@@ -160,7 +160,8 @@ run_workload(const std::shared_ptr<couchbase::transactions::transactions>& trans
     for (std::size_t i = 0; i < arguments.number_of_transactions; ++i) {
       transactions->run(
         [&collection, &document_ids, &arguments, &errors](
-          std::shared_ptr<couchbase::transactions::async_attempt_context> attempt) {
+          std::shared_ptr<couchbase::transactions::async_attempt_context> attempt)
+          -> couchbase::error {
           std::vector<std::string> selected_keys;
           std::sample(document_ids.begin(),
                       document_ids.end(),
@@ -193,6 +194,7 @@ run_workload(const std::shared_ptr<couchbase::transactions::transactions>& trans
                 }
               });
           }
+          return {};
         },
         [&promise = results[i]](auto err, auto result) {
           promise.set_value({ err, result });

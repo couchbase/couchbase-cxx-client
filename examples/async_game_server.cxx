@@ -153,7 +153,7 @@ public:
     auto f = barrier->get_future();
     transactions_->run(
       [this, damage, collection, player_id, monster_id, &exists](
-        std::shared_ptr<async_attempt_context> ctx) {
+        std::shared_ptr<async_attempt_context> ctx) -> couchbase::error {
         ctx->get(
           collection,
           monster_id,
@@ -226,6 +226,7 @@ public:
               });
             }
           });
+        return {};
       },
       [barrier](auto err, auto res) {
         barrier->set_value({ err, res });

@@ -45,12 +45,14 @@ TEST_CASE("transactions public async API: can async get", "[transactions]")
   auto barrier = std::make_shared<std::promise<void>>();
   auto f = barrier->get_future();
   c.transactions()->run(
-    [id, coll](std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) {
+    [id, coll](
+      std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) -> couchbase::error {
       ctx->get(coll, id, [id](auto e, auto res) {
         CHECK_FALSE(e.ec());
         CHECK(res.key() == id);
         CHECK(res.template content<tao::json::value>() == async_content);
       });
+      return {};
     },
     [barrier](auto e, auto res) {
       CHECK_FALSE(e.ec());
@@ -73,10 +75,12 @@ TEST_CASE("transactions public async API: can get fail as expected", "[transacti
   auto barrier = std::make_shared<std::promise<void>>();
   auto f = barrier->get_future();
   c.transactions()->run(
-    [id, coll](std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) {
+    [id, coll](
+      std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) -> couchbase::error {
       ctx->get(coll, id, [id](auto e, auto) {
         CHECK(e.ec() == couchbase::errc::transaction_op::document_not_found_exception);
       });
+      return {};
     },
     [barrier](auto e, auto res) {
       CHECK_FALSE(e.ec());
@@ -100,13 +104,15 @@ TEST_CASE("transactions public async API: can async remove", "[transactions]")
   auto barrier = std::make_shared<std::promise<void>>();
   auto f = barrier->get_future();
   c.transactions()->run(
-    [coll, id](std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) {
+    [coll,
+     id](std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) -> couchbase::error {
       ctx->get(coll, id, [ctx](auto e, auto res) {
         CHECK_FALSE(e.ec());
         ctx->remove(res, [](auto remove_err) {
           CHECK_FALSE(remove_err.ec());
         });
       });
+      return {};
     },
     [barrier](auto e, auto res) {
       CHECK_FALSE(res.transaction_id.empty());
@@ -132,7 +138,8 @@ TEST_CASE("transactions public async API: async remove with bad cas fails as exp
   auto barrier = std::make_shared<std::promise<void>>();
   auto f = barrier->get_future();
   c.transactions()->run(
-    [coll, id](std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) {
+    [coll,
+     id](std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) -> couchbase::error {
       ctx->get(coll, id, [ctx](auto, auto res) {
         // all this to change the cas...
         couchbase::core::transactions::transaction_get_result temp_doc(res);
@@ -141,6 +148,7 @@ TEST_CASE("transactions public async API: async remove with bad cas fails as exp
           CHECK(remove_err.ec());
         });
       });
+      return {};
     },
     [barrier](auto e, auto res) {
       CHECK_FALSE(res.transaction_id.empty());
@@ -163,10 +171,12 @@ TEST_CASE("transactions public async API: can async insert", "[transactions]")
   auto barrier = std::make_shared<std::promise<void>>();
   auto f = barrier->get_future();
   c.transactions()->run(
-    [id, coll](std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) {
+    [id, coll](
+      std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) -> couchbase::error {
       ctx->insert(coll, id, async_content, [coll, id](auto e, auto) {
         CHECK_FALSE(e.ec());
       });
+      return {};
     },
     [barrier](auto e, auto res) {
       CHECK_FALSE(res.transaction_id.empty());
@@ -193,10 +203,12 @@ TEST_CASE(
   auto barrier = std::make_shared<std::promise<void>>();
   auto f = barrier->get_future();
   c.transactions()->run(
-    [id, coll](std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) {
+    [id, coll](
+      std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) -> couchbase::error {
       ctx->insert(coll, id, async_content, [coll, id](auto e, auto) {
         CHECK(e.ec() == couchbase::errc::transaction_op::document_exists_exception);
       });
+      return {};
     },
     [barrier](auto e, auto res) {
       CHECK_FALSE(res.transaction_id.empty());
@@ -222,13 +234,15 @@ TEST_CASE("transactions public async API: can async replace", "[transactions]")
   auto f = barrier->get_future();
   tao::json::value new_content = { { "Iam", "new content" } };
   c.transactions()->run(
-    [id, coll, new_content](std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) {
+    [id, coll, new_content](
+      std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) -> couchbase::error {
       ctx->get(coll, id, [new_content, ctx](auto, auto res) {
         ctx->replace(res, new_content, [](auto replace_e, auto replace_result) {
           CHECK(!replace_result.cas().empty());
           CHECK_FALSE(replace_e.ec());
         });
       });
+      return {};
     },
     [barrier](auto e, auto tx_result) {
       CHECK_FALSE(tx_result.transaction_id.empty());
@@ -254,7 +268,8 @@ TEST_CASE("transactions public async API: async replace fails as expected with b
   auto f = barrier->get_future();
   tao::json::value new_content = { { "Iam", "new content" } };
   c.transactions()->run(
-    [id, coll, new_content](std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) {
+    [id, coll, new_content](
+      std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) -> couchbase::error {
       ctx->get(coll, id, [new_content, ctx](auto, auto res) {
         // all this to change the cas...
         couchbase::core::transactions::transaction_get_result temp_doc(res);
@@ -263,6 +278,7 @@ TEST_CASE("transactions public async API: async replace fails as expected with b
           CHECK(replace_e.ec());
         });
       });
+      return {};
     },
     [barrier](auto e, auto tx_result) {
       CHECK_FALSE(tx_result.transaction_id.empty());
@@ -288,7 +304,8 @@ TEST_CASE("transactions public async API: uncaught exception will rollback", "[t
   auto f = barrier->get_future();
   tao::json::value new_content = { { "Iam", "new content" } };
   c.transactions()->run(
-    [id, coll, new_content](std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) {
+    [id, coll, new_content](
+      std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) -> couchbase::error {
       ctx->get(coll, id, [new_content, ctx](auto e, auto res) {
         CHECK_FALSE(e.ec());
         ctx->replace(res, new_content, [](auto replace_e, auto) {
@@ -296,6 +313,42 @@ TEST_CASE("transactions public async API: uncaught exception will rollback", "[t
           throw std::runtime_error("I wanna rollback");
         });
       });
+      return {};
+    },
+    [barrier](auto e, auto res) {
+      CHECK(e.ec() == couchbase::errc::transaction::failed);
+      CHECK_FALSE(res.unstaging_complete);
+      CHECK_FALSE(res.transaction_id.empty());
+      barrier->set_value();
+    },
+    async_options());
+
+  f.get();
+}
+
+TEST_CASE("transactions public async API: rerturning error will rollback", "[transactions]")
+{
+  test::utils::integration_test_guard integration;
+
+  auto id = test::utils::uniq_id("txn");
+  auto c = integration.public_cluster();
+  auto coll = c.bucket(integration.ctx.bucket).default_collection();
+  auto [err, upsert_res] = coll.upsert(id, async_content, {}).get();
+  REQUIRE_SUCCESS(err.ec());
+
+  auto barrier = std::make_shared<std::promise<void>>();
+  auto f = barrier->get_future();
+  tao::json::value new_content = { { "Iam", "new content" } };
+  c.transactions()->run(
+    [id, coll, new_content](
+      std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) -> couchbase::error {
+      ctx->get(coll, id, [new_content, ctx](auto e, auto res) {
+        CHECK_FALSE(e.ec());
+        ctx->replace(res, new_content, [](auto replace_e, auto) {
+          CHECK_FALSE(replace_e.ec());
+        });
+      });
+      return couchbase::error(couchbase::errc::common::request_canceled);
     },
     [barrier](auto e, auto res) {
       CHECK(e.ec() == couchbase::errc::transaction::failed);
@@ -323,7 +376,8 @@ TEST_CASE("transactions public async API: can set transaction options", "[transa
   auto barrier = std::make_shared<std::promise<void>>();
   auto f = barrier->get_future();
   c.transactions()->run(
-    [id, coll](std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) {
+    [id, coll](
+      std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) -> couchbase::error {
       ctx->get(coll, id, [ctx](auto, auto doc) {
         // all this to change the cas...
         couchbase::core::transactions::transaction_get_result temp_doc(doc);
@@ -332,6 +386,7 @@ TEST_CASE("transactions public async API: can set transaction options", "[transa
           CHECK(remove_err.ec());
         });
       });
+      return {};
     },
     [&begin, &cfg, barrier](auto e, auto res) {
       auto end = std::chrono::steady_clock::now();
@@ -367,7 +422,7 @@ TEST_CASE("transactions public async API: can do mutating query", "[transactions
   auto f = barrier->get_future();
   c.transactions()->run(
     [id, test_ctx = integration.ctx](
-      std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) {
+      std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) -> couchbase::error {
       ctx->query(fmt::format(R"(INSERT INTO `{}` (KEY, VALUE) VALUES("{}", {}))",
                              test_ctx.bucket,
                              id,
@@ -375,6 +430,7 @@ TEST_CASE("transactions public async API: can do mutating query", "[transactions
                  [](auto e, auto) {
                    CHECK_FALSE(e.ec());
                  });
+      return {};
     },
     [barrier](auto e, auto res) {
       CHECK_FALSE(e.ec());
@@ -405,7 +461,7 @@ TEST_CASE("transactions public async API: some query errors rollback", "[transac
   auto f = barrier->get_future();
   c.transactions()->run(
     [id, id2, test_ctx = integration.ctx](
-      std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) {
+      std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) -> couchbase::error {
       ctx->query(fmt::format(R"(INSERT INTO `{}` (KEY, VALUE) VALUES("{}", {}))",
                              test_ctx.bucket,
                              id2,
@@ -419,6 +475,7 @@ TEST_CASE("transactions public async API: some query errors rollback", "[transac
                               [](auto, auto) {
                               });
                  });
+      return {};
     },
     [barrier](auto e, auto res) {
       CHECK(e.ec() == couchbase::errc::transaction::failed);
