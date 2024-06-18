@@ -15,9 +15,9 @@
  *   limitations under the License.
  */
 
-#include <core/logger/logger.hxx>
 #include <couchbase/cluster.hxx>
 #include <couchbase/fmt/error.hxx>
+#include <couchbase/logger.hxx>
 
 #include <asio/io_context.hpp>
 
@@ -238,16 +238,14 @@ public:
 int
 main()
 {
+  couchbase::logger::initialize_console_logger();
+  couchbase::logger::set_level(couchbase::logger::log_level::trace);
+
   const int NUM_THREADS = 4;
-  couchbase::core::logger::set_log_levels(couchbase::core::logger::level::trace);
   std::atomic<bool> monster_exists = true;
   std::string bucket_name = "default";
   asio::io_context io;
   auto guard = asio::make_work_guard(io);
-
-  if (!couchbase::core::logger::is_initialized()) {
-    couchbase::core::logger::create_console_logger();
-  }
 
   std::list<std::thread> io_threads;
   for (int i = 0; i < 2 * (NUM_THREADS + 1); i++) {
