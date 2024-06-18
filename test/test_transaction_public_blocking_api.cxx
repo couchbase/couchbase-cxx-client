@@ -121,9 +121,8 @@ TEST_CASE("transactions public blocking API: can get", "[transactions]")
     [id, &coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
       auto [e, doc] = ctx->get(coll, id);
       CHECK_FALSE(e.ec());
-      CHECK(doc.key() == id);
-      CHECK_FALSE(doc.cas().empty());
-      CHECK(doc.content<tao::json::value>() == content);
+      CHECK(doc.id() == id);
+      CHECK(doc.content_as<tao::json::value>() == content);
       return {};
     },
     txn_opts());
@@ -164,11 +163,10 @@ TEST_CASE("transactions public blocking API: can insert", "[transactions]")
     [id, coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
       auto [e, doc] = ctx->insert(coll, id, content);
       CHECK_FALSE(e.ec());
-      CHECK(doc.key() == id);
-      CHECK_FALSE(doc.cas().empty());
+      CHECK(doc.id() == id);
       auto [e2, inserted_doc] = ctx->get(coll, id);
       CHECK_FALSE(e2.ec());
-      CHECK(inserted_doc.content<tao::json::value>() == content);
+      CHECK(inserted_doc.content_as<tao::json::value>() == content);
       return {};
     },
     txn_opts());
@@ -231,9 +229,8 @@ TEST_CASE("transactions public blocking API: can replace", "[transactions]")
       auto [_, doc] = ctx->get(coll, id);
       auto [e, replaced_doc] = ctx->replace(doc, new_content);
       CHECK_FALSE(e.ec());
-      CHECK(doc.key() == replaced_doc.key());
-      CHECK(doc.cas() != replaced_doc.cas());
-      CHECK(doc.content<tao::json::value>() == content);
+      CHECK(doc.id() == replaced_doc.id());
+      CHECK(doc.content_as<tao::json::value>() == content);
       // FIXME(JCBC-2152)
       // CHECK(replaced_doc.content<tao::json::value>() == new_content);
       return {};
@@ -665,7 +662,7 @@ TEST_CASE("transactions public blocking API: can get doc from bucket not yet ope
        &coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
         auto [e, doc] = ctx->get(coll, id);
         CHECK_FALSE(e.ec());
-        CHECK(doc.content<tao::json::value>() == content);
+        CHECK(doc.content_as<tao::json::value>() == content);
         return {};
       },
       txn_opts());
@@ -691,7 +688,7 @@ TEST_CASE("transactions public blocking API: can insert doc into bucket not yet 
        &coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
         auto [e, doc] = ctx->insert(coll, id, content);
         CHECK_FALSE(e.ec());
-        CHECK_FALSE(doc.cas().empty());
+        CHECK(doc.id() == id);
         return {};
       },
       txn_opts());
@@ -729,7 +726,7 @@ TEST_CASE("transactions public blocking API: can replace doc in bucket not yet o
         CHECK_FALSE(get_err.ec());
         auto [e, doc] = ctx->replace(get_doc, new_content);
         CHECK_FALSE(e.ec());
-        CHECK_FALSE(doc.cas().empty());
+        CHECK(doc.id() == id);
         return {};
       },
       txn_opts());

@@ -179,3 +179,8 @@
  * transaction_op error codes do not have 'exception' suffix
  */
 #define COUCHBASE_CXX_CLIENT_TRANSACTION_OP_ERRC_NO_EXCEPTION_SUFFIX 1
+
+/**
+ * transactions_get_result has `content_as` and `id` methods
+ */
+#define COUCHBASE_CXX_CLIENT_TXNS_GET_RESULT_FINAL_API
