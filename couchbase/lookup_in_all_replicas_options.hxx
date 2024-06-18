@@ -19,7 +19,6 @@
 
 #include <couchbase/subdoc/fwd/command_bundle.hxx>
 
-#include <core/impl/subdoc/command.hxx>
 #include <couchbase/codec/encoded_value.hxx>
 #include <couchbase/common_options.hxx>
 #include <couchbase/error.hxx>
@@ -117,6 +116,10 @@ namespace core
 class cluster;
 namespace impl
 {
+namespace subdoc
+{
+struct command;
+} // namespace subdoc
 
 /**
  * @since 1.0.0

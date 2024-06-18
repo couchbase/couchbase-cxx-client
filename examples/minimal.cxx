@@ -15,10 +15,9 @@
  *   limitations under the License.
  */
 
-#include "core/logger/logger.hxx"
-
 #include <couchbase/cluster.hxx>
 #include <couchbase/fmt/error.hxx>
+#include <couchbase/logger.hxx>
 
 #include <asio.hpp>
 
@@ -35,8 +34,8 @@ static constexpr auto collection_name{ couchbase::collection::default_name };
 int
 main()
 {
-  couchbase::core::logger::create_console_logger();
-  couchbase::core::logger::set_log_levels(couchbase::core::logger::level::trace);
+  couchbase::logger::initialize_console_logger();
+  couchbase::logger::set_level(couchbase::logger::log_level::trace);
 
   asio::io_context io;
   auto guard = asio::make_work_guard(io);
@@ -59,8 +58,10 @@ main()
     };
 
     auto [err, resp] = collection.upsert(document_id, basic_doc, {}).get();
-    std::cout << "ec: " << err.ec().message() << ", id: " << document_id
-              << ", CAS: " << resp.cas().value() << "\n";
+    if (err.ec()) {
+      std::cout << "ec: " << err.ec().message() << ", ";
+    }
+    std::cout << "id: " << document_id << ", CAS: " << resp.cas().value() << "\n";
   }
 
   cluster.close();
