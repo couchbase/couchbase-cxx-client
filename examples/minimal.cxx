@@ -62,31 +62,6 @@ main()
     std::cout << "ec: " << err.ec().message() << ", id: " << document_id
               << ", CAS: " << resp.cas().value() << "\n";
   }
-  {
-    auto collection = cluster.bucket(bucket_name).scope(scope_name).collection(collection_name);
-    auto [err, res] = collection.get("minimal_example").get();
-  }
-
-  //  {
-  //    auto collection = cluster.bucket(bucket_name).scope(scope_name).collection(collection_name);
-  //    auto barrier = std::make_shared<std::promise<std::pair<couchbase::error,
-  //    couchbase::transactions::transaction_result>>>(); cluster.transactions()->run(
-  //      [collection](std::shared_ptr<couchbase::transactions::async_attempt_context> ctx){
-  //        tao::json::value content{ {"foo", "bar"} };
-  //        return ctx->insert(collection, "foo1", content, [ctx, collection](auto err, auto res) {
-  //          tao::json::value content{ {"foo", "bar"} };
-  //          return ctx->insert(collection, "foo2", content, [](auto err, auto res) {
-  //            return;
-  //          });
-  //        });
-  //      },
-  //      [barrier](auto err, auto res) {
-  //        barrier->set_value({err, res});
-  //      },
-  //      {}
-  //      );
-  //    barrier->get_future();
-  //  }
 
   cluster.close();
   guard.reset();
