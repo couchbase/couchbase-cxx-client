@@ -375,7 +375,7 @@ TEST_CASE("transactions public blocking API: get doc not found and propagating e
   auto [tx_err, result] = c.transactions()->run(
     [id, coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
       auto [e, doc] = ctx->get(coll, id);
-      CHECK(e.ec() == couchbase::errc::transaction_op::document_not_found_exception);
+      CHECK(e.ec() == couchbase::errc::transaction_op::document_not_found);
       if (e) {
         return e;
       }
@@ -386,8 +386,7 @@ TEST_CASE("transactions public blocking API: get doc not found and propagating e
   CHECK_FALSE(result.unstaging_complete);
   CHECK(tx_err.ec() == couchbase::errc::transaction::failed);
   CHECK(tx_err.cause().has_value());
-  CHECK(tx_err.cause().value().ec() ==
-        couchbase::errc::transaction_op::document_not_found_exception);
+  CHECK(tx_err.cause().value().ec() == couchbase::errc::transaction_op::document_not_found);
 }
 
 TEST_CASE(

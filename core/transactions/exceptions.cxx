@@ -183,7 +183,7 @@ external_exception_from_transaction_op_errc(errc::transaction_op ec) -> external
       return external_exception::DOCUMENT_NOT_FOUND_EXCEPTION;
     case errc::transaction_op::not_set:
       return external_exception::NOT_SET;
-    case errc::transaction_op::feature_not_available_exception:
+    case errc::transaction_op::feature_not_available:
       return external_exception::FEATURE_NOT_AVAILABLE_EXCEPTION;
     case errc::transaction_op::transaction_aborted_externally:
       return external_exception::TRANSACTION_ABORTED_EXTERNALLY;
@@ -195,9 +195,9 @@ external_exception_from_transaction_op_errc(errc::transaction_op ec) -> external
       return external_exception::PARSING_FAILURE;
     case errc::transaction_op::illegal_state:
       return external_exception::ILLEGAL_STATE_EXCEPTION;
-    case errc::transaction_op::couchbase_exception:
+    case errc::transaction_op::couchbase_error:
       return external_exception::COUCHBASE_EXCEPTION;
-    case errc::transaction_op::service_not_available_exception:
+    case errc::transaction_op::service_not_available:
       return external_exception::SERVICE_NOT_AVAILABLE_EXCEPTION;
     case errc::transaction_op::request_canceled:
       return external_exception::REQUEST_CANCELED_EXCEPTION;
