@@ -1887,8 +1887,8 @@ attempt_context_impl::insert_raw_with_query(const core::document_id& id,
           if (err) {
             try {
               std::rethrow_exception(err);
-            } catch (const transaction_operation_failed&) {
-              return self->op_completed_with_error(std::move(cb), err);
+            } catch (const transaction_operation_failed& e) {
+              return self->op_completed_with_error(std::move(cb), e);
             } catch (const document_exists& ex) {
               return self->op_completed_with_error(std::move(cb), ex);
             } catch (const std::exception& e) {
