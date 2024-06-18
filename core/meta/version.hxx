@@ -54,6 +54,12 @@ user_agent_for_http(const std::string& client_id,
                     const std::string& extra = "") -> std::string;
 
 auto
+build_date() -> const std::string&;
+
+auto
+build_revision_short() -> const std::string&;
+
+auto
 user_agent_for_mcbp(const std::string& client_id,
                     const std::string& session_id,
                     const std::string& extra = "",
