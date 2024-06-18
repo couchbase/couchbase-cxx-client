@@ -16,6 +16,8 @@
  */
 
 #include "http_component.hxx"
+#include <couchbase/build_config.hxx>
+
 #include "free_form_http_request.hxx"
 #include "io/http_session_manager.hxx"
 #include "pending_operation.hxx"
@@ -33,6 +35,27 @@ class pending_http_operation
   , public pending_operation
 {
 public:
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+  pending_http_operation(asio::io_context& io,
+                         http_request request,
+                         std::chrono::milliseconds dispatch_timeout)
+    : deadline_{ io }
+    , dispatch_deadline_{ io }
+    , dispatch_timeout_{ dispatch_timeout }
+    , request_{ std::move(request) }
+    , encoded_{ io::http_request {
+      request_.service,
+      request_.method,
+      request_.path,
+      request_.headers,
+      request_.body,
+      {},
+      {},
+      request_.timeout,
+    } }
+  {
+  }
+#else
   pending_http_operation(asio::io_context& io, http_request request)
     : deadline_{ io }
     , request_{ std::move(request) }
@@ -48,24 +71,50 @@ public:
       } }
   {
   }
+#endif
 
   ~pending_http_operation() override = default;
 
-  void start(free_form_http_request_callback&& callback,
-             utils::movable_function<void()>&& stream_end_callback)
+  void start(free_form_http_request_callback&& callback)
   {
     callback_ = std::move(callback);
-    stream_end_callback_ = std::move(stream_end_callback);
-    deadline_.expires_after(request_.timeout);
-    deadline_.async_wait([self = shared_from_this()](auto ec) {
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+    dispatch_deadline_.expires_after(dispatch_timeout_);
+    dispatch_deadline_.async_wait([self = shared_from_this()](auto ec) {
       if (ec == asio::error::operation_aborted) {
         return;
       }
+      // TODO:  client_context_id/request_id??
+      CB_LOG_DEBUG(R"(HTTP request timed out: {}, method={}, path="{}")",
+                   self->encoded_.type,
+                   self->encoded_.method,
+                   self->encoded_.path);
       self->trigger_timeout();
       if (self->session_) {
         self->session_->stop();
       }
     });
+#endif
+    deadline_.expires_after(request_.timeout);
+    deadline_.async_wait([self = shared_from_this()](auto ec) {
+      if (ec == asio::error::operation_aborted) {
+        return;
+      }
+      // TODO:  client_context_id/request_id??
+      CB_LOG_DEBUG(R"(HTTP request timed out: {}, method={}, path="{}")",
+                   self->encoded_.type,
+                   self->encoded_.method,
+                   self->encoded_.path);
+      self->trigger_timeout();
+      if (self->session_) {
+        self->session_->stop();
+      }
+    });
+  }
+
+  void set_stream_end_callback(utils::movable_function<void()>&& stream_end_callback)
+  {
+    stream_end_callback_ = std::move(stream_end_callback);
   }
 
   void cancel() override
@@ -79,9 +128,12 @@ public:
   void invoke_response_handler(std::error_code ec, io::http_streaming_response resp)
   {
     deadline_.cancel();
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+    dispatch_deadline_.cancel();
+#endif
     std::scoped_lock lock(callback_mutex_);
-    if (callback_) {
-      callback_(http_response{ std::move(resp) }, ec);
+    if (auto callback = std::move(callback_); callback) {
+      callback(http_response{ std::move(resp) }, ec);
     }
     callback_ = nullptr;
   }
@@ -107,29 +159,43 @@ public:
         });
     };
 
-    // TODO(dimitris): Connecting should be retried.
-    if (!session_->is_connected()) {
-      session_->connect([self = shared_from_this(), start_op = std::move(start_op)]() {
-        if (!self->session_->is_connected()) {
-          self->invoke_response_handler(couchbase::errc::common::request_canceled, {});
-          return;
-        }
-        start_op();
-      });
-    } else {
-      start_op();
-    }
+    start_op();
   }
+
+  [[nodiscard]] auto deadline_expiry() const -> std::chrono::time_point<std::chrono::steady_clock>
+  {
+    return deadline_.expiry();
+  }
+
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+
+  [[nodiscard]] auto dispatch_deadline_expiry() const
+    -> std::chrono::time_point<std::chrono::steady_clock>
+  {
+    return dispatch_deadline_.expiry();
+  }
+
+  [[nodiscard]] auto request() const -> http_request
+  {
+    return request_;
+  }
+#endif
 
 private:
   void trigger_timeout()
   {
+    // TODO:  if triggered from the dispatch timeout, should only be
+    // errc::common::unambiguous_timeout?
     auto ec =
       request_.is_read_only ? errc::common::unambiguous_timeout : errc::common::ambiguous_timeout;
     invoke_response_handler(ec, {});
   }
 
   asio::steady_timer deadline_;
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+  asio::steady_timer dispatch_deadline_;
+  std::chrono::milliseconds dispatch_timeout_;
+#endif
   http_request request_;
   io::http_request encoded_;
   free_form_http_request_callback callback_;
@@ -173,6 +239,16 @@ public:
       credentials = cluster_credentials{ request.username, request.password };
     }
 
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+    auto op =
+      std::make_shared<pending_http_operation>(io_, request, session_manager->dispatch_timeout());
+    if (!session_manager->is_configured()) {
+      return defer_command(op, session_manager, credentials, std::move(callback));
+    }
+#else
+    auto op = std::make_shared<pending_http_operation>(io_, request);
+#endif
+
     std::shared_ptr<io::http_session> session;
     {
       auto [ec, s] = session_manager->check_out(request.service, credentials, request.endpoint);
@@ -182,20 +258,91 @@ public:
       session = std::move(s);
     }
 
-    auto op = std::make_shared<pending_http_operation>(io_, request);
-    op->start(
-      [callback = std::move(callback)](auto resp, auto ec) mutable {
-        callback(std::move(resp), ec);
-      },
-      [session_manager, session, service = request.service]() mutable {
-        session_manager->check_in(service, session);
-      });
-    op->send_to(session);
+    op->start([callback = std::move(callback)](auto resp, auto ec) mutable {
+      callback(std::move(resp), ec);
+    });
+    op->set_stream_end_callback([session_manager, session, service = request.service]() mutable {
+      session_manager->check_in(service, session);
+    });
 
+    if (!session->is_connected()) {
+      session_manager->connect_then_send_pending_op(
+        session,
+        {},
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+        op->dispatch_deadline_expiry(),
+#endif
+        op->deadline_expiry(),
+        [op](std::error_code ec, std::shared_ptr<io::http_session> http_session) {
+          if (ec) {
+            return op->invoke_response_handler(ec, {});
+          }
+          op->send_to(http_session);
+        });
+    } else {
+      op->send_to(session);
+    }
     return op;
   }
 
 private:
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+  auto defer_command(std::shared_ptr<pending_http_operation> pending_op,
+                     std::shared_ptr<io::http_session_manager> session_manager,
+                     const couchbase::core::cluster_credentials& credentials,
+                     free_form_http_request_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    if (session_manager->last_bootstrap_error().has_value()) {
+      return tl::unexpected(session_manager->last_bootstrap_error().value().ec);
+    }
+    pending_op->start([callback = std::move(callback)](auto resp, auto ec) mutable {
+      callback(std::move(resp), ec);
+    });
+    // TODO:  client_context_id?
+    CB_LOG_DEBUG(R"(Adding pending HTTP operation to deferred queue: {})",
+                 pending_op->request().service);
+    session_manager->add_to_deferred_queue([op = pending_op,
+                                            session_manager = std::move(session_manager),
+                                            credentials]() mutable {
+      // don't do anything if the op wasn't dispatched or has already timed out
+      auto now = std::chrono::steady_clock::now();
+      if (op->dispatch_deadline_expiry() < now || op->deadline_expiry() < now) {
+        return;
+      }
+      std::shared_ptr<io::http_session> session;
+      {
+        auto [ec, s] =
+          session_manager->check_out(op->request().service, credentials, op->request().endpoint);
+        if (ec) {
+          return op->invoke_response_handler(ec, {});
+        }
+        session = std::move(s);
+      }
+      op->set_stream_end_callback(
+        [session_manager, session, service = op->request().service]() mutable {
+          session_manager->check_in(service, session);
+        });
+      if (!session->is_connected()) {
+        session_manager->connect_then_send_pending_op(
+          session,
+          {},
+          op->dispatch_deadline_expiry(),
+          op->deadline_expiry(),
+          [op = std::move(op)](std::error_code ec, std::shared_ptr<io::http_session> http_session) {
+            if (ec) {
+              return op->invoke_response_handler(ec, {});
+            }
+            op->send_to(http_session);
+          });
+      } else {
+        op->send_to(session);
+      }
+    });
+    return pending_op;
+  }
+#endif
+
   asio::io_context& io_;
   core_sdk_shim shim_;
   std::shared_ptr<retry_strategy> default_retry_strategy_;

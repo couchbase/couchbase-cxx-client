@@ -22,6 +22,7 @@
 namespace couchbase::core::timeout_defaults
 {
 constexpr std::chrono::milliseconds bootstrap_timeout{ 10'000 };
+constexpr std::chrono::milliseconds dispatch_timeout{ 30'000 };
 
 constexpr std::chrono::milliseconds resolve_timeout{ 2'000 };
 constexpr std::chrono::milliseconds connect_timeout{ 2'000 };

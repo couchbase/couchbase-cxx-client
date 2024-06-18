@@ -425,6 +425,13 @@ extract_options(connection_string& connstr)
        * The period of time allocated to complete bootstrap
        */
       parse_option(connstr.options.bootstrap_timeout, name, value, connstr.warnings);
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+    } else if (name == "dispatch_timeout") {
+      /**
+       * The period of time allocated to complete HTTP session bootstrap
+       */
+      parse_option(connstr.options.dispatch_timeout, name, value, connstr.warnings);
+#endif
     } else if (name == "resolve_timeout") {
       /**
        * The period of time to resolve DNS name of the node to IP address
