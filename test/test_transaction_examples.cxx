@@ -129,14 +129,14 @@ main(int argc, const char* argv[])
           // [4.4] replace document's content
           ctx->replace(doc,
                        tao::json::value{ { "some", "other async content" } },
-                       [=](auto err_ctx_2, auto res) {
+                       [=](auto err_ctx_2, auto /*res*/) {
                          if (err_ctx_2.ec()) {
                            fmt::print(stderr,
                                       "error replacing content in doc {}: {}\n",
                                       id_1,
                                       err_ctx_2.ec().message());
                          } else {
-                           fmt::print("successfully replaced: {}, cas={}\n", id_1, res.cas());
+                           fmt::print("successfully replaced: {}\n", id_1);
                          }
                        });
         });
@@ -147,14 +147,14 @@ main(int argc, const char* argv[])
           }
           ctx->replace(doc,
                        tao::json::value{ { "some", "other async content" } },
-                       [=](auto err_ctx_2, auto res) {
+                       [=](auto err_ctx_2, auto /*res*/) {
                          if (err_ctx_2.ec()) {
                            fmt::print(stderr,
                                       "error replacing content in doc {}: {}\n",
                                       id_2,
                                       err_ctx_2.ec().message());
                          } else {
-                           fmt::print("successfully replaced: {}, cas={}\n", id_2, res.cas());
+                           fmt::print("successfully replaced: {}\n", id_2);
                          }
                        });
         });
@@ -165,14 +165,14 @@ main(int argc, const char* argv[])
           }
           ctx->replace(doc,
                        tao::json::value{ { "some", "other async content" } },
-                       [=](auto err_ctx_2, auto res) {
+                       [=](auto err_ctx_2, auto /*res*/) {
                          if (err_ctx_2.ec()) {
                            fmt::print(stderr,
                                       "error replacing content in doc {}: {}\n",
                                       id_3,
                                       err_ctx_2.ec().message());
                          } else {
-                           fmt::print("successfully replaced: {}, cas={}\n", id_3, res.cas());
+                           fmt::print("successfully replaced: {}\n", id_3);
                          }
                        });
         });
@@ -286,7 +286,7 @@ main(int argc, const char* argv[])
           return {};
         }
         fmt::println("document content: {}",
-                     tao::json::to_string(doc.template content<tao::json::value>()));
+                     tao::json::to_string(doc.template content_as<tao::json::value>()));
         return {};
       });
 
@@ -313,7 +313,7 @@ main(int argc, const char* argv[])
             return;
           }
           fmt::println("document content: {}",
-                       tao::json::to_string(doc.template content<tao::json::value>()));
+                       tao::json::to_string(doc.template content_as<tao::json::value>()));
         });
         return {};
       },

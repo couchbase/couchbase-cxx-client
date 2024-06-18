@@ -164,7 +164,7 @@ public:
               exists = false;
               return;
             }
-            auto monster_body = monster.template content<Monster>();
+            auto monster_body = monster.template content_as<Monster>();
             auto monster_hitpoints = monster_body.hitpoints;
             auto monster_new_hitpoints = monster_hitpoints - damage;
 
@@ -188,7 +188,7 @@ public:
                     std::cout << "error getting player: " << e.ec().message() << std::endl;
                     return;
                   }
-                  const Player& player_body = player.template content<Player>();
+                  const Player& player_body = player.template content_as<Player>();
 
                   // the player earns experience for killing the monster
                   int experience_for_killing_monster = monster_body.experience_when_killed;

@@ -27,6 +27,7 @@
 // forward declarations...
 namespace couchbase::core::transactions
 {
+class attempt_context_impl;
 class transaction_get_result;
 class transaction_links;
 class document_metadata;
@@ -37,7 +38,38 @@ namespace couchbase::transactions
 
 class transaction_get_result
 {
-  friend class couchbase::core::transactions::transaction_get_result;
+public:
+  /**
+   * @private
+   */
+  transaction_get_result();
+
+  /**
+   * Content of the document.
+   *
+   * @return content of the document.
+   */
+  template<typename Document,
+           typename Transcoder = codec::default_json_transcoder,
+           std::enable_if_t<!codec::is_transcoder_v<Document>, bool> = true,
+           std::enable_if_t<codec::is_transcoder_v<Transcoder>, bool> = true>
+  [[nodiscard]] auto content_as() const -> Document
+  {
+    return Transcoder::template decode<Document>(content());
+  }
+
+  template<typename Transcoder, std::enable_if_t<codec::is_transcoder_v<Transcoder>, bool> = true>
+  [[nodiscard]] auto content_as() const -> typename Transcoder::document_type
+  {
+    return Transcoder::decode(content());
+  }
+
+  /**
+   * Get document id.
+   *
+   * @return the id of this document.
+   */
+  [[nodiscard]] auto id() const -> const std::string&;
 
 private:
   std::shared_ptr<couchbase::core::transactions::transaction_get_result> base_{};
@@ -48,83 +80,14 @@ private:
   {
   }
 
-public:
-  /** @private */
-
-  transaction_get_result();
-  /**
-   * Content of the document.
-   *
-   * @return content of the document.
-   */
-  template<typename Document,
-           typename Transcoder = codec::default_json_transcoder,
-           std::enable_if_t<!codec::is_transcoder_v<Document>, bool> = true,
-           std::enable_if_t<codec::is_transcoder_v<Transcoder>, bool> = true>
-  [[nodiscard]] auto content() const -> Document
-  {
-    return Transcoder::template decode<Document>(content());
-  }
-
-  template<typename Transcoder, std::enable_if_t<codec::is_transcoder_v<Transcoder>, bool> = true>
-  [[nodiscard]] auto content() const -> typename Transcoder::document_type
-  {
-    return Transcoder::decode(content());
-  }
-
-  /**
-   * Content of the document as raw byte vector
-   *
-   * @return content
-   */
   [[nodiscard]] auto content() const -> const codec::encoded_value&;
 
-  /**
-   * Copy content into document
-   * @param content
-   */
-  void content(const codec::encoded_value& content);
+  friend class couchbase::core::transactions::transaction_get_result;
+  friend class couchbase::core::transactions::attempt_context_impl;
 
-  /**
-   * Move content into document
-   *
-   * @param content
-   */
-  void content(codec::encoded_value&& content);
-
-  /**
-   * Get document id.
-   *
-   * @return the id of this document.
-   */
-  [[nodiscard]] auto key() const -> const std::string&;
-
-  /**
-   * Get the name of the bucket this document is in.
-   *
-   * @return name of the bucket which contains the document.
-   */
   [[nodiscard]] auto bucket() const -> const std::string&;
-
-  /**
-   * Get the name of the scope this document is in.
-   *
-   * @return name of the scope which contains the document.
-   */
   [[nodiscard]] auto scope() const -> const std::string&;
-
-  /**
-   * Get the name of the collection this document is in.
-   *
-   * @return name of the collection which contains the document.
-   */
   [[nodiscard]] auto collection() const -> const std::string&;
-
-  /**
-   * Get the CAS fot this document
-   *
-   * @return the CAS of the document.
-   */
   [[nodiscard]] auto cas() const -> couchbase::cas;
 };
 } // namespace couchbase::transactions

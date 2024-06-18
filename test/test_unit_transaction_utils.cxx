@@ -302,13 +302,8 @@ TEST_CASE("transaction_get_result: can convert core transaction_get_result to "
     couchbase::core::transactions::transaction_get_result core_result(
       { bucket, scope, collection, key }, json_content, cas.value(), links, metadata);
     auto public_result = core_result.to_public_result();
-    REQUIRE(public_result.collection() == collection);
-    REQUIRE(public_result.bucket() == bucket);
-    REQUIRE(public_result.scope() == scope);
-    REQUIRE(public_result.cas() == cas);
-    REQUIRE(public_result.key() == key);
-    REQUIRE(public_result.content() == json_content);
-    REQUIRE(public_result.content<tao::json::value>() == content);
+    REQUIRE(public_result.id() == key);
+    REQUIRE(public_result.content_as<tao::json::value>() == content);
     REQUIRE(core_result.collection() == collection);
     REQUIRE(core_result.bucket() == bucket);
     REQUIRE(core_result.scope() == scope);
@@ -360,13 +355,13 @@ TEST_CASE("transaction_get_result: can convert core transaction_get_result to "
   {
     couchbase::core::transactions::transaction_get_result core_result{};
     auto final_public_result = core_result.to_public_result();
-    REQUIRE(final_public_result.cas().empty());
+    REQUIRE(final_public_result.id().empty());
   }
   SECTION("default constructed public->core->public")
   {
     couchbase::transactions::transaction_get_result public_res;
     couchbase::core::transactions::transaction_get_result core_res(public_res);
     auto final_public_res = core_res.to_public_result();
-    REQUIRE(final_public_res.cas().empty());
+    REQUIRE(final_public_res.id().empty());
   }
 }

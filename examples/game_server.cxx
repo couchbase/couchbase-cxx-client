@@ -156,7 +156,7 @@ public:
           exists = false;
           return {};
         }
-        const Monster& monster_body = monster.content<Monster>();
+        const Monster& monster_body = monster.content_as<Monster>();
 
         int monster_hitpoints = monster_body.hitpoints;
         int monster_new_hitpoints = monster_hitpoints - damage_;
@@ -176,7 +176,7 @@ public:
           // set a "dead" flag or similar.
           ctx->remove(monster);
 
-          const Player& player_body = player.content<Player>();
+          const Player& player_body = player.content_as<Player>();
 
           // the player earns experience for killing the monster
           int experience_for_killing_monster = monster_body.experience_when_killed;

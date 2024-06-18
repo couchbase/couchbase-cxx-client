@@ -80,7 +80,7 @@ public:
 
   explicit transaction_get_result(const couchbase::transactions::transaction_get_result& res)
     : cas_(res.cas())
-    , document_id_(res.bucket(), res.scope(), res.collection(), res.key())
+    , document_id_(res.bucket(), res.scope(), res.collection(), res.id())
     , links_(res.base_->links())
     , content_(std::move(res.content()))
     , metadata_(res.base_->metadata_)

@@ -49,8 +49,8 @@ TEST_CASE("transactions public async API: can async get", "[transactions]")
       std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) -> couchbase::error {
       ctx->get(coll, id, [id](auto e, auto res) {
         CHECK_FALSE(e.ec());
-        CHECK(res.key() == id);
-        CHECK(res.template content<tao::json::value>() == async_content);
+        CHECK(res.id() == id);
+        CHECK(res.template content_as<tao::json::value>() == async_content);
       });
       return {};
     },
@@ -236,9 +236,9 @@ TEST_CASE("transactions public async API: can async replace", "[transactions]")
   c.transactions()->run(
     [id, coll, new_content](
       std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) -> couchbase::error {
-      ctx->get(coll, id, [new_content, ctx](auto, auto res) {
-        ctx->replace(res, new_content, [](auto replace_e, auto replace_result) {
-          CHECK(!replace_result.cas().empty());
+      ctx->get(coll, id, [new_content, ctx, id](auto, auto res) {
+        ctx->replace(res, new_content, [id](auto replace_e, auto replace_result) {
+          CHECK(replace_result.id() == id);
           CHECK_FALSE(replace_e.ec());
         });
       });
