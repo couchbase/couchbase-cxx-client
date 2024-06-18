@@ -31,51 +31,51 @@ struct transaction_op_error_category : std::error_category {
   {
     switch (static_cast<errc::transaction_op>(ev)) {
       case errc::transaction_op::unknown:
-        return "unknown error (1300)";
+        return "unknown (1300)";
       case errc::transaction_op::active_transaction_record_entry_not_found:
-        return "active transaction record entry not found (1301)";
+        return "active_transaction_record_entry_not_found (1301)";
       case errc::transaction_op::active_transaction_record_full:
-        return "active transaction record full (1302)";
+        return "active_transaction_record_full (1302)";
       case errc::transaction_op::active_transaction_record_not_found:
-        return "active transaction record not found (1303)";
+        return "active_transaction_record_not_found (1303)";
       case errc::transaction_op::document_already_in_transaction:
-        return "document already in transaction (1304)";
+        return "document_already_in_transaction (1304)";
       case errc::transaction_op::document_exists:
-        return "document exists (1305)";
+        return "document_exists (1305)";
       case errc::transaction_op::document_not_found:
-        return "document not found (1306)";
+        return "document_not_found (1306)";
       case errc::transaction_op::not_set:
-        return "error not set (1307)";
+        return "not_set (1307)";
       case errc::transaction_op::feature_not_available:
-        return "feature not available (1308)";
+        return "feature_not_available (1308)";
       case errc::transaction_op::transaction_aborted_externally:
-        return "transaction aborted externally (1309)";
+        return "transaction_aborted_externally (1309)";
       case errc::transaction_op::previous_operation_failed:
-        return "previous operation failed (1310)";
+        return "previous_operation_failed (1310)";
       case errc::transaction_op::forward_compatibility_failure:
-        return "forward compatible failure (1311)";
+        return "forward_compatibility_failure (1311)";
       case errc::transaction_op::parsing_failure:
-        return "parsing failure (1312)";
+        return "parsing_failure (1312)";
       case errc::transaction_op::illegal_state:
-        return "illegal state (1313)";
+        return "illegal_state (1313)";
       case errc::transaction_op::couchbase_error:
-        return "couchbase exception (1314)";
+        return "couchbase_error (1314)";
       case errc::transaction_op::service_not_available:
-        return "service not available (1315)";
+        return "service_not_available (1315)";
       case errc::transaction_op::request_canceled:
-        return "request canceled (1316)";
+        return "request_canceled (1316)";
       case errc::transaction_op::concurrent_operations_detected_on_same_document:
-        return "concurrent operations detected on same document (1317)";
+        return "concurrent_operations_detected_on_same_document (1317)";
       case errc::transaction_op::commit_not_permitted:
-        return "commit not permitted (1318)";
+        return "commit_not_permitted (1318)";
       case errc::transaction_op::rollback_not_permitted:
-        return "rollback not permitted (1319)";
+        return "rollback_not_permitted (1319)";
       case errc::transaction_op::transaction_already_aborted:
-        return "transaction already aborted (1320)";
+        return "transaction_already_aborted (1320)";
       case errc::transaction_op::transaction_already_committed:
-        return "transaction already committed (1321)";
+        return "transaction_already_committed (1321)";
       case errc::transaction_op::transaction_op_failed:
-        return "transaction operation failed (1399)";
+        return "transaction_op_failed (1399)";
     }
     return "FIXME: unknown error code (recompile with newer library): couchbase.transaction_op." +
            std::to_string(ev);

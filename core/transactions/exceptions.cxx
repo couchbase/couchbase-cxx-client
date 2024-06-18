@@ -177,9 +177,9 @@ external_exception_from_transaction_op_errc(errc::transaction_op ec) -> external
       return external_exception::ACTIVE_TRANSACTION_RECORD_NOT_FOUND;
     case errc::transaction_op::document_already_in_transaction:
       return external_exception::DOCUMENT_ALREADY_IN_TRANSACTION;
-    case errc::transaction_op::document_exists_exception:
+    case errc::transaction_op::document_exists:
       return external_exception::DOCUMENT_EXISTS_EXCEPTION;
-    case errc::transaction_op::document_not_found_exception:
+    case errc::transaction_op::document_not_found:
       return external_exception::DOCUMENT_NOT_FOUND_EXCEPTION;
     case errc::transaction_op::not_set:
       return external_exception::NOT_SET;
@@ -193,13 +193,13 @@ external_exception_from_transaction_op_errc(errc::transaction_op ec) -> external
       return external_exception::FORWARD_COMPATIBILITY_FAILURE;
     case errc::transaction_op::parsing_failure:
       return external_exception::PARSING_FAILURE;
-    case errc::transaction_op::illegal_state_exception:
+    case errc::transaction_op::illegal_state:
       return external_exception::ILLEGAL_STATE_EXCEPTION;
     case errc::transaction_op::couchbase_exception:
       return external_exception::COUCHBASE_EXCEPTION;
     case errc::transaction_op::service_not_available_exception:
       return external_exception::SERVICE_NOT_AVAILABLE_EXCEPTION;
-    case errc::transaction_op::request_canceled_exception:
+    case errc::transaction_op::request_canceled:
       return external_exception::REQUEST_CANCELED_EXCEPTION;
     case errc::transaction_op::concurrent_operations_detected_on_same_document:
       return external_exception::CONCURRENT_OPERATIONS_DETECTED_ON_SAME_DOCUMENT;
