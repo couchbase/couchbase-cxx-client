@@ -40,13 +40,13 @@ struct transaction_op_error_category : std::error_category {
         return "active transaction record not found (1303)";
       case errc::transaction_op::document_already_in_transaction:
         return "document already in transaction (1304)";
-      case errc::transaction_op::document_exists_exception:
+      case errc::transaction_op::document_exists:
         return "document exists (1305)";
-      case errc::transaction_op::document_not_found_exception:
+      case errc::transaction_op::document_not_found:
         return "document not found (1306)";
       case errc::transaction_op::not_set:
         return "error not set (1307)";
-      case errc::transaction_op::feature_not_available_exception:
+      case errc::transaction_op::feature_not_available:
         return "feature not available (1308)";
       case errc::transaction_op::transaction_aborted_externally:
         return "transaction aborted externally (1309)";
@@ -56,13 +56,13 @@ struct transaction_op_error_category : std::error_category {
         return "forward compatible failure (1311)";
       case errc::transaction_op::parsing_failure:
         return "parsing failure (1312)";
-      case errc::transaction_op::illegal_state_exception:
+      case errc::transaction_op::illegal_state:
         return "illegal state (1313)";
-      case errc::transaction_op::couchbase_exception:
+      case errc::transaction_op::couchbase_error:
         return "couchbase exception (1314)";
-      case errc::transaction_op::service_not_available_exception:
+      case errc::transaction_op::service_not_available:
         return "service not available (1315)";
-      case errc::transaction_op::request_canceled_exception:
+      case errc::transaction_op::request_canceled:
         return "request canceled (1316)";
       case errc::transaction_op::concurrent_operations_detected_on_same_document:
         return "concurrent operations detected on same document (1317)";

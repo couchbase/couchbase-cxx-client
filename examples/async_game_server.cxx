@@ -159,7 +159,7 @@ public:
           monster_id,
           [ctx, this, collection, monster_id, player_id, &exists, damage = std::move(damage)](
             auto e, auto monster) {
-            if (e.ec() == couchbase::errc::transaction_op::document_not_found_exception) {
+            if (e.ec() == couchbase::errc::transaction_op::document_not_found) {
               std::cout << "monster no longer exists" << std::endl;
               exists = false;
               return;

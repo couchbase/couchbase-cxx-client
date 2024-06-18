@@ -172,7 +172,7 @@ run_workload(const std::shared_ptr<couchbase::transactions::transactions>& trans
           for (const auto& id : selected_keys) {
             attempt->get(
               collection, id, [attempt, &collection, id, &arguments, &errors](auto ctx, auto res) {
-                if (ctx.ec() == couchbase::errc::transaction_op::document_not_found_exception) {
+                if (ctx.ec() == couchbase::errc::transaction_op::document_not_found) {
                   attempt->insert(collection,
                                   id,
                                   generate_document(arguments.document_body_size),

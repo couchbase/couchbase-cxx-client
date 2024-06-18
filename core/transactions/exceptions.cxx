@@ -128,19 +128,19 @@ transaction_op_errc_from_external_exception(external_exception e) -> errc::trans
     case external_exception::CONCURRENT_OPERATIONS_DETECTED_ON_SAME_DOCUMENT:
       return errc::transaction_op::concurrent_operations_detected_on_same_document;
     case external_exception::COUCHBASE_EXCEPTION:
-      return errc::transaction_op::couchbase_exception;
+      return errc::transaction_op::couchbase_error;
     case external_exception::DOCUMENT_ALREADY_IN_TRANSACTION:
       return errc::transaction_op::document_already_in_transaction;
     case external_exception::DOCUMENT_EXISTS_EXCEPTION:
-      return errc::transaction_op::document_exists_exception;
+      return errc::transaction_op::document_exists;
     case external_exception::DOCUMENT_NOT_FOUND_EXCEPTION:
-      return errc::transaction_op::document_not_found_exception;
+      return errc::transaction_op::document_not_found;
     case external_exception::FEATURE_NOT_AVAILABLE_EXCEPTION:
-      return errc::transaction_op::feature_not_available_exception;
+      return errc::transaction_op::feature_not_available;
     case external_exception::FORWARD_COMPATIBILITY_FAILURE:
       return errc::transaction_op::forward_compatibility_failure;
     case external_exception::ILLEGAL_STATE_EXCEPTION:
-      return errc::transaction_op::illegal_state_exception;
+      return errc::transaction_op::illegal_state;
     case external_exception::PARSING_FAILURE:
       return errc::transaction_op::parsing_failure;
     case external_exception::NOT_SET:
@@ -148,11 +148,11 @@ transaction_op_errc_from_external_exception(external_exception e) -> errc::trans
     case external_exception::PREVIOUS_OPERATION_FAILED:
       return errc::transaction_op::previous_operation_failed;
     case external_exception::REQUEST_CANCELED_EXCEPTION:
-      return errc::transaction_op::request_canceled_exception;
+      return errc::transaction_op::request_canceled;
     case external_exception::ROLLBACK_NOT_PERMITTED:
       return errc::transaction_op::rollback_not_permitted;
     case external_exception::SERVICE_NOT_AVAILABLE_EXCEPTION:
-      return errc::transaction_op::service_not_available_exception;
+      return errc::transaction_op::service_not_available;
     case external_exception::TRANSACTION_ABORTED_EXTERNALLY:
       return errc::transaction_op::transaction_aborted_externally;
     case external_exception::TRANSACTION_ALREADY_ABORTED:

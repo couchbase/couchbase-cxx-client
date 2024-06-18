@@ -174,3 +174,8 @@
  * to propagate errors and rollback
  */
 #define COUCHBASE_CXX_CLIENT_TXNS_LAMBDA_RETURNS_ERROR 1
+
+/**
+ * transaction_op error codes do not have 'exception' suffix
+ */
+#define COUCHBASE_CXX_CLIENT_TRANSACTION_OP_ERRC_NO_EXCEPTION_SUFFIX 1
