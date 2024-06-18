@@ -151,7 +151,7 @@ public:
     auto [err, result] =
       transactions_->run([&](std::shared_ptr<attempt_context> ctx) -> couchbase::error {
         auto [e, monster] = ctx->get(collection, monster_id);
-        if (e.ec() == couchbase::errc::transaction_op::document_not_found_exception) {
+        if (e.ec() == couchbase::errc::transaction_op::document_not_found) {
           std::cout << "monster no longer exists" << std::endl;
           exists = false;
           return {};

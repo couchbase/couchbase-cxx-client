@@ -78,7 +78,7 @@ TEST_CASE("transactions public async API: can get fail as expected", "[transacti
     [id, coll](
       std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) -> couchbase::error {
       ctx->get(coll, id, [id](auto e, auto) {
-        CHECK(e.ec() == couchbase::errc::transaction_op::document_not_found_exception);
+        CHECK(e.ec() == couchbase::errc::transaction_op::document_not_found);
       });
       return {};
     },
@@ -206,7 +206,7 @@ TEST_CASE(
     [id, coll](
       std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) -> couchbase::error {
       ctx->insert(coll, id, async_content, [coll, id](auto e, auto) {
-        CHECK(e.ec() == couchbase::errc::transaction_op::document_exists_exception);
+        CHECK(e.ec() == couchbase::errc::transaction_op::document_exists);
       });
       return {};
     },

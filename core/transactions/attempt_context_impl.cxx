@@ -492,7 +492,7 @@ attempt_context_impl::get_replica_from_preferred_server_group(
     [handler = std::move(handler)](std::exception_ptr err,
                                    std::optional<transaction_get_result> res) mutable {
       if (!res) {
-        return handler({ errc::transaction_op::document_not_found_exception }, {});
+        return handler({ errc::transaction_op::document_not_found }, {});
       }
       return wrap_callback_for_async_public_api(std::move(err), std::move(res), std::move(handler));
     });
@@ -3233,7 +3233,7 @@ attempt_context_impl::create_staged_insert_error_handler(const core::document_id
                       self, "doc {} not in txn - was inserted outside txn", id);
                     return self->op_completed_with_error(
                       std::forward<Handler>(cb),
-                      document_exists({ couchbase::errc::transaction_op::document_exists_exception,
+                      document_exists({ couchbase::errc::transaction_op::document_exists,
                                         key_value_error_context() }));
                   }
                   if (doc->links().staged_attempt_id() == self->id()) {
@@ -3497,7 +3497,7 @@ attempt_context_impl::get(const couchbase::collection& coll, const std::string& 
       return {};
     });
   if (!ctx.ec() && res.cas().empty()) {
-    return { { errc::transaction_op::document_not_found_exception }, res };
+    return { { errc::transaction_op::document_not_found }, res };
   }
   return { ctx, res };
 }
@@ -3510,7 +3510,7 @@ attempt_context_impl::get(const couchbase::collection& coll,
                [handler = std::move(handler)](std::exception_ptr err,
                                               std::optional<transaction_get_result> res) mutable {
                  if (!res) {
-                   return handler({ errc::transaction_op::document_not_found_exception }, {});
+                   return handler({ errc::transaction_op::document_not_found }, {});
                  }
                  return wrap_callback_for_async_public_api(
                    std::move(err), std::move(res), std::move(handler));

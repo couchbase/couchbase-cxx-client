@@ -1123,25 +1123,26 @@ enum class transaction_op {
   active_transaction_record_full = 1302,
   active_transaction_record_not_found = 1303,
   document_already_in_transaction = 1304,
-  document_exists_exception = 1305,
-  document_not_found_exception = 1306,
+  document_exists = 1305,
+  document_not_found = 1306,
   not_set = 1307,
-  feature_not_available_exception = 1308,
+  feature_not_available = 1308,
   transaction_aborted_externally = 1309,
   previous_operation_failed = 1310,
   forward_compatibility_failure = 1311,
   parsing_failure = 1312,
-  illegal_state_exception = 1313,
-  couchbase_exception = 1314,
-  service_not_available_exception = 1315,
-  request_canceled_exception = 1316,
+  illegal_state = 1313,
+  couchbase_error = 1314,
+  service_not_available = 1315,
+  request_canceled = 1316,
   concurrent_operations_detected_on_same_document = 1317,
   commit_not_permitted = 1318,
   rollback_not_permitted = 1319,
   transaction_already_aborted = 1320,
   transaction_already_committed = 1321,
+
   /**
-   * Special code for internal use
+   * @internal
    */
   transaction_op_failed = 1399,
 };
