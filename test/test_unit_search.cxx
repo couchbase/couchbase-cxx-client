@@ -130,8 +130,9 @@ TEST_CASE("unit: disjunction search query", "[unit]")
 //! [search-disjunction]
 auto query = couchbase::disjunction_query{
   couchbase::match_query("location hostel").field("reviews.content"),
-  couchbase::boolean_field_query(true).field("free_breakfast")
-};
+  couchbase::boolean_field_query(true).field("free_breakfast"),
+  couchbase::boolean_field_query(true).field("late_check_in"),
+}.min(2);
 //! [search-disjunction]
   // clang-format on
   const auto encoded = query.encode();
@@ -139,8 +140,10 @@ auto query = couchbase::disjunction_query{
   REQUIRE(encoded.query == R"(
 {"disjuncts":[
     {"field":"reviews.content","match":"location hostel"},
-    {"bool":true,"field":"free_breakfast"}
-]}
+    {"bool":true,"field":"free_breakfast"},
+    {"bool":true,"field":"late_check_in"}
+],
+"min": 2}
 )"_json);
 }
 
@@ -177,8 +180,8 @@ query.must_not(
   REQUIRE_FALSE(encoded.ec);
   REQUIRE(encoded.query == R"(
 {"must":     {"conjuncts":[{"field":"reviews.content","match":"hostel room"},{"bool":true,"field":"free_breakfast"}]},
- "must_not": {"disjuncts":[{"field":"city","match":"Padfield Gilingham"}]},
- "should":   {"disjuncts":[{"field":"reviews.ratings.Overall","min":4},{"field":"reviews.ratings.Service","min":5}]}}
+ "must_not": {"disjuncts":[{"field":"city","match":"Padfield Gilingham"}], "min": 1},
+ "should":   {"disjuncts":[{"field":"reviews.ratings.Overall","min":4},{"field":"reviews.ratings.Service","min":5}], "min": 1}}
 )"_json);
 }
 

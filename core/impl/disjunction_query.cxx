@@ -35,6 +35,7 @@ disjunction_query::encode() const -> encoded_search_query
   if (boost_) {
     built.query["boost"] = boost_.value();
   }
+  built.query["min"] = min_;
 
   tao::json::value disjuncts = tao::json::empty_array;
   for (const auto& disjunct : disjuncts_) {
