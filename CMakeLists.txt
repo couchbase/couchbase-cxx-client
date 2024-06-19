@@ -144,6 +144,7 @@ set(couchbase_cxx_client_FILES
     core/impl/internal_search_result.cxx
     core/impl/internal_search_row.cxx
     core/impl/internal_search_row_locations.cxx
+    core/impl/internal_error_context.cxx
     core/impl/internal_term_facet_result.cxx
     core/impl/key_value_error_category.cxx
     core/impl/key_value_error_context.cxx

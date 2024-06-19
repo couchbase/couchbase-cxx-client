@@ -19,6 +19,7 @@
 
 #include "core/diagnostics.hxx"
 #include "core/service_type.hxx"
+#include "core/utils/json.hxx"
 
 #include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/diagnostics_result.hxx>
@@ -132,9 +133,9 @@ endpoint_diagnostics_as_json(const endpoint_diagnostics& report)
 } // namespace
 
 auto
-ping_result::as_json() const -> codec::tao_json_serializer::document_type
+ping_result::as_json() const -> std::string
 {
-  codec::tao_json_serializer::document_type endpoints{};
+  tao::json::value endpoints = tao::json::empty_object;
   for (const auto& [service_type, reports] : endpoints_) {
     std::vector<codec::tao_json_serializer::document_type> json_reports{};
     for (const auto& report : reports) {
@@ -142,18 +143,18 @@ ping_result::as_json() const -> codec::tao_json_serializer::document_type
     }
     endpoints[service_type_as_string(service_type)] = json_reports;
   }
-  return {
+  return couchbase::core::utils::json::generate({
     { "version", version_ },
     { "id", id_ },
     { "sdk", sdk_ },
     { "services", endpoints },
-  };
+  });
 }
 
 auto
-diagnostics_result::as_json() const -> codec::tao_json_serializer::document_type
+diagnostics_result::as_json() const -> std::string
 {
-  codec::tao_json_serializer::document_type endpoints{};
+  tao::json::value endpoints = tao::json::empty_object;
   for (const auto& [service_type, reports] : endpoints_) {
     std::vector<codec::tao_json_serializer::document_type> json_reports{};
     for (const auto& report : reports) {
@@ -161,12 +162,12 @@ diagnostics_result::as_json() const -> codec::tao_json_serializer::document_type
     }
     endpoints[service_type_as_string(service_type)] = json_reports;
   }
-  return {
+  return couchbase::core::utils::json::generate({
     { "id", id_ },
     { "sdk", sdk_ },
     { "version", version_ },
     { "services", endpoints },
-  };
+  });
 }
 } // namespace couchbase
 

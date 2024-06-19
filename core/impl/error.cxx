@@ -27,6 +27,7 @@
 #include "core/error_context/query_public_json.hxx"
 #include "core/error_context/search_json.hxx"
 #include "core/error_context/subdocument_json.hxx"
+#include "core/impl/internal_error_context.hxx"
 #include "core/transactions/internal/exceptions_internal_fmt.hxx"
 #include "error.hxx"
 
@@ -99,46 +100,43 @@ namespace core::impl
 auto
 make_error(const core::error_context::query& core_ctx) -> error
 {
-  return { core_ctx.ec, "", couchbase::error_context{ internal_error_context(core_ctx) } };
+  return { core_ctx.ec, {}, internal_error_context::build_error_context(core_ctx) };
 }
 
 auto
 make_error(const query_error_context& core_ctx) -> error
 {
-  tao::json::value ctx(core_ctx);
-  return { core_ctx.ec(), {}, couchbase::error_context(ctx) };
+  return { core_ctx.ec(), {}, internal_error_context::build_error_context(core_ctx) };
 }
 
 auto
 make_error(const core::error_context::search& core_ctx) -> error
 {
-  return { core_ctx.ec, "", couchbase::error_context{ internal_error_context(core_ctx) } };
+  return { core_ctx.ec, {}, internal_error_context::build_error_context(core_ctx) };
 }
 
 auto
 make_error(const core::error_context::analytics& core_ctx) -> error
 {
-  return { core_ctx.ec, "", couchbase::error_context{ internal_error_context(core_ctx) } };
+  return { core_ctx.ec, {}, internal_error_context::build_error_context(core_ctx) };
 }
 
 auto
 make_error(const core::error_context::http& core_ctx) -> error
 {
-  return { core_ctx.ec, "", couchbase::error_context{ internal_error_context(core_ctx) } };
+  return { core_ctx.ec, {}, internal_error_context::build_error_context(core_ctx) };
 }
 
 auto
 make_error(const couchbase::core::key_value_error_context& core_ctx) -> error
 {
-  tao::json::value ctx(core_ctx);
-  return { core_ctx.ec(), "", couchbase::error_context(ctx) };
+  return { core_ctx.ec(), {}, internal_error_context::build_error_context(core_ctx) };
 }
 
 auto
 make_error(const couchbase::core::subdocument_error_context& core_ctx) -> error
 {
-  tao::json::value ctx(core_ctx);
-  return { core_ctx.ec(), "", couchbase::error_context(ctx) };
+  return { core_ctx.ec(), {}, internal_error_context::build_error_context(core_ctx) };
 }
 
 auto
@@ -165,7 +163,7 @@ make_error(const couchbase::core::transactions::transaction_operation_failed& co
 {
   return { couchbase::errc::transaction_op::transaction_op_failed,
            core_tof.what(),
-           couchbase::error_context(tao::json::empty_object, internal_error_context(core_tof)),
+           internal_error_context::build_error_context(tao::json::empty_object, core_tof),
            error(errc::make_error_code(
              transaction_op_errc_from_external_exception(core_tof.cause()))) };
 }

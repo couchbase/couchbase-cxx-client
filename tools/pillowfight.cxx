@@ -32,6 +32,7 @@
 #include <fmt/chrono.h>
 #include <fmt/std.h>
 #include <hdr/hdr_histogram.h>
+#include <tao/json.hpp>
 
 #include <csignal>
 #include <deque>
@@ -504,7 +505,7 @@ private:
                                    T,
                                    std::future<
                                      std::pair<couchbase::error, couchbase::mutation_result>>>) {
-              auto ctx = err.ctx().template as<tao::json::value>();
+              auto ctx = tao::json::from_string(err.ctx().to_json());
               known_keys.emplace_back(ctx["id"].get_string());
             }
           },

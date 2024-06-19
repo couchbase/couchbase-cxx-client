@@ -17,11 +17,13 @@
 
 #include "test_helper_integration.hxx"
 
+#include "core/diagnostics.hxx"
+#include "core/diagnostics_json.hxx"
+
 #include <couchbase/diagnostics_result.hxx>
 #include <couchbase/ping_result.hxx>
 
-#include "core/diagnostics.hxx"
-#include "core/diagnostics_json.hxx"
+#include <tao/json.hpp>
 
 using namespace std::literals::chrono_literals;
 
@@ -278,7 +280,7 @@ TEST_CASE("unit: serializing diagnostics report", "[unit]")
       },
     };
 
-    auto report = res.as_json();
+    auto report = tao::json::from_string(res.as_json());
     REQUIRE(report == expected);
   }
 }
@@ -510,7 +512,7 @@ TEST_CASE("unit: serializing ping report", "[integration]")
       },
     };
 
-    auto report = res.as_json();
+    auto report = tao::json::from_string(res.as_json());
     REQUIRE(report == expected);
   }
 }

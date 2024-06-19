@@ -18,6 +18,7 @@
 #include "test_helper_integration.hxx"
 
 #include "core/error_context/analytics_json.hxx"
+#include "core/impl/internal_error_context.hxx"
 #include "core/operations/document_analytics.hxx"
 #include "core/operations/document_append.hxx"
 #include "core/operations/document_decrement.hxx"
@@ -505,7 +506,8 @@ TEST_CASE("integration: public API analytics query")
        * "errors": [{"code": 23027, "msg": "Bucket default on link Default.Local is not connected"}
        * ],
        */
-      return error.ctx().as<couchbase::core::error_context::analytics>().first_error_code != 23027;
+      return error.ctx().impl()->as<couchbase::core::error_context::analytics>().first_error_code !=
+             23027;
     }));
 
     REQUIRE_SUCCESS(error.ec());

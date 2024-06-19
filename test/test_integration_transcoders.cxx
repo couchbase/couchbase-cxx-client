@@ -17,6 +17,8 @@
 
 #include "test_helper_integration.hxx"
 
+#include "core/impl/internal_error_context.hxx"
+
 #include <catch2/matchers/catch_matchers.hpp>
 #include <catch2/matchers/catch_matchers_exception.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
@@ -557,7 +559,7 @@ TEST_CASE("integration: subdoc with public API", "[integration]")
                    {})
         .get();
     REQUIRE(err.ec() == couchbase::errc::key_value::path_not_found);
-    auto ctx = err.ctx().as<tao::json::value>();
+    auto ctx = err.ctx().impl()->as<tao::json::value>();
     REQUIRE(ctx.find("first_error_index") != nullptr);
     REQUIRE(ctx["first_error_index"] == 1);
     REQUIRE(ctx.find("first_error_path") != nullptr);
@@ -580,7 +582,7 @@ TEST_CASE("integration: subdoc with public API", "[integration]")
                    {})
         .get();
     REQUIRE_SUCCESS(err.ec());
-    auto ctx = err.ctx().as<tao::json::value>();
+    auto ctx = err.ctx().impl()->as<tao::json::value>();
     REQUIRE(ctx.find("first_error_index") == nullptr);
     REQUIRE_FALSE(resp.cas().empty());
     REQUIRE(resp.has_value(0));
@@ -604,7 +606,7 @@ TEST_CASE("integration: subdoc with public API", "[integration]")
           },
           {})
         .get();
-    auto ctx = err.ctx().as<tao::json::value>();
+    auto ctx = err.ctx().impl()->as<tao::json::value>();
     REQUIRE_SUCCESS(err.ec());
     REQUIRE(ctx.find("first_error_index") == nullptr);
     REQUIRE(ctx.find("first_error_path") == nullptr);

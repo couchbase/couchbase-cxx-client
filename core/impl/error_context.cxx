@@ -17,65 +17,40 @@
 
 #include <couchbase/error_context.hxx>
 
-#include <tao/json/to_string.hpp>
-#include <tao/json/value.hpp>
+#include "core/impl/internal_error_context.hxx"
 
 #include <string>
 #include <utility>
 
 namespace couchbase
 {
-error_context::error_context()
-  : internal_(tao::json::empty_object)
-  , internal_metadata_(tao::json::empty_object)
+
+error_context::error_context(std::shared_ptr<internal_error_context> impl)
+  : impl_(std::move(impl))
 {
 }
 
-error_context::error_context(internal_error_context internal)
-  : internal_(std::move(internal))
-  , internal_metadata_(tao::json::empty_object)
+auto
+error_context::impl() const -> std::shared_ptr<internal_error_context>
 {
-}
-
-error_context::error_context(couchbase::internal_error_context internal,
-                             couchbase::internal_error_context internal_metadata)
-  : internal_(std::move(internal))
-  , internal_metadata_(std::move(internal_metadata))
-{
+  return impl_;
 }
 
 error_context::operator bool() const
 {
-  return internal_.operator bool();
+  if (impl_ == nullptr) {
+    return false;
+  }
+  return impl_->operator bool();
 }
 
 auto
 error_context::to_json(error_context_json_format format) const -> std::string
 {
-  if (internal_.is_uninitialized()) {
+  if (impl_ == nullptr) {
     return "{}";
   }
-  switch (format) {
-    case error_context_json_format::compact:
-      return tao::json::to_string(internal_);
-    case error_context_json_format::pretty:
-      return tao::json::to_string(internal_, 2);
-  }
-  return "{}";
+  return impl_->internal_to_json(format);
 }
 
-auto
-error_context::internal_metadata(couchbase::error_context_json_format format) const -> std::string
-{
-  if (internal_metadata_.is_uninitialized()) {
-    return "{}";
-  }
-  switch (format) {
-    case error_context_json_format::compact:
-      return tao::json::to_string(internal_metadata_);
-    case error_context_json_format::pretty:
-      return tao::json::to_string(internal_metadata_, 2);
-  }
-  return "{}";
-}
 } // namespace couchbase

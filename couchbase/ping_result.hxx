@@ -17,7 +17,6 @@
 
 #pragma once
 
-#include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/endpoint_ping_report.hxx>
 #include <couchbase/service_type.hxx>
 
@@ -110,7 +109,7 @@ public:
    *
    * @return the JSON report.
    */
-  [[nodiscard]] auto as_json() const -> codec::tao_json_serializer::document_type;
+  [[nodiscard]] auto as_json() const -> std::string;
 
 private:
   std::string id_{};
