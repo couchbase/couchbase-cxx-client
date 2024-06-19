@@ -20,6 +20,7 @@
 
 #include "core/error_context/query.hxx"
 #include "core/error_context/query_json.hxx"
+#include "core/impl/internal_error_context.hxx"
 #include "core/logger/logger.hxx"
 #include "core/utils/binary.hxx"
 
@@ -236,13 +237,13 @@ Examples:
       if (json_lines_) {
         print_result_json_line(scope_id,
                                statement,
-                               error.ctx().as<couchbase::core::error_context::query>(),
+                               error.ctx().impl()->as<couchbase::core::error_context::query>(),
                                resp,
                                query_options);
       } else {
         print_result(scope_id,
                      statement,
-                     error.ctx().as<couchbase::core::error_context::query>(),
+                     error.ctx().impl()->as<couchbase::core::error_context::query>(),
                      resp,
                      query_options);
       }

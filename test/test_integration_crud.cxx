@@ -19,6 +19,7 @@
 
 #include "utils/move_only_context.hxx"
 
+#include "core/impl/internal_error_context.hxx"
 #include "core/operations/document_append.hxx"
 #include "core/operations/document_decrement.hxx"
 #include "core/operations/document_exists.hxx"
@@ -947,7 +948,7 @@ TEST_CASE("integration: pessimistic locking with public API", "[integration]")
     }
     auto [err, resp] = collection.get_and_lock(id, lock_time, options).get();
     REQUIRE(err.ec() == couchbase::errc::common::ambiguous_timeout);
-    auto retry_reasons = err.ctx().as<tao::json::value>().at("retry_reasons").get_array();
+    auto retry_reasons = err.ctx().impl()->as<tao::json::value>().at("retry_reasons").get_array();
     REQUIRE(retry_reasons.at(0).get_string() == "kv_locked");
   }
 
@@ -956,7 +957,7 @@ TEST_CASE("integration: pessimistic locking with public API", "[integration]")
     auto wrong_cas = couchbase::cas{ cas.value() - 1 };
     auto err = collection.unlock(id, wrong_cas, {}).get();
     REQUIRE(err.ec() == couchbase::errc::common::cas_mismatch);
-    auto retry_reasons = err.ctx().as<tao::json::value>().at("retry_reasons").get_array();
+    auto retry_reasons = err.ctx().impl()->as<tao::json::value>().at("retry_reasons").get_array();
     REQUIRE(retry_reasons.empty());
   }
 

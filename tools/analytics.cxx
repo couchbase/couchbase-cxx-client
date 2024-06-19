@@ -16,16 +16,18 @@
  */
 
 #include "analytics.hxx"
-#include "core/utils/binary.hxx"
 #include "utils.hxx"
 
-#include <core/logger/logger.hxx>
+#include "core/error_context/analytics_json.hxx"
+#include "core/impl/internal_error_context.hxx"
+#include "core/logger/logger.hxx"
+#include "core/utils/binary.hxx"
+
 #include <couchbase/cluster.hxx>
 #include <couchbase/fmt/analytics_status.hxx>
 #include <couchbase/fmt/error.hxx>
 
 #include <asio/io_context.hpp>
-#include <core/error_context/analytics_json.hxx>
 #include <fmt/chrono.h>
 #include <spdlog/fmt/bin_to_hex.h>
 #include <tao/json.hpp>
@@ -170,13 +172,13 @@ public:
       if (json_lines_) {
         print_result_json_line(scope_id,
                                statement,
-                               error.ctx().as<couchbase::core::error_context::analytics>(),
+                               error.ctx().impl()->as<couchbase::core::error_context::analytics>(),
                                resp,
                                analytics_options);
       } else {
         print_result(scope_id,
                      statement,
-                     error.ctx().as<couchbase::core::error_context::analytics>(),
+                     error.ctx().impl()->as<couchbase::core::error_context::analytics>(),
                      resp,
                      analytics_options);
       }

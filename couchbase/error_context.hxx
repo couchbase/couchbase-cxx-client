@@ -17,51 +17,34 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
-
-#include <tao/json.hpp>
-#include <tao/json/contrib/traits.hpp>
-#include <tao/json/value.hpp>
 
 namespace couchbase
 {
-using internal_error_context = tao::json::value;
-
 enum class error_context_json_format {
   compact = 0,
   pretty,
 };
 
+struct internal_error_context;
+
 class error_context
 {
 public:
-  error_context();
-  explicit error_context(internal_error_context internal);
-  error_context(internal_error_context internal, internal_error_context internal_metadata);
+  error_context() = default;
 
   explicit operator bool() const;
 
   [[nodiscard]] auto to_json(
     error_context_json_format format = error_context_json_format::compact) const -> std::string;
 
-  template<typename T>
-  T as() const
-  {
-    if constexpr (std::is_same_v<T, internal_error_context>) {
-      return internal_;
-    } else {
-      return internal_.as<T>();
-    }
-  }
-
-  /**
-   * @internal
-   */
-  [[nodiscard]] auto internal_metadata(
-    error_context_json_format format = error_context_json_format::compact) const -> std::string;
+  [[nodiscard]] auto impl() const -> std::shared_ptr<internal_error_context>;
 
 private:
-  internal_error_context internal_;
-  internal_error_context internal_metadata_;
+  friend struct internal_error_context;
+  explicit error_context(std::shared_ptr<internal_error_context> impl);
+
+  std::shared_ptr<internal_error_context> impl_{ nullptr };
 };
 } // namespace couchbase

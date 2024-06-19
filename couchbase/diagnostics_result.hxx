@@ -17,7 +17,6 @@
 
 #pragma once
 
-#include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/endpoint_diagnostics.hxx>
 #include <couchbase/service_type.hxx>
 
@@ -113,7 +112,7 @@ public:
    * @since 1.0.0
    * @committed
    */
-  [[nodiscard]] auto as_json() const -> codec::tao_json_serializer::document_type;
+  [[nodiscard]] auto as_json() const -> std::string;
 
 private:
   std::string id_{};

@@ -17,12 +17,12 @@
 
 #pragma once
 
+#include <couchbase/error_context.hxx>
+
 #include <memory>
 #include <optional>
 #include <string>
 #include <system_error>
-
-#include <couchbase/error_context.hxx>
 
 namespace couchbase
 {

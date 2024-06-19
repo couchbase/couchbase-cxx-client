@@ -19,12 +19,9 @@
 
 #include <chrono>
 #include <cstdint>
-#include <map>
 #include <optional>
 #include <string>
 
-#include <couchbase/codec/tao_json_serializer.hxx>
-#include <couchbase/endpoint_ping_report.hxx>
 #include <couchbase/service_type.hxx>
 
 namespace couchbase
@@ -192,14 +189,14 @@ public:
   }
 
 private:
-  service_type type_;
+  service_type type_{};
   std::string id_;
   std::string local_;
   std::string remote_;
-  ping_state state_;
+  ping_state state_{};
   std::optional<std::string> error_{};
   std::optional<std::string> namespace_{};
-  std::chrono::microseconds latency_;
+  std::chrono::microseconds latency_{};
 };
 
 } // namespace couchbase

@@ -189,3 +189,9 @@
  * Public API does not require passing IO context when connecting
  */
 #define COUCHBASE_CXX_CLIENT_PUBLIC_API_DOES_NOT_EXPOSE_ASIO
+
+/**
+ * Public API uses Tao::JSON headers only when it is absolutely necessary to
+ * encode document content or decode results.
+ */
+#define COUCHBASE_CXX_CLIENT_PUBLIC_API_USES_TAO_JSON_ONLY_FOR_CONTENT

@@ -22,7 +22,10 @@
 #include <fmt/chrono.h>
 #include <fmt/format.h>
 
+#include <tao/json.hpp>
+
 #include <system_error>
+#include <tao/json/from_string.hpp>
 #include <thread>
 
 static constexpr auto connection_string{ "couchbase://127.0.0.1" };
@@ -98,11 +101,7 @@ public:
   {
     auto options = couchbase::upsert_options{}.retry_strategy(retry_strategy_).timeout(timeout_);
     auto [err, resp] = collection_.upsert(document_id_, content_, options).get();
-    auto ctx = err.ctx().as<tao::json::value>();
-    std::size_t retry_attempts = 0;
-    if (const auto* attempts = ctx.find("retry_attempts"); attempts != nullptr) {
-      retry_attempts = attempts->get_unsigned();
-    }
+    std::size_t retry_attempts = retry_attemps_from_context(err.ctx().to_json());
 
     if (err.ec()) {
       throw std::system_error(
@@ -123,11 +122,7 @@ public:
     auto options =
       couchbase::get_and_lock_options{}.retry_strategy(retry_strategy_).timeout(timeout_);
     auto [err, resp] = collection_.get_and_lock(document_id_, lock_duration_, options).get();
-    auto ctx = err.ctx().as<tao::json::value>();
-    std::size_t retry_attempts = 0;
-    if (const auto* attempts = ctx.find("retry_attempts"); attempts != nullptr) {
-      retry_attempts = attempts->get_unsigned();
-    }
+    std::size_t retry_attempts = retry_attemps_from_context(err.ctx().to_json());
     if (err) {
       throw std::system_error(
         err.ec(),
@@ -143,11 +138,7 @@ public:
     std::scoped_lock lock(mutex_);
     auto options = couchbase::unlock_options{}.timeout(timeout_);
     auto err = collection_.unlock(document_id_, cas_, options).get();
-    auto ctx = err.ctx().as<tao::json::value>();
-    std::size_t retry_attempts = 0;
-    if (const auto* attempts = ctx.find("retry_attempts"); attempts != nullptr) {
-      retry_attempts = attempts->get_unsigned();
-    }
+    std::size_t retry_attempts = retry_attemps_from_context(err.ctx().to_json());
     if (err) {
       throw std::system_error(
         err.ec(),
@@ -158,6 +149,15 @@ public:
   }
 
 private:
+  static auto retry_attemps_from_context(const std::string& context_json) -> std::size_t
+  {
+    auto ctx = tao::json::from_string(context_json);
+    if (const auto* attempts = ctx.find("retry_attempts"); attempts != nullptr) {
+      return attempts->get_unsigned();
+    }
+    return 0;
+  }
+
   couchbase::collection collection_;
   std::string document_id_;
   std::chrono::seconds lock_duration_;
