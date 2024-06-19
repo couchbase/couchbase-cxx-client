@@ -84,19 +84,6 @@ public:
                          });
   }
 
-  void search_query(std::string index_name,
-                    const class search_query& query,
-                    search_options::built options,
-                    search_handler&& handler) const
-  {
-    return core_.execute(
-      core::impl::build_search_request(std::move(index_name), query, options, bucket_name_, name_),
-      [handler = std::move(handler)](auto&& resp) mutable {
-        return handler(core::impl::make_error(resp.ctx),
-                       search_result{ internal_search_result{ resp } });
-      });
-  }
-
   void search(std::string index_name,
               couchbase::search_request request,
               search_options::built options,

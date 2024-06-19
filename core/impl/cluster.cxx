@@ -207,19 +207,6 @@ public:
       });
   }
 
-  void search_query(std::string index_name,
-                    const class search_query& query,
-                    const search_options::built& options,
-                    search_handler&& handler) const
-  {
-    return core_.execute(
-      core::impl::build_search_request(std::move(index_name), query, options, {}, {}),
-      [handler = std::move(handler)](auto resp) mutable {
-        return handler(core::impl::make_error(resp.ctx),
-                       search_result{ internal_search_result{ resp } });
-      });
-  }
-
   void ping(const ping_options::built& options, ping_handler&& handler) const
   {
     return core_.ping(options.report_id,
@@ -378,28 +365,6 @@ cluster::diagnostics(const couchbase::diagnostics_options& options) const
   auto barrier = std::make_shared<std::promise<std::pair<error, diagnostics_result>>>();
   diagnostics(options, [barrier](auto err, auto result) mutable {
     barrier->set_value({ std::move(err), std::move(result) });
-  });
-  return barrier->get_future();
-}
-
-void
-cluster::search_query(std::string index_name,
-                      const class search_query& query,
-                      const search_options& options,
-                      search_handler&& handler) const
-{
-  return impl_->search_query(std::move(index_name), query, options.build(), std::move(handler));
-}
-
-auto
-cluster::search_query(std::string index_name,
-                      const class search_query& query,
-                      const search_options& options) const
-  -> std::future<std::pair<error, search_result>>
-{
-  auto barrier = std::make_shared<std::promise<std::pair<error, search_result>>>();
-  search_query(std::move(index_name), query, options, [barrier](auto err, auto result) mutable {
-    barrier->set_value(std::make_pair(std::move(err), std::move(result)));
   });
   return barrier->get_future();
 }

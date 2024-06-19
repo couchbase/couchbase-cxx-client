@@ -129,7 +129,7 @@ public:
    * @see https://docs.couchbase.com/server/current/fts/fts-introduction.html
    *
    * @since 1.0.0
-   * @volatile
+   * @committed
    */
   void search(std::string index_name,
               search_request request,
@@ -152,7 +152,7 @@ public:
    * @see https://docs.couchbase.com/server/current/fts/fts-introduction.html
    *
    * @since 1.0.0
-   * @volatile
+   * @committed
    */
   [[nodiscard]] auto search(std::string index_name,
                             search_request request,

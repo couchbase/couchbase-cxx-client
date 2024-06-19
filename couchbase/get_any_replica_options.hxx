@@ -55,7 +55,7 @@ struct get_any_replica_options : public common_options<get_any_replica_options> 
    * @return this options builder for chaining purposes.
    *
    * @since 1.0.0
-   * @volatile
+   * @committed
    */
   auto read_preference(read_preference preference) -> get_any_replica_options&
   {

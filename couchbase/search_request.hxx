@@ -40,7 +40,7 @@ namespace couchbase
  * It can be used to send an FTS @ref search_query, and/or a @ref vector_search
  *
  * @since 1.0.0
- * @volatile
+ * @committed
  */
 class search_request
 {
@@ -51,7 +51,7 @@ public:
    * @param search_query the query to run
    *
    * @since 1.0.0
-   * @uncommitted
+   * @committed
    */
   explicit search_request(const couchbase::search_query& search_query);
 
@@ -61,7 +61,7 @@ public:
    * @param vector_search the vector_search to run
    *
    * @since 1.0.0
-   * @uncommitted
+   * @committed
    */
   explicit search_request(const couchbase::vector_search& vector_search);
 
@@ -74,7 +74,7 @@ public:
    * @return this search_request for chaining purposes.
    *
    * @since 1.0.0
-   * @uncommitted
+   * @committed
    */
   auto search_query(const couchbase::search_query& search_query) -> search_request&;
 
@@ -87,7 +87,7 @@ public:
    * @return this search_request for chaining purposes.
    *
    * @since 1.0.0
-   * @uncommitted
+   * @committed
    */
   auto vector_search(const couchbase::vector_search& vector_search) -> search_request&;
 
