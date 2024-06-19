@@ -15,7 +15,7 @@
  *   limitations under the License.
  */
 
-#include <couchbase/fmt/key_value_status_code.hxx>
+#include "core/fmt/key_value_status_code.hxx"
 
 #include "status.hxx"
 

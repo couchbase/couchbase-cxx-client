@@ -17,12 +17,12 @@
 
 #pragma once
 
+#include "core/error_context/key_value_error_context.hxx"
+#include "core/error_context/query_error_context.hxx"
+#include "core/error_context/subdocument_error_context.hxx"
+#include "core/error_context/transaction_error_context.hxx"
+#include "core/error_context/transaction_op_error_context.hxx"
 #include <couchbase/error.hxx>
-#include <couchbase/key_value_error_context.hxx>
-#include <couchbase/query_error_context.hxx>
-#include <couchbase/subdocument_error_context.hxx>
-#include <couchbase/transaction_error_context.hxx>
-#include <couchbase/transaction_op_error_context.hxx>
 
 #include "core/error_context/analytics.hxx"
 #include "core/error_context/http.hxx"
@@ -45,19 +45,19 @@ auto
 make_error(const core::error_context::http& core_ctx) -> error;
 
 auto
-make_error(const couchbase::key_value_error_context& core_ctx) -> error;
+make_error(const couchbase::core::key_value_error_context& core_ctx) -> error;
 
 auto
-make_error(const couchbase::subdocument_error_context& core_ctx) -> error;
+make_error(const couchbase::core::subdocument_error_context& core_ctx) -> error;
 
 auto
-make_error(const couchbase::query_error_context& core_ctx) -> error;
+make_error(const couchbase::core::query_error_context& core_ctx) -> error;
 
 auto
-make_error(const couchbase::transaction_error_context& core_ctx) -> error;
+make_error(const couchbase::core::transaction_error_context& core_ctx) -> error;
 
 auto
-make_error(const couchbase::transaction_op_error_context& core_ctx) -> error;
+make_error(const couchbase::core::transaction_op_error_context& core_ctx) -> error;
 
 auto
 make_error(const couchbase::core::transactions::transaction_operation_failed& core_tof) -> error;

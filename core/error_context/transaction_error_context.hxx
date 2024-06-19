@@ -17,10 +17,10 @@
 
 #pragma once
 
-#include <couchbase/base_error_context.hxx>
-#include <couchbase/transaction_op_error_context.hxx>
+#include "base_error_context.hxx"
+#include "transaction_op_error_context.hxx"
 
-namespace couchbase
+namespace couchbase::core
 {
 class transaction_error_context
 {
@@ -46,4 +46,4 @@ private:
   std::error_code ec_{};    // a transaction error_code
   std::error_code cause_{}; // a transaction_op error_code
 };
-} // namespace couchbase
+} // namespace couchbase::core

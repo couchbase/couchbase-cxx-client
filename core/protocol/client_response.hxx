@@ -17,8 +17,8 @@
 
 #pragma once
 
-#include <couchbase/fmt/key_value_extended_error_info.hxx>
-#include <couchbase/fmt/key_value_status_code.hxx>
+#include "core/fmt/key_value_extended_error_info.hxx"
+#include "core/fmt/key_value_status_code.hxx"
 
 #include "client_opcode.hxx"
 #include "client_opcode_fmt.hxx"

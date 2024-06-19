@@ -22,6 +22,9 @@
 #include <couchbase/error_codes.hxx>
 #include <couchbase/transactions/transaction_result.hxx>
 
+#include "core/error_context/transaction_error_context.hxx"
+#include "core/error_context/transaction_op_error_context.hxx"
+
 #include <stdexcept>
 #include <utility>
 
@@ -107,7 +110,8 @@ public:
    * @returns Internal state of transaction.
    */
   [[nodiscard]] auto get_transaction_result() const
-    -> std::pair<couchbase::transaction_error_context, couchbase::transactions::transaction_result>
+    -> std::pair<couchbase::core::transaction_error_context,
+                 couchbase::transactions::transaction_result>
   {
     return { error_context(), { result_.transaction_id, result_.unstaging_complete } };
   }

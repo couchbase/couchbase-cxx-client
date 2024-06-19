@@ -15,7 +15,6 @@
  */
 #pragma once
 
-#include <couchbase/transaction_error_context.hxx>
 #include <string>
 
 namespace couchbase::transactions

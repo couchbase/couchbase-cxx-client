@@ -17,7 +17,7 @@
 
 #pragma once
 
-namespace couchbase
+namespace couchbase::core
 {
 /**
  * This enum defines known attributes, that could be associated with the error code in the error
@@ -139,4 +139,4 @@ enum class key_value_error_map_attribute {
    */
   no_retry,
 };
-} // namespace couchbase
+} // namespace couchbase::core

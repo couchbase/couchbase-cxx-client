@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <couchbase/key_value_error_context.hxx>
+#include "core/error_context/key_value_error_context.hxx"
 #include <couchbase/mutation_token.hxx>
 #include <couchbase/persist_to.hxx>
 #include <couchbase/replicate_to.hxx>

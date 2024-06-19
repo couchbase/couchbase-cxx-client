@@ -839,7 +839,7 @@ TEST_CASE("integration: upsert returns valid mutation token", "[integration]")
     REQUIRE(resp.ctx.first_error_index() == 0);
     REQUIRE(resp.fields.size() == 1);
     REQUIRE(resp.fields[0].path == "a");
-    REQUIRE(resp.fields[0].status == couchbase::key_value_status_code::subdoc_path_exists);
+    REQUIRE(resp.fields[0].status == couchbase::core::key_value_status_code::subdoc_path_exists);
   }
 }
 

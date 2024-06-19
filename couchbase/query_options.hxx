@@ -21,7 +21,6 @@
 #include <couchbase/common_options.hxx>
 #include <couchbase/error.hxx>
 #include <couchbase/mutation_state.hxx>
-#include <couchbase/query_error_context.hxx>
 #include <couchbase/query_profile.hxx>
 #include <couchbase/query_result.hxx>
 #include <couchbase/query_scan_consistency.hxx>

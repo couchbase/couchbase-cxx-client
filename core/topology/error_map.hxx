@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <couchbase/key_value_error_map_info.hxx>
+#include "core/error_context/key_value_error_map_info.hxx"
 
 #include "core/platform/uuid.h"
 
@@ -30,6 +30,6 @@ struct error_map {
   uuid::uuid_t id{};
   std::uint16_t version{};
   std::uint16_t revision{};
-  std::map<std::uint16_t, couchbase::key_value_error_map_info> errors{};
+  std::map<std::uint16_t, couchbase::core::key_value_error_map_info> errors{};
 };
 } // namespace couchbase::core

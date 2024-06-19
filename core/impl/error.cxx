@@ -15,9 +15,9 @@
  *   limitations under the License.
  */
 
+#include "core/error_context/transaction_error_context.hxx"
 #include <couchbase/error.hxx>
 #include <couchbase/error_context.hxx>
-#include <couchbase/transaction_error_context.hxx>
 
 #include "core/error_context/analytics_json.hxx"
 #include "core/error_context/http_json.hxx"
@@ -128,27 +128,27 @@ make_error(const core::error_context::http& core_ctx) -> error
 }
 
 auto
-make_error(const couchbase::key_value_error_context& core_ctx) -> error
+make_error(const couchbase::core::key_value_error_context& core_ctx) -> error
 {
   tao::json::value ctx(core_ctx);
   return { core_ctx.ec(), "", couchbase::error_context(ctx) };
 }
 
 auto
-make_error(const couchbase::subdocument_error_context& core_ctx) -> error
+make_error(const couchbase::core::subdocument_error_context& core_ctx) -> error
 {
   tao::json::value ctx(core_ctx);
   return { core_ctx.ec(), "", couchbase::error_context(ctx) };
 }
 
 auto
-make_error(const couchbase::transaction_error_context& ctx) -> error
+make_error(const couchbase::core::transaction_error_context& ctx) -> error
 {
   return { ctx.ec(), "", {}, { ctx.cause() } };
 }
 
 auto
-make_error(const couchbase::transaction_op_error_context& ctx) -> error
+make_error(const couchbase::core::transaction_op_error_context& ctx) -> error
 {
   if (std::holds_alternative<key_value_error_context>(ctx.cause())) {
     return { ctx.ec(), "", {}, make_error(std::get<key_value_error_context>(ctx.cause())) };

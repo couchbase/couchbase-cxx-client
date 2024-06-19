@@ -17,12 +17,12 @@
 
 #pragma once
 
-#include <couchbase/base_error_context.hxx>
+#include "base_error_context.hxx"
 
 #include <cstdint>
 #include <optional>
 
-namespace couchbase
+namespace couchbase::core
 {
 /**
  * The error context returned with Query operations.
@@ -147,4 +147,4 @@ private:
   std::string hostname_{};
   std::uint16_t port_{};
 };
-} // namespace couchbase
+} // namespace couchbase::core

@@ -47,7 +47,7 @@ namespace impl
 {
 auto
 build_transaction_query_result(operations::query_response resp, std::error_code ec = {})
-  -> std::pair<couchbase::transaction_op_error_context,
+  -> std::pair<couchbase::core::transaction_op_error_context,
                couchbase::transactions::transaction_query_result>;
 
 auto

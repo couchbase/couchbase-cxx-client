@@ -20,7 +20,7 @@
 #include "../protocol/client_opcode_fmt.hxx"
 #include "../protocol/magic_fmt.hxx"
 
-#include <couchbase/fmt/key_value_status_code.hxx>
+#include "core/fmt/key_value_status_code.hxx"
 
 #include <fmt/core.h>
 #include <spdlog/fmt/bin_to_hex.h>

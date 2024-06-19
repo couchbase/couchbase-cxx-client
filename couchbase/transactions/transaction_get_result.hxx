@@ -22,7 +22,6 @@
 #include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/collection.hxx>
 #include <couchbase/result.hxx>
-#include <couchbase/transaction_op_error_context.hxx>
 
 // forward declarations...
 namespace couchbase::core::transactions

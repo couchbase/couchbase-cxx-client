@@ -17,10 +17,10 @@
 
 #pragma once
 
-#include <couchbase/key_value_error_context.hxx>
-#include <couchbase/subdocument_error_context.hxx>
+#include "subdocument_error_context.hxx"
 
 #include "core/document_id.hxx"
+#include "key_value_error_context.hxx"
 
 #include <optional>
 #include <set>
@@ -29,7 +29,6 @@
 
 namespace couchbase::core
 {
-
 auto
 make_key_value_error_context(std::error_code ec, const document_id& id) -> key_value_error_context;
 

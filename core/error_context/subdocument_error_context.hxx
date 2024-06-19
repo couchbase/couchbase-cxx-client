@@ -17,9 +17,9 @@
 
 #pragma once
 
-#include <couchbase/key_value_error_context.hxx>
+#include "key_value_error_context.hxx"
 
-namespace couchbase
+namespace couchbase::core
 {
 /**
  * The error context returned with subdocument key/value operations.
@@ -144,4 +144,4 @@ private:
   std::optional<std::size_t> first_error_index_{};
   bool deleted_{};
 };
-} // namespace couchbase
+} // namespace couchbase::core

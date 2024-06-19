@@ -30,9 +30,9 @@
 #include "mcbp_traits.hxx"
 #include "retry_orchestrator.hxx"
 
+#include "core/error_context/key_value_error_map_info.hxx"
 #include <couchbase/durability_level.hxx>
 #include <couchbase/error_codes.hxx>
-#include <couchbase/key_value_error_map_info.hxx>
 
 #include <asio/steady_timer.hpp>
 #include <fmt/chrono.h>

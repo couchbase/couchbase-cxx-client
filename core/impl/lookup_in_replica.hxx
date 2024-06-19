@@ -26,8 +26,8 @@
 #include "core/public_fwd.hxx"
 #include "core/timeout_defaults.hxx"
 
+#include "core/error_context/subdocument_error_context.hxx"
 #include <couchbase/lookup_in_result.hxx>
-#include <couchbase/subdocument_error_context.hxx>
 
 namespace couchbase::core::impl
 {

@@ -17,11 +17,12 @@
 
 #pragma once
 
-#include <couchbase/key_value_error_context.hxx>
-#include <couchbase/query_error_context.hxx>
+#include "core/error_context/key_value_error_context.hxx"
+#include "core/error_context/query_error_context.hxx"
+
 #include <variant>
 
-namespace couchbase
+namespace couchbase::core
 {
 class transaction_op_error_context
 {
@@ -33,13 +34,13 @@ public:
   {
   }
 
-  transaction_op_error_context(std::error_code ec, couchbase::key_value_error_context cause)
+  transaction_op_error_context(std::error_code ec, key_value_error_context cause)
     : ec_(ec)
     , cause_(std::move(cause))
   {
   }
 
-  transaction_op_error_context(std::error_code ec, couchbase::query_error_context cause)
+  transaction_op_error_context(std::error_code ec, query_error_context cause)
     : ec_(ec)
     , cause_(std::move(cause))
   {
@@ -75,4 +76,4 @@ private:
   std::error_code ec_{}; // a transaction_op error_code
   std::variant<std::monostate, key_value_error_context, query_error_context> cause_{};
 };
-} // namespace couchbase
+} // namespace couchbase::core
