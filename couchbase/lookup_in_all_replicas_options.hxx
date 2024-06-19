@@ -62,7 +62,7 @@ struct lookup_in_all_replicas_options : common_options<lookup_in_all_replicas_op
    * @return this options builder for chaining purposes.
    *
    * @since 1.0.0
-   * @volatile
+   * @committed
    */
   auto read_preference(read_preference preference) -> lookup_in_all_replicas_options&
   {
