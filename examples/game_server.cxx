@@ -15,9 +15,9 @@
  *   limitations under the License.
  */
 
-#include <core/logger/logger.hxx>
 #include <couchbase/cluster.hxx>
 #include <couchbase/fmt/error.hxx>
+#include <couchbase/logger.hxx>
 
 #include <asio/io_context.hpp>
 #include <spdlog/spdlog.h>
@@ -151,12 +151,12 @@ public:
     auto [err, result] =
       transactions_->run([&](std::shared_ptr<attempt_context> ctx) -> couchbase::error {
         auto [e, monster] = ctx->get(collection, monster_id);
-        if (e.ec() == couchbase::errc::transaction_op::document_not_found_exception) {
+        if (e.ec() == couchbase::errc::transaction_op::document_not_found) {
           std::cout << "monster no longer exists" << std::endl;
           exists = false;
           return {};
         }
-        const Monster& monster_body = monster.content<Monster>();
+        const Monster& monster_body = monster.content_as<Monster>();
 
         int monster_hitpoints = monster_body.hitpoints;
         int monster_new_hitpoints = monster_hitpoints - damage_;
@@ -176,7 +176,7 @@ public:
           // set a "dead" flag or similar.
           ctx->remove(monster);
 
-          const Player& player_body = player.content<Player>();
+          const Player& player_body = player.content_as<Player>();
 
           // the player earns experience for killing the monster
           int experience_for_killing_monster = monster_body.experience_when_killed;
@@ -211,16 +211,14 @@ public:
 int
 main()
 {
+  couchbase::logger::initialize_console_logger();
+  couchbase::logger::set_level(couchbase::logger::log_level::trace);
+
   const int NUM_THREADS = 4;
-  couchbase::core::logger::set_log_levels(couchbase::core::logger::level::trace);
   std::atomic<bool> monster_exists = true;
   std::string bucket_name = "default";
   asio::io_context io;
   auto guard = asio::make_work_guard(io);
-
-  if (!couchbase::core::logger::is_initialized()) {
-    couchbase::core::logger::create_console_logger();
-  }
 
   std::list<std::thread> io_threads;
   for (int i = 0; i < 2 * NUM_THREADS; i++) {

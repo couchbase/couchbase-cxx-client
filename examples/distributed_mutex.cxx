@@ -15,8 +15,6 @@
  *   limitations under the License.
  */
 
-#include "core/logger/logger.hxx"
-
 #include <couchbase/best_effort_retry_strategy.hxx>
 #include <couchbase/cluster.hxx>
 #include <couchbase/fmt/error_context.hxx>

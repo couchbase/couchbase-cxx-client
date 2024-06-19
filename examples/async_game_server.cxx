@@ -15,9 +15,9 @@
  *   limitations under the License.
  */
 
-#include <core/logger/logger.hxx>
 #include <couchbase/cluster.hxx>
 #include <couchbase/fmt/error.hxx>
+#include <couchbase/logger.hxx>
 
 #include <asio/io_context.hpp>
 
@@ -159,12 +159,12 @@ public:
           monster_id,
           [ctx, this, collection, monster_id, player_id, &exists, damage = std::move(damage)](
             auto e, auto monster) {
-            if (e.ec() == couchbase::errc::transaction_op::document_not_found_exception) {
+            if (e.ec() == couchbase::errc::transaction_op::document_not_found) {
               std::cout << "monster no longer exists" << std::endl;
               exists = false;
               return;
             }
-            auto monster_body = monster.template content<Monster>();
+            auto monster_body = monster.template content_as<Monster>();
             auto monster_hitpoints = monster_body.hitpoints;
             auto monster_new_hitpoints = monster_hitpoints - damage;
 
@@ -188,7 +188,7 @@ public:
                     std::cout << "error getting player: " << e.ec().message() << std::endl;
                     return;
                   }
-                  const Player& player_body = player.template content<Player>();
+                  const Player& player_body = player.template content_as<Player>();
 
                   // the player earns experience for killing the monster
                   int experience_for_killing_monster = monster_body.experience_when_killed;
@@ -238,16 +238,14 @@ public:
 int
 main()
 {
+  couchbase::logger::initialize_console_logger();
+  couchbase::logger::set_level(couchbase::logger::log_level::trace);
+
   const int NUM_THREADS = 4;
-  couchbase::core::logger::set_log_levels(couchbase::core::logger::level::trace);
   std::atomic<bool> monster_exists = true;
   std::string bucket_name = "default";
   asio::io_context io;
   auto guard = asio::make_work_guard(io);
-
-  if (!couchbase::core::logger::is_initialized()) {
-    couchbase::core::logger::create_console_logger();
-  }
 
   std::list<std::thread> io_threads;
   for (int i = 0; i < 2 * (NUM_THREADS + 1); i++) {

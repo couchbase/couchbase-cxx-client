@@ -33,20 +33,8 @@ transaction_get_result::content() const -> const codec::encoded_value&
   return base_->content();
 }
 
-void
-transaction_get_result::content(const codec::encoded_value& content)
-{
-  return base_->content(content);
-}
-
-void
-transaction_get_result::content(codec::encoded_value&& content)
-{
-  return base_->content(std::move(content));
-}
-
 auto
-transaction_get_result::key() const -> const std::string&
+transaction_get_result::id() const -> const std::string&
 {
   return base_->key();
 }

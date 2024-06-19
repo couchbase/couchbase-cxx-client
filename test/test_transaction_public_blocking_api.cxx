@@ -121,9 +121,8 @@ TEST_CASE("transactions public blocking API: can get", "[transactions]")
     [id, &coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
       auto [e, doc] = ctx->get(coll, id);
       CHECK_FALSE(e.ec());
-      CHECK(doc.key() == id);
-      CHECK_FALSE(doc.cas().empty());
-      CHECK(doc.content<tao::json::value>() == content);
+      CHECK(doc.id() == id);
+      CHECK(doc.content_as<tao::json::value>() == content);
       return {};
     },
     txn_opts());
@@ -143,7 +142,7 @@ TEST_CASE("transactions public blocking API: get returns error if doc doesn't ex
   auto [tx_err, result] = c.transactions()->run(
     [id, coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
       auto [e, doc] = ctx->get(coll, id);
-      CHECK(e.ec() == couchbase::errc::transaction_op::document_not_found_exception);
+      CHECK(e.ec() == couchbase::errc::transaction_op::document_not_found);
       return {};
     },
     txn_opts());
@@ -164,11 +163,10 @@ TEST_CASE("transactions public blocking API: can insert", "[transactions]")
     [id, coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
       auto [e, doc] = ctx->insert(coll, id, content);
       CHECK_FALSE(e.ec());
-      CHECK(doc.key() == id);
-      CHECK_FALSE(doc.cas().empty());
+      CHECK(doc.id() == id);
       auto [e2, inserted_doc] = ctx->get(coll, id);
       CHECK_FALSE(e2.ec());
-      CHECK(inserted_doc.content<tao::json::value>() == content);
+      CHECK(inserted_doc.content_as<tao::json::value>() == content);
       return {};
     },
     txn_opts());
@@ -198,7 +196,7 @@ TEST_CASE("transactions public blocking API: insert has error when doc already e
     [id, coll, new_content](
       std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
       auto [e, doc] = ctx->insert(coll, id, new_content);
-      CHECK(e.ec() == couchbase::errc::transaction_op::document_exists_exception);
+      CHECK(e.ec() == couchbase::errc::transaction_op::document_exists);
       return {};
     },
     txn_opts());
@@ -231,9 +229,8 @@ TEST_CASE("transactions public blocking API: can replace", "[transactions]")
       auto [_, doc] = ctx->get(coll, id);
       auto [e, replaced_doc] = ctx->replace(doc, new_content);
       CHECK_FALSE(e.ec());
-      CHECK(doc.key() == replaced_doc.key());
-      CHECK(doc.cas() != replaced_doc.cas());
-      CHECK(doc.content<tao::json::value>() == content);
+      CHECK(doc.id() == replaced_doc.id());
+      CHECK(doc.content_as<tao::json::value>() == content);
       // FIXME(JCBC-2152)
       // CHECK(replaced_doc.content<tao::json::value>() == new_content);
       return {};
@@ -348,7 +345,7 @@ TEST_CASE("transactions public blocking API: remove fails as expected with missi
   auto [tx_err, result] = c.transactions()->run(
     [id, coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
       auto [e, doc] = ctx->get(coll, id);
-      CHECK(e.ec() == couchbase::errc::transaction_op::document_not_found_exception);
+      CHECK(e.ec() == couchbase::errc::transaction_op::document_not_found);
       // the doc is 'blank', so trying to use it results in failure
       auto err = ctx->remove(doc);
       CHECK(err.cause().has_value());
@@ -375,7 +372,7 @@ TEST_CASE("transactions public blocking API: get doc not found and propagating e
   auto [tx_err, result] = c.transactions()->run(
     [id, coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
       auto [e, doc] = ctx->get(coll, id);
-      CHECK(e.ec() == couchbase::errc::transaction_op::document_not_found_exception);
+      CHECK(e.ec() == couchbase::errc::transaction_op::document_not_found);
       if (e) {
         return e;
       }
@@ -386,8 +383,7 @@ TEST_CASE("transactions public blocking API: get doc not found and propagating e
   CHECK_FALSE(result.unstaging_complete);
   CHECK(tx_err.ec() == couchbase::errc::transaction::failed);
   CHECK(tx_err.cause().has_value());
-  CHECK(tx_err.cause().value().ec() ==
-        couchbase::errc::transaction_op::document_not_found_exception);
+  CHECK(tx_err.cause().value().ec() == couchbase::errc::transaction_op::document_not_found);
 }
 
 TEST_CASE(
@@ -666,7 +662,7 @@ TEST_CASE("transactions public blocking API: can get doc from bucket not yet ope
        &coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
         auto [e, doc] = ctx->get(coll, id);
         CHECK_FALSE(e.ec());
-        CHECK(doc.content<tao::json::value>() == content);
+        CHECK(doc.content_as<tao::json::value>() == content);
         return {};
       },
       txn_opts());
@@ -692,7 +688,7 @@ TEST_CASE("transactions public blocking API: can insert doc into bucket not yet 
        &coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
         auto [e, doc] = ctx->insert(coll, id, content);
         CHECK_FALSE(e.ec());
-        CHECK_FALSE(doc.cas().empty());
+        CHECK(doc.id() == id);
         return {};
       },
       txn_opts());
@@ -730,7 +726,7 @@ TEST_CASE("transactions public blocking API: can replace doc in bucket not yet o
         CHECK_FALSE(get_err.ec());
         auto [e, doc] = ctx->replace(get_doc, new_content);
         CHECK_FALSE(e.ec());
-        CHECK_FALSE(doc.cas().empty());
+        CHECK(doc.id() == id);
         return {};
       },
       txn_opts());

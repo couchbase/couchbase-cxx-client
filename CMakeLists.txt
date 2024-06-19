@@ -147,6 +147,7 @@ set(couchbase_cxx_client_FILES
     core/impl/internal_term_facet_result.cxx
     core/impl/key_value_error_category.cxx
     core/impl/key_value_error_context.cxx
+    core/impl/logger.cxx
     core/impl/lookup_in_replica.cxx
     core/impl/management_error_category.cxx
     core/impl/match_all_query.cxx
