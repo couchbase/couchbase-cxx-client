@@ -25,7 +25,7 @@
 #include <string>
 #include <system_error>
 
-namespace couchbase
+namespace couchbase::core
 {
 /**
  * The error_context is the parent interface for all service-specific error contexts that are
@@ -181,4 +181,4 @@ private:
   std::size_t retry_attempts_{ 0 };
   std::set<retry_reason> retry_reasons_{};
 };
-} // namespace couchbase
+} // namespace couchbase::core

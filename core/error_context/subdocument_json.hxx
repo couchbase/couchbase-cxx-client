@@ -17,9 +17,10 @@
 
 #pragma once
 
-#include <couchbase/fmt/key_value_status_code.hxx>
 #include <couchbase/fmt/retry_reason.hxx>
-#include <couchbase/subdocument_error_context.hxx>
+
+#include "core/fmt/key_value_status_code.hxx"
+#include "subdocument_error_context.hxx"
 
 #include <fmt/format.h>
 #include <tao/json/forward.hpp>
@@ -29,13 +30,13 @@
 namespace tao::json
 {
 template<>
-struct traits<couchbase::subdocument_error_context> {
+struct traits<couchbase::core::subdocument_error_context> {
   template<template<typename...> class Traits>
   static void assign(tao::json::basic_value<Traits>& v,
-                     const couchbase::subdocument_error_context& ctx)
+                     const couchbase::core::subdocument_error_context& ctx)
   {
-    tao::json::traits<couchbase::key_value_error_context>::assign(
-      v, dynamic_cast<const couchbase::key_value_error_context&>(ctx));
+    tao::json::traits<couchbase::core::key_value_error_context>::assign(
+      v, dynamic_cast<const couchbase::core::key_value_error_context&>(ctx));
     if (ctx.first_error_index().has_value()) {
       v["first_error_index"] = ctx.first_error_index().value();
     }

@@ -19,7 +19,7 @@
 
 #include <cstdint>
 
-namespace couchbase
+namespace couchbase::core
 {
 enum class key_value_status_code : std::uint16_t {
   success = 0x00,
@@ -106,4 +106,4 @@ enum class key_value_status_code : std::uint16_t {
 
   unknown = 0xffff,
 };
-} // namespace couchbase
+} // namespace couchbase::core

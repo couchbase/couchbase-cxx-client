@@ -17,8 +17,8 @@
 
 #pragma once
 
+#include "query_error_context.hxx"
 #include <couchbase/fmt/retry_reason.hxx>
-#include <couchbase/query_error_context.hxx>
 
 #include <fmt/format.h>
 #include <tao/json/forward.hpp>
@@ -26,9 +26,10 @@
 namespace tao::json
 {
 template<>
-struct traits<couchbase::query_error_context> {
+struct traits<couchbase::core::query_error_context> {
   template<template<typename...> class Traits>
-  static void assign(tao::json::basic_value<Traits>& v, const couchbase::query_error_context& ctx)
+  static void assign(tao::json::basic_value<Traits>& v,
+                     const couchbase::core::query_error_context& ctx)
   {
     std::vector<tao::json::basic_value<Traits>> reasons{};
     for (couchbase::retry_reason r : ctx.retry_reasons()) {

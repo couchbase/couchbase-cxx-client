@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <couchbase/key_value_error_context.hxx>
+#include "core/error_context/key_value_error_context.hxx"
 
 #include "core/io/mcbp_context.hxx"
 #include "core/io/mcbp_traits.hxx"

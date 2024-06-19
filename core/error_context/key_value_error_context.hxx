@@ -17,16 +17,17 @@
 
 #pragma once
 
-#include <couchbase/base_error_context.hxx>
-#include <couchbase/cas.hxx>
-#include <couchbase/key_value_error_map_info.hxx>
-#include <couchbase/key_value_extended_error_info.hxx>
-#include <couchbase/key_value_status_code.hxx>
+#include "couchbase/cas.hxx"
+
+#include "base_error_context.hxx"
+#include "key_value_error_map_info.hxx"
+#include "key_value_extended_error_info.hxx"
+#include "key_value_status_code.hxx"
 
 #include <cstdint>
 #include <optional>
 
-namespace couchbase
+namespace couchbase::core
 {
 /**
  * The error context returned with key/value operations.
@@ -34,7 +35,7 @@ namespace couchbase
  * @since 1.0.0
  * @committed
  */
-class key_value_error_context : public base_error_context
+class key_value_error_context : public core::base_error_context
 {
 public:
   /**
@@ -231,4 +232,4 @@ private:
   std::optional<key_value_error_map_info> error_map_info_{};
   std::optional<key_value_extended_error_info> extended_error_info_{};
 };
-} // namespace couchbase
+} // namespace couchbase::core

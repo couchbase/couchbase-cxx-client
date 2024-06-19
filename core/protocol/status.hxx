@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <couchbase/key_value_status_code.hxx>
+#include "core/error_context/key_value_status_code.hxx"
 
 #include "client_opcode.hxx"
 

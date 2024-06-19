@@ -15,16 +15,16 @@
  *   limitations under the License.
  */
 
-#include <couchbase/key_value_error_context.hxx>
-
 #include <couchbase/fmt/cas.hxx>
-#include <couchbase/fmt/key_value_error_map_attribute.hxx>
-#include <couchbase/fmt/key_value_status_code.hxx>
 #include <couchbase/fmt/retry_reason.hxx>
+
+#include "core/error_context/key_value_error_context.hxx"
+#include "core/fmt/key_value_error_map_attribute.hxx"
+#include "core/fmt/key_value_status_code.hxx"
 
 #include <tao/json/to_string.hpp>
 
-namespace couchbase
+namespace couchbase::core
 {
 auto
 key_value_error_context::to_json() const -> std::string
@@ -95,4 +95,4 @@ key_value_error_context::to_json() const -> std::string
 
   return tao::json::to_string(json, 2);
 }
-} // namespace couchbase
+} // namespace couchbase::core

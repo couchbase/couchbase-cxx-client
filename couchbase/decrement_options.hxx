@@ -20,7 +20,6 @@
 #include <couchbase/common_durability_options.hxx>
 #include <couchbase/counter_result.hxx>
 #include <couchbase/expiry.hxx>
-#include <couchbase/key_value_error_context.hxx>
 
 #include <chrono>
 #include <functional>

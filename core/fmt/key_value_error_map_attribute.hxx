@@ -17,12 +17,12 @@
 
 #pragma once
 
-#include <couchbase/key_value_error_map_attribute.hxx>
+#include "core/error_context/key_value_error_map_attribute.hxx"
 
 #include <fmt/core.h>
 
 template<>
-struct fmt::formatter<couchbase::key_value_error_map_attribute> {
+struct fmt::formatter<couchbase::core::key_value_error_map_attribute> {
   template<typename ParseContext>
   constexpr auto parse(ParseContext& ctx)
   {
@@ -30,68 +30,68 @@ struct fmt::formatter<couchbase::key_value_error_map_attribute> {
   }
 
   template<typename FormatContext>
-  auto format(couchbase::key_value_error_map_attribute attr, FormatContext& ctx) const
+  auto format(couchbase::core::key_value_error_map_attribute attr, FormatContext& ctx) const
   {
     string_view name = "unknown";
     switch (attr) {
-      case couchbase::key_value_error_map_attribute::success:
+      case couchbase::core::key_value_error_map_attribute::success:
         name = "success";
         break;
-      case couchbase::key_value_error_map_attribute::item_only:
+      case couchbase::core::key_value_error_map_attribute::item_only:
         name = "item-only";
         break;
-      case couchbase::key_value_error_map_attribute::invalid_input:
+      case couchbase::core::key_value_error_map_attribute::invalid_input:
         name = "invalid-input";
         break;
-      case couchbase::key_value_error_map_attribute::fetch_config:
+      case couchbase::core::key_value_error_map_attribute::fetch_config:
         name = "fetch-config";
         break;
-      case couchbase::key_value_error_map_attribute::conn_state_invalidated:
+      case couchbase::core::key_value_error_map_attribute::conn_state_invalidated:
         name = "conn-state-invalidated";
         break;
-      case couchbase::key_value_error_map_attribute::auth:
+      case couchbase::core::key_value_error_map_attribute::auth:
         name = "auth";
         break;
-      case couchbase::key_value_error_map_attribute::special_handling:
+      case couchbase::core::key_value_error_map_attribute::special_handling:
         name = "special-handling";
         break;
-      case couchbase::key_value_error_map_attribute::support:
+      case couchbase::core::key_value_error_map_attribute::support:
         name = "support";
         break;
-      case couchbase::key_value_error_map_attribute::temp:
+      case couchbase::core::key_value_error_map_attribute::temp:
         name = "temp";
         break;
-      case couchbase::key_value_error_map_attribute::internal:
+      case couchbase::core::key_value_error_map_attribute::internal:
         name = "internal";
         break;
-      case couchbase::key_value_error_map_attribute::retry_now:
+      case couchbase::core::key_value_error_map_attribute::retry_now:
         name = "retry-now";
         break;
-      case couchbase::key_value_error_map_attribute::retry_later:
+      case couchbase::core::key_value_error_map_attribute::retry_later:
         name = "retry-later";
         break;
-      case couchbase::key_value_error_map_attribute::subdoc:
+      case couchbase::core::key_value_error_map_attribute::subdoc:
         name = "subdoc";
         break;
-      case couchbase::key_value_error_map_attribute::dcp:
+      case couchbase::core::key_value_error_map_attribute::dcp:
         name = "dcp";
         break;
-      case couchbase::key_value_error_map_attribute::auto_retry:
+      case couchbase::core::key_value_error_map_attribute::auto_retry:
         name = "auto-retry";
         break;
-      case couchbase::key_value_error_map_attribute::item_locked:
+      case couchbase::core::key_value_error_map_attribute::item_locked:
         name = "item-locked";
         break;
-      case couchbase::key_value_error_map_attribute::item_deleted:
+      case couchbase::core::key_value_error_map_attribute::item_deleted:
         name = "item-deleted";
         break;
-      case couchbase::key_value_error_map_attribute::rate_limit:
+      case couchbase::core::key_value_error_map_attribute::rate_limit:
         name = "rate-limit";
         break;
-      case couchbase::key_value_error_map_attribute::system_constraint:
+      case couchbase::core::key_value_error_map_attribute::system_constraint:
         name = "system-constraint";
         break;
-      case couchbase::key_value_error_map_attribute::no_retry:
+      case couchbase::core::key_value_error_map_attribute::no_retry:
         name = "no-retry";
         break;
     }

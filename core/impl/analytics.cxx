@@ -121,29 +121,6 @@ map_signature(core::operations::analytics_response& resp) -> std::optional<std::
 } // namespace
 
 auto
-build_context(core::operations::analytics_response& resp) -> analytics_error_context
-{
-  return {
-    resp.ctx.ec,
-    resp.ctx.last_dispatched_to,
-    resp.ctx.last_dispatched_from,
-    resp.ctx.retry_attempts,
-    std::move(resp.ctx.retry_reasons),
-    resp.ctx.first_error_code,
-    std::move(resp.ctx.first_error_message),
-    std::move(resp.ctx.client_context_id),
-    std::move(resp.ctx.statement),
-    std::move(resp.ctx.parameters),
-    std::move(resp.ctx.method),
-    std::move(resp.ctx.path),
-    resp.ctx.http_status,
-    std::move(resp.ctx.http_body),
-    std::move(resp.ctx.hostname),
-    resp.ctx.port,
-  };
-}
-
-auto
 build_result(core::operations::analytics_response& resp) -> analytics_result
 {
   return {

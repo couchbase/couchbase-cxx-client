@@ -20,7 +20,7 @@
 #include "core/transactions/exceptions.hxx"
 #include "core/transactions/result.hxx"
 
-#include <couchbase/transaction_op_error_context.hxx>
+#include "core/error_context/transaction_op_error_context.hxx"
 
 #include <spdlog/spdlog.h>
 

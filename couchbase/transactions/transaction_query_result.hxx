@@ -16,7 +16,6 @@
 #pragma once
 
 #include <couchbase/query_result.hxx>
-#include <couchbase/transaction_op_error_context.hxx>
 
 namespace couchbase::transactions
 {

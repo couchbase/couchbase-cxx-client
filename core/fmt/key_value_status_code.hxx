@@ -17,18 +17,18 @@
 
 #pragma once
 
-#include <couchbase/key_value_status_code.hxx>
+#include "core/error_context/key_value_status_code.hxx"
 
 #include <fmt/core.h>
 
 /**
- * Helper for fmtlib to format @ref couchbase::key_value_status_code objects.
+ * Helper for fmtlib to format @ref couchbase::core::key_value_status_code objects.
  *
  * @since 1.0.0
  * @committed
  */
 template<>
-struct fmt::formatter<couchbase::key_value_status_code> {
+struct fmt::formatter<couchbase::core::key_value_status_code> {
   template<typename ParseContext>
   constexpr auto parse(ParseContext& ctx)
   {
@@ -36,9 +36,9 @@ struct fmt::formatter<couchbase::key_value_status_code> {
   }
 
   template<typename FormatContext>
-  auto format(couchbase::key_value_status_code opcode, FormatContext& ctx) const
+  auto format(couchbase::core::key_value_status_code opcode, FormatContext& ctx) const
   {
-    using couchbase::key_value_status_code;
+    using couchbase::core::key_value_status_code;
     string_view name = "unknown";
     switch (opcode) {
       case key_value_status_code::success:

@@ -17,7 +17,6 @@
 
 #pragma once
 
-#include <couchbase/analytics_error_context.hxx>
 #include <couchbase/analytics_result.hxx>
 #include <couchbase/analytics_scan_consistency.hxx>
 #include <couchbase/codec/tao_json_serializer.hxx>

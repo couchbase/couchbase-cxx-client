@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <couchbase/key_value_error_map_info.hxx>
+#include "core/error_context/key_value_error_map_info.hxx"
 #include <couchbase/retry_reason.hxx>
 
 #include <memory>

@@ -30,7 +30,4 @@ build_query_request(std::string statement,
 
 auto
 build_result(operations::query_response& resp) -> query_result;
-
-auto
-build_context(operations::query_response& resp) -> query_error_context;
 } // namespace couchbase::core::impl

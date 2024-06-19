@@ -27,9 +27,6 @@
 namespace couchbase::core::impl
 {
 auto
-build_context(core::operations::analytics_response& resp) -> analytics_error_context;
-
-auto
 build_result(core::operations::analytics_response& resp) -> analytics_result;
 
 auto

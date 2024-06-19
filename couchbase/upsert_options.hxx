@@ -21,7 +21,6 @@
 #include <couchbase/common_durability_options.hxx>
 #include <couchbase/error.hxx>
 #include <couchbase/expiry.hxx>
-#include <couchbase/key_value_error_context.hxx>
 #include <couchbase/mutation_result.hxx>
 
 #include <chrono>

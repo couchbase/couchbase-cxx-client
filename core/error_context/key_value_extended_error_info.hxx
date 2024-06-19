@@ -19,7 +19,7 @@
 
 #include <string>
 
-namespace couchbase
+namespace couchbase::core
 {
 /**
  * Represents extended error information returned by the server in some cases.
@@ -83,4 +83,4 @@ private:
   std::string reference_{};
   std::string context_{};
 };
-} // namespace couchbase
+} // namespace couchbase::core

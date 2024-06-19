@@ -15,13 +15,13 @@
  *   limitations under the License.
  */
 
-#include <couchbase/query_error_context.hxx>
-
 #include <couchbase/fmt/retry_reason.hxx>
+
+#include "core/error_context/query_error_context.hxx"
 
 #include <tao/json/to_string.hpp>
 
-namespace couchbase
+namespace couchbase::core
 {
 auto
 query_error_context::to_json() const -> std::string
@@ -72,4 +72,4 @@ query_error_context::to_json() const -> std::string
 
   return tao::json::to_string(json, 2);
 }
-} // namespace couchbase
+} // namespace couchbase::core

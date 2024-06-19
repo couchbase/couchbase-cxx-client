@@ -20,6 +20,7 @@
 #include <couchbase/transactions/transaction_query_result.hxx>
 
 #include "core/cluster.hxx"
+#include "core/error_context/transaction_op_error_context.hxx"
 #include "core/operations/document_query.hxx"
 #include "core/utils/binary.hxx"
 
@@ -195,7 +196,7 @@ build_query_request(std::string statement,
 auto
 build_transaction_query_result(operations::query_response resp,
                                std::error_code txn_ec /*defaults to 0*/)
-  -> std::pair<couchbase::transaction_op_error_context,
+  -> std::pair<couchbase::core::transaction_op_error_context,
                couchbase::transactions::transaction_query_result>
 {
   if (resp.ctx.ec) {
