@@ -330,7 +330,7 @@ private:
   std::shared_ptr<scan_stream_manager> stream_manager_;
   std::string last_seen_key_{};
   std::variant<std::monostate, failed, running, completed> state_{};
-  bool should_cancel_{ false };
+  std::atomic<bool> should_cancel_{ false };
   std::optional<std::chrono::time_point<std::chrono::steady_clock>> first_attempt_timestamp_{};
 };
 
