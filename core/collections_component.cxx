@@ -37,12 +37,14 @@
 #include <asio/io_context.hpp>
 #include <asio/steady_timer.hpp>
 
+#include <memory>
+
 namespace couchbase::core
 {
 static auto
 build_key(std::string_view scope_name, std::string_view collection_name) -> std::string
 {
-  return fmt::format("%s.%s", scope_name, collection_name);
+  return fmt::format("{}.{}", scope_name, collection_name);
 }
 
 class collection_id_cache_entry_impl
@@ -50,14 +52,12 @@ class collection_id_cache_entry_impl
   , public collection_id_cache_entry
 {
 public:
-  collection_id_cache_entry_impl(std::shared_ptr<collections_component_impl> manager,
-                                 dispatcher dispatcher,
+  collection_id_cache_entry_impl(std::weak_ptr<collections_component_impl> manager,
                                  std::string scope_name,
                                  std::string collection_name,
                                  std::size_t max_queue_size,
                                  std::uint32_t id)
     : manager_{ std::move(manager) }
-    , dispatcher_{ std::move(dispatcher) }
     , scope_name_{ std::move(scope_name) }
     , collection_name_{ std::move(collection_name) }
     , max_queue_size_{ max_queue_size }
@@ -65,38 +65,7 @@ public:
   {
   }
 
-  [[nodiscard]] auto dispatch(std::shared_ptr<mcbp::queue_request> req) -> std::error_code override
-  {
-    /*
-     * if the collection id is unknown then mark the request pending and refresh collection id first
-     * if it is pending then queue request
-     * otherwise send the request
-     */
-    switch (std::scoped_lock lock(mutex_); id_) {
-      case unknown_collection_id:
-        CB_LOG_DEBUG(
-          "collection {}.{} unknown. refreshing id", req->scope_name_, req->collection_id_);
-        id_ = pending_collection_id;
-
-        if (auto ec = refresh_collection_id(req); ec) {
-          id_ = unknown_collection_id;
-          return ec;
-        }
-        return {};
-
-      case pending_collection_id:
-        CB_LOG_DEBUG("collection {}.{} pending. queueing request OP={}",
-                     req->scope_name_,
-                     req->collection_id_,
-                     req->command_);
-        return queue_->push(req, max_queue_size_);
-
-      default:
-        break;
-    }
-
-    return send_with_collection_id(std::move(req));
-  }
+  [[nodiscard]] auto dispatch(std::shared_ptr<mcbp::queue_request> req) -> std::error_code override;
 
   void reset_id() override
   {
@@ -137,24 +106,6 @@ public:
     return {};
   }
 
-  [[nodiscard]] auto send_with_collection_id(std::shared_ptr<mcbp::queue_request> req)
-    -> std::error_code
-  {
-    if (auto ec = assign_collection_id(req); ec) {
-      CB_LOG_DEBUG("failed to set collection ID \"{}.{}\" on request (OP={}): {}",
-                   req->scope_name_,
-                   req->collection_name_,
-                   req->command_,
-                   ec.message());
-      return ec;
-    }
-
-    if (auto ec = dispatcher_.direct_dispatch(req); ec) {
-      return ec;
-    }
-    return {};
-  }
-
   [[nodiscard]] auto refresh_collection_id(std::shared_ptr<mcbp::queue_request> req)
     -> std::error_code;
 
@@ -167,8 +118,9 @@ public:
   }
 
 private:
-  const std::shared_ptr<collections_component_impl> manager_;
-  const dispatcher dispatcher_;
+  // Using std::weak_ptr here as lifetime of the entry is bound to the lifetime
+  // of the component, and we want to avoid memory leaks due to circular dependencies.
+  const std::weak_ptr<collections_component_impl> manager_;
   const std::string scope_name_;
   const std::string collection_name_;
   const std::size_t max_queue_size_;
@@ -200,12 +152,8 @@ public:
     if (auto it = cache_.find(key); it != cache_.end()) {
       return it->second;
     }
-    auto entry = std::make_shared<collection_id_cache_entry_impl>(shared_from_this(),
-                                                                  dispatcher_,
-                                                                  std::move(scope_name),
-                                                                  std::move(collection_name),
-                                                                  max_queue_size_,
-                                                                  id);
+    auto entry = std::make_shared<collection_id_cache_entry_impl>(
+      shared_from_this(), std::move(scope_name), std::move(collection_name), max_queue_size_, id);
     cache_.try_emplace(key, entry);
     return entry;
   }
@@ -229,7 +177,6 @@ public:
 
     cache_.try_emplace(key,
                        std::make_shared<collection_id_cache_entry_impl>(shared_from_this(),
-                                                                        dispatcher_,
                                                                         std::move(scope_name),
                                                                         std::move(collection_name),
                                                                         max_queue_size_,
@@ -327,6 +274,17 @@ public:
     return req;
   }
 
+  auto direct_re_queue(std::shared_ptr<mcbp::queue_request> request,
+                       bool is_retry) -> std::error_code
+  {
+    return dispatcher_.direct_re_queue(std::move(request), is_retry);
+  }
+
+  auto direct_dispatch(std::shared_ptr<mcbp::queue_request> request) -> std::error_code
+  {
+    return dispatcher_.direct_dispatch(std::move(request));
+  }
+
   auto dispatch(std::shared_ptr<mcbp::queue_request> request)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
@@ -358,6 +316,50 @@ private:
   mutable std::mutex cache_mutex_{};
 };
 
+[[nodiscard]] auto
+collection_id_cache_entry_impl::dispatch(std::shared_ptr<mcbp::queue_request> req)
+  -> std::error_code
+{
+  /*
+   * if the collection id is unknown then mark the request pending and refresh collection id first
+   * if it is pending then queue request
+   * otherwise send the request
+   */
+  switch (std::scoped_lock lock(mutex_); id_) {
+    case unknown_collection_id:
+      CB_LOG_DEBUG(
+        "collection {}.{} unknown. refreshing id", req->scope_name_, req->collection_id_);
+      id_ = pending_collection_id;
+
+      if (auto ec = refresh_collection_id(req); ec) {
+        id_ = unknown_collection_id;
+        return ec;
+      }
+      return {};
+
+    case pending_collection_id:
+      CB_LOG_DEBUG("collection {}.{} pending. queueing request OP={}",
+                   req->scope_name_,
+                   req->collection_id_,
+                   req->command_);
+      return queue_->push(req, max_queue_size_);
+
+    default:
+      break;
+  }
+
+  if (auto ec = assign_collection_id(req); ec) {
+    CB_LOG_DEBUG("failed to set collection ID \"{}.{}\" on request (OP={}): {}",
+                 req->scope_name_,
+                 req->collection_name_,
+                 req->command_,
+                 ec.message());
+    return ec;
+  }
+
+  return manager_.lock()->direct_dispatch(std::move(req));
+}
+
 auto
 collection_id_cache_entry_impl::refresh_collection_id(std::shared_ptr<mcbp::queue_request> req)
   -> std::error_code
@@ -367,7 +369,7 @@ collection_id_cache_entry_impl::refresh_collection_id(std::shared_ptr<mcbp::queu
   }
 
   CB_LOG_DEBUG("refreshing collection ID for \"{}.{}\"", req->scope_name_, req->collection_name_);
-  auto op = manager_->get_collection_id(
+  auto op = manager_.lock()->get_collection_id(
     req->scope_name_,
     req->collection_name_,
     get_collection_id_options{},
@@ -384,7 +386,7 @@ collection_id_cache_entry_impl::refresh_collection_id(std::shared_ptr<mcbp::queu
                        req->collection_name_);
           self->set_id(unknown_collection_id);
           if (self->queue_->remove(req)) {
-            if (self->manager_->handle_collection_unknown(req)) {
+            if (self->manager_.lock()->handle_collection_unknown(req)) {
               return;
             }
           } else {
@@ -401,7 +403,7 @@ collection_id_cache_entry_impl::refresh_collection_id(std::shared_ptr<mcbp::queu
         }
         // There was an error getting this collection ID so lets remove the cache from the manager
         // and try to callback on all the queued requests.
-        self->manager_->remove(req->scope_name_, req->collection_name_);
+        self->manager_.lock()->remove(req->scope_name_, req->collection_name_);
         auto queue = self->swap_queue();
         queue->close();
         return queue->drain([ec](auto r) {
@@ -426,7 +428,7 @@ collection_id_cache_entry_impl::refresh_collection_id(std::shared_ptr<mcbp::queu
                        ec.message());
           return;
         }
-        self->dispatcher_.direct_re_queue(r, false);
+        self->manager_.lock()->direct_re_queue(r, false);
       });
     });
   if (op) {
