@@ -71,7 +71,7 @@ wait_until_collection_manifest_propagated(const couchbase::core::cluster& cluste
   auto deadline = std::chrono::system_clock::now() + total_timeout;
   while (std::chrono::system_clock::now() < deadline) {
     auto propagated = test::utils::wait_until(
-      [cluster, bucket_name, current_manifest_uid, round, successful_rounds]() {
+      [&cluster, bucket_name, current_manifest_uid, round, successful_rounds]() {
         couchbase::core::operations::management::collections_manifest_get_request req{
           { bucket_name, "_default", "_default", "" }
         };

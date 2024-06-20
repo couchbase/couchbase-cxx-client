@@ -407,7 +407,7 @@ public:
              vbucket < gsl::narrow_cast<std::uint16_t>(self->vbucket_map_.size());
              ++vbucket) {
           const range_scan_create_options create_options{
-            self->scope_name_,       {},
+            self->scope_name_,       self->collection_name_,
             self->scan_type_,        self->options_.timeout,
             self->collection_id_,    self->vbucket_to_snapshot_requirements_[vbucket],
             self->options_.ids_only, self->options_.retry_strategy,

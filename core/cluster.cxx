@@ -1921,8 +1921,9 @@ cluster::execute(impl::lookup_in_replica_request request,
 auto
 cluster::to_string() const -> std::string
 {
-  return fmt::format(R"(#<cluster:{} impl={}>)",
+  return fmt::format(R"(#<cluster:{} impl={}, use_count={}>)",
                      static_cast<const void*>(this),
-                     impl_ ? static_cast<const void*>(impl_.get()) : "(none)");
+                     impl_ ? static_cast<const void*>(impl_.get()) : "(none)",
+                     impl_ ? std::to_string(impl_.use_count()) : "(none)");
 }
 } // namespace couchbase::core

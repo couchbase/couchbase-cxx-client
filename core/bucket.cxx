@@ -106,8 +106,9 @@ public:
         // self->span_->add_tag(tracing::attributes::orphan, "canceled");
         return req->try_callback(resp, ec);
       }
-      backoff_and_retry(
-        req, reason == retry_reason::do_not_retry ? retry_reason::node_not_available : reason);
+      backoff_and_retry(std::move(req),
+                        reason == retry_reason::do_not_retry ? retry_reason::node_not_available
+                                                             : reason);
       return;
     }
     key_value_status_code status{ key_value_status_code::unknown };
@@ -164,7 +165,7 @@ public:
     } else {
       resp = std::make_shared<mcbp::queue_response>(std::move(packet));
     }
-    resolve_response(req, resp, error, reason, std::move(error_info));
+    resolve_response(std::move(req), std::move(resp), error, reason, std::move(error_info));
   }
 
   auto direct_dispatch(std::shared_ptr<mcbp::queue_request> req) -> std::error_code
