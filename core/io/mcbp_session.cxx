@@ -1171,8 +1171,8 @@ public:
     // handle request new style
     std::shared_ptr<mcbp::queue_request> request{};
     std::shared_ptr<response_handler> handler{};
-    std::scoped_lock lock(operations_mutex_);
     {
+      std::scoped_lock lock(operations_mutex_);
       if (auto pair = operations_.find(opaque); pair != operations_.end() && pair->second.first) {
         request = pair->second.first;
         handler = pair->second.second;

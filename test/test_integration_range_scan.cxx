@@ -764,8 +764,10 @@ TEST_CASE("integration: range scan cancel during streaming using pending_operati
   }
 
   std::shared_ptr<couchbase::core::pending_operation> operation_holder{};
+  std::mutex operation_holder_mutex{};
 
-  auto execute_operation_cancel = [&operation_holder]() {
+  auto execute_operation_cancel = [&operation_holder, &operation_holder_mutex]() {
+    std::scoped_lock lock(operation_holder_mutex);
     operation_holder->cancel();
   };
 
@@ -792,7 +794,10 @@ TEST_CASE("integration: range scan cancel during streaming using pending_operati
         barrier->set_value({ std::move(res), ec });
       });
     EXPECT_SUCCESS(op);
-    std::swap(operation_holder, op.value()); // store the operation for cancellation
+    {
+      std::scoped_lock lock(operation_holder_mutex);
+      std::swap(operation_holder, op.value()); // store the operation for cancellation
+    }
 
     auto [res, ec] = f.get();
     REQUIRE(res.complete == false);

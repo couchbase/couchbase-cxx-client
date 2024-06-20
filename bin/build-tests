@@ -65,6 +65,7 @@ case "${CB_SANITIZER}" in
 
     tsan | thread)
         CB_CMAKE_EXTRAS="-DENABLE_SANITIZER_THREAD=ON"
+        export TSAN_OPTIONS="second_deadlock_stack=1"
         ;;
 
     msan | memory)
