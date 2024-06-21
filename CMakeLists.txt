@@ -416,6 +416,7 @@ if(COUCHBASE_CXX_CLIENT_BUILD_SHARED OR BUILD_SHARED_LIBS)
 else()
   add_library(couchbase_cxx_client STATIC ${couchbase_cxx_client_FILES})
 endif()
+add_library(couchbase_cxx_client::couchbase_cxx_client ALIAS couchbase_cxx_client)
 set_target_properties(couchbase_cxx_client PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 target_include_directories(couchbase_cxx_client PRIVATE ${PROJECT_BINARY_DIR}/generated)
