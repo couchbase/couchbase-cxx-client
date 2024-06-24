@@ -387,7 +387,7 @@ attempt_context_impl::get_replica_from_preferred_server_group(
                                         .cause(FEATURE_NOT_AVAILABLE_EXCEPTION)),
               {});
   }
-  cache_error_async(cb, [self = shared_from_this(), id, cb = std::move(cb)]() mutable {
+  cache_error_async(cb, [self = shared_from_this(), id, cb]() mutable {
     self->check_if_done(cb);
     self->do_get(
       id,
@@ -573,7 +573,7 @@ attempt_context_impl::replace_raw(const transaction_get_result& document,
   return cache_error_async(cb, [&]() {
     ensure_open_bucket(
       document.bucket(),
-      [self = shared_from_this(), cb = std::move(cb), document, content = std::move(content)](
+      [self = shared_from_this(), cb, document, content = std::move(content)](
         std::error_code ec) mutable {
         if (ec) {
           return self->op_completed_with_error(
@@ -915,8 +915,7 @@ attempt_context_impl::insert_raw(const core::document_id& id,
     return insert_raw_with_query(id, std::move(content), std::move(cb));
   }
   return cache_error_async(
-    cb,
-    [self = shared_from_this(), id, cb = std::move(cb), content = std::move(content)]() mutable {
+    cb, [self = shared_from_this(), id, cb, content = std::move(content)]() mutable {
       self->ensure_open_bucket(
         id.bucket(),
         [self, id, content = std::move(content), cb = std::move(cb)](std::error_code ec) mutable {
@@ -1810,7 +1809,7 @@ make_kv_txdata(std::optional<transaction_get_result> doc = std::nullopt) -> tao:
 void
 attempt_context_impl::get_with_query(const core::document_id& id, bool optional, Callback&& cb)
 {
-  cache_error_async(cb, [self = shared_from_this(), id, optional, cb = std::move(cb)]() mutable {
+  cache_error_async(cb, [self = shared_from_this(), id, optional, cb]() mutable {
     couchbase::transactions::transaction_query_options opts;
     opts.readonly(true);
     return self->wrap_query(
@@ -1871,8 +1870,7 @@ attempt_context_impl::insert_raw_with_query(const core::document_id& id,
                                             Callback&& cb)
 {
   cache_error_async(
-    cb,
-    [self = shared_from_this(), id, content = std::move(content), cb = std::move(cb)]() mutable {
+    cb, [self = shared_from_this(), id, content = std::move(content), cb]() mutable {
       couchbase::transactions::transaction_query_options opts;
       return self->wrap_query(
         KV_INSERT,
@@ -1920,11 +1918,7 @@ attempt_context_impl::replace_raw_with_query(const transaction_get_result& docum
                                              Callback&& cb)
 {
   cache_error_async(
-    cb,
-    [self = shared_from_this(),
-     document,
-     content = std::move(content),
-     cb = std::move(cb)]() mutable {
+    cb, [self = shared_from_this(), document, content = std::move(content), cb]() mutable {
       couchbase::transactions::transaction_query_options opts;
       return self->wrap_query(
         KV_REPLACE,
