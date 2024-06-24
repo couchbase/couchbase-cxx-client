@@ -775,7 +775,6 @@ public:
           bucket->close();
         });
         self->session_manager_->close();
-        handler();
         self->work_.reset();
         if (self->tracer_) {
           self->tracer_->stop();
@@ -785,6 +784,7 @@ public:
           self->meter_->stop();
         }
         self->meter_.reset();
+        handler();
       }));
   }
 
