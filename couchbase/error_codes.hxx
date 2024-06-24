@@ -1118,9 +1118,9 @@ enum class transaction {
  * @uncommitted
  */
 enum class transaction_op {
-    /**
-     * @internal
-     */
+  /**
+   * @internal
+   */
   generic = 1300,
 
   active_transaction_record_entry_not_found = 1301,
