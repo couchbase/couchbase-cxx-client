@@ -161,14 +161,9 @@ public:
     // is false.  Not rolling back takes precedence over retry.  Otherwise, we
     // just retain the first.
     assert(errors.size() > 0);
-    // start with first error that isn't previous_operation_failed
-    auto error_to_throw = *(std::find_if(errors.begin(), errors.end(), [](auto& err) {
-      return err.cause() != external_exception::PREVIOUS_OPERATION_FAILED;
-    }));
+    // start with first error
+    auto error_to_throw = errors.front();
     for (auto& ex : errors) {
-      if (ex.cause() == external_exception::PREVIOUS_OPERATION_FAILED) {
-        continue;
-      }
       if (!ex.retry_) {
         error_to_throw = ex;
       }
