@@ -206,7 +206,7 @@ build_transaction_query_result(operations::query_response resp,
     if (!txn_ec) {
       // TODO: review what our default should be...
       // no override error code was passed in, so default to not_set
-      txn_ec = errc::transaction_op::not_set;
+      txn_ec = errc::transaction_op::generic;
     }
   }
   return {
