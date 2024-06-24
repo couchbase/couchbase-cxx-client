@@ -116,7 +116,9 @@ transaction_op_errc_from_external_exception(external_exception e) -> errc::trans
 {
   switch (e) {
     case external_exception::UNKNOWN:
-      return errc::transaction_op::unknown;
+    case external_exception::COUCHBASE_EXCEPTION:
+    case external_exception::NOT_SET:
+      return errc::transaction_op::generic;
     case external_exception::ACTIVE_TRANSACTION_RECORD_ENTRY_NOT_FOUND:
       return errc::transaction_op::active_transaction_record_entry_not_found;
     case external_exception::ACTIVE_TRANSACTION_RECORD_FULL:
@@ -127,8 +129,6 @@ transaction_op_errc_from_external_exception(external_exception e) -> errc::trans
       return errc::transaction_op::active_transaction_record_not_found;
     case external_exception::CONCURRENT_OPERATIONS_DETECTED_ON_SAME_DOCUMENT:
       return errc::transaction_op::concurrent_operations_detected_on_same_document;
-    case external_exception::COUCHBASE_EXCEPTION:
-      return errc::transaction_op::couchbase_error;
     case external_exception::DOCUMENT_ALREADY_IN_TRANSACTION:
       return errc::transaction_op::document_already_in_transaction;
     case external_exception::DOCUMENT_EXISTS_EXCEPTION:
@@ -143,8 +143,6 @@ transaction_op_errc_from_external_exception(external_exception e) -> errc::trans
       return errc::transaction_op::illegal_state;
     case external_exception::PARSING_FAILURE:
       return errc::transaction_op::parsing_failure;
-    case external_exception::NOT_SET:
-      return errc::transaction_op::not_set;
     case external_exception::PREVIOUS_OPERATION_FAILED:
       return errc::transaction_op::previous_operation_failed;
     case external_exception::REQUEST_CANCELED_EXCEPTION:
@@ -160,14 +158,14 @@ transaction_op_errc_from_external_exception(external_exception e) -> errc::trans
     case external_exception::TRANSACTION_ALREADY_COMMITTED:
       return errc::transaction_op::transaction_already_committed;
   }
-  return errc::transaction_op::unknown;
+  return errc::transaction_op::generic;
 }
 
 auto
 external_exception_from_transaction_op_errc(errc::transaction_op ec) -> external_exception
 {
   switch (ec) {
-    case errc::transaction_op::unknown:
+    case errc::transaction_op::generic:
       return external_exception::UNKNOWN;
     case errc::transaction_op::active_transaction_record_entry_not_found:
       return external_exception::ACTIVE_TRANSACTION_RECORD_ENTRY_NOT_FOUND;
@@ -181,8 +179,6 @@ external_exception_from_transaction_op_errc(errc::transaction_op ec) -> external
       return external_exception::DOCUMENT_EXISTS_EXCEPTION;
     case errc::transaction_op::document_not_found:
       return external_exception::DOCUMENT_NOT_FOUND_EXCEPTION;
-    case errc::transaction_op::not_set:
-      return external_exception::NOT_SET;
     case errc::transaction_op::feature_not_available:
       return external_exception::FEATURE_NOT_AVAILABLE_EXCEPTION;
     case errc::transaction_op::transaction_aborted_externally:
@@ -195,8 +191,6 @@ external_exception_from_transaction_op_errc(errc::transaction_op ec) -> external
       return external_exception::PARSING_FAILURE;
     case errc::transaction_op::illegal_state:
       return external_exception::ILLEGAL_STATE_EXCEPTION;
-    case errc::transaction_op::couchbase_error:
-      return external_exception::COUCHBASE_EXCEPTION;
     case errc::transaction_op::service_not_available:
       return external_exception::SERVICE_NOT_AVAILABLE_EXCEPTION;
     case errc::transaction_op::request_canceled:

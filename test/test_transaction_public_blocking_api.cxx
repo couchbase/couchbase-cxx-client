@@ -340,7 +340,7 @@ TEST_CASE("transactions public blocking API: remove fails as expected with missi
       // the doc is 'blank', so trying to use it results in failure
       auto err = ctx->remove(doc);
       CHECK(err.cause().has_value());
-      CHECK(err.cause().value().ec() == couchbase::errc::transaction_op::unknown);
+      CHECK(err.cause().value().ec() == couchbase::errc::transaction_op::generic);
       return {};
     },
     txn_opts());
@@ -348,7 +348,7 @@ TEST_CASE("transactions public blocking API: remove fails as expected with missi
   CHECK_FALSE(result.unstaging_complete);
   CHECK(tx_err.ec() == couchbase::errc::transaction::failed);
   CHECK(tx_err.cause().has_value());
-  CHECK(tx_err.cause().value().ec() == couchbase::errc::transaction_op::unknown);
+  CHECK(tx_err.cause().value().ec() == couchbase::errc::transaction_op::generic);
 }
 
 TEST_CASE("transactions public blocking API: get doc not found and propagating error",
@@ -398,7 +398,7 @@ TEST_CASE(
   CHECK_FALSE(result.unstaging_complete);
   CHECK(tx_err.ec() == couchbase::errc::transaction::failed);
   CHECK(tx_err.cause().has_value());
-  CHECK(tx_err.cause().value().ec() == couchbase::errc::transaction_op::unknown);
+  CHECK(tx_err.cause().value().ec() == couchbase::errc::transaction_op::generic);
 }
 
 TEST_CASE("transactions public blocking API: can pass per-transaction configs", "[transactions]")

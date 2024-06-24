@@ -60,7 +60,7 @@ wrap_err_callback_for_async_api(std::exception_ptr err, std::function<void(couch
     } catch (const transaction_operation_failed& e) {
       return cb(core::impl::make_error(e));
     } catch (...) {
-      return cb({ errc::transaction_op::unknown });
+      return cb({ errc::transaction_op::generic });
     }
   }
   return cb({});
@@ -76,7 +76,7 @@ wrap_void_call_for_public_api(std::function<void()>&& handler) -> couchbase::err
     return core::impl::make_error(e);
   } catch (...) {
     // the handler should catch everything else, but just in case...
-    return { errc::transaction_op::unknown };
+    return { errc::transaction_op::generic };
   }
 }
 
@@ -92,7 +92,7 @@ wrap_call_for_public_api(std::function<transaction_get_result()>&& handler)
     return { core::impl::make_error(ex.ctx()), {} };
   } catch (...) {
     // the handler should catch everything else, but just in case...
-    return { { errc::transaction_op::unknown }, {} };
+    return { { errc::transaction_op::generic }, {} };
   }
 }
 
@@ -113,10 +113,10 @@ wrap_callback_for_async_public_api(
     } catch (const transaction_operation_failed& e) {
       return cb(core::impl::make_error(e), {});
     } catch (...) {
-      return cb({ errc::transaction_op::unknown }, {});
+      return cb({ errc::transaction_op::generic }, {});
     }
   }
-  return cb({ errc::transaction_op::unknown }, {});
+  return cb({ errc::transaction_op::generic }, {});
 }
 
 } // namespace
@@ -1766,7 +1766,7 @@ attempt_context_impl::do_public_query(
     return { core::impl::make_error(qe.ctx()), {} };
   } catch (...) {
     // should not be necessary, but just in case...
-    return { { couchbase::errc::transaction_op::unknown }, {} };
+    return { { couchbase::errc::transaction_op::generic }, {} };
   }
 }
 
@@ -3530,7 +3530,7 @@ attempt_context_impl::query(std::string statement,
               return handler(core::impl::make_error(ex.ctx()), {});
             } catch (...) {
               // just in case...
-              return handler({ couchbase::errc::transaction_op::unknown }, {});
+              return handler({ couchbase::errc::transaction_op::generic }, {});
             }
           }
           auto [ctx, res] = core::impl::build_transaction_query_result(*resp);

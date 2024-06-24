@@ -1118,28 +1118,30 @@ enum class transaction {
  * @uncommitted
  */
 enum class transaction_op {
-  unknown = 1300,
+    /**
+     * @internal
+     */
+  generic = 1300,
+
   active_transaction_record_entry_not_found = 1301,
   active_transaction_record_full = 1302,
   active_transaction_record_not_found = 1303,
   document_already_in_transaction = 1304,
   document_exists = 1305,
   document_not_found = 1306,
-  not_set = 1307,
-  feature_not_available = 1308,
-  transaction_aborted_externally = 1309,
-  previous_operation_failed = 1310,
-  forward_compatibility_failure = 1311,
-  parsing_failure = 1312,
-  illegal_state = 1313,
-  couchbase_error = 1314,
-  service_not_available = 1315,
-  request_canceled = 1316,
-  concurrent_operations_detected_on_same_document = 1317,
-  commit_not_permitted = 1318,
-  rollback_not_permitted = 1319,
-  transaction_already_aborted = 1320,
-  transaction_already_committed = 1321,
+  feature_not_available = 1307,
+  transaction_aborted_externally = 1308,
+  previous_operation_failed = 1309,
+  forward_compatibility_failure = 1310,
+  parsing_failure = 1311,
+  illegal_state = 1312,
+  service_not_available = 1313,
+  request_canceled = 1314,
+  concurrent_operations_detected_on_same_document = 1315,
+  commit_not_permitted = 1316,
+  rollback_not_permitted = 1317,
+  transaction_already_aborted = 1318,
+  transaction_already_committed = 1319,
 
   /**
    * @internal
