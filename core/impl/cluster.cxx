@@ -32,10 +32,11 @@
 #include "query.hxx"
 #include "search.hxx"
 
-#include <asio/bind_executor.hpp>
-#include <asio/post.hpp>
 #include <couchbase/bucket.hxx>
 #include <couchbase/cluster.hxx>
+
+#include <asio/bind_executor.hpp>
+#include <asio/post.hpp>
 
 namespace couchbase
 {
@@ -186,13 +187,30 @@ public:
   {
     std::promise<void> barrier;
     auto future = barrier.get_future();
-    close([&barrier] {
-      barrier.set_value();
-    });
-    future.get();
 
-    io_.stop();
-    io_thread_.join();
+    // Spawn new thread to avoid joining IO thread from the same thread
+    // We cannot use close() method here, as it is capturing self as a shared
+    // pointer to extend lifetime for the user's callback. Here the reference
+    // counter has reached zero already, so we can only capture `*this`.
+    std::thread([this, &barrier]() mutable {
+      if (auto txns = std::move(transactions_); txns != nullptr) {
+        // blocks until cleanup is finished
+        txns->close();
+      }
+      std::promise<void> core_stopped;
+      auto f = core_stopped.get_future();
+      core_.close([&core_stopped]() {
+        core_stopped.set_value();
+      });
+      f.get();
+      io_.stop();
+      if (io_thread_.joinable()) {
+        io_thread_.join();
+      }
+      barrier.set_value();
+    }).detach();
+
+    future.get();
   }
 
   void open(const std::string& connection_string,
@@ -313,11 +331,24 @@ public:
 
   void close(core::utils::movable_function<void()> handler)
   {
-    if (auto txns = std::move(transactions_); txns != nullptr) {
-      // blocks until cleanup is finished
-      txns->close();
-    }
-    return core_.close(std::move(handler));
+    // Spawn new thread to avoid joining IO thread from the same thread
+    std::thread([self = shared_from_this(), handler = std::move(handler)]() mutable {
+      if (auto txns = std::move(self->transactions_); txns != nullptr) {
+        // blocks until cleanup is finished
+        txns->close();
+      }
+      std::promise<void> barrier;
+      auto future = barrier.get_future();
+      self->core_.close([&barrier]() {
+        barrier.set_value();
+      });
+      future.get();
+      self->io_.stop();
+      if (self->io_thread_.joinable()) {
+        self->io_thread_.join();
+      }
+      handler();
+    }).detach();
   }
 
   [[nodiscard]] auto core() const -> const core::cluster&
@@ -496,17 +527,7 @@ cluster::close(std::function<void()>&& handler)
   if (!impl_) {
     return handler();
   }
-  // Spawn new thread to ensure the IO will be safely shutdown before calling
-  // destructor
-  std::thread([impl = impl_, handler = std::move(handler)]() {
-    auto barrier = std::make_shared<std::promise<void>>();
-    auto future = barrier->get_future();
-    impl->close([barrier] {
-      barrier->set_value();
-    });
-    future.get();
-    handler();
-  }).detach();
+  impl_->close(std::move(handler));
 }
 
 auto

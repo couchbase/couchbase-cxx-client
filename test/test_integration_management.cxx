@@ -2159,8 +2159,6 @@ TEST_CASE("integration: user management", "[integration]")
     REQUIRE(resp.roles.size() > 0);
   }
 
-// FIXME(SA, CXXCBC-531) triggers issues in public cluster destructor
-#ifndef COUCHBASE_CXX_CLIENT_BUILD_SANITIZED
   if (integration.cluster_version().is_enterprise()) {
 
     SECTION("change user password")
@@ -2218,7 +2216,6 @@ TEST_CASE("integration: user management", "[integration]")
       }
     }
   }
-#endif
 }
 
 TEST_CASE("integration: user management collections roles", "[integration]")
