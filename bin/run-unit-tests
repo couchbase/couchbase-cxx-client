@@ -24,6 +24,7 @@ echo "NODE_LABELS=${NODE_LABELS}"
 echo "TEST_DEPLOYMENT_TYPE=${TEST_DEPLOYMENT_TYPE}"
 
 CB_CTEST=${CB_CTEST:-$(which ctest)}
+CB_CTEST_EXTRAS=${CB_CTEST_EXTRAS:-""}
 CB_SANITIZER=${CB_SANITIZER:-""}
 
 echo "CB_CTEST=${CB_CTEST}"
@@ -33,6 +34,9 @@ set -xu
 BUILD_DIR="${PROJECT_ROOT}/cmake-build-tests"
 if [ "x${CB_SANITIZER}" != "x" ]; then
     BUILD_DIR="${BUILD_DIR}-${CB_SANITIZER}"
+fi
+if [ "x${CB_SANITIZER}" = "xvalgrind" ]; then
+    CB_CTEST_EXTRAS="--test-action memcheck"
 fi
 
 cd "${BUILD_DIR}"
@@ -98,7 +102,7 @@ fi
 ulimit -c unlimited
 
 export TEST_CONNECTION_STRING="${TEST_CONNECTION_STRING//cluster.crt/${PROJECT_ROOT}/cluster.crt}"
-${CB_CTEST} --output-on-failure --label-regex 'integration|unit' --output-junit results.xml
+${CB_CTEST} ${CB_CTEST_EXTRAS} --output-on-failure --label-regex 'integration|unit' --output-junit results.xml
 STATUS=$?
 
 if [ ! -z "${GOCAVES_PID}" ]
@@ -126,7 +130,7 @@ then
            fi
         done
     fi
-    for core in /tmp/core.* "${PWD}/core*"
+    for core in /tmp/core.* "${PWD}/{vg,}core*"
     do
         if [ -f $core ]
         then

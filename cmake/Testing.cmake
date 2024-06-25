@@ -9,7 +9,25 @@ if(NOT TARGET Catch2::Catch2WithMain)
 endif()
 
 list(APPEND CMAKE_MODULE_PATH "${catch2_SOURCE_DIR}/extras")
-enable_testing()
+
+if(COUCHBASE_CXX_CLIENT_ENABLE_VALGRIND)
+  find_program(VALGRIND valgrind)
+  if(VALGRIND)
+    set(VALGRIND_COMMAND "${VALGRIND}")
+    set(VALGRIND_COMMAND_OPTIONS
+        "-v --tool=memcheck --leak-check=full --track-fds=yes --num-callers=50 --show-reachable=yes --track-origins=yes --malloc-fill=0xff --free-fill=0xfe"
+    )
+    set(MEMORYCHECK_COMMAND "${VALGRIND}")
+    set(MEMORYCHECK_COMMAND_OPTIONS "${VALGRIND_COMMAND_OPTIONS}")
+    set(CTEST_MEMORYCHECK_TYPE Valgrind)
+    set(CTEST_MEMORYCHECK_COMMAND "${VALGRIND}")
+    set(CTEST_MEMORYCHECK_COMMAND_OPTIONS "${VALGRIND_COMMAND_OPTIONS}")
+  else()
+    message(SEND_ERROR "valgrind requested but executable not found")
+  endif()
+endif()
+
+include(CTest)
 include(Catch)
 
 define_property(
