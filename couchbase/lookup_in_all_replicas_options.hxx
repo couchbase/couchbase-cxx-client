@@ -27,10 +27,7 @@
 #include <couchbase/read_preference.hxx>
 #include <couchbase/store_semantics.hxx>
 
-#include <chrono>
 #include <functional>
-#include <memory>
-#include <optional>
 #include <vector>
 
 namespace couchbase
@@ -89,9 +86,7 @@ struct lookup_in_all_replicas_options : common_options<lookup_in_all_replicas_op
   }
 
 private:
-  enum read_preference read_preference_ {
-    read_preference::no_preference
-  };
+  couchbase::read_preference read_preference_{ read_preference::no_preference };
 };
 
 /**
@@ -114,28 +109,12 @@ using lookup_in_all_replicas_handler = std::function<void(error, lookup_in_all_r
 namespace core
 {
 class cluster;
-namespace impl
-{
-namespace subdoc
+
+namespace impl::subdoc
 {
 struct command;
-} // namespace subdoc
-
-/**
- * @since 1.0.0
- * @internal
- */
-void
-initiate_lookup_in_all_replicas_operation(
-  std::shared_ptr<couchbase::core::cluster> core,
-  const std::string& bucket_name,
-  const std::string& scope_name,
-  const std::string& collection_name,
-  std::string document_key,
-  const std::vector<couchbase::core::impl::subdoc::command>& specs,
-  lookup_in_all_replicas_options::built options,
-  lookup_in_all_replicas_handler&& handler);
+} // namespace impl::subdoc
 #endif
-} // namespace impl
+
 } // namespace core
 } // namespace couchbase

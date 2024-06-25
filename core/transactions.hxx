@@ -173,8 +173,9 @@ public:
    *
    * @param logic The lambda containing the transaction logic.
    * @return A struct containing some internal state information about the transaction.
-   * @throws @ref transaction_failed, @ref transaction_expired, @ref transaction_commit_ambiguous,
-   * all of which share a common base class @ref transaction_exception.
+   * @throws @ref transaction_failed, @ref errc::transaction::expired, @ref
+   * transaction_commit_ambiguous, all of which share a common base class @ref
+   * transaction_exception.
    */
   auto run(logic&& code) -> couchbase::transactions::transaction_result;
 
@@ -194,8 +195,8 @@ public:
    * @param logic The lambda containing the async transaction logic.
    * @param cb Called when the transaction is complete.
    * @return A struct containing some internal state information about the transaction.
-   * @throws @ref transaction_failed, @ref transaction_expired, @ref transaction_commit_ambiguous,
-   * all of which share a common base class @ref transaction_exception.
+   * @throws @ref errc::transaction::failed, @ref errc::transaction::expired, @ref
+   * errc::transaction::ambiguous.
    */
   void run(async_logic&& code, txn_complete_callback&& cb);
 

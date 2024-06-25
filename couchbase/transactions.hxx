@@ -53,8 +53,8 @@ public:
    * desired transactional operations.
    * @param cfg if passed in, these options override the defaults, or those set in the {@link
    * cluster_options}.
-   * @return an {@link transaction_error_context}, and a {@link transaction_result} representing the
-   * results of the transaction.
+   * @return an {@link error}, and a {@link transaction_result} representing the results of the
+   * transaction.
    */
   virtual auto run(txn_logic&& logic,
                    const transaction_options& cfg) -> std::pair<error, transaction_result> = 0;

@@ -277,7 +277,7 @@ public:
   }
 
   /**
-   * Creates an instance of a sampling scan type with a seed..
+   * Creates an instance of a sampling scan type with a seed.
    *
    * @param limit the maximum number of documents the sampling scan can return.
    * @param seed the seed used for the random number generator that selects the documents.

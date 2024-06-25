@@ -35,7 +35,7 @@
 namespace couchbase
 {
 /**
- * Options for @ref cluster#search_query(), @ref cluster#search() and @ref scope#search().
+ * Options for @ref cluster#search() and @ref scope#search().
  *
  * @since 1.0.0
  * @committed
@@ -514,8 +514,7 @@ private:
 };
 
 /**
- * The signature for the handler of the @ref cluster#search_query(), @ref cluster#search() and @ref
- * scope#search() operations
+ * The signature for the handler of the @ref cluster#search() and @ref scope#search() operations
  *
  * @since 1.0.0
  * @uncommitted
