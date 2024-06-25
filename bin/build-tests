@@ -71,6 +71,10 @@ case "${CB_SANITIZER}" in
     msan | memory)
         CB_CMAKE_EXTRAS="-DENABLE_SANITIZER_MEMORY=ON"
         ;;
+
+    valgrind)
+        CB_CMAKE_EXTRAS="-DCOUCHBASE_CXX_CLIENT_ENABLE_VALGRIND=ON"
+        ;;
 esac
 
 CB_COLUMNAR=${CB_COLUMNAR:-""}
