@@ -11,18 +11,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        server:
+          - 7.6.2
         sanitizer:
           - asan
           - lsan
           - tsan
           - ubsan
+          - valgrind
         tls:
           - tls
           - plain
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     services:
       couchbase:
-        image: couchbase:enterprise-7.2.5
+        image: couchbase:enterprise-${{ matrix.server }}
         ports:
           - 8091-8096:8091-8096
           - 11210:11210
@@ -32,12 +35,8 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y libssl-dev cmake curl wget gnupg2 gdb
-          wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-          sudo bash -c "echo 'deb https://apt.llvm.org/focal/ llvm-toolchain-focal-13 main' >> /etc/apt/sources.list"
-          sudo apt-get update -y
-          sudo apt-get install -y clang-13 clang-tools-13
-      - uses: actions/checkout@v2
+          sudo apt-get install -y libssl-dev cmake curl wget gnupg2 gdb clang clang-tools valgrind
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
       - name: Initialize couchbase
@@ -51,16 +50,24 @@ jobs:
       - name: Build tests
         env:
           CB_SANITIZER: ${{ matrix.sanitizer }}
-          CB_CLANG: clang-13
-          CB_CLANGXX: clang++-13
+          # SA: see CXXCBC-571, Valgrind reports memory leak, because ASIO does
+          # not deallocate thread-local state of OpenSSL properly
+          CB_BORINGSSL: OFF
         run: ./bin/build-tests
       - name: Check couchbase
         run: ./bin/check-cluster
       - name: Run tests
-        timeout-minutes: 30
+        timeout-minutes: 120
         env:
           CB_SANITIZER: ${{ matrix.sanitizer }}
-          TEST_SERVER_VERSION: 7.2.3
+          TEST_SERVER_VERSION: ${{ matrix.server }}
           TEST_CONNECTION_STRING: ${{ matrix.tls == 'tls' && 'couchbases://127.0.0.1?trust_certificate=cluster.crt' || 'couchbase://127.0.0.1' }}
           TEST_LOG_LEVEL: trace
         run: ./bin/run-unit-tests
+      - name: Upload report
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-${{ matrix.sanitizer }}-${{ matrix.tls }}-${{ matrix.server }}
+          path: |
+            cmake-build-tests-${{ matrix.sanitizer }}/Testing/Temporary/*.log
