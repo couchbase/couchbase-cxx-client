@@ -22,10 +22,7 @@
 #include <couchbase/get_replica_result.hxx>
 #include <couchbase/read_preference.hxx>
 
-#include <chrono>
 #include <functional>
-#include <memory>
-#include <optional>
 
 namespace couchbase
 {
@@ -83,9 +80,7 @@ struct get_any_replica_options : public common_options<get_any_replica_options> 
   }
 
 private:
-  enum read_preference read_preference_ {
-    read_preference::no_preference
-  };
+  couchbase::read_preference read_preference_{ read_preference::no_preference };
 };
 
 /**

@@ -83,7 +83,7 @@ public:
    *
    * Transactions can conflict (or other operations on those documents), and may retry.
    * This is the maximum time a transaction can take, including any retries.  The transaction will
-   * throw an @ref transaction_expired and rollback when this occurs.
+   * throw an @ref errc::transaction::expired and rollback when this occurs.
    *
    * @return timeout for transactions.
    */
