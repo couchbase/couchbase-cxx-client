@@ -313,8 +313,10 @@ public:
     std::function<void(std::exception_ptr, std::optional<transaction_get_result>)>&& cb) override;
 
   auto get_replica_from_preferred_server_group(const core::document_id& id)
-    -> transaction_get_result override;
-  void get_replica_from_preferred_server_group(const core::document_id& id, Callback&& cb) override;
+    -> std::optional<transaction_get_result> override;
+  void get_replica_from_preferred_server_group(
+    const core::document_id& id,
+    std::function<void(std::exception_ptr, std::optional<transaction_get_result>)>&& cb) override;
   auto get_replica_from_preferred_server_group(const couchbase::collection& coll,
                                                const std::string& id)
     -> std::pair<couchbase::error, couchbase::transactions::transaction_get_result> override;
