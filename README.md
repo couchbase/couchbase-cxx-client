@@ -5,6 +5,11 @@
 [![sanitizers](https://img.shields.io/github/actions/workflow/status/couchbase/couchbase-cxx-client/sanitizers.yml?branch=main&label=sanitizers)](https://github.com/couchbase/couchbase-cxx-client/actions?query=workflow%3Asanitizers+branch%3Amain)
 [![tests](https://img.shields.io/github/actions/workflow/status/couchbase/couchbase-cxx-client/tests.yml?branch=main&label=tests)](https://github.com/couchbase/couchbase-cxx-client/actions?query=workflow%3Atests+branch%3Amain)
 
+* Documentation and User Guides: https://docs.couchbase.com/cxx-sdk/current/hello-world/start-using-sdk.html
+* API Reference: https://docs.couchbase.com/sdk-api/couchbase-cxx-client
+* Issue Tracker: https://issues.couchbase.com/projects/CXXCBC/issues
+* Server Documentation: https://docs.couchbase.com/home/server.html
+
 ## Using with CPM.cmake
 
 [CPM.cmake](https://github.com/cpm-cmake/CPM.cmake) makes it really easy to
