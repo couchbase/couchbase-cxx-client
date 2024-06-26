@@ -186,7 +186,7 @@ struct server_version {
 
   [[nodiscard]] auto supports_search_analyze() const -> bool
   {
-    return supports_search() && (is_mad_hatter() || is_cheshire_cat() || is_neo());
+    return supports_search() && (is_cheshire_cat() || is_neo());
   }
 
   [[nodiscard]] auto supports_analytics_links_cert_auth() const -> bool
