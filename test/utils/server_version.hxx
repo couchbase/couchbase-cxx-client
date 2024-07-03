@@ -26,7 +26,8 @@ namespace test::utils
 enum class server_edition {
   unknown,
   enterprise,
-  community
+  community,
+  columnar
 };
 
 enum class deployment_type {
@@ -286,6 +287,11 @@ struct server_version {
   [[nodiscard]] auto is_capella() const -> bool
   {
     return deployment == deployment_type::capella;
+  }
+
+  [[nodiscard]] auto is_columnar() const -> bool
+  {
+    return edition == server_edition::columnar;
   }
 };
 

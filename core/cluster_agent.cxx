@@ -15,22 +15,48 @@
 
 #include "cluster_agent.hxx"
 
+#include "cluster_agent_config.hxx"
+#include "core/logger/logger.hxx"
+#include "http_component.hxx"
+
+#include <memory>
+#include <utility>
+
 namespace couchbase::core
 {
 class cluster_agent_impl
 {
 public:
-  cluster_agent_impl(cluster_agent_config config)
-    : config_{ std::move(config) }
+  cluster_agent_impl(asio::io_context& io, cluster_agent_config config)
+    : io_{ io }
+    , config_{ std::move(config) }
+    , http_{ io_, config_.shim, config_.default_retry_strategy }
   {
+    CB_LOG_DEBUG("creating new cluster agent: {}", config_.to_string());
+  }
+
+  auto free_form_http_request(http_request request, free_form_http_request_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    return http_.do_http_request(std::move(request), std::move(callback));
   }
 
 private:
+  asio::io_context& io_;
   const cluster_agent_config config_;
+  http_component http_;
 };
 
-core::cluster_agent::cluster_agent(cluster_agent_config config)
-  : impl_{ std::make_shared<cluster_agent_impl>(std::move(config)) }
+cluster_agent::cluster_agent(asio::io_context& io, cluster_agent_config config)
+  : impl_{ std::make_shared<cluster_agent_impl>(io, std::move(config)) }
 {
+}
+
+auto
+cluster_agent::free_form_http_request(couchbase::core::http_request request,
+                                      couchbase::core::free_form_http_request_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->free_form_http_request(std::move(request), std::move(callback));
 }
 } // namespace couchbase::core

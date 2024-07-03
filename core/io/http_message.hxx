@@ -19,6 +19,7 @@
 
 #include "core/service_type.hxx"
 #include "core/utils/json_streaming_lexer.hxx"
+#include "core/utils/movable_function.hxx"
 
 #include <chrono>
 #include <map>
@@ -45,6 +46,7 @@ struct http_request {
                                       user's request */
   std::chrono::milliseconds
     timeout{}; /* effective timeout, service default or provided in user's request */
+  bool stream_response{};
 };
 
 class http_response_body
@@ -117,4 +119,5 @@ struct http_response {
     return false;
   }
 };
+
 } // namespace couchbase::core::io

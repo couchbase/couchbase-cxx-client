@@ -15,67 +15,102 @@
 
 #include "free_form_http_request.hxx"
 
+#include "io/http_streaming_response.hxx"
+#include "utils/movable_function.hxx"
+
+#include <memory>
+
 namespace couchbase::core
 {
 class http_response_impl
 {
 public:
-  auto endpoint() -> std::string
+  http_response_impl() = default;
+
+  explicit http_response_impl(io::http_streaming_response streaming_resp)
+    : streaming_resp_{ std::move(streaming_resp) }
+  {
+  }
+
+  auto endpoint() const -> std::string
   {
     return {};
   }
 
-  auto status_code() -> std::uint32_t
+  auto status_code() const -> std::uint32_t
   {
-    return {};
+    return streaming_resp_.status_code();
   }
 
-  auto content_length() -> std::size_t
+  auto content_length() const -> std::size_t
   {
-    return {};
+    if (streaming_resp_.headers().find("content-length") == streaming_resp_.headers().end()) {
+      return 0;
+    }
+    return std::stoul(streaming_resp_.headers().at("content-length"));
   }
 
-  auto body() -> std::vector<std::byte>
+  void next_body(utils::movable_function<void(std::string, std::error_code)> callback)
   {
-    return {};
+    return streaming_resp_.body().next(std::move(callback));
   }
 
-  auto close() -> std::error_code
+  void close_body()
   {
-    return {};
+    return streaming_resp_.body().close();
   }
+
+private:
+  io::http_streaming_response streaming_resp_;
 };
 
-http_response::http_response()
-  : impl_{ std::make_shared<http_response_impl>() }
+http_response::http_response(io::http_streaming_response resp)
+  : impl_{ std::make_shared<http_response_impl>(std::move(resp)) }
 {
 }
 
 auto
-http_response::endpoint() -> std::string
+http_response::endpoint() const -> std::string
 {
   return impl_->endpoint();
 }
 auto
-http_response::status_code() -> std::uint32_t
+http_response::status_code() const -> std::uint32_t
 {
   return impl_->status_code();
 }
 auto
-http_response::content_length() -> std::size_t
+http_response::content_length() const -> std::size_t
 {
   return impl_->content_length();
 }
 
 auto
-http_response::body() -> std::vector<std::byte>
+http_response::body() const -> http_response_body
 {
-  return impl_->body();
+  return { impl_ };
 }
 
-auto
-http_response::close() -> std::error_code
+void
+http_response::close()
 {
-  return impl_->close();
+  return impl_->close_body();
+}
+
+http_response_body::http_response_body(std::shared_ptr<http_response_impl> impl)
+  : impl_{ std::move(impl) }
+{
+}
+
+void
+http_response_body::cancel()
+{
+  return impl_->close_body();
+}
+
+void
+http_response_body::next(utils::movable_function<void(std::string, std::error_code)> callback)
+{
+  return impl_->next_body(std::move(callback));
 }
 } // namespace couchbase::core

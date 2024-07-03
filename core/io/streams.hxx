@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "core/utils/movable_function.hxx"
 #include "ip_protocol.hxx"
 
 #include <asio.hpp>
@@ -92,20 +93,22 @@ public:
 
   [[nodiscard]] virtual auto local_endpoint() const -> asio::ip::tcp::endpoint = 0;
 
-  virtual void close(std::function<void(std::error_code)>&& handler) = 0;
+  virtual void close(utils::movable_function<void(std::error_code)>&& handler) = 0;
 
   virtual void reopen() = 0;
 
   virtual void set_options() = 0;
 
   virtual void async_connect(const asio::ip::tcp::resolver::results_type::endpoint_type& endpoint,
-                             std::function<void(std::error_code)>&& handler) = 0;
+                             utils::movable_function<void(std::error_code)>&& handler) = 0;
 
-  virtual void async_write(std::vector<asio::const_buffer>& buffers,
-                           std::function<void(std::error_code, std::size_t)>&& handler) = 0;
+  virtual void async_write(
+    std::vector<asio::const_buffer>& buffers,
+    utils::movable_function<void(std::error_code, std::size_t)>&& handler) = 0;
 
-  virtual void async_read_some(asio::mutable_buffer buffer,
-                               std::function<void(std::error_code, std::size_t)>&& handler) = 0;
+  virtual void async_read_some(
+    asio::mutable_buffer buffer,
+    utils::movable_function<void(std::error_code, std::size_t)>&& handler) = 0;
 };
 
 class plain_stream_impl : public stream_impl
@@ -130,7 +133,7 @@ public:
     return res;
   }
 
-  void close(std::function<void(std::error_code)>&& handler) override
+  void close(utils::movable_function<void(std::error_code)>&& handler) override
   {
     open_ = false;
     return asio::post(strand_, [stream = stream_, h = std::move(handler)]() {
@@ -160,7 +163,7 @@ public:
   }
 
   void async_connect(const asio::ip::tcp::resolver::results_type::endpoint_type& endpoint,
-                     std::function<void(std::error_code)>&& handler) override
+                     utils::movable_function<void(std::error_code)>&& handler) override
   {
     return stream_->async_connect(endpoint, [this, h = std::move(handler)](std::error_code ec) {
       open_ = stream_->is_open();
@@ -169,13 +172,14 @@ public:
   }
 
   void async_write(std::vector<asio::const_buffer>& buffers,
-                   std::function<void(std::error_code, std::size_t)>&& handler) override
+                   utils::movable_function<void(std::error_code, std::size_t)>&& handler) override
   {
     return asio::async_write(*stream_, buffers, std::move(handler));
   }
 
-  void async_read_some(asio::mutable_buffer buffer,
-                       std::function<void(std::error_code, std::size_t)>&& handler) override
+  void async_read_some(
+    asio::mutable_buffer buffer,
+    utils::movable_function<void(std::error_code, std::size_t)>&& handler) override
   {
     return stream_->async_read_some(buffer, std::move(handler));
   }
@@ -207,7 +211,7 @@ public:
     return res;
   }
 
-  void close(std::function<void(std::error_code)>&& handler) override
+  void close(utils::movable_function<void(std::error_code)>&& handler) override
   {
     open_ = false;
     return asio::post(strand_, [stream = stream_, h = std::move(handler)]() {
@@ -238,10 +242,10 @@ public:
   }
 
   void async_connect(const asio::ip::tcp::resolver::results_type::endpoint_type& endpoint,
-                     std::function<void(std::error_code)>&& handler) override
+                     utils::movable_function<void(std::error_code)>&& handler) override
   {
     return stream_->lowest_layer().async_connect(
-      endpoint, [this, handler](std::error_code ec_connect) mutable {
+      endpoint, [this, handler = std::move(handler)](std::error_code ec_connect) mutable {
         if (ec_connect == asio::error::operation_aborted) {
           return;
         }
@@ -249,24 +253,26 @@ public:
           return handler(ec_connect);
         }
         open_ = stream_->lowest_layer().is_open();
-        stream_->async_handshake(asio::ssl::stream_base::client,
-                                 [handler](std::error_code ec_handshake) mutable {
-                                   if (ec_handshake == asio::error::operation_aborted) {
-                                     return;
-                                   }
-                                   return handler(ec_handshake);
-                                 });
+        stream_->async_handshake(
+          asio::ssl::stream_base::client,
+          [handler = std::move(handler)](std::error_code ec_handshake) mutable {
+            if (ec_handshake == asio::error::operation_aborted) {
+              return;
+            }
+            return handler(ec_handshake);
+          });
       });
   }
 
   void async_write(std::vector<asio::const_buffer>& buffers,
-                   std::function<void(std::error_code, std::size_t)>&& handler) override
+                   utils::movable_function<void(std::error_code, std::size_t)>&& handler) override
   {
     return asio::async_write(*stream_, buffers, std::move(handler));
   }
 
-  void async_read_some(asio::mutable_buffer buffer,
-                       std::function<void(std::error_code, std::size_t)>&& handler) override
+  void async_read_some(
+    asio::mutable_buffer buffer,
+    utils::movable_function<void(std::error_code, std::size_t)>&& handler) override
   {
     return stream_->async_read_some(buffer, std::move(handler));
   }
