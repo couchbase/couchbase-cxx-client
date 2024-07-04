@@ -19,6 +19,7 @@ integration_test(search)
 integration_test(management)
 integration_test(management_eventing)
 integration_test(management_search_index)
+integration_test(columnar)
 
 unit_test(connection_string)
 unit_test(utils)

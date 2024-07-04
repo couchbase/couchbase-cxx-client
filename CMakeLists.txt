@@ -371,6 +371,7 @@ set(couchbase_cxx_client_FILES
     core/range_scan_options.cxx
     core/range_scan_orchestrator.cxx
     core/retry_orchestrator.cxx
+    core/row_streamer.cxx
     core/scan_result.cxx
     core/search_query_options.cxx
     core/seed_config.cxx
@@ -409,6 +410,13 @@ set(couchbase_cxx_client_FILES
     core/utils/split_string.cxx
     core/utils/url_codec.cxx
     core/view_query_options.cxx
+    core/http_component.cxx
+    core/io/http_streaming_parser.cxx
+    core/io/http_streaming_response.cxx
+    core/columnar/agent.cxx
+    core/columnar/agent_config.cxx
+    core/columnar/query_component.cxx
+    core/columnar/query_result.cxx
 )
 
 if(COUCHBASE_CXX_CLIENT_BUILD_SHARED OR BUILD_SHARED_LIBS)

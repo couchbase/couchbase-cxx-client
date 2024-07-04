@@ -40,6 +40,11 @@ noop_on_row(std::string&& /* row */) -> stream_control
   return stream_control::next_row;
 }
 
+static void
+noop_on_meta_header_complete(std::error_code /* ec */, std::string&& /* meta_header */)
+{ /* do nothing */
+}
+
 #define STATE_MARKER_ROOT (reinterpret_cast<void*>(1))
 #define STATE_MARKER_ROWSET (reinterpret_cast<void*>(2))
 
@@ -135,6 +140,9 @@ struct streaming_lexer_impl {
   std::string buffer_{};
   std::string last_key_{};
   std::error_code error_{};
+  utils::movable_function<void(std::error_code, std::string&&)> on_meta_header_complete_{
+    noop_on_meta_header_complete
+  };
   std::function<void(std::error_code, std::size_t, std::string&&)> on_complete_{ noop_on_complete };
   std::function<stream_control(std::string&&)> on_row_{ noop_on_row };
   bool root_has_been_validated_{ false };
@@ -241,6 +249,10 @@ error_callback(jsonsl_t lexer,
   auto* impl = static_cast<detail::streaming_lexer_impl*>(lexer->data);
 
   impl->error_ = convert_status(error);
+
+  impl->on_meta_header_complete_(impl->error_, {});
+  impl->on_meta_header_complete_ = detail::noop_on_meta_header_complete;
+
   impl->on_complete_(impl->error_, impl->number_of_rows_, {});
   impl->on_complete_ = detail::noop_on_complete;
 
@@ -258,6 +270,10 @@ meta_header_complete_callback(jsonsl_t lexer,
   impl->meta_buffer_.append(impl->buffer_.c_str(), state->pos_begin);
   impl->meta_header_length_ = state->pos_begin;
   lexer->action_callback_PUSH = nullptr;
+
+  auto meta_header = impl->meta_buffer_;
+  impl->on_meta_header_complete_({}, std::move(meta_header));
+  impl->on_meta_header_complete_ = detail::noop_on_meta_header_complete;
 }
 
 static void
@@ -279,6 +295,12 @@ trailer_pop_callback(jsonsl_t lexer,
   impl->meta_buffer_.resize(impl->meta_header_length_);
   impl->meta_buffer_.append(impl->get_buffer_region(impl->last_row_end_position_));
   impl->meta_complete_ = true;
+
+  // This will have no effect if on_meta_header_complete has already been called.
+  auto meta_header = impl->meta_buffer_;
+  impl->on_meta_header_complete_({}, std::move(meta_header));
+  impl->on_meta_header_complete_ = detail::noop_on_meta_header_complete;
+
   impl->on_complete_({}, impl->number_of_rows_, std::move(impl->meta_buffer_));
 }
 
@@ -406,6 +428,13 @@ streaming_lexer::feed(std::string_view data)
     impl_->buffer_.erase(0, impl_->keep_position_ - impl_->min_pos_);
   }
   impl_->min_pos_ = impl_->keep_position_;
+}
+
+void
+streaming_lexer::on_metadata_header_complete(
+  utils::movable_function<void(std::error_code, std::string&&)> handler)
+{
+  impl_->on_meta_header_complete_ = std::move(handler);
 }
 
 void

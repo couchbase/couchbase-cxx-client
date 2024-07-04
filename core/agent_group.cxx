@@ -33,13 +33,14 @@ public:
   agent_group_impl(asio::io_context& io, agent_group_config config)
     : io_{ io }
     , config_(std::move(config))
-    , cluster_agent_({
-        config_.shim,
-        config_.user_agent,
-        config_.default_retry_strategy,
-        config_.seed,
-        config_.key_value,
-      })
+    , cluster_agent_(io,
+                     {
+                       config_.shim,
+                       config_.user_agent,
+                       config_.default_retry_strategy,
+                       config_.seed,
+                       config_.key_value,
+                     })
   {
     CB_LOG_DEBUG("SDK version: {}", meta::sdk_id());
     CB_LOG_DEBUG("creating new agent group: {}", config_.to_string());
@@ -110,11 +111,10 @@ public:
     return {};
   }
 
-  auto free_form_http_request(http_request /* request */,
-                              free_form_http_request_callback&& /* callback */)
+  auto free_form_http_request(http_request request, free_form_http_request_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
-    return {};
+    return cluster_agent_.free_form_http_request(std::move(request), std::move(callback));
   }
 
   auto wait_until_ready(

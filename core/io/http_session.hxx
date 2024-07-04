@@ -23,10 +23,14 @@
 #include "core/origin.hxx"
 #include "core/platform/base64.h"
 #include "core/platform/uuid.h"
+#include "core/service_type_fmt.hxx"
 #include "core/utils/movable_function.hxx"
 #include "http_context.hxx"
 #include "http_message.hxx"
 #include "http_parser.hxx"
+#include "http_streaming_parser.hxx"
+#include "http_streaming_response.hxx"
+
 #include "streams.hxx"
 
 #include <couchbase/error_codes.hxx>
@@ -37,6 +41,7 @@
 
 #include <list>
 #include <memory>
+#include <optional>
 #include <utility>
 
 namespace couchbase::core::io
@@ -300,8 +305,19 @@ public:
   void cancel_current_response(std::error_code ec)
   {
     std::scoped_lock lock(current_response_mutex_);
-    if (auto ctx = std::move(current_response_); ctx.handler) {
-      ctx.handler(ec, std::move(ctx.parser.response));
+    if (streaming_response_) {
+      auto ctx = std::move(current_streaming_response_);
+      if (ctx.resp_handler) {
+        ctx.resp_handler(ec, {});
+      }
+      if (ctx.stream_end_handler) {
+        ctx.stream_end_handler();
+        ctx.stream_end_handler = nullptr;
+      }
+    } else {
+      if (auto ctx = std::move(current_response_); ctx.handler) {
+        ctx.handler(ec, std::move(ctx.parser.response));
+      }
     }
   }
 
@@ -382,7 +398,43 @@ public:
         ctx.parser.response.body.use_json_streaming(std::move(request.streaming.value()));
       }
       std::scoped_lock lock(current_response_mutex_);
+      streaming_response_ = false;
       std::swap(current_response_, ctx);
+    }
+    if (request.headers["connection"] == "keep-alive") {
+      keep_alive_ = true;
+    }
+    request.headers["user-agent"] = user_agent_;
+    auto credentials = fmt::format("{}:{}", credentials_.username, credentials_.password);
+    request.headers["authorization"] = fmt::format(
+      "Basic {}",
+      base64::encode(gsl::as_bytes(gsl::span{ credentials.data(), credentials.size() })));
+    write(fmt::format(
+      "{} {} HTTP/1.1\r\nhost: {}:{}\r\n", request.method, request.path, hostname_, service_));
+    if (!request.body.empty()) {
+      request.headers["content-length"] = std::to_string(request.body.size());
+    }
+    for (const auto& [name, value] : request.headers) {
+      write(fmt::format("{}: {}\r\n", name, value));
+    }
+    write("\r\n");
+    write(request.body);
+    flush();
+  }
+
+  void write_and_stream(
+    io::http_request& request,
+    utils::movable_function<void(std::error_code, io::http_streaming_response)> resp_handler,
+    utils::movable_function<void()> stream_end_handler)
+  {
+    if (stopped_) {
+      return;
+    }
+    {
+      streaming_response_context ctx{ std::move(resp_handler), std::move(stream_end_handler) };
+      std::scoped_lock lock(current_response_mutex_);
+      std::swap(current_streaming_response_, ctx);
+      streaming_response_ = true;
     }
     if (request.headers["connection"] == "keep-alive") {
       keep_alive_ = true;
@@ -427,7 +479,91 @@ public:
     return idle_timer_.cancel() != 0;
   }
 
+  /**
+   * Reads some bytes from the body of the HTTP response. Should only be used in streaming mode.
+   * @param callback
+   */
+  void read_some(utils::movable_function<void(std::string, bool, std::error_code)>&& callback)
+  {
+    if (stopped_ || !stream_->is_open()) {
+      callback({}, {}, errc::common::request_canceled);
+      return;
+    }
+    std::unique_lock<std::mutex> lock{ read_some_mutex_ };
+    return stream_->async_read_some(
+      asio::buffer(input_buffer_),
+      [self = shared_from_this(), callback = std::move(callback), lck = std::move(lock)](
+        std::error_code ec, std::size_t bytes_transferred) mutable {
+        if (ec == asio::error::operation_aborted || self->stopped_) {
+          CB_LOG_PROTOCOL("[HTTP, IN] type={}, host=\"{}\", rc={}, bytes_received={}",
+                          self->type_,
+                          self->info_.remote_address(),
+                          ec ? ec.message() : "ok",
+                          bytes_transferred);
+          lck.unlock();
+          callback({}, {}, errc::common::request_canceled);
+          return;
+        } else {
+          CB_LOG_PROTOCOL("[HTTP, IN] type={}, host=\"{}\", rc={}, bytes_received={}{:a}",
+                          self->type_,
+                          self->info_.remote_address(),
+                          ec ? ec.message() : "ok",
+                          bytes_transferred,
+                          spdlog::to_hex(self->input_buffer_.data(),
+                                         self->input_buffer_.data() +
+                                           static_cast<std::ptrdiff_t>(bytes_transferred)));
+        }
+        self->last_active_ = std::chrono::steady_clock::now();
+        if (ec) {
+          CB_LOG_ERROR("{} IO error while reading from the socket: {}",
+                       self->info_.log_prefix(),
+                       ec.message());
+          lck.unlock();
+          callback({}, {}, ec);
+          return self->stop();
+        }
+        http_streaming_parser::feeding_result res{};
+        {
+          std::scoped_lock lock(self->current_response_mutex_);
+          res = self->current_streaming_response_.parser.feed(
+            reinterpret_cast<const char*>(self->input_buffer_.data()), bytes_transferred);
+        }
+        if (res.failure) {
+          self->stop();
+          lck.unlock();
+          return callback({}, {}, errc::common::parsing_failure);
+        }
+
+        std::string data;
+        {
+          std::scoped_lock lock(self->current_response_mutex_);
+          std::swap(data, self->current_streaming_response_.parser.body_chunk);
+        }
+
+        if (res.complete) {
+          streaming_response_context ctx{};
+          {
+            std::scoped_lock lock(self->current_response_mutex_);
+            std::swap(self->current_streaming_response_, ctx);
+          }
+          if (ctx.resp->must_close_connection()) {
+            self->keep_alive_ = false;
+          }
+        }
+        lck.unlock();
+        callback(std::move(data), !res.complete, {});
+      });
+  }
+
 private:
+  struct streaming_response_context {
+    utils::movable_function<void(std::error_code, io::http_streaming_response)> resp_handler{};
+    utils::movable_function<void()> stream_end_handler{};
+    std::optional<io::http_streaming_response> resp{};
+    http_streaming_parser parser{};
+    bool complete{ false };
+  };
+
   struct response_context {
     utils::movable_function<void(std::error_code, io::http_response&&)> handler{};
     http_parser parser{};
@@ -564,33 +700,68 @@ private:
           return self->stop();
         }
 
-        http_parser::feeding_result res{};
-        {
-          std::scoped_lock lock(self->current_response_mutex_);
-          res = self->current_response_.parser.feed(
-            reinterpret_cast<const char*>(self->input_buffer_.data()), bytes_transferred);
-        }
-        if (res.failure) {
-          CB_LOG_ERROR("{} Parsing error while reading from the socket: {}",
-                       self->info_.log_prefix(),
-                       res.error);
-          return self->stop();
-        }
-        if (res.complete) {
-          response_context ctx{};
+        if (self->streaming_response_) {
+          // If streaming the response, read at least the entire header and then call the
+          // streaming handler
+          http_streaming_parser::feeding_result res{};
           {
             std::scoped_lock lock(self->current_response_mutex_);
-            std::swap(self->current_response_, ctx);
+            res = self->current_streaming_response_.parser.feed(
+              reinterpret_cast<const char*>(self->input_buffer_.data()), bytes_transferred);
           }
-          if (ctx.parser.response.must_close_connection()) {
-            self->keep_alive_ = false;
+          if (res.failure) {
+            return self->stop();
           }
-          ctx.handler({}, std::move(ctx.parser.response));
+          if (res.complete || res.headers_complete) {
+            streaming_response_context ctx{};
+            {
+              std::scoped_lock lock(self->current_response_mutex_);
+              std::swap(self->current_streaming_response_, ctx);
+            }
+
+            ctx.resp = http_streaming_response{ self->ctx_, ctx.parser, self };
+            ctx.parser.body_chunk = "";
+
+            if (res.complete && ctx.resp->must_close_connection()) {
+              self->keep_alive_ = false;
+            }
+            self->reading_ = false;
+            ctx.resp_handler({}, *ctx.resp);
+            ctx.resp_handler = nullptr;
+            if (!res.complete) {
+              std::scoped_lock lock(self->current_response_mutex_);
+              std::swap(self->current_streaming_response_, ctx);
+            }
+            return;
+          }
           self->reading_ = false;
-          return;
+          return self->do_read();
+        } else {
+          http_parser::feeding_result res{};
+          {
+            std::scoped_lock lock(self->current_response_mutex_);
+            res = self->current_response_.parser.feed(
+              reinterpret_cast<const char*>(self->input_buffer_.data()), bytes_transferred);
+          }
+          if (res.failure) {
+            return self->stop();
+          }
+          if (res.complete) {
+            response_context ctx{};
+            {
+              std::scoped_lock lock(self->current_response_mutex_);
+              std::swap(self->current_response_, ctx);
+            }
+            if (ctx.parser.response.must_close_connection()) {
+              self->keep_alive_ = false;
+            }
+            ctx.handler({}, std::move(ctx.parser.response));
+            self->reading_ = false;
+            return;
+          }
+          self->reading_ = false;
+          return self->do_read();
         }
-        self->reading_ = false;
-        return self->do_read();
       });
   }
 
@@ -670,7 +841,10 @@ private:
   std::function<void()> on_stop_handler_{ nullptr };
 
   response_context current_response_{};
+  streaming_response_context current_streaming_response_{};
+  bool streaming_response_{ false };
   std::mutex current_response_mutex_{};
+  std::mutex read_some_mutex_{};
 
   std::array<std::uint8_t, 16384> input_buffer_{};
   std::vector<std::vector<std::uint8_t>> output_buffer_{};

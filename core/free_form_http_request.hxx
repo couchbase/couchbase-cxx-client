@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include "service_type.hxx"
 #include "utils/movable_function.hxx"
 
 #include <chrono>
@@ -36,27 +37,20 @@ class request_span;
 
 namespace couchbase::core
 {
-enum class http_service_type {
-  management,
-  capi,
-  n1ql,
-  search,
-  analytics,
-};
-
 class http_request
 {
 public:
-  http_service_type service;
+  service_type service;
   std::string method{};
   std::string endpoint{};
   std::string path{};
   std::string username{};
   std::string password{};
-  std::vector<std::byte> body{};
+  std::string body{};
   std::map<std::string, std::string> headers{};
   std::string content_type{};
   bool is_idempotent{};
+  bool is_read_only{};
   std::string unique_id{};
   std::shared_ptr<couchbase::retry_strategy> retry_strategy{};
   std::chrono::milliseconds timeout{};
@@ -67,19 +61,37 @@ public:
   } internal{};
 };
 
+namespace io
+{
+class http_streaming_response;
+} // namespace io
+
 class http_response_impl;
+
+class http_response_body
+{
+public:
+  http_response_body(std::shared_ptr<http_response_impl> impl);
+
+  void next(utils::movable_function<void(std::string, std::error_code)> callback);
+  void cancel();
+
+private:
+  std::shared_ptr<http_response_impl> impl_;
+};
 
 class http_response
 {
 public:
-  http_response();
+  http_response() = default;
+  http_response(io::http_streaming_response resp);
 
-  auto endpoint() -> std::string;
-  auto status_code() -> std::uint32_t;
-  auto content_length() -> std::size_t;
+  auto endpoint() const -> std::string;
+  auto status_code() const -> std::uint32_t;
+  auto content_length() const -> std::size_t;
 
-  auto body() -> std::vector<std::byte>;
-  auto close() -> std::error_code;
+  auto body() const -> http_response_body;
+  void close();
 
 private:
   std::shared_ptr<http_response_impl> impl_;

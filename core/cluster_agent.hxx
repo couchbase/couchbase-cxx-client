@@ -16,8 +16,18 @@
 #pragma once
 
 #include "cluster_agent_config.hxx"
+#include "free_form_http_request.hxx"
+#include "pending_operation.hxx"
+
+#include <tl/expected.hpp>
 
 #include <memory>
+#include <system_error>
+
+namespace asio
+{
+class io_context;
+} // namespace asio
 
 namespace couchbase::core
 {
@@ -26,7 +36,10 @@ class cluster_agent_impl;
 class cluster_agent
 {
 public:
-  explicit cluster_agent(cluster_agent_config config);
+  explicit cluster_agent(asio::io_context& io, cluster_agent_config config);
+
+  auto free_form_http_request(http_request request, free_form_http_request_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
 private:
   std::shared_ptr<cluster_agent_impl> impl_;

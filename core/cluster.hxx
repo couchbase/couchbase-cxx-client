@@ -43,6 +43,11 @@ namespace mcbp
 class queue_request;
 } // namespace mcbp
 
+namespace io
+{
+class http_session_manager;
+} // namespace io
+
 namespace o = operations;
 namespace om = operations::management;
 template<typename T>
@@ -297,6 +302,9 @@ public:
   [[nodiscard]] auto direct_re_queue(const std::string& bucket_name,
                                      std::shared_ptr<mcbp::queue_request> req,
                                      bool is_retry) const -> std::error_code;
+
+  [[nodiscard]] auto http_session_manager() const
+    -> std::pair<std::error_code, std::shared_ptr<io::http_session_manager>>;
 
   [[nodiscard]] auto to_string() const -> std::string;
 

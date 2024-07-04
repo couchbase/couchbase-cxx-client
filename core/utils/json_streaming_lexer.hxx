@@ -21,6 +21,8 @@
 
 #include <couchbase/error_codes.hxx>
 
+#include "movable_function.hxx"
+
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -52,6 +54,8 @@ public:
 
   void feed(std::string_view data);
 
+  void on_metadata_header_complete(
+    utils::movable_function<void(std::error_code ec, std::string&& meta_header)> handler);
   void on_complete(
     std::function<void(std::error_code ec, std::size_t number_of_rows, std::string&& meta)>
       handler);

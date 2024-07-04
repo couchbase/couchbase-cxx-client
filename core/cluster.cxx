@@ -837,6 +837,15 @@ public:
     return {};
   }
 
+  auto http_session_manager()
+    -> std::pair<std::error_code, std::shared_ptr<io::http_session_manager>>
+  {
+    if (stopped_) {
+      return { errc::network::cluster_closed, {} };
+    }
+    return { {}, session_manager_ };
+  }
+
 private:
   std::string id_{ uuid::to_string(uuid::random()) };
   asio::io_context& ctx_;
@@ -1916,6 +1925,13 @@ cluster::execute(impl::lookup_in_replica_request request,
                  utils::movable_function<void(impl::lookup_in_replica_response)>&& handler) const
 {
   return impl_->execute(std::move(request), std::move(handler));
+}
+
+auto
+cluster::http_session_manager() const
+  -> std::pair<std::error_code, std::shared_ptr<io::http_session_manager>>
+{
+  return impl_->http_session_manager();
 }
 
 auto

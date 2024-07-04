@@ -40,6 +40,8 @@ server_version::parse(const std::string& str, const deployment_type deployment) 
             ver.edition = server_edition::enterprise;
           } else if (version_match[7] == "community") {
             ver.edition = server_edition::community;
+          } else if (version_match[7] == "columnar") {
+            ver.edition = server_edition::columnar;
           }
         }
       }
