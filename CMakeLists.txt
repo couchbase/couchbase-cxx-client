@@ -219,7 +219,10 @@ set(couchbase_cxx_client_FILES
     core/impl/scan_result.cxx
     core/io/dns_client.cxx
     core/io/dns_config.cxx
+    core/io/http_session.cxx
     core/io/http_parser.cxx
+    core/io/http_streaming_parser.cxx
+    core/io/http_streaming_response.cxx
     core/io/mcbp_message.cxx
     core/io/mcbp_parser.cxx
     core/io/mcbp_session.cxx
@@ -411,8 +414,6 @@ set(couchbase_cxx_client_FILES
     core/utils/url_codec.cxx
     core/view_query_options.cxx
     core/http_component.cxx
-    core/io/http_streaming_parser.cxx
-    core/io/http_streaming_response.cxx
     core/columnar/agent.cxx
     core/columnar/agent_config.cxx
     core/columnar/query_component.cxx

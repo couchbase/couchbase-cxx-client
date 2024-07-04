@@ -31,6 +31,7 @@
 #include "core/management/analytics_link.hxx"
 #include "core/mcbp/completion_token.hxx"
 #include "core/mcbp/queue_request.hxx"
+#include "core/meta/version.hxx"
 #include "core/metrics/logging_meter.hxx"
 #include "core/metrics/noop_meter.hxx"
 #include "core/operations.hxx"
