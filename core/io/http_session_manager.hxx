@@ -18,6 +18,7 @@
 #pragma once
 
 #include "core/config_listener.hxx"
+#include "core/logger/logger.hxx"
 #include "core/operations/http_noop.hxx"
 #include "core/service_type.hxx"
 #include "core/tracing/noop_tracer.hxx"
