@@ -425,7 +425,7 @@ attempt_context_impl::get_replica_from_preferred_server_group(
                   return self->op_completed_with_callback(std::move(cb),
                                                           std::optional<transaction_get_result>());
                 }
-                // fall through
+                [[fallthrough]];
               default: {
                 auto msg = fmt::format("got error \"{}\" (ec={}) while getting replica for doc {}",
                                        err_message.value_or(""),

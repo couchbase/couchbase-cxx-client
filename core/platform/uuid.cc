@@ -66,7 +66,8 @@ couchbase::core::uuid::from_string(std::string_view str)
           throw std::invalid_argument("couchbase::core::uuid::from_string: hyphen not found where "
                                       "expected");
         }
-        ++ii; // fall-through
+        ++ii;
+        [[fallthrough]];
       default:
         ret[jj++] = std::uint8_t(from_hex({ str.data() + ii, 2 }));
     }

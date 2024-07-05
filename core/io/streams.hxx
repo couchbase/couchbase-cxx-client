@@ -45,7 +45,7 @@ async_resolve(ip_protocol protocol,
       return resolver.async_resolve(
         asio::ip::tcp::v6(), hostname, service, std::forward<Handler>(handler));
     case ip_protocol::any:
-      /* fall-through */
+      [[fallthrough]];
     default:
       /* use any protocol */
       break;
