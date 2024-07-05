@@ -25,9 +25,25 @@ if(ENABLE_CPPCHECK)
 endif()
 
 if(ENABLE_CLANG_TIDY)
-  find_program(CLANGTIDY clang-tidy)
+  option(ENABLE_CLANG_TIDY_FIX "Try to fix the code if clang-tidy can propose a solution" OFF)
+  if(APPLE)
+    execute_process(
+      COMMAND brew --prefix llvm
+      OUTPUT_VARIABLE LLVM_ROOT_DIR
+      ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE)
+  endif()
+
+  if(LLVM_ROOT_DIR)
+    find_program(CLANGTIDY clang-tidy HINTS "${LLVM_ROOT_DIR}/bin")
+  else()
+    find_program(CLANGTIDY clang-tidy)
+  endif()
   if(CLANGTIDY)
-    set(CMAKE_CXX_CLANG_TIDY ${CLANGTIDY} -extra-arg=-Wno-unknown-warning-option)
+    set(COUCHBASE_CXX_CLIENT_CLANG_TIDY "${CLANGTIDY};-extra-arg=-Wno-unknown-warning-option")
+    if(ENABLE_CLANG_TIDY_FIX)
+      set(COUCHBASE_CXX_CLIENT_CLANG_TIDY
+          "${COUCHBASE_CXX_CLIENT_CLANG_TIDY};-fix;-export-fixes=${PROJECT_BINARY_DIR}/clang-tidy-fixes.yaml")
+    endif()
   else()
     message(SEND_ERROR "clang-tidy requested but executable not found")
   endif()

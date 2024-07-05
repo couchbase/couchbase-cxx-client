@@ -27,8 +27,9 @@
 
 namespace couchbase::core::operations::management
 {
-std::error_code
-scope_create_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+auto
+scope_create_request::encode_to(encoded_request_type& encoded,
+                                http_context& /* context */) const -> std::error_code
 {
   encoded.method = "POST";
   encoded.path = fmt::format("/pools/default/buckets/{}/scopes", bucket_name);
@@ -37,15 +38,15 @@ scope_create_request::encode_to(encoded_request_type& encoded, http_context& /* 
   return {};
 }
 
-scope_create_response
-scope_create_request::make_response(error_context::http&& ctx,
-                                    const encoded_response_type& encoded) const
+auto
+scope_create_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded)
+  const -> scope_create_response
 {
   scope_create_response response{ std::move(ctx) };
   if (!response.ctx.ec) {
     switch (encoded.status_code) {
       case 400: {
-        std::regex scope_exists("Scope with name .+ already exists");
+        const std::regex scope_exists("Scope with name .+ already exists");
         if (std::regex_search(encoded.body.data(), scope_exists)) {
           response.ctx.ec = errc::management::scope_exists;
         } else if (encoded.body.data().find("Not allowed on this version of cluster") !=

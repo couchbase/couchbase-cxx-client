@@ -95,7 +95,7 @@ public:
 
   [[nodiscard]] bool has_expired_client_side();
 
-  void after_delay(std::chrono::milliseconds delay, std::function<void()> fn);
+  void after_delay(std::chrono::milliseconds delay, const std::function<void()>& fn);
 
   [[nodiscard]] std::chrono::time_point<std::chrono::steady_clock> start_time_client() const
   {
@@ -122,7 +122,7 @@ public:
     atr_collection_ = coll;
   }
 
-  [[nodiscard]] ::couchbase::transactions::transaction_result get_transaction_result() const
+  [[nodiscard]] auto get_transaction_result() const -> ::couchbase::transactions::transaction_result
   {
     return couchbase::transactions::transaction_result{
       transaction_id(), current_attempt().state == attempt_state::COMPLETED
@@ -143,7 +143,7 @@ public:
 
   void new_attempt_context(async_attempt_context::VoidCallback&& cb);
 
-  std::shared_ptr<attempt_context_impl> current_attempt_context();
+  auto current_attempt_context() -> std::shared_ptr<attempt_context_impl>;
 
   // These functions just delegate to the current_attempt_context_
   void get(const core::document_id& id, async_attempt_context::Callback&& cb);
@@ -177,9 +177,9 @@ public:
 
   void existing_error(bool previous_op_failed = true);
 
-  void handle_error(std::exception_ptr err, txn_complete_callback&& cb);
+  void handle_error(const std::exception_ptr& err, txn_complete_callback&& callback);
 
-  std::chrono::nanoseconds remaining() const;
+  auto remaining() const -> std::chrono::nanoseconds;
 
 private:
   transaction_context(transactions& txns,

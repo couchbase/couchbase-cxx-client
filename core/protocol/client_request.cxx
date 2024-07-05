@@ -29,7 +29,7 @@ compress_value(const std::vector<std::byte>& value,
   static const double min_ratio = 0.83;
 
   std::string compressed;
-  std::size_t compressed_size =
+  const std::size_t compressed_size =
     snappy::Compress(reinterpret_cast<const char*>(value.data()), value.size(), &compressed);
   if (gsl::narrow_cast<double>(compressed_size) / gsl::narrow_cast<double>(value.size()) <
       min_ratio) {

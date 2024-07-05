@@ -138,7 +138,7 @@ void
 scan_result::iterator::fetch_item()
 {
   auto barrier = std::make_shared<std::promise<std::pair<error, scan_result_item>>>();
-  internal_->next([barrier](error err, std::optional<scan_result_item> item) mutable {
+  internal_->next([barrier](const error& err, std::optional<scan_result_item> item) mutable {
     if (err) {
       return barrier->set_value({ err, {} });
     }

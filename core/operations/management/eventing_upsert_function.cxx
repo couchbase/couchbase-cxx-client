@@ -27,9 +27,9 @@
 
 namespace couchbase::core::operations::management
 {
-std::error_code
+auto
 eventing_upsert_function_request::encode_to(encoded_request_type& encoded,
-                                            http_context& /* context */) const
+                                            http_context& /* context */) const -> std::error_code
 {
   tao::json::value body{};
   body["appname"] = function.name;
@@ -48,9 +48,11 @@ eventing_upsert_function_request::encode_to(encoded_request_type& encoded,
   }
 
   if (bucket_name.has_value() && scope_name.has_value()) {
-    tao::json::value function_scope{ { "bucket", bucket_name.value() },
-                                     { "scope", scope_name.value() } };
-    body["function_scope"] = function_scope;
+    tao::json::value function_scope{
+      { "bucket", bucket_name.value() },
+      { "scope", scope_name.value() },
+    };
+    body["function_scope"] = std::move(function_scope);
   }
 
   tao::json::value depcfg{};
@@ -72,13 +74,15 @@ eventing_upsert_function_request::encode_to(encoded_request_type& encoded,
 
   if (!function.constant_bindings.empty()) {
     std::vector<tao::json::value> constants{};
+    constants.reserve(function.constant_bindings.size());
     for (const auto& constant : function.constant_bindings) {
-      constants.emplace_back(tao::json::value{
+      tao::json::value constant_json{
         { "value", constant.alias },
         { "literal", constant.literal },
-      });
+      };
+      constants.emplace_back(std::move(constant_json));
     }
-    depcfg["constants"] = constants;
+    depcfg["constants"] = std::move(constants);
   }
 
   if (!function.url_bindings.empty()) {
@@ -116,7 +120,7 @@ eventing_upsert_function_request::encode_to(encoded_request_type& encoded,
       }
       urls.emplace_back(binding);
     }
-    depcfg["curl"] = urls;
+    depcfg["curl"] = std::move(urls);
   }
 
   if (!function.bucket_bindings.empty()) {
@@ -142,7 +146,7 @@ eventing_upsert_function_request::encode_to(encoded_request_type& encoded,
       }
       buckets.emplace_back(binding);
     }
-    depcfg["buckets"] = buckets;
+    depcfg["buckets"] = std::move(buckets);
   }
 
   tao::json::value settings{};
@@ -324,8 +328,8 @@ eventing_upsert_function_request::encode_to(encoded_request_type& encoded,
     }
   }
 
-  body["depcfg"] = depcfg;
-  body["settings"] = settings;
+  body["depcfg"] = std::move(depcfg);
+  body["settings"] = std::move(settings);
 
   encoded.headers["content-type"] = "application/json";
   encoded.method = "POST";
@@ -339,9 +343,10 @@ eventing_upsert_function_request::encode_to(encoded_request_type& encoded,
   return {};
 }
 
-eventing_upsert_function_response
+auto
 eventing_upsert_function_request::make_response(error_context::http&& ctx,
                                                 const encoded_response_type& encoded) const
+  -> eventing_upsert_function_response
 {
   eventing_upsert_function_response response{ std::move(ctx) };
   if (!response.ctx.ec) {

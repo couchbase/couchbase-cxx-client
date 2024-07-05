@@ -43,20 +43,20 @@ public:
                  std::shared_ptr<retry_strategy> default_retry_strategy);
 
   auto range_scan_create(std::uint16_t vbucket_id,
-                         range_scan_create_options options,
+                         const range_scan_create_options& options,
                          range_scan_create_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto range_scan_continue(std::vector<std::byte> scan_uuid,
+  auto range_scan_continue(const std::vector<std::byte>& scan_uuid,
                            std::uint16_t vbucket_id,
-                           range_scan_continue_options options,
+                           const range_scan_continue_options& options,
                            range_scan_item_callback&& item_callback,
                            range_scan_continue_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
   auto range_scan_cancel(std::vector<std::byte> scan_uuid,
                          std::uint16_t vbucket_id,
-                         range_scan_cancel_options options,
+                         const range_scan_cancel_options& options,
                          range_scan_cancel_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 

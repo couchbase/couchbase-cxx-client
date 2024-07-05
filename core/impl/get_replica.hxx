@@ -48,7 +48,7 @@ struct get_replica_request {
   io::retry_context<true> retries{};
 
   [[nodiscard]] auto encode_to(encoded_request_type& encoded,
-                               core::mcbp_context&& context) -> std::error_code;
+                               core::mcbp_context&& context) const -> std::error_code;
 
   [[nodiscard]] auto make_response(key_value_error_context&& ctx,
                                    const encoded_response_type& encoded) const

@@ -18,6 +18,7 @@
 #include <couchbase/error_codes.hxx>
 #include <couchbase/query_options.hxx>
 #include <couchbase/transactions/transaction_query_result.hxx>
+#include <utility>
 
 #include "core/cluster.hxx"
 #include "core/error_context/transaction_op_error_context.hxx"
@@ -36,21 +37,29 @@ map_status(std::string status) -> query_status
   });
   if (status == "running") {
     return query_status::running;
-  } else if (status == "success") {
+  }
+  if (status == "success") {
     return query_status::success;
-  } else if (status == "errors") {
+  }
+  if (status == "errors") {
     return query_status::errors;
-  } else if (status == "completed") {
+  }
+  if (status == "completed") {
     return query_status::completed;
-  } else if (status == "stopped") {
+  }
+  if (status == "stopped") {
     return query_status::stopped;
-  } else if (status == "timeout") {
+  }
+  if (status == "timeout") {
     return query_status::timeout;
-  } else if (status == "closed") {
+  }
+  if (status == "closed") {
     return query_status::closed;
-  } else if (status == "fatal") {
+  }
+  if (status == "fatal") {
     return query_status::fatal;
-  } else if (status == "aborted") {
+  }
+  if (status == "aborted") {
     return query_status::aborted;
   }
   return query_status::unknown;
@@ -74,12 +83,8 @@ map_warnings(operations::query_response& resp) -> std::vector<query_warning>
   if (resp.meta.warnings) {
     warnings.reserve(resp.meta.warnings->size());
     for (auto& warning : resp.meta.warnings.value()) {
-      warnings.emplace_back(query_warning{
-        warning.code,
-        std::move(warning.message),
-        std::move(warning.reason),
-        std::move(warning.retry),
-      });
+      warnings.emplace_back(
+        warning.code, std::move(warning.message), warning.reason, warning.retry);
     }
   }
   return warnings;
@@ -117,7 +122,6 @@ map_profile(operations::query_response& resp) -> std::optional<std::vector<std::
   }
   return utils::to_binary(resp.meta.profile.value());
 }
-} // namespace
 
 auto
 build_context(operations::query_response& resp) -> query_error_context
@@ -141,6 +145,7 @@ build_context(operations::query_response& resp) -> query_error_context
     resp.ctx.port,
   };
 }
+} // namespace
 
 auto
 build_result(operations::query_response& resp) -> query_result
@@ -204,7 +209,7 @@ build_transaction_query_result(operations::query_response resp,
       txn_ec = errc::transaction_op::parsing_failure;
     }
     if (!txn_ec) {
-      // TODO: review what our default should be...
+      // TODO(SA): review what our default should be...
       // no override error code was passed in, so default to not_set
       txn_ec = errc::transaction_op::generic;
     }
@@ -223,10 +228,9 @@ build_transaction_query_result(operations::query_response resp,
       map_rows(resp) },
   };
 }
-
 auto
 build_transaction_query_request(query_options::built opts) -> core::operations::query_request
 {
-  return core::impl::build_query_request("", {}, opts);
+  return core::impl::build_query_request("", {}, std::move(opts));
 }
 } // namespace couchbase::core::impl

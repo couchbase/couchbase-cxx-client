@@ -17,17 +17,32 @@
 
 #include "core/cluster.hxx"
 
+#include "core/impl/error.hxx"
 #include "core/operations/management/collection_create.hxx"
 #include "core/operations/management/collection_drop.hxx"
 #include "core/operations/management/collection_update.hxx"
 #include "core/operations/management/scope_create.hxx"
 #include "core/operations/management/scope_drop.hxx"
 #include "core/operations/management/scope_get_all.hxx"
+#include "core/topology/collections_manifest.hxx"
 
-#include "core/impl/error.hxx"
 #include <couchbase/collection_manager.hxx>
+#include <couchbase/create_collection_options.hxx>
+#include <couchbase/create_scope_options.hxx>
+#include <couchbase/drop_collection_options.hxx>
+#include <couchbase/drop_scope_options.hxx>
+#include <couchbase/error.hxx>
+#include <couchbase/get_all_scopes_options.hxx>
+#include <couchbase/management/collection_spec.hxx>
+#include <couchbase/management/scope_spec.hxx>
+#include <couchbase/update_collection_options.hxx>
 
+#include <future>
 #include <memory>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 namespace couchbase
 {

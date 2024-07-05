@@ -52,7 +52,7 @@ unstaging_state::wait_until_unstage_possible() -> bool
 void
 unstaging_state::notify_unstage_complete()
 {
-  std::lock_guard lock(mutex_);
+  const std::lock_guard lock(mutex_);
   in_flight_count_--;
   cv_.notify_one();
 }
@@ -60,7 +60,7 @@ unstaging_state::notify_unstage_complete()
 void
 unstaging_state::notify_unstage_error()
 {
-  std::lock_guard lock(mutex_);
+  const std::lock_guard lock(mutex_);
   abort_ = true;
   in_flight_count_--;
   cv_.notify_all();
@@ -69,14 +69,14 @@ unstaging_state::notify_unstage_error()
 auto
 staged_mutation_queue::empty() -> bool
 {
-  std::lock_guard<std::mutex> lock(mutex_);
+  const std::lock_guard<std::mutex> lock(mutex_);
   return queue_.empty();
 }
 
 void
 staged_mutation_queue::add(const staged_mutation& mutation)
 {
-  std::lock_guard<std::mutex> lock(mutex_);
+  const std::lock_guard<std::mutex> lock(mutex_);
   // Can only have one staged mutation per document.
   queue_.erase(std::remove_if(queue_.begin(),
                               queue_.end(),
@@ -91,16 +91,17 @@ void
 staged_mutation_queue::extract_to(const std::string& prefix,
                                   core::operations::mutate_in_request& req)
 {
-  std::lock_guard<std::mutex> lock(mutex_);
+  const std::lock_guard<std::mutex> lock(mutex_);
   tao::json::value inserts = tao::json::empty_array;
   tao::json::value replaces = tao::json::empty_array;
   tao::json::value removes = tao::json::empty_array;
 
   for (const auto& mutation : queue_) {
-    tao::json::value doc{ { ATR_FIELD_PER_DOC_ID, mutation.doc().id().key() },
-                          { ATR_FIELD_PER_DOC_BUCKET, mutation.doc().id().bucket() },
-                          { ATR_FIELD_PER_DOC_SCOPE, mutation.doc().id().scope() },
-                          { ATR_FIELD_PER_DOC_COLLECTION, mutation.doc().id().collection() } };
+    const tao::json::value doc{ { ATR_FIELD_PER_DOC_ID, mutation.doc().id().key() },
+                                { ATR_FIELD_PER_DOC_BUCKET, mutation.doc().id().bucket() },
+                                { ATR_FIELD_PER_DOC_SCOPE, mutation.doc().id().scope() },
+                                { ATR_FIELD_PER_DOC_COLLECTION,
+                                  mutation.doc().id().collection() } };
     switch (mutation.type()) {
       case staged_mutation_type::INSERT:
         inserts.push_back(doc);
@@ -157,7 +158,7 @@ staged_mutation_queue::find_any(const core::document_id& id) -> staged_mutation*
 auto
 staged_mutation_queue::find_replace(const core::document_id& id) -> staged_mutation*
 {
-  std::lock_guard<std::mutex> lock(mutex_);
+  const std::lock_guard<std::mutex> lock(mutex_);
   for (auto& item : queue_) {
     if (item.type() == staged_mutation_type::REPLACE && document_ids_equal(item.doc().id(), id)) {
       return &item;
@@ -169,7 +170,7 @@ staged_mutation_queue::find_replace(const core::document_id& id) -> staged_mutat
 auto
 staged_mutation_queue::find_insert(const core::document_id& id) -> staged_mutation*
 {
-  std::lock_guard<std::mutex> lock(mutex_);
+  const std::lock_guard<std::mutex> lock(mutex_);
   for (auto& item : queue_) {
     if (item.type() == staged_mutation_type::INSERT && document_ids_equal(item.doc().id(), id)) {
       return &item;
@@ -181,7 +182,7 @@ staged_mutation_queue::find_insert(const core::document_id& id) -> staged_mutati
 auto
 staged_mutation_queue::find_remove(const core::document_id& id) -> staged_mutation*
 {
-  std::lock_guard<std::mutex> lock(mutex_);
+  const std::lock_guard<std::mutex> lock(mutex_);
   for (auto& item : queue_) {
     if (item.type() == staged_mutation_type::REMOVE && document_ids_equal(item.doc().id(), id)) {
       return &item;
@@ -190,19 +191,19 @@ staged_mutation_queue::find_remove(const core::document_id& id) -> staged_mutati
   return nullptr;
 }
 void
-staged_mutation_queue::iterate(std::function<void(staged_mutation&)> op)
+staged_mutation_queue::iterate(const std::function<void(staged_mutation&)>& op)
 {
-  std::lock_guard<std::mutex> lock(mutex_);
+  const std::lock_guard<std::mutex> lock(mutex_);
   for (auto& item : queue_) {
     op(item);
   }
 }
 
 void
-staged_mutation_queue::commit(std::shared_ptr<attempt_context_impl> ctx)
+staged_mutation_queue::commit(const std::shared_ptr<attempt_context_impl>& ctx)
 {
   CB_ATTEMPT_CTX_LOG_TRACE(ctx, "committing staged mutations...");
-  std::lock_guard<std::mutex> lock(mutex_);
+  const std::lock_guard<std::mutex> lock(mutex_);
 
   unstaging_state state{ ctx };
   std::vector<std::future<void>> futures{};
@@ -260,6 +261,8 @@ staged_mutation_queue::commit(std::shared_ptr<attempt_context_impl> ctx)
       break;
     }
 
+    // TODO(CXXCBC-549): clang-tidy reports potential memory leak here
+    // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
     futures.push_back(std::move(future));
   }
 
@@ -286,10 +289,10 @@ staged_mutation_queue::commit(std::shared_ptr<attempt_context_impl> ctx)
 }
 
 void
-staged_mutation_queue::rollback(std::shared_ptr<attempt_context_impl> ctx)
+staged_mutation_queue::rollback(const std::shared_ptr<attempt_context_impl>& ctx)
 {
   CB_ATTEMPT_CTX_LOG_TRACE(ctx, "rolling back staged mutations...");
-  std::lock_guard<std::mutex> lock(mutex_);
+  const std::lock_guard<std::mutex> lock(mutex_);
 
   unstaging_state state{ ctx };
   std::vector<std::future<void>> futures{};
@@ -325,15 +328,16 @@ staged_mutation_queue::rollback(std::shared_ptr<attempt_context_impl> ctx)
           break;
         case staged_mutation_type::REMOVE:
         case staged_mutation_type::REPLACE:
-          rollback_remove_or_replace(ctx, item, delay, [&state, barrier](std::exception_ptr exc) {
-            if (exc) {
-              state.notify_unstage_error();
-              barrier->set_exception(exc);
-            } else {
-              state.notify_unstage_complete();
-              barrier->set_value();
-            }
-          });
+          rollback_remove_or_replace(
+            ctx, item, delay, [&state, barrier](const std::exception_ptr& exc) {
+              if (exc) {
+                state.notify_unstage_error();
+                barrier->set_exception(exc);
+              } else {
+                state.notify_unstage_complete();
+                barrier->set_value();
+              }
+            });
           break;
       }
     } catch (...) {
@@ -347,6 +351,8 @@ staged_mutation_queue::rollback(std::shared_ptr<attempt_context_impl> ctx)
       break;
     }
 
+    // TODO(CXXCBC-549): clang-tidy reports potential memory leak here
+    // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
     futures.push_back(std::move(future));
   }
 
@@ -371,7 +377,7 @@ staged_mutation_queue::rollback(std::shared_ptr<attempt_context_impl> ctx)
 }
 
 void
-staged_mutation_queue::rollback_insert(std::shared_ptr<attempt_context_impl> ctx,
+staged_mutation_queue::rollback_insert(const std::shared_ptr<attempt_context_impl>& ctx,
                                        const staged_mutation& item,
                                        async_exp_delay& delay,
                                        utils::movable_function<void(std::exception_ptr)> callback)
@@ -430,7 +436,7 @@ staged_mutation_queue::rollback_insert(std::shared_ptr<attempt_context_impl> ctx
 
 void
 staged_mutation_queue::rollback_remove_or_replace(
-  std::shared_ptr<attempt_context_impl> ctx,
+  const std::shared_ptr<attempt_context_impl>& ctx,
   const staged_mutation& item,
   async_exp_delay& delay,
   utils::movable_function<void(std::exception_ptr)> callback)
@@ -485,7 +491,7 @@ staged_mutation_queue::rollback_remove_or_replace(
 }
 
 void
-staged_mutation_queue::commit_doc(std::shared_ptr<attempt_context_impl> ctx,
+staged_mutation_queue::commit_doc(const std::shared_ptr<attempt_context_impl>& ctx,
                                   staged_mutation& item,
                                   async_constant_delay& delay,
                                   utils::movable_function<void(std::exception_ptr)> callback,
@@ -569,55 +575,54 @@ staged_mutation_queue::commit_doc(std::shared_ptr<attempt_context_impl> ctx,
                     return handler({}, {}, {});
                   });
               });
-          } else {
-            core::operations::mutate_in_request req{ item.doc().id() };
-            req.specs =
-              couchbase::mutate_in_specs{
-                // TODO(SA): upsert null to "txn" to match Java implementation
-                //
-                // from CoreTransactionAttemptContext.java:
-                // > Upsert this field to better handle illegal doc mutation.
-                // > E.g. run shadowDocSameTxnKVInsert without this, fails
-                // > at this point as path has been removed. Could also handle
-                // > with a spec change to handle that.
-                couchbase::mutate_in_specs::remove(TRANSACTION_INTERFACE_PREFIX_ONLY).xattr(),
-                // subdoc::opcode::set_doc used in replace w/ empty path
-                couchbase::mutate_in_specs::replace_raw("", std::move(item.content().data)),
-              }
-                .specs();
-            req.store_semantics = couchbase::store_semantics::replace;
-            req.cas = couchbase::cas(cas_zero_mode ? 0 : item.doc().cas().value());
-            req.flags = item.content().flags;
-            wrap_durable_request(req, ctx->overall()->config());
-            return ctx->cluster_ref().execute(
-              req,
-              [handler = std::move(handler),
-               ctx,
-               &item,
-               delay,
-               ambiguity_resolution_mode,
-               cas_zero_mode](const core::operations::mutate_in_response resp) mutable {
-                auto res = result::create_from_subdoc_response(resp);
-                return validate_commit_doc_result(
-                  ctx,
-                  res,
-                  item,
-                  [ambiguity_resolution_mode, cas_zero_mode, handler = std::move(handler)](
-                    auto e) mutable {
-                    if (e) {
-                      return handler(e, ambiguity_resolution_mode, cas_zero_mode);
-                    }
-                    // Commit successful
-                    return handler({}, {}, {});
-                  });
-              });
           }
+          core::operations::mutate_in_request req{ item.doc().id() };
+          req.specs =
+            couchbase::mutate_in_specs{
+              // TODO(SA): upsert null to "txn" to match Java implementation
+              //
+              // from CoreTransactionAttemptContext.java:
+              // > Upsert this field to better handle illegal doc mutation.
+              // > E.g. run shadowDocSameTxnKVInsert without this, fails
+              // > at this point as path has been removed. Could also handle
+              // > with a spec change to handle that.
+              couchbase::mutate_in_specs::remove(TRANSACTION_INTERFACE_PREFIX_ONLY).xattr(),
+              // subdoc::opcode::set_doc used in replace w/ empty path
+              couchbase::mutate_in_specs::replace_raw("", item.content().data),
+            }
+              .specs();
+          req.store_semantics = couchbase::store_semantics::replace;
+          req.cas = couchbase::cas(cas_zero_mode ? 0 : item.doc().cas().value());
+          req.flags = item.content().flags;
+          wrap_durable_request(req, ctx->overall()->config());
+          return ctx->cluster_ref().execute(
+            req,
+            [handler = std::move(handler),
+             ctx,
+             &item,
+             delay,
+             ambiguity_resolution_mode,
+             cas_zero_mode](const core::operations::mutate_in_response& resp) mutable {
+              auto res = result::create_from_subdoc_response(resp);
+              return validate_commit_doc_result(
+                ctx,
+                res,
+                item,
+                [ambiguity_resolution_mode, cas_zero_mode, handler = std::move(handler)](
+                  auto e) mutable {
+                  if (e) {
+                    return handler(e, ambiguity_resolution_mode, cas_zero_mode);
+                  }
+                  // Commit successful
+                  return handler({}, {}, {});
+                });
+            });
         });
     }));
 }
 
 void
-staged_mutation_queue::remove_doc(std::shared_ptr<attempt_context_impl> ctx,
+staged_mutation_queue::remove_doc(const std::shared_ptr<attempt_context_impl>& ctx,
                                   const staged_mutation& item,
                                   async_constant_delay& delay,
                                   utils::movable_function<void(std::exception_ptr)> callback)
@@ -649,7 +654,7 @@ staged_mutation_queue::remove_doc(std::shared_ptr<attempt_context_impl> ctx,
           return ctx->cluster_ref().execute(
             req,
             [handler = std::move(handler), ctx, &item, delay](
-              core::operations::remove_response resp) mutable {
+              const core::operations::remove_response& resp) mutable {
               auto res = result::create_from_mutation_response(resp);
               return validate_remove_doc_result(ctx, res, item, std::move(handler));
             });
@@ -658,7 +663,7 @@ staged_mutation_queue::remove_doc(std::shared_ptr<attempt_context_impl> ctx,
 }
 
 void
-staged_mutation_queue::validate_commit_doc_result(std::shared_ptr<attempt_context_impl> ctx,
+staged_mutation_queue::validate_commit_doc_result(const std::shared_ptr<attempt_context_impl>& ctx,
                                                   result& res,
                                                   staged_mutation& item,
                                                   client_error_handler&& handler)
@@ -669,7 +674,7 @@ staged_mutation_queue::validate_commit_doc_result(std::shared_ptr<attempt_contex
     return handler(e);
   }
   CB_ATTEMPT_CTX_LOG_TRACE(ctx, "commit doc result {}", res);
-  // TODO: mutation tokens
+  // TODO(SA): mutation tokens
   ctx->hooks_.after_doc_committed_before_saving_cas(
     ctx, item.doc().id().key(), [ctx, res, item, handler = std::move(handler)](auto ec) mutable {
       if (ec) {
@@ -687,7 +692,7 @@ staged_mutation_queue::validate_commit_doc_result(std::shared_ptr<attempt_contex
 }
 
 void
-staged_mutation_queue::validate_remove_doc_result(std::shared_ptr<attempt_context_impl> ctx,
+staged_mutation_queue::validate_remove_doc_result(const std::shared_ptr<attempt_context_impl>& ctx,
                                                   result& res,
                                                   const staged_mutation& item,
                                                   client_error_handler&& handler)
@@ -708,10 +713,11 @@ staged_mutation_queue::validate_remove_doc_result(std::shared_ptr<attempt_contex
 }
 
 void
-staged_mutation_queue::validate_rollback_insert_result(std::shared_ptr<attempt_context_impl> ctx,
-                                                       result& res,
-                                                       const staged_mutation& item,
-                                                       client_error_handler&& handler)
+staged_mutation_queue::validate_rollback_insert_result(
+  const std::shared_ptr<attempt_context_impl>& ctx,
+  result& res,
+  const staged_mutation& item,
+  client_error_handler&& handler)
 {
   try {
     validate_operation_result(res);
@@ -730,7 +736,7 @@ staged_mutation_queue::validate_rollback_insert_result(std::shared_ptr<attempt_c
 
 void
 staged_mutation_queue::validate_rollback_remove_or_replace_result(
-  std::shared_ptr<attempt_context_impl> ctx,
+  const std::shared_ptr<attempt_context_impl>& ctx,
   result& res,
   const staged_mutation& item,
   client_error_handler&& handler)
@@ -753,7 +759,7 @@ staged_mutation_queue::validate_rollback_remove_or_replace_result(
 void
 staged_mutation_queue::handle_commit_doc_error(
   const client_error& e,
-  std::shared_ptr<attempt_context_impl> ctx,
+  const std::shared_ptr<attempt_context_impl>& ctx,
   staged_mutation& item,
   async_constant_delay& delay,
   bool ambiguity_resolution_mode,
@@ -808,7 +814,7 @@ staged_mutation_queue::handle_commit_doc_error(
 void
 staged_mutation_queue::handle_remove_doc_error(
   const client_error& e,
-  std::shared_ptr<attempt_context_impl> ctx,
+  const std::shared_ptr<attempt_context_impl>& ctx,
   const staged_mutation& item,
   async_constant_delay& delay,
   utils::movable_function<void(std::exception_ptr)> callback)
@@ -845,7 +851,7 @@ staged_mutation_queue::handle_remove_doc_error(
 void
 staged_mutation_queue::handle_rollback_insert_error(
   const client_error& e,
-  std::shared_ptr<attempt_context_impl> ctx,
+  const std::shared_ptr<attempt_context_impl>& ctx,
   const staged_mutation& item,
   async_exp_delay& delay,
   utils::movable_function<void(std::exception_ptr)> callback)
@@ -894,7 +900,7 @@ staged_mutation_queue::handle_rollback_insert_error(
 void
 staged_mutation_queue::handle_rollback_remove_or_replace_error(
   const client_error& e,
-  std::shared_ptr<attempt_context_impl> ctx,
+  const std::shared_ptr<attempt_context_impl>& ctx,
   const staged_mutation& item,
   async_exp_delay& delay,
   utils::movable_function<void(std::exception_ptr)> callback)

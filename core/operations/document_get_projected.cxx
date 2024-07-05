@@ -26,7 +26,9 @@
 namespace couchbase::core::operations
 {
 
-static auto
+namespace
+{
+auto
 subdoc_lookup(tao::json::value& root, const std::string& path) -> std::optional<tao::json::value>
 {
   std::string::size_type offset = 0;
@@ -36,7 +38,7 @@ subdoc_lookup(tao::json::value& root, const std::string& path) -> std::optional<
     std::string::size_type idx = path.find_first_of(".[]", offset);
 
     if (idx == std::string::npos) {
-      std::string key = path.substr(offset);
+      const std::string key = path.substr(offset);
       if (auto* val = cur->find(key); val != nullptr) {
         return *val;
       }
@@ -44,7 +46,7 @@ subdoc_lookup(tao::json::value& root, const std::string& path) -> std::optional<
     }
 
     if (path[idx] == '.' || path[idx] == '[') {
-      std::string key = path.substr(offset, idx - offset);
+      const std::string key = path.substr(offset, idx - offset);
       auto* val = cur->find(key);
       if (val == nullptr) {
         break;
@@ -54,10 +56,9 @@ subdoc_lookup(tao::json::value& root, const std::string& path) -> std::optional<
       if (!cur->is_array()) {
         break;
       }
-      std::string key = path.substr(offset, idx - offset);
-      if (int array_index = std::stoi(key); array_index == -1) {
-        cur = &cur->get_array().back();
-      } else if (static_cast<std::size_t>(array_index) < cur->get_array().size()) {
+      const std::string key = path.substr(offset, idx - offset);
+      if (const int array_index = std::stoi(key);
+          array_index == -1 || static_cast<std::size_t>(array_index) < cur->get_array().size()) {
         cur = &cur->get_array().back();
       } else {
         break;
@@ -73,7 +74,7 @@ subdoc_lookup(tao::json::value& root, const std::string& path) -> std::optional<
   return {};
 }
 
-static void
+void
 subdoc_apply_projection(tao::json::value& root,
                         const std::string& path,
                         tao::json::value& value,
@@ -91,7 +92,7 @@ subdoc_apply_projection(tao::json::value& root,
     }
 
     if (path[idx] == '.') {
-      std::string key = path.substr(offset, idx - offset);
+      const std::string key = path.substr(offset, idx - offset);
       tao::json::value* child = cur->find(key);
       if (child == nullptr) {
         cur->operator[](key) = tao::json::empty_object;
@@ -99,7 +100,7 @@ subdoc_apply_projection(tao::json::value& root,
       }
       cur = child;
     } else if (path[idx] == '[') {
-      std::string key = path.substr(offset, idx - offset);
+      const std::string key = path.substr(offset, idx - offset);
       tao::json::value* child = cur->find(key);
       if (child == nullptr) {
         cur->operator[](key) = tao::json::empty_array;
@@ -118,10 +119,10 @@ subdoc_apply_projection(tao::json::value& root,
         Expects(false);
       }
       if (preserve_array_indexes) {
-        int array_index = std::stoi(path.substr(offset, idx - offset));
+        const int array_index = std::stoi(path.substr(offset, idx - offset));
         if (array_index >= 0) {
           if (static_cast<std::size_t>(array_index) >= cur->get_array().size()) {
-            cur->get_array().resize(static_cast<std::size_t>(array_index + 1), tao::json::null);
+            cur->get_array().resize(static_cast<std::size_t>(array_index) + 1, tao::json::null);
           }
           cur->at(static_cast<std::size_t>(array_index)) = child;
           cur = &cur->at(static_cast<std::size_t>(array_index));
@@ -139,6 +140,7 @@ subdoc_apply_projection(tao::json::value& root,
     offset = idx + 1;
   }
 }
+} // namespace
 
 auto
 get_projected_request::encode_to(get_projected_request::encoded_request_type& encoded,

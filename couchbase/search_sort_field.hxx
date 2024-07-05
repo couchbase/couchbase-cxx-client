@@ -65,13 +65,13 @@ public:
    * search_sort_field_type::date for DateTime fields, or @ref search_sort_field_type::number for
    * numeric/geo fields.
    *
-   * @param desc field type
+   * @param value field type
    * @return pointer to this
    *
    * @since 1.0.0
    * @committed
    */
-  auto type(search_sort_field_type desc) -> search_sort_field&;
+  auto type(search_sort_field_type value) -> search_sort_field&;
 
   /**
    * Specifies the search-order for index-fields that contain multiple values (in consequence of

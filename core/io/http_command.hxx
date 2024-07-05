@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include <couchbase/build_config.hxx>
+
 #include "core/service_type_fmt.hxx"
 #include "core/tracing/constants.hxx"
 #include "core/utils/movable_function.hxx"

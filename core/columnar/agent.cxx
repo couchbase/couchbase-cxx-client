@@ -44,16 +44,17 @@ public:
     CB_LOG_DEBUG("creating new columnar cluster agent: {}", config_.to_string());
   }
 
-  auto free_form_http_request(http_request request, free_form_http_request_callback&& callback)
+  auto free_form_http_request(const http_request& request,
+                              free_form_http_request_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
-    return http_.do_http_request(std::move(request), std::move(callback));
+    return http_.do_http_request(request, std::move(callback));
   }
 
-  auto execute_query(query_options options, query_callback&& callback)
+  auto execute_query(const query_options& options, query_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, error>
   {
-    return query_.execute_query(std::move(options), std::move(callback));
+    return query_.execute_query(options, std::move(callback));
   }
 
 private:
@@ -69,16 +70,17 @@ agent::agent(asio::io_context& io, couchbase::core::columnar::agent_config confi
 }
 
 auto
-agent::free_form_http_request(http_request request, free_form_http_request_callback&& callback)
+agent::free_form_http_request(const http_request& request,
+                              free_form_http_request_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->free_form_http_request(std::move(request), std::move(callback));
+  return impl_->free_form_http_request(request, std::move(callback));
 }
 
 auto
-agent::execute_query(query_options options, query_callback&& callback)
+agent::execute_query(const query_options& options, query_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, error>
 {
-  return impl_->execute_query(std::move(options), std::move(callback));
+  return impl_->execute_query(options, std::move(callback));
 }
 } // namespace couchbase::core::columnar

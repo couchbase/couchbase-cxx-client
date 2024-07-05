@@ -20,15 +20,25 @@
 #include "core/utils/binary.hxx"
 #include "core/utils/unsigned_leb128.hxx"
 
-#include <fmt/core.h>
+#include <fmt/format.h>
 
 #include <algorithm>
-#include <stdexcept>
+#include <cstddef>
+#include <cstdint>
+#include <iterator>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 namespace couchbase::core
 {
-static bool
-is_valid_collection_char(char ch)
+namespace
+{
+// FIXME(SA): maybe we still need these functions to enforce correctness
+// of the names
+[[maybe_unused]] auto
+is_valid_collection_char(char ch) -> bool
 {
   if (ch >= 'A' && ch <= 'Z') {
     return true;
@@ -49,8 +59,9 @@ is_valid_collection_char(char ch)
   }
 }
 
-bool
-is_valid_collection_element(std::string_view element)
+// FIXME(SA): meaningful function, but is not used anywhere for some reason?
+[[maybe_unused]] auto
+is_valid_collection_element(std::string_view element) -> bool
 {
   if (element.empty() || element.size() > 251) {
     return false;
@@ -58,11 +69,12 @@ is_valid_collection_element(std::string_view element)
   return std::all_of(element.begin(), element.end(), is_valid_collection_char);
 }
 
-[[nodiscard]] static std::string
-compile_collection_path(const std::string& scope, const std::string& collection)
+[[nodiscard]] auto
+compile_collection_path(const std::string& scope, const std::string& collection) -> std::string
 {
   return fmt::format("{}.{}", scope, collection);
 }
+} // namespace
 
 document_id::document_id(std::string bucket, std::string key)
   : bucket_(std::move(bucket))
@@ -83,18 +95,18 @@ document_id::document_id(std::string bucket,
   collection_path_ = compile_collection_path(scope_, collection_);
 }
 
-bool
-document_id::has_default_collection() const
+auto
+document_id::has_default_collection() const -> bool
 {
   return !use_collections_ || collection_path_ == "_default._default";
 }
 
-std::vector<std::byte>
-make_protocol_key(const document_id& id)
+auto
+make_protocol_key(const document_id& id) -> std::vector<std::byte>
 {
   std::vector<std::byte> key{};
   if (id.is_collection_resolved()) {
-    utils::unsigned_leb128<std::uint32_t> encoded(id.collection_uid());
+    const utils::unsigned_leb128<std::uint32_t> encoded(id.collection_uid());
     key.reserve(encoded.size());
     key.insert(key.end(), encoded.begin(), encoded.end());
   }

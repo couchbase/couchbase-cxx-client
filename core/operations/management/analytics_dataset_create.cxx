@@ -25,14 +25,14 @@
 
 namespace couchbase::core::operations::management
 {
-std::error_code
+auto
 analytics_dataset_create_request::encode_to(encoded_request_type& encoded,
-                                            http_context& /* context */) const
+                                            http_context& /* context */) const -> std::error_code
 {
   std::string where_clause = condition ? fmt::format("WHERE {}", *condition) : "";
   std::string if_not_exists_clause = ignore_if_exists ? "IF NOT EXISTS" : "";
 
-  tao::json::value body{
+  const tao::json::value body{
     { "statement",
       fmt::format("CREATE DATASET {} {}.`{}` ON `{}` {}",
                   if_not_exists_clause,
@@ -48,9 +48,10 @@ analytics_dataset_create_request::encode_to(encoded_request_type& encoded,
   return {};
 }
 
-analytics_dataset_create_response
+auto
 analytics_dataset_create_request::make_response(error_context::http&& ctx,
                                                 const encoded_response_type& encoded) const
+  -> analytics_dataset_create_response
 {
   analytics_dataset_create_response response{ std::move(ctx) };
   if (!response.ctx.ec) {
@@ -68,7 +69,7 @@ analytics_dataset_create_request::make_response(error_context::http&& ctx,
 
       if (const auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
         for (const auto& error : errors->get_array()) {
-          analytics_problem err{
+          const analytics_problem err{
             error.at("code").as<std::uint32_t>(),
             error.at("msg").get_string(),
           };
@@ -78,6 +79,8 @@ analytics_dataset_create_request::make_response(error_context::http&& ctx,
               break;
             case 24006: /* Link [string] does not exist */
               link_not_found = true;
+              break;
+            default:
               break;
           }
           response.errors.emplace_back(err);

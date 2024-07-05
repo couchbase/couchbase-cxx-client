@@ -15,12 +15,22 @@
  *   limitations under the License.
  */
 
+#include <couchbase/bucket.hxx>
+
 #include "core/cluster.hxx"
 #include "diagnostics.hxx"
 
-#include <couchbase/bucket.hxx>
+#include <couchbase/collection.hxx>
+#include <couchbase/collection_manager.hxx>
+#include <couchbase/error.hxx>
+#include <couchbase/ping_options.hxx>
+#include <couchbase/ping_result.hxx>
+#include <couchbase/scope.hxx>
 
+#include <future>
 #include <memory>
+#include <string_view>
+#include <utility>
 
 namespace couchbase
 {

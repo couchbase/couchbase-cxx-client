@@ -23,17 +23,18 @@
 
 namespace couchbase::core::operations::management
 {
-std::error_code
-bucket_drop_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+auto
+bucket_drop_request::encode_to(encoded_request_type& encoded,
+                               http_context& /* context */) const -> std::error_code
 {
   encoded.method = "DELETE";
   encoded.path = fmt::format("/pools/default/buckets/{}", name);
   return {};
 }
 
-bucket_drop_response
-bucket_drop_request::make_response(error_context::http&& ctx,
-                                   const encoded_response_type& encoded) const
+auto
+bucket_drop_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded)
+  const -> bucket_drop_response
 {
   bucket_drop_response response{ std::move(ctx) };
   if (!response.ctx.ec) {

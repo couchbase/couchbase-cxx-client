@@ -17,31 +17,42 @@
 
 #include "internal_search_result.hxx"
 
-#include "couchbase/date_range_facet_result.hxx"
+#include "core/operations/document_search.hxx"
 #include "internal_date_range_facet_result.hxx"
 #include "internal_numeric_range_facet_result.hxx"
 #include "internal_search_meta_data.hxx"
 #include "internal_search_row.hxx"
-#include "internal_search_row_location.hxx"
-#include "internal_search_row_locations.hxx"
 #include "internal_term_facet_result.hxx"
+
+#include <couchbase/date_range_facet_result.hxx>
+#include <couchbase/numeric_range_facet_result.hxx>
+#include <couchbase/search_facet_result.hxx>
+#include <couchbase/search_row.hxx>
+#include <couchbase/term_facet_result.hxx>
+
+#include <map>
+#include <memory>
+#include <string>
+#include <vector>
 
 namespace couchbase
 {
-static auto
+namespace
+{
+auto
 map_rows(const std::vector<core::operations::search_response::search_row>& rows)
   -> std::vector<couchbase::search_row>
 {
   std::vector<couchbase::search_row> result{};
   result.reserve(rows.size());
   for (const auto& row : rows) {
-    result.emplace_back(couchbase::search_row{ internal_search_row{ row } });
+    result.emplace_back(internal_search_row{ row });
   }
   return result;
 }
 
-static auto
-map_facets(std::vector<core::operations::search_response::search_facet> facets)
+auto
+map_facets(const std::vector<core::operations::search_response::search_facet>& facets)
   -> std::map<std::string, std::shared_ptr<search_facet_result>>
 {
   std::map<std::string, std::shared_ptr<search_facet_result>> result;
@@ -63,6 +74,7 @@ map_facets(std::vector<core::operations::search_response::search_facet> facets)
 
   return result;
 }
+} // namespace
 
 internal_search_result::internal_search_result(const core::operations::search_response& response)
   : meta_data_{ internal_search_meta_data{ response.meta } }

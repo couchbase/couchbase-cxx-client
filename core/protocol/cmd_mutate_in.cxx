@@ -121,13 +121,13 @@ mutate_in_request_body::fill_extras()
     memcpy(extras_.data(), &field, sizeof(field));
   }
   if (user_flags_) {
-    std::size_t offset = extras_.size();
+    const std::size_t offset = extras_.size();
     extras_.resize(offset + sizeof(std::uint32_t));
     std::uint32_t field = utils::byte_swap(user_flags_.value());
     memcpy(extras_.data() + offset, &field, sizeof(field));
   }
   if (flags_ != std::byte{ 0U }) {
-    std::size_t offset = extras_.size();
+    const std::size_t offset = extras_.size();
     extras_.resize(offset + sizeof(flags_));
     extras_[offset] = std::byte{ flags_ };
   }

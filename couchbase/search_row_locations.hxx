@@ -20,6 +20,7 @@
 #include <couchbase/search_row_location.hxx>
 
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -42,6 +43,9 @@ public:
    * @internal
    */
   explicit search_row_locations(internal_search_row_locations internal);
+  ~search_row_locations();
+  search_row_locations(search_row_locations&& other) noexcept;
+  auto operator=(search_row_locations&& other) noexcept -> search_row_locations&;
 
   /**
    * @since 1.0.0

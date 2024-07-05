@@ -22,13 +22,14 @@
 
 namespace couchbase::core::operations::management
 {
-std::error_code
+auto
 query_index_get_all_request::encode_to(encoded_request_type& encoded,
                                        couchbase::core::http_context& /* context */) const
+  -> std::error_code
 {
-  std::string bucket_cond = "bucket_id = $bucket_name";
-  std::string scope_cond = "(" + bucket_cond + " AND scope_id = $scope_name)";
-  std::string collection_cond = "(" + scope_cond + " AND keyspace_id = $collection_name)";
+  const std::string bucket_cond = "bucket_id = $bucket_name";
+  const std::string scope_cond = "(" + bucket_cond + " AND scope_id = $scope_name)";
+  const std::string collection_cond = "(" + scope_cond + " AND keyspace_id = $collection_name)";
 
   std::string where;
   if (!collection_name.empty()) {
@@ -40,7 +41,8 @@ query_index_get_all_request::encode_to(encoded_request_type& encoded,
   }
 
   if (collection_name == "_default" || collection_name.empty()) {
-    std::string default_collection_cond = "(bucket_id IS MISSING AND keyspace_id = $bucket_name)";
+    const std::string default_collection_cond =
+      "(bucket_id IS MISSING AND keyspace_id = $bucket_name)";
     where = "(" + where + " OR " + default_collection_cond + ")";
   }
 
@@ -68,9 +70,10 @@ query_index_get_all_request::encode_to(encoded_request_type& encoded,
   return {};
 }
 
-query_index_get_all_response
+auto
 query_index_get_all_request::make_response(couchbase::core::error_context::http&& ctx,
                                            const encoded_response_type& encoded) const
+  -> query_index_get_all_response
 {
   query_index_get_all_response response{ std::move(ctx) };
   if (!response.ctx.ec) {
@@ -111,7 +114,9 @@ query_index_get_all_request::make_response(couchbase::core::error_context::http&
         index.index_key.emplace_back(key.get_string());
       }
 
-      std::string bucket_id, scope_id, keyspace_id;
+      std::string bucket_id;
+      std::string scope_id;
+      std::string keyspace_id;
       if (const auto* prop = entry.find("bucket_id")) {
         bucket_id = prop->get_string();
       }

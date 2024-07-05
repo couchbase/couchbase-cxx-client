@@ -74,6 +74,11 @@ public:
   {
   }
 
+  watch_context(const watch_context&) = delete;
+  auto operator=(const watch_context&) -> watch_context& = delete;
+  auto operator=(watch_context&&) -> watch_context& = delete;
+  ~watch_context() = default;
+
   void execute()
   {
     return core_.execute(
@@ -87,7 +92,7 @@ public:
       },
       [ctx = shared_from_this()](auto resp) {
         if (ctx->check(resp)) {
-          ctx->finish(resp);
+          ctx->finish(resp, {});
         } else if (ctx->remaining().count() <= 0) {
           ctx->finish(resp, couchbase::errc::common::ambiguous_timeout);
         } else {
@@ -98,7 +103,7 @@ public:
 
 private:
   template<typename Response>
-  void finish(Response& resp, std::optional<std::error_code> ec = {})
+  void finish(Response& resp, std::optional<std::error_code> ec)
   {
     watch_query_indexes_handler handler{};
     std::swap(handler, handler_);
@@ -194,8 +199,8 @@ public:
         {},
         options.timeout,
       },
-      [handler =
-         std::move(handler)](core::operations::management::query_index_get_all_response resp) {
+      [handler = std::move(handler)](
+        const core::operations::management::query_index_get_all_response& resp) {
         if (resp.ctx.ec) {
           return handler(core::impl::make_error(resp.ctx), {});
         }
@@ -301,7 +306,8 @@ public:
         {},
         options.timeout,
       },
-      [handler = std::move(handler)](core::operations::management::query_index_drop_response resp) {
+      [handler =
+         std::move(handler)](const core::operations::management::query_index_drop_response& resp) {
         handler(core::impl::make_error(resp.ctx));
       });
   }
@@ -369,7 +375,7 @@ query_index_manager::query_index_manager(core::cluster core)
 }
 
 void
-query_index_manager::get_all_indexes(std::string bucket_name,
+query_index_manager::get_all_indexes(const std::string& bucket_name,
                                      const get_all_query_indexes_options& options,
                                      get_all_query_indexes_handler&& handler) const
 {
@@ -377,23 +383,23 @@ query_index_manager::get_all_indexes(std::string bucket_name,
 }
 
 auto
-query_index_manager::get_all_indexes(std::string bucket_name,
+query_index_manager::get_all_indexes(const std::string& bucket_name,
                                      const get_all_query_indexes_options& options) const
   -> std::future<std::pair<error, std::vector<management::query_index>>>
 {
   auto barrier =
     std::make_shared<std::promise<std::pair<error, std::vector<management::query_index>>>>();
   auto future = barrier->get_future();
-  get_all_indexes(std::move(bucket_name), options, [barrier](auto err, auto resp) mutable {
+  get_all_indexes(bucket_name, options, [barrier](auto err, auto resp) mutable {
     barrier->set_value({ std::move(err), resp });
   });
   return future;
 }
 
 void
-query_index_manager::create_index(std::string bucket_name,
+query_index_manager::create_index(const std::string& bucket_name,
                                   std::string index_name,
-                                  std::vector<std::string> fields,
+                                  std::vector<std::string> keys,
                                   const create_query_index_options& options,
                                   create_query_index_handler&& handler) const
 {
@@ -401,29 +407,28 @@ query_index_manager::create_index(std::string bucket_name,
                              {},
                              {},
                              std::move(index_name),
-                             std::move(fields),
+                             std::move(keys),
                              options.build(),
                              std::move(handler));
 }
 
 auto
-query_index_manager::create_index(std::string bucket_name,
+query_index_manager::create_index(const std::string& bucket_name,
                                   std::string index_name,
-                                  std::vector<std::string> fields,
+                                  std::vector<std::string> keys,
                                   const create_query_index_options& options) const
   -> std::future<error>
 {
   auto barrier = std::make_shared<std::promise<error>>();
   auto future = barrier->get_future();
-  create_index(
-    std::move(bucket_name), std::move(index_name), std::move(fields), options, [barrier](auto err) {
-      barrier->set_value(std::move(err));
-    });
+  create_index(bucket_name, std::move(index_name), std::move(keys), options, [barrier](auto err) {
+    barrier->set_value(std::move(err));
+  });
   return future;
 }
 
 void
-query_index_manager::create_primary_index(std::string bucket_name,
+query_index_manager::create_primary_index(const std::string& bucket_name,
                                           const create_primary_query_index_options& options,
                                           create_query_index_handler&& handler) const
 {
@@ -431,20 +436,20 @@ query_index_manager::create_primary_index(std::string bucket_name,
 }
 
 auto
-query_index_manager::create_primary_index(std::string bucket_name,
+query_index_manager::create_primary_index(const std::string& bucket_name,
                                           const create_primary_query_index_options& options) const
   -> std::future<error>
 {
   auto barrier = std::make_shared<std::promise<error>>();
   auto future = barrier->get_future();
-  create_primary_index(std::move(bucket_name), options, [barrier](auto err) {
+  create_primary_index(bucket_name, options, [barrier](auto err) {
     barrier->set_value(std::move(err));
   });
   return future;
 }
 
 void
-query_index_manager::drop_primary_index(std::string bucket_name,
+query_index_manager::drop_primary_index(const std::string& bucket_name,
                                         const drop_primary_query_index_options& options,
                                         drop_query_index_handler&& handler) const
 {
@@ -452,20 +457,20 @@ query_index_manager::drop_primary_index(std::string bucket_name,
 }
 
 auto
-query_index_manager::drop_primary_index(std::string bucket_name,
+query_index_manager::drop_primary_index(const std::string& bucket_name,
                                         const drop_primary_query_index_options& options) const
   -> std::future<error>
 {
   auto barrier = std::make_shared<std::promise<error>>();
   auto future = barrier->get_future();
-  drop_primary_index(std::move(bucket_name), options, [barrier](auto err) {
+  drop_primary_index(bucket_name, options, [barrier](auto err) {
     barrier->set_value(std::move(err));
   });
   return future;
 }
 
 void
-query_index_manager::drop_index(std::string bucket_name,
+query_index_manager::drop_index(const std::string& bucket_name,
                                 std::string index_name,
                                 const drop_query_index_options& options,
                                 drop_query_index_handler&& handler) const
@@ -475,20 +480,20 @@ query_index_manager::drop_index(std::string bucket_name,
 }
 
 auto
-query_index_manager::drop_index(std::string bucket_name,
+query_index_manager::drop_index(const std::string& bucket_name,
                                 std::string index_name,
                                 const drop_query_index_options& options) const -> std::future<error>
 {
   auto barrier = std::make_shared<std::promise<error>>();
   auto future = barrier->get_future();
-  drop_index(std::move(bucket_name), std::move(index_name), options, [barrier](auto err) {
+  drop_index(bucket_name, std::move(index_name), options, [barrier](auto err) {
     barrier->set_value(std::move(err));
   });
   return future;
 }
 
 void
-query_index_manager::build_deferred_indexes(std::string bucket_name,
+query_index_manager::build_deferred_indexes(const std::string& bucket_name,
                                             const build_query_index_options& options,
                                             build_deferred_query_indexes_handler&& handler) const
 {
@@ -496,20 +501,20 @@ query_index_manager::build_deferred_indexes(std::string bucket_name,
 }
 
 auto
-query_index_manager::build_deferred_indexes(std::string bucket_name,
+query_index_manager::build_deferred_indexes(const std::string& bucket_name,
                                             const build_query_index_options& options) const
   -> std::future<error>
 {
   auto barrier = std::make_shared<std::promise<error>>();
   auto future = barrier->get_future();
-  build_deferred_indexes(std::move(bucket_name), options, [barrier](auto err) {
+  build_deferred_indexes(bucket_name, options, [barrier](auto err) {
     barrier->set_value(std::move(err));
   });
   return future;
 }
 
 void
-query_index_manager::watch_indexes(std::string bucket_name,
+query_index_manager::watch_indexes(const std::string& bucket_name,
                                    std::vector<std::string> index_names,
                                    const watch_query_indexes_options& options,
                                    watch_query_indexes_handler&& handler) const
@@ -519,14 +524,14 @@ query_index_manager::watch_indexes(std::string bucket_name,
 }
 
 auto
-query_index_manager::watch_indexes(std::string bucket_name,
+query_index_manager::watch_indexes(const std::string& bucket_name,
                                    std::vector<std::string> index_names,
                                    const watch_query_indexes_options& options) const
   -> std::future<error>
 {
   auto barrier = std::make_shared<std::promise<error>>();
   auto future = barrier->get_future();
-  watch_indexes(std::move(bucket_name), std::move(index_names), options, [barrier](auto err) {
+  watch_indexes(bucket_name, std::move(index_names), options, [barrier](auto err) {
     barrier->set_value(std::move(err));
   });
   return future;

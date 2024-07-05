@@ -28,6 +28,8 @@ class internal_search_row
 {
 public:
   explicit internal_search_row(core::operations::search_response::search_row row);
+  internal_search_row(internal_search_row&& other) noexcept;
+  auto operator=(internal_search_row&& other) noexcept -> internal_search_row&;
 
   [[nodiscard]] auto index() const -> const std::string&;
 

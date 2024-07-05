@@ -17,12 +17,11 @@
 
 #pragma once
 
+#include <couchbase/common_options.hxx>
+#include <couchbase/error.hxx>
 #include <couchbase/management/bucket_settings.hxx>
 
 #include <functional>
-#include <memory>
-#include <optional>
-#include <string>
 
 namespace couchbase
 {

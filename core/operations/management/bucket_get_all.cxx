@@ -23,17 +23,19 @@
 
 namespace couchbase::core::operations::management
 {
-std::error_code
-bucket_get_all_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+auto
+bucket_get_all_request::encode_to(encoded_request_type& encoded,
+                                  http_context& /* context */) const -> std::error_code
 {
   encoded.method = "GET";
   encoded.path = "/pools/default/buckets";
   return {};
 }
 
-bucket_get_all_response
+auto
 bucket_get_all_request::make_response(error_context::http&& ctx,
                                       const encoded_response_type& encoded) const
+  -> bucket_get_all_response
 {
   bucket_get_all_response response{ std::move(ctx) };
   if (!response.ctx.ec) {

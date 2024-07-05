@@ -23,17 +23,20 @@
 
 namespace couchbase::subdoc
 {
-static const std::string macro_document{ "$document" };
-static const std::string macro_expiry_time{ "$document.exptime" };
-static const std::string macro_cas{ "$document.CAS" };
-static const std::string macro_sequence_number{ "$document.seqno" };
-static const std::string macro_vbucket_uuid{ "$document.vbucket_uuid" };
-static const std::string macro_last_modified{ "$document.last_modified" };
-static const std::string macro_is_deleted{ "$document.deleted" };
-static const std::string macro_value_size_bytes{ "$document.value_bytes" };
-static const std::string macro_revision_id{ "$document.revision_id" };
-static const std::string macro_flags{ "$document.flags" };
-static const std::string macro_vbucket{ "$vbucket" };
+namespace
+{
+const auto macro_document{ "$document" };
+const auto macro_expiry_time{ "$document.exptime" };
+const auto macro_cas{ "$document.CAS" };
+const auto macro_sequence_number{ "$document.seqno" };
+const auto macro_vbucket_uuid{ "$document.vbucket_uuid" };
+const auto macro_last_modified{ "$document.last_modified" };
+const auto macro_is_deleted{ "$document.deleted" };
+const auto macro_value_size_bytes{ "$document.value_bytes" };
+const auto macro_revision_id{ "$document.revision_id" };
+const auto macro_flags{ "$document.flags" };
+const auto macro_vbucket{ "$vbucket" };
+} // namespace
 
 auto
 to_lookup_in_macro(std::string_view input) -> std::optional<couchbase::subdoc::lookup_in_macro>
@@ -75,7 +78,7 @@ to_lookup_in_macro(std::string_view input) -> std::optional<couchbase::subdoc::l
 }
 
 auto
-to_string(lookup_in_macro value) -> const std::string&
+to_string(lookup_in_macro value) -> std::string
 {
   switch (value) {
     case lookup_in_macro::document:

@@ -17,13 +17,17 @@
 
 #include "get_replica.hxx"
 
-#include <couchbase/error_codes.hxx>
+#include "core/error_context/key_value_error_context.hxx"
+#include "core/io/mcbp_context.hxx"
+
+#include <system_error>
+#include <utility>
 
 namespace couchbase::core::impl
 {
 auto
 get_replica_request::encode_to(get_replica_request::encoded_request_type& encoded,
-                               core::mcbp_context&& /* context */) -> std::error_code
+                               core::mcbp_context&& /* context */) const -> std::error_code
 {
   encoded.opaque(opaque);
   encoded.partition(partition);

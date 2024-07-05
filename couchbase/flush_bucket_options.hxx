@@ -17,10 +17,8 @@
 
 #pragma once
 
-#include <functional>
-#include <memory>
-#include <optional>
-#include <string>
+#include <couchbase/common_options.hxx>
+#include <couchbase/error.hxx>
 
 namespace couchbase
 {

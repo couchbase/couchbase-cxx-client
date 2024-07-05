@@ -19,6 +19,8 @@
 
 #include <cerrno>
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <system_error>
@@ -50,7 +52,7 @@ public:
                               "initialize random generator");
     }
 #else
-    if ((handle = open("/dev/urandom", O_RDONLY)) == -1) {
+    if ((handle = open("/dev/urandom", O_RDONLY | O_CLOEXEC)) == -1) {
       throw std::system_error(errno,
                               std::system_category(),
                               "RandomGeneratorProvider::Failed to "
@@ -70,7 +72,7 @@ public:
 
   bool getBytes(void* dest, std::size_t size)
   {
-    std::lock_guard<std::mutex> lock(mutex);
+    const std::lock_guard<std::mutex> lock(mutex);
 #ifdef WIN32
     return CryptGenRandom(handle, (DWORD)size, static_cast<BYTE*>(dest));
 #else
@@ -94,7 +96,7 @@ RandomGenerator::RandomGenerator()
 {
   if (!shared_provider) {
     // This might be the first one, lets lock and create
-    std::lock_guard<std::mutex> guard(shared_provider_lock);
+    const std::lock_guard<std::mutex> guard(shared_provider_lock);
     if (!shared_provider) { // cppcheck-suppress identicalInnerCondition; DCLP
       shared_provider = std::make_unique<RandomGeneratorProvider>();
     }
@@ -104,7 +106,7 @@ RandomGenerator::RandomGenerator()
 std::uint64_t
 RandomGenerator::next()
 {
-  std::uint64_t ret;
+  std::uint64_t ret = 0;
   if (getBytes(&ret, sizeof(ret))) {
     return ret;
   }

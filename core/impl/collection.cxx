@@ -15,8 +15,18 @@
  *   limitations under the License.
  */
 
+#include <couchbase/collection.hxx>
+
+#include "error.hxx"
+#include "get_all_replicas.hxx"
+#include "get_any_replica.hxx"
+#include "internal_scan_result.hxx"
+#include "observe_poll.hxx"
+
 #include "core/agent_group.hxx"
+#include "core/agent_group_config.hxx"
 #include "core/cluster.hxx"
+#include "core/impl/subdoc/command.hxx"
 #include "core/logger/logger.hxx"
 #include "core/operations/document_append.hxx"
 #include "core/operations/document_decrement.hxx"
@@ -41,19 +51,57 @@
 #include "core/operations/document_upsert.hxx"
 #include "core/range_scan_options.hxx"
 #include "core/range_scan_orchestrator.hxx"
-#include "error.hxx"
-#include "get_all_replicas.hxx"
-#include "get_any_replica.hxx"
-#include "get_replica.hxx"
-#include "internal_scan_result.hxx"
-#include "lookup_in_all_replicas.hxx"
-#include "lookup_in_any_replica.hxx"
-#include "lookup_in_replica.hxx"
-#include "observe_poll.hxx"
+#include "core/range_scan_orchestrator_options.hxx"
+#include "core/topology/configuration.hxx"
 
-#include <couchbase/collection.hxx>
+#include <couchbase/binary_collection.hxx>
+#include <couchbase/cas.hxx>
+#include <couchbase/codec/encoded_value.hxx>
+#include <couchbase/collection_query_index_manager.hxx>
+#include <couchbase/durability_level.hxx>
+#include <couchbase/error.hxx>
+#include <couchbase/error_codes.hxx>
+#include <couchbase/exists_options.hxx>
+#include <couchbase/exists_result.hxx>
+#include <couchbase/expiry.hxx>
+#include <couchbase/get_all_replicas_options.hxx>
+#include <couchbase/get_and_lock_options.hxx>
+#include <couchbase/get_and_touch_options.hxx>
+#include <couchbase/get_any_replica_options.hxx>
+#include <couchbase/get_options.hxx>
+#include <couchbase/get_replica_result.hxx>
+#include <couchbase/get_result.hxx>
+#include <couchbase/insert_options.hxx>
+#include <couchbase/lookup_in_all_replicas_options.hxx>
+#include <couchbase/lookup_in_any_replica_options.hxx>
+#include <couchbase/lookup_in_options.hxx>
+#include <couchbase/lookup_in_replica_result.hxx>
+#include <couchbase/lookup_in_specs.hxx>
+#include <couchbase/mutate_in_options.hxx>
+#include <couchbase/mutate_in_specs.hxx>
+#include <couchbase/persist_to.hxx>
+#include <couchbase/remove_options.hxx>
+#include <couchbase/replace_options.hxx>
+#include <couchbase/replicate_to.hxx>
+#include <couchbase/result.hxx>
+#include <couchbase/scan_options.hxx>
+#include <couchbase/scan_type.hxx>
+#include <couchbase/touch_options.hxx>
+#include <couchbase/unlock_options.hxx>
+#include <couchbase/upsert_options.hxx>
 
+#include <fmt/format.h>
+
+#include <chrono>
+#include <cstdint>
+#include <future>
 #include <memory>
+#include <optional>
+#include <string_view>
+#include <system_error>
+#include <utility>
+#include <variant>
+#include <vector>
 
 namespace couchbase
 {
@@ -422,6 +470,7 @@ public:
       },
       [handler = std::move(handler)](auto resp) mutable {
         std::vector<lookup_in_result::entry> entries;
+        entries.reserve(resp.fields.size());
         for (auto& field : resp.fields) {
           entries.emplace_back(lookup_in_result::entry{
             std::move(field.path),
@@ -862,8 +911,7 @@ public:
                 }
                 auto internal_result =
                   std::make_shared<internal_scan_result>(std::move(core_scan_result));
-                scan_result result{ internal_result };
-                return handler({}, result);
+                return handler({}, scan_result{ internal_result });
               });
           });
       });

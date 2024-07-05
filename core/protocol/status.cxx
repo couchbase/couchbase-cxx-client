@@ -201,7 +201,6 @@ map_status_code(protocol::client_opcode opcode, std::uint16_t status) -> std::er
       return errc::key_value::mutation_token_outdated;
 
     case key_value_status_code::unknown:
-      break;
     case key_value_status_code::config_only:
       break;
   }

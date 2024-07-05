@@ -23,6 +23,7 @@
 
 #include <chrono>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace couchbase::core::transactions
@@ -40,7 +41,7 @@ struct forward_compat_behavior_full {
 
   explicit forward_compat_behavior_full(const tao::json::value& j)
   {
-    std::string b = j.at("b").get_string();
+    const std::string b = j.at("b").get_string();
     behavior = create_forward_compat_behavior(b);
     if (const auto* ra = j.find("ra"); ra != nullptr) {
       retry_delay = std::chrono::milliseconds(ra->get_unsigned());
@@ -48,7 +49,7 @@ struct forward_compat_behavior_full {
   }
 
   template<typename OStream>
-  friend OStream& operator<<(OStream& os, const forward_compat_behavior_full& b)
+  friend auto operator<<(OStream& os, const forward_compat_behavior_full& b) -> OStream&
   {
     os << "forward_compat_behavior_full:{";
     os << "behavior: " << forward_compat_behavior_name(b.behavior);
@@ -67,6 +68,11 @@ struct forward_compat_requirement {
     : behavior(b)
   {
   }
+
+  forward_compat_requirement(const forward_compat_requirement&) = default;
+  forward_compat_requirement(forward_compat_requirement&&) = default;
+  auto operator=(const forward_compat_requirement&) -> forward_compat_requirement& = default;
+  auto operator=(forward_compat_requirement&&) -> forward_compat_requirement& = default;
 
   [[nodiscard]] virtual auto check(const forward_compat_supported& supported) const
     -> forward_compat_behavior_full = 0;
@@ -117,8 +123,8 @@ struct forward_compat_extension_requirement : public forward_compat_requirement 
   }
 };
 
-forward_compat_stage
-create_forward_compat_stage(const std::string& str)
+auto
+create_forward_compat_stage(const std::string& str) -> forward_compat_stage
 {
   if (str == "WW_R") {
     return forward_compat_stage::WWC_READING_ATR;
@@ -159,14 +165,14 @@ public:
       auto stage = create_forward_compat_stage(key);
       // the value is an array of forward_compat_behavior_full objects
       for (const auto& item : value.get_array()) {
-        forward_compat_behavior_full behavior(item);
+        const forward_compat_behavior_full behavior(item);
         if (const auto* b = item.find("b"); b != nullptr) {
           if (const auto* e = item.find("e")) {
-            std::string ext = e->get_string();
+            const std::string ext = e->get_string();
             compat_map_[stage].push_back(
               std::make_unique<forward_compat_extension_requirement>(behavior, ext));
           } else if (const auto* p = item.find("p")) {
-            std::string proto_string = p->get_string();
+            const std::string proto_string = p->get_string();
             auto proto = core::utils::split_string(proto_string, '.');
             compat_map_[stage].push_back(std::make_unique<forward_compat_protocol_requirement>(
               behavior, std::stoul(proto[0]), std::stoul(proto[1])));
@@ -176,9 +182,8 @@ public:
     }
   }
 
-  std::optional<transaction_operation_failed> check_internal(
-    forward_compat_stage stage,
-    const forward_compat_supported& supported)
+  auto check_internal(forward_compat_stage stage, const forward_compat_supported& supported)
+    -> std::optional<transaction_operation_failed>
   {
     if (auto it = compat_map_.find(stage); it != compat_map_.end()) {
       transaction_operation_failed ex(FAIL_OTHER, "Forward Compatibililty failure");
@@ -211,11 +216,12 @@ private:
   tao::json::value json_;
 };
 
-std::optional<transaction_operation_failed>
+auto
 check_forward_compat(forward_compat_stage stage, std::optional<tao::json::value> json)
+  -> std::optional<transaction_operation_failed>
 {
   if (json) {
-    forward_compat_supported supported;
+    const forward_compat_supported supported;
     forward_compat fc(json.value());
     return fc.check_internal(stage, supported);
   }

@@ -16,8 +16,15 @@
  */
 
 #include <couchbase/fail_fast_retry_strategy.hxx>
+#include <couchbase/retry_action.hxx>
+#include <couchbase/retry_reason.hxx>
+#include <couchbase/retry_request.hxx>
 
 #include <fmt/core.h>
+#include <fmt/format.h>
+
+#include <memory>
+#include <string>
 
 namespace couchbase
 {

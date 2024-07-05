@@ -26,9 +26,9 @@
 
 namespace couchbase::core::operations::management
 {
-std::error_code
+auto
 query_index_create_request::encode_to(encoded_request_type& encoded,
-                                      http_context& /* context */) const
+                                      http_context& /* context */) const -> std::error_code
 {
   if (!core::utils::check_query_management_request(*this)) {
     return errc::common::invalid_argument;
@@ -87,9 +87,10 @@ query_index_create_request::encode_to(encoded_request_type& encoded,
   return {};
 }
 
-query_index_create_response
+auto
 query_index_create_request::make_response(error_context::http&& ctx,
                                           const encoded_response_type& encoded) const
+  -> query_index_create_response
 {
   query_index_create_response response{ std::move(ctx) };
   if (!response.ctx.ec) {

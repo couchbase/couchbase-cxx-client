@@ -26,8 +26,8 @@
 
 namespace
 {
-inline int
-static_on_status(llhttp_t* parser, const char* at, std::size_t length)
+inline auto
+static_on_status(llhttp_t* parser, const char* at, std::size_t length) -> int
 {
   auto* wrapper = static_cast<couchbase::core::io::http_streaming_parser*>(parser->data);
   wrapper->status_message.assign(at, length);
@@ -35,8 +35,8 @@ static_on_status(llhttp_t* parser, const char* at, std::size_t length)
   return 0;
 }
 
-inline int
-static_on_header_field(llhttp_t* parser, const char* at, std::size_t length)
+inline auto
+static_on_header_field(llhttp_t* parser, const char* at, std::size_t length) -> int
 {
   auto* wrapper = static_cast<couchbase::core::io::http_streaming_parser*>(parser->data);
   wrapper->header_field.assign(at, length);
@@ -49,32 +49,32 @@ static_on_header_field(llhttp_t* parser, const char* at, std::size_t length)
   return 0;
 }
 
-inline int
-static_on_header_value(llhttp_t* parser, const char* at, std::size_t length)
+inline auto
+static_on_header_value(llhttp_t* parser, const char* at, std::size_t length) -> int
 {
   auto* wrapper = static_cast<couchbase::core::io::http_streaming_parser*>(parser->data);
   wrapper->headers[wrapper->header_field] = std::string(at, length);
   return 0;
 }
 
-inline int
-static_on_headers_complete(llhttp_t* parser)
+inline auto
+static_on_headers_complete(llhttp_t* parser) -> int
 {
   auto* wrapper = static_cast<couchbase::core::io::http_streaming_parser*>(parser->data);
   wrapper->headers_complete = true;
   return 0;
 }
 
-inline int
-static_on_body(llhttp_t* parser, const char* at, std::size_t length)
+inline auto
+static_on_body(llhttp_t* parser, const char* at, std::size_t length) -> int
 {
   auto* wrapper = static_cast<couchbase::core::io::http_streaming_parser*>(parser->data);
   wrapper->body_chunk.append(std::string_view{ at, length });
   return 0;
 }
 
-inline int
-static_on_message_complete(llhttp_t* parser)
+inline auto
+static_on_message_complete(llhttp_t* parser) -> int
 {
   auto* wrapper = static_cast<couchbase::core::io::http_streaming_parser*>(parser->data);
   wrapper->complete = true;
@@ -104,7 +104,7 @@ http_streaming_parser::http_streaming_parser()
 }
 
 http_streaming_parser::http_streaming_parser(http_streaming_parser&& other) noexcept
-  : status_code{ std::move(other.status_code) }
+  : status_code{ other.status_code }
   , status_message{ std::move(other.status_message) }
   , headers{ std::move(other.headers) }
   , body_chunk{ std::move(other.body_chunk) }
@@ -117,10 +117,11 @@ http_streaming_parser::http_streaming_parser(http_streaming_parser&& other) noex
   }
 }
 
-http_streaming_parser&
+auto
 http_streaming_parser::operator=(couchbase::core::io::http_streaming_parser&& other) noexcept
+  -> http_streaming_parser&
 {
-  status_code = std::move(other.status_code);
+  status_code = other.status_code;
   status_message = std::move(other.status_message);
   headers = std::move(other.headers);
   body_chunk = std::move(other.body_chunk);
@@ -146,14 +147,15 @@ http_streaming_parser::reset()
   llhttp_init(&state_->parser, HTTP_RESPONSE, &state_->settings);
 }
 
-const char*
-http_streaming_parser::error_message() const
+auto
+http_streaming_parser::error_message() const -> const char*
 {
   return llhttp_errno_name(llhttp_get_errno(&state_->parser));
 }
 
-http_streaming_parser::feeding_result
-http_streaming_parser::feed(const char* data, std::size_t data_len) const
+auto
+http_streaming_parser::feed(const char* data,
+                            std::size_t data_len) const -> http_streaming_parser::feeding_result
 {
   auto error = llhttp_execute(&state_->parser, data, data_len);
   if (error != HPE_OK) {

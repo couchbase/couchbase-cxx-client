@@ -56,27 +56,28 @@ public:
 
   auto close() -> std::error_code;
 
-  auto n1ql_query(n1ql_query_options options, n1ql_query_callback&& callback)
+  auto n1ql_query(const n1ql_query_options& options, n1ql_query_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto prepared_n1ql_query(n1ql_query_options options, n1ql_query_callback&& callback)
+  auto prepared_n1ql_query(const n1ql_query_options& options, n1ql_query_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto analytics_query(analytics_query_options options, analytics_query_callback&& callback)
+  auto analytics_query(const analytics_query_options& options, analytics_query_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto search_query(search_query_options options, search_query_callback&& callback)
+  auto search_query(const search_query_options& options, search_query_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto free_form_http_request(http_request request, free_form_http_request_callback&& callback)
+  auto free_form_http_request(const http_request& request,
+                              free_form_http_request_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
   auto wait_until_ready(std::chrono::milliseconds timeout,
-                        wait_until_ready_options options,
+                        const wait_until_ready_options& options,
                         wait_until_ready_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto ping(ping_options options, ping_callback&& callback)
+  auto ping(const ping_options& options, ping_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
   auto diagnostics(diagnostics_options options) -> tl::expected<diagnostic_info, std::error_code>;

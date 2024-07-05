@@ -29,8 +29,6 @@
 #include <cstring>
 #include <gsl/util>
 
-#include <iostream>
-
 namespace couchbase::core::protocol
 {
 auto
@@ -127,7 +125,7 @@ private:
     std::vector<std::byte> payload(header_size + body_.size(), std::byte{});
     payload[0] = static_cast<std::byte>(magic_);
     payload[1] = static_cast<std::byte>(opcode_);
-#if defined(__GNUC__) && __GNUC__ == 8
+#if defined(__GNUC__) && __GNUC__ >= 8 && __GNUC__ < 12
 #pragma GCC diagnostic pop
 #endif
     const auto& framing_extras = body_.framing_extras();

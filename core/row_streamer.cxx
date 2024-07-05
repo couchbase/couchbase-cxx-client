@@ -181,7 +181,7 @@ private:
         return;
       }
       {
-        std::lock_guard<std::mutex> lock{ self->data_feed_mutex_ };
+        const std::lock_guard<std::mutex> lock{ self->data_feed_mutex_ };
         self->lexer_.feed(data);
       }
 

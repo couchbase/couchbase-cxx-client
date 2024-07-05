@@ -50,7 +50,7 @@ error_class_from_external_exception(external_exception e)
 auto
 error_class_from_result(const result& res) -> error_class
 {
-  subdoc_result::status_type subdoc_status = res.subdoc_status();
+  const subdoc_result::status_type subdoc_status = res.subdoc_status();
   assert(res.ec ||
          (!res.ignore_subdoc_errors && subdoc_status != subdoc_result::status_type::success));
   if (res.ec || res.ignore_subdoc_errors) {
@@ -83,17 +83,16 @@ error_class_from_result(const result& res) -> error_class
       return FAIL_PATH_ALREADY_EXISTS;
     }
     return FAIL_OTHER;
-  } else {
-    // TODO this section is likely redundant from TXNCXX-230, but leaving it here to be compatible
-    // with older C++ clients.  It can be removed later.
-    if (subdoc_status == subdoc_result::status_type::subdoc_path_not_found) {
-      return FAIL_PATH_NOT_FOUND;
-    } else if (subdoc_status == subdoc_result::status_type::subdoc_path_exists) {
-      return FAIL_PATH_ALREADY_EXISTS;
-    } else {
-      return FAIL_OTHER;
-    }
   }
+  // TODO(TXNCXX-230): this section is likely redundant, but leaving it here to be compatible with
+  // older C++ clients.  It can be removed later.
+  if (subdoc_status == subdoc_result::status_type::subdoc_path_not_found) {
+    return FAIL_PATH_NOT_FOUND;
+  }
+  if (subdoc_status == subdoc_result::status_type::subdoc_path_exists) {
+    return FAIL_PATH_ALREADY_EXISTS;
+  }
+  return FAIL_OTHER;
 }
 
 transaction_exception::transaction_exception(const std::runtime_error& cause,
@@ -105,7 +104,7 @@ transaction_exception::transaction_exception(const std::runtime_error& cause,
   , type_(type)
   , txn_id_(context.transaction_id())
 {
-  auto txn_op = dynamic_cast<const transaction_operation_failed*>(&cause);
+  const auto* txn_op = dynamic_cast<const transaction_operation_failed*>(&cause);
   if (nullptr != txn_op) {
     cause_ = txn_op->cause();
   }

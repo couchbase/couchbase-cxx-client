@@ -18,10 +18,14 @@
 #include "string_hex.h"
 
 #include <cinttypes>
+#include <cstdint>
+#include <cstdio>
 #include <iomanip>
+#include <ios>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
 static inline std::uint8_t
 from_hex_digit(char c)
@@ -48,7 +52,7 @@ couchbase::core::from_hex(std::string_view buffer)
                               std::to_string(buffer.size()));
   }
 
-  for (char digit : buffer) {
+  for (const char digit : buffer) {
     ret = (ret << 4) | from_hex_digit(digit);
   }
 
@@ -95,7 +99,8 @@ couchbase::core::to_hex(std::string_view buffer)
   }
   std::stringstream ss;
   for (const auto& c : buffer) {
-    ss << "0x" << std::hex << std::setfill('0') << std::setw(2) << std::uint32_t(c) << " ";
+    ss << "0x" << std::hex << std::setfill('0') << std::setw(2) << static_cast<std::uint32_t>(c)
+       << " ";
   }
   auto ret = ss.str();
   ret.resize(ret.size() - 1);

@@ -441,6 +441,11 @@ target_include_directories(couchbase_cxx_client SYSTEM PUBLIC ${PROJECT_SOURCE_D
                                                               ${PROJECT_SOURCE_DIR}/third_party/expected/include)
 target_link_libraries(couchbase_cxx_client PRIVATE project_options project_warnings)
 
+if (COUCHBASE_CXX_CLIENT_CLANG_TIDY)
+  set_target_properties(couchbase_cxx_client PROPERTIES CXX_CLANG_TIDY "${COUCHBASE_CXX_CLIENT_CLANG_TIDY}")
+  message(STATUS "clang-tidy: ${COUCHBASE_CXX_CLIENT_CLANG_TIDY}")
+endif()
+
 include(cmake/DetectStandardFilesystem.cmake)
 couchbase_cxx_check_filesystem(
   couchbase_cxx_client

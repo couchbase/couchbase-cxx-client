@@ -25,8 +25,9 @@
 
 namespace couchbase::core::operations::management
 {
-std::error_code
-group_get_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+auto
+group_get_request::encode_to(encoded_request_type& encoded,
+                             http_context& /* context */) const -> std::error_code
 {
   encoded.method = "GET";
   encoded.path = fmt::format("/settings/rbac/groups/{}", name);
@@ -34,9 +35,9 @@ group_get_request::encode_to(encoded_request_type& encoded, http_context& /* con
   return {};
 }
 
-group_get_response
+auto
 group_get_request::make_response(error_context::http&& ctx,
-                                 const encoded_response_type& encoded) const
+                                 const encoded_response_type& encoded) const -> group_get_response
 {
   group_get_response response{ std::move(ctx) };
   if (!response.ctx.ec) {

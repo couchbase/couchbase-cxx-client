@@ -88,7 +88,7 @@ class transactions_cleanup
 {
 public:
   transactions_cleanup(core::cluster cluster,
-                       const couchbase::transactions::transactions_config::built& config);
+                       couchbase::transactions::transactions_config::built config);
   ~transactions_cleanup();
 
   [[nodiscard]] const core::cluster& cluster_ref() const
@@ -106,7 +106,7 @@ public:
   };
 
   // Add an attempt cleanup later.
-  void add_attempt(std::shared_ptr<attempt_context> ctx);
+  void add_attempt(const std::shared_ptr<attempt_context>& ctx);
 
   std::size_t cleanup_queue_length() const
   {
@@ -125,11 +125,10 @@ public:
   // only used for testing
   void force_cleanup_entry(atr_cleanup_entry& entry, transactions_cleanup_attempt& attempt);
   // only used for testing
-  const atr_cleanup_stats force_cleanup_atr(const core::document_id& atr_id,
-                                            std::vector<transactions_cleanup_attempt>& results);
-  const client_record_details get_active_clients(
-    const couchbase::transactions::transaction_keyspace& keyspace,
-    const std::string& uuid);
+  auto force_cleanup_atr(const core::document_id& atr_id,
+                         std::vector<transactions_cleanup_attempt>& results) -> atr_cleanup_stats;
+  auto get_active_clients(const couchbase::transactions::transaction_keyspace& keyspace,
+                          const std::string& uuid) -> client_record_details;
   void remove_client_record_from_all_buckets(const std::string& uuid);
   void start();
   void stop();
@@ -163,9 +162,9 @@ private:
   void lost_attempts_loop();
   void clean_collection(const couchbase::transactions::transaction_keyspace& keyspace);
   void create_client_record(const couchbase::transactions::transaction_keyspace& keyspace);
-  const atr_cleanup_stats handle_atr_cleanup(
-    const core::document_id& atr_id,
-    std::vector<transactions_cleanup_attempt>* result = nullptr);
+  auto handle_atr_cleanup(const core::document_id& atr_id,
+                          std::vector<transactions_cleanup_attempt>* result = nullptr)
+    -> atr_cleanup_stats;
   bool running_{ false };
 };
 } // namespace transactions

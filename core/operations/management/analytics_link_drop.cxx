@@ -25,15 +25,15 @@
 
 namespace couchbase::core::operations::management
 {
-std::error_code
+auto
 analytics_link_drop_request::encode_to(encoded_request_type& encoded,
-                                       http_context& /* context */) const
+                                       http_context& /* context */) const -> std::error_code
 {
   encoded.headers["content-type"] = "application/x-www-form-urlencoded";
   encoded.headers["accept"] = "application/json";
   encoded.method = "DELETE";
   if (std::count(dataverse_name.begin(), dataverse_name.end(), '/') == 0) {
-    std::map<std::string, std::string> values{
+    const std::map<std::string, std::string> values{
       { "dataverse", dataverse_name },
       { "name", link_name },
     };
@@ -46,9 +46,10 @@ analytics_link_drop_request::encode_to(encoded_request_type& encoded,
   return {};
 }
 
-analytics_link_drop_response
+auto
 analytics_link_drop_request::make_response(error_context::http&& ctx,
                                            const encoded_response_type& encoded) const
+  -> analytics_link_drop_response
 {
   analytics_link_drop_response response{ std::move(ctx) };
   if (!response.ctx.ec) {
@@ -73,7 +74,7 @@ analytics_link_drop_request::make_response(error_context::http&& ctx,
       if (response.status != "success") {
         if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
           for (const auto& error : errors->get_array()) {
-            analytics_link_drop_response::problem err{
+            const analytics_link_drop_response::problem err{
               error.at("code").as<std::uint32_t>(),
               error.at("msg").get_string(),
             };
@@ -91,6 +92,8 @@ analytics_link_drop_request::make_response(error_context::http&& ctx,
           break;
         case 24034: /* Cannot find dataverse with name [string] */
           dataverse_does_not_exist = true;
+          break;
+        default:
           break;
       }
     }

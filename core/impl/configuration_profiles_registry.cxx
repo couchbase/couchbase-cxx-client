@@ -15,12 +15,19 @@
  *   limitations under the License.
  */
 
-#include <couchbase/cluster_options.hxx>
 #include <couchbase/configuration_profiles_registry.hxx>
+
+#include <couchbase/cluster_options.hxx>
+#include <couchbase/configuration_profile.hxx>
 #include <couchbase/wan_development_configuration_profile.hxx>
 
+#include <functional>
 #include <map>
+#include <memory>
 #include <mutex>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace couchbase
 {
@@ -50,7 +57,7 @@ configuration_profiles_registry::register_profile(const std::string& name,
     return;
   }
   auto& instance = registry_instance();
-  std::scoped_lock lock(instance.store_mutex);
+  const std::scoped_lock lock(instance.store_mutex);
   instance.store[name] = std::move(profile);
 }
 
@@ -63,7 +70,7 @@ configuration_profiles_registry::apply_profile(const std::string& name,
     return;
   }
   auto& instance = registry_instance();
-  std::scoped_lock lock(instance.store_mutex);
+  const std::scoped_lock lock(instance.store_mutex);
   if (auto it = instance.store.find(name); it != instance.store.end() && it->second != nullptr) {
     profile = it->second;
   } else {
@@ -79,7 +86,7 @@ configuration_profiles_registry::available_profiles() -> std::vector<std::string
 {
   std::vector<std::string> profile_names;
   auto& instance = registry_instance();
-  std::scoped_lock lock(instance.store_mutex);
+  const std::scoped_lock lock(instance.store_mutex);
   profile_names.reserve(instance.store.size());
   for (const auto& [name, _] : instance.store) {
     profile_names.push_back(name);

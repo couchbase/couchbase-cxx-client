@@ -19,24 +19,55 @@
 
 #include "analytics.hxx"
 #include "core/agent_group.hxx"
+#include "core/agent_group_config.hxx"
+#include "core/cluster_options.hxx"
+#include "core/core_sdk_shim.hxx"
+#include "core/io/ip_protocol.hxx"
+#include "core/origin.hxx"
+#include "core/tls_verify_mode.hxx"
 #include "core/transactions.hxx"
 #include "core/utils/connection_string.hxx"
+#include "core/utils/movable_function.hxx"
 #include "diagnostics.hxx"
 #include "error.hxx"
-#include "internal_search_error_context.hxx"
-#include "internal_search_meta_data.hxx"
 #include "internal_search_result.hxx"
-#include "internal_search_row.hxx"
-#include "internal_search_row_location.hxx"
-#include "internal_search_row_locations.hxx"
 #include "query.hxx"
 #include "search.hxx"
 
+#include <couchbase/analytics_index_manager.hxx>
+#include <couchbase/analytics_options.hxx>
+#include <couchbase/analytics_result.hxx>
 #include <couchbase/bucket.hxx>
+#include <couchbase/bucket_manager.hxx>
 #include <couchbase/cluster.hxx>
+#include <couchbase/cluster_options.hxx>
+#include <couchbase/diagnostics_options.hxx>
+#include <couchbase/diagnostics_result.hxx>
+#include <couchbase/fork_event.hxx>
+#include <couchbase/ip_protocol.hxx>
+#include <couchbase/ping_options.hxx>
+#include <couchbase/ping_result.hxx>
+#include <couchbase/query_index_manager.hxx>
+#include <couchbase/query_options.hxx>
+#include <couchbase/query_result.hxx>
+#include <couchbase/search_index_manager.hxx>
+#include <couchbase/search_options.hxx>
+#include <couchbase/search_request.hxx>
+#include <couchbase/tls_verify_mode.hxx>
+#include <couchbase/transactions.hxx>
 
 #include <asio/bind_executor.hpp>
+#include <asio/detail/concurrency_hint.hpp>
+#include <asio/execution_context.hpp>
 #include <asio/post.hpp>
+
+#include <functional>
+#include <future>
+#include <memory>
+#include <string>
+#include <string_view>
+#include <system_error>
+#include <utility>
 
 namespace couchbase
 {
@@ -183,6 +214,12 @@ fork_event_to_asio(fork_event event) -> asio::execution_context::fork_event
 class cluster_impl : public std::enable_shared_from_this<cluster_impl>
 {
 public:
+  cluster_impl() = default;
+  cluster_impl(const cluster_impl&) = delete;
+  cluster_impl(cluster_impl&&) = delete;
+  auto operator=(const cluster_impl&) = delete;
+  auto operator=(cluster_impl&&) = delete;
+
   ~cluster_impl()
   {
     std::promise<void> barrier;

@@ -23,8 +23,9 @@
 
 namespace couchbase::core::operations::management
 {
-std::error_code
-view_index_drop_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+auto
+view_index_drop_request::encode_to(encoded_request_type& encoded,
+                                   http_context& /* context */) const -> std::error_code
 {
   encoded.method = "DELETE";
   encoded.path = fmt::format("/{}/_design/{}{}",
@@ -34,9 +35,10 @@ view_index_drop_request::encode_to(encoded_request_type& encoded, http_context& 
   return {};
 }
 
-view_index_drop_response
+auto
 view_index_drop_request::make_response(error_context::http&& ctx,
                                        const encoded_response_type& encoded) const
+  -> view_index_drop_response
 {
   view_index_drop_response response{ std::move(ctx) };
   if (!response.ctx.ec) {

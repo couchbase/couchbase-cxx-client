@@ -17,27 +17,41 @@
 
 #include "dns_srv_tracker.hxx"
 
+#include "core/config_listener.hxx"
+#include "core/io/dns_client.hxx"
+#include "core/io/dns_config.hxx"
 #include "core/logger/logger.hxx"
+#include "core/origin.hxx"
+#include "core/topology/configuration.hxx"
 #include "core/utils/join_strings.hxx"
+#include "core/utils/movable_function.hxx"
 
 #include <couchbase/error_codes.hxx>
 
 #include <asio/bind_executor.hpp>
 #include <asio/io_context.hpp>
 #include <asio/post.hpp>
+#include <fmt/format.h>
 
+#include <functional>
 #include <memory>
+#include <mutex>
+#include <set>
+#include <string>
+#include <system_error>
+#include <utility>
+#include <vector>
 
 namespace couchbase::core::impl
 {
 dns_srv_tracker::dns_srv_tracker(asio::io_context& ctx,
                                  std::string address,
-                                 const io::dns::dns_config& config,
+                                 io::dns::dns_config config,
                                  bool use_tls)
   : ctx_{ ctx }
   , dns_client_{ ctx_ }
   , address_{ std::move(address) }
-  , config_{ config }
+  , config_{ std::move(config) }
   , use_tls_{ use_tls }
   , service_{ use_tls_ ? "_couchbases" : "_couchbase" }
 {
@@ -84,7 +98,7 @@ void
 dns_srv_tracker::do_dns_refresh()
 {
   get_srv_nodes(
-    [self = shared_from_this()](origin::node_list nodes, std::error_code dns_ec) mutable {
+    [self = shared_from_this()](const origin::node_list& nodes, std::error_code dns_ec) mutable {
       bool expected_state{ true };
       if (dns_ec || nodes.empty()) {
         if (dns_ec) {
@@ -95,7 +109,7 @@ dns_srv_tracker::do_dns_refresh()
       }
       std::set<std::shared_ptr<config_listener>> listeners;
       {
-        std::scoped_lock lock(self->config_listeners_mutex_);
+        const std::scoped_lock lock(self->config_listeners_mutex_);
         listeners = self->config_listeners_;
       }
 
@@ -123,7 +137,7 @@ dns_srv_tracker::report_bootstrap_error(const std::string& endpoint, std::error_
   bool trigger_dns_srv_refresh = false;
 
   if (ec && ec != errc::common::request_canceled) {
-    std::scoped_lock lock(known_endpoints_mutex_);
+    const std::scoped_lock lock(known_endpoints_mutex_);
     known_endpoints_.erase(endpoint);
     if (known_endpoints_.empty()) {
       trigger_dns_srv_refresh = true;
@@ -149,21 +163,21 @@ void
 dns_srv_tracker::report_bootstrap_success(const std::vector<std::string>& endpoints)
 {
   std::set<std::string, std::less<>> known_endpoints{ endpoints.begin(), endpoints.end() };
-  std::scoped_lock lock(known_endpoints_mutex_);
+  const std::scoped_lock lock(known_endpoints_mutex_);
   std::swap(known_endpoints_, known_endpoints);
 }
 
 void
 dns_srv_tracker::register_config_listener(std::shared_ptr<config_listener> listener)
 {
-  std::scoped_lock lock(config_listeners_mutex_);
+  const std::scoped_lock lock(config_listeners_mutex_);
   config_listeners_.insert(listener);
 }
 
 void
 dns_srv_tracker::unregister_config_listener(std::shared_ptr<config_listener> listener)
 {
-  std::scoped_lock lock(config_listeners_mutex_);
+  const std::scoped_lock lock(config_listeners_mutex_);
   config_listeners_.erase(listener);
 }
 } // namespace couchbase::core::impl

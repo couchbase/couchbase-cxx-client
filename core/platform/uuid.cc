@@ -19,8 +19,12 @@
 
 #include "string_hex.h"
 
-#include <iomanip>
+#include <cstddef>
+#include <cstdint>
 #include <random>
+#include <stdexcept>
+#include <string>
+#include <string_view>
 
 void
 couchbase::core::uuid::random(couchbase::core::uuid::uuid_t& uuid)
@@ -69,7 +73,7 @@ couchbase::core::uuid::from_string(std::string_view str)
         ++ii;
         [[fallthrough]];
       default:
-        ret[jj++] = std::uint8_t(from_hex({ str.data() + ii, 2 }));
+        ret[jj++] = static_cast<std::uint8_t>(from_hex({ str.data() + ii, 2 }));
     }
   }
   return ret;

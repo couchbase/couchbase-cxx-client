@@ -76,39 +76,39 @@ private:
   void remove_docs_staged_for_removal(std::optional<std::vector<doc_record>> docs,
                                       durability_level dl);
   void remove_txn_links(std::optional<std::vector<doc_record>> docs, durability_level dl);
-  void do_per_doc(std::vector<doc_record> docs,
+  void do_per_doc(const std::vector<doc_record>& docs,
                   bool require_crc_to_match,
                   const std::function<void(transaction_get_result&, bool)>& call);
 
 public:
-  explicit atr_cleanup_entry(std::shared_ptr<attempt_context> ctx);
+  explicit atr_cleanup_entry(const std::shared_ptr<attempt_context>& ctx);
   explicit atr_cleanup_entry(const atr_entry& entry,
-                             const core::document_id& atr_coll,
+                             core::document_id atr_id,
                              const transactions_cleanup& cleanup,
                              bool check_if_expired = true);
 
-  explicit atr_cleanup_entry(const core::document_id& atr_id,
-                             const std::string& attempt_id,
+  explicit atr_cleanup_entry(core::document_id atr_id,
+                             std::string attempt_id,
                              const transactions_cleanup& cleanup);
 
   void clean(transactions_cleanup_attempt* result = nullptr);
-  bool ready() const;
-  couchbase::core::document_id atr_id() const
+  [[nodiscard]] auto ready() const -> bool;
+  [[nodiscard]] auto atr_id() const -> couchbase::core::document_id
   {
     return atr_id_;
   }
 
-  std::string attempt_id() const
+  [[nodiscard]] auto attempt_id() const -> std::string
   {
     return attempt_id_;
   }
 
-  bool check_if_expired() const
+  [[nodiscard]] auto check_if_expired() const -> bool
   {
     return check_if_expired_;
   }
 
-  std::chrono::time_point<std::chrono::steady_clock> min_start_time() const
+  [[nodiscard]] auto min_start_time() const -> std::chrono::time_point<std::chrono::steady_clock>
   {
     return min_start_time_;
   };
@@ -127,6 +127,7 @@ public:
     os << "}";
     return os;
   }
+
   void min_start_time(std::chrono::time_point<std::chrono::steady_clock> new_time)
   {
     min_start_time_ = new_time;
@@ -144,7 +145,7 @@ private:
 public:
   // pop, but only if the front entry's min_start_time_ is before now
   std::optional<atr_cleanup_entry> pop(bool check_time = true);
-  void push(std::shared_ptr<attempt_context> ctx);
+  void push(const std::shared_ptr<attempt_context>& ctx);
   std::size_t size() const;
 };
 

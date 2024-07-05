@@ -17,9 +17,9 @@
 
 #pragma once
 
-#include "../io/dns_client.hxx"
-#include "../origin.hxx"
 #include "bootstrap_state_listener.hxx"
+#include "core/io/dns_client.hxx"
+#include "core/origin.hxx"
 #include "core/utils/movable_function.hxx"
 
 #include <mutex>
@@ -41,7 +41,7 @@ class dns_srv_tracker
 public:
   dns_srv_tracker(asio::io_context& ctx,
                   std::string address,
-                  const io::dns::dns_config& config,
+                  io::dns::dns_config config,
                   bool use_tls);
   void get_srv_nodes(
     utils::movable_function<void(origin::node_list nodes, std::error_code ec)> callback);

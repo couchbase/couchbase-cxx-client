@@ -25,8 +25,9 @@
 
 namespace couchbase::core::operations::management
 {
-std::error_code
-user_upsert_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+auto
+user_upsert_request::encode_to(encoded_request_type& encoded,
+                               http_context& /* context */) const -> std::error_code
 {
   encoded.method = "PUT";
   encoded.path = fmt::format("/settings/rbac/users/{}/{}", domain, user.username);
@@ -40,7 +41,7 @@ user_upsert_request::encode_to(encoded_request_type& encoded, http_context& /* c
       fmt::format("password={}", utils::string_codec::url_encode(user.password.value())));
   }
   if (!user.groups.empty()) {
-    std::string encoded_groups = utils::join_strings(user.groups, ",");
+    const std::string encoded_groups = utils::join_strings(user.groups, ",");
     params.push_back(fmt::format("groups={}", utils::string_codec::url_encode(encoded_groups)));
   }
   std::vector<std::string> encoded_roles{};
@@ -60,7 +61,7 @@ user_upsert_request::encode_to(encoded_request_type& encoded, http_context& /* c
     encoded_roles.push_back(spec);
   }
   if (!encoded_roles.empty()) {
-    std::string concatenated = utils::join_strings(encoded_roles, ",");
+    const std::string concatenated = utils::join_strings(encoded_roles, ",");
     params.push_back(fmt::format("roles={}", utils::string_codec::url_encode(concatenated)));
   }
   encoded.body = utils::join_strings(params, "&");
@@ -68,9 +69,9 @@ user_upsert_request::encode_to(encoded_request_type& encoded, http_context& /* c
   return {};
 }
 
-user_upsert_response
-user_upsert_request::make_response(error_context::http&& ctx,
-                                   const encoded_response_type& encoded) const
+auto
+user_upsert_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded)
+  const -> user_upsert_response
 {
   user_upsert_response response{ std::move(ctx) };
   if (!response.ctx.ec) {

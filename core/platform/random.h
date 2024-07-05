@@ -34,6 +34,6 @@ public:
 
   std::uint64_t next();
 
-  bool getBytes(void* dest, size_t size);
+  static bool getBytes(void* dest, size_t size);
 };
 } // namespace couchbase::core

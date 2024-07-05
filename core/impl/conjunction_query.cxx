@@ -18,8 +18,9 @@
 #include "encoded_search_query.hxx"
 
 #include <couchbase/conjunction_query.hxx>
-
 #include <couchbase/error_codes.hxx>
+
+#include <tao/json/type.hpp>
 
 namespace couchbase
 {

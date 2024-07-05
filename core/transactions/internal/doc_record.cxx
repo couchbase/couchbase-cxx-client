@@ -20,13 +20,13 @@
 
 namespace couchbase::core::transactions
 {
-doc_record
-doc_record::create_from(const tao::json::value& obj)
+auto
+doc_record::create_from(const tao::json::value& obj) -> doc_record
 {
-  std::string bucket_name = obj.at(ATR_FIELD_PER_DOC_BUCKET).get_string();
-  std::string scope_name = obj.at(ATR_FIELD_PER_DOC_SCOPE).get_string();
-  std::string collection_name = obj.at(ATR_FIELD_PER_DOC_COLLECTION).get_string();
-  std::string id = obj.at(ATR_FIELD_PER_DOC_ID).get_string();
-  return doc_record(bucket_name, scope_name, collection_name, id);
+  const std::string bucket_name = obj.at(ATR_FIELD_PER_DOC_BUCKET).get_string();
+  const std::string scope_name = obj.at(ATR_FIELD_PER_DOC_SCOPE).get_string();
+  const std::string collection_name = obj.at(ATR_FIELD_PER_DOC_COLLECTION).get_string();
+  const std::string id = obj.at(ATR_FIELD_PER_DOC_ID).get_string();
+  return { bucket_name, scope_name, collection_name, id };
 }
 } // namespace couchbase::core::transactions

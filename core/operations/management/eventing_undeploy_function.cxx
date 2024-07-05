@@ -24,9 +24,9 @@
 
 namespace couchbase::core::operations::management
 {
-std::error_code
+auto
 eventing_undeploy_function_request::encode_to(encoded_request_type& encoded,
-                                              http_context& /* context */) const
+                                              http_context& /* context */) const -> std::error_code
 {
   encoded.method = "POST";
   encoded.path = fmt::format("/api/v1/functions/{}/undeploy", name);
@@ -38,9 +38,10 @@ eventing_undeploy_function_request::encode_to(encoded_request_type& encoded,
   return {};
 }
 
-eventing_undeploy_function_response
+auto
 eventing_undeploy_function_request::make_response(error_context::http&& ctx,
                                                   const encoded_response_type& encoded) const
+  -> eventing_undeploy_function_response
 {
   eventing_undeploy_function_response response{ std::move(ctx) };
   if (!response.ctx.ec) {

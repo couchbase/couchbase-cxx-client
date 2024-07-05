@@ -43,10 +43,11 @@ class agent
 public:
   explicit agent(asio::io_context& io, agent_config config);
 
-  auto free_form_http_request(http_request request, free_form_http_request_callback&& callback)
+  auto free_form_http_request(const http_request& request,
+                              free_form_http_request_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto execute_query(query_options options, query_callback&& callback)
+  auto execute_query(const query_options& options, query_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, error>;
 
 private:

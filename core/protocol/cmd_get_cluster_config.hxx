@@ -43,9 +43,9 @@ private:
   std::optional<std::string_view> config_text_;
 
 public:
-  [[nodiscard]] auto config() -> topology::configuration&&
+  [[nodiscard]] auto config() -> const topology::configuration&
   {
-    return std::move(config_);
+    return config_;
   }
 
   [[nodiscard]] auto config_text() const -> const std::optional<std::string_view>&

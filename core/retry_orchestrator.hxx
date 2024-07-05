@@ -30,7 +30,7 @@ class queue_request;
 class retry_orchestrator
 {
 public:
-  [[nodiscard]] static auto should_retry(std::shared_ptr<mcbp::queue_request> request,
+  [[nodiscard]] static auto should_retry(const std::shared_ptr<mcbp::queue_request>& request,
                                          retry_reason reason) -> retry_action;
 };
 } // namespace couchbase::core

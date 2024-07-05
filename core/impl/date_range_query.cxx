@@ -15,13 +15,18 @@
  *   limitations under the License.
  */
 
-#include "encoded_search_query.hxx"
-
 #include <couchbase/date_range_query.hxx>
+
+#include "encoded_search_query.hxx"
 
 #include <couchbase/error_codes.hxx>
 
 #include <fmt/chrono.h>
+#include <fmt/format.h>
+#include <tao/json/type.hpp>
+
+#include <chrono>
+#include <ctime>
 
 namespace couchbase
 {

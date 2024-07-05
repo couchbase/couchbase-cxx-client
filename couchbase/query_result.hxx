@@ -20,9 +20,6 @@
 #include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/query_meta_data.hxx>
 
-#include <chrono>
-#include <cinttypes>
-#include <optional>
 #include <vector>
 
 namespace couchbase

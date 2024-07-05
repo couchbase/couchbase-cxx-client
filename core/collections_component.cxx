@@ -16,36 +16,60 @@
  */
 
 #include "collections_component.hxx"
-#include "collections_component_unit_test_api.hxx"
 
 #include "collection_id_cache_entry.hxx"
+#include "collections_component_unit_test_api.hxx"
+#include "core/collections_options.hxx"
 #include "core/logger/logger.hxx"
 #include "core/mcbp/big_endian.hxx"
-#include "couchbase/collection.hxx"
-#include "couchbase/scope.hxx"
+#include "core/pending_operation.hxx"
+#include "core/protocol/client_opcode.hxx"
+#include "core/protocol/client_opcode_fmt.hxx"
+#include "core/protocol/magic.hxx"
 #include "dispatcher.hxx"
 #include "mcbp/operation_queue.hxx"
 #include "mcbp/queue_request.hxx"
 #include "mcbp/queue_response.hxx"
-#include "protocol/client_opcode_fmt.hxx"
 #include "retry_orchestrator.hxx"
 #include "utils/binary.hxx"
 #include "utils/json.hxx"
 
-#include <fmt/core.h>
+#include <couchbase/collection.hxx>
+#include <couchbase/error_codes.hxx>
+#include <couchbase/retry_reason.hxx>
+#include <couchbase/scope.hxx>
 
+#include <asio/error.hpp>
 #include <asio/io_context.hpp>
 #include <asio/steady_timer.hpp>
+#include <fmt/format.h>
+#include <tao/json/forward.hpp>
+#include <tao/pegtl/parse_error.hpp>
+#include <tl/expected.hpp>
 
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+
+#include <functional>
+#include <map>
 #include <memory>
+#include <mutex>
+#include <string>
+#include <string_view>
+#include <system_error>
+#include <utility>
 
 namespace couchbase::core
 {
-static auto
+namespace
+{
+auto
 build_key(std::string_view scope_name, std::string_view collection_name) -> std::string
 {
   return fmt::format("{}.{}", scope_name, collection_name);
 }
+} // namespace
 
 class collection_id_cache_entry_impl
   : public std::enable_shared_from_this<collection_id_cache_entry_impl>
@@ -69,7 +93,7 @@ public:
 
   void reset_id() override
   {
-    std::scoped_lock lock(mutex_);
+    const std::scoped_lock lock(mutex_);
     if (id_ != unknown_collection_id && id_ != pending_collection_id) {
       id_ = unknown_collection_id;
     }
@@ -77,17 +101,17 @@ public:
 
   void set_id(std::uint32_t id)
   {
-    std::scoped_lock lock(mutex_);
+    const std::scoped_lock lock(mutex_);
     id_ = id;
   }
 
   [[nodiscard]] auto get_id() -> std::uint32_t
   {
-    std::scoped_lock lock(mutex_);
+    const std::scoped_lock lock(mutex_);
     return id_;
   }
 
-  [[nodiscard]] auto assign_collection_id(std::shared_ptr<mcbp::queue_request> req)
+  [[nodiscard]] auto assign_collection_id(const std::shared_ptr<mcbp::queue_request>& req)
     -> std::error_code
   {
     auto collection_id = get_id();
@@ -106,13 +130,13 @@ public:
     return {};
   }
 
-  [[nodiscard]] auto refresh_collection_id(std::shared_ptr<mcbp::queue_request> req)
+  [[nodiscard]] auto refresh_collection_id(const std::shared_ptr<mcbp::queue_request>& req)
     -> std::error_code;
 
   [[nodiscard]] auto swap_queue() -> std::unique_ptr<mcbp::operation_queue>
   {
     auto queue = std::make_unique<mcbp::operation_queue>();
-    std::scoped_lock lock(mutex_);
+    const std::scoped_lock lock(mutex_);
     std::swap(queue_, queue);
     return queue;
   }
@@ -134,7 +158,7 @@ class collections_component_impl : public std::enable_shared_from_this<collectio
 public:
   collections_component_impl(asio::io_context& io,
                              dispatcher dispatcher,
-                             collections_component_options options)
+                             const collections_component_options& options)
     : io_{ io }
     , dispatcher_(std::move(dispatcher))
     , max_queue_size_{ options.max_queue_size }
@@ -146,7 +170,7 @@ public:
                             std::string collection_name,
                             std::uint32_t id) -> std::shared_ptr<collection_id_cache_entry>
   {
-    std::scoped_lock lock(cache_mutex_);
+    const std::scoped_lock lock(cache_mutex_);
     auto key = build_key(scope_name, collection_name);
 
     if (auto it = cache_.find(key); it != cache_.end()) {
@@ -160,13 +184,13 @@ public:
 
   void remove(std::string_view scope_name, std::string_view collection_name)
   {
-    std::scoped_lock lock(cache_mutex_);
+    const std::scoped_lock lock(cache_mutex_);
     cache_.erase(build_key(scope_name, collection_name));
   }
 
   void upsert(std::string scope_name, std::string collection_name, std::uint32_t id)
   {
-    std::scoped_lock lock(cache_mutex_);
+    const std::scoped_lock lock(cache_mutex_);
 
     auto key = build_key(scope_name, collection_name);
 
@@ -183,7 +207,7 @@ public:
                                                                         id));
   }
 
-  auto handle_collection_unknown(std::shared_ptr<mcbp::queue_request> request) -> bool
+  auto handle_collection_unknown(const std::shared_ptr<mcbp::queue_request>& request) -> bool
   {
     /*
      * We cannot retry requests with no collection information.
@@ -210,7 +234,7 @@ public:
     return retried;
   }
 
-  void re_queue(std::shared_ptr<mcbp::queue_request> request)
+  void re_queue(const std::shared_ptr<mcbp::queue_request>& request)
   {
     auto cache_entry =
       get_and_maybe_insert(request->scope_name_, request->collection_name_, unknown_collection_id);
@@ -224,20 +248,20 @@ public:
 
   [[nodiscard]] auto get_collection_id(std::string scope_name,
                                        std::string collection_name,
-                                       get_collection_id_options options,
+                                       const get_collection_id_options& options,
                                        get_collection_id_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     auto handler = [self = shared_from_this(),
-                    cb = std::move(callback)](std::shared_ptr<mcbp::queue_response> response,
-                                              std::shared_ptr<mcbp::queue_request> request,
+                    cb = std::move(callback)](const std::shared_ptr<mcbp::queue_response>& response,
+                                              const std::shared_ptr<mcbp::queue_request>& request,
                                               std::error_code error) {
       if (error) {
         return cb(get_collection_id_result{}, error);
       }
 
-      std::uint64_t manifest_id = mcbp::big_endian::read_uint64(response->extras_, 0);
-      std::uint32_t collection_id = mcbp::big_endian::read_uint32(response->extras_, 8);
+      const std::uint64_t manifest_id = mcbp::big_endian::read_uint64(response->extras_, 0);
+      const std::uint32_t collection_id = mcbp::big_endian::read_uint32(response->extras_, 8);
 
       self->upsert(request->scope_name_, request->collection_name_, collection_id);
 
@@ -325,7 +349,7 @@ collection_id_cache_entry_impl::dispatch(std::shared_ptr<mcbp::queue_request> re
    * if it is pending then queue request
    * otherwise send the request
    */
-  switch (std::scoped_lock lock(mutex_); id_) {
+  switch (const std::scoped_lock lock(mutex_); id_) {
     case unknown_collection_id:
       CB_LOG_DEBUG(
         "collection {}.{} unknown. refreshing id", req->scope_name_, req->collection_id_);
@@ -361,8 +385,8 @@ collection_id_cache_entry_impl::dispatch(std::shared_ptr<mcbp::queue_request> re
 }
 
 auto
-collection_id_cache_entry_impl::refresh_collection_id(std::shared_ptr<mcbp::queue_request> req)
-  -> std::error_code
+collection_id_cache_entry_impl::refresh_collection_id(
+  const std::shared_ptr<mcbp::queue_request>& req) -> std::error_code
 {
   if (auto ec = queue_->push(req, max_queue_size_); ec) {
     return ec;
@@ -431,6 +455,8 @@ collection_id_cache_entry_impl::refresh_collection_id(std::shared_ptr<mcbp::queu
         self->manager_.lock()->direct_re_queue(r, false);
       });
     });
+  // TODO(CXXCBC-549)
+  // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
   if (op) {
     return {};
   }
@@ -439,22 +465,20 @@ collection_id_cache_entry_impl::refresh_collection_id(std::shared_ptr<mcbp::queu
 
 collections_component::collections_component(asio::io_context& io,
                                              dispatcher dispatcher,
-                                             collections_component_options options)
-  : impl_{
-    std::make_shared<collections_component_impl>(io, std::move(dispatcher), std::move(options))
-  }
+                                             const collections_component_options& options)
+  : impl_{ std::make_shared<collections_component_impl>(io, std::move(dispatcher), options) }
 {
 }
 
 auto
 collections_component::get_collection_id(std::string scope_name,
                                          std::string collection_name,
-                                         get_collection_id_options options,
+                                         const get_collection_id_options& options,
                                          get_collection_id_callback callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
   return impl_->get_collection_id(
-    std::move(scope_name), std::move(collection_name), std::move(options), std::move(callback));
+    std::move(scope_name), std::move(collection_name), options, std::move(callback));
 }
 
 auto

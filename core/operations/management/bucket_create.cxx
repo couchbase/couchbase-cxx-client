@@ -27,8 +27,9 @@
 namespace couchbase::core::operations::management
 {
 
-std::error_code
-bucket_create_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+auto
+bucket_create_request::encode_to(encoded_request_type& encoded,
+                                 http_context& /* context */) const -> std::error_code
 {
   encoded.method = "POST";
   encoded.path = "/pools/default/buckets";
@@ -154,9 +155,10 @@ bucket_create_request::encode_to(encoded_request_type& encoded, http_context& /*
   }
   return {};
 }
-bucket_create_response
+auto
 bucket_create_request::make_response(error_context::http&& ctx,
                                      const encoded_response_type& encoded) const
+  -> bucket_create_response
 {
   bucket_create_response response{ std::move(ctx) };
   if (!response.ctx.ec) {
