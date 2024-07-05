@@ -11,7 +11,9 @@ target_link_libraries(
           taocpp::json
           fmt::fmt
           spdlog::spdlog)
-target_include_directories(couchbase_meta PRIVATE ${PROJECT_BINARY_DIR}/generated ${PROJECT_SOURCE_DIR}
+target_include_directories(couchbase_meta PRIVATE ${PROJECT_BINARY_DIR}/generated
+                                                  ${PROJECT_BINARY_DIR}/generated_$<CONFIG>
+                                                  ${PROJECT_SOURCE_DIR}
                                                   ${hdr_histogram_SOURCE_DIR}/include)
 
 if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND COUCHBASE_CXX_CLIENT_USE_BORINGSSL_PREFIX)

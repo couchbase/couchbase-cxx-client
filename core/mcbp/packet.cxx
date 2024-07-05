@@ -25,6 +25,8 @@
 #include <fmt/core.h>
 #include <spdlog/fmt/bin_to_hex.h>
 
+#include <iterator>
+
 namespace couchbase::core::mcbp
 {
 auto

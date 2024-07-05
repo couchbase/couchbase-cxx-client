@@ -31,7 +31,7 @@ if(ENABLE_IPO)
   endif()
 endif()
 
-if(CMAKE_CXX_COMPILER_ID MATCHES ".*Clang")
+if(CMAKE_CXX_COMPILER_ID MATCHES ".*Clang" AND NOT WIN32)
   add_compile_options(-fcolor-diagnostics)
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT MINGW)
   add_compile_options(-fdiagnostics-color=always)

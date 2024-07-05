@@ -428,7 +428,7 @@ endif()
 add_library(couchbase_cxx_client::couchbase_cxx_client ALIAS couchbase_cxx_client)
 set_target_properties(couchbase_cxx_client PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-target_include_directories(couchbase_cxx_client PRIVATE ${PROJECT_BINARY_DIR}/generated)
+target_include_directories(couchbase_cxx_client PRIVATE ${PROJECT_BINARY_DIR}/generated ${PROJECT_BINARY_DIR}/generated_$<CONFIG>)
 target_include_directories(couchbase_cxx_client PUBLIC ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/private)
 target_include_directories(couchbase_cxx_client SYSTEM PUBLIC ${PROJECT_SOURCE_DIR}/third_party/cxx_function
                                                               ${PROJECT_SOURCE_DIR}/third_party/expected/include)
