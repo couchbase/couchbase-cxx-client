@@ -9,4 +9,6 @@ target_link_libraries(
           taocpp::json
           fmt::fmt
           spdlog::spdlog)
-target_include_directories(couchbase_tracing PRIVATE ${PROJECT_BINARY_DIR}/generated ${PROJECT_SOURCE_DIR})
+target_include_directories(couchbase_tracing PRIVATE ${PROJECT_BINARY_DIR}/generated
+                                                     ${PROJECT_BINARY_DIR}/generated_$<CONFIG>
+                                                     ${PROJECT_SOURCE_DIR})

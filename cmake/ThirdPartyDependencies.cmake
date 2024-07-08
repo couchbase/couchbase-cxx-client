@@ -21,12 +21,16 @@ if(NOT TARGET fmt::fmt)
     NAME
     fmt
     GIT_TAG
-    10.2.1
+    11.0.1
     VERSION
-    10.2.1
+    11.0.1
     GITHUB_REPOSITORY
     "fmtlib/fmt"
     OPTIONS
+    # Unicode support for MSVC enabled in CompilerWarnings.cmake
+    "FMT_UNICODE OFF"
+    "FMT_DOC OFF"
+    "FMT_INSTALL OFF"
     "BUILD_SHARED_LIBS OFF"
     "CMAKE_C_VISIBILITY_PRESET hidden"
     "CMAKE_CXX_VISIBILITY_PRESET hidden"
@@ -39,7 +43,7 @@ if(NOT TARGET spdlog::spdlog)
     NAME
     spdlog
     VERSION
-    1.13.0
+    1.14.1
     GITHUB_REPOSITORY
     "gabime/spdlog"
     OPTIONS
@@ -92,9 +96,9 @@ if(NOT TARGET llhttp::llhttp)
     NAME
     llhttp
     GIT_TAG
-    release/v9.2.0
+    release/v9.2.1
     VERSION
-    9.2.0
+    9.2.1
     GITHUB_REPOSITORY
     "nodejs/llhttp"
     OPTIONS
@@ -111,9 +115,9 @@ if(NOT TARGET snappy)
     NAME
     snappy
     GIT_TAG
-    1.1.10
+    1.2.1
     VERSION
-    1.1.10
+    1.2.1
     GITHUB_REPOSITORY
     "google/snappy"
     OPTIONS
@@ -154,14 +158,14 @@ if(NOT TARGET taocpp::json)
 endif()
 
 if(NOT TARGET asio::asio)
-  # https://github.com/chriskohlhoff/asio
+  # https://github.com/chriskohlhoff/asio/tags
   cpmaddpackage(
     NAME
     asio
     GIT_TAG
-    asio-1-29-0
+    asio-1-30-2
     VERSION
-    1.29.0
+    1.30.2
     GITHUB_REPOSITORY
     "chriskohlhoff/asio")
 endif()

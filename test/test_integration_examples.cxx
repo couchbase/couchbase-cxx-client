@@ -36,6 +36,7 @@
 #include <tao/json.hpp>
 
 #include <fmt/chrono.h>
+#include <fmt/ranges.h>
 
 #ifndef _WIN32
 #include <sys/wait.h>
@@ -665,6 +666,7 @@ namespace example_fork
 #include <couchbase/fmt/cas.hxx>
 #include <couchbase/fmt/mutation_token.hxx>
 
+#include <fmt/ranges.h>
 #include <tao/json.hpp>
 
 #include <sys/wait.h>

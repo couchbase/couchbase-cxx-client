@@ -28,6 +28,7 @@
 #include <couchbase/fmt/retry_reason.hxx>
 
 #include <fmt/chrono.h>
+#include <fmt/ranges.h>
 
 #include <csignal>
 
