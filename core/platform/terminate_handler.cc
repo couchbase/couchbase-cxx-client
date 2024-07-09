@@ -46,7 +46,7 @@ log_handled_exception()
     // try once to re-throw currently active exception (so we can print
     // its what() message).
     if (tried_throw++ == 0) {
-      throw;
+      std::rethrow_exception(std::current_exception());
     }
   } catch (const std::exception& e) {
     CB_LOG_CRITICAL("Caught unhandled std::exception-derived exception. what(): {}", e.what());

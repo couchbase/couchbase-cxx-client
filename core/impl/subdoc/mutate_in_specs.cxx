@@ -24,8 +24,8 @@ namespace couchbase
 auto
 mutate_in_specs::specs() const -> const std::vector<core::impl::subdoc::command>&
 {
-  static std::vector<core::impl::subdoc::command> empty{};
   if (specs_ == nullptr) {
+    static std::vector<core::impl::subdoc::command> empty{};
     return empty;
   }
   return specs_->specs();

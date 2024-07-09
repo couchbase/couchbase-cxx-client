@@ -5,14 +5,20 @@ option(ENABLE_INCLUDE_WHAT_YOU_USE "Enable static analysis with include-what-you
 if(ENABLE_CPPCHECK)
   find_program(CPPCHECK cppcheck)
   if(CPPCHECK)
+    set(CPPCHECK_EXTRA_ARGS "")
+    if(ENABLE_CPPCHECK_INCONCLUSIVE)
+      set(CPPCHECK_EXTRA_ARGS "${CPPCHECK_EXTRA_ARGS} --inconclusive")
+    endif()
     set(CMAKE_CXX_CPPCHECK
         ${CPPCHECK}
-        --suppress=missingInclude
+        --error-exitcode=42
+        --verbose
+        --std=c++17
         --enable=all
         --inline-suppr
-        --inconclusive
-        -i
-        ${CMAKE_SOURCE_DIR}/imgui/lib)
+        --check-level=exhaustive
+        --suppressions-list=${PROJECT_SOURCE_DIR}/.cppcheck_suppressions.txt
+        ${CPPCHECK_EXTRA_ARGS})
   else()
     message(SEND_ERROR "cppcheck requested but executable not found")
   endif()

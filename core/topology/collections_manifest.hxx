@@ -26,20 +26,20 @@ namespace couchbase::core::topology
 {
 struct collections_manifest {
   struct collection {
-    std::uint64_t uid;
+    std::uint64_t uid{};
     std::string name;
     std::int32_t max_expiry{ 0 };
     std::optional<bool> history{};
   };
 
   struct scope {
-    std::uint64_t uid;
+    std::uint64_t uid{};
     std::string name;
     std::vector<collection> collections;
   };
 
   uuid::uuid_t id;
-  std::uint64_t uid;
+  std::uint64_t uid{};
   std::vector<scope> scopes;
 };
 } // namespace couchbase::core::topology

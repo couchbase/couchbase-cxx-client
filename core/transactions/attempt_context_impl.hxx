@@ -222,7 +222,7 @@ private:
 
   template<typename Ret>
   void op_completed_with_error_no_cache(
-    std::function<void(std::exception_ptr, std::optional<Ret>)>&& cb,
+    std::function<void(std::exception_ptr, std::optional<Ret>)> cb,
     std::exception_ptr err)
   {
     try {
@@ -232,17 +232,17 @@ private:
     }
   }
 
-  void op_completed_with_error_no_cache(VoidCallback&& cb, std::exception_ptr err)
+  void op_completed_with_error_no_cache(VoidCallback cb, std::exception_ptr err)
   {
     try {
-      cb(std::move(err));
+      cb(err);
     } catch (...) {
       // just eat it.
     }
   }
 
   template<typename Handler>
-  void cache_error_async(Handler cb, std::function<void()> func)
+  void cache_error_async(Handler&& cb, std::function<void()> func)
   {
     try {
       op_list_.increment_ops();
@@ -268,18 +268,18 @@ private:
         default:
           err.cause(UNKNOWN);
       }
-      op_completed_with_error_no_cache(std::move(cb), std::make_exception_ptr(err));
+      op_completed_with_error_no_cache(std::forward<Handler>(cb), std::make_exception_ptr(err));
     } catch (const transaction_operation_failed& e) {
       // thrown only from call_func when previous error exists, so eat it,
       // unless it has PREVIOUS_OP_FAILED or FEATURE_NOT_AVAILABLE_EXCEPTION
       // cause
       if (e.cause() == PREVIOUS_OPERATION_FAILED || e.cause() == FEATURE_NOT_AVAILABLE_EXCEPTION) {
-        op_completed_with_error(std::move(cb), e);
+        op_completed_with_error(cb, e);
       }
     } catch (const op_exception& e) {
-      op_completed_with_error(std::move(cb), e);
+      op_completed_with_error(cb, e);
     } catch (const std::exception& e) {
-      op_completed_with_error(std::move(cb), transaction_operation_failed(FAIL_OTHER, e.what()));
+      op_completed_with_error(cb, transaction_operation_failed(FAIL_OTHER, e.what()));
     }
   }
 

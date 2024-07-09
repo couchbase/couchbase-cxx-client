@@ -68,13 +68,13 @@ public:
 #endif
   }
 
-  bool getBytes(void* dest, size_t size)
+  bool getBytes(void* dest, std::size_t size)
   {
     std::lock_guard<std::mutex> lock(mutex);
 #ifdef WIN32
     return CryptGenRandom(handle, (DWORD)size, static_cast<BYTE*>(dest));
 #else
-    return size_t(read(handle, dest, size)) == size;
+    return static_cast<std::size_t>(read(handle, dest, size)) == size;
 #endif
   }
 
@@ -95,7 +95,7 @@ RandomGenerator::RandomGenerator()
   if (!shared_provider) {
     // This might be the first one, lets lock and create
     std::lock_guard<std::mutex> guard(shared_provider_lock);
-    if (!shared_provider) {
+    if (!shared_provider) { // cppcheck-suppress identicalInnerCondition; DCLP
       shared_provider = std::make_unique<RandomGeneratorProvider>();
     }
   }
@@ -113,7 +113,7 @@ RandomGenerator::next()
 }
 
 bool
-RandomGenerator::getBytes(void* dest, size_t size)
+RandomGenerator::getBytes(void* dest, std::size_t size)
 {
   return shared_provider->getBytes(dest, size);
 }

@@ -192,18 +192,18 @@ TEST_CASE("integration: get all replicas with missing key", "[integration]")
 
   test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
-  std::string scope_name{ "_default" };
-  std::string collection_name{ "_default" };
-  std::string key = test::utils::uniq_id("get_all_replica_missing_key");
-
   {
     auto test_ctx = integration.ctx;
     auto [e, cluster] =
       couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
     REQUIRE_SUCCESS(e.ec());
 
+    const std::string scope_name{ "_default" };
+    const std::string collection_name{ "_default" };
     auto collection =
       cluster.bucket(integration.ctx.bucket).scope(scope_name).collection(collection_name);
+
+    const std::string key = test::utils::uniq_id("get_all_replica_missing_key");
     auto [err, result] = collection.get_all_replicas(key, {}).get();
     REQUIRE(err.ec() == couchbase::errc::key_value::document_not_found);
     REQUIRE(result.empty());
@@ -674,6 +674,7 @@ TEST_CASE("integration: zone-aware read replicas on balanced cluster", "[integra
 
   auto connection_string =
     couchbase::core::utils::parse_connection_string(integration.ctx.connection_string);
+  // cppcheck-suppress unreadVariable
   connection_string.options.server_group = server_groups.front();
 
   auto cluster_options = integration.ctx.certificate_path.empty()

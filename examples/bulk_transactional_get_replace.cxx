@@ -129,7 +129,7 @@ run_workload(const std::shared_ptr<couchbase::transactions::transactions>& trans
              const couchbase::collection& collection,
              const program_arguments& arguments)
 {
-  if (arguments.number_of_keys <= 0 || arguments.number_of_keys_per_transaction <= 0) {
+  if (arguments.number_of_keys == 0 || arguments.number_of_keys_per_transaction == 0) {
     return;
   }
 

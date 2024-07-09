@@ -1,0 +1,36 @@
+# these look important
+duplInheritedMember:*
+shadowFunction:*
+templateRecursion:*
+useInitializationList:*
+
+# uncomment one-by-one and fix when have time
+constParameterCallback:*
+constParameterReference:*
+constVariableReference:*
+functionConst:*
+functionStatic:*
+noExplicitConstructor:*
+passedByValue:*
+returnByReference:*
+shadowVariable:*
+stlIfStrFind:*
+unusedFunction:*
+unusedStructMember:*
+unusedVariable:*
+useStlAlgorithm:*
+
+# these are not very useful
+checkersReport:*
+internalAstError:*
+missingInclude:*
+missingIncludeSystem:*
+unmatchedSuppression:*
+
+# suppressions in tests
+comparisonOfFuncReturningBoolError:*/test/test_*
+unknownMacro:*/test/test_*
+variableScope:*/test/test_*
+
+# do not scan third-party code
+*:*/_deps/*

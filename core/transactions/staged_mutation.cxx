@@ -813,8 +813,8 @@ staged_mutation_queue::handle_remove_doc_error(
   async_constant_delay& delay,
   utils::movable_function<void(std::exception_ptr)> callback)
 {
-  auto ec = e.ec();
   try {
+    auto ec = e.ec();
     if (ctx->expiry_overtime_mode_.load()) {
       CB_ATTEMPT_CTX_LOG_TRACE(
         ctx, "remove_doc for {} error while in overtime mode {}", item.doc().id(), e.what());
@@ -850,7 +850,6 @@ staged_mutation_queue::handle_rollback_insert_error(
   async_exp_delay& delay,
   utils::movable_function<void(std::exception_ptr)> callback)
 {
-  auto ec = e.ec();
   try {
     if (ctx->expiry_overtime_mode_.load()) {
       CB_ATTEMPT_CTX_LOG_TRACE(
@@ -861,7 +860,7 @@ staged_mutation_queue::handle_rollback_insert_error(
         .expired();
     }
     CB_ATTEMPT_CTX_LOG_TRACE(ctx, "rollback_insert for {} error {}", item.doc().id(), e.what());
-    switch (ec) {
+    switch (auto ec = e.ec(); ec) {
       case FAIL_HARD:
       case FAIL_CAS_MISMATCH:
         throw transaction_operation_failed(ec, e.what()).no_rollback();
@@ -900,7 +899,6 @@ staged_mutation_queue::handle_rollback_remove_or_replace_error(
   async_exp_delay& delay,
   utils::movable_function<void(std::exception_ptr)> callback)
 {
-  auto ec = e.ec();
   try {
     if (ctx->expiry_overtime_mode_.load()) {
       CB_ATTEMPT_CTX_LOG_TRACE(
@@ -914,7 +912,7 @@ staged_mutation_queue::handle_rollback_remove_or_replace_error(
     }
     CB_ATTEMPT_CTX_LOG_TRACE(
       ctx, "rollback_remove_or_replace_error for {} error {}", item.doc().id(), e.what());
-    switch (ec) {
+    switch (auto ec = e.ec(); ec) {
       case FAIL_HARD:
       case FAIL_DOC_NOT_FOUND:
       case FAIL_CAS_MISMATCH:

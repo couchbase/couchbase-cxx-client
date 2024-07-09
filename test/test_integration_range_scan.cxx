@@ -1642,7 +1642,6 @@ mutations_to_public_mutation_state(
   const std::map<std::string, couchbase::mutation_token>& mutations)
 {
   couchbase::mutation_state state{};
-  std::vector<couchbase::mutation_token> tokens{};
   for (const auto& [key, token] : mutations) {
     couchbase::mutation_result mut_res{ {}, token };
     state.add(mut_res);

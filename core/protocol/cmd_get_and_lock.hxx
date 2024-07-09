@@ -63,7 +63,7 @@ public:
 
 private:
   std::vector<std::byte> key_;
-  std::uint32_t lock_time_;
+  std::uint32_t lock_time_{ 0 };
   std::vector<std::byte> extras_{};
 
 public:

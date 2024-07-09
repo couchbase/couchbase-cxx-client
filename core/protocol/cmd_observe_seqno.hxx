@@ -88,7 +88,7 @@ public:
   static const inline client_opcode opcode = client_opcode::observe_seqno;
 
 private:
-  std::uint64_t partition_uuid_;
+  std::uint64_t partition_uuid_{};
   std::vector<std::byte> value_{};
 
 public:

@@ -228,12 +228,12 @@ private:
         if (ec == asio::error::operation_aborted) {
           return self->invoke_handler(errc::common::ambiguous_timeout, std::move(msg));
         }
-        static std::string meter_name = "db.couchbase.operations";
-        static std::map<std::string, std::string> tags = {
-          { "db.couchbase.service", fmt::format("{}", self->request.type) },
-          { "db.operation", self->encoded.path },
-        };
         if (self->meter_) {
+          static std::string meter_name = "db.couchbase.operations";
+          static std::map<std::string, std::string> tags = {
+            { "db.couchbase.service", fmt::format("{}", self->request.type) },
+            { "db.operation", self->encoded.path },
+          };
           self->meter_->get_value_recorder(meter_name, tags)
             ->record_value(std::chrono::duration_cast<std::chrono::microseconds>(
                              std::chrono::steady_clock::now() - start)

@@ -469,7 +469,7 @@ atr_cleanup_queue::pop(bool check_time) -> std::optional<atr_cleanup_entry>
 {
   std::unique_lock<std::mutex> lock(mutex_);
   if (!queue_.empty()) {
-    if (!check_time || (check_time && queue_.top().ready())) {
+    if (!check_time || queue_.top().ready()) {
       // copy it
       atr_cleanup_entry top = queue_.top();
       // pop it

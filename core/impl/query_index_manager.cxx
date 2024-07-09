@@ -134,7 +134,7 @@ private:
         finish(resp, couchbase::errc::common::index_not_found);
         return true;
       }
-      complete &= (it != resp.indexes.end() && it->state == "online");
+      complete &= it->state == "online";
     }
     if (options_.watch_primary) {
       const auto it = std::find_if(resp.indexes.begin(),

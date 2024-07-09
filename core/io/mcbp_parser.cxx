@@ -65,8 +65,8 @@ mcbp_parser::next(mcbp_message& msg) -> mcbp_parser::result
                            body_size - prefix_size,
                            &uncompressed)) {
       msg.body.insert(msg.body.end(),
-                      reinterpret_cast<std::byte*>(&uncompressed.data()[0]),
-                      reinterpret_cast<std::byte*>(&uncompressed.data()[uncompressed.size()]));
+                      reinterpret_cast<std::byte*>(uncompressed.data()),
+                      reinterpret_cast<std::byte*>(uncompressed.data() + uncompressed.size()));
       use_raw_value = false;
       // patch header with new body size
       msg.header.bodylen =

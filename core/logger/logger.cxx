@@ -189,14 +189,6 @@ create_file_logger_impl(const std::string logger_name, const configuration& logg
 {
   std::shared_ptr<spdlog::logger> logger{};
 
-  auto fname = logger_settings.filename;
-  auto buffersz = logger_settings.buffer_size;
-  auto cyclesz = logger_settings.cycle_size;
-
-  if (!spdlog::details::os::getenv("COUCHBASE_CXX_CLIENT_MAXIMIZE_LOGGER_CYCLE_SIZE").empty()) {
-    cyclesz = 1024LLU * 1024 * 1024; // use up to 1 GB log file size
-  }
-
   try {
     // Initialise the loggers.
     //
@@ -228,7 +220,13 @@ create_file_logger_impl(const std::string logger_name, const configuration& logg
     auto sink = std::make_shared<spdlog::sinks::dist_sink_mt>();
     sink->set_level(spdlog::level::trace);
 
-    if (!fname.empty()) {
+    if (const auto& fname = logger_settings.filename; !fname.empty()) {
+      auto cyclesz = logger_settings.cycle_size;
+
+      if (!spdlog::details::os::getenv("COUCHBASE_CXX_CLIENT_MAXIMIZE_LOGGER_CYCLE_SIZE").empty()) {
+        cyclesz = 1024LLU * 1024 * 1024; // use up to 1 GB log file size
+      }
+
       auto fsink = std::make_shared<custom_rotating_file_sink_mt>(fname, cyclesz, log_pattern);
       fsink->set_level(spdlog::level::trace);
       sink->add_sink(fsink);
@@ -256,6 +254,7 @@ create_file_logger_impl(const std::string logger_name, const configuration& logg
     if (logger_settings.unit_test) {
       logger = std::make_shared<spdlog::logger>(logger_name, sink);
     } else {
+      auto buffersz = logger_settings.buffer_size;
       // Create the default thread pool for async logging
       spdlog::init_thread_pool(buffersz, 1);
 

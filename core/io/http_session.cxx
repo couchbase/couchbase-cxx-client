@@ -294,12 +294,11 @@ http_session::cancel_current_response(std::error_code ec)
   std::scoped_lock lock(current_response_mutex_);
   if (streaming_response_) {
     auto ctx = std::move(current_streaming_response_);
-    if (ctx.resp_handler) {
-      ctx.resp_handler(ec, {});
+    if (auto handler = ctx.resp_handler; handler) {
+      handler(ec, {});
     }
-    if (ctx.stream_end_handler) {
-      ctx.stream_end_handler();
-      ctx.stream_end_handler = nullptr;
+    if (auto handler = std::move(ctx.stream_end_handler); handler) {
+      handler();
     }
   } else {
     if (auto ctx = std::move(current_response_); ctx.handler) {

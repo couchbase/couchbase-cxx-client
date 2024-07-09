@@ -29,7 +29,7 @@ namespace couchbase::core::impl
 {
 struct observe_seqno_response {
   key_value_error_context ctx{};
-  bool active;
+  bool active{};
   std::uint16_t partition{};
   std::uint64_t partition_uuid{};
   std::uint64_t last_persisted_sequence_number{};
@@ -51,8 +51,8 @@ struct observe_seqno_request {
     core::protocol::client_response<core::protocol::observe_seqno_response_body>;
 
   core::document_id id;
-  bool active;
-  std::uint64_t partition_uuid;
+  bool active{};
+  std::uint64_t partition_uuid{};
   std::optional<std::chrono::milliseconds> timeout{};
   std::uint16_t partition{};
   std::uint32_t opaque{};
