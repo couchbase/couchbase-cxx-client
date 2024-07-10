@@ -100,7 +100,7 @@ generate_document(std::size_t document_body_size) -> tao::json::value
 void
 run_workload_sequential(const couchbase::collection& collection, const program_arguments& arguments)
 {
-  if (arguments.number_of_operations <= 0) {
+  if (arguments.number_of_operations == 0) {
     return;
   }
 
@@ -197,7 +197,7 @@ run_workload_sequential(const couchbase::collection& collection, const program_a
 void
 run_workload_bulk(const couchbase::collection& collection, const program_arguments& arguments)
 {
-  if (arguments.number_of_operations <= 0) {
+  if (arguments.number_of_operations == 0) {
     return;
   }
 

@@ -416,6 +416,10 @@ TEST_CASE("integration: search index management analyze document", "[integration
     SKIP("cluster does not support search analyze");
   }
 
+  if (integration.cluster_version().is_capella()) {
+    SKIP("FIXME: this test on Capella is not very stable.");
+  }
+
   auto index_name = test::utils::uniq_id("index");
 
   {
@@ -463,6 +467,10 @@ TEST_CASE("integration: search index management analyze document public API", "[
 
   if (!integration.cluster_version().supports_search_analyze()) {
     SKIP("cluster does not support search analyze");
+  }
+
+  if (integration.cluster_version().is_capella()) {
+    SKIP("FIXME: this test on Capella is not very stable.");
   }
 
   auto index_name = test::utils::uniq_id("index");

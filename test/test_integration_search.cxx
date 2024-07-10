@@ -372,6 +372,10 @@ TEST_CASE("integration: search query consistency", "[integration]")
     SKIP("cluster does not support search");
   }
 
+  if (integration.cluster_version().is_capella()) {
+    SKIP("FIXME(SA): this test on Capella is not very stable. Revisit once Capella will use 7.6");
+  }
+
   test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
   const std::string params =

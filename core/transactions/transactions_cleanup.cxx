@@ -549,7 +549,9 @@ transactions_cleanup::attempts_loop()
           CB_ATTEMPT_CLEANUP_LOG_DEBUG("loop stopping - {} entries on queue", atr_queue_.size());
           return;
         }
-        if (entry) {
+        // FIXME(SA): for some reason cppcheck thinks that entry here will
+        // be always true, while pop() operation still might return empty optional
+        if (entry) { // cppcheck-suppress knownConditionTrueFalse
           CB_ATTEMPT_CLEANUP_LOG_TRACE("beginning cleanup on {}", *entry);
           try {
             entry->clean();

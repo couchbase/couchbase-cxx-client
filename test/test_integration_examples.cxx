@@ -549,7 +549,6 @@ main(int argc, const char* argv[])
   std::string connection_string{ argv[1] }; // "couchbase://127.0.0.1"
   std::string username{ argv[2] };          // "Administrator"
   std::string password{ argv[3] };          // "password"
-  std::string bucket_name{ "travel-sample" };
 
   auto options = couchbase::cluster_options(username, password);
   // customize through the 'options'.

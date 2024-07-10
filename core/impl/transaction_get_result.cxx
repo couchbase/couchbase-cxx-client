@@ -39,22 +39,28 @@ transaction_get_result::id() const -> const std::string&
   return base_->key();
 }
 
+// FIXME(SA): cppcheck complains about returning temporary strings in the
+// functions below, but it is not clear where does it see temporary here,
+// as all calls go down to the member fields of the base_.
+//
+// Curiously it does not complain about the base_->key()
+
 auto
 transaction_get_result::bucket() const -> const std::string&
 {
-  return base_->bucket();
+  return base_->bucket(); // cppcheck-suppress returnTempReference
 }
 
 auto
 transaction_get_result::scope() const -> const std::string&
 {
-  return base_->scope();
+  return base_->scope(); // cppcheck-suppress returnTempReference
 }
 
 auto
 transaction_get_result::collection() const -> const std::string&
 {
-  return base_->collection();
+  return base_->collection(); // cppcheck-suppress returnTempReference
 }
 
 auto

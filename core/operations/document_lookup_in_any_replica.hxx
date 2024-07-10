@@ -114,17 +114,6 @@ struct lookup_in_any_replica_request {
                 make_key_value_error_context(ec, id), ec, {}, {}, false) });
             }
 
-            if (ec) {
-              std::optional<std::string> first_error_path{};
-              std::optional<std::size_t> first_error_index{};
-              return h(
-                response_type{ make_subdocument_error_context(make_key_value_error_context(ec, id),
-                                                              ec,
-                                                              first_error_path,
-                                                              first_error_index,
-                                                              false) });
-            }
-
             using handler_type = utils::movable_function<void(response_type)>;
 
             struct replica_context {

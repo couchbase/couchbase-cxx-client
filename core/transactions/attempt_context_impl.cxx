@@ -1105,7 +1105,7 @@ attempt_context_impl::remove(const transaction_get_result& document, VoidCallbac
           return self->op_completed_with_error(
             std::move(cb), transaction_operation_failed(FAIL_OTHER, ec.message()));
         }
-        staged_mutation* existing_sm = self->staged_mutations_->find_any(document.id());
+        const staged_mutation* existing_sm = self->staged_mutations_->find_any(document.id());
         auto error_handler = [self](error_class ec, std::string msg, VoidCallback&& cb) mutable {
           transaction_operation_failed err(ec, std::move(msg));
           switch (ec) {
@@ -1342,11 +1342,13 @@ wrap_query_request(const couchbase::transactions::transaction_query_options& opt
     req.scan_consistency = txn_context->config().query_config.scan_consistency;
   }
   auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(txn_context->remaining());
+  // FIXME(SA): is this assignment necessary? cppcheck complains about redundant
+  // assignment below
   req.timeout =
     remaining + extra +
     std::chrono::milliseconds(1000); // match java with 1 second over the kv durable timeout.
   req.raw["txtimeout"] = fmt::format("\"{}ms\"", remaining.count());
-  req.timeout =
+  req.timeout = // cppcheck-suppress redundantAssignment
     std::chrono::duration_cast<std::chrono::milliseconds>(txn_context->remaining()) + extra;
   return req;
 }
@@ -2898,15 +2900,14 @@ attempt_context_impl::do_get(const core::document_id& id,
       return cb(FAIL_EXPIRY, "expired in do_get", std::nullopt);
     }
 
-    staged_mutation* own_write = check_for_own_write(id);
-    if (own_write) {
+    if (const staged_mutation* own_write = check_for_own_write(id); own_write != nullptr) {
       CB_ATTEMPT_CTX_LOG_DEBUG(this, "found own-write of mutated doc {}", id);
       return cb(std::nullopt,
                 std::nullopt,
                 transaction_get_result::create_from(own_write->doc(), own_write->content()));
     }
-    staged_mutation* own_remove = staged_mutations_->find_remove(id);
-    if (own_remove) {
+    if (const staged_mutation* own_remove = staged_mutations_->find_remove(id);
+        own_remove != nullptr) {
       auto msg = fmt::format("found own-write of removed doc {}", id);
       CB_ATTEMPT_CTX_LOG_DEBUG(this, "{}", msg);
       return cb(FAIL_DOC_NOT_FOUND, msg, std::nullopt);
@@ -3103,12 +3104,12 @@ attempt_context_impl::get_doc(const core::document_id& id,
       core::operations::lookup_in_any_replica_request req{ id };
       req.read_preference = couchbase::read_preference::selected_server_group;
       req.specs = specs;
-      execute_lookup(this, req, std::move(cb));
+      execute_lookup(this, req, cb);
     } else {
       core::operations::lookup_in_request req{ id };
       req.access_deleted = true;
       req.specs = specs;
-      execute_lookup(this, req, std::move(cb));
+      execute_lookup(this, req, cb);
     }
   } catch (const std::exception& e) {
     return cb(FAIL_OTHER, e.what(), std::nullopt);

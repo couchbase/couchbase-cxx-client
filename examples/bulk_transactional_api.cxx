@@ -112,7 +112,7 @@ run_workload_sequential(const std::shared_ptr<couchbase::transactions::transacti
                         const couchbase::collection& collection,
                         const program_arguments& arguments)
 {
-  if (arguments.number_of_operations <= 0) {
+  if (arguments.number_of_operations == 0) {
     return;
   }
 
@@ -285,7 +285,7 @@ run_workload_bulk(const std::shared_ptr<couchbase::transactions::transactions>& 
                   const couchbase::collection& collection,
                   const program_arguments& arguments)
 {
-  if (arguments.number_of_operations <= 0) {
+  if (arguments.number_of_operations == 0) {
     return;
   }
 

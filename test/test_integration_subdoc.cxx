@@ -565,7 +565,6 @@ TEST_CASE("integration: subdoc store", "[integration]")
     SECTION("missing path")
     {
       std::string path = "not-exists";
-      std::string value = "123";
       couchbase::core::operations::mutate_in_request req{ id };
       req.specs =
         couchbase::mutate_in_specs{ couchbase::mutate_in_specs::replace(path, 123) }.specs();
@@ -1195,7 +1194,6 @@ TEST_CASE("integration: subdoc top level array", "[integration]")
 
   // add number 1 to top-level array (and initialize the document)
   {
-    std::string value{ "1" };
     couchbase::core::operations::mutate_in_request req{ id };
     req.store_semantics = couchbase::store_semantics::upsert;
     req.specs =
@@ -1213,7 +1211,6 @@ TEST_CASE("integration: subdoc top level array", "[integration]")
 
   // try to add number 1 but only if it is not in the array yet
   {
-    std::string value{ "1" };
     couchbase::core::operations::mutate_in_request req{ id };
     req.specs =
       couchbase::mutate_in_specs{ couchbase::mutate_in_specs::array_add_unique(empty_path, 1) }
@@ -1239,7 +1236,6 @@ TEST_CASE("integration: subdoc top level array", "[integration]")
 
   // add number 2 to the end of the array
   {
-    std::string value{ "2" };
     couchbase::core::operations::mutate_in_request req{ id };
     req.specs =
       couchbase::mutate_in_specs{ couchbase::mutate_in_specs::array_append(empty_path, 2) }.specs();

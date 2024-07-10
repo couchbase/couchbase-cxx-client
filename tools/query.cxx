@@ -44,6 +44,13 @@ struct scope_with_bucket {
   std::string scope_name;
 };
 
+auto
+default_options()
+{
+  static auto defaults = couchbase::query_options{}.build();
+  return defaults;
+}
+
 class query_app : public CLI::App
 {
 public:
@@ -63,7 +70,6 @@ Examples:
                 "query" }
   {
     const std::vector<std::string> allowed_profile_modes{ "off", "phases", "timings" };
-    auto defaults = couchbase::query_options{}.build();
 
     add_option("queries", queries_, "One or many queries to execute.")->required(true);
     add_option(
@@ -470,19 +476,19 @@ private:
   std::string scope_name_{ couchbase::scope::default_name };
 
   std::vector<std::string> params_{};
-  bool prepare_{ false };
-  bool read_only_{ false };
-  bool preserve_expiry_{ false };
-  bool disable_metrics_{ false };
+  bool prepare_{ !default_options().adhoc };
+  bool read_only_{ default_options().readonly };
+  bool preserve_expiry_{ default_options().preserve_expiry };
+  bool disable_metrics_{ !default_options().metrics };
   std::optional<std::string> profile_{};
-  std::optional<bool> use_replica_;
-  std::optional<std::uint64_t> maximum_parallelism_;
-  std::optional<std::uint64_t> scan_cap_;
-  std::optional<std::chrono::milliseconds> scan_wait_;
-  std::optional<std::uint64_t> pipeline_batch_;
-  std::optional<std::uint64_t> pipeline_cap_;
+  std::optional<bool> use_replica_{ default_options().use_replica };
+  std::optional<std::uint64_t> maximum_parallelism_{ default_options().max_parallelism };
+  std::optional<std::uint64_t> scan_cap_{ default_options().scan_cap };
+  std::optional<std::chrono::milliseconds> scan_wait_{ default_options().scan_wait };
+  std::optional<std::uint64_t> pipeline_batch_{ default_options().pipeline_batch };
+  std::optional<std::uint64_t> pipeline_cap_{ default_options().pipeline_cap };
   std::optional<std::string> client_context_id_;
-  bool flex_index_{ false };
+  bool flex_index_{ default_options().flex_index };
   std::string scan_consistency_{};
   std::vector<std::string> raw_{};
   bool json_lines_{ false };

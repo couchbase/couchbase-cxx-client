@@ -111,8 +111,8 @@ struct traits<couchbase::core::topology::configuration> {
         const auto* m = v.find("vBucketServerMap");
         const auto& nodes = v.at("nodes").get_array();
         if (m != nullptr) {
-          size_t index = 0;
           if (const auto* s = m->find("serverList"); s != nullptr && s->is_array()) {
+            std::size_t index = 0;
             for (const auto& j : s->get_array()) {
               couchbase::core::topology::configuration::node n;
               n.index = index++;
@@ -155,7 +155,7 @@ struct traits<couchbase::core::topology::configuration> {
           }
         }
       } else {
-        size_t index = 0;
+        std::size_t index = 0;
         for (const auto& node : v.at("nodes").get_array()) {
           couchbase::core::topology::configuration::node n;
           n.index = index++;

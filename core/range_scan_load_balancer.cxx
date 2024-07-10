@@ -112,7 +112,7 @@ range_scan_load_balancer::select_vbucket() -> std::optional<std::uint16_t>
   std::shuffle(iterators.begin(), iterators.end(), gen);
 
   for (auto it : iterators) {
-    auto& [node_id, node_status] = *it;
+    auto& [node_id, node_status] = *it; // cppcheck-suppress variableScope
     auto stream_count = node_status.active_stream_count();
 
     if (stream_count < min_stream_count && node_status.pending_vbucket_count() > 0) {

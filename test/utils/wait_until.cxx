@@ -232,12 +232,12 @@ wait_for_search_pindexes_ready(const couchbase::core::cluster& cluster,
                   index_name,
                   to_string(num_pindexes_target),
                   to_string(num_pindexes_actual));
-      if (!num_pindexes_actual || !num_pindexes_target) {
+      if (!num_pindexes_actual.has_value() || !num_pindexes_target.has_value()) {
         kick_manager_manager_on_search_service(cluster);
         return false;
       }
 
-      if (num_pindexes_target == 0) {
+      if (num_pindexes_target.value() == 0) {
         kick_manager_manager_on_search_service(cluster);
         return false;
       }
@@ -253,7 +253,7 @@ wait_until_indexed(const couchbase::core::cluster& cluster,
                    std::uint64_t expected_count) -> bool
 {
   return test::utils::wait_until(
-    [cluster = std::move(cluster), &index_name, &expected_count]() {
+    [cluster, &index_name, &expected_count]() {
       if (!refresh_config_on_search_service(cluster)) {
         return false;
       }

@@ -379,7 +379,7 @@ public:
 
   void scan(scan_callback&& cb)
   {
-    if (item_limit_ == 0 || concurrency_ <= 0) {
+    if (item_limit_ == 0 || concurrency_ == 0) {
       return cb(errc::common::invalid_argument, {});
     }
 
@@ -460,12 +460,13 @@ public:
 
   void next(utils::movable_function<void(range_scan_item, std::error_code)> callback) override
   {
-    if (item_limit_ == 0 || item_limit_-- == 0) {
+    if (item_limit_ == 0) {
       callback({}, errc::key_value::range_scan_completed);
       cancel();
-    } else {
-      next_item(std::move(callback));
+      return;
     }
+    --item_limit_;
+    next_item(std::move(callback));
   }
 
   template<typename Handler>

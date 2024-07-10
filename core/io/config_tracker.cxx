@@ -1,3 +1,20 @@
+/* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
+/*
+ *   Copyright 2020-Present Couchbase, Inc.
+ *
+ *   Licensed under the Apache License, Version 2.0 (the "License");
+ *   you may not use this file except in compliance with the License.
+ *   You may obtain a copy of the License at
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *   Unless required by applicable law or agreed to in writing, software
+ *   distributed under the License is distributed on an "AS IS" BASIS,
+ *   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *   See the License for the specific language governing permissions and
+ *   limitations under the License.
+ */
+
 #include "config_tracker.hxx"
 
 #include "core/impl/bootstrap_state_listener.hxx"
@@ -265,14 +282,19 @@ private:
     {
       std::scoped_lock lock(sessions_mutex_);
 
+      if (sessions_.empty()) {
+        CB_LOG_WARNING(R"({} unable to find connected session (sessions_ is empty), retry in {})",
+                       log_prefix_,
+                       heartbeat_interval_);
+        return;
+      }
+
       std::size_t start = heartbeat_next_index_.fetch_add(1);
       std::size_t i = start;
       do {
-        if (!sessions_.empty()) {
-          std::size_t session_idx = i % sessions_.size();
-          if (sessions_[session_idx].is_bootstrapped() && sessions_[session_idx].supports_gcccp()) {
-            session = sessions_[session_idx];
-          }
+        std::size_t session_idx = i % sessions_.size();
+        if (sessions_[session_idx].is_bootstrapped() && sessions_[session_idx].supports_gcccp()) {
+          session = sessions_[session_idx];
         }
         i = heartbeat_next_index_.fetch_add(1);
       } while (start % sessions_.size() != i % sessions_.size());

@@ -38,7 +38,7 @@ struct forward_compat_behavior_full {
   {
   }
 
-  forward_compat_behavior_full(const tao::json::value& j)
+  explicit forward_compat_behavior_full(const tao::json::value& j)
   {
     std::string b = j.at("b").get_string();
     behavior = create_forward_compat_behavior(b);
@@ -56,35 +56,38 @@ struct forward_compat_behavior_full {
       os << ", retry_delay: " << b.retry_delay->count() << " ms";
     }
     os << "}";
+    return os;
   }
 };
 
 struct forward_compat_requirement {
   forward_compat_behavior_full behavior;
 
-  forward_compat_requirement(forward_compat_behavior_full b)
+  explicit forward_compat_requirement(forward_compat_behavior_full b)
     : behavior(b)
   {
   }
 
-  virtual forward_compat_behavior_full check(forward_compat_supported supported) = 0;
+  [[nodiscard]] virtual auto check(const forward_compat_supported& supported) const
+    -> forward_compat_behavior_full = 0;
   virtual ~forward_compat_requirement() = default;
 };
 
 struct forward_compat_protocol_requirement : public forward_compat_requirement {
-  uint32_t min_protocol_major;
-  uint32_t min_protocol_minor;
+  std::uint64_t min_protocol_major;
+  std::uint64_t min_protocol_minor;
 
   forward_compat_protocol_requirement(forward_compat_behavior_full b,
-                                      uint32_t min_major,
-                                      uint32_t min_minor)
+                                      unsigned long min_major,
+                                      unsigned long min_minor)
     : forward_compat_requirement(b)
     , min_protocol_major(min_major)
     , min_protocol_minor(min_minor)
   {
   }
 
-  virtual forward_compat_behavior_full check(forward_compat_supported supported)
+  [[nodiscard]] auto check(const forward_compat_supported& supported) const
+    -> forward_compat_behavior_full override
   {
     if ((min_protocol_major > supported.protocol_major) ||
         (min_protocol_minor > supported.protocol_minor)) {
@@ -97,13 +100,14 @@ struct forward_compat_protocol_requirement : public forward_compat_requirement {
 struct forward_compat_extension_requirement : public forward_compat_requirement {
   std::string extension_id;
 
-  forward_compat_extension_requirement(forward_compat_behavior_full b, const std::string ext)
+  forward_compat_extension_requirement(forward_compat_behavior_full b, std::string ext)
     : forward_compat_requirement(b)
-    , extension_id(ext)
+    , extension_id(std::move(ext))
   {
   }
 
-  virtual forward_compat_behavior_full check(forward_compat_supported supported)
+  [[nodiscard]] auto check(const forward_compat_supported& supported) const
+    -> forward_compat_behavior_full override
   {
     auto it = std::find(supported.extensions.begin(), supported.extensions.end(), extension_id);
     if (it == supported.extensions.end()) {
@@ -146,7 +150,7 @@ create_forward_compat_stage(const std::string& str)
 class forward_compat
 {
 public:
-  forward_compat(tao::json::value& json)
+  explicit forward_compat(tao::json::value& json)
     : json_(json)
   {
     CB_TXN_LOG_TRACE("creating forward_compat from {}", core::utils::json::generate(json_));
@@ -159,22 +163,22 @@ public:
         if (const auto* b = item.find("b"); b != nullptr) {
           if (const auto* e = item.find("e")) {
             std::string ext = e->get_string();
-            compat_map_[stage].push_back(new forward_compat_extension_requirement(behavior, ext));
+            compat_map_[stage].push_back(
+              std::make_unique<forward_compat_extension_requirement>(behavior, ext));
           } else if (const auto* p = item.find("p")) {
             std::string proto_string = p->get_string();
             auto proto = core::utils::split_string(proto_string, '.');
-            compat_map_[stage].push_back(new forward_compat_protocol_requirement(
-              behavior,
-              static_cast<std::uint32_t>(std::stoi(proto[0])),
-              static_cast<std::uint32_t>(std::stoi(proto[1]))));
+            compat_map_[stage].push_back(std::make_unique<forward_compat_protocol_requirement>(
+              behavior, std::stoul(proto[0]), std::stoul(proto[1])));
           }
         }
       }
     }
   }
 
-  std::optional<transaction_operation_failed> check_internal(forward_compat_stage stage,
-                                                             forward_compat_supported supported)
+  std::optional<transaction_operation_failed> check_internal(
+    forward_compat_stage stage,
+    const forward_compat_supported& supported)
   {
     if (auto it = compat_map_.find(stage); it != compat_map_.end()) {
       transaction_operation_failed ex(FAIL_OTHER, "Forward Compatibililty failure");
@@ -202,7 +206,8 @@ public:
   }
 
 private:
-  std::map<forward_compat_stage, std::list<forward_compat_requirement*>> compat_map_;
+  std::map<forward_compat_stage, std::list<std::unique_ptr<forward_compat_requirement>>>
+    compat_map_;
   tao::json::value json_;
 };
 

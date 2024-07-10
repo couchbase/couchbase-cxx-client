@@ -69,7 +69,7 @@ public:
    */
   auto prefix_length(std::uint32_t length) -> match_query&
   {
-    if (length <= 0) {
+    if (length == 0) {
       throw std::invalid_argument("prefix_length must be positive");
     }
 
