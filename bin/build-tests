@@ -73,6 +73,12 @@ case "${CB_SANITIZER}" in
         ;;
 esac
 
+CB_COLUMNAR=${CB_COLUMNAR:-""}
+if [ ! -z "$CB_COLUMNAR" ] ; then
+    CB_CMAKE_EXTRAS="${CB_CMAKE_EXTRAS} -DCOUCHBASE_CXX_CLIENT_COLUMNAR=ON"
+fi
+echo "CB_COLUMNAR=${CB_COLUMNAR}"
+
 set -exuo pipefail
 
 BUILD_DIR="${PROJECT_ROOT}/cmake-build-tests"

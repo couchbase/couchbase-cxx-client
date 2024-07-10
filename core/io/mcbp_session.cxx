@@ -17,8 +17,12 @@
 
 #include "mcbp_session.hxx"
 
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+#include "core/columnar/background_bootstrap_listener.hxx"
+#endif
 #include "core/config_listener.hxx"
 #include "core/diagnostics.hxx"
+#include "core/impl/bootstrap_error.hxx"
 #include "core/impl/bootstrap_state_listener.hxx"
 #include "core/logger/logger.hxx"
 #include "core/mcbp/codec.hxx"
@@ -214,7 +218,7 @@ class mcbp_session_impl
     std::shared_ptr<mcbp_session_impl> session_;
     sasl::ClientContext sasl_;
     std::atomic_bool stopped_{ false };
-    std::string last_error_message_;
+    impl::bootstrap_error last_bootstrap_error_;
 
   public:
     ~bootstrap_handler()
@@ -241,14 +245,14 @@ class mcbp_session_impl
       return { "SCRAM-SHA512", "SCRAM-SHA256", "SCRAM-SHA1" };
     }
 
-    auto last_error_message() && -> std::string
+    auto last_bootstrap_error() && -> impl::bootstrap_error
     {
-      return std::move(last_error_message_);
+      return std::move(last_bootstrap_error_);
     }
 
-    [[nodiscard]] auto last_error_message() const& -> const std::string&
+    [[nodiscard]] auto last_bootstrap_error() const& -> const impl::bootstrap_error&
     {
-      return last_error_message_;
+      return last_bootstrap_error_;
     }
 
     explicit bootstrap_handler(std::shared_ptr<mcbp_session_impl> session)
@@ -343,26 +347,34 @@ class mcbp_session_impl
             case key_value_status_code::rate_limited_max_commands:
             case key_value_status_code::rate_limited_max_connections:
             case key_value_status_code::rate_limited_network_egress:
-            case key_value_status_code::rate_limited_network_ingress:
-              last_error_message_ =
+            case key_value_status_code::rate_limited_network_ingress: {
+              auto error_msg =
                 fmt::format("unable to bootstrap MCBP session (bucket={}, opcode={}, status={}), "
                             "the user has reached rate limit",
                             session_->bucket_name_.value_or(""),
                             protocol::client_opcode(msg.header.opcode),
                             status);
-              CB_LOG_DEBUG("{} {}", session_->log_prefix_, last_error_message_);
+              last_bootstrap_error_ = { errc::common::rate_limited,
+                                        std::move(error_msg),
+                                        session_->bootstrap_hostname(),
+                                        session_->bootstrap_port() };
+              CB_LOG_DEBUG("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
               return complete(errc::common::rate_limited);
-
-            case key_value_status_code::scope_size_limit_exceeded:
-              last_error_message_ =
+            }
+            case key_value_status_code::scope_size_limit_exceeded: {
+              auto error_msg =
                 fmt::format("unable to bootstrap MCBP session (bucket={}, opcode={}, status={}), "
                             "the user has reached quota limit",
                             session_->bucket_name_.value_or(""),
                             protocol::client_opcode(msg.header.opcode),
                             status);
-              CB_LOG_DEBUG("{} {}", session_->log_prefix_, last_error_message_);
+              last_bootstrap_error_ = { errc::common::quota_limited,
+                                        std::move(error_msg),
+                                        session_->bootstrap_hostname(),
+                                        session_->bootstrap_port() };
+              CB_LOG_DEBUG("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
               return complete(errc::common::quota_limited);
-
+            }
             default:
               break;
           }
@@ -380,11 +392,15 @@ class mcbp_session_impl
                   return auth_success();
                 }
               } else {
-                last_error_message_ =
+                auto error_msg =
                   fmt::format("unexpected message status during bootstrap: {} (opaque={})",
                               resp.error_message(),
                               resp.opaque());
-                CB_LOG_WARNING("{} {}", session_->log_prefix_, last_error_message_);
+                last_bootstrap_error_ = { errc::network::handshake_failure,
+                                          std::move(error_msg),
+                                          session_->bootstrap_hostname(),
+                                          session_->bootstrap_port() };
+                CB_LOG_WARNING("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
                 return complete(errc::network::handshake_failure);
               }
             } break;
@@ -392,11 +408,15 @@ class mcbp_session_impl
               protocol::client_response<protocol::sasl_list_mechs_response_body> resp(
                 std::move(msg));
               if (resp.status() != key_value_status_code::success) {
-                last_error_message_ =
+                auto error_msg =
                   fmt::format("unexpected message status during bootstrap: {} (opaque={})",
                               resp.error_message(),
                               resp.opaque());
-                CB_LOG_WARNING("{} {}", session_->log_prefix_, last_error_message_);
+                last_bootstrap_error_ = { errc::common::authentication_failure,
+                                          std::move(error_msg),
+                                          session_->bootstrap_hostname(),
+                                          session_->bootstrap_port() };
+                CB_LOG_WARNING("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
                 return complete(errc::common::authentication_failure);
               }
             } break;
@@ -417,18 +437,26 @@ class mcbp_session_impl
                   req.body().sasl_data(sasl_payload);
                   session_->write_and_flush(req.data());
                 } else {
-                  last_error_message_ = fmt::format(
+                  auto error_msg = fmt::format(
                     "unable to authenticate: (sasl_code={}, opaque={})", sasl_code, resp.opaque());
-                  CB_LOG_ERROR("{} {}", session_->log_prefix_, last_error_message_);
+                  last_bootstrap_error_ = { errc::common::authentication_failure,
+                                            std::move(error_msg),
+                                            session_->bootstrap_hostname(),
+                                            session_->bootstrap_port() };
+                  CB_LOG_ERROR("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
                   return complete(errc::common::authentication_failure);
                 }
               } else {
-                last_error_message_ =
+                auto error_msg =
                   fmt::format("{} unexpected message status during bootstrap: {} (opaque={})",
                               session_->log_prefix_,
                               resp.error_message(),
                               resp.opaque());
-                CB_LOG_WARNING("{} {}", session_->log_prefix_, last_error_message_);
+                last_bootstrap_error_ = { errc::common::authentication_failure,
+                                          std::move(error_msg),
+                                          session_->bootstrap_hostname(),
+                                          session_->bootstrap_port() };
+                CB_LOG_WARNING("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
                 return complete(errc::common::authentication_failure);
               }
             } break;
@@ -437,12 +465,16 @@ class mcbp_session_impl
               if (resp.status() == key_value_status_code::success) {
                 return auth_success();
               }
-              last_error_message_ =
+              auto error_msg =
                 fmt::format("unable to authenticate (opcode={}, status={}, opaque={})",
                             opcode,
                             resp.status(),
                             resp.opaque());
-              CB_LOG_ERROR("{} {}", session_->log_prefix_, last_error_message_);
+              last_bootstrap_error_ = { errc::common::authentication_failure,
+                                        std::move(error_msg),
+                                        session_->bootstrap_hostname(),
+                                        session_->bootstrap_port() };
+              CB_LOG_ERROR("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
               return complete(errc::common::authentication_failure);
             }
             case protocol::client_opcode::get_error_map: {
@@ -450,12 +482,16 @@ class mcbp_session_impl
               if (resp.status() == key_value_status_code::success) {
                 session_->error_map_.emplace(resp.body().errmap());
               } else {
-                last_error_message_ =
+                auto error_msg =
                   fmt::format("unexpected message status during bootstrap: {} (opaque={}, {:n})",
                               resp.error_message(),
                               resp.opaque(),
                               spdlog::to_hex(resp.header()));
-                CB_LOG_WARNING("{} {}", session_->log_prefix_, last_error_message_);
+                last_bootstrap_error_ = { errc::network::protocol_error,
+                                          std::move(error_msg),
+                                          session_->bootstrap_hostname(),
+                                          session_->bootstrap_port() };
+                CB_LOG_WARNING("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
                 return complete(errc::network::protocol_error);
               }
             } break;
@@ -467,28 +503,40 @@ class mcbp_session_impl
                              session_->bucket_name_.value_or(""));
                 session_->bucket_selected_ = true;
               } else if (resp.status() == key_value_status_code::not_found) {
-                last_error_message_ =
+                auto error_msg =
                   fmt::format("kv_engine node does not have configuration propagated yet "
                               "(opcode={}, status={}, opaque={})",
                               opcode,
                               resp.status(),
                               resp.opaque());
-                CB_LOG_DEBUG("{} {}", session_->log_prefix_, last_error_message_);
+                last_bootstrap_error_ = { errc::network::configuration_not_available,
+                                          std::move(error_msg),
+                                          session_->bootstrap_hostname(),
+                                          session_->bootstrap_port() };
+                CB_LOG_DEBUG("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
                 return complete(errc::network::configuration_not_available);
               } else if (resp.status() == key_value_status_code::no_access) {
-                last_error_message_ =
+                auto error_msg =
                   fmt::format("unable to select bucket: {}, probably the bucket does not exist",
                               session_->bucket_name_.value_or(""));
-                CB_LOG_DEBUG("{} {}", session_->log_prefix_, last_error_message_);
+                last_bootstrap_error_ = { errc::common::bucket_not_found,
+                                          std::move(error_msg),
+                                          session_->bootstrap_hostname(),
+                                          session_->bootstrap_port() };
+                CB_LOG_DEBUG("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
                 session_->bucket_selected_ = false;
                 return complete(errc::common::bucket_not_found);
               } else {
-                last_error_message_ =
+                auto error_msg =
                   fmt::format("unexpected message status during bootstrap: {} (opaque={}, {:n})",
                               resp.error_message(),
                               resp.opaque(),
                               spdlog::to_hex(resp.header()));
-                CB_LOG_WARNING("{} {}", session_->log_prefix_, last_error_message_);
+                last_bootstrap_error_ = { errc::common::bucket_not_found,
+                                          std::move(error_msg),
+                                          session_->bootstrap_hostname(),
+                                          session_->bootstrap_port() };
+                CB_LOG_WARNING("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
                 return complete(errc::common::bucket_not_found);
               }
             } break;
@@ -521,13 +569,17 @@ class mcbp_session_impl
                 session_->update_configuration(resp.body().config());
                 complete({});
               } else if (resp.status() == key_value_status_code::not_found) {
-                last_error_message_ =
+                auto error_msg =
                   fmt::format("kv_engine node does not have configuration propagated yet "
                               "(opcode={}, status={}, opaque={})",
                               opcode,
                               resp.status(),
                               resp.opaque());
-                CB_LOG_DEBUG("{} {}", session_->log_prefix_, last_error_message_);
+                last_bootstrap_error_ = { errc::network::configuration_not_available,
+                                          std::move(error_msg),
+                                          session_->bootstrap_hostname(),
+                                          session_->bootstrap_port() };
+                CB_LOG_DEBUG("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
                 return complete(errc::network::configuration_not_available);
               } else if (resp.status() == key_value_status_code::no_bucket &&
                          !session_->bucket_name_) {
@@ -542,18 +594,26 @@ class mcbp_session_impl
                                                      0));
                 complete({});
               } else {
-                last_error_message_ =
+                auto error_msg =
                   fmt::format("unexpected message status during bootstrap: {} (opaque={}, {:n})",
                               resp.error_message(),
                               resp.opaque(),
                               spdlog::to_hex(resp.header()));
-                CB_LOG_WARNING("{} {}", session_->log_prefix_, last_error_message_);
+                last_bootstrap_error_ = { errc::network::protocol_error,
+                                          std::move(error_msg),
+                                          session_->bootstrap_hostname(),
+                                          session_->bootstrap_port() };
+                CB_LOG_WARNING("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
                 return complete(errc::network::protocol_error);
               }
             } break;
             default:
-              last_error_message_ = fmt::format("unexpected message during bootstrap: {}", opcode);
-              CB_LOG_WARNING("{} {}", session_->log_prefix_, last_error_message_);
+              auto error_msg = fmt::format("unexpected message during bootstrap: {}", opcode);
+              last_bootstrap_error_ = { errc::network::protocol_error,
+                                        std::move(error_msg),
+                                        session_->bootstrap_hostname(),
+                                        session_->bootstrap_port() };
+              CB_LOG_WARNING("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
               return complete(errc::network::protocol_error);
           }
           break;
@@ -874,8 +934,8 @@ public:
         local_address(),
         diag::ping_state::error,
         bucket_name_,
-        last_bootstrap_error_message_.has_value() ? last_bootstrap_error_message_.value()
-                                                  : "Bootstrap incomplete, cannot perform ping.",
+        last_bootstrap_error_.has_value() ? last_bootstrap_error_.value().error_message
+                                          : "Bootstrap incomplete, cannot perform ping.",
       });
       return;
     }
@@ -938,18 +998,56 @@ public:
       if (ec == asio::error::operation_aborted || self->stopped_) {
         return;
       }
-      if (!ec) {
-        ec = errc::common::unambiguous_timeout;
-      }
       if (self->state_listener_) {
         self->state_listener_->report_bootstrap_error(
           fmt::format("{}:{}", self->bootstrap_hostname_, self->bootstrap_port_), ec);
+      }
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+      // an existing background bootstrap listener means we want to infinitely
+      // attempt to connect.
+      if (self->background_bootstrap_listener_) {
+        if (self->last_bootstrap_error_.has_value()) {
+          self->background_bootstrap_listener_->notify_bootstrap_error(
+            self->last_bootstrap_error_.value());
+        } else {
+          self->background_bootstrap_listener_->notify_bootstrap_error(
+            { make_error_code(errc::common::unambiguous_timeout),
+              "Unable to connect in time.",
+              self->bootstrap_hostname_,
+              self->bootstrap_port_ });
+        }
+        auto backoff = std::chrono::milliseconds(500);
+        CB_LOG_DEBUG("{} unable to connect in time, waiting for {}ms before retry",
+                     self->log_prefix_,
+                     backoff.count());
+        self->retry_backoff_.expires_after(backoff);
+        self->retry_backoff_.async_wait([self](std::error_code ec) mutable {
+          if (ec == asio::error::operation_aborted || self->stopped_) {
+            return;
+          }
+          self->origin_.restart();
+          self->initiate_bootstrap();
+        });
+      } else {
+        if (!ec) {
+          ec = errc::common::unambiguous_timeout;
+        }
+        CB_LOG_WARNING("{} unable to bootstrap in time", self->log_prefix_);
+        if (auto h = std::move(self->bootstrap_callback_); h) {
+          h(ec, {});
+        }
+        self->stop(retry_reason::do_not_retry);
+      }
+#else
+      if (!ec) {
+        ec = errc::common::unambiguous_timeout;
       }
       CB_LOG_WARNING("{} unable to bootstrap in time", self->log_prefix_);
       if (auto h = std::move(self->bootstrap_callback_); h) {
         h(ec, {});
       }
       self->stop(retry_reason::do_not_retry);
+#endif
     });
     initiate_bootstrap();
   }
@@ -961,7 +1059,7 @@ public:
     }
     bootstrapped_ = false;
     if (bootstrap_handler_) {
-      last_bootstrap_error_message_ = std::move(bootstrap_handler_)->last_error_message();
+      last_bootstrap_error_ = std::move(bootstrap_handler_)->last_bootstrap_error();
     }
     bootstrap_handler_ = nullptr;
     state_ = diag::endpoint_state::connecting;
@@ -976,6 +1074,19 @@ public:
                    bootstrap_port_);
     }
     if (origin_.exhausted()) {
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+      if (background_bootstrap_listener_) {
+        if (last_bootstrap_error_.has_value()) {
+          background_bootstrap_listener_->notify_bootstrap_error(last_bootstrap_error_.value());
+        } else {
+          background_bootstrap_listener_->notify_bootstrap_error(
+            { errc::network::no_endpoints_left,
+              "Reached end of list of bootstrap nodes.",
+              bootstrap_hostname_,
+              bootstrap_port_ });
+        }
+      }
+#endif
       auto backoff = std::chrono::milliseconds(500);
       CB_LOG_DEBUG("{} reached the end of list of bootstrap nodes, waiting for {}ms before restart",
                    log_prefix_,
@@ -1093,6 +1204,11 @@ public:
     if (auto on_stop = std::move(on_stop_handler_); on_stop) {
       on_stop();
     }
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+    if (background_bootstrap_listener_) {
+      background_bootstrap_listener_ = nullptr;
+    }
+#endif
   }
 
   void write(std::vector<std::byte>&& buf)
@@ -1347,6 +1463,16 @@ public:
     return ++opaque_;
   }
 
+  [[nodiscard]] auto last_bootstrap_error() && -> std::optional<impl::bootstrap_error>
+  {
+    return std::move(last_bootstrap_error_);
+  }
+
+  [[nodiscard]] auto last_bootstrap_error() const& -> const std::optional<impl::bootstrap_error>&
+  {
+    return last_bootstrap_error_;
+  }
+
   auto decode_error_code(std::uint16_t code) -> std::optional<key_value_error_map_info>
   {
     if (error_map_) {
@@ -1487,6 +1613,14 @@ public:
     collection_cache_.update(path, uid);
   }
 
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+  void add_background_bootstrap_listener(
+    std::shared_ptr<columnar::background_bootstrap_listener> listener)
+  {
+    background_bootstrap_listener_ = std::move(listener);
+  }
+#endif
+
 private:
   void invoke_bootstrap_handler(std::error_code ec)
   {
@@ -1556,6 +1690,7 @@ private:
     last_active_ = std::chrono::steady_clock::now();
     if (ec) {
       CB_LOG_ERROR("{} error on resolve: {} ({})", log_prefix_, ec.value(), ec.message());
+      last_bootstrap_error_ = { ec, ec.message(), bootstrap_hostname_, bootstrap_port_ };
       return initiate_bootstrap();
     }
     endpoints_ = endpoints;
@@ -1604,7 +1739,10 @@ private:
                        port,
                        self->bootstrap_hostname_,
                        self->bootstrap_port_);
-          return self->stream_->close([self](std::error_code) {
+          return self->stream_->close([self](std::error_code ec) {
+            self->last_bootstrap_error_ = {
+              ec, ec.message(), self->bootstrap_hostname_, self->bootstrap_port_
+            };
             self->initiate_bootstrap();
           });
         });
@@ -1612,10 +1750,14 @@ private:
         it->endpoint(),
         std::bind(&mcbp_session_impl::on_connect, shared_from_this(), std::placeholders::_1, it));
     } else {
-      CB_LOG_ERROR("{} no more endpoints left to connect to \"{}:{}\", will try another address",
-                   log_prefix_,
-                   bootstrap_hostname_,
-                   bootstrap_port_);
+      auto error_msg =
+        fmt::format("no more endpoints left to connect to \"{}:{}\", will try another address",
+                    bootstrap_hostname_,
+                    bootstrap_port_);
+      last_bootstrap_error_ = {
+        errc::network::no_endpoints_left, std::move(error_msg), bootstrap_hostname_, bootstrap_port_
+      };
+      CB_LOG_ERROR("{} {}", log_prefix_, last_bootstrap_error_.value().error_message);
       if (state_listener_) {
         state_listener_->report_bootstrap_error(
           fmt::format("{}:{}", bootstrap_hostname_, bootstrap_port_),
@@ -1835,7 +1977,7 @@ private:
   std::optional<std::string> bucket_name_;
   mcbp_parser parser_;
   std::shared_ptr<bootstrap_handler> bootstrap_handler_{ nullptr };
-  std::optional<std::string> last_bootstrap_error_message_;
+  std::optional<impl::bootstrap_error> last_bootstrap_error_;
   std::shared_ptr<message_handler> handler_{ nullptr };
   utils::movable_function<void(std::error_code, const topology::configuration&)>
     bootstrap_callback_{};
@@ -1887,6 +2029,11 @@ private:
   std::string log_prefix_{};
   std::chrono::time_point<std::chrono::steady_clock> last_active_{};
   std::atomic<diag::endpoint_state> state_{ diag::endpoint_state::disconnected };
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+  std::shared_ptr<columnar::background_bootstrap_listener> background_bootstrap_listener_{
+    nullptr
+  };
+#endif
 };
 
 mcbp_session::mcbp_session(std::string client_id,
@@ -2011,6 +2158,18 @@ mcbp_session::bootstrap_port_number() const -> std::uint16_t
   return impl_->bootstrap_port_number();
 }
 
+auto
+mcbp_session::last_bootstrap_error() && -> std::optional<impl::bootstrap_error>
+{
+  return std::move(impl_)->last_bootstrap_error();
+}
+
+auto
+mcbp_session::last_bootstrap_error() const& -> const std::optional<impl::bootstrap_error>&
+{
+  return impl_->last_bootstrap_error();
+}
+
 void
 mcbp_session::write_and_subscribe(std::uint32_t opaque,
                                   std::vector<std::byte>&& data,
@@ -2118,5 +2277,14 @@ mcbp_session::write_and_flush(std::vector<std::byte>&& buffer)
 {
   return impl_->write_and_flush(std::move(buffer));
 }
+
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+void
+mcbp_session::add_background_bootstrap_listener(
+  std::shared_ptr<columnar::background_bootstrap_listener> listener)
+{
+  return impl_->add_background_bootstrap_listener(std::move(listener));
+}
+#endif
 
 } // namespace couchbase::core::io

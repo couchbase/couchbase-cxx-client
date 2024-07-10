@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -17,10 +17,18 @@
 
 #pragma once
 
-#cmakedefine COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE "@COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE@"
-#cmakedefine COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE
-#cmakedefine COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_DATE "@COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_DATE@"
-#cmakedefine COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_SHA256 "@COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_SHA256@"
-#cmakedefine COUCHBASE_CXX_CLIENT_BORINGSSL_SHA "@COUCHBASE_CXX_CLIENT_BORINGSSL_SHA@"
-#cmakedefine COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL
-#cmakedefine COUCHBASE_CXX_CLIENT_COLUMNAR
+#include <string>
+#include <vector>
+
+namespace couchbase::core::columnar
+{
+struct security_options {
+public:
+  bool trust_only_capella{ true };
+  bool trust_only_pem_file{ false };
+  bool trust_only_pem_string{ false };
+  bool trust_only_platform{ false };
+  std::vector<std::string> trust_only_certificates{};
+  std::vector<std::string> cipher_suites{};
+};
+} // namespace couchbase::core::columnar

@@ -39,7 +39,6 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
   using encoded_response_type = typename Request::encoded_response_type;
   using error_context_type = typename Request::error_context_type;
   asio::steady_timer deadline;
-  asio::steady_timer retry_backoff;
   Request request;
   encoded_request_type encoded;
   std::shared_ptr<couchbase::tracing::request_tracer> tracer_;
@@ -50,14 +49,36 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
   std::chrono::milliseconds timeout_{};
   std::string client_context_id_;
   std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+  std::chrono::milliseconds dispatch_timeout_{};
+  asio::steady_timer dispatch_deadline_;
 
+  http_command(asio::io_context& ctx,
+               Request req,
+               std::shared_ptr<couchbase::tracing::request_tracer> tracer,
+               std::shared_ptr<couchbase::metrics::meter> meter,
+               std::chrono::milliseconds default_timeout,
+               std::chrono::milliseconds dispatch_timeout)
+    : deadline(ctx)
+    , request(req)
+    , tracer_(std::move(tracer))
+    , meter_(std::move(meter))
+    , timeout_(request.timeout.value_or(default_timeout))
+    , client_context_id_(request.client_context_id.value_or(uuid::to_string(uuid::random())))
+    , dispatch_timeout_(dispatch_timeout)
+    , dispatch_deadline_(ctx)
+  {
+    if constexpr (io::http_traits::supports_parent_span_v<Request>) {
+      parent_span = request.parent_span;
+    }
+  }
+#else
   http_command(asio::io_context& ctx,
                Request req,
                std::shared_ptr<couchbase::tracing::request_tracer> tracer,
                std::shared_ptr<couchbase::metrics::meter> meter,
                std::chrono::milliseconds default_timeout)
     : deadline(ctx)
-    , retry_backoff(ctx)
     , request(req)
     , tracer_(std::move(tracer))
     , meter_(std::move(meter))
@@ -68,6 +89,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
       parent_span = request.parent_span;
     }
   }
+#endif
 
   void finish_dispatch(const std::string& remote_address, const std::string& local_address)
   {
@@ -91,11 +113,31 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
     if (span_->uses_tags())
       span_->add_tag(tracing::attributes::operation_id, client_context_id_);
     handler_ = std::move(handler);
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+    dispatch_deadline_.expires_after(dispatch_timeout_);
+    dispatch_deadline_.async_wait([self = this->shared_from_this()](std::error_code ec) {
+      if (ec == asio::error::operation_aborted) {
+        return;
+      }
+      CB_LOG_DEBUG(
+        R"(HTTP request timed out before dispatch: {}, method={}, path="{}", client_context_id="{}")",
+        self->encoded.type,
+        self->encoded.method,
+        self->encoded.path,
+        self->client_context_id_);
+      self->cancel(errc::common::unambiguous_timeout);
+    });
+#endif
     deadline.expires_after(timeout_);
     deadline.async_wait([self = this->shared_from_this()](std::error_code ec) {
       if (ec == asio::error::operation_aborted) {
         return;
       }
+      CB_LOG_DEBUG(R"(HTTP request timed out: {}, method={}, path="{}", client_context_id="{}")",
+                   self->encoded.type,
+                   self->encoded.method,
+                   self->encoded.path,
+                   self->client_context_id_);
       if constexpr (io::http_traits::supports_readonly_v<Request>) {
         if (self->request.readonly) {
           self->cancel(errc::common::unambiguous_timeout);
@@ -123,12 +165,17 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
     if (auto handler = std::move(handler_); handler) {
       handler(ec, std::move(msg));
     }
-    retry_backoff.cancel();
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+    dispatch_deadline_.cancel();
+#endif
     deadline.cancel();
   }
 
   void send_to()
   {
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+    dispatch_deadline_.cancel();
+#endif
     if (!handler_) {
       return;
     }
@@ -143,10 +190,18 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
     session_ = std::move(session);
   }
 
-  [[nodiscard]] auto deadline_expired() const -> bool
+  [[nodiscard]] auto deadline_expiry() const -> std::chrono::time_point<std::chrono::steady_clock>
   {
-    return deadline.expiry() < std::chrono::steady_clock::now();
+    return deadline.expiry();
   }
+
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+  [[nodiscard]] auto dispatch_deadline_expiry() const
+    -> std::chrono::time_point<std::chrono::steady_clock>
+  {
+    return dispatch_deadline_.expiry();
+  }
+#endif
 
 private:
   void send()

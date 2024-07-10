@@ -1,0 +1,29 @@
+name: columnar
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Install build environment
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y libssl-dev cmake gcc g++ curl gdb
+      - uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ github.job }}
+      - name: Build
+        timeout-minutes: 40
+        env:
+          CB_COLUMNAR: ON
+        run: ./bin/build-tests

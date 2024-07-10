@@ -14,6 +14,11 @@ if(NOT DEFINED COUCHBASE_CXX_CLIENT_MASTER_PROJECT)
   endif()
 endif()
 
+option(COUCHBASE_CXX_CLIENT_COLUMNAR "Build with Columnar additions" FALSE)
+if(COUCHBASE_CXX_CLIENT_COLUMNAR)
+  message(STATUS "COUCHBASE_CXX_CLIENT_COLUMNAR=${COUCHBASE_CXX_CLIENT_COLUMNAR} building with Columnar additions.")
+endif()
+
 project(
   couchbase_cxx_client
   VERSION "1.0.0"
@@ -226,6 +231,7 @@ set(couchbase_cxx_client_FILES
     core/io/mcbp_message.cxx
     core/io/mcbp_parser.cxx
     core/io/mcbp_session.cxx
+    core/io/config_tracker.cxx
     core/key_value_config.cxx
     core/management/analytics_link_azure_blob_external.cxx
     core/management/analytics_link_couchbase_remote.cxx

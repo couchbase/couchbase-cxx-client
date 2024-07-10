@@ -16,6 +16,7 @@
  */
 
 #include "origin.hxx"
+#include <couchbase/build_config.hxx>
 
 #include "core/utils/connection_string.hxx"
 #include "topology/configuration.hxx"
@@ -220,6 +221,9 @@ origin::to_json() const -> std::string
       "options",
       {
         { "bootstrap_timeout", options_.bootstrap_timeout },
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+        { "dispatch_timeout", options_.dispatch_timeout },
+#endif
         { "resolve_timeout", options_.resolve_timeout },
         { "connect_timeout", options_.connect_timeout },
         { "key_value_timeout", options_.key_value_timeout },
