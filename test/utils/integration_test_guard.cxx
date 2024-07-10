@@ -141,6 +141,7 @@ integration_test_guard::load_bucket_info(const std::string& bucket_name, bool re
       "unable to load info for bucket \"{}\": {}", bucket_name, resp.ctx.ec.message());
     throw std::system_error(resp.ctx.ec);
   }
+  CB_LOG_DEBUG("Bucket Info, name=\"{}\": {}", bucket_name, resp.ctx.http_body);
 
   info[bucket_name] = resp.info;
   return info[bucket_name];
@@ -163,6 +164,7 @@ integration_test_guard::load_cluster_info(bool refresh)
     CB_LOG_CRITICAL("unable to load info for cluster: {}", resp.ctx.ec.message());
     throw std::system_error(resp.ctx.ec);
   }
+  CB_LOG_DEBUG("Cluster Info: {}", resp.ctx.http_body);
 
   cluster_info.emplace(std::move(resp.info));
 
