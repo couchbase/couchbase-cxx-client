@@ -28,6 +28,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <system_error>
 #include <vector>
 
 namespace asio
@@ -90,7 +91,7 @@ public:
                          asio::io_context& ctx,
                          asio::ssl::context& tls,
                          std::shared_ptr<impl::bootstrap_state_listener> state_listener);
-  ~cluster_config_tracker();
+  ~cluster_config_tracker() override;
 
   void create_sessions(
     utils::movable_function<void(std::error_code, topology::configuration cfg)>&& handler);
