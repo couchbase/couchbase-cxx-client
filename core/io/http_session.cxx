@@ -294,7 +294,7 @@ http_session::cancel_current_response(std::error_code ec)
   std::scoped_lock lock(current_response_mutex_);
   if (streaming_response_) {
     auto ctx = std::move(current_streaming_response_);
-    if (auto handler = ctx.resp_handler; handler) {
+    if (auto handler = std::move(ctx.resp_handler); handler) {
       handler(ec, {});
     }
     if (auto handler = std::move(ctx.stream_end_handler); handler) {
@@ -671,8 +671,9 @@ http_session::do_read()
             self->keep_alive_ = false;
           }
           self->reading_ = false;
-          ctx.resp_handler({}, *ctx.resp);
-          ctx.resp_handler = nullptr;
+          if (auto handler = std::move(ctx.resp_handler); handler) {
+            handler({}, *ctx.resp);
+          }
           if (!res.complete) {
             std::scoped_lock lock(self->current_response_mutex_);
             std::swap(self->current_streaming_response_, ctx);
