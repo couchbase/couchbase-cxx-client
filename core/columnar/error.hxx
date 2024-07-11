@@ -17,39 +17,33 @@
 
 #pragma once
 
-#include "agent_config.hxx"
-#include "core/free_form_http_request.hxx"
-#include "core/pending_operation.hxx"
-#include "error.hxx"
-#include "query_options.hxx"
-
-#include <asio/io_context.hpp>
-#include <tl/expected.hpp>
-
+#include <cstdint>
+#include <map>
 #include <memory>
+#include <string>
 #include <system_error>
+#include <variant>
 
-namespace couchbase
-{
-class retry_strategy;
-} // namespace couchbase
+#include <tao/json/value.hpp>
 
 namespace couchbase::core::columnar
 {
-class agent_impl;
+/**
+ * Properties specific to query errors. Will only be set if the error code is
+ * columnar::errc::query_error
+ */
+struct query_error_properties {
+  std::int32_t code{};
+  std::string server_message{};
+};
 
-class agent
-{
-public:
-  explicit agent(asio::io_context& io, agent_config config);
+using error_properties = std::variant<std::monostate, query_error_properties>;
 
-  auto free_form_http_request(http_request request, free_form_http_request_callback&& callback)
-    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
-
-  auto execute_query(query_options options, query_callback&& callback)
-    -> tl::expected<std::shared_ptr<pending_operation>, error>;
-
-private:
-  std::shared_ptr<agent_impl> impl_;
+struct error {
+  std::error_code ec{};
+  std::string message{};
+  error_properties properties{};
+  std::map<std::string, tao::json::value> ctx{};
+  std::shared_ptr<error> cause{};
 };
 } // namespace couchbase::core::columnar

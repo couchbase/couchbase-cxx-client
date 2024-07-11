@@ -18,6 +18,7 @@
 #include "test_helper_integration.hxx"
 
 #include "core/columnar/agent.hxx"
+#include "core/columnar/error_codes.hxx"
 #include "core/free_form_http_request.hxx"
 #include "core/row_streamer.hxx"
 
@@ -29,17 +30,17 @@
 std::pair<std::variant<std::monostate,
                        couchbase::core::columnar::query_result_row,
                        couchbase::core::columnar::query_result_end>,
-          std::error_code>
+          couchbase::core::columnar::error>
 get_next_item(couchbase::core::columnar::query_result& result)
 {
   auto barrier = std::make_shared<
     std::promise<std::pair<std::variant<std::monostate,
                                         couchbase::core::columnar::query_result_row,
                                         couchbase::core::columnar::query_result_end>,
-                           std::error_code>>>();
+                           couchbase::core::columnar::error>>>();
   auto f = barrier->get_future();
-  result.next_row([barrier](auto item, auto ec) mutable {
-    barrier->set_value({ std::move(item), ec });
+  result.next_row([barrier](auto item, auto err) mutable {
+    barrier->set_value({ std::move(item), err });
   });
   return f.get();
 }
@@ -108,6 +109,8 @@ TEST_CASE("integration: columnar http component simple request", "[integration]"
   for (std::size_t i = 0; i <= 100; i++) {
     REQUIRE(result_array.at(i) == tao::json::value{ { "i", i } });
   }
+
+  resp_body.cancel();
 }
 
 TEST_CASE("integration: columnar query component simple request", "[integration]")
@@ -124,23 +127,23 @@ TEST_CASE("integration: columnar query component simple request", "[integration]
 
   couchbase::core::columnar::query_result result;
   {
-    auto barrier = std::make_shared<
-      std::promise<std::pair<couchbase::core::columnar::query_result, std::error_code>>>();
+    auto barrier = std::make_shared<std::promise<
+      std::pair<couchbase::core::columnar::query_result, couchbase::core::columnar::error>>>();
     auto f = barrier->get_future();
-    auto resp = agent.execute_query(options, [barrier](auto res, auto ec) mutable {
-      barrier->set_value({ std::move(res), ec });
+    auto resp = agent.execute_query(options, [barrier](auto res, auto err) mutable {
+      barrier->set_value({ std::move(res), err });
     });
-    auto [res, ec] = f.get();
+    auto [res, err] = f.get();
     REQUIRE(resp.has_value());
-    REQUIRE_SUCCESS(ec);
+    REQUIRE_SUCCESS(err.ec);
     REQUIRE_FALSE(res.metadata().has_value());
     result = std::move(res);
   }
 
   std::size_t row_count{ 0 };
   while (true) {
-    auto [item, ec] = get_next_item(result);
-    REQUIRE_SUCCESS(ec);
+    auto [item, err] = get_next_item(result);
+    REQUIRE_SUCCESS(err.ec);
     REQUIRE(!std::holds_alternative<std::monostate>(item));
 
     if (std::holds_alternative<couchbase::core::columnar::query_result_end>(item)) {
@@ -160,6 +163,57 @@ TEST_CASE("integration: columnar query component simple request", "[integration]
   REQUIRE(row_count == 5000);
 }
 
+TEST_CASE("integration: columnar query component simple request - single row response",
+          "[integration]")
+{
+  test::utils::integration_test_guard integration;
+  if (!integration.cluster_version().is_columnar()) {
+    SKIP("Requires a columnar cluster");
+  }
+
+  couchbase::core::columnar::agent agent{ integration.io, { { integration.cluster } } };
+
+  couchbase::core::columnar::query_options options{ "SELECT \"bar\" AS foo" };
+  options.timeout = std::chrono::seconds(20);
+
+  couchbase::core::columnar::query_result result;
+  {
+    auto barrier = std::make_shared<std::promise<
+      std::pair<couchbase::core::columnar::query_result, couchbase::core::columnar::error>>>();
+    auto f = barrier->get_future();
+    auto resp = agent.execute_query(options, [barrier](auto res, auto err) mutable {
+      barrier->set_value({ std::move(res), err });
+    });
+    auto [res, err] = f.get();
+    REQUIRE(resp.has_value());
+    REQUIRE_SUCCESS(err.ec);
+    REQUIRE_FALSE(res.metadata().has_value());
+    result = std::move(res);
+  }
+
+  std::size_t row_count{ 0 };
+  while (true) {
+    auto [item, err] = get_next_item(result);
+    REQUIRE_SUCCESS(err.ec);
+    REQUIRE(!std::holds_alternative<std::monostate>(item));
+
+    if (std::holds_alternative<couchbase::core::columnar::query_result_end>(item)) {
+      break;
+    }
+
+    REQUIRE(std::holds_alternative<couchbase::core::columnar::query_result_row>(item));
+    auto row = std::get<couchbase::core::columnar::query_result_row>(item);
+    auto row_json = couchbase::core::utils::json::parse(row.content);
+    REQUIRE(row_json == tao::json::value{ { "foo", "bar" } });
+
+    row_count++;
+  }
+  REQUIRE(result.metadata().has_value());
+  REQUIRE(result.metadata()->warnings.empty());
+  REQUIRE(result.metadata()->metrics.result_count == 1);
+  REQUIRE(row_count == 1);
+}
+
 TEST_CASE("integration: columnar query component request with database & scope names",
           "[integration]")
 {
@@ -177,23 +231,23 @@ TEST_CASE("integration: columnar query component request with database & scope n
 
   couchbase::core::columnar::query_result result;
   {
-    auto barrier = std::make_shared<
-      std::promise<std::pair<couchbase::core::columnar::query_result, std::error_code>>>();
+    auto barrier = std::make_shared<std::promise<
+      std::pair<couchbase::core::columnar::query_result, couchbase::core::columnar::error>>>();
     auto f = barrier->get_future();
-    auto resp = agent.execute_query(options, [barrier](auto res, auto ec) mutable {
-      barrier->set_value({ std::move(res), ec });
+    auto resp = agent.execute_query(options, [barrier](auto res, auto err) mutable {
+      barrier->set_value({ std::move(res), err });
     });
-    auto [res, ec] = f.get();
+    auto [res, err] = f.get();
     REQUIRE(resp.has_value());
-    REQUIRE_SUCCESS(ec);
+    REQUIRE_SUCCESS(err.ec);
     REQUIRE_FALSE(res.metadata().has_value());
     result = std::move(res);
   }
 
   std::size_t row_count{ 0 };
   while (true) {
-    auto [item, ec] = get_next_item(result);
-    REQUIRE_SUCCESS(ec);
+    auto [item, err] = get_next_item(result);
+    REQUIRE_SUCCESS(err.ec);
     REQUIRE(!std::holds_alternative<std::monostate>(item));
 
     if (std::holds_alternative<couchbase::core::columnar::query_result_end>(item)) {
@@ -226,23 +280,23 @@ TEST_CASE("integration: columnar query read some rows and cancel")
 
   couchbase::core::columnar::query_result result;
   {
-    auto barrier = std::make_shared<
-      std::promise<std::pair<couchbase::core::columnar::query_result, std::error_code>>>();
+    auto barrier = std::make_shared<std::promise<
+      std::pair<couchbase::core::columnar::query_result, couchbase::core::columnar::error>>>();
     auto f = barrier->get_future();
-    auto resp = agent.execute_query(options, [barrier](auto res, auto ec) mutable {
-      barrier->set_value({ std::move(res), ec });
+    auto resp = agent.execute_query(options, [barrier](auto res, auto err) mutable {
+      barrier->set_value({ std::move(res), err });
     });
-    auto [res, ec] = f.get();
+    auto [res, err] = f.get();
     REQUIRE(resp.has_value());
-    REQUIRE_SUCCESS(ec);
+    REQUIRE_SUCCESS(err.ec);
     REQUIRE_FALSE(res.metadata().has_value());
     result = std::move(res);
   }
 
   std::vector<std::string> buffered_rows{};
   for (std::size_t i = 0; i < 2; i++) {
-    auto [item, ec] = get_next_item(result);
-    REQUIRE_SUCCESS(ec);
+    auto [item, err] = get_next_item(result);
+    REQUIRE_SUCCESS(err.ec);
     REQUIRE(!std::holds_alternative<std::monostate>(item));
 
     if (std::holds_alternative<couchbase::core::columnar::query_result_end>(item)) {
@@ -256,9 +310,9 @@ TEST_CASE("integration: columnar query read some rows and cancel")
   result.cancel();
 
   for (std::size_t i = 0; i < 2; i++) {
-    auto [item, ec] = get_next_item(result);
-    REQUIRE(ec == couchbase::errc::common::request_canceled);
-    REQUIRE(std::holds_alternative<std::monostate>(item));
+    auto [item, err] = get_next_item(result);
+    REQUIRE_SUCCESS(err.ec);
+    REQUIRE(std::holds_alternative<couchbase::core::columnar::query_result_end>(item));
   }
 
   REQUIRE_FALSE(result.metadata().has_value());
@@ -276,16 +330,17 @@ TEST_CASE("integration: columnar query cancel operation")
   couchbase::core::columnar::query_options options{ "FROM RANGE(0, 10000000) AS i SELECT *" };
   options.timeout = std::chrono::seconds(20);
 
-  auto barrier = std::make_shared<
-    std::promise<std::pair<couchbase::core::columnar::query_result, std::error_code>>>();
+  auto barrier = std::make_shared<std::promise<
+    std::pair<couchbase::core::columnar::query_result, couchbase::core::columnar::error>>>();
   auto f = barrier->get_future();
-  auto resp = agent.execute_query(options, [barrier](auto res, auto ec) mutable {
-    barrier->set_value({ std::move(res), ec });
+  auto resp = agent.execute_query(options, [barrier](auto res, auto err) mutable {
+    barrier->set_value({ std::move(res), err });
   });
   REQUIRE(resp.has_value());
   resp.value()->cancel();
-  auto [res, ec] = f.get();
-  REQUIRE(ec == couchbase::errc::common::request_canceled);
+  auto [res, err] = f.get();
+  REQUIRE(err.ec == couchbase::core::columnar::errc::generic);
+  REQUIRE(err.message.find("canceled") != std::string::npos);
 }
 
 TEST_CASE("integration: columnar query operation timeout")
@@ -301,13 +356,47 @@ TEST_CASE("integration: columnar query operation timeout")
   options.read_only = true;
   options.timeout = std::chrono::seconds(1);
 
-  auto barrier = std::make_shared<
-    std::promise<std::pair<couchbase::core::columnar::query_result, std::error_code>>>();
+  auto barrier = std::make_shared<std::promise<
+    std::pair<couchbase::core::columnar::query_result, couchbase::core::columnar::error>>>();
   auto f = barrier->get_future();
-  auto resp = agent.execute_query(options, [barrier](auto res, auto ec) mutable {
-    barrier->set_value({ std::move(res), ec });
+  auto resp = agent.execute_query(options, [barrier](auto res, auto err) mutable {
+    barrier->set_value({ std::move(res), err });
   });
   REQUIRE(resp.has_value());
-  auto [res, ec] = f.get();
-  REQUIRE(ec == couchbase::errc::common::unambiguous_timeout);
+  auto [res, err] = f.get();
+  REQUIRE(err.ec == couchbase::core::columnar::errc::timeout);
+}
+
+TEST_CASE("integration: columnar query collection does not exist")
+{
+  test::utils::integration_test_guard integration;
+  if (!integration.cluster_version().is_columnar()) {
+    SKIP("Requires a columnar cluster");
+  }
+
+  couchbase::core::columnar::agent agent{ integration.io, { { integration.cluster } } };
+
+  couchbase::core::columnar::query_options options{ "SELECT * FROM `does-not-exist`" };
+  options.timeout = std::chrono::seconds(20);
+
+  auto barrier = std::make_shared<std::promise<
+    std::pair<couchbase::core::columnar::query_result, couchbase::core::columnar::error>>>();
+  auto f = barrier->get_future();
+  auto resp = agent.execute_query(options, [barrier](auto res, auto err) mutable {
+    barrier->set_value({ std::move(res), err });
+  });
+  REQUIRE(resp.has_value());
+  auto [res, err] = f.get();
+  REQUIRE(err.ec == couchbase::core::columnar::errc::query_error);
+
+  REQUIRE(
+    std::holds_alternative<couchbase::core::columnar::query_error_properties>(err.properties));
+  REQUIRE(std::get<couchbase::core::columnar::query_error_properties>(err.properties).code ==
+          24045);
+  REQUIRE(std::get<couchbase::core::columnar::query_error_properties>(err.properties)
+            .server_message.find("does-not-exist") != std::string::npos);
+
+  REQUIRE(err.ctx.count("errors") == 1);
+  REQUIRE(err.ctx["errors"].get_array().size() == 1);
+  REQUIRE(err.ctx["errors"].get_array().at(0).get_object().at("code").get_signed() == 24045);
 }

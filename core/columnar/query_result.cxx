@@ -15,10 +15,14 @@
  *   limitations under the License.
  */
 
+#include <couchbase/error_codes.hxx>
+
 #include "query_result.hxx"
 
 #include "core/utils/duration_parser.hxx"
 #include "core/utils/json.hxx"
+#include "core/utils/movable_function.hxx"
+#include "error_codes.hxx"
 
 #include <optional>
 
@@ -34,11 +38,14 @@ public:
 
   void next_row(
     utils::movable_function<void(std::variant<std::monostate, query_result_row, query_result_end>,
-                                 std::error_code)> handler)
+                                 error)> handler)
   {
     return rows_.next_row([handler = std::move(handler)](std::string content, std::error_code ec) {
       if (ec) {
-        return handler({}, ec);
+        if (ec == couchbase::errc::common::request_canceled) {
+          return handler(query_result_end{}, {});
+        }
+        return handler({}, { maybe_convert_error_code(ec) });
       }
       if (content.empty()) {
         return handler(query_result_end{}, {});
@@ -106,7 +113,7 @@ query_result::query_result(row_streamer rows)
 void
 query_result::next_row(
   utils::movable_function<void(std::variant<std::monostate, query_result_row, query_result_end>,
-                               std::error_code)> handler)
+                               error)> handler)
 {
   impl_->next_row(std::move(handler));
 }

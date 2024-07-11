@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "error.hxx"
 #include "query_result.hxx"
 
 #include "core/json_string.hxx"
@@ -59,5 +60,5 @@ struct query_options {
   std::optional<std::chrono::milliseconds> timeout{};
 };
 
-using query_callback = utils::movable_function<void(query_result result, std::error_code ec)>;
+using query_callback = utils::movable_function<void(query_result result, error err)>;
 } // namespace couchbase::core::columnar
