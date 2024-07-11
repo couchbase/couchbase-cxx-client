@@ -501,6 +501,9 @@ http_session::read_some(
           std::scoped_lock lock(self->current_response_mutex_);
           std::swap(self->current_streaming_response_, ctx);
         }
+        if (ctx.stream_end_handler) {
+          ctx.stream_end_handler();
+        }
         if (ctx.resp->must_close_connection()) {
           self->keep_alive_ = false;
         }
@@ -677,6 +680,10 @@ http_session::do_read()
           if (!res.complete) {
             std::scoped_lock lock(self->current_response_mutex_);
             std::swap(self->current_streaming_response_, ctx);
+          } else {
+            if (auto handler = std::move(ctx.stream_end_handler); handler) {
+              handler();
+            }
           }
           return;
         }

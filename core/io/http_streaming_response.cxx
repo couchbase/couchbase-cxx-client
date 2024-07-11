@@ -14,13 +14,11 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  */
+
 #include "http_streaming_response.hxx"
+#include "core/utils/movable_function.hxx"
 #include "http_session.hxx"
 
-#include "core/utils/json.hxx"
-#include "core/utils/movable_function.hxx"
-
-#include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/error_codes.hxx>
 
 #include <cstdint>
@@ -38,10 +36,12 @@ class http_streaming_response_body_impl
 public:
   http_streaming_response_body_impl(asio::io_context& io,
                                     std::shared_ptr<http_session> session,
-                                    std::string cached_data)
+                                    std::string cached_data,
+                                    bool reading_complete)
     : session_{ std::move(session) }
     , cached_data_{ std::move(cached_data) }
     , deadline_{ io }
+    , reading_complete_{ reading_complete }
   {
   }
 
@@ -63,7 +63,7 @@ public:
       callback(std::move(data), {});
       return;
     }
-    if (completed_) {
+    if (reading_complete_) {
       callback({}, {});
       return;
     }
@@ -73,7 +73,7 @@ public:
         if (!has_more || ec) {
           self->close({});
           if (!ec) {
-            self->completed_ = true;
+            self->reading_complete_ = true;
           }
         }
         cb(std::move(data), ec);
@@ -99,15 +99,17 @@ private:
   std::string cached_data_;
   std::error_code final_ec_;
   asio::steady_timer deadline_;
-  std::atomic_bool completed_{ false };
+  std::atomic_bool reading_complete_{ false };
 };
 
 http_streaming_response_body::http_streaming_response_body(asio::io_context& io,
                                                            std::shared_ptr<http_session> session,
-                                                           std::string cached_data)
+                                                           std::string cached_data,
+                                                           bool reading_complete)
   : impl_{ std::make_shared<http_streaming_response_body_impl>(io,
                                                                std::move(session),
-                                                               std::move(cached_data)) }
+                                                               std::move(cached_data),
+                                                               reading_complete) }
 {
 }
 
@@ -188,7 +190,7 @@ http_streaming_response::http_streaming_response(
       parser.status_code,
       parser.status_message,
       parser.headers,
-      http_streaming_response_body{ io, std::move(session), parser.body_chunk }) }
+      http_streaming_response_body{ io, std::move(session), parser.body_chunk, parser.complete }) }
 {
 }
 
