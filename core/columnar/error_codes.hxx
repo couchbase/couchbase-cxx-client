@@ -17,40 +17,31 @@
 
 #pragma once
 
-#include "core/pending_operation.hxx"
-#include "error.hxx"
-#include "query_options.hxx"
-
-#include <memory>
+#include <cstdint>
 #include <system_error>
 
-#include <tl/expected.hpp>
-
-namespace asio
+namespace couchbase::core::columnar
 {
-class io_context;
-} // namespace asio
+auto
+columnar_category() noexcept -> const std::error_category&;
 
-namespace couchbase::core
-{
-class http_component;
-
-namespace columnar
-{
-class query_component_impl;
-
-class query_component
-{
-public:
-  query_component(asio::io_context& io,
-                  http_component http,
-                  std::shared_ptr<retry_strategy> default_retry_strategy);
-
-  auto execute_query(query_options options, query_callback&& callback)
-    -> tl::expected<std::shared_ptr<pending_operation>, error>;
-
-private:
-  std::shared_ptr<query_component_impl> impl_;
+enum class errc : std::uint8_t {
+  generic = 1,
+  invalid_credential = 2,
+  timeout = 3,
+  query_error = 4,
 };
-} // namespace columnar
-} // namespace couchbase::core
+
+inline auto
+make_error_code(errc e) noexcept -> std::error_code
+{
+  return { static_cast<int>(e), columnar_category() };
+}
+
+auto
+maybe_convert_error_code(std::error_code e) -> std::error_code;
+} // namespace couchbase::core::columnar
+
+template<>
+struct std::is_error_code_enum<couchbase::core::columnar::errc> : std::true_type {
+};

@@ -156,7 +156,6 @@ integration_test_guard::load_cluster_info(bool refresh)
   }
 
   auto req = couchbase::core::operations::management::cluster_describe_request{};
-  req.timeout = std::chrono::seconds(60);
   auto resp = execute(cluster, req);
   if (resp.ctx.ec == couchbase::errc::common::service_not_available) {
     open_bucket(cluster, ctx.bucket);

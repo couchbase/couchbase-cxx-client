@@ -51,7 +51,7 @@ public:
   }
 
   auto execute_query(query_options options, query_callback&& callback)
-    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+    -> tl::expected<std::shared_ptr<pending_operation>, error>
   {
     return query_.execute_query(std::move(options), std::move(callback));
   }
@@ -77,7 +77,7 @@ agent::free_form_http_request(http_request request, free_form_http_request_callb
 
 auto
 agent::execute_query(query_options options, query_callback&& callback)
-  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  -> tl::expected<std::shared_ptr<pending_operation>, error>
 {
   return impl_->execute_query(std::move(options), std::move(callback));
 }
