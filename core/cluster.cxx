@@ -307,7 +307,7 @@ public:
     }
 
     origin_ = std::move(origin);
-    CB_LOG_DEBUG(R"(open cluster, id: "{}", core version: "{}", {})",
+    CB_LOG_DEBUG(R"(open cluster in background, id: "{}", core version: "{}", {})",
                  id_,
                  couchbase::core::meta::sdk_semver(),
                  origin_.to_json());

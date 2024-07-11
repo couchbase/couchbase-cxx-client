@@ -15,6 +15,8 @@
  *   limitations under the License.
  */
 
+#include <couchbase/build_config.hxx>
+
 #include "connection_string.hxx"
 #include "core/logger/logger.hxx"
 #include "core/meta/version.hxx"
