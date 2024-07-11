@@ -17,6 +17,8 @@
 
 #include "integration_shortcuts.hxx"
 
+#include <couchbase/build_config.hxx>
+
 #include "core/logger/logger.hxx"
 #include "core/utils/join_strings.hxx"
 
@@ -27,9 +29,15 @@ open_cluster(const couchbase::core::cluster& cluster, const couchbase::core::ori
 {
   auto barrier = std::make_shared<std::promise<std::error_code>>();
   auto f = barrier->get_future();
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+  cluster.open_in_background(origin, [barrier](std::error_code ec) mutable {
+    barrier->set_value(ec);
+  });
+#else
   cluster.open(origin, [barrier](std::error_code ec) mutable {
     barrier->set_value(ec);
   });
+#endif
   auto rc = f.get();
   if (rc) {
     CB_LOG_CRITICAL("unable to connect to the cluster: {}, nodes={}",
