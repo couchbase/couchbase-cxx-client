@@ -681,7 +681,7 @@ http_session::do_read()
             std::scoped_lock lock(self->current_response_mutex_);
             std::swap(self->current_streaming_response_, ctx);
           } else {
-            if (auto handler = std::move(ctx.stream_end_handler)) {
+            if (auto handler = std::move(ctx.stream_end_handler); handler) {
               handler();
             }
           }
