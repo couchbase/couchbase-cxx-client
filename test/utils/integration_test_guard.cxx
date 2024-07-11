@@ -155,10 +155,12 @@ integration_test_guard::load_cluster_info(bool refresh)
     return cluster_info.value();
   }
 
-  auto resp = execute(cluster, couchbase::core::operations::management::cluster_describe_request{});
+  auto req = couchbase::core::operations::management::cluster_describe_request{};
+  req.timeout = std::chrono::seconds(60);
+  auto resp = execute(cluster, req);
   if (resp.ctx.ec == couchbase::errc::common::service_not_available) {
     open_bucket(cluster, ctx.bucket);
-    resp = execute(cluster, couchbase::core::operations::management::cluster_describe_request{});
+    resp = execute(cluster, req);
   }
   if (resp.ctx.ec) {
     CB_LOG_CRITICAL("unable to load info for cluster: {}", resp.ctx.ec.message());
