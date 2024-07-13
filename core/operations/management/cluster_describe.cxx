@@ -22,18 +22,19 @@
 
 namespace couchbase::core::operations::management
 {
-std::error_code
+auto
 cluster_describe_request::encode_to(encoded_request_type& encoded,
-                                    http_context& /* context */) const
+                                    http_context& /* context */) const -> std::error_code
 {
   encoded.method = "GET";
   encoded.path = "/pools/default";
   return {};
 }
 
-cluster_describe_response
+auto
 cluster_describe_request::make_response(error_context::http&& ctx,
                                         const encoded_response_type& encoded) const
+  -> cluster_describe_response
 {
   cluster_describe_response response{ std::move(ctx) };
   if (!response.ctx.ec && encoded.status_code != 200) {

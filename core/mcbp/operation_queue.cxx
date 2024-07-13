@@ -34,7 +34,7 @@ namespace couchbase::core::mcbp
 auto
 operation_queue::debug_string() const -> std::string
 {
-  std::scoped_lock lock(mutex_);
+  const std::scoped_lock lock(mutex_);
   std::vector<char> out;
   fmt::format_to(
     std::back_insert_iterator(out), "num_items: {}, is_open: {}", items_.size(), is_open_);
@@ -48,9 +48,9 @@ operation_queue::consumer() -> std::shared_ptr<operation_consumer>
 }
 
 void
-operation_queue::close_consumer(std::shared_ptr<operation_consumer> consumer)
+operation_queue::close_consumer(const std::shared_ptr<operation_consumer>& consumer)
 {
-  std::scoped_lock lock(mutex_);
+  const std::scoped_lock lock(mutex_);
   consumer->close();
   signal_.notify_all();
 }
@@ -58,7 +58,7 @@ operation_queue::close_consumer(std::shared_ptr<operation_consumer> consumer)
 void
 operation_queue::close()
 {
-  std::scoped_lock lock(mutex_);
+  const std::scoped_lock lock(mutex_);
   is_open_ = false;
   signal_.notify_all();
 }
@@ -67,7 +67,7 @@ auto
 operation_queue::push(std::shared_ptr<queue_request> request,
                       std::size_t max_items) -> std::error_code
 {
-  std::scoped_lock lock(mutex_);
+  const std::scoped_lock lock(mutex_);
 
   if (!is_open_) {
     return errc::network::operation_queue_closed;
@@ -94,9 +94,9 @@ operation_queue::push(std::shared_ptr<queue_request> request,
 }
 
 auto
-operation_queue::remove(std::shared_ptr<queue_request> request) -> bool
+operation_queue::remove(const std::shared_ptr<queue_request>& request) -> bool
 {
-  std::scoped_lock lock(mutex_);
+  const std::scoped_lock lock(mutex_);
 
   if (!is_open_) {
     return false;
@@ -116,7 +116,8 @@ operation_queue::remove(std::shared_ptr<queue_request> request) -> bool
 }
 
 auto
-operation_queue::pop(std::shared_ptr<operation_consumer> consumer) -> std::shared_ptr<queue_request>
+operation_queue::pop(const std::shared_ptr<operation_consumer>& consumer)
+  -> std::shared_ptr<queue_request>
 {
   std::unique_lock lock(mutex_);
 
@@ -135,7 +136,7 @@ operation_queue::pop(std::shared_ptr<operation_consumer> consumer) -> std::share
 }
 
 void
-operation_queue::drain(operation_queue::drain_callback callback)
+operation_queue::drain(const operation_queue::drain_callback& callback)
 {
   for (const auto& request : items_to_drain()) {
     callback(request);
@@ -145,7 +146,7 @@ operation_queue::drain(operation_queue::drain_callback callback)
 auto
 operation_queue::items_to_drain() -> std::list<std::shared_ptr<queue_request>>
 {
-  std::scoped_lock lock(mutex_);
+  const std::scoped_lock lock(mutex_);
 
   if (is_open_) {
     CB_LOG_ERROR("attempted to drain open MCBP operation queue, ignoring");

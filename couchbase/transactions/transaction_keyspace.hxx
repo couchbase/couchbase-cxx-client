@@ -44,7 +44,7 @@ struct transaction_keyspace {
    *
    * @return true if valid.
    */
-  auto valid() -> bool;
+  auto valid() const -> bool;
 
   /** @private */
   template<typename OStream>

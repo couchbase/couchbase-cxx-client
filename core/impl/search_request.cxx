@@ -29,7 +29,7 @@ public:
                                std::optional<vector_search_options::built> options)
     : search_query_(std::move(search_query))
     , vector_search_(std::move(vector_search))
-    , vector_search_options_(std::move(options))
+    , vector_search_options_(options)
   {
   }
 

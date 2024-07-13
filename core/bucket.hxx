@@ -194,7 +194,7 @@ public:
   void on_configuration_update(std::shared_ptr<config_listener> handler);
   void close();
   void export_diag_info(diag::diagnostics_result& res) const;
-  void ping(std::shared_ptr<diag::ping_collector> collector,
+  void ping(const std::shared_ptr<diag::ping_collector>& collector,
             std::optional<std::chrono::milliseconds> timeout);
   void defer_command(utils::movable_function<void()> command);
 
@@ -207,7 +207,8 @@ public:
   [[nodiscard]] auto is_configured() const -> bool;
 
   auto direct_dispatch(std::shared_ptr<mcbp::queue_request> req) -> std::error_code;
-  auto direct_re_queue(std::shared_ptr<mcbp::queue_request> req, bool is_retry) -> std::error_code;
+  auto direct_re_queue(const std::shared_ptr<mcbp::queue_request>& req,
+                       bool is_retry) -> std::error_code;
 
 private:
   [[nodiscard]] auto default_timeout() const -> std::chrono::milliseconds;

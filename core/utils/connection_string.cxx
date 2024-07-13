@@ -107,7 +107,7 @@ struct action<param> {
   {
     const auto& pair = in.string();
     auto eq = pair.find('=');
-    std::string key = pair.substr(0, eq);
+    const std::string key = pair.substr(0, eq);
     cs.params[key] = (eq == std::string::npos) ? "" : pair.substr(eq + 1);
   }
 };
@@ -207,6 +207,8 @@ struct action<bucket_name> {
 };
 } // namespace priv
 
+namespace
+{
 void
 parse_option(std::string& receiver,
              const std::string& /* name */,
@@ -322,7 +324,7 @@ parse_option(std::chrono::milliseconds& receiver,
   }
 }
 
-static void
+void
 extract_options(connection_string& connstr)
 {
   connstr.options.enable_tls = connstr.tls;
@@ -510,6 +512,7 @@ extract_options(connection_string& connstr)
     }
   }
 }
+} // namespace
 
 auto
 parse_connection_string(const std::string& input, cluster_options options) -> connection_string

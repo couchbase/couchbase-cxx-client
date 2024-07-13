@@ -55,13 +55,12 @@ public:
   {
   }
 
-  auto execute_query(query_options options, query_callback&& callback)
+  auto execute_query(const query_options& options, query_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, error>
   {
     auto req = build_query_request(options);
     auto op = http_.do_http_request(
-      std::move(req),
-      [self = shared_from_this(), cb = std::move(callback)](auto resp, auto ec) mutable {
+      req, [self = shared_from_this(), cb = std::move(callback)](auto resp, auto ec) mutable {
         if (ec) {
           if (ec == couchbase::errc::common::request_canceled) {
             cb({},
@@ -79,7 +78,7 @@ public:
             return;
           }
           auto error_parse_res =
-            self->parse_error(resp.status_code(), utils::json::parse(metadata_header));
+            parse_error(resp.status_code(), utils::json::parse(metadata_header));
           if (error_parse_res.err.ec) {
             cb({}, { error_parse_res.err });
             return;
@@ -167,10 +166,11 @@ private:
       std::int32_t code = c->is_signed() ? gsl::narrow_cast<std::int32_t>(c->get_signed())
                                          : gsl::narrow_cast<std::int32_t>(c->get_unsigned());
 
-      res.err.ctx["errors"].get_array().push_back(tao::json::value{
+      tao::json::value error = {
         { "code", code },
         { "msg", msg->get_string() },
-      });
+      };
+      res.err.ctx["errors"].get_array().emplace_back(std::move(error));
 
       if (first_error_code == 0) {
         first_error_code = code;
@@ -234,7 +234,7 @@ private:
       payload[key] = utils::json::parse(val);
     }
     if (options.timeout.has_value()) {
-      std::chrono::milliseconds timeout = options.timeout.value() + std::chrono::seconds(5);
+      const std::chrono::milliseconds timeout = options.timeout.value() + std::chrono::seconds(5);
       payload["timeout"] = fmt::format("{}ms", timeout.count());
     }
 
@@ -275,10 +275,10 @@ query_component::query_component(asio::io_context& io,
 }
 
 auto
-query_component::execute_query(query_options options, query_callback&& callback)
+query_component::execute_query(const query_options& options, query_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, error>
 {
-  return impl_->execute_query(std::move(options), std::move(callback));
+  return impl_->execute_query(options, std::move(callback));
 }
 
 } // namespace couchbase::core::columnar

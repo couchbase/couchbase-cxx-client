@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include <couchbase/build_config.hxx>
+
 #include "core/config_listener.hxx"
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
 #include "core/columnar/bootstrap_notification_subscriber.hxx"

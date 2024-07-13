@@ -24,8 +24,9 @@
 
 namespace couchbase::core::operations::management
 {
-std::error_code
-user_get_all_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+auto
+user_get_all_request::encode_to(encoded_request_type& encoded,
+                                http_context& /* context */) const -> std::error_code
 {
   encoded.method = "GET";
   encoded.path = fmt::format("/settings/rbac/users/{}", domain);
@@ -33,9 +34,9 @@ user_get_all_request::encode_to(encoded_request_type& encoded, http_context& /* 
   return {};
 }
 
-user_get_all_response
-user_get_all_request::make_response(error_context::http&& ctx,
-                                    const encoded_response_type& encoded) const
+auto
+user_get_all_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded)
+  const -> user_get_all_response
 {
   user_get_all_response response{ std::move(ctx) };
   if (!response.ctx.ec) {

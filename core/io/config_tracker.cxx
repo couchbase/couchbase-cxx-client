@@ -17,6 +17,8 @@
 
 #include "config_tracker.hxx"
 
+#include <couchbase/build_config.hxx>
+
 #include "core/impl/bootstrap_state_listener.hxx"
 #include "core/logger/logger.hxx"
 #include "core/origin.hxx"
@@ -77,13 +79,13 @@ public:
     }
 
     {
-      std::scoped_lock lock(config_listeners_mutex_);
+      const std::scoped_lock lock(config_listeners_mutex_);
       config_listeners_.clear();
     }
 
     std::vector<io::mcbp_session> old_sessions;
     {
-      std::scoped_lock lock(sessions_mutex_);
+      const std::scoped_lock lock(sessions_mutex_);
       std::swap(old_sessions, sessions_);
     }
     for (auto& session : old_sessions) {
@@ -102,7 +104,7 @@ public:
     new_session.add_background_bootstrap_listener(shared_from_this());
 #endif
     new_session.bootstrap([self = shared_from_this(), new_session, h = std::move(handler)](
-                            std::error_code ec, topology::configuration cfg) mutable {
+                            std::error_code ec, const topology::configuration& cfg) mutable {
       if (!ec) {
         if (self->origin_.options().network == "auto") {
           self->origin_.options().network = cfg.select_network(new_session.bootstrap_hostname());
@@ -132,7 +134,7 @@ public:
           self->remove_session(id);
         });
         {
-          std::scoped_lock lock(self->sessions_mutex_);
+          const std::scoped_lock lock(self->sessions_mutex_);
           self->sessions_.emplace_back(std::move(new_session));
         }
         self->update_config(cfg);
@@ -157,11 +159,11 @@ public:
 
   void on_configuration_update(std::shared_ptr<config_listener> handler)
   {
-    std::scoped_lock lock(config_listeners_mutex_);
+    const std::scoped_lock lock(config_listeners_mutex_);
     config_listeners_.emplace_back(std::move(handler));
   }
 
-  [[nodiscard]] std::vector<protocol::hello_feature> supported_features() const
+  [[nodiscard]] auto supported_features() const -> std::vector<protocol::hello_feature>
   {
     if (!supported_features_.empty()) {
       return supported_features_;
@@ -169,14 +171,14 @@ public:
     std::vector<io::mcbp_session> sessions;
     std::vector<protocol::hello_feature> supported_features;
     {
-      std::scoped_lock lock(sessions_mutex_);
+      const std::scoped_lock lock(sessions_mutex_);
       sessions = sessions_;
     }
     for (const auto& session : sessions) {
       if (supported_features.empty()) {
         supported_features = session.supported_features();
       } else {
-        // TODO:  this seems like a larger problem....
+        // TODO(JC):  this seems like a larger problem....
         if (supported_features != session.supported_features()) {
           CB_LOG_WARNING("Supported features mismatch between sessions.");
         }
@@ -194,7 +196,7 @@ public:
 
   void update_config(topology::configuration config) override
   {
-    update_cluster_config(std::move(config));
+    update_cluster_config(config);
   }
 
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
@@ -202,7 +204,7 @@ public:
   {
     std::set<std::shared_ptr<columnar::bootstrap_notification_subscriber>> subscribers;
     {
-      std::scoped_lock lock(bootstrap_notification_subscribers_mutex_);
+      const std::scoped_lock lock(bootstrap_notification_subscribers_mutex_);
       subscribers = bootstrap_notification_subscribers_;
     }
     for (const auto& subscriber : subscribers) {
@@ -214,7 +216,7 @@ public:
   {
     std::set<std::shared_ptr<columnar::bootstrap_notification_subscriber>> subscribers;
     {
-      std::scoped_lock lock(bootstrap_notification_subscribers_mutex_);
+      const std::scoped_lock lock(bootstrap_notification_subscribers_mutex_);
       subscribers = bootstrap_notification_subscribers_;
     }
     for (const auto& subscriber : subscribers) {
@@ -225,14 +227,14 @@ public:
   void register_bootstrap_notification_subscriber(
     std::shared_ptr<columnar::bootstrap_notification_subscriber> subscriber) override
   {
-    std::scoped_lock lock(bootstrap_notification_subscribers_mutex_);
+    const std::scoped_lock lock(bootstrap_notification_subscribers_mutex_);
     bootstrap_notification_subscribers_.insert(subscriber);
   }
 
   void unregister_bootstrap_notification_subscriber(
     std::shared_ptr<columnar::bootstrap_notification_subscriber> subscriber) override
   {
-    std::scoped_lock lock(bootstrap_notification_subscribers_mutex_);
+    const std::scoped_lock lock(bootstrap_notification_subscribers_mutex_);
     bootstrap_notification_subscribers_.erase(subscriber);
   }
 #endif
@@ -244,7 +246,7 @@ public:
 
   [[nodiscard]] auto config() -> std::optional<topology::configuration>
   {
-    std::scoped_lock lock(config_mutex_);
+    const std::scoped_lock lock(config_mutex_);
     return config_;
   }
 
@@ -280,7 +282,7 @@ private:
     }
     std::optional<io::mcbp_session> session{};
     {
-      std::scoped_lock lock(sessions_mutex_);
+      const std::scoped_lock lock(sessions_mutex_);
 
       if (sessions_.empty()) {
         CB_LOG_WARNING(R"({} unable to find connected session (sessions_ is empty), retry in {})",
@@ -289,10 +291,10 @@ private:
         return;
       }
 
-      std::size_t start = heartbeat_next_index_.fetch_add(1);
+      const std::size_t start = heartbeat_next_index_.fetch_add(1);
       std::size_t i = start;
       do {
-        std::size_t session_idx = i % sessions_.size();
+        const std::size_t session_idx = i % sessions_.size();
         if (sessions_[session_idx].is_bootstrapped() && sessions_[session_idx].supports_gcccp()) {
           session = sessions_[session_idx];
         }
@@ -331,7 +333,7 @@ private:
     });
   }
 
-  bool should_update_config(const topology::configuration& config)
+  auto should_update_config(const topology::configuration& config) -> bool
   {
     if (!config_) {
       CB_LOG_DEBUG("{} initialize configuration rev={}", log_prefix_, config.rev_str());
@@ -350,9 +352,9 @@ private:
     return true;
   }
 
-  void update_config_sessions(topology::configuration config)
+  void update_config_sessions(const topology::configuration& config)
   {
-    std::scoped_lock lock(sessions_mutex_);
+    const std::scoped_lock lock(sessions_mutex_);
     std::vector<io::mcbp_session> new_sessions{};
 
     for (const auto& node : config.nodes) {
@@ -388,7 +390,8 @@ private:
         continue;
       }
 
-      couchbase::core::origin origin(origin_.credentials(), hostname, port, origin_.options());
+      const couchbase::core::origin origin(
+        origin_.credentials(), hostname, port, origin_.options());
       io::mcbp_session session =
         origin_.options().enable_tls
           ? io::mcbp_session(client_id_, ctx_, tls_, origin, state_listener_)
@@ -436,12 +439,12 @@ private:
     }
   }
 
-  void update_cluster_config(topology::configuration config)
+  void update_cluster_config(const topology::configuration& config)
   {
     std::vector<topology::configuration::node> added{};
     std::vector<topology::configuration::node> removed{};
     {
-      std::scoped_lock lock(config_mutex_);
+      const std::scoped_lock lock(config_mutex_);
       if (!should_update_config(config)) {
         return;
       }
@@ -456,7 +459,7 @@ private:
       configured_ = true;
 
       {
-        std::scoped_lock listeners_lock(config_listeners_mutex_);
+        const std::scoped_lock listeners_lock(config_listeners_mutex_);
         for (const auto& listener : config_listeners_) {
           listener->update_config(*config_);
         }
@@ -492,7 +495,8 @@ private:
       if (ptr != sessions_.end()) {
         continue;
       }
-      couchbase::core::origin origin(origin_.credentials(), hostname, port, origin_.options());
+      const couchbase::core::origin origin(
+        origin_.credentials(), hostname, port, origin_.options());
       io::mcbp_session session =
         origin_.options().enable_tls
           ? io::mcbp_session(client_id_, ctx_, tls_, origin, state_listener_)

@@ -21,17 +21,18 @@
 
 namespace couchbase::core::operations::management
 {
-std::error_code
+auto
 collections_manifest_get_request::encode_to(encoded_request_type& encoded,
-                                            mcbp_context&& /* context */) const
+                                            mcbp_context&& /* context */) const -> std::error_code
 {
   encoded.opaque(opaque);
   return {};
 }
 
-collections_manifest_get_response
+auto
 collections_manifest_get_request::make_response(key_value_error_context&& ctx,
                                                 const encoded_response_type& encoded) const
+  -> collections_manifest_get_response
 {
   collections_manifest_get_response response{ std::move(ctx) };
   if (!response.ctx.ec()) {

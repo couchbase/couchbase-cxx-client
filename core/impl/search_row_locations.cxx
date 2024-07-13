@@ -28,6 +28,12 @@ search_row_locations::search_row_locations(internal_search_row_locations interna
 {
 }
 
+search_row_locations::~search_row_locations() = default;
+search_row_locations::search_row_locations(search_row_locations&& other) noexcept = default;
+auto
+search_row_locations::operator=(search_row_locations&& other) noexcept
+  -> search_row_locations& = default;
+
 auto
 search_row_locations::get(const std::string& field) const -> std::vector<search_row_location>
 {

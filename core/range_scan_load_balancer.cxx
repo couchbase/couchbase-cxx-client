@@ -18,6 +18,7 @@
 #include "range_scan_load_balancer.hxx"
 
 #include <algorithm>
+#include <gsl/util>
 #include <limits>
 #include <map>
 #include <numeric>
@@ -35,7 +36,7 @@ range_scan_node_state::range_scan_node_state(std::queue<std::uint16_t> vbuckets)
 auto
 range_scan_node_state::fetch_vbucket_id() -> std::optional<std::uint16_t>
 {
-  std::lock_guard<std::mutex> const lock{ mutex_ };
+  const std::lock_guard<std::mutex> lock{ mutex_ };
   if (pending_vbuckets_.empty()) {
     return {};
   }
@@ -48,28 +49,28 @@ range_scan_node_state::fetch_vbucket_id() -> std::optional<std::uint16_t>
 void
 range_scan_node_state::notify_stream_ended()
 {
-  std::lock_guard<std::mutex> const lock{ mutex_ };
+  const std::lock_guard<std::mutex> lock{ mutex_ };
   active_stream_count_--;
 }
 
 void
 range_scan_node_state::enqueue_vbucket(std::uint16_t vbucket_id)
 {
-  std::lock_guard<std::mutex> const lock{ mutex_ };
+  const std::lock_guard<std::mutex> lock{ mutex_ };
   pending_vbuckets_.push(vbucket_id);
 }
 
 auto
 range_scan_node_state::active_stream_count() -> std::uint16_t
 {
-  std::lock_guard<std::mutex> const lock{ mutex_ };
+  const std::lock_guard<std::mutex> lock{ mutex_ };
   return active_stream_count_;
 }
 
 auto
 range_scan_node_state::pending_vbucket_count() -> std::size_t
 {
-  std::lock_guard<std::mutex> const lock{ mutex_ };
+  const std::lock_guard<std::mutex> lock{ mutex_ };
   return pending_vbuckets_.size();
 }
 
@@ -79,9 +80,9 @@ range_scan_load_balancer::range_scan_load_balancer(
   : seed_{ seed }
 {
   std::map<std::int16_t, std::queue<std::uint16_t>> node_to_vbucket_map{};
-  for (std::uint16_t vbucket_id = 0; vbucket_id < vbucket_map.size(); vbucket_id++) {
+  for (std::size_t vbucket_id = 0; vbucket_id < vbucket_map.size(); vbucket_id++) {
     auto node_id = vbucket_map[vbucket_id][0];
-    node_to_vbucket_map[node_id].push(vbucket_id);
+    node_to_vbucket_map[node_id].push(gsl::narrow_cast<std::uint16_t>(vbucket_id));
   }
   for (auto [node_id, vbucket_ids] : node_to_vbucket_map) {
     nodes_.emplace(node_id, std::move(vbucket_ids));
@@ -97,7 +98,7 @@ range_scan_load_balancer::seed(std::uint64_t seed)
 auto
 range_scan_load_balancer::select_vbucket() -> std::optional<std::uint16_t>
 {
-  std::lock_guard<std::mutex> const lock{ select_vbucket_mutex_ };
+  const std::lock_guard<std::mutex> lock{ select_vbucket_mutex_ };
 
   auto min_stream_count = std::numeric_limits<std::uint16_t>::max();
   std::optional<std::int16_t> selected_node_id{};

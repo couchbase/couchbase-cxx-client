@@ -40,7 +40,8 @@
 
 namespace couchbase::core::io::dns
 {
-
+namespace
+{
 #ifdef _WIN32
 // Reference:  https://learn.microsoft.com/en-us/windows/win32/api/_iphlp/
 std::string
@@ -105,7 +106,7 @@ load_resolv_conf()
   return {};
 }
 #else
-static constexpr auto default_resolv_conf_path = "/etc/resolv.conf";
+constexpr auto default_resolv_conf_path = "/etc/resolv.conf";
 
 auto
 load_resolv_conf(const char* conf_path) -> std::string
@@ -143,11 +144,12 @@ load_resolv_conf(const char* conf_path) -> std::string
   return {};
 }
 #endif
-static std::once_flag system_config_initialized_flag;
+} // namespace
 
 auto
 dns_config::system_config() -> const dns_config&
 {
+  static std::once_flag system_config_initialized_flag;
   static dns_config instance{};
 
   std::call_once(system_config_initialized_flag, []() {

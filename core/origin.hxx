@@ -54,7 +54,7 @@ struct origin {
 
   origin(origin&& other) = default;
   origin(const origin& other);
-  origin(const origin& other, const topology::configuration& config);
+  origin(origin other, const topology::configuration& config);
   origin(cluster_credentials auth,
          const std::string& hostname,
          std::uint16_t port,

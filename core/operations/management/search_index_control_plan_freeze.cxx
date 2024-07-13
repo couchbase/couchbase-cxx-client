@@ -24,9 +24,10 @@
 
 namespace couchbase::core::operations::management
 {
-std::error_code
+auto
 search_index_control_plan_freeze_request::encode_to(encoded_request_type& encoded,
                                                     http_context& /* context */) const
+  -> std::error_code
 {
   if (index_name.empty()) {
     return errc::common::invalid_argument;
@@ -45,9 +46,10 @@ search_index_control_plan_freeze_request::encode_to(encoded_request_type& encode
   return {};
 }
 
-search_index_control_plan_freeze_response
+auto
 search_index_control_plan_freeze_request::make_response(error_context::http&& ctx,
                                                         const encoded_response_type& encoded) const
+  -> search_index_control_plan_freeze_response
 {
   search_index_control_plan_freeze_response response{ std::move(ctx) };
   if (!response.ctx.ec) {

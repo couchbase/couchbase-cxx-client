@@ -68,8 +68,8 @@ internal_error_context::internal_error_context(tao::json::value internal,
 }
 
 auto
-internal_error_context::build_error_context(tao::json::value internal,
-                                            tao::json::value internal_metadata)
+internal_error_context::build_error_context(const tao::json::value& internal,
+                                            const tao::json::value& internal_metadata)
   -> couchbase::error_context
 {
   return couchbase::error_context{

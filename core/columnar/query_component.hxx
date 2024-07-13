@@ -46,7 +46,7 @@ public:
                   http_component http,
                   std::shared_ptr<retry_strategy> default_retry_strategy);
 
-  auto execute_query(query_options options, query_callback&& callback)
+  auto execute_query(const query_options& options, query_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, error>;
 
 private:

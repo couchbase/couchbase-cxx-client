@@ -24,7 +24,9 @@
 #include "core/logger/logger.hxx"
 #include "core/utils/unsigned_leb128.hxx"
 
+#include <algorithm>
 #include <couchbase/error_codes.hxx>
+#include <cstdint>
 
 namespace couchbase::core::mcbp
 {
@@ -50,7 +52,7 @@ codec::is_feature_enabled(protocol::hello_feature feature) const -> bool
 }
 
 auto
-codec::encode_packet(const couchbase::core::mcbp::packet& packet)
+codec::encode_packet(const couchbase::core::mcbp::packet& packet) const
   -> tl::expected<std::vector<std::byte>, std::error_code>
 {
   auto encoded_key = packet.key_;
@@ -65,7 +67,7 @@ codec::encode_packet(const couchbase::core::mcbp::packet& packet)
       return tl::unexpected(errc::common::unsupported_operation);
     }
     if (supports_collection_id(packet.command_)) {
-      core::utils::unsigned_leb128<std::uint32_t> encoded(packet.collection_id_);
+      const core::utils::unsigned_leb128<std::uint32_t> encoded(packet.collection_id_);
       encoded_key.reserve(encoded_key.size() + encoded.size());
       encoded_key.insert(encoded_key.begin(), encoded.begin(), encoded.end());
     } else if (packet.command_ == protocol::client_opcode::get_random_key) {
@@ -81,9 +83,9 @@ codec::encode_packet(const couchbase::core::mcbp::packet& packet)
     }
   }
 
-  std::size_t ext_len = extras.size();
-  std::size_t key_len = encoded_key.size();
-  std::size_t val_len = packet.value_.size();
+  const std::size_t ext_len = extras.size();
+  const std::size_t key_len = encoded_key.size();
+  const std::size_t val_len = packet.value_.size();
   std::size_t frames_len = 0;
 
   if (packet.barrier_frame_) {
@@ -99,7 +101,7 @@ codec::encode_packet(const couchbase::core::mcbp::packet& packet)
     frames_len += 3;
   }
   if (packet.open_tracing_frame_) {
-    std::size_t trace_ctx_len = packet.open_tracing_frame_->trace_context.size();
+    const std::size_t trace_ctx_len = packet.open_tracing_frame_->trace_context.size();
     frames_len = trace_ctx_len;
     if (trace_ctx_len < 15) {
       frames_len += 1;
@@ -111,7 +113,7 @@ codec::encode_packet(const couchbase::core::mcbp::packet& packet)
     frames_len += 3;
   }
   if (packet.user_impersonation_frame_) {
-    std::size_t user_len = packet.user_impersonation_frame_->user.size();
+    const std::size_t user_len = packet.user_impersonation_frame_->user.size();
     frames_len += user_len;
     if (user_len < 15) {
       frames_len += 1;
@@ -143,7 +145,7 @@ codec::encode_packet(const couchbase::core::mcbp::packet& packet)
         return tl::unexpected(errc::common::unsupported_operation);
     }
   }
-  std::size_t packet_len = 24 + ext_len + frames_len + key_len + val_len;
+  const std::size_t packet_len = 24 + ext_len + frames_len + key_len + val_len;
   buffer_writer buffer{ packet_len };
   buffer.write_byte(static_cast<std::byte>(packet_magic));
   buffer.write_byte(static_cast<std::byte>(packet.command_));
@@ -209,10 +211,9 @@ codec::encode_packet(const couchbase::core::mcbp::packet& packet)
     }
 
     if (packet.durability_timeout_frame_) {
-      auto millis = packet.durability_timeout_frame_->timeout.count();
-      if (millis > 65535) {
-        millis = 65535;
-      }
+      std::int64_t millis = packet.durability_timeout_frame_->timeout.count();
+      millis =
+        std::min(millis, static_cast<std::int64_t>(std::numeric_limits<std::uint16_t>::max()));
       buffer.write_frame_header(mcbp::request_sync_durability, 3);
       buffer.write_byte(static_cast<std::byte>(packet.durability_level_frame_->level));
       buffer.write_uint16(static_cast<std::uint16_t>(millis));
@@ -243,7 +244,7 @@ codec::encode_packet(const couchbase::core::mcbp::packet& packet)
       return tl::unexpected(errc::common::feature_not_available);
     }
 
-    std::size_t trace_ctx_len = packet.open_tracing_frame_->trace_context.size();
+    const std::size_t trace_ctx_len = packet.open_tracing_frame_->trace_context.size();
     if (trace_ctx_len < 15) {
       buffer.write_frame_header(mcbp::request_open_tracing, trace_ctx_len);
       buffer.write(packet.open_tracing_frame_->trace_context);
@@ -273,7 +274,7 @@ codec::encode_packet(const couchbase::core::mcbp::packet& packet)
       return tl::unexpected(errc::common::invalid_argument);
     }
 
-    std::size_t user_len = packet.user_impersonation_frame_->user.size();
+    const std::size_t user_len = packet.user_impersonation_frame_->user.size();
     if (user_len < 15) {
       buffer.write_frame_header(mcbp::request_user_impersonation, user_len);
       buffer.write(packet.user_impersonation_frame_->user);
@@ -316,7 +317,8 @@ codec::encode_packet(const couchbase::core::mcbp::packet& packet)
 }
 
 auto
-codec::decode_packet(gsl::span<std::byte> input) -> std::tuple<packet, std::size_t, std::error_code>
+codec::decode_packet(gsl::span<std::byte> input) const
+  -> std::tuple<packet, std::size_t, std::error_code>
 {
   if (input.empty()) {
     return { {}, {}, errc::network::end_of_stream };
@@ -327,22 +329,22 @@ codec::decode_packet(gsl::span<std::byte> input) -> std::tuple<packet, std::size
   if (input.size() < header_len) {
     return { {}, {}, errc::network::need_more_data };
   }
-  gsl::span<std::byte> header{ input.data(), header_len };
+  const gsl::span<std::byte> header{ input.data(), header_len };
 
   // grab the length of the full body
-  std::uint32_t body_len = big_endian::read_uint32(header, 8);
+  const std::uint32_t body_len = big_endian::read_uint32(header, 8);
   // Read the remaining bytes of the body
   if (input.size() < header_len + body_len) {
     return { {}, {}, errc::network::need_more_data };
   }
-  gsl::span<std::byte> body{ input.data() + header_len, body_len };
+  const gsl::span<std::byte> body{ input.data() + header_len, body_len };
 
   return decode_packet(header, body);
 }
 
 auto
-codec::decode_packet(gsl::span<std::byte> header,
-                     gsl::span<std::byte> body) -> std::tuple<packet, std::size_t, std::error_code>
+codec::decode_packet(gsl::span<std::byte> header, gsl::span<std::byte> body) const
+  -> std::tuple<packet, std::size_t, std::error_code>
 {
   packet pkt;
 
@@ -376,7 +378,7 @@ codec::decode_packet(gsl::span<std::byte> header,
   pkt.opaque_ = big_endian::read_uint32(header, 12);
   pkt.cas_ = big_endian::read_uint64(header, 16);
 
-  std::size_t header_len = header.size();
+  const std::size_t header_len = header.size();
   std::size_t body_len = body.size();
   std::size_t ext_len = big_endian::read_uint8(header, 4);
   std::size_t key_len = big_endian::read_uint16(header, 2);
@@ -401,13 +403,13 @@ codec::decode_packet(gsl::span<std::byte> header,
                  body_len);
     return { {}, {}, errc::network::protocol_error };
   }
-  std::size_t value_len = body_len - (frames_len + ext_len + key_len);
+  const std::size_t value_len = body_len - (frames_len + ext_len + key_len);
 
   if (frames_len > 0) {
     std::size_t frame_offset = 0;
 
     while (frame_offset < frames_len) {
-      std::byte frame_header = body[frame_offset];
+      const std::byte frame_header = body[frame_offset];
       ++frame_offset;
 
       auto frame_type = std::to_integer<std::uint8_t>((frame_header & std::byte{ 0xf0 }) >> 4);

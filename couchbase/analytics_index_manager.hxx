@@ -63,7 +63,7 @@ public:
    * @since 1.0.0
    * @committed
    */
-  void create_dataverse(std::string dataverse_name,
+  void create_dataverse(const std::string& dataverse_name,
                         const create_dataverse_analytics_options& options,
                         create_dataverse_analytics_handler&& handler) const;
 
@@ -77,7 +77,7 @@ public:
    * @since 1.0.0
    * @committed
    */
-  [[nodiscard]] auto create_dataverse(std::string dataverse_name,
+  [[nodiscard]] auto create_dataverse(const std::string& dataverse_name,
                                       const create_dataverse_analytics_options& options) const
     -> std::future<error>;
 
@@ -91,7 +91,7 @@ public:
    * @since 1.0.0
    * @committed
    */
-  void drop_dataverse(std::string dataverse_name,
+  void drop_dataverse(const std::string& dataverse_name,
                       const drop_dataverse_analytics_options& options,
                       drop_dataverse_analytics_handler&& handler) const;
 
@@ -105,7 +105,7 @@ public:
    * @since 1.0.0
    * @committed
    */
-  [[nodiscard]] auto drop_dataverse(std::string dataverse_name,
+  [[nodiscard]] auto drop_dataverse(const std::string& dataverse_name,
                                     const drop_dataverse_analytics_options& options) const
     -> std::future<error>;
 
@@ -120,8 +120,8 @@ public:
    * @since 1.0.0
    * @committed
    */
-  void create_dataset(std::string dataset_name,
-                      std::string bucket_name,
+  void create_dataset(const std::string& dataset_name,
+                      const std::string& bucket_name,
                       const create_dataset_analytics_options& options,
                       create_dataset_analytics_handler&& handler) const;
 
@@ -136,8 +136,8 @@ public:
    * @since 1.0.0
    * @committed
    */
-  [[nodiscard]] auto create_dataset(std::string dataset_name,
-                                    std::string bucket_name,
+  [[nodiscard]] auto create_dataset(const std::string& dataset_name,
+                                    const std::string& bucket_name,
                                     const create_dataset_analytics_options& options) const
     -> std::future<error>;
 
@@ -151,7 +151,7 @@ public:
    * @since 1.0.0
    * @committed
    */
-  void drop_dataset(std::string dataset_name,
+  void drop_dataset(const std::string& dataset_name,
                     const drop_dataset_analytics_options& options,
                     drop_dataset_analytics_handler&& handler) const;
 
@@ -165,7 +165,7 @@ public:
    * @since 1.0.0
    * @committed
    */
-  [[nodiscard]] auto drop_dataset(std::string dataset_name,
+  [[nodiscard]] auto drop_dataset(const std::string& dataset_name,
                                   const drop_dataset_analytics_options& options) const
     -> std::future<error>;
 
@@ -205,9 +205,9 @@ public:
    * @since 1.0.0
    * @committed
    */
-  void create_index(std::string index_name,
-                    std::string dataset_name,
-                    std::map<std::string, std::string> fields,
+  void create_index(const std::string& index_name,
+                    const std::string& dataset_name,
+                    const std::map<std::string, std::string>& fields,
                     const create_index_analytics_options& options,
                     create_index_analytics_handler&& handler) const;
 
@@ -223,9 +223,9 @@ public:
    * @since 1.0.0
    * @committed
    */
-  [[nodiscard]] auto create_index(std::string index_name,
-                                  std::string dataset_name,
-                                  std::map<std::string, std::string> fields,
+  [[nodiscard]] auto create_index(const std::string& index_name,
+                                  const std::string& dataset_name,
+                                  const std::map<std::string, std::string>& fields,
                                   const create_index_analytics_options& options) const
     -> std::future<error>;
 
@@ -240,8 +240,8 @@ public:
    * @since 1.0.0
    * @committed
    */
-  void drop_index(std::string index_name,
-                  std::string dataset_name,
+  void drop_index(const std::string& index_name,
+                  const std::string& dataset_name,
                   const drop_index_analytics_options& options,
                   drop_index_analytics_handler&& handler) const;
 
@@ -256,8 +256,8 @@ public:
    * @since 1.0.0
    * @committed
    */
-  [[nodiscard]] auto drop_index(std::string index_name,
-                                std::string dataset_name,
+  [[nodiscard]] auto drop_index(const std::string& index_name,
+                                const std::string& dataset_name,
                                 const drop_index_analytics_options& options) const
     -> std::future<error>;
 
@@ -425,8 +425,8 @@ public:
    * @since 1.0.0
    * @committed
    */
-  void drop_link(std::string link_name,
-                 std::string dataverse_name,
+  void drop_link(const std::string& link_name,
+                 const std::string& dataverse_name,
                  const drop_link_analytics_options& options,
                  drop_link_analytics_handler&& handler) const;
 
@@ -441,8 +441,8 @@ public:
    * @since 1.0.0
    * @committed
    */
-  [[nodiscard]] auto drop_link(std::string link_name,
-                               std::string dataverse_name,
+  [[nodiscard]] auto drop_link(const std::string& link_name,
+                               const std::string& dataverse_name,
                                const drop_link_analytics_options& options) const
     -> std::future<error>;
 

@@ -24,9 +24,9 @@
 
 namespace couchbase::core::operations::management
 {
-std::error_code
+auto
 analytics_index_create_request::encode_to(encoded_request_type& encoded,
-                                          http_context& /* context */) const
+                                          http_context& /* context */) const -> std::error_code
 {
   std::string if_not_exists_clause = ignore_if_exists ? "IF NOT EXISTS" : "";
   std::vector<std::string> field_specs;
@@ -35,7 +35,7 @@ analytics_index_create_request::encode_to(encoded_request_type& encoded,
     field_specs.emplace_back(fmt::format("{}:{}", field_name, field_type));
   }
 
-  tao::json::value body{
+  const tao::json::value body{
     { "statement",
       fmt::format("CREATE INDEX `{}` {} ON {}.`{}` ({})",
                   index_name,
@@ -51,9 +51,10 @@ analytics_index_create_request::encode_to(encoded_request_type& encoded,
   return {};
 }
 
-analytics_index_create_response
+auto
 analytics_index_create_request::make_response(error_context::http&& ctx,
                                               const encoded_response_type& encoded) const
+  -> analytics_index_create_response
 {
   analytics_index_create_response response{ std::move(ctx) };
   if (!response.ctx.ec) {
@@ -73,7 +74,7 @@ analytics_index_create_request::make_response(error_context::http&& ctx,
 
       if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
         for (const auto& error : errors->get_array()) {
-          analytics_problem err{
+          const analytics_problem err{
             error.at("code").as<std::uint32_t>(),
             error.at("msg").get_string(),
           };
@@ -86,6 +87,8 @@ analytics_index_create_request::make_response(error_context::http&& ctx,
               break;
             case 24006: /* Link [string] does not exist */
               link_not_found = true;
+              break;
+            default:
               break;
           }
           response.errors.emplace_back(err);

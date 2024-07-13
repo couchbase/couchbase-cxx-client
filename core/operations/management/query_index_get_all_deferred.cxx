@@ -22,16 +22,17 @@
 
 namespace couchbase::core::operations::management
 {
-std::error_code
+auto
 query_index_get_all_deferred_request::encode_to(encoded_request_type& encoded,
                                                 couchbase::core::http_context& /* context */) const
+  -> std::error_code
 {
 
   // essentially same as query_index_get_all_request::encode_to, except for the state condition. If
   // you change this, you probably need to change that as well.
-  std::string bucket_cond = "bucket_id = $bucket_name";
-  std::string scope_cond = "(" + bucket_cond + " AND scope_id = $scope_name)";
-  std::string collection_cond = "(" + scope_cond + " AND keyspace_id = $collection_name)";
+  const std::string bucket_cond = "bucket_id = $bucket_name";
+  const std::string scope_cond = "(" + bucket_cond + " AND scope_id = $scope_name)";
+  const std::string collection_cond = "(" + scope_cond + " AND keyspace_id = $collection_name)";
 
   std::string where;
   if (!collection_name.empty()) {
@@ -43,7 +44,8 @@ query_index_get_all_deferred_request::encode_to(encoded_request_type& encoded,
   }
 
   if (collection_name == "_default" || collection_name.empty()) {
-    std::string default_collection_cond = "(bucket_id IS MISSING AND keyspace_id = $bucket_name)";
+    const std::string default_collection_cond =
+      "(bucket_id IS MISSING AND keyspace_id = $bucket_name)";
     where = "(" + where + " OR " + default_collection_cond + ")";
   }
 
@@ -70,9 +72,10 @@ query_index_get_all_deferred_request::encode_to(encoded_request_type& encoded,
   return {};
 }
 
-query_index_get_all_deferred_response
+auto
 query_index_get_all_deferred_request::make_response(couchbase::core::error_context::http&& ctx,
                                                     const encoded_response_type& encoded) const
+  -> query_index_get_all_deferred_response
 {
   query_index_get_all_deferred_response response{ std::move(ctx) };
   if (!response.ctx.ec) {

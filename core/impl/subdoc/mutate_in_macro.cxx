@@ -43,7 +43,7 @@ to_binary(couchbase::subdoc::mutate_in_macro value) -> std::vector<std::byte>
 {
   // echo -n '"${Mutation.CAS}"' | ruby -e 'puts ARGF.read.chars.map{|c| format("std::byte{0x%02x}",
   // c.ord)}.join(", ")'
-  static std::vector cas_bytes{
+  static const std::vector cas_bytes{
     std::byte{ 0x22 }, std::byte{ 0x24 }, std::byte{ 0x7b }, std::byte{ 0x4d }, std::byte{ 0x75 },
     std::byte{ 0x74 }, std::byte{ 0x61 }, std::byte{ 0x74 }, std::byte{ 0x69 }, std::byte{ 0x6f },
     std::byte{ 0x6e }, std::byte{ 0x2e }, std::byte{ 0x43 }, std::byte{ 0x41 }, std::byte{ 0x53 },
@@ -53,7 +53,7 @@ to_binary(couchbase::subdoc::mutate_in_macro value) -> std::vector<std::byte>
   // echo -n '"${Mutation.seqno}"' | ruby -e 'puts ARGF.read.chars.map{|c|
   // format("std::byte{0x%02x}", c.ord)}.join(",
   // ")'
-  static std::vector seqno_bytes{
+  static const std::vector seqno_bytes{
     std::byte{ 0x22 }, std::byte{ 0x24 }, std::byte{ 0x7b }, std::byte{ 0x4d }, std::byte{ 0x75 },
     std::byte{ 0x74 }, std::byte{ 0x61 }, std::byte{ 0x74 }, std::byte{ 0x69 }, std::byte{ 0x6f },
     std::byte{ 0x6e }, std::byte{ 0x2e }, std::byte{ 0x73 }, std::byte{ 0x65 }, std::byte{ 0x71 },
@@ -62,7 +62,7 @@ to_binary(couchbase::subdoc::mutate_in_macro value) -> std::vector<std::byte>
 
   // echo -n '"${Mutation.value_crc32c}"' | ruby -e 'puts ARGF.read.chars.map{|c|
   // format("std::byte{0x%02x}", c.ord)}.join(", ")'
-  static std::vector crc32_bytes{
+  static const std::vector crc32_bytes{
     std::byte{ 0x22 }, std::byte{ 0x24 }, std::byte{ 0x7b }, std::byte{ 0x4d }, std::byte{ 0x75 },
     std::byte{ 0x74 }, std::byte{ 0x61 }, std::byte{ 0x74 }, std::byte{ 0x69 }, std::byte{ 0x6f },
     std::byte{ 0x6e }, std::byte{ 0x2e }, std::byte{ 0x76 }, std::byte{ 0x61 }, std::byte{ 0x6c },

@@ -233,10 +233,14 @@ file(
   "
 #include \"core/mozilla_ca_bundle.hxx\"
 
+#include <gsl/span>
+
+#include <array>
+#include <string_view>
+
 namespace couchbase::core::default_ca
 {
-constexpr inline std::size_t number_of_certificates{ ${NUMBER_OF_CERTIFICATES} };
-constexpr inline certificate certificates[]{
+constexpr inline std::array<certificate, ${NUMBER_OF_CERTIFICATES}> certificates{
 ")
 foreach(CERTIFICATE ${CERTIFICATES})
   string(
@@ -244,30 +248,33 @@ foreach(CERTIFICATE ${CERTIFICATES})
           "[ \t\r\n]*([^=\n]+)[ \t\r\n]*=+\n(-----BEGIN CERTIFICATE-----[^-]+-----END CERTIFICATE-----)"
           PARTS
           ${CERTIFICATE})
-  file(APPEND ${CA_BUNDLE_CPP_FILE} "    { R\"(${CMAKE_MATCH_1})\",\n      R\"(${CMAKE_MATCH_2})\" },\n\n")
+  file(APPEND ${CA_BUNDLE_CPP_FILE}
+"  certificate{ R\"(${CMAKE_MATCH_1})\",
+               R\"(${CMAKE_MATCH_2})\" },
+
+")
 endforeach()
 
 file(
   APPEND ${CA_BUNDLE_CPP_FILE}
-  "    { \"\", \"\" },
-};
+"};
 
 auto
 mozilla_ca_certs() -> gsl::span<const certificate>
 {
-    return { certificates, number_of_certificates };
+  return certificates;
 }
 
 auto
 mozilla_ca_certs_date() -> std::string_view
 {
-    return \"${COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_DATE}\";
+  return \"${COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_DATE}\";
 }
 
 auto
 mozilla_ca_certs_sha256() -> std::string_view
 {
-    return \"${COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_SHA256}\";
+  return \"${COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_SHA256}\";
 }
 } // namespace couchbase::core::default_ca
 ")

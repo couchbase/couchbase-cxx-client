@@ -30,7 +30,22 @@
 #include "core/operations/document_upsert.hxx"
 #include "observe_poll.hxx"
 
+#include <couchbase/append_options.hxx>
+#include <couchbase/decrement_options.hxx>
+#include <couchbase/durability_level.hxx>
+#include <couchbase/error.hxx>
+#include <couchbase/increment_options.hxx>
+#include <couchbase/persist_to.hxx>
+#include <couchbase/prepend_options.hxx>
+#include <couchbase/replicate_to.hxx>
+
+#include <cstddef>
+#include <future>
 #include <memory>
+#include <string_view>
+#include <system_error>
+#include <utility>
+#include <vector>
 
 namespace couchbase
 {
@@ -103,32 +118,33 @@ public:
       options.timeout,
       { options.retry_strategy },
     };
-    return core_.execute(
-      std::move(request),
-      [core = core_, id = std::move(id), options, handler = std::move(handler)](
-        auto&& resp) mutable {
-        if (resp.ctx.ec()) {
-          return handler(core::impl::make_error(std::move(resp.ctx)),
-                         mutation_result{ resp.cas, std::move(resp.token) });
-        }
+    return core_.execute(std::move(request),
+                         [core = core_, id = std::move(id), options, handler = std::move(handler)](
+                           auto&& resp) mutable {
+                           if (resp.ctx.ec()) {
+                             return handler(core::impl::make_error(std::move(resp.ctx)),
+                                            mutation_result{ resp.cas, std::move(resp.token) });
+                           }
 
-        auto token = resp.token;
-        core::impl::initiate_observe_poll(
-          core,
-          std::move(id),
-          token,
-          options.timeout,
-          options.persist_to,
-          options.replicate_to,
-          [resp = std::move(resp), handler = std::move(handler)](std::error_code ec) mutable {
-            if (ec) {
-              resp.ctx.override_ec(ec);
-              return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{});
-            }
-            return handler(core::impl::make_error(std::move(resp.ctx)),
-                           mutation_result{ resp.cas, std::move(resp.token) });
-          });
-      });
+                           auto token = resp.token;
+                           core::impl::initiate_observe_poll(
+                             core,
+                             std::move(id),
+                             token,
+                             options.timeout,
+                             options.persist_to,
+                             options.replicate_to,
+                             [resp = std::forward<decltype(resp)>(resp),
+                              handler = std::move(handler)](std::error_code ec) mutable {
+                               if (ec) {
+                                 resp.ctx.override_ec(ec);
+                                 return handler(core::impl::make_error(std::move(resp.ctx)),
+                                                mutation_result{});
+                               }
+                               return handler(core::impl::make_error(std::move(resp.ctx)),
+                                              mutation_result{ resp.cas, std::move(resp.token) });
+                             });
+                         });
   }
 
   void prepend(std::string document_key,
@@ -171,32 +187,33 @@ public:
       options.timeout,
       { options.retry_strategy },
     };
-    return core_.execute(
-      std::move(request),
-      [core = core_, id = std::move(id), options, handler = std::move(handler)](
-        auto&& resp) mutable {
-        if (resp.ctx.ec()) {
-          return handler(core::impl::make_error(std::move(resp.ctx)),
-                         mutation_result{ resp.cas, std::move(resp.token) });
-        }
+    return core_.execute(std::move(request),
+                         [core = core_, id = std::move(id), options, handler = std::move(handler)](
+                           auto&& resp) mutable {
+                           if (resp.ctx.ec()) {
+                             return handler(core::impl::make_error(std::move(resp.ctx)),
+                                            mutation_result{ resp.cas, std::move(resp.token) });
+                           }
 
-        auto token = resp.token;
-        core::impl::initiate_observe_poll(
-          core,
-          std::move(id),
-          token,
-          options.timeout,
-          options.persist_to,
-          options.replicate_to,
-          [resp = std::move(resp), handler = std::move(handler)](std::error_code ec) mutable {
-            if (ec) {
-              resp.ctx.override_ec(ec);
-              return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{});
-            }
-            return handler(core::impl::make_error(std::move(resp.ctx)),
-                           mutation_result{ resp.cas, std::move(resp.token) });
-          });
-      });
+                           auto token = resp.token;
+                           core::impl::initiate_observe_poll(
+                             core,
+                             std::move(id),
+                             token,
+                             options.timeout,
+                             options.persist_to,
+                             options.replicate_to,
+                             [resp = std::forward<decltype(resp)>(resp),
+                              handler = std::move(handler)](std::error_code ec) mutable {
+                               if (ec) {
+                                 resp.ctx.override_ec(ec);
+                                 return handler(core::impl::make_error(std::move(resp.ctx)),
+                                                mutation_result{});
+                               }
+                               return handler(core::impl::make_error(std::move(resp.ctx)),
+                                              mutation_result{ resp.cas, std::move(resp.token) });
+                             });
+                         });
   }
 
   void decrement(std::string document_key,
@@ -259,7 +276,8 @@ public:
           options.timeout,
           options.persist_to,
           options.replicate_to,
-          [resp = std::move(resp), handler = std::move(handler)](std::error_code ec) mutable {
+          [resp = std::forward<decltype(resp)>(resp),
+           handler = std::move(handler)](std::error_code ec) mutable {
             if (ec) {
               resp.ctx.override_ec(ec);
               return handler(core::impl::make_error(std::move(resp.ctx)), counter_result{});
@@ -330,7 +348,8 @@ public:
           options.timeout,
           options.persist_to,
           options.replicate_to,
-          [resp = std::move(resp), handler = std::move(handler)](std::error_code ec) mutable {
+          [resp = std::forward<decltype(resp)>(resp),
+           handler = std::move(handler)](std::error_code ec) mutable {
             if (ec) {
               resp.ctx.override_ec(ec);
               return handler(core::impl::make_error(std::move(resp.ctx)), counter_result{});

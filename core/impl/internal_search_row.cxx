@@ -38,6 +38,12 @@ internal_search_row::internal_search_row(core::operations::search_response::sear
   }
 }
 
+internal_search_row::internal_search_row(internal_search_row&& other) noexcept = default;
+
+auto
+internal_search_row::operator=(internal_search_row&& other) noexcept
+  -> internal_search_row& = default;
+
 auto
 internal_search_row::index() const -> const std::string&
 {

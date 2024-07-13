@@ -53,124 +53,127 @@ public:
 
   [[nodiscard]] auto bucket_name() const -> const std::string&;
 
-  auto get(get_options options, get_callback&& callback)
+  auto get(const get_options& options, get_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto get_and_touch(get_and_touch_options options, get_and_touch_callback&& callback)
+  auto get_and_touch(const get_and_touch_options& options, get_and_touch_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto get_and_lock(get_and_lock_options options, get_and_touch_callback&& callback)
+  auto get_and_lock(const get_and_lock_options& options, get_and_touch_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto get_one_replica(get_one_replica_options options, get_one_replica_callback&& callback)
+  auto get_one_replica(const get_one_replica_options& options, get_one_replica_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto touch(touch_options options, touch_callback&& callback)
+  auto touch(const touch_options& options, touch_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto unlock(unlock_options options, unlock_callback&& callback)
+  auto unlock(const unlock_options& options, unlock_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto remove(remove_options options, remove_callback&& callback)
+  auto remove(const remove_options& options, remove_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto insert(insert_options options, insert_callback&& callback)
+  auto insert(const insert_options& options, insert_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto upsert(upsert_options options, upsert_callback&& callback)
+  auto upsert(const upsert_options& options, upsert_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto replace(replace_options options, replace_callback&& callback)
+  auto replace(const replace_options& options, replace_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto append(adjoin_options options, adjoin_callback&& callback)
+  auto append(const adjoin_options& options, adjoin_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto prepend(adjoin_options options, adjoin_callback&& callback)
+  auto prepend(const adjoin_options& options, adjoin_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto increment(counter_options options, counter_callback&& callback)
+  auto increment(const counter_options& options, counter_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto decrement(counter_options options, counter_callback&& callback)
+  auto decrement(const counter_options& options, counter_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto get_random(get_random_options options, get_random_callback&& callback)
+  auto get_random(const get_random_options& options, get_random_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto get_with_meta(get_with_meta_options options, get_with_meta_callback&& callback)
+  auto get_with_meta(const get_with_meta_options& options, get_with_meta_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto upsert_with_meta(upsert_with_meta_options options, upsert_with_meta_callback&& callback)
+  auto upsert_with_meta(const upsert_with_meta_options& options,
+                        upsert_with_meta_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto remove_with_meta(remove_with_meta_options options, remove_with_meta_callback&& callback)
+  auto remove_with_meta(const remove_with_meta_options& options,
+                        remove_with_meta_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto observe(observe_options options, observe_callback&& callback)
+  auto observe(const observe_options& options, observe_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto observe_seqno(observe_seqno_options options, observe_seqno_callback&& callback)
+  auto observe_seqno(const observe_seqno_options& options, observe_seqno_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto lookup_in(lookup_in_options options, lookup_in_callback&& callback)
+  auto lookup_in(const lookup_in_options& options, lookup_in_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto mutate_in(mutate_in_options options, mutate_in_callback&& callback)
+  auto mutate_in(const mutate_in_options& options, mutate_in_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto n1ql_query(n1ql_query_options options, n1ql_query_callback&& callback)
+  auto n1ql_query(const n1ql_query_options& options, n1ql_query_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto prepared_n1ql_query(n1ql_query_options options, n1ql_query_callback&& callback)
+  auto prepared_n1ql_query(const n1ql_query_options& options, n1ql_query_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto analytics_query(analytics_query_options options, analytics_query_callback&& callback)
+  auto analytics_query(const analytics_query_options& options, analytics_query_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto search_query(search_query_options options, search_query_callback&& callback)
+  auto search_query(const search_query_options& options, search_query_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto view_query(view_query_options options, view_query_callback&& callback)
+  auto view_query(const view_query_options& options, view_query_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto free_form_http_request(http_request request, free_form_http_request_callback&& callback)
+  auto free_form_http_request(const http_request& request,
+                              free_form_http_request_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto stats(stats_options options, stats_callback&& callback)
+  auto stats(const stats_options& options, stats_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
   auto get_collection_id(std::string scope_name,
                          std::string collection_name,
-                         get_collection_id_options options,
+                         const get_collection_id_options& options,
                          get_collection_id_callback callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
   auto wait_until_ready(std::chrono::milliseconds timeout,
-                        wait_until_ready_options options,
+                        const wait_until_ready_options& options,
                         wait_until_ready_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto ping(ping_options options, ping_callback&& callback)
+  auto ping(const ping_options& options, ping_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
   auto diagnostics(diagnostics_options options) -> tl::expected<diagnostic_info, std::error_code>;
 
   auto range_scan_create(std::uint16_t vbucket_id,
-                         range_scan_create_options options,
+                         const range_scan_create_options& options,
                          range_scan_create_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto range_scan_continue(std::vector<std::byte> scan_uuid,
+  auto range_scan_continue(const std::vector<std::byte>& scan_uuid,
                            std::uint16_t vbucket_id,
-                           range_scan_continue_options options,
+                           const range_scan_continue_options& options,
                            range_scan_item_callback&& item_callback,
                            range_scan_continue_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
   auto range_scan_cancel(std::vector<std::byte> scan_uuid,
                          std::uint16_t vbucket_id,
-                         range_scan_cancel_options options,
+                         const range_scan_cancel_options& options,
                          range_scan_cancel_callback&& callback) const
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 

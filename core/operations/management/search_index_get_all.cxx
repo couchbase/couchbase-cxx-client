@@ -25,9 +25,9 @@
 
 namespace couchbase::core::operations::management
 {
-std::error_code
+auto
 search_index_get_all_request::encode_to(encoded_request_type& encoded,
-                                        http_context& /* context */) const
+                                        http_context& /* context */) const -> std::error_code
 {
   encoded.method = "GET";
   if (bucket_name.has_value() && scope_name.has_value()) {
@@ -39,9 +39,10 @@ search_index_get_all_request::encode_to(encoded_request_type& encoded,
   return {};
 }
 
-search_index_get_all_response
+auto
 search_index_get_all_request::make_response(error_context::http&& ctx,
                                             const encoded_response_type& encoded) const
+  -> search_index_get_all_response
 {
   search_index_get_all_response response{ std::move(ctx) };
   if (!response.ctx.ec) {

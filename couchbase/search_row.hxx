@@ -43,6 +43,9 @@ public:
    * @volatile
    */
   explicit search_row(internal_search_row internal);
+  search_row(search_row&& other) noexcept;
+  ~search_row();
+  auto operator=(search_row&& other) noexcept -> search_row&;
 
   /**
    * @since 1.0.0

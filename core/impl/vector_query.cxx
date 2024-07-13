@@ -37,7 +37,7 @@ vector_query::encode() const -> encoded_search_query
       vector_values.push_back(value);
     }
     built.query["vector"] = vector_values;
-  } else {
+  } else if (base64_vector_query_.has_value()) {
     built.query["vector_base64"] = base64_vector_query_.value();
   }
 

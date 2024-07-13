@@ -23,17 +23,18 @@
 
 namespace couchbase::core::operations::management
 {
-std::error_code
-bucket_flush_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+auto
+bucket_flush_request::encode_to(encoded_request_type& encoded,
+                                http_context& /* context */) const -> std::error_code
 {
   encoded.method = "POST";
   encoded.path = fmt::format("/pools/default/buckets/{}/controller/doFlush", name);
   return {};
 }
 
-bucket_flush_response
-bucket_flush_request::make_response(error_context::http&& ctx,
-                                    const encoded_response_type& encoded) const
+auto
+bucket_flush_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded)
+  const -> bucket_flush_response
 {
   bucket_flush_response response{ std::move(ctx) };
   if (!response.ctx.ec) {

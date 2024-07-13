@@ -18,6 +18,7 @@
 #pragma once
 
 #include <cinttypes>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -39,7 +40,7 @@ public:
    * @since 1.0.0
    * @internal
    */
-  explicit search_row_location(internal_search_row_location location);
+  explicit search_row_location(internal_search_row_location internal);
 
   search_row_location();
 

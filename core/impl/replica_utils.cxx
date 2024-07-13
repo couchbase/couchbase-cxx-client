@@ -40,7 +40,7 @@ effective_nodes(const document_id& id,
   for (std::size_t idx = 0U; idx <= config.num_replicas.value_or(0U); ++idx) {
     auto [vbid, server] = config.map_key(id.key(), idx);
     if (server.has_value() && server.value() < config.nodes.size()) {
-      bool is_replica = idx != 0;
+      const bool is_replica = idx != 0;
       available_nodes.emplace_back(readable_node{ is_replica, idx });
       if (preferred_server_group == config.nodes[server.value()].server_group) {
         local_nodes.emplace_back(readable_node{ is_replica, idx });

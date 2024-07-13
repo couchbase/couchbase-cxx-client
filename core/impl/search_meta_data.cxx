@@ -26,6 +26,13 @@ search_meta_data::search_meta_data(internal_search_meta_data internal)
 {
 }
 
+search_meta_data::search_meta_data(search_meta_data&& other) noexcept = default;
+
+search_meta_data::~search_meta_data() = default;
+
+auto
+search_meta_data::operator=(search_meta_data&& other) noexcept -> search_meta_data& = default;
+
 auto
 search_meta_data::client_context_id() const -> const std::string&
 {

@@ -63,5 +63,5 @@ to_lookup_in_macro(std::string_view input) -> std::optional<lookup_in_macro>;
  * @volatile
  */
 auto
-to_string(lookup_in_macro value) -> const std::string&;
+to_string(lookup_in_macro value) -> std::string;
 } // namespace couchbase::subdoc

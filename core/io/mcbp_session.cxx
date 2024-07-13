@@ -17,6 +17,8 @@
 
 #include "mcbp_session.hxx"
 
+#include <couchbase/build_config.hxx>
+
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
 #include "core/columnar/background_bootstrap_listener.hxx"
 #endif
@@ -54,7 +56,6 @@
 #include "retry_orchestrator.hxx"
 #include "streams.hxx"
 
-#include <couchbase/build_config.hxx>
 #include <couchbase/error_codes.hxx>
 #include <couchbase/fmt/retry_reason.hxx>
 
@@ -70,7 +71,7 @@ template<typename Container>
 struct mcbp_header_view {
   const Container& buf_;
 
-  mcbp_header_view(const Container& buf)
+  explicit mcbp_header_view(const Container& buf)
     : buf_{ buf }
   {
   }
@@ -221,6 +222,11 @@ class mcbp_session_impl
     impl::bootstrap_error last_bootstrap_error_;
 
   public:
+    bootstrap_handler(const bootstrap_handler&) = delete;
+    auto operator=(const bootstrap_handler&) -> bootstrap_handler& = delete;
+    bootstrap_handler(bootstrap_handler&&) = delete;
+    auto operator=(bootstrap_handler&&) -> bootstrap_handler& = delete;
+
     ~bootstrap_handler()
     {
       stop();
@@ -321,10 +327,10 @@ class mcbp_session_impl
         errmap_req.opaque(session_->next_opaque());
         session_->write(errmap_req.data());
       }
-      if (session_->bucket_name_) {
+      if (auto val = session_->bucket_name_; val) {
         protocol::client_request<protocol::select_bucket_request_body> sb_req;
         sb_req.opaque(session_->next_opaque());
-        sb_req.body().bucket_name(session_->bucket_name_.value());
+        sb_req.body().bucket_name(val.value());
         session_->write(sb_req.data());
       }
       protocol::client_request<protocol::get_cluster_config_request_body> cfg_req;
@@ -405,7 +411,7 @@ class mcbp_session_impl
               }
             } break;
             case protocol::client_opcode::sasl_list_mechs: {
-              protocol::client_response<protocol::sasl_list_mechs_response_body> resp(
+              const protocol::client_response<protocol::sasl_list_mechs_response_body> resp(
                 std::move(msg));
               if (resp.status() != key_value_status_code::success) {
                 auto error_msg =
@@ -461,7 +467,8 @@ class mcbp_session_impl
               }
             } break;
             case protocol::client_opcode::sasl_step: {
-              protocol::client_response<protocol::sasl_step_response_body> resp(std::move(msg));
+              const protocol::client_response<protocol::sasl_step_response_body> resp(
+                std::move(msg));
               if (resp.status() == key_value_status_code::success) {
                 return auth_success();
               }
@@ -545,15 +552,16 @@ class mcbp_session_impl
                                        session_->connection_endpoints_.remote.port() };
               protocol::client_response<protocol::get_cluster_config_response_body> resp(
                 std::move(msg), info);
-              if (session_->origin_.options().dump_configuration &&
-                  resp.body().config_text().has_value()) {
-                CB_LOG_TRACE("{} configuration from get_cluster_config request (bootstrap, "
-                             "size={}, endpoint=\"{}:{}\"), {}",
-                             session_->log_prefix_,
-                             resp.body().config_text().value().size(),
-                             info.endpoint_address,
-                             info.endpoint_port,
-                             resp.body().config_text().value());
+              if (session_->origin_.options().dump_configuration) {
+                if (const auto& text = resp.body().config_text(); text.has_value()) {
+                  CB_LOG_TRACE("{} configuration from get_cluster_config request (bootstrap, "
+                               "size={}, endpoint=\"{}:{}\"), {}",
+                               session_->log_prefix_,
+                               text.value().size(),
+                               info.endpoint_address,
+                               info.endpoint_port,
+                               text.value());
+                }
               }
               if (resp.status() == key_value_status_code::success) {
                 // MB-60405 fixes this for 7.6.2, but for earlier versions we need to protect
@@ -561,7 +569,8 @@ class mcbp_session_impl
                 // if we retry here, but a timeout would be more acceptable than a crash and if we
                 // do timeout, we have a clear indication of the problem (i.e. it is a server bug
                 // and we cannot use a config w/ an empty vbucket map).
-                if (resp.body().config().vbmap && resp.body().config().vbmap->size() == 0) {
+                if (const auto vbmap = resp.body().config().vbmap;
+                    vbmap.has_value() && vbmap->empty()) {
                   CB_LOG_WARNING("{} received a configuration with an empty vbucket map, retrying",
                                  session_->log_prefix_);
                   return complete(errc::network::configuration_not_available);
@@ -625,20 +634,23 @@ class mcbp_session_impl
                                        session_->bootstrap_port_number_ };
               protocol::server_request<protocol::cluster_map_change_notification_request_body> req(
                 std::move(msg), info);
-              if (session_->origin_.options().dump_configuration &&
-                  req.body().config_text().has_value()) {
-                CB_LOG_TRACE("{} configuration from cluster_map_change_notification request "
-                             "(size={}, endpoint=\"{}:{}\"), {}",
-                             session_->log_prefix_,
-                             req.body().config_text().value().size(),
-                             info.endpoint_address,
-                             info.endpoint_port,
-                             req.body().config_text().value());
+              if (session_->origin_.options().dump_configuration) {
+                if (const auto& text = req.body().config_text(); text.has_value()) {
+                  CB_LOG_TRACE("{} configuration from cluster_map_change_notification request "
+                               "(size={}, endpoint=\"{}:{}\"), {}",
+                               session_->log_prefix_,
+                               text.value().size(),
+                               info.endpoint_address,
+                               info.endpoint_port,
+                               text.value());
+                }
               }
               std::optional<topology::configuration> config = req.body().config();
               if (session_ && config.has_value()) {
                 if ((!config->bucket.has_value() && req.body().bucket().empty()) ||
                     (session_->bucket_name_.has_value() && !req.body().bucket().empty() &&
+                     // TODO(CXXCBC-549)
+                     // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
                      session_->bucket_name_.value() == req.body().bucket())) {
                   session_->update_configuration(std::move(config.value()));
                 }
@@ -680,6 +692,11 @@ class mcbp_session_impl
     {
     }
 
+    message_handler(const message_handler&) = delete;
+    auto operator=(const message_handler&) -> message_handler& = delete;
+    message_handler(message_handler&&) = delete;
+    auto operator=(message_handler&&) -> message_handler& = delete;
+
     ~message_handler()
     {
       stop();
@@ -709,15 +726,16 @@ class mcbp_session_impl
                                        session_->bootstrap_port_number_ };
               protocol::client_response<protocol::get_cluster_config_response_body> resp(
                 std::move(msg), info);
-              if (session_->origin_.options().dump_configuration &&
-                  resp.body().config_text().has_value()) {
-                CB_LOG_TRACE("{} configuration from get_cluster_config response (size={}, "
-                             "endpoint=\"{}:{}\"), {}",
-                             session_->log_prefix_,
-                             resp.body().config_text().value().size(),
-                             info.endpoint_address,
-                             info.endpoint_port,
-                             resp.body().config_text().value());
+              if (session_->origin_.options().dump_configuration) {
+                if (const auto& text = resp.body().config_text(); text.has_value()) {
+                  CB_LOG_TRACE("{} configuration from get_cluster_config response (size={}, "
+                               "endpoint=\"{}:{}\"), {}",
+                               session_->log_prefix_,
+                               text.value().size(),
+                               info.endpoint_address,
+                               info.endpoint_port,
+                               text.value());
+                }
               }
               if (resp.status() == key_value_status_code::success) {
                 if (session_) {
@@ -754,7 +772,7 @@ class mcbp_session_impl
             case protocol::client_opcode::decrement:
             case protocol::client_opcode::subdoc_multi_lookup:
             case protocol::client_opcode::subdoc_multi_mutation: {
-              std::uint16_t status = utils::byte_swap(msg.header.specific);
+              const std::uint16_t status = utils::byte_swap(msg.header.specific);
               if (status == static_cast<std::uint16_t>(key_value_status_code::not_my_vbucket)) {
                 session_->handle_not_my_vbucket(msg);
               }
@@ -791,20 +809,23 @@ class mcbp_session_impl
                                        session_->bootstrap_port_number_ };
               protocol::server_request<protocol::cluster_map_change_notification_request_body> req(
                 std::move(msg), info);
-              if (session_->origin_.options().dump_configuration &&
-                  req.body().config_text().has_value()) {
-                CB_LOG_TRACE("{} configuration from cluster_map_change_notification request "
-                             "(size={}, endpoint=\"{}:{}\"), {}",
-                             session_->log_prefix_,
-                             req.body().config_text().value().size(),
-                             info.endpoint_address,
-                             info.endpoint_port,
-                             req.body().config_text().value());
+              if (session_->origin_.options().dump_configuration) {
+                if (const auto& text = req.body().config_text(); text.has_value()) {
+                  CB_LOG_TRACE("{} configuration from cluster_map_change_notification request "
+                               "(size={}, endpoint=\"{}:{}\"), {}",
+                               session_->log_prefix_,
+                               text.value().size(),
+                               info.endpoint_address,
+                               info.endpoint_port,
+                               text.value());
+                }
               }
               std::optional<topology::configuration> config = req.body().config();
               if (session_ && config.has_value()) {
                 if ((!config->bucket.has_value() && req.body().bucket().empty()) ||
                     (session_->bucket_name_.has_value() && !req.body().bucket().empty() &&
+                     // TODO(CXXCBC-549)
+                     // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
                      session_->bucket_name_.value() == req.body().bucket())) {
                   session_->update_configuration(std::move(config.value()));
                 }
@@ -887,7 +908,12 @@ public:
       "[{}/{}/{}/{}]", client_id_, id_, stream_->log_prefix(), bucket_name_.value_or("-"));
   }
 
-  ~mcbp_session_impl()
+  mcbp_session_impl(const mcbp_session_impl&) = delete;
+  auto operator=(const mcbp_session_impl&) -> mcbp_session_impl& = delete;
+  mcbp_session_impl(mcbp_session_impl&&) = delete;
+  auto operator=(mcbp_session_impl&&) -> mcbp_session_impl& = delete;
+
+  ~mcbp_session_impl() override
   {
     CB_LOG_DEBUG("{} destroy MCBP connection", log_prefix_);
     stop(retry_reason::do_not_retry);
@@ -922,7 +948,7 @@ public:
              bucket_name_ };
   }
 
-  void ping(std::shared_ptr<diag::ping_reporter> handler,
+  void ping(const std::shared_ptr<diag::ping_reporter>& handler,
             std::optional<std::chrono::milliseconds> timeout)
   {
     if (!bootstrapped_) {
@@ -948,7 +974,7 @@ public:
         std::error_code ec,
         retry_reason reason,
         io::mcbp_message&& /* msg */,
-        std::optional<key_value_error_map_info> /* error_info */) {
+        const std::optional<key_value_error_map_info>& /* error_info */) {
         diag::ping_state state = diag::ping_state::ok;
         std::optional<std::string> error{};
         if (ec) {
@@ -1117,10 +1143,10 @@ public:
                   resolver_,
                   bootstrap_hostname_,
                   bootstrap_port_,
-                  std::bind(&mcbp_session_impl::on_resolve,
-                            shared_from_this(),
-                            std::placeholders::_1,
-                            std::placeholders::_2));
+                  [capture0 = shared_from_this()](auto&& PH1, auto&& PH2) {
+                    capture0->on_resolve(std::forward<decltype(PH1)>(PH1),
+                                         std::forward<decltype(PH2)>(PH2));
+                  });
   }
 
   [[nodiscard]] auto id() const -> const std::string&
@@ -1164,14 +1190,14 @@ public:
     if (auto h = std::move(handler_); h) {
       h->stop();
     }
-    std::error_code ec = errc::common::request_canceled;
+    const std::error_code ec = errc::common::request_canceled;
     if (!bootstrapped_) {
       if (auto h = std::move(bootstrap_callback_); h) {
         h(ec, {});
       }
     }
     {
-      std::scoped_lock lock(command_handlers_mutex_);
+      const std::scoped_lock lock(command_handlers_mutex_);
       for (auto& [opaque, handler] : command_handlers_) {
         if (handler) {
           CB_LOG_DEBUG("{} MCBP cancel operation during session close, opaque={}, ec={}",
@@ -1185,7 +1211,7 @@ public:
       command_handlers_.clear();
     }
     {
-      std::scoped_lock lock(operations_mutex_);
+      const std::scoped_lock lock(operations_mutex_);
       auto operations = std::move(operations_);
       for (auto& [opaque, operation] : operations) {
         auto& [request, handler] = operation;
@@ -1217,7 +1243,7 @@ public:
       return;
     }
     CB_LOG_TRACE("{} MCBP send {}", log_prefix_, mcbp_header_view(buf));
-    std::scoped_lock lock(output_buffer_mutex_);
+    const std::scoped_lock lock(output_buffer_mutex_);
     output_buffer_.emplace_back(std::move(buf));
   }
 
@@ -1242,19 +1268,19 @@ public:
 
   void remove_request(std::shared_ptr<mcbp::queue_request> request) override
   {
-    std::scoped_lock lock(operations_mutex_);
+    const std::scoped_lock lock(operations_mutex_);
     if (auto iter = operations_.find(request->opaque_); iter != operations_.end()) {
       operations_.erase(iter);
     }
   }
 
   void enqueue_request(std::uint32_t opaque,
-                       std::shared_ptr<mcbp::queue_request> request,
-                       std::shared_ptr<response_handler> handler)
+                       const std::shared_ptr<mcbp::queue_request>& request,
+                       const std::shared_ptr<response_handler>& handler)
   {
-    std::scoped_lock lock(operations_mutex_);
+    const std::scoped_lock lock(operations_mutex_);
     request->waiting_in_ = this;
-    operations_.try_emplace(opaque, std::move(request), std::move(handler));
+    operations_.try_emplace(opaque, request, handler);
   }
 
   auto handle_request(protocol::client_opcode opcode,
@@ -1265,7 +1291,7 @@ public:
     // handle request old style
     command_handler fun{};
     {
-      std::scoped_lock lock(command_handlers_mutex_);
+      const std::scoped_lock lock(command_handlers_mutex_);
       if (auto handler = command_handlers_.find(opaque);
           handler != command_handlers_.end() && handler->second) {
         fun = std::move(handler->second);
@@ -1288,7 +1314,7 @@ public:
     std::shared_ptr<mcbp::queue_request> request{};
     std::shared_ptr<response_handler> handler{};
     {
-      std::scoped_lock lock(operations_mutex_);
+      const std::scoped_lock lock(operations_mutex_);
       if (auto pair = operations_.find(opaque); pair != operations_.end() && pair->second.first) {
         request = pair->second.first;
         handler = pair->second.second;
@@ -1308,8 +1334,8 @@ public:
     return false;
   }
 
-  void write_and_subscribe(std::shared_ptr<mcbp::queue_request> request,
-                           std::shared_ptr<response_handler> handler)
+  void write_and_subscribe(const std::shared_ptr<mcbp::queue_request>& request,
+                           const std::shared_ptr<response_handler>& handler)
   {
     auto opaque = request->opaque_;
     auto data = codec_.encode_packet(*request);
@@ -1329,14 +1355,14 @@ public:
                                {});
       return;
     }
-    enqueue_request(opaque, std::move(request), std::move(handler));
+    enqueue_request(opaque, request, handler);
     if (bootstrapped_ && stream_->is_open()) {
       write_and_flush(std::move(data.value()));
     } else {
       CB_LOG_DEBUG("{} the stream is not ready yet, put the message into pending buffer, opaque={}",
                    log_prefix_,
                    opaque);
-      std::scoped_lock lock(pending_buffer_mutex_);
+      const std::scoped_lock lock(pending_buffer_mutex_);
       if (bootstrapped_ && stream_->is_open()) {
         write_and_flush(std::move(data.value()));
       } else {
@@ -1357,7 +1383,7 @@ public:
       return;
     }
     {
-      std::scoped_lock lock(command_handlers_mutex_);
+      const std::scoped_lock lock(command_handlers_mutex_);
       command_handlers_.try_emplace(opaque, std::move(handler));
     }
     if (bootstrapped_ && stream_->is_open()) {
@@ -1366,7 +1392,7 @@ public:
       CB_LOG_DEBUG("{} the stream is not ready yet, put the message into pending buffer, opaque={}",
                    log_prefix_,
                    opaque);
-      std::scoped_lock lock(pending_buffer_mutex_);
+      const std::scoped_lock lock(pending_buffer_mutex_);
       if (bootstrapped_ && stream_->is_open()) {
         write_and_flush(std::move(data));
       } else {
@@ -1427,13 +1453,16 @@ public:
 
   [[nodiscard]] auto config() -> topology::configuration
   {
-    std::scoped_lock lock(config_mutex_);
-    return config_.value();
+    const std::scoped_lock lock(config_mutex_);
+    if (config_) {
+      return config_.value();
+    }
+    return {};
   }
 
   [[nodiscard]] auto index() const -> std::size_t
   {
-    std::scoped_lock lock(config_mutex_);
+    const std::scoped_lock lock(config_mutex_);
     Expects(config_.has_value());
     return config_->index_for_this_node();
   }
@@ -1489,17 +1518,17 @@ public:
     config_listeners_.emplace_back(std::move(handler));
   }
 
-  void update_configuration(topology::configuration&& config)
+  void update_configuration(topology::configuration config)
   {
     if (stopped_) {
       return;
     }
-    std::scoped_lock lock(config_mutex_);
+    const std::scoped_lock lock(config_mutex_);
     // MB-60405 fixes this for 7.6.2, but for earlier versions we need to protect against using a
     // config that has an empty vbucket map.  We should be okay to ignore at this point b/c we
     // should already have a config w/ a non-empty vbucket map (bootstrap will not complete
     // successfully unless we have a config w/ a non-empty vbucket map).
-    if (config.vbmap && config.vbmap->size() == 0) {
+    if (config.vbmap && config.vbmap->empty()) {
       CB_LOG_DEBUG("{} received a configuration with an empty vbucket map, ignoring", log_prefix_);
       return;
     }
@@ -1565,7 +1594,7 @@ public:
             msg.header.magic == static_cast<std::uint8_t>(protocol::magic::client_response));
     if (protocol::has_json_datatype(msg.header.datatype)) {
       auto magic = static_cast<protocol::magic>(msg.header.magic);
-      std::uint8_t extras_size = msg.header.extlen;
+      const std::uint8_t extras_size = msg.header.extlen;
       std::uint8_t framing_extras_size = 0;
       std::uint16_t key_size = utils::byte_swap(msg.header.keylen);
       if (magic == protocol::magic::alt_client_response) {
@@ -1573,7 +1602,7 @@ public:
         key_size = msg.header.keylen & 0xffU;
       }
 
-      std::vector<std::uint8_t>::difference_type offset =
+      const std::vector<std::uint8_t>::difference_type offset =
         framing_extras_size + key_size + extras_size;
       if (utils::byte_swap(msg.header.bodylen) - offset > 0) {
         std::string_view config_text{ reinterpret_cast<const char*>(msg.body.data()) + offset,
@@ -1668,7 +1697,7 @@ private:
       return stop(retry_reason::node_not_available);
     }
     state_ = diag::endpoint_state::connected;
-    std::scoped_lock lock(pending_buffer_mutex_);
+    const std::scoped_lock lock(pending_buffer_mutex_);
     bootstrapped_ = true;
     bootstrap_handler_->stop();
     handler_ = std::make_shared<message_handler>(shared_from_this());
@@ -1711,7 +1740,7 @@ private:
     });
   }
 
-  void do_connect(asio::ip::tcp::resolver::results_type::iterator it)
+  void do_connect(const asio::ip::tcp::resolver::results_type::iterator& it)
   {
     if (stopped_) {
       return;
@@ -1746,9 +1775,9 @@ private:
             self->initiate_bootstrap();
           });
         });
-      stream_->async_connect(
-        it->endpoint(),
-        std::bind(&mcbp_session_impl::on_connect, shared_from_this(), std::placeholders::_1, it));
+      stream_->async_connect(it->endpoint(), [capture0 = shared_from_this(), it](auto&& PH1) {
+        capture0->on_connect(std::forward<decltype(PH1)>(PH1), it);
+      });
     } else {
       auto error_msg =
         fmt::format("no more endpoints left to connect to \"{}:{}\", will try another address",
@@ -1794,7 +1823,17 @@ private:
                        : "",
                      stream_->is_open());
       if (stream_->is_open()) {
-        stream_->close(std::bind(&mcbp_session_impl::do_connect, shared_from_this(), ++it));
+        stream_->close([self = shared_from_this(), next_address = ++it](std::error_code ec) {
+          if (ec) {
+            CB_LOG_WARNING(
+              "{} unable to close socket, but continue connecting attempt to {}:{}: {}",
+              self->log_prefix_,
+              next_address->endpoint().address().to_string(),
+              next_address->endpoint().port(),
+              ec.value());
+          }
+          self->do_connect(next_address);
+        });
       } else {
         do_connect(++it);
       }
@@ -1828,8 +1867,9 @@ private:
       stream_->close([](std::error_code) {
       });
     }
-    connection_deadline_.async_wait(
-      std::bind(&mcbp_session_impl::check_deadline, shared_from_this(), std::placeholders::_1));
+    connection_deadline_.async_wait([capture0 = shared_from_this()](auto&& PH1) {
+      capture0->check_deadline(std::forward<decltype(PH1)>(PH1));
+    });
   }
 
   void do_read()
@@ -1849,16 +1889,16 @@ private:
                           ec ? ec.message() : "ok",
                           bytes_transferred);
           return;
-        } else {
-          CB_LOG_PROTOCOL("[MCBP, IN] host=\"{}\", port={}, rc={}, bytes_received={}{:a}",
-                          self->connection_endpoints_.remote_address,
-                          self->connection_endpoints_.remote.port(),
-                          ec ? ec.message() : "ok",
-                          bytes_transferred,
-                          spdlog::to_hex(self->input_buffer_.data(),
-                                         self->input_buffer_.data() +
-                                           static_cast<std::ptrdiff_t>(bytes_transferred)));
         }
+        CB_LOG_PROTOCOL("[MCBP, IN] host=\"{}\", port={}, rc={}, bytes_received={}{:a}",
+                        self->connection_endpoints_.remote_address,
+                        self->connection_endpoints_.remote.port(),
+                        ec ? ec.message() : "ok",
+                        bytes_transferred,
+                        spdlog::to_hex(self->input_buffer_.data(),
+                                       self->input_buffer_.data() +
+                                         static_cast<std::ptrdiff_t>(bytes_transferred)));
+
         self->last_active_ = std::chrono::steady_clock::now();
         if (ec) {
           if (stream_id != self->stream_->id()) {
@@ -1918,7 +1958,7 @@ private:
     if (stopped_ || !stream_->is_open()) {
       return;
     }
-    std::scoped_lock lock(writing_buffer_mutex_, output_buffer_mutex_);
+    const std::scoped_lock lock(writing_buffer_mutex_, output_buffer_mutex_);
     if (!writing_buffer_.empty() || output_buffer_.empty()) {
       return;
     }
@@ -1954,7 +1994,7 @@ private:
           return self->stop(retry_reason::socket_closed_while_in_flight);
         }
         {
-          std::scoped_lock inner_lock(self->writing_buffer_mutex_);
+          const std::scoped_lock inner_lock(self->writing_buffer_mutex_);
           self->writing_buffer_.clear();
         }
         asio::post(asio::bind_executor(self->ctx_, [self]() {
@@ -2036,13 +2076,13 @@ private:
 #endif
 };
 
-mcbp_session::mcbp_session(std::string client_id,
+mcbp_session::mcbp_session(const std::string& client_id,
                            asio::io_context& ctx,
                            core::origin origin,
                            std::shared_ptr<impl::bootstrap_state_listener> state_listener,
                            std::optional<std::string> bucket_name,
                            std::vector<protocol::hello_feature> known_features)
-  : impl_{ std::make_shared<mcbp_session_impl>(std::move(client_id),
+  : impl_{ std::make_shared<mcbp_session_impl>(client_id,
                                                ctx,
                                                std::move(origin),
                                                std::move(state_listener),
@@ -2051,14 +2091,14 @@ mcbp_session::mcbp_session(std::string client_id,
 {
 }
 
-mcbp_session::mcbp_session(std::string client_id,
+mcbp_session::mcbp_session(const std::string& client_id,
                            asio::io_context& ctx,
                            asio::ssl::context& tls,
                            core::origin origin,
                            std::shared_ptr<impl::bootstrap_state_listener> state_listener,
                            std::optional<std::string> bucket_name,
                            std::vector<protocol::hello_feature> known_features)
-  : impl_{ std::make_shared<mcbp_session_impl>(std::move(client_id),
+  : impl_{ std::make_shared<mcbp_session_impl>(client_id,
                                                ctx,
                                                tls,
                                                std::move(origin),
@@ -2235,10 +2275,10 @@ mcbp_session::supported_features() const -> std::vector<protocol::hello_feature>
 }
 
 void
-mcbp_session::ping(std::shared_ptr<diag::ping_reporter> handler,
+mcbp_session::ping(const std::shared_ptr<diag::ping_reporter>& handler,
                    std::optional<std::chrono::milliseconds> timeout) const
 {
-  return impl_->ping(std::move(handler), std::move(timeout));
+  return impl_->ping(handler, timeout);
 }
 
 auto
@@ -2266,10 +2306,10 @@ mcbp_session::update_collection_uid(const std::string& path, std::uint32_t uid)
 }
 
 void
-mcbp_session::write_and_subscribe(std::shared_ptr<mcbp::queue_request> request,
-                                  std::shared_ptr<response_handler> handler)
+mcbp_session::write_and_subscribe(const std::shared_ptr<mcbp::queue_request>& request,
+                                  const std::shared_ptr<response_handler>& handler)
 {
-  return impl_->write_and_subscribe(std::move(request), std::move(handler));
+  return impl_->write_and_subscribe(request, handler);
 }
 
 void

@@ -18,6 +18,7 @@
 #include "encoded_search_query.hxx"
 
 #include <couchbase/geo_bounding_box_query.hxx>
+#include <tao/json/type.hpp>
 
 namespace couchbase
 {

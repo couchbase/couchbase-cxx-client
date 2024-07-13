@@ -45,7 +45,7 @@ transaction_keyspace::transaction_keyspace(const std::string& bucket_name)
 }
 
 auto
-transaction_keyspace::valid() -> bool
+transaction_keyspace::valid() const -> bool
 {
   return !bucket.empty() && !scope.empty() && !collection.empty();
 }

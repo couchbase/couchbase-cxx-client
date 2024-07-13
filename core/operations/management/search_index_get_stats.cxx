@@ -24,9 +24,9 @@
 
 namespace couchbase::core::operations::management
 {
-std::error_code
+auto
 search_index_get_stats_request::encode_to(encoded_request_type& encoded,
-                                          http_context& /* context */) const
+                                          http_context& /* context */) const -> std::error_code
 {
   if (index_name.empty()) {
     return errc::common::invalid_argument;
@@ -36,9 +36,10 @@ search_index_get_stats_request::encode_to(encoded_request_type& encoded,
   return {};
 }
 
-search_index_get_stats_response
+auto
 search_index_get_stats_request::make_response(error_context::http&& ctx,
                                               const encoded_response_type& encoded) const
+  -> search_index_get_stats_response
 {
   search_index_get_stats_response response{ std::move(ctx) };
   if (!response.ctx.ec) {
@@ -66,6 +67,8 @@ search_index_get_stats_request::make_response(error_context::http&& ctx,
           return response;
         }
       } break;
+      default:
+        break;
     }
     response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
   }

@@ -20,6 +20,7 @@
 #include <couchbase/search_date_range.hxx>
 #include <couchbase/search_facet_result.hxx>
 
+#include <memory>
 #include <string>
 #include <vector>
 

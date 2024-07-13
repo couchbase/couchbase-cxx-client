@@ -45,6 +45,7 @@ analytics_request::encode_to(analytics_request::encoded_request_type& encoded,
     }
   } else {
     std::vector<tao::json::value> parameters;
+    parameters.reserve(positional_parameters.size());
     for (const auto& value : positional_parameters) {
       parameters.emplace_back(utils::json::parse(value));
     }
@@ -122,7 +123,7 @@ analytics_request::make_response(error_context::analytics&& ctx,
                      response.ctx.client_context_id);
     }
     if (auto& status_prop = payload.at("status"); status_prop.is_string()) {
-      const auto status = status_prop.get_string();
+      const auto& status = status_prop.get_string();
       if (status == "running") {
         response.meta.status = analytics_response::analytics_status::running;
       } else if (status == "success") {

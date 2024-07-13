@@ -20,6 +20,8 @@
 #include <couchbase/date_range_facet.hxx>
 #include <couchbase/error_codes.hxx>
 
+#include <tao/json/type.hpp>
+
 namespace couchbase
 {
 auto

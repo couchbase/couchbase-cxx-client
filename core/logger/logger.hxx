@@ -121,7 +121,7 @@ reset();
  * @param l spdlog::logger instance
  */
 void
-register_spdlog_logger(std::shared_ptr<spdlog::logger> l);
+register_spdlog_logger(const std::shared_ptr<spdlog::logger>& l);
 
 /**
  * Engines that create their own instances of an spdlog::logger should unregister

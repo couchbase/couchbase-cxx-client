@@ -17,10 +17,19 @@
 
 #include "internal_numeric_range_facet_result.hxx"
 
+#include "core/operations/document_search.hxx"
+
+#include <couchbase/search_numeric_range.hxx>
+
+#include <cstdint>
+#include <vector>
+
 namespace couchbase
 {
 
-static auto
+namespace
+{
+auto
 map_ranges(const core::operations::search_response::search_facet& facet)
   -> std::vector<search_numeric_range>
 {
@@ -33,6 +42,7 @@ map_ranges(const core::operations::search_response::search_facet& facet)
 
   return ranges;
 }
+} // namespace
 
 internal_numeric_range_facet_result::internal_numeric_range_facet_result(
   const core::operations::search_response::search_facet& facet)

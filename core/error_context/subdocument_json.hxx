@@ -17,10 +17,9 @@
 
 #pragma once
 
-#include <couchbase/fmt/retry_reason.hxx>
-
-#include "core/fmt/key_value_status_code.hxx"
 #include "subdocument_error_context.hxx"
+
+#include <couchbase/fmt/retry_reason.hxx>
 
 #include <fmt/format.h>
 #include <tao/json/forward.hpp>

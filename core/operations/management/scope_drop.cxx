@@ -26,17 +26,18 @@
 
 namespace couchbase::core::operations::management
 {
-std::error_code
-scope_drop_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+auto
+scope_drop_request::encode_to(encoded_request_type& encoded,
+                              http_context& /* context */) const -> std::error_code
 {
   encoded.method = "DELETE";
   encoded.path = fmt::format("/pools/default/buckets/{}/scopes/{}", bucket_name, scope_name);
   return {};
 }
 
-scope_drop_response
+auto
 scope_drop_request::make_response(error_context::http&& ctx,
-                                  const encoded_response_type& encoded) const
+                                  const encoded_response_type& encoded) const -> scope_drop_response
 {
   scope_drop_response response{ std::move(ctx) };
   if (!response.ctx.ec) {
@@ -45,7 +46,7 @@ scope_drop_request::make_response(error_context::http&& ctx,
         response.ctx.ec = errc::common::unsupported_operation;
         break;
       case 404: {
-        std::regex scope_not_found("Scope with name .+ is not found");
+        const std::regex scope_not_found("Scope with name .+ is not found");
         if (std::regex_search(encoded.body.data(), scope_not_found)) {
           response.ctx.ec = errc::common::scope_not_found;
         } else {

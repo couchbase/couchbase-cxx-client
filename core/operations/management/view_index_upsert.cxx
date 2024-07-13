@@ -24,9 +24,9 @@
 
 namespace couchbase::core::operations::management
 {
-std::error_code
+auto
 view_index_upsert_request::encode_to(encoded_request_type& encoded,
-                                     http_context& /* context */) const
+                                     http_context& /* context */) const -> std::error_code
 {
   tao::json::value body;
   body["views"] = tao::json::empty_object;
@@ -51,9 +51,10 @@ view_index_upsert_request::encode_to(encoded_request_type& encoded,
   return {};
 }
 
-view_index_upsert_response
+auto
 view_index_upsert_request::make_response(error_context::http&& ctx,
                                          const encoded_response_type& encoded) const
+  -> view_index_upsert_response
 {
   view_index_upsert_response response{ std::move(ctx) };
   if (!response.ctx.ec) {

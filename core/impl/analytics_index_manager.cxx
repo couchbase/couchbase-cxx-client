@@ -16,8 +16,12 @@
  */
 
 #include "core/cluster.hxx"
+#include "core/impl/error.hxx"
 #include "core/logger/logger.hxx"
 
+#include "core/management/analytics_link_azure_blob_external.hxx"
+#include "core/management/analytics_link_couchbase_remote.hxx"
+#include "core/management/analytics_link_s3_external.hxx"
 #include "core/operations/management/analytics_dataset_create.hxx"
 #include "core/operations/management/analytics_dataset_drop.hxx"
 #include "core/operations/management/analytics_dataset_get_all.hxx"
@@ -34,10 +38,35 @@
 #include "core/operations/management/analytics_link_get_all.hxx"
 #include "core/operations/management/analytics_link_replace.hxx"
 
-#include "core/impl/error.hxx"
-
 #include <couchbase/analytics_index_manager.hxx>
+#include <couchbase/connect_link_analytics_options.hxx>
+#include <couchbase/create_dataset_analytics_options.hxx>
+#include <couchbase/create_dataverse_analytics_options.hxx>
+#include <couchbase/create_index_analytics_options.hxx>
+#include <couchbase/create_link_analytics_options.hxx>
+#include <couchbase/disconnect_link_analytics_options.hxx>
+#include <couchbase/drop_dataset_analytics_options.hxx>
+#include <couchbase/drop_dataverse_analytics_options.hxx>
+#include <couchbase/drop_index_analytics_options.hxx>
+#include <couchbase/drop_link_analytics_options.hxx>
+#include <couchbase/error.hxx>
+#include <couchbase/get_all_datasets_analytics_options.hxx>
+#include <couchbase/get_all_indexes_analytics_options.hxx>
+#include <couchbase/get_links_analytics_options.hxx>
+#include <couchbase/get_pending_mutations_analytics_options.hxx>
+#include <couchbase/management/analytics_dataset.hxx>
+#include <couchbase/management/analytics_index.hxx>
 #include <couchbase/management/analytics_link.hxx>
+#include <couchbase/replace_link_analytics_options.hxx>
+
+#include <cstdint>
+#include <future>
+#include <map>
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace couchbase
 {
@@ -105,6 +134,9 @@ to_core_s3_external_link(const management::analytics_link& link)
     s3_link.service_endpoint,
   };
 }
+
+constexpr auto DEFAULT_DATAVERSE_NAME = "Default";
+constexpr auto DEFAULT_LINK_NAME = "Local";
 } // namespace
 
 class analytics_index_manager_impl
@@ -196,7 +228,7 @@ public:
         options.timeout,
       },
       [handler = std::move(handler)](
-        core::operations::management::analytics_dataset_get_all_response resp) {
+        const core::operations::management::analytics_dataset_get_all_response& resp) {
         if (resp.ctx.ec) {
           return handler(core::impl::make_error(resp.ctx), {});
         }
@@ -262,8 +294,8 @@ public:
         {},
         options.timeout,
       },
-      [handler =
-         std::move(handler)](core::operations::management::analytics_index_get_all_response resp) {
+      [handler = std::move(handler)](
+        const core::operations::management::analytics_index_get_all_response& resp) {
         if (resp.ctx.ec) {
           return handler(core::impl::make_error(resp.ctx), {});
         }
@@ -321,7 +353,7 @@ public:
         options.timeout,
       },
       [handler = std::move(handler)](
-        core::operations::management::analytics_get_pending_mutations_response resp) {
+        const core::operations::management::analytics_get_pending_mutations_response& resp) {
         if (resp.ctx.ec) {
           return handler(core::impl::make_error(resp.ctx), {});
         }
@@ -471,8 +503,8 @@ public:
     }
     return core_.execute(
       req,
-      [handler =
-         std::move(handler)](core::operations::management::analytics_link_get_all_response resp) {
+      [handler = std::move(handler)](
+        const core::operations::management::analytics_link_get_all_response& resp) {
         if (resp.ctx.ec) {
           return handler(core::impl::make_error(resp.ctx), {});
         }
@@ -525,9 +557,6 @@ public:
   }
 
 private:
-  static const inline std::string DEFAULT_DATAVERSE_NAME = "Default";
-  static const inline std::string DEFAULT_LINK_NAME = "Local";
-
   core::cluster core_;
 };
 
@@ -537,7 +566,7 @@ analytics_index_manager::analytics_index_manager(core::cluster core)
 }
 
 void
-analytics_index_manager::create_dataverse(std::string dataverse_name,
+analytics_index_manager::create_dataverse(const std::string& dataverse_name,
                                           const create_dataverse_analytics_options& options,
                                           create_dataverse_analytics_handler&& handler) const
 {
@@ -545,20 +574,20 @@ analytics_index_manager::create_dataverse(std::string dataverse_name,
 }
 
 auto
-analytics_index_manager::create_dataverse(std::string dataverse_name,
+analytics_index_manager::create_dataverse(const std::string& dataverse_name,
                                           const create_dataverse_analytics_options& options) const
   -> std::future<error>
 {
   auto barrier = std::make_shared<std::promise<error>>();
   auto future = barrier->get_future();
-  create_dataverse(std::move(dataverse_name), options, [barrier](auto err) mutable {
+  create_dataverse(dataverse_name, options, [barrier](auto err) mutable {
     barrier->set_value({ std::move(err) });
   });
   return future;
 }
 
 void
-analytics_index_manager::drop_dataverse(std::string dataverse_name,
+analytics_index_manager::drop_dataverse(const std::string& dataverse_name,
                                         const drop_dataverse_analytics_options& options,
                                         drop_dataverse_analytics_handler&& handler) const
 {
@@ -566,21 +595,21 @@ analytics_index_manager::drop_dataverse(std::string dataverse_name,
 }
 
 auto
-analytics_index_manager::drop_dataverse(std::string dataverse_name,
+analytics_index_manager::drop_dataverse(const std::string& dataverse_name,
                                         const drop_dataverse_analytics_options& options) const
   -> std::future<error>
 {
   auto barrier = std::make_shared<std::promise<error>>();
   auto future = barrier->get_future();
-  drop_dataverse(std::move(dataverse_name), options, [barrier](auto err) mutable {
+  drop_dataverse(dataverse_name, options, [barrier](auto err) mutable {
     barrier->set_value({ std::move(err) });
   });
   return future;
 }
 
 void
-analytics_index_manager::create_dataset(std::string dataset_name,
-                                        std::string bucket_name,
+analytics_index_manager::create_dataset(const std::string& dataset_name,
+                                        const std::string& bucket_name,
                                         const create_dataset_analytics_options& options,
                                         create_dataset_analytics_handler&& handler) const
 {
@@ -588,22 +617,21 @@ analytics_index_manager::create_dataset(std::string dataset_name,
 }
 
 auto
-analytics_index_manager::create_dataset(std::string dataset_name,
-                                        std::string bucket_name,
+analytics_index_manager::create_dataset(const std::string& dataset_name,
+                                        const std::string& bucket_name,
                                         const create_dataset_analytics_options& options) const
   -> std::future<error>
 {
   auto barrier = std::make_shared<std::promise<error>>();
   auto future = barrier->get_future();
-  create_dataset(
-    std::move(dataset_name), std::move(bucket_name), options, [barrier](auto err) mutable {
-      barrier->set_value({ std::move(err) });
-    });
+  create_dataset(dataset_name, bucket_name, options, [barrier](auto err) mutable {
+    barrier->set_value({ std::move(err) });
+  });
   return future;
 }
 
 void
-analytics_index_manager::drop_dataset(std::string dataset_name,
+analytics_index_manager::drop_dataset(const std::string& dataset_name,
                                       const drop_dataset_analytics_options& options,
                                       drop_dataset_analytics_handler&& handler) const
 {
@@ -611,13 +639,13 @@ analytics_index_manager::drop_dataset(std::string dataset_name,
 }
 
 auto
-analytics_index_manager::drop_dataset(std::string dataset_name,
+analytics_index_manager::drop_dataset(const std::string& dataset_name,
                                       const drop_dataset_analytics_options& options) const
   -> std::future<error>
 {
   auto barrier = std::make_shared<std::promise<error>>();
   auto future = barrier->get_future();
-  drop_dataset(std::move(dataset_name), options, [barrier](auto err) mutable {
+  drop_dataset(dataset_name, options, [barrier](auto err) mutable {
     barrier->set_value({ std::move(err) });
   });
   return future;
@@ -644,9 +672,9 @@ analytics_index_manager::get_all_datasets(const get_all_datasets_analytics_optio
 }
 
 void
-analytics_index_manager::create_index(std::string index_name,
-                                      std::string dataset_name,
-                                      std::map<std::string, std::string> fields,
+analytics_index_manager::create_index(const std::string& index_name,
+                                      const std::string& dataset_name,
+                                      const std::map<std::string, std::string>& fields,
                                       const create_index_analytics_options& options,
                                       create_index_analytics_handler&& handler) const
 {
@@ -654,27 +682,23 @@ analytics_index_manager::create_index(std::string index_name,
 }
 
 auto
-analytics_index_manager::create_index(std::string index_name,
-                                      std::string dataset_name,
-                                      std::map<std::string, std::string> fields,
+analytics_index_manager::create_index(const std::string& index_name,
+                                      const std::string& dataset_name,
+                                      const std::map<std::string, std::string>& fields,
                                       const create_index_analytics_options& options) const
   -> std::future<error>
 {
   auto barrier = std::make_shared<std::promise<error>>();
   auto future = barrier->get_future();
-  create_index(std::move(index_name),
-               std::move(dataset_name),
-               std::move(fields),
-               options,
-               [barrier](auto err) mutable {
-                 barrier->set_value({ std::move(err) });
-               });
+  create_index(index_name, dataset_name, fields, options, [barrier](auto err) mutable {
+    barrier->set_value({ std::move(err) });
+  });
   return future;
 }
 
 void
-analytics_index_manager::drop_index(std::string index_name,
-                                    std::string dataset_name,
+analytics_index_manager::drop_index(const std::string& index_name,
+                                    const std::string& dataset_name,
                                     const drop_index_analytics_options& options,
                                     drop_index_analytics_handler&& handler) const
 {
@@ -682,14 +706,14 @@ analytics_index_manager::drop_index(std::string index_name,
 }
 
 auto
-analytics_index_manager::drop_index(std::string index_name,
-                                    std::string dataset_name,
+analytics_index_manager::drop_index(const std::string& index_name,
+                                    const std::string& dataset_name,
                                     const drop_index_analytics_options& options) const
   -> std::future<error>
 {
   auto barrier = std::make_shared<std::promise<error>>();
   auto future = barrier->get_future();
-  drop_index(std::move(index_name), std::move(dataset_name), options, [barrier](auto err) mutable {
+  drop_index(index_name, dataset_name, options, [barrier](auto err) mutable {
     barrier->set_value({ std::move(err) });
   });
   return future;
@@ -818,8 +842,8 @@ analytics_index_manager::replace_link(const management::analytics_link& link,
 }
 
 void
-analytics_index_manager::drop_link(std::string link_name,
-                                   std::string dataverse_name,
+analytics_index_manager::drop_link(const std::string& link_name,
+                                   const std::string& dataverse_name,
                                    const drop_link_analytics_options& options,
                                    drop_link_analytics_handler&& handler) const
 {
@@ -827,14 +851,14 @@ analytics_index_manager::drop_link(std::string link_name,
 }
 
 auto
-analytics_index_manager::drop_link(std::string link_name,
-                                   std::string dataverse_name,
+analytics_index_manager::drop_link(const std::string& link_name,
+                                   const std::string& dataverse_name,
                                    const drop_link_analytics_options& options) const
   -> std::future<error>
 {
   auto barrier = std::make_shared<std::promise<error>>();
   auto future = barrier->get_future();
-  drop_link(std::move(link_name), std::move(dataverse_name), options, [barrier](auto err) mutable {
+  drop_link(link_name, dataverse_name, options, [barrier](auto err) mutable {
     barrier->set_value({ std::move(err) });
   });
   return future;

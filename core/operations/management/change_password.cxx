@@ -23,8 +23,9 @@
 
 namespace couchbase::core::operations::management
 {
-std::error_code
-change_password_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+auto
+change_password_request::encode_to(encoded_request_type& encoded,
+                                   http_context& /* context */) const -> std::error_code
 {
   encoded.method = "POST";
   encoded.path = "/controller/changePassword";
@@ -34,9 +35,10 @@ change_password_request::encode_to(encoded_request_type& encoded, http_context& 
   return {};
 }
 
-change_password_response
+auto
 change_password_request::make_response(error_context::http&& ctx,
                                        const encoded_response_type& encoded) const
+  -> change_password_response
 {
   change_password_response response{ std::move(ctx) };
   if (!response.ctx.ec) {

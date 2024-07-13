@@ -23,8 +23,9 @@
 namespace couchbase::core::operations::management
 {
 
-std::error_code
-extract_common_error_code(std::uint32_t status_code, const std::string& response_body)
+auto
+extract_common_error_code(std::uint32_t status_code,
+                          const std::string& response_body) -> std::error_code
 {
   if (status_code == 429) {
     if (response_body.find("Limit(s) exceeded") != std::string::npos) {
@@ -38,8 +39,9 @@ extract_common_error_code(std::uint32_t status_code, const std::string& response
   return errc::common::internal_server_failure;
 }
 
-std::optional<std::error_code>
-extract_common_query_error_code(std::uint64_t code, const std::string& message)
+auto
+extract_common_query_error_code(std::uint64_t code,
+                                const std::string& message) -> std::optional<std::error_code>
 {
   switch (code) {
     case 1191: /* ICode: E_SERVICE_USER_REQUEST_EXCEEDED, IKey: "service.requests.exceeded" */
@@ -70,14 +72,15 @@ extract_common_query_error_code(std::uint64_t code, const std::string& message)
   return {};
 }
 
-std::pair<std::error_code, eventing_problem>
+auto
 extract_eventing_error_code(const tao::json::value& response)
+  -> std::pair<std::error_code, eventing_problem>
 {
   if (!response.is_object()) {
     return {};
   }
   if (const auto& name = response.find("name"); name != nullptr && name->is_string()) {
-    eventing_problem problem{
+    const eventing_problem problem{
       response.at("code").get_unsigned(),
       name->get_string(),
       response.at("description").get_string(),
@@ -125,8 +128,10 @@ extract_eventing_error_code(const tao::json::value& response)
   return {};
 }
 
-std::optional<std::error_code>
-translate_query_error_code(std::uint64_t error, const std::string& message, std::uint64_t reason)
+auto
+translate_query_error_code(std::uint64_t error,
+                           const std::string& message,
+                           std::uint64_t reason) -> std::optional<std::error_code>
 {
   switch (error) {
     case 5000: /* IKey: "Internal Error" */
@@ -199,8 +204,9 @@ translate_query_error_code(std::uint64_t error, const std::string& message, std:
   return extract_common_query_error_code(error, message);
 }
 
-std::optional<std::error_code>
-translate_analytics_error_code(std::uint64_t error, const std::string& /* message */)
+auto
+translate_analytics_error_code(std::uint64_t error,
+                               const std::string& /* message */) -> std::optional<std::error_code>
 {
   switch (error) {
     case 0:
@@ -250,8 +256,9 @@ translate_analytics_error_code(std::uint64_t error, const std::string& /* messag
   return errc::common::internal_server_failure;
 }
 
-std::optional<std::error_code>
-translate_search_error_code(std::uint32_t status_code, const std::string& response_body)
+auto
+translate_search_error_code(std::uint32_t status_code,
+                            const std::string& response_body) -> std::optional<std::error_code>
 {
   if (status_code == 400 || status_code == 500) {
     if (response_body.find("no indexName:") != std::string::npos) {

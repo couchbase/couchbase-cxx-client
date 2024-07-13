@@ -26,10 +26,13 @@
 #include "internal/transactions_cleanup.hxx"
 #include "internal/utils.hxx"
 
+#include "core/utils/byteswap.hxx"
+
 #include <couchbase/fmt/transaction_keyspace.hxx>
 
 #include <functional>
 #include <memory>
+#include <utility>
 
 namespace couchbase::core::transactions
 {
@@ -44,26 +47,16 @@ transactions_cleanup_attempt::transactions_cleanup_attempt(const atr_cleanup_ent
 
 transactions_cleanup::transactions_cleanup(
   core::cluster cluster,
-  const couchbase::transactions::transactions_config::built& config)
+  couchbase::transactions::transactions_config::built config)
   : cluster_(std::move(cluster))
-  , config_(config)
+  , config_(std::move(config))
   , client_uuid_(uid_generator::next())
 {
   start();
 }
 
-static auto
-byteswap64(std::uint64_t val) -> std::uint64_t
+namespace
 {
-  std::uint64_t ret = 0;
-  for (std::size_t ii = 0; ii < sizeof(std::uint64_t); ii++) {
-    ret <<= 8ULL;
-    ret |= val & 0xffULL;
-    val >>= 8ULL;
-  }
-  return ret;
-}
-
 /**
  * ${Mutation.CAS} is written by kvengine with
  * 'macroToString(htonll(info.cas))'.  Discussed this with KV team and, though
@@ -77,38 +70,32 @@ byteswap64(std::uint64_t val) -> std::uint64_t
  * Want:        0x155CD21DA7580000   (1539336197457313792 in base10, an epoch
  * time in millionths of a second)
  */
-static auto
+auto
 parse_mutation_cas(const std::string& cas) -> std::uint64_t
 {
   if (cas.empty()) {
     return 0;
   }
-  return byteswap64(stoull(cas, nullptr, 16)) / 1000000;
+  return core::utils::byte_swap(static_cast<std::uint64_t>(std::stoull(cas, nullptr, 16))) /
+         1000000;
 }
 
-static const std::string CLIENT_RECORD_DOC_ID = "_txn:client-record";
-static const std::string FIELD_RECORDS = "records";
-static const std::string FIELD_CLIENTS_ONLY = "clients";
-static const std::string FIELD_CLIENTS = FIELD_RECORDS + "." + FIELD_CLIENTS_ONLY;
-static const std::string FIELD_HEARTBEAT = "heartbeat_ms";
-static const std::string FIELD_EXPIRES = "expires_ms";
-static const std::string FIELD_OVERRIDE = "override";
-static const std::string FIELD_OVERRIDE_EXPIRES = "expires";
-static const std::string FIELD_OVERRIDE_ENABLED = "enabled";
-static const std::string FIELD_NUM_ATRS = "num_atrs";
+// TODO(CXXCBC-549)
+const std::string CLIENT_RECORD_DOC_ID = "_txn:client-record"; // NOLINT(cert-err58-cpp)
+} // namespace
 
-#define SAFETY_MARGIN_EXPIRY_MS 2000
+constexpr auto SAFETY_MARGIN_EXPIRY_MS = 2000;
 
 template<class R, class P>
 auto
-transactions_cleanup::interruptable_wait(std::chrono::duration<R, P> delay) -> bool
+transactions_cleanup::interruptable_wait(std::chrono::duration<R, P> time) -> bool
 {
   // wait for specified time, _or_ until the condition variable changes
   std::unique_lock<std::mutex> lock(mutex_);
   if (!running_) {
     return false;
   }
-  cv_.wait_for(lock, delay, [&]() {
+  cv_.wait_for(lock, time, [&]() {
     return !running_;
   });
   return running_;
@@ -121,7 +108,7 @@ transactions_cleanup::clean_collection(
   // first make sure the collection is in the list
   while (is_running()) {
     {
-      std::lock_guard<std::mutex> lock(mutex_);
+      const std::lock_guard<std::mutex> lock(mutex_);
       if (collections_.end() == std::find(collections_.begin(), collections_.end(), keyspace)) {
         CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG(
           "cleanup for {} ending, no longer in collection cleanup list", keyspace);
@@ -135,9 +122,8 @@ transactions_cleanup::clean_collection(
 
       auto all_atrs = atr_ids::all();
 
-      std::chrono::microseconds cleanup_window =
-        std::chrono::duration_cast<std::chrono::microseconds>(
-          config_.cleanup_config.cleanup_window);
+      const auto cleanup_window = std::chrono::duration_cast<std::chrono::microseconds>(
+        config_.cleanup_config.cleanup_window);
       auto start = std::chrono::steady_clock::now();
       CB_LOST_ATTEMPT_CLEANUP_LOG_INFO(
         "{} active clients (including this one), {} ATRs to check in {}ms",
@@ -150,12 +136,11 @@ transactions_cleanup::clean_collection(
         auto atrs_left_for_this_client =
           std::distance(it, all_atrs.end()) /
           std::max<decltype(it)::difference_type>(1, details.num_active_clients);
-        auto now = std::chrono::steady_clock::now();
-        std::chrono::microseconds elapsed_in_cleanup_window =
+        const auto now = std::chrono::steady_clock::now();
+        const auto elapsed_in_cleanup_window =
           std::chrono::duration_cast<std::chrono::microseconds>(now - start);
-        std::chrono::microseconds remaining_in_cleanup_window =
-          cleanup_window - elapsed_in_cleanup_window;
-        std::chrono::microseconds budget_for_this_atr = std::chrono::microseconds(
+        const auto remaining_in_cleanup_window = cleanup_window - elapsed_in_cleanup_window;
+        const auto budget_for_this_atr = std::chrono::microseconds(
           remaining_in_cleanup_window.count() /
           std::max<decltype(it)::difference_type>(1, atrs_left_for_this_client));
         // clean the ATR entry
@@ -172,10 +157,9 @@ transactions_cleanup::clean_collection(
             "cleanup of atr {} failed with {}, moving on", atr_id, e.what());
         }
 
-        auto atr_end = std::chrono::steady_clock::now();
-        std::chrono::microseconds atr_used =
-          std::chrono::duration_cast<std::chrono::microseconds>(atr_end - now);
-        std::chrono::microseconds atr_left = budget_for_this_atr - atr_used;
+        const auto atr_end = std::chrono::steady_clock::now();
+        const auto atr_used = std::chrono::duration_cast<std::chrono::microseconds>(atr_end - now);
+        const auto atr_left = budget_for_this_atr - atr_used;
 
         // Too verbose to log, but leaving here commented as it may be useful later for internal
         // debugging
@@ -208,7 +192,7 @@ transactions_cleanup::clean_collection(
 auto
 transactions_cleanup::handle_atr_cleanup(const core::document_id& atr_id,
                                          std::vector<transactions_cleanup_attempt>* results)
-  -> const atr_cleanup_stats
+  -> atr_cleanup_stats
 {
   atr_cleanup_stats stats;
   auto atr = active_transaction_record::get_atr(cluster_, atr_id);
@@ -253,7 +237,7 @@ transactions_cleanup::create_client_record(
     req.store_semantics = couchbase::store_semantics::insert;
     req.specs =
       couchbase::mutate_in_specs{
-        couchbase::mutate_in_specs::insert(FIELD_CLIENTS, tao::json::empty_object)
+        couchbase::mutate_in_specs::insert("records.clients", tao::json::empty_object)
           .xattr()
           .create_path(),
         // subdoc::opcode::set_doc used in replace w/ empty path
@@ -291,7 +275,7 @@ transactions_cleanup::create_client_record(
 auto
 transactions_cleanup::get_active_clients(
   const couchbase::transactions::transaction_keyspace& keyspace,
-  const std::string& uuid) -> const client_record_details
+  const std::string& uuid) -> client_record_details
 {
   client_record_details details;
   // Write our client record, return details.
@@ -301,7 +285,7 @@ transactions_cleanup::get_active_clients(
     core::operations::lookup_in_request req{ id };
     req.specs =
       lookup_in_specs{
-        lookup_in_specs::get(FIELD_RECORDS).xattr(),
+        lookup_in_specs::get("records").xattr(),
         lookup_in_specs::get(subdoc::lookup_in_macro::vbucket).xattr(),
       }
         .specs();
@@ -327,21 +311,22 @@ transactions_cleanup::get_active_clients(
       auto records = res.values[0].content_as();
       CB_LOST_ATTEMPT_CLEANUP_LOG_TRACE("client records: {}", core::utils::json::generate(records));
       for (const auto& [key, value] : records.get_object()) {
-        if (key == FIELD_OVERRIDE) {
+        if (key == "override") {
           for (const auto& [over_ride, param] : value.get_object()) {
-            if (over_ride == FIELD_OVERRIDE_ENABLED) {
+            if (over_ride == "enabled") {
               details.override_enabled = param.get_boolean();
-            } else if (over_ride == FIELD_OVERRIDE_EXPIRES) {
+            } else if (over_ride == "expires") {
               details.override_expires = param.as<std::uint64_t>();
             }
           }
-        } else if (key == FIELD_CLIENTS_ONLY) {
+        } else if (key == "clients") {
           for (const auto& [other_client_uuid, cl] : value.get_object()) {
-            std::uint64_t heartbeat_ms = parse_mutation_cas(cl.at(FIELD_HEARTBEAT).get_string());
-            auto expires_ms = cl.at(FIELD_EXPIRES).as<std::uint64_t>();
+            const std::uint64_t heartbeat_ms =
+              parse_mutation_cas(cl.at("heartbeat_ms").get_string());
+            auto expires_ms = cl.at("expires_ms").as<std::uint64_t>();
             auto expired_period =
               static_cast<std::int64_t>(now_ms) - static_cast<std::int64_t>(heartbeat_ms);
-            bool has_expired =
+            const bool has_expired =
               expired_period >= static_cast<std::int64_t>(expires_ms) && now_ms > heartbeat_ms;
             if (has_expired && other_client_uuid != uuid) {
               details.expired_client_ids.push_back(other_client_uuid);
@@ -378,16 +363,16 @@ transactions_cleanup::get_active_clients(
     // update client record, maybe cleanup some as well...
     core::operations::mutate_in_request mutate_req{ id };
     auto mut_specs = couchbase::mutate_in_specs{
-      couchbase::mutate_in_specs::upsert(FIELD_CLIENTS + "." + uuid + "." + FIELD_HEARTBEAT,
+      couchbase::mutate_in_specs::upsert(fmt::format("records.clients.{}.heartbeat_ms", uuid),
                                          subdoc::mutate_in_macro::cas)
         .xattr()
         .create_path(),
-      couchbase::mutate_in_specs::upsert(FIELD_CLIENTS + "." + uuid + "." + FIELD_EXPIRES,
-                                         config_.cleanup_config.cleanup_window.count() / 2 +
+      couchbase::mutate_in_specs::upsert(fmt::format("records.clients.{}.expires_ms", uuid),
+                                         (config_.cleanup_config.cleanup_window.count() / 2) +
                                            SAFETY_MARGIN_EXPIRY_MS)
         .xattr()
         .create_path(),
-      couchbase::mutate_in_specs::upsert(FIELD_CLIENTS + "." + uuid + "." + FIELD_NUM_ATRS,
+      couchbase::mutate_in_specs::upsert(fmt::format("records.clients.{}.num_atrs", uuid),
                                          atr_ids::all().size())
         .xattr()
         .create_path(),
@@ -398,9 +383,9 @@ transactions_cleanup::get_active_clients(
       CB_LOST_ATTEMPT_CLEANUP_LOG_TRACE(
         "adding {} to list of clients to be removed when updating this client",
         details.expired_client_ids[idx]);
-      mut_specs.push_back(
-        couchbase::mutate_in_specs::remove(FIELD_CLIENTS + "." + details.expired_client_ids[idx])
-          .xattr());
+      mut_specs.push_back(couchbase::mutate_in_specs::remove(
+                            fmt::format("records.clients.{}", details.expired_client_ids[idx]))
+                            .xattr());
     }
     mutate_req.specs = mut_specs.specs();
     ec = wait_for_hook([this, bucket = keyspace.bucket](auto handler) mutable {
@@ -454,13 +439,13 @@ transactions_cleanup::remove_client_record_from_all_buckets(const std::string& u
             if (ec) {
               throw client_error(*ec, "client_record_before_remove_client hook raised error");
             }
-            document_id id{
+            const document_id id{
               keyspace.bucket, keyspace.scope, keyspace.collection, CLIENT_RECORD_DOC_ID
             };
             core::operations::mutate_in_request req{ id };
             req.specs =
               couchbase::mutate_in_specs{
-                couchbase::mutate_in_specs::remove(FIELD_CLIENTS + "." + uuid).xattr(),
+                couchbase::mutate_in_specs::remove(fmt::format("records.clients.{}", uuid)).xattr(),
               }
                 .specs();
             wrap_durable_request(req, config_);
@@ -497,7 +482,7 @@ transactions_cleanup::remove_client_record_from_all_buckets(const std::string& u
 auto
 transactions_cleanup::force_cleanup_atr(const core::document_id& atr_id,
                                         std::vector<transactions_cleanup_attempt>& results)
-  -> const atr_cleanup_stats
+  -> atr_cleanup_stats
 {
   CB_LOST_ATTEMPT_CLEANUP_LOG_TRACE("starting force_cleanup_atr: atr_id {}", atr_id);
   return handle_atr_cleanup(atr_id, &results);
@@ -570,9 +555,10 @@ transactions_cleanup::attempts_loop()
 }
 
 void
-transactions_cleanup::add_attempt(std::shared_ptr<attempt_context> ctx)
+transactions_cleanup::add_attempt(const std::shared_ptr<attempt_context>& ctx)
 {
   auto ctx_impl = std::dynamic_pointer_cast<attempt_context_impl>(ctx);
+  Expects(ctx_impl != nullptr);
   switch (ctx_impl->state()) {
     case attempt_state::NOT_STARTED:
     case attempt_state::COMPLETED:
@@ -616,7 +602,9 @@ transactions_cleanup::start()
   running_ =
     config_.cleanup_config.cleanup_client_attempts || config_.cleanup_config.cleanup_lost_attempts;
   if (config_.cleanup_config.cleanup_client_attempts) {
-    cleanup_thr_ = std::thread(std::bind(&transactions_cleanup::attempts_loop, this));
+    cleanup_thr_ = std::thread([this] {
+      attempts_loop();
+    });
   }
   if (config_.metadata_collection) {
     add_collection({ config_.metadata_collection->bucket,
@@ -632,7 +620,7 @@ void
 transactions_cleanup::stop()
 {
   {
-    std::unique_lock<std::mutex> lock(mutex_);
+    const std::unique_lock<std::mutex> lock(mutex_);
     running_ = false;
     cv_.notify_all();
   }

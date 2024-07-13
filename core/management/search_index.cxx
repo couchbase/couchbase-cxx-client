@@ -68,12 +68,9 @@ index::is_vector_index() const -> bool
   if (types == nullptr || !types->is_object()) {
     return false;
   }
-  for (const auto& [_, val] : types->get_object()) {
-    const auto* properties = val.find("properties");
-    if (properties != nullptr && has_vector_mapping_properties(*properties)) {
-      return true;
-    }
-  }
-  return false;
+  return std::any_of(types->get_object().begin(), types->get_object().end(), [](const auto& pair) {
+    const auto* properties = pair.second.find("properties");
+    return properties != nullptr && has_vector_mapping_properties(*properties);
+  });
 }
 } // namespace couchbase::core::management::search

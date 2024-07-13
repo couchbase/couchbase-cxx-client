@@ -34,6 +34,7 @@
 
 #include <memory>
 #include <sstream>
+#include <utility>
 
 namespace couchbase::core::io::dns
 {
@@ -44,18 +45,18 @@ public:
     asio::io_context& ctx,
     const std::string& name,
     const std::string& service,
-    const asio::ip::address& address,
+    asio::ip::address address,
     std::uint16_t port,
     utils::movable_function<void(couchbase::core::io::dns::dns_srv_response&& resp)> handler)
     : deadline_(ctx)
     , udp_deadline_(ctx)
     , udp_(ctx)
     , tcp_(ctx)
-    , address_(address)
+    , address_(std::move(address))
     , port_(port)
     , handler_(std::move(handler))
   {
-    static std::string protocol{ "_tcp" };
+    static const std::string protocol{ "_tcp" };
     dns_message request{};
     question_record qr;
     qr.klass = resource_class::in;
@@ -78,7 +79,7 @@ public:
                  port_,
                  udp_timeout,
                  total_timeout);
-    asio::ip::udp::endpoint endpoint(address_, port_);
+    const asio::ip::udp::endpoint endpoint(address_, port_);
     udp_.open(endpoint.protocol());
     CB_LOG_PROTOCOL("[DNS, UDP, OUT] host=\"{}\", port={}, buffer_size={}{:a}",
                     address_.to_string(),

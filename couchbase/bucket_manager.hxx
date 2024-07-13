@@ -19,6 +19,7 @@
 
 #include <couchbase/create_bucket_options.hxx>
 #include <couchbase/drop_bucket_options.hxx>
+#include <couchbase/error.hxx>
 #include <couchbase/flush_bucket_options.hxx>
 #include <couchbase/get_all_buckets_options.hxx>
 #include <couchbase/get_bucket_options.hxx>

@@ -17,6 +17,17 @@
 
 #include "internal_search_error_context.hxx"
 
+#include "core/operations/document_search.hxx"
+
+#include <couchbase/retry_reason.hxx>
+
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <set>
+#include <system_error>
+#include <utility>
+
 namespace couchbase
 {
 internal_search_error_context::internal_search_error_context(

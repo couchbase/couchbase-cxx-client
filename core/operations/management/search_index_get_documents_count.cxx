@@ -24,9 +24,10 @@
 
 namespace couchbase::core::operations::management
 {
-std::error_code
+auto
 search_index_get_documents_count_request::encode_to(encoded_request_type& encoded,
                                                     http_context& /* context */) const
+  -> std::error_code
 {
   encoded.method = "GET";
   if (bucket_name.has_value() && scope_name.has_value()) {
@@ -40,9 +41,10 @@ search_index_get_documents_count_request::encode_to(encoded_request_type& encode
   return {};
 }
 
-search_index_get_documents_count_response
+auto
 search_index_get_documents_count_request::make_response(error_context::http&& ctx,
                                                         const encoded_response_type& encoded) const
+  -> search_index_get_documents_count_response
 {
   search_index_get_documents_count_response response{ std::move(ctx) };
   if (!response.ctx.ec) {
@@ -94,6 +96,8 @@ search_index_get_documents_count_request::make_response(error_context::http&& ct
           return response;
         }
       } break;
+      default:
+        break;
     }
     response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
   }

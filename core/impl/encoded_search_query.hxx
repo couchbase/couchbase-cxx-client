@@ -17,13 +17,14 @@
 
 #pragma once
 
+#include <tao/json/type.hpp>
 #include <tao/json/value.hpp>
 
 namespace couchbase
 {
 struct encoded_search_query {
   std::error_code ec{};
-  tao::json::value query{};
+  tao::json::value query = tao::json::empty_object;
 };
 
 } // namespace couchbase

@@ -44,7 +44,7 @@ public:
   http_session_info(const std::string& client_id, const std::string& session_id);
   http_session_info(const std::string& client_id,
                     const std::string& session_id,
-                    const asio::ip::tcp::endpoint& local_endpoint,
+                    asio::ip::tcp::endpoint local_endpoint,
                     const asio::ip::tcp::endpoint& remote_endpoint);
 
   [[nodiscard]] auto remote_endpoint() const -> const asio::ip::tcp::endpoint&;
@@ -65,20 +65,20 @@ class http_session : public std::enable_shared_from_this<http_session>
 {
 public:
   http_session(service_type type,
-               const std::string& client_id,
+               std::string client_id,
                asio::io_context& ctx,
-               const cluster_credentials& credentials,
-               const std::string& hostname,
-               const std::string& service,
+               cluster_credentials credentials,
+               std::string hostname,
+               std::string service,
                http_context http_ctx);
 
   http_session(service_type type,
-               const std::string& client_id,
+               std::string client_id,
                asio::io_context& ctx,
                asio::ssl::context& tls,
-               const cluster_credentials& credentials,
-               const std::string& hostname,
-               const std::string& service,
+               cluster_credentials credentials,
+               std::string hostname,
+               std::string service,
                http_context http_ctx);
 
   ~http_session();

@@ -49,12 +49,12 @@ jsonify(const tao::json::value& obj) -> std::string
 auto
 now_ns_from_vbucket(const tao::json::value& vbucket) -> std::uint64_t
 {
-  std::string now_str = vbucket.at("HLC").at("now").get_string();
+  const std::string now_str = vbucket.at("HLC").at("now").get_string();
   return stoull(now_str, nullptr, 10) * 1000000000;
 }
 
 void
-wrap_collection_call(result& res, std::function<void(result&)> call)
+wrap_collection_call(result& res, const std::function<void(result&)>& call)
 {
   call(res);
   if (!res.is_success()) {
@@ -99,8 +99,8 @@ wrap_operation_future(std::future<result>& fut, bool ignore_subdoc_errors) -> re
 }
 
 auto
-wait_for_hook(std::function<void(utils::movable_function<void(std::optional<error_class>)>)> hook)
-  -> std::optional<error_class>
+wait_for_hook(const std::function<void(utils::movable_function<void(std::optional<error_class>)>)>&
+                hook) -> std::optional<error_class>
 {
   auto hook_barrier = std::make_shared<std::promise<std::optional<error_class>>>();
   auto hook_future = hook_barrier->get_future();
@@ -122,17 +122,17 @@ auto
 error_class_from_response_extras(const core::operations::mutate_in_response& resp)
   -> std::optional<error_class>
 {
-  if (!resp.ctx.first_error_index()) {
-    return {};
+  if (const auto& first_error_index = resp.ctx.first_error_index(); first_error_index.has_value()) {
+    auto status = resp.fields.at(first_error_index.value()).status;
+    if (status == key_value_status_code::subdoc_path_not_found) {
+      return FAIL_PATH_NOT_FOUND;
+    }
+    if (status == key_value_status_code::subdoc_path_exists) {
+      return FAIL_PATH_ALREADY_EXISTS;
+    }
+    return FAIL_OTHER;
   }
-  auto status = resp.fields.at(*resp.ctx.first_error_index()).status;
-  if (status == key_value_status_code::subdoc_path_not_found) {
-    return FAIL_PATH_NOT_FOUND;
-  }
-  if (status == key_value_status_code::subdoc_path_exists) {
-    return FAIL_PATH_ALREADY_EXISTS;
-  }
-  return FAIL_OTHER;
+  return {};
 }
 
 auto

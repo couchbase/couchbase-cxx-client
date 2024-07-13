@@ -89,14 +89,14 @@ public:
   mcbp_session(mcbp_session&& other) = default;
   auto operator=(mcbp_session&& other) -> mcbp_session& = default;
 
-  mcbp_session(std::string client_id,
+  mcbp_session(const std::string& client_id,
                asio::io_context& ctx,
                couchbase::core::origin origin,
                std::shared_ptr<impl::bootstrap_state_listener> state_listener,
                std::optional<std::string> bucket_name = {},
                std::vector<protocol::hello_feature> known_features = {});
 
-  mcbp_session(std::string client_id,
+  mcbp_session(const std::string& client_id,
                asio::io_context& ctx,
                asio::ssl::context& tls,
                couchbase::core::origin origin,
@@ -124,8 +124,8 @@ public:
   [[nodiscard]] auto last_bootstrap_error() && -> std::optional<impl::bootstrap_error>;
   [[nodiscard]] auto last_bootstrap_error() const& -> const std::optional<impl::bootstrap_error>&;
   void write_and_flush(std::vector<std::byte>&& buffer);
-  void write_and_subscribe(std::shared_ptr<mcbp::queue_request>,
-                           std::shared_ptr<response_handler> handler);
+  void write_and_subscribe(const std::shared_ptr<mcbp::queue_request>&,
+                           const std::shared_ptr<response_handler>& handler);
   void write_and_subscribe(std::uint32_t opaque,
                            std::vector<std::byte>&& data,
                            command_handler&& handler);
@@ -138,7 +138,7 @@ public:
   [[nodiscard]] auto config() const -> std::optional<topology::configuration>;
   [[nodiscard]] auto diag_info() const -> diag::endpoint_diag_info;
   void on_configuration_update(std::shared_ptr<config_listener> handler);
-  void ping(std::shared_ptr<diag::ping_reporter> handler,
+  void ping(const std::shared_ptr<diag::ping_reporter>& handler,
             std::optional<std::chrono::milliseconds> = {}) const;
   [[nodiscard]] auto supports_gcccp() const -> bool;
   [[nodiscard]] auto decode_error_code(std::uint16_t code)

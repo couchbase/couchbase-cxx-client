@@ -47,7 +47,7 @@ mcbp_parser::next(mcbp_message& msg) -> mcbp_parser::result
   std::uint32_t key_size = utils::byte_swap(msg.header.keylen);
   std::uint32_t prefix_size = static_cast<std::uint32_t>(msg.header.extlen) + key_size;
   if (msg.header.magic == static_cast<std::uint8_t>(protocol::magic::alt_client_response)) {
-    std::uint8_t framing_extras_size = msg.header.keylen & 0xffU;
+    const std::uint8_t framing_extras_size = msg.header.keylen & 0xffU;
     key_size = static_cast<std::uint32_t>(msg.header.keylen >> 8U);
     prefix_size = static_cast<std::uint32_t>(framing_extras_size) +
                   static_cast<std::uint32_t>(msg.header.extlen) + key_size;
@@ -55,12 +55,12 @@ mcbp_parser::next(mcbp_message& msg) -> mcbp_parser::result
   msg.body.insert(
     msg.body.end(), buf.begin() + header_size, buf.begin() + header_size + prefix_size);
 
-  bool is_compressed =
+  const bool is_compressed =
     (msg.header.datatype & static_cast<std::uint8_t>(protocol::datatype::snappy)) != 0;
   bool use_raw_value = true;
   if (is_compressed) {
     std::string uncompressed;
-    std::size_t offset = header_size + prefix_size;
+    const std::size_t offset = header_size + prefix_size;
     if (snappy::Uncompress(reinterpret_cast<const char*>(buf.data() + offset),
                            body_size - prefix_size,
                            &uncompressed)) {

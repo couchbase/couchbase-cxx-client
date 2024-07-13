@@ -17,9 +17,17 @@
 
 #include "internal_search_meta_data.hxx"
 
+#include "core/operations/document_search.hxx"
+
+#include <couchbase/search_metrics.hxx>
+
+#include <map>
+
 namespace couchbase
 {
-static auto
+namespace
+{
+auto
 map_metrics(const core::operations::search_response::search_metrics& metrics)
   -> couchbase::search_metrics
 {
@@ -32,6 +40,7 @@ map_metrics(const core::operations::search_response::search_metrics& metrics)
     metrics.max_score,
   };
 }
+} // namespace
 
 internal_search_meta_data::internal_search_meta_data(
   const core::operations::search_response::search_meta_data& meta)

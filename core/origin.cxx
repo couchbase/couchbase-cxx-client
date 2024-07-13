@@ -25,6 +25,7 @@
 #include <fmt/core.h>
 
 #include <tao/json.hpp>
+#include <utility>
 
 namespace tao::json
 {
@@ -276,8 +277,8 @@ origin::to_json() const -> std::string
   return tao::json::to_string(json);
 }
 
-bool
-cluster_credentials::uses_certificate() const
+auto
+cluster_credentials::uses_certificate() const -> bool
 {
   return !certificate_path.empty();
 }
@@ -291,8 +292,8 @@ couchbase::core::origin::origin(const couchbase::core::origin& other)
 {
 }
 
-couchbase::core::origin::origin(const origin& other, const topology::configuration& config)
-  : origin(other)
+couchbase::core::origin::origin(origin other, const topology::configuration& config)
+  : origin(std::move(other))
 {
   set_nodes_from_config(config);
 }
@@ -330,8 +331,8 @@ couchbase::core::origin::origin(couchbase::core::cluster_credentials auth,
   }
   next_node_ = nodes_.begin();
 }
-couchbase::core::origin&
-couchbase::core::origin::operator=(const couchbase::core::origin& other)
+auto
+couchbase::core::origin::operator=(const couchbase::core::origin& other) -> couchbase::core::origin&
 {
   if (this != &other) {
     options_ = other.options_;
@@ -342,28 +343,28 @@ couchbase::core::origin::operator=(const couchbase::core::origin& other)
   }
   return *this;
 }
-const std::string&
-couchbase::core::origin::username() const
+auto
+couchbase::core::origin::username() const -> const std::string&
 {
   return credentials_.username;
 }
-const std::string&
-couchbase::core::origin::password() const
+auto
+couchbase::core::origin::password() const -> const std::string&
 {
   return credentials_.password;
 }
-const std::string&
-couchbase::core::origin::certificate_path() const
+auto
+couchbase::core::origin::certificate_path() const -> const std::string&
 {
   return credentials_.certificate_path;
 }
-const std::string&
-couchbase::core::origin::key_path() const
+auto
+couchbase::core::origin::key_path() const -> const std::string&
 {
   return credentials_.key_path;
 }
-std::vector<std::string>
-couchbase::core::origin::get_hostnames() const
+auto
+couchbase::core::origin::get_hostnames() const -> std::vector<std::string>
 {
   std::vector<std::string> res;
   res.reserve(nodes_.size());
@@ -372,8 +373,8 @@ couchbase::core::origin::get_hostnames() const
   }
   return res;
 }
-std::vector<std::string>
-couchbase::core::origin::get_nodes() const
+auto
+couchbase::core::origin::get_nodes() const -> std::vector<std::string>
 {
   std::vector<std::string> res;
   res.reserve(nodes_.size());
@@ -413,8 +414,8 @@ couchbase::core::origin::set_nodes_from_config(const topology::configuration& co
   }
   next_node_ = nodes_.begin();
 }
-std::pair<std::string, std::string>
-couchbase::core::origin::next_address()
+auto
+couchbase::core::origin::next_address() -> std::pair<std::string, std::string>
 {
   if (exhausted_) {
     restart();
@@ -426,8 +427,8 @@ couchbase::core::origin::next_address()
   }
   return address;
 }
-bool
-couchbase::core::origin::exhausted() const
+auto
+couchbase::core::origin::exhausted() const -> bool
 {
   return exhausted_;
 }
@@ -437,18 +438,18 @@ couchbase::core::origin::restart()
   exhausted_ = false;
   next_node_ = nodes_.begin();
 }
-const couchbase::core::cluster_options&
-couchbase::core::origin::options() const
+auto
+couchbase::core::origin::options() const -> const couchbase::core::cluster_options&
 {
   return options_;
 }
-couchbase::core::cluster_options&
-couchbase::core::origin::options()
+auto
+couchbase::core::origin::options() -> couchbase::core::cluster_options&
 {
   return options_;
 }
-const couchbase::core::cluster_credentials&
-couchbase::core::origin::credentials() const
+auto
+couchbase::core::origin::credentials() const -> const couchbase::core::cluster_credentials&
 {
   return credentials_;
 }

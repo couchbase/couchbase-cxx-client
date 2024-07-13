@@ -19,40 +19,135 @@
 
 #include "cluster.hxx"
 
-#include "bucket.hxx"
-#include "capella_ca.hxx"
-#include "core/impl/get_replica.hxx"
-#include "core/impl/lookup_in_replica.hxx"
-#include "core/impl/observe_seqno.hxx"
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
 #include "core/io/config_tracker.hxx"
 #endif
+
+#include "bucket.hxx"
+#include "capella_ca.hxx"
+#include "core/diagnostics.hxx"
+#include "core/impl/get_replica.hxx"
+#include "core/impl/lookup_in_replica.hxx"
+#include "core/impl/observe_seqno.hxx"
 #include "core/io/http_command.hxx"
+#include "core/io/http_message.hxx"
 #include "core/io/http_session_manager.hxx"
-#include "core/io/mcbp_command.hxx"
 #include "core/io/mcbp_session.hxx"
-#include "core/management/analytics_link.hxx"
-#include "core/mcbp/completion_token.hxx"
+#include "core/logger/logger.hxx"
+#include "core/management/analytics_link_azure_blob_external.hxx"
+#include "core/management/analytics_link_couchbase_remote.hxx"
+#include "core/management/analytics_link_s3_external.hxx"
 #include "core/mcbp/queue_request.hxx"
 #include "core/meta/version.hxx"
 #include "core/metrics/logging_meter.hxx"
 #include "core/metrics/noop_meter.hxx"
-#include "core/operations.hxx"
-#include "core/operations/management/analytics.hxx"
-#include "core/operations/management/bucket.hxx"
+#include "core/operations/document_analytics.hxx"
+#include "core/operations/document_append.hxx"
+#include "core/operations/document_decrement.hxx"
+#include "core/operations/document_exists.hxx"
+#include "core/operations/document_get.hxx"
+#include "core/operations/document_get_all_replicas.hxx"
+#include "core/operations/document_get_and_lock.hxx"
+#include "core/operations/document_get_and_touch.hxx"
+#include "core/operations/document_get_any_replica.hxx"
+#include "core/operations/document_get_projected.hxx"
+#include "core/operations/document_increment.hxx"
+#include "core/operations/document_insert.hxx"
+#include "core/operations/document_lookup_in.hxx"
+#include "core/operations/document_lookup_in_all_replicas.hxx"
+#include "core/operations/document_lookup_in_any_replica.hxx"
+#include "core/operations/document_mutate_in.hxx"
+#include "core/operations/document_prepend.hxx"
+#include "core/operations/document_query.hxx"
+#include "core/operations/document_remove.hxx"
+#include "core/operations/document_replace.hxx"
+#include "core/operations/document_search.hxx"
+#include "core/operations/document_touch.hxx"
+#include "core/operations/document_unlock.hxx"
+#include "core/operations/document_upsert.hxx"
+#include "core/operations/document_view.hxx"
+#include "core/operations/http_noop.hxx"
+#include "core/operations/management/analytics_dataset_create.hxx"
+#include "core/operations/management/analytics_dataset_drop.hxx"
+#include "core/operations/management/analytics_dataset_get_all.hxx"
+#include "core/operations/management/analytics_dataverse_create.hxx"
+#include "core/operations/management/analytics_dataverse_drop.hxx"
+#include "core/operations/management/analytics_get_pending_mutations.hxx"
+#include "core/operations/management/analytics_index_create.hxx"
+#include "core/operations/management/analytics_index_drop.hxx"
+#include "core/operations/management/analytics_index_get_all.hxx"
+#include "core/operations/management/analytics_link_connect.hxx"
+#include "core/operations/management/analytics_link_create.hxx"
+#include "core/operations/management/analytics_link_disconnect.hxx"
+#include "core/operations/management/analytics_link_drop.hxx"
+#include "core/operations/management/analytics_link_get_all.hxx"
+#include "core/operations/management/analytics_link_replace.hxx"
+#include "core/operations/management/bucket_create.hxx"
 #include "core/operations/management/bucket_describe.hxx"
+#include "core/operations/management/bucket_drop.hxx"
+#include "core/operations/management/bucket_flush.hxx"
+#include "core/operations/management/bucket_get.hxx"
+#include "core/operations/management/bucket_get_all.hxx"
+#include "core/operations/management/bucket_update.hxx"
+#include "core/operations/management/change_password.hxx"
 #include "core/operations/management/cluster_describe.hxx"
 #include "core/operations/management/cluster_developer_preview_enable.hxx"
-#include "core/operations/management/collections.hxx"
-#include "core/operations/management/eventing.hxx"
+#include "core/operations/management/collection_create.hxx"
+#include "core/operations/management/collection_drop.hxx"
+#include "core/operations/management/collection_update.hxx"
+#include "core/operations/management/collections_manifest_get.hxx"
+#include "core/operations/management/eventing_deploy_function.hxx"
+#include "core/operations/management/eventing_drop_function.hxx"
+#include "core/operations/management/eventing_get_all_functions.hxx"
+#include "core/operations/management/eventing_get_function.hxx"
+#include "core/operations/management/eventing_get_status.hxx"
+#include "core/operations/management/eventing_pause_function.hxx"
+#include "core/operations/management/eventing_resume_function.hxx"
+#include "core/operations/management/eventing_undeploy_function.hxx"
+#include "core/operations/management/eventing_upsert_function.hxx"
 #include "core/operations/management/freeform.hxx"
-#include "core/operations/management/query.hxx"
-#include "core/operations/management/search.hxx"
-#include "core/operations/management/user.hxx"
-#include "core/operations/management/view.hxx"
+#include "core/operations/management/group_drop.hxx"
+#include "core/operations/management/group_get.hxx"
+#include "core/operations/management/group_get_all.hxx"
+#include "core/operations/management/group_upsert.hxx"
+#include "core/operations/management/query_index_build.hxx"
+#include "core/operations/management/query_index_build_deferred.hxx"
+#include "core/operations/management/query_index_create.hxx"
+#include "core/operations/management/query_index_drop.hxx"
+#include "core/operations/management/query_index_get_all.hxx"
+#include "core/operations/management/query_index_get_all_deferred.hxx"
+#include "core/operations/management/role_get_all.hxx"
+#include "core/operations/management/scope_create.hxx"
+#include "core/operations/management/scope_drop.hxx"
+#include "core/operations/management/scope_get_all.hxx"
+#include "core/operations/management/search_get_stats.hxx"
+#include "core/operations/management/search_index_analyze_document.hxx"
+#include "core/operations/management/search_index_control_ingest.hxx"
+#include "core/operations/management/search_index_control_plan_freeze.hxx"
+#include "core/operations/management/search_index_control_query.hxx"
+#include "core/operations/management/search_index_drop.hxx"
+#include "core/operations/management/search_index_get.hxx"
+#include "core/operations/management/search_index_get_all.hxx"
+#include "core/operations/management/search_index_get_documents_count.hxx"
+#include "core/operations/management/search_index_get_stats.hxx"
+#include "core/operations/management/search_index_upsert.hxx"
+#include "core/operations/management/user_drop.hxx"
+#include "core/operations/management/user_get.hxx"
+#include "core/operations/management/user_get_all.hxx"
+#include "core/operations/management/user_upsert.hxx"
+#include "core/operations/management/view_index_drop.hxx"
+#include "core/operations/management/view_index_get.hxx"
+#include "core/operations/management/view_index_get_all.hxx"
+#include "core/operations/management/view_index_upsert.hxx"
+#include "core/platform/uuid.h"
+#include "core/protocol/hello_feature.hxx"
+#include "core/service_type.hxx"
+#include "core/tls_verify_mode.hxx"
+#include "core/topology/capabilities.hxx"
 #include "core/tracing/noop_tracer.hxx"
 #include "core/tracing/threshold_logging_tracer.hxx"
 #include "core/utils/join_strings.hxx"
+#include "core/utils/movable_function.hxx"
 #include "crud_component.hxx"
 #include "dispatcher.hxx"
 #include "impl/dns_srv_tracker.hxx"
@@ -60,10 +155,30 @@
 #include "ping_collector.hxx"
 #include "ping_reporter.hxx"
 
-#include <asio/ssl.hpp>
-#include <fstream>
+#include <couchbase/error_codes.hxx>
+#include <couchbase/retry_reason.hxx>
+
+#include <asio/bind_executor.hpp>
+#include <asio/executor_work_guard.hpp>
+#include <asio/post.hpp>
+#include <asio/ssl/verify_mode.hpp>
+#include <fmt/core.h>
+
+#include <atomic>
+#include <chrono>
+#include <cstring>
+#include <fmt/format.h>
+#include <map>
 #include <memory>
-#include <thread>
+#include <mutex>
+#include <optional>
+#include <set>
+#include <string>
+#include <system_error>
+#include <tuple>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
 namespace couchbase::core
 {
@@ -85,12 +200,17 @@ public:
   {
   }
 
+  ping_collector_impl(const ping_collector_impl&) = delete;
+  ping_collector_impl(ping_collector_impl&&) = delete;
+  auto operator=(const ping_collector_impl&) -> ping_collector_impl& = delete;
+  auto operator=(ping_collector_impl&&) -> ping_collector_impl& = delete;
+
   ~ping_collector_impl() override
   {
     invoke_handler();
   }
 
-  [[nodiscard]] diag::ping_result& result()
+  [[nodiscard]] auto result() -> diag::ping_result&
   {
     return res_;
   }
@@ -119,17 +239,19 @@ public:
   }
 };
 
+namespace
+{
 template<typename Request>
-bool
+auto
 is_feature_supported(const Request& /* request */,
-                     const configuration_capabilities& /* capabilities */)
+                     const configuration_capabilities& /* capabilities */) -> bool
 {
   return true;
 }
 
-bool
+auto
 is_feature_supported(const operations::search_request& request,
-                     const configuration_capabilities& capabilities)
+                     const configuration_capabilities& capabilities) -> bool
 {
   if (request.scope_name && !capabilities.supports_scoped_search_indexes()) {
     return false;
@@ -141,15 +263,13 @@ is_feature_supported(const operations::search_request& request,
   return true;
 }
 
-bool
+auto
 is_feature_supported(const operations::management::search_index_upsert_request& request,
-                     const configuration_capabilities& capabilities)
+                     const configuration_capabilities& capabilities) -> bool
 {
-  if (request.index.is_vector_index() && !capabilities.supports_vector_search()) {
-    return false;
-  }
-  return true;
+  return !request.index.is_vector_index() || capabilities.supports_vector_search();
 }
+} // namespace
 
 class cluster_impl : public std::enable_shared_from_this<cluster_impl>
 {
@@ -271,6 +391,8 @@ public:
             [self, hostname = std::move(hostname), handler = std::move(handler)](
               origin::node_list nodes, std::error_code ec) mutable {
               if (ec) {
+                // TODO(CXXCBC-549): clang-tidy-19 reports potential memory leak here
+                // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
                 return self->close([ec, handler = std::move(handler)]() mutable {
                   handler(ec);
                 });
@@ -355,7 +477,7 @@ public:
     }
     std::shared_ptr<bucket> b{};
     {
-      std::scoped_lock lock(buckets_mutex_);
+      const std::scoped_lock lock(buckets_mutex_);
       auto ptr = buckets_.find(bucket_name);
       if (ptr == buckets_.end()) {
         std::vector<protocol::hello_feature> known_features;
@@ -363,7 +485,9 @@ public:
         auto origin = origin_;
         if (session_ && session_->has_config()) {
           known_features = session_->supported_features();
-          origin = { origin_, session_->config().value() };
+          if (const auto config = session_->config(); config.has_value()) {
+            origin = { origin_, config.value() };
+          }
         }
 
         b = std::make_shared<bucket>(
@@ -379,7 +503,7 @@ public:
     b->bootstrap([self = shared_from_this(), bucket_name, handler = std::move(handler)](
                    std::error_code ec, const topology::configuration& config) mutable {
       if (ec) {
-        std::scoped_lock lock(self->buckets_mutex_);
+        const std::scoped_lock lock(self->buckets_mutex_);
         self->buckets_.erase(bucket_name);
       } else if (self->session_ && !self->session_->supports_gcccp()) {
         self->session_manager_->set_configuration(config, self->origin_.options());
@@ -396,7 +520,7 @@ public:
     }
     std::shared_ptr<bucket> b{};
     {
-      std::scoped_lock lock(buckets_mutex_);
+      const std::scoped_lock lock(buckets_mutex_);
 
       if (auto ptr = buckets_.find(bucket_name); ptr != buckets_.end()) {
         b = std::move(ptr->second);
@@ -409,7 +533,7 @@ public:
     return handler({});
   }
 
-  std::pair<std::error_code, couchbase::core::origin> origin() const
+  auto origin() const -> std::pair<std::error_code, couchbase::core::origin>
   {
     if (stopped_) {
       return { errc::network::cluster_closed, {} };
@@ -495,11 +619,8 @@ public:
         }
         return self->with_bucket_configuration(
           bucket_name,
-          [self = std::move(self),
-           cap,
-           request = std::move(request),
-           handler = std::forward<Handler>(handler)](std::error_code ec,
-                                                     topology::configuration config) mutable {
+          [self, cap, request = std::move(request), handler = std::forward<Handler>(handler)](
+            std::error_code ec, const topology::configuration& config) mutable {
             if (ec) {
               handler(request.make_response({ ec }, {}));
               return;
@@ -513,9 +634,9 @@ public:
       });
   }
 
-  std::shared_ptr<bucket> find_bucket_by_name(const std::string& name)
+  auto find_bucket_by_name(const std::string& name) -> std::shared_ptr<bucket>
   {
-    std::scoped_lock lock(buckets_mutex_);
+    const std::scoped_lock lock(buckets_mutex_);
 
     auto bucket = buckets_.find(name);
     if (bucket == buckets_.end()) {
@@ -528,13 +649,13 @@ public:
   {
     std::vector<std::shared_ptr<bucket>> buckets{};
     {
-      std::scoped_lock lock(buckets_mutex_);
+      const std::scoped_lock lock(buckets_mutex_);
       buckets.reserve(buckets_.size());
       for (const auto& [name, bucket] : buckets_) {
         buckets.push_back(bucket);
       }
     }
-    for (auto bucket : buckets) {
+    for (const auto& bucket : buckets) {
       handler(bucket);
     }
   }
@@ -553,7 +674,7 @@ public:
     bool has_capella_host = false;
     {
       bool has_non_capella_host = false;
-      static std::string suffix = "cloud.couchbase.com";
+      static const std::string suffix = "cloud.couchbase.com";
       for (const auto& node : origin_.get_hostnames()) {
         if (auto pos = node.find(suffix);
             pos != std::string::npos && pos + suffix.size() == node.size()) {
@@ -652,6 +773,8 @@ public:
                          id_,
                          origin_.options().trust_certificate,
                          ec.message());
+            // TODO(CXXCBC-549): clang-tidy-19 reports potential memory leak here
+            // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
             return close([ec, handler = std::move(handler)]() mutable {
               return handler(ec);
             });
@@ -667,6 +790,8 @@ public:
                        id_,
                        origin_.certificate_path(),
                        ec.message());
+          // TODO(CXXCBC-549): clang-tidy-19 reports potential memory leak here
+          // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
           return close([ec, handler = std::move(handler)]() mutable {
             return handler(ec);
           });
@@ -676,6 +801,8 @@ public:
         if (ec) {
           CB_LOG_ERROR(
             "[{}]: unable to load private key \"{}\": {}", id_, origin_.key_path(), ec.message());
+          // TODO(CXXCBC-549): clang-tidy-19 reports potential memory leak here
+          // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
           return close([ec, handler = std::move(handler)]() mutable {
             return handler(ec);
           });
@@ -717,6 +844,8 @@ public:
         });
       }
       if (ec) {
+        // TODO(CXXCBC-549): clang-tidy-19 reports potential memory leak here
+        // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
         return self->close([ec, handler = std::move(handler)]() mutable {
           handler(ec);
         });
@@ -728,7 +857,7 @@ public:
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
   void do_background_open()
   {
-    // TODO: retries on more failures?  Right now only retry if load_verify_file() fails...
+    // TODO(JC): retries on more failures?  Right now only retry if load_verify_file() fails...
 
     // Disables TLS v1.2 which should be okay cloud/columnar default.
     configure_tls_options(true);
@@ -788,7 +917,7 @@ public:
         }
       }
     } else if (origin_.options().security_options.trust_only_platform) {
-      // TODO:  CXXCBC-548: security_options updates (use Mozilla certs?)
+      // TODO(CXXCBC-548): security_options updates (use Mozilla certs?)
       CB_LOG_DEBUG(R"([{}]: use default CA for TLS verify)", id_);
       std::error_code ec{};
       // load system certificates
@@ -808,7 +937,7 @@ public:
         }
       }
     }
-    // TODO:  CXXCBC-548: security_options updates (support cipher suites)
+    // TODO(CXXCBC-548): security_options updates (support cipher suites)
     // if (!origin_.options().security_options.cipher_suites.empty()) {
     // }
     config_tracker_ = std::make_shared<couchbase::core::io::cluster_config_tracker>(
@@ -831,7 +960,6 @@ public:
         }
         cb();
       });
-    return;
   }
 
   void do_background_dns_srv_open()
@@ -872,7 +1000,7 @@ public:
   void create_cluster_sessions()
   {
     config_tracker_->create_sessions(
-      [self = shared_from_this()](std::error_code ec, topology::configuration cfg) mutable {
+      [self = shared_from_this()](std::error_code ec, const topology::configuration& cfg) mutable {
         if (ec) {
           auto backoff = std::chrono::milliseconds(500);
           CB_LOG_DEBUG("[{}] Waiting for {}ms before retrying to create cluster sessions.",
@@ -909,9 +1037,8 @@ public:
 
         if (auto bucket = self->find_bucket_by_name(bucket_name); bucket != nullptr) {
           return bucket->with_configuration(std::move(handler));
-        } else {
-          return handler(errc::common::bucket_not_found, {});
         }
+        return handler(errc::common::bucket_not_found, {});
       });
   }
 
@@ -1068,7 +1195,7 @@ public:
       return errc::common::invalid_argument;
     }
     if (auto bucket = find_bucket_by_name(bucket_name); bucket != nullptr) {
-      return bucket->direct_re_queue(std::move(req), is_retry);
+      return bucket->direct_re_queue(req, is_retry);
     }
 
     open_bucket(bucket_name,
@@ -1167,12 +1294,12 @@ cluster::open(couchbase::core::origin origin,
 
 void
 cluster::open_in_background(
-  [[maybe_unused]] couchbase::core::origin origin,
+  [[maybe_unused]] const couchbase::core::origin& origin,
   [[maybe_unused]] utils::movable_function<void(std::error_code)>&& handler) const
 {
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
   if (impl_) {
-    impl_->open_in_background(std::move(origin), std::move(handler));
+    impl_->open_in_background(origin, std::move(handler));
   }
 #else
   CB_LOG_ERROR("Background open only available for Columnar builds.");
@@ -1199,7 +1326,7 @@ cluster::ping(std::optional<std::string> report_id,
     impl_->ping(std::move(report_id),
                 std::move(bucket_name),
                 std::move(services),
-                std::move(timeout),
+                timeout,
                 std::move(handler));
   }
 }
@@ -1223,8 +1350,8 @@ cluster::close_bucket(const std::string& bucket_name,
   }
 }
 
-std::pair<std::error_code, couchbase::core::origin>
-cluster::origin() const
+auto
+cluster::origin() const -> std::pair<std::error_code, couchbase::core::origin>
 {
   if (impl_) {
     return impl_->origin();

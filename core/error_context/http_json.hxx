@@ -17,8 +17,8 @@
 
 #pragma once
 
-#include <core/error_context/http.hxx>
-#include <core/impl/retry_reason.hxx>
+#include "core/error_context/http.hxx"
+#include "core/impl/retry_reason.hxx"
 
 #include <couchbase/error_codes.hxx>
 #include <couchbase/fmt/retry_reason.hxx>
