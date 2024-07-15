@@ -695,11 +695,7 @@ private:
     CB_LOG_DEBUG(R"(Adding HTTP request to deferred queue: {}, client_context_id="{}")",
                  cmd->request.type,
                  cmd->client_context_id_);
-    add_to_deferred_queue([self = shared_from_this(),
-                           cmd,
-                           request,
-                           credentials,
-                           handler = std::forward<Handler>(handler)]() mutable {
+    add_to_deferred_queue([self = shared_from_this(), cmd, request, credentials]() mutable {
       // don't do anything if the command wasn't dispatched or has already timed out
       auto now = std::chrono::steady_clock::now();
       if (cmd->dispatch_deadline_expiry() < now || cmd->deadline_expiry() < now) {
@@ -713,10 +709,8 @@ private:
       }
       auto [error, session] = self->check_out(request.type, credentials, preferred_node);
       if (error) {
-        typename Request::error_context_type ctx{};
-        ctx.ec = error;
         using response_type = typename Request::encoded_response_type;
-        return handler(request.make_response(std::move(ctx), response_type{}));
+        return cmd->invoke_handler(error, response_type{});
       }
       cmd->set_command_session(session);
       if (!session->is_connected()) {
