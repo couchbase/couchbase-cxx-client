@@ -296,13 +296,13 @@ public:
 private:
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
   auto defer_command(std::shared_ptr<pending_http_operation> pending_op,
-                     std::shared_ptr<io::http_session_manager> session_manager,
+                     const std::shared_ptr<io::http_session_manager>& session_manager,
                      const couchbase::core::cluster_credentials& credentials,
                      free_form_http_request_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
-    if (session_manager->last_bootstrap_error().has_value()) {
-      return tl::unexpected(session_manager->last_bootstrap_error().value().ec);
+    if (auto last_error = session_manager->last_bootstrap_error(); last_error.has_value()) {
+      return tl::unexpected(last_error->ec);
     }
     pending_op->start([callback = std::move(callback)](auto resp, auto ec) mutable {
       callback(std::move(resp), ec);
