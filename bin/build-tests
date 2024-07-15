@@ -99,6 +99,15 @@ if [ "x${CB_TEST_SUITE}" != "x" ] ; then
     fi
 fi
 
+command -v ccache && ccache -s
+
+if [ "$(uname -s)" = "Darwin" ]
+then
+    sw_vers
+    system_profiler SPSoftwareDataType SPHardwareDataType
+    xcode-select --print-path
+fi
+
 ${CB_CMAKE}  \
     -DCMAKE_BUILD_TYPE=${CB_CMAKE_BUILD_TYPE} \
     -DCMAKE_C_COMPILER="${CB_CC}" \
