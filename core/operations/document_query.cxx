@@ -26,6 +26,8 @@
 #include <couchbase/error_codes.hxx>
 
 #include <gsl/assert>
+#include <tao/json/value.hpp>
+
 #include <regex>
 
 namespace couchbase::core::operations

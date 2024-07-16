@@ -299,4 +299,30 @@ integration_test_guard::generate_key_not_in_server_group(const std::string& grou
   }
 }
 
+auto
+integration_test_guard::transactions() const
+  -> std::shared_ptr<couchbase::core::transactions::transactions>
+{
+  couchbase::transactions::transactions_config cfg{};
+  cfg.timeout(std::chrono::seconds(2));
+  auto [ec, txns] = couchbase::core::transactions::transactions::create(cluster, cfg).get();
+  if (ec) {
+    CB_LOG_CRITICAL("unable to initialize transactions: {}", ec.message());
+    throw std::runtime_error(fmt::format("unable to initialize transactions: {}", ec.message()));
+  }
+  return txns;
+}
+auto
+integration_test_guard::public_cluster() const -> couchbase::cluster
+{
+  auto options = ctx.build_options();
+  options.transactions().timeout(std::chrono::seconds(2));
+  auto [err, c] = couchbase::cluster::connect(ctx.connection_string, options).get();
+  if (err.ec()) {
+    CB_LOG_CRITICAL("unable to connect to cluster (public API): {}", err.message());
+    throw std::runtime_error(
+      fmt::format("unable to connect to cluster (public API): {}", err.message()));
+  }
+  return c;
+}
 } // namespace test::utils

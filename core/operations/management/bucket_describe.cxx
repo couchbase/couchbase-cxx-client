@@ -20,9 +20,11 @@
 #include "core/utils/json.hxx"
 #include "error_utils.hxx"
 
+#include <fmt/core.h>
+#include <tao/json/value.hpp>
+
 #include <algorithm>
 #include <cstdint>
-#include <fmt/core.h>
 
 namespace couchbase::core::operations::management
 {

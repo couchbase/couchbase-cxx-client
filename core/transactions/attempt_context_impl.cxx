@@ -30,6 +30,9 @@
 #include "internal/exceptions_internal.hxx"
 #include "internal/exceptions_internal_fmt.hxx"
 #include "internal/logging.hxx"
+#include "internal/transaction_attempt.hxx"
+#include "internal/transaction_context.hxx"
+#include "internal/transactions_cleanup.hxx"
 #include "internal/utils.hxx"
 #include "staged_mutation.hxx"
 
@@ -3661,5 +3664,65 @@ attempt_context_impl::op_completed_with_error(const VoidCallback& cb, const std:
       handle_err_from_callback(std::current_exception());
     }
   }
+}
+
+auto
+attempt_context_impl::is_done() const -> bool
+{
+  return is_done_;
+}
+
+auto
+attempt_context_impl::overall() -> std::shared_ptr<transaction_context>
+{
+  return overall_;
+}
+
+auto
+attempt_context_impl::transaction_id() const -> const std::string&
+{
+  return overall_->transaction_id();
+}
+
+auto
+attempt_context_impl::id() const -> const std::string&
+{
+  return overall_->current_attempt().id;
+}
+
+auto
+attempt_context_impl::state() -> attempt_state
+{
+  return overall_->current_attempt().state;
+}
+
+void
+attempt_context_impl::state(attempt_state s)
+{
+  overall_->current_attempt_state(s);
+}
+
+auto
+attempt_context_impl::atr_id() const -> const std::string&
+{
+  return overall_->atr_id();
+}
+
+void
+attempt_context_impl::atr_id(const std::string& atr_id)
+{
+  overall_->atr_id(atr_id);
+}
+
+auto
+attempt_context_impl::atr_collection() const -> const std::string&
+{
+  return overall_->atr_collection();
+}
+
+void
+attempt_context_impl::atr_collection_name(const std::string& coll)
+{
+  overall_->atr_collection(coll);
 }
 } // namespace couchbase::core::transactions

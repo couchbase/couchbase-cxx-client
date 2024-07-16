@@ -19,9 +19,9 @@
 #include "attempt_context_impl.hxx"
 #include "attempt_context_testing_hooks.hxx"
 #include "core/cluster.hxx"
-
 #include "core/logger/logger.hxx"
 #include "core/transactions/internal/logging.hxx"
+#include "internal/transaction_context.hxx"
 #include "internal/transaction_fields.hxx"
 #include "internal/utils.hxx"
 #include "result.hxx"

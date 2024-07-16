@@ -19,6 +19,8 @@
 
 #include "core/utils/json.hxx"
 
+#include <tao/json/value.hpp>
+
 namespace
 {
 auto

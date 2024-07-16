@@ -18,6 +18,8 @@
 #include "error_utils.hxx"
 #include "core/utils/json.hxx"
 
+#include <tao/json/value.hpp>
+
 #include <regex>
 
 namespace couchbase::core::operations::management

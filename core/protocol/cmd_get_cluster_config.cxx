@@ -22,6 +22,7 @@
 #include "core/utils/json.hxx"
 
 #include <gsl/assert>
+#include <tao/json/value.hpp>
 
 namespace couchbase::core::protocol
 {

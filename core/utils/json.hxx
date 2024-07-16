@@ -19,7 +19,7 @@
 
 #include "core/json_string.hxx"
 
-#include <tao/json/value.hpp>
+#include <tao/json/forward.hpp>
 
 namespace couchbase::core::utils::json
 {

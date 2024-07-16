@@ -20,6 +20,8 @@
 #include "core/utils/json.hxx"
 #include "error_utils.hxx"
 
+#include <tao/json/value.hpp>
+
 namespace couchbase::core::operations::management
 {
 auto
