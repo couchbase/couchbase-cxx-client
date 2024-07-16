@@ -22,6 +22,8 @@
 #include "error_utils.hxx"
 
 #include <fmt/core.h>
+#include <tao/json/value.hpp>
+
 #include <regex>
 
 namespace couchbase::core::operations::management

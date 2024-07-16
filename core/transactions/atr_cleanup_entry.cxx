@@ -26,6 +26,7 @@
 #include "internal/exceptions_internal.hxx"
 #include "internal/exceptions_internal_fmt.hxx"
 #include "internal/logging.hxx"
+#include "internal/transaction_context.hxx"
 #include "internal/transactions_cleanup.hxx"
 #include "internal/utils.hxx"
 #include "result.hxx"

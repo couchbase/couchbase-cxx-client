@@ -25,6 +25,7 @@
 #include "error_utils.hxx"
 
 #include <fmt/core.h>
+#include <tao/json/value.hpp>
 
 namespace couchbase::core::operations::management
 {

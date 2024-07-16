@@ -24,6 +24,7 @@
 
 #include <iostream>
 #include <iterator>
+#include <sstream>
 
 using namespace couchbase::core::transactions;
 

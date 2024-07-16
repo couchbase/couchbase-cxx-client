@@ -18,7 +18,9 @@
 
 #include "atr_cleanup_entry.hxx"
 #include "client_record.hxx"
-#include "couchbase/transactions/transactions_config.hxx"
+#include "core/cluster.hxx"
+
+#include <couchbase/transactions/transactions_config.hxx>
 
 #include <atomic>
 #include <condition_variable>

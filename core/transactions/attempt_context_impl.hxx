@@ -24,7 +24,6 @@
 #include "attempt_state.hxx"
 #include "internal/atr_cleanup_entry.hxx"
 #include "internal/exceptions_internal.hxx"
-#include "internal/transaction_context.hxx"
 #include "transaction_get_result.hxx"
 
 #include <couchbase/codec/encoded_value.hxx>
@@ -42,7 +41,7 @@
 namespace couchbase::core
 {
 class cluster;
-class attempt_context_testing_hooks;
+class transaction_context;
 
 namespace impl
 {
@@ -66,6 +65,7 @@ class transactions;
 enum class forward_compat_stage;
 class staged_mutation_queue;
 class staged_mutation;
+struct attempt_context_testing_hooks;
 
 class attempt_context_impl
   : public attempt_context
@@ -362,55 +362,25 @@ public:
 
   void existing_error(bool prev_op_failed = true);
 
-  [[nodiscard]] auto is_done() const -> bool
-  {
-    return is_done_;
-  }
+  [[nodiscard]] auto is_done() const -> bool;
 
-  [[nodiscard]] auto overall() -> std::shared_ptr<transaction_context>
-  {
-    return overall_;
-  }
+  [[nodiscard]] auto overall() -> std::shared_ptr<transaction_context>;
 
-  [[nodiscard]] auto transaction_id() const -> const std::string&
-  {
-    return overall_->transaction_id();
-  }
+  [[nodiscard]] auto transaction_id() const -> const std::string&;
 
-  [[nodiscard]] auto id() const -> const std::string&
-  {
-    return overall_->current_attempt().id;
-  }
+  [[nodiscard]] auto id() const -> const std::string&;
 
-  [[nodiscard]] auto state() -> attempt_state
-  {
-    return overall_->current_attempt().state;
-  }
+  [[nodiscard]] auto state() -> attempt_state;
 
-  void state(attempt_state s)
-  {
-    overall_->current_attempt_state(s);
-  }
+  void state(attempt_state s);
 
-  [[nodiscard]] auto atr_id() const -> const std::string&
-  {
-    return overall_->atr_id();
-  }
+  [[nodiscard]] auto atr_id() const -> const std::string&;
 
-  void atr_id(const std::string& atr_id)
-  {
-    overall_->atr_id(atr_id);
-  }
+  void atr_id(const std::string& atr_id);
 
-  [[nodiscard]] auto atr_collection() const -> const std::string&
-  {
-    return overall_->atr_collection();
-  }
+  [[nodiscard]] auto atr_collection() const -> const std::string&;
 
-  void atr_collection_name(const std::string& coll)
-  {
-    overall_->atr_collection(coll);
-  }
+  void atr_collection_name(const std::string& coll);
 
   auto has_expired_client_side(std::string place, std::optional<const std::string> doc_id) -> bool;
 

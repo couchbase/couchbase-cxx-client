@@ -23,9 +23,13 @@
 #include "core/operations/management/bucket.hxx"
 #include "core/operations/management/collections.hxx"
 #include "core/operations/management/user.hxx"
-#include "couchbase/cluster.hxx"
 
 #include <thread>
+
+namespace couchbase::core
+{
+class cluster;
+} // namespace couchbase::core
 
 namespace test::utils
 {

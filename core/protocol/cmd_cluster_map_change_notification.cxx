@@ -21,8 +21,10 @@
 #include "core/utils/byteswap.hxx"
 #include "core/utils/json.hxx"
 
-#include <cstring>
 #include <gsl/assert>
+
+#include <cstddef>
+#include <cstring>
 
 namespace couchbase::core::protocol
 {

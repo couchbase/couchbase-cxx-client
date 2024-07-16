@@ -21,6 +21,8 @@
 #include "core/utils/name_codec.hxx"
 #include "error_utils.hxx"
 
+#include <tao/json/value.hpp>
+
 namespace couchbase::core::operations::management::details
 {
 auto

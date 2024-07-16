@@ -24,6 +24,8 @@
 
 #include <couchbase/durability_level.hxx>
 
+#include <tao/json/value.hpp>
+
 namespace couchbase::core::operations::management
 {
 

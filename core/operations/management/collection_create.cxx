@@ -21,9 +21,10 @@
 #include "core/utils/url_codec.hxx"
 #include "error_utils.hxx"
 
-#include <regex>
-
 #include <fmt/core.h>
+#include <tao/json/value.hpp>
+
+#include <regex>
 
 namespace couchbase::core::operations::management
 {

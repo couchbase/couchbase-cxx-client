@@ -23,6 +23,8 @@
 #include "core/utils/url_codec.hxx"
 #include "error_utils.hxx"
 
+#include <tao/json/value.hpp>
+
 namespace couchbase::core::operations::management
 {
 auto

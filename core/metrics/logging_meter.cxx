@@ -23,9 +23,9 @@
 #include "core/utils/json.hxx"
 #include "noop_meter.hxx"
 
-#include <hdr/hdr_histogram.h>
-
 #include <gsl/assert>
+#include <hdr/hdr_histogram.h>
+#include <tao/json/value.hpp>
 
 #include <memory>
 #include <utility>

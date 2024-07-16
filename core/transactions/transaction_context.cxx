@@ -17,9 +17,12 @@
 #include "attempt_context_impl.hxx"
 #include "uid_generator.hxx"
 
+#include "core/transactions.hxx"
 #include "exceptions_fmt.hxx"
 #include "internal/logging.hxx"
+#include "internal/transaction_attempt.hxx"
 #include "internal/transaction_context.hxx"
+#include "internal/transactions_cleanup.hxx"
 #include "internal/utils.hxx"
 
 #include <asio/post.hpp>
@@ -355,5 +358,108 @@ transaction_context::finalize(txn_complete_callback&& cb)
   } catch (...) {
     return handle_error(std::current_exception(), std::move(cb));
   }
+}
+
+void
+transaction_context::current_attempt_state(attempt_state s)
+{
+  const std::lock_guard<std::mutex> lock(mutex_);
+  if (attempts_.empty()) {
+    throw std::runtime_error("transaction_context has no attempts yet");
+  }
+  attempts_.back().state = s;
+}
+
+auto
+transaction_context::cluster_ref() const -> const core::cluster&
+{
+  return transactions_.cluster_ref();
+}
+
+auto
+transaction_context::config() const -> const couchbase::transactions::transactions_config::built&
+{
+  return config_;
+}
+
+auto
+transaction_context::cleanup() -> transactions_cleanup&
+{
+  return cleanup_;
+}
+
+auto
+transaction_context::start_time_client() const -> std::chrono::time_point<std::chrono::steady_clock>
+{
+  return start_time_client_;
+}
+
+auto
+transaction_context::atr_id() const -> const std::string&
+{
+  return atr_id_;
+}
+
+void
+transaction_context::atr_id(const std::string& id)
+{
+  atr_id_ = id;
+}
+
+auto
+transaction_context::atr_collection() const -> const std::string&
+{
+  return atr_collection_;
+}
+
+void
+transaction_context::atr_collection(const std::string& coll)
+{
+  atr_collection_ = coll;
+}
+
+auto
+transaction_context::get_transaction_result() const -> ::couchbase::transactions::transaction_result
+{
+  return couchbase::transactions::transaction_result{
+    transaction_id(), current_attempt().state == attempt_state::COMPLETED
+  };
+}
+
+void
+transaction_context::new_attempt_context()
+{
+  auto barrier = std::make_shared<std::promise<void>>();
+  auto f = barrier->get_future();
+  new_attempt_context([barrier](const std::exception_ptr& err) {
+    if (err) {
+      return barrier->set_exception(err);
+    }
+    return barrier->set_value();
+  });
+  f.get();
+}
+
+auto
+transaction_context::current_attempt() const -> const transaction_attempt&
+{
+  const std::lock_guard<std::mutex> lock(mutex_);
+  if (attempts_.empty()) {
+    throw std::runtime_error("transaction context has no attempts yet");
+  }
+  return attempts_.back();
+}
+
+auto
+transaction_context::num_attempts() const -> std::size_t
+{
+  const std::lock_guard<std::mutex> lock(mutex_);
+  return attempts_.size();
+}
+
+auto
+transaction_context::transaction_id() const -> const std::string&
+{
+  return transaction_id_;
 }
 } // namespace couchbase::core::transactions

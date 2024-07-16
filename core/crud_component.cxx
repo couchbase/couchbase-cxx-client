@@ -44,7 +44,7 @@
 #include <gsl/span_ext>
 #include <gsl/util>
 #include <snappy.h>
-#include <tao/json/forward.hpp>
+#include <tao/json/value.hpp>
 #include <tl/expected.hpp>
 
 #include <chrono>

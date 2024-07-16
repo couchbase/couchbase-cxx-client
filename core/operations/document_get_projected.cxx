@@ -23,6 +23,8 @@
 #include <couchbase/error_codes.hxx>
 #include <couchbase/lookup_in_specs.hxx>
 
+#include <tao/json/value.hpp>
+
 namespace couchbase::core::operations
 {
 
