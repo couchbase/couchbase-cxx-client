@@ -15,37 +15,31 @@
  *   limitations under the License.
  */
 
-#pragma once
+#include "error.hxx"
 
-#include <cstdint>
-#include <map>
-#include <memory>
+#include <tao/json/to_string.hpp>
+
 #include <string>
-#include <system_error>
-#include <variant>
-
-#include <tao/json/value.hpp>
 
 namespace couchbase::core::columnar
 {
-/**
- * Properties specific to query errors. Will only be set if the error code is
- * columnar::errc::query_error
- */
-struct query_error_properties {
-  std::int32_t code{};
-  std::string server_message{};
-};
-
-using error_properties = std::variant<std::monostate, query_error_properties>;
-
-struct error {
-  std::error_code ec{};
-  std::string message{};
-  error_properties properties{};
-  tao::json::value ctx = tao::json::empty_object;
-  std::shared_ptr<error> cause{};
-
-  auto message_with_ctx() -> std::string;
-};
+auto
+error::message_with_ctx() -> std::string
+{
+  std::string serialized_ctx{};
+  if (!ctx.get_object().empty()) {
+    serialized_ctx = tao::json::to_string(ctx);
+  }
+  std::string res{};
+  if (!message.empty()) {
+    res += message;
+  }
+  if (!serialized_ctx.empty()) {
+    if (!res.empty()) {
+      res += ' ';
+    }
+    res += serialized_ctx;
+  }
+  return res;
+}
 } // namespace couchbase::core::columnar

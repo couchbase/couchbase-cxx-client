@@ -396,7 +396,8 @@ TEST_CASE("integration: columnar query collection does not exist")
   REQUIRE(std::get<couchbase::core::columnar::query_error_properties>(err.properties)
             .server_message.find("does-not-exist") != std::string::npos);
 
-  REQUIRE(err.ctx.count("errors") == 1);
+  REQUIRE(err.ctx.find("errors") != nullptr);
   REQUIRE(err.ctx["errors"].get_array().size() == 1);
   REQUIRE(err.ctx["errors"].get_array().at(0).get_object().at("code").get_signed() == 24045);
+  REQUIRE(err.message_with_ctx().find("\"code\":24045") != std::string::npos);
 }
