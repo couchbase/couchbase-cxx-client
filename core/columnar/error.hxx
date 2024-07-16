@@ -46,6 +46,6 @@ struct error {
   tao::json::value ctx = tao::json::empty_object;
   std::shared_ptr<error> cause{};
 
-  auto message_with_ctx() -> std::string;
+  auto message_with_ctx() const -> std::string;
 };
 } // namespace couchbase::core::columnar
