@@ -422,6 +422,7 @@ set(couchbase_cxx_client_FILES
     core/http_component.cxx
     core/columnar/agent.cxx
     core/columnar/agent_config.cxx
+    core/columnar/error.cxx
     core/columnar/error_codes.cxx
     core/columnar/query_component.cxx
     core/columnar/query_result.cxx
