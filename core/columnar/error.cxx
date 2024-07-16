@@ -24,7 +24,7 @@
 namespace couchbase::core::columnar
 {
 auto
-error::message_with_ctx() -> std::string
+error::message_with_ctx() const -> std::string
 {
   std::string serialized_ctx{};
   if (!ctx.get_object().empty()) {
