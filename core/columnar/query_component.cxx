@@ -22,6 +22,7 @@
 
 #include "core/free_form_http_request.hxx"
 #include "core/http_component.hxx"
+#include "core/logger/logger.hxx"
 #include "core/row_streamer.hxx"
 #include "core/service_type.hxx"
 #include "core/utils/json.hxx"
@@ -106,6 +107,7 @@ private:
     if (errors_json == nullptr) {
       return {};
     }
+    CB_LOG_DEBUG("QUERY ERROR: {}.", utils::json::generate(errors_json));
     if (!errors_json->is_array()) {
       return { { errc::generic,
                  "Could not parse errors from server response - expected JSON array" } };
@@ -209,6 +211,9 @@ private:
       for (const auto& val : options.positional_parameters) {
         params_json.emplace_back(utils::json::parse(val));
       }
+      if (!params_json.empty()) {
+        payload["args"] = std::move(params_json);
+      }
     }
     for (const auto& [name, val] : options.named_parameters) {
       std::string key = name;
@@ -257,6 +262,7 @@ private:
     if (options.read_only.has_value()) {
       req.is_read_only = options.read_only.value();
     }
+    CB_LOG_DEBUG("QUERY REQUEST: body={}.", req.body);
     return req;
   }
 
