@@ -30,7 +30,7 @@ buffer_writer::buffer_writer(std::size_t size)
 void
 buffer_writer::write(const std::vector<std::byte>& val)
 {
-  if (val.size() == 0 || val.data() == nullptr) {
+  if (val.empty() || val.data() == nullptr) {
     return;
   }
   std::memcpy(store_.data() + offset_, val.data(), val.size());

@@ -17,6 +17,15 @@
 
 #include "key_value.hxx"
 
+#include "core/document_id.hxx"
+#include "core/error_context/key_value_error_context.hxx"
+#include "core/error_context/subdocument_error_context.hxx"
+
+#include <cstdint>
+#include <optional>
+#include <system_error>
+#include <utility>
+
 namespace couchbase::core
 {
 

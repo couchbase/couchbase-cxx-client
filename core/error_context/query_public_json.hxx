@@ -18,6 +18,7 @@
 #pragma once
 
 #include "query_error_context.hxx"
+
 #include <couchbase/fmt/retry_reason.hxx>
 
 #include <fmt/format.h>

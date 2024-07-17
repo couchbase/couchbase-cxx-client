@@ -54,12 +54,12 @@ parse_mutation_cas(const std::string& cas) -> std::uint64_t
 
   std::uint64_t val = stoull(cas, nullptr, 16);
   /* byteswap */
-  std::size_t ii;
+  std::size_t ii = 0;
   std::uint64_t ret = 0;
   for (ii = 0; ii < sizeof(std::uint64_t); ii++) {
-    ret <<= 8ull;
-    ret |= val & 0xffull;
-    val >>= 8ull;
+    ret <<= 8ULL;
+    ret |= val & 0xffULL;
+    val >>= 8ULL;
   }
   return ret / 1000000;
 }
@@ -94,7 +94,7 @@ map_to_atr(const operations::lookup_in_response& resp) -> active_transaction_rec
       if (const auto* compat = val.find(ATR_FIELD_FORWARD_COMPAT); compat != nullptr) {
         forward_compat = *compat;
       }
-      std::optional<std::uint32_t> expires_after_msec =
+      const std::optional<std::uint32_t> expires_after_msec =
         std::max(val.optional<std::int32_t>(ATR_FIELD_EXPIRES_AFTER_MSECS).value_or(0), 0);
       entries.emplace_back(
         resp.ctx.bucket(),
@@ -117,10 +117,9 @@ map_to_atr(const operations::lookup_in_response& resp) -> active_transaction_rec
         val.optional<std::string>(ATR_FIELD_DURABILITY_LEVEL));
     }
   }
-  return active_transaction_record(
-    { resp.ctx.bucket(), resp.ctx.scope(), resp.ctx.collection(), resp.ctx.id() },
-    resp.cas.value(),
-    std::move(entries));
+  return { { resp.ctx.bucket(), resp.ctx.scope(), resp.ctx.collection(), resp.ctx.id() },
+           resp.cas.value(),
+           std::move(entries) };
 }
 
 auto
@@ -151,28 +150,28 @@ active_transaction_record::get_atr(
       lookup_in_specs::get(subdoc::lookup_in_macro::vbucket).xattr(),
     }
       .specs();
-  cluster.execute(req,
-                  [atr_id, cb = std::move(cb)](core::operations::lookup_in_response resp) mutable {
-                    try {
-                      if (resp.ctx.ec() == couchbase::errc::key_value::document_not_found) {
-                        // that's ok, just return an empty one.
-                        return cb({}, {});
-                      }
-                      if (!resp.ctx.ec()) {
-                        // success
-                        return cb(resp.ctx.ec(), map_to_atr(resp));
-                      }
-                      // otherwise, raise an error.
-                      cb(resp.ctx.ec(), {});
-                    } catch (const std::exception&) {
-                      // ok - we have a corrupt ATR.  The question is:  what should we return
-                      // for an error? Turns out, we don't much care in the code what this error
-                      // is.  Since we cannot parse the atr, but there wasn't an error, lets
-                      // select this one for now.
-                      // TODO: consider a different mechanism - not an error_code.  Or, perhaps
-                      // we need txn-specific error codes?
-                      cb(couchbase::errc::key_value::path_invalid, std::nullopt);
-                    }
-                  });
+  cluster.execute(
+    req, [atr_id, cb = std::move(cb)](const core::operations::lookup_in_response& resp) mutable {
+      try {
+        if (resp.ctx.ec() == couchbase::errc::key_value::document_not_found) {
+          // that's ok, just return an empty one.
+          return cb({}, {});
+        }
+        if (!resp.ctx.ec()) {
+          // success
+          return cb(resp.ctx.ec(), map_to_atr(resp));
+        }
+        // otherwise, raise an error.
+        cb(resp.ctx.ec(), {});
+      } catch (const std::exception&) {
+        // ok - we have a corrupt ATR.  The question is:  what should we return
+        // for an error? Turns out, we don't much care in the code what this error
+        // is.  Since we cannot parse the atr, but there wasn't an error, lets
+        // select this one for now.
+        // TODO(SA): consider a different mechanism - not an error_code.  Or, perhaps
+        // we need txn-specific error codes?
+        cb(couchbase::errc::key_value::path_invalid, std::nullopt);
+      }
+    });
 }
 } // namespace couchbase::core::transactions

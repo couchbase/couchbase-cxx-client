@@ -183,7 +183,7 @@ public:
            logic&& code) -> couchbase::transactions::transaction_result;
 
   auto run(::couchbase::transactions::txn_logic&& code,
-           const couchbase::transactions::transaction_options& cfg)
+           const couchbase::transactions::transaction_options& config)
     -> std::pair<couchbase::error, couchbase::transactions::transaction_result> override;
 
   /**
@@ -206,7 +206,7 @@ public:
 
   void run(couchbase::transactions::async_txn_logic&& code,
            couchbase::transactions::async_txn_complete_logic&& complete_cb,
-           const couchbase::transactions::transaction_options& cfg) override;
+           const couchbase::transactions::transaction_options& config) override;
   /**
    * @internal
    * called internally - will likely move
@@ -276,8 +276,7 @@ public:
   /**
    * @internal
    */
-  transactions(core::cluster cluster,
-               const couchbase::transactions::transactions_config::built& config);
+  transactions(core::cluster cluster, couchbase::transactions::transactions_config::built config);
   transactions(core::cluster cluster, const couchbase::transactions::transactions_config& config);
 
   ~transactions() override;

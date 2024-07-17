@@ -18,11 +18,14 @@
 #include "config_profiles.hxx"
 
 #include "cluster_options.hxx"
+#include "core/config_profile.hxx"
 
-#include <fmt/core.h>
+#include <fmt/format.h>
 
 #include <chrono>
+#include <mutex>
 #include <stdexcept>
+#include <string_view>
 
 namespace couchbase::core
 {
@@ -69,8 +72,8 @@ config_profiles::apply(std::string_view profile_name, couchbase::core::cluster_o
   }
 }
 
-config_profiles&
-known_profiles()
+auto
+known_profiles() -> config_profiles&
 {
   static config_profiles profiles{};
   return profiles;

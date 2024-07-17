@@ -18,33 +18,53 @@
 #include "crud_component.hxx"
 
 #include "collections_component.hxx"
-
-#include "core/logger/logger.hxx"
+#include "core/error_context/key_value_status_code.hxx"
 #include "core/mcbp/buffer_writer.hxx"
+#include "core/pending_operation.hxx"
+#include "core/protocol/client_opcode.hxx"
 #include "core/protocol/datatype.hxx"
+#include "core/protocol/magic.hxx"
+#include "core/range_scan_options.hxx"
 #include "core/utils/binary.hxx"
 #include "core/utils/unsigned_leb128.hxx"
 #include "mcbp/big_endian.hxx"
 #include "mcbp/queue_request.hxx"
 #include "mcbp/queue_response.hxx"
 #include "platform/base64.h"
-#include "snappy.h"
 #include "timeout_defaults.hxx"
 #include "utils/json.hxx"
 
 #include <couchbase/error_codes.hxx>
 
+#include <asio/error.hpp>
 #include <asio/io_context.hpp>
 #include <asio/steady_timer.hpp>
-
+#include <fmt/format.h>
+#include <gsl/span>
+#include <gsl/span_ext>
+#include <gsl/util>
+#include <snappy.h>
+#include <tao/json/value.hpp>
 #include <tl/expected.hpp>
 
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
 #include <random>
+#include <string>
+#include <system_error>
+#include <utility>
+#include <variant>
+#include <vector>
 
 namespace couchbase::core
 {
-static std::pair<std::vector<std::byte>, std::error_code>
+namespace
+{
+auto
 serialize_range_scan_create_options(const range_scan_create_options& options)
+  -> std::pair<std::vector<std::byte>, std::error_code>
 {
   tao::json::value body{};
   if (options.ids_only) {
@@ -116,7 +136,7 @@ serialize_range_scan_create_options(const range_scan_create_options& options)
 
 auto
 parse_range_scan_keys(gsl::span<std::byte> data,
-                      std::shared_ptr<mcbp::queue_request> request,
+                      const std::shared_ptr<mcbp::queue_request>& request,
                       range_scan_item_callback&& item_callback) -> std::error_code
 {
   do {
@@ -140,7 +160,7 @@ parse_range_scan_keys(gsl::span<std::byte> data,
 
 auto
 parse_range_scan_documents(gsl::span<std::byte> data,
-                           std::shared_ptr<mcbp::queue_request> request,
+                           const std::shared_ptr<mcbp::queue_request>& request,
                            range_scan_item_callback&& item_callback) -> std::error_code
 {
   do {
@@ -201,15 +221,16 @@ parse_range_scan_documents(gsl::span<std::byte> data,
 
 auto
 parse_range_scan_data(gsl::span<std::byte> payload,
-                      std::shared_ptr<mcbp::queue_request> request,
+                      const std::shared_ptr<mcbp::queue_request>& request,
                       range_scan_item_callback&& items,
                       bool keys_only) -> std::error_code
 {
   if (keys_only) {
-    return parse_range_scan_keys(payload, std::move(request), std::move(items));
+    return parse_range_scan_keys(payload, request, std::move(items));
   }
-  return parse_range_scan_documents(payload, std::move(request), std::move(items));
+  return parse_range_scan_documents(payload, request, std::move(items));
 }
+} // namespace
 
 class crud_component_impl
 {
@@ -230,8 +251,8 @@ public:
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     auto handler = [cb = std::move(callback),
-                    options](std::shared_ptr<mcbp::queue_response> response,
-                             std::shared_ptr<mcbp::queue_request> /* request */,
+                    options](const std::shared_ptr<mcbp::queue_response>& response,
+                             const std::shared_ptr<mcbp::queue_request>& /* request */,
                              std::error_code error) {
       if (error) {
         return cb({}, error);
@@ -275,9 +296,9 @@ public:
     return op;
   }
 
-  auto range_scan_continue(std::vector<std::byte> scan_uuid,
+  auto range_scan_continue(const std::vector<std::byte>& scan_uuid,
                            std::uint16_t vbucket_id,
-                           range_scan_continue_options options,
+                           const range_scan_continue_options& options,
                            range_scan_item_callback&& item_callback,
                            range_scan_continue_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
@@ -286,8 +307,8 @@ public:
       return tl::unexpected(errc::common::invalid_argument);
     }
     auto handler = [item_cb = std::move(item_callback), cb = std::move(callback), options](
-                     std::shared_ptr<mcbp::queue_response> response,
-                     std::shared_ptr<mcbp::queue_request> request,
+                     const std::shared_ptr<mcbp::queue_response>& response,
+                     const std::shared_ptr<mcbp::queue_request>& request,
                      std::error_code error) mutable {
       if (error) {
         // in case or error code, the request will be automatically canceled
@@ -299,7 +320,7 @@ public:
         }
         return;
       }
-      bool ids_only = mcbp::big_endian::read_uint32(response->extras_, 0) == 0;
+      const bool ids_only = mcbp::big_endian::read_uint32(response->extras_, 0) == 0;
 
       if (auto ec = parse_range_scan_data(response->value_, request, std::move(item_cb), ids_only);
           ec) {
@@ -309,7 +330,7 @@ public:
         return;
       }
 
-      range_scan_continue_result res{
+      const range_scan_continue_result res{
         response->status_code_ == key_value_status_code::range_scan_more,
         response->status_code_ == key_value_status_code::range_scan_complete,
         ids_only,
@@ -339,7 +360,7 @@ public:
       req->set_deadline(timer);
     }
 
-    mcbp::buffer_writer buf{ scan_uuid.size() + sizeof(std::uint32_t) * 3 };
+    mcbp::buffer_writer buf{ scan_uuid.size() + (sizeof(std::uint32_t) * 3) };
     buf.write(scan_uuid);
     buf.write_uint32(options.batch_item_limit);
     buf.write_uint32(gsl::narrow_cast<std::uint32_t>(options.batch_time_limit.count()));
@@ -359,8 +380,8 @@ public:
       return tl::unexpected(errc::common::invalid_argument);
     }
     auto handler = [cb = std::move(callback),
-                    options](std::shared_ptr<mcbp::queue_response> /* response */,
-                             std::shared_ptr<mcbp::queue_request> /* request */,
+                    options](const std::shared_ptr<mcbp::queue_response>& /* response */,
+                             const std::shared_ptr<mcbp::queue_request>& /* request */,
                              std::error_code error) mutable {
       cb({}, error);
     };
@@ -409,36 +430,32 @@ crud_component::crud_component(asio::io_context& io,
 
 auto
 crud_component::range_scan_create(std::uint16_t vbucket_id,
-                                  range_scan_create_options options,
+                                  const range_scan_create_options& options,
                                   range_scan_create_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->range_scan_create(vbucket_id, std::move(options), std::move(callback));
+  return impl_->range_scan_create(vbucket_id, options, std::move(callback));
 }
 
 auto
-crud_component::range_scan_continue(std::vector<std::byte> scan_uuid,
+crud_component::range_scan_continue(const std::vector<std::byte>& scan_uuid,
                                     std::uint16_t vbucket_id,
-                                    range_scan_continue_options options,
+                                    const range_scan_continue_options& options,
                                     range_scan_item_callback&& item_callback,
                                     range_scan_continue_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->range_scan_continue(std::move(scan_uuid),
-                                    vbucket_id,
-                                    std::move(options),
-                                    std::move(item_callback),
-                                    std::move(callback));
+  return impl_->range_scan_continue(
+    scan_uuid, vbucket_id, options, std::move(item_callback), std::move(callback));
 }
 
 auto
 crud_component::range_scan_cancel(std::vector<std::byte> scan_uuid,
                                   std::uint16_t vbucket_id,
-                                  range_scan_cancel_options options,
+                                  const range_scan_cancel_options& options,
                                   range_scan_cancel_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->range_scan_cancel(
-    std::move(scan_uuid), vbucket_id, std::move(options), std::move(callback));
+  return impl_->range_scan_cancel(std::move(scan_uuid), vbucket_id, options, std::move(callback));
 }
 } // namespace couchbase::core

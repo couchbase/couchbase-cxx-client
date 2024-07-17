@@ -22,17 +22,22 @@
 
 #include "core/free_form_http_request.hxx"
 #include "core/http_component.hxx"
-#include "core/logger/logger.hxx"
 #include "core/row_streamer.hxx"
 #include "core/service_type.hxx"
 #include "core/utils/json.hxx"
+#include "error.hxx"
+#include "error_codes.hxx"
 #include "query_result.hxx"
 
 #include <fmt/format.h>
+#include <gsl/util>
 #include <tao/json/value.hpp>
+#include <tl/expected.hpp>
 
 #include <chrono>
+#include <cstdint>
 #include <memory>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -50,45 +55,145 @@ public:
   {
   }
 
-  auto execute_query(query_options options, query_callback&& callback)
-    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  auto execute_query(const query_options& options, query_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, error>
   {
     auto req = build_query_request(options);
     auto op = http_.do_http_request(
-      std::move(req),
-      [self = shared_from_this(), cb = std::move(callback)](auto resp, auto ec) mutable {
+      req, [self = shared_from_this(), cb = std::move(callback)](auto resp, auto ec) mutable {
         if (ec) {
-          cb({}, ec);
+          if (ec == couchbase::errc::common::request_canceled) {
+            cb({},
+               { couchbase::core::columnar::errc::generic, "The query operation was canceled." });
+            return;
+          }
+          cb({}, { maybe_convert_error_code(ec) });
           return;
         }
         auto streamer = std::make_shared<row_streamer>(self->io_, resp.body(), "/results/^");
         return streamer->start([self, streamer, resp = std::move(resp), cb = std::move(cb)](
                                  auto metadata_header, auto ec) mutable {
           if (ec) {
-            cb({}, ec);
+            cb({}, { maybe_convert_error_code(ec) });
             return;
           }
-          auto query_ec =
-            self->parse_query_error(resp.status_code(), utils::json::parse(metadata_header));
-          if (query_ec) {
-            cb({}, query_ec);
+          auto error_parse_res =
+            parse_error(resp.status_code(), utils::json::parse(metadata_header));
+          if (error_parse_res.err.ec) {
+            cb({}, { error_parse_res.err });
             return;
           }
           cb(query_result{ std::move(*streamer) }, {});
         });
       });
-    return op;
+
+    if (!op.has_value()) {
+      return tl::unexpected<error>({ op.error() });
+    }
+    return { op.value() };
   }
 
 private:
-  static auto parse_query_error(const std::uint32_t& http_status_code,
-                                const tao::json::value& /* metadata_header */) -> std::error_code
+  struct error_parse_result {
+    error err{};
+    bool retriable{ false };
+  };
+
+  static auto parse_error(const std::uint32_t& http_status_code,
+                          const tao::json::value& metadata_header) -> error_parse_result
   {
-    // TODO(dimitris): Handle errors
-    if (http_status_code != 200) {
-      return errc::common::internal_server_failure;
+    const auto* errors_json = metadata_header.find("errors");
+    if (errors_json == nullptr) {
+      return {};
     }
-    return {};
+    if (!errors_json->is_array()) {
+      return { { errc::generic,
+                 "Could not parse errors from server response - expected JSON array" } };
+    }
+    if (errors_json->get_array().empty()) {
+      return {};
+    }
+
+    error_parse_result res;
+    res.retriable = true;
+    res.err.ctx["http_status"] = std::to_string(http_status_code);
+    res.err.ctx["errors"] = std::vector<tao::json::value>{};
+
+    if (http_status_code == 401) {
+      res.err.ec = errc::invalid_credential;
+    } else {
+      res.err.ec = errc::query_error;
+    }
+
+    std::int32_t first_error_code{ 0 };
+    std::string first_error_msg{};
+
+    for (auto error_json : errors_json->get_array()) {
+      auto* retr = error_json.find("retriable");
+      if (retr == nullptr) {
+        // An error is assumed to not be retriable if the field is missing
+        res.retriable = false;
+      } else if (!retr->is_boolean()) {
+        return { { errc::generic,
+                   "Could not parse error from server response - 'retriable' was not boolean" } };
+      } else {
+        // Operation is retriable iff all errors are retriable
+        res.retriable = res.retriable && retr->get_boolean();
+      }
+
+      auto* msg = error_json.find("msg");
+      if (msg == nullptr) {
+        return { { errc::generic,
+                   "Could not parse error from server response - could not find 'msg' field" } };
+      }
+      if (!msg->is_string()) {
+        return { { errc::generic,
+                   "Could not parse error from server response - 'msg' field was not string" } };
+      }
+
+      auto* c = error_json.find("code");
+      if (c == nullptr) {
+        return { { errc::generic,
+                   "Could not parse error from server response - could not find 'code' field" } };
+      }
+      if (!(c->is_unsigned() || c->is_signed())) {
+        return {
+          { errc::generic,
+            "Could not parse error from server response - 'code' field was not an integer" }
+        };
+      }
+
+      std::int32_t code = c->is_signed() ? gsl::narrow_cast<std::int32_t>(c->get_signed())
+                                         : gsl::narrow_cast<std::int32_t>(c->get_unsigned());
+
+      tao::json::value error = {
+        { "code", code },
+        { "msg", msg->get_string() },
+      };
+      res.err.ctx["errors"].get_array().emplace_back(std::move(error));
+
+      if (first_error_code == 0) {
+        first_error_code = code;
+        first_error_msg = msg->get_string();
+      }
+
+      switch (code) {
+        case 20000:
+          res.err.ec = errc::invalid_credential;
+          break;
+        case 21002:
+          res.err.ec = errc::timeout;
+          break;
+        default:
+          break;
+      }
+    }
+
+    if (res.err.ec == errc::query_error) {
+      res.err.properties = query_error_properties{ first_error_code, first_error_msg };
+    }
+
+    return res;
   }
 
   static auto build_query_payload(const query_options& options) -> tao::json::value
@@ -129,7 +234,7 @@ private:
       payload[key] = utils::json::parse(val);
     }
     if (options.timeout.has_value()) {
-      std::chrono::milliseconds timeout = options.timeout.value() + std::chrono::seconds(5);
+      const std::chrono::milliseconds timeout = options.timeout.value() + std::chrono::seconds(5);
       payload["timeout"] = fmt::format("{}ms", timeout.count());
     }
 
@@ -170,10 +275,10 @@ query_component::query_component(asio::io_context& io,
 }
 
 auto
-query_component::execute_query(query_options options, query_callback&& callback)
-  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+query_component::execute_query(const query_options& options, query_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, error>
 {
-  return impl_->execute_query(std::move(options), std::move(callback));
+  return impl_->execute_query(options, std::move(callback));
 }
 
 } // namespace couchbase::core::columnar

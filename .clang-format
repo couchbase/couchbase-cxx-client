@@ -256,3 +256,4 @@ AllowShortLambdasOnASingleLine: None
 AllowShortEnumsOnASingleLine: false
 BreakBeforeBraces: Linux
 FixNamespaceComments: true
+QualifierAlignment: Left

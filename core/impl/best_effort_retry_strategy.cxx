@@ -17,9 +17,20 @@
 
 #include <couchbase/best_effort_retry_strategy.hxx>
 
-#include <fmt/core.h>
+#include <couchbase/retry_action.hxx>
+#include <couchbase/retry_reason.hxx>
+#include <couchbase/retry_request.hxx>
 
+#include <fmt/format.h>
+
+#include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <utility>
 
 namespace couchbase
 {
@@ -69,12 +80,7 @@ exponential_backoff(std::chrono::milliseconds min_backoff,
 
   return [min, max, factor](std::size_t retry_attempts) {
     double backoff = min * std::pow(factor, static_cast<double>(retry_attempts));
-    if (backoff > max) {
-      backoff = max;
-    }
-    if (backoff < min) {
-      backoff = min;
-    }
+    backoff = std::max(std::min(backoff, max), min);
     return std::chrono::milliseconds(static_cast<std::uint64_t>(backoff));
   };
 }

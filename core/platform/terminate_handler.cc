@@ -21,6 +21,7 @@
 #include "core/logger/logger.hxx"
 #include "core/meta/version.hxx"
 
+#include <cstdio>
 #include <cstdlib>
 #include <exception>
 

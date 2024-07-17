@@ -21,8 +21,8 @@
 
 namespace couchbase::core::impl::subdoc
 {
-std::vector<std::byte>
-join_values(const std::vector<std::vector<std::byte>>& values)
+auto
+join_values(const std::vector<std::vector<std::byte>>& values) -> std::vector<std::byte>
 {
   if (values.empty()) {
     return {};

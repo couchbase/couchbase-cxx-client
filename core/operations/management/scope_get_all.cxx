@@ -22,20 +22,23 @@
 #include "error_utils.hxx"
 
 #include <fmt/core.h>
+#include <tao/json/value.hpp>
 
 namespace couchbase::core::operations::management
 {
-std::error_code
-scope_get_all_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+auto
+scope_get_all_request::encode_to(encoded_request_type& encoded,
+                                 http_context& /* context */) const -> std::error_code
 {
   encoded.method = "GET";
   encoded.path = fmt::format("/pools/default/buckets/{}/scopes", bucket_name);
   return {};
 }
 
-scope_get_all_response
+auto
 scope_get_all_request::make_response(error_context::http&& ctx,
                                      const encoded_response_type& encoded) const
+  -> scope_get_all_response
 {
   scope_get_all_response response{ std::move(ctx) };
   if (!response.ctx.ec) {

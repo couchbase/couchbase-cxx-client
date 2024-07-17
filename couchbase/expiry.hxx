@@ -43,13 +43,13 @@ std::uint32_t
 expiry_relative(std::chrono::seconds expiry);
 
 /**
- * @param time_point
+ * @param expiry point in time
  * @return value encoding absolute time for KV protocol
  *
  * @since 1.0.0
  * @internal
  */
 std::uint32_t
-expiry_absolute(std::chrono::system_clock::time_point time_point);
+expiry_absolute(std::chrono::system_clock::time_point expiry);
 #endif
 } // namespace couchbase::core::impl

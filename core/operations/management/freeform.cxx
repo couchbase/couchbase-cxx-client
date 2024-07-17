@@ -21,8 +21,9 @@
 
 namespace couchbase::core::operations::management
 {
-std::error_code
-freeform_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+auto
+freeform_request::encode_to(encoded_request_type& encoded,
+                            http_context& /* context */) const -> std::error_code
 {
   switch (type) {
     case service_type::query:
@@ -42,9 +43,9 @@ freeform_request::encode_to(encoded_request_type& encoded, http_context& /* cont
   return {};
 }
 
-freeform_response
+auto
 freeform_request::make_response(error_context::http&& ctx,
-                                const encoded_response_type& encoded) const
+                                const encoded_response_type& encoded) const -> freeform_response
 {
   freeform_response response{ std::move(ctx) };
   response.status = encoded.status_code;

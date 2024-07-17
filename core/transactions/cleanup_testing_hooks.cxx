@@ -21,7 +21,8 @@ namespace couchbase::core::transactions
 namespace
 {
 inline void
-noop1(const std::string&, utils::movable_function<void(std::optional<error_class>)>&& handler)
+noop1(const std::string& /*unused*/,
+      utils::movable_function<void(std::optional<error_class>)>&& handler)
 {
   return handler({});
 }

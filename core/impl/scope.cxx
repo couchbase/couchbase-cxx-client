@@ -34,6 +34,7 @@
 #include <fmt/core.h>
 
 #include <memory>
+#include <utility>
 
 namespace couchbase
 {
@@ -89,12 +90,13 @@ public:
               search_options::built options,
               search_handler&& handler) const
   {
-    return core_.execute(core::impl::build_search_request(
-                           std::move(index_name), std::move(request), options, bucket_name_, name_),
-                         [handler = std::move(handler)](auto&& resp) mutable {
-                           return handler(core::impl::make_error(resp.ctx),
-                                          search_result{ internal_search_result{ resp } });
-                         });
+    return core_.execute(
+      core::impl::build_search_request(
+        std::move(index_name), std::move(request), std::move(options), bucket_name_, name_),
+      [handler = std::move(handler)](auto&& resp) mutable {
+        return handler(core::impl::make_error(resp.ctx),
+                       search_result{ internal_search_result{ resp } });
+      });
   }
 
 private:

@@ -40,7 +40,8 @@ observe_seqno_response_body::parse(key_value_status_code status,
     using offset_type = std::vector<std::byte>::difference_type;
     offset_type offset = framing_extras_size + extras_size + key_size;
 
-    bool failover = std::to_integer<std::uint8_t>(body[static_cast<std::size_t>(offset)]) != 0U;
+    const bool failover =
+      std::to_integer<std::uint8_t>(body[static_cast<std::size_t>(offset)]) != 0U;
     ++offset;
 
     memcpy(&partition_id_, body.data() + offset, sizeof(partition_id_));
@@ -84,7 +85,7 @@ observe_seqno_request_body::partition_uuid(const uint64_t& uuid)
 void
 observe_seqno_request_body::fill_body()
 {
-  std::vector<std::byte>::size_type offset = 0;
+  const std::vector<std::byte>::size_type offset = 0;
 
   value_.resize(sizeof(std::uint64_t));
 

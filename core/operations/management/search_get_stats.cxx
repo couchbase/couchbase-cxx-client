@@ -21,18 +21,19 @@
 
 namespace couchbase::core::operations::management
 {
-std::error_code
+auto
 search_get_stats_request::encode_to(encoded_request_type& encoded,
-                                    http_context& /* context */) const
+                                    http_context& /* context */) const -> std::error_code
 {
   encoded.method = "GET";
   encoded.path = "/api/nsstats";
   return {};
 }
 
-search_get_stats_response
+auto
 search_get_stats_request::make_response(error_context::http&& ctx,
                                         const encoded_response_type& encoded) const
+  -> search_get_stats_response
 {
   search_get_stats_response response{ std::move(ctx) };
   if (!response.ctx.ec) {

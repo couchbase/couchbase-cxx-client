@@ -20,13 +20,15 @@
 #include "core/utils/json.hxx"
 #include "error_utils.hxx"
 
+#include <tao/json/value.hpp>
+
 namespace couchbase::core::operations::management
 {
-std::error_code
+auto
 analytics_index_get_all_request::encode_to(encoded_request_type& encoded,
-                                           http_context& /* context */) const
+                                           http_context& /* context */) const -> std::error_code
 {
-  tao::json::value body{
+  const tao::json::value body{
     { "statement", "SELECT d.* FROM Metadata.`Index` d WHERE d.DataverseName <> \"Metadata\"" },
   };
 
@@ -37,9 +39,10 @@ analytics_index_get_all_request::encode_to(encoded_request_type& encoded,
   return {};
 }
 
-analytics_index_get_all_response
+auto
 analytics_index_get_all_request::make_response(error_context::http&& ctx,
                                                const encoded_response_type& encoded) const
+  -> analytics_index_get_all_response
 {
   analytics_index_get_all_response response{ std::move(ctx) };
 
@@ -66,7 +69,7 @@ analytics_index_get_all_request::make_response(error_context::http&& ctx,
     } else {
       if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
         for (const auto& error : errors->get_array()) {
-          analytics_problem err{
+          const analytics_problem err{
             error.at("code").as<std::uint32_t>(),
             error.at("msg").get_string(),
           };

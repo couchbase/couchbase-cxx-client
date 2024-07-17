@@ -22,10 +22,13 @@
 #include "core/utils/url_codec.hxx"
 #include "error_utils.hxx"
 
+#include <tao/json/value.hpp>
+
 namespace couchbase::core::operations::management
 {
-std::error_code
-group_upsert_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+auto
+group_upsert_request::encode_to(encoded_request_type& encoded,
+                                http_context& /* context */) const -> std::error_code
 {
   encoded.method = "PUT";
   encoded.path = fmt::format("/settings/rbac/groups/{}", group.name);
@@ -55,7 +58,7 @@ group_upsert_request::encode_to(encoded_request_type& encoded, http_context& /* 
     encoded_roles.push_back(spec);
   }
   if (!encoded_roles.empty()) {
-    std::string concatenated = fmt::format("{}", utils::join_strings(encoded_roles, ","));
+    const std::string concatenated = fmt::format("{}", utils::join_strings(encoded_roles, ","));
     params.push_back(fmt::format("roles={}", utils::string_codec::url_encode(concatenated)));
   }
   encoded.body = utils::join_strings(params, "&");
@@ -63,9 +66,9 @@ group_upsert_request::encode_to(encoded_request_type& encoded, http_context& /* 
   return {};
 }
 
-group_upsert_response
-group_upsert_request::make_response(error_context::http&& ctx,
-                                    const encoded_response_type& encoded) const
+auto
+group_upsert_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded)
+  const -> group_upsert_response
 {
   group_upsert_response response{ std::move(ctx) };
   if (!response.ctx.ec) {

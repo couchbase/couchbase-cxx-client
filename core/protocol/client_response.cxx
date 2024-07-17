@@ -21,6 +21,7 @@
 
 #include <cstring>
 #include <gsl/assert>
+#include <tao/json/value.hpp>
 
 namespace couchbase::core::protocol
 {

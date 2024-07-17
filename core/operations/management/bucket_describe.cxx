@@ -20,21 +20,25 @@
 #include "core/utils/json.hxx"
 #include "error_utils.hxx"
 
-#include <cstdint>
 #include <fmt/core.h>
+#include <tao/json/value.hpp>
+
+#include <algorithm>
+#include <cstdint>
 
 namespace couchbase::core::operations::management
 {
-std::error_code
-bucket_describe_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+auto
+bucket_describe_request::encode_to(encoded_request_type& encoded,
+                                   http_context& /* context */) const -> std::error_code
 {
   encoded.method = "GET";
   encoded.path = fmt::format("/pools/default/b/{}", name);
   return {};
 }
 
-std::string
-normalize_capability(const std::string& capability)
+auto
+normalize_capability(const std::string& capability) -> std::string
 {
   std::string normalized;
   normalized.reserve(capability.size());
@@ -46,9 +50,10 @@ normalize_capability(const std::string& capability)
   return normalized;
 }
 
-bucket_describe_response
+auto
 bucket_describe_request::make_response(error_context::http&& ctx,
                                        const encoded_response_type& encoded) const
+  -> bucket_describe_response
 {
   bucket_describe_response response{ std::move(ctx) };
   if (!response.ctx.ec && encoded.status_code != 200) {
@@ -89,7 +94,7 @@ bucket_describe_request::make_response(error_context::http&& ctx,
     for (const auto& node : nodes->get_array()) {
       if (const auto* server_group_name = node.find("serverGroup");
           server_group_name != nullptr && server_group_name->is_string()) {
-        std::string group_name = server_group_name->get_string();
+        const std::string group_name = server_group_name->get_string();
         auto& group = response.info.server_groups[group_name];
         group.name = group_name;
         server_node server;
@@ -166,11 +171,9 @@ bucket_describe_request::make_response(error_context::http&& ctx,
 auto
 bucket_describe_response::bucket_info::has_capability(const std::string& capability) const -> bool
 {
-  for (const auto& cap : bucket_capabilities) {
-    if (cap == normalize_capability(capability)) {
-      return true;
-    }
-  }
-  return false;
+  return std::any_of(
+    bucket_capabilities.begin(), bucket_capabilities.end(), [&capability](const auto& cap) {
+      return cap == normalize_capability(capability);
+    });
 }
 } // namespace couchbase::core::operations::management

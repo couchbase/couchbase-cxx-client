@@ -64,11 +64,11 @@ class collections_component
 public:
   collections_component(asio::io_context& io,
                         dispatcher dispatcher,
-                        collections_component_options options);
+                        const collections_component_options& options);
 
   auto get_collection_id(std::string scope_name,
                          std::string collection_name,
-                         get_collection_id_options options,
+                         const get_collection_id_options& options,
                          get_collection_id_callback callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 

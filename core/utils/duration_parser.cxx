@@ -19,10 +19,12 @@
 
 namespace couchbase::core::utils
 {
+namespace
+{
 /**
  * leading_int consumes the leading [0-9]* from s.
  */
-static auto
+auto
 leading_int(std::string& s, std::int64_t& v) -> bool
 {
   v = 0;
@@ -34,11 +36,11 @@ leading_int(std::string& s, std::int64_t& v) -> bool
       break;
     }
 
-    if (v > std::int64_t((1LLU << 63U) - 1LLU) / 10) {
+    if (v > static_cast<std::int64_t>((1LLU << 63U) - 1LLU) / 10) {
       return false;
     }
 
-    v = v * 10 + std::int64_t(c) - '0';
+    v = v * 10 + static_cast<std::int64_t>(c) - '0';
 
     if (v < 0) {
       return false;
@@ -54,8 +56,7 @@ leading_int(std::string& s, std::int64_t& v) -> bool
  * It is used only for fractions, so does not return an error on overflow,
  * it just stops accumulating precision.
  */
-
-static void
+void
 leading_fraction(std::string& s, std::int64_t& x, std::uint32_t& scale)
 {
   std::size_t i = 0;
@@ -74,13 +75,13 @@ leading_fraction(std::string& s, std::int64_t& x, std::uint32_t& scale)
       continue;
     }
 
-    if (x > std::int64_t((1LLU << 63LLU) - 1LLU) / 10) {
+    if (x > static_cast<std::int64_t>((1LLU << 63LLU) - 1LLU) / 10) {
       // It's possible for overflow to give a positive number, so take care.
       overflow = true;
       continue;
     }
 
-    auto y = x * 10 + std::int64_t(c) - '0';
+    auto y = (x * 10) + static_cast<std::int64_t>(c) - '0';
     if (y < 0) {
       overflow = true;
       continue;
@@ -92,6 +93,7 @@ leading_fraction(std::string& s, std::int64_t& x, std::uint32_t& scale)
 
   s = s.substr(i);
 }
+} // namespace
 
 auto
 parse_duration(const std::string& text) -> std::chrono::nanoseconds
@@ -125,7 +127,7 @@ parse_duration(const std::string& text) -> std::chrono::nanoseconds
 
   while (!s.empty()) {
     // The next character must be [0-9.]
-    if (!(s[0] == '.' || ('0' <= s[0] && s[0] <= '9'))) {
+    if (s[0] != '.' && ('0' > s[0] || s[0] > '9')) {
       throw duration_parse_error("invalid duration: " + text);
     }
 
@@ -137,7 +139,7 @@ parse_duration(const std::string& text) -> std::chrono::nanoseconds
       throw duration_parse_error("invalid duration (leading_int overflow): " + text);
     }
 
-    bool pre = pl != s.size(); // whether we consumed anything before a period
+    const bool pre = pl != s.size(); // whether we consumed anything before a period
 
     std::int64_t f{ 0 };      // integer after decimal point
     std::uint32_t scale{ 1 }; // value = v + f/scale

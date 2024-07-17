@@ -19,6 +19,7 @@
 
 #include "core/impl/internal_error_context.hxx"
 
+#include <memory>
 #include <string>
 #include <utility>
 

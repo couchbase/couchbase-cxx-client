@@ -26,12 +26,14 @@
 #include "internal/exceptions_internal.hxx"
 #include "internal/exceptions_internal_fmt.hxx"
 #include "internal/logging.hxx"
+#include "internal/transaction_context.hxx"
 #include "internal/transactions_cleanup.hxx"
 #include "internal/utils.hxx"
 #include "result.hxx"
 #include "result_fmt.hxx"
 
 #include <optional>
+#include <utility>
 
 namespace couchbase::core::transactions
 {
@@ -46,11 +48,11 @@ compare_atr_entries::operator()(atr_cleanup_entry& lhs, atr_cleanup_entry& rhs) 
 // wait a bit after an attempt is expired before cleaning it.
 const uint32_t atr_cleanup_entry::safety_margin_ms_ = 1500;
 
-atr_cleanup_entry::atr_cleanup_entry(const core::document_id& atr_id,
-                                     const std::string& attempt_id,
+atr_cleanup_entry::atr_cleanup_entry(core::document_id atr_id,
+                                     std::string attempt_id,
                                      const transactions_cleanup& cleanup)
-  : atr_id_(atr_id)
-  , attempt_id_(attempt_id)
+  : atr_id_(std::move(atr_id))
+  , attempt_id_(std::move(attempt_id))
   , check_if_expired_(false)
   , cleanup_(&cleanup)
   , atr_entry_(nullptr)
@@ -58,11 +60,11 @@ atr_cleanup_entry::atr_cleanup_entry(const core::document_id& atr_id,
 }
 
 atr_cleanup_entry::atr_cleanup_entry(const atr_entry& entry,
-                                     const core::document_id& atr_id,
+                                     core::document_id atr_id,
                                      const transactions_cleanup& cleanup,
                                      bool check_if_expired)
   //  : atr_id_(atr_id.bucket(), atr_id.scope(), atr_id.collection(), atr_id.key())
-  : atr_id_(atr_id)
+  : atr_id_(std::move(atr_id))
   , attempt_id_(entry.attempt_id())
   , check_if_expired_(check_if_expired)
   , cleanup_(&cleanup)
@@ -70,7 +72,7 @@ atr_cleanup_entry::atr_cleanup_entry(const atr_entry& entry,
 {
 }
 
-atr_cleanup_entry::atr_cleanup_entry(std::shared_ptr<attempt_context> ctx)
+atr_cleanup_entry::atr_cleanup_entry(const std::shared_ptr<attempt_context>& ctx)
   : min_start_time_(std::chrono::steady_clock::now())
   , check_if_expired_(false)
   , atr_entry_(nullptr)
@@ -78,10 +80,15 @@ atr_cleanup_entry::atr_cleanup_entry(std::shared_ptr<attempt_context> ctx)
   // NOTE: we create these entries externally, in fit_performer tests, hence the
   // use of attempt_context rather than attempt_context_impl
   auto ctx_impl = std::dynamic_pointer_cast<attempt_context_impl>(ctx);
-  atr_id_ = { ctx_impl->atr_id_.value().bucket(),
-              ctx_impl->atr_id_.value().scope(),
-              ctx_impl->atr_id_.value().collection(),
-              ctx_impl->atr_id_.value().key() };
+  Expects(ctx_impl != nullptr);
+  if (auto atr_id = ctx_impl->atr_id_; atr_id.has_value()) {
+    atr_id_ = {
+      atr_id->bucket(),
+      atr_id->scope(),
+      atr_id->collection(),
+      atr_id->key(),
+    };
+  }
   attempt_id_ = ctx_impl->id();
   cleanup_ = &ctx_impl->overall_->cleanup();
 }
@@ -91,7 +98,7 @@ atr_cleanup_entry::clean(transactions_cleanup_attempt* result)
 {
   CB_ATTEMPT_CLEANUP_LOG_TRACE("cleaning {}", *this);
   // get atr entry if needed
-  atr_entry entry;
+  const atr_entry entry;
   if (nullptr == atr_entry_) {
     auto atr = active_transaction_record::get_atr(cleanup_->cluster_ref(), atr_id_);
     if (atr) {
@@ -102,14 +109,12 @@ atr_cleanup_entry::clean(transactions_cleanup_attempt* result)
       if (it != atr->entries().end()) {
         atr_entry_ = &(*it);
         return check_atr_and_cleanup(result);
-      } else {
-        CB_ATTEMPT_CLEANUP_LOG_TRACE("could not find attempt {}, nothing to clean", attempt_id_);
-        return;
       }
-    } else {
-      CB_ATTEMPT_CLEANUP_LOG_TRACE("could not find atr {}, nothing to clean", atr_id_);
+      CB_ATTEMPT_CLEANUP_LOG_TRACE("could not find attempt {}, nothing to clean", attempt_id_);
       return;
     }
+    CB_ATTEMPT_CLEANUP_LOG_TRACE("could not find atr {}, nothing to clean", atr_id_);
+    return;
   }
   check_atr_and_cleanup(result);
 }
@@ -127,7 +132,7 @@ atr_cleanup_entry::check_atr_and_cleanup(transactions_cleanup_attempt* result)
     CB_ATTEMPT_CLEANUP_LOG_TRACE("not expired, nothing to clean");
     return;
   }
-  if (result) {
+  if (result != nullptr) {
     result->state(atr_entry_->state());
   }
   auto err =
@@ -149,7 +154,6 @@ atr_cleanup_entry::check_atr_and_cleanup(transactions_cleanup_attempt* result)
   if (ec) {
     throw client_error(*ec, "on_cleanup_completed hook threw error");
   }
-  return;
 }
 
 void
@@ -175,7 +179,7 @@ atr_cleanup_entry::cleanup_docs(durability_level dl)
 }
 
 void
-atr_cleanup_entry::do_per_doc(std::vector<doc_record> docs,
+atr_cleanup_entry::do_per_doc(const std::vector<doc_record>& docs,
                               bool require_crc_to_match,
                               const std::function<void(transaction_get_result&, bool)>& call)
 {
@@ -227,19 +231,21 @@ atr_cleanup_entry::do_per_doc(std::vector<doc_record> docs,
         continue;
       }
       if (require_crc_to_match) {
-        if (!doc.metadata()->crc32() || !doc.links().crc32_of_staging() ||
-            doc.links().crc32_of_staging() != doc.metadata()->crc32()) {
-          CB_ATTEMPT_CLEANUP_LOG_TRACE(
-            "document {} crc32 {} doesn't match staged value {}, skipping",
-            dr.id(),
-            doc.metadata()->crc32().value_or("<none>"),
-            doc.links().crc32_of_staging().value_or("<none>"));
-          continue;
+        if (const auto& metadata = doc.metadata(); metadata.has_value()) {
+          if (!metadata->crc32() || !doc.links().crc32_of_staging() ||
+              doc.links().crc32_of_staging() != metadata->crc32()) {
+            CB_ATTEMPT_CLEANUP_LOG_TRACE(
+              "document {} crc32 {} doesn't match staged value {}, skipping",
+              dr.id(),
+              metadata->crc32().value_or("<none>"),
+              doc.links().crc32_of_staging().value_or("<none>"));
+            continue;
+          }
         }
       }
       call(doc, res.deleted);
     } catch (const client_error& e) {
-      error_class ec = e.ec();
+      const error_class ec = e.ec();
       switch (ec) {
         case FAIL_DOC_NOT_FOUND:
           CB_ATTEMPT_CLEANUP_LOG_ERROR("document {} not found - ignoring ", dr);
@@ -270,10 +276,11 @@ atr_cleanup_entry::commit_docs(std::optional<std::vector<doc_record>> docs, dura
           req.flags = content.flags;
           auto barrier = std::make_shared<std::promise<result>>();
           auto f = barrier->get_future();
-          cleanup_->cluster_ref().execute(
-            wrap_durable_request(req, dl), [barrier](core::operations::insert_response resp) {
-              barrier->set_value(result::create_from_mutation_response(resp));
-            });
+          cleanup_->cluster_ref().execute(wrap_durable_request(req, dl),
+                                          [barrier](const core::operations::insert_response& resp) {
+                                            barrier->set_value(
+                                              result::create_from_mutation_response(resp));
+                                          });
           wrap_operation_future(f);
         } else {
           core::operations::mutate_in_request req{ doc.id() };
@@ -290,7 +297,7 @@ atr_cleanup_entry::commit_docs(std::optional<std::vector<doc_record>> docs, dura
           auto barrier = std::make_shared<std::promise<result>>();
           auto f = barrier->get_future();
           cleanup_->cluster_ref().execute(
-            req, [barrier](core::operations::mutate_in_response resp) {
+            req, [barrier](const core::operations::mutate_in_response& resp) {
               barrier->set_value(result::create_from_subdoc_response(resp));
             });
           wrap_operation_future(f);
@@ -328,9 +335,10 @@ atr_cleanup_entry::remove_docs(std::optional<std::vector<doc_record>> docs, dura
         wrap_durable_request(req, dl);
         auto barrier = std::make_shared<std::promise<result>>();
         auto f = barrier->get_future();
-        cleanup_->cluster_ref().execute(req, [barrier](core::operations::mutate_in_response resp) {
-          barrier->set_value(result::create_from_subdoc_response(resp));
-        });
+        cleanup_->cluster_ref().execute(
+          req, [barrier](const core::operations::mutate_in_response& resp) {
+            barrier->set_value(result::create_from_subdoc_response(resp));
+          });
         wrap_operation_future(f);
       } else {
         core::operations::remove_request req{ doc.id() };
@@ -338,9 +346,10 @@ atr_cleanup_entry::remove_docs(std::optional<std::vector<doc_record>> docs, dura
         wrap_durable_request(req, dl);
         auto barrier = std::make_shared<std::promise<result>>();
         auto f = barrier->get_future();
-        cleanup_->cluster_ref().execute(req, [barrier](core::operations::remove_response resp) {
-          barrier->set_value(result::create_from_mutation_response(resp));
-        });
+        cleanup_->cluster_ref().execute(
+          req, [barrier](const core::operations::remove_response& resp) {
+            barrier->set_value(result::create_from_mutation_response(resp));
+          });
         wrap_operation_future(f);
       }
       CB_ATTEMPT_CLEANUP_LOG_TRACE("remove_docs removed doc {}", doc.id());
@@ -367,9 +376,10 @@ atr_cleanup_entry::remove_docs_staged_for_removal(std::optional<std::vector<doc_
         wrap_durable_request(req, dl);
         auto barrier = std::make_shared<std::promise<result>>();
         auto f = barrier->get_future();
-        cleanup_->cluster_ref().execute(req, [barrier](core::operations::remove_response resp) {
-          barrier->set_value(result::create_from_mutation_response(resp));
-        });
+        cleanup_->cluster_ref().execute(
+          req, [barrier](const core::operations::remove_response& resp) {
+            barrier->set_value(result::create_from_mutation_response(resp));
+          });
         wrap_operation_future(f);
         CB_ATTEMPT_CLEANUP_LOG_TRACE("remove_docs_staged_for_removal removed doc {}", doc.id());
       } else {
@@ -405,9 +415,10 @@ atr_cleanup_entry::remove_txn_links(std::optional<std::vector<doc_record>> docs,
       wrap_durable_request(req, dl);
       auto barrier = std::make_shared<std::promise<result>>();
       auto f = barrier->get_future();
-      cleanup_->cluster_ref().execute(req, [barrier](core::operations::mutate_in_response resp) {
-        barrier->set_value(result::create_from_subdoc_response(resp));
-      });
+      cleanup_->cluster_ref().execute(
+        req, [barrier](const core::operations::mutate_in_response& resp) {
+          barrier->set_value(result::create_from_subdoc_response(resp));
+        });
       wrap_operation_future(f);
       CB_ATTEMPT_CLEANUP_LOG_TRACE("remove_txn_links removed links for doc {}", doc.id());
     });
@@ -437,9 +448,10 @@ atr_cleanup_entry::cleanup_entry(durability_level dl)
     wrap_durable_request(req, dl);
     auto barrier = std::make_shared<std::promise<result>>();
     auto f = barrier->get_future();
-    cleanup_->cluster_ref().execute(req, [barrier](core::operations::mutate_in_response resp) {
-      barrier->set_value(result::create_from_subdoc_response(resp));
-    });
+    cleanup_->cluster_ref().execute(req,
+                                    [barrier](const core::operations::mutate_in_response& resp) {
+                                      barrier->set_value(result::create_from_subdoc_response(resp));
+                                    });
     wrap_operation_future(f);
     CB_ATTEMPT_CLEANUP_LOG_TRACE("successfully removed attempt {}", attempt_id_);
   } catch (const client_error& e) {
@@ -467,7 +479,7 @@ atr_cleanup_entry::ready() const -> bool
 auto
 atr_cleanup_queue::pop(bool check_time) -> std::optional<atr_cleanup_entry>
 {
-  std::unique_lock<std::mutex> lock(mutex_);
+  const std::unique_lock<std::mutex> lock(mutex_);
   if (!queue_.empty()) {
     if (!check_time || queue_.top().ready()) {
       // copy it
@@ -483,14 +495,14 @@ atr_cleanup_queue::pop(bool check_time) -> std::optional<atr_cleanup_entry>
 auto
 atr_cleanup_queue::size() const -> std::size_t
 {
-  std::unique_lock<std::mutex> lock(mutex_);
+  const std::unique_lock<std::mutex> lock(mutex_);
   return queue_.size();
 }
 
 void
-atr_cleanup_queue::push(std::shared_ptr<attempt_context> ctx)
+atr_cleanup_queue::push(const std::shared_ptr<attempt_context>& ctx)
 {
-  std::unique_lock<std::mutex> lock(mutex_);
+  const std::unique_lock<std::mutex> lock(mutex_);
   queue_.emplace(ctx);
 }
 } // namespace couchbase::core::transactions

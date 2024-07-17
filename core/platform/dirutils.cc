@@ -11,6 +11,9 @@
 #include "dirutils.h"
 
 #include <cstring>
+#include <string>
+#include <vector>
+
 #ifdef _MSC_VER
 #include <filesystem>
 
@@ -24,7 +27,7 @@ namespace couchbase::core::platform
 static std::string
 split(const std::string& input, bool directory)
 {
-  std::string::size_type path = input.find_last_of("\\/");
+  const std::string::size_type path = input.find_last_of("\\/");
   std::string file;
   std::string dir;
 
@@ -33,7 +36,7 @@ split(const std::string& input, bool directory)
     file = input;
   } else {
     dir = input.substr(0, path);
-    if (dir.length() == 0) {
+    if (dir.empty()) {
       dir = input.substr(0, 1);
     }
 
@@ -98,9 +101,9 @@ find_files_with_prefix(const std::string& dir, const std::string& name)
 {
   std::vector<std::string> files;
   if (DIR* dp = opendir(dir.c_str()); dp != nullptr) {
-    const struct dirent* de;
+    const struct dirent* de = nullptr;
     while ((de = readdir(dp)) != nullptr) {
-      if (std::string fnm(de->d_name); fnm == "." || fnm == "..") {
+      if (const std::string fnm(de->d_name); fnm == "." || fnm == "..") {
         continue;
       }
       if (strncmp(de->d_name, name.c_str(), name.length()) == 0) {

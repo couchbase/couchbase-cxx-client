@@ -18,7 +18,12 @@
 #include "io/http_streaming_response.hxx"
 #include "utils/movable_function.hxx"
 
+#include <cstddef>
+#include <cstdint>
 #include <memory>
+#include <string>
+#include <system_error>
+#include <utility>
 
 namespace couchbase::core
 {
@@ -32,17 +37,17 @@ public:
   {
   }
 
-  auto endpoint() const -> std::string
+  [[nodiscard]] auto endpoint() const -> std::string
   {
     return {};
   }
 
-  auto status_code() const -> std::uint32_t
+  [[nodiscard]] auto status_code() const -> std::uint32_t
   {
     return streaming_resp_.status_code();
   }
 
-  auto content_length() const -> std::size_t
+  [[nodiscard]] auto content_length() const -> std::size_t
   {
     if (streaming_resp_.headers().find("content-length") == streaming_resp_.headers().end()) {
       return 0;

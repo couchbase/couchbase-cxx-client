@@ -21,10 +21,13 @@
 #include "core/utils/json.hxx"
 #include "error_utils.hxx"
 
+#include <tao/json/value.hpp>
+
 namespace couchbase::core::operations::management
 {
-std::error_code
-group_get_all_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+auto
+group_get_all_request::encode_to(encoded_request_type& encoded,
+                                 http_context& /* context */) const -> std::error_code
 {
   encoded.method = "GET";
   encoded.path = "/settings/rbac/groups";
@@ -32,9 +35,10 @@ group_get_all_request::encode_to(encoded_request_type& encoded, http_context& /*
   return {};
 }
 
-group_get_all_response
+auto
 group_get_all_request::make_response(error_context::http&& ctx,
                                      const encoded_response_type& encoded) const
+  -> group_get_all_response
 {
   group_get_all_response response{ std::move(ctx) };
   if (!response.ctx.ec) {

@@ -21,14 +21,16 @@
 #include "core/utils/url_codec.hxx"
 #include "error_utils.hxx"
 
-#include <regex>
-
 #include <fmt/core.h>
+#include <tao/json/value.hpp>
+
+#include <regex>
 
 namespace couchbase::core::operations::management
 {
-std::error_code
-collection_create_request::encode_to(encoded_request_type& encoded, http_context& /*context*/) const
+auto
+collection_create_request::encode_to(encoded_request_type& encoded,
+                                     http_context& /*context*/) const -> std::error_code
 {
   encoded.method = "POST";
   encoded.path =
@@ -48,15 +50,16 @@ collection_create_request::encode_to(encoded_request_type& encoded, http_context
   return {};
 }
 
-collection_create_response
+auto
 collection_create_request::make_response(error_context::http&& ctx,
                                          const encoded_response_type& encoded) const
+  -> collection_create_response
 {
   collection_create_response response{ std::move(ctx) };
   if (!response.ctx.ec) {
     switch (encoded.status_code) {
       case 400: {
-        std::regex collection_exists("Collection with name .+ already exists");
+        const std::regex collection_exists("Collection with name .+ already exists");
         if (std::regex_search(encoded.body.data(), collection_exists)) {
           response.ctx.ec = errc::management::collection_exists;
         } else {
@@ -64,7 +67,7 @@ collection_create_request::make_response(error_context::http&& ctx,
         }
       } break;
       case 404: {
-        std::regex scope_not_found("Scope with name .+ is not found");
+        const std::regex scope_not_found("Scope with name .+ is not found");
         if (std::regex_search(encoded.body.data(), scope_not_found)) {
           response.ctx.ec = errc::common::scope_not_found;
         } else {

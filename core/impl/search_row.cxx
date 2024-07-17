@@ -30,6 +30,11 @@ search_row::search_row(internal_search_row internal)
 {
 }
 
+search_row::~search_row() = default;
+search_row::search_row(search_row&& other) noexcept = default;
+auto
+search_row::operator=(search_row&& other) noexcept -> search_row& = default;
+
 auto
 search_row::index() const -> const std::string&
 {

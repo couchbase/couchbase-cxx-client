@@ -18,17 +18,18 @@
 #include "cluster_options.hxx"
 
 #include "config_profiles.hxx"
-#include "core/transactions/attempt_context_testing_hooks.hxx"
-#include "core/transactions/cleanup_testing_hooks.hxx"
+#include "core/service_type.hxx"
 
 #include <couchbase/best_effort_retry_strategy.hxx>
 
+#include <chrono>
 #include <stdexcept>
+#include <string_view>
 
 namespace couchbase::core
 {
-std::chrono::milliseconds
-cluster_options::default_timeout_for(service_type type) const
+auto
+cluster_options::default_timeout_for(service_type type) const -> std::chrono::milliseconds
 {
   switch (type) {
     case service_type::key_value:

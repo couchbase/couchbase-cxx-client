@@ -21,6 +21,6 @@ namespace couchbase::core::transactions
 auto
 to_string(const std::vector<std::byte>& input) -> std::string
 {
-  return std::string(reinterpret_cast<const char*>(input.data()), input.size());
+  return { reinterpret_cast<const char*>(input.data()), input.size() };
 }
 } // namespace couchbase::core::transactions

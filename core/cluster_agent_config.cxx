@@ -15,9 +15,9 @@
 
 #include "cluster_agent_config.hxx"
 
-#include <couchbase/retry_strategy.hxx>
+#include <fmt/format.h>
 
-#include <fmt/core.h>
+#include <string>
 
 namespace couchbase::core
 {

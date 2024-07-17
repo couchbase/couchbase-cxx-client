@@ -12,16 +12,27 @@
 #include "logger.hxx"
 
 #include "configuration.hxx"
+#include "core/logger/level.hxx"
 #include "custom_rotating_file_sink.hxx"
 
-#include <chrono>
-#include <mutex>
 #include <spdlog/async.h>
 #include <spdlog/async_logger.h>
+#include <spdlog/common.h>
+#include <spdlog/details/os.h>
+#include <spdlog/logger.h>
 #include <spdlog/sinks/dist_sink.h>
 #include <spdlog/sinks/null_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
+
+#include <atomic>
+#include <chrono>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <utility>
 
 static const std::string file_logger_name{ "couchbase_cxx_client_file_logger" };
 static const std::string protocol_logger_name{ "couchbase_cxx_client_protocol_logger" };
@@ -53,7 +64,7 @@ get_file_logger() -> std::shared_ptr<spdlog::logger>
   thread_local std::shared_ptr<spdlog::logger> logger{ nullptr };
   thread_local int version{ -1 };
   if (version != file_logger_version) {
-    std::scoped_lock lock(file_logger_mutex);
+    const std::scoped_lock lock(file_logger_mutex);
     logger = file_logger;
     version = file_logger_version;
   }
@@ -61,9 +72,9 @@ get_file_logger() -> std::shared_ptr<spdlog::logger>
 }
 
 void
-update_file_logger(std::shared_ptr<spdlog::logger> new_logger)
+update_file_logger(const std::shared_ptr<spdlog::logger>& new_logger)
 {
-  std::scoped_lock lock(file_logger_mutex);
+  const std::scoped_lock lock(file_logger_mutex);
   // delete if already exists
   spdlog::drop(file_logger_name);
   file_logger = new_logger;
@@ -184,7 +195,7 @@ is_initialized() -> bool
 }
 
 auto
-create_file_logger_impl(const std::string logger_name, const configuration& logger_settings)
+create_file_logger_impl(const std::string& logger_name, const configuration& logger_settings)
   -> std::pair<std::optional<std::string>, std::shared_ptr<spdlog::logger>>
 {
   std::shared_ptr<spdlog::logger> logger{};
@@ -365,7 +376,7 @@ create_console_logger()
 }
 
 void
-register_spdlog_logger(std::shared_ptr<spdlog::logger> l)
+register_spdlog_logger(const std::shared_ptr<spdlog::logger>& l)
 {
   try {
     get_file_logger()->debug("Registering logger {}", l->name());
@@ -391,7 +402,7 @@ check_log_levels(level lvl) -> bool
 {
   auto level = translate_level(lvl);
   bool correct = true;
-  spdlog::apply_all([level, &correct](std::shared_ptr<spdlog::logger> l) {
+  spdlog::apply_all([level, &correct](const std::shared_ptr<spdlog::logger>& l) {
     if (l->level() != level) {
       correct = false;
     }
@@ -404,7 +415,7 @@ set_log_levels(level lvl)
 {
   auto level = translate_level(lvl);
   // Apply the function to each registered spdlog::logger except protocol logger
-  spdlog::apply_all([level](std::shared_ptr<spdlog::logger> l) {
+  spdlog::apply_all([level](const std::shared_ptr<spdlog::logger>& l) {
     if (l->name() == protocol_logger_name) {
       l->set_level(spdlog::level::trace);
       return;

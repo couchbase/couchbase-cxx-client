@@ -20,14 +20,16 @@
 #include "core/utils/json.hxx"
 #include "error_utils.hxx"
 
-#include <regex>
-
 #include <fmt/core.h>
+#include <tao/json/value.hpp>
+
+#include <regex>
 
 namespace couchbase::core::operations::management
 {
-std::error_code
-collection_drop_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+auto
+collection_drop_request::encode_to(encoded_request_type& encoded,
+                                   http_context& /* context */) const -> std::error_code
 {
   encoded.method = "DELETE";
   encoded.path = fmt::format(
@@ -35,9 +37,10 @@ collection_drop_request::encode_to(encoded_request_type& encoded, http_context& 
   return {};
 }
 
-collection_drop_response
+auto
 collection_drop_request::make_response(error_context::http&& ctx,
                                        const encoded_response_type& encoded) const
+  -> collection_drop_response
 {
   collection_drop_response response{ std::move(ctx) };
   if (!response.ctx.ec) {
@@ -46,8 +49,8 @@ collection_drop_request::make_response(error_context::http&& ctx,
         response.ctx.ec = errc::common::unsupported_operation;
         break;
       case 404: {
-        std::regex scope_not_found("Scope with name .+ is not found");
-        std::regex collection_not_found("Collection with name .+ is not found");
+        const std::regex scope_not_found("Scope with name .+ is not found");
+        const std::regex collection_not_found("Collection with name .+ is not found");
         if (std::regex_search(encoded.body.data(), collection_not_found)) {
           response.ctx.ec = errc::common::collection_not_found;
         } else if (std::regex_search(encoded.body.data(), scope_not_found)) {

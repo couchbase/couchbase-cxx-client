@@ -16,23 +16,29 @@
 
 #pragma once
 
-#include "core/transactions.hxx"
 #include "core/transactions/async_attempt_context.hxx"
 #include "couchbase/transactions/transaction_options.hxx"
 #include "couchbase/transactions/transaction_result.hxx"
 #include "couchbase/transactions/transactions_config.hxx"
-#include "transaction_attempt.hxx"
-#include "transactions_cleanup.hxx"
 
 #include <chrono>
+#include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
-#include <thread>
 #include <vector>
 
 namespace couchbase::core::transactions
 {
 class attempt_context_impl;
+enum class attempt_state;
+class transactions;
+class transactions_cleanup;
+struct transaction_attempt;
+
+using txn_complete_callback =
+  std::function<void(std::optional<transaction_exception>,
+                     std::optional<::couchbase::transactions::transaction_result>)>;
 
 struct exp_delay;
 
@@ -48,102 +54,45 @@ public:
   auto operator=(transaction_context&&) -> transaction_context& = delete;
   auto operator=(transaction_context&) -> transaction_context& = delete;
 
-  [[nodiscard]] const std::string& transaction_id() const
-  {
-    return transaction_id_;
-  }
+  [[nodiscard]] auto transaction_id() const -> const std::string&;
 
-  [[nodiscard]] std::size_t num_attempts() const
-  {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return attempts_.size();
-  }
-  [[nodiscard]] const transaction_attempt& current_attempt() const
-  {
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (attempts_.empty()) {
-      throw std::runtime_error("transaction context has no attempts yet");
-    }
-    return attempts_.back();
-  }
+  [[nodiscard]] auto num_attempts() const -> std::size_t;
+
+  [[nodiscard]] auto current_attempt() const -> const transaction_attempt&;
 
   void add_attempt();
 
-  void current_attempt_state(attempt_state s)
-  {
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (attempts_.empty()) {
-      throw std::runtime_error("transaction_context has no attempts yet");
-    }
-    attempts_.back().state = s;
-  }
+  void current_attempt_state(attempt_state s);
 
-  [[nodiscard]] const core::cluster& cluster_ref() const
-  {
-    return transactions_.cluster_ref();
-  }
+  [[nodiscard]] auto cluster_ref() const -> const core::cluster&;
 
-  const couchbase::transactions::transactions_config::built& config() const
-  {
-    return config_;
-  }
+  auto config() const -> const couchbase::transactions::transactions_config::built&;
 
-  transactions_cleanup& cleanup()
-  {
-    return cleanup_;
-  }
+  auto cleanup() -> transactions_cleanup&;
 
   [[nodiscard]] bool has_expired_client_side();
 
-  void after_delay(std::chrono::milliseconds delay, std::function<void()> fn);
+  void after_delay(std::chrono::milliseconds delay, const std::function<void()>& fn);
 
-  [[nodiscard]] std::chrono::time_point<std::chrono::steady_clock> start_time_client() const
-  {
-    return start_time_client_;
-  }
+  [[nodiscard]] auto start_time_client() const
+    -> std::chrono::time_point<std::chrono::steady_clock>;
 
-  [[nodiscard]] const std::string& atr_id() const
-  {
-    return atr_id_;
-  }
+  [[nodiscard]] auto atr_id() const -> const std::string&;
 
-  void atr_id(const std::string& id)
-  {
-    atr_id_ = id;
-  }
+  void atr_id(const std::string& id);
 
-  [[nodiscard]] auto atr_collection() const -> const std::string&
-  {
-    return atr_collection_;
-  }
+  [[nodiscard]] auto atr_collection() const -> const std::string&;
 
-  void atr_collection(const std::string& coll)
-  {
-    atr_collection_ = coll;
-  }
+  void atr_collection(const std::string& coll);
 
-  [[nodiscard]] ::couchbase::transactions::transaction_result get_transaction_result() const
-  {
-    return couchbase::transactions::transaction_result{
-      transaction_id(), current_attempt().state == attempt_state::COMPLETED
-    };
-  }
-  void new_attempt_context()
-  {
-    auto barrier = std::make_shared<std::promise<void>>();
-    auto f = barrier->get_future();
-    new_attempt_context([barrier](std::exception_ptr err) {
-      if (err) {
-        return barrier->set_exception(err);
-      }
-      return barrier->set_value();
-    });
-    f.get();
-  }
+  [[nodiscard]] auto get_transaction_result() const
+    -> ::couchbase::transactions::transaction_result;
+
+  void new_attempt_context();
 
   void new_attempt_context(async_attempt_context::VoidCallback&& cb);
 
-  std::shared_ptr<attempt_context_impl> current_attempt_context();
+  auto current_attempt_context() -> std::shared_ptr<attempt_context_impl>;
 
   // These functions just delegate to the current_attempt_context_
   void get(const core::document_id& id, async_attempt_context::Callback&& cb);
@@ -177,9 +126,9 @@ public:
 
   void existing_error(bool previous_op_failed = true);
 
-  void handle_error(std::exception_ptr err, txn_complete_callback&& cb);
+  void handle_error(const std::exception_ptr& err, txn_complete_callback&& callback);
 
-  std::chrono::nanoseconds remaining() const;
+  auto remaining() const -> std::chrono::nanoseconds;
 
 private:
   transaction_context(transactions& txns,

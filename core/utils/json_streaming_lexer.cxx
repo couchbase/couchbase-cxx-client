@@ -27,23 +27,26 @@ namespace couchbase::core::utils::json
 namespace detail
 {
 
-static void
+namespace
+{
+void
 noop_on_complete(std::error_code /* ec */,
                  std::size_t /* number_of_rows */,
                  std::string&& /* meta */)
 { /* do nothing */
 }
 
-static auto
+auto
 noop_on_row(std::string&& /* row */) -> stream_control
 {
   return stream_control::next_row;
 }
 
-static void
+void
 noop_on_meta_header_complete(std::error_code /* ec */, std::string&& /* meta_header */)
 { /* do nothing */
 }
+} // namespace
 
 #define STATE_MARKER_ROOT (reinterpret_cast<void*>(1))
 #define STATE_MARKER_ROWSET (reinterpret_cast<void*>(2))
@@ -149,7 +152,9 @@ struct streaming_lexer_impl {
 };
 } // namespace detail
 
-static auto
+namespace
+{
+auto
 convert_status(jsonsl_error_t error) -> std::error_code
 {
   switch (error) {
@@ -240,7 +245,7 @@ convert_status(jsonsl_error_t error) -> std::error_code
   return errc::streaming_json_lexer::generic;
 }
 
-static auto
+auto
 error_callback(jsonsl_t lexer,
                jsonsl_error_t error,
                struct jsonsl_state_st* /* state */,
@@ -259,7 +264,7 @@ error_callback(jsonsl_t lexer,
   return 0;
 }
 
-static void
+void
 meta_header_complete_callback(jsonsl_t lexer,
                               jsonsl_action_t /* action */,
                               struct jsonsl_state_st* state,
@@ -276,7 +281,7 @@ meta_header_complete_callback(jsonsl_t lexer,
   impl->on_meta_header_complete_ = detail::noop_on_meta_header_complete;
 }
 
-static void
+void
 trailer_pop_callback(jsonsl_t lexer,
                      jsonsl_action_t /* action */,
                      struct jsonsl_state_st* state,
@@ -304,7 +309,7 @@ trailer_pop_callback(jsonsl_t lexer,
   impl->on_complete_({}, impl->number_of_rows_, std::move(impl->meta_buffer_));
 }
 
-static void
+void
 row_pop_callback(jsonsl_t lexer,
                  jsonsl_action_t /* action */,
                  struct jsonsl_state_st* state,
@@ -347,7 +352,7 @@ row_pop_callback(jsonsl_t lexer,
   }
 }
 
-static void
+void
 initial_action_pop_callback(jsonsl_t lexer,
                             jsonsl_action_t action,
                             struct jsonsl_state_st* state,
@@ -369,7 +374,7 @@ initial_action_pop_callback(jsonsl_t lexer,
   }
 }
 
-static void
+void
 initial_action_push_callback(jsonsl_t lexer,
                              jsonsl_action_t /* action */,
                              struct jsonsl_state_st* state,
@@ -394,6 +399,7 @@ initial_action_push_callback(jsonsl_t lexer,
     state->data = STATE_MARKER_ROWSET;
   }
 }
+} // namespace
 
 json::streaming_lexer::streaming_lexer(const std::string& pointer_expression, std::uint32_t depth)
 {

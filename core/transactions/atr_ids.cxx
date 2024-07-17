@@ -24,7 +24,8 @@
 
 namespace couchbase::core::transactions
 {
-
+// TODO(CXXCBC-549)
+// NOLINTNEXTLINE(cert-err58-cpp)
 const std::vector<std::string> ATR_IDS({
   "_txn:atr-0-#14",     "_txn:atr-1-#10b6",    "_txn:atr-2-#cc8",    "_txn:atr-3-#f08",
   "_txn:atr-4-#c7",     "_txn:atr-5-#11a",     "_txn:atr-6-#a",      "_txn:atr-7-#2c4",
@@ -303,7 +304,7 @@ auto
 atr_ids::vbucket_for_key(const std::string& key) -> std::size_t
 {
   static const int num_vbuckets = 1024;
-  std::uint32_t digest = core::utils::hash_crc32(key.data(), key.size());
+  const std::uint32_t digest = core::utils::hash_crc32(key.data(), key.size());
   return static_cast<std::size_t>(digest % num_vbuckets);
 }
 

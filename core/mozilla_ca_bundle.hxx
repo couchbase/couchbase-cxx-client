@@ -17,8 +17,9 @@
 
 #pragma once
 
-#include <array>
 #include <gsl/span>
+
+#include <array>
 #include <string_view>
 
 namespace couchbase::core::default_ca

@@ -15,10 +15,14 @@
  *   limitations under the License.
  */
 
+#include <couchbase/error_codes.hxx>
+
 #include "query_result.hxx"
 
 #include "core/utils/duration_parser.hxx"
 #include "core/utils/json.hxx"
+#include "core/utils/movable_function.hxx"
+#include "error_codes.hxx"
 
 #include <optional>
 
@@ -27,24 +31,28 @@ namespace couchbase::core::columnar
 class query_result_impl
 {
 public:
-  query_result_impl(row_streamer rows)
+  explicit query_result_impl(row_streamer rows)
     : rows_{ std::move(rows) }
   {
   }
 
   void next_row(
     utils::movable_function<void(std::variant<std::monostate, query_result_row, query_result_end>,
-                                 std::error_code)> handler)
+                                 error)> handler)
   {
-    return rows_.next_row([handler = std::move(handler)](std::string content, std::error_code ec) {
-      if (ec) {
-        return handler({}, ec);
-      }
-      if (content.empty()) {
-        return handler(query_result_end{}, {});
-      }
-      handler(query_result_row{ content }, {});
-    });
+    return rows_.next_row(
+      [handler = std::move(handler)](const std::string& content, std::error_code ec) {
+        if (ec) {
+          if (ec == couchbase::errc::common::request_canceled) {
+            return handler(query_result_end{}, {});
+          }
+          return handler({}, { maybe_convert_error_code(ec) });
+        }
+        if (content.empty()) {
+          return handler(query_result_end{}, {});
+        }
+        handler(query_result_row{ content }, {});
+      });
   }
 
   auto metadata() -> std::optional<query_metadata>
@@ -106,7 +114,7 @@ query_result::query_result(row_streamer rows)
 void
 query_result::next_row(
   utils::movable_function<void(std::variant<std::monostate, query_result_row, query_result_end>,
-                               std::error_code)> handler)
+                               error)> handler)
 {
   impl_->next_row(std::move(handler));
 }

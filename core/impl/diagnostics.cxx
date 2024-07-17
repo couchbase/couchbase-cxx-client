@@ -23,9 +23,13 @@
 
 #include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/diagnostics_result.hxx>
+#include <couchbase/endpoint_diagnostics.hxx>
 #include <couchbase/endpoint_ping_report.hxx>
 #include <couchbase/ping_result.hxx>
 #include <couchbase/service_type.hxx>
+
+#include <tao/json/forward.hpp>
+#include <tao/json/type.hpp>
 
 #include <cstdint>
 #include <map>
@@ -100,11 +104,11 @@ endpoint_ping_report_as_json(const endpoint_ping_report& report)
     { "local", report.local() },
     { "state", ping_state_as_string(report.state()) },
   };
-  if (report.error()) {
-    res["error"] = report.error().value();
+  if (auto val = report.error(); val) {
+    res["error"] = val.value();
   }
-  if (report.endpoint_namespace()) {
-    res["namespace"] = report.endpoint_namespace().value();
+  if (auto val = report.endpoint_namespace(); val) {
+    res["namespace"] = val.value();
   }
   return res;
 }
@@ -119,14 +123,14 @@ endpoint_diagnostics_as_json(const endpoint_diagnostics& report)
     { "remote", report.remote() },
     { "state", endpoint_state_as_string(report.state()) },
   };
-  if (report.last_activity()) {
-    res["last_activity_us"] = report.last_activity().value().count();
+  if (auto val = report.last_activity(); val) {
+    res["last_activity_us"] = val.value().count();
   }
-  if (report.endpoint_namespace()) {
-    res["namespace"] = report.endpoint_namespace().value();
+  if (auto val = report.endpoint_namespace(); val) {
+    res["namespace"] = val.value();
   }
-  if (report.details()) {
-    res["details"] = report.details();
+  if (auto val = report.details(); val) {
+    res["details"] = val.value();
   }
   return res;
 }

@@ -16,12 +16,6 @@
 
 #pragma once
 
-#include <couchbase/transactions/async_attempt_context.hxx>
-#include <couchbase/transactions/attempt_context.hxx>
-#include <couchbase/transactions/transaction_query_options.hxx>
-
-#include "attempt_context_testing_hooks.hxx"
-#include "couchbase/codec/encoded_value.hxx"
 #include "error_list.hxx"
 #include "waitable_op_list.hxx"
 
@@ -30,8 +24,12 @@
 #include "attempt_state.hxx"
 #include "internal/atr_cleanup_entry.hxx"
 #include "internal/exceptions_internal.hxx"
-#include "internal/transaction_context.hxx"
 #include "transaction_get_result.hxx"
+
+#include <couchbase/codec/encoded_value.hxx>
+#include <couchbase/transactions/async_attempt_context.hxx>
+#include <couchbase/transactions/attempt_context.hxx>
+#include <couchbase/transactions/transaction_query_options.hxx>
 
 #include <cstdint>
 #include <memory>
@@ -43,6 +41,8 @@
 namespace couchbase::core
 {
 class cluster;
+class transaction_context;
+
 namespace impl
 {
 auto
@@ -65,6 +65,7 @@ class transactions;
 enum class forward_compat_stage;
 class staged_mutation_queue;
 class staged_mutation;
+struct attempt_context_testing_hooks;
 
 class attempt_context_impl
   : public attempt_context
@@ -141,23 +142,23 @@ private:
   void commit_with_query(VoidCallback&& cb);
   void rollback_with_query(VoidCallback&& cb);
 
-  void query_begin_work(std::optional<std::string> query_context, VoidCallback&& cb);
+  void query_begin_work(const std::optional<std::string>& query_context, VoidCallback&& cb);
 
   void do_query(const std::string& statement,
                 const couchbase::transactions::transaction_query_options& opts,
-                std::optional<std::string> query_context,
+                const std::optional<std::string>& query_context,
                 QueryCallback&& cb);
-  auto handle_query_error(const core::operations::query_response& resp) -> std::exception_ptr;
+  auto handle_query_error(const core::operations::query_response& resp) const -> std::exception_ptr;
   void wrap_query(const std::string& statement,
                   const couchbase::transactions::transaction_query_options& opts,
                   std::vector<core::json_string> params,
                   const tao::json::value& txdata,
                   const std::string& hook_point,
                   bool check_expiry,
-                  std::optional<std::string> query_context,
+                  const std::optional<std::string>& query_context,
                   std::function<void(std::exception_ptr, core::operations::query_response)>&& cb);
 
-  void handle_err_from_callback(std::exception_ptr e);
+  void handle_err_from_callback(const std::exception_ptr& e);
 
   template<typename Cb, typename T>
   void op_completed_with_callback(Cb&& cb, std::optional<T> t)
@@ -183,14 +184,16 @@ private:
     }
   }
 
-  template<typename ErrorHandler, typename ExceptionType>
+  template<typename ErrorHandler,
+           typename ExceptionType,
+           typename std::enable_if_t<!std::is_same_v<ExceptionType, std::exception_ptr>, int> = 0>
   void op_completed_with_error(ErrorHandler&& cb, ExceptionType&& err)
   {
     return op_completed_with_error(std::forward<ErrorHandler>(cb),
                                    std::make_exception_ptr(std::forward<ExceptionType>(err)));
   }
 
-  void op_completed_with_error(VoidCallback cb, std::exception_ptr err);
+  void op_completed_with_error(const VoidCallback& cb, const std::exception_ptr& err);
 
   template<typename Ret>
   void op_completed_with_error(std::function<void(std::exception_ptr, std::optional<Ret>)> cb,
@@ -359,55 +362,25 @@ public:
 
   void existing_error(bool prev_op_failed = true);
 
-  [[nodiscard]] auto is_done() const -> bool
-  {
-    return is_done_;
-  }
+  [[nodiscard]] auto is_done() const -> bool;
 
-  [[nodiscard]] auto overall() -> std::shared_ptr<transaction_context>
-  {
-    return overall_;
-  }
+  [[nodiscard]] auto overall() -> std::shared_ptr<transaction_context>;
 
-  [[nodiscard]] auto transaction_id() const -> const std::string&
-  {
-    return overall_->transaction_id();
-  }
+  [[nodiscard]] auto transaction_id() const -> const std::string&;
 
-  [[nodiscard]] auto id() const -> const std::string&
-  {
-    return overall_->current_attempt().id;
-  }
+  [[nodiscard]] auto id() const -> const std::string&;
 
-  [[nodiscard]] auto state() -> attempt_state
-  {
-    return overall_->current_attempt().state;
-  }
+  [[nodiscard]] auto state() -> attempt_state;
 
-  void state(attempt_state s)
-  {
-    overall_->current_attempt_state(s);
-  }
+  void state(attempt_state s);
 
-  [[nodiscard]] auto atr_id() const -> const std::string&
-  {
-    return overall_->atr_id();
-  }
+  [[nodiscard]] auto atr_id() const -> const std::string&;
 
-  void atr_id(const std::string& atr_id)
-  {
-    overall_->atr_id(atr_id);
-  }
+  void atr_id(const std::string& atr_id);
 
-  [[nodiscard]] auto atr_collection() const -> const std::string&
-  {
-    return overall_->atr_collection();
-  }
+  [[nodiscard]] auto atr_collection() const -> const std::string&;
 
-  void atr_collection_name(const std::string& coll)
-  {
-    overall_->atr_collection(coll);
-  }
+  void atr_collection_name(const std::string& coll);
 
   auto has_expired_client_side(std::string place, std::optional<const std::string> doc_id) -> bool;
 

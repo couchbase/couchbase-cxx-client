@@ -18,6 +18,7 @@
 #pragma once
 
 #include "core/pending_operation.hxx"
+#include "error.hxx"
 #include "query_options.hxx"
 
 #include <memory>
@@ -45,8 +46,8 @@ public:
                   http_component http,
                   std::shared_ptr<retry_strategy> default_retry_strategy);
 
-  auto execute_query(query_options options, query_callback&& callback)
-    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+  auto execute_query(const query_options& options, query_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, error>;
 
 private:
   std::shared_ptr<query_component_impl> impl_;

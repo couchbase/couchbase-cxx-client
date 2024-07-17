@@ -132,7 +132,7 @@ public:
 
   void reset()
   {
-    std::scoped_lock lock(mutex_);
+    const std::scoped_lock lock(mutex_);
     replicated_ = 0;
     persisted_ = 0;
     persisted_on_active_ = false;
@@ -140,9 +140,9 @@ public:
 
   void examine(const observe_seqno_response& response)
   {
-    std::scoped_lock lock(mutex_);
-    bool replicated = response.current_sequence_number >= token_.sequence_number();
-    bool persisted = response.last_persisted_sequence_number >= token_.sequence_number();
+    const std::scoped_lock lock(mutex_);
+    const bool replicated = response.current_sequence_number >= token_.sequence_number();
+    const bool persisted = response.last_persisted_sequence_number >= token_.sequence_number();
 
     replicated_ += (replicated && !response.active) ? 1 : 0;
     persisted_ += persisted ? 1 : 0;
@@ -168,7 +168,7 @@ private:
 
 class observe_context;
 void
-observe_poll(cluster core, std::shared_ptr<observe_context> ctx);
+observe_poll(const cluster& core, std::shared_ptr<observe_context> ctx);
 
 class observe_context : public std::enable_shared_from_this<observe_context>
 {
@@ -251,7 +251,7 @@ public:
     poll_deadline_.cancel();
     observe_handler handler{};
     {
-      std::scoped_lock lock(handler_mutex_);
+      const std::scoped_lock lock(handler_mutex_);
       std::swap(handler_, handler);
     }
     if (handler) {
@@ -263,7 +263,7 @@ public:
   {
     observe_handler handler{};
     {
-      std::scoped_lock lock(handler_mutex_);
+      const std::scoped_lock lock(handler_mutex_);
       if (!handler_) {
         return;
       }
@@ -286,7 +286,7 @@ public:
     on_last_response_ = std::move(handler);
   }
 
-  void execute(cluster core)
+  void execute(const cluster& core)
   {
     auto requests = std::move(requests_);
     status_.reset();
@@ -294,7 +294,7 @@ public:
       if (ec == asio::error::operation_aborted) {
         return;
       }
-      observe_poll(std::move(core), std::move(ctx));
+      observe_poll(core, std::move(ctx));
     });
     for (auto&& request : requests) {
       core.execute(std::move(request),
@@ -322,7 +322,7 @@ private:
 };
 
 void
-observe_poll(cluster core, std::shared_ptr<observe_context> ctx)
+observe_poll(const cluster& core, std::shared_ptr<observe_context> ctx)
 {
   const std::string bucket_name = ctx->bucket_name();
   core.with_bucket_configuration(
@@ -358,7 +358,7 @@ observe_poll(cluster core, std::shared_ptr<observe_context> ctx)
 } // namespace
 
 void
-initiate_observe_poll(cluster core,
+initiate_observe_poll(const cluster& core,
                       document_id id,
                       mutation_token token,
                       std::optional<std::chrono::milliseconds> timeout,
@@ -374,6 +374,6 @@ initiate_observe_poll(cluster core,
                                                replicate_to,
                                                std::move(handler));
   ctx->start();
-  return observe_poll(std::move(core), std::move(ctx));
+  return observe_poll(core, std::move(ctx));
 }
 } // namespace couchbase::core::impl

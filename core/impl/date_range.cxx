@@ -18,6 +18,13 @@
 #include <couchbase/date_range.hxx>
 
 #include <fmt/chrono.h>
+#include <fmt/format.h>
+
+#include <chrono>
+#include <ctime>
+#include <optional>
+#include <string>
+#include <utility>
 
 namespace couchbase
 {

@@ -15,9 +15,17 @@
  *   limitations under the License.
  */
 
+#include <couchbase/date_range_facet_result.hxx>
+
 #include "internal_date_range_facet_result.hxx"
 
-#include <couchbase/date_range_facet_result.hxx>
+#include <couchbase/search_date_range.hxx>
+
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace couchbase
 {

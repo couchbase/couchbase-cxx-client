@@ -21,20 +21,23 @@
 #include "core/utils/json.hxx"
 #include "error_utils.hxx"
 
+#include <tao/json/value.hpp>
+
 namespace couchbase::core::operations::management
 {
-std::error_code
+auto
 eventing_get_all_functions_request::encode_to(encoded_request_type& encoded,
-                                              http_context& /* context */) const
+                                              http_context& /* context */) const -> std::error_code
 {
   encoded.method = "GET";
   encoded.path = "/api/v1/functions";
   return {};
 }
 
-eventing_get_all_functions_response
+auto
 eventing_get_all_functions_request::make_response(error_context::http&& ctx,
                                                   const encoded_response_type& encoded) const
+  -> eventing_get_all_functions_response
 {
   eventing_get_all_functions_response response{ std::move(ctx) };
   if (!response.ctx.ec) {

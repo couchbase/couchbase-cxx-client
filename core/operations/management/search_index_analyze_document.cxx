@@ -21,12 +21,14 @@
 #include "error_utils.hxx"
 
 #include <fmt/core.h>
+#include <tao/json/value.hpp>
 
 namespace couchbase::core::operations::management
 {
-std::error_code
+auto
 search_index_analyze_document_request::encode_to(encoded_request_type& encoded,
                                                  http_context& /* context */) const
+  -> std::error_code
 {
   if (index_name.empty()) {
     return errc::common::invalid_argument;
@@ -46,9 +48,10 @@ search_index_analyze_document_request::encode_to(encoded_request_type& encoded,
   return {};
 }
 
-search_index_analyze_document_response
+auto
 search_index_analyze_document_request::make_response(error_context::http&& ctx,
                                                      const encoded_response_type& encoded) const
+  -> search_index_analyze_document_response
 {
   search_index_analyze_document_response response{ std::move(ctx) };
   if (!response.ctx.ec) {

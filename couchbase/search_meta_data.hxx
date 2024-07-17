@@ -46,6 +46,9 @@ public:
    * @volatile
    */
   explicit search_meta_data(internal_search_meta_data internal);
+  search_meta_data(search_meta_data&& other) noexcept;
+  ~search_meta_data();
+  auto operator=(search_meta_data&& other) noexcept -> search_meta_data&;
 
   /**
    * Returns the client context identifier string set on the search request.

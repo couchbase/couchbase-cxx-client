@@ -22,12 +22,14 @@
 #include "core/utils/keyspace.hxx"
 #include "error_utils.hxx"
 
+#include <tao/json/value.hpp>
+
 namespace couchbase::core::operations::management
 {
 
 template<typename Range>
-std::string
-quote_and_join_strings(const Range& values, const std::string& sep)
+auto
+quote_and_join_strings(const Range& values, const std::string& sep) -> std::string
 {
   std::stringstream stream;
   auto sentinel = std::end(values);
@@ -42,9 +44,9 @@ quote_and_join_strings(const Range& values, const std::string& sep)
   return stream.str();
 }
 
-std::error_code
+auto
 query_index_build_request::encode_to(encoded_request_type& encoded,
-                                     http_context& /* context */) const
+                                     http_context& /* context */) const -> std::error_code
 {
   if (!utils::check_query_management_request(*this)) {
     return errc::common::invalid_argument;
@@ -64,9 +66,10 @@ query_index_build_request::encode_to(encoded_request_type& encoded,
   return {};
 }
 
-query_index_build_response
+auto
 query_index_build_request::make_response(error_context::http&& ctx,
                                          const encoded_response_type& encoded) const
+  -> query_index_build_response
 {
   query_index_build_response response{ std::move(ctx) };
   if (!response.ctx.ec) {

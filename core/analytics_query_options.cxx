@@ -15,6 +15,12 @@
 
 #include "analytics_query_options.hxx"
 
+#include <cstddef>
+#include <memory>
+#include <optional>
+#include <system_error>
+#include <vector>
+
 namespace couchbase::core
 {
 class analytics_query_row_reader_impl

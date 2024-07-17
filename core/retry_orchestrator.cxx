@@ -26,7 +26,7 @@
 namespace couchbase::core
 {
 auto
-retry_orchestrator::should_retry(std::shared_ptr<mcbp::queue_request> request,
+retry_orchestrator::should_retry(const std::shared_ptr<mcbp::queue_request>& request,
                                  retry_reason reason) -> retry_action
 {
   if (always_retry(reason)) {

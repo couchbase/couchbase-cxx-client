@@ -191,7 +191,7 @@ private:
       return;
     }
 
-    bool fatal;
+    bool fatal = false;
     if (ec == errc::key_value::document_not_found || ec == errc::common::authentication_failure ||
         ec == errc::common::collection_not_found || ec == errc::common::request_canceled) {
       // Errors that are fatal unless this is a sampling scan
@@ -440,7 +440,7 @@ public:
     }
   }
 
-  bool is_cancelled() override
+  auto is_cancelled() -> bool override
   {
     return cancelled_;
   }

@@ -18,6 +18,7 @@
 #include <couchbase/error_codes.hxx>
 
 #include <string>
+#include <system_error>
 
 namespace couchbase::core::impl
 {

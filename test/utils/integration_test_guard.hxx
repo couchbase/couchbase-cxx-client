@@ -23,7 +23,6 @@
 #include "core/management/bucket_settings.hxx"
 #include "core/operations/management/bucket_describe.hxx"
 #include "core/operations/management/cluster_describe.hxx"
-#include "core/transactions.hxx"
 
 #include <couchbase/cluster.hxx>
 
@@ -117,30 +116,9 @@ public:
   auto number_of_query_nodes() -> std::size_t;
 
   [[nodiscard]] auto transactions() const
-    -> std::shared_ptr<couchbase::core::transactions::transactions>
-  {
-    couchbase::transactions::transactions_config cfg{};
-    cfg.timeout(std::chrono::seconds(2));
-    auto [ec, txns] = couchbase::core::transactions::transactions::create(cluster, cfg).get();
-    if (ec) {
-      CB_LOG_CRITICAL("unable to initialize transactions: {}", ec.message());
-      throw std::runtime_error(fmt::format("unable to initialize transactions: {}", ec.message()));
-    }
-    return txns;
-  }
+    -> std::shared_ptr<couchbase::core::transactions::transactions>;
 
-  [[nodiscard]] auto public_cluster() const -> couchbase::cluster
-  {
-    auto options = ctx.build_options();
-    options.transactions().timeout(std::chrono::seconds(2));
-    auto [err, c] = couchbase::cluster::connect(ctx.connection_string, options).get();
-    if (err.ec()) {
-      CB_LOG_CRITICAL("unable to connect to cluster (public API): {}", err.message());
-      throw std::runtime_error(
-        fmt::format("unable to connect to cluster (public API): {}", err.message()));
-    }
-    return c;
-  }
+  [[nodiscard]] auto public_cluster() const -> couchbase::cluster;
 
   auto cluster_version() -> server_version;
 

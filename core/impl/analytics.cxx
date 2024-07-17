@@ -17,20 +17,29 @@
 
 #include "analytics.hxx"
 
-#include "core/cluster.hxx"
+#include "core/analytics_scan_consistency.hxx"
 #include "core/operations/document_analytics.hxx"
 #include "core/utils/binary.hxx"
 
-#include <couchbase/cluster.hxx>
-#include <couchbase/error_codes.hxx>
-#include <couchbase/scope.hxx>
+#include <couchbase/analytics_metrics.hxx>
+#include <couchbase/analytics_options.hxx>
+#include <couchbase/analytics_result.hxx>
+#include <couchbase/analytics_scan_consistency.hxx>
+#include <couchbase/analytics_status.hxx>
+#include <couchbase/analytics_warning.hxx>
+#include <couchbase/codec/encoded_value.hxx>
+
+#include <cstddef>
+#include <optional>
+#include <utility>
+#include <vector>
 
 namespace couchbase::core::impl
 {
 namespace
 {
 
-static auto
+auto
 map_status(core::operations::analytics_response::analytics_status status) -> analytics_status
 {
   switch (status) {
@@ -58,7 +67,7 @@ map_status(core::operations::analytics_response::analytics_status status) -> ana
   return analytics_status::unknown;
 }
 
-static auto
+auto
 map_scan_consistency(std::optional<couchbase::analytics_scan_consistency> consistency)
   -> std::optional<couchbase::core::analytics_scan_consistency>
 {
@@ -73,7 +82,7 @@ map_scan_consistency(std::optional<couchbase::analytics_scan_consistency> consis
   return {};
 }
 
-static auto
+auto
 map_rows(const core::operations::analytics_response& resp) -> std::vector<codec::binary>
 {
   std::vector<codec::binary> rows;
@@ -84,7 +93,7 @@ map_rows(const core::operations::analytics_response& resp) -> std::vector<codec:
   return rows;
 }
 
-static auto
+auto
 map_warnings(core::operations::analytics_response& resp) -> std::vector<analytics_warning>
 {
   if (resp.meta.warnings.empty()) {
@@ -98,7 +107,7 @@ map_warnings(core::operations::analytics_response& resp) -> std::vector<analytic
   return warnings;
 }
 
-static auto
+auto
 map_metrics(const core::operations::analytics_response& resp) -> analytics_metrics
 {
   return analytics_metrics{
@@ -109,7 +118,7 @@ map_metrics(const core::operations::analytics_response& resp) -> analytics_metri
   };
 }
 
-static auto
+auto
 map_signature(core::operations::analytics_response& resp) -> std::optional<std::vector<std::byte>>
 {
   if (!resp.meta.signature) {

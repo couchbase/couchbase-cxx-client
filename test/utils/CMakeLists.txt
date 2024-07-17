@@ -19,6 +19,7 @@ target_link_libraries(
           fmt::fmt
           spdlog::spdlog)
 target_include_directories(test_utils PRIVATE ${PROJECT_SOURCE_DIR})
+target_include_directories(test_utils PRIVATE ${PROJECT_BINARY_DIR}/generated)
 if(TARGET PkgConfig::PKG_CONFIG_OPENSSL)
   target_link_libraries(test_utils PUBLIC PkgConfig::PKG_CONFIG_OPENSSL)
 else()

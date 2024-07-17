@@ -155,10 +155,11 @@ integration_test_guard::load_cluster_info(bool refresh)
     return cluster_info.value();
   }
 
-  auto resp = execute(cluster, couchbase::core::operations::management::cluster_describe_request{});
+  auto req = couchbase::core::operations::management::cluster_describe_request{};
+  auto resp = execute(cluster, req);
   if (resp.ctx.ec == couchbase::errc::common::service_not_available) {
     open_bucket(cluster, ctx.bucket);
-    resp = execute(cluster, couchbase::core::operations::management::cluster_describe_request{});
+    resp = execute(cluster, req);
   }
   if (resp.ctx.ec) {
     CB_LOG_CRITICAL("unable to load info for cluster: {}", resp.ctx.ec.message());
@@ -298,4 +299,30 @@ integration_test_guard::generate_key_not_in_server_group(const std::string& grou
   }
 }
 
+auto
+integration_test_guard::transactions() const
+  -> std::shared_ptr<couchbase::core::transactions::transactions>
+{
+  couchbase::transactions::transactions_config cfg{};
+  cfg.timeout(std::chrono::seconds(2));
+  auto [ec, txns] = couchbase::core::transactions::transactions::create(cluster, cfg).get();
+  if (ec) {
+    CB_LOG_CRITICAL("unable to initialize transactions: {}", ec.message());
+    throw std::runtime_error(fmt::format("unable to initialize transactions: {}", ec.message()));
+  }
+  return txns;
+}
+auto
+integration_test_guard::public_cluster() const -> couchbase::cluster
+{
+  auto options = ctx.build_options();
+  options.transactions().timeout(std::chrono::seconds(2));
+  auto [err, c] = couchbase::cluster::connect(ctx.connection_string, options).get();
+  if (err.ec()) {
+    CB_LOG_CRITICAL("unable to connect to cluster (public API): {}", err.message());
+    throw std::runtime_error(
+      fmt::format("unable to connect to cluster (public API): {}", err.message()));
+  }
+  return c;
+}
 } // namespace test::utils

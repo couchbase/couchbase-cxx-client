@@ -15,7 +15,9 @@
 
 #include "core_sdk_shim.hxx"
 
-#include <fmt/core.h>
+#include <fmt/format.h>
+
+#include <string>
 
 namespace couchbase::core
 {

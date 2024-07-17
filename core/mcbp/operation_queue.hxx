@@ -36,16 +36,16 @@ public:
 
   [[nodiscard]] auto push(std::shared_ptr<queue_request> request,
                           std::size_t max_items) -> std::error_code;
-  auto remove(std::shared_ptr<queue_request> request) -> bool;
-  void drain(drain_callback callback);
+  auto remove(const std::shared_ptr<queue_request>& request) -> bool;
+  void drain(const drain_callback& callback);
 
   [[nodiscard]] auto consumer() -> std::shared_ptr<operation_consumer>;
   void close();
   [[nodiscard]] auto debug_string() const -> std::string;
 
 private:
-  void close_consumer(std::shared_ptr<operation_consumer> consumer);
-  auto pop(std::shared_ptr<operation_consumer> consumer) -> std::shared_ptr<queue_request>;
+  void close_consumer(const std::shared_ptr<operation_consumer>& consumer);
+  auto pop(const std::shared_ptr<operation_consumer>& consumer) -> std::shared_ptr<queue_request>;
   auto items_to_drain() -> std::list<std::shared_ptr<queue_request>>;
 
   std::list<std::shared_ptr<queue_request>> items_{};

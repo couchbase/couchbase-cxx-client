@@ -21,12 +21,13 @@
 #include "core/utils/name_codec.hxx"
 #include "error_utils.hxx"
 
-namespace couchbase::core::operations::management
+#include <tao/json/value.hpp>
+
+namespace couchbase::core::operations::management::details
 {
-namespace details
-{
-analytics_link_replace_response
+auto
 make_analytics_link_replace_response(error_context::http&& ctx, const io::http_response& encoded)
+  -> analytics_link_replace_response
 {
   management::analytics_link_replace_response response{ std::move(ctx) };
   if (!response.ctx.ec) {
@@ -52,7 +53,7 @@ make_analytics_link_replace_response(error_context::http&& ctx, const io::http_r
       if (response.status != "success") {
         if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
           for (const auto& error : errors->get_array()) {
-            management::analytics_link_replace_response::problem err{
+            const management::analytics_link_replace_response::problem err{
               error.at("code").as<std::uint32_t>(),
               error.at("msg").get_string(),
             };
@@ -71,6 +72,8 @@ make_analytics_link_replace_response(error_context::http&& ctx, const io::http_r
         case 24034: /* Cannot find dataverse with name [string] */
           dataverse_does_not_exist = true;
           break;
+        default:
+          break;
       }
     }
     if (dataverse_does_not_exist) {
@@ -83,5 +86,4 @@ make_analytics_link_replace_response(error_context::http&& ctx, const io::http_r
   }
   return response;
 }
-} // namespace details
-} // namespace couchbase::core::operations::management
+} // namespace couchbase::core::operations::management::details

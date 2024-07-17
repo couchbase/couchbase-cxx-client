@@ -15,9 +15,11 @@
  *   limitations under the License.
  */
 
+#include <couchbase/boolean_field_query.hxx>
+
 #include "encoded_search_query.hxx"
 
-#include <couchbase/boolean_field_query.hxx>
+#include <tao/json/type.hpp>
 
 namespace couchbase
 {

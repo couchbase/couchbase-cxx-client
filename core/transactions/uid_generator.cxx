@@ -18,10 +18,12 @@
 
 #include "uid_generator.hxx"
 
-// TODO: Remove this, and just use client directly
+// TODO(SA): Remove this, and just use client directly
 
 auto
 couchbase::core::transactions::uid_generator::next() -> std::string
 {
+  // TODO(CXXCBC-549)
+  // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.rand)
   return core::uuid::to_string(core::uuid::random());
 }

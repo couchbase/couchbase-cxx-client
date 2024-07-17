@@ -25,12 +25,13 @@
 #include "error_utils.hxx"
 
 #include <fmt/core.h>
+#include <tao/json/value.hpp>
 
 namespace couchbase::core::operations::management
 {
-std::error_code
+auto
 analytics_link_get_all_request::encode_to(encoded_request_type& encoded,
-                                          http_context& /* context */) const
+                                          http_context& /* context */) const -> std::error_code
 {
   std::map<std::string, std::string> values{};
 
@@ -63,9 +64,10 @@ analytics_link_get_all_request::encode_to(encoded_request_type& encoded,
   return {};
 }
 
-analytics_link_get_all_response
+auto
 analytics_link_get_all_request::make_response(error_context::http&& ctx,
                                               const encoded_response_type& encoded) const
+  -> analytics_link_get_all_response
 {
   analytics_link_get_all_response response{ std::move(ctx) };
   if (!response.ctx.ec) {
@@ -90,7 +92,7 @@ analytics_link_get_all_request::make_response(error_context::http&& ctx,
       if (response.status != "success") {
         if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
           for (const auto& error : errors->get_array()) {
-            analytics_link_get_all_response::problem err{
+            const analytics_link_get_all_response::problem err{
               error.at("code").as<std::uint32_t>(),
               error.at("msg").get_string(),
             };
@@ -121,6 +123,8 @@ analytics_link_get_all_request::make_response(error_context::http&& ctx,
           break;
         case 24034: /* Cannot find dataverse with name [string] */
           dataverse_does_not_exist = true;
+          break;
+        default:
           break;
       }
     }

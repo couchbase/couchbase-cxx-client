@@ -16,6 +16,12 @@
 #include "dispatcher.hxx"
 
 #include "cluster.hxx"
+#include "core/core_sdk_shim.hxx"
+
+#include <memory>
+#include <string>
+#include <system_error>
+#include <utility>
 
 namespace couchbase::core
 {
@@ -24,11 +30,13 @@ dispatcher::dispatcher(std::string bucket_name, core_sdk_shim shim)
   , shim_{ std::move(shim) }
 {
 }
+
 auto
 dispatcher::direct_dispatch(std::shared_ptr<mcbp::queue_request> req) const -> std::error_code
 {
   return shim_.cluster.direct_dispatch(bucket_name_, std::move(req));
 }
+
 auto
 dispatcher::direct_re_queue(std::shared_ptr<mcbp::queue_request> req,
                             bool is_retry) const -> std::error_code

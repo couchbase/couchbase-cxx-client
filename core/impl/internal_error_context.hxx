@@ -46,7 +46,8 @@ struct internal_error_context {
   internal_error_context(tao::json::value internal, tao::json::value internal_metadata);
 
   [[nodiscard]] static auto build_error_context(
-    tao::json::value internal = tao::json::empty_object,
-    tao::json::value internal_metadata = tao::json::empty_object) -> couchbase::error_context;
+    const tao::json::value& internal = tao::json::empty_object,
+    const tao::json::value& internal_metadata = tao::json::empty_object)
+    -> couchbase::error_context;
 };
 } // namespace couchbase

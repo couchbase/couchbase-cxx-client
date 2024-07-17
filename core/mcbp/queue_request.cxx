@@ -38,7 +38,7 @@ queue_request::queue_request(protocol::magic magic,
 auto
 queue_request::retry_attempts() const -> std::size_t
 {
-  std::scoped_lock lock(retry_mutex_);
+  const std::scoped_lock lock(retry_mutex_);
   return retry_count_;
 }
 
@@ -57,14 +57,14 @@ queue_request::idempotent() const -> bool
 auto
 queue_request::retry_reasons() const -> std::set<retry_reason>
 {
-  std::scoped_lock lock(retry_mutex_);
+  const std::scoped_lock lock(retry_mutex_);
   return retry_reasons_;
 }
 
 void
 queue_request::record_retry_attempt(retry_reason reason)
 {
-  std::scoped_lock lock(retry_mutex_);
+  const std::scoped_lock lock(retry_mutex_);
   ++retry_count_;
   retry_reasons_.insert(reason);
 }
@@ -72,14 +72,14 @@ queue_request::record_retry_attempt(retry_reason reason)
 auto
 queue_request::retries() const -> std::pair<std::size_t, std::set<retry_reason>>
 {
-  std::scoped_lock lock(retry_mutex_);
+  const std::scoped_lock lock(retry_mutex_);
   return { retry_count_, retry_reasons_ };
 }
 
 auto
 queue_request::connection_info() const -> queue_request_connection_info
 {
-  std::scoped_lock lock(connection_info_mutex_);
+  const std::scoped_lock lock(connection_info_mutex_);
   return connection_info_;
 }
 
@@ -89,18 +89,21 @@ queue_request::is_cancelled() const -> bool
   return is_completed_.load();
 }
 
-static inline void
+namespace
+{
+inline void
 cancel_timer(std::shared_ptr<asio::steady_timer> timer)
 {
   if (auto t = std::move(timer); t) {
     t->cancel();
   }
 }
+} // namespace
 
 auto
 queue_request::internal_cancel() -> bool
 {
-  std::scoped_lock lock(processing_mutex_);
+  const std::scoped_lock lock(processing_mutex_);
 
   if (bool expected_state{ false }; !is_completed_.compare_exchange_strong(expected_state, true)) {
     // someone already completed this request

@@ -58,7 +58,7 @@ public:
    * @since 1.0.0
    * @committed
    */
-  void get_all_indexes(std::string bucket_name,
+  void get_all_indexes(const std::string& bucket_name,
                        const get_all_query_indexes_options& options,
                        get_all_query_indexes_handler&& handler) const;
 
@@ -72,7 +72,7 @@ public:
    * @since 1.0.0
    * @committed
    */
-  [[nodiscard]] auto get_all_indexes(std::string bucket_name,
+  [[nodiscard]] auto get_all_indexes(const std::string& bucket_name,
                                      const get_all_query_indexes_options& options) const
     -> std::future<std::pair<error, std::vector<management::query_index>>>;
 
@@ -88,7 +88,7 @@ public:
    * @since 1.0.0
    * @committed
    */
-  void create_index(std::string bucket_name,
+  void create_index(const std::string& bucket_name,
                     std::string index_name,
                     std::vector<std::string> keys,
                     const create_query_index_options& options,
@@ -106,7 +106,7 @@ public:
    * @since 1.0.0
    * @committed
    */
-  [[nodiscard]] auto create_index(std::string bucket_name,
+  [[nodiscard]] auto create_index(const std::string& bucket_name,
                                   std::string index_name,
                                   std::vector<std::string> keys,
                                   const create_query_index_options& options) const
@@ -122,7 +122,7 @@ public:
    * @since 1.0.0
    * @committed
    */
-  void create_primary_index(std::string bucket_name,
+  void create_primary_index(const std::string& bucket_name,
                             const create_primary_query_index_options& options,
                             create_primary_query_index_handler&& handler) const;
 
@@ -136,7 +136,7 @@ public:
    * @since 1.0.0
    * @committed
    */
-  [[nodiscard]] auto create_primary_index(std::string bucket_name,
+  [[nodiscard]] auto create_primary_index(const std::string& bucket_name,
                                           const create_primary_query_index_options& options) const
     -> std::future<error>;
 
@@ -150,7 +150,7 @@ public:
    * @since 1.0.0
    * @committed
    */
-  void drop_primary_index(std::string bucket_name,
+  void drop_primary_index(const std::string& bucket_name,
                           const drop_primary_query_index_options& options,
                           drop_primary_query_index_handler&& handler) const;
 
@@ -164,7 +164,7 @@ public:
    * @since 1.0.0
    * @committed
    */
-  [[nodiscard]] auto drop_primary_index(std::string bucket_name,
+  [[nodiscard]] auto drop_primary_index(const std::string& bucket_name,
                                         const drop_primary_query_index_options& options) const
     -> std::future<error>;
 
@@ -179,7 +179,7 @@ public:
    * @since 1.0.0
    * @committed
    */
-  void drop_index(std::string bucket_name,
+  void drop_index(const std::string& bucket_name,
                   std::string index_name,
                   const drop_query_index_options& options,
                   drop_query_index_handler&& handler) const;
@@ -195,7 +195,7 @@ public:
    * @since 1.0.0
    * @committed
    */
-  [[nodiscard]] auto drop_index(std::string bucket_name,
+  [[nodiscard]] auto drop_index(const std::string& bucket_name,
                                 std::string index_name,
                                 const drop_query_index_options& options) const
     -> std::future<error>;
@@ -212,7 +212,7 @@ public:
    * @since 1.0.0
    * @committed
    */
-  void build_deferred_indexes(std::string bucket_name,
+  void build_deferred_indexes(const std::string& bucket_name,
                               const build_query_index_options& options,
                               build_deferred_query_indexes_handler&& handler) const;
 
@@ -228,7 +228,7 @@ public:
    * @since 1.0.0
    * @committed
    */
-  [[nodiscard]] auto build_deferred_indexes(std::string bucket_name,
+  [[nodiscard]] auto build_deferred_indexes(const std::string& bucket_name,
                                             const build_query_index_options& options) const
     -> std::future<error>;
 
@@ -243,7 +243,7 @@ public:
    * @since 1.0.0
    * @committed
    */
-  void watch_indexes(std::string bucket_name,
+  void watch_indexes(const std::string& bucket_name,
                      std::vector<std::string> index_names,
                      const watch_query_indexes_options& options,
                      watch_query_indexes_handler&& handler) const;
@@ -259,7 +259,7 @@ public:
    * @since 1.0.0
    * @committed
    */
-  [[nodiscard]] auto watch_indexes(std::string bucket_name,
+  [[nodiscard]] auto watch_indexes(const std::string& bucket_name,
                                    std::vector<std::string> index_names,
                                    const watch_query_indexes_options& options) const
     -> std::future<error>;

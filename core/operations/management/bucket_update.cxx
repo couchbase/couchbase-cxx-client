@@ -24,10 +24,13 @@
 
 #include <couchbase/durability_level.hxx>
 
+#include <tao/json/value.hpp>
+
 namespace couchbase::core::operations::management
 {
-std::error_code
-bucket_update_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+auto
+bucket_update_request::encode_to(encoded_request_type& encoded,
+                                 http_context& /* context */) const -> std::error_code
 {
   encoded.method = "POST";
   encoded.path = fmt::format("/pools/default/buckets/{}", bucket.name);
@@ -113,9 +116,10 @@ bucket_update_request::encode_to(encoded_request_type& encoded, http_context& /*
   return {};
 }
 
-bucket_update_response
+auto
 bucket_update_request::make_response(error_context::http&& ctx,
                                      const encoded_response_type& encoded) const
+  -> bucket_update_response
 {
   bucket_update_response response{ std::move(ctx) };
   if (!response.ctx.ec) {

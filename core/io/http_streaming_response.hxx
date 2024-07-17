@@ -40,7 +40,8 @@ public:
   http_streaming_response_body() = default;
   http_streaming_response_body(asio::io_context& io,
                                std::shared_ptr<http_session> session,
-                               std::string cached_data = {});
+                               std::string cached_data = {},
+                               bool reading_complete = false);
 
   void set_deadline(std::chrono::time_point<std::chrono::steady_clock> deadline_tp);
   void next(utils::movable_function<void(std::string, std::error_code)>&& callback);

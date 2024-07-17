@@ -18,9 +18,19 @@
 #include "bucket.hxx"
 
 #include "collection_id_cache_entry.hxx"
-#include "core/mcbp/big_endian.hxx"
+#include "core/config_listener.hxx"
+#include "core/document_id.hxx"
+#include "core/error_context/key_value_error_map_info.hxx"
+#include "core/error_context/key_value_status_code.hxx"
+#include "core/io/mcbp_message.hxx"
+#include "core/logger/logger.hxx"
 #include "core/mcbp/codec.hxx"
-#include "couchbase/bucket.hxx"
+#include "core/protocol/client_opcode.hxx"
+#include "core/protocol/client_request.hxx"
+#include "core/protocol/hello_feature.hxx"
+#include "core/response_handler.hxx"
+#include "core/service_type.hxx"
+#include "core/utils/movable_function.hxx"
 #include "dispatcher.hxx"
 #include "impl/bootstrap_state_listener.hxx"
 #include "mcbp/operation_queue.hxx"
@@ -31,14 +41,35 @@
 #include "protocol/cmd_get_cluster_config.hxx"
 #include "retry_orchestrator.hxx"
 
+#include <couchbase/error_codes.hxx>
 #include <couchbase/metrics/meter.hxx>
+#include <couchbase/retry_reason.hxx>
+#include <couchbase/retry_strategy.hxx>
 #include <couchbase/tracing/request_tracer.hxx>
 
-#include <fmt/chrono.h>
+#include <asio/bind_executor.hpp>
+#include <asio/error.hpp>
+#include <asio/io_context.hpp>
+#include <asio/post.hpp>
+#include <asio/ssl/context.hpp>
+#include <fmt/format.h>
+#include <gsl/span>
 
+#include <algorithm>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+
+#include <iterator>
+#include <map>
+#include <memory>
 #include <mutex>
+#include <optional>
 #include <queue>
-#include <spdlog/fmt/bin_to_hex.h>
+#include <string>
+#include <system_error>
+#include <utility>
+#include <vector>
 
 namespace couchbase::core
 {
@@ -76,15 +107,15 @@ public:
   {
   }
 
-  auto resolve_response(std::shared_ptr<mcbp::queue_request> req,
-                        std::shared_ptr<mcbp::queue_response> resp,
+  auto resolve_response(const std::shared_ptr<mcbp::queue_request>& req,
+                        const std::shared_ptr<mcbp::queue_response>& resp,
                         std::error_code ec,
                         retry_reason reason,
                         std::optional<key_value_error_map_info> error_info)
   {
-    // TODO: copy from mcbp_command, subject to refactor later
-    static std::string meter_name = "db.couchbase.operations";
-    static std::map<std::string, std::string> tags = {
+    // TODO(SA): copy from mcbp_command, subject to refactor later
+    static const std::string meter_name = "db.couchbase.operations";
+    static const std::map<std::string, std::string> tags = {
       { "db.couchbase.service", "kv" },
       { "db.operation", fmt::format("{}", req->command_) },
     };
@@ -94,7 +125,7 @@ public:
                        .count());
 
     if (ec == asio::error::operation_aborted) {
-      // TODO: fix tracing
+      // TODO(SA): fix tracing
       //  self->span_->add_tag(tracing::attributes::orphan, "aborted");
       return req->try_callback(resp,
                                req->idempotent() ? errc::common::unambiguous_timeout
@@ -102,13 +133,12 @@ public:
     }
     if (ec == errc::common::request_canceled) {
       if (!req->idempotent() && !allows_non_idempotent_retry(reason)) {
-        // TODO: fix tracing
+        // TODO(SA): fix tracing
         // self->span_->add_tag(tracing::attributes::orphan, "canceled");
         return req->try_callback(resp, ec);
       }
-      backoff_and_retry(std::move(req),
-                        reason == retry_reason::do_not_retry ? retry_reason::node_not_available
-                                                             : reason);
+      backoff_and_retry(
+        req, reason == retry_reason::do_not_retry ? retry_reason::node_not_available : reason);
       return;
     }
     key_value_status_code status{ key_value_status_code::unknown };
@@ -165,7 +195,7 @@ public:
     } else {
       resp = std::make_shared<mcbp::queue_response>(std::move(packet));
     }
-    resolve_response(std::move(req), std::move(resp), error, reason, std::move(error_info));
+    resolve_response(req, resp, error, reason, std::move(error_info));
   }
 
   auto direct_dispatch(std::shared_ptr<mcbp::queue_request> req) -> std::error_code
@@ -199,7 +229,8 @@ public:
     return {};
   }
 
-  auto direct_re_queue(std::shared_ptr<mcbp::queue_request> req, bool is_retry) -> std::error_code
+  auto direct_re_queue(const std::shared_ptr<mcbp::queue_request>& req,
+                       bool is_retry) -> std::error_code
   {
     auto handle_error = [is_retry, req](std::error_code ec) {
       // We only want to log an error on retries if the error isn't cancelled.
@@ -254,7 +285,8 @@ public:
     return {};
   }
 
-  auto backoff_and_retry(std::shared_ptr<mcbp::queue_request> request, retry_reason reason) -> bool
+  auto backoff_and_retry(const std::shared_ptr<mcbp::queue_request>& request,
+                         retry_reason reason) -> bool
   {
     auto action = retry_orchestrator::should_retry(request, reason);
     auto retried = action.need_to_retry();
@@ -272,7 +304,8 @@ public:
     return retried;
   }
 
-  auto route_request(std::shared_ptr<mcbp::queue_request> req) -> std::optional<io::mcbp_session>
+  auto route_request(const std::shared_ptr<mcbp::queue_request>& req)
+    -> std::optional<io::mcbp_session>
   {
     if (req->key_.empty()) {
       if (auto server = server_by_vbucket(req->vbucket_, req->replica_index_); server) {
@@ -288,20 +321,26 @@ public:
   [[nodiscard]] auto server_by_vbucket(std::uint16_t vbucket,
                                        std::size_t node_index) -> std::optional<std::size_t>
   {
-    std::scoped_lock lock(config_mutex_);
-    return config_->server_by_vbucket(vbucket, node_index);
+    const std::scoped_lock lock(config_mutex_);
+    if (config_) {
+      return config_->server_by_vbucket(vbucket, node_index);
+    }
+    return {};
   }
 
   [[nodiscard]] auto map_id(const document_id& id)
     -> std::pair<std::uint16_t, std::optional<std::size_t>>
   {
-    std::scoped_lock lock(config_mutex_);
-    return config_->map_key(id.key(), id.node_index());
+    const std::scoped_lock lock(config_mutex_);
+    if (config_) {
+      return config_->map_key(id.key(), id.node_index());
+    }
+    return { 0, {} };
   }
 
   auto config_rev() const -> std::string
   {
-    std::scoped_lock lock(config_mutex_);
+    const std::scoped_lock lock(config_mutex_);
     if (config_) {
       return config_->rev_str();
     }
@@ -311,8 +350,11 @@ public:
   [[nodiscard]] auto map_id(const std::vector<std::byte>& key, std::size_t node_index)
     -> std::pair<std::uint16_t, std::optional<std::size_t>>
   {
-    std::scoped_lock lock(config_mutex_);
-    return config_->map_key(key, node_index);
+    const std::scoped_lock lock(config_mutex_);
+    if (config_) {
+      return config_->map_key(key, node_index);
+    }
+    return { 0, {} };
   }
 
   void restart_sessions()
@@ -375,7 +417,8 @@ public:
         ++kv_node_index;
         continue;
       }
-      couchbase::core::origin origin(origin_.credentials(), hostname, port, origin_.options());
+      const couchbase::core::origin origin(
+        origin_.credentials(), hostname, port, origin_.options());
       io::mcbp_session session =
         origin_.options().enable_tls
           ? io::mcbp_session(
@@ -458,7 +501,7 @@ public:
         });
 
         {
-          std::scoped_lock lock(self->sessions_mutex_);
+          const std::scoped_lock lock(self->sessions_mutex_);
           self->sessions_.insert_or_assign(this_index, std::move(new_session));
         }
         self->update_config(cfg);
@@ -481,7 +524,7 @@ public:
     if (configured_) {
       std::optional<topology::configuration> config{};
       {
-        std::scoped_lock config_lock(config_mutex_);
+        const std::scoped_lock config_lock(config_mutex_);
         config = config_;
       }
       if (config) {
@@ -489,7 +532,7 @@ public:
       }
       return handler(errc::network::configuration_not_available, topology::configuration{});
     }
-    std::scoped_lock lock(deferred_commands_mutex_);
+    const std::scoped_lock lock(deferred_commands_mutex_);
     deferred_commands_.emplace([self = shared_from_this(), handler = std::move(handler)]() mutable {
       if (self->closed_ || !self->configured_) {
         return handler(errc::network::configuration_not_available, topology::configuration{});
@@ -497,7 +540,7 @@ public:
 
       std::optional<topology::configuration> config{};
       {
-        std::scoped_lock config_lock(self->config_mutex_);
+        const std::scoped_lock config_lock(self->config_mutex_);
         config = self->config_;
       }
       if (config) {
@@ -511,7 +554,7 @@ public:
   {
     std::queue<utils::movable_function<void()>> commands{};
     {
-      std::scoped_lock lock(deferred_commands_mutex_);
+      const std::scoped_lock lock(deferred_commands_mutex_);
       std::swap(deferred_commands_, commands);
     }
     if (!commands.empty()) {
@@ -531,7 +574,7 @@ public:
     }
     std::optional<io::mcbp_session> session{};
     {
-      std::scoped_lock lock(sessions_mutex_);
+      const std::scoped_lock lock(sessions_mutex_);
       if (sessions_.empty()) {
         CB_LOG_WARNING(R"({} unable to find connected session (sessions_ is empty), retry in {})",
                        log_prefix_,
@@ -539,7 +582,7 @@ public:
         return;
       }
 
-      std::size_t start = heartbeat_next_index_.fetch_add(1);
+      const std::size_t start = heartbeat_next_index_.fetch_add(1);
       std::size_t i = start;
       do {
         auto ptr = sessions_.find(i % sessions_.size());
@@ -596,13 +639,13 @@ public:
     }
 
     {
-      std::scoped_lock lock(config_listeners_mutex_);
+      const std::scoped_lock lock(config_listeners_mutex_);
       config_listeners_.clear();
     }
 
     std::map<size_t, io::mcbp_session> old_sessions;
     {
-      std::scoped_lock lock(sessions_mutex_);
+      const std::scoped_lock lock(sessions_mutex_);
       std::swap(old_sessions, sessions_);
     }
     for (auto& [index, session] : old_sessions) {
@@ -643,12 +686,12 @@ public:
     std::vector<topology::configuration::node> removed{};
     bool sequence_changed = false;
     {
-      std::scoped_lock lock(config_mutex_);
+      const std::scoped_lock lock(config_mutex_);
       // MB-60405 fixes this for 7.6.2, but for earlier versions we need to protect against using a
       // config that has an empty vbucket map.  Ideally we only run into this condition on initial
       // bootstrap and that is handled in the session's update_config(), but just in case, only
       // accept a config w/ a non-empty vbucket map.
-      if (config.vbmap && config.vbmap->size() == 0) {
+      if (config.vbmap && config.vbmap->empty()) {
         if (!config_) {
           CB_LOG_WARNING(
             "{} will not initialize configuration rev={} because config has an empty partition map",
@@ -664,7 +707,8 @@ public:
         // this is to make sure we can get a correct config soon
         poll_config(errc::network::configuration_not_available);
         return;
-      } else if (!config_) {
+      }
+      if (!config_) {
         CB_LOG_DEBUG("{} initialize configuration rev={}", log_prefix_, config.rev_str());
       } else if (config.force) {
         CB_LOG_DEBUG("{} forced to accept configuration rev={}", log_prefix_, config.rev_str());
@@ -706,14 +750,14 @@ public:
       configured_ = true;
 
       {
-        std::scoped_lock listeners_lock(config_listeners_mutex_);
+        const std::scoped_lock listeners_lock(config_listeners_mutex_);
         for (const auto& listener : config_listeners_) {
           listener->update_config(*config_);
         }
       }
     }
     if (!added.empty() || !removed.empty() || sequence_changed) {
-      std::scoped_lock lock(sessions_mutex_);
+      const std::scoped_lock lock(sessions_mutex_);
       std::map<size_t, io::mcbp_session> new_sessions{};
 
       std::size_t next_index{ 0 };
@@ -748,7 +792,8 @@ public:
           continue;
         }
 
-        couchbase::core::origin origin(origin_.credentials(), hostname, port, origin_.options());
+        const couchbase::core::origin origin(
+          origin_.credentials(), hostname, port, origin_.options());
         io::mcbp_session session =
           origin_.options().enable_tls
             ? io::mcbp_session(
@@ -806,7 +851,7 @@ public:
   [[nodiscard]] auto find_session_by_index(std::size_t index) const
     -> std::optional<io::mcbp_session>
   {
-    std::scoped_lock lock(sessions_mutex_);
+    const std::scoped_lock lock(sessions_mutex_);
     if (auto ptr = sessions_.find(index); ptr != sessions_.end()) {
       return ptr->second;
     }
@@ -815,7 +860,7 @@ public:
 
   [[nodiscard]] auto next_session_index() -> std::size_t
   {
-    std::scoped_lock lock(sessions_mutex_);
+    const std::scoped_lock lock(sessions_mutex_);
 
     if (auto index = round_robin_next_.fetch_add(1); index < sessions_.size()) {
       return index;
@@ -863,7 +908,7 @@ public:
   {
     std::map<size_t, io::mcbp_session> sessions;
     {
-      std::scoped_lock lock(sessions_mutex_);
+      const std::scoped_lock lock(sessions_mutex_);
       sessions = sessions_;
     }
     for (const auto& [index, session] : sessions) {
@@ -871,12 +916,12 @@ public:
     }
   }
 
-  void ping(std::shared_ptr<diag::ping_collector> collector,
+  void ping(const std::shared_ptr<diag::ping_collector>& collector,
             std::optional<std::chrono::milliseconds> timeout)
   {
     std::map<size_t, io::mcbp_session> sessions;
     {
-      std::scoped_lock lock(sessions_mutex_);
+      const std::scoped_lock lock(sessions_mutex_);
       sessions = sessions_;
     }
     for (const auto& [index, session] : sessions) {
@@ -891,13 +936,13 @@ public:
 
   void on_configuration_update(std::shared_ptr<config_listener> handler)
   {
-    std::scoped_lock lock(config_listeners_mutex_);
+    const std::scoped_lock lock(config_listeners_mutex_);
     config_listeners_.emplace_back(std::move(handler));
   }
 
   auto defer_command(utils::movable_function<void()> command) -> std::error_code
   {
-    std::scoped_lock lock_for_deferred_commands(deferred_commands_mutex_);
+    const std::scoped_lock lock_for_deferred_commands(deferred_commands_mutex_);
     deferred_commands_.emplace(std::move(command));
     return {};
   }
@@ -972,10 +1017,10 @@ bucket::export_diag_info(diag::diagnostics_result& res) const
 }
 
 void
-bucket::ping(std::shared_ptr<diag::ping_collector> collector,
+bucket::ping(const std::shared_ptr<diag::ping_collector>& collector,
              std::optional<std::chrono::milliseconds> timeout)
 {
-  return impl_->ping(std::move(collector), std::move(timeout));
+  return impl_->ping(collector, timeout);
 }
 
 void
@@ -990,8 +1035,8 @@ bucket::update_config(topology::configuration config)
   return impl_->update_config(std::move(config));
 }
 
-const std::string&
-bucket::name() const
+auto
+bucket::name() const -> const std::string&
 {
   return impl_->name();
 }
@@ -1002,8 +1047,8 @@ bucket::close()
   return impl_->close();
 }
 
-const std::string&
-bucket::log_prefix() const
+auto
+bucket::log_prefix() const -> const std::string&
 {
   return impl_->log_prefix();
 }
@@ -1100,8 +1145,9 @@ bucket::direct_dispatch(std::shared_ptr<mcbp::queue_request> req) -> std::error_
 }
 
 auto
-bucket::direct_re_queue(std::shared_ptr<mcbp::queue_request> req, bool is_retry) -> std::error_code
+bucket::direct_re_queue(const std::shared_ptr<mcbp::queue_request>& req,
+                        bool is_retry) -> std::error_code
 {
-  return impl_->direct_re_queue(std::move(req), is_retry);
+  return impl_->direct_re_queue(req, is_retry);
 }
 } // namespace couchbase::core

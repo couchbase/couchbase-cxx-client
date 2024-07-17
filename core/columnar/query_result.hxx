@@ -19,6 +19,7 @@
 
 #include "core/row_streamer.hxx"
 #include "core/utils/movable_function.hxx"
+#include "error.hxx"
 
 #include <chrono>
 #include <cstdint>
@@ -67,7 +68,7 @@ public:
 
   void next_row(
     utils::movable_function<void(std::variant<std::monostate, query_result_row, query_result_end>,
-                                 std::error_code)> handler);
+                                 error)> handler);
   void cancel();
   auto metadata() -> std::optional<query_metadata>;
 

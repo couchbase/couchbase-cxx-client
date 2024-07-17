@@ -22,12 +22,15 @@
 #include "error_utils.hxx"
 
 #include <fmt/core.h>
+#include <tao/json/value.hpp>
+
 #include <regex>
 
 namespace couchbase::core::operations::management
 {
-std::error_code
-query_index_drop_request::encode_to(encoded_request_type& encoded, http_context& /*context*/) const
+auto
+query_index_drop_request::encode_to(encoded_request_type& encoded,
+                                    http_context& /*context*/) const -> std::error_code
 {
   if (!utils::check_query_management_request(*this)) {
     return errc::common::invalid_argument;
@@ -55,9 +58,10 @@ query_index_drop_request::encode_to(encoded_request_type& encoded, http_context&
   return {};
 }
 
-query_index_drop_response
+auto
 query_index_drop_request::make_response(error_context::http&& ctx,
                                         const encoded_response_type& encoded) const
+  -> query_index_drop_response
 {
   query_index_drop_response response{ std::move(ctx) };
   if (!response.ctx.ec) {

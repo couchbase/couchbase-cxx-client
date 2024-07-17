@@ -21,21 +21,24 @@
 #include "error_utils.hxx"
 
 #include <fmt/core.h>
+#include <tao/json/value.hpp>
 
 namespace couchbase::core::operations::management
 {
-std::error_code
+auto
 analytics_get_pending_mutations_request::encode_to(encoded_request_type& encoded,
                                                    http_context& /* context */) const
+  -> std::error_code
 {
   encoded.method = "GET";
   encoded.path = "/analytics/node/agg/stats/remaining";
   return {};
 }
 
-analytics_get_pending_mutations_response
+auto
 analytics_get_pending_mutations_request::make_response(error_context::http&& ctx,
                                                        const encoded_response_type& encoded) const
+  -> analytics_get_pending_mutations_response
 {
   analytics_get_pending_mutations_response response{ std::move(ctx) };
   if (!response.ctx.ec) {
@@ -60,7 +63,7 @@ analytics_get_pending_mutations_request::make_response(error_context::http&& ctx
     response.status = payload.optional<std::string>("status").value_or("unknown");
     if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
       for (const auto& error : errors->get_array()) {
-        analytics_problem err{
+        const analytics_problem err{
           error.at("code").as<std::uint32_t>(),
           error.at("msg").get_string(),
         };

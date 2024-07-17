@@ -16,8 +16,24 @@
 #include "agent.hxx"
 
 #include "collections_component.hxx"
+#include "core/agent_config.hxx"
+#include "core/analytics_query_options.hxx"
+#include "core/collections_options.hxx"
+#include "core/crud_options.hxx"
+#include "core/diagntostics_options.hxx"
+#include "core/durability_options.hxx"
+#include "core/free_form_http_request.hxx"
 #include "core/logger/logger.hxx"
 #include "core/meta/version.hxx"
+#include "core/n1ql_query_options.hxx"
+#include "core/pending_operation.hxx"
+#include "core/ping_options.hxx"
+#include "core/range_scan_options.hxx"
+#include "core/search_query_options.hxx"
+#include "core/stats_options.hxx"
+#include "core/subdoc_options.hxx"
+#include "core/view_query_options.hxx"
+#include "core/wait_until_ready_options.hxx"
 #include "crud_component.hxx"
 #include "dispatcher.hxx"
 
@@ -27,6 +43,16 @@
 #include <couchbase/error_codes.hxx>
 
 #include <asio/io_context.hpp>
+
+#include <tl/expected.hpp>
+
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <system_error>
+#include <utility>
+#include <vector>
 
 namespace couchbase::core
 {
@@ -51,161 +77,166 @@ public:
     return bucket_name_;
   }
 
-  auto get(get_options /* options */, get_callback&& /* callback */)
+  auto get(const get_options& /* options */, get_callback&& /* callback */)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto get_and_touch(get_and_touch_options /* options */, get_and_touch_callback&& /* callback */)
+  auto get_and_touch(const get_and_touch_options& /* options */,
+                     get_and_touch_callback&& /* callback */)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto get_and_lock(get_and_lock_options /* options */, get_and_touch_callback&& /* callback */)
+  auto get_and_lock(const get_and_lock_options& /* options */,
+                    get_and_touch_callback&& /* callback */)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto get_one_replica(get_one_replica_options /* options */,
+  auto get_one_replica(const get_one_replica_options& /* options */,
                        get_one_replica_callback&& /* callback */)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto touch(touch_options /* options */, touch_callback&& /* callback */)
+  auto touch(const touch_options& /* options */, touch_callback&& /* callback */)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto unlock(unlock_options /* options */, unlock_callback&& /* callback */)
+  auto unlock(const unlock_options& /* options */, unlock_callback&& /* callback */)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto remove(remove_options /* options */, remove_callback&& /* callback */)
+  auto remove(const remove_options& /* options */, remove_callback&& /* callback */)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto insert(insert_options /* options */, insert_callback&& /* callback */)
+  auto insert(const insert_options& /* options */, insert_callback&& /* callback */)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto upsert(upsert_options /* options */, upsert_callback&& /* callback */)
+  auto upsert(const upsert_options& /* options */, upsert_callback&& /* callback */)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto replace(replace_options /* options */, replace_callback&& /* callback */)
+  auto replace(const replace_options& /* options */, replace_callback&& /* callback */)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto append(adjoin_options /* options */, adjoin_callback&& /* callback */)
+  auto append(const adjoin_options& /* options */, adjoin_callback&& /* callback */)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto prepend(adjoin_options /* options */, adjoin_callback&& /* callback */)
+  auto prepend(const adjoin_options& /* options */, adjoin_callback&& /* callback */)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto increment(counter_options /* options */, counter_callback&& /* callback */)
+  auto increment(const counter_options& /* options */, counter_callback&& /* callback */)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto decrement(counter_options /* options */, counter_callback&& /* callback */)
+  auto decrement(const counter_options& /* options */, counter_callback&& /* callback */)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto lookup_in(lookup_in_options /* options */, lookup_in_callback&& /* callback */)
+  auto lookup_in(const lookup_in_options& /* options */, lookup_in_callback&& /* callback */)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto mutate_in(mutate_in_options /* options */, mutate_in_callback&& /* callback */)
+  auto mutate_in(const mutate_in_options& /* options */, mutate_in_callback&& /* callback */)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto get_random(get_random_options /* options */, get_random_callback&& /* callback */)
+  auto get_random(const get_random_options& /* options */, get_random_callback&& /* callback */)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto get_with_meta(get_with_meta_options /* options */, get_with_meta_callback&& /* callback */)
+  auto get_with_meta(const get_with_meta_options& /* options */,
+                     get_with_meta_callback&& /* callback */)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto upsert_with_meta(upsert_with_meta_options /* options */,
+  auto upsert_with_meta(const upsert_with_meta_options& /* options */,
                         upsert_with_meta_callback&& /* callback */)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto remove_with_meta(remove_with_meta_options /* options */,
+  auto remove_with_meta(const remove_with_meta_options& /* options */,
                         remove_with_meta_callback&& /* callback */)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto n1ql_query(n1ql_query_options /* options */, n1ql_query_callback&& /* callback */)
+  auto n1ql_query(const n1ql_query_options& /* options */, n1ql_query_callback&& /* callback */)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto prepared_n1ql_query(n1ql_query_options /* options */, n1ql_query_callback&& /* callback */)
+  auto prepared_n1ql_query(const n1ql_query_options& /* options */,
+                           n1ql_query_callback&& /* callback */)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto analytics_query(analytics_query_options /* options */,
+  auto analytics_query(const analytics_query_options& /* options */,
                        analytics_query_callback&& /* callback */)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto search_query(search_query_options /* options */, search_query_callback&& /* callback */)
+  auto search_query(const search_query_options& /* options */,
+                    search_query_callback&& /* callback */)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto view_query(view_query_options /* options */, view_query_callback&& /* callback */)
+  auto view_query(const view_query_options& /* options */, view_query_callback&& /* callback */)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto free_form_http_request(http_request /* request */,
+  auto free_form_http_request(const http_request& /* request */,
                               free_form_http_request_callback&& /* callback */)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
@@ -214,24 +245,24 @@ public:
 
   auto get_collection_id(std::string scope_name,
                          std::string collection_name,
-                         get_collection_id_options options,
+                         const get_collection_id_options& options,
                          get_collection_id_callback callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return collections_.get_collection_id(
-      std::move(scope_name), std::move(collection_name), std::move(options), std::move(callback));
+      std::move(scope_name), std::move(collection_name), options, std::move(callback));
   }
 
   auto wait_until_ready(
     std::chrono::milliseconds /* timeout */,
-    wait_until_ready_options /* options */,
+    const wait_until_ready_options& /* options */,
     wait_until_ready_callback&&
     /* callback */) -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto ping(ping_options /* options */, ping_callback&& /* callback */)
+  auto ping(const ping_options& /* options */, ping_callback&& /* callback */)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
@@ -243,54 +274,51 @@ public:
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto stats(stats_options /* options */, stats_callback&& /* callback */)
+  auto stats(const stats_options& /* options */, stats_callback&& /* callback */)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto observe(observe_options /* options */, observe_callback&& /* callback */)
+  auto observe(const observe_options& /* options */, observe_callback&& /* callback */)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto observe_seqno(observe_seqno_options /* options */, observe_seqno_callback&& /* callback */)
+  auto observe_seqno(const observe_seqno_options& /* options */,
+                     observe_seqno_callback&& /* callback */)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
   auto range_scan_create(std::uint16_t vbucket_id,
-                         range_scan_create_options options,
+                         const range_scan_create_options& options,
                          range_scan_create_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
-    return crud_.range_scan_create(vbucket_id, std::move(options), std::move(callback));
+    return crud_.range_scan_create(vbucket_id, options, std::move(callback));
   }
 
-  auto range_scan_continue(std::vector<std::byte> scan_uuid,
+  auto range_scan_continue(const std::vector<std::byte>& scan_uuid,
                            std::uint16_t vbucket_id,
-                           range_scan_continue_options options,
+                           const range_scan_continue_options& options,
                            range_scan_item_callback&& item_callback,
                            range_scan_continue_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
-    return crud_.range_scan_continue(std::move(scan_uuid),
-                                     vbucket_id,
-                                     std::move(options),
-                                     std::move(item_callback),
-                                     std::move(callback));
+    return crud_.range_scan_continue(
+      scan_uuid, vbucket_id, options, std::move(item_callback), std::move(callback));
   }
 
   auto range_scan_cancel(std::vector<std::byte> scan_uuid,
                          std::uint16_t vbucket_id,
-                         range_scan_cancel_options options,
+                         const range_scan_cancel_options& options,
                          range_scan_cancel_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
-    return crud_.range_scan_cancel(
-      std::move(scan_uuid), vbucket_id, std::move(options), std::move(callback));
+    return crud_.range_scan_cancel(std::move(scan_uuid), vbucket_id, options, std::move(callback));
   }
 
 private:
@@ -315,187 +343,190 @@ agent::bucket_name() const -> const std::string&
 }
 
 auto
-agent::get(get_options options, get_callback&& callback)
+agent::get(const get_options& options, get_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->get(std::move(options), std::move(callback));
+  return impl_->get(options, std::move(callback));
 }
 
 auto
-agent::get_and_touch(get_and_touch_options options, get_and_touch_callback&& callback)
+agent::get_and_touch(const get_and_touch_options& options, get_and_touch_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->get_and_touch(std::move(options), std::move(callback));
+  return impl_->get_and_touch(options, std::move(callback));
 }
 
 auto
-agent::get_and_lock(get_and_lock_options options, get_and_touch_callback&& callback)
+agent::get_and_lock(const get_and_lock_options& options, get_and_touch_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->get_and_lock(std::move(options), std::move(callback));
+  return impl_->get_and_lock(options, std::move(callback));
 }
 
 auto
-agent::get_one_replica(get_one_replica_options options, get_one_replica_callback&& callback)
+agent::get_one_replica(const get_one_replica_options& options, get_one_replica_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->get_one_replica(std::move(options), std::move(callback));
+  return impl_->get_one_replica(options, std::move(callback));
 }
 
 auto
-agent::touch(touch_options options, touch_callback&& callback)
+agent::touch(const touch_options& options, touch_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->touch(std::move(options), std::move(callback));
+  return impl_->touch(options, std::move(callback));
 }
 
 auto
-agent::unlock(unlock_options options, unlock_callback&& callback)
+agent::unlock(const unlock_options& options, unlock_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->unlock(std::move(options), std::move(callback));
+  return impl_->unlock(options, std::move(callback));
 }
 
 auto
-agent::remove(remove_options options, remove_callback&& callback)
+agent::remove(const remove_options& options, remove_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->remove(std::move(options), std::move(callback));
+  return impl_->remove(options, std::move(callback));
 }
 
 auto
-agent::insert(insert_options options, insert_callback&& callback)
+agent::insert(const insert_options& options, insert_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->insert(std::move(options), std::move(callback));
+  return impl_->insert(options, std::move(callback));
 }
 
 auto
-agent::upsert(upsert_options options, upsert_callback&& callback)
+agent::upsert(const upsert_options& options, upsert_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->upsert(std::move(options), std::move(callback));
+  return impl_->upsert(options, std::move(callback));
 }
 
 auto
-agent::replace(replace_options options, replace_callback&& callback)
+agent::replace(const replace_options& options, replace_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->replace(std::move(options), std::move(callback));
+  return impl_->replace(options, std::move(callback));
 }
 
 auto
-agent::append(adjoin_options options, adjoin_callback&& callback)
+agent::append(const adjoin_options& options, adjoin_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->append(std::move(options), std::move(callback));
+  return impl_->append(options, std::move(callback));
 }
 
 auto
-agent::prepend(adjoin_options options, adjoin_callback&& callback)
+agent::prepend(const adjoin_options& options, adjoin_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->prepend(std::move(options), std::move(callback));
+  return impl_->prepend(options, std::move(callback));
 }
 
 auto
-agent::increment(counter_options options, counter_callback&& callback)
+agent::increment(const counter_options& options, counter_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->increment(std::move(options), std::move(callback));
+  return impl_->increment(options, std::move(callback));
 }
 
 auto
-agent::decrement(counter_options options, counter_callback&& callback)
+agent::decrement(const counter_options& options, counter_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->decrement(std::move(options), std::move(callback));
+  return impl_->decrement(options, std::move(callback));
 }
 
 auto
-agent::get_random(get_random_options options, get_random_callback&& callback)
+agent::get_random(const get_random_options& options, get_random_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->get_random(std::move(options), std::move(callback));
+  return impl_->get_random(options, std::move(callback));
 }
 
 auto
-agent::get_with_meta(get_with_meta_options options, get_with_meta_callback&& callback)
+agent::get_with_meta(const get_with_meta_options& options, get_with_meta_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->get_with_meta(std::move(options), std::move(callback));
+  return impl_->get_with_meta(options, std::move(callback));
 }
 
 auto
-agent::upsert_with_meta(upsert_with_meta_options options, upsert_with_meta_callback&& callback)
+agent::upsert_with_meta(const upsert_with_meta_options& options,
+                        upsert_with_meta_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->upsert_with_meta(std::move(options), std::move(callback));
+  return impl_->upsert_with_meta(options, std::move(callback));
 }
 
 auto
-agent::remove_with_meta(remove_with_meta_options options, remove_with_meta_callback&& callback)
+agent::remove_with_meta(const remove_with_meta_options& options,
+                        remove_with_meta_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->remove_with_meta(std::move(options), std::move(callback));
+  return impl_->remove_with_meta(options, std::move(callback));
 }
 
 auto
-agent::n1ql_query(n1ql_query_options options, n1ql_query_callback&& callback)
+agent::n1ql_query(const n1ql_query_options& options, n1ql_query_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->n1ql_query(std::move(options), std::move(callback));
+  return impl_->n1ql_query(options, std::move(callback));
 }
 
 auto
-agent::prepared_n1ql_query(n1ql_query_options options, n1ql_query_callback&& callback)
+agent::prepared_n1ql_query(const n1ql_query_options& options, n1ql_query_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->prepared_n1ql_query(std::move(options), std::move(callback));
+  return impl_->prepared_n1ql_query(options, std::move(callback));
 }
 
 auto
-agent::analytics_query(analytics_query_options options, analytics_query_callback&& callback)
+agent::analytics_query(const analytics_query_options& options, analytics_query_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->analytics_query(std::move(options), std::move(callback));
+  return impl_->analytics_query(options, std::move(callback));
 }
 
 auto
-agent::search_query(search_query_options options, search_query_callback&& callback)
+agent::search_query(const search_query_options& options, search_query_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->search_query(std::move(options), std::move(callback));
+  return impl_->search_query(options, std::move(callback));
 }
 
 auto
-agent::view_query(view_query_options options, view_query_callback&& callback)
+agent::view_query(const view_query_options& options, view_query_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->view_query(std::move(options), std::move(callback));
+  return impl_->view_query(options, std::move(callback));
 }
 
 auto
-agent::free_form_http_request(http_request request, free_form_http_request_callback&& callback)
+agent::free_form_http_request(const http_request& request,
+                              free_form_http_request_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->free_form_http_request(std::move(request), std::move(callback));
+  return impl_->free_form_http_request(request, std::move(callback));
 }
 
 auto
 agent::wait_until_ready(std::chrono::milliseconds timeout,
-                        wait_until_ready_options options,
+                        const wait_until_ready_options& options,
                         wait_until_ready_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->wait_until_ready(timeout, std::move(options), std::move(callback));
+  return impl_->wait_until_ready(timeout, options, std::move(callback));
 }
 
 auto
-agent::ping(ping_options options, ping_callback&& callback)
+agent::ping(const ping_options& options, ping_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->ping(std::move(options), std::move(callback));
+  return impl_->ping(options, std::move(callback));
 }
 
 auto
@@ -505,84 +536,80 @@ agent::diagnostics(diagnostics_options options) -> tl::expected<diagnostic_info,
 }
 
 auto
-agent::stats(stats_options options, stats_callback&& callback)
+agent::stats(const stats_options& options, stats_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->stats(std::move(options), std::move(callback));
+  return impl_->stats(options, std::move(callback));
 }
 
 auto
 agent::get_collection_id(std::string scope_name,
                          std::string collection_name,
-                         get_collection_id_options options,
+                         const get_collection_id_options& options,
                          get_collection_id_callback callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
   return impl_->get_collection_id(
-    std::move(scope_name), std::move(collection_name), std::move(options), std::move(callback));
+    std::move(scope_name), std::move(collection_name), options, std::move(callback));
 }
 
 auto
-agent::observe(observe_options options, observe_callback&& callback)
+agent::observe(const observe_options& options, observe_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->observe(std::move(options), std::move(callback));
+  return impl_->observe(options, std::move(callback));
 }
 
 auto
-agent::observe_seqno(observe_seqno_options options, observe_seqno_callback&& callback)
+agent::observe_seqno(const observe_seqno_options& options, observe_seqno_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->observe_seqno(std::move(options), std::move(callback));
+  return impl_->observe_seqno(options, std::move(callback));
 }
 
 auto
-agent::lookup_in(lookup_in_options options, lookup_in_callback&& callback)
+agent::lookup_in(const lookup_in_options& options, lookup_in_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->lookup_in(std::move(options), std::move(callback));
+  return impl_->lookup_in(options, std::move(callback));
 }
 
 auto
-agent::mutate_in(mutate_in_options options, mutate_in_callback&& callback)
+agent::mutate_in(const mutate_in_options& options, mutate_in_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->mutate_in(std::move(options), std::move(callback));
+  return impl_->mutate_in(options, std::move(callback));
 }
 
 auto
 agent::range_scan_create(std::uint16_t vbucket_id,
-                         range_scan_create_options options,
+                         const range_scan_create_options& options,
                          range_scan_create_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->range_scan_create(vbucket_id, std::move(options), std::move(callback));
+  return impl_->range_scan_create(vbucket_id, options, std::move(callback));
 }
 
 auto
-agent::range_scan_continue(std::vector<std::byte> scan_uuid,
+agent::range_scan_continue(const std::vector<std::byte>& scan_uuid,
                            std::uint16_t vbucket_id,
-                           range_scan_continue_options options,
+                           const range_scan_continue_options& options,
                            range_scan_item_callback&& item_callback,
                            range_scan_continue_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->range_scan_continue(std::move(scan_uuid),
-                                    vbucket_id,
-                                    std::move(options),
-                                    std::move(item_callback),
-                                    std::move(callback));
+  return impl_->range_scan_continue(
+    scan_uuid, vbucket_id, options, std::move(item_callback), std::move(callback));
 }
 
 auto
 agent::range_scan_cancel(std::vector<std::byte> scan_uuid,
                          std::uint16_t vbucket_id,
-                         range_scan_cancel_options options,
+                         const range_scan_cancel_options& options,
                          range_scan_cancel_callback&& callback) const
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
-  return impl_->range_scan_cancel(
-    std::move(scan_uuid), vbucket_id, std::move(options), std::move(callback));
+  return impl_->range_scan_cancel(std::move(scan_uuid), vbucket_id, options, std::move(callback));
 }
 
 agent_unit_test_api::agent_unit_test_api(std::shared_ptr<agent_impl> impl)

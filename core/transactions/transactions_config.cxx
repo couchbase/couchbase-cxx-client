@@ -25,9 +25,7 @@ namespace couchbase::transactions
 {
 
 transactions_config::transactions_config()
-  : level_(couchbase::durability_level::majority)
-  , timeout_(std::chrono::seconds(15))
-  , attempt_context_hooks_(new core::transactions::attempt_context_testing_hooks())
+  : attempt_context_hooks_(new core::transactions::attempt_context_testing_hooks())
   , cleanup_hooks_(new core::transactions::cleanup_testing_hooks())
 {
 }

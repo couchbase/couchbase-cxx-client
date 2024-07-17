@@ -22,16 +22,17 @@
 #include "error_utils.hxx"
 
 #include <fmt/core.h>
+#include <tao/json/value.hpp>
 
 namespace couchbase::core::operations::management
 {
-std::error_code
+auto
 analytics_dataverse_drop_request::encode_to(encoded_request_type& encoded,
-                                            http_context& /* context */) const
+                                            http_context& /* context */) const -> std::error_code
 {
   std::string if_exists_clause = ignore_if_does_not_exist ? "IF EXISTS" : "";
 
-  tao::json::value body{
+  const tao::json::value body{
     { "statement",
       fmt::format("DROP DATAVERSE {} {}",
                   utils::analytics::uncompound_name(dataverse_name),
@@ -44,9 +45,10 @@ analytics_dataverse_drop_request::encode_to(encoded_request_type& encoded,
   return {};
 }
 
-analytics_dataverse_drop_response
+auto
 analytics_dataverse_drop_request::make_response(error_context::http&& ctx,
                                                 const encoded_response_type& encoded) const
+  -> analytics_dataverse_drop_response
 {
   analytics_dataverse_drop_response response{ std::move(ctx) };
   if (!response.ctx.ec) {
@@ -64,13 +66,15 @@ analytics_dataverse_drop_request::make_response(error_context::http&& ctx,
 
       if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
         for (const auto& error : errors->get_array()) {
-          analytics_problem err{
+          const analytics_problem err{
             error.at("code").as<std::uint32_t>(),
             error.at("msg").get_string(),
           };
           switch (err.code) {
             case 24034: /* Cannot find dataverse with name [string] */
               dataverse_does_not_exist = true;
+              break;
+            default:
               break;
           }
           response.errors.emplace_back(err);

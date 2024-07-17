@@ -26,6 +26,8 @@
 #include <couchbase/error_codes.hxx>
 
 #include <gsl/assert>
+#include <tao/json/value.hpp>
+
 #include <regex>
 
 namespace couchbase::core::operations
@@ -73,6 +75,7 @@ query_request::encode_to(query_request::encoded_request_type& encoded,
     }
   } else {
     std::vector<tao::json::value> parameters;
+    parameters.reserve(positional_parameters.size());
     for (const auto& value : positional_parameters) {
       parameters.emplace_back(utils::json::parse(value));
     }
@@ -306,7 +309,9 @@ query_request::make_response(error_context::query&& ctx,
 
     if (response.meta.status == "success") {
       if (response.prepared) {
-        ctx_->cache.put(statement, response.prepared.value());
+        if (ctx_.has_value()) {
+          ctx_->cache.put(statement, response.prepared.value());
+        }
       } else if (extract_encoded_plan_) {
         extract_encoded_plan_ = false;
         if (response.rows.size() == 1) {
@@ -320,7 +325,9 @@ query_request::make_response(error_context::query&& ctx,
           auto* plan = row.find("encoded_plan");
           auto* name = row.find("name");
           if (plan != nullptr && name != nullptr) {
-            ctx_->cache.put(statement, name->get_string(), plan->get_string());
+            if (ctx_) {
+              ctx_->cache.put(statement, name->get_string(), plan->get_string());
+            }
             throw couchbase::core::priv::retry_http_request{};
           }
           response.ctx.ec = errc::query::prepared_statement_failure;
@@ -352,7 +359,9 @@ query_request::make_response(error_context::query&& ctx,
           case 4040: /* IKey: "plan.build_prepared.no_such_name" */
           case 4050: /* IKey: "plan.build_prepared.unrecognized_prepared" */
           case 4070: /* IKey: "plan.build_prepared.decoding" */
-            ctx_->cache.erase(statement);
+            if (ctx_.has_value()) {
+              ctx_->cache.erase(statement);
+            }
             throw couchbase::core::priv::retry_http_request{};
           case 4060: /* IKey: "plan.build_prepared.no_such_name" */
           case 4080: /* IKey: "plan.build_prepared.name_encoded_plan_mismatch" */

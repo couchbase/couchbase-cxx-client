@@ -21,6 +21,7 @@
 #include <couchbase/error_codes.hxx>
 
 #include <tao/json/contrib/traits.hpp>
+#include <tao/json/value.hpp>
 
 namespace couchbase
 {
@@ -32,7 +33,7 @@ doc_id_query::encode() const -> encoded_search_query
   }
 
   encoded_search_query built;
-  built.query = tao::json::value{ { "ids", ids_ } };
+  built.query["ids"] = ids_;
 
   if (boost_.has_value()) {
     built.query["boost"] = boost_.value();

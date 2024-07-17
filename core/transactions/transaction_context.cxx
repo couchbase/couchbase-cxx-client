@@ -17,13 +17,17 @@
 #include "attempt_context_impl.hxx"
 #include "uid_generator.hxx"
 
+#include "core/transactions.hxx"
 #include "exceptions_fmt.hxx"
 #include "internal/logging.hxx"
+#include "internal/transaction_attempt.hxx"
 #include "internal/transaction_context.hxx"
+#include "internal/transactions_cleanup.hxx"
 #include "internal/utils.hxx"
 
 #include <asio/post.hpp>
 #include <asio/steady_timer.hpp>
+#include <utility>
 
 namespace couchbase::core::transactions
 {
@@ -70,8 +74,8 @@ transaction_context::transaction_context(transactions& txns,
 void
 transaction_context::add_attempt()
 {
-  transaction_attempt attempt{};
-  std::lock_guard<std::mutex> lock(mutex_);
+  const transaction_attempt attempt{};
+  const std::lock_guard<std::mutex> lock(mutex_);
   attempts_.push_back(attempt);
 }
 
@@ -94,7 +98,7 @@ transaction_context::has_expired_client_side() -> bool
     std::chrono::duration_cast<std::chrono::nanoseconds>(now - start_time_client_) +
     deferred_elapsed_;
   auto expired_millis = std::chrono::duration_cast<std::chrono::milliseconds>(expired_nanos);
-  bool is_expired = expired_nanos > config_.timeout;
+  const bool is_expired = expired_nanos > config_.timeout;
   if (is_expired) {
     CB_ATTEMPT_CTX_LOG_INFO(
       current_attempt_context_,
@@ -112,7 +116,7 @@ transaction_context::has_expired_client_side() -> bool
 }
 
 void
-transaction_context::after_delay(std::chrono::milliseconds delay, std::function<void()> fn)
+transaction_context::after_delay(std::chrono::milliseconds delay, const std::function<void()>& fn)
 {
   auto timer = std::make_shared<asio::steady_timer>(this->transactions_.cluster_ref().io_context());
   timer->expires_after(delay);
@@ -207,7 +211,8 @@ transaction_context::query(const std::string& statement,
                            async_attempt_context::QueryCallback&& cb)
 {
   if (current_attempt_context_) {
-    return current_attempt_context_->query(statement, opts, query_context, std::move(cb));
+    return current_attempt_context_->query(
+      statement, opts, std::move(query_context), std::move(cb));
   }
   throw(transaction_operation_failed(FAIL_OTHER, "no current attempt context"));
 }
@@ -247,7 +252,7 @@ transaction_context::existing_error(bool previous_op_failed)
 }
 
 void
-transaction_context::handle_error(std::exception_ptr err, txn_complete_callback&& callback)
+transaction_context::handle_error(const std::exception_ptr& err, txn_complete_callback&& callback)
 {
   try {
     try {
@@ -344,14 +349,117 @@ transaction_context::finalize(txn_complete_callback&& cb)
     if (current_attempt_context_->is_done()) {
       return cb(std::nullopt, get_transaction_result());
     }
-    commit([self = shared_from_this(), cb = std::move(cb)](std::exception_ptr err) mutable {
+    commit([self = shared_from_this(), cb = std::move(cb)](const std::exception_ptr& err) mutable {
       if (err) {
-        return self->handle_error(std::move(err), std::move(cb));
+        return self->handle_error(err, std::move(cb));
       }
       cb(std::nullopt, self->get_transaction_result());
     });
   } catch (...) {
     return handle_error(std::current_exception(), std::move(cb));
   }
+}
+
+void
+transaction_context::current_attempt_state(attempt_state s)
+{
+  const std::lock_guard<std::mutex> lock(mutex_);
+  if (attempts_.empty()) {
+    throw std::runtime_error("transaction_context has no attempts yet");
+  }
+  attempts_.back().state = s;
+}
+
+auto
+transaction_context::cluster_ref() const -> const core::cluster&
+{
+  return transactions_.cluster_ref();
+}
+
+auto
+transaction_context::config() const -> const couchbase::transactions::transactions_config::built&
+{
+  return config_;
+}
+
+auto
+transaction_context::cleanup() -> transactions_cleanup&
+{
+  return cleanup_;
+}
+
+auto
+transaction_context::start_time_client() const -> std::chrono::time_point<std::chrono::steady_clock>
+{
+  return start_time_client_;
+}
+
+auto
+transaction_context::atr_id() const -> const std::string&
+{
+  return atr_id_;
+}
+
+void
+transaction_context::atr_id(const std::string& id)
+{
+  atr_id_ = id;
+}
+
+auto
+transaction_context::atr_collection() const -> const std::string&
+{
+  return atr_collection_;
+}
+
+void
+transaction_context::atr_collection(const std::string& coll)
+{
+  atr_collection_ = coll;
+}
+
+auto
+transaction_context::get_transaction_result() const -> ::couchbase::transactions::transaction_result
+{
+  return couchbase::transactions::transaction_result{
+    transaction_id(), current_attempt().state == attempt_state::COMPLETED
+  };
+}
+
+void
+transaction_context::new_attempt_context()
+{
+  auto barrier = std::make_shared<std::promise<void>>();
+  auto f = barrier->get_future();
+  new_attempt_context([barrier](const std::exception_ptr& err) {
+    if (err) {
+      return barrier->set_exception(err);
+    }
+    return barrier->set_value();
+  });
+  f.get();
+}
+
+auto
+transaction_context::current_attempt() const -> const transaction_attempt&
+{
+  const std::lock_guard<std::mutex> lock(mutex_);
+  if (attempts_.empty()) {
+    throw std::runtime_error("transaction context has no attempts yet");
+  }
+  return attempts_.back();
+}
+
+auto
+transaction_context::num_attempts() const -> std::size_t
+{
+  const std::lock_guard<std::mutex> lock(mutex_);
+  return attempts_.size();
+}
+
+auto
+transaction_context::transaction_id() const -> const std::string&
+{
+  return transaction_id_;
 }
 } // namespace couchbase::core::transactions

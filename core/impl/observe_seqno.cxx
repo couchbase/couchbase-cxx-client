@@ -23,7 +23,7 @@ namespace couchbase::core::impl
 {
 auto
 observe_seqno_request::encode_to(observe_seqno_request::encoded_request_type& encoded,
-                                 core::mcbp_context&& /* context */) -> std::error_code
+                                 core::mcbp_context&& /* context */) const -> std::error_code
 {
   encoded.opaque(opaque);
   encoded.partition(partition);

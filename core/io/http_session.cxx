@@ -23,6 +23,7 @@
 #include "core/service_type_fmt.hxx"
 
 #include <couchbase/error_codes.hxx>
+#include <utility>
 
 namespace couchbase::core::io
 {
@@ -33,10 +34,11 @@ http_session_info::http_session_info(const std::string& client_id, const std::st
 
 http_session_info::http_session_info(const std::string& client_id,
                                      const std::string& session_id,
-                                     const asio::ip::tcp::endpoint& local_endpoint,
+                                     asio::ip::tcp::endpoint local_endpoint,
                                      const asio::ip::tcp::endpoint& remote_endpoint)
+  : local_endpoint_(std::move(local_endpoint))
 {
-  local_endpoint_ = local_endpoint;
+
   local_endpoint_address_ = local_endpoint_.address().to_string();
   if (local_endpoint_.protocol() == asio::ip::tcp::v6()) {
     local_endpoint_address_ =
@@ -93,14 +95,14 @@ http_session_info::log_prefix() const -> const std::string&
 }
 
 http_session::http_session(couchbase::core::service_type type,
-                           const std::string& client_id,
+                           std::string client_id,
                            asio::io_context& ctx,
-                           const couchbase::core::cluster_credentials& credentials,
-                           const std::string& hostname,
-                           const std::string& service,
+                           couchbase::core::cluster_credentials credentials,
+                           std::string hostname,
+                           std::string service,
                            couchbase::core::http_context http_ctx)
   : type_(type)
-  , client_id_(client_id)
+  , client_id_(std::move(client_id))
   , id_(uuid::to_string(uuid::random()))
   , ctx_(ctx)
   , resolver_(ctx_)
@@ -108,9 +110,9 @@ http_session::http_session(couchbase::core::service_type type,
   , connect_deadline_timer_(stream_->get_executor())
   , idle_timer_(stream_->get_executor())
   , retry_backoff_(stream_->get_executor())
-  , credentials_(credentials)
-  , hostname_(hostname)
-  , service_(service)
+  , credentials_(std::move(credentials))
+  , hostname_(std::move(hostname))
+  , service_(std::move(service))
   , user_agent_(meta::user_agent_for_http(client_id_, id_, http_ctx.options.user_agent_extra))
   , info_(client_id_, id_)
   , http_ctx_(std::move(http_ctx))
@@ -118,15 +120,15 @@ http_session::http_session(couchbase::core::service_type type,
 }
 
 http_session::http_session(couchbase::core::service_type type,
-                           const std::string& client_id,
+                           std::string client_id,
                            asio::io_context& ctx,
                            asio::ssl::context& tls,
-                           const couchbase::core::cluster_credentials& credentials,
-                           const std::string& hostname,
-                           const std::string& service,
+                           couchbase::core::cluster_credentials credentials,
+                           std::string hostname,
+                           std::string service,
                            couchbase::core::http_context http_ctx)
   : type_(type)
-  , client_id_(client_id)
+  , client_id_(std::move(client_id))
   , id_(uuid::to_string(uuid::random()))
   , ctx_(ctx)
   , resolver_(ctx_)
@@ -134,9 +136,9 @@ http_session::http_session(couchbase::core::service_type type,
   , connect_deadline_timer_(ctx_)
   , idle_timer_(ctx_)
   , retry_backoff_(ctx_)
-  , credentials_(credentials)
-  , hostname_(hostname)
-  , service_(service)
+  , credentials_(std::move(credentials))
+  , hostname_(std::move(hostname))
+  , service_(std::move(service))
   , user_agent_(meta::user_agent_for_http(client_id_, id_, http_ctx.options.user_agent_extra))
   , info_(client_id_, id_)
   , http_ctx_(std::move(http_ctx))
@@ -163,14 +165,14 @@ http_session::http_context() -> couchbase::core::http_context&
 auto
 http_session::remote_address() -> std::string
 {
-  std::scoped_lock lock(info_mutex_);
+  const std::scoped_lock lock(info_mutex_);
   return info_.remote_address();
 }
 
 auto
 http_session::local_address() -> std::string
 {
-  std::scoped_lock lock(info_mutex_);
+  const std::scoped_lock lock(info_mutex_);
   return info_.local_address();
 }
 
@@ -191,7 +193,7 @@ http_session::diag_info() -> diag::endpoint_diag_info
 auto
 http_session::log_prefix() -> std::string
 {
-  std::scoped_lock lock(info_mutex_);
+  const std::scoped_lock lock(info_mutex_);
   return info_.log_prefix();
 }
 
@@ -234,7 +236,7 @@ http_session::port() const -> const std::string&
 auto
 http_session::endpoint() -> const asio::ip::tcp::endpoint&
 {
-  std::scoped_lock lock(info_mutex_);
+  const std::scoped_lock lock(info_mutex_);
   return info_.remote_endpoint();
 }
 
@@ -259,10 +261,10 @@ http_session::initiate_connect()
                   resolver_,
                   hostname_,
                   service_,
-                  std::bind(&http_session::on_resolve,
-                            shared_from_this(),
-                            std::placeholders::_1,
-                            std::placeholders::_2));
+                  [capture0 = shared_from_this()](auto&& PH1, auto&& PH2) {
+                    capture0->on_resolve(std::forward<decltype(PH1)>(PH1),
+                                         std::forward<decltype(PH2)>(PH2));
+                  });
   } else {
     // reset state in case the session is being reused
     state_ = diag::endpoint_state::disconnected;
@@ -291,7 +293,7 @@ http_session::on_stop(std::function<void()> handler)
 void
 http_session::cancel_current_response(std::error_code ec)
 {
-  std::scoped_lock lock(current_response_mutex_);
+  const std::scoped_lock lock(current_response_mutex_);
   if (streaming_response_) {
     auto ctx = std::move(current_streaming_response_);
     if (auto handler = std::move(ctx.resp_handler); handler) {
@@ -350,7 +352,7 @@ http_session::write(const std::vector<std::uint8_t>& buf)
   if (stopped_) {
     return;
   }
-  std::scoped_lock lock(output_buffer_mutex_);
+  const std::scoped_lock lock(output_buffer_mutex_);
   output_buffer_.push_back(buf);
 }
 
@@ -360,7 +362,7 @@ http_session::write(const std::string_view& buf)
   if (stopped_) {
     return;
   }
-  std::scoped_lock lock(output_buffer_mutex_);
+  const std::scoped_lock lock(output_buffer_mutex_);
   output_buffer_.emplace_back(buf.begin(), buf.end());
 }
 
@@ -389,7 +391,7 @@ http_session::write_and_stream(
   }
   {
     streaming_response_context ctx{ std::move(resp_handler), std::move(stream_end_handler) };
-    std::scoped_lock lock(current_response_mutex_);
+    const std::scoped_lock lock(current_response_mutex_);
     std::swap(current_streaming_response_, ctx);
     streaming_response_ = true;
   }
@@ -459,16 +461,16 @@ http_session::read_some(
         lck.unlock();
         callback({}, {}, errc::common::request_canceled);
         return;
-      } else {
-        CB_LOG_PROTOCOL("[HTTP, IN] type={}, host=\"{}\", rc={}, bytes_received={}{:a}",
-                        self->type_,
-                        self->info_.remote_address(),
-                        ec ? ec.message() : "ok",
-                        bytes_transferred,
-                        spdlog::to_hex(self->input_buffer_.data(),
-                                       self->input_buffer_.data() +
-                                         static_cast<std::ptrdiff_t>(bytes_transferred)));
       }
+      CB_LOG_PROTOCOL("[HTTP, IN] type={}, host=\"{}\", rc={}, bytes_received={}{:a}",
+                      self->type_,
+                      self->info_.remote_address(),
+                      ec ? ec.message() : "ok",
+                      bytes_transferred,
+                      spdlog::to_hex(self->input_buffer_.data(),
+                                     self->input_buffer_.data() +
+                                       static_cast<std::ptrdiff_t>(bytes_transferred)));
+
       self->last_active_ = std::chrono::steady_clock::now();
       if (ec) {
         CB_LOG_ERROR(
@@ -479,7 +481,7 @@ http_session::read_some(
       }
       http_streaming_parser::feeding_result res{};
       {
-        std::scoped_lock lock(self->current_response_mutex_);
+        const std::scoped_lock lock(self->current_response_mutex_);
         res = self->current_streaming_response_.parser.feed(
           reinterpret_cast<const char*>(self->input_buffer_.data()), bytes_transferred);
       }
@@ -491,15 +493,18 @@ http_session::read_some(
 
       std::string data;
       {
-        std::scoped_lock lock(self->current_response_mutex_);
+        const std::scoped_lock lock(self->current_response_mutex_);
         std::swap(data, self->current_streaming_response_.parser.body_chunk);
       }
 
       if (res.complete) {
         streaming_response_context ctx{};
         {
-          std::scoped_lock lock(self->current_response_mutex_);
+          const std::scoped_lock lock(self->current_response_mutex_);
           std::swap(self->current_streaming_response_, ctx);
+        }
+        if (ctx.stream_end_handler) {
+          ctx.stream_end_handler();
         }
         if (ctx.resp->must_close_connection()) {
           self->keep_alive_ = false;
@@ -546,21 +551,30 @@ http_session::do_connect(asio::ip::tcp::resolver::results_type::iterator it)
                  service_,
                  http_ctx_.options.connect_timeout.count());
     connect_deadline_timer_.expires_after(http_ctx_.options.connect_timeout);
-    connect_deadline_timer_.async_wait(
-      [self = shared_from_this(), it](const auto timer_ec) mutable {
-        if (timer_ec == asio::error::operation_aborted || self->stopped_) {
-          return;
+    connect_deadline_timer_.async_wait([self = shared_from_this(),
+                                        it](const auto timer_ec) mutable {
+      if (timer_ec == asio::error::operation_aborted || self->stopped_) {
+        return;
+      }
+      CB_LOG_DEBUG("{} unable to connect to {}:{} in time, reconnecting",
+                   self->info_.log_prefix(),
+                   self->hostname_,
+                   self->service_);
+      return self->stream_->close([self, next_address = ++it](std::error_code ec) {
+        if (ec) {
+          CB_LOG_WARNING("{} unable to close socket, but continue connecting attempt to {}:{}: {}",
+                         self->info_.log_prefix(),
+                         next_address->endpoint().address().to_string(),
+                         next_address->endpoint().port(),
+                         ec.value());
         }
-        CB_LOG_DEBUG("{} unable to connect to {}:{} in time, reconnecting",
-                     self->info_.log_prefix(),
-                     self->hostname_,
-                     self->service_);
-        return self->stream_->close(std::bind(&http_session::do_connect, self, ++it));
+        self->do_connect(next_address);
       });
+    });
 
-    stream_->async_connect(
-      it->endpoint(),
-      std::bind(&http_session::on_connect, shared_from_this(), std::placeholders::_1, it));
+    stream_->async_connect(it->endpoint(), [capture0 = shared_from_this(), it](auto&& PH1) {
+      capture0->on_connect(std::forward<decltype(PH1)>(PH1), it);
+    });
   } else {
     CB_LOG_ERROR("{} no more endpoints left to connect, \"{}:{}\" is not reachable",
                  info_.log_prefix(),
@@ -588,7 +602,16 @@ http_session::on_connect(const std::error_code& ec,
                      ? ", check server ports and cluster encryption setting"
                      : "");
     if (stream_->is_open()) {
-      stream_->close(std::bind(&http_session::do_connect, shared_from_this(), ++it));
+      stream_->close([self = shared_from_this(), next_address = ++it](std::error_code ec) {
+        if (ec) {
+          CB_LOG_WARNING("{} unable to close socket, but continue connecting attempt to {}:{}: {}",
+                         self->info_.log_prefix(),
+                         next_address->endpoint().address().to_string(),
+                         next_address->endpoint().port(),
+                         ec.value());
+        }
+        self->do_connect(next_address);
+      });
     } else {
       do_connect(++it);
     }
@@ -600,7 +623,7 @@ http_session::on_connect(const std::error_code& ec,
                  it->endpoint().address().to_string(),
                  it->endpoint().port());
     {
-      std::scoped_lock lock(info_mutex_);
+      const std::scoped_lock lock(info_mutex_);
       info_ = http_session_info(client_id_, id_, stream_->local_endpoint(), it->endpoint());
     }
     connect_deadline_timer_.cancel();
@@ -628,16 +651,16 @@ http_session::do_read()
                         ec ? ec.message() : "ok",
                         bytes_transferred);
         return;
-      } else {
-        CB_LOG_PROTOCOL("[HTTP, IN] type={}, host=\"{}\", rc={}, bytes_received={}{:a}",
-                        self->type_,
-                        self->info_.remote_address(),
-                        ec ? ec.message() : "ok",
-                        bytes_transferred,
-                        spdlog::to_hex(self->input_buffer_.data(),
-                                       self->input_buffer_.data() +
-                                         static_cast<std::ptrdiff_t>(bytes_transferred)));
       }
+      CB_LOG_PROTOCOL("[HTTP, IN] type={}, host=\"{}\", rc={}, bytes_received={}{:a}",
+                      self->type_,
+                      self->info_.remote_address(),
+                      ec ? ec.message() : "ok",
+                      bytes_transferred,
+                      spdlog::to_hex(self->input_buffer_.data(),
+                                     self->input_buffer_.data() +
+                                       static_cast<std::ptrdiff_t>(bytes_transferred)));
+
       self->last_active_ = std::chrono::steady_clock::now();
       if (ec) {
         CB_LOG_ERROR(
@@ -650,7 +673,7 @@ http_session::do_read()
         // streaming handler
         http_streaming_parser::feeding_result res{};
         {
-          std::scoped_lock lock(self->current_response_mutex_);
+          const std::scoped_lock lock(self->current_response_mutex_);
           res = self->current_streaming_response_.parser.feed(
             reinterpret_cast<const char*>(self->input_buffer_.data()), bytes_transferred);
         }
@@ -660,7 +683,7 @@ http_session::do_read()
         if (res.complete || res.headers_complete) {
           streaming_response_context ctx{};
           {
-            std::scoped_lock lock(self->current_response_mutex_);
+            const std::scoped_lock lock(self->current_response_mutex_);
             std::swap(self->current_streaming_response_, ctx);
           }
 
@@ -675,39 +698,42 @@ http_session::do_read()
             handler({}, *ctx.resp);
           }
           if (!res.complete) {
-            std::scoped_lock lock(self->current_response_mutex_);
+            const std::scoped_lock lock(self->current_response_mutex_);
             std::swap(self->current_streaming_response_, ctx);
+          } else {
+            if (auto handler = std::move(ctx.stream_end_handler); handler) {
+              handler();
+            }
           }
-          return;
-        }
-        self->reading_ = false;
-        return self->do_read();
-      } else {
-        http_parser::feeding_result res{};
-        {
-          std::scoped_lock lock(self->current_response_mutex_);
-          res = self->current_response_.parser.feed(
-            reinterpret_cast<const char*>(self->input_buffer_.data()), bytes_transferred);
-        }
-        if (res.failure) {
-          return self->stop();
-        }
-        if (res.complete) {
-          response_context ctx{};
-          {
-            std::scoped_lock lock(self->current_response_mutex_);
-            std::swap(self->current_response_, ctx);
-          }
-          if (ctx.parser.response.must_close_connection()) {
-            self->keep_alive_ = false;
-          }
-          ctx.handler({}, std::move(ctx.parser.response));
-          self->reading_ = false;
           return;
         }
         self->reading_ = false;
         return self->do_read();
       }
+      http_parser::feeding_result res{};
+      {
+        const std::scoped_lock lock(self->current_response_mutex_);
+        res = self->current_response_.parser.feed(
+          reinterpret_cast<const char*>(self->input_buffer_.data()), bytes_transferred);
+      }
+      if (res.failure) {
+        return self->stop();
+      }
+      if (res.complete) {
+        response_context ctx{};
+        {
+          const std::scoped_lock lock(self->current_response_mutex_);
+          std::swap(self->current_response_, ctx);
+        }
+        if (ctx.parser.response.must_close_connection()) {
+          self->keep_alive_ = false;
+        }
+        ctx.handler({}, std::move(ctx.parser.response));
+        self->reading_ = false;
+        return;
+      }
+      self->reading_ = false;
+      return self->do_read();
     });
 }
 
@@ -717,7 +743,7 @@ http_session::do_write()
   if (stopped_) {
     return;
   }
-  std::scoped_lock lock(writing_buffer_mutex_, output_buffer_mutex_);
+  const std::scoped_lock lock(writing_buffer_mutex_, output_buffer_mutex_);
   if (!writing_buffer_.empty() || output_buffer_.empty()) {
     return;
   }
@@ -749,12 +775,12 @@ http_session::do_write()
         return self->stop();
       }
       {
-        std::scoped_lock inner_lock(self->writing_buffer_mutex_);
+        const std::scoped_lock inner_lock(self->writing_buffer_mutex_);
         self->writing_buffer_.clear();
       }
       bool want_write = false;
       {
-        std::scoped_lock inner_lock(self->output_buffer_mutex_);
+        const std::scoped_lock inner_lock(self->output_buffer_mutex_);
         want_write = !self->output_buffer_.empty();
       }
       if (want_write) {

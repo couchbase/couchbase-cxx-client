@@ -103,7 +103,7 @@ url_encode(Ti first, Ti last, To& o, bool check_encoded = true) -> bool
 
       o.insert(o.end(), first, first + 1);
     } else {
-      unsigned int c = static_cast<unsigned char>(*first);
+      const unsigned int c = static_cast<unsigned char>(*first);
       std::size_t numbytes = 0;
 
       if ((c & 0x80) == 0) { /* ASCII character */
@@ -147,12 +147,15 @@ url_decode(Ti first, Ti last, To out, std::size_t& nout) -> bool
 {
   for (; first != last && *first != '\0'; ++first) {
     if (*first == '%') {
+      // TODO(CXXCBC-549)
+      // NOLINTNEXTLINE(cppcoreguidelines-avoid-c-arrays,hicpp-avoid-c-arrays,modernize-avoid-c-arrays)
       char nextbuf[3] = { 0 };
       std::size_t jj = 0;
       ++first;
       nextbuf[0] = *first;
       for (; first != last && jj < 2; ++jj) {
-        nextbuf[jj] = *first;
+        // TODO(CXXCBC-549)
+        nextbuf[jj] = *first; // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
         if (jj != 1) {
           ++first;
         }
@@ -162,7 +165,7 @@ url_decode(Ti first, Ti last, To out, std::size_t& nout) -> bool
       }
 
       char* end = nullptr;
-      unsigned long octet = std::strtoul(nextbuf, &end, 16);
+      const unsigned long octet = std::strtoul(nextbuf, &end, 16);
       if (octet == ULONG_MAX || (octet == 0 && end == nextbuf)) {
         return false;
       }
@@ -374,7 +377,7 @@ escape(const std::string& s, encoding mode) -> std::string
     return s;
   }
 
-  std::size_t required = s.size() + 2 * hex_count;
+  const std::size_t required = s.size() + (2 * hex_count);
   std::string t;
   t.resize(required);
 

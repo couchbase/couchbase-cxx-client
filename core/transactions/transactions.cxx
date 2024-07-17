@@ -30,6 +30,7 @@
 #include <couchbase/error.hxx>
 
 #include <system_error>
+#include <utility>
 
 namespace couchbase::core::transactions
 {
@@ -40,9 +41,9 @@ transactions::transactions(core::cluster cluster,
 }
 
 transactions::transactions(core::cluster cluster,
-                           const couchbase::transactions::transactions_config::built& config)
+                           couchbase::transactions::transactions_config::built config)
   : cluster_(std::move(cluster))
-  , config_(config)
+  , config_(std::move(config))
   , cleanup_(new transactions_cleanup(cluster_, config_))
 {
 }
@@ -117,6 +118,8 @@ auto
 wrap_run(transactions& txns,
          const couchbase::transactions::transaction_options& config,
          std::size_t max_attempts,
+         // TODO(CXXCBC-549)
+         // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
          Handler&& fn) -> ::couchbase::transactions::transaction_result
 {
   auto overall = transaction_context::create(txns, config);
@@ -169,7 +172,7 @@ wrap_public_api_run(transactions& txns,
                     Handler&& fn) -> ::couchbase::transactions::transaction_result
 {
   return wrap_run(txns, config, max_attempts, [fn = std::forward<Handler>(fn)](auto ctx) {
-    couchbase::error err = fn(ctx);
+    const couchbase::error err = fn(ctx);
     if (err && err.ec() != errc::transaction_op::transaction_op_failed) {
       if (err.ec().category() == core::impl::transaction_op_category()) {
         throw op_exception(err);
@@ -182,7 +185,7 @@ wrap_public_api_run(transactions& txns,
 auto
 transactions::run(logic&& code) -> ::couchbase::transactions::transaction_result
 {
-  couchbase::transactions::transaction_options config;
+  const couchbase::transactions::transaction_options config;
   return wrap_run(*this, config, max_attempts_, std::move(code));
 }
 
@@ -214,7 +217,7 @@ transactions::run(const couchbase::transactions::transaction_options& config,
 {
   std::thread([this, config, code = std::move(code), cb = std::move(cb)]() {
     try {
-      auto result = wrap_run(*this, config, max_attempts_, std::move(code));
+      auto result = wrap_run(*this, config, max_attempts_, code);
       return cb({}, result);
     } catch (const transaction_exception& e) {
       return cb(e, std::nullopt);
@@ -228,7 +231,7 @@ transactions::run(couchbase::transactions::async_txn_logic&& code,
 {
   std::thread([this, config, code = std::move(code), cb = std::move(cb)]() {
     try {
-      auto result = wrap_public_api_run(*this, config, max_attempts_, std::move(code));
+      auto result = wrap_public_api_run(*this, config, max_attempts_, code);
       return cb({}, result);
     } catch (const transaction_exception& e) {
       auto [ctx, res] = e.get_transaction_result();
@@ -240,7 +243,7 @@ transactions::run(couchbase::transactions::async_txn_logic&& code,
 void
 transactions::run(async_logic&& code, txn_complete_callback&& cb)
 {
-  couchbase::transactions::transaction_options config;
+  const couchbase::transactions::transaction_options config;
   return run(config, std::move(code), std::move(cb));
 }
 

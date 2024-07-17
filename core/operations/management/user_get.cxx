@@ -22,10 +22,13 @@
 #include "core/utils/json.hxx"
 #include "error_utils.hxx"
 
+#include <tao/json/value.hpp>
+
 namespace couchbase::core::operations::management
 {
-std::error_code
-user_get_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+auto
+user_get_request::encode_to(encoded_request_type& encoded,
+                            http_context& /* context */) const -> std::error_code
 {
   encoded.method = "GET";
   encoded.path = fmt::format("/settings/rbac/users/{}/{}", domain, username);
@@ -33,9 +36,9 @@ user_get_request::encode_to(encoded_request_type& encoded, http_context& /* cont
   return {};
 }
 
-user_get_response
+auto
 user_get_request::make_response(error_context::http&& ctx,
-                                const encoded_response_type& encoded) const
+                                const encoded_response_type& encoded) const -> user_get_response
 {
   user_get_response response{ std::move(ctx) };
   if (!response.ctx.ec) {

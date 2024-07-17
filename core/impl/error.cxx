@@ -15,26 +15,41 @@
  *   limitations under the License.
  */
 
-#include "core/error_context/transaction_error_context.hxx"
-#include <couchbase/error.hxx>
-#include <couchbase/error_context.hxx>
+#include "error.hxx"
 
+#include "core/error_context/analytics.hxx"
 #include "core/error_context/analytics_json.hxx"
+#include "core/error_context/http.hxx"
 #include "core/error_context/http_json.hxx"
 #include "core/error_context/internal_tof_metadata_json.hxx"
-#include "core/error_context/key_value_json.hxx"
+#include "core/error_context/key_value_error_context.hxx"
+#include "core/error_context/query.hxx"
+#include "core/error_context/query_error_context.hxx"
 #include "core/error_context/query_json.hxx"
 #include "core/error_context/query_public_json.hxx"
+#include "core/error_context/search.hxx"
 #include "core/error_context/search_json.hxx"
+#include "core/error_context/subdocument_error_context.hxx"
 #include "core/error_context/subdocument_json.hxx"
+#include "core/error_context/transaction_error_context.hxx"
+#include "core/error_context/transaction_op_error_context.hxx"
 #include "core/impl/internal_error_context.hxx"
+#include "core/transactions/exceptions.hxx"
+#include "core/transactions/internal/exceptions_internal.hxx"
 #include "core/transactions/internal/exceptions_internal_fmt.hxx"
-#include "error.hxx"
+
+#include <couchbase/error.hxx>
+#include <couchbase/error_codes.hxx>
+#include <couchbase/error_context.hxx>
+
+#include <tao/json/value.hpp>
 
 #include <memory>
 #include <optional>
+#include <string>
 #include <system_error>
 #include <utility>
+#include <variant>
 
 namespace couchbase
 {

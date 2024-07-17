@@ -20,7 +20,9 @@
 namespace couchbase
 {
 
-static auto
+namespace
+{
+auto
 map_ranges(const core::operations::search_response::search_facet& facet)
   -> std::vector<search_term_range>
 {
@@ -33,6 +35,7 @@ map_ranges(const core::operations::search_response::search_facet& facet)
 
   return ranges;
 }
+} // namespace
 
 internal_term_facet_result::internal_term_facet_result(
   const core::operations::search_response::search_facet& facet)

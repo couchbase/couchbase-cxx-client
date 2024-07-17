@@ -23,12 +23,15 @@
 
 #include "base64.h"
 
-#include <algorithm>
+#include <gsl/span>
+
 #include <array>
 #include <cctype>
+#include <cstddef>
 #include <cstdint>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 /**
@@ -77,7 +80,7 @@ code2val(const char code)
 static void
 encode_rest(const std::byte* s, std::string& result, size_t num)
 {
-  std::uint32_t val;
+  std::uint32_t val = 0;
 
   switch (num) {
     case 2:
@@ -213,7 +216,7 @@ decode(std::string_view blob)
   // To reduce the number of reallocations, start by reserving an
   // output buffer of 75% of the input size (and add 3 to avoid dealing
   // with zero)
-  size_t estimate = blob.size() / 100 * 75;
+  const size_t estimate = blob.size() / 100 * 75;
   destination.reserve(estimate + 3);
 
   const auto* in = blob.data();

@@ -87,6 +87,13 @@ sdk_build_info() -> std::map<std::string, std::string>
     "false"
 #endif
     ;
+  info["columnar"] =
+#if defined(COUCHBASE_CXX_CLIENT_COLUMNAR)
+    "true"
+#else
+    "false"
+#endif
+    ;
   info["post_linked_openssl"] = COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL;
   info["static_openssl"] =
 #if defined(COUCHBASE_CXX_CLIENT_STATIC_OPENSSL)

@@ -20,13 +20,15 @@
 #include "core/utils/json.hxx"
 #include "error_utils.hxx"
 
+#include <tao/json/value.hpp>
+
 namespace couchbase::core::operations::management
 {
-std::error_code
+auto
 analytics_dataset_get_all_request::encode_to(encoded_request_type& encoded,
-                                             http_context& /* context */) const
+                                             http_context& /* context */) const -> std::error_code
 {
-  tao::json::value body{
+  const tao::json::value body{
     { "statement",
       R"(SELECT d.* FROM Metadata.`Dataset` d WHERE d.DataverseName <> "Metadata" AND d.DatasetType = "INTERNAL")" },
   };
@@ -37,9 +39,10 @@ analytics_dataset_get_all_request::encode_to(encoded_request_type& encoded,
   return {};
 }
 
-analytics_dataset_get_all_response
+auto
 analytics_dataset_get_all_request::make_response(error_context::http&& ctx,
                                                  const encoded_response_type& encoded) const
+  -> analytics_dataset_get_all_response
 {
   analytics_dataset_get_all_response response{ std::move(ctx) };
 
@@ -55,7 +58,7 @@ analytics_dataset_get_all_request::make_response(error_context::http&& ctx,
     if (response.status != "success") {
       if (const auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
         for (const auto& error : errors->get_array()) {
-          analytics_problem err{
+          const analytics_problem err{
             error.at("code").as<std::uint32_t>(),
             error.at("msg").get_string(),
           };

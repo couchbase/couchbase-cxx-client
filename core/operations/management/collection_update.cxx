@@ -22,13 +22,15 @@
 #include "error_utils.hxx"
 
 #include <fmt/core.h>
+#include <tao/json/value.hpp>
 
 #include <regex>
 
 namespace couchbase::core::operations::management
 {
-std::error_code
-collection_update_request::encode_to(encoded_request_type& encoded, http_context& /*context*/) const
+auto
+collection_update_request::encode_to(encoded_request_type& encoded,
+                                     http_context& /*context*/) const -> std::error_code
 {
   encoded.method = "PATCH";
   encoded.path = fmt::format(
@@ -49,9 +51,10 @@ collection_update_request::encode_to(encoded_request_type& encoded, http_context
   return {};
 }
 
-collection_update_response
+auto
 collection_update_request::make_response(error_context::http&& ctx,
                                          const encoded_response_type& encoded) const
+  -> collection_update_response
 {
   collection_update_response response{ std::move(ctx) };
   if (!response.ctx.ec) {
@@ -60,8 +63,8 @@ collection_update_request::make_response(error_context::http&& ctx,
         response.ctx.ec = errc::common::invalid_argument;
       } break;
       case 404: {
-        std::regex scope_not_found("Scope with name .+ is not found");
-        std::regex collection_not_found("Collection with name .+ is not found");
+        const std::regex scope_not_found("Scope with name .+ is not found");
+        const std::regex collection_not_found("Collection with name .+ is not found");
         if (std::regex_search(encoded.body.data(), collection_not_found)) {
           response.ctx.ec = errc::common::collection_not_found;
         } else if (std::regex_search(encoded.body.data(), scope_not_found)) {

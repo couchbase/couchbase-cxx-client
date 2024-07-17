@@ -19,6 +19,7 @@
 
 #include <core/transactions/attempt_context_testing_hooks.hxx>
 #include <core/transactions/cleanup_testing_hooks.hxx>
+#include <utility>
 
 namespace couchbase::transactions
 {
@@ -44,8 +45,8 @@ transaction_options::test_factories(
   std::shared_ptr<core::transactions::attempt_context_testing_hooks> hooks,
   std::shared_ptr<core::transactions::cleanup_testing_hooks> cleanup_hooks) -> transaction_options&
 {
-  attempt_context_hooks_ = hooks;
-  cleanup_hooks_ = cleanup_hooks;
+  attempt_context_hooks_ = std::move(hooks);
+  cleanup_hooks_ = std::move(cleanup_hooks);
   return *this;
 }
 

@@ -24,7 +24,7 @@ namespace couchbase::core::transactions
 auto
 result::strerror() const -> std::string
 {
-  static std::string success("success");
+  static const std::string success("success");
   if (ec) {
     return ec.message();
   }
