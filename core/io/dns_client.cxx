@@ -32,6 +32,7 @@
 
 #include <spdlog/fmt/bin_to_hex.h>
 
+#include <chrono>
 #include <memory>
 #include <sstream>
 #include <utility>
@@ -155,7 +156,6 @@ public:
                    self->address_.to_string(),
                    self->port_);
       self->udp_.cancel();
-      return self->retry_with_tcp();
     });
 
     deadline_.expires_after(total_timeout);
@@ -182,6 +182,12 @@ private:
         !retrying_with_tcp_.compare_exchange_strong(expected_state, true)) {
       return;
     }
+
+    CB_LOG_TRACE("Query DNS-SRV (TCP) address=\"{}:{}\", time_left={}",
+                 address_.to_string(),
+                 port_,
+                 std::chrono::duration_cast<std::chrono::milliseconds>(
+                   deadline_.expiry() - std::chrono::steady_clock::now()));
 
     const asio::ip::tcp::no_delay no_delay(true);
     std::error_code ignore_ec;
