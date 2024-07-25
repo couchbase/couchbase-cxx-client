@@ -20,6 +20,7 @@
 #include "free_form_http_request.hxx"
 #include "io/http_session_manager.hxx"
 #include "pending_operation.hxx"
+#include "pending_operation_connection_info.hxx"
 
 #include <couchbase/build_config.hxx>
 
@@ -34,6 +35,7 @@ namespace couchbase::core
 class pending_http_operation
   : public std::enable_shared_from_this<pending_http_operation>
   , public pending_operation
+  , public pending_operation_connection_info
 {
 public:
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
@@ -51,8 +53,7 @@ public:
       request_.headers,
       request_.body,
       {},
-      {},
-      request_.timeout,
+      request_.client_context_id,
     } }
   {
   }
@@ -68,7 +69,6 @@ public:
         request_.body,
         {},
         {},
-        request_.timeout,
       } }
   {
   }
@@ -83,38 +83,41 @@ public:
   void start(free_form_http_request_callback&& callback)
   {
     callback_ = std::move(callback);
+    encoded_.headers["client-context-id"] = request_.client_context_id;
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
     dispatch_deadline_.expires_after(dispatch_timeout_);
     dispatch_deadline_.async_wait([self = shared_from_this()](auto ec) {
       if (ec == asio::error::operation_aborted) {
         return;
       }
-      // TODO(JC):  client_context_id/request_id??
-      CB_LOG_DEBUG(R"(HTTP request timed out: {}, method={}, path="{}")",
+      CB_LOG_DEBUG(R"(HTTP request timed out: {}, method={}, path="{}", client_context_id={})",
                    self->encoded_.type,
                    self->encoded_.method,
-                   self->encoded_.path);
+                   self->encoded_.path,
+                   self->encoded_.client_context_id);
       self->trigger_timeout();
       if (self->session_) {
         self->session_->stop();
       }
     });
 #endif
-    deadline_.expires_after(request_.timeout);
-    deadline_.async_wait([self = shared_from_this()](auto ec) {
-      if (ec == asio::error::operation_aborted) {
-        return;
-      }
-      // TODO(JC):  client_context_id/request_id??
-      CB_LOG_DEBUG(R"(HTTP request timed out: {}, method={}, path="{}")",
-                   self->encoded_.type,
-                   self->encoded_.method,
-                   self->encoded_.path);
-      self->trigger_timeout();
-      if (self->session_) {
-        self->session_->stop();
-      }
-    });
+    if (request_.timeout.has_value()) {
+      deadline_.expires_after(request_.timeout.value());
+      deadline_.async_wait([self = shared_from_this()](auto ec) {
+        if (ec == asio::error::operation_aborted) {
+          return;
+        }
+        CB_LOG_DEBUG(R"(HTTP request timed out: {}, method={}, path="{}", client_context_id={})",
+                     self->encoded_.type,
+                     self->encoded_.method,
+                     self->encoded_.path,
+                     self->encoded_.client_context_id);
+        self->trigger_timeout();
+        if (self->session_) {
+          self->session_->stop();
+        }
+      });
+    }
   }
 
   void set_stream_end_callback(utils::movable_function<void()>&& stream_end_callback)
@@ -188,6 +191,16 @@ public:
     return request_;
   }
 #endif
+
+  [[nodiscard]] auto dispatched_to() const -> std::string override
+  {
+    return session_->remote_address();
+  }
+
+  [[nodiscard]] auto dispatched_from() const -> std::string override
+  {
+    return session_->local_address();
+  }
 
 private:
   void trigger_timeout()
@@ -307,9 +320,10 @@ private:
     pending_op->start([callback = std::move(callback)](auto resp, auto ec) mutable {
       callback(std::move(resp), ec);
     });
-    // TODO(JC):  client_context_id?
-    CB_LOG_DEBUG(R"(Adding pending HTTP operation to deferred queue: {})",
-                 pending_op->request().service);
+    CB_LOG_DEBUG(
+      R"(Adding pending HTTP operation to deferred queue: service={}, client_context_id={})",
+      pending_op->request().service,
+      pending_op->request().client_context_id);
     session_manager->add_to_deferred_queue(
       [op = pending_op, session_manager, credentials]() mutable {
         // don't do anything if the op wasn't dispatched or has already timed out

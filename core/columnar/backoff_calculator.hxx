@@ -15,36 +15,20 @@
  *   limitations under the License.
  */
 
-#include "error.hxx"
+#pragma once
 
-#include <tao/json/to_string.hpp>
-
-#include <string>
+#include <chrono>
+#include <functional>
 
 namespace couchbase::core::columnar
 {
-error::operator bool() const
-{
-  return ec.operator bool();
-}
+using backoff_calculator = std::function<std::chrono::milliseconds(std::size_t retry_attempts)>;
 
 auto
-error::message_with_ctx() const -> std::string
-{
-  std::string serialized_ctx{};
-  if (!ctx.get_object().empty()) {
-    serialized_ctx = tao::json::to_string(ctx);
-  }
-  std::string res{};
-  if (!message.empty()) {
-    res += message;
-  }
-  if (!serialized_ctx.empty()) {
-    if (!res.empty()) {
-      res += ' ';
-    }
-    res += serialized_ctx;
-  }
-  return res;
-}
+exponential_backoff_with_full_jitter(std::chrono::milliseconds min_backoff,
+                                     std::chrono::milliseconds max_backoff,
+                                     double backoff_factor) -> backoff_calculator;
+
+auto
+default_backoff_calculator(std::size_t retry_attempts) -> std::chrono::milliseconds;
 } // namespace couchbase::core::columnar

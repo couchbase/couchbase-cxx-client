@@ -19,7 +19,6 @@ integration_test(search)
 integration_test(management)
 integration_test(management_eventing)
 integration_test(management_search_index)
-integration_test(columnar)
 
 unit_test(connection_string)
 unit_test(utils)
@@ -51,3 +50,6 @@ unit_test(waitable_op_list)
 
 integration_test(examples)
 transaction_test(examples)
+
+integration_test(columnar_query)
+unit_test(columnar_retry)
