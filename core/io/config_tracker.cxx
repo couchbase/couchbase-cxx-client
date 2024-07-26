@@ -94,7 +94,8 @@ public:
   }
 
   void create_sessions(
-    utils::movable_function<void(std::error_code, topology::configuration cfg)>&& handler)
+    utils::movable_function<
+      void(std::error_code, const topology::configuration&, const cluster_options&)>&& handler)
   {
     io::mcbp_session new_session =
       origin_.options().enable_tls
@@ -153,7 +154,7 @@ public:
         }
 #endif
       }
-      h(ec, cfg);
+      h(ec, cfg, self->origin_.options());
     });
   }
 
@@ -611,7 +612,8 @@ cluster_config_tracker::close()
 
 void
 cluster_config_tracker::create_sessions(
-  utils::movable_function<void(std::error_code, topology::configuration cfg)>&& handler)
+  utils::movable_function<
+    void(std::error_code, const topology::configuration&, const cluster_options&)>&& handler)
 {
   return impl_->create_sessions(std::move(handler));
 }

@@ -42,6 +42,7 @@ class context;
 
 namespace couchbase::core
 {
+struct cluster_options;
 struct origin;
 
 namespace protocol
@@ -94,7 +95,9 @@ public:
   ~cluster_config_tracker() override;
 
   void create_sessions(
-    utils::movable_function<void(std::error_code, topology::configuration cfg)>&& handler);
+    utils::movable_function<void(std::error_code,
+                                 const topology::configuration&,
+                                 const couchbase::core::cluster_options&)>&& handler);
   void on_configuration_update(std::shared_ptr<config_listener> handler);
   void close();
   void register_state_listener();

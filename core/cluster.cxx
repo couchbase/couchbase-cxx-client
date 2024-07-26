@@ -1000,7 +1000,9 @@ public:
   void create_cluster_sessions()
   {
     config_tracker_->create_sessions(
-      [self = shared_from_this()](std::error_code ec, const topology::configuration& cfg) mutable {
+      [self = shared_from_this()](std::error_code ec,
+                                  const topology::configuration& cfg,
+                                  const cluster_options& options) mutable {
         if (ec) {
           auto backoff = std::chrono::milliseconds(500);
           CB_LOG_DEBUG("[{}] Waiting for {}ms before retrying to create cluster sessions.",
@@ -1010,7 +1012,7 @@ public:
             self->create_cluster_sessions();
           });
         } else {
-          self->session_manager_->set_configuration(cfg, self->origin_.options());
+          self->session_manager_->set_configuration(cfg, options);
           self->config_tracker_->on_configuration_update(self->session_manager_);
           self->config_tracker_->register_state_listener();
         }
