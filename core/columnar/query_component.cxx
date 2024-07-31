@@ -249,7 +249,7 @@ private:
   static auto build_query_request(const query_options& options) -> http_request
   {
     http_request req{ service_type::analytics, "POST" };
-    req.path = "/analytics/service";
+    req.path = "/api/v1/request";
     req.body = utils::json::generate(build_query_payload(options));
     if (options.timeout.has_value()) {
       req.timeout = options.timeout.value();
