@@ -17,12 +17,13 @@
 
 #include "pillowfight.hxx"
 
-#include "core/operations/document_upsert.hxx"
-#include "couchbase/codec/binary_noop_serializer.hxx"
 #include "utils.hxx"
 
 #include <core/logger/logger.hxx>
+#include <core/meta/version.hxx>
+#include <core/utils/binary.hxx>
 #include <couchbase/cluster.hxx>
+#include <couchbase/codec/binary_noop_serializer.hxx>
 #include <couchbase/codec/raw_binary_transcoder.hxx>
 #include <couchbase/fmt/cas.hxx>
 #include <couchbase/fmt/error.hxx>
@@ -31,6 +32,7 @@
 #include <asio/steady_timer.hpp>
 #include <fmt/chrono.h>
 #include <fmt/std.h>
+#include <gsl/util>
 #include <hdr/hdr_histogram.h>
 #include <tao/json.hpp>
 
@@ -44,24 +46,118 @@ namespace cbc
 {
 namespace
 {
-const std::string default_bucket_name{ "default" };
-const std::size_t default_number_of_io_threads{ 1 };
-const std::size_t default_number_of_worker_threads{ 1 };
-const double default_chance_of_get{ 0.6 };
-const double default_hit_chance_for_get{ 1.0 };
-const double default_hit_chance_for_upsert{ 1 };
-const double default_chance_of_query{ 1.0 };
-const std::string default_query_statement{
+enum class operation {
+  cmd_get,
+  cmd_replace,
+  cmd_delete,
+  cmd_insert,
+  cmd_query,
+};
+
+struct operation_weights {
+  std::size_t gets{ 1 };
+  std::size_t replaces{ 1 };
+  std::size_t deletes{ 0 };
+  std::size_t inserts{ 0 };
+  std::size_t queries{ 0 };
+
+  [[nodiscard]] auto to_string() const -> std::string
+  {
+    return fmt::format("{}:{}:{}:{}:{}", gets, replaces, deletes, inserts, queries);
+  }
+
+  [[nodiscard]] auto to_vector() const -> std::vector<std::size_t>
+  {
+    return { gets, replaces, deletes, inserts, queries };
+  }
+};
+
+class operation_generator
+{
+public:
+  static auto parse(const std::string& input) -> operation_generator
+  {
+    operation_weights weights;
+
+    std::stringstream is(input);
+    std::string token;
+
+    if (std::getline(is, token, ':')) {
+      weights.gets = parse_ratio_term(token, weights.gets);
+    }
+    if (std::getline(is, token, ':')) {
+      weights.replaces = parse_ratio_term(token, weights.replaces);
+    }
+    if (std::getline(is, token, ':')) {
+      weights.deletes = parse_ratio_term(token, weights.inserts);
+    }
+    if (std::getline(is, token, ':')) {
+      weights.inserts = parse_ratio_term(token, weights.inserts);
+    }
+    if (std::getline(is, token, ':')) {
+      weights.queries = parse_ratio_term(token, weights.queries);
+    }
+
+    return operation_generator(weights);
+  }
+
+  [[nodiscard]] auto next_operation() -> operation
+  {
+    return operations_[distribution_(generator_)];
+  }
+
+  [[nodiscard]] auto to_string() const -> std::string
+  {
+    return weights_.to_string();
+  }
+
+private:
+  explicit operation_generator(operation_weights weights)
+    : weights_{ weights }
+    , weights_vector_{ weights_.to_vector() }
+    , distribution_{ weights_vector_.begin(), weights_vector_.end() }
+  {
+  }
+
+  static auto parse_ratio_term(const std::string& term, std::size_t default_value) -> std::size_t
+  {
+    try {
+      return std::stoull(term);
+    } catch (const std::invalid_argument&) {
+      return default_value;
+    } catch (const std::out_of_range&) {
+      return default_value;
+    }
+    return default_value;
+  }
+
+  std::random_device random_device_;
+  std::mt19937 generator_{ random_device_() };
+
+  std::vector<operation> operations_{ operation::cmd_get,
+                                      operation::cmd_replace,
+                                      operation::cmd_delete,
+                                      operation::cmd_insert,
+                                      operation::cmd_query };
+  operation_weights weights_;
+  std::vector<std::size_t> weights_vector_;
+  std::discrete_distribution<> distribution_;
+};
+
+constexpr const char* default_bucket_name{ "default" };
+constexpr std::size_t default_number_of_io_threads{ 1 };
+constexpr std::size_t default_number_of_worker_threads{ 1 };
+constexpr const char* default_query_statement{
   "SELECT COUNT(*) FROM `{bucket_name}` WHERE type = \"fake_profile\""
 };
-const std::size_t default_document_body_size{ 0 };
-const std::size_t default_operations_limit{ 0 };
-const std::size_t default_key_value_batch_size{ 100 };
-const std::size_t default_query_batch_size{ 0 };
-const std::chrono::milliseconds default_batch_wait{ 0 };
-const std::size_t default_number_of_keys_to_populate{ 1'000 };
+constexpr operation_weights default_operation_ratio{};
+constexpr std::size_t default_document_body_size{ 0 };
+constexpr std::size_t default_operations_limit{ 0 };
+constexpr std::size_t default_operation_batch_size{ 100 };
+constexpr std::chrono::milliseconds default_batch_wait{ 0 };
+constexpr std::size_t default_number_of_keys_to_populate{ 1'000 };
 
-const char* default_json_doc = R"({
+constexpr const char* default_json_doc = R"({
   "type": "fake_profile",
   "random": 91,
   "random float": 16.439,
@@ -102,11 +198,6 @@ const char* default_json_doc = R"({
   }
 })";
 
-enum class operation {
-  get,
-  upsert,
-};
-
 using raw_json_transcoder =
   couchbase::codec::json_transcoder<couchbase::codec::binary_noop_serializer>;
 
@@ -130,11 +221,11 @@ dump_stats(asio::steady_timer& timer, std::chrono::system_clock::time_point star
 {
   struct stats_entry {
     std::chrono::system_clock::time_point timestamp;
-    std::uint64_t operations;
-    std::uint64_t errors;
+    std::uint64_t operations{};
+    std::uint64_t errors{};
   };
 
-  static constexpr std::size_t max_window_size{ 3 * 60 }; // average on last 3 minutes only
+  static constexpr std::size_t max_window_size{ 3LLU * 60LLU }; // average on last 3 minutes only
   static std::deque<stats_entry> stats_window{};
   static std::uint64_t last_total{ 0 };
   static std::uint64_t last_errors{ 0 };
@@ -192,14 +283,14 @@ dump_stats(asio::steady_timer& timer, std::chrono::system_clock::time_point star
   });
 }
 
-std::string
-uniq_id(const std::string& prefix)
+auto
+uniq_id(const std::string& prefix) -> std::string
 {
   return fmt::format("{}_{}", prefix, std::chrono::steady_clock::now().time_since_epoch().count());
 }
 
-std::string
-random_text(std::size_t length)
+auto
+random_text(std::size_t length) -> std::string
 {
   std::string alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
   static thread_local std::mt19937_64 gen{ std::random_device()() };
@@ -218,74 +309,62 @@ public:
     : CLI::App{ "Run workload generator.", "pillowfight" }
   {
     add_flag("--verbose", verbose_, "Include more context and information where it is applicable.");
+
     add_option("--bucket-name", bucket_name_, "Name of the bucket.")
       ->default_val(default_bucket_name);
-    add_option("--scope-name", scope_name_, "Name of the scope.")
-      ->default_val(couchbase::scope::default_name);
-    add_option("--key-value-batch-size",
-               key_value_batch_size_,
-               "Number of the operations in single batch Key/Value operations (zero to disable).")
-      ->default_val(default_key_value_batch_size);
-    add_option("--query-batch-size",
-               query_batch_size_,
-               "Number of the operations in single batch for Query operations (zero to disable).")
-      ->default_val(default_query_batch_size);
-    add_option("--batch-wait", batch_wait_, "Time to wait after the batch.")
-      ->default_val(default_batch_wait);
-    add_option("--number-of-io-threads", number_of_io_threads_, "Number of the IO threads.")
-      ->default_val(default_number_of_io_threads);
-    add_option(
-      "--number-of-worker-threads", number_of_worker_threads_, "Number of the worker threads.")
-      ->default_val(default_number_of_worker_threads);
-    add_option("--chance-of-get",
-               chance_of_get_,
-               "The probability of get operation (where 1 means only get, and 0 - only upsert).")
-      ->default_val(default_chance_of_get);
-    add_option("--hit-chance-for-get",
-               hit_chance_for_get_,
-               "The probability of using existing ID for get operation.")
-      ->default_val(default_hit_chance_for_get);
-    add_option("--hit-chance-for-upsert",
-               hit_chance_for_upsert_,
-               "The probability of using existing ID for upsert operation.")
-      ->default_val(default_hit_chance_for_upsert);
-    add_option("--chance-of-query",
-               chance_of_query_,
-               "The probability of N1QL query will be sent during the iteration.")
-      ->default_val(default_chance_of_query);
-    add_option("--query-statement",
-               query_statement_,
-               "The N1QL query statement to use ({bucket_name}, {scope_name} and {collection_name} "
-               "will be substituted).")
-      ->default_val(default_query_statement);
     add_option("--document-body-size",
                document_body_size_,
                "Size of the body (if zero, it will use predefined document).")
       ->default_val(default_document_body_size);
+    add_flag("--incompressible-body",
+             incompressible_body_,
+             "Use random characters to fill generated document value (by default uses 'x' to fill "
+             "the body).");
+    add_option("--number-of-io-threads", number_of_io_threads_, "Number of the IO threads.")
+      ->default_val(default_number_of_io_threads);
     add_option("--number-of-keys-to-populate",
                number_of_keys_to_populate_,
                "Preload keys before running workload, so that the worker will not generate new "
                "keys afterwards.")
       ->default_val(default_number_of_keys_to_populate);
+    add_option(
+      "--number-of-worker-threads", number_of_worker_threads_, "Number of the worker threads.")
+      ->default_val(default_number_of_worker_threads);
+    add_option(
+      "--operation-ratio",
+      operation_ratio_string_,
+      "The ratio of the operations to generate in form \"G:R:D:I:Q\", where letters represent "
+      "ratio of the operations in whole numbers: Get, Replace, Delete, Insert and Query "
+      "respectively. (e.g. 5:2:1:1:0 would do on average 5 gets for every insert)")
+      ->default_val(default_operation_ratio.to_string());
     add_option("--operations-limit",
                operations_limit_,
                "Stop and exit after the number of the operations reaches this limit. (zero for "
                "running indefinitely)")
       ->default_val(default_operations_limit);
-    add_flag("--incompressible-body",
-             incompressible_body_,
-             "Use random characters to fill generated document value (by default uses 'x' to fill "
-             "the body).");
+    add_option("--operation-batch-size",
+               operation_batch_size_,
+               "Number of the operations in single batch operations (1 to wait for completion "
+               "after each operation).")
+      ->default_val(default_operation_batch_size);
+    add_option("--batch-wait", batch_wait_, "Time to wait after the batch.")
+      ->default_val(default_batch_wait);
+    add_option("--query-statement",
+               query_statement_,
+               "The N1QL query statement to use ({bucket_name}, {scope_name} and {collection_name} "
+               "will be substituted).")
+      ->default_val(default_query_statement);
+    add_option("--scope-name", scope_name_, "Name of the scope.")
+      ->default_val(couchbase::scope::default_name);
 
     add_common_options(this, common_options_);
     allow_extras(true);
   }
 
-  [[nodiscard]] int execute() const
+  [[nodiscard]] auto execute() const -> int
   {
-    if (key_value_batch_size_ == 0 && query_batch_size_ == 0) {
-      throw CLI::ValidationError(
-        "--query-batch-size and --key-value-batch-size cannot be zero at the same time");
+    if (operation_batch_size_ == 0) {
+      throw CLI::ValidationError("--operation-batch-size cannot be zero");
     }
     apply_logger_options(common_options_.logger);
 
@@ -312,6 +391,17 @@ public:
 
     const auto connection_string = common_options_.connection.connection_string;
 
+    fmt::print(stderr,
+               "Workload Plan\n"
+               "| Version: {}\n"
+               "| Connection String: {}\n"
+               "| Ratio: {} (Get:Replace:Delete:Insert:Query)\n"
+               "| Batch size: {}\n",
+               couchbase::core::meta::sdk_semver(),
+               connection_string,
+               operation_generator::parse(operation_ratio_string_).to_string(),
+               operation_batch_size_);
+
     auto [connect_err, cluster] =
       couchbase::cluster::connect(connection_string, cluster_options).get();
     if (connect_err) {
@@ -327,25 +417,6 @@ public:
     if (number_of_keys_to_populate_ > 0) {
       populate_keys(cluster, known_keys);
     }
-
-    fmt::print(stderr,
-               "Workload Plan\n"
-               "| Key/Value: {}\n"
-               "|   batch size: {}\n"
-               "|   {:02.2f}% get ({:02.2f}% hit)\n"
-               "|   {:02.2f}% upsert ({:02.2f}% hit)\n"
-               "| Query: {}\n"
-               "|   batch size: {}\n"
-               "|   {:02.2f}% chance\n",
-               key_value_batch_size_ == 0 ? "disabled" : "enabled",
-               key_value_batch_size_,
-               chance_of_get_ * 100,
-               hit_chance_for_get_ * 100,
-               100 - chance_of_get_ * 100,
-               hit_chance_for_upsert_ * 100,
-               query_batch_size_ == 0 ? "disabled" : "enabled",
-               query_batch_size_,
-               chance_of_query_ * 100);
 
     const auto start_time = std::chrono::system_clock::now();
 
@@ -434,6 +505,8 @@ private:
     auto query_statement{ fmt::format(query_statement_, fmt::arg("bucket_name", bucket_name_)) };
 
     bool stopping{ false };
+    auto operation_generator{ operation_generator::parse(operation_ratio_string_) };
+
     while (running.test_and_set() && !stopping) {
       std::list<
         std::pair<std::chrono::system_clock::time_point,
@@ -441,42 +514,34 @@ private:
                                std::future<std::pair<couchbase::error, couchbase::get_result>>,
                                std::future<std::pair<couchbase::error, couchbase::query_result>>>>>
         futures;
-      for (std::size_t i = 0; i < key_value_batch_size_; ++i) {
-        auto opcode = (dist(gen) <= chance_of_get_) ? operation::get : operation::upsert;
-        if (opcode == operation::get && known_keys.empty()) {
-          opcode = operation::upsert;
-        }
-        bool should_check_known_keys{ false };
-        switch (opcode) {
-          case operation::get:
-            should_check_known_keys = hit_chance_for_get_ > dist(gen);
-            break;
-          case operation::upsert:
-            should_check_known_keys = hit_chance_for_upsert_ > dist(gen);
-            break;
-        }
-        std::string document_id = uniq_id("id");
-        if (should_check_known_keys && !known_keys.empty()) {
-          auto key_index =
-            std::uniform_int_distribution<std::size_t>(0, known_keys.size() - 1)(gen);
-          document_id = known_keys[key_index];
-        }
 
-        switch (opcode) {
-          case operation::upsert:
-            futures.emplace_back(std::chrono::system_clock::now(),
-                                 collection.upsert<raw_json_transcoder>(document_id, json_doc));
-            break;
-          case operation::get:
+      auto known_keys_distribution =
+        std::uniform_int_distribution<std::size_t>(0, known_keys.size() - 1);
+      for (std::size_t i = 0; i < operation_batch_size_; ++i) {
+        auto operation = operation_generator.next_operation();
+        std::string document_id = (operation != operation::cmd_insert && !known_keys.empty())
+                                    ? known_keys[known_keys_distribution(gen)]
+                                    : uniq_id("id");
+        switch (operation) {
+          case operation::cmd_get:
             futures.emplace_back(std::chrono::system_clock::now(), collection.get(document_id));
             break;
-        }
-      }
-
-      for (std::size_t i = 0; i < query_batch_size_; ++i) {
-        if (chance_of_query_ > 0 && dist(gen) <= chance_of_query_) {
-          futures.emplace_back(std::chrono::system_clock::now(),
-                               cluster.query(query_statement, couchbase::query_options{}));
+          case operation::cmd_replace:
+            futures.emplace_back(std::chrono::system_clock::now(),
+                                 collection.replace<raw_json_transcoder>(document_id, json_doc));
+            break;
+          case operation::cmd_delete:
+            futures.emplace_back(std::chrono::system_clock::now(), collection.remove(document_id));
+            break;
+          case operation::cmd_insert:
+            known_keys.push_back(document_id);
+            futures.emplace_back(std::chrono::system_clock::now(),
+                                 collection.replace<raw_json_transcoder>(document_id, json_doc));
+            break;
+          case operation::cmd_query:
+            futures.emplace_back(std::chrono::system_clock::now(),
+                                 cluster.query(query_statement, couchbase::query_options{}));
+            break;
         }
       }
 
@@ -501,12 +566,6 @@ private:
               if (verbose) {
                 fmt::print(stderr, "\r\033[K{}\n", err.ctx().to_json());
               }
-            } else if constexpr (std::is_same_v<
-                                   T,
-                                   std::future<
-                                     std::pair<couchbase::error, couchbase::mutation_result>>>) {
-              auto ctx = tao::json::from_string(err.ctx().to_json());
-              known_keys.emplace_back(ctx["id"].get_string());
             }
           },
           std::move(future));
@@ -548,20 +607,24 @@ private:
                    std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::system_clock::now() - start_time));
 
-        auto batch_size = std::min(keys_left, std::max(key_value_batch_size_, minimum_batch_size));
+        auto batch_size = std::min(keys_left, std::max(operation_batch_size_, minimum_batch_size));
 
-        std::vector<std::future<std::pair<couchbase::error, couchbase::mutation_result>>> futures;
+        std::vector<std::pair<std::string,
+                              std::future<std::pair<couchbase::error, couchbase::mutation_result>>>>
+          futures;
         futures.reserve(batch_size);
         for (std::size_t k = 0; k < batch_size; ++k) {
           const std::string document_id = uniq_id("id");
-          futures.emplace_back(collection.upsert<raw_json_transcoder>(document_id, json_doc));
+          futures.emplace_back(document_id,
+                               collection.upsert<raw_json_transcoder>(document_id, json_doc));
         }
 
-        for (auto&& future : futures) {
+        for (auto&& [document_id, future] : futures) {
           auto [ctx, res] = future.get();
           if (ctx.ec()) {
             ++retried_keys;
           } else {
+            known_keys[i].emplace_back(document_id);
             ++stored_keys;
             --keys_left;
           }
@@ -585,20 +648,16 @@ private:
   std::string scope_name_{ couchbase::scope::default_name };
   std::string collection_name_{ couchbase::collection::default_name };
   bool verbose_{ false };
-  std::size_t key_value_batch_size_;
-  std::size_t query_batch_size_;
-  std::chrono::milliseconds batch_wait_;
-  std::size_t number_of_io_threads_;
-  std::size_t number_of_worker_threads_;
-  std::size_t number_of_keys_to_populate_;
-  double chance_of_get_;
-  double hit_chance_for_get_;
-  double hit_chance_for_upsert_;
-  double chance_of_query_;
+  std::size_t operation_batch_size_{};
+  std::chrono::milliseconds batch_wait_{};
+  std::size_t number_of_io_threads_{};
+  std::size_t number_of_worker_threads_{};
+  std::size_t number_of_keys_to_populate_{};
+  std::string operation_ratio_string_{ default_operation_ratio.to_string() };
   std::string query_statement_;
-  bool incompressible_body_;
-  std::size_t document_body_size_;
-  std::size_t operations_limit_;
+  bool incompressible_body_{};
+  std::size_t document_body_size_{};
+  std::size_t operations_limit_{};
 };
 } // namespace
 
