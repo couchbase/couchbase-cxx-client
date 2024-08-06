@@ -26,6 +26,7 @@ class pending_operation_connection_info
 public:
   virtual ~pending_operation_connection_info() = default;
   [[nodiscard]] virtual auto dispatched_to() const -> std::string = 0;
+  [[nodiscard]] virtual auto dispatched_to_host() const -> std::string = 0;
   [[nodiscard]] virtual auto dispatched_from() const -> std::string = 0;
 };
 } // namespace couchbase::core

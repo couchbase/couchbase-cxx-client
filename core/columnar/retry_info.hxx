@@ -26,5 +26,6 @@ struct retry_info {
   std::size_t retry_attempts{ 0 };
   std::string last_dispatched_to{};
   std::string last_dispatched_from{};
+  std::string last_dispatched_to_host{};
 };
 } // namespace couchbase::core::columnar

@@ -60,6 +60,7 @@ public:
 
   struct {
     std::string user{};
+    std::string undesired_endpoint{};
   } internal{};
 };
 

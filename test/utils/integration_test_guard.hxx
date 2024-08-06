@@ -113,7 +113,17 @@ public:
     return has_service(couchbase::core::service_type::analytics);
   }
 
-  auto number_of_query_nodes() -> std::size_t;
+  auto number_of_nodes_with_service(std::string type) -> std::size_t;
+
+  auto number_of_query_nodes() -> std::size_t
+  {
+    return number_of_nodes_with_service("n1ql");
+  }
+
+  auto number_of_analytics_nodes() -> std::size_t
+  {
+    return number_of_nodes_with_service("cbas");
+  }
 
   [[nodiscard]] auto transactions() const
     -> std::shared_ptr<couchbase::core::transactions::transactions>;
