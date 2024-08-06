@@ -202,6 +202,11 @@ public:
     return session_->local_address();
   }
 
+  [[nodiscard]] auto dispatched_to_host() const -> std::string override
+  {
+    return fmt::format("{}:{}", session_->hostname(), session_->port());
+  }
+
 private:
   void trigger_timeout()
   {
@@ -272,7 +277,8 @@ public:
 
     std::shared_ptr<io::http_session> session;
     {
-      auto [ec, s] = session_manager->check_out(request.service, credentials, request.endpoint);
+      auto [ec, s] = session_manager->check_out(
+        request.service, credentials, request.endpoint, request.internal.undesired_endpoint);
       if (ec) {
         return tl::unexpected(ec);
       }
@@ -333,8 +339,10 @@ private:
         }
         std::shared_ptr<io::http_session> session;
         {
-          auto [ec, s] =
-            session_manager->check_out(op->request().service, credentials, op->request().endpoint);
+          auto [ec, s] = session_manager->check_out(op->request().service,
+                                                    credentials,
+                                                    op->request().endpoint,
+                                                    op->request().internal.undesired_endpoint);
           if (ec) {
             return op->invoke_response_handler(ec, {});
           }

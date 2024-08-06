@@ -272,9 +272,17 @@ public:
 
   auto check_out(service_type type,
                  const couchbase::core::cluster_credentials& credentials,
-                 const std::string& preferred_node)
+                 std::string preferred_node,
+                 const std::string& undesired_node = {})
     -> std::pair<std::error_code, std::shared_ptr<http_session>>
   {
+    if (preferred_node.empty() && !undesired_node.empty()) {
+      auto [hostname, port] = pick_random_node(type, undesired_node);
+      if (port != 0) {
+        preferred_node = fmt::format("{}:{}", hostname, port);
+      }
+    }
+
     std::scoped_lock lock(sessions_mutex_);
     idle_sessions_[type].remove_if([](const auto& s) {
       return !s;
@@ -291,10 +299,15 @@ public:
           break;
         }
       } else {
+        auto [hostname, port] = split_host_port(preferred_node);
+
         auto ptr = std::find_if(idle_sessions_[type].begin(),
                                 idle_sessions_[type].end(),
-                                [preferred_node](const auto& s) {
-                                  return s->remote_address() == preferred_node;
+                                [&preferred_node, &h = hostname, &p = port](const auto& s) {
+                                  // Check for a match using both the unresolved hostname & IP
+                                  // address
+                                  return (s->remote_address() == preferred_node ||
+                                          (s->hostname() == h && s->port() == std::to_string(p)));
                                 });
         if (ptr != idle_sessions_[type].end()) {
           session = *ptr;
@@ -303,7 +316,6 @@ public:
             break;
           }
         } else {
-          auto [hostname, port] = split_host_port(preferred_node);
           session = create_session(type, credentials, hostname, port);
           break;
         }
@@ -780,6 +792,36 @@ private:
       return { "", static_cast<std::uint16_t>(0U) };
     }
     return { hostname, port };
+  }
+
+  auto pick_random_node(service_type type,
+                        const std::string& undesired_node) -> std::pair<std::string, std::uint16_t>
+  {
+    std::vector<topology::configuration::node> candidate_nodes{};
+    {
+      const std::scoped_lock lock(config_mutex_);
+      std::copy_if(config_.nodes.begin(),
+                   config_.nodes.end(),
+                   std::back_inserter(candidate_nodes),
+                   [this, type, &undesired_node](const topology::configuration::node& node) {
+                     auto endpoint = node.endpoint(options_.network, type, options_.enable_tls);
+                     return endpoint.has_value() && (endpoint.value() != undesired_node);
+                   });
+    }
+
+    if (candidate_nodes.empty()) {
+      // Could not find any other nodes
+      return { "", static_cast<std::uint16_t>(0U) };
+    }
+
+    std::vector<topology::configuration::node> selected{};
+    std::sample(candidate_nodes.begin(),
+                candidate_nodes.end(),
+                std::back_inserter(selected),
+                1,
+                std::mt19937{ std::random_device{}() });
+    return { selected.at(0).hostname_for(options_.network),
+             selected.at(0).port_or(options_.network, type, options_.enable_tls, 0) };
   }
 
   std::string client_id_;

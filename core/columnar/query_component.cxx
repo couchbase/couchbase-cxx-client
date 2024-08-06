@@ -87,6 +87,7 @@ public:
           auto op_info = std::dynamic_pointer_cast<pending_operation_connection_info>(op);
           self->retry_info_.last_dispatched_from = op_info->dispatched_from();
           self->retry_info_.last_dispatched_to = op_info->dispatched_to();
+          self->retry_info_.last_dispatched_to_host = op_info->dispatched_to_host();
         }
 
         if (ec) {
@@ -180,6 +181,7 @@ private:
         return;
       }
       self->retry_info_.retry_attempts++;
+      self->http_req_.internal.undesired_endpoint = self->retry_info_.last_dispatched_to;
       auto err = self->dispatch();
       if (err) {
         self->invoke_callback({}, std::move(err));
