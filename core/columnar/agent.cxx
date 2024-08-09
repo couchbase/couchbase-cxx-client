@@ -39,7 +39,7 @@ public:
     : io_{ io }
     , config_{ std::move(config) }
     , http_{ io_, config_.shim, config_.default_retry_strategy }
-    , query_{ io_, http_, config_.default_retry_strategy }
+    , query_{ io_, http_ }
   {
     CB_LOG_DEBUG("creating new columnar cluster agent: {}", config_.to_string());
   }

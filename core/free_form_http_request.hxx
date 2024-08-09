@@ -22,6 +22,7 @@
 #include <cinttypes>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -49,15 +50,17 @@ public:
   std::string body{};
   std::map<std::string, std::string> headers{};
   std::string content_type{};
+  std::string client_context_id{};
   bool is_idempotent{};
   bool is_read_only{};
   std::string unique_id{};
   std::shared_ptr<couchbase::retry_strategy> retry_strategy{};
-  std::chrono::milliseconds timeout{};
+  std::optional<std::chrono::milliseconds> timeout{};
   std::shared_ptr<couchbase::tracing::request_span> parent_span{};
 
   struct {
     std::string user{};
+    std::string undesired_endpoint{};
   } internal{};
 };
 

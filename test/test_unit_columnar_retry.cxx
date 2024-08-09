@@ -15,36 +15,24 @@
  *   limitations under the License.
  */
 
-#include "error.hxx"
+#include "test_helper.hxx"
 
-#include <tao/json/to_string.hpp>
+#include "core/columnar/backoff_calculator.hxx"
 
-#include <string>
+#include <chrono>
+#include <cmath>
 
-namespace couchbase::core::columnar
+TEST_CASE("unit: backoff calculator gives backoff values within expected range", "[unit]")
 {
-error::operator bool() const
-{
-  return ec.operator bool();
+  const auto calculator{ couchbase::core::columnar::default_backoff_calculator };
+  const auto base = std::chrono::milliseconds(100);
+  const auto cap = std::chrono::minutes(1);
+  const double factor = 2;
+
+  for (std::size_t i = 0; i < 10; ++i) {
+    // Repeat a few times as the backoff is random with Full Jitter
+    REQUIRE(calculator(0) <= base);
+    REQUIRE(calculator(2) <= base * std::pow(factor, 2));
+    REQUIRE(calculator(1000) <= cap);
+  }
 }
-
-auto
-error::message_with_ctx() const -> std::string
-{
-  std::string serialized_ctx{};
-  if (!ctx.get_object().empty()) {
-    serialized_ctx = tao::json::to_string(ctx);
-  }
-  std::string res{};
-  if (!message.empty()) {
-    res += message;
-  }
-  if (!serialized_ctx.empty()) {
-    if (!res.empty()) {
-      res += ' ';
-    }
-    res += serialized_ctx;
-  }
-  return res;
-}
-} // namespace couchbase::core::columnar

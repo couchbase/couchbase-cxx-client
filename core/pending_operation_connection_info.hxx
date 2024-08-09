@@ -15,36 +15,18 @@
  *   limitations under the License.
  */
 
-#include "error.hxx"
-
-#include <tao/json/to_string.hpp>
+#pragma once
 
 #include <string>
 
-namespace couchbase::core::columnar
+namespace couchbase::core
 {
-error::operator bool() const
+class pending_operation_connection_info
 {
-  return ec.operator bool();
-}
-
-auto
-error::message_with_ctx() const -> std::string
-{
-  std::string serialized_ctx{};
-  if (!ctx.get_object().empty()) {
-    serialized_ctx = tao::json::to_string(ctx);
-  }
-  std::string res{};
-  if (!message.empty()) {
-    res += message;
-  }
-  if (!serialized_ctx.empty()) {
-    if (!res.empty()) {
-      res += ' ';
-    }
-    res += serialized_ctx;
-  }
-  return res;
-}
-} // namespace couchbase::core::columnar
+public:
+  virtual ~pending_operation_connection_info() = default;
+  [[nodiscard]] virtual auto dispatched_to() const -> std::string = 0;
+  [[nodiscard]] virtual auto dispatched_to_host() const -> std::string = 0;
+  [[nodiscard]] virtual auto dispatched_from() const -> std::string = 0;
+};
+} // namespace couchbase::core

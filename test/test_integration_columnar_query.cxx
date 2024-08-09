@@ -27,11 +27,12 @@
 #include <string>
 #include <variant>
 
-std::pair<std::variant<std::monostate,
-                       couchbase::core::columnar::query_result_row,
-                       couchbase::core::columnar::query_result_end>,
-          couchbase::core::columnar::error>
+auto
 get_next_item(couchbase::core::columnar::query_result& result)
+  -> std::pair<std::variant<std::monostate,
+                            couchbase::core::columnar::query_result_row,
+                            couchbase::core::columnar::query_result_end>,
+               couchbase::core::columnar::error>
 {
   auto barrier = std::make_shared<
     std::promise<std::pair<std::variant<std::monostate,
@@ -43,6 +44,26 @@ get_next_item(couchbase::core::columnar::query_result& result)
     barrier->set_value({ std::move(item), err });
   });
   return f.get();
+}
+
+auto
+buffer_rows(couchbase::core::columnar::query_result& result)
+  -> std::vector<couchbase::core::columnar::query_result_row>
+{
+  std::vector<couchbase::core::columnar::query_result_row> rows{};
+  while (true) {
+    auto [item, err] = get_next_item(result);
+    REQUIRE_SUCCESS(err.ec);
+    REQUIRE(!std::holds_alternative<std::monostate>(item));
+
+    if (std::holds_alternative<couchbase::core::columnar::query_result_end>(item)) {
+      break;
+    }
+
+    REQUIRE(std::holds_alternative<couchbase::core::columnar::query_result_row>(item));
+    rows.emplace_back(std::get<couchbase::core::columnar::query_result_row>(item));
+  }
+  return rows;
 }
 
 TEST_CASE("integration: columnar http component simple request", "[integration]")
@@ -399,5 +420,63 @@ TEST_CASE("integration: columnar query collection does not exist")
   REQUIRE(err.ctx.find("errors") != nullptr);
   REQUIRE(err.ctx["errors"].get_array().size() == 1);
   REQUIRE(err.ctx["errors"].get_array().at(0).get_object().at("code").get_signed() == 24045);
+  REQUIRE(!err.ctx["last_dispatched_to"].get_string().empty());
+  REQUIRE(!err.ctx["last_dispatched_from"].get_string().empty());
   REQUIRE(err.message_with_ctx().find("\"code\":24045") != std::string::npos);
+}
+
+TEST_CASE("integration: columnar query positional parameters")
+{
+  test::utils::integration_test_guard integration;
+  if (!integration.cluster_version().is_columnar()) {
+    SKIP("Requires a columnar cluster");
+  }
+
+  couchbase::core::columnar::agent agent{ integration.io, { { integration.cluster } } };
+
+  couchbase::core::columnar::query_options options{ "SELECT $1 AS foo" };
+  options.positional_parameters = { { "\"bar\"" } };
+  options.timeout = std::chrono::seconds(20);
+
+  auto barrier = std::make_shared<std::promise<
+    std::pair<couchbase::core::columnar::query_result, couchbase::core::columnar::error>>>();
+  auto f = barrier->get_future();
+  auto resp = agent.execute_query(options, [barrier](auto res, auto err) mutable {
+    barrier->set_value({ std::move(res), err });
+  });
+  REQUIRE(resp.has_value());
+  auto [res, err] = f.get();
+  REQUIRE_SUCCESS(err.ec);
+  auto rows = buffer_rows(res);
+  REQUIRE(rows.size() == 1);
+  REQUIRE(couchbase::core::utils::json::parse(rows.at(0).content) ==
+          tao::json::value{ { "foo", "bar" } });
+}
+
+TEST_CASE("integration: columnar query named parameters")
+{
+  test::utils::integration_test_guard integration;
+  if (!integration.cluster_version().is_columnar()) {
+    SKIP("Requires a columnar cluster");
+  }
+
+  couchbase::core::columnar::agent agent{ integration.io, { { integration.cluster } } };
+
+  couchbase::core::columnar::query_options options{ "SELECT $val AS foo" };
+  options.named_parameters["val"] = couchbase::core::json_string{ "\"bar\"" };
+  options.timeout = std::chrono::seconds(20);
+
+  auto barrier = std::make_shared<std::promise<
+    std::pair<couchbase::core::columnar::query_result, couchbase::core::columnar::error>>>();
+  auto f = barrier->get_future();
+  auto resp = agent.execute_query(options, [barrier](auto res, auto err) mutable {
+    barrier->set_value({ std::move(res), err });
+  });
+  REQUIRE(resp.has_value());
+  auto [res, err] = f.get();
+  REQUIRE_SUCCESS(err.ec);
+  auto rows = buffer_rows(res);
+  REQUIRE(rows.size() == 1);
+  REQUIRE(couchbase::core::utils::json::parse(rows.at(0).content) ==
+          tao::json::value{ { "foo", "bar" } });
 }
