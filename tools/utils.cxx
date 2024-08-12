@@ -687,7 +687,7 @@ available_analytics_scan_consistency_modes() -> std::vector<std::string>
 [[noreturn]] void
 fail(std::string_view message)
 {
-  fmt::print(stderr, "ERROR: {}", message);
+  fmt::print(stderr, "ERROR: {}\n", message);
   exit(EXIT_FAILURE);
 }
 } // namespace cbc

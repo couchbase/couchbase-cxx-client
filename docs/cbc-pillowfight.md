@@ -21,21 +21,16 @@ Run simple workload generator that sends GET/UPSERT requests with optional N1QL 
 <dt>`--bucket-name=STRING`</dt><dd>Name of the bucket. [default: `default`]</dd>
 <dt>`--scope-name=STRING`</dt><dd>Name of the scope. [default: `_default`]</dd>
 <dt>`--collection-name=STRING`</dt><dd>Name of the collection. [default: `_default`]</dd>
-<dt>`--key-value-batch-size=INTEGER`</dt><dd>Number of the Key/Value operations in a single batch (set to zero to disable KV operations). [default: `100`]</dd>
-<dt>`--query-batch-size=INTEGER`</dt><dd>Number of the Query operations in a single batch (set to zero to disable Query operations). [default: `0`]</dd>
+<dt>`--operation-batch-size=INTEGER`</dt><dd>Number of the operations in a single batch (set to 1 to wait for completion after every operation). [default: `100`]</dd>
 <dt>`--batch-wait=DURATION`</dt><dd>Time to wait after the batch. [default: `0ms`]</dd>
 <dt>`--number-of-io-threads=INTEGER`</dt><dd>Number of the IO threads. [default: `1`]</dd>
 <dt>`--number-of-worker-threads=INTEGER`</dt><dd>Number of the IO threads. [default: `1`]</dd>
-<dt>`--chance-of-get=FLOAT`</dt><dd>The probability of get operation (where 1 means only get, and 0 - only upsert). [default: `0.6`]</dd>
-<dt>`--hit-chance-for-get=FLOAT`</dt><dd>The probability of using existing ID for get operation. [default: `1`]</dd>
-<dt>`--hit-chance-for-upsert=FLOAT`</dt><dd>The probability of using existing ID for upsert operation. [default: `0.5`]</dd>
-<dt>`--chance-of-query=FLOAT`</dt><dd>The probability of N1QL query will be sent during iteration. [default: `1`]</dd>
-<dt>`--query-statement=STRING`</dt><dd>The N1QL query statement to use ({bucket_name}, {scope_name} and {collection_name} will be substituted). [default: <code>SELECT COUNT(*) FROM \`{bucket_name}\` WHERE type = "fake_profile"</code>]</dd>
+<dt>`--operation-ratio=TEXT`</dt><dd>The ratio of the operations to generate in form "G:R:D:I:Q", where letters represent ratio of the operations in whole numbers: Get, Replace, Delete, Insert and Query respectively. (e.g. "5:0:0:1:0" would do on average 5 gets for every insert). [default: `1:1:0:0:0`]</dd>
+<dt>`--query-statement=STRING`</dt><dd>The N1QL query statement to use (`{bucket_name}`, `{scope_name}` and `{collection_name}` will be substituted). [default: <code>SELECT COUNT(*) FROM \`{bucket_name}\` WHERE type = "fake_profile"</code>]</dd>
 <dt>`--incompressible-body`</dt><dd>Use random characters to fill generated document value (by default uses 'x' to fill the body).</dd>
 <dt>`--document-body-size=INTEGER`</dt><dd>Size of the body (if zero, it will use predefined document). [default: `0`]</dd>
 <dt>`--number-of-keys-to-populate=INTEGER`</dt><dd>Preload keys before running workload, so that the worker will not generate new keys afterwards. [default: `1000`]</dd>
 <dt>`--operations-limit=INTEGER`</dt><dd>Stop and exit after the number of the operations reaches this limit. (zero for running indefinitely) [default: `0`]</dd>
-
 </dl>
 
 
