@@ -426,6 +426,7 @@ set(couchbase_cxx_client_FILES
     core/columnar/error_codes.cxx
     core/columnar/query_component.cxx
     core/columnar/query_result.cxx
+    core/columnar/backoff_calculator.cxx
 )
 
 if(COUCHBASE_CXX_CLIENT_BUILD_SHARED OR BUILD_SHARED_LIBS)

@@ -15,36 +15,17 @@
  *   limitations under the License.
  */
 
-#include "error.hxx"
+#pragma once
 
-#include <tao/json/to_string.hpp>
-
+#include <cstddef>
 #include <string>
 
 namespace couchbase::core::columnar
 {
-error::operator bool() const
-{
-  return ec.operator bool();
-}
-
-auto
-error::message_with_ctx() const -> std::string
-{
-  std::string serialized_ctx{};
-  if (!ctx.get_object().empty()) {
-    serialized_ctx = tao::json::to_string(ctx);
-  }
-  std::string res{};
-  if (!message.empty()) {
-    res += message;
-  }
-  if (!serialized_ctx.empty()) {
-    if (!res.empty()) {
-      res += ' ';
-    }
-    res += serialized_ctx;
-  }
-  return res;
-}
+struct retry_info {
+  std::size_t retry_attempts{ 0 };
+  std::string last_dispatched_to{};
+  std::string last_dispatched_from{};
+  std::string last_dispatched_to_host{};
+};
 } // namespace couchbase::core::columnar
