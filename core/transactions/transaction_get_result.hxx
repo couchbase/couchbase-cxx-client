@@ -15,16 +15,17 @@
  */
 
 #pragma once
+
 #include "core/document_id.hxx"
-#include "core/operations.hxx"
+#include "core/operations_fwd.hxx"
 #include "core/utils/json.hxx"
-#include "couchbase/codec/encoded_value.hxx"
 #include "document_metadata.hxx"
 #include "transaction_links.hxx"
+
+#include <couchbase/codec/encoded_value.hxx>
 #include <couchbase/fmt/cas.hxx>
 #include <couchbase/transactions/transaction_get_result.hxx>
 
-#include <ostream>
 #include <utility>
 
 namespace couchbase::core::transactions
@@ -57,6 +58,8 @@ public:
   /** @internal */
   transaction_get_result(const transaction_get_result& doc) = default;
   transaction_get_result(transaction_get_result&& doc) noexcept = default;
+  auto operator=(const transaction_get_result&) -> transaction_get_result& = delete;
+  auto operator=(transaction_get_result&&) -> transaction_get_result& = default;
 
   /*
   transaction_get_result(const transaction_op_error_context& ctx)
@@ -82,7 +85,7 @@ public:
     : cas_(res.cas())
     , document_id_(res.bucket(), res.scope(), res.collection(), res.id())
     , links_(res.base_->links())
-    , content_(std::move(res.content()))
+    , content_(res.content())
     , metadata_(res.base_->metadata_)
   {
   }
@@ -111,20 +114,9 @@ public:
     }
   }
 
-  auto operator=(const transaction_get_result& o) -> transaction_get_result&
-  {
-    if (this != &o) {
-      document_id_ = o.document_id_;
-      content_ = o.content_;
-      cas_ = o.cas_;
-      links_ = o.links_;
-    }
-    return *this;
-  }
-
   /** @internal */
-  static transaction_get_result create_from(const transaction_get_result& document,
-                                            codec::encoded_value content);
+  static auto create_from(const transaction_get_result& document,
+                          codec::encoded_value content) -> transaction_get_result;
 
   /** @internal */
   static auto create_from(const core::operations::lookup_in_response& resp)

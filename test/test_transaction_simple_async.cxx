@@ -16,6 +16,7 @@
 
 #include "test_helper_integration.hxx"
 
+#include "core/operations.hxx"
 #include "core/transactions.hxx"
 #include "core/transactions/attempt_context_impl.hxx"
 #include "simple_object.hxx"

@@ -68,74 +68,15 @@ public:
                     std::optional<std::string> crc32_of_staging,
                     std::optional<std::string> op,
                     std::optional<tao::json::value> forward_compat,
-                    bool is_deleted)
-    : atr_id_(std::move(atr_id))
-    , atr_bucket_name_(std::move(atr_bucket_name))
-    , atr_scope_name_(std::move(atr_scope_name))
-    , atr_collection_name_(std::move(atr_collection_name))
-    , staged_transaction_id_(std::move(staged_transaction_id))
-    , staged_attempt_id_(std::move(staged_attempt_id))
-    , staged_operation_id_(std::move(staged_operation_id))
-    , staged_content_json_(std::move(staged_content_json))
-    , staged_content_binary_(std::move(staged_content_binary))
-    , cas_pre_txn_(std::move(cas_pre_txn))
-    , revid_pre_txn_(std::move(revid_pre_txn))
-    , exptime_pre_txn_(exptime_pre_txn)
-    , crc32_of_staging_(std::move(crc32_of_staging))
-    , op_(std::move(op))
-    , forward_compat_(forward_compat)
-    , is_deleted_(is_deleted)
-  {
-  }
+                    bool is_deleted);
 
   /** @brief create links from query result
    *
    * @param json the returned row object from a txn query response.
    */
-  explicit transaction_links(const tao::json::value& json)
-  {
-    if (const auto* meta = json.find("txnMeta"); meta != nullptr && meta->is_object()) {
-      for (const auto& [key, value] : meta->get_object()) {
-        if (key == "atmpt") {
-          staged_attempt_id_ = value.get_string();
-        }
-        if (key == "txn") {
-          staged_transaction_id_ = value.get_string();
-        }
-        if (key == "atr" && value.is_object()) {
-          atr_id_ = value.at("key").get_string();
-          atr_bucket_name_ = value.at("bkt").get_string();
-          atr_scope_name_ = value.at("scp").get_string();
-          atr_collection_name_ = value.at("coll").get_string();
-        }
-      }
-    }
-  }
+  explicit transaction_links(const tao::json::value& json);
 
-  void append_to_json(tao::json::value& obj) const
-  {
-    if (staged_attempt_id_) {
-      obj["txnMeta"]["atmpt"] = staged_attempt_id_.value();
-    }
-    if (staged_transaction_id_) {
-      obj["txnMeta"]["txn"] = staged_transaction_id_.value();
-    }
-    if (staged_operation_id_) {
-      obj["txnMeta"]["txn"] = staged_operation_id_.value();
-    }
-    if (atr_id_) {
-      obj["txnMeta"]["atr"]["key"] = atr_id_.value();
-    }
-    if (atr_bucket_name_) {
-      obj["txnMeta"]["atr"]["bkt"] = atr_bucket_name_.value();
-    }
-    if (atr_scope_name_) {
-      obj["txnMeta"]["atr"]["scp"] = atr_scope_name_.value();
-    }
-    if (atr_collection_name_) {
-      obj["txnMeta"]["atr"]["coll"] = atr_collection_name_.value();
-    }
-  }
+  void append_to_json(tao::json::value& obj) const;
 
   /**
    * Note this doesn't guarantee an active transaction, as it may have expired
@@ -226,17 +167,17 @@ public:
     return staged_content_json_ || staged_content_binary_;
   }
 
-  [[nodiscard]] codec::encoded_value staged_content_json_or_binary() const
+  [[nodiscard]] auto staged_content_json_or_binary() const -> codec::encoded_value
   {
     return staged_content_json_.value_or(staged_content_binary_.value_or(codec::encoded_value{}));
   }
 
-  [[nodiscard]] codec::encoded_value staged_content_json() const
+  [[nodiscard]] auto staged_content_json() const -> codec::encoded_value
   {
     return staged_content_json_.value_or(codec::encoded_value{});
   }
 
-  [[nodiscard]] codec::encoded_value staged_content_binary() const
+  [[nodiscard]] auto staged_content_binary() const -> codec::encoded_value
   {
     return staged_content_binary_.value_or(codec::encoded_value{});
   }

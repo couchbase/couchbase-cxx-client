@@ -98,9 +98,9 @@ public:
   }
 
 private:
-  const std::optional<std::string> cas_;
-  const std::optional<std::string> revid_;
-  const std::optional<std::uint32_t> exptime_;
-  const std::optional<std::string> crc32_;
+  std::optional<std::string> cas_;
+  std::optional<std::string> revid_;
+  std::optional<std::uint32_t> exptime_;
+  std::optional<std::string> crc32_;
 };
 } // namespace couchbase::core::transactions

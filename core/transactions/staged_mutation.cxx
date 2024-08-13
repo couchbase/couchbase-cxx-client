@@ -20,6 +20,7 @@
 #include "attempt_context_testing_hooks.hxx"
 #include "core/cluster.hxx"
 #include "core/logger/logger.hxx"
+#include "core/operations.hxx"
 #include "core/transactions/internal/logging.hxx"
 #include "internal/transaction_context.hxx"
 #include "internal/transaction_fields.hxx"
@@ -74,7 +75,7 @@ staged_mutation_queue::empty() -> bool
 }
 
 void
-staged_mutation_queue::add(const staged_mutation& mutation)
+staged_mutation_queue::add(staged_mutation&& mutation)
 {
   const std::lock_guard<std::mutex> lock(mutex_);
   // Can only have one staged mutation per document.
@@ -84,7 +85,7 @@ staged_mutation_queue::add(const staged_mutation& mutation)
                                 return document_ids_equal(item.id(), mutation.id());
                               }),
                queue_.end());
-  queue_.push_back(mutation);
+  queue_.emplace_back(std::move(mutation));
 }
 
 void
@@ -675,14 +676,17 @@ staged_mutation_queue::validate_commit_doc_result(const std::shared_ptr<attempt_
   }
   CB_ATTEMPT_CTX_LOG_TRACE(ctx, "commit doc result {}", res);
   // TODO(SA): mutation tokens
+  const auto key = item.doc().id().key();
   ctx->hooks_.after_doc_committed_before_saving_cas(
-    ctx, item.doc().id().key(), [ctx, res, item, handler = std::move(handler)](auto ec) mutable {
+    ctx,
+    key,
+    [ctx, res, key, item = std::move(item), handler = std::move(handler)](auto ec) mutable {
       if (ec) {
         return handler(client_error(*ec, "after_doc_committed_before_saving_cas threw error"));
       }
       item.doc().cas(res.cas);
       return ctx->hooks_.after_doc_committed(
-        ctx, item.doc().id().key(), [res, item, handler = std::move(handler)](auto ec) mutable {
+        ctx, key, [res, item = std::move(item), handler = std::move(handler)](auto ec) mutable {
           if (ec) {
             return handler(client_error(*ec, "after_doc_committed threw error"));
           }

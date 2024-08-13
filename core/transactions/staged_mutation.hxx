@@ -16,12 +16,12 @@
 
 #pragma once
 
-#include <couchbase/codec/encoded_value.hxx>
-
 #include "attempt_context_impl.hxx"
 #include "internal/utils.hxx"
 #include "transaction_get_result.hxx"
 #include "uid_generator.hxx"
+
+#include <couchbase/codec/encoded_value.hxx>
 
 #include <mutex>
 #include <string>
@@ -55,10 +55,11 @@ public:
   {
   }
 
-  staged_mutation(const staged_mutation& o) = default;
-  staged_mutation(staged_mutation&& o) = default;
-  auto operator=(const staged_mutation& o) -> staged_mutation& = default;
-  auto operator=(staged_mutation&& o) -> staged_mutation& = default;
+  ~staged_mutation() = default;
+  staged_mutation(const staged_mutation&) = delete;
+  staged_mutation(staged_mutation&&) = default;
+  auto operator=(const staged_mutation&) -> staged_mutation& = delete;
+  auto operator=(staged_mutation&&) -> staged_mutation& = default;
 
   [[nodiscard]] auto id() const -> const core::document_id&
   {
@@ -125,7 +126,7 @@ public:
 };
 
 struct unstaging_state {
-  static const size_t MAX_PARALLELISM = 1000;
+  static constexpr std::size_t MAX_PARALLELISM{ 1000 };
 
   std::shared_ptr<attempt_context_impl> ctx_;
   std::mutex mutex_{};
@@ -209,7 +210,7 @@ private:
 
 public:
   auto empty() -> bool;
-  void add(const staged_mutation& mutation);
+  void add(staged_mutation&& mutation);
   void extract_to(const std::string& prefix, core::operations::mutate_in_request& req);
   void commit(const std::shared_ptr<attempt_context_impl>& ctx);
   void rollback(const std::shared_ptr<attempt_context_impl>& ctx);

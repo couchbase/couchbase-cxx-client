@@ -49,6 +49,7 @@ public:
                      const couchbase::transactions::transaction_options& config = {})
     -> std::shared_ptr<transaction_context>;
 
+  ~transaction_context();
   transaction_context(const transaction_context&) = delete;
   transaction_context(transaction_context&&) = delete;
   auto operator=(transaction_context&&) -> transaction_context& = delete;
@@ -70,7 +71,7 @@ public:
 
   auto cleanup() -> transactions_cleanup&;
 
-  [[nodiscard]] bool has_expired_client_side();
+  [[nodiscard]] auto has_expired_client_side() -> bool;
 
   void after_delay(std::chrono::milliseconds delay, const std::function<void()>& fn);
 

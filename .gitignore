@@ -1,4 +1,5 @@
 /out/
+/CPTCMakeBuild
 /build/
 /cmake-build-*/
 /cmake-build-report.tar.gz

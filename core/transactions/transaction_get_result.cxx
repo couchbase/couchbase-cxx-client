@@ -15,8 +15,12 @@
  */
 
 #include "transaction_get_result.hxx"
-#include "couchbase/codec/codec_flags.hxx"
+
 #include "result.hxx"
+
+#include "core/operations.hxx"
+
+#include <couchbase/codec/codec_flags.hxx>
 
 namespace couchbase::core::transactions
 {

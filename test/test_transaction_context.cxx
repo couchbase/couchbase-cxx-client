@@ -18,6 +18,7 @@
 
 #include "core/transactions/attempt_context_impl.hxx"
 
+#include "core/operations.hxx"
 #include "core/transactions.hxx"
 #include "core/transactions/internal/transaction_context.hxx"
 #include "core/transactions/internal/utils.hxx"

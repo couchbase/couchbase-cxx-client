@@ -22,7 +22,7 @@
 #include "attempt_state.hxx"
 #include "core/cluster.hxx"
 #include "core/impl/error.hxx"
-#include "core/operations/document_mutate_in.hxx"
+#include "core/operations.hxx"
 #include "core/transactions/error_class.hxx"
 #include "durability_level.hxx"
 #include "exceptions.hxx"
@@ -130,39 +130,42 @@ wrap_callback_for_async_public_api(
 auto
 attempt_context_impl::cluster_ref() const -> const core::cluster&
 {
-  return overall_->cluster_ref();
+  return overall()->cluster_ref();
 }
 
-attempt_context_impl::attempt_context_impl(std::shared_ptr<transaction_context> transaction_ctx)
-  : overall_(std::move(transaction_ctx))
+attempt_context_impl::attempt_context_impl(
+  const std::shared_ptr<transaction_context>& transaction_ctx)
+  : overall_{ transaction_ctx }
   , staged_mutations_(std::make_unique<staged_mutation_queue>())
-  , hooks_(overall_->config().attempt_context_hooks ? *overall_->config().attempt_context_hooks
-                                                    : noop_hooks)
+  , hooks_(transaction_ctx->config().attempt_context_hooks
+             ? *transaction_ctx->config().attempt_context_hooks
+             : noop_hooks)
 {
   // put a new transaction_attempt in the context...
-  overall_->add_attempt();
+  overall()->add_attempt();
   CB_ATTEMPT_CTX_LOG_TRACE(
     this,
     "added new attempt, state {}, expiration in {}ms",
     attempt_state_name(state()),
-    std::chrono::duration_cast<std::chrono::milliseconds>(overall_->remaining()).count());
+    std::chrono::duration_cast<std::chrono::milliseconds>(overall()->remaining()).count());
 }
 
 attempt_context_impl::~attempt_context_impl() = default;
 
 auto
-attempt_context_impl::create(std::shared_ptr<transaction_context> transaction_ctx)
+attempt_context_impl::create(const std::shared_ptr<transaction_context>& transaction_ctx)
   -> std::shared_ptr<attempt_context_impl>
 {
   class attempt_context_impl_wrapper : public attempt_context_impl
   {
   public:
-    explicit attempt_context_impl_wrapper(std::shared_ptr<transaction_context> transaction_ctx)
-      : attempt_context_impl(std::move(transaction_ctx))
+    explicit attempt_context_impl_wrapper(
+      const std::shared_ptr<transaction_context>& transaction_ctx)
+      : attempt_context_impl(transaction_ctx)
     {
     }
   };
-  return std::make_shared<attempt_context_impl_wrapper>(std::move(transaction_ctx));
+  return std::make_shared<attempt_context_impl_wrapper>(transaction_ctx);
 }
 
 void
@@ -213,7 +216,7 @@ attempt_context_impl::get(const core::document_id& id) -> transaction_get_result
     if (err) {
       barrier->set_exception(err);
     } else {
-      barrier->set_value(*res);
+      barrier->set_value(std::move(*res));
     }
   });
   return f.get();
@@ -670,7 +673,7 @@ attempt_context_impl::replace_raw(const transaction_get_result& document,
                                                  existing_sm->doc().cas().value(),
                                                  exp_delay(std::chrono::milliseconds(5),
                                                            std::chrono::milliseconds(300),
-                                                           self->overall_->config().timeout),
+                                                           self->overall()->config().timeout),
                                                  op_id,
                                                  std::move(cb));
                       return;
@@ -733,7 +736,7 @@ attempt_context_impl::create_staged_replace(const transaction_get_result& docume
         .create_path(),
     }
       .specs();
-  req.durability_level = overall_->config().level;
+  req.durability_level = overall()->config().level;
   req.cas = document.cas();
   req.flags = document.content().flags;
   req.access_deleted = true;
@@ -768,8 +771,8 @@ attempt_context_impl::create_staged_replace(const transaction_get_result& docume
                            "about to replace doc {} with cas {} in txn {}",
                            document.id(),
                            document.cas().value(),
-                           overall_->transaction_id());
-  overall_->cluster_ref().execute(
+                           overall()->transaction_id());
+  overall()->cluster_ref().execute(
     req,
     [self = shared_from_this(),
      operation_id = op_id,
@@ -819,7 +822,7 @@ attempt_context_impl::create_staged_replace(const transaction_get_result& docume
               document.id().bucket(),
               document.id().scope(),
               document.id().collection(),
-              self->overall_->transaction_id(),
+              self->overall()->transaction_id(),
               self->id(),
               operation_id,
               std::move(staged_content_json),
@@ -860,7 +863,7 @@ attempt_context_impl::replace_raw(const transaction_get_result& document,
                 if (err) {
                   return barrier->set_exception(err);
                 }
-                barrier->set_value(*res);
+                barrier->set_value(std::move(*res));
               });
   return f.get();
 }
@@ -928,7 +931,7 @@ attempt_context_impl::insert_raw(const core::document_id& id,
                if (err) {
                  return barrier->set_exception(err);
                }
-               barrier->set_value(*res);
+               barrier->set_value(std::move(*res));
              });
   return f.get();
 }
@@ -987,7 +990,7 @@ attempt_context_impl::insert_raw(const core::document_id& id,
                                            cas,
                                            exp_delay(std::chrono::milliseconds(5),
                                                      std::chrono::milliseconds(300),
-                                                     self->overall_->config().timeout),
+                                                     self->overall()->config().timeout),
                                            op_id,
                                            std::move(cb));
               });
@@ -1014,16 +1017,16 @@ attempt_context_impl::select_atr_if_needed_unlocked(
     std::optional<const std::string> hook_atr =
       hooks_.random_atr_id_for_vbucket(shared_from_this());
     if (hook_atr) {
-      atr_id_ = atr_id_from_bucket_and_key(overall_->config(), id.bucket(), hook_atr.value());
+      atr_id_ = atr_id_from_bucket_and_key(overall()->config(), id.bucket(), hook_atr.value());
     } else {
       vbucket_id = atr_ids::vbucket_for_key(id.key());
       atr_id_ = atr_id_from_bucket_and_key(
-        overall_->config(), id.bucket(), atr_ids::atr_id_for_vbucket(vbucket_id));
+        overall()->config(), id.bucket(), atr_ids::atr_id_for_vbucket(vbucket_id));
     }
     // TODO(SA): cleanup the transaction_context - this should be set (threadsafe)
     // from the above calls
-    overall_->atr_collection(collection_spec_from_id(id));
-    overall_->atr_id(atr_id_->key());
+    overall()->atr_collection(collection_spec_from_id(id));
+    overall()->atr_id(atr_id_->key());
     state(attempt_state::NOT_STARTED);
     CB_ATTEMPT_CTX_LOG_TRACE(
       this,
@@ -1031,7 +1034,7 @@ attempt_context_impl::select_atr_if_needed_unlocked(
       id,
       vbucket_id,
       atr_id_.value());
-    overall_->cleanup().add_collection(
+    overall()->cleanup().add_collection(
       { atr_id_->bucket(), atr_id_->scope(), atr_id_->collection() });
     set_atr_pending_locked(id, std::move(lock), std::move(cb));
   } catch (const std::exception& e) {
@@ -1217,10 +1220,10 @@ attempt_context_impl::remove(const transaction_get_result& document, VoidCallbac
                           .create_path(),
                       }
                         .specs();
-                    req.durability_level = self->overall_->config().level;
+                    req.durability_level = self->overall()->config().level;
                     req.cas = document.cas();
                     req.access_deleted = document.links().is_deleted();
-                    return self->overall_->cluster_ref().execute(
+                    return self->overall()->cluster_ref().execute(
                       req,
                       [self,
                        document = std::move(document),
@@ -1301,10 +1304,10 @@ attempt_context_impl::remove_staged_insert(const core::document_id& id, VoidCall
           couchbase::mutate_in_specs::remove("txn").xattr(),
         }
           .specs();
-      wrap_durable_request(req, self->overall_->config());
+      wrap_durable_request(req, self->overall()->config());
       req.access_deleted = true;
 
-      return self->overall_->cluster_ref().execute(
+      return self->overall()->cluster_ref().execute(
         req,
         [self, id, cb = std::move(cb), error_handler = std::move(error_handler)](
           const core::operations::mutate_in_response& resp) mutable {
@@ -1382,23 +1385,23 @@ attempt_context_impl::query_begin_work(const std::optional<std::string>& query_c
   txdata["id"]["atmpt"] = id();
   txdata["id"]["txn"] = transaction_id();
   txdata["state"] = tao::json::empty_object;
-  txdata["state"]["timeLeftMs"] = overall_->remaining().count() / 1000000;
+  txdata["state"]["timeLeftMs"] = overall()->remaining().count() / 1000000;
   txdata["config"] = tao::json::empty_object;
-  auto [ec, origin] = overall_->cluster_ref().origin();
+  auto [ec, origin] = overall()->cluster_ref().origin();
   txdata["config"]["kvTimeoutMs"] = (ec) ? core::timeout_defaults::key_value_durable_timeout.count()
                                          : origin.options().key_value_durable_timeout.count();
   txdata["config"]["numAtrs"] = 1024;
   opts.raw("numatrs", jsonify(1024));
-  txdata["config"]["durabilityLevel"] = durability_level_to_string(overall_->config().level);
-  opts.raw("durability_level", durability_level_to_string_for_query(overall_->config().level));
+  txdata["config"]["durabilityLevel"] = durability_level_to_string(overall()->config().level);
+  opts.raw("durability_level", durability_level_to_string_for_query(overall()->config().level));
   if (atr_id_) {
     txdata["atr"] = tao::json::empty_object;
     txdata["atr"]["scp"] = atr_id_->scope();
     txdata["atr"]["coll"] = atr_id_->collection();
     txdata["atr"]["bkt"] = atr_id_->bucket();
     txdata["atr"]["id"] = atr_id_->key();
-  } else if (overall_->config().metadata_collection) {
-    auto id = atr_id_from_bucket_and_key(overall_->config(), "", "");
+  } else if (overall()->config().metadata_collection) {
+    auto id = atr_id_from_bucket_and_key(overall()->config(), "", "");
     txdata["atr"] = tao::json::empty_object;
     txdata["atr"]["scp"] = id.scope();
     txdata["atr"]["coll"] = id.collection();
@@ -1652,7 +1655,7 @@ attempt_context_impl::wrap_query(
               {});
   }
 
-  auto req = wrap_query_request(opts, overall_);
+  auto req = wrap_query_request(opts, overall());
   if (statement != BEGIN_WORK) {
     auto mode = op_list_.get_mode();
     assert(mode.is_query());
@@ -1708,7 +1711,7 @@ attempt_context_impl::wrap_query(
       }
 
       CB_ATTEMPT_CTX_LOG_TRACE(self, "http request: {}", dump_request(req));
-      return self->overall_->cluster_ref().execute(
+      return self->overall()->cluster_ref().execute(
         req, [self, req, cb = std::move(cb)](core::operations::query_response resp) mutable {
           CB_ATTEMPT_CTX_LOG_TRACE(
             self, "response: {} status: {}", resp.ctx.http_body, resp.meta.status);
@@ -2137,7 +2140,7 @@ attempt_context_impl::atr_commit(bool ambiguity_resolution_mode)
           couchbase::mutate_in_specs::insert(prefix + ATR_FIELD_PREVENT_COLLLISION, 0).xattr(),
         }
           .specs();
-      wrap_durable_request(req, self->overall_->config());
+      wrap_durable_request(req, self->overall()->config());
       auto ec = self->error_if_expired_and_not_in_overtime(STAGE_ATR_COMMIT, {});
       if (ec) {
         throw client_error(
@@ -2159,7 +2162,7 @@ attempt_context_impl::atr_commit(bool ambiguity_resolution_mode)
                                "updating atr {}, setting to {}",
                                req.id,
                                attempt_state_name(attempt_state::COMMITTED));
-      self->overall_->cluster_ref().execute(
+      self->overall()->cluster_ref().execute(
         req, [barrier](const core::operations::mutate_in_response& resp) {
           barrier->set_value(result::create_from_subdoc_response(resp));
         });
@@ -2274,10 +2277,10 @@ attempt_context_impl::atr_commit_ambiguity_resolution()
     req.specs = lookup_in_specs{ lookup_in_specs::get(prefix + ATR_FIELD_STATUS).xattr() }.specs();
     auto barrier = std::make_shared<std::promise<result>>();
     auto f = barrier->get_future();
-    overall_->cluster_ref().execute(req,
-                                    [barrier](const core::operations::lookup_in_response& resp) {
-                                      barrier->set_value(result::create_from_subdoc_response(resp));
-                                    });
+    overall()->cluster_ref().execute(
+      req, [barrier](const core::operations::lookup_in_response& resp) {
+        barrier->set_value(result::create_from_subdoc_response(resp));
+      });
     auto res = wrap_operation_future(f);
     auto atr_status_raw = res.values[0].content_as<std::string>();
     CB_ATTEMPT_CTX_LOG_DEBUG(
@@ -2348,13 +2351,13 @@ attempt_context_impl::atr_complete()
         couchbase::mutate_in_specs::remove(prefix).xattr(),
       }
         .specs();
-    wrap_durable_request(req, overall_->config());
+    wrap_durable_request(req, overall()->config());
     auto barrier = std::make_shared<std::promise<result>>();
     auto f = barrier->get_future();
-    overall_->cluster_ref().execute(req,
-                                    [barrier](const core::operations::mutate_in_response& resp) {
-                                      barrier->set_value(result::create_from_subdoc_response(resp));
-                                    });
+    overall()->cluster_ref().execute(
+      req, [barrier](const core::operations::mutate_in_response& resp) {
+        barrier->set_value(result::create_from_subdoc_response(resp));
+      });
     wrap_operation_future(f);
     ec = wait_for_hook([self = shared_from_this()](auto handler) mutable {
       return self->hooks_.after_atr_complete(self, std::move(handler));
@@ -2464,13 +2467,13 @@ attempt_context_impl::atr_abort()
       }
         .specs();
     staged_mutations_->extract_to(prefix, req);
-    wrap_durable_request(req, overall_->config());
+    wrap_durable_request(req, overall()->config());
     auto barrier = std::make_shared<std::promise<result>>();
     auto f = barrier->get_future();
-    overall_->cluster_ref().execute(req,
-                                    [barrier](const core::operations::mutate_in_response& resp) {
-                                      barrier->set_value(result::create_from_subdoc_response(resp));
-                                    });
+    overall()->cluster_ref().execute(
+      req, [barrier](const core::operations::mutate_in_response& resp) {
+        barrier->set_value(result::create_from_subdoc_response(resp));
+      });
     wrap_operation_future(f);
     state(attempt_state::ABORTED);
 
@@ -2540,13 +2543,13 @@ attempt_context_impl::atr_rollback_complete()
         couchbase::mutate_in_specs::remove(prefix).xattr(),
       }
         .specs();
-    wrap_durable_request(req, overall_->config());
+    wrap_durable_request(req, overall()->config());
     auto barrier = std::make_shared<std::promise<result>>();
     auto f = barrier->get_future();
-    overall_->cluster_ref().execute(req,
-                                    [barrier](const core::operations::mutate_in_response& resp) {
-                                      barrier->set_value(result::create_from_subdoc_response(resp));
-                                    });
+    overall()->cluster_ref().execute(
+      req, [barrier](const core::operations::mutate_in_response& resp) {
+        barrier->set_value(result::create_from_subdoc_response(resp));
+      });
     wrap_operation_future(f);
     state(attempt_state::ROLLED_BACK);
     ec = wait_for_hook([self = shared_from_this()](auto handler) mutable {
@@ -2677,7 +2680,7 @@ auto
 attempt_context_impl::has_expired_client_side(std::string place,
                                               std::optional<const std::string> doc_id) -> bool
 {
-  const bool over = overall_->has_expired_client_side();
+  const bool over = overall()->has_expired_client_side();
   const bool hook = hooks_.has_expired_client_side(shared_from_this(), place, std::move(doc_id));
   if (over) {
     CB_ATTEMPT_CTX_LOG_DEBUG(this, "{} expired in {}", id(), place);
@@ -2787,7 +2790,7 @@ attempt_context_impl::set_atr_pending_locked(
             case FAIL_AMBIGUOUS:
               // Retry just this
               CB_ATTEMPT_CTX_LOG_DEBUG(self, "got FAIL_AMBIGUOUS, retrying set atr pending", ec);
-              return self->overall_->after_delay(
+              return self->overall()->after_delay(
                 std::chrono::milliseconds(1), [self, doc_id, &lock, fn = std::move(fn)]() mutable {
                   self->set_atr_pending_locked(doc_id, std::move(lock), std::move(fn));
                 });
@@ -2813,12 +2816,12 @@ attempt_context_impl::set_atr_pending_locked(
 
           CB_ATTEMPT_CTX_LOG_DEBUG(self, "updating atr {}", self->atr_id_.value());
 
-          const std::chrono::nanoseconds remaining = self->overall_->remaining();
+          const std::chrono::nanoseconds remaining = self->overall()->remaining();
           // This bounds the value to [0-timeout].  It should always be in this
           // range, this is just to protect against the application clock
           // changing.
           const long remaining_bounded_nanos =
-            std::max(std::min(remaining.count(), self->overall_->config().timeout.count()),
+            std::max(std::min(remaining.count(), self->overall()->config().timeout.count()),
                      static_cast<std::chrono::nanoseconds::rep>(0));
           const long remaining_bounded_msecs = remaining_bounded_nanos / 1'000'000;
 
@@ -2827,7 +2830,7 @@ attempt_context_impl::set_atr_pending_locked(
           req.specs =
             couchbase::mutate_in_specs{
               couchbase::mutate_in_specs::insert(prefix + ATR_FIELD_TRANSACTION_ID,
-                                                 self->overall_->transaction_id())
+                                                 self->overall()->transaction_id())
                 .xattr()
                 .create_path(),
               couchbase::mutate_in_specs::insert(prefix + ATR_FIELD_STATUS,
@@ -2845,7 +2848,7 @@ attempt_context_impl::set_atr_pending_locked(
               // ExtStoreDurability
               couchbase::mutate_in_specs::insert(
                 prefix + ATR_FIELD_DURABILITY_LEVEL,
-                store_durability_level_to_string(self->overall_->config().level))
+                store_durability_level_to_string(self->overall()->config().level))
                 .xattr()
                 .create_path(),
               // subdoc::opcode::set_doc used in replace w/ empty path
@@ -2856,8 +2859,8 @@ attempt_context_impl::set_atr_pending_locked(
               .specs();
           req.store_semantics = couchbase::store_semantics::upsert;
 
-          wrap_durable_request(req, self->overall_->config());
-          return self->overall_->cluster_ref().execute(
+          wrap_durable_request(req, self->overall()->config());
+          return self->overall()->cluster_ref().execute(
             req,
             [self, fn = std::move(fn), error_handler = std::move(error_handler)](
               core::operations::mutate_in_response resp) mutable {
@@ -3400,15 +3403,15 @@ attempt_context_impl::create_staged_insert(const core::document_id& id,
         .create_path(),
     }
       .specs();
-  req.durability_level = overall_->config().level;
+  req.durability_level = overall()->config().level;
   req.access_deleted = true;
   req.create_as_deleted = true;
   req.flags = content.flags;
   req.cas = couchbase::cas(cas);
   req.store_semantics =
     cas == 0 ? couchbase::store_semantics::insert : couchbase::store_semantics::replace;
-  wrap_durable_request(req, overall_->config());
-  overall_->cluster_ref().execute(
+  wrap_durable_request(req, overall()->config());
+  overall()->cluster_ref().execute(
     req,
     [self = shared_from_this(),
      id,
@@ -3473,7 +3476,7 @@ attempt_context_impl::create_staged_insert(const core::document_id& id,
               id.bucket(),
               id.scope(),
               id.collection(),
-              self->overall_->transaction_id(),
+              self->overall()->transaction_id(),
               self->id(),
               op_id,
               std::move(staged_content_json),
@@ -3673,56 +3676,56 @@ attempt_context_impl::is_done() const -> bool
 }
 
 auto
-attempt_context_impl::overall() -> std::shared_ptr<transaction_context>
+attempt_context_impl::overall() const -> std::shared_ptr<transaction_context>
 {
-  return overall_;
+  return overall_.lock();
 }
 
 auto
 attempt_context_impl::transaction_id() const -> const std::string&
 {
-  return overall_->transaction_id();
+  return overall()->transaction_id();
 }
 
 auto
 attempt_context_impl::id() const -> const std::string&
 {
-  return overall_->current_attempt().id;
+  return overall()->current_attempt().id;
 }
 
 auto
-attempt_context_impl::state() -> attempt_state
+attempt_context_impl::state() const -> attempt_state
 {
-  return overall_->current_attempt().state;
+  return overall()->current_attempt().state;
 }
 
 void
-attempt_context_impl::state(attempt_state s)
+attempt_context_impl::state(attempt_state s) const
 {
-  overall_->current_attempt_state(s);
+  overall()->current_attempt_state(s);
 }
 
 auto
 attempt_context_impl::atr_id() const -> const std::string&
 {
-  return overall_->atr_id();
+  return overall()->atr_id();
 }
 
 void
-attempt_context_impl::atr_id(const std::string& atr_id)
+attempt_context_impl::atr_id(const std::string& atr_id) const
 {
-  overall_->atr_id(atr_id);
+  overall()->atr_id(atr_id);
 }
 
 auto
 attempt_context_impl::atr_collection() const -> const std::string&
 {
-  return overall_->atr_collection();
+  return overall()->atr_collection();
 }
 
 void
-attempt_context_impl::atr_collection_name(const std::string& coll)
+attempt_context_impl::atr_collection_name(const std::string& coll) const
 {
-  overall_->atr_collection(coll);
+  overall()->atr_collection(coll);
 }
 } // namespace couchbase::core::transactions
