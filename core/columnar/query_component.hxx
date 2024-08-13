@@ -42,7 +42,9 @@ class query_component_impl;
 class query_component
 {
 public:
-  query_component(asio::io_context& io, http_component http);
+  query_component(asio::io_context& io,
+                  http_component http,
+                  std::chrono::milliseconds default_timeout);
 
   auto execute_query(const query_options& options, query_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, error>;

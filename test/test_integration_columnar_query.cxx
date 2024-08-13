@@ -388,6 +388,31 @@ TEST_CASE("integration: columnar query operation timeout")
   REQUIRE(err.ec == couchbase::core::columnar::errc::timeout);
 }
 
+TEST_CASE("integration: columnar query global timeout")
+{
+  test::utils::integration_test_guard integration;
+  if (!integration.cluster_version().is_columnar()) {
+    SKIP("Requires a columnar cluster");
+  }
+
+  couchbase::core::columnar::timeout_config timeouts{};
+  timeouts.query_timeout = std::chrono::seconds(1);
+  couchbase::core::columnar::agent agent{ integration.io, { { integration.cluster }, timeouts } };
+
+  couchbase::core::columnar::query_options options{ "FROM RANGE(0, 10000000) AS i SELECT *" };
+  options.read_only = true;
+
+  auto barrier = std::make_shared<std::promise<
+    std::pair<couchbase::core::columnar::query_result, couchbase::core::columnar::error>>>();
+  auto f = barrier->get_future();
+  auto resp = agent.execute_query(options, [barrier](auto res, auto err) mutable {
+    barrier->set_value({ std::move(res), err });
+  });
+  REQUIRE(resp.has_value());
+  auto [res, err] = f.get();
+  REQUIRE(err.ec == couchbase::core::columnar::errc::timeout);
+}
+
 TEST_CASE("integration: columnar query collection does not exist")
 {
   test::utils::integration_test_guard integration;

@@ -46,7 +46,7 @@ class http_component
 public:
   http_component(asio::io_context& io,
                  core_sdk_shim shim,
-                 std::shared_ptr<retry_strategy> default_retry_strategy);
+                 std::shared_ptr<retry_strategy> default_retry_strategy = {});
 
   auto do_http_request(const http_request& request, free_form_http_request_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;

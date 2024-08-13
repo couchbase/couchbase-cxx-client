@@ -54,10 +54,12 @@ class pending_query_operation
   , public pending_operation
 {
 public:
-  pending_query_operation(const query_options& options, asio::io_context& io, http_component& http)
+  pending_query_operation(const query_options& options,
+                          asio::io_context& io,
+                          http_component& http,
+                          std::chrono::milliseconds default_timeout)
     : http_req_{ build_query_request(options) }
-    , timeout_{ options.timeout.value_or(std::chrono::minutes(10)) }
-    // TODO(CXXCBC-557): Replace with global timeout
+    , timeout_{ options.timeout.value_or(default_timeout) }
     , io_{ io }
     , deadline_{ io_ }
     , retry_timer_{ io_ }
@@ -395,16 +397,19 @@ private:
 class query_component_impl : public std::enable_shared_from_this<query_component_impl>
 {
 public:
-  query_component_impl(asio::io_context& io, http_component http)
+  query_component_impl(asio::io_context& io,
+                       http_component http,
+                       std::chrono::milliseconds default_timeout)
     : io_{ io }
     , http_{ std::move(http) }
+    , default_timeout_{ default_timeout }
   {
   }
 
   auto execute_query(const query_options& options, query_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, error>
   {
-    auto op = std::make_shared<pending_query_operation>(options, io_, http_);
+    auto op = std::make_shared<pending_query_operation>(options, io_, http_, default_timeout_);
     auto err = op->start(std::move(callback));
     if (err) {
       return tl::unexpected<error>(err);
@@ -415,10 +420,13 @@ public:
 private:
   asio::io_context& io_;
   http_component http_;
+  std::chrono::milliseconds default_timeout_;
 };
 
-query_component::query_component(asio::io_context& io, core::http_component http)
-  : impl_{ std::make_shared<query_component_impl>(io, std::move(http)) }
+query_component::query_component(asio::io_context& io,
+                                 core::http_component http,
+                                 std::chrono::milliseconds default_timeout)
+  : impl_{ std::make_shared<query_component_impl>(io, std::move(http), default_timeout) }
 {
 }
 
