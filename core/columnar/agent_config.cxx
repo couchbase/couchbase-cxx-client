@@ -17,6 +17,7 @@
 
 #include "agent_config.hxx"
 
+#include <fmt/chrono.h>
 #include <fmt/core.h>
 
 #include <string>
@@ -26,13 +27,21 @@ namespace couchbase::core::columnar
 auto
 agent_config::to_string() const -> std::string
 {
+  return fmt::format(R"(#<columnar_agent_config:{} shim={}, user_agent="{}", timeouts={}>)",
+                     static_cast<const void*>(this),
+                     shim.to_string(),
+                     user_agent,
+                     timeouts.to_string());
+}
+
+auto
+timeout_config::to_string() const -> std::string
+{
   return fmt::format(
-    R"(#<cluster_agent_config:{} shim={}, user_agent="{}", default_retry_strategy={}, seed={}, key_value={}>)",
+    R"(#<timeout_config:{} connect_timeout={}, dispatch_timeout={}, query_timeout={}>)",
     static_cast<const void*>(this),
-    shim.to_string(),
-    user_agent,
-    default_retry_strategy ? default_retry_strategy->to_string() : "(none)",
-    seed.to_string(),
-    key_value.to_string());
+    connect_timeout,
+    dispatch_timeout,
+    query_timeout);
 }
 } // namespace couchbase::core::columnar
