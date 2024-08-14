@@ -39,7 +39,7 @@ struct freeform_request {
   using encoded_response_type = io::http_response;
   using error_context_type = error_context::http;
 
-  service_type type;
+  service_type type{};
   std::string method;
   std::string path;
   std::map<std::string, std::string> headers{};

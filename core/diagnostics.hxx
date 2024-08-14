@@ -48,12 +48,12 @@ enum class endpoint_state {
 };
 
 struct endpoint_diag_info {
-  service_type type;
+  service_type type{};
   std::string id;
   std::optional<std::chrono::microseconds> last_activity{};
   std::string remote;
   std::string local;
-  endpoint_state state;
+  endpoint_state state{};
   /** serialized as "namespace" */
   std::optional<std::string> bucket{};
   std::optional<std::string> details{};
@@ -74,7 +74,7 @@ enum class ping_state {
 };
 
 struct endpoint_ping_info {
-  service_type type;
+  service_type type{};
   std::string id;
   std::chrono::microseconds latency;
   std::string remote;
