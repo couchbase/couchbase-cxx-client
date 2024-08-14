@@ -45,7 +45,7 @@ protected:
     base_sink<std::mutex>::formatter_->format(msg, formatted);
     // prevent data race when calling output()
     std::lock_guard<std::mutex> lock(mut_);
-    out_ << formatted.data();
+    out_.write(formatted.data(), static_cast<std::streamsize>(formatted.size()));
   }
   void flush_() override
   {
