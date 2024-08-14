@@ -178,7 +178,7 @@ private:
   void flush();
   void cancel_current_response(std::error_code ec);
 
-  service_type type_;
+  service_type type_{};
   std::string client_id_;
   std::string id_;
   asio::io_context& ctx_;

@@ -41,7 +41,7 @@ namespace couchbase::core
 class http_request
 {
 public:
-  service_type service;
+  service_type service{};
   std::string method{};
   std::string endpoint{};
   std::string path{};

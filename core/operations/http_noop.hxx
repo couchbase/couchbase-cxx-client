@@ -35,7 +35,7 @@ struct http_noop_request {
   using encoded_response_type = io::http_response;
   using error_context_type = error_context::http;
 
-  service_type type;
+  service_type type{};
 
   std::optional<std::string> client_context_id{};
   std::optional<std::chrono::milliseconds> timeout{};
