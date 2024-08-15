@@ -18,6 +18,7 @@
 #include <couchbase/error_codes.hxx>
 #include <couchbase/scan_result.hxx>
 
+#include "core/range_scan_orchestrator.hxx"
 #include "core/scan_result.hxx"
 
 namespace couchbase
@@ -26,12 +27,18 @@ class internal_scan_result
 {
 
 public:
-  explicit internal_scan_result(core::scan_result core_result);
+  internal_scan_result(core::range_scan_orchestrator orchestrator, core::scan_result core_result);
+  internal_scan_result(const internal_scan_result&) = delete;
+  internal_scan_result(internal_scan_result&&) noexcept = default;
+  auto operator=(const internal_scan_result&) -> internal_scan_result& = delete;
+  auto operator=(internal_scan_result&&) noexcept -> internal_scan_result& = default;
+
   ~internal_scan_result();
   void next(scan_item_handler&& handler);
   void cancel();
 
 private:
+  core::range_scan_orchestrator orchestrator_;
   core::scan_result core_result_;
 };
 } // namespace couchbase

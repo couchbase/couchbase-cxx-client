@@ -34,14 +34,14 @@ public:
   virtual auto next() -> std::future<tl::expected<range_scan_item, std::error_code>> = 0;
   virtual void next(utils::movable_function<void(range_scan_item, std::error_code)> callback) = 0;
   virtual void cancel() = 0;
-  virtual bool is_cancelled() = 0;
+  virtual auto is_cancelled() -> bool = 0;
 };
 
 class scan_result
 {
 public:
   scan_result() = default;
-  explicit scan_result(std::shared_ptr<range_scan_item_iterator> iterator);
+  explicit scan_result(std::weak_ptr<range_scan_item_iterator> iterator);
   [[nodiscard]] auto next() const -> tl::expected<range_scan_item, std::error_code>;
   void next(utils::movable_function<void(range_scan_item, std::error_code)> callback) const;
   void cancel();

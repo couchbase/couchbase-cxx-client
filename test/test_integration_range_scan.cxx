@@ -272,48 +272,6 @@ TEST_CASE("integration: range scan small values", "[integration]")
   }
 }
 
-class collection_guard
-{
-public:
-  explicit collection_guard(test::utils::integration_test_guard& integration)
-    : integration_{ integration }
-  {
-    auto resp =
-      test::utils::execute(integration_.cluster,
-                           couchbase::core::operations::management::collection_create_request{
-                             integration_.ctx.bucket,
-                             couchbase::scope::default_name,
-                             collection_name_,
-                           });
-    REQUIRE_SUCCESS(resp.ctx.ec);
-    REQUIRE(test::utils::wait_until_collection_manifest_propagated(
-      integration_.cluster, integration_.ctx.bucket, resp.uid));
-  }
-
-  ~collection_guard()
-  {
-    auto resp =
-      test::utils::execute(integration_.cluster,
-                           couchbase::core::operations::management::collection_drop_request{
-                             integration_.ctx.bucket,
-                             couchbase::scope::default_name,
-                             collection_name_,
-                           });
-    REQUIRE_SUCCESS(resp.ctx.ec);
-    REQUIRE(test::utils::wait_until_collection_manifest_propagated(
-      integration_.cluster, integration_.ctx.bucket, resp.uid));
-  }
-
-  [[nodiscard]] auto name() const -> const std::string&
-  {
-    return collection_name_;
-  }
-
-private:
-  test::utils::integration_test_guard& integration_;
-  std::string collection_name_{ test::utils::uniq_id("collection") };
-};
-
 TEST_CASE("integration: range scan collection retry", "[integration]")
 {
   test::utils::integration_test_guard integration;
@@ -322,7 +280,7 @@ TEST_CASE("integration: range scan collection retry", "[integration]")
     SKIP("cluster does not support range_scan");
   }
 
-  const collection_guard new_collection(integration);
+  const test::utils::collection_guard new_collection(integration);
 
   auto test_ctx = integration.ctx;
   auto [err, cluster] =
@@ -331,7 +289,7 @@ TEST_CASE("integration: range scan collection retry", "[integration]")
 
   auto collection = cluster.bucket(integration.ctx.bucket)
                       .scope(couchbase::scope::default_name)
-                      .collection(new_collection.name());
+                      .collection(new_collection.collection_name());
 
   std::vector<std::byte> value = couchbase::core::utils::to_binary(R"({"barry":"sheen")");
   for (std::size_t i = 0; i < value.size(); ++i) {
@@ -357,12 +315,12 @@ TEST_CASE("integration: range scan collection retry", "[integration]")
   REQUIRE(agent.has_value());
 
   // we're going to force a refresh, so we need to delete the collection from our cache.
-  agent->unit_test_api().collections().remove_collection_from_cache(couchbase::scope::default_name,
-                                                                    new_collection.name());
+  agent->unit_test_api().collections().remove_collection_from_cache(
+    couchbase::scope::default_name, new_collection.collection_name());
 
   couchbase::core::range_scan_create_options create_options{
     couchbase::scope::default_name,
-    new_collection.name(),
+    new_collection.collection_name(),
     couchbase::core::range_scan{
       couchbase::core::scan_term{ "rangecollectionretry" },
       couchbase::core::scan_term{ "rangecollectionretry\xff" },
@@ -1026,7 +984,7 @@ TEST_CASE("integration: orchestrator sampling scan with custom collection", "[in
     SKIP("cluster does not support range_scan");
   }
 
-  const collection_guard new_collection(integration);
+  const test::utils::collection_guard new_collection(integration);
 
   auto test_ctx = integration.ctx;
   auto [err, cluster] =
@@ -1035,7 +993,7 @@ TEST_CASE("integration: orchestrator sampling scan with custom collection", "[in
 
   auto collection = cluster.bucket(integration.ctx.bucket)
                       .scope(couchbase::scope::default_name)
-                      .collection(new_collection.name());
+                      .collection(new_collection.collection_name());
 
   auto ids = make_doc_ids(100, "samplingscan-");
   auto value = make_binary_value(100);
@@ -1056,7 +1014,7 @@ TEST_CASE("integration: orchestrator sampling scan with custom collection", "[in
                                                         agent.value(),
                                                         vbucket_map,
                                                         couchbase::scope::default_name,
-                                                        new_collection.name(),
+                                                        new_collection.collection_name(),
                                                         scan,
                                                         options);
 
@@ -1096,7 +1054,7 @@ TEST_CASE("integration: orchestrator sampling scan with seed & custom collection
     SKIP("cluster does not support range_scan");
   }
 
-  const collection_guard new_collection(integration);
+  const test::utils::collection_guard new_collection(integration);
 
   auto test_ctx = integration.ctx;
   auto [err, cluster] =
@@ -1105,7 +1063,7 @@ TEST_CASE("integration: orchestrator sampling scan with seed & custom collection
 
   auto collection = cluster.bucket(integration.ctx.bucket)
                       .scope(couchbase::scope::default_name)
-                      .collection(new_collection.name());
+                      .collection(new_collection.collection_name());
 
   auto ids = make_doc_ids(100, "samplingscan-");
   auto value = make_binary_value(100);
@@ -1132,7 +1090,7 @@ TEST_CASE("integration: orchestrator sampling scan with seed & custom collection
                                                         agent.value(),
                                                         vbucket_map,
                                                         couchbase::scope::default_name,
-                                                        new_collection.name(),
+                                                        new_collection.collection_name(),
                                                         scan,
                                                         options);
 
@@ -1165,7 +1123,7 @@ TEST_CASE("integration: orchestrator sampling scan with seed & custom collection
                                                          agent.value(),
                                                          vbucket_map,
                                                          couchbase::scope::default_name,
-                                                         new_collection.name(),
+                                                         new_collection.collection_name(),
                                                          scan2,
                                                          options);
   auto result2 = orchestrator2.scan();
@@ -1259,7 +1217,7 @@ TEST_CASE(
     SKIP("cluster does not support range_scan");
   }
 
-  const collection_guard new_collection(integration);
+  const test::utils::collection_guard new_collection(integration);
 
   auto test_ctx = integration.ctx;
   auto [err, cluster] =
@@ -1268,7 +1226,7 @@ TEST_CASE(
 
   auto collection = cluster.bucket(integration.ctx.bucket)
                       .scope(couchbase::scope::default_name)
-                      .collection(new_collection.name());
+                      .collection(new_collection.collection_name());
 
   auto ids = make_doc_ids(100, "samplingscan-");
   auto value = make_binary_value(100);
@@ -1290,7 +1248,7 @@ TEST_CASE(
                                                         agent.value(),
                                                         vbucket_map,
                                                         couchbase::scope::default_name,
-                                                        new_collection.name(),
+                                                        new_collection.collection_name(),
                                                         scan,
                                                         options);
 
@@ -1333,7 +1291,7 @@ TEST_CASE("integration: orchestrator sampling scan with custom collection and up
     SKIP("cluster does not support range_scan");
   }
 
-  const collection_guard new_collection(integration);
+  const test::utils::collection_guard new_collection(integration);
 
   auto test_ctx = integration.ctx;
   auto [err, cluster] =
@@ -1342,7 +1300,7 @@ TEST_CASE("integration: orchestrator sampling scan with custom collection and up
 
   auto collection = cluster.bucket(integration.ctx.bucket)
                       .scope(couchbase::scope::default_name)
-                      .collection(new_collection.name());
+                      .collection(new_collection.collection_name());
 
   auto ids = make_doc_ids(100, "samplingscan-");
   auto value = make_binary_value(100);
@@ -1365,7 +1323,7 @@ TEST_CASE("integration: orchestrator sampling scan with custom collection and up
                                                         agent.value(),
                                                         vbucket_map,
                                                         couchbase::scope::default_name,
-                                                        new_collection.name(),
+                                                        new_collection.collection_name(),
                                                         scan,
                                                         options);
 

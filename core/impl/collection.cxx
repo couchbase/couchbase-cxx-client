@@ -905,12 +905,12 @@ public:
                                                               core_scan_type,
                                                               orchestrator_opts);
             return orchestrator.scan(
-              [handler = std::move(handler)](auto ec, auto core_scan_result) mutable {
+              [handler = std::move(handler), orchestrator](auto ec, auto core_scan_result) mutable {
                 if (ec) {
                   return handler(error(ec, "Error while starting the range scan"), {});
                 }
-                auto internal_result =
-                  std::make_shared<internal_scan_result>(std::move(core_scan_result));
+                auto internal_result = std::make_shared<internal_scan_result>(
+                  std::move(orchestrator), std::move(core_scan_result));
                 return handler({}, scan_result{ internal_result });
               });
           });

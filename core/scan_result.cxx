@@ -25,36 +25,47 @@ namespace couchbase::core
 class scan_result_impl
 {
 public:
-  explicit scan_result_impl(std::shared_ptr<range_scan_item_iterator> iterator)
+  explicit scan_result_impl(std::weak_ptr<range_scan_item_iterator> iterator)
     : iterator_{ std::move(iterator) }
   {
   }
 
   [[nodiscard]] auto next() const -> tl::expected<range_scan_item, std::error_code>
   {
-    return iterator_->next().get();
+    if (auto ptr = iterator_.lock(); ptr != nullptr) {
+      return ptr->next().get();
+    }
+    return tl::unexpected{ errc::common::request_canceled };
   }
 
   void next(utils::movable_function<void(range_scan_item, std::error_code)> callback) const
   {
-    return iterator_->next(std::move(callback));
+    if (auto ptr = iterator_.lock(); ptr != nullptr) {
+      return ptr->next(std::move(callback));
+    }
+    callback({}, errc::common::request_canceled);
   }
 
   void cancel()
   {
-    return iterator_->cancel();
+    if (auto ptr = iterator_.lock(); ptr != nullptr) {
+      return ptr->cancel();
+    }
   }
 
   [[nodiscard]] auto is_cancelled() -> bool
   {
-    return iterator_->is_cancelled();
+    if (auto ptr = iterator_.lock(); ptr != nullptr) {
+      return ptr->is_cancelled();
+    }
+    return false;
   }
 
 private:
-  std::shared_ptr<range_scan_item_iterator> iterator_;
+  std::weak_ptr<range_scan_item_iterator> iterator_;
 };
 
-scan_result::scan_result(std::shared_ptr<range_scan_item_iterator> iterator)
+scan_result::scan_result(std::weak_ptr<range_scan_item_iterator> iterator)
   : impl_{ std::make_shared<scan_result_impl>(std::move(iterator)) }
 {
 }
@@ -62,7 +73,7 @@ scan_result::scan_result(std::shared_ptr<range_scan_item_iterator> iterator)
 auto
 scan_result::next() const -> tl::expected<range_scan_item, std::error_code>
 {
-  if (impl_) {
+  if (impl_ != nullptr) {
     return impl_->next();
   }
   return tl::unexpected{ errc::common::request_canceled };
@@ -71,7 +82,7 @@ scan_result::next() const -> tl::expected<range_scan_item, std::error_code>
 void
 scan_result::next(utils::movable_function<void(range_scan_item, std::error_code)> callback) const
 {
-  if (impl_) {
+  if (impl_ != nullptr) {
     return impl_->next(std::move(callback));
   }
   callback({}, errc::common::request_canceled);
@@ -80,7 +91,7 @@ scan_result::next(utils::movable_function<void(range_scan_item, std::error_code)
 void
 scan_result::cancel()
 {
-  if (impl_) {
+  if (impl_ != nullptr) {
     return impl_->cancel();
   }
 }
@@ -88,7 +99,7 @@ scan_result::cancel()
 auto
 scan_result::is_cancelled() -> bool
 {
-  if (impl_) {
+  if (impl_ != nullptr) {
     return impl_->is_cancelled();
   }
   return true;

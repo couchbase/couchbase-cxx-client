@@ -127,4 +127,25 @@ create_search_index(integration_test_guard& integration,
 
 auto
 drop_search_index(integration_test_guard& integration, const std::string& index_name) -> bool;
+
+class collection_guard
+{
+public:
+  explicit collection_guard(test::utils::integration_test_guard& integration);
+  ~collection_guard();
+
+  collection_guard(const collection_guard&) = delete;
+  collection_guard(collection_guard&&) noexcept = delete;
+  auto operator=(const collection_guard&) -> collection_guard& = delete;
+  auto operator=(collection_guard&&) -> collection_guard& = delete;
+
+  [[nodiscard]] auto scope_name() const -> const std::string&;
+  [[nodiscard]] auto collection_name() const -> const std::string&;
+
+private:
+  test::utils::integration_test_guard& integration_;
+  std::string scope_name_;
+  std::string collection_name_;
+};
+
 } // namespace test::utils

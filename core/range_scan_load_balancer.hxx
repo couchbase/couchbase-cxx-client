@@ -15,7 +15,6 @@
  *   limitations under the License.
  */
 
-#include "core/logger/logger.hxx"
 #include "core/topology/configuration.hxx"
 
 #include <mutex>
@@ -26,7 +25,7 @@ namespace couchbase::core
 class range_scan_node_state
 {
 public:
-  range_scan_node_state(std::queue<std::uint16_t> vbuckets);
+  explicit range_scan_node_state(std::queue<std::uint16_t> vbuckets);
 
   auto fetch_vbucket_id() -> std::optional<std::uint16_t>;
   void notify_stream_ended();
@@ -43,8 +42,8 @@ private:
 class range_scan_load_balancer
 {
 public:
-  range_scan_load_balancer(const topology::configuration::vbucket_map& vbucket_map,
-                           std::optional<std::uint64_t> seed = {});
+  explicit range_scan_load_balancer(const topology::configuration::vbucket_map& vbucket_map,
+                                    std::optional<std::uint64_t> seed = {});
 
   void seed(std::uint64_t seed);
 

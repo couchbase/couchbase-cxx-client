@@ -44,7 +44,7 @@ wait_until_bucket_healthy(const couchbase::core::cluster& cluster,
 {
   return wait_until([cluster, bucket_name]() {
     couchbase::core::operations::management::bucket_get_request req{ bucket_name };
-    auto resp = test::utils::execute(cluster, req);
+    auto resp = execute(cluster, req);
     if (resp.ctx.ec) {
       return false;
     }
@@ -70,12 +70,12 @@ wait_until_collection_manifest_propagated(const couchbase::core::cluster& cluste
   std::size_t round = 0;
   auto deadline = std::chrono::system_clock::now() + total_timeout;
   while (std::chrono::system_clock::now() < deadline) {
-    auto propagated = test::utils::wait_until(
-      [&cluster, bucket_name, current_manifest_uid, round, successful_rounds]() {
+    auto propagated =
+      wait_until([&cluster, bucket_name, current_manifest_uid, round, successful_rounds]() {
         couchbase::core::operations::management::collections_manifest_get_request req{
           { bucket_name, "_default", "_default", "" }
         };
-        auto resp = test::utils::execute(cluster, req);
+        auto resp = execute(cluster, req);
         CB_LOG_INFO("wait_until_collection_manifest_propagated \"{}\", expected: {}, actual: {}, "
                     "round: {} ({}), manifest: {}",
                     bucket_name,
@@ -103,10 +103,10 @@ auto
 wait_until_user_present(const couchbase::core::cluster& cluster,
                         const std::string& username) -> bool
 {
-  auto present = test::utils::wait_until([cluster, username]() {
+  auto present = wait_until([cluster, username]() {
     couchbase::core::operations::management::user_get_request req{};
     req.username = username;
-    auto resp = test::utils::execute(cluster, req);
+    auto resp = execute(cluster, req);
     return resp.ctx.ec == couchbase::errc::management::user_exists ||
            (!resp.ctx.ec && resp.user.username == username);
   });
@@ -123,7 +123,7 @@ wait_until_cluster_connected(const std::string& username,
 {
   auto cluster_options = couchbase::cluster_options(username, password);
 
-  auto connected = test::utils::wait_until([cluster_options, connection_string]() {
+  auto connected = wait_until([cluster_options, connection_string]() {
     auto [err, _] = couchbase::cluster::connect(connection_string, cluster_options).get();
     return err.ec().value() == 0;
   });
@@ -154,7 +154,7 @@ refresh_config_on_search_service(const couchbase::core::cluster& cluster) -> boo
       { "content-type", "application/json" },
     },
   };
-  auto resp = test::utils::execute(cluster, req);
+  auto resp = execute(cluster, req);
   return !resp.ctx.ec;
 }
 
@@ -174,7 +174,7 @@ kick_manager_manager_on_search_service(const couchbase::core::cluster& cluster) 
       { "content-type", "application/json" },
     },
   };
-  auto resp = test::utils::execute(cluster, req);
+  auto resp = execute(cluster, req);
   return !resp.ctx.ec;
 }
 
@@ -201,14 +201,14 @@ wait_for_search_pindexes_ready(const couchbase::core::cluster& cluster,
                                const std::string& bucket_name,
                                const std::string& index_name) -> bool
 {
-  return test::utils::wait_until(
+  return wait_until(
     [&]() {
       if (!refresh_config_on_search_service(cluster)) {
         return false;
       }
 
       couchbase::core::operations::management::search_get_stats_request req{};
-      auto resp = test::utils::execute(cluster, req);
+      auto resp = execute(cluster, req);
       if (resp.ctx.ec || resp.stats.empty()) {
         return false;
       }
@@ -252,7 +252,7 @@ wait_until_indexed(const couchbase::core::cluster& cluster,
                    const std::string& index_name,
                    std::uint64_t expected_count) -> bool
 {
-  return test::utils::wait_until(
+  return wait_until(
     [cluster, &index_name, &expected_count]() {
       if (!refresh_config_on_search_service(cluster)) {
         return false;
@@ -261,7 +261,7 @@ wait_until_indexed(const couchbase::core::cluster& cluster,
       couchbase::core::operations::management::search_index_get_documents_count_request req{};
       req.index_name = index_name;
       req.timeout = std::chrono::seconds{ 1 };
-      auto resp = test::utils::execute(cluster, req);
+      auto resp = execute(cluster, req);
       CB_LOG_INFO("wait_until_indexed for \"{}\", expected: {}, actual: {}",
                   index_name,
                   expected_count,
@@ -378,31 +378,30 @@ wait_for_function_created(const couchbase::core::cluster& cluster,
 
   couchbase::core::operations::management::eventing_get_function_response resp{};
   while (std::chrono::system_clock::now() < deadline) {
-    auto exists =
-      test::utils::wait_until([&cluster, &resp, function_name, bucket_name, scope_name]() {
-        couchbase::core::operations::management::eventing_get_function_request req{ function_name,
-                                                                                    bucket_name,
-                                                                                    scope_name };
-        resp = test::utils::execute(cluster, req);
-        if (resp.ctx.ec) {
-          return false;
-        }
+    auto exists = wait_until([&cluster, &resp, function_name, bucket_name, scope_name]() {
+      couchbase::core::operations::management::eventing_get_function_request req{ function_name,
+                                                                                  bucket_name,
+                                                                                  scope_name };
+      resp = execute(cluster, req);
+      if (resp.ctx.ec) {
+        return false;
+      }
 
-        // The function scope sometimes takes longer to be set correctly (especially for the admin
-        // scope).
-        if (bucket_name.has_value() && scope_name.has_value()) {
-          return resp.function.internal.bucket_name.has_value() &&
-                 resp.function.internal.scope_name.has_value() &&
-                 resp.function.internal.bucket_name.value() == bucket_name.value() &&
-                 resp.function.internal.scope_name.value() == scope_name.value();
-        }
-        return (!resp.function.internal.bucket_name.has_value() &&
-                !resp.function.internal.scope_name.has_value()) ||
-               (resp.function.internal.bucket_name.has_value() &&
-                resp.function.internal.scope_name.has_value() &&
-                resp.function.internal.bucket_name.value() == "*" &&
-                resp.function.internal.scope_name.value() == "*");
-      });
+      // The function scope sometimes takes longer to be set correctly (especially for the admin
+      // scope).
+      if (bucket_name.has_value() && scope_name.has_value()) {
+        return resp.function.internal.bucket_name.has_value() &&
+               resp.function.internal.scope_name.has_value() &&
+               resp.function.internal.bucket_name.value() == bucket_name.value() &&
+               resp.function.internal.scope_name.value() == scope_name.value();
+      }
+      return (!resp.function.internal.bucket_name.has_value() &&
+              !resp.function.internal.scope_name.has_value()) ||
+             (resp.function.internal.bucket_name.has_value() &&
+              resp.function.internal.scope_name.has_value() &&
+              resp.function.internal.bucket_name.value() == "*" &&
+              resp.function.internal.scope_name.value() == "*");
+    });
     if (exists) {
       round += 1;
       if (round >= successful_rounds) {
@@ -425,4 +424,58 @@ drop_search_index(integration_test_guard& integration, const std::string& index_
   return !resp.ctx.ec;
 }
 
+collection_guard::collection_guard(integration_test_guard& integration)
+  : integration_{ integration }
+  , scope_name_{ couchbase::scope::default_name }
+  , collection_name_{ uniq_id("collection") }
+{
+  auto resp = execute(integration_.cluster,
+                      couchbase::core::operations::management::collection_create_request{
+                        integration_.ctx.bucket,
+                        scope_name_,
+                        collection_name_,
+                      });
+  if (resp.ctx.ec) {
+    throw std::runtime_error(
+      fmt::format("unable to create collection {}: {}", collection_name_, resp.ctx.ec.message()));
+  }
+  auto propagated = wait_until_collection_manifest_propagated(
+    integration_.cluster, integration_.ctx.bucket, resp.uid);
+  if (!propagated) {
+    throw std::runtime_error(
+      fmt::format("unable to wait for collection manifest to reach UID {}", resp.uid));
+  }
+}
+
+collection_guard::~collection_guard()
+{
+  auto resp = execute(integration_.cluster,
+                      couchbase::core::operations::management::collection_drop_request{
+                        integration_.ctx.bucket,
+                        couchbase::scope::default_name,
+                        collection_name_,
+                      });
+  if (resp.ctx.ec) {
+    fmt::println(
+      stderr, "unable to drop collection {}: {}", collection_name_, resp.ctx.ec.message());
+    return;
+  }
+  auto propagated = wait_until_collection_manifest_propagated(
+    integration_.cluster, integration_.ctx.bucket, resp.uid);
+  if (!propagated) {
+    fmt::println(stderr, "unable to wait for collection manifest to reach UID {}", resp.uid);
+  }
+}
+
+auto
+collection_guard::scope_name() const -> const std::string&
+{
+  return scope_name_;
+}
+
+auto
+collection_guard::collection_name() const -> const std::string&
+{
+  return collection_name_;
+}
 } // namespace test::utils

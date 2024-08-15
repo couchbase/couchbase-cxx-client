@@ -94,7 +94,7 @@ public:
                     std::int16_t node_id,
                     range_scan_create_options create_options,
                     range_scan_continue_options continue_options,
-                    std::shared_ptr<scan_stream_manager> stream_manager)
+                    std::weak_ptr<scan_stream_manager> stream_manager)
     : agent_{ std::move(kv_provider) }
     , io_{ io }
     , vbucket_id_{ vbucket_id }
@@ -116,8 +116,10 @@ public:
           "stream for vbucket_id {} cannot be retried because it has exceeded the timeout",
           vbucket_id_);
         state_ = failed{ errc::common::unambiguous_timeout, !is_sampling_scan() };
-        stream_manager_->stream_failed(
-          node_id_, vbucket_id_, errc::common::unambiguous_timeout, error_is_fatal());
+        if (auto mgr = stream_manager_.lock(); mgr != nullptr) {
+          mgr->stream_failed(
+            node_id_, vbucket_id_, errc::common::unambiguous_timeout, error_is_fatal());
+        }
         return;
       }
     } else {
@@ -138,22 +140,25 @@ public:
             CB_LOG_TRACE("ignoring vbucket_id {} because no documents exist for it",
                          self->vbucket_id_);
             self->state_ = failed{ ec, false };
-            self->stream_manager_->stream_failed(
-              self->node_id_, self->vbucket_id_, ec, self->error_is_fatal());
+            if (auto mgr = self->stream_manager_.lock(); mgr != nullptr) {
+              mgr->stream_failed(self->node_id_, self->vbucket_id_, ec, self->error_is_fatal());
+            }
           } else if (ec == errc::common::temporary_failure) {
             // Retryable error - server is overwhelmed, retry after reducing concurrency
             CB_LOG_DEBUG("received busy status during scan from vbucket with ID {} - reducing "
                          "concurrency & retrying",
                          self->vbucket_id_);
             self->state_ = std::monostate{};
-            self->stream_manager_->stream_start_failed_awaiting_retry(self->node_id_,
-                                                                      self->vbucket_id_);
+            if (auto mgr = self->stream_manager_.lock(); mgr != nullptr) {
+              mgr->stream_start_failed_awaiting_retry(self->node_id_, self->vbucket_id_);
+            }
           } else if (ec == errc::common::internal_server_failure ||
                      ec == errc::common::collection_not_found) {
             // Fatal errors
             self->state_ = failed{ ec, true };
-            self->stream_manager_->stream_failed(
-              self->node_id_, self->vbucket_id_, ec, self->error_is_fatal());
+            if (auto mgr = self->stream_manager_.lock(); mgr != nullptr) {
+              mgr->stream_failed(self->node_id_, self->vbucket_id_, ec, self->error_is_fatal());
+            }
           } else {
             // Unexpected errors
             CB_LOG_DEBUG("received unexpected error {} from stream for vbucket {} during range "
@@ -162,8 +167,9 @@ public:
                          self->vbucket_id_,
                          ec.message());
             self->state_ = failed{ ec, true };
-            self->stream_manager_->stream_failed(
-              self->node_id_, self->vbucket_id_, ec, self->error_is_fatal());
+            if (auto mgr = self->stream_manager_.lock(); mgr != nullptr) {
+              mgr->stream_failed(self->node_id_, self->vbucket_id_, ec, self->error_is_fatal());
+            }
           }
           return;
         }
@@ -211,7 +217,9 @@ private:
     }
 
     state_ = failed{ ec, fatal };
-    stream_manager_->stream_failed(node_id_, vbucket_id_, ec, fatal);
+    if (auto mgr = stream_manager_.lock(); mgr != nullptr) {
+      mgr->stream_failed(node_id_, vbucket_id_, ec, fatal);
+    }
   }
 
   void complete()
@@ -220,7 +228,9 @@ private:
       return;
     }
 
-    stream_manager_->stream_completed(node_id_, vbucket_id_);
+    if (auto mgr = stream_manager_.lock(); mgr != nullptr) {
+      mgr->stream_completed(node_id_, vbucket_id_);
+    }
     state_ = completed{};
   }
 
@@ -275,7 +285,9 @@ private:
             return;
           }
           self->last_seen_key_ = item.key;
-          self->stream_manager_->stream_received_item(std::move(item));
+          if (auto mgr = self->stream_manager_.lock(); mgr != nullptr) {
+            mgr->stream_received_item(std::move(item));
+          }
         },
         [self](auto res, auto ec) {
           if (ec) {
@@ -327,7 +339,7 @@ private:
   std::int16_t node_id_;
   range_scan_create_options create_options_;
   range_scan_continue_options continue_options_;
-  std::shared_ptr<scan_stream_manager> stream_manager_;
+  std::weak_ptr<scan_stream_manager> stream_manager_;
   std::string last_seen_key_{};
   std::variant<std::monostate, failed, running, completed> state_{};
   std::atomic<bool> should_cancel_{ false };
@@ -383,7 +395,7 @@ public:
       return cb(errc::common::invalid_argument, {});
     }
 
-    get_collection_id_options const get_cid_options{ options_.retry_strategy,
+    const get_collection_id_options get_cid_options{ options_.retry_strategy,
                                                      options_.timeout,
                                                      options_.parent_span };
     agent_.get_collection_id(
@@ -398,7 +410,7 @@ public:
 
         auto batch_time_limit =
           std::chrono::duration_cast<std::chrono::milliseconds>(0.9 * self->options_.timeout);
-        range_scan_continue_options const continue_options{
+        const range_scan_continue_options continue_options{
           self->options_.batch_item_limit, self->options_.batch_byte_limit, batch_time_limit,
           self->options_.timeout,          self->options_.retry_strategy,
         };
@@ -494,7 +506,7 @@ public:
           } else {
             // Empty signal means that stream has completed
             {
-              std::lock_guard<std::mutex> const lock{ self->stream_map_mutex_ };
+              const std::lock_guard<std::mutex> lock{ self->stream_map_mutex_ };
               self->streams_.erase(signal.vbucket_id);
             }
             return asio::post(asio::bind_executor(
@@ -524,7 +536,7 @@ public:
       auto v = vbucket_id.value();
       std::shared_ptr<range_scan_stream> stream{};
       {
-        std::lock_guard<std::mutex> const lock{ stream_map_mutex_ };
+        const std::lock_guard<std::mutex> lock{ stream_map_mutex_ };
         stream = streams_.at(v);
       }
       CB_LOG_TRACE("scanning vbucket {} at node {}", vbucket_id.value(), stream->node_id());
