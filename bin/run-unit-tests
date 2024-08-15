@@ -37,6 +37,7 @@ if [ "x${CB_SANITIZER}" != "x" ]; then
 fi
 if [ "x${CB_SANITIZER}" = "xvalgrind" ]; then
     CB_CTEST_EXTRAS="--test-action memcheck"
+    export TEST_USE_WAN_DEVELOPMENT_PROFILE=yes
 fi
 
 cd "${BUILD_DIR}"
