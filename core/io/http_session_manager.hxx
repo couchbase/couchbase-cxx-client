@@ -119,7 +119,7 @@ public:
       }
     }
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-    drain_deferred_queue();
+    drain_deferred_queue({});
 #endif
   }
 
@@ -154,7 +154,7 @@ public:
 #endif
     }
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-    drain_deferred_queue();
+    drain_deferred_queue({});
 #endif
   }
 
@@ -375,6 +375,9 @@ public:
 
   void close()
   {
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+    drain_deferred_queue(errc::common::request_canceled);
+#endif
     std::scoped_lock lock(sessions_mutex_);
     for (auto& [type, sessions] : idle_sessions_) {
       for (auto& s : sessions) {
@@ -536,9 +539,9 @@ public:
   }
 
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-  void add_to_deferred_queue(utils::movable_function<void()> command)
+  void add_to_deferred_queue(utils::movable_function<void(std::error_code)> command)
   {
-    std::scoped_lock lock_for_deferred_commands(deferred_commands_mutex_);
+    const std::scoped_lock lock_for_deferred_commands(deferred_commands_mutex_);
     deferred_commands_.emplace(std::move(command));
   }
 
@@ -707,44 +710,50 @@ private:
     CB_LOG_DEBUG(R"(Adding HTTP request to deferred queue: {}, client_context_id="{}")",
                  cmd->request.type,
                  cmd->client_context_id_);
-    add_to_deferred_queue([self = shared_from_this(), cmd, request, credentials]() mutable {
-      // don't do anything if the command wasn't dispatched or has already timed out
-      auto now = std::chrono::steady_clock::now();
-      if (cmd->dispatch_deadline_expiry() < now || cmd->deadline_expiry() < now) {
-        return;
-      }
-      std::string preferred_node;
-      if constexpr (http_traits::supports_sticky_node_v<Request>) {
-        if (request.send_to_node) {
-          preferred_node = *request.send_to_node;
+    add_to_deferred_queue(
+      [self = shared_from_this(), cmd, request, credentials](std::error_code ec) mutable {
+        if (ec) {
+          using response_type = typename Request::encoded_response_type;
+          return cmd->invoke_handler(ec, response_type{});
         }
-      }
-      auto [error, session] = self->check_out(request.type, credentials, preferred_node);
-      if (error) {
-        using response_type = typename Request::encoded_response_type;
-        return cmd->invoke_handler(error, response_type{});
-      }
-      cmd->set_command_session(session);
-      if (!session->is_connected()) {
-        self->connect_then_send(session, cmd, preferred_node);
-      } else {
-        cmd->send_to();
-      }
-    });
+
+        // don't do anything if the command wasn't dispatched or has already timed out
+        auto now = std::chrono::steady_clock::now();
+        if (cmd->dispatch_deadline_expiry() < now || cmd->deadline_expiry() < now) {
+          return;
+        }
+        std::string preferred_node;
+        if constexpr (http_traits::supports_sticky_node_v<Request>) {
+          if (request.send_to_node) {
+            preferred_node = *request.send_to_node;
+          }
+        }
+        auto [error, session] = self->check_out(request.type, credentials, preferred_node);
+        if (error) {
+          using response_type = typename Request::encoded_response_type;
+          return cmd->invoke_handler(error, response_type{});
+        }
+        cmd->set_command_session(session);
+        if (!session->is_connected()) {
+          self->connect_then_send(session, cmd, preferred_node);
+        } else {
+          cmd->send_to();
+        }
+      });
   }
 
-  void drain_deferred_queue()
+  void drain_deferred_queue(std::error_code ec)
   {
-    std::queue<utils::movable_function<void()>> commands{};
+    std::queue<utils::movable_function<void(std::error_code)>> commands{};
     {
-      std::scoped_lock lock(deferred_commands_mutex_);
+      const std::scoped_lock lock(deferred_commands_mutex_);
       std::swap(deferred_commands_, commands);
     }
     if (!commands.empty()) {
       CB_LOG_TRACE("Draining deferred operation queue, size={}", commands.size());
     }
     while (!commands.empty()) {
-      commands.front()();
+      commands.front()(ec);
       commands.pop();
     }
   }
@@ -843,7 +852,7 @@ private:
   std::atomic_bool configured_{ false };
   std::chrono::milliseconds dispatch_timeout_{};
   std::atomic_bool allow_fast_fail_{ true };
-  std::queue<utils::movable_function<void()>> deferred_commands_{};
+  std::queue<utils::movable_function<void(std::error_code)>> deferred_commands_{};
   std::mutex deferred_commands_mutex_{};
   std::optional<impl::bootstrap_error> last_bootstrap_error_;
   std::mutex last_bootstrap_error_mutex_{};

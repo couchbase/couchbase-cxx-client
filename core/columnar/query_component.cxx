@@ -58,7 +58,8 @@ public:
                           asio::io_context& io,
                           http_component& http,
                           std::chrono::milliseconds default_timeout)
-    : http_req_{ build_query_request(options) }
+    : client_context_id_{ uuid::to_string(uuid::random()) }
+    , http_req_{ build_query_request(options) }
     , timeout_{ options.timeout.value_or(default_timeout) }
     , io_{ io }
     , deadline_{ io_ }
@@ -252,6 +253,7 @@ private:
     if (options.timeout.has_value()) {
       req.timeout = options.timeout.value();
     }
+
     req.client_context_id = client_context_id_;
     req.headers["connection"] = "keep-alive";
     req.headers["content-type"] = "application/json";
@@ -378,6 +380,7 @@ private:
     return res;
   }
 
+  std::string client_context_id_;
   http_request http_req_;
   std::chrono::milliseconds timeout_;
   asio::io_context& io_;
@@ -391,7 +394,6 @@ private:
   std::atomic_bool cancelled_{ false };
   backoff_calculator backoff_calculator_{ default_backoff_calculator };
   retry_info retry_info_{};
-  std::string client_context_id_{ uuid::to_string(uuid::random()) };
 };
 
 class query_component_impl : public std::enable_shared_from_this<query_component_impl>

@@ -331,7 +331,13 @@ private:
       pending_op->request().service,
       pending_op->request().client_context_id);
     session_manager->add_to_deferred_queue(
-      [op = pending_op, session_manager, credentials]() mutable {
+      [op = pending_op, session_manager, credentials](std::error_code ec) mutable {
+        if (ec) {
+          // The deferred operation was cancelled - currently this can happen due to closing the
+          // cluster
+          return op->invoke_response_handler(ec, {});
+        }
+
         // don't do anything if the op wasn't dispatched or has already timed out
         auto now = std::chrono::steady_clock::now();
         if (op->dispatch_deadline_expiry() < now || op->deadline_expiry() < now) {
@@ -339,12 +345,13 @@ private:
         }
         std::shared_ptr<io::http_session> session;
         {
-          auto [ec, s] = session_manager->check_out(op->request().service,
-                                                    credentials,
-                                                    op->request().endpoint,
-                                                    op->request().internal.undesired_endpoint);
-          if (ec) {
-            return op->invoke_response_handler(ec, {});
+          auto [check_out_ec, s] =
+            session_manager->check_out(op->request().service,
+                                       credentials,
+                                       op->request().endpoint,
+                                       op->request().internal.undesired_endpoint);
+          if (check_out_ec) {
+            return op->invoke_response_handler(check_out_ec, {});
           }
           session = std::move(s);
         }
