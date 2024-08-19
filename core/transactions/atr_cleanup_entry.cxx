@@ -20,6 +20,7 @@
 #include "durability_level.hxx"
 #include "forward_compat.hxx"
 
+#include "core/operations.hxx"
 #include "core/transactions.hxx"
 #include "internal/atr_cleanup_entry.hxx"
 #include "internal/doc_record_fmt.hxx"
@@ -63,7 +64,6 @@ atr_cleanup_entry::atr_cleanup_entry(const atr_entry& entry,
                                      core::document_id atr_id,
                                      const transactions_cleanup& cleanup,
                                      bool check_if_expired)
-  //  : atr_id_(atr_id.bucket(), atr_id.scope(), atr_id.collection(), atr_id.key())
   : atr_id_(std::move(atr_id))
   , attempt_id_(entry.attempt_id())
   , check_if_expired_(check_if_expired)
@@ -90,7 +90,7 @@ atr_cleanup_entry::atr_cleanup_entry(const std::shared_ptr<attempt_context>& ctx
     };
   }
   attempt_id_ = ctx_impl->id();
-  cleanup_ = &ctx_impl->overall_->cleanup();
+  cleanup_ = &ctx_impl->overall()->cleanup();
 }
 
 void

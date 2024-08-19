@@ -26,6 +26,7 @@
 #include "internal/transactions_cleanup.hxx"
 #include "internal/utils.hxx"
 
+#include "core/operations.hxx"
 #include "core/utils/byteswap.hxx"
 
 #include <couchbase/fmt/transaction_keyspace.hxx>
@@ -577,7 +578,7 @@ transactions_cleanup::add_attempt(const std::shared_ptr<attempt_context>& ctx)
 }
 
 void
-transactions_cleanup::add_collection(couchbase::transactions::transaction_keyspace keyspace)
+transactions_cleanup::add_collection(const couchbase::transactions::transaction_keyspace& keyspace)
 {
 
   if (keyspace.valid() && config_.cleanup_config.cleanup_lost_attempts) {
@@ -585,7 +586,7 @@ transactions_cleanup::add_collection(couchbase::transactions::transaction_keyspa
 
     auto it = std::find(collections_.begin(), collections_.end(), keyspace);
     if (it == collections_.end()) {
-      collections_.emplace_back(std::move(keyspace));
+      collections_.emplace_back(keyspace);
       // start cleaning right away
       lost_attempt_cleanup_workers_.emplace_back([this, keyspace = collections_.back()]() {
         this->clean_collection(keyspace);

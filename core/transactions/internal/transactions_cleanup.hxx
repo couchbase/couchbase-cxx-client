@@ -43,32 +43,38 @@ private:
   attempt_state state_;
 
 public:
-  transactions_cleanup_attempt(const atr_cleanup_entry&);
+  explicit transactions_cleanup_attempt(const atr_cleanup_entry&);
 
-  [[nodiscard]] bool success() const
+  [[nodiscard]] auto success() const -> bool
   {
     return success_;
   }
+
   void success(bool success)
   {
     success_ = success;
   }
-  [[nodiscard]] const core::document_id& atr_id() const
+
+  [[nodiscard]] auto atr_id() const -> const core::document_id&
   {
     return atr_id_;
   }
-  [[nodiscard]] const std::string attempt_id() const
+
+  [[nodiscard]] auto attempt_id() const -> std::string
   {
     return attempt_id_;
   }
-  [[nodiscard]] const std::string atr_bucket_name() const
+
+  [[nodiscard]] auto atr_bucket_name() const -> std::string
   {
     return atr_bucket_name_;
   }
-  [[nodiscard]] attempt_state state() const
+
+  [[nodiscard]] auto state() const -> attempt_state
   {
     return state_;
   }
+
   void state(attempt_state state)
   {
     state_ = state;
@@ -76,14 +82,8 @@ public:
 };
 
 struct atr_cleanup_stats {
-  bool exists;
-  std::size_t num_entries;
-
-  atr_cleanup_stats()
-    : exists(false)
-    , num_entries(0)
-  {
-  }
+  bool exists{};
+  std::size_t num_entries{};
 };
 
 class transactions_cleanup
@@ -93,16 +93,16 @@ public:
                        couchbase::transactions::transactions_config::built config);
   ~transactions_cleanup();
 
-  [[nodiscard]] const core::cluster& cluster_ref() const
+  [[nodiscard]] auto cluster_ref() const -> const core::cluster&
   {
     return cluster_;
   };
 
-  [[nodiscard]] const couchbase::transactions::transactions_config::built& config() const
+  [[nodiscard]] auto config() const -> const couchbase::transactions::transactions_config::built&
   {
     return config_;
   }
-  [[nodiscard]] couchbase::transactions::transactions_config::built& config()
+  [[nodiscard]] auto config() -> couchbase::transactions::transactions_config::built&
   {
     return config_;
   };
@@ -110,13 +110,13 @@ public:
   // Add an attempt cleanup later.
   void add_attempt(const std::shared_ptr<attempt_context>& ctx);
 
-  std::size_t cleanup_queue_length() const
+  auto cleanup_queue_length() const -> std::size_t
   {
     return atr_queue_.size();
   }
 
-  void add_collection(couchbase::transactions::transaction_keyspace keyspace);
-  std::list<couchbase::transactions::transaction_keyspace> collections()
+  void add_collection(const couchbase::transactions::transaction_keyspace& keyspace);
+  auto collections() -> std::list<couchbase::transactions::transaction_keyspace>
   {
     std::lock_guard<std::mutex> lock(mutex_);
     return collections_;
@@ -152,14 +152,14 @@ private:
 
   void attempts_loop();
 
-  bool is_running()
+  auto is_running() -> bool
   {
     std::unique_lock<std::mutex> lock(mutex_);
     return running_;
   }
 
   template<class R, class P>
-  bool interruptable_wait(std::chrono::duration<R, P> time);
+  auto interruptable_wait(std::chrono::duration<R, P> time) -> bool;
 
   void lost_attempts_loop();
   void clean_collection(const couchbase::transactions::transaction_keyspace& keyspace);

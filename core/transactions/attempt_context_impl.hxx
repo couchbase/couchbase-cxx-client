@@ -75,7 +75,7 @@ class attempt_context_impl
   , public std::enable_shared_from_this<attempt_context_impl>
 {
 private:
-  std::shared_ptr<transaction_context> overall_;
+  std::weak_ptr<transaction_context> overall_;
   std::optional<core::document_id> atr_id_;
   bool is_done_{ false };
   std::unique_ptr<staged_mutation_queue> staged_mutations_;
@@ -288,10 +288,10 @@ private:
 
   [[nodiscard]] auto cluster_ref() const -> const core::cluster&;
 
-  explicit attempt_context_impl(std::shared_ptr<transaction_context> transaction_ctx);
+  explicit attempt_context_impl(const std::shared_ptr<transaction_context>& transaction_ctx);
 
 public:
-  static auto create(std::shared_ptr<transaction_context> transaction_ctx)
+  static auto create(const std::shared_ptr<transaction_context>& transaction_ctx)
     -> std::shared_ptr<attempt_context_impl>;
 
   ~attempt_context_impl() override;
@@ -364,23 +364,23 @@ public:
 
   [[nodiscard]] auto is_done() const -> bool;
 
-  [[nodiscard]] auto overall() -> std::shared_ptr<transaction_context>;
+  [[nodiscard]] auto overall() const -> std::shared_ptr<transaction_context>;
 
   [[nodiscard]] auto transaction_id() const -> const std::string&;
 
   [[nodiscard]] auto id() const -> const std::string&;
 
-  [[nodiscard]] auto state() -> attempt_state;
+  [[nodiscard]] auto state() const -> attempt_state;
 
-  void state(attempt_state s);
+  void state(attempt_state s) const;
 
   [[nodiscard]] auto atr_id() const -> const std::string&;
 
-  void atr_id(const std::string& atr_id);
+  void atr_id(const std::string& atr_id) const;
 
   [[nodiscard]] auto atr_collection() const -> const std::string&;
 
-  void atr_collection_name(const std::string& coll);
+  void atr_collection_name(const std::string& coll) const;
 
   auto has_expired_client_side(std::string place, std::optional<const std::string> doc_id) -> bool;
 

@@ -18,6 +18,7 @@
 
 #include "simple_object.hxx"
 
+#include "core/operations.hxx"
 #include "core/transactions.hxx"
 #include "core/transactions/atr_ids.hxx"
 

@@ -71,6 +71,8 @@ transaction_context::transaction_context(transactions& txns,
   }
 }
 
+transaction_context::~transaction_context() = default;
+
 void
 transaction_context::add_attempt()
 {
