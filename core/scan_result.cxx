@@ -25,47 +25,36 @@ namespace couchbase::core
 class scan_result_impl
 {
 public:
-  explicit scan_result_impl(std::weak_ptr<range_scan_item_iterator> iterator)
+  explicit scan_result_impl(std::shared_ptr<range_scan_item_iterator> iterator)
     : iterator_{ std::move(iterator) }
   {
   }
 
   [[nodiscard]] auto next() const -> tl::expected<range_scan_item, std::error_code>
   {
-    if (auto ptr = iterator_.lock(); ptr != nullptr) {
-      return ptr->next().get();
-    }
-    return tl::unexpected{ errc::common::request_canceled };
+    return iterator_->next().get();
   }
 
   void next(utils::movable_function<void(range_scan_item, std::error_code)> callback) const
   {
-    if (auto ptr = iterator_.lock(); ptr != nullptr) {
-      return ptr->next(std::move(callback));
-    }
-    callback({}, errc::common::request_canceled);
+    return iterator_->next(std::move(callback));
   }
 
   void cancel()
   {
-    if (auto ptr = iterator_.lock(); ptr != nullptr) {
-      return ptr->cancel();
-    }
+    return iterator_->cancel();
   }
 
   [[nodiscard]] auto is_cancelled() -> bool
   {
-    if (auto ptr = iterator_.lock(); ptr != nullptr) {
-      return ptr->is_cancelled();
-    }
-    return false;
+    return iterator_->is_cancelled();
   }
 
 private:
-  std::weak_ptr<range_scan_item_iterator> iterator_;
+  std::shared_ptr<range_scan_item_iterator> iterator_;
 };
 
-scan_result::scan_result(std::weak_ptr<range_scan_item_iterator> iterator)
+scan_result::scan_result(std::shared_ptr<range_scan_item_iterator> iterator)
   : impl_{ std::make_shared<scan_result_impl>(std::move(iterator)) }
 {
 }

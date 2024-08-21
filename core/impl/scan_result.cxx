@@ -50,10 +50,8 @@ to_scan_result_item(core::range_scan_item core_item) -> scan_result_item
 }
 } // namespace
 
-internal_scan_result::internal_scan_result(core::range_scan_orchestrator orchestrator,
-                                           core::scan_result core_result)
-  : orchestrator_{ std::move(orchestrator) }
-  , core_result_{ std::move(core_result) }
+internal_scan_result::internal_scan_result(core::scan_result core_result)
+  : core_result_{ std::move(core_result) }
 {
 }
 

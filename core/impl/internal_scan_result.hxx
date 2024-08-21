@@ -27,7 +27,7 @@ class internal_scan_result
 {
 
 public:
-  internal_scan_result(core::range_scan_orchestrator orchestrator, core::scan_result core_result);
+  explicit internal_scan_result(core::scan_result core_result);
   internal_scan_result(const internal_scan_result&) = delete;
   internal_scan_result(internal_scan_result&&) noexcept = default;
   auto operator=(const internal_scan_result&) -> internal_scan_result& = delete;
@@ -38,7 +38,6 @@ public:
   void cancel();
 
 private:
-  core::range_scan_orchestrator orchestrator_;
   core::scan_result core_result_;
 };
 } // namespace couchbase
