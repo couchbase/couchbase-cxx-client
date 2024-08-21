@@ -34,6 +34,7 @@
 #include <couchbase/term_facet.hxx>
 
 #include <tao/json.hpp>
+#include <tao/json/contrib/traits.hpp>
 
 #include <fmt/chrono.h>
 #include <fmt/ranges.h>
@@ -41,6 +42,31 @@
 #ifndef _WIN32
 #include <sys/wait.h>
 #endif
+
+//! [start-using-hotel]
+// [6] definition of the custom type and its decoder
+struct hotel {
+  std::string id{};
+  std::string name{};
+  std::string country{};
+  double average_rating{};
+};
+
+template<>
+struct tao::json::traits<hotel> {
+  template<template<typename...> class Traits>
+  static auto as(const tao::json::basic_value<Traits>& v) -> hotel
+  {
+    hotel result;
+    auto object = v.get_object();
+    result.id = object["id"].template as<std::string>();
+    result.average_rating = object["avg_rating"].template as<double>();
+    result.name = object["doc"]["title"].template as<std::string>();
+    result.country = object["doc"]["country"].template as<std::string>();
+    return result;
+  }
+};
+//! [start-using-hotel]
 
 namespace start_using
 {
@@ -50,6 +76,7 @@ namespace start_using
 #include <couchbase/fmt/mutation_token.hxx>
 
 #include <tao/json.hpp>
+#include <tao/json/contrib/traits.hpp>
 
 int
 main(int argc, const char* argv[])
@@ -110,17 +137,43 @@ main(int argc, const char* argv[])
 
   { // [4] N1QL query
     auto inventory_scope = bucket.scope("inventory");
-    auto [error, query_result] = inventory_scope.query("SELECT * FROM airline WHERE id = 10").get();
+    // Select first 5 hotels from US or UK, that describe themselves as cheap
+    // and order them by overall rating.
+    std::string query{ R"(
+        SELECT META(h).id, h AS doc,
+               AVG(r.ratings.Overall) AS avg_rating
+        FROM hotel h
+        UNNEST h.reviews r
+        WHERE h.country IN $1 AND h.description LIKE "%cheap%"
+        GROUP BY META(h).id, h
+        ORDER BY avg_rating DESC
+        LIMIT 5;
+    )" };
+    auto query_options = couchbase::query_options{}.positional_parameters(
+      std::vector{ "United States", "United Kingdom" });
+    auto [error, query_result] = inventory_scope.query(query, query_options).get();
     if (error) {
       fmt::print("unable to perform query: {}\n", error.ctx().to_json());
       return 1;
     }
-    for (const auto& row : query_result.rows_as_json()) {
-      fmt::print("row: {}\n", tao::json::to_string(row));
+    fmt::println("{:<15} {:<15} {:>10} {:<30}", "ID", "Country", "Rating", "Hotel");
+    for (auto& row : query_result.rows_as_json()) {
+      fmt::println("{:<15} {:<15} {:>10.2f} {:<30}",
+                   row["id"].as<std::string>(),
+                   row["doc"]["country"].as<std::string>(),
+                   row["avg_rating"].as<double>(),
+                   row["doc"]["title"].as<std::string>());
+    }
+
+    // [5] iterate over results using custom type
+    fmt::println("{:<15} {:<15} {:>10} {:<30}", "ID", "Country", "Rating", "Hotel");
+    for (const auto& row : query_result.rows_as<couchbase::codec::tao_json_serializer, hotel>()) {
+      fmt::println(
+        "{:<15} {:<15} {:>10.2f} {:<30}", row.id, row.country, row.average_rating, row.name);
     }
   }
 
-  // [5] close cluster connection
+  // [7] close cluster connection
   cluster.close().get();
   return 0;
 }
@@ -128,10 +181,14 @@ main(int argc, const char* argv[])
 /*
 
 $ ./start_using couchbase://127.0.0.1 Administrator password
-saved document "my-document", cas=17486a1722b20000
+saved document "my-document", cas=17ed9f687ee90000, token=travel-sample:110:101634532779186:101
 retrieved document "my-document", name="mike"
-row: {"airline":{"callsign":"MILE-AIR","country":"United
-States","iata":"Q5","icao":"MLA","id":10,"name":"40-Mile Air","type":"airline"}}
+ID              Country             Rating Hotel
+hotel_26169     United States         4.75 San Francisco/Twin Peaks-Lake Merced
+hotel_26499     United States         4.60 Santa Monica
+hotel_3616      United Kingdom        4.57 Birmingham (England)
+hotel_7387      United States         4.50 Death Valley National Park
+hotel_25588     United States         4.44 San Francisco/Civic Center-Tenderloin
 
  */
 //! [start-using]

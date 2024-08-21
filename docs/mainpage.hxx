@@ -32,9 +32,11 @@
  * * [3] retrieves document back with @ref couchbase::collection#get(), extracts content as generic
  * JSON value, and prints one of the fields,
  * * [4] performs N1QL query with @ref couchbase::scope#query() and prints the result.
- * * [5] closes the cluster and deallocate resources
+ * * [5] output results obtained in [4] using custom type defined in [6]
+ * * [7] closes the cluster and deallocate resources
  *
  * @snippetlineno test_integration_examples.cxx start-using
+ * @snippetlineno test_integration_examples.cxx start-using-hotel
  *
  * @anchor start-transactions
  * ### Using Transactions
