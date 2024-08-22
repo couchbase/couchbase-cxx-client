@@ -21,7 +21,7 @@ endif()
 
 project(
   couchbase_cxx_client
-  VERSION "1.0.0"
+  VERSION "1.0.1"
   LANGUAGES CXX C)
 message(STATUS "Couchbase C++ client ${couchbase_cxx_client_VERSION} build ${couchbase_cxx_client_BUILD_NUMBER}, master: ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT}")
 message(STATUS "System: ${CMAKE_SYSTEM_NAME}, ${CMAKE_SYSTEM_VERSION}, ${CMAKE_SYSTEM_PROCESSOR}")
