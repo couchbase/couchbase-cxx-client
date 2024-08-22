@@ -23,7 +23,10 @@ project(
   couchbase_cxx_client
   VERSION "1.0.1"
   LANGUAGES CXX C)
-message(STATUS "Couchbase C++ client ${couchbase_cxx_client_VERSION} build ${couchbase_cxx_client_BUILD_NUMBER}, master: ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT}")
+message(
+  STATUS
+    "Couchbase C++ client ${couchbase_cxx_client_VERSION} build ${couchbase_cxx_client_BUILD_NUMBER}, master: ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT}"
+)
 message(STATUS "System: ${CMAKE_SYSTEM_NAME}, ${CMAKE_SYSTEM_VERSION}, ${CMAKE_SYSTEM_PROCESSOR}")
 if(WIN32)
   message(STATUS "Windows SDK: ${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}")
@@ -84,13 +87,18 @@ include(cmake/OpenSSL.cmake)
 
 include(cmake/VersionInfo.cmake)
 
-add_subdirectory(core/meta)
-add_subdirectory(core/platform)
-add_subdirectory(core/logger)
-add_subdirectory(core/crypto)
-add_subdirectory(core/sasl)
-add_subdirectory(core/tracing)
-add_subdirectory(core/metrics)
+include(cmake/DetectStandardFilesystem.cmake)
+couchbase_cxx_check_filesystem(
+  couchbase_cxx_client
+  "filesystem"
+  "std::filesystem"
+  "stdc++fs;c++fs"
+  STD_FILESYSTEM)
+if(STD_FILESYSTEM)
+  message(STATUS "Using std::filesystem")
+else()
+  message(FATAL_ERROR "Couchbase C++ Client requires C++17, including an implementation of std::filesystem.")
+endif()
 
 set(couchbase_cxx_client_FILES
     ${CMAKE_CURRENT_BINARY_DIR}/generated/mozilla_ca_bundle.cxx
@@ -105,13 +113,22 @@ set(couchbase_cxx_client_FILES
     core/cluster_agent_config.cxx
     core/cluster_options.cxx
     core/collections_component.cxx
+    core/columnar/agent.cxx
+    core/columnar/agent_config.cxx
+    core/columnar/backoff_calculator.cxx
+    core/columnar/error.cxx
+    core/columnar/error_codes.cxx
+    core/columnar/query_component.cxx
+    core/columnar/query_result.cxx
     core/config_profiles.cxx
     core/core_sdk_shim.cxx
     core/crud_component.cxx
+    core/crypto/cbcrypto.cc
     core/dispatcher.cxx
     core/document_id.cxx
     core/error_context/key_value.cxx
     core/free_form_http_request.cxx
+    core/http_component.cxx
     core/impl/analytics.cxx
     core/impl/analytics_error_category.cxx
     core/impl/analytics_index_manager.cxx
@@ -135,8 +152,8 @@ set(couchbase_cxx_client_FILES
     core/impl/disjunction_query.cxx
     core/impl/dns_srv_tracker.cxx
     core/impl/doc_id_query.cxx
-    core/impl/error_context.cxx
     core/impl/error.cxx
+    core/impl/error_context.cxx
     core/impl/expiry.cxx
     core/impl/fail_fast_retry_strategy.cxx
     core/impl/field_level_encryption_error_category.cxx
@@ -145,13 +162,13 @@ set(couchbase_cxx_client_FILES
     core/impl/geo_polygon_query.cxx
     core/impl/get_replica.cxx
     core/impl/internal_date_range_facet_result.cxx
+    core/impl/internal_error_context.cxx
     core/impl/internal_numeric_range_facet_result.cxx
     core/impl/internal_search_error_context.cxx
     core/impl/internal_search_meta_data.cxx
     core/impl/internal_search_result.cxx
     core/impl/internal_search_row.cxx
     core/impl/internal_search_row_locations.cxx
-    core/impl/internal_error_context.cxx
     core/impl/internal_term_facet_result.cxx
     core/impl/key_value_error_category.cxx
     core/impl/key_value_error_context.cxx
@@ -180,13 +197,14 @@ set(couchbase_cxx_client_FILES
     core/impl/replica_utils.cxx
     core/impl/retry_action.cxx
     core/impl/retry_reason.cxx
+    core/impl/scan_result.cxx
     core/impl/scope.cxx
     core/impl/search.cxx
     core/impl/search_error_category.cxx
     core/impl/search_index_manager.cxx
     core/impl/search_meta_data.cxx
-    core/impl/search_result.cxx
     core/impl/search_request.cxx
+    core/impl/search_result.cxx
     core/impl/search_row.cxx
     core/impl/search_row_location.cxx
     core/impl/search_row_locations.cxx
@@ -223,18 +241,19 @@ set(couchbase_cxx_client_FILES
     core/impl/vector_search.cxx
     core/impl/view_error_category.cxx
     core/impl/wildcard_query.cxx
-    core/impl/scan_result.cxx
+    core/io/config_tracker.cxx
     core/io/dns_client.cxx
     core/io/dns_config.cxx
-    core/io/http_session.cxx
     core/io/http_parser.cxx
+    core/io/http_session.cxx
     core/io/http_streaming_parser.cxx
     core/io/http_streaming_response.cxx
     core/io/mcbp_message.cxx
     core/io/mcbp_parser.cxx
     core/io/mcbp_session.cxx
-    core/io/config_tracker.cxx
     core/key_value_config.cxx
+    core/logger/custom_rotating_file_sink.cxx
+    core/logger/logger.cxx
     core/management/analytics_link_azure_blob_external.cxx
     core/management/analytics_link_couchbase_remote.cxx
     core/management/analytics_link_s3_external.cxx
@@ -248,6 +267,8 @@ set(couchbase_cxx_client_FILES
     core/mcbp/packet.cxx
     core/mcbp/queue_request.cxx
     core/mcbp/server_duration.cxx
+    core/meta/version.cxx
+    core/metrics/logging_meter.cxx
     core/n1ql_query_options.cxx
     core/operations/document_analytics.cxx
     core/operations/document_append.cxx
@@ -344,6 +365,12 @@ set(couchbase_cxx_client_FILES
     core/operations/management/view_index_get_all.cxx
     core/operations/management/view_index_upsert.cxx
     core/origin.cxx
+    core/platform/base64.cc
+    core/platform/dirutils.cc
+    core/platform/random.cc
+    core/platform/string_hex.cc
+    core/platform/terminate_handler.cc
+    core/platform/uuid.cc
     core/protocol/client_request.cxx
     core/protocol/client_response.cxx
     core/protocol/cmd_append.cxx
@@ -383,10 +410,17 @@ set(couchbase_cxx_client_FILES
     core/range_scan_orchestrator.cxx
     core/retry_orchestrator.cxx
     core/row_streamer.cxx
+    core/sasl/client.cc
+    core/sasl/context.cc
+    core/sasl/mechanism.cc
+    core/sasl/plain/plain.cc
+    core/sasl/scram-sha/scram-sha.cc
+    core/sasl/scram-sha/stringutils.cc
     core/scan_result.cxx
     core/search_query_options.cxx
     core/seed_config.cxx
     core/topology/configuration.cxx
+    core/tracing/threshold_logging_tracer.cxx
     core/transactions/active_transaction_record.cxx
     core/transactions/async_attempt_context.cxx
     core/transactions/atr_cleanup_entry.cxx
@@ -421,100 +455,78 @@ set(couchbase_cxx_client_FILES
     core/utils/split_string.cxx
     core/utils/url_codec.cxx
     core/view_query_options.cxx
-    core/http_component.cxx
-    core/columnar/agent.cxx
-    core/columnar/agent_config.cxx
-    core/columnar/error.cxx
-    core/columnar/error_codes.cxx
-    core/columnar/query_component.cxx
-    core/columnar/query_result.cxx
-    core/columnar/backoff_calculator.cxx
-)
+    core/platform/backtrace.c)
 
+add_library(couchbase_cxx_client_static STATIC ${couchbase_cxx_client_FILES})
+add_library(couchbase_cxx_client::couchbase_cxx_client_static ALIAS couchbase_cxx_client_static)
+
+set(couchbase_cxx_client_LIBRARIES couchbase_cxx_client_static)
+
+option(COUCHBASE_CXX_CLIENT_BUILD_SHARED "Build with shared library" ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT})
 if(COUCHBASE_CXX_CLIENT_BUILD_SHARED OR BUILD_SHARED_LIBS)
   add_library(couchbase_cxx_client SHARED ${couchbase_cxx_client_FILES})
-else()
-  add_library(couchbase_cxx_client STATIC ${couchbase_cxx_client_FILES})
-endif()
-add_library(couchbase_cxx_client::couchbase_cxx_client ALIAS couchbase_cxx_client)
-set_target_properties(couchbase_cxx_client PROPERTIES POSITION_INDEPENDENT_CODE ON)
-
-target_include_directories(taocpp-json INTERFACE
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-  $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
-)
-
-target_include_directories(couchbase_cxx_client PRIVATE ${PROJECT_BINARY_DIR}/generated ${PROJECT_BINARY_DIR}/generated_$<CONFIG>)
-target_include_directories(couchbase_cxx_client SYSTEM PRIVATE ${PROJECT_SOURCE_DIR}/third_party/cxx_function
-                                                               ${PROJECT_SOURCE_DIR}/third_party/expected/include)
-target_link_libraries(couchbase_cxx_client PRIVATE project_options project_warnings)
-
-if (COUCHBASE_CXX_CLIENT_CLANG_TIDY)
-  set_target_properties(couchbase_cxx_client PROPERTIES CXX_CLANG_TIDY "${COUCHBASE_CXX_CLIENT_CLANG_TIDY}")
-  message(STATUS "clang-tidy: ${COUCHBASE_CXX_CLIENT_CLANG_TIDY}")
+  add_library(couchbase_cxx_client::couchbase_cxx_client ALIAS couchbase_cxx_client)
+  list(APPEND couchbase_cxx_client_LIBRARIES couchbase_cxx_client)
 endif()
 
-include(cmake/DetectStandardFilesystem.cmake)
-couchbase_cxx_check_filesystem(
-  couchbase_cxx_client
-  "filesystem"
-  "std::filesystem"
-  "stdc++fs;c++fs"
-  STD_FILESYSTEM)
-if(STD_FILESYSTEM)
-  message(STATUS "Using std::filesystem")
-else()
-  message(FATAL_ERROR "Couchbase C++ Client requires C++17, including an implementation of std::filesystem.")
-endif()
+foreach(TARGET ${couchbase_cxx_client_LIBRARIES})
+  set_target_properties(${TARGET} PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-target_link_libraries(
-  couchbase_cxx_client
-  PUBLIC fmt::fmt
-         spdlog::spdlog
-         couchbase_backtrace
-         couchbase_logger
-         couchbase_platform
-         couchbase_meta
-         couchbase_crypto
-         couchbase_sasl
-         couchbase_tracing
-         couchbase_metrics)
+  target_include_directories(
+    ${TARGET} PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}> $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/generated>
+                      $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/generated_$<CONFIG>>)
 
-target_link_libraries(
-  couchbase_cxx_client
-  PRIVATE Microsoft.GSL::GSL
-          asio
-          llhttp::llhttp
-          taocpp::json
-          snappy
-          jsonsl
-          hdr_histogram_static)
+  target_include_directories(
+    ${TARGET} SYSTEM PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/cxx_function>
+                             $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/expected/include>)
 
-if(WIN32)
-  target_link_libraries(couchbase_cxx_client PRIVATE iphlpapi)
-endif()
+  target_include_directories(${TARGET} PUBLIC $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
-if(NOT COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL)
-  if(TARGET PkgConfig::PKG_CONFIG_OPENSSL)
-    target_link_libraries(couchbase_cxx_client PUBLIC PkgConfig::PKG_CONFIG_OPENSSL)
-  else()
-    target_link_libraries(couchbase_cxx_client PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+  target_link_libraries(${TARGET} PUBLIC fmt::fmt spdlog::spdlog)
+
+  target_link_libraries(
+    ${TARGET}
+    PRIVATE project_options
+            project_warnings
+            Microsoft.GSL::GSL
+            asio
+            llhttp::llhttp
+            taocpp::json
+            snappy
+            jsonsl
+            hdr_histogram_static)
+
+  if(WIN32)
+    target_link_libraries(${TARGET} PRIVATE iphlpapi)
   endif()
-endif()
 
-if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
-  if(COUCHBASE_CXX_CLIENT_USE_BORINGSSL_PREFIX)
-    target_compile_definitions(couchbase_cxx_client PUBLIC BORINGSSL_PREFIX=${COUCHBASE_CXX_CLIENT_BORINGSSL_PREFIX})
+  if(NOT COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL)
+    if(TARGET PkgConfig::PKG_CONFIG_OPENSSL)
+      target_link_libraries(${TARGET} PUBLIC PkgConfig::PKG_CONFIG_OPENSSL)
+    else()
+      target_link_libraries(${TARGET} PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+    endif()
+
+    if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
+      if(COUCHBASE_CXX_CLIENT_USE_BORINGSSL_PREFIX)
+        target_compile_definitions(${TARGET} PUBLIC BORINGSSL_PREFIX=${COUCHBASE_CXX_CLIENT_BORINGSSL_PREFIX})
+      endif()
+      if(WIN32 AND NOT CMAKE_MSVC_RUNTIME_LIBRARY)
+        # BoringSSL uses the /MD compile flag, so we need to do the same
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+        message(STATUS "CMAKE_MSVC_RUNTIME_LIBRARY=${CMAKE_MSVC_RUNTIME_LIBRARY}")
+      endif()
+      if(MINGW)
+        target_link_libraries(${TARGET} PUBLIC ws2_32)
+      endif()
+    endif()
   endif()
-  if(WIN32 AND NOT CMAKE_MSVC_RUNTIME_LIBRARY)
-    # BoringSSL uses the /MD compile flag, so we need to do the same
-    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
-    message(STATUS "CMAKE_MSVC_RUNTIME_LIBRARY=${CMAKE_MSVC_RUNTIME_LIBRARY}")
+
+  if(COUCHBASE_CXX_CLIENT_CLANG_TIDY)
+    set_target_properties(${TARGET} PROPERTIES CXX_CLANG_TIDY "${COUCHBASE_CXX_CLIENT_CLANG_TIDY}")
+    message(STATUS "clang-tidy: ${COUCHBASE_CXX_CLIENT_CLANG_TIDY}")
   endif()
-  if(MINGW)
-    target_link_libraries(couchbase_cxx_client PUBLIC ws2_32)
-  endif()
-endif()
+endforeach()
 
 option(COUCHBASE_CXX_CLIENT_BUILD_TESTS "Build test programs" ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT})
 if(COUCHBASE_CXX_CLIENT_BUILD_TESTS)

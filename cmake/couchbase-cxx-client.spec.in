@@ -13,10 +13,17 @@ Source0: @COUCHBASE_CXX_CLIENT_TARBALL_NAME@.tar.gz
 %description
 This is the client and protocol library for Couchbase project.
 
-%package -n %{name}-tools
+%package tools
 Summary: Couchbase C++ SDK - Tools
+Requires: %{name}%{?_isa} = %{version}-%{release}
 %description -n %{name}-tools
 CLI tools from the Couchbase C++ SDK.
+
+%package devel
+Summary: Couchbase C++ SDK - Header files
+Requires: %{name}%{?_isa} = %{version}-%{release}
+%description devel
+Development files for the Couchbase C++ SDK.
 
 %prep
 %autosetup -p1 -n@COUCHBASE_CXX_CLIENT_TARBALL_NAME@
@@ -25,7 +32,8 @@ CLI tools from the Couchbase C++ SDK.
     -DCOUCHBASE_CXX_CLIENT_BUILD_EXAMPLES=OFF \
     -DCOUCHBASE_CXX_CLIENT_BUILD_TESTS=OFF \
     -DCOUCHBASE_CXX_CLIENT_BUILD_TOOLS=ON \
-    -DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON
+    -DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON \
+    -DCOUCHBASE_CXX_CLIENT_BUILD_SHARED=ON
 
 %build
 %cmake_build
@@ -33,18 +41,22 @@ CLI tools from the Couchbase C++ SDK.
 %install
 %cmake_install
 
-%files -n %{name}
+%files
 %license %{_docdir}/couchbase_cxx_client/LICENSE.txt
 %license %{_docdir}/tao/pegtl/LICENSE
-%{_libdir}/libcouchbase_cxx_client.a*
-%{_libdir}/cmake/couchbase_cxx_client/couchbase_cxx_client*.cmake
-%{_libdir}/pkgconfig/couchbase_cxx_client.pc
+%{_libdir}/libcouchbase_cxx_client.so.*
+
+%files tools
+%{_bindir}/cbc
+
+%files devel
 %{_includedir}/couchbase
 %{_includedir}/tao
+%{_libdir}/cmake/couchbase_cxx_client/couchbase_cxx_client*.cmake
+%{_libdir}/libcouchbase_cxx_client.so
+%{_libdir}/libcouchbase_cxx_client_static.a
+%{_libdir}/pkgconfig/couchbase_cxx_client.pc
 %{_datadir}/pegtl/cmake/pegtl*.cmake
-
-%files -n %{name}-tools
-%{_bindir}/cbc
 
 %changelog
 * @COUCHBASE_CXX_CLIENT_RPM_DATE@ Couchbase SDK Team <support@couchbase.com> - @COUCHBASE_CXX_CLIENT_PACKAGE_VERSION@-@COUCHBASE_CXX_CLIENT_PACKAGE_RELEASE@

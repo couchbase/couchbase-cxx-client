@@ -25,19 +25,19 @@ if(COUCHBASE_CXX_CLIENT_BUILD_TOOLS)
   install(TARGETS cbc RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
-install(TARGETS couchbase_cxx_client
+install(TARGETS ${couchbase_cxx_client_LIBRARIES}
         EXPORT couchbase_cxx_client-targets
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/couchbase_cxx_client)
+        DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 # install(EXPORT couchbase_cxx_client-targets
 #         NAMESPACE couchbase_cxx_client::
 #         FILE couchbase_cxx_client-config.cmake
 #         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/couchbase_cxx_client)
 
-export(TARGETS couchbase_cxx_client
-       NAMESPACE couchbase_cxx_client::
-       FILE couchbase_cxx_client-targets.cmake)
-export(PACKAGE couchbase_cxx_client)
+# export(TARGETS couchbase_cxx_client
+#        NAMESPACE couchbase_cxx_client::
+#        FILE couchbase_cxx_client-targets.cmake)
+# export(PACKAGE couchbase_cxx_client)
 
 set(COUCHBASE_CXX_CLIENT_TARBALL_NAME "couchbase-cxx-client-${COUCHBASE_CXX_CLIENT_SEMVER}")
 set(COUCHBASE_CXX_CLIENT_TARBALL "${PROJECT_BINARY_DIR}/packaging/${COUCHBASE_CXX_CLIENT_TARBALL_NAME}.tar.gz")
