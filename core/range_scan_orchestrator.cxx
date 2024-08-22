@@ -440,7 +440,8 @@ public:
           self->streams_[vbucket] = stream;
         }
         self->start_streams(self->concurrency_);
-        return cb({}, scan_result(self));
+        // Transferring ownership of the range_scan_orchestrator impl to the scan_result
+        return cb({}, scan_result(std::move(self)));
       });
   }
 
@@ -663,6 +664,9 @@ range_scan_orchestrator::scan() -> tl::expected<scan_result, std::error_code>
 void
 range_scan_orchestrator::scan(couchbase::core::scan_callback&& cb)
 {
-  return impl_->scan(std::move(cb));
+  if (impl_) {
+    return impl_->scan(std::move(cb));
+  }
+  cb(errc::common::request_canceled, {});
 }
 } // namespace couchbase::core
