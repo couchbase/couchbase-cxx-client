@@ -229,6 +229,7 @@ set(couchbase_cxx_client_FILES
     core/io/mcbp_message.cxx
     core/io/mcbp_parser.cxx
     core/io/mcbp_session.cxx
+    core/io/streams.cxx
     core/key_value_config.cxx
     core/logger/custom_rotating_file_sink.cxx
     core/logger/logger.cxx

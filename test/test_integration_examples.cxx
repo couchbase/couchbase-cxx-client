@@ -780,7 +780,7 @@ main(int argc, const char* argv[])
 
     {
       fmt::print("CHILD(pid={}): get from collection\n", getpid());
-      std::string doc_id = "parent-document";
+      std::string doc_id = "child-document";
       auto [err, get_result] = collection.get(doc_id).get();
       if (err.ec()) {
         fmt::print("CHILD(pid={}): unable to get the document \"{}\": {}\n", getpid(), doc_id, err);

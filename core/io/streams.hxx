@@ -20,10 +20,15 @@
 #include "core/utils/movable_function.hxx"
 #include "ip_protocol.hxx"
 
-#include <asio.hpp>
-#include <asio/ssl.hpp>
+#include <asio/error.hpp>
+#include <asio/io_context.hpp>
+#include <asio/ip/tcp.hpp>
+#include <asio/ssl/context.hpp>
+#include <asio/ssl/stream.hpp>
+#include <asio/strand.hpp>
 
-#include <functional>
+#include <string>
+#include <vector>
 
 namespace couchbase::core::io
 {
@@ -61,24 +66,13 @@ protected:
   std::string id_{};
 
 public:
-  stream_impl(asio::io_context& ctx, bool is_tls)
-    : strand_(asio::make_strand(ctx))
-    , tls_(is_tls)
-    , id_(uuid::to_string(uuid::random()))
-  {
-  }
+  stream_impl(asio::io_context& ctx, bool is_tls);
 
   virtual ~stream_impl() = default;
 
-  [[nodiscard]] auto log_prefix() const -> std::string_view
-  {
-    return tls_ ? "tls" : "plain";
-  }
+  [[nodiscard]] auto log_prefix() const -> std::string_view;
 
-  [[nodiscard]] auto id() const -> const std::string&
-  {
-    return id_;
-  }
+  [[nodiscard]] auto id() const -> const std::string&;
 
   [[nodiscard]] auto get_executor() const noexcept
   {
@@ -111,166 +105,53 @@ private:
   std::shared_ptr<asio::ip::tcp::socket> stream_;
 
 public:
-  explicit plain_stream_impl(asio::io_context& ctx)
-    : stream_impl(ctx, false)
-    , stream_(std::make_shared<asio::ip::tcp::socket>(strand_))
-  {
-  }
+  explicit plain_stream_impl(asio::io_context& ctx);
 
-  [[nodiscard]] auto local_endpoint() const -> asio::ip::tcp::endpoint override
-  {
-    std::error_code ec;
-    auto res = stream_->local_endpoint(ec);
-    if (ec) {
-      return {};
-    }
-    return res;
-  }
+  [[nodiscard]] auto local_endpoint() const -> asio::ip::tcp::endpoint override;
 
-  [[nodiscard]] auto is_open() const -> bool override
-  {
-    if (stream_) {
-      return stream_->is_open();
-    }
-    return false;
-  }
+  [[nodiscard]] auto is_open() const -> bool override;
 
-  void close(utils::movable_function<void(std::error_code)>&& handler) override
-  {
-    id_ = uuid::to_string(uuid::random());
-    auto s = std::make_shared<asio::ip::tcp::socket>(strand_);
-    std::swap(stream_, s);
-    return asio::post(strand_, [stream = std::move(s), h = std::move(handler)]() {
-      asio::error_code ec{};
-      stream->shutdown(asio::socket_base::shutdown_both, ec);
-      stream->close(ec);
-      h(ec);
-    });
-  }
+  void close(utils::movable_function<void(std::error_code)>&& handler) override;
 
-  void set_options() override
-  {
-    if (!is_open()) {
-      return;
-    }
-    std::error_code ec{};
-    stream_->set_option(asio::ip::tcp::no_delay{ true }, ec);
-    stream_->set_option(asio::socket_base::keep_alive{ true }, ec);
-  }
+  void set_options() override;
 
   void async_connect(const asio::ip::tcp::resolver::results_type::endpoint_type& endpoint,
-                     utils::movable_function<void(std::error_code)>&& handler) override
-  {
-    return stream_->async_connect(endpoint, std::move(handler));
-  }
+                     utils::movable_function<void(std::error_code)>&& handler) override;
 
   void async_write(std::vector<asio::const_buffer>& buffers,
-                   utils::movable_function<void(std::error_code, std::size_t)>&& handler) override
-  {
-    return asio::async_write(*stream_, buffers, std::move(handler));
-  }
+                   utils::movable_function<void(std::error_code, std::size_t)>&& handler) override;
 
   void async_read_some(
     asio::mutable_buffer buffer,
-    utils::movable_function<void(std::error_code, std::size_t)>&& handler) override
-  {
-    return stream_->async_read_some(buffer, std::move(handler));
-  }
+    utils::movable_function<void(std::error_code, std::size_t)>&& handler) override;
 };
 
 class tls_stream_impl : public stream_impl
 {
 private:
-  std::shared_ptr<asio::ssl::stream<asio::ip::tcp::socket>> stream_;
   asio::ssl::context& tls_;
+  std::shared_ptr<asio::ssl::stream<asio::ip::tcp::socket>> stream_;
 
 public:
-  tls_stream_impl(asio::io_context& ctx, asio::ssl::context& tls)
-    : stream_impl(ctx, true)
-    , stream_(
-        std::make_shared<asio::ssl::stream<asio::ip::tcp::socket>>(asio::ip::tcp::socket(strand_),
-                                                                   tls))
-    , tls_(tls)
-  {
-  }
+  tls_stream_impl(asio::io_context& ctx, asio::ssl::context& tls);
 
-  [[nodiscard]] auto local_endpoint() const -> asio::ip::tcp::endpoint override
-  {
-    std::error_code ec;
-    auto res = stream_->lowest_layer().local_endpoint(ec);
-    if (ec) {
-      return {};
-    }
-    return res;
-  }
+  [[nodiscard]] auto local_endpoint() const -> asio::ip::tcp::endpoint override;
 
-  [[nodiscard]] auto is_open() const -> bool override
-  {
-    if (stream_) {
-      return stream_->lowest_layer().is_open();
-    }
-    return false;
-  }
+  [[nodiscard]] auto is_open() const -> bool override;
 
-  void close(utils::movable_function<void(std::error_code)>&& handler) override
-  {
-    id_ = uuid::to_string(uuid::random());
-    auto s = std::make_shared<asio::ssl::stream<asio::ip::tcp::socket>>(
-      asio::ip::tcp::socket(strand_), tls_);
-    std::swap(stream_, s);
-    return asio::post(strand_, [stream = std::move(s), h = std::move(handler)]() {
-      asio::error_code ec{};
-      stream->lowest_layer().shutdown(asio::socket_base::shutdown_both, ec);
-      stream->lowest_layer().close(ec);
-      h(ec);
-    });
-  }
+  void close(utils::movable_function<void(std::error_code)>&& handler) override;
 
-  void set_options() override
-  {
-    if (!is_open()) {
-      return;
-    }
-    std::error_code ec{};
-    stream_->lowest_layer().set_option(asio::ip::tcp::no_delay{ true }, ec);
-    stream_->lowest_layer().set_option(asio::socket_base::keep_alive{ true }, ec);
-  }
+  void set_options() override;
 
   void async_connect(const asio::ip::tcp::resolver::results_type::endpoint_type& endpoint,
-                     utils::movable_function<void(std::error_code)>&& handler) override
-  {
-    return stream_->lowest_layer().async_connect(
-      endpoint,
-      [stream = stream_, handler = std::move(handler)](std::error_code ec_connect) mutable {
-        if (ec_connect == asio::error::operation_aborted) {
-          return;
-        }
-        if (ec_connect) {
-          return handler(ec_connect);
-        }
-        stream->async_handshake(
-          asio::ssl::stream_base::client,
-          [handler = std::move(handler)](std::error_code ec_handshake) mutable {
-            if (ec_handshake == asio::error::operation_aborted) {
-              return;
-            }
-            return handler(ec_handshake);
-          });
-      });
-  }
+                     utils::movable_function<void(std::error_code)>&& handler) override;
 
   void async_write(std::vector<asio::const_buffer>& buffers,
-                   utils::movable_function<void(std::error_code, std::size_t)>&& handler) override
-  {
-    return asio::async_write(*stream_, buffers, std::move(handler));
-  }
+                   utils::movable_function<void(std::error_code, std::size_t)>&& handler) override;
 
   void async_read_some(
     asio::mutable_buffer buffer,
-    utils::movable_function<void(std::error_code, std::size_t)>&& handler) override
-  {
-    return stream_->async_read_some(buffer, std::move(handler));
-  }
+    utils::movable_function<void(std::error_code, std::size_t)>&& handler) override;
 };
 
 } // namespace couchbase::core::io
