@@ -283,11 +283,14 @@ public:
       }
     }
 
-    std::scoped_lock lock(sessions_mutex_);
+    const std::scoped_lock lock(sessions_mutex_);
     idle_sessions_[type].remove_if([](const auto& s) {
       return !s;
     });
     busy_sessions_[type].remove_if([](const auto& s) {
+      return !s;
+    });
+    pending_sessions_[type].remove_if([](const auto& s) {
       return !s;
     });
     std::shared_ptr<http_session> session{};
@@ -337,6 +340,8 @@ public:
     }
     if (session->is_connected()) {
       busy_sessions_[type].push_back(session);
+    } else {
+      pending_sessions_[type].push_back(session);
     }
     return { {}, session };
   }
@@ -370,6 +375,9 @@ public:
       busy_sessions_[type].remove_if([id = session->id()](const auto& s) -> bool {
         return !s || s->id() == id;
       });
+      pending_sessions_[type].remove_if([id = session->id()](const auto& s) -> bool {
+        return !s || s->id() == id;
+      });
     }
   }
 
@@ -378,8 +386,15 @@ public:
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
     drain_deferred_queue(errc::common::request_canceled);
 #endif
-    std::scoped_lock lock(sessions_mutex_);
-    for (auto& [type, sessions] : idle_sessions_) {
+    std::map<service_type, std::list<std::shared_ptr<http_session>>> busy_sessions, idle_sessions,
+      pending_sessions;
+    {
+      const std::scoped_lock lock(sessions_mutex_);
+      busy_sessions = std::move(busy_sessions_);
+      idle_sessions = std::move(idle_sessions_);
+      pending_sessions = std::move(pending_sessions_);
+    }
+    for (auto& [type, sessions] : idle_sessions) {
       for (auto& s : sessions) {
         if (s) {
           s->reset_idle();
@@ -387,7 +402,20 @@ public:
         }
       }
     }
-    busy_sessions_.clear();
+    for (auto& [type, sessions] : busy_sessions) {
+      for (auto& s : sessions) {
+        if (s) {
+          s->stop();
+        }
+      }
+    }
+    for (auto& [type, sessions] : pending_sessions) {
+      for (auto& s : sessions) {
+        if (s) {
+          s->stop();
+        }
+      }
+    }
   }
 
   template<typename Request, typename Handler>
@@ -471,7 +499,7 @@ public:
   {
     session->connect([self = shared_from_this(),
                       session,
-                      preferred_node = std::move(preferred_node),
+                      preferred_node,
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
                       dispatch_deadline,
 #endif
@@ -480,13 +508,20 @@ public:
       if (!session->is_connected()) {
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
         auto now = std::chrono::steady_clock::now();
+        if (session->is_stopped()) {
+          // Session was forced to stop (e.g. due to cluster being closed or cancellation)
+          cb(errc::common::request_canceled, {});
+          return;
+        }
         if (dispatch_deadline < now || deadline < now) {
           session->stop();
+          cb(errc::common::unambiguous_timeout, {});
           return;
         }
 #else
         if (deadline < std::chrono::steady_clock::now()) {
           session->stop();
+          return cb(errc::common::unambiguous_timeout, {});
           return;
         }
 #endif
@@ -504,12 +539,16 @@ public:
           self->create_session(session->type(), session->credentials(), hostname, port);
         if (new_session->is_connected()) {
           {
-            std::scoped_lock inner_lock(self->sessions_mutex_);
+            const std::scoped_lock inner_lock(self->sessions_mutex_);
             self->busy_sessions_[new_session->type()].push_back(new_session);
           }
           cb({}, new_session);
         } else {
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+          {
+            const std::scoped_lock inner_lock(self->sessions_mutex_);
+            self->pending_sessions_[new_session->type()].push_back(new_session);
+          }
           self->connect_then_send_pending_op(
             new_session, preferred_node, dispatch_deadline, deadline, cb);
 #else
@@ -521,17 +560,23 @@ public:
         auto now = std::chrono::steady_clock::now();
         if (dispatch_deadline < now || deadline < now) {
           session->stop();
+          cb(errc::common::unambiguous_timeout, {});
           return;
         }
 #else
         if (deadline < std::chrono::steady_clock::now()) {
           session->stop();
+          cb(errc::common::unambiguous_timeout, {});
           return;
         }
 #endif
         {
-          std::scoped_lock inner_lock(self->sessions_mutex_);
+          const std::scoped_lock inner_lock(self->sessions_mutex_);
           self->busy_sessions_[session->type()].push_back(session);
+          self->pending_sessions_[session->type()].remove_if(
+            [id = session->id()](const auto& s) -> bool {
+              return !s || s->id() == id;
+            });
         }
         cb({}, session);
       }
@@ -844,6 +889,7 @@ private:
   mutable std::mutex config_mutex_{};
   std::map<service_type, std::list<std::shared_ptr<http_session>>> busy_sessions_{};
   std::map<service_type, std::list<std::shared_ptr<http_session>>> idle_sessions_{};
+  std::map<service_type, std::list<std::shared_ptr<http_session>>> pending_sessions_{};
   std::size_t next_index_{ 0 };
   std::mutex next_index_mutex_{};
   std::mutex sessions_mutex_{};

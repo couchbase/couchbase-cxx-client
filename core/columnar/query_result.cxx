@@ -43,9 +43,6 @@ public:
     return rows_.next_row(
       [handler = std::move(handler)](const std::string& content, std::error_code ec) {
         if (ec) {
-          if (ec == couchbase::errc::common::request_canceled) {
-            return handler(query_result_end{}, {});
-          }
           return handler({}, { maybe_convert_error_code(ec) });
         }
         if (content.empty()) {

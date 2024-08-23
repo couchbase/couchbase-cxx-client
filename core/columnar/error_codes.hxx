@@ -25,6 +25,10 @@ namespace couchbase::core::columnar
 auto
 columnar_category() noexcept -> const std::error_category&;
 
+/**
+ * Error codes used when the error is the result of an unsuccessful client-server interaction.
+ * Wrapper SDKs should expose them as an error that extends ColumnarError.
+ */
 enum class errc : std::uint8_t {
   generic = 1,
   invalid_credential = 2,
@@ -39,9 +43,33 @@ make_error_code(errc e) noexcept -> std::error_code
 }
 
 auto
+columnar_client_category() noexcept -> const std::error_category&;
+
+/**
+ * Error codes used for client-side errors.
+ * Wrapper SDKs should expose them using platform-idiomatic error types that do _not_ extend
+ * ColumnarError.
+ */
+enum class client_errc : std::uint8_t {
+  canceled = 1,
+  invalid_argument = 2,
+  cluster_closed = 3,
+};
+
+inline auto
+make_error_code(client_errc e) noexcept -> std::error_code
+{
+  return { static_cast<int>(e), columnar_client_category() };
+}
+
+auto
 maybe_convert_error_code(std::error_code e) -> std::error_code;
 } // namespace couchbase::core::columnar
 
 template<>
 struct std::is_error_code_enum<couchbase::core::columnar::errc> : std::true_type {
+};
+
+template<>
+struct std::is_error_code_enum<couchbase::core::columnar::client_errc> : std::true_type {
 };
