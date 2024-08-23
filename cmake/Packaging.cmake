@@ -25,19 +25,27 @@ if(COUCHBASE_CXX_CLIENT_BUILD_TOOLS)
   install(TARGETS cbc RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
-install(TARGETS ${couchbase_cxx_client_LIBRARIES}
-        EXPORT couchbase_cxx_client-targets
-        DESTINATION ${CMAKE_INSTALL_LIBDIR})
+# export(
+#   TARGETS project_options project_warnings
+#   NAMESPACE couchbase_cxx_client_core::
+#   APPEND
+#   FILE couchbase_cxx_client_core-targets.cmake)
 
-# install(EXPORT couchbase_cxx_client-targets
-#         NAMESPACE couchbase_cxx_client::
-#         FILE couchbase_cxx_client-config.cmake
-#         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/couchbase_cxx_client)
+install(
+  TARGETS ${couchbase_cxx_client_LIBRARIES}
+  EXPORT couchbase_cxx_client-targets
+  DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
-# export(TARGETS couchbase_cxx_client
-#        NAMESPACE couchbase_cxx_client::
-#        FILE couchbase_cxx_client-targets.cmake)
-# export(PACKAGE couchbase_cxx_client)
+export(
+  TARGETS ${couchbase_cxx_client_LIBRARIES}
+  NAMESPACE couchbase_cxx_client::
+  FILE couchbase_cxx_client-targets.cmake)
+
+install(
+  EXPORT couchbase_cxx_client-targets
+  NAMESPACE couchbase_cxx_client::
+  FILE couchbase_cxx_client-config.cmake
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/couchbase_cxx_client)
 
 set(COUCHBASE_CXX_CLIENT_TARBALL_NAME "couchbase-cxx-client-${COUCHBASE_CXX_CLIENT_SEMVER}")
 set(COUCHBASE_CXX_CLIENT_TARBALL "${PROJECT_BINARY_DIR}/packaging/${COUCHBASE_CXX_CLIENT_TARBALL_NAME}.tar.gz")
@@ -122,7 +130,8 @@ if(COUCHBASE_CXX_CLIENT_RPM_TARGETS)
   configure_file(${PROJECT_SOURCE_DIR}/cmake/couchbase-cxx-client.spec.in "${COUCHBASE_CXX_CLIENT_SPEC}" @ONLY)
 
   set(COUCHBASE_CXX_CLIENT_DEFAULT_ROOT "rocky-9-x86_64")
-  set(COUCHBASE_CXX_CLIENT_RPM_NAME "couchbase-cxx-client-${COUCHBASE_CXX_CLIENT_PACKAGE_VERSION}-${COUCHBASE_CXX_CLIENT_PACKAGE_RELEASE}")
+  set(COUCHBASE_CXX_CLIENT_RPM_NAME
+      "couchbase-cxx-client-${COUCHBASE_CXX_CLIENT_PACKAGE_VERSION}-${COUCHBASE_CXX_CLIENT_PACKAGE_RELEASE}")
   set(COUCHBASE_CXX_CLIENT_SRPM "${PROJECT_BINARY_DIR}/packaging/srpm/${COUCHBASE_CXX_CLIENT_RPM_NAME}.el9.src.rpm")
 
   add_custom_command(
@@ -130,8 +139,7 @@ if(COUCHBASE_CXX_CLIENT_RPM_TARGETS)
     WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/packaging"
     COMMAND ${SPECTOOL} --get-files couchbase-cxx-client.spec
     COMMAND ${MOCK} --buildsrpm --root=${COUCHBASE_CXX_CLIENT_DEFAULT_ROOT}
-            --resultdir=${PROJECT_BINARY_DIR}/packaging/srpm --spec couchbase-cxx-client.spec
-            --sources .
+            --resultdir=${PROJECT_BINARY_DIR}/packaging/srpm --spec couchbase-cxx-client.spec --sources .
     DEPENDS ${COUCHBASE_CXX_CLIENT_TARBALL} ${COUCHBASE_CXX_CLIENT_SPEC})
 
   add_custom_target(packaging_srpm DEPENDS ${COUCHBASE_CXX_CLIENT_SRPM})

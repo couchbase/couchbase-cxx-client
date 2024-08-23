@@ -483,12 +483,12 @@ foreach(TARGET ${couchbase_cxx_client_LIBRARIES})
 
   target_include_directories(${TARGET} PUBLIC $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
-  target_link_libraries(${TARGET} PUBLIC fmt::fmt spdlog::spdlog)
-
   target_link_libraries(
     ${TARGET}
     PRIVATE project_options
             project_warnings
+            fmt::fmt
+            spdlog::spdlog
             Microsoft.GSL::GSL
             asio
             llhttp::llhttp

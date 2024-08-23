@@ -13,6 +13,11 @@ function(declare_system_library target)
   endif()
   set_target_properties(${target} PROPERTIES INTERFACE_SYSTEM_INCLUDE_DIRECTORIES
                                              $<TARGET_PROPERTY:${target},INTERFACE_INCLUDE_DIRECTORIES>)
+  # export(
+  #   TARGETS ${target}
+  #   NAMESPACE couchbase_cxx_client_core::
+  #   APPEND
+  #   FILE couchbase_cxx_client_core-targets.cmake)
 endfunction()
 
 if(NOT TARGET fmt::fmt)
@@ -26,9 +31,10 @@ if(NOT TARGET fmt::fmt)
     11.0.1
     GITHUB_REPOSITORY
     "fmtlib/fmt"
-    EXCLUDE_FROM_ALL ON
+    EXCLUDE_FROM_ALL
+    ON
     OPTIONS
-    "FMT_INSTALL ON"
+    "FMT_INSTALL OFF"
     # Unicode support for MSVC enabled in CompilerWarnings.cmake
     "FMT_UNICODE OFF"
     "FMT_DOC OFF"
@@ -47,9 +53,10 @@ if(NOT TARGET spdlog::spdlog)
     1.14.1
     GITHUB_REPOSITORY
     "gabime/spdlog"
-    EXCLUDE_FROM_ALL ON
+    EXCLUDE_FROM_ALL
+    ON
     OPTIONS
-    "SPDLOG_INSTALL ON"
+    "SPDLOG_INSTALL OFF"
     "BUILD_SHARED_LIBS OFF"
     "CMAKE_C_VISIBILITY_PRESET hidden"
     "CMAKE_CXX_VISIBILITY_PRESET hidden"
@@ -67,9 +74,10 @@ if(NOT TARGET Microsoft.GSL::GSL)
     4.0.0
     GITHUB_REPOSITORY
     "microsoft/gsl"
-    EXCLUDE_FROM_ALL ON
+    EXCLUDE_FROM_ALL
+    ON
     OPTIONS
-    "GSL_INSTALL ON"
+    "GSL_INSTALL OFF"
     "CMAKE_C_VISIBILITY_PRESET hidden"
     "CMAKE_CXX_VISIBILITY_PRESET hidden"
     "CMAKE_POSITION_INDEPENDENT_CODE ON")
@@ -86,7 +94,8 @@ if(NOT TARGET hdr_histogram_static)
     0.11.8
     GITHUB_REPOSITORY
     "HdrHistogram/HdrHistogram_c"
-    EXCLUDE_FROM_ALL ON
+    EXCLUDE_FROM_ALL
+    ON
     OPTIONS
     "CMAKE_C_VISIBILITY_PRESET hidden"
     "CMAKE_CXX_VISIBILITY_PRESET hidden"
@@ -107,7 +116,8 @@ if(NOT TARGET llhttp::llhttp)
     9.2.1
     GITHUB_REPOSITORY
     "nodejs/llhttp"
-    EXCLUDE_FROM_ALL ON
+    EXCLUDE_FROM_ALL
+    ON
     OPTIONS
     "CMAKE_C_VISIBILITY_PRESET hidden"
     "CMAKE_CXX_VISIBILITY_PRESET hidden"
@@ -127,9 +137,10 @@ if(NOT TARGET snappy)
     1.2.1
     GITHUB_REPOSITORY
     "google/snappy"
-    EXCLUDE_FROM_ALL ON
+    EXCLUDE_FROM_ALL
+    ON
     OPTIONS
-    "SNAPPY_INSTALL ON"
+    "SNAPPY_INSTALL OFF"
     "CMAKE_C_VISIBILITY_PRESET hidden"
     "CMAKE_CXX_VISIBILITY_PRESET hidden"
     "CMAKE_POSITION_INDEPENDENT_CODE ON"
@@ -154,7 +165,7 @@ if(NOT TARGET taocpp::json)
     GITHUB_REPOSITORY
     "taocpp/json"
     OPTIONS
-    "TAOCPP_JSON_INSTALL ON"
+    "TAOCPP_JSON_INSTALL OFF"
     "CMAKE_C_VISIBILITY_PRESET hidden"
     "CMAKE_CXX_VISIBILITY_PRESET hidden"
     "CMAKE_POSITION_INDEPENDENT_CODE ON"
@@ -177,7 +188,8 @@ if(NOT TARGET asio::asio)
     1.30.2
     GITHUB_REPOSITORY
     "chriskohlhoff/asio"
-    EXCLUDE_FROM_ALL ON)
+    EXCLUDE_FROM_ALL
+    ON)
 endif()
 
 # ASIO doesn't use CMake, we have to configure it manually. Extra notes for using on Windows:
@@ -187,15 +199,10 @@ endif()
 #
 # 2) WIN32_LEAN_AND_MEAN is defined to make Winsock2 work.
 if(asio_ADDED)
-  add_library(asio STATIC
-      ${asio_SOURCE_DIR}/asio/src/asio.cpp
-      ${asio_SOURCE_DIR}/asio/src/asio_ssl.cpp)
+  add_library(asio STATIC ${asio_SOURCE_DIR}/asio/src/asio.cpp ${asio_SOURCE_DIR}/asio/src/asio_ssl.cpp)
 
   target_include_directories(asio SYSTEM PRIVATE ${asio_SOURCE_DIR}/asio/include)
-  target_compile_definitions(asio PRIVATE
-      ASIO_STANDALONE=1
-      ASIO_NO_DEPRECATED=1
-      ASIO_SEPARATE_COMPILATION=1)
+  target_compile_definitions(asio PRIVATE ASIO_STANDALONE=1 ASIO_NO_DEPRECATED=1 ASIO_SEPARATE_COMPILATION=1)
   target_link_libraries(asio PRIVATE Threads::Threads)
   set_target_properties(
     asio
@@ -208,17 +215,39 @@ if(asio_ADDED)
     macro(get_win32_winnt version)
       if(CMAKE_SYSTEM_VERSION)
         set(ver ${CMAKE_SYSTEM_VERSION})
-        string(REGEX MATCH "^([0-9]+).([0-9])" ver ${ver})
-        string(REGEX MATCH "^([0-9]+)" verMajor ${ver})
+        string(
+          REGEX MATCH
+                "^([0-9]+).([0-9])"
+                ver
+                ${ver})
+        string(
+          REGEX MATCH
+                "^([0-9]+)"
+                verMajor
+                ${ver})
         # Check for Windows 10, b/c we'll need to convert to hex 'A'.
         if("${verMajor}" MATCHES "10")
           set(verMajor "A")
-          string(REGEX REPLACE "^([0-9]+)" ${verMajor} ver ${ver})
+          string(
+            REGEX
+            REPLACE "^([0-9]+)"
+                    ${verMajor}
+                    ver
+                    ${ver})
         endif("${verMajor}" MATCHES "10")
         # Remove all remaining '.' characters.
-        string(REPLACE "." "" ver ${ver})
+        string(
+          REPLACE "."
+                  ""
+                  ver
+                  ${ver})
         # Prepend each digit with a zero.
-        string(REGEX REPLACE "([0-9A-Z])" "0\\1" ver ${ver})
+        string(
+          REGEX
+          REPLACE "([0-9A-Z])"
+                  "0\\1"
+                  ver
+                  ${ver})
         set(${version} "0x${ver}")
       endif()
     endmacro()
