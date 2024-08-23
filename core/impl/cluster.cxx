@@ -230,21 +230,8 @@ public:
     // We cannot use close() method here, as it is capturing self as a shared
     // pointer to extend lifetime for the user's callback. Here the reference
     // counter has reached zero already, so we can only capture `*this`.
-    std::thread([this, &barrier]() mutable {
-      if (auto txns = std::move(transactions_); txns != nullptr) {
-        // blocks until cleanup is finished
-        txns->close();
-      }
-      std::promise<void> core_stopped;
-      auto f = core_stopped.get_future();
-      core_.close([&core_stopped]() {
-        core_stopped.set_value();
-      });
-      f.get();
-      io_.stop();
-      if (io_thread_.joinable()) {
-        io_thread_.join();
-      }
+    std::thread([this, barrier = std::move(barrier)]() mutable {
+      do_close();
       barrier.set_value();
     }).detach();
 
@@ -372,20 +359,7 @@ public:
   {
     // Spawn new thread to avoid joining IO thread from the same thread
     std::thread([self = shared_from_this(), handler = std::move(handler)]() mutable {
-      if (auto txns = std::move(self->transactions_); txns != nullptr) {
-        // blocks until cleanup is finished
-        txns->close();
-      }
-      std::promise<void> barrier;
-      auto future = barrier.get_future();
-      self->core_.close([&barrier]() {
-        barrier.set_value();
-      });
-      future.get();
-      self->io_.stop();
-      if (self->io_thread_.joinable()) {
-        self->io_thread_.join();
-      }
+      self->do_close();
       handler();
     }).detach();
   }
@@ -401,7 +375,25 @@ public:
   }
 
 private:
-  asio::io_context io_{ ASIO_CONCURRENCY_HINT_1 };
+  void do_close()
+  {
+    if (auto txns = std::move(transactions_); txns != nullptr) {
+      // blocks until cleanup is finished
+      txns->close();
+    }
+    std::promise<void> core_stopped;
+    auto f = core_stopped.get_future();
+    core_.close([core_stopped = std::move(core_stopped)]() mutable {
+      core_stopped.set_value();
+    });
+    f.get();
+    io_.stop();
+    if (io_thread_.joinable()) {
+      io_thread_.join();
+    }
+  }
+
+  asio::io_context io_{ ASIO_CONCURRENCY_HINT_SAFE };
   core::cluster core_{ io_ };
   std::shared_ptr<core::transactions::transactions> transactions_{ nullptr };
   std::thread io_thread_{ [&io = io_] {
@@ -540,12 +532,15 @@ cluster::connect(const std::string& connection_string,
   // Spawn new thread for connection to ensure that cluster_impl pointer will
   // not be deallocated in IO thread in case of error.
   std::thread([connection_string, options, handler = std::move(handler)]() {
-    auto impl = std::make_shared<cluster_impl>();
     auto barrier = std::make_shared<std::promise<std::pair<error, cluster>>>();
     auto future = barrier->get_future();
-    impl->open(connection_string, options, [barrier](auto err, auto c) {
-      barrier->set_value({ std::move(err), std::move(c) });
-    });
+    {
+      auto impl = std::make_shared<cluster_impl>();
+      impl->open(connection_string, options, [barrier](auto err, auto c) {
+        barrier->set_value({ std::move(err), std::move(c) });
+      });
+    }
+
     auto [err, c] = future.get();
     handler(std::move(err), std::move(c));
   }).detach();

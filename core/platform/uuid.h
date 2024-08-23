@@ -34,23 +34,23 @@ random(uuid_t& uuid);
 /**
  * Generate a new random uuid and return it
  */
-uuid_t
-random();
+auto
+random() -> uuid_t;
 
 /**
  * Convert a textual version of a UUID to a uuid type
  * @throw std::invalid_argument if the textual uuid is not
  *        formatted correctly
  */
-uuid_t
-from_string(std::string_view str);
+auto
+from_string(std::string_view str) -> uuid_t;
 
 /**
  * Print a textual version of the UUID in the form:
  *
  *     00000000-0000-0000-0000-000000000000
  */
-std::string
-to_string(const couchbase::core::uuid::uuid_t& uuid);
+auto
+to_string(const couchbase::core::uuid::uuid_t& uuid) -> std::string;
 
 } // namespace couchbase::core::uuid
