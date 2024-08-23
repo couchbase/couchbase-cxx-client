@@ -365,6 +365,7 @@ set(couchbase_cxx_client_FILES
     core/operations/management/view_index_get_all.cxx
     core/operations/management/view_index_upsert.cxx
     core/origin.cxx
+    core/platform/backtrace.c
     core/platform/base64.cc
     core/platform/dirutils.cc
     core/platform/random.cc
@@ -455,7 +456,7 @@ set(couchbase_cxx_client_FILES
     core/utils/split_string.cxx
     core/utils/url_codec.cxx
     core/view_query_options.cxx
-    core/platform/backtrace.c)
+    third_party/jsonsl/jsonsl.c)
 
 add_library(couchbase_cxx_client_static STATIC ${couchbase_cxx_client_FILES})
 add_library(couchbase_cxx_client::couchbase_cxx_client_static ALIAS couchbase_cxx_client_static)
@@ -493,7 +494,6 @@ foreach(TARGET ${couchbase_cxx_client_LIBRARIES})
             llhttp::llhttp
             taocpp::json
             snappy
-            jsonsl
             hdr_histogram_static)
 
   if(WIN32)

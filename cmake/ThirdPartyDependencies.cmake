@@ -28,10 +28,10 @@ if(NOT TARGET fmt::fmt)
     "fmtlib/fmt"
     EXCLUDE_FROM_ALL ON
     OPTIONS
+    "FMT_INSTALL ON"
     # Unicode support for MSVC enabled in CompilerWarnings.cmake
     "FMT_UNICODE OFF"
     "FMT_DOC OFF"
-    "FMT_INSTALL OFF"
     "BUILD_SHARED_LIBS OFF"
     "CMAKE_C_VISIBILITY_PRESET hidden"
     "CMAKE_CXX_VISIBILITY_PRESET hidden"
@@ -49,6 +49,7 @@ if(NOT TARGET spdlog::spdlog)
     "gabime/spdlog"
     EXCLUDE_FROM_ALL ON
     OPTIONS
+    "SPDLOG_INSTALL ON"
     "BUILD_SHARED_LIBS OFF"
     "CMAKE_C_VISIBILITY_PRESET hidden"
     "CMAKE_CXX_VISIBILITY_PRESET hidden"
@@ -68,6 +69,7 @@ if(NOT TARGET Microsoft.GSL::GSL)
     "microsoft/gsl"
     EXCLUDE_FROM_ALL ON
     OPTIONS
+    "GSL_INSTALL ON"
     "CMAKE_C_VISIBILITY_PRESET hidden"
     "CMAKE_CXX_VISIBILITY_PRESET hidden"
     "CMAKE_POSITION_INDEPENDENT_CODE ON")
@@ -127,11 +129,11 @@ if(NOT TARGET snappy)
     "google/snappy"
     EXCLUDE_FROM_ALL ON
     OPTIONS
+    "SNAPPY_INSTALL ON"
     "CMAKE_C_VISIBILITY_PRESET hidden"
     "CMAKE_CXX_VISIBILITY_PRESET hidden"
     "CMAKE_POSITION_INDEPENDENT_CODE ON"
     "BUILD_SHARED_LIBS OFF"
-    "SNAPPY_INSTALL OFF"
     "SNAPPY_BUILD_TESTS OFF"
     "SNAPPY_BUILD_BENCHMARKS OFF")
 endif()
@@ -152,6 +154,7 @@ if(NOT TARGET taocpp::json)
     GITHUB_REPOSITORY
     "taocpp/json"
     OPTIONS
+    "TAOCPP_JSON_INSTALL ON"
     "CMAKE_C_VISIBILITY_PRESET hidden"
     "CMAKE_CXX_VISIBILITY_PRESET hidden"
     "CMAKE_POSITION_INDEPENDENT_CODE ON"
@@ -184,11 +187,16 @@ endif()
 #
 # 2) WIN32_LEAN_AND_MEAN is defined to make Winsock2 work.
 if(asio_ADDED)
-  add_library(asio INTERFACE)
+  add_library(asio STATIC
+      ${asio_SOURCE_DIR}/asio/src/asio.cpp
+      ${asio_SOURCE_DIR}/asio/src/asio_ssl.cpp)
 
-  target_include_directories(asio SYSTEM INTERFACE ${asio_SOURCE_DIR}/asio/include)
-  target_compile_definitions(asio INTERFACE ASIO_STANDALONE ASIO_NO_DEPRECATED)
-  target_link_libraries(asio INTERFACE Threads::Threads)
+  target_include_directories(asio SYSTEM PRIVATE ${asio_SOURCE_DIR}/asio/include)
+  target_compile_definitions(asio PRIVATE
+      ASIO_STANDALONE=1
+      ASIO_NO_DEPRECATED=1
+      ASIO_SEPARATE_COMPILATION=1)
+  target_link_libraries(asio PRIVATE Threads::Threads)
   set_target_properties(
     asio
     PROPERTIES C_VISIBILITY_PRESET hidden
@@ -230,10 +238,6 @@ endif()
 
 include_directories(SYSTEM ${PROJECT_SOURCE_DIR}/third_party/cxx_function)
 include_directories(SYSTEM ${PROJECT_SOURCE_DIR}/third_party/expected/include)
-
-add_library(jsonsl OBJECT ${PROJECT_SOURCE_DIR}/third_party/jsonsl/jsonsl.c)
-set_target_properties(jsonsl PROPERTIES C_VISIBILITY_PRESET hidden POSITION_INDEPENDENT_CODE TRUE)
-target_include_directories(jsonsl SYSTEM PUBLIC ${PROJECT_SOURCE_DIR}/third_party/jsonsl)
 
 declare_system_library(snappy)
 declare_system_library(llhttp::llhttp)

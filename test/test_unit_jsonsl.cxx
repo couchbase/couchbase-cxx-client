@@ -18,8 +18,8 @@
 #include "test_helper.hxx"
 
 #include "core/utils/json_streaming_lexer.hxx"
+#include "third_party/jsonsl/jsonsl.h"
 
-#include <jsonsl.h>
 #include <ostream>
 
 enum class parser_event_type {
