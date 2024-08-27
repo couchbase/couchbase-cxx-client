@@ -19,10 +19,6 @@
 
 #include "cluster.hxx"
 
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-#include "core/io/config_tracker.hxx"
-#endif
-
 #include "bucket.hxx"
 #include "capella_ca.hxx"
 #include "core/diagnostics.hxx"
@@ -33,6 +29,9 @@
 #include "core/io/http_message.hxx"
 #include "core/io/http_session_manager.hxx"
 #include "core/io/mcbp_session.hxx"
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+#include "core/io/config_tracker.hxx"
+#endif
 #include "core/logger/logger.hxx"
 #include "core/management/analytics_link_azure_blob_external.hxx"
 #include "core/management/analytics_link_couchbase_remote.hxx"

@@ -17,8 +17,6 @@
 
 #include "query_component.hxx"
 
-#include <couchbase/error_codes.hxx>
-
 #include "backoff_calculator.hxx"
 #include "core/free_form_http_request.hxx"
 #include "core/http_component.hxx"
@@ -85,23 +83,18 @@ public:
           const std::scoped_lock lock{ self->pending_op_mutex_ };
           std::swap(op, self->pending_op_);
         }
+        if (ec) {
+          self->invoke_callback(
+            {},
+            { maybe_convert_error_code(ec), "Failed to execute the HTTP request for the query" });
+          return;
+        }
         // op can be null if the pending_query_operation was cancelled.
         if (op) {
           auto op_info = std::dynamic_pointer_cast<pending_operation_connection_info>(op);
           self->retry_info_.last_dispatched_from = op_info->dispatched_from();
           self->retry_info_.last_dispatched_to = op_info->dispatched_to();
           self->retry_info_.last_dispatched_to_host = op_info->dispatched_to_host();
-        }
-
-        if (ec) {
-          if (ec == couchbase::errc::common::request_canceled) {
-            self->invoke_callback(
-              {},
-              { couchbase::core::columnar::errc::generic, "The query operation was canceled." });
-            return;
-          }
-          self->invoke_callback({}, { maybe_convert_error_code(ec) });
-          return;
         }
         auto streamer = std::make_shared<row_streamer>(self->io_, resp.body(), "/results/^");
         return streamer->start(
@@ -154,6 +147,7 @@ public:
   {
     cancelled_ = true;
     retry_timer_.cancel();
+    deadline_.cancel();
     std::shared_ptr<pending_operation> op;
     {
       const std::scoped_lock lock{ pending_op_mutex_ };
@@ -162,9 +156,11 @@ public:
     if (op) {
       op->cancel();
     }
-    // This will only call the callback if it has not already been called.
-    invoke_callback(
-      {}, { couchbase::core::columnar::errc::generic, "The query operation was canceled." });
+    // This will only call the callback if it has not already been called (e.g. in the case of a
+    // timeout).
+    invoke_callback({},
+                    { couchbase::core::columnar::client_errc::canceled,
+                      "The query operation was canceled by the caller." });
   }
 
 private:

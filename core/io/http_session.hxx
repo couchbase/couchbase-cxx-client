@@ -177,6 +177,7 @@ private:
   void write(const std::string_view& buf);
   void flush();
   void cancel_current_response(std::error_code ec);
+  void invoke_connect_callback();
 
   service_type type_{};
   std::string client_id_;
@@ -199,6 +200,7 @@ private:
   std::atomic_bool reading_{ false };
 
   utils::movable_function<void()> connect_callback_{};
+  std::mutex connect_callback_mutex_{};
   std::function<void()> on_stop_handler_{ nullptr };
 
   response_context current_response_{};

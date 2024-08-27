@@ -243,7 +243,10 @@ http_session::endpoint() -> const asio::ip::tcp::endpoint&
 void
 http_session::connect(utils::movable_function<void()>&& callback)
 {
-  connect_callback_ = std::move(callback);
+  {
+    const std::scoped_lock lock(connect_callback_mutex_);
+    connect_callback_ = std::move(callback);
+  }
   initiate_connect();
 }
 
@@ -276,9 +279,7 @@ http_session::initiate_connect()
       if (ec == asio::error::operation_aborted || self->stopped_) {
         return;
       }
-      if (auto callback = std::move(self->connect_callback_); callback) {
-        callback();
-      }
+      self->invoke_connect_callback();
     });
     return;
   }
@@ -310,6 +311,19 @@ http_session::cancel_current_response(std::error_code ec)
 }
 
 void
+http_session::invoke_connect_callback()
+{
+  utils::movable_function<void()> cb;
+  {
+    const std::scoped_lock lock(connect_callback_mutex_);
+    cb = std::move(connect_callback_);
+  }
+  if (cb) {
+    cb();
+  }
+}
+
+void
 http_session::stop()
 {
   if (stopped_) {
@@ -319,12 +333,10 @@ http_session::stop()
   state_ = diag::endpoint_state::disconnecting;
   stream_->close([](std::error_code) {
   });
+  invoke_connect_callback();
   connect_deadline_timer_.cancel();
   idle_timer_.cancel();
   retry_backoff_.cancel();
-  if (connect_callback_) {
-    connect_callback_ = nullptr;
-  }
 
   cancel_current_response(errc::common::request_canceled);
 
@@ -387,6 +399,8 @@ http_session::write_and_stream(
   utils::movable_function<void()> stream_end_handler)
 {
   if (stopped_) {
+    resp_handler(errc::common::request_canceled, {});
+    stream_end_handler();
     return;
   }
   {
@@ -627,9 +641,7 @@ http_session::on_connect(const std::error_code& ec,
       info_ = http_session_info(client_id_, id_, stream_->local_endpoint(), it->endpoint());
     }
     connect_deadline_timer_.cancel();
-    if (auto callback = std::move(connect_callback_); callback) {
-      callback();
-    }
+    invoke_connect_callback();
     flush();
   }
 }
