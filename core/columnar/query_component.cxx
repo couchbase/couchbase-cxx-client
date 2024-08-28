@@ -41,6 +41,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <system_error>
 #include <utility>
 #include <vector>
@@ -57,8 +58,8 @@ public:
                           http_component& http,
                           std::chrono::milliseconds default_timeout)
     : client_context_id_{ uuid::to_string(uuid::random()) }
-    , http_req_{ build_query_request(options) }
     , timeout_{ options.timeout.value_or(default_timeout) }
+    , http_req_{ build_query_request(options) }
     , io_{ io }
     , deadline_{ io_ }
     , retry_timer_{ io_ }
@@ -107,6 +108,7 @@ public:
               self->parse_error(resp.status_code(), utils::json::parse(metadata_header));
 
             if (error_parse_res.retriable) {
+              self->retry_info_.last_error = error_parse_res.err;
               return self->maybe_retry();
             }
 
@@ -273,6 +275,14 @@ private:
     err.ctx["retry_attempts"] = retry_info_.retry_attempts;
     err.ctx["last_dispatched_to"] = retry_info_.last_dispatched_to;
     err.ctx["last_dispatched_from"] = retry_info_.last_dispatched_from;
+
+    // When reporting a timeout that is a result of an operation being retried, the last set of
+    // retryable errors should be listed.
+    if (err.ec == errc::timeout && retry_info_.last_error) {
+      if (const auto* e = retry_info_.last_error.ctx.find("errors"); e != nullptr) {
+        err.ctx["last_errors"] = e;
+      }
+    }
   }
 
   auto parse_error(const std::uint32_t& http_status_code,
@@ -377,8 +387,8 @@ private:
   }
 
   std::string client_context_id_;
-  http_request http_req_;
   std::chrono::milliseconds timeout_;
+  http_request http_req_;
   asio::io_context& io_;
   asio::steady_timer deadline_;
   asio::steady_timer retry_timer_;

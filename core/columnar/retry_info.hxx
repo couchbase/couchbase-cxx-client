@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include "error.hxx"
+
 #include <cstddef>
 #include <string>
 
@@ -27,5 +29,6 @@ struct retry_info {
   std::string last_dispatched_to{};
   std::string last_dispatched_from{};
   std::string last_dispatched_to_host{};
+  error last_error{};
 };
 } // namespace couchbase::core::columnar
