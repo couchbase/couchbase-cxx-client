@@ -60,16 +60,7 @@ public:
     return *this;
   }
 
-  /**
-   * Selects network to use.
-   *
-   * @param name network name as it is exposed in the configuration.
-   * @return this object for chaining purposes.
-   *
-   * @see
-   * https://docs.couchbase.com/server/current/learn/clusters-and-availability/connectivity.html#alternate-addresses
-   * @see https://docs.couchbase.com/server/current/rest-api/rest-set-up-alternate-address.html
-   */
+  [[deprecated("Use couchbase::network_options#preferred_network() instead.")]]
   auto network(std::string name) -> behavior_options&
   {
     network_ = std::move(name);

@@ -35,9 +35,19 @@ public:
   static constexpr std::chrono::milliseconds default_config_poll_floor{ 50 };
   static constexpr std::chrono::milliseconds default_idle_http_connection_timeout{ 4'500 };
 
+  /**
+   * Selects network to use.
+   *
+   * @param name network name as it is exposed in the configuration.
+   * @return this object for chaining purposes.
+   *
+   * @see
+   * https://docs.couchbase.com/server/current/learn/clusters-and-availability/connectivity.html#alternate-addresses
+   * @see https://docs.couchbase.com/server/current/rest-api/rest-set-up-alternate-address.html
+   */
   auto preferred_network(std::string network_name) -> network_options&
   {
-    network_ = network_name;
+    network_ = std::move(network_name);
     return *this;
   }
 

@@ -140,7 +140,6 @@ options_to_origin(const std::string& connection_string,
   user_options.enable_mutation_tokens = opts.behavior.enable_mutation_tokens;
   user_options.enable_unordered_execution = opts.behavior.enable_unordered_execution;
   user_options.user_agent_extra = opts.behavior.user_agent_extra;
-  user_options.network = opts.behavior.network;
 
   user_options.server_group = opts.network.server_group;
   user_options.enable_tcp_keep_alive = opts.network.enable_tcp_keep_alive;
@@ -150,8 +149,10 @@ options_to_origin(const std::string& connection_string,
   if (opts.network.max_http_connections) {
     user_options.max_http_connections = opts.network.max_http_connections.value();
   }
-  if (!opts.network.network.empty()) {
-    user_options.network = opts.network.network;
+  user_options.network = opts.network.network;
+  if (user_options.network.empty()) {
+    // this is deprecated option, but use it in case main options is empty
+    user_options.network = opts.behavior.network;
   }
   switch (opts.network.ip_protocol) {
     case ip_protocol::any:
