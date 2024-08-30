@@ -36,7 +36,7 @@ using async_err_handler = std::function<void(error)>;
  * In the example below, we get 3 documents in parallel, and update each when
  * the get returns the document:
  *
- * @snippet test/test_transaction_examples.cxx simple-async-txn
+ * @snippet{trimleft} test/test_transaction_examples.cxx simple-async-txn
  */
 class async_attempt_context
 {
@@ -66,6 +66,12 @@ public:
    * @param coll The collection which contains the document.
    * @param id The unique id of the document.
    * @param handler The handler which implements @ref async_result_handler
+   *
+   * Select preferred server group in connection options:
+   * @snippet{trimleft} test_integration_read_replica.cxx select-preferred_server_group
+   *
+   * Fetch document from the nodes that belong to selected server group only:
+   * @snippet{trimleft} test_transaction_examples.cxx get_replica_from_preferred_server_group-async
    *
    * @see network_options::preferred_server_group
    * @see https://docs.couchbase.com/server/current/manage/manage-groups/manage-groups.html

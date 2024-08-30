@@ -18,6 +18,7 @@
 #include "test_helper_integration.hxx"
 
 #include <couchbase/cluster.hxx>
+#include <couchbase/codec/codec_flags.hxx>
 #include <couchbase/fmt/cas.hxx>
 #include <couchbase/fmt/error.hxx>
 
@@ -32,8 +33,8 @@ namespace blocking_txn
 
 #include <tao/json.hpp>
 
-int
-main(int argc, const char* argv[])
+auto
+main(int argc, const char* argv[]) -> int
 {
   if (argc != 4) {
     fmt::print("USAGE: ./blocking-txn couchbase://127.0.0.1 Administrator password\n");
@@ -224,8 +225,8 @@ namespace read_local_txn
 #include <tao/json.hpp>
 #include <tao/json/to_string.hpp>
 
-int
-main(int argc, const char* argv[])
+auto
+main(int argc, const char* argv[]) -> int
 {
   if (argc != 4) {
     fmt::println("USAGE: ./read-local-txn couchbase://127.0.0.1 Administrator password");
@@ -262,6 +263,7 @@ main(int argc, const char* argv[])
   }
 
   {
+    //! [get_replica_from_preferred_server_group-sync]
     auto [tx_err, tx_res] = cluster.transactions()->run(
       [=](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
         auto [err, doc] = ctx->get_replica_from_preferred_server_group(collection, id);
@@ -283,9 +285,11 @@ main(int argc, const char* argv[])
     } else {
       fmt::println("transaction {} completed successfully", tx_res.transaction_id);
     }
+    //! [get_replica_from_preferred_server_group-sync]
   }
 
   {
+    //! [get_replica_from_preferred_server_group-async]
     auto barrier = std::make_shared<std::promise<std::error_code>>();
     auto f = barrier->get_future();
     cluster.transactions()->run(
@@ -315,6 +319,7 @@ main(int argc, const char* argv[])
       fmt::print(stderr, "received async error from future: message - {}\n", async_err.message());
       retval = 1;
     }
+    //! [get_replica_from_preferred_server_group-async]
   }
 
   cluster.close().get();
@@ -359,4 +364,349 @@ TEST_CASE("example: read from local server group in transaction", "[integration]
   };
 
   REQUIRE(read_local_txn::main(4, argv) == 0);
+}
+
+class byte_appender
+{
+public:
+  using iterator_category = std::output_iterator_tag;
+  using value_type = void;
+
+  explicit byte_appender(std::vector<std::byte>& output)
+    : output_{ output }
+  {
+  }
+
+  auto operator=(char ch) -> byte_appender&
+  {
+    output_.push_back(static_cast<std::byte>(ch));
+    return *this;
+  }
+
+  auto operator*() -> byte_appender&
+  {
+    return *this;
+  }
+
+  auto operator++() const -> byte_appender
+  {
+    return *this;
+  }
+
+  auto operator++(int) const -> byte_appender
+  {
+    return *this;
+  }
+
+private:
+  std::vector<std::byte>& output_;
+};
+
+template<>
+struct fmt::detail::is_output_iterator<byte_appender, char> : std::true_type {
+};
+
+//! [binary_object_in_transactions-ledger]
+struct ledger_entry {
+  std::string date{};
+  std::string description{};
+  std::string account{};
+  std::uint64_t debit{};
+  std::uint64_t credit{};
+};
+
+class ledger
+{
+public:
+  void add_record(const std::string& date,
+                  const std::string& from_account,
+                  const std::string& to_account,
+                  std::uint64_t amount,
+                  const std::string& description)
+  {
+    entries_.push_back({
+      date,
+      description,
+      to_account,
+      /* debit  */ amount,
+      /* credit */ 0,
+    });
+    entries_.push_back({
+      date,
+      description,
+      from_account,
+      /* debit  */ 0,
+      /* credit */ amount,
+    });
+  }
+
+  [[nodiscard]] auto entries() const -> const std::vector<ledger_entry>&
+  {
+    return entries_;
+  }
+
+  [[nodiscard]] auto to_csv() const -> std::vector<std::byte>
+  {
+    std::vector<std::byte> buffer;
+    byte_appender output(buffer);
+
+    fmt::format_to(output, "Date,Description,Account,Debit,Credit\n");
+    for (const auto& entry : entries_) {
+      fmt::format_to(output,
+                     "{},{},{},{},{}\n",
+                     entry.date,
+                     entry.description,
+                     entry.account,
+                     entry.debit,
+                     entry.credit);
+    }
+    return buffer;
+  }
+
+  static auto from_csv(const std::vector<std::byte>& blob) -> ledger
+  {
+
+    ledger ret;
+
+    std::istringstream input({
+      reinterpret_cast<const char*>(blob.data()),
+      blob.size(),
+    });
+    std::string line;
+
+    bool header_line{ true };
+    while (std::getline(input, line)) {
+      if (header_line) {
+        header_line = false;
+        continue;
+      }
+      std::istringstream line_stream(line);
+
+      ledger_entry entry;
+
+      std::getline(line_stream, entry.date, ',');
+      std::getline(line_stream, entry.description, ',');
+      std::getline(line_stream, entry.account, ',');
+
+      std::string field;
+      std::getline(line_stream, field, ',');
+      if (!field.empty()) {
+        entry.debit = std::stoul(field);
+      }
+      std::getline(line_stream, field, ',');
+      if (!field.empty()) {
+        entry.credit = std::stoul(field);
+      }
+
+      ret.entries_.push_back(entry);
+    }
+    return ret;
+  }
+
+private:
+  std::vector<ledger_entry> entries_{};
+};
+//! [binary_object_in_transactions-ledger]
+
+//! [binary_object_in_transactions-ledger_transcoder]
+struct csv_transcoder {
+  using document_type = ledger;
+
+  template<typename Document = document_type>
+  static auto encode(const Document& document) -> couchbase::codec::encoded_value
+  {
+    return {
+      document.to_csv(),
+      couchbase::codec::codec_flags::binary_common_flags,
+    };
+  }
+
+  template<typename Document = document_type>
+  static auto decode(const couchbase::codec::encoded_value& encoded) -> Document
+  {
+    if (encoded.flags == 0 &&
+        !couchbase::codec::codec_flags::has_common_flags(
+          encoded.flags, couchbase::codec::codec_flags::binary_common_flags)) {
+      throw std::system_error(
+        couchbase::errc::common::decoding_failure,
+        "csv_transcoder expects document to have binary common flags, flags=" +
+          std::to_string(encoded.flags));
+    }
+
+    return Document::from_csv(encoded.data);
+  }
+};
+
+template<>
+struct couchbase::codec::is_transcoder<csv_transcoder> : public std::true_type {
+};
+//! [binary_object_in_transactions-ledger_transcoder]
+
+namespace binary_objects_in_transactions
+{
+#include <couchbase/cluster.hxx>
+#include <couchbase/fmt/cas.hxx>
+
+#include <tao/json.hpp>
+
+auto
+main(int argc, const char* argv[]) -> int
+{
+  if (argc != 4) {
+    fmt::print("USAGE: ./blocking-txn couchbase://127.0.0.1 Administrator password\n");
+    return 1;
+  }
+
+  int retval = 0;
+
+  const std::string connection_string{ argv[1] };
+  const std::string username{ argv[2] };
+  const std::string password{ argv[3] };
+
+  auto options = couchbase::cluster_options(username, password);
+  options.apply_profile("wan_development");
+
+  auto [connect_err, cluster] = couchbase::cluster::connect(connection_string, options).get();
+  if (connect_err) {
+    fmt::print("unable to connect to the cluster: {}\n", connect_err);
+    return 1;
+  }
+
+  auto collection = cluster.bucket("default").default_collection();
+
+  //! [binary_object_in_transactions-initial_state]
+  // Lets represent a ledger, which keeps the moving of funds between accounts
+  // in the system. Lets also assume that the system cannot use JSON representation
+  // for some reason, and we will be storing the ledger formatted as CSV (comma-
+  // separated values).
+  //
+  // This is how the ledger might look like at some point in time:
+  //
+  // Date,Description,Account,Debit,Credit
+  // 2024-08-30,Payment received,Cash,1500,0
+  // 2024-08-30,Payment received,Accounts Receivable,0,1500
+  // 2024-08-31,Rent payment,Expenses,1000,0
+  // 2024-08-31,Rent payment,Cash,0,1000
+  // 2024-09-01,Office Supplies,Expenses,200,0
+  // 2024-09-01,Office Supplies,Cash,0,200
+  // 2024-09-02,Client Invoice,Accounts Receivable,1200,0
+  // 2024-09-02,Client Invoice,Revenue,0,1200
+  //
+  // The application must inform the SDK that this is a "binary" (as a opposed
+  // to "JSON") data, and provide custom transcoder to ensure that the SDK will
+  // handle everything correctly.
+  ledger initial_state;
+  initial_state.add_record("2024-08-30", "Accounts Receivable", "Cash", 1500, "Payment received");
+  auto [err, res] = collection.upsert<csv_transcoder, ledger>("the_ledger", initial_state).get();
+  if (err.ec()) {
+    fmt::print(
+      stderr,
+      "Create initial state of \"the_ledger\" has failed before starting transaction: {}\n",
+      err.ec().message());
+    return 1;
+  }
+  //! [binary_object_in_transactions-initial_state]
+
+  {
+    //! [binary_object_in_transactions-sync]
+    auto [tx_err, tx_res] = cluster.transactions()->run(
+      [=](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
+        //! [binary_object_in_transactions-sync_replace]
+        //! [binary_object_in_transactions-sync_get]
+        auto [err_ctx, doc] = ctx->get(collection, "the_ledger");
+        if (err_ctx.ec()) {
+          fmt::print(stderr, "Failed to retrieve \"the_ledger\": {}\n", err_ctx.ec().message());
+          return {};
+        }
+
+        // decode binary object into an application struct
+        auto the_ledger = doc.content_as<ledger, csv_transcoder>();
+        //! [binary_object_in_transactions-sync_get]
+        the_ledger.add_record("2024-09-01", "Cash", "Expenses", 1000, "Rent payment");
+        // replace the document contents, that will be treated by Couchbase as a binary object
+        ctx->replace<csv_transcoder, ledger>(doc, the_ledger);
+        //! [binary_object_in_transactions-sync_replace]
+        return {};
+      });
+
+    if (tx_err.ec()) {
+      fmt::print(stderr,
+                 "error in transaction {}, cause: {}\n",
+                 tx_err.ec().message(),
+                 tx_err.cause().has_value() ? tx_err.cause().value().ec().message() : "");
+      retval = 1;
+    } else {
+      fmt::print("transaction {} completed successfully\n", tx_res.transaction_id);
+    }
+    //! [binary_object_in_transactions-sync]
+  }
+
+  {
+    //! [binary_object_in_transactions-async]
+    auto barrier = std::make_shared<std::promise<std::error_code>>();
+    auto f = barrier->get_future();
+    cluster.transactions()->run(
+      [=](std::shared_ptr<couchbase::transactions::async_attempt_context> ctx) -> couchbase::error {
+        ctx->get(collection, "the_ledger", [=](auto err_ctx_1, auto doc) {
+          if (err_ctx_1.ec()) {
+            fmt::print(
+              stderr, "failed to get document \"the_ledger\": {}\n", err_ctx_1.ec().message());
+            return;
+          }
+
+          // decode binary object into an application struct
+          auto the_ledger = doc.template content_as<ledger, csv_transcoder>();
+          the_ledger.add_record("2024-09-01", "Cash", "Expenses", 200, "Office Supplies");
+
+          ctx->replace<csv_transcoder, ledger>(
+            doc, std::move(the_ledger), [=](auto err_ctx_2, auto /*res*/) {
+              if (err_ctx_2.ec()) {
+                fmt::print(stderr,
+                           "error replacing content in doc \"the_ledger\": {}\n",
+                           err_ctx_2.ec().message());
+              } else {
+                fmt::print("successfully replaced: \"the_ledger\"\n");
+              }
+            });
+        });
+        return {};
+      },
+
+      [barrier](auto tx_err, auto tx_res) {
+        if (tx_err.ec()) {
+          fmt::print(stderr,
+                     "error in async transaction {}, {}\n",
+                     tx_res.transaction_id,
+                     tx_err.ec().message());
+        }
+        barrier->set_value(tx_err.ec());
+      });
+    if (auto async_err = f.get()) {
+      fmt::print(stderr, "received async error from future: message - {}\n", async_err.message());
+      retval = 1;
+    }
+    //! [binary_object_in_transactions-async]
+  }
+
+  cluster.close().get();
+  return retval;
+}
+
+} // namespace binary_objects_in_transactions
+TEST_CASE("example: binary objects in transactions", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+  if (!integration.cluster_version().supports_collections()) {
+    SKIP("cluster does not support collections");
+  }
+
+  const auto env = test::utils::test_context::load_from_environment();
+  const char* argv[] = {
+    "binary-objects-in-transactions", // name of the "executable"
+    env.connection_string.c_str(),
+    env.username.c_str(),
+    env.password.c_str(),
+  };
+
+  REQUIRE(binary_objects_in_transactions::main(4, argv) == 0);
 }

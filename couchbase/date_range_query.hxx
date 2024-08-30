@@ -34,10 +34,10 @@ namespace couchbase
  *
  * Match documents where field `review_date` falls within the range ("2001-10-09T10:20:30-08:00",
  * "2016-10-31")
- * @snippet test_unit_search.cxx search-date-range
+ * @snippet{trimleft} test_unit_search.cxx search-date-range
  *
  * It also works with `std::tm` and `std::chrono::system_clock::time_point`.
- * @snippet test_unit_search.cxx search-date-range-tm
+ * @snippet{trimleft} test_unit_search.cxx search-date-range-tm
  *
  * @see https://docs.couchbase.com/server/current/fts/fts-supported-queries-date-range.html server
  * documentation.

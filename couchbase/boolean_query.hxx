@@ -51,7 +51,7 @@ namespace couchbase
  * > 5`.
  * * and finally, exclude documents with `city` `"Padfield"` or `"Gilingham"`.
  *
- * @snippet test_unit_search.cxx search-boolean
+ * @snippet{trimleft} test_unit_search.cxx search-boolean
  *
  * @see https://docs.couchbase.com/server/current/fts/fts-supported-queries-boolean-field-query.html
  * server documentation

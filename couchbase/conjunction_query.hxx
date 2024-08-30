@@ -32,7 +32,7 @@ namespace couchbase
  *
  * Match documents with `"location"` in the field `reviews.content` and `true` in the field
  * `free_breakfast`.
- * @snippet test_unit_search.cxx search-conjunction
+ * @snippet{trimleft} test_unit_search.cxx search-conjunction
  *
  * @see https://docs.couchbase.com/server/current/fts/fts-supported-queries-conjuncts-disjuncts.html
  * server documentation

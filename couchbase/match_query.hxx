@@ -33,7 +33,7 @@ namespace couchbase
  *
  * Match documents with both `"location"` and `"hostel"` terms in the field `reviews.content`,
  * ensuring common prefix length `4`, maximum fuzziness and select standard analyzer.
- * @snippet test_unit_search.cxx search-match
+ * @snippet{trimleft} test_unit_search.cxx search-match
  *
  * @see https://docs.couchbase.com/server/current/fts/fts-supported-queries-match.html server
  * documentation

@@ -35,7 +35,7 @@ namespace couchbase
  * identical to the initial, thus explicitly closing the box. However, specifying an explicit
  * closure in this way is optional: the closure will be inferred by the Couchbase Server if not
  * explicitly specified.
- * @snippet test_unit_search.cxx search-geo-bounding-box
+ * @snippet{trimleft} test_unit_search.cxx search-geo-bounding-box
  *
  * @see
  * https://docs.couchbase.com/server/current/fts/fts-supported-queries-geo-bounded-rectangle.html

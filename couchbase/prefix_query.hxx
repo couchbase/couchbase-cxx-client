@@ -30,7 +30,7 @@ namespace couchbase
  * @ref match_query.
  *
  * Match documents where field `reviews.content` contains words starting with `"inter"`:
- * @snippet test_unit_search.cxx search-prefix
+ * @snippet{trimleft} test_unit_search.cxx search-prefix
  *
  * @see https://docs.couchbase.com/server/current/fts/fts-supported-queries-prefix-query.html server
  * documentation

@@ -29,7 +29,7 @@ namespace couchbase
  * characters and `?` will match `1` occurrence of any character.
  *
  * Match documents where field `reviews.content` contains words starting with `"inter"`:
- * @snippet test_unit_search.cxx search-wildcard
+ * @snippet{trimleft} test_unit_search.cxx search-wildcard
  *
  * @see https://docs.couchbase.com/server/current/fts/fts-supported-queries-wildcard.html server
  * documentation

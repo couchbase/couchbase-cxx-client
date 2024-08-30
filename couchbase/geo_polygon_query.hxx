@@ -31,7 +31,7 @@ namespace couchbase
  *
  * If a target data-location falls within the box, its document is returned.
  *
- * @snippet test_unit_search.cxx search-geo-polygon
+ * @snippet{trimleft} test_unit_search.cxx search-geo-polygon
  *
  * @see https://docs.couchbase.com/server/current/fts/fts-supported-queries-geo-bounded-polygon.html
  * server documentation

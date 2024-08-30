@@ -32,7 +32,7 @@ namespace couchbase
  * The following query specifies a longitude of `-2.235143` and a latitude of `53.482358`. The
  * target-field `geo` is specified, as is a distance of `100 miles`: this is the radius within which
  * target-locations must reside for their documents to be returned.
- * @snippet test_unit_search.cxx search-geo-distance
+ * @snippet{trimleft} test_unit_search.cxx search-geo-distance
  *
  * @see https://docs.couchbase.com/server/current/fts/fts-supported-queries-geo-point-distance.html
  * server documentation
