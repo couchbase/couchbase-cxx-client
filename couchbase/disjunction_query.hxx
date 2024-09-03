@@ -35,7 +35,7 @@ namespace couchbase
  * * `"location"` in the field `reviews.content`
  * * `true` in the field `free_breakfast`.
  *
- * @snippet test_unit_search.cxx search-disjunction
+ * @snippet{trimleft} test_unit_search.cxx search-disjunction
  *
  * @see https://docs.couchbase.com/server/current/fts/fts-supported-queries-conjuncts-disjuncts.html
  * server documentation

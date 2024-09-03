@@ -34,7 +34,26 @@ class document_metadata;
 
 namespace couchbase::transactions
 {
-
+/**
+ * The representation of the document in context of distributed transaction.
+ *
+ * By default transactions operate on JSON documents, that is a native encoding
+ * for Couchbase, but it is possible to use any other type, as long as its
+ * transcoder can encode it into bytestring.
+ *
+ * The following example shows how to use custom type with custom encoding in
+ * context of the transactions.
+ *
+ * We start with defining the type and its transcoder.
+ * @snippet{trimleft} test_transaction_examples.cxx binary_object_in_transactions-ledger
+ * @snippet{trimleft} test_transaction_examples.cxx binary_object_in_transactions-ledger_transcoder
+ *
+ * Then populate initial state of the system.
+ * @snippet{trimleft} test_transaction_examples.cxx binary_object_in_transactions-initial_state
+ *
+ * Now the actual transactional mutation of the document.
+ * @snippet{trimleft} test_transaction_examples.cxx binary_object_in_transactions-sync
+ */
 class transaction_get_result
 {
 public:
@@ -57,6 +76,11 @@ public:
     return Transcoder::template decode<Document>(content());
   }
 
+  /**
+   * Content of the document.
+   *
+   * @return content of the document.
+   */
   template<typename Transcoder, std::enable_if_t<codec::is_transcoder_v<Transcoder>, bool> = true>
   [[nodiscard]] auto content_as() const -> typename Transcoder::document_type
   {

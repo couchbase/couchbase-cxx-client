@@ -293,6 +293,11 @@ struct server_version {
   {
     return edition == server_edition::columnar;
   }
+
+  [[nodiscard]] auto supports_binary_objects_in_transactions() const -> bool
+  {
+    return (major == 7 && minor == 6 && micro >= 2) || (major == 7 && minor > 6) || major > 7;
+  }
 };
 
 } // namespace test::utils

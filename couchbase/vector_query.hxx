@@ -52,7 +52,7 @@ public:
    * @param vector_field_name the document field that contains the vector
    * @param base64_vector_query a base64-encoded sequence of little-endian IEEE 754 floats
    *
-   * @snippet test/test_unit_search.cxx base64-vector-query
+   * @snippet{trimleft} test/test_unit_search.cxx base64-vector-query
    * @since 1.0.0
    * @committed
    */

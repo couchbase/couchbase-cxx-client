@@ -61,6 +61,7 @@ struct smuggling_transcoder {
     return { encoded.data, encoded.flags };
   }
 };
+
 template<>
 struct couchbase::codec::is_transcoder<smuggling_transcoder> : public std::true_type {
 };
@@ -823,7 +824,9 @@ TEST_CASE("integration: zone-aware read replicas on unbalanced cluster", "[integ
                                integration.ctx.username, integration.ctx.password))
                            : couchbase::cluster_options(couchbase::certificate_authenticator(
                                integration.ctx.certificate_path, integration.ctx.certificate_path));
+  //! [select-preferred_server_group]
   cluster_options.network().preferred_server_group(selected_server_group);
+  //! [select-preferred_server_group]
   auto [e, cluster] =
     couchbase::cluster::connect(integration.ctx.connection_string, cluster_options).get();
   REQUIRE_SUCCESS(e.ec());
@@ -834,11 +837,13 @@ TEST_CASE("integration: zone-aware read replicas on unbalanced cluster", "[integ
     REQUIRE_SUCCESS(err.ec());
   }
   {
+    //! [get_any_replica-with-read_preference]
     auto [err, result] = collection
                            .get_any_replica(id.key(),
                                             couchbase::get_any_replica_options{}.read_preference(
                                               couchbase::read_preference::selected_server_group))
                            .get();
+    //! [get_any_replica-with-read_preference]
     REQUIRE(err.ec() == couchbase::errc::key_value::document_irretrievable);
   }
   {
@@ -847,11 +852,13 @@ TEST_CASE("integration: zone-aware read replicas on unbalanced cluster", "[integ
     REQUIRE(result.size() == number_of_replicas + 1);
   }
   {
+    //! [get_all_replicas-with-read_preference]
     auto [err, result] = collection
                            .get_all_replicas(id.key(),
                                              couchbase::get_all_replicas_options{}.read_preference(
                                                couchbase::read_preference::selected_server_group))
                            .get();
+    //! [get_all_replicas-with-read_preference]
     REQUIRE(err.ec() == couchbase::errc::key_value::document_irretrievable);
   }
 

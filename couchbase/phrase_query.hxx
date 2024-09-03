@@ -34,7 +34,7 @@ namespace couchbase
  * @ref match_phrase_query should usually be preferred for real-world use cases.
  *
  * Match documents with terms `"nice"` and `"view"` in field `reviews.content`:
- * @snippet test_unit_search.cxx search-phrase
+ * @snippet{trimleft} test_unit_search.cxx search-phrase
  *
  * @see https://docs.couchbase.com/server/current/fts/fts-supported-queries-phrase.html server
  * documentation

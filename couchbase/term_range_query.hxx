@@ -30,7 +30,7 @@ namespace couchbase
  * specified range. Either min or max can be omitted, but not both.
  *
  * Match documents where field `desc` contains terms in the range `("foo", "foof")`:
- * @snippet test_unit_search.cxx search-term-range
+ * @snippet{trimleft} test_unit_search.cxx search-term-range
  *
  * @see https://docs.couchbase.com/server/current/fts/fts-supported-queries-term-range.html server
  * documentation.

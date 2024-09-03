@@ -33,7 +33,7 @@ namespace transactions
  *
  * In the example below, we get a document then replace its content:
  *
- * @snippet test/test_transaction_examples.cxx simple-blocking-txn
+ * @snippet{trimleft} test/test_transaction_examples.cxx simple-blocking-txn
  */
 
 class attempt_context
@@ -50,6 +50,17 @@ public:
    * @param id The unique id of the document.
    * @return The result of the operation, which is an @ref error and a @ref
    * transaction_get_result.
+   *
+   * The example below shows how to use custom transcoder with transactions.
+   *
+   * The type should have transcoder to be defined. The only restriction is
+   * that the transcoder should mark encoded value with either
+   * codec::codec_flags::json_common_flags or codec::codec_flags::binary_common_flags.
+   * Behavior of transcoders with any other flags is not defined.
+   *
+   * @snippet{trimleft} test_transaction_examples.cxx binary_object_in_transactions-sync_get
+   *
+   * @see transactions::transaction_get_result for more complete example
    */
   virtual auto get(const couchbase::collection& coll,
                    const std::string& id) -> std::pair<error, transaction_get_result> = 0;
@@ -66,6 +77,12 @@ public:
    * @param id The unique id of the document.
    * @return The result of the operation, which is an @ref error and a @ref
    * transaction_get_result.
+   *
+   * Select preferred server group in connection options:
+   * @snippet{trimleft} test_integration_read_replica.cxx select-preferred_server_group
+   *
+   * Fetch document from the nodes that belong to selected server group only:
+   * @snippet{trimleft} test_transaction_examples.cxx get_replica_from_preferred_server_group-sync
    *
    * @see network_options::preferred_server_group
    * @see https://docs.couchbase.com/server/current/manage/manage-groups/manage-groups.html
@@ -110,17 +127,26 @@ public:
   /**
    * Replace the contents of a document in a collection.
    *
-   * Replaces the contents of an existing document. Note that currently this
-   content can be either a
-   * <std::vector<std::byte>> or an object which can be serialized with the @ref
-   codec::tao_json_serializer.
-
+   * Replaces the contents of an existing document. Note that currently this content can be either a
+   * std::vector<std::byte> or an object which can be serialized with the @ref
+   * codec::tao_json_serializer.
+   *
    * @tparam Content Type of the contents of the document.
-   * @param doc Document whose content will be replaced.  This is gotten from a
-   call to @ref attempt_context::get
+   * @param doc Document whose content will be replaced.  This is gotten from a call to @ref
+   * attempt_context::get
    * @param content New content of the document.
-   * @return The result of the operation, which is an @ref error and a @ref
-   transaction_get_result.
+   * @return The result of the operation, which is an @ref error and a @ref transaction_get_result.
+   *
+   * The example below shows how to use custom transcoder with transactions.
+   *
+   * The type should have transcoder to be defined. The only restriction is
+   * that the transcoder should mark encoded value with either
+   * codec::codec_flags::json_common_flags or codec::codec_flags::binary_common_flags.
+   * Behavior of transcoders with any other flags is not defined.
+   *
+   * @snippet{trimleft} test_transaction_examples.cxx binary_object_in_transactions-sync_replace
+   *
+   * @see transactions::transaction_get_result for more complete example
    */
   template<typename Transcoder = codec::default_json_transcoder,
            typename Document,

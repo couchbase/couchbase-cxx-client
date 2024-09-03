@@ -39,7 +39,7 @@ namespace couchbase
  * Following this processing, the tokens `"locat"` and
  * `"function"` are recognized as common to both input and target; and also as being both in the
  * same sequence as, and at the same distance from one another; and therefore a match is made.
- * @snippet test_unit_search.cxx search-match-phrase
+ * @snippet{trimleft} test_unit_search.cxx search-match-phrase
  *
  * @see https://docs.couchbase.com/server/current/fts/fts-supported-queries-match-phrase.html
  *

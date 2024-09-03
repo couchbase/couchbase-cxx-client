@@ -92,9 +92,9 @@ public:
    * @par Get flags and value as they are stored in the result
    *  Here is an example of custom transcoder, that just extracts value and flags as they are stored
    * in the result.
-   * @snippet test_integration_read_replica.cxx smuggling-transcoder
+   * @snippet{trimleft} test_integration_read_replica.cxx smuggling-transcoder
    *  Usage
-   * @snippet test_integration_read_replica.cxx smuggling-transcoder-usage
+   * @snippet{trimleft} test_integration_read_replica.cxx smuggling-transcoder-usage
    *
    * @since 1.0.0
    * @committed

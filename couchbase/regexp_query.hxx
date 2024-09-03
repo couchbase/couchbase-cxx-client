@@ -28,7 +28,7 @@ namespace couchbase
  * Finds documents containing terms that match the specified regular expression.
  *
  * Match documents where field `reviews.content` contains words starting with `"inter"`:
- * @snippet test_unit_search.cxx search-regexp
+ * @snippet{trimleft} test_unit_search.cxx search-regexp
  *
  * @see https://docs.couchbase.com/server/current/fts/fts-supported-queries-regexp.html server
  * documentation

@@ -348,6 +348,13 @@ public:
    * @param options the custom options
    * @return the future object with first available result, might be the active or a replica.
    *
+   * Select preferred server group in connection options:
+   * @snippet{trimleft} test_integration_read_replica.cxx select-preferred_server_group
+   *
+   * Restrict get_any_replica to reach nodes that belong to selected server
+   * group only:
+   * @snippet{trimleft} test_integration_read_replica.cxx get_any_replica-with-read_preference
+   *
    * @exception errc::key_value::document_irretrievable
    *    the situation where the SDK got all responses (most likely: key not found) but none of them
    * were successful so it ended up not returning anything
@@ -387,6 +394,13 @@ public:
    *
    * @note Individual errors are ignored, so you can think of this API as a best effort
    * approach which explicitly emphasises availability over consistency.
+   *
+   * Select preferred server group in connection options:
+   * @snippet{trimleft} test_integration_read_replica.cxx select-preferred_server_group
+   *
+   * Restrict get_all_replicas to reach nodes that belong to selected server
+   * group only:
+   * @snippet{trimleft} test_integration_read_replica.cxx get_all_replicas-with-read_preference
    *
    * @param document_id the document id which is used to uniquely identify it.
    * @param options the custom options
