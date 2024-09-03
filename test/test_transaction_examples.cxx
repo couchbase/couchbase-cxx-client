@@ -465,10 +465,9 @@ public:
 
   static auto from_csv(const std::vector<std::byte>& blob) -> ledger
   {
-
     ledger ret;
 
-    std::istringstream input({
+    std::istringstream input(std::string{
       reinterpret_cast<const char*>(blob.data()),
       blob.size(),
     });
@@ -698,6 +697,9 @@ TEST_CASE("example: binary objects in transactions", "[integration]")
   test::utils::integration_test_guard integration;
   if (!integration.cluster_version().supports_collections()) {
     SKIP("cluster does not support collections");
+  }
+  if (!integration.cluster_version().supports_binary_objects_in_transactions()) {
+    SKIP("cluster does not support binary objects in transactions");
   }
 
   const auto env = test::utils::test_context::load_from_environment();
