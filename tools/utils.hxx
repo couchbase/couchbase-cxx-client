@@ -123,6 +123,7 @@ struct dns_srv_options {
 };
 
 struct network_options {
+  std::string network{};
   std::chrono::milliseconds tcp_keep_alive_interval{};
   std::chrono::milliseconds config_poll_interval{};
   std::chrono::milliseconds idle_http_connection_timeout{};

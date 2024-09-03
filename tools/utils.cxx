@@ -503,6 +503,7 @@ apply_options(couchbase::cluster_options& options, const dns_srv_options& dns_sr
 void
 apply_options(couchbase::cluster_options& options, const network_options& network)
 {
+  options.network().preferred_network(network.network);
   options.network().tcp_keep_alive_interval(network.tcp_keep_alive_interval);
   options.network().config_poll_interval(network.config_poll_interval);
   options.network().idle_http_connection_timeout(network.idle_http_connection_timeout);
