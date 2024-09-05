@@ -25,6 +25,7 @@
 #include <couchbase/build_config.hxx>
 
 #include <asio/error.hpp>
+#include <fmt/chrono.h>
 #include <tl/expected.hpp>
 
 #include <memory>
@@ -90,34 +91,36 @@ public:
       if (ec == asio::error::operation_aborted) {
         return;
       }
-      CB_LOG_DEBUG(R"(HTTP request timed out: {}, method={}, path="{}", client_context_id={})",
-                   self->encoded_.type,
-                   self->encoded_.method,
-                   self->encoded_.path,
-                   self->encoded_.client_context_id);
+      CB_LOG_DEBUG(
+        R"(HTTP request timed out (dispatch): {}, method={}, path="{}", dispatch_timeout={}, client_context_id={})",
+        self->encoded_.type,
+        self->encoded_.method,
+        self->encoded_.path,
+        self->dispatch_timeout_,
+        self->encoded_.client_context_id);
       self->trigger_timeout();
       if (self->session_) {
         self->session_->stop();
       }
     });
 #endif
-    if (request_.timeout.has_value()) {
-      deadline_.expires_after(request_.timeout.value());
-      deadline_.async_wait([self = shared_from_this()](auto ec) {
-        if (ec == asio::error::operation_aborted) {
-          return;
-        }
-        CB_LOG_DEBUG(R"(HTTP request timed out: {}, method={}, path="{}", client_context_id={})",
-                     self->encoded_.type,
-                     self->encoded_.method,
-                     self->encoded_.path,
-                     self->encoded_.client_context_id);
-        self->trigger_timeout();
-        if (self->session_) {
-          self->session_->stop();
-        }
-      });
-    }
+    deadline_.expires_after(request_.timeout);
+    deadline_.async_wait([self = shared_from_this()](auto ec) {
+      if (ec == asio::error::operation_aborted) {
+        return;
+      }
+      CB_LOG_DEBUG(
+        R"(HTTP request timed out: {}, method={}, path="{}", timeout={}, client_context_id={})",
+        self->encoded_.type,
+        self->encoded_.method,
+        self->encoded_.path,
+        self->request_.timeout,
+        self->encoded_.client_context_id);
+      self->trigger_timeout();
+      if (self->session_) {
+        self->session_->stop();
+      }
+    });
   }
 
   void set_stream_end_callback(utils::movable_function<void()>&& stream_end_callback)

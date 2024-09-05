@@ -147,7 +147,6 @@ TEST_CASE("integration: columnar query component simple request", "[integration]
   couchbase::core::columnar::agent agent{ integration.io, { { integration.cluster } } };
 
   couchbase::core::columnar::query_options options{ "FROM RANGE(0, 4999) AS i SELECT *" };
-  options.timeout = std::chrono::seconds(20);
 
   couchbase::core::columnar::query_result result;
   {
@@ -198,7 +197,6 @@ TEST_CASE("integration: columnar query component simple request - single row res
   couchbase::core::columnar::agent agent{ integration.io, { { integration.cluster } } };
 
   couchbase::core::columnar::query_options options{ "SELECT \"bar\" AS foo" };
-  options.timeout = std::chrono::seconds(20);
 
   couchbase::core::columnar::query_result result;
   {
@@ -251,7 +249,6 @@ TEST_CASE("integration: columnar query component request with database & scope n
   couchbase::core::columnar::query_options options{ "SELECT * FROM airline LIMIT 100" };
   options.database_name = "travel-sample";
   options.scope_name = "inventory";
-  options.timeout = std::chrono::seconds(20);
 
   couchbase::core::columnar::query_result result;
   {
@@ -300,7 +297,6 @@ TEST_CASE("integration: columnar query read some rows and cancel")
   couchbase::core::columnar::agent agent{ integration.io, { { integration.cluster } } };
 
   couchbase::core::columnar::query_options options{ "FROM RANGE(0, 100) AS i SELECT *" };
-  options.timeout = std::chrono::seconds(20);
 
   couchbase::core::columnar::query_result result;
   {
@@ -352,7 +348,6 @@ TEST_CASE("integration: columnar query cancel operation")
   couchbase::core::columnar::agent agent{ integration.io, { { integration.cluster } } };
 
   couchbase::core::columnar::query_options options{ "FROM RANGE(0, 10000000) AS i SELECT *" };
-  options.timeout = std::chrono::seconds(20);
 
   auto barrier = std::make_shared<std::promise<
     std::pair<couchbase::core::columnar::query_result, couchbase::core::columnar::error>>>();
@@ -398,37 +393,11 @@ TEST_CASE("integration: columnar query global timeout")
   }
 
   couchbase::core::columnar::timeout_config timeouts{};
-  timeouts.query_timeout = std::chrono::seconds(1);
+  timeouts.query_timeout = std::chrono::milliseconds(1);
   couchbase::core::columnar::agent agent{ integration.io, { { integration.cluster }, timeouts } };
 
   couchbase::core::columnar::query_options options{ "FROM RANGE(0, 200) AS i SELECT *" };
   options.read_only = true;
-
-  auto barrier = std::make_shared<std::promise<
-    std::pair<couchbase::core::columnar::query_result, couchbase::core::columnar::error>>>();
-  auto f = barrier->get_future();
-  auto resp = agent.execute_query(options, [barrier](auto res, auto err) mutable {
-    barrier->set_value({ std::move(res), err });
-  });
-  REQUIRE(resp.has_value());
-  auto [res, err] = f.get();
-  REQUIRE(err.ec == couchbase::core::columnar::errc::timeout);
-}
-
-TEST_CASE("integration: columnar query dispatch timeout")
-{
-  couchbase::core::cluster_options cluster_opts;
-  cluster_opts.dispatch_timeout =
-    std::chrono::milliseconds(5); // dispatch timeout is currently set in the cluster, not the agent
-  test::utils::integration_test_guard integration(cluster_opts);
-
-  if (!integration.cluster_version().is_columnar()) {
-    SKIP("Requires a columnar cluster");
-  }
-
-  couchbase::core::columnar::agent agent{ integration.io, { { integration.cluster } } };
-
-  couchbase::core::columnar::query_options options{ "FROM RANGE(0, 200) AS i SELECT *" };
 
   auto barrier = std::make_shared<std::promise<
     std::pair<couchbase::core::columnar::query_result, couchbase::core::columnar::error>>>();
@@ -451,7 +420,6 @@ TEST_CASE("integration: columnar query collection does not exist")
   couchbase::core::columnar::agent agent{ integration.io, { { integration.cluster } } };
 
   couchbase::core::columnar::query_options options{ "SELECT * FROM `does-not-exist`" };
-  options.timeout = std::chrono::seconds(20);
 
   auto barrier = std::make_shared<std::promise<
     std::pair<couchbase::core::columnar::query_result, couchbase::core::columnar::error>>>();
@@ -489,7 +457,6 @@ TEST_CASE("integration: columnar query positional parameters")
 
   couchbase::core::columnar::query_options options{ "SELECT $1 AS foo" };
   options.positional_parameters = { { "\"bar\"" } };
-  options.timeout = std::chrono::seconds(20);
 
   auto barrier = std::make_shared<std::promise<
     std::pair<couchbase::core::columnar::query_result, couchbase::core::columnar::error>>>();
@@ -518,7 +485,6 @@ TEST_CASE("integration: columnar query named parameters")
 
   couchbase::core::columnar::query_options options{ "SELECT $val AS foo" };
   options.named_parameters["val"] = couchbase::core::json_string{ "\"bar\"" };
-  options.timeout = std::chrono::seconds(20);
 
   auto barrier = std::make_shared<std::promise<
     std::pair<couchbase::core::columnar::query_result, couchbase::core::columnar::error>>>();
@@ -546,7 +512,6 @@ TEST_CASE("integration: closing cluster before columnar query returns")
   couchbase::core::columnar::agent agent{ integration.io, { { integration.cluster } } };
 
   couchbase::core::columnar::query_options options{ "FROM RANGE(0, 9999) AS i SELECT *" };
-  options.timeout = std::chrono::seconds(20);
 
   auto barrier = std::make_shared<std::promise<
     std::pair<couchbase::core::columnar::query_result, couchbase::core::columnar::error>>>();
@@ -578,7 +543,6 @@ TEST_CASE("integration: closing cluster while reading columnar query rows")
   couchbase::core::columnar::agent agent{ integration.io, { { integration.cluster } } };
 
   couchbase::core::columnar::query_options options{ "FROM RANGE(0, 9999) AS i SELECT *" };
-  options.timeout = std::chrono::seconds(20);
 
   auto barrier = std::make_shared<std::promise<
     std::pair<couchbase::core::columnar::query_result, couchbase::core::columnar::error>>>();

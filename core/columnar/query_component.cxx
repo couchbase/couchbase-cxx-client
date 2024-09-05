@@ -33,6 +33,7 @@
 
 #include <asio/io_context.hpp>
 #include <asio/steady_timer.hpp>
+#include <fmt/chrono.h>
 #include <fmt/format.h>
 #include <gsl/util>
 #include <tao/json/value.hpp>
@@ -59,6 +60,7 @@ public:
                           std::chrono::milliseconds default_timeout)
     : client_context_id_{ uuid::to_string(uuid::random()) }
     , timeout_{ options.timeout.value_or(default_timeout) }
+    , payload_(build_query_payload(options))
     , http_req_{ build_query_request(options) }
     , io_{ io }
     , deadline_{ io_ }
@@ -166,6 +168,15 @@ public:
   }
 
 private:
+  void update_http_request_timeout()
+  {
+    http_req_.timeout = std::chrono::duration_cast<std::chrono::milliseconds>(
+      deadline_.expiry() - std::chrono::steady_clock::now());
+    const auto server_timeout = http_req_.timeout + std::chrono::seconds(5);
+    payload_["timeout"] = fmt::format("{}ms", server_timeout.count());
+    http_req_.body = couchbase::core::utils::json::generate(payload_);
+  }
+
   void maybe_retry()
   {
     if (cancelled_) {
@@ -183,6 +194,13 @@ private:
       }
       self->retry_info_.retry_attempts++;
       self->http_req_.internal.undesired_endpoint = self->retry_info_.last_dispatched_to;
+      self->update_http_request_timeout();
+      CB_LOG_DEBUG(
+        "Retrying Query: client_context_id={}, http_timeout={}, retry_attempt={}, errors={}",
+        self->client_context_id_,
+        self->http_req_.timeout,
+        self->retry_info_.retry_attempts,
+        utils::json::generate(self->retry_info_.last_error.ctx["errors"]));
       auto err = self->dispatch();
       if (err) {
         self->invoke_callback({}, std::move(err));
@@ -247,10 +265,8 @@ private:
   {
     http_request req{ service_type::analytics, "POST" };
     req.path = "/api/v1/request";
-    req.body = utils::json::generate(build_query_payload(options));
-    if (options.timeout.has_value()) {
-      req.timeout = options.timeout.value();
-    }
+    req.body = utils::json::generate(payload_);
+    req.timeout = timeout_;
 
     req.client_context_id = client_context_id_;
     req.headers["connection"] = "keep-alive";
@@ -388,6 +404,7 @@ private:
 
   std::string client_context_id_;
   std::chrono::milliseconds timeout_;
+  tao::json::value payload_;
   http_request http_req_;
   asio::io_context& io_;
   asio::steady_timer deadline_;

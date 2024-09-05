@@ -55,7 +55,7 @@ public:
   bool is_read_only{};
   std::string unique_id{};
   std::shared_ptr<couchbase::retry_strategy> retry_strategy{};
-  std::optional<std::chrono::milliseconds> timeout{};
+  std::chrono::milliseconds timeout{};
   std::shared_ptr<couchbase::tracing::request_span> parent_span{};
 
   struct {
