@@ -51,7 +51,7 @@ Run simple workload generator that sends GET/UPSERT requests with optional N1QL 
 <dt>`--certificate-path=STRING`</dt><dd>Path to the certificate.</dd>
 <dt>`--key-path=STRING`</dt><dd>Path to the key.</dd>
 <dt>`--ldap-compatible`</dt><dd>Whether to select authentication mechanism that is compatible with LDAP.</dd>
-<dt>`--configuration-profile=STRING`</dt><dd>Apply configuration profile. (available profiles: `wan_development`)</dd>
+<dt>`--configuration-profile=STRING`</dt><dd>Apply configuration profile (might override other switches). (available profiles: `wan_development`)</dd>
 </dl>
 
 ### SECURITY OPTIONS
