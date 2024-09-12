@@ -88,8 +88,9 @@ add_options(CLI::App* app, connection_options& options)
                   options.ldap_compatible,
                   "Whether to select authentication mechanism that is compatible with LDAP.");
   group
-    ->add_option(
-      "--configuration-profile", options.configuration_profile, "Apply configuration profile.")
+    ->add_option("--configuration-profile",
+                 options.configuration_profile,
+                 "Apply configuration profile (might override other switches).")
     ->transform(CLI::IsMember(couchbase::configuration_profiles_registry::available_profiles()));
 }
 
@@ -633,10 +634,6 @@ build_cluster_options(const common_options& options) -> couchbase::cluster_optio
 {
   auto cluster_options = create_cluster_options(options.connection);
 
-  if (!options.connection.configuration_profile.empty()) {
-    cluster_options.apply_profile(options.connection.configuration_profile);
-  }
-
   apply_options(cluster_options, options.security);
   apply_options(cluster_options, options.timeouts);
   apply_options(cluster_options, options.compression);
@@ -646,6 +643,10 @@ build_cluster_options(const common_options& options) -> couchbase::cluster_optio
   apply_options(cluster_options, options.metrics);
   apply_options(cluster_options, options.tracing);
   apply_options(cluster_options, options.behavior);
+
+  if (!options.connection.configuration_profile.empty()) {
+    cluster_options.apply_profile(options.connection.configuration_profile);
+  }
 
   return cluster_options;
 }
