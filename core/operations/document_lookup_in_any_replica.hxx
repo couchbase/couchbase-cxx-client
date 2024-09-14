@@ -24,9 +24,10 @@
 #include "core/operations/document_lookup_in.hxx"
 #include "core/operations/operation_traits.hxx"
 #include "core/utils/movable_function.hxx"
-#include "couchbase/codec/encoded_value.hxx"
-#include "couchbase/error_codes.hxx"
-#include "couchbase/read_preference.hxx"
+
+#include <couchbase/codec/encoded_value.hxx>
+#include <couchbase/error_codes.hxx>
+#include <couchbase/read_preference.hxx>
 
 #include <functional>
 #include <memory>

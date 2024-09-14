@@ -18,13 +18,13 @@
 #pragma once
 
 #include <couchbase/codec/json_transcoder.hxx>
-#include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/codec/transcoder_traits.hxx>
 
 namespace couchbase
 {
 namespace codec
 {
+class tao_json_serializer;
 using default_json_transcoder = json_transcoder<tao_json_serializer>;
 
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN

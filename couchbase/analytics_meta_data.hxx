@@ -20,10 +20,11 @@
 #include <couchbase/analytics_metrics.hxx>
 #include <couchbase/analytics_status.hxx>
 #include <couchbase/analytics_warning.hxx>
-#include <couchbase/codec/json_transcoder.hxx>
+#include <couchbase/codec/encoded_value.hxx>
 
 #include <cinttypes>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace couchbase

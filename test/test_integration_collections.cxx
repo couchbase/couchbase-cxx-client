@@ -29,6 +29,8 @@
 #include "core/operations/document_upsert.hxx"
 #include "core/operations/management/collections.hxx"
 
+#include <tao/json/value.hpp>
+
 TEST_CASE("integration: missing scope and collection", "[integration]")
 {
   test::utils::integration_test_guard integration;

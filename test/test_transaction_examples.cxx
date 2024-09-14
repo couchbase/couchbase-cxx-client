@@ -19,6 +19,7 @@
 
 #include <couchbase/cluster.hxx>
 #include <couchbase/codec/codec_flags.hxx>
+#include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/fmt/cas.hxx>
 #include <couchbase/fmt/error.hxx>
 
@@ -29,6 +30,7 @@ namespace blocking_txn
 {
 //! [blocking-txn]
 #include <couchbase/cluster.hxx>
+#include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/fmt/cas.hxx>
 
 #include <tao/json.hpp>
@@ -219,6 +221,7 @@ namespace read_local_txn
 {
 //! [read-local-txn]
 #include <couchbase/cluster.hxx>
+#include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/fmt/cas.hxx>
 #include <couchbase/transactions/attempt_context.hxx>
 

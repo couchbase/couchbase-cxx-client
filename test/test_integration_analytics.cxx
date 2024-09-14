@@ -17,6 +17,8 @@
 
 #include "test_helper_integration.hxx"
 
+#include <couchbase/codec/tao_json_serializer.hxx>
+
 #include "core/error_context/analytics_json.hxx"
 #include "core/impl/internal_error_context.hxx"
 #include "core/operations/document_analytics.hxx"
@@ -391,7 +393,7 @@ TEST_CASE("integration: public API analytics query")
     REQUIRE_FALSE(resp.meta_data().request_id().empty());
     REQUIRE_FALSE(resp.meta_data().client_context_id().empty());
     REQUIRE(resp.meta_data().status() == couchbase::analytics_status::success);
-    auto rows = resp.rows_as_json();
+    auto rows = resp.rows_as();
     REQUIRE(rows.size() == 1);
     REQUIRE(rows[0] == document);
   }
@@ -410,7 +412,7 @@ TEST_CASE("integration: public API analytics query")
       return !error && resp.meta_data().metrics().result_count() == 1;
     }));
     REQUIRE_SUCCESS(error.ec());
-    auto rows = resp.rows_as_json();
+    auto rows = resp.rows_as();
     REQUIRE(rows.size() == 1);
     REQUIRE(rows[0] == document);
   }
@@ -430,7 +432,7 @@ TEST_CASE("integration: public API analytics query")
       return !error && resp.meta_data().metrics().result_count() == 1;
     }));
     REQUIRE_SUCCESS(error.ec());
-    auto rows = resp.rows_as_json();
+    auto rows = resp.rows_as();
     REQUIRE(rows.size() == 1);
     REQUIRE(rows[0] == document);
   }
@@ -451,7 +453,7 @@ TEST_CASE("integration: public API analytics query")
       return !error && resp.meta_data().metrics().result_count() == 1;
     }));
     REQUIRE_SUCCESS(error.ec());
-    auto rows = resp.rows_as_json();
+    auto rows = resp.rows_as();
     REQUIRE(rows.size() == 1);
     REQUIRE(rows[0] == document);
   }
@@ -471,7 +473,7 @@ TEST_CASE("integration: public API analytics query")
       return !error && resp.meta_data().metrics().result_count() == 1;
     }));
     REQUIRE_SUCCESS(error.ec());
-    auto rows = resp.rows_as_json();
+    auto rows = resp.rows_as();
     REQUIRE(rows.size() == 1);
     REQUIRE(rows[0] == document);
   }
@@ -511,7 +513,7 @@ TEST_CASE("integration: public API analytics query")
     }));
 
     REQUIRE_SUCCESS(error.ec());
-    auto rows = resp.rows_as_json();
+    auto rows = resp.rows_as();
     REQUIRE(rows.size() == 1);
     REQUIRE(rows[0] == document);
   }
@@ -616,7 +618,7 @@ TEST_CASE("integration: public API analytics scope query")
     return !error && resp.meta_data().metrics().result_count() == 1;
   }));
   REQUIRE_SUCCESS(error.ec());
-  REQUIRE(resp.rows_as_json()[0] == document);
+  REQUIRE(resp.rows_as()[0] == document);
   REQUIRE_FALSE(resp.meta_data().request_id().empty());
   REQUIRE_FALSE(resp.meta_data().client_context_id().empty());
   REQUIRE(resp.meta_data().status() == couchbase::analytics_status::success);

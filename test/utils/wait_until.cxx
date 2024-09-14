@@ -35,6 +35,7 @@
 #include "core/utils/json.hxx"
 
 #include <fmt/chrono.h>
+#include <tao/json/value.hpp>
 
 namespace test::utils
 {

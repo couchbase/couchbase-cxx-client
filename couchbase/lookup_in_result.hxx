@@ -17,7 +17,9 @@
 
 #pragma once
 
-#include <couchbase/codec/tao_json_serializer.hxx>
+#include <couchbase/codec/encoded_value.hxx>
+#include <couchbase/codec/serializer_traits.hxx>
+#include <couchbase/error_codes.hxx>
 #include <couchbase/result.hxx>
 #include <couchbase/subdoc/lookup_in_macro.hxx>
 
@@ -25,6 +27,11 @@
 
 namespace couchbase
 {
+
+namespace codec
+{
+class tao_json_serializer;
+} // namespace codec
 
 /**
  * Represents result of lookup_in operations.
@@ -80,7 +87,9 @@ public:
    * @since 1.0.0
    * @committed
    */
-  template<typename Document>
+  template<typename Document,
+           typename Serializer = codec::tao_json_serializer,
+           std::enable_if_t<codec::is_serializer_v<Serializer>, bool> = true>
   [[nodiscard]] auto content_as(std::size_t index) const -> Document
   {
     for (const entry& e : entries_) {
@@ -91,7 +100,7 @@ public:
                                     std::to_string(index) + ", path \"" + e.path + "\"");
         }
 
-        return codec::tao_json_serializer::deserialize<Document>(e.value);
+        return Serializer::template deserialize<Document>(e.value);
       }
     }
     throw std::system_error(errc::key_value::path_invalid,
@@ -108,7 +117,9 @@ public:
    * @since 1.0.0
    * @committed
    */
-  template<typename Document>
+  template<typename Document,
+           typename Serializer = codec::tao_json_serializer,
+           std::enable_if_t<codec::is_serializer_v<Serializer>, bool> = true>
   [[nodiscard]] auto content_as(const std::string& path) const -> Document
   {
     for (const entry& e : entries_) {
@@ -117,7 +128,7 @@ public:
           throw std::system_error(e.ec, "error getting result for path \"" + e.path + "\"");
         }
 
-        return codec::tao_json_serializer::deserialize<Document>(e.value);
+        return Serializer::template deserialize<Document>(e.value);
       }
     }
     throw std::system_error(errc::key_value::path_invalid,
@@ -134,7 +145,9 @@ public:
    * @since 1.0.0
    * @committed
    */
-  template<typename Document>
+  template<typename Document,
+           typename Serializer = codec::tao_json_serializer,
+           std::enable_if_t<codec::is_serializer_v<Serializer>, bool> = true>
   [[nodiscard]] auto content_as(subdoc::lookup_in_macro macro) const -> Document
   {
     const auto& macro_string = subdoc::to_string(macro);
@@ -144,7 +157,7 @@ public:
           throw std::system_error(e.ec, "error getting result for macro \"" + macro_string + "\"");
         }
 
-        return codec::tao_json_serializer::deserialize<Document>(e.value);
+        return Serializer::template deserialize<Document>(e.value);
       }
     }
     throw std::system_error(errc::key_value::path_invalid,

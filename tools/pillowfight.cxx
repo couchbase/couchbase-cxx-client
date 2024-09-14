@@ -17,6 +17,7 @@
 
 #include "pillowfight.hxx"
 
+#include "core/utils/json.hxx"
 #include "utils.hxx"
 
 #include <core/logger/logger.hxx>

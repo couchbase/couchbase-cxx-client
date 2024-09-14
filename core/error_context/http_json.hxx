@@ -23,7 +23,7 @@
 #include <couchbase/error_codes.hxx>
 #include <couchbase/fmt/retry_reason.hxx>
 
-#include <tao/json/forward.hpp>
+#include <tao/json/value.hpp>
 
 namespace tao::json
 {

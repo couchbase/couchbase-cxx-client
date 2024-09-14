@@ -19,6 +19,7 @@
 #include "profile.hxx"
 #include "test_helper.hxx"
 
+#include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/query_options.hxx>
 
 TEST_CASE("unit: query options can encode positional parameters automatically", "[unit]")

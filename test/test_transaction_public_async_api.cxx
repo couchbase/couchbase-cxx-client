@@ -15,10 +15,14 @@
  */
 
 #include "test_helper_integration.hxx"
-#include <core/transactions/transaction_get_result.hxx>
+
+#include "core/transactions/transaction_get_result.hxx"
+
 #include <couchbase/cluster.hxx>
+#include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/transactions.hxx>
 #include <couchbase/transactions/transaction_options.hxx>
+
 #include <memory>
 
 static const tao::json::value async_content{ { "some_number", 0 } };

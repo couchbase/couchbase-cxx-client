@@ -16,10 +16,14 @@
  */
 
 #include "document_lookup_in.hxx"
+
 #include "core/impl/subdoc/path_flags.hxx"
 #include "core/protocol/hello_feature.hxx"
+#include "core/utils/json.hxx"
 
 #include <couchbase/error_codes.hxx>
+
+#include <tao/json/value.hpp>
 
 namespace couchbase::core::operations
 {

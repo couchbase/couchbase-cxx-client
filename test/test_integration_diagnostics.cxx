@@ -20,6 +20,8 @@
 #include "core/diagnostics.hxx"
 #include "core/operations/document_query.hxx"
 
+#include <couchbase/codec/tao_json_serializer.hxx>
+
 using namespace std::literals::chrono_literals;
 
 TEST_CASE("integration: fetch diagnostics after N1QL query", "[integration]")
@@ -73,8 +75,8 @@ TEST_CASE("integration: fetch diagnostics after N1QL query", "[integration]")
       REQUIRE_SUCCESS(ctx.ec());
       INFO("rows.size() =" << res.rows_as_binary().size());
       REQUIRE(res.rows_as_binary().size() == 1);
-      INFO("row=" << couchbase::core::utils::json::generate(res.rows_as_json()[0]));
-      REQUIRE(res.rows_as_json()[0] ==
+      INFO("row=" << couchbase::core::utils::json::generate(res.rows_as()[0]));
+      REQUIRE(res.rows_as()[0] ==
               couchbase::core::utils::json::parse(R"({"greetings":"hello, couchbase"})"));
     }
     {

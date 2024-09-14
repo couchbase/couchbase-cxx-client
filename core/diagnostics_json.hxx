@@ -22,7 +22,7 @@
 #include "diagnostics_fmt.hxx"
 #include "service_type_fmt.hxx"
 
-#include <tao/json/forward.hpp>
+#include <tao/json/value.hpp>
 
 namespace tao::json
 {

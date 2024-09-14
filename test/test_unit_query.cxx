@@ -21,6 +21,8 @@
 
 #include "core/operations/document_query.hxx"
 
+#include <tao/json/value.hpp>
+
 couchbase::core::http_context
 make_http_context(couchbase::core::topology::configuration& config)
 {

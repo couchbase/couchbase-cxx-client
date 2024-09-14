@@ -43,7 +43,7 @@
 #include <asio/io_context.hpp>
 #include <asio/steady_timer.hpp>
 #include <fmt/format.h>
-#include <tao/json/forward.hpp>
+#include <tao/json/value.hpp>
 #include <tao/pegtl/parse_error.hpp>
 #include <tl/expected.hpp>
 

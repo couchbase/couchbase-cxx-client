@@ -38,6 +38,7 @@
 #include "couchbase/codec/raw_binary_transcoder.hxx"
 
 #include <couchbase/cluster.hxx>
+#include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/lookup_in_specs.hxx>
 
 TEST_CASE("integration: trivial non-data query", "[integration]")
@@ -587,7 +588,7 @@ TEST_CASE("integration: query with public API", "[integration]")
   {
     auto [ctx, resp] = cluster.query("SELECT 42 AS the_answer", {}).get();
     REQUIRE_SUCCESS(ctx.ec());
-    auto rows = resp.rows_as_json();
+    auto rows = resp.rows_as();
     REQUIRE(rows.size() == 1);
     REQUIRE(rows[0]["the_answer"] == 42);
   }
@@ -605,7 +606,7 @@ TEST_CASE("integration: query with public API", "[integration]")
     options.named_parameters(std::pair{ "a", 2 }, std::pair{ "b", 40 });
     auto [ctx, resp] = cluster.query("SELECT $a + $b AS the_answer", options).get();
     REQUIRE_SUCCESS(ctx.ec());
-    auto rows = resp.rows_as_json();
+    auto rows = resp.rows_as();
     REQUIRE(rows.size() == 1);
     REQUIRE(rows[0]["the_answer"] == 42);
   }
@@ -676,7 +677,7 @@ TEST_CASE("integration: query from scope with public API", "[integration]")
         .query(fmt::format("SELECT * from `{}` USE KEYS '{}'", collection_name, key), {})
         .get();
     REQUIRE_SUCCESS(ctx.ec());
-    auto rows = resp.rows_as_json();
+    auto rows = resp.rows_as();
     REQUIRE(rows.size() == 1);
     REQUIRE(rows[0][collection_name] == value);
   }
@@ -707,7 +708,7 @@ TEST_CASE("integration: query from scope with public API", "[integration]")
                couchbase::query_options().adhoc(true))
         .get();
     REQUIRE_SUCCESS(ctx.ec());
-    auto rows = resp.rows_as_json();
+    auto rows = resp.rows_as();
     REQUIRE(rows.size() == 1);
     REQUIRE(rows[0][collection_name] == value);
   }
