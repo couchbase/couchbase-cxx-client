@@ -42,6 +42,7 @@ public:
             name == "version_build" || name == "mozilla_ca_bundle_size") {
           info[name] = std::stoi(value);
         } else if (name == "snapshot" || name == "static_stdlib" || name == "static_openssl" ||
+                   name == "static_target" || name == "static_boringssl" || name == "columnar" ||
                    name == "mozilla_ca_bundle_embedded") {
           info[name] = value == "true";
         } else {

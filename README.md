@@ -30,6 +30,20 @@ CPMAddPackage(
   "COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL ON")
 ```
 
+In case the library installed in the system using `install` target or package
+management system, `FindPackage` could be used:
+
+```cmake
+cmake_minimum_required(VERSION 3.19)
+
+project(minimal)
+
+find_package(couchbase_cxx_client REQUIRED)
+
+add_executable(minimal minimal.cxx)
+target_link_libraries(minimal PRIVATE couchbase_cxx_client::couchbase_cxx_client)
+```
+
 ## Building with CMake
 
 This repo is being built with `CMake` so everything should build easily once the

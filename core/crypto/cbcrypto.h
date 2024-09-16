@@ -27,8 +27,8 @@ enum class Algorithm {
   ALG_SHA512
 };
 
-bool
-isSupported(Algorithm algorithm);
+auto
+isSupported(Algorithm algorithm) -> bool;
 
 const int SHA1_DIGEST_SIZE = 20;
 const int SHA256_DIGEST_SIZE = 32;
@@ -41,8 +41,8 @@ const int SHA512_DIGEST_SIZE = 64;
  * @throws std::invalid_argument - unsupported algorithm
  *         std::runtime_error - Failures generating the HMAC
  */
-std::string
-CBC_HMAC(Algorithm algorithm, std::string_view key, std::string_view data);
+auto
+CBC_HMAC(Algorithm algorithm, std::string_view key, std::string_view data) -> std::string;
 
 /**
  * Generate a PBKDF2_HMAC digest of the key and data by using the given
@@ -51,24 +51,24 @@ CBC_HMAC(Algorithm algorithm, std::string_view key, std::string_view data);
  * @throws std::invalid_argument - unsupported algorithm
  *         std::runtime_error - Failures generating the HMAC
  */
-std::string
+auto
 PBKDF2_HMAC(Algorithm algorithm,
             const std::string& pass,
             std::string_view salt,
-            unsigned int iterationCount);
+            unsigned int iterationCount) -> std::string;
 
 /**
  * Generate a digest by using the requested algorithm
  */
-std::string
-digest(Algorithm algorithm, std::string_view data);
+auto
+digest(Algorithm algorithm, std::string_view data) -> std::string;
 
 enum class Cipher {
   AES_256_cbc
 };
 
-Cipher
-to_cipher(const std::string& str);
+auto
+to_cipher(const std::string& str) -> Cipher;
 
 /**
  * Encrypt the specified data by using a given cipher
@@ -79,8 +79,9 @@ to_cipher(const std::string& str);
  * @param data The Pointer to the data to encrypt
  * @return The encrypted data
  */
-std::string
-encrypt(Cipher cipher, std::string_view key, std::string_view iv, std::string_view data);
+auto
+encrypt(Cipher cipher, std::string_view key, std::string_view iv, std::string_view data)
+  -> std::string;
 
 /**
  * Decrypt the specified data by using a given cipher
@@ -91,7 +92,8 @@ encrypt(Cipher cipher, std::string_view key, std::string_view iv, std::string_vi
  * @param data The data to decrypt
  * @return The decrypted data
  */
-std::string
-decrypt(Cipher cipher, std::string_view key, std::string_view iv, std::string_view data);
+auto
+decrypt(Cipher cipher, std::string_view key, std::string_view iv, std::string_view data)
+  -> std::string;
 
 } // namespace couchbase::core::crypto

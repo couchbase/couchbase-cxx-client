@@ -72,16 +72,15 @@ sdk_build_info() -> std::map<std::string, std::string>
   info["cxx"] = COUCHBASE_CXX_CLIENT_CXX_COMPILER;
   info["cmake_version"] = CMAKE_VERSION;
   info["cmake_build_type"] = CMAKE_BUILD_TYPE;
-  info["compile_definitions"] = COUCHBASE_CXX_CLIENT_COMPILE_DEFINITIONS;
-  info["compile_features"] = COUCHBASE_CXX_CLIENT_COMPILE_FEATURES;
-  info["compile_flags"] = COUCHBASE_CXX_CLIENT_COMPILE_FLAGS;
-  info["compile_options"] = COUCHBASE_CXX_CLIENT_COMPILE_OPTIONS;
-  info["link_depends"] = COUCHBASE_CXX_CLIENT_LINK_DEPENDS;
-  info["link_flags"] = COUCHBASE_CXX_CLIENT_LINK_FLAGS;
-  info["link_libraries"] = COUCHBASE_CXX_CLIENT_LINK_LIBRARIES;
-  info["link_options"] = COUCHBASE_CXX_CLIENT_LINK_OPTIONS;
+  info["static_target"] =
+#if defined(COUCHBASE_CXX_CLIENT_STATIC_TARGET)
+    "true"
+#else
+    "false"
+#endif
+    ;
   info["static_stdlib"] =
-#if defined(COUCHBASE_CXX_CLIENT_STATIC_STDLIB)
+#if defined(COUCHBASE_CXX_CLIENT_STATIC_TARGET) && defined(COUCHBASE_CXX_CLIENT_STATIC_STDLIB)
     "true"
 #else
     "false"
