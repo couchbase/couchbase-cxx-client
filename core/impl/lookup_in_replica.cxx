@@ -16,9 +16,13 @@
  */
 
 #include "lookup_in_replica.hxx"
+
 #include "core/impl/subdoc/path_flags.hxx"
+#include "core/utils/json.hxx"
 
 #include <couchbase/error_codes.hxx>
+
+#include <tao/json/value.hpp>
 
 namespace couchbase::core::impl
 {

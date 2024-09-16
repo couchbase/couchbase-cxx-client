@@ -25,8 +25,8 @@
 #include "core/operations/operation_traits.hxx"
 #include "core/utils/movable_function.hxx"
 
-#include "couchbase/codec/encoded_value.hxx"
-#include "couchbase/error_codes.hxx"
+#include <couchbase/codec/encoded_value.hxx>
+#include <couchbase/error_codes.hxx>
 
 #include <functional>
 #include <memory>

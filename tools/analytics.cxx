@@ -22,6 +22,7 @@
 #include "core/impl/internal_error_context.hxx"
 #include "core/logger/logger.hxx"
 #include "core/utils/binary.hxx"
+#include "core/utils/json.hxx"
 
 #include <couchbase/cluster.hxx>
 #include <couchbase/fmt/analytics_status.hxx>

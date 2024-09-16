@@ -17,13 +17,20 @@
 
 #pragma once
 
-#include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/query_meta_data.hxx>
+
+#include <couchbase/codec/encoded_value.hxx>
+#include <couchbase/codec/serializer_traits.hxx>
 
 #include <vector>
 
 namespace couchbase
 {
+
+namespace codec
+{
+class tao_json_serializer;
+}
 
 /**
  * Represents result of @ref cluster#query() and @ref scope#query() calls.
@@ -75,7 +82,7 @@ public:
     return rows_;
   }
 
-  template<typename Serializer,
+  template<typename Serializer = codec::tao_json_serializer,
            typename Document = typename Serializer::document_type,
            std::enable_if_t<codec::is_serializer_v<Serializer>, bool> = true>
   [[nodiscard]] auto rows_as() const -> std::vector<Document>
@@ -86,11 +93,6 @@ public:
       rows.emplace_back(Serializer::template deserialize<Document>(row));
     }
     return rows;
-  }
-
-  [[nodiscard]] auto rows_as_json() const -> std::vector<codec::tao_json_serializer::document_type>
-  {
-    return rows_as<codec::tao_json_serializer>();
   }
 
 private:

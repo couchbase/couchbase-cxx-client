@@ -24,6 +24,8 @@
 #include "core/operations/management/query_index_create.hxx"
 #include "core/topology/configuration.hxx"
 
+#include <tao/json/value.hpp>
+
 #include <regex>
 #include <string>
 

@@ -38,6 +38,7 @@
 #include "core/operations/document_upsert.hxx"
 
 #include <couchbase/cluster.hxx>
+#include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/lookup_in_specs.hxx>
 #include <couchbase/mutate_in_specs.hxx>
 

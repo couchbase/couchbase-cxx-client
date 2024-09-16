@@ -18,7 +18,6 @@
 #pragma once
 
 #include <cinttypes>
-#include <vector>
 
 namespace couchbase::codec::codec_flags
 {

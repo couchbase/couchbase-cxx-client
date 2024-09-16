@@ -16,10 +16,9 @@
 #pragma once
 
 #include <string>
-#include <vector>
 
 #include <couchbase/cas.hxx>
-#include <couchbase/codec/tao_json_serializer.hxx>
+#include <couchbase/codec/default_json_transcoder.hxx>
 #include <couchbase/collection.hxx>
 #include <couchbase/result.hxx>
 

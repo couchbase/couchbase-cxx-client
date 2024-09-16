@@ -18,7 +18,6 @@
 #include "core/logger/logger.hxx"
 #include "test_helper_integration.hxx"
 
-#include <algorithm>
 #include <catch2/catch_approx.hpp>
 
 #include "core/error_context/http_json.hxx"
@@ -42,12 +41,16 @@
 #include "core/operations/management/query.hxx"
 #include "core/operations/management/scope_get_all.hxx"
 #include "core/operations/management/user.hxx"
-#include "couchbase/cluster.hxx"
-#include "couchbase/create_primary_query_index_options.hxx"
-#include "couchbase/create_query_index_options.hxx"
-#include "couchbase/drop_query_index_options.hxx"
-#include "couchbase/management/analytics_link.hxx"
-#include "couchbase/watch_query_indexes_options.hxx"
+
+#include <couchbase/cluster.hxx>
+#include <couchbase/codec/tao_json_serializer.hxx>
+#include <couchbase/create_primary_query_index_options.hxx>
+#include <couchbase/create_query_index_options.hxx>
+#include <couchbase/drop_query_index_options.hxx>
+#include <couchbase/management/analytics_link.hxx>
+#include <couchbase/watch_query_indexes_options.hxx>
+
+#include <algorithm>
 
 using Catch::Approx;
 

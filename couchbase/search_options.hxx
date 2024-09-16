@@ -17,7 +17,6 @@
 
 #pragma once
 
-#include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/common_options.hxx>
 #include <couchbase/error.hxx>
 #include <couchbase/highlight_style.hxx>
@@ -34,6 +33,11 @@
 
 namespace couchbase
 {
+namespace codec
+{
+class tao_json_serializer;
+}
+
 /**
  * Options for @ref cluster#search() and @ref scope#search().
  *
@@ -183,10 +187,12 @@ struct search_options : public common_options<search_options> {
    * @since 1.0.0
    * @committed
    */
-  template<typename Value>
+  template<typename Value,
+           typename Serializer = codec::tao_json_serializer,
+           std::enable_if_t<codec::is_serializer_v<Serializer>, bool> = true>
   auto raw(std::string name, const Value& value) -> search_options&
   {
-    raw_[std::move(name)] = std::move(codec::tao_json_serializer::serialize(value));
+    raw_[std::move(name)] = std::move(Serializer::template serialize(value));
     return self();
   }
 

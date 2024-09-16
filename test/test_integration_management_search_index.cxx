@@ -20,6 +20,8 @@
 
 #include "core/operations/management/search.hxx"
 
+#include <couchbase/codec/tao_json_serializer.hxx>
+
 // serverless requires 1 partition and 1 replica
 const std::string serverless_plan_params = R"({ "indexPartition": 1, "numReplicas": 1 })";
 

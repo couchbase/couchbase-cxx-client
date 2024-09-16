@@ -20,6 +20,7 @@
 #include <catch2/catch_approx.hpp>
 
 #include <couchbase/codec/default_json_transcoder.hxx>
+#include <couchbase/codec/tao_json_serializer.hxx>
 
 #include <tao/json.hpp>
 

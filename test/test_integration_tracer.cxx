@@ -34,6 +34,7 @@
 #include "core/operations/document_view.hxx"
 #include "core/platform/uuid.h"
 
+#include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/lookup_in_specs.hxx>
 #include <couchbase/mutate_in_specs.hxx>
 #include <couchbase/tracing/request_tracer.hxx>

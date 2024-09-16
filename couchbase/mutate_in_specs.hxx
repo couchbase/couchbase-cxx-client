@@ -32,6 +32,7 @@
 #include <couchbase/subdoc/replace.hxx>
 #include <couchbase/subdoc/upsert.hxx>
 
+#include <memory>
 #include <vector>
 
 namespace couchbase
@@ -40,31 +41,34 @@ namespace couchbase
 namespace
 {
 template<typename Value>
-std::vector<std::vector<std::byte>>
-encode_array(const Value& value)
+auto
+encode_array(const Value& value) -> std::vector<std::vector<std::byte>>
 {
   return { std::move(codec::default_json_transcoder::encode(value).data) };
 }
 
 template<typename Value>
-std::vector<std::vector<std::byte>>
-encode_array(std::vector<std::vector<std::byte>>&& output, const Value& value)
+auto
+encode_array(std::vector<std::vector<std::byte>>&& output,
+             const Value& value) -> std::vector<std::vector<std::byte>>
 {
   output.emplace_back(std::move(codec::default_json_transcoder::encode(value).data));
   return std::move(output);
 }
 
 template<typename Value, typename... Rest>
-std::vector<std::vector<std::byte>>
-encode_array(std::vector<std::vector<std::byte>>&& output, const Value& value, Rest... args)
+auto
+encode_array(std::vector<std::vector<std::byte>>&& output,
+             const Value& value,
+             Rest... args) -> std::vector<std::vector<std::byte>>
 {
   output.emplace_back(std::move(codec::default_json_transcoder::encode(value).data));
   return encode_array(std::move(output), args...);
 }
 
 template<typename Value, typename... Rest>
-std::vector<std::vector<std::byte>>
-encode_array(const Value& value, Rest... args)
+auto
+encode_array(const Value& value, Rest... args) -> std::vector<std::vector<std::byte>>
 {
   return encode_array(encode_array(value), args...);
 }
@@ -228,10 +232,10 @@ public:
    * @since 1.0.0
    * @committed
    */
-  template<typename Value>
+  template<typename Value, typename Transcoder = codec::default_json_transcoder>
   static auto upsert(std::string path, const Value& value) -> subdoc::upsert
   {
-    return { std::move(path), std::move(codec::default_json_transcoder::encode(value).data) };
+    return { std::move(path), std::move(Transcoder::template encode(value).data) };
   }
 
   /**
@@ -446,10 +450,10 @@ public:
    * @since 1.0.0
    * @committed
    */
-  template<typename Value>
+  template<typename Value, typename Transcoder = codec::default_json_transcoder>
   static auto array_add_unique(std::string path, const Value& value) -> subdoc::array_add_unique
   {
-    return { std::move(path), std::move(codec::default_json_transcoder::encode(value).data) };
+    return { std::move(path), std::move(Transcoder::template encode(value).data) };
   }
 
   /**

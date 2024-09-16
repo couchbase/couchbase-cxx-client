@@ -25,6 +25,7 @@
 
 #include <couchbase/boolean_query.hxx>
 #include <couchbase/cluster.hxx>
+#include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/fmt/cas.hxx>
 #include <couchbase/fmt/error.hxx>
 #include <couchbase/fmt/mutation_token.hxx>
@@ -72,6 +73,7 @@ namespace start_using
 {
 //! [start-using]
 #include <couchbase/cluster.hxx>
+#include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/fmt/cas.hxx>
 #include <couchbase/fmt/mutation_token.hxx>
 
@@ -157,7 +159,7 @@ main(int argc, const char* argv[])
       return 1;
     }
     fmt::println("{:<15} {:<15} {:>10} {:<30}", "ID", "Country", "Rating", "Hotel");
-    for (auto& row : query_result.rows_as_json()) {
+    for (auto& row : query_result.rows_as()) {
       fmt::println("{:<15} {:<15} {:>10.2f} {:<30}",
                    row["id"].as<std::string>(),
                    row["doc"]["country"].as<std::string>(),
@@ -815,7 +817,7 @@ main(int argc, const char* argv[])
           "PARENT(pid={}): unable to perform query: {}\n", getpid(), error.ctx().to_json());
         return 1;
       }
-      for (const auto& row : query_result.rows_as_json()) {
+      for (const auto& row : query_result.rows_as()) {
         fmt::print("PARENT(pid={}): row: {}\n", getpid(), tao::json::to_string(row));
       }
     }
