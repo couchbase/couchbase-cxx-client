@@ -126,7 +126,7 @@ typedef struct jsonsl_jpr_st* jsonsl_jpr_t;
   X(SPECIAL, '^')                                                                                  \
   X(UESCAPE, 'u')
 typedef enum {
-#define X(o, c) JSONSL_T_##o = c,
+#define X(o, c) JSONSL_T_##o = (c),
   JSONSL_XTYPE JSONSL_T_UNKNOWN = '?',
   /* Abstract 'root' object */
   JSONSL_T_ROOT = 0
@@ -152,7 +152,7 @@ typedef enum {
   X(NAN, 1 << 8)                                                                                   \
   X(INF, 1 << 9)
 typedef enum {
-#define X(o, b) JSONSL_SPECIALf_##o = b,
+#define X(o, b) JSONSL_SPECIALf_##o = (b),
   JSONSL_XSPECIAL
 #undef X
     /* Handy flags for checking */
@@ -189,7 +189,7 @@ typedef enum {
   X(UESCAPE, 'U')                                                                                  \
   X(ERROR, '!')
 typedef enum {
-#define X(a, c) JSONSL_ACTION_##a = c,
+#define X(a, c) JSONSL_ACTION_##a = (c),
   JSONSL_XACTION JSONSL_ACTION_UNKNOWN = '?'
 #undef X
 } jsonsl_action_t;
@@ -597,15 +597,14 @@ jsonsl_destroy(jsonsl_t jsn);
  * @param jsn the lexer
  * @param cur the current nest, which should be a struct jsonsl_nest_st
  */
-static JSONSL_INLINE struct jsonsl_state_st*
-jsonsl_last_state(const jsonsl_t jsn, const struct jsonsl_state_st* state)
+static JSONSL_INLINE const struct jsonsl_state_st*
+jsonsl_last_state(const struct jsonsl_st* jsn, const struct jsonsl_state_st* state)
 {
   /* Don't complain about overriding array bounds */
   if (state->level > 1) {
     return jsn->stack + state->level - 1;
-  } else {
-    return NULL;
   }
+  return NULL;
 }
 
 /**
@@ -615,8 +614,8 @@ jsonsl_last_state(const jsonsl_t jsn, const struct jsonsl_state_st* state)
  * @param the lexer
  * @return A pointer to the child.
  */
-static JSONSL_INLINE struct jsonsl_state_st*
-jsonsl_last_child(const jsonsl_t jsn, const struct jsonsl_state_st* parent)
+static JSONSL_INLINE const struct jsonsl_state_st*
+jsonsl_last_child(const struct jsonsl_st* jsn, const struct jsonsl_state_st* parent)
 {
   return jsn->stack + (parent->level + 1);
 }
@@ -649,7 +648,7 @@ jsonsl_enable_all_callbacks(jsonsl_t jsn)
  * have children. This means a list type or an object type.
  */
 #define JSONSL_STATE_IS_CONTAINER(state)                                                           \
-  (state->type == JSONSL_T_OBJECT || state->type == JSONSL_T_LIST)
+  ((state)->type == JSONSL_T_OBJECT || (state)->type == JSONSL_T_LIST)
 
 /**
  * These two functions, dump a string representation
@@ -661,7 +660,7 @@ const char*
 jsonsl_strerror(jsonsl_error_t err);
 JSONSL_API
 const char*
-jsonsl_strtype(jsonsl_type_t jt);
+jsonsl_strtype(jsonsl_type_t type);
 
 /**
  * Dumps global metrics to the screen. This is a noop unless
@@ -723,7 +722,7 @@ jsonsl_dump_global_metrics(void);
 
 typedef enum {
 
-#define X(T, v) JSONSL_MATCH_##T = v,
+#define X(T, v) JSONSL_MATCH_##T = (v),
   JSONSL_XMATCH
 
 #undef X

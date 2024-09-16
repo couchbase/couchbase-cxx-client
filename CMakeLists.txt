@@ -427,6 +427,7 @@ set(couchbase_cxx_client_FILES
     core/columnar/query_component.cxx
     core/columnar/query_result.cxx
     core/columnar/backoff_calculator.cxx
+    third_party/jsonsl/jsonsl.c
 )
 
 if(COUCHBASE_CXX_CLIENT_BUILD_SHARED OR BUILD_SHARED_LIBS)
@@ -481,7 +482,6 @@ target_link_libraries(
           llhttp::llhttp
           taocpp::json
           snappy
-          jsonsl
           hdr_histogram_static)
 
 if(WIN32)

@@ -224,10 +224,6 @@ endif()
 include_directories(SYSTEM ${PROJECT_SOURCE_DIR}/third_party/cxx_function)
 include_directories(SYSTEM ${PROJECT_SOURCE_DIR}/third_party/expected/include)
 
-add_library(jsonsl OBJECT ${PROJECT_SOURCE_DIR}/third_party/jsonsl/jsonsl.c)
-set_target_properties(jsonsl PROPERTIES C_VISIBILITY_PRESET hidden POSITION_INDEPENDENT_CODE TRUE)
-target_include_directories(jsonsl SYSTEM PUBLIC ${PROJECT_SOURCE_DIR}/third_party/jsonsl)
-
 declare_system_library(snappy)
 declare_system_library(llhttp::llhttp)
 declare_system_library(hdr_histogram_static)

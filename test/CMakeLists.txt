@@ -35,7 +35,6 @@ unit_test(diagnostics)
 unit_test(management_query_index)
 unit_test(management_search_index)
 unit_test(range_scan)
-target_link_libraries(test_unit_jsonsl jsonsl)
 
 integration_benchmark(get)
 
