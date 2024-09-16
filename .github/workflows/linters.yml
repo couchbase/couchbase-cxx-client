@@ -49,7 +49,7 @@ jobs:
           CB_SCAN_BUILD: /usr/bin/scan-build-11
       - name: Upload scan-build report
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: report
           path: cmake-build-report.tar.gz

@@ -31,6 +31,7 @@
 #include "core/operations/document_upsert.hxx"
 
 #include <couchbase/cluster.hxx>
+#include <couchbase/codec/tao_json_serializer.hxx>
 
 TEST_CASE("integration: durable operations", "[integration]")
 {

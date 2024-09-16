@@ -27,6 +27,7 @@
 #include "core/public_fwd.hxx"
 #include "core/timeout_defaults.hxx"
 
+#include <couchbase/codec/encoded_value.hxx>
 #include <couchbase/lookup_in_result.hxx>
 
 namespace couchbase::core::operations

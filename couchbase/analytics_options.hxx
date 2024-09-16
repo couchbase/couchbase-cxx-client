@@ -19,18 +19,23 @@
 
 #include <couchbase/analytics_result.hxx>
 #include <couchbase/analytics_scan_consistency.hxx>
-#include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/common_options.hxx>
 #include <couchbase/error.hxx>
 #include <couchbase/mutation_state.hxx>
 
 #include <chrono>
 #include <functional>
-#include <memory>
+#include <map>
 #include <optional>
 
 namespace couchbase
 {
+
+namespace codec
+{
+class tao_json_serializer;
+} // namespace codec
+
 /**
  * Options for cluster#analytics_query() and scope#analytics_query().
  *
@@ -223,7 +228,6 @@ struct analytics_options : public common_options<analytics_options> {
   }
 
   /**
-   *
    * @tparam Value
    * @param name
    * @param value
@@ -232,10 +236,12 @@ struct analytics_options : public common_options<analytics_options> {
    * @since 1.0.0
    * @committed
    */
-  template<typename Value>
+  template<typename Serializer = codec::tao_json_serializer,
+           typename Value,
+           std::enable_if_t<codec::is_serializer_v<Serializer>, bool> = true>
   auto raw(std::string name, const Value& value) -> analytics_options&
   {
-    raw_[std::move(name)] = std::move(codec::tao_json_serializer::serialize(value));
+    raw_[std::move(name)] = std::move(Serializer::template serialize(value));
     return self();
   }
 
@@ -249,12 +255,14 @@ struct analytics_options : public common_options<analytics_options> {
    * @since 1.0.0
    * @committed
    */
-  template<typename... Parameters>
+  template<typename Serializer = codec::tao_json_serializer,
+           typename... Parameters,
+           std::enable_if_t<codec::is_serializer_v<Serializer>, bool> = true>
   auto positional_parameters(const Parameters&... parameters) -> analytics_options&
   {
     named_parameters_.clear();
     positional_parameters_.clear();
-    encode_positional_parameters(parameters...);
+    encode_positional_parameters<Serializer>(parameters...);
     return self();
   }
 
@@ -268,12 +276,14 @@ struct analytics_options : public common_options<analytics_options> {
    * @since 1.0.0
    * @committed
    */
-  template<typename... Parameters>
+  template<typename Serializer = codec::tao_json_serializer,
+           typename... Parameters,
+           std::enable_if_t<codec::is_serializer_v<Serializer>, bool> = true>
   auto named_parameters(const Parameters&... parameters) -> analytics_options&
   {
     named_parameters_.clear();
     positional_parameters_.clear();
-    encode_named_parameters(parameters...);
+    encode_named_parameters<Serializer>(parameters...);
     return self();
   }
 
@@ -343,23 +353,29 @@ struct analytics_options : public common_options<analytics_options> {
   }
 
 private:
-  template<typename Parameter, typename... Rest>
+  template<typename Serializer = codec::tao_json_serializer,
+           typename Parameter,
+           typename... Rest,
+           std::enable_if_t<codec::is_serializer_v<Serializer>, bool> = true>
   void encode_positional_parameters(const Parameter& parameter, Rest... args)
   {
-    positional_parameters_.emplace_back(
-      std::move(codec::tao_json_serializer::serialize(parameter)));
+    positional_parameters_.emplace_back(std::move(Serializer::template serialize(parameter)));
     if constexpr (sizeof...(args) > 0) {
-      encode_positional_parameters(args...);
+      encode_positional_parameters<Serializer>(args...);
     }
   }
 
-  template<typename Name, typename Parameter, typename... Rest>
+  template<typename Serializer = codec::tao_json_serializer,
+           typename Name,
+           typename Parameter,
+           typename... Rest,
+           std::enable_if_t<codec::is_serializer_v<Serializer>, bool> = true>
   void encode_named_parameters(const std::pair<Name, Parameter>& parameter, Rest... args)
   {
     named_parameters_[parameter.first] =
-      std::move(codec::tao_json_serializer::serialize(parameter.second));
+      std::move(Serializer::template serialize(parameter.second));
     if constexpr (sizeof...(args) > 0) {
-      encode_named_parameters(args...);
+      encode_named_parameters<Serializer>(args...);
     }
   }
 

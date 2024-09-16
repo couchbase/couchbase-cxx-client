@@ -32,6 +32,7 @@
 #include <fmt/chrono.h>
 #include <spdlog/details/os.h>
 #include <spdlog/spdlog.h>
+#include <tao/json/value.hpp>
 
 #include <chrono>
 #include <regex>

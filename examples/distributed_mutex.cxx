@@ -17,6 +17,7 @@
 
 #include <couchbase/best_effort_retry_strategy.hxx>
 #include <couchbase/cluster.hxx>
+#include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/fmt/error_context.hxx>
 
 #include <fmt/chrono.h>

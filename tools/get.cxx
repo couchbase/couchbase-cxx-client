@@ -21,6 +21,7 @@
 #include <core/logger/logger.hxx>
 #include <couchbase/cluster.hxx>
 #include <couchbase/codec/raw_binary_transcoder.hxx>
+#include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/fmt/cas.hxx>
 #include <couchbase/fmt/error.hxx>
 

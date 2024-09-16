@@ -28,6 +28,8 @@
 #include "core/operations/document_replace.hxx"
 #include "core/operations/document_upsert.hxx"
 
+#include <tao/json/value.hpp>
+
 TEST_CASE("benchmark: get a document", "[benchmark]")
 {
   test::utils::integration_test_guard integration;

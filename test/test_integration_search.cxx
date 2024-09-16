@@ -38,6 +38,8 @@
 #include <couchbase/match_none_query.hxx>
 #include <couchbase/query_string_query.hxx>
 
+#include <tao/json/value.hpp>
+
 #include <regex>
 
 using Catch::Matchers::StartsWith;
@@ -55,7 +57,7 @@ TEST_CASE("integration: search query")
   {
     auto sample_data = couchbase::core::utils::json::parse(
       couchbase::core::json_string(test::utils::read_test_data("search_beers_dataset.json")));
-    auto const& o = sample_data.get_object();
+    const auto& o = sample_data.get_object();
     for (const auto& [key, value] : o) {
       couchbase::core::document_id id(integration.ctx.bucket, "_default", "_default", key);
       couchbase::core::operations::upsert_request req{

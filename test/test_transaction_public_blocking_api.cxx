@@ -22,6 +22,7 @@
 
 #include <couchbase/cluster.hxx>
 #include <couchbase/codec/raw_binary_transcoder.hxx>
+#include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/transactions.hxx>
 
 #include <memory>
@@ -455,7 +456,7 @@ TEST_CASE("transactions public blocking API: can do simple query", "[transaction
       auto [e, res] =
         ctx->query(fmt::format("SELECT * FROM `{}` USE KEYS '{}'", test_ctx.bucket, id));
       CHECK_FALSE(e.ec());
-      CHECK(content == res.rows_as_json().front()["default"]);
+      CHECK(content == res.rows_as().front()["default"]);
       return {};
     },
     couchbase::transactions::transaction_options().timeout(std::chrono::seconds(10)));
@@ -513,7 +514,7 @@ TEST_CASE("transactions public blocking API: some query errors don't force rollb
       auto [get_err, get_res] =
         ctx->query(fmt::format("SELECT * FROM `{}` USE KEYS '{}'", test_ctx.bucket, id));
       CHECK_FALSE(get_err.ec());
-      CHECK(get_res.rows_as_json().size() == 0);
+      CHECK(get_res.rows_as().size() == 0);
       auto [insert_err, _] = ctx->query(fmt::format(
         R"(INSERT INTO `{}` (KEY, VALUE) VALUES ("{}", {}))", test_ctx.bucket, id, content_json));
       CHECK_FALSE(insert_err.ec());
@@ -616,8 +617,8 @@ TEST_CASE("transactions public blocking API: can query from a scope", "[transact
     [&](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
       auto [e, res] = ctx->query(new_scope, statement);
       CHECK_FALSE(e.ec());
-      CHECK(res.rows_as_json().size() > 0);
-      CHECK(res.rows_as_json().front()[new_coll_name] == content);
+      CHECK(res.rows_as().size() > 0);
+      CHECK(res.rows_as().front()[new_coll_name] == content);
       return {};
     },
     txn_opts());

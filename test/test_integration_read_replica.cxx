@@ -45,6 +45,8 @@
 #include <couchbase/password_authenticator.hxx>
 #include <couchbase/read_preference.hxx>
 
+#include <tao/json/value.hpp>
+
 static const tao::json::value basic_doc = {
   { "a", 1.0 },
   { "b", 2.0 },

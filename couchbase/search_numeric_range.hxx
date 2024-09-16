@@ -19,6 +19,7 @@
 
 #include <cinttypes>
 #include <string>
+#include <variant>
 
 namespace couchbase
 {

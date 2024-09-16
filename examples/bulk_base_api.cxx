@@ -16,6 +16,7 @@
  */
 
 #include <couchbase/cluster.hxx>
+#include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/fmt/error.hxx>
 
 #include <fmt/format.h>

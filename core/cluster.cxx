@@ -154,6 +154,7 @@
 #include "ping_collector.hxx"
 #include "ping_reporter.hxx"
 
+#include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/error_codes.hxx>
 #include <couchbase/retry_reason.hxx>
 

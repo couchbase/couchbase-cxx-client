@@ -23,6 +23,7 @@
 #include "utils.hxx"
 
 #include <couchbase/cluster.hxx>
+#include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/fmt/cas.hxx>
 #include <couchbase/fmt/error.hxx>
 #include <couchbase/fmt/retry_reason.hxx>
