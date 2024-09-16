@@ -182,18 +182,17 @@ public:
   }
 
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-
   [[nodiscard]] auto dispatch_deadline_expiry() const
     -> std::chrono::time_point<std::chrono::steady_clock>
   {
     return dispatch_deadline_.expiry();
   }
+#endif
 
   [[nodiscard]] auto request() const -> http_request
   {
     return request_;
   }
-#endif
 
   [[nodiscard]] auto dispatched_to() const -> std::string override
   {
@@ -272,29 +271,53 @@ public:
     auto op =
       std::make_shared<pending_http_operation>(io_, request, session_manager->dispatch_timeout());
     if (!session_manager->is_configured()) {
-      return defer_command(op, session_manager, credentials, std::move(callback));
+      auto ec = defer_command(op, session_manager, credentials, std::move(callback));
+      if (ec) {
+        return tl::unexpected{ ec };
+      }
+      return op;
     }
 #else
     auto op = std::make_shared<pending_http_operation>(io_, request);
 #endif
 
-    std::shared_ptr<io::http_session> session;
-    {
-      auto [ec, s] = session_manager->check_out(
-        request.service, credentials, request.endpoint, request.internal.undesired_endpoint);
-      if (ec) {
-        return tl::unexpected(ec);
-      }
-      session = std::move(s);
-    }
+    send_http_operation(op, session_manager, credentials, std::move(callback));
+    return op;
+  }
 
+private:
+  void send_http_operation(const std::shared_ptr<pending_http_operation>& op,
+                           const std::shared_ptr<io::http_session_manager>& session_manager,
+                           const couchbase::core::cluster_credentials& credentials,
+                           free_form_http_request_callback&& callback)
+  {
     op->start([callback = std::move(callback)](auto resp, auto ec) mutable {
       callback(std::move(resp), ec);
     });
-    op->set_stream_end_callback([session_manager, session, service = request.service]() mutable {
-      session_manager->check_in(service, session);
-    });
 
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+    // don't do anything if the op wasn't dispatched or has already timed out
+    auto now = std::chrono::steady_clock::now();
+    if (op->dispatch_deadline_expiry() < now || op->deadline_expiry() < now) {
+      return;
+    }
+#endif
+    std::shared_ptr<io::http_session> session;
+    {
+      auto [check_out_ec, s] =
+        session_manager->check_out(op->request().service,
+                                   credentials,
+                                   op->request().endpoint,
+                                   op->request().internal.undesired_endpoint);
+      if (check_out_ec) {
+        return op->invoke_response_handler(check_out_ec, {});
+      }
+      session = std::move(s);
+    }
+    op->set_stream_end_callback(
+      [session_manager, session, service = op->request().service]() mutable {
+        session_manager->check_in(service, session);
+      });
     if (!session->is_connected()) {
       session_manager->connect_then_send_pending_op(
         session,
@@ -312,73 +335,35 @@ public:
     } else {
       op->send_to(session);
     }
-    return op;
   }
 
-private:
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
   auto defer_command(std::shared_ptr<pending_http_operation> pending_op,
                      const std::shared_ptr<io::http_session_manager>& session_manager,
                      const couchbase::core::cluster_credentials& credentials,
-                     free_form_http_request_callback&& callback)
-    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+                     free_form_http_request_callback&& callback) -> std::error_code
   {
     if (auto last_error = session_manager->last_bootstrap_error(); last_error.has_value()) {
-      return tl::unexpected(last_error->ec);
+      return last_error->ec;
     }
-    pending_op->start([callback = std::move(callback)](auto resp, auto ec) mutable {
-      callback(std::move(resp), ec);
-    });
     CB_LOG_DEBUG(
       R"(Adding pending HTTP operation to deferred queue: service={}, client_context_id={})",
       pending_op->request().service,
       pending_op->request().client_context_id);
-    session_manager->add_to_deferred_queue(
-      [op = pending_op, session_manager, credentials](std::error_code ec) mutable {
-        if (ec) {
-          // The deferred operation was cancelled - currently this can happen due to closing the
-          // cluster
-          return op->invoke_response_handler(ec, {});
-        }
+    session_manager->add_to_deferred_queue([this,
+                                            callback = std::move(callback),
+                                            op = std::move(pending_op),
+                                            session_manager,
+                                            credentials](std::error_code ec) mutable {
+      if (ec) {
+        // The deferred operation was cancelled - currently this can happen due to closing the
+        // cluster
+        return callback({}, ec);
+      }
 
-        // don't do anything if the op wasn't dispatched or has already timed out
-        auto now = std::chrono::steady_clock::now();
-        if (op->dispatch_deadline_expiry() < now || op->deadline_expiry() < now) {
-          return;
-        }
-        std::shared_ptr<io::http_session> session;
-        {
-          auto [check_out_ec, s] =
-            session_manager->check_out(op->request().service,
-                                       credentials,
-                                       op->request().endpoint,
-                                       op->request().internal.undesired_endpoint);
-          if (check_out_ec) {
-            return op->invoke_response_handler(check_out_ec, {});
-          }
-          session = std::move(s);
-        }
-        op->set_stream_end_callback(
-          [session_manager, session, service = op->request().service]() mutable {
-            session_manager->check_in(service, session);
-          });
-        if (!session->is_connected()) {
-          session_manager->connect_then_send_pending_op(
-            session,
-            {},
-            op->dispatch_deadline_expiry(),
-            op->deadline_expiry(),
-            [op](std::error_code ec, std::shared_ptr<io::http_session> http_session) {
-              if (ec) {
-                return op->invoke_response_handler(ec, {});
-              }
-              op->send_to(std::move(http_session));
-            });
-        } else {
-          op->send_to(session);
-        }
-      });
-    return pending_op;
+      return send_http_operation(std::move(op), session_manager, credentials, std::move(callback));
+    });
+    return {};
   }
 #endif
 
