@@ -163,9 +163,9 @@ if(NOT TARGET asio::asio)
     NAME
     asio
     GIT_TAG
-    asio-1-30-2
+    asio-1-31-0
     VERSION
-    1.30.2
+    1.31.0
     GITHUB_REPOSITORY
     "chriskohlhoff/asio")
 endif()
@@ -177,11 +177,11 @@ endif()
 #
 # 2) WIN32_LEAN_AND_MEAN is defined to make Winsock2 work.
 if(asio_ADDED)
-  add_library(asio INTERFACE)
+  add_library(asio STATIC ${asio_SOURCE_DIR}/asio/src/asio.cpp ${asio_SOURCE_DIR}/asio/src/asio_ssl.cpp)
 
-  target_include_directories(asio SYSTEM INTERFACE ${asio_SOURCE_DIR}/asio/include)
-  target_compile_definitions(asio INTERFACE ASIO_STANDALONE ASIO_NO_DEPRECATED)
-  target_link_libraries(asio INTERFACE Threads::Threads)
+  target_include_directories(asio SYSTEM PUBLIC ${asio_SOURCE_DIR}/asio/include)
+  target_compile_definitions(asio PRIVATE ASIO_STANDALONE=1 ASIO_NO_DEPRECATED=1 ASIO_SEPARATE_COMPILATION=1)
+  target_link_libraries(asio PRIVATE Threads::Threads OpenSSL::SSL OpenSSL::Crypto)
   set_target_properties(
     asio
     PROPERTIES C_VISIBILITY_PRESET hidden

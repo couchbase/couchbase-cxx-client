@@ -23,7 +23,7 @@ components:
     versions: [ 1.2.1 ]
   asio:
     bd-id: 3739d5e9-9ad8-4845-8077-1770167a69c2
-    versions: [ 1.30.2 ]
+    versions: [ 1.31.0 ]
   json:
     bd-id: cae0f7d2-4279-473a-9f71-eabdd121d2e3
     versions: [ 1.0.0-beta.14 ]
