@@ -51,6 +51,10 @@ public:
   auto do_http_request(const http_request& request, free_form_http_request_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
+  auto do_http_request_buffered(const http_request& request,
+                                buffered_free_form_http_request_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+
 private:
   std::shared_ptr<http_component_impl> impl_;
 };

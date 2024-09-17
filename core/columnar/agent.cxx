@@ -21,6 +21,8 @@
 #include "core/free_form_http_request.hxx"
 #include "core/http_component.hxx"
 #include "core/logger/logger.hxx"
+#include "database_management_options.hxx"
+#include "management_component.hxx"
 #include "query_component.hxx"
 #include "query_options.hxx"
 
@@ -40,6 +42,7 @@ public:
     , config_{ std::move(config) }
     , http_{ io_, config_.shim }
     , query_{ io_, http_, config_.timeouts.query_timeout }
+    , mgmt_{ http_, config_.timeouts.management_timeout }
   {
     CB_LOG_DEBUG("creating new columnar cluster agent: {}", config_.to_string());
   }
@@ -51,10 +54,36 @@ public:
     return http_.do_http_request(request, std::move(callback));
   }
 
+  auto free_form_http_request_buffered(const http_request& request,
+                                       buffered_free_form_http_request_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    return http_.do_http_request_buffered(request, std::move(callback));
+  }
+
   auto execute_query(const query_options& options, query_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, error>
   {
     return query_.execute_query(options, std::move(callback));
+  }
+
+  auto database_fetch_all(const fetch_all_databases_options& options,
+                          fetch_all_databases_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, error>
+  {
+    return mgmt_.database_fetch_all(options, std::move(callback));
+  }
+
+  auto database_drop(const drop_database_options& options, drop_database_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, error>
+  {
+    return mgmt_.database_drop(options, std::move(callback));
+  }
+
+  auto database_create(const create_database_options& options, create_database_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, error>
+  {
+    return mgmt_.database_create(options, std::move(callback));
   }
 
 private:
@@ -62,6 +91,7 @@ private:
   const agent_config config_;
   http_component http_;
   query_component query_;
+  management_component mgmt_;
 };
 
 agent::agent(asio::io_context& io, couchbase::core::columnar::agent_config config)
@@ -78,9 +108,40 @@ agent::free_form_http_request(const http_request& request,
 }
 
 auto
+agent::free_form_http_request_buffered(
+  const couchbase::core::http_request& request,
+  couchbase::core::buffered_free_form_http_request_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->free_form_http_request_buffered(request, std::move(callback));
+}
+
+auto
 agent::execute_query(const query_options& options, query_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, error>
 {
   return impl_->execute_query(options, std::move(callback));
+}
+
+auto
+agent::database_fetch_all(const fetch_all_databases_options& options,
+                          fetch_all_databases_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, error>
+{
+  return impl_->database_fetch_all(options, std::move(callback));
+}
+
+auto
+agent::database_create(const create_database_options& options, create_database_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, error>
+{
+  return impl_->database_create(options, std::move(callback));
+}
+
+auto
+agent::database_drop(const drop_database_options& options, drop_database_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, error>
+{
+  return impl_->database_drop(options, std::move(callback));
 }
 } // namespace couchbase::core::columnar

@@ -30,11 +30,6 @@
 #include <system_error>
 #include <vector>
 
-namespace couchbase
-{
-class retry_strategy;
-} // namespace couchbase
-
 namespace couchbase::core::columnar
 {
 enum class query_scan_consistency : std::uint8_t {

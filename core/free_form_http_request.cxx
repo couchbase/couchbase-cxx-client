@@ -15,6 +15,7 @@
 
 #include "free_form_http_request.hxx"
 
+#include "io/http_message.hxx"
 #include "io/http_streaming_response.hxx"
 #include "utils/movable_function.hxx"
 
@@ -69,6 +70,41 @@ private:
   io::http_streaming_response streaming_resp_;
 };
 
+class buffered_http_response_impl
+{
+public:
+  explicit buffered_http_response_impl(io::http_response resp)
+    : resp_{ std::move(resp) }
+  {
+  }
+
+  [[nodiscard]] auto endpoint() const -> std::string
+  {
+    return {};
+  }
+
+  [[nodiscard]] auto status_code() const -> std::uint32_t
+  {
+    return resp_.status_code;
+  }
+
+  [[nodiscard]] auto content_length() const -> std::size_t
+  {
+    if (resp_.headers.find("content-length") == resp_.headers.end()) {
+      return 0;
+    }
+    return std::stoul(resp_.headers.at("content-length"));
+  }
+
+  [[nodiscard]] auto body() const -> std::string
+  {
+    return resp_.body.data();
+  }
+
+private:
+  io::http_response resp_;
+};
+
 http_response::http_response(io::http_streaming_response resp)
   : impl_{ std::make_shared<http_response_impl>(std::move(resp)) }
 {
@@ -93,7 +129,7 @@ http_response::content_length() const -> std::size_t
 auto
 http_response::body() const -> http_response_body
 {
-  return { impl_ };
+  return http_response_body{ impl_ };
 }
 
 void
@@ -118,4 +154,32 @@ http_response_body::next(utils::movable_function<void(std::string, std::error_co
 {
   return impl_->next_body(std::move(callback));
 }
+
+buffered_http_response::buffered_http_response(io::http_response resp)
+  : impl_{ std::make_shared<buffered_http_response_impl>(std::move(resp)) }
+{
+}
+
+auto
+buffered_http_response::endpoint() const -> std::string
+{
+  return impl_->endpoint();
+}
+auto
+buffered_http_response::status_code() const -> std::uint32_t
+{
+  return impl_->status_code();
+}
+auto
+buffered_http_response::content_length() const -> std::size_t
+{
+  return impl_->content_length();
+}
+
+auto
+buffered_http_response::body() -> std::string
+{
+  return impl_->body();
+}
+
 } // namespace couchbase::core
