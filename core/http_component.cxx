@@ -33,6 +33,17 @@
 
 namespace couchbase::core
 {
+namespace
+{
+auto
+encode_http_request(const http_request& req) -> io::http_request
+{
+  return io::http_request{
+    req.service, req.method, req.path, req.headers, req.body, {}, req.client_context_id,
+  };
+}
+} // namespace
+
 class pending_http_operation
   : public std::enable_shared_from_this<pending_http_operation>
   , public pending_operation
@@ -47,30 +58,14 @@ public:
     , dispatch_deadline_{ io }
     , dispatch_timeout_{ dispatch_timeout }
     , request_{ std::move(request) }
-    , encoded_{ io::http_request {
-      request_.service,
-      request_.method,
-      request_.path,
-      request_.headers,
-      request_.body,
-      {},
-      request_.client_context_id,
-    } }
+    , encoded_{ encode_http_request(request_) }
   {
   }
 #else
   pending_http_operation(asio::io_context& io, http_request request)
     : deadline_{ io }
     , request_{ std::move(request) }
-    , encoded_{ io::http_request{
-        request_.service,
-        request_.method,
-        request_.path,
-        request_.headers,
-        request_.body,
-        {},
-        {},
-      } }
+    , encoded_{ encode_http_request(request_) }
   {
   }
 #endif
@@ -232,6 +227,176 @@ private:
   std::mutex callback_mutex_;
 };
 
+class pending_buffered_http_operation
+  : public std::enable_shared_from_this<pending_buffered_http_operation>
+  , public pending_operation
+  , public pending_operation_connection_info
+{
+public:
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+  pending_buffered_http_operation(asio::io_context& io,
+                                  http_request request,
+                                  std::chrono::milliseconds dispatch_timeout)
+    : deadline_{ io }
+    , dispatch_deadline_{ io }
+    , dispatch_timeout_{ dispatch_timeout }
+    , request_{ std::move(request) }
+    , encoded_{ encode_http_request(request_) }
+  {
+  }
+#else
+  pending_buffered_http_operation(asio::io_context& io, http_request request)
+    : deadline_{ io }
+    , request_{ std::move(request) }
+    , encoded_{ encode_http_request(request_) }
+  {
+  }
+#endif
+
+  ~pending_buffered_http_operation() override = default;
+  pending_buffered_http_operation(const pending_buffered_http_operation&) = delete;
+  pending_buffered_http_operation(pending_buffered_http_operation&&) = delete;
+  auto operator=(const pending_buffered_http_operation&) -> pending_buffered_http_operation =
+                                                              delete;
+  auto operator=(pending_buffered_http_operation&&) -> pending_buffered_http_operation = delete;
+
+  void start(buffered_free_form_http_request_callback&& callback)
+  {
+    callback_ = std::move(callback);
+    encoded_.headers["client-context-id"] = request_.client_context_id;
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+    dispatch_deadline_.expires_after(dispatch_timeout_);
+    dispatch_deadline_.async_wait([self = shared_from_this()](auto ec) {
+      if (ec == asio::error::operation_aborted) {
+        return;
+      }
+      CB_LOG_DEBUG(
+        R"(HTTP request timed out (dispatch): {}, method={}, path="{}", dispatch_timeout={}, client_context_id={})",
+        self->encoded_.type,
+        self->encoded_.method,
+        self->encoded_.path,
+        self->dispatch_timeout_,
+        self->encoded_.client_context_id);
+      self->trigger_timeout();
+      if (self->session_) {
+        self->session_->stop();
+      }
+    });
+#endif
+    deadline_.expires_after(request_.timeout);
+    deadline_.async_wait([self = shared_from_this()](auto ec) {
+      if (ec == asio::error::operation_aborted) {
+        return;
+      }
+      CB_LOG_DEBUG(
+        R"(HTTP request timed out: {}, method={}, path="{}", timeout={}, client_context_id={})",
+        self->encoded_.type,
+        self->encoded_.method,
+        self->encoded_.path,
+        self->request_.timeout,
+        self->encoded_.client_context_id);
+      self->trigger_timeout();
+      if (self->session_) {
+        self->session_->stop();
+      }
+    });
+  }
+
+  void cancel() override
+  {
+    if (session_) {
+      session_->stop();
+    }
+    invoke_response_handler(errc::common::request_canceled, {});
+  }
+
+  void invoke_response_handler(std::error_code ec, io::http_response resp)
+  {
+    deadline_.cancel();
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+    dispatch_deadline_.cancel();
+#endif
+    buffered_free_form_http_request_callback callback{};
+    {
+      const std::scoped_lock lock(callback_mutex_);
+      std::swap(callback, callback_);
+    }
+    if (callback) {
+      callback(buffered_http_response{ std::move(resp) }, ec);
+    }
+  }
+
+  void send_to(std::shared_ptr<io::http_session> session)
+  {
+    if (!callback_) {
+      return;
+    }
+    session_ = std::move(session);
+
+    session_->write_and_subscribe(
+      encoded_, [self = shared_from_this()](std::error_code ec, io::http_response resp) {
+        if (ec == asio::error::operation_aborted) {
+          return;
+        }
+        self->invoke_response_handler(ec, std::move(resp));
+      });
+  }
+
+  [[nodiscard]] auto deadline_expiry() const -> std::chrono::time_point<std::chrono::steady_clock>
+  {
+    return deadline_.expiry();
+  }
+
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+  [[nodiscard]] auto dispatch_deadline_expiry() const
+    -> std::chrono::time_point<std::chrono::steady_clock>
+  {
+    return dispatch_deadline_.expiry();
+  }
+#endif
+
+  [[nodiscard]] auto request() const -> http_request
+  {
+    return request_;
+  }
+
+  [[nodiscard]] auto dispatched_to() const -> std::string override
+  {
+    return session_->remote_address();
+  }
+
+  [[nodiscard]] auto dispatched_from() const -> std::string override
+  {
+    return session_->local_address();
+  }
+
+  [[nodiscard]] auto dispatched_to_host() const -> std::string override
+  {
+    return fmt::format("{}:{}", session_->hostname(), session_->port());
+  }
+
+private:
+  void trigger_timeout()
+  {
+    // TODO(JC):  if triggered from the dispatch timeout, should only be
+    // errc::common::unambiguous_timeout?
+    auto ec =
+      request_.is_read_only ? errc::common::unambiguous_timeout : errc::common::ambiguous_timeout;
+    invoke_response_handler(ec, {});
+  }
+
+  asio::steady_timer deadline_;
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+  asio::steady_timer dispatch_deadline_;
+  std::chrono::milliseconds dispatch_timeout_;
+#endif
+  http_request request_;
+  io::http_request encoded_;
+  buffered_free_form_http_request_callback callback_;
+  std::shared_ptr<io::http_session> session_;
+  std::mutex callback_mutex_;
+};
+
 class http_component_impl
 {
 public:
@@ -279,6 +444,48 @@ public:
     }
 #else
     auto op = std::make_shared<pending_http_operation>(io_, request);
+#endif
+
+    send_http_operation(op, session_manager, credentials, std::move(callback));
+    return op;
+  }
+
+  auto do_http_request_buffered(const http_request& request,
+                                buffered_free_form_http_request_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    std::shared_ptr<io::http_session_manager> session_manager;
+    {
+      auto [ec, sm] = shim_.cluster.http_session_manager();
+      if (ec) {
+        return tl::unexpected(ec);
+      }
+      session_manager = std::move(sm);
+    }
+
+    cluster_credentials credentials;
+    if (request.username.empty() && request.password.empty()) {
+      auto [ec, origin] = shim_.cluster.origin();
+      if (ec) {
+        return tl::unexpected(ec);
+      }
+      credentials = origin.credentials();
+    } else {
+      credentials = cluster_credentials{ request.username, request.password };
+    }
+
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+    auto op = std::make_shared<pending_buffered_http_operation>(
+      io_, request, session_manager->dispatch_timeout());
+    if (!session_manager->is_configured()) {
+      auto ec = defer_command(op, session_manager, credentials, std::move(callback));
+      if (ec) {
+        return tl::unexpected{ ec };
+      }
+      return op;
+    }
+#else
+    auto op = std::make_shared<pending_buffered_http_operation>(io_, request);
 #endif
 
     send_http_operation(op, session_manager, credentials, std::move(callback));
@@ -337,11 +544,84 @@ private:
     }
   }
 
+  void send_http_operation(const std::shared_ptr<pending_buffered_http_operation>& op,
+                           const std::shared_ptr<io::http_session_manager>& session_manager,
+                           const couchbase::core::cluster_credentials& credentials,
+                           buffered_free_form_http_request_callback&& callback)
+  {
+    std::shared_ptr<io::http_session> session;
+    {
+      auto [check_out_ec, s] =
+        session_manager->check_out(op->request().service,
+                                   credentials,
+                                   op->request().endpoint,
+                                   op->request().internal.undesired_endpoint);
+      if (check_out_ec) {
+        return op->invoke_response_handler(check_out_ec, {});
+      }
+      session = std::move(s);
+    }
+    op->start(
+      [callback = std::move(callback), session_manager, session, service = op->request().service](
+        auto resp, auto ec) mutable {
+        callback(std::move(resp), ec);
+        session_manager->check_in(service, session);
+      });
+
+    if (!session->is_connected()) {
+      session_manager->connect_then_send_pending_op(
+        session,
+        {},
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-  auto defer_command(std::shared_ptr<pending_http_operation> pending_op,
+        op->dispatch_deadline_expiry(),
+#endif
+        op->deadline_expiry(),
+        [op](std::error_code ec, std::shared_ptr<io::http_session> http_session) {
+          if (ec) {
+            return op->invoke_response_handler(ec, {});
+          }
+          op->send_to(std::move(http_session));
+        });
+    } else {
+      op->send_to(session);
+    }
+  }
+
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+  template<typename Callback, typename PendingHttpOp>
+  auto defer_command(std::shared_ptr<PendingHttpOp> pending_op,
                      const std::shared_ptr<io::http_session_manager>& session_manager,
                      const couchbase::core::cluster_credentials& credentials,
-                     free_form_http_request_callback&& callback) -> std::error_code
+                     Callback&& callback) -> std::error_code
+  {
+    if (auto last_error = session_manager->last_bootstrap_error(); last_error.has_value()) {
+      return last_error->ec;
+    }
+    CB_LOG_DEBUG(
+      R"(Adding pending HTTP operation to deferred queue: service={}, client_context_id={})",
+      pending_op->request().service,
+      pending_op->request().client_context_id);
+    session_manager->add_to_deferred_queue([this,
+                                            callback = std::forward<Callback>(callback),
+                                            op = std::move(pending_op),
+                                            session_manager,
+                                            credentials](std::error_code ec) mutable {
+      if (ec) {
+        // The deferred operation was cancelled - currently this can happen due to closing the
+        // cluster
+        return callback({}, ec);
+      }
+
+      return send_http_operation(
+        op, session_manager, credentials, std::forward<Callback>(callback));
+    });
+    return {};
+  }
+
+  auto defer_command(std::shared_ptr<pending_buffered_http_operation> pending_op,
+                     const std::shared_ptr<io::http_session_manager>& session_manager,
+                     const couchbase::core::cluster_credentials& credentials,
+                     buffered_free_form_http_request_callback&& callback) -> std::error_code
   {
     if (auto last_error = session_manager->last_bootstrap_error(); last_error.has_value()) {
       return last_error->ec;
@@ -361,7 +641,7 @@ private:
         return callback({}, ec);
       }
 
-      return send_http_operation(std::move(op), session_manager, credentials, std::move(callback));
+      return send_http_operation(op, session_manager, credentials, std::move(callback));
     });
     return {};
   }
@@ -387,6 +667,14 @@ http_component::do_http_request(const http_request& request,
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
   return impl_->do_http_request(request, std::move(callback));
+}
+
+auto
+http_component::do_http_request_buffered(const couchbase::core::http_request& request,
+                                         buffered_free_form_http_request_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->do_http_request_buffered(request, std::move(callback));
 }
 
 } // namespace couchbase::core

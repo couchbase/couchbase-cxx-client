@@ -93,7 +93,7 @@ TEST_CASE("integration: columnar http component simple request", "[integration]"
     auto barrier = std::make_shared<
       std::promise<tl::expected<couchbase::core::http_response, std::error_code>>>();
     auto f = barrier->get_future();
-    auto op = agent.free_form_http_request(std::move(req), [barrier](auto resp, auto ec) {
+    auto op = agent.free_form_http_request(req, [barrier](auto resp, auto ec) {
       if (ec) {
         barrier->set_value(tl::unexpected(ec));
         return;
@@ -135,6 +135,57 @@ TEST_CASE("integration: columnar http component simple request", "[integration]"
   }
 
   resp_body.cancel();
+}
+
+TEST_CASE("integration: columnar http component simple request buffered", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+  if (!integration.cluster_version().is_columnar()) {
+    SKIP("Requires a columnar cluster");
+  }
+
+  auto agent = couchbase::core::columnar::agent(integration.io, { { integration.cluster } });
+
+  tao::json::value body{ { "statement", "FROM RANGE(0, 100) AS i SELECT *" } };
+
+  auto req = couchbase::core::http_request{
+    couchbase::core::service_type::analytics,     "POST", {}, "/analytics/service", {}, {},
+    couchbase::core::utils::json::generate(body),
+  };
+
+  req.timeout = std::chrono::seconds(10);
+  req.headers["content-type"] = "application/json";
+
+  couchbase::core::buffered_http_response resp;
+  {
+    auto barrier = std::make_shared<
+      std::promise<tl::expected<couchbase::core::buffered_http_response, std::error_code>>>();
+    auto f = barrier->get_future();
+    auto op = agent.free_form_http_request_buffered(std::move(req), [barrier](auto resp, auto ec) {
+      if (ec) {
+        barrier->set_value(tl::unexpected(ec));
+        return;
+      }
+      barrier->set_value(std::move(resp));
+    });
+    REQUIRE(op.has_value());
+    auto r = f.get();
+    REQUIRE(r.has_value());
+    resp = r.value();
+  }
+
+  auto code = resp.status_code();
+  REQUIRE(code == 200);
+
+  tao::json::value body_json =
+    couchbase::core::utils::json::parse(static_cast<std::string_view>(resp.body()));
+  REQUIRE(body_json.find("results") != nullptr);
+
+  auto result_array = body_json["results"].get_array();
+  REQUIRE(result_array.size() == 101);
+  for (std::size_t i = 0; i <= 100; i++) {
+    REQUIRE(result_array.at(i) == tao::json::value{ { "i", i } });
+  }
 }
 
 TEST_CASE("integration: columnar query component simple request", "[integration]")

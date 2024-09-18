@@ -67,6 +67,7 @@ public:
 namespace io
 {
 class http_streaming_response;
+struct http_response;
 } // namespace io
 
 class http_response_impl;
@@ -74,7 +75,7 @@ class http_response_impl;
 class http_response_body
 {
 public:
-  http_response_body(std::shared_ptr<http_response_impl> impl);
+  explicit http_response_body(std::shared_ptr<http_response_impl> impl);
 
   void next(utils::movable_function<void(std::string, std::error_code)> callback);
   void cancel();
@@ -87,13 +88,13 @@ class http_response
 {
 public:
   http_response() = default;
-  http_response(io::http_streaming_response resp);
+  explicit http_response(io::http_streaming_response resp);
 
-  auto endpoint() const -> std::string;
-  auto status_code() const -> std::uint32_t;
-  auto content_length() const -> std::size_t;
+  [[nodiscard]] auto endpoint() const -> std::string;
+  [[nodiscard]] auto status_code() const -> std::uint32_t;
+  [[nodiscard]] auto content_length() const -> std::size_t;
 
-  auto body() const -> http_response_body;
+  [[nodiscard]] auto body() const -> http_response_body;
   void close();
 
 private:
@@ -103,4 +104,24 @@ private:
 using free_form_http_request_callback =
   utils::movable_function<void(http_response response, std::error_code ec)>;
 
+class buffered_http_response_impl;
+
+class buffered_http_response
+{
+public:
+  buffered_http_response() = default;
+  explicit buffered_http_response(io::http_response resp);
+
+  [[nodiscard]] auto endpoint() const -> std::string;
+  [[nodiscard]] auto status_code() const -> std::uint32_t;
+  [[nodiscard]] auto content_length() const -> std::size_t;
+
+  [[nodiscard]] auto body() -> std::string;
+
+private:
+  std::shared_ptr<buffered_http_response_impl> impl_;
+};
+
+using buffered_free_form_http_request_callback =
+  utils::movable_function<void(buffered_http_response response, std::error_code ec)>;
 } // namespace couchbase::core

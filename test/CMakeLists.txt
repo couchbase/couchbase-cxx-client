@@ -53,4 +53,5 @@ integration_test(examples)
 transaction_test(examples)
 
 integration_test(columnar_query)
+integration_test(columnar_management)
 unit_test(columnar_retry)

@@ -38,10 +38,11 @@ auto
 timeout_config::to_string() const -> std::string
 {
   return fmt::format(
-    R"(#<timeout_config:{} connect_timeout={}, dispatch_timeout={}, query_timeout={}>)",
+    R"(#<timeout_config:{} connect_timeout={}, dispatch_timeout={}, query_timeout={}, management_timeout={}>)",
     static_cast<const void*>(this),
     connect_timeout,
     dispatch_timeout,
-    query_timeout);
+    query_timeout,
+    management_timeout);
 }
 } // namespace couchbase::core::columnar

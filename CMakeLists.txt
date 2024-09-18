@@ -108,6 +108,7 @@ set(couchbase_cxx_client_FILES
     core/columnar/backoff_calculator.cxx
     core/columnar/error.cxx
     core/columnar/error_codes.cxx
+    core/columnar/management_component.cxx
     core/columnar/query_component.cxx
     core/columnar/query_result.cxx
     core/config_profiles.cxx

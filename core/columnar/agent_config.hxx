@@ -35,6 +35,7 @@ struct timeout_config {
   static constexpr std::chrono::milliseconds default_connect_timeout{ 10'000 };
   static constexpr std::chrono::milliseconds default_dispatch_timeout{ 30'000 };
   static constexpr std::chrono::milliseconds default_query_timeout{ 600'000 };
+  static constexpr std::chrono::milliseconds default_management_timeout{ 30'000 };
 
   // TODO(DC): Use connect_timeout and dispatch_timeout once the agent provides an entry point for
   // opening the cluster
@@ -42,6 +43,7 @@ struct timeout_config {
   std::chrono::milliseconds dispatch_timeout{ default_dispatch_timeout }; // Not currently used
 
   std::chrono::milliseconds query_timeout{ default_query_timeout };
+  std::chrono::milliseconds management_timeout{ default_management_timeout };
 
   [[nodiscard]] auto to_string() const -> std::string;
 };
