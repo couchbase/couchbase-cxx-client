@@ -18,7 +18,6 @@
 #pragma once
 
 #include <functional>
-#include <gsl/assert>
 #include <memory>
 
 /* replace with standard version once http://wg21.link/P0288 will be accepted and implemented */

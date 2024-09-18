@@ -15,7 +15,7 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y libssl-dev cmake gcc g++ curl gdb
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
       - name: ccache

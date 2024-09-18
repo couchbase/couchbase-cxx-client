@@ -1,0 +1,65 @@
+Name: couchbase-cxx-client
+Summary: Couchbase C++ SDK
+Version: @COUCHBASE_CXX_CLIENT_PACKAGE_VERSION@
+Release: @COUCHBASE_CXX_CLIENT_PACKAGE_RELEASE@%{?dist}
+Vendor: Couchbase, Inc.
+Packager: Couchbase SDK Team <support@couchbase.com>
+License: ASL 2.0
+URL: https://docs.couchbase.com/cxx-sdk/current/hello-world/overview.html
+BuildRequires: gcc, gcc-c++
+BuildRequires: cmake >= 3.19
+Source0: @COUCHBASE_CXX_CLIENT_TARBALL_NAME@.tar.gz
+
+%description
+This is the client and protocol library for Couchbase project.
+
+%package tools
+Summary: Couchbase C++ SDK - Tools
+Requires: %{name}%{?_isa} = %{version}-%{release}
+%description -n %{name}-tools
+CLI tools from the Couchbase C++ SDK.
+
+%package devel
+Summary: Couchbase C++ SDK - Header files
+Requires: %{name}%{?_isa} = %{version}-%{release}
+%description devel
+Development files for the Couchbase C++ SDK.
+
+%prep
+%autosetup -p1 -n@COUCHBASE_CXX_CLIENT_TARBALL_NAME@
+%cmake \
+    -DBUILD_SHARED_LIBS=OFF \
+    -DCOUCHBASE_CXX_CLIENT_INSTALL=ON \
+    -DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON \
+    -DCOUCHBASE_CXX_CLIENT_BUILD_EXAMPLES=OFF \
+    -DCOUCHBASE_CXX_CLIENT_BUILD_TESTS=OFF \
+    -DCOUCHBASE_CXX_CLIENT_BUILD_TOOLS=ON \
+    -DCOUCHBASE_CXX_CLIENT_BUILD_STATIC=OFF \
+    -DCOUCHBASE_CXX_CLIENT_BUILD_SHARED=ON
+
+%build
+%cmake_build
+
+%install
+%cmake_install
+
+%files
+%license %{_docdir}/couchbase_cxx_client/LICENSE.txt
+%license %{_docdir}/tao/pegtl/LICENSE
+%license %{_docdir}/tao/json/LICENSE
+%{_libdir}/libcouchbase_cxx_client.so.*
+
+%files tools
+%{_bindir}/cbc
+
+%files devel
+%{_includedir}/couchbase
+%{_includedir}/tao
+%{_libdir}/cmake/*/*.cmake
+%{_libdir}/libcouchbase_cxx_client.so
+%{_libdir}/pkgconfig/couchbase_cxx_client.pc
+
+%changelog
+* @COUCHBASE_CXX_CLIENT_RPM_DATE@ Couchbase SDK Team <support@couchbase.com> - @COUCHBASE_CXX_CLIENT_PACKAGE_VERSION@-@COUCHBASE_CXX_CLIENT_PACKAGE_RELEASE@
+- Automated build.
+%{_libdir}/libcouchbase_cxx_client_static.a
