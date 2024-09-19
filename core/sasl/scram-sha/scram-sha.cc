@@ -36,6 +36,8 @@ namespace couchbase::core::sasl::mechanism::scram
 
 using AttributeMap = std::map<char, std::string>;
 
+namespace
+{
 /**
  * Decode the attribute list into a set. The attribute list looks like:
  * "k=value,y=value" etc
@@ -44,8 +46,8 @@ using AttributeMap = std::map<char, std::string>;
  * @param attributes where to store the attributes
  * @return true if success, false otherwise
  */
-static bool
-decodeAttributeList(const std::string& list, AttributeMap& attributes)
+auto
+decodeAttributeList(const std::string& list, AttributeMap& attributes) -> bool
 {
   size_t pos = 0;
 
@@ -85,12 +87,13 @@ decodeAttributeList(const std::string& list, AttributeMap& attributes)
 
   return true;
 }
+} // namespace
 
 /********************************************************************
  * Common API
  *******************************************************************/
-std::string
-ScramShaBackend::getAuthMessage()
+auto
+ScramShaBackend::getAuthMessage() -> std::string
 {
   if (client_first_message_bare.empty()) {
     throw std::logic_error("can't call getAuthMessage without client_first_message_bare is set");
@@ -168,8 +171,6 @@ ScramShaBackend::addAttribute(std::ostream& out, char key, int value, bool more)
 {
   out << key << '=';
 
-  std::string base64_encoded;
-
   switch (key) {
     case 'n': // username ..
     case 'r': // client nonce.. printable characters
@@ -201,8 +202,8 @@ ScramShaBackend::addAttribute(std::ostream& out, char key, int value, bool more)
  * ServerKey       := HMAC(SaltedPassword, "Server Key")
  * ServerSignature := HMAC(ServerKey, AuthMessage)
  */
-std::string
-ScramShaBackend::getServerSignature()
+auto
+ScramShaBackend::getServerSignature() -> std::string
 {
   auto serverKey = couchbase::core::crypto::CBC_HMAC(algorithm, getSaltedPassword(), "Server Key");
 
@@ -221,12 +222,12 @@ ScramShaBackend::getServerSignature()
  * ClientSignature := HMAC(StoredKey, AuthMessage)
  * ClientProof     := ClientKey XOR ClientSignature
  */
-std::string
-ScramShaBackend::getClientProof()
+auto
+ScramShaBackend::getClientProof() -> std::string
 {
   auto clientKey = couchbase::core::crypto::CBC_HMAC(algorithm, getSaltedPassword(), "Client Key");
   auto storedKey = couchbase::core::crypto::digest(algorithm, clientKey);
-  std::string authMessage = getAuthMessage();
+  const std::string authMessage = getAuthMessage();
   auto clientSignature = couchbase::core::crypto::CBC_HMAC(algorithm, storedKey, authMessage);
 
   // Client Proof is ClientKey XOR ClientSignature
@@ -238,7 +239,7 @@ ScramShaBackend::getClientProof()
 
   auto total = proof.size();
   for (std::size_t ii = 0; ii < total; ++ii) {
-    proof[ii] = ck[ii] ^ cs[ii];
+    proof[ii] = static_cast<char>(ck[ii] ^ cs[ii]);
   }
 
   return proof;
@@ -252,10 +253,10 @@ ClientBackend::ClientBackend(GetUsernameCallback& user_cb,
   : MechanismBackend(user_cb, password_cb, ctx)
   , ScramShaBackend(mech, algo)
 {
-  couchbase::core::RandomGenerator randomGenerator;
+  const couchbase::core::RandomGenerator randomGenerator;
 
   std::array<char, 8> nonce{};
-  if (!randomGenerator.getBytes(nonce.data(), nonce.size())) {
+  if (!couchbase::core::RandomGenerator::getBytes(nonce.data(), nonce.size())) {
     CB_LOG_ERROR_RAW("failed to generate server nonce");
     throw std::bad_alloc();
   }
@@ -263,8 +264,8 @@ ClientBackend::ClientBackend(GetUsernameCallback& user_cb,
   clientNonce = couchbase::core::to_hex({ nonce.data(), nonce.size() });
 }
 
-std::pair<error, std::string_view>
-ClientBackend::start()
+auto
+ClientBackend::start() -> std::pair<error, std::string_view>
 {
   std::stringstream out;
   out << "n,,";
@@ -277,8 +278,8 @@ ClientBackend::start()
   return { error::OK, client_first_message };
 }
 
-std::pair<error, std::string_view>
-ClientBackend::step(std::string_view input)
+auto
+ClientBackend::step(std::string_view input) -> std::pair<error, std::string_view>
 {
   if (input.empty()) {
     return { error::BAD_PARAM, {} };
@@ -365,8 +366,8 @@ ClientBackend::step(std::string_view input)
   return { error::OK, {} };
 }
 
-bool
-ClientBackend::generateSaltedPassword(const std::string& secret)
+auto
+ClientBackend::generateSaltedPassword(const std::string& secret) -> bool
 {
   try {
     saltedPassword = couchbase::core::crypto::PBKDF2_HMAC(algorithm, secret, salt, iterationCount);

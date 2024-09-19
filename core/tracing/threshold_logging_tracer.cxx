@@ -32,6 +32,7 @@
 #include <chrono>
 #include <mutex>
 #include <queue>
+#include <utility>
 
 namespace couchbase::core::tracing
 {
@@ -68,7 +69,7 @@ public:
   threshold_logging_span(std::string name,
                          std::shared_ptr<threshold_logging_tracer> tracer,
                          std::shared_ptr<request_span> parent = nullptr)
-    : request_span(std::move(name), parent)
+    : request_span(std::move(name), std::move(parent))
     , tracer_{ std::move(tracer) }
   {
   }
@@ -168,21 +169,11 @@ public:
   {
   }
 
-  concurrent_fixed_queue(concurrent_fixed_queue& other)
-  {
-    std::unique_lock<std::mutex> lock(other.mutex_);
-    data_ = other.data_;
-    capacity_ = other.capacity_;
-  }
-
-  concurrent_fixed_queue(const concurrent_fixed_queue& other) = delete;
-
-  concurrent_fixed_queue(concurrent_fixed_queue&& other) noexcept
-  {
-    std::unique_lock<std::mutex> lock(other.mutex_);
-    std::swap(data_, other.data_);
-    std::swap(capacity_, other.capacity_);
-  }
+  concurrent_fixed_queue(const concurrent_fixed_queue&) = delete;
+  concurrent_fixed_queue(concurrent_fixed_queue&&) = delete;
+  auto operator=(const concurrent_fixed_queue&) -> concurrent_fixed_queue& = delete;
+  auto operator=(concurrent_fixed_queue&&) -> concurrent_fixed_queue& = delete;
+  ~concurrent_fixed_queue() = default;
 
   void pop()
   {
@@ -198,13 +189,13 @@ public:
 
   auto empty() -> bool
   {
-    std::unique_lock<std::mutex> lock(mutex_);
+    const std::unique_lock<std::mutex> lock(mutex_);
     return data_.empty();
   }
 
   void emplace(const T&& item)
   {
-    std::unique_lock<std::mutex> lock(mutex_);
+    const std::unique_lock<std::mutex> lock(mutex_);
     data_.emplace(std::forward<const T>(item));
     if (data_.size() > capacity_) {
       data_.pop();
@@ -214,7 +205,7 @@ public:
   auto steal_data() -> std::priority_queue<T>
   {
     std::priority_queue<T> data;
-    std::unique_lock<std::mutex> lock(mutex_);
+    const std::unique_lock<std::mutex> lock(mutex_);
     std::swap(data, data_);
     return data;
   }
@@ -223,7 +214,7 @@ public:
 using fixed_span_queue = concurrent_fixed_queue<reported_span>;
 
 auto
-convert(std::shared_ptr<threshold_logging_span> span) -> reported_span
+convert(const std::shared_ptr<threshold_logging_span>& span) -> reported_span
 {
   tao::json::value entry{
     { "operation_name", span->name() },
@@ -276,6 +267,11 @@ public:
     threshold_queues_.try_emplace(service_type::management, options.threshold_sample_size);
   }
 
+  threshold_logging_tracer_impl(const threshold_logging_tracer_impl&) = delete;
+  threshold_logging_tracer_impl(threshold_logging_tracer_impl&&) = delete;
+  auto operator=(const threshold_logging_tracer_impl&) -> threshold_logging_tracer_impl& = delete;
+  auto operator=(threshold_logging_tracer_impl&&) -> threshold_logging_tracer_impl& = delete;
+
   ~threshold_logging_tracer_impl()
   {
     emit_orphan_report_.cancel();
@@ -297,12 +293,12 @@ public:
     emit_threshold_report_.cancel();
   }
 
-  void add_orphan(std::shared_ptr<threshold_logging_span> span)
+  void add_orphan(const std::shared_ptr<threshold_logging_span>& span)
   {
-    orphan_queue_.emplace(convert(std::move(span)));
+    orphan_queue_.emplace(convert(span));
   }
 
-  void check_threshold(std::shared_ptr<threshold_logging_span> span)
+  void check_threshold(const std::shared_ptr<threshold_logging_span>& span)
   {
     auto service = span->service();
     if (!service.has_value()) {
@@ -409,12 +405,12 @@ threshold_logging_tracer::start_span(std::string name,
 }
 
 void
-threshold_logging_tracer::report(std::shared_ptr<threshold_logging_span> span)
+threshold_logging_tracer::report(const std::shared_ptr<threshold_logging_span>& span)
 {
   if (span->orphan()) {
-    impl_->add_orphan(std::move(span));
+    impl_->add_orphan(span);
   } else {
-    impl_->check_threshold(std::move(span));
+    impl_->check_threshold(span);
   }
 }
 

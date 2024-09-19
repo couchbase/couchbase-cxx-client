@@ -21,8 +21,8 @@
 namespace couchbase::core::sasl::mechanism::plain
 {
 
-std::pair<error, std::string_view>
-ClientBackend::start()
+auto
+ClientBackend::start() -> std::pair<error, std::string_view>
 {
   auto usernm = usernameCallback();
   auto passwd = passwordCallback();

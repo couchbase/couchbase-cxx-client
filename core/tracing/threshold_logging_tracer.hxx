@@ -40,7 +40,7 @@ public:
 
   auto start_span(std::string name, std::shared_ptr<couchbase::tracing::request_span> parent)
     -> std::shared_ptr<couchbase::tracing::request_span> override;
-  void report(std::shared_ptr<threshold_logging_span> span);
+  void report(const std::shared_ptr<threshold_logging_span>& span);
   void start() override;
   void stop() override;
 

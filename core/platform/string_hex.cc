@@ -17,6 +17,7 @@
 
 #include "string_hex.h"
 
+#include <array>
 #include <cinttypes>
 #include <cstdint>
 #include <cstdio>
@@ -27,8 +28,10 @@
 #include <string>
 #include <string_view>
 
-static inline std::uint8_t
-from_hex_digit(char c)
+namespace
+{
+inline auto
+from_hex_digit(char c) -> std::uint8_t
 {
   if ('0' <= c && c <= '9') {
     return static_cast<std::uint8_t>(c - '0');
@@ -42,9 +45,10 @@ from_hex_digit(char c)
   throw std::invalid_argument(
     "couchbase::core::from_hex_digit: character was not in hexadecimal range");
 }
+} // namespace
 
-std::uint64_t
-couchbase::core::from_hex(std::string_view buffer)
+auto
+couchbase::core::from_hex(std::string_view buffer) -> std::uint64_t
 {
   std::uint64_t ret = 0;
   if (buffer.size() > 16) {
@@ -59,40 +63,40 @@ couchbase::core::from_hex(std::string_view buffer)
   return ret;
 }
 
-std::string
-couchbase::core::to_hex(std::uint8_t val)
+auto
+couchbase::core::to_hex(std::uint8_t val) -> std::string
 {
-  char buf[32];
-  snprintf(buf, sizeof(buf), "0x%02" PRIx8, val);
-  return std::string{ buf };
+  std::array<char, 32> buf{};
+  snprintf(buf.data(), buf.size(), "0x%02" PRIx8, val);
+  return std::string{ buf.data() };
 }
 
-std::string
-couchbase::core::to_hex(std::uint16_t val)
+auto
+couchbase::core::to_hex(std::uint16_t val) -> std::string
 {
-  char buf[32];
-  snprintf(buf, sizeof(buf), "0x%04" PRIx16, val);
-  return std::string{ buf };
+  std::array<char, 32> buf{};
+  snprintf(buf.data(), buf.size(), "0x%04" PRIx16, val);
+  return std::string{ buf.data() };
 }
 
-std::string
-couchbase::core::to_hex(std::uint32_t val)
+auto
+couchbase::core::to_hex(std::uint32_t val) -> std::string
 {
-  char buf[32];
-  snprintf(buf, sizeof(buf), "0x%08" PRIx32, val);
-  return std::string{ buf };
+  std::array<char, 32> buf{};
+  snprintf(buf.data(), buf.size(), "0x%08" PRIx32, val);
+  return std::string{ buf.data() };
 }
 
-std::string
-couchbase::core::to_hex(std::uint64_t val)
+auto
+couchbase::core::to_hex(std::uint64_t val) -> std::string
 {
-  char buf[32];
-  snprintf(buf, sizeof(buf), "0x%016" PRIx64, val);
-  return std::string{ buf };
+  std::array<char, 32> buf{};
+  snprintf(buf.data(), buf.size(), "0x%016" PRIx64, val);
+  return std::string{ buf.data() };
 }
 
-std::string
-couchbase::core::to_hex(std::string_view buffer)
+auto
+couchbase::core::to_hex(std::string_view buffer) -> std::string
 {
   if (buffer.empty()) {
     return "";

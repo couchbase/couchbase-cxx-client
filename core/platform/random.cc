@@ -54,7 +54,7 @@ public:
                               "initialize random generator");
     }
 #else
-    if ((handle = open("/dev/urandom", O_RDONLY | O_CLOEXEC)) == -1) {
+    if (handle = open("/dev/urandom", O_RDONLY | O_CLOEXEC); handle == -1) {
       throw std::system_error(errno,
                               std::system_category(),
                               "RandomGeneratorProvider::Failed to "
@@ -62,6 +62,10 @@ public:
     }
 #endif
   }
+  RandomGeneratorProvider(const RandomGeneratorProvider&) = delete;
+  auto operator=(const RandomGeneratorProvider&) -> RandomGeneratorProvider& = delete;
+  RandomGeneratorProvider(RandomGeneratorProvider&&) = delete;
+  auto operator=(RandomGeneratorProvider&&) -> RandomGeneratorProvider& = delete;
 
   virtual ~RandomGeneratorProvider()
   {
@@ -72,7 +76,7 @@ public:
 #endif
   }
 
-  bool getBytes(void* dest, std::size_t size)
+  auto getBytes(void* dest, std::size_t size) -> bool
   {
     const std::lock_guard<std::mutex> lock(mutex);
 #ifdef WIN32
@@ -82,7 +86,7 @@ public:
 #endif
   }
 
-protected:
+private:
 #ifdef WIN32
   HCRYPTPROV handle{};
 #else
@@ -105,8 +109,8 @@ RandomGenerator::RandomGenerator()
   }
 }
 
-std::uint64_t
-RandomGenerator::next()
+auto
+RandomGenerator::next() -> std::uint64_t
 {
   std::uint64_t ret = 0;
   if (getBytes(&ret, sizeof(ret))) {
@@ -116,8 +120,8 @@ RandomGenerator::next()
   return static_cast<std::uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count());
 }
 
-bool
-RandomGenerator::getBytes(void* dest, std::size_t size)
+auto
+RandomGenerator::getBytes(void* dest, std::size_t size) -> bool
 {
   return shared_provider->getBytes(dest, size);
 }

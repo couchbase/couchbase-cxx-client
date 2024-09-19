@@ -65,8 +65,8 @@ private:
 
   const spdlog::filename_t base_filename_;
   const std::size_t max_size_;
-  std::size_t current_size_{ 0 };
   std::unique_ptr<spdlog::details::file_helper> file_helper_;
+  std::size_t current_size_{ 0 };
   std::unique_ptr<spdlog::pattern_formatter> formatter;
   unsigned long next_file_id_;
 

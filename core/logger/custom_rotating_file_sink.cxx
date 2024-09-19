@@ -28,7 +28,9 @@
 #include <memory>
 #include <spdlog/details/file_helper.h>
 
-static auto
+namespace
+{
+auto
 find_first_logfile_id(const std::string& basename) -> unsigned long
 {
   unsigned long id = 0;
@@ -46,7 +48,7 @@ find_first_logfile_id(const std::string& basename) -> unsigned long
     index = file.rfind('.');
     if (index != std::string::npos) {
       try {
-        unsigned long value = std::stoul(file.substr(index + 1));
+        const unsigned long value = std::stoul(file.substr(index + 1));
         if (value > id) {
           id = value;
         }
@@ -60,19 +62,20 @@ find_first_logfile_id(const std::string& basename) -> unsigned long
 
   return id;
 }
+} // namespace
 
 template<class Mutex>
 custom_rotating_file_sink<Mutex>::custom_rotating_file_sink(const spdlog::filename_t& base_filename,
                                                             std::size_t max_size,
                                                             const std::string& log_pattern)
-  : base_filename_(base_filename)
-  , max_size_(max_size)
-  , next_file_id_(find_first_logfile_id(base_filename))
+  : base_filename_{ base_filename }
+  , max_size_{ max_size }
+  , file_helper_{ open_file() }
+  , current_size_{ file_helper_->size() } // expensive. called only once
+  , formatter{ std::make_unique<spdlog::pattern_formatter>(log_pattern,
+                                                           spdlog::pattern_time_type::local) }
+  , next_file_id_{ find_first_logfile_id(base_filename) }
 {
-  formatter =
-    std::make_unique<spdlog::pattern_formatter>(log_pattern, spdlog::pattern_time_type::local);
-  file_helper_ = open_file();
-  current_size_ = file_helper_->size(); // expensive. called only once
   add_hook(opening_log_file_);
 }
 

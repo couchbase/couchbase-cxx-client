@@ -34,14 +34,16 @@
 #include <string_view>
 #include <vector>
 
+namespace
+{
 /**
  * An array of the legal characters used for direct lookup
  */
-static const std::array codemap{ 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
-                                 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
-                                 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
-                                 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
-                                 '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '/' };
+const std::array codemap{ 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+                          'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+                          'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
+                          'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+                          '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '/' };
 
 /**
  * A method to map the code back to the value
@@ -49,8 +51,8 @@ static const std::array codemap{ 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J
  * @param code the code to map
  * @return the byte value for the code character
  */
-static std::uint32_t
-code2val(const char code)
+auto
+code2val(const char code) -> std::uint32_t
 {
   if (code >= 'A' && code <= 'Z') {
     return static_cast<std::uint32_t>(code) - static_cast<std::uint32_t>('A');
@@ -70,6 +72,8 @@ code2val(const char code)
   throw std::invalid_argument("couchbase::core::base64::code2val Invalid input character");
 }
 
+// TODO(CXXCBC-549): clang-tidy-19 reports subscript with non-const index
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-constant-array-index)
 /**
  * Encode up to 3 characters to 4 output character.
  *
@@ -77,7 +81,7 @@ code2val(const char code)
  * @param d pointer to the output stream
  * @param num the number of characters from s to encode
  */
-static void
+void
 encode_rest(const std::byte* s, std::string& result, size_t num)
 {
   std::uint32_t val = 0;
@@ -109,7 +113,7 @@ encode_rest(const std::byte* s, std::string& result, size_t num)
  * @param s pointer to the input stream
  * @param d pointer to the output stream
  */
-static void
+void
 encode_triplet(const std::byte* s, std::string& str)
 {
   auto val = (static_cast<std::uint32_t>(*s) << 16U) |      //
@@ -120,6 +124,7 @@ encode_triplet(const std::byte* s, std::string& str)
   str.push_back(codemap[(val >> 6U) & 63]);
   str.push_back(codemap[val & 63]);
 }
+// NOLINTEND(cppcoreguidelines-pro-bounds-constant-array-index)
 
 /**
  * decode 4 input characters to up to two output bytes
@@ -128,8 +133,8 @@ encode_triplet(const std::byte* s, std::string& str)
  * @param d destination
  * @return the number of characters inserted
  */
-static int
-decode_quad(const char* s, std::vector<std::byte>& d)
+auto
+decode_quad(const char* s, std::vector<std::byte>& d) -> int
 {
   std::uint32_t value = code2val(s[0]) << 18U;
   value |= code2val(s[1]) << 12U;
@@ -157,11 +162,12 @@ decode_quad(const char* s, std::vector<std::byte>& d)
 
   return ret;
 }
+} // namespace
 
 namespace couchbase::core::base64
 {
-std::string
-encode(gsl::span<const std::byte> blob, bool pretty_print)
+auto
+encode(gsl::span<const std::byte> blob, bool pretty_print) -> std::string
 {
   // base64 encodes up to 3 input characters to 4 output
   // characters in the alphabet above.
@@ -204,8 +210,8 @@ encode(gsl::span<const std::byte> blob, bool pretty_print)
   return result;
 }
 
-std::vector<std::byte>
-decode(std::string_view blob)
+auto
+decode(std::string_view blob) -> std::vector<std::byte>
 {
   std::vector<std::byte> destination;
 
@@ -241,15 +247,15 @@ decode(std::string_view blob)
   return destination;
 }
 
-std::string
-decode_to_string(std::string_view blob)
+auto
+decode_to_string(std::string_view blob) -> std::string
 {
   auto decoded = decode(blob);
   return { reinterpret_cast<const char*>(decoded.data()), decoded.size() };
 }
 
-std::string
-encode(std::string_view blob, bool pretty_print)
+auto
+encode(std::string_view blob, bool pretty_print) -> std::string
 {
   return encode(gsl::as_bytes(gsl::span{ blob.data(), blob.size() }), pretty_print);
 }

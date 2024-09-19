@@ -22,8 +22,8 @@
 namespace couchbase::core::sasl
 {
 
-const std::string&
-Context::get_uuid()
+auto
+Context::get_uuid() -> const std::string&
 {
   if (uuid.empty()) {
     uuid = uuid::to_string(uuid::random());

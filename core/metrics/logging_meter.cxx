@@ -205,7 +205,7 @@ logging_meter::get_value_recorder(const std::string& name,
                                   const std::map<std::string, std::string>& tags)
   -> std::shared_ptr<couchbase::metrics::value_recorder>
 {
-  static std::shared_ptr<noop_value_recorder> noop_recorder{
+  static const std::shared_ptr<noop_value_recorder> noop_recorder{
     std::make_shared<noop_value_recorder>()
   };
 
@@ -214,18 +214,18 @@ logging_meter::get_value_recorder(const std::string& name,
   }
 
   static const std::string service_tag = "db.couchbase.service";
-  auto service = tags.find(service_tag);
+  const auto service = tags.find(service_tag);
   if (service == tags.end()) {
     return noop_recorder;
   }
 
   static const std::string operation_tag = "db.operation";
-  auto operation = tags.find(operation_tag);
+  const auto operation = tags.find(operation_tag);
   if (operation == tags.end()) {
     return noop_recorder;
   }
 
-  std::scoped_lock lock(recorders_mutex_);
+  const std::scoped_lock lock(recorders_mutex_);
   auto& service_recorders = recorders_[service->second];
 
   auto recorder = service_recorders.find(operation->second);

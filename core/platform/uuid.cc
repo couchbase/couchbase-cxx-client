@@ -42,16 +42,16 @@ couchbase::core::uuid::random(couchbase::core::uuid::uuid_t& uuid)
   uuid[6] |= 0x40;
 }
 
-couchbase::core::uuid::uuid_t
-couchbase::core::uuid::random()
+auto
+couchbase::core::uuid::random() -> couchbase::core::uuid::uuid_t
 {
   uuid_t ret;
   random(ret);
   return ret;
 }
 
-couchbase::core::uuid::uuid_t
-couchbase::core::uuid::from_string(std::string_view str)
+auto
+couchbase::core::uuid::from_string(std::string_view str) -> couchbase::core::uuid::uuid_t
 {
   uuid_t ret;
   if (str.size() != 36) {
@@ -73,14 +73,16 @@ couchbase::core::uuid::from_string(std::string_view str)
         ++ii;
         [[fallthrough]];
       default:
+        // TODO(CXXCBC-549): clang-tidy-19 reports issue with subscript
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index)
         ret[jj++] = static_cast<std::uint8_t>(from_hex({ str.data() + ii, 2 }));
     }
   }
   return ret;
 }
 
-inline char
-to_char(std::uint8_t c)
+inline auto
+to_char(std::uint8_t c) -> char
 {
   if (c <= 9) {
     return static_cast<char>('0' + c);
@@ -88,8 +90,8 @@ to_char(std::uint8_t c)
   return static_cast<char>('a' + (c - 10));
 }
 
-std::string
-couchbase::core::uuid::to_string(const couchbase::core::uuid::uuid_t& uuid)
+auto
+couchbase::core::uuid::to_string(const couchbase::core::uuid::uuid_t& uuid) -> std::string
 {
   std::string ret(36, '-');
   std::size_t i = 0;

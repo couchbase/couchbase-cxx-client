@@ -48,10 +48,7 @@ public:
  * @throws unknown_mechanism if no supported mechanism is listed in the
  *                           available mechanisms
  */
-Mechanism
-select_mechanism(const std::vector<std::string>& available_mechanisms);
+auto
+select_mechanism(const std::vector<std::string>& available_mechanisms) -> Mechanism;
 
 } // namespace couchbase::core::sasl
-
-std::string
-to_string(couchbase::core::sasl::Mechanism mechanism);

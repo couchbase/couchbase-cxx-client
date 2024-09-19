@@ -34,15 +34,17 @@
 #include <string_view>
 #include <utility>
 
-static const std::string file_logger_name{ "couchbase_cxx_client_file_logger" };
-static const std::string protocol_logger_name{ "couchbase_cxx_client_protocol_logger" };
+namespace
+{
+const std::string file_logger_name{ "couchbase_cxx_client_file_logger" };
+const std::string protocol_logger_name{ "couchbase_cxx_client_protocol_logger" };
 
 /**
  * Custom log pattern which the loggers will use.
  * This pattern is duplicated for some test cases. If you need to update it,
  * please also update in all relevant places.
  */
-static const std::string log_pattern{ "[%Y-%m-%d %T.%e] %4oms [%^%4!l%$] [%P,%t] %v" };
+const std::string log_pattern{ "[%Y-%m-%d %T.%e] %4oms [%^%4!l%$] [%P,%t] %v" };
 
 /**
  * Instances of spdlog (async) file logger.
@@ -52,12 +54,10 @@ static const std::string log_pattern{ "[%Y-%m-%d %T.%e] %4oms [%^%4!l%$] [%P,%t]
  * messages and send them to the sinks, which do the actual writing (to file,
  * to stream etc.) or further processing.
  */
-static std::shared_ptr<spdlog::logger> file_logger{};
-static std::mutex file_logger_mutex;
-static std::atomic_int file_logger_version{ 0 };
+std::shared_ptr<spdlog::logger> file_logger{};
+std::mutex file_logger_mutex;
+std::atomic_int file_logger_version{ 0 };
 
-namespace
-{
 auto
 get_file_logger() -> std::shared_ptr<spdlog::logger>
 {
@@ -81,12 +81,12 @@ update_file_logger(const std::shared_ptr<spdlog::logger>& new_logger)
   spdlog::register_logger(new_logger);
   ++file_logger_version;
 }
-} // namespace
 
 /**
  * Instance of the protocol logger.
  */
-static std::shared_ptr<spdlog::logger> protocol_logger{};
+std::shared_ptr<spdlog::logger> protocol_logger{};
+} // namespace
 
 namespace couchbase::core::logger
 {

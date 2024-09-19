@@ -18,14 +18,12 @@
 #include "mechanism.h"
 
 #include <algorithm>
-#include <iterator>
-#include <vector>
 
 namespace couchbase::core::sasl
 {
 
-Mechanism
-select_mechanism(const std::vector<std::string>& available_mechanisms)
+auto
+select_mechanism(const std::vector<std::string>& available_mechanisms) -> Mechanism
 {
   // Search what we've got backends for
   const std::vector<std::pair<std::string, Mechanism>> mechs = {
@@ -42,7 +40,7 @@ select_mechanism(const std::vector<std::string>& available_mechanisms)
     }
   }
 
-  throw unknown_mechanism("unknown mechanism"); // TODO: avoid this exception
+  throw unknown_mechanism("unknown mechanism"); // TODO(SA): avoid this exception
 }
 
 } // namespace couchbase::core::sasl
