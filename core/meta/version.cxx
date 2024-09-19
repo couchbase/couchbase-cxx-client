@@ -249,15 +249,17 @@ parse_git_describe_output(const std::string& git_describe_output) -> std::string
   return "";
 }
 
-const std::string&
-build_revision_short()
+auto
+build_revision_short() -> const std::string&
 {
   static const std::string revision{ COUCHBASE_CXX_CLIENT_GIT_REVISION_SHORT };
   return revision;
 }
 
-static std::string
-revision_with_prefix(std::string_view prefix)
+namespace
+{
+auto
+revision_with_prefix(std::string_view prefix) -> std::string
 {
   const auto& revision = build_revision_short();
   if (revision.empty() || revision == "unknown") {
@@ -265,6 +267,7 @@ revision_with_prefix(std::string_view prefix)
   }
   return fmt::format("{}{}", prefix, revision);
 }
+} // namespace
 
 auto
 build_date() -> const std::string&

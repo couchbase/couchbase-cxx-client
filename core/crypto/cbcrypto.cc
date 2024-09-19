@@ -554,11 +554,11 @@ encrypt(const couchbase::core::crypto::Cipher cipher,
   return ret;
 }
 
-std::string
+auto
 decrypt(const couchbase::core::crypto::Cipher cipher,
         std::string_view key,
         std::string_view iv,
-        std::string_view data)
+        std::string_view data) -> std::string
 {
   std::size_t outputsize = 0;
   std::string ret;

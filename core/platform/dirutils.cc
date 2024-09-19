@@ -24,8 +24,10 @@
 
 namespace couchbase::core::platform
 {
-static std::string
-split(const std::string& input, bool directory)
+namespace
+{
+auto
+split(const std::string& input, bool directory) -> std::string
 {
   const std::string::size_type path = input.find_last_of("\\/");
   std::string file;
@@ -52,15 +54,16 @@ split(const std::string& input, bool directory)
   }
   return file;
 }
+} // namespace
 
-std::string
-dirname(const std::string& dir)
+auto
+dirname(const std::string& dir) -> std::string
 {
   return split(dir, true);
 }
 
-std::string
-basename(const std::string& name)
+auto
+basename(const std::string& name) -> std::string
 {
   return split(name, false);
 }
@@ -96,12 +99,16 @@ find_files_with_prefix(const std::string& dir, const std::string& name)
   return files;
 }
 #else
-std::vector<std::string>
-find_files_with_prefix(const std::string& dir, const std::string& name)
+auto
+find_files_with_prefix(const std::string& dir, const std::string& name) -> std::vector<std::string>
 {
   std::vector<std::string> files;
+  // TODO(CXXCBC-549): clang-tidy-19 reports function is not thread safe
+  // NOLINTNEXTLINE(concurrency-mt-unsafe)
   if (DIR* dp = opendir(dir.c_str()); dp != nullptr) {
     const struct dirent* de = nullptr;
+    // TODO(CXXCBC-549): clang-tidy-19 reports function is not thread safe
+    // NOLINTNEXTLINE(concurrency-mt-unsafe)
     while ((de = readdir(dp)) != nullptr) {
       if (const std::string fnm(de->d_name); fnm == "." || fnm == "..") {
         continue;
@@ -120,8 +127,8 @@ find_files_with_prefix(const std::string& dir, const std::string& name)
 }
 #endif
 
-std::vector<std::string>
-find_files_with_prefix(const std::string& name)
+auto
+find_files_with_prefix(const std::string& name) -> std::vector<std::string>
 {
   return find_files_with_prefix(dirname(name), basename(name));
 }

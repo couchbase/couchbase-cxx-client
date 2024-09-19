@@ -21,18 +21,21 @@
 #include "core/logger/logger.hxx"
 #include "core/meta/version.hxx"
 
+#include <array>
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
 
 namespace couchbase::core::platform
 {
-static bool should_include_backtrace = true;
-static std::terminate_handler default_terminate_handler = nullptr;
+namespace
+{
+bool should_include_backtrace = true;
+std::terminate_handler default_terminate_handler = nullptr;
 
 // Logs details on the handled exception. Attempts to log to
 // `terminate_logger` if non-null; otherwise prints to stderr.
-static void
+void
 log_handled_exception()
 {
 #ifdef WIN32
@@ -58,18 +61,16 @@ log_handled_exception()
 }
 
 // Log the symbolified backtrace to this point.
-static void
+void
 log_backtrace()
 {
-  static const char format_str[] = "Call stack:\n%s";
-
-  char buffer[8192];
-  if (print_backtrace_to_buffer("    ", buffer, sizeof(buffer))) {
-    CB_LOG_CRITICAL("Call stack:\n{}", buffer);
+  std::array<char, 8192> buffer{};
+  if (print_backtrace_to_buffer("    ", buffer.data(), buffer.size())) {
+    CB_LOG_CRITICAL("Call stack:\n{}", buffer.data());
   } else {
     // Exceeded buffer space - print directly to stderr FD (requires no
     // buffering, but has the disadvantage that we don't get it in the log).
-    fprintf(stderr, format_str, "");
+    fprintf(stderr, "Call stack:\n%s", "");
     print_backtrace_to_file(stderr);
     fflush(stderr);
     CB_LOG_CRITICAL_RAW("Call stack exceeds 8k, rendered to STDERR");
@@ -78,7 +79,7 @@ log_backtrace()
 
 // Replacement terminate_handler which prints the exception's what() and a
 // backtrace of the current stack before chaining to the default handler.
-static void
+void
 backtrace_terminate_handler()
 {
   static bool meta_reported = false;
@@ -108,6 +109,7 @@ backtrace_terminate_handler()
 
   std::abort();
 }
+} // namespace
 
 void
 install_backtrace_terminate_handler()

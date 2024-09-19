@@ -43,8 +43,8 @@ namespace couchbase::core::sasl::mechanism::scram
  *         [StringPrep, C.8]
  *       - Tagging characters [StringPrep, C.9]
  */
-const std::string&
-sasl_prep(const std::string& string)
+auto
+sasl_prep(const std::string& string) -> const std::string&
 {
   for (const auto& c : string) {
     if ((static_cast<unsigned int>(c) & 0x80U) != 0) {
@@ -61,8 +61,8 @@ sasl_prep(const std::string& string)
   return string;
 }
 
-std::string
-encode_username(const std::string& username)
+auto
+encode_username(const std::string& username) -> std::string
 {
   std::string ret(username);
 
