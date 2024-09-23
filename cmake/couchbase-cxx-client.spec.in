@@ -10,6 +10,12 @@ BuildRequires: gcc, gcc-c++
 BuildRequires: cmake >= 3.19
 Source0: @COUCHBASE_CXX_CLIENT_TARBALL_NAME@.tar.gz
 
+%if 0%{?amzn}
+# The additional linker flags break AmazonLinux
+# https://bugzilla.redhat.com/show_bug.cgi?id=2043092
+%undefine _package_note_flags
+%endif
+
 %description
 This is the client and protocol library for Couchbase project.
 
@@ -62,4 +68,3 @@ Development files for the Couchbase C++ SDK.
 %changelog
 * @COUCHBASE_CXX_CLIENT_RPM_DATE@ Couchbase SDK Team <support@couchbase.com> - @COUCHBASE_CXX_CLIENT_PACKAGE_VERSION@-@COUCHBASE_CXX_CLIENT_PACKAGE_RELEASE@
 - Automated build.
-%{_libdir}/libcouchbase_cxx_client_static.a
