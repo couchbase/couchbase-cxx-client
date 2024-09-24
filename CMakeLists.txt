@@ -76,19 +76,6 @@ include(cmake/OpenSSL.cmake)
 
 include(cmake/VersionInfo.cmake)
 
-include(cmake/DetectStandardFilesystem.cmake)
-couchbase_cxx_check_filesystem(
-  couchbase_cxx_client
-  "filesystem"
-  "std::filesystem"
-  "stdc++fs;c++fs"
-  STD_FILESYSTEM)
-if(STD_FILESYSTEM)
-  message(STATUS "Using std::filesystem")
-else()
-  message(FATAL_ERROR "Couchbase C++ Client requires C++17, including an implementation of std::filesystem.")
-endif()
-
 add_subdirectory(core/platform)
 set(couchbase_cxx_client_FILES
     ${CMAKE_CURRENT_BINARY_DIR}/generated/mozilla_ca_bundle.cxx
@@ -492,6 +479,19 @@ if(WIN32 OR NOT COUCHBASE_CXX_CLIENT_BUILD_SHARED)
 endif()
 
 foreach(TARGET ${couchbase_cxx_client_LIBRARIES})
+  include(cmake/DetectStandardFilesystem.cmake)
+  couchbase_cxx_check_filesystem(
+    ${TARGET}
+    "filesystem"
+    "std::filesystem"
+    "stdc++fs;c++fs"
+    STD_FILESYSTEM)
+  if(STD_FILESYSTEM)
+    message(STATUS "Using std::filesystem")
+  else()
+    message(FATAL_ERROR "Couchbase C++ Client requires C++17, including an implementation of std::filesystem.")
+  endif()
+
   set_target_properties(${TARGET} PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
   target_include_directories(
