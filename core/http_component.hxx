@@ -49,7 +49,11 @@ public:
                  std::shared_ptr<retry_strategy> default_retry_strategy = {});
 
   auto do_http_request(const http_request& request, free_form_http_request_callback&& callback)
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+    -> tl::expected<std::shared_ptr<pending_operation>, error_union>;
+#else
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+#endif
 
   auto do_http_request_buffered(const http_request& request,
                                 buffered_free_form_http_request_callback&& callback)

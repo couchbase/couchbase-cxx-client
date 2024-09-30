@@ -91,6 +91,7 @@ public:
     if (allow_fast_fail_) {
       std::scoped_lock bootstrap_error_lock(last_bootstrap_error_mutex_);
       last_bootstrap_error_ = error;
+      drain_deferred_queue(last_bootstrap_error_.value());
     }
   }
 
@@ -222,14 +223,19 @@ public:
             ctx_, request, tracer_, meter_, options_.default_timeout_for(request.type));
 #endif
 
-          cmd->start(
-            [start = std::chrono::steady_clock::now(),
-             self = shared_from_this(),
-             type,
-             cmd,
-             handler = collector->build_reporter()](std::error_code ec, io::http_response&& msg) {
-              diag::ping_state state = diag::ping_state::ok;
-              std::optional<std::string> error{};
+          cmd->start([start = std::chrono::steady_clock::now(),
+                      self = shared_from_this(),
+                      type,
+                      cmd,
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+                      handler = collector->build_reporter()](error_union err,
+                                                             io::http_response&& msg) {
+            diag::ping_state state = diag::ping_state::ok;
+            std::optional<std::string> error{};
+            if (!std::holds_alternative<std::monostate>(err)) {
+              auto ec = std::holds_alternative<impl::bootstrap_error>(err)
+                          ? std::get<impl::bootstrap_error>(err).ec
+                          : std::get<std::error_code>(err);
               if (ec) {
                 if (ec == errc::common::unambiguous_timeout ||
                     ec == errc::common::ambiguous_timeout) {
@@ -240,25 +246,42 @@ public:
                 error.emplace(fmt::format(
                   "code={}, message={}, http_code={}", ec.value(), ec.message(), msg.status_code));
               }
-              auto remote_address = cmd->session_->remote_address();
-              // If not connected, the remote address will be empty.  Better to
-              // give the user some context on the "attempted" remote address.
-              if (remote_address.empty()) {
-                remote_address =
-                  fmt::format("{}:{}", cmd->session_->hostname(), cmd->session_->port());
+            }
+#else
+                      handler = collector->build_reporter()](std::error_code ec,
+                                                             io::http_response&& msg) {
+            diag::ping_state state = diag::ping_state::ok;
+            std::optional<std::string> error{};
+            if (ec) {
+              if (ec == errc::common::unambiguous_timeout ||
+                  ec == errc::common::ambiguous_timeout) {
+                state = diag::ping_state::timeout;
+              } else {
+                state = diag::ping_state::error;
               }
-              handler->report(
-                diag::endpoint_ping_info{ type,
-                                          cmd->session_->id(),
-                                          std::chrono::duration_cast<std::chrono::microseconds>(
-                                            std::chrono::steady_clock::now() - start),
-                                          remote_address,
-                                          cmd->session_->local_address(),
-                                          state,
-                                          {},
-                                          error });
-              self->check_in(type, cmd->session_);
-            });
+              error.emplace(fmt::format(
+                "code={}, message={}, http_code={}", ec.value(), ec.message(), msg.status_code));
+            }
+#endif
+            auto remote_address = cmd->session_->remote_address();
+            // If not connected, the remote address will be empty.  Better to
+            // give the user some context on the "attempted" remote address.
+            if (remote_address.empty()) {
+              remote_address =
+                fmt::format("{}:{}", cmd->session_->hostname(), cmd->session_->port());
+            }
+            handler->report(
+              diag::endpoint_ping_info{ type,
+                                        cmd->session_->id(),
+                                        std::chrono::duration_cast<std::chrono::microseconds>(
+                                          std::chrono::steady_clock::now() - start),
+                                        remote_address,
+                                        cmd->session_->local_address(),
+                                        state,
+                                        {},
+                                        error });
+            self->check_in(type, cmd->session_);
+          });
           cmd->set_command_session(session);
           if (!session->is_connected()) {
             connect_then_send(session, cmd, {}, true);
@@ -450,18 +473,37 @@ public:
       meter_,
       options_.default_timeout_for(request.type),
       dispatch_timeout_);
+    cmd->start([self = shared_from_this(), cmd, handler = std::forward<Handler>(handler)](
+                 error_union err, io::http_response&& msg) mutable {
 #else
     auto cmd = std::make_shared<operations::http_command<Request>>(
       ctx_, request, tracer_, meter_, options_.default_timeout_for(request.type));
-#endif
     cmd->start([self = shared_from_this(), cmd, handler = std::forward<Handler>(handler)](
                  std::error_code ec, io::http_response&& msg) mutable {
+#endif
       using command_type = typename decltype(cmd)::element_type;
       using encoded_response_type = typename command_type::encoded_response_type;
       using error_context_type = typename command_type::error_context_type;
       encoded_response_type resp{ std::move(msg) };
       error_context_type ctx{};
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+      if (!std::holds_alternative<std::monostate>(err)) {
+        if (std::holds_alternative<impl::bootstrap_error>(err)) {
+          auto bootstrap_error = std::get<impl::bootstrap_error>(err);
+          if (bootstrap_error.ec == errc::common::unambiguous_timeout) {
+            CB_LOG_DEBUG("Timeout caused by bootstrap error. code={}, ec_message={}, message={}.",
+                         bootstrap_error.ec.value(),
+                         bootstrap_error.ec.message(),
+                         bootstrap_error.error_message);
+          }
+          ctx.ec = bootstrap_error.ec;
+        } else {
+          ctx.ec = std::get<std::error_code>(err);
+        }
+      }
+#else
       ctx.ec = ec;
+#endif
       ctx.client_context_id = cmd->client_context_id_;
       ctx.method = cmd->encoded.method;
       ctx.path = cmd->encoded.path;
@@ -584,7 +626,7 @@ public:
   }
 
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-  void add_to_deferred_queue(utils::movable_function<void(std::error_code)> command)
+  void add_to_deferred_queue(utils::movable_function<void(error_union)> command)
   {
     const std::scoped_lock lock_for_deferred_commands(deferred_commands_mutex_);
     deferred_commands_.emplace(std::move(command));
@@ -723,20 +765,25 @@ private:
       options_.default_timeout_for(request.type),
       dispatch_timeout_);
     cmd->start([self = shared_from_this(), cmd, handler = std::forward<Handler>(handler)](
-                 std::error_code ec, io::http_response&& msg) mutable {
+                 error_union err, io::http_response&& msg) mutable {
       using command_type = typename decltype(cmd)::element_type;
       using encoded_response_type = typename command_type::encoded_response_type;
       using error_context_type = typename command_type::error_context_type;
       encoded_response_type resp{ std::move(msg) };
       error_context_type ctx{};
-      if (self->last_bootstrap_error_.has_value() && ec == errc::common::unambiguous_timeout) {
-        CB_LOG_DEBUG("Timeout caused by bootstrap error. code={}, ec_message={}, message={}.",
-                     self->last_bootstrap_error_.value().ec.value(),
-                     self->last_bootstrap_error_.value().ec.message(),
-                     self->last_bootstrap_error_.value().error_message);
-        ctx.ec = self->last_bootstrap_error_.value().ec;
-      } else {
-        ctx.ec = ec;
+      if (!std::holds_alternative<std::monostate>(err)) {
+        if (std::holds_alternative<impl::bootstrap_error>(err)) {
+          auto bootstrap_error = std::get<impl::bootstrap_error>(err);
+          if (bootstrap_error.ec == errc::common::unambiguous_timeout) {
+            CB_LOG_DEBUG("Timeout caused by bootstrap error. code={}, ec_message={}, message={}.",
+                         bootstrap_error.ec.value(),
+                         bootstrap_error.ec.message(),
+                         bootstrap_error.error_message);
+          }
+          ctx.ec = bootstrap_error.ec;
+        } else {
+          ctx.ec = std::get<std::error_code>(err);
+        }
       }
       ctx.client_context_id = cmd->client_context_id_;
       ctx.method = cmd->encoded.method;
@@ -756,10 +803,10 @@ private:
                  cmd->request.type,
                  cmd->client_context_id_);
     add_to_deferred_queue(
-      [self = shared_from_this(), cmd, request, credentials](std::error_code ec) mutable {
-        if (ec) {
+      [self = shared_from_this(), cmd, request, credentials](error_union err) mutable {
+        if (!std::holds_alternative<std::monostate>(err)) {
           using response_type = typename Request::encoded_response_type;
-          return cmd->invoke_handler(ec, response_type{});
+          return cmd->invoke_handler(err, response_type{});
         }
 
         // don't do anything if the command wasn't dispatched or has already timed out
@@ -787,9 +834,9 @@ private:
       });
   }
 
-  void drain_deferred_queue(std::error_code ec)
+  void drain_deferred_queue(error_union err)
   {
-    std::queue<utils::movable_function<void(std::error_code)>> commands{};
+    std::queue<utils::movable_function<void(error_union)>> commands{};
     {
       const std::scoped_lock lock(deferred_commands_mutex_);
       std::swap(deferred_commands_, commands);
@@ -798,7 +845,7 @@ private:
       CB_LOG_TRACE("Draining deferred operation queue, size={}", commands.size());
     }
     while (!commands.empty()) {
-      commands.front()(ec);
+      commands.front()(err);
       commands.pop();
     }
   }
@@ -898,7 +945,7 @@ private:
   std::atomic_bool configured_{ false };
   std::chrono::milliseconds dispatch_timeout_{};
   std::atomic_bool allow_fast_fail_{ true };
-  std::queue<utils::movable_function<void(std::error_code)>> deferred_commands_{};
+  std::queue<utils::movable_function<void(error_union)>> deferred_commands_{};
   std::mutex deferred_commands_mutex_{};
   std::optional<impl::bootstrap_error> last_bootstrap_error_;
   std::mutex last_bootstrap_error_mutex_{};

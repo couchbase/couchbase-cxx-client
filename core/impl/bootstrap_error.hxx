@@ -20,8 +20,12 @@
 #include <optional>
 #include <string>
 #include <system_error>
+#include <variant>
 
-namespace couchbase::core::impl
+namespace couchbase::core
+{
+
+namespace impl
 {
 
 struct bootstrap_error {
@@ -31,4 +35,8 @@ struct bootstrap_error {
   std::optional<std::string> port;
 };
 
-} // namespace couchbase::core::impl
+} // namespace impl
+
+using error_union = std::variant<std::monostate, std::error_code, impl::bootstrap_error>;
+
+} // namespace couchbase::core

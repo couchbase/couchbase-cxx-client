@@ -131,19 +131,22 @@ public:
     invoke_response_handler(errc::common::request_canceled, {});
   }
 
-  void invoke_response_handler(std::error_code ec, io::http_streaming_response resp)
-  {
-    deadline_.cancel();
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+  void invoke_response_handler(error_union err, io::http_streaming_response resp)
+  {
     dispatch_deadline_.cancel();
+#else
+  void invoke_response_handler(std::error_code err, io::http_streaming_response resp)
+  {
 #endif
+    deadline_.cancel();
     free_form_http_request_callback callback{};
     {
       const std::scoped_lock lock(callback_mutex_);
       std::swap(callback, callback_);
     }
     if (callback) {
-      callback(http_response{ std::move(resp) }, ec);
+      callback(http_response{ std::move(resp) }, err);
     }
   }
 
@@ -157,12 +160,22 @@ public:
     auto start_op = [self = shared_from_this()]() {
       self->session_->write_and_stream(
         self->encoded_,
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+        [self](error_union err, io::http_streaming_response resp) {
+          if (std::holds_alternative<std::error_code>(err) &&
+              std::get<std::error_code>(err) == asio::error::operation_aborted) {
+            return;
+          }
+          self->invoke_response_handler(err, std::move(resp));
+        },
+#else
         [self](std::error_code ec, io::http_streaming_response resp) {
           if (ec == asio::error::operation_aborted) {
             return;
           }
           self->invoke_response_handler(ec, std::move(resp));
         },
+#endif
         [self]() {
           self->stream_end_callback_();
         });
@@ -409,8 +422,13 @@ public:
   {
   }
 
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+  auto do_http_request(const http_request& request, free_form_http_request_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, error_union>
+#else
   auto do_http_request(const http_request& request, free_form_http_request_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+#endif
   {
     std::shared_ptr<io::http_session_manager> session_manager;
     {
@@ -436,9 +454,9 @@ public:
     auto op =
       std::make_shared<pending_http_operation>(io_, request, session_manager->dispatch_timeout());
     if (!session_manager->is_configured()) {
-      auto ec = defer_command(op, session_manager, credentials, std::move(callback));
-      if (ec) {
-        return tl::unexpected{ ec };
+      auto err = defer_command(op, session_manager, credentials, std::move(callback));
+      if (!std::holds_alternative<std::monostate>(err)) {
+        return tl::unexpected{ err };
       }
       return op;
     }
@@ -478,8 +496,11 @@ public:
     auto op = std::make_shared<pending_buffered_http_operation>(
       io_, request, session_manager->dispatch_timeout());
     if (!session_manager->is_configured()) {
-      auto ec = defer_command(op, session_manager, credentials, std::move(callback));
-      if (ec) {
+      auto err = defer_command(op, session_manager, credentials, std::move(callback));
+      if (!std::holds_alternative<std::monostate>(err)) {
+        auto ec = std::holds_alternative<impl::bootstrap_error>(err)
+                    ? std::get<impl::bootstrap_error>(err).ec
+                    : std::get<std::error_code>(err);
         return tl::unexpected{ ec };
       }
       return op;
@@ -498,16 +519,19 @@ private:
                            const couchbase::core::cluster_credentials& credentials,
                            free_form_http_request_callback&& callback)
   {
-    op->start([callback = std::move(callback)](auto resp, auto ec) mutable {
-      callback(std::move(resp), ec);
-    });
-
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+    op->start([callback = std::move(callback)](auto resp, error_union err) mutable {
+      callback(std::move(resp), err);
+    });
     // don't do anything if the op wasn't dispatched or has already timed out
     auto now = std::chrono::steady_clock::now();
     if (op->dispatch_deadline_expiry() < now || op->deadline_expiry() < now) {
       return;
     }
+#else
+    op->start([callback = std::move(callback)](auto resp, auto ec) mutable {
+      callback(std::move(resp), ec);
+    });
 #endif
     std::shared_ptr<io::http_session> session;
     {
@@ -592,10 +616,10 @@ private:
   auto defer_command(std::shared_ptr<PendingHttpOp> pending_op,
                      const std::shared_ptr<io::http_session_manager>& session_manager,
                      const couchbase::core::cluster_credentials& credentials,
-                     Callback&& callback) -> std::error_code
+                     Callback&& callback) -> error_union
   {
     if (auto last_error = session_manager->last_bootstrap_error(); last_error.has_value()) {
-      return last_error->ec;
+      return last_error.value();
     }
     CB_LOG_DEBUG(
       R"(Adding pending HTTP operation to deferred queue: service={}, client_context_id={})",
@@ -605,26 +629,26 @@ private:
                                             callback = std::forward<Callback>(callback),
                                             op = std::move(pending_op),
                                             session_manager,
-                                            credentials](std::error_code ec) mutable {
-      if (ec) {
+                                            credentials](error_union err) mutable {
+      if (!std::holds_alternative<std::monostate>(err)) {
         // The deferred operation was cancelled - currently this can happen due to closing the
         // cluster
-        return callback({}, ec);
+        return callback({}, err);
       }
 
       return send_http_operation(
         op, session_manager, credentials, std::forward<Callback>(callback));
     });
-    return {};
+    return std::monostate{};
   }
 
   auto defer_command(std::shared_ptr<pending_buffered_http_operation> pending_op,
                      const std::shared_ptr<io::http_session_manager>& session_manager,
                      const couchbase::core::cluster_credentials& credentials,
-                     buffered_free_form_http_request_callback&& callback) -> std::error_code
+                     buffered_free_form_http_request_callback&& callback) -> error_union
   {
     if (auto last_error = session_manager->last_bootstrap_error(); last_error.has_value()) {
-      return last_error->ec;
+      return last_error.value();
     }
     CB_LOG_DEBUG(
       R"(Adding pending HTTP operation to deferred queue: service={}, client_context_id={})",
@@ -634,8 +658,11 @@ private:
                                             callback = std::move(callback),
                                             op = std::move(pending_op),
                                             session_manager,
-                                            credentials](std::error_code ec) mutable {
-      if (ec) {
+                                            credentials](error_union err) mutable {
+      if (!std::holds_alternative<std::monostate>(err)) {
+        auto ec = std::holds_alternative<impl::bootstrap_error>(err)
+                    ? std::get<impl::bootstrap_error>(err).ec
+                    : std::get<std::error_code>(err);
         // The deferred operation was cancelled - currently this can happen due to closing the
         // cluster
         return callback({}, ec);
@@ -643,7 +670,7 @@ private:
 
       return send_http_operation(op, session_manager, credentials, std::move(callback));
     });
-    return {};
+    return std::monostate{};
   }
 #endif
 
@@ -664,7 +691,11 @@ http_component::http_component(asio::io_context& io,
 auto
 http_component::do_http_request(const http_request& request,
                                 free_form_http_request_callback&& callback)
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+  -> tl::expected<std::shared_ptr<pending_operation>, error_union>
+#else
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+#endif
 {
   return impl_->do_http_request(request, std::move(callback));
 }

@@ -19,6 +19,7 @@
 
 #include <couchbase/build_config.hxx>
 
+#include "core/impl/bootstrap_error.hxx"
 #include "core/service_type_fmt.hxx"
 #include "core/tracing/constants.hxx"
 #include "core/utils/movable_function.hxx"
@@ -33,7 +34,11 @@
 namespace couchbase::core::operations
 {
 
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+using http_command_handler = utils::movable_function<void(error_union, io::http_response&&)>;
+#else
 using http_command_handler = utils::movable_function<void(std::error_code, io::http_response&&)>;
+#endif
 
 template<typename Request>
 struct http_command : public std::enable_shared_from_this<http_command<Request>> {
@@ -158,17 +163,24 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
     }
   }
 
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+  void invoke_handler(error_union error, io::http_response&& msg)
+#else
   void invoke_handler(std::error_code ec, io::http_response&& msg)
+#endif
   {
     if (span_ != nullptr) {
       span_->end();
       span_ = nullptr;
     }
     if (auto handler = std::move(handler_); handler) {
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+      handler(error, std::move(msg));
+    }
+    dispatch_deadline_.cancel();
+#else
       handler(ec, std::move(msg));
     }
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-    dispatch_deadline_.cancel();
 #endif
     deadline.cancel();
   }
