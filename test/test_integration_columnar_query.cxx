@@ -91,15 +91,16 @@ TEST_CASE("integration: columnar http component simple request", "[integration]"
   couchbase::core::http_response resp;
   {
     auto barrier = std::make_shared<
-      std::promise<tl::expected<couchbase::core::http_response, std::error_code>>>();
+      std::promise<tl::expected<couchbase::core::http_response, couchbase::core::error_union>>>();
     auto f = barrier->get_future();
-    auto op = agent.free_form_http_request(req, [barrier](auto resp, auto ec) {
-      if (ec) {
-        barrier->set_value(tl::unexpected(ec));
-        return;
-      }
-      barrier->set_value(std::move(resp));
-    });
+    auto op =
+      agent.free_form_http_request(req, [barrier](auto resp, couchbase::core::error_union err) {
+        if (!std::holds_alternative<std::monostate>(err)) {
+          barrier->set_value(tl::unexpected(err));
+          return;
+        }
+        barrier->set_value(std::move(resp));
+      });
     REQUIRE(op.has_value());
     auto r = f.get();
     REQUIRE(r.has_value());

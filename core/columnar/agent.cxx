@@ -49,7 +49,7 @@ public:
 
   auto free_form_http_request(const http_request& request,
                               free_form_http_request_callback&& callback)
-    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+    -> tl::expected<std::shared_ptr<pending_operation>, error_union>
   {
     return http_.do_http_request(request, std::move(callback));
   }
@@ -102,7 +102,7 @@ agent::agent(asio::io_context& io, couchbase::core::columnar::agent_config confi
 auto
 agent::free_form_http_request(const http_request& request,
                               free_form_http_request_callback&& callback)
-  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  -> tl::expected<std::shared_ptr<pending_operation>, error_union>
 {
   return impl_->free_form_http_request(request, std::move(callback));
 }

@@ -395,7 +395,12 @@ http_session::flush()
 void
 http_session::write_and_stream(
   io::http_request& request,
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+  utils::movable_function<void(couchbase::core::error_union, io::http_streaming_response)>
+    resp_handler,
+#else
   utils::movable_function<void(std::error_code, io::http_streaming_response)> resp_handler,
+#endif
   utils::movable_function<void()> stream_end_handler)
 {
   if (stopped_) {

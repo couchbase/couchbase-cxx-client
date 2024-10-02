@@ -15,6 +15,9 @@
 
 #pragma once
 
+#include <couchbase/build_config.hxx>
+
+#include "core/impl/bootstrap_error.hxx"
 #include "service_type.hxx"
 #include "utils/movable_function.hxx"
 
@@ -101,8 +104,13 @@ private:
   std::shared_ptr<http_response_impl> impl_;
 };
 
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+using free_form_http_request_callback =
+  utils::movable_function<void(http_response response, couchbase::core::error_union err)>;
+#else
 using free_form_http_request_callback =
   utils::movable_function<void(http_response response, std::error_code ec)>;
+#endif
 
 class buffered_http_response_impl;
 

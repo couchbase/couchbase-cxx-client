@@ -40,7 +40,11 @@ public:
 
   auto free_form_http_request(const http_request& request,
                               free_form_http_request_callback&& callback)
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+    -> tl::expected<std::shared_ptr<pending_operation>, error_union>;
+#else
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+#endif
 
 private:
   std::shared_ptr<cluster_agent_impl> impl_;

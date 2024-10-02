@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "core/impl/bootstrap_error.hxx"
 #include "core/pending_operation.hxx"
 #include "error.hxx"
 #include "query_options.hxx"

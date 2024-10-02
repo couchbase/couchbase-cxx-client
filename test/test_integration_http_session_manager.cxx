@@ -33,8 +33,8 @@ TEST_CASE("integration: random node selection with analytics service", "[integra
 
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
   auto barrier = std::make_shared<std::promise<bool>>();
-  session_mgr->add_to_deferred_queue([barrier](std::error_code ec) mutable {
-    REQUIRE_SUCCESS(ec);
+  session_mgr->add_to_deferred_queue([barrier](couchbase::core::error_union err) mutable {
+    REQUIRE(std::holds_alternative<std::monostate>(err));
     barrier->set_value(true);
   });
   auto fut = barrier->get_future();
