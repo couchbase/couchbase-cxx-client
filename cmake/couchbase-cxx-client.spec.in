@@ -10,6 +10,12 @@ BuildRequires: gcc, gcc-c++
 BuildRequires: cmake >= 3.19
 Source0: @COUCHBASE_CXX_CLIENT_TARBALL_NAME@.tar.gz
 
+%if 0%{?amzn}
+# The additional linker flags break AmazonLinux
+# https://bugzilla.redhat.com/show_bug.cgi?id=2043092
+%undefine _package_note_flags
+%endif
+
 %description
 This is the client and protocol library for Couchbase project.
 
@@ -28,6 +34,9 @@ Development files for the Couchbase C++ SDK.
 %prep
 %autosetup -p1 -n@COUCHBASE_CXX_CLIENT_TARBALL_NAME@
 %cmake \
+%if 0%{?rhel} == 8 || 0%{?rocky} == 8 || 0%{?ol} == 8
+    -S "." -B "redhat-linux-build" \
+%endif
     -DBUILD_SHARED_LIBS=OFF \
     -DCOUCHBASE_CXX_CLIENT_INSTALL=ON \
     -DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON \
@@ -38,10 +47,18 @@ Development files for the Couchbase C++ SDK.
     -DCOUCHBASE_CXX_CLIENT_BUILD_SHARED=ON
 
 %build
+%if 0%{?rhel} == 8 || 0%{?rocky} == 8 || 0%{?ol} == 8
+/usr/bin/cmake --build "redhat-linux-build" -j${RPM_BUILD_NCPUS} --verbose
+%else
 %cmake_build
+%endif
 
 %install
+%if 0%{?rhel} == 8 || 0%{?rocky} == 8 || 0%{?ol} == 8
+DESTDIR="%{buildroot}" /usr/bin/cmake --install "redhat-linux-build"
+%else
 %cmake_install
+%endif
 
 %files
 %license %{_docdir}/couchbase_cxx_client/LICENSE.txt
@@ -62,4 +79,3 @@ Development files for the Couchbase C++ SDK.
 %changelog
 * @COUCHBASE_CXX_CLIENT_RPM_DATE@ Couchbase SDK Team <support@couchbase.com> - @COUCHBASE_CXX_CLIENT_PACKAGE_VERSION@-@COUCHBASE_CXX_CLIENT_PACKAGE_RELEASE@
 - Automated build.
-%{_libdir}/libcouchbase_cxx_client_static.a

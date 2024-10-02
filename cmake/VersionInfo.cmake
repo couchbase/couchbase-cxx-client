@@ -24,8 +24,30 @@ if(NOT COUCHBASE_CXX_CLIENT_GIT_DESCRIBE)
   endif()
 endif()
 
-string(TIMESTAMP COUCHBASE_CXX_CLIENT_BUILD_TIMESTAMP "%Y-%m-%dT%H:%M:%S" UTC)
-string(TIMESTAMP COUCHBASE_CXX_CLIENT_BUILD_DATE "%Y-%m-%d" UTC)
+if(NOT COUCHBASE_CXX_CLIENT_BUILD_TIMESTAMP)
+  if(GIT)
+    execute_process(
+      COMMAND git describe --tags --abbrev=0 HEAD
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+      RESULT_VARIABLE tag_result
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      OUTPUT_VARIABLE last_tag)
+
+    if (tag_result EQUAL 0)
+      execute_process(
+        COMMAND git log --max-count=1 --no-patch --format=%cd --date=format:%Y-%m-%dT%H:%M:%S ${last_tag}
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        OUTPUT_VARIABLE COUCHBASE_CXX_CLIENT_BUILD_TIMESTAMP)
+    endif()
+  endif()
+
+  if (NOT COUCHBASE_CXX_CLIENT_BUILD_TIMESTAMP)
+    string(TIMESTAMP COUCHBASE_CXX_CLIENT_BUILD_TIMESTAMP "%Y-%m-%dT%H:%M:%S" UTC)
+  endif()
+endif()
+
+string(REGEX REPLACE "T.*" "" COUCHBASE_CXX_CLIENT_BUILD_DATE "${COUCHBASE_CXX_CLIENT_BUILD_TIMESTAMP}")
 
 # set(couchbase_cxx_client_BUILD_NUMBER 142)
 # set(COUCHBASE_CXX_CLIENT_GIT_DESCRIBE "1.0.0-beta.4-27-g6807da0") #-> "couchbase_cxx_client-1.0.0-beta.4+142.27.6807da0"

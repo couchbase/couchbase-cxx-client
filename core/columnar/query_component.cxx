@@ -139,6 +139,7 @@ public:
     }
     retry_timer_.cancel();
     deadline_.cancel();
+    error return_error{};
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
     if (std::holds_alternative<impl::bootstrap_error>(op.error())) {
       auto bootstrap_error = std::get<impl::bootstrap_error>(op.error());
@@ -146,14 +147,17 @@ public:
         fmt::format("Failed to create the HTTP pending operation due to a bootstrap error.  "
                     "See logs for further details.  bootstrap_error.message={}",
                     bootstrap_error.error_message);
-      return error{ bootstrap_error.ec, message };
+      return_error.ec = bootstrap_error.ec;
+      return_error.message = message;
     } else {
-      return error{ std::get<std::error_code>(op.error()),
-                    "Failed to create the HTTP pending operation." };
+      return_error.ec = std::get<std::error_code>(op.error());
+      return_error.message = "Failed to create the HTTP pending operation.";
     }
 #else
-    return error{ op.error() };
+    return_error.ec = op.error();
 #endif
+    invoke_callback({}, return_error);
+    return return_error;
   }
 
   auto start(query_callback&& callback) -> error
