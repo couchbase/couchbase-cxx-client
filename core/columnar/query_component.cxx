@@ -334,53 +334,71 @@ private:
     std::int32_t first_error_code{ 0 };
     std::string first_error_msg{};
 
+    std::int32_t first_non_retr_error_code{ 0 };
+    std::string first_non_retr_error_msg{};
+
     for (auto error_json : errors_json->get_array()) {
-      auto* retr = error_json.find("retriable");
-      if (retr == nullptr) {
-        // An error is assumed to not be retriable if the field is missing
-        res.retriable = false;
-      } else if (!retr->is_boolean()) {
-        return { { errc::generic,
-                   "Could not parse error from server response - 'retriable' was not boolean" } };
-      } else {
-        // Operation is retriable iff all errors are retriable
-        res.retriable = res.retriable && retr->get_boolean();
+      bool retr{ false }; // An error is assumed to not be retriable if the field is missing
+      {
+        auto* r = error_json.find("retriable");
+        if (r != nullptr) {
+          if (!r->is_boolean()) {
+            return {
+              { errc::generic,
+                "Could not parse error from server response - 'retriable' was not boolean" }
+            };
+          }
+          retr = r->get_boolean();
+        }
       }
 
-      auto* msg = error_json.find("msg");
-      if (msg == nullptr) {
-        return { { errc::generic,
-                   "Could not parse error from server response - could not find 'msg' field" } };
-      }
-      if (!msg->is_string()) {
-        return { { errc::generic,
-                   "Could not parse error from server response - 'msg' field was not string" } };
+      // Operation is retriable iff all errors are retriable
+      res.retriable = res.retriable && retr;
+
+      std::string msg{};
+      {
+        auto* m = error_json.find("msg");
+        if (m == nullptr) {
+          return { { errc::generic,
+                     "Could not parse error from server response - could not find 'msg' field" } };
+        }
+        if (!m->is_string()) {
+          return { { errc::generic,
+                     "Could not parse error from server response - 'msg' field was not string" } };
+        }
+        msg = m->get_string();
       }
 
-      auto* c = error_json.find("code");
-      if (c == nullptr) {
-        return { { errc::generic,
-                   "Could not parse error from server response - could not find 'code' field" } };
+      std::int32_t code{};
+      {
+        auto* c = error_json.find("code");
+        if (c == nullptr) {
+          return { { errc::generic,
+                     "Could not parse error from server response - could not find 'code' field" } };
+        }
+        if (!(c->is_unsigned() || c->is_signed())) {
+          return {
+            { errc::generic,
+              "Could not parse error from server response - 'code' field was not an integer" }
+          };
+        }
+        code = c->is_signed() ? gsl::narrow_cast<std::int32_t>(c->get_signed())
+                              : gsl::narrow_cast<std::int32_t>(c->get_unsigned());
       }
-      if (!(c->is_unsigned() || c->is_signed())) {
-        return {
-          { errc::generic,
-            "Could not parse error from server response - 'code' field was not an integer" }
-        };
-      }
-
-      std::int32_t code = c->is_signed() ? gsl::narrow_cast<std::int32_t>(c->get_signed())
-                                         : gsl::narrow_cast<std::int32_t>(c->get_unsigned());
 
       tao::json::value error = {
         { "code", code },
-        { "msg", msg->get_string() },
+        { "msg", msg },
       };
       res.err.ctx["errors"].get_array().emplace_back(std::move(error));
 
       if (first_error_code == 0) {
         first_error_code = code;
-        first_error_msg = msg->get_string();
+        first_error_msg = msg;
+      }
+      if (!retr && first_non_retr_error_code == 0) {
+        first_non_retr_error_code = code;
+        first_non_retr_error_msg = msg;
       }
 
       switch (code) {
@@ -396,7 +414,14 @@ private:
     }
 
     if (res.err.ec == errc::query_error) {
-      res.err.properties = query_error_properties{ first_error_code, first_error_msg };
+      // If any of the errors is not retriable, report the first non-retriable code/message in the
+      // error properties
+      if (first_non_retr_error_code != 0) {
+        res.err.properties =
+          query_error_properties{ first_non_retr_error_code, first_non_retr_error_msg };
+      } else {
+        res.err.properties = query_error_properties{ first_error_code, first_error_msg };
+      }
     }
 
     return res;
