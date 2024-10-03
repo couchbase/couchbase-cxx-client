@@ -19,18 +19,20 @@
 
 #include "core/utils/connection_string.hxx"
 
+#include <couchbase/build_config.hxx>
+
 TEST_CASE("unit: connection string", "[unit]")
 {
   SECTION("full example")
   {
     auto spec = couchbase::core::utils::parse_connection_string(
-      "couchbase://localhost:8091=http;127.0.0.1=mcd/default?enable_tracing=false");
+      "couchbase://localhost:8091=http;127.0.0.1=mcd/default?dump_configuration=true");
     CHECK(spec.scheme == "couchbase");
     CHECK(spec.default_port == 11210);
     CHECK(spec.default_mode == couchbase::core::utils::connection_string::bootstrap_mode::gcccp);
     CHECK(spec.tls == false);
     CHECK(spec.params == std::map<std::string, std::string>{
-                           { "enable_tracing", "false" },
+                           { "dump_configuration", "true" },
                          });
     CHECK(spec.bootstrap_nodes ==
           std::vector<couchbase::core::utils::connection_string::node>{
@@ -43,7 +45,7 @@ TEST_CASE("unit: connection string", "[unit]")
               couchbase::core::utils::connection_string::address_type::ipv4,
               couchbase::core::utils::connection_string::bootstrap_mode::gcccp },
           });
-    CHECK(spec.options.enable_tracing == false);
+    CHECK(spec.options.dump_configuration == true);
     CHECK(spec.default_bucket_name == "default");
   }
 
@@ -406,6 +408,87 @@ TEST_CASE("unit: connection string", "[unit]")
     }
   }
 
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+  SECTION("options")
+  {
+    CHECK(couchbase::core::utils::parse_connection_string("couchbase://127.0.0.1")
+            .options.trust_certificate.empty());
+    CHECK(couchbase::core::utils::parse_connection_string(
+            "couchbase://127.0.0.1?security.trust_only_pem_file=/etc/tls/example.cert")
+            .options.trust_certificate == "/etc/tls/example.cert");
+    auto spec = couchbase::core::utils::parse_connection_string(
+      "couchbase://127.0.0.1?timeout.connect_timeout=42ms&timeout.query_timeout=123ms");
+    CHECK(spec.options.bootstrap_timeout == std::chrono::milliseconds(42));
+    CHECK(spec.options.query_timeout == std::chrono::milliseconds(123));
+
+    SECTION("parameters")
+    {
+      CHECK(spec.params == std::map<std::string, std::string>{
+                             { "timeout.connect_timeout", "42ms" },
+                             { "timeout.query_timeout", "123ms" },
+                           });
+
+      spec = couchbase::core::utils::parse_connection_string(
+        "couchbase://127.0.0.1?timeout.connect_timeout=42ms&foo=bar");
+      CHECK(spec.params == std::map<std::string, std::string>{
+                             { "timeout.connect_timeout", "42ms" },
+                             { "foo", "bar" },
+                           });
+      CHECK(spec.options.bootstrap_timeout == std::chrono::milliseconds(42));
+
+      spec = couchbase::core::utils::parse_connection_string(
+        "couchbase://127.0.0.1?timeout.resolve_timeout=4s2ms");
+      CHECK(spec.params == std::map<std::string, std::string>{
+                             { "timeout.resolve_timeout", "4s2ms" },
+                           });
+      CHECK(spec.options.resolve_timeout == std::chrono::milliseconds(4002));
+
+      spec = couchbase::core::utils::parse_connection_string(
+        "couchbase://"
+        "127.0.0.1?user_agent_extra=couchnode%2F4.1.1%20(node%2F12.11."
+        "1%3B%20v8%2F7.7.299.11-node.12%3B%20ssl%2F1.1.1c)");
+      CHECK(spec.options.user_agent_extra ==
+            "couchnode/4.1.1 (node/12.11.1; v8/7.7.299.11-node.12; ssl/1.1.1c)");
+    }
+  }
+
+  SECTION("parsing warnings")
+  {
+    auto spec = couchbase::core::utils::parse_connection_string(
+      "couchbase://127.0.0.1?timeout.connect_timeout=42ms&foo=bar");
+    CHECK(spec.warnings == std::vector<std::string>{
+                             R"(unknown parameter "foo" in connection string (value "bar"))",
+                           });
+
+    spec = couchbase::core::utils::parse_connection_string(
+      "couchbase://127.0.0.1?enable_dns_srv=maybe&ip_protocol=yes");
+    CHECK(
+      spec.warnings ==
+      std::vector<std::string>{
+        R"(unable to parse "enable_dns_srv" parameter in connection string (value "maybe" cannot be interpreted as a boolean))",
+        R"(unable to parse "ip_protocol" parameter in connection string (value "yes" is not a valid IP protocol preference))",
+      });
+
+    spec = couchbase::core::utils::parse_connection_string(
+      "couchbase://localhost:8091=http;127.0.0.1=mcd/default?enable_dns_srv=true");
+    CHECK(
+      spec.warnings ==
+      std::vector<std::string>{
+        R"(parameter "enable_dns_srv" requires single entry in bootstrap nodes list of the connection string, ignoring (value "true"))",
+      });
+
+    spec = couchbase::core::utils::parse_connection_string(
+      "couchbase://"
+      "localhost?timeout.query_timeout=10000ms&timeout.dispatch_timeout=true&timeout.resolve_"
+      "timeout=11000ms");
+    std::string warning_prefix =
+      R"(unable to parse "timeout.dispatch_timeout" parameter in connection string (value: "true"): invalid duration: true)";
+    CHECK(spec.warnings.at(0).substr(0, warning_prefix.size()) == warning_prefix);
+    CHECK(spec.options.query_timeout == std::chrono::milliseconds(10000));
+    CHECK(spec.options.resolve_timeout == std::chrono::milliseconds(11000));
+  }
+
+#else
   SECTION("options")
   {
     CHECK(couchbase::core::utils::parse_connection_string("couchbase://127.0.0.1")
@@ -449,25 +532,6 @@ TEST_CASE("unit: connection string", "[unit]")
     }
   }
 
-  SECTION("parsing errors")
-  {
-    CHECK(couchbase::core::utils::parse_connection_string("").error ==
-          "failed to parse connection string: empty input");
-    CHECK(
-      couchbase::core::utils::parse_connection_string("couchbase://127.0.0.1/bucket/foo").error ==
-      R"(failed to parse connection string (column: 29, trailer: "/foo"))");
-    CHECK(couchbase::core::utils::parse_connection_string("couchbase://[:13.15.49.232]").error ==
-          R"(failed to parse connection string (column: 14, trailer: ":13.15.49.232]"))");
-    CHECK(couchbase::core::utils::parse_connection_string(
-            "couchbase://[2001:1:db8:85a3:8d3:1319:8a2e:370:7348]")
-            .error == R"(failed to parse connection string (column: 47, trailer: ":7348]"))");
-    CHECK(
-      couchbase::core::utils::parse_connection_string(
-        "couchbase://2001:db8:85a3:8d3:1319:8a2e:370:7348")
-        .error.value() ==
-      R"(failed to parse connection string (column: 18, trailer: "db8:85a3:8d3:1319:8a2e:370:7348"))");
-  }
-
   SECTION("parsing warnings")
   {
     auto spec = couchbase::core::utils::parse_connection_string(
@@ -500,5 +564,25 @@ TEST_CASE("unit: connection string", "[unit]")
     CHECK(spec.warnings.at(0).substr(0, warning_prefix.size()) == warning_prefix);
     CHECK(spec.options.query_timeout == std::chrono::milliseconds(10000));
     CHECK(spec.options.management_timeout == std::chrono::milliseconds(11000));
+  }
+#endif
+
+  SECTION("parsing errors")
+  {
+    CHECK(couchbase::core::utils::parse_connection_string("").error ==
+          "failed to parse connection string: empty input");
+    CHECK(
+      couchbase::core::utils::parse_connection_string("couchbase://127.0.0.1/bucket/foo").error ==
+      R"(failed to parse connection string (column: 29, trailer: "/foo"))");
+    CHECK(couchbase::core::utils::parse_connection_string("couchbase://[:13.15.49.232]").error ==
+          R"(failed to parse connection string (column: 14, trailer: ":13.15.49.232]"))");
+    CHECK(couchbase::core::utils::parse_connection_string(
+            "couchbase://[2001:1:db8:85a3:8d3:1319:8a2e:370:7348]")
+            .error == R"(failed to parse connection string (column: 47, trailer: ":7348]"))");
+    CHECK(
+      couchbase::core::utils::parse_connection_string(
+        "couchbase://2001:db8:85a3:8d3:1319:8a2e:370:7348")
+        .error.value() ==
+      R"(failed to parse connection string (column: 18, trailer: "db8:85a3:8d3:1319:8a2e:370:7348"))");
   }
 }
