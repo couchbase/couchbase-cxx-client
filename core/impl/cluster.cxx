@@ -539,12 +539,15 @@ cluster::connect(const std::string& connection_string,
   // Spawn new thread for connection to ensure that cluster_impl pointer will
   // not be deallocated in IO thread in case of error.
   std::thread([connection_string, options, handler = std::move(handler)]() {
-    auto impl = std::make_shared<cluster_impl>();
     auto barrier = std::make_shared<std::promise<std::pair<error, cluster>>>();
     auto future = barrier->get_future();
-    impl->open(connection_string, options, [barrier](auto err, auto c) {
-      barrier->set_value({ std::move(err), std::move(c) });
-    });
+    {
+      auto impl = std::make_shared<cluster_impl>();
+      impl->open(connection_string, options, [barrier](auto err, auto c) {
+        barrier->set_value({ std::move(err), std::move(c) });
+      });
+    }
+
     auto [err, c] = future.get();
     handler(std::move(err), std::move(c));
   }).detach();
