@@ -34,7 +34,7 @@ using namespace tao::pegtl;
 
 struct bucket_name : seq<uri::segment_nz> {
 };
-using param_key = star<sor<abnf::ALPHA, abnf::DIGIT, one<'_'>>>;
+using param_key = star<sor<abnf::ALPHA, abnf::DIGIT, one<'_', '.'>>>;
 using param_value = star<sor<minus<uri::pchar, one<'=', '&', '?'>>, one<'/'>>>;
 struct param : seq<param_key, one<'='>, param_value> {
 };
@@ -237,24 +237,6 @@ parse_option(bool& receiver,
 }
 
 void
-parse_option(tls_verify_mode& receiver,
-             const std::string& name,
-             const std::string& value,
-             std::vector<std::string>& warnings)
-{
-  if (value == "none") {
-    receiver = tls_verify_mode::none;
-  } else if (value == "peer") {
-    receiver = tls_verify_mode::peer;
-  } else {
-    warnings.push_back(fmt::format(
-      R"(unable to parse "{}" parameter in connection string (value "{}" is not a valid TLS verification mode))",
-      name,
-      value));
-  }
-}
-
-void
 parse_option(io::ip_protocol& receiver,
              const std::string& name,
              const std::string& value,
@@ -269,6 +251,55 @@ parse_option(io::ip_protocol& receiver,
   } else {
     warnings.push_back(fmt::format(
       R"(unable to parse "{}" parameter in connection string (value "{}" is not a valid IP protocol preference))",
+      name,
+      value));
+  }
+}
+
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+void
+parse_option(std::chrono::milliseconds& receiver,
+             const std::string& name,
+             const std::string& value,
+             std::vector<std::string>& warnings)
+{
+  try {
+    receiver = std::chrono::duration_cast<std::chrono::milliseconds>(
+      parse_duration(string_codec::url_decode(value)));
+  } catch (const duration_parse_error& dpe) {
+    warnings.push_back(
+      fmt::format(R"(unable to parse "{}" parameter in connection string (value: "{}"): {})",
+                  name,
+                  value,
+                  dpe.what()));
+  } catch (const std::invalid_argument& ex1) {
+    warnings.push_back(fmt::format(
+      R"(unable to parse "{}" parameter in connection string (value "{}" is not a number): {})",
+      name,
+      value,
+      ex1.what()));
+  } catch (const std::out_of_range& ex2) {
+    warnings.push_back(fmt::format(
+      R"(unable to parse "{}" parameter in connection string (value "{}" is out of range): {})",
+      name,
+      value,
+      ex2.what()));
+  }
+}
+#else
+void
+parse_option(tls_verify_mode& receiver,
+             const std::string& name,
+             const std::string& value,
+             std::vector<std::string>& warnings)
+{
+  if (value == "none") {
+    receiver = tls_verify_mode::none;
+  } else if (value == "peer") {
+    receiver = tls_verify_mode::peer;
+  } else {
+    warnings.push_back(fmt::format(
+      R"(unable to parse "{}" parameter in connection string (value "{}" is not a valid TLS verification mode))",
       name,
       value));
   }
@@ -323,6 +354,7 @@ parse_option(std::chrono::milliseconds& receiver,
     }
   }
 }
+#endif
 
 void
 extract_options(connection_string& connstr)
@@ -333,6 +365,54 @@ extract_options(connection_string& connstr)
     connstr.options.enable_dns_srv = false;
   }
   for (const auto& [name, value] : connstr.params) {
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+    if (name == "security.trust_only_pem_file") {
+      /**
+       * Set the trust cert path
+       */
+      parse_option(connstr.options.trust_certificate, name, value, connstr.warnings);
+    } else if (name == "security.disable_server_certificate_verification") {
+      /**
+       * Disable TLS server cert verification if set to true.
+       */
+      if (value == "true" || value == "yes" || value == "on" || value == "1") {
+        connstr.options.tls_verify = tls_verify_mode::none;
+      } else if (value == "false" || value == "no" || value == "off" || value == "0") {
+        connstr.options.tls_verify = tls_verify_mode::peer;
+      } else {
+        connstr.warnings.push_back(fmt::format(
+          R"(unable to parse "{}" parameter in connection string (value "{}" cannot be interpreted as a boolean))",
+          name,
+          value));
+      }
+
+    } else if (name == "timeout.connect_timeout") {
+      /**
+       * The period of time allocated to complete bootstrap
+       */
+      parse_option(connstr.options.bootstrap_timeout, name, value, connstr.warnings);
+    } else if (name == "timeout.dispatch_timeout") {
+      /**
+       * Number of seconds to wait before timing out a Query or N1QL request by the client.
+       */
+      parse_option(connstr.options.dispatch_timeout, name, value, connstr.warnings);
+    } else if (name == "timeout.query_timeout") {
+      /**
+       * Number of seconds to wait before timing out a Query or N1QL request by the client.
+       */
+      parse_option(connstr.options.query_timeout, name, value, connstr.warnings);
+    } else if (name == "timeout.resolve_timeout") {
+      /**
+       * The period of time to resolve DNS name of the node to IP address
+       */
+      parse_option(connstr.options.resolve_timeout, name, value, connstr.warnings);
+    } else if (name == "timeout.socket_connect_timeout") {
+      /**
+       * Number of seconds the client should wait while attempting to connect to a node’s KV service
+       * via a socket. Initial connection, reconnecting, node added, etc.
+       */
+      parse_option(connstr.options.connect_timeout, name, value, connstr.warnings);
+#else
     if (name == "kv_connect_timeout") {
       /**
        * Number of seconds the client should wait while attempting to connect to a node’s KV service
@@ -404,6 +484,7 @@ extract_options(connection_string& connstr)
       if (force_ipv4) {
         connstr.options.use_ip_protocol = io::ip_protocol::force_ipv4;
       }
+#endif
     } else if (name == "ip_protocol") {
       /**
        * Controls preference of IP protocol for name resolution
@@ -413,6 +494,37 @@ extract_options(connection_string& connstr)
       parse_option(connstr.options.config_poll_interval, name, value, connstr.warnings);
     } else if (name == "config_poll_floor") {
       parse_option(connstr.options.config_poll_floor, name, value, connstr.warnings);
+    } else if (name == "enable_dns_srv") {
+      if (connstr.bootstrap_nodes.size() == 1) {
+        parse_option(connstr.options.enable_dns_srv, name, value, connstr.warnings);
+      } else {
+        connstr.warnings.push_back(fmt::format(
+          R"(parameter "{}" requires single entry in bootstrap nodes list of the connection string, ignoring (value "{}"))",
+          name,
+          value));
+      }
+    } else if (name == "network") {
+      connstr.options.network =
+        value; /* current known values are "auto", "default" and "external" */
+    } else if (name == "user_agent_extra") {
+      /**
+       * string, that will be appended to identification fields of the server protocols (key in HELO
+       * packet for MCBP, "user-agent" header for HTTP)
+       */
+      parse_option(connstr.options.user_agent_extra, name, value, connstr.warnings);
+    } else if (name == "dump_configuration") {
+      /**
+       * Whether to dump every new configuration on TRACE level
+       */
+      parse_option(connstr.options.dump_configuration, name, value, connstr.warnings);
+    } else if (name == "enable_clustermap_notification") {
+      /**
+       * Allow the server to push configuration updates asynchronously.
+       */
+      parse_option(connstr.options.enable_clustermap_notification, name, value, connstr.warnings);
+    } else if (name == "disable_mozilla_ca_certificates") {
+      parse_option(connstr.options.disable_mozilla_ca_certificates, name, value, connstr.warnings);
+#ifndef COUCHBASE_CXX_CLIENT_COLUMNAR
     } else if (name == "max_http_connections") {
       /**
        * The maximum number of HTTP connections allowed on a per-host and per-port basis.  0
@@ -429,40 +541,16 @@ extract_options(connection_string& connstr)
        * The period of time allocated to complete bootstrap
        */
       parse_option(connstr.options.bootstrap_timeout, name, value, connstr.warnings);
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-    } else if (name == "dispatch_timeout") {
-      /**
-       * The period of time allocated to complete HTTP session bootstrap
-       */
-      parse_option(connstr.options.dispatch_timeout, name, value, connstr.warnings);
-#endif
     } else if (name == "resolve_timeout") {
       /**
        * The period of time to resolve DNS name of the node to IP address
        */
       parse_option(connstr.options.resolve_timeout, name, value, connstr.warnings);
-    } else if (name == "enable_dns_srv") {
-      if (connstr.bootstrap_nodes.size() == 1) {
-        parse_option(connstr.options.enable_dns_srv, name, value, connstr.warnings);
-      } else {
-        connstr.warnings.push_back(fmt::format(
-          R"(parameter "{}" requires single entry in bootstrap nodes list of the connection string, ignoring (value "{}"))",
-          name,
-          value));
-      }
-    } else if (name == "network") {
-      connstr.options.network =
-        value; /* current known values are "auto", "default" and "external" */
     } else if (name == "show_queries") {
       /**
        * Whether to display N1QL, Analytics, Search queries on info level (default false)
        */
       parse_option(connstr.options.show_queries, name, value, connstr.warnings);
-    } else if (name == "enable_clustermap_notification") {
-      /**
-       * Allow the server to push configuration updates asynchronously.
-       */
-      parse_option(connstr.options.enable_clustermap_notification, name, value, connstr.warnings);
     } else if (name == "enable_unordered_execution") {
       /**
        * Allow the server to reorder commands
@@ -487,25 +575,13 @@ extract_options(connection_string& connstr)
       parse_option(connstr.options.enable_metrics, name, value, connstr.warnings);
     } else if (name == "tls_verify") {
       parse_option(connstr.options.tls_verify, name, value, connstr.warnings);
-    } else if (name == "disable_mozilla_ca_certificates") {
-      parse_option(connstr.options.disable_mozilla_ca_certificates, name, value, connstr.warnings);
     } else if (name == "tls_disable_deprecated_protocols") {
       parse_option(connstr.options.tls_disable_deprecated_protocols, name, value, connstr.warnings);
     } else if (name == "tls_disable_v1_2") {
       parse_option(connstr.options.tls_disable_v1_2, name, value, connstr.warnings);
-    } else if (name == "user_agent_extra") {
-      /**
-       * string, that will be appended to identification fields of the server protocols (key in HELO
-       * packet for MCBP, "user-agent" header for HTTP)
-       */
-      parse_option(connstr.options.user_agent_extra, name, value, connstr.warnings);
-    } else if (name == "dump_configuration") {
-      /**
-       * Whether to dump every new configuration on TRACE level
-       */
-      parse_option(connstr.options.dump_configuration, name, value, connstr.warnings);
     } else if (name == "server_group") {
       parse_option(connstr.options.server_group, name, value, connstr.warnings);
+#endif
     } else {
       connstr.warnings.push_back(
         fmt::format(R"(unknown parameter "{}" in connection string (value "{}"))", name, value));
