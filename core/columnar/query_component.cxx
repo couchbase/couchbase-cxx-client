@@ -282,11 +282,13 @@ private:
           break;
       }
     }
+
+    const std::chrono::milliseconds server_timeout = timeout_ + std::chrono::seconds(5);
+    payload["timeout"] = fmt::format("{}ms", server_timeout.count());
+
     for (const auto& [key, val] : options.raw) {
       payload[key] = utils::json::parse(val);
     }
-    const std::chrono::milliseconds server_timeout = timeout_ + std::chrono::seconds(5);
-    payload["timeout"] = fmt::format("{}ms", server_timeout.count());
 
     return payload;
   }
