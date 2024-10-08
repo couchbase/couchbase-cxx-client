@@ -149,6 +149,13 @@ void
 set_log_levels(level lvl);
 
 /**
+ * Get the lowest (most verbose) level among the registered loggers
+ * @return log severity level
+ */
+auto
+get_lowest_log_level() -> level;
+
+/**
  * Checks whether a specific level should be logged based on the current
  * configuration.
  * @param level severity level to check
