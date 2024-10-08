@@ -77,8 +77,10 @@ update_file_logger(const std::shared_ptr<spdlog::logger>& new_logger)
   const std::scoped_lock lock(file_logger_mutex);
   // delete if already exists
   spdlog::drop(file_logger_name);
-  file_logger = new_logger;
-  spdlog::register_logger(new_logger);
+  if (new_logger) {
+    file_logger = new_logger;
+    spdlog::register_logger(new_logger);
+  }
   ++file_logger_version;
 }
 
@@ -110,6 +112,28 @@ translate_level(level level) -> spdlog::level::level_enum
       return spdlog::level::level_enum::off;
   }
   return spdlog::level::level_enum::trace;
+}
+
+auto
+translate_level(spdlog::level::level_enum spdlog_level) -> level
+{
+  switch (spdlog_level) {
+    case spdlog::level::level_enum::trace:
+      return level::trace;
+    case spdlog::level::debug:
+      return level::debug;
+    case spdlog::level::info:
+      return level::info;
+    case spdlog::level::warn:
+      return level::warn;
+    case spdlog::level::err:
+      return level::err;
+    case spdlog::level::critical:
+      return level::critical;
+    default:
+      break;
+  }
+  return level::off;
 }
 
 auto
@@ -248,11 +272,7 @@ create_file_logger_impl(const std::string& logger_name, const configuration& log
 
       // Set the formatting pattern of this sink
       stderrsink->set_pattern(log_pattern);
-      if (logger_settings.unit_test) {
-        stderrsink->set_level(spdlog::level::trace);
-      } else {
-        stderrsink->set_level(spdlog::level::err);
-      }
+      stderrsink->set_level(translate_level(logger_settings.console_sink_log_level));
       sink->add_sink(stderrsink);
     }
     if (nullptr != logger_settings.sink) {
@@ -408,6 +428,19 @@ check_log_levels(level lvl) -> bool
     }
   });
   return correct;
+}
+
+auto
+get_lowest_log_level() -> level
+{
+  auto lowest = spdlog::level::off;
+  // Apply the function to each registered spdlog::logger except protocol logger
+  spdlog::apply_all([&lowest](const std::shared_ptr<spdlog::logger>& l) {
+    if (auto level = l->level(); level < lowest) {
+      lowest = level;
+    }
+  });
+  return translate_level(lowest);
 }
 
 void

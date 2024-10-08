@@ -52,6 +52,11 @@ struct configuration {
   level log_level{ level::info };
 
   /**
+   * The default log level for console sink
+   */
+  level console_sink_log_level{ level::trace };
+
+  /**
    * Custom sink to use, if desired
    */
   std::shared_ptr<spdlog::sinks::sink> sink{ nullptr };
