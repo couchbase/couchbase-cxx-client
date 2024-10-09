@@ -59,7 +59,6 @@ protected:
   asio::strand<asio::io_context::executor_type> strand_;
   bool tls_;
   std::string id_{};
-  std::atomic_bool open_{ false };
 
 public:
   stream_impl(asio::io_context& ctx, bool is_tls)
@@ -81,21 +80,16 @@ public:
     return id_;
   }
 
-  [[nodiscard]] auto is_open() const -> bool
-  {
-    return open_;
-  }
-
-  auto get_executor() const noexcept
+  [[nodiscard]] auto get_executor() const noexcept
   {
     return strand_;
   }
 
   [[nodiscard]] virtual auto local_endpoint() const -> asio::ip::tcp::endpoint = 0;
 
-  virtual void close(utils::movable_function<void(std::error_code)>&& handler) = 0;
+  [[nodiscard]] virtual auto is_open() const -> bool = 0;
 
-  virtual void reopen() = 0;
+  virtual void close(utils::movable_function<void(std::error_code)>&& handler) = 0;
 
   virtual void set_options() = 0;
 
@@ -133,10 +127,20 @@ public:
     return res;
   }
 
+  [[nodiscard]] auto is_open() const -> bool override
+  {
+    if (stream_) {
+      return stream_->is_open();
+    }
+    return false;
+  }
+
   void close(utils::movable_function<void(std::error_code)>&& handler) override
   {
-    open_ = false;
-    return asio::post(strand_, [stream = stream_, h = std::move(handler)]() {
+    id_ = uuid::to_string(uuid::random());
+    auto s = std::make_shared<asio::ip::tcp::socket>(strand_);
+    std::swap(stream_, s);
+    return asio::post(strand_, [stream = std::move(s), h = std::move(handler)]() {
       asio::error_code ec{};
       stream->shutdown(asio::socket_base::shutdown_both, ec);
       stream->close(ec);
@@ -144,17 +148,9 @@ public:
     });
   }
 
-  void reopen() override
-  {
-    return close([this](std::error_code) {
-      id_ = uuid::to_string(uuid::random());
-      stream_ = std::make_shared<asio::ip::tcp::socket>(strand_);
-    });
-  }
-
   void set_options() override
   {
-    if (!open_ || !stream_) {
+    if (!is_open()) {
       return;
     }
     std::error_code ec{};
@@ -165,10 +161,7 @@ public:
   void async_connect(const asio::ip::tcp::resolver::results_type::endpoint_type& endpoint,
                      utils::movable_function<void(std::error_code)>&& handler) override
   {
-    return stream_->async_connect(endpoint, [this, h = std::move(handler)](std::error_code ec) {
-      open_ = stream_->is_open();
-      h(ec);
-    });
+    return stream_->async_connect(endpoint, std::move(handler));
   }
 
   void async_write(std::vector<asio::const_buffer>& buffers,
@@ -211,10 +204,21 @@ public:
     return res;
   }
 
+  [[nodiscard]] auto is_open() const -> bool override
+  {
+    if (stream_) {
+      return stream_->lowest_layer().is_open();
+    }
+    return false;
+  }
+
   void close(utils::movable_function<void(std::error_code)>&& handler) override
   {
-    open_ = false;
-    return asio::post(strand_, [stream = stream_, h = std::move(handler)]() {
+    id_ = uuid::to_string(uuid::random());
+    auto s = std::make_shared<asio::ssl::stream<asio::ip::tcp::socket>>(
+      asio::ip::tcp::socket(strand_), tls_);
+    std::swap(stream_, s);
+    return asio::post(strand_, [stream = std::move(s), h = std::move(handler)]() {
       asio::error_code ec{};
       stream->lowest_layer().shutdown(asio::socket_base::shutdown_both, ec);
       stream->lowest_layer().close(ec);
@@ -222,18 +226,9 @@ public:
     });
   }
 
-  void reopen() override
-  {
-    return close([this](std::error_code) {
-      id_ = uuid::to_string(uuid::random());
-      stream_ = std::make_shared<asio::ssl::stream<asio::ip::tcp::socket>>(
-        asio::ip::tcp::socket(strand_), tls_);
-    });
-  }
-
   void set_options() override
   {
-    if (!open_ || !stream_) {
+    if (!is_open()) {
       return;
     }
     std::error_code ec{};
@@ -245,15 +240,15 @@ public:
                      utils::movable_function<void(std::error_code)>&& handler) override
   {
     return stream_->lowest_layer().async_connect(
-      endpoint, [this, handler = std::move(handler)](std::error_code ec_connect) mutable {
+      endpoint,
+      [stream = stream_, handler = std::move(handler)](std::error_code ec_connect) mutable {
         if (ec_connect == asio::error::operation_aborted) {
           return;
         }
         if (ec_connect) {
           return handler(ec_connect);
         }
-        open_ = stream_->lowest_layer().is_open();
-        stream_->async_handshake(
+        stream->async_handshake(
           asio::ssl::stream_base::client,
           [handler = std::move(handler)](std::error_code ec_handshake) mutable {
             if (ec_handshake == asio::error::operation_aborted) {
