@@ -1084,20 +1084,21 @@ public:
       return;
     }
     bootstrapped_ = false;
-    if (bootstrap_handler_) {
-      last_bootstrap_error_ = std::move(bootstrap_handler_)->last_bootstrap_error();
+    if (auto handler = std::move(bootstrap_handler_); handler) {
+      last_bootstrap_error_ = handler->last_bootstrap_error();
     }
-    bootstrap_handler_ = nullptr;
     state_ = diag::endpoint_state::connecting;
     if (stream_->is_open()) {
       std::string old_id = stream_->id();
-      stream_->reopen();
-      CB_LOG_TRACE(R"({} reopen socket connection "{}" -> "{}", host="{}", port={})",
-                   log_prefix_,
-                   old_id,
-                   stream_->id(),
-                   bootstrap_hostname_,
-                   bootstrap_port_);
+      return stream_->close([self = shared_from_this(), old_id](std::error_code) {
+        CB_LOG_DEBUG(R"({} reopened socket connection "{}" -> "{}", host="{}", port={})",
+                     self->log_prefix_,
+                     old_id,
+                     self->stream_->id(),
+                     self->bootstrap_hostname_,
+                     self->bootstrap_port_);
+        return self->initiate_bootstrap();
+      });
     }
     if (origin_.exhausted()) {
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
@@ -1174,6 +1175,20 @@ public:
     if (stopped_) {
       return;
     }
+
+    if (reason == retry_reason::socket_closed_while_in_flight && !bootstrapped_) {
+      return stream_->close([self = shared_from_this(), old_id = stream_->id()](std::error_code) {
+        CB_LOG_DEBUG(
+          R"({} reopened socket connection due to IO error, "{}" -> "{}", host="{}", port={})",
+          self->log_prefix_,
+          old_id,
+          self->stream_->id(),
+          self->bootstrap_hostname_,
+          self->bootstrap_port_);
+        return self->initiate_bootstrap();
+      });
+    }
+
     state_ = diag::endpoint_state::disconnecting;
     CB_LOG_DEBUG("{} stop MCBP connection, reason={}", log_prefix_, reason);
     stopped_ = true;
@@ -1653,6 +1668,7 @@ public:
 private:
   void invoke_bootstrap_handler(std::error_code ec)
   {
+    connection_deadline_.cancel();
     retry_backoff_.cancel();
 
     if (ec && state_listener_) {
@@ -1716,6 +1732,7 @@ private:
     if (ec == asio::error::operation_aborted || stopped_) {
       return;
     }
+    connection_deadline_.cancel();
     last_active_ = std::chrono::steady_clock::now();
     if (ec) {
       CB_LOG_ERROR("{} error on resolve: {} ({})", log_prefix_, ec.value(), ec.message());
@@ -1734,9 +1751,7 @@ private:
       if (timer_ec == asio::error::operation_aborted || self->stopped_) {
         return;
       }
-      return self->stream_->close([self](std::error_code) {
-        self->initiate_bootstrap();
-      });
+      self->initiate_bootstrap();
     });
   }
 
@@ -1768,12 +1783,7 @@ private:
                        port,
                        self->bootstrap_hostname_,
                        self->bootstrap_port_);
-          return self->stream_->close([self](std::error_code ec) {
-            self->last_bootstrap_error_ = {
-              ec, ec.message(), self->bootstrap_hostname_, self->bootstrap_port_
-            };
-            self->initiate_bootstrap();
-          });
+          self->initiate_bootstrap();
         });
       stream_->async_connect(it->endpoint(), [capture0 = shared_from_this(), it](auto&& PH1) {
         capture0->on_connect(std::forward<decltype(PH1)>(PH1), it);
@@ -1801,6 +1811,7 @@ private:
     if (ec == asio::error::operation_aborted || stopped_) {
       return;
     }
+    connection_deadline_.cancel();
     last_active_ = std::chrono::steady_clock::now();
     if (!stream_->is_open() || ec) {
 #ifdef COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL
@@ -1853,23 +1864,26 @@ private:
                                 connection_endpoints_.remote_address,
                                 connection_endpoints_.remote.port());
       parser_.reset();
+      {
+        const std::scoped_lock lock(output_buffer_mutex_);
+        output_buffer_.clear();
+      }
       bootstrap_handler_ = std::make_shared<bootstrap_handler>(shared_from_this());
-      connection_deadline_.cancel();
-    }
-  }
 
-  void check_deadline(std::error_code ec)
-  {
-    if (ec == asio::error::operation_aborted || stopped_) {
-      return;
-    }
-    if (connection_deadline_.expiry() <= asio::steady_timer::clock_type::now()) {
-      stream_->close([](std::error_code) {
+      connection_deadline_.expires_after(origin_.options().key_value_timeout);
+      connection_deadline_.async_wait([self = shared_from_this()](const auto timer_ec) {
+        if (timer_ec == asio::error::operation_aborted || self->stopped_) {
+          return;
+        }
+        CB_LOG_DEBUG("{} unable to boostrap single node at {}:{} (\"{}:{}\") in time, reconnecting",
+                     self->log_prefix_,
+                     self->connection_endpoints_.remote_address,
+                     self->connection_endpoints_.remote.port(),
+                     self->bootstrap_hostname_,
+                     self->bootstrap_port_);
+        return self->initiate_bootstrap();
       });
     }
-    connection_deadline_.async_wait([capture0 = shared_from_this()](auto&& PH1) {
-      capture0->check_deadline(std::forward<decltype(PH1)>(PH1));
-    });
   }
 
   void do_read()
@@ -1883,6 +1897,7 @@ private:
       [self = shared_from_this(), stream_id = stream_->id()](std::error_code ec,
                                                              std::size_t bytes_transferred) {
         if (ec == asio::error::operation_aborted || self->stopped_) {
+          self->reading_ = false;
           CB_LOG_PROTOCOL("[MCBP, IN] host=\"{}\", port={}, rc={}, bytes_received={}",
                           self->connection_endpoints_.remote_address,
                           self->connection_endpoints_.remote.port(),
@@ -1901,6 +1916,7 @@ private:
 
         self->last_active_ = std::chrono::steady_clock::now();
         if (ec) {
+          self->reading_ = false;
           if (stream_id != self->stream_->id()) {
             CB_LOG_ERROR(
               R"({} ignore IO error while reading from the socket: {} ({}), old_id="{}", new_id="{}")",
