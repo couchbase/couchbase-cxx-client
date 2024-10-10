@@ -33,8 +33,10 @@ collection_update_request::encode_to(encoded_request_type& encoded,
                                      http_context& /*context*/) const -> std::error_code
 {
   encoded.method = "PATCH";
-  encoded.path = fmt::format(
-    "/pools/default/buckets/{}/scopes/{}/collections/{}", bucket_name, scope_name, collection_name);
+  encoded.path = fmt::format("/pools/default/buckets/{}/scopes/{}/collections/{}",
+                             utils::string_codec::v2::path_escape(bucket_name),
+                             utils::string_codec::v2::path_escape(scope_name),
+                             utils::string_codec::v2::path_escape(collection_name));
   encoded.headers["content-type"] = "application/x-www-form-urlencoded";
   std::map<std::string, std::string> values{};
   if (max_expiry.has_value()) {

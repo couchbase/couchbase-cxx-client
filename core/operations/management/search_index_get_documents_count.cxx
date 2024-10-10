@@ -18,6 +18,7 @@
 #include "search_index_get_documents_count.hxx"
 
 #include "core/utils/json.hxx"
+#include "core/utils/url_codec.hxx"
 #include "error_utils.hxx"
 
 #include <fmt/core.h>
@@ -33,8 +34,8 @@ search_index_get_documents_count_request::encode_to(encoded_request_type& encode
   encoded.method = "GET";
   if (bucket_name.has_value() && scope_name.has_value()) {
     encoded.path = fmt::format("/api/bucket/{}/scope/{}/index/{}/count",
-                               bucket_name.value(),
-                               scope_name.value(),
+                               utils::string_codec::v2::path_escape(bucket_name.value()),
+                               utils::string_codec::v2::path_escape(scope_name.value()),
                                index_name);
   } else {
     encoded.path = fmt::format("/api/index/{}/count", index_name);

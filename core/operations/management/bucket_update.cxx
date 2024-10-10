@@ -20,6 +20,7 @@
 #include "core/management/bucket_settings.hxx"
 #include "core/utils/join_strings.hxx"
 #include "core/utils/json.hxx"
+#include "core/utils/url_codec.hxx"
 #include "error_utils.hxx"
 
 #include <couchbase/durability_level.hxx>
@@ -33,7 +34,8 @@ bucket_update_request::encode_to(encoded_request_type& encoded,
                                  http_context& /* context */) const -> std::error_code
 {
   encoded.method = "POST";
-  encoded.path = fmt::format("/pools/default/buckets/{}", bucket.name);
+  encoded.path =
+    fmt::format("/pools/default/buckets/{}", utils::string_codec::v2::path_escape(bucket.name));
 
   encoded.headers["content-type"] = "application/x-www-form-urlencoded";
 

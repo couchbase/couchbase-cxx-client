@@ -18,6 +18,7 @@
 #include "scope_drop.hxx"
 
 #include "core/utils/json.hxx"
+#include "core/utils/url_codec.hxx"
 #include "error_utils.hxx"
 
 #include <fmt/core.h>
@@ -32,7 +33,9 @@ scope_drop_request::encode_to(encoded_request_type& encoded,
                               http_context& /* context */) const -> std::error_code
 {
   encoded.method = "DELETE";
-  encoded.path = fmt::format("/pools/default/buckets/{}/scopes/{}", bucket_name, scope_name);
+  encoded.path = fmt::format("/pools/default/buckets/{}/scopes/{}",
+                             utils::string_codec::v2::path_escape(bucket_name),
+                             utils::string_codec::v2::path_escape(scope_name));
   return {};
 }
 

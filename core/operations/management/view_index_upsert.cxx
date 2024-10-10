@@ -18,6 +18,7 @@
 #include "view_index_upsert.hxx"
 
 #include "core/utils/json.hxx"
+#include "core/utils/url_codec.hxx"
 #include "error_utils.hxx"
 
 #include <fmt/core.h>
@@ -45,7 +46,7 @@ view_index_upsert_request::encode_to(encoded_request_type& encoded,
   encoded.headers["content-type"] = "application/json";
   encoded.method = "PUT";
   encoded.path = fmt::format("/{}/_design/{}{}",
-                             bucket_name,
+                             utils::string_codec::v2::path_escape(bucket_name),
                              document.ns == design_document_namespace::development ? "dev_" : "",
                              document.name);
   encoded.body = utils::json::generate(body);
