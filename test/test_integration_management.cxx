@@ -318,6 +318,32 @@ TEST_CASE("integration: bucket management", "[integration]")
     }
   }
 
+  SECTION("URI encoding")
+  {
+    std::string all_valid_chars{
+      "abcdefghijklmnopqrstuvwxyz%20_123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    };
+    {
+      couchbase::core::operations::management::bucket_create_request req;
+      req.bucket.name = all_valid_chars;
+      auto resp = test::utils::execute(integration.cluster, req);
+      REQUIRE_SUCCESS(resp.ctx.ec);
+    }
+    {
+      REQUIRE(wait_for_bucket_created(integration, all_valid_chars));
+      couchbase::core::operations::management::bucket_get_request req;
+      req.name = all_valid_chars;
+      auto resp = test::utils::execute(integration.cluster, req);
+      REQUIRE_SUCCESS(resp.ctx.ec);
+      REQUIRE(resp.bucket.name == all_valid_chars);
+    }
+    {
+      couchbase::core::operations::management::bucket_drop_request req;
+      req.name = all_valid_chars;
+      test::utils::execute(integration.cluster, req);
+    }
+  }
+
   SECTION("flush")
   {
     SECTION("core api")
@@ -1149,9 +1175,55 @@ TEST_CASE("integration: collection management", "[integration]")
 
   auto scope_name = test::utils::uniq_id("scope");
   auto collection_name = test::utils::uniq_id("collection");
+  std::string all_valid_chars{
+    "abcdefghijklmnopqrstuvwxyz%20_123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  };
   std::int32_t max_expiry = 5;
   SECTION("core api")
   {
+    {
+      couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket,
+                                                                         all_valid_chars };
+      auto resp = test::utils::execute(integration.cluster, req);
+      REQUIRE_SUCCESS(resp.ctx.ec);
+      auto created = test::utils::wait_until_collection_manifest_propagated(
+        integration.cluster, integration.ctx.bucket, resp.uid);
+      REQUIRE(created);
+    }
+    {
+      auto created = test::utils::wait_until([&]() {
+        return scope_exists(integration.cluster, integration.ctx.bucket, all_valid_chars);
+      });
+      REQUIRE(created);
+    }
+
+    if (integration.cluster_version().is_enterprise()) {
+      {
+        couchbase::core::operations::management::collection_create_request req{
+          integration.ctx.bucket, all_valid_chars, all_valid_chars
+        };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE_SUCCESS(resp.ctx.ec);
+        auto created = test::utils::wait_until_collection_manifest_propagated(
+          integration.cluster, integration.ctx.bucket, resp.uid);
+        REQUIRE(created);
+      }
+      {
+        std::optional<couchbase::core::topology::collections_manifest::collection> collection{};
+        REQUIRE(test::utils::wait_until([&]() {
+          collection = get_collection(
+            integration.cluster, integration.ctx.bucket, all_valid_chars, all_valid_chars);
+          return collection.has_value();
+        }));
+
+        REQUIRE(collection->name == all_valid_chars);
+      }
+    }
+    {
+      couchbase::core::operations::management::scope_drop_request req{ integration.ctx.bucket,
+                                                                       all_valid_chars };
+      auto resp = test::utils::execute(integration.cluster, req);
+    }
     {
       couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket,
                                                                          scope_name };
@@ -1919,6 +1991,48 @@ TEST_CASE("integration: user groups management", "[integration]")
 
   if (!integration.cluster_version().supports_user_groups()) {
     SKIP("cluster does not support user groups");
+  }
+
+  SECTION("URI encoding")
+  {
+    std::string all_valid_chars{
+      "abcdefghijklmnopqrstuvwxyz%20_123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    };
+
+    auto group_name = test::utils::uniq_id("group");
+    {
+      couchbase::core::operations::management::bucket_create_request req;
+      req.bucket.name = all_valid_chars;
+      auto resp = test::utils::execute(integration.cluster, req);
+      REQUIRE_SUCCESS(resp.ctx.ec);
+      wait_for_bucket_created(integration, all_valid_chars);
+    }
+    {
+      couchbase::core::management::rbac::group group{};
+      group.name = group_name;
+      group.description = "this is a test";
+      group.roles = { couchbase::core::management::rbac::role{
+                        "replication_target",
+                        all_valid_chars,
+                      },
+                      couchbase::core::management::rbac::role{ "replication_admin" } };
+      group.ldap_group_reference = "asda=price";
+
+      couchbase::core::operations::management::group_upsert_request req{ group };
+      auto resp = test::utils::execute(integration.cluster, req);
+      REQUIRE_SUCCESS(resp.ctx.ec);
+    }
+    {
+      couchbase::core::operations::management::bucket_drop_request req;
+      req.name = all_valid_chars;
+      auto resp = test::utils::execute(integration.cluster, req);
+    }
+    {
+      couchbase::core::operations::management::group_drop_request req;
+      req.name = group_name;
+      auto resp = test::utils::execute(integration.cluster, req);
+      REQUIRE_SUCCESS(resp.ctx.ec);
+    }
   }
 
   SECTION("group crud")

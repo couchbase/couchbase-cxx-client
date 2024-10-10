@@ -17,6 +17,7 @@
 
 #include "bucket_drop.hxx"
 
+#include "core/utils/url_codec.hxx"
 #include "error_utils.hxx"
 
 #include <fmt/core.h>
@@ -28,7 +29,8 @@ bucket_drop_request::encode_to(encoded_request_type& encoded,
                                http_context& /* context */) const -> std::error_code
 {
   encoded.method = "DELETE";
-  encoded.path = fmt::format("/pools/default/buckets/{}", name);
+  encoded.path =
+    fmt::format("/pools/default/buckets/{}", utils::string_codec::v2::path_escape(name));
   return {};
 }
 

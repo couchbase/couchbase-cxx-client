@@ -19,6 +19,7 @@
 
 #include "core/management/search_index_json.hxx"
 #include "core/utils/json.hxx"
+#include "core/utils/url_codec.hxx"
 #include "error_utils.hxx"
 
 #include <fmt/core.h>
@@ -37,8 +38,10 @@ search_index_upsert_request::encode_to(encoded_request_type& encoded,
   encoded.headers["cache-control"] = "no-cache";
   encoded.headers["content-type"] = "application/json";
   if (bucket_name.has_value() && scope_name.has_value()) {
-    encoded.path = fmt::format(
-      "/api/bucket/{}/scope/{}/index/{}", bucket_name.value(), scope_name.value(), index.name);
+    encoded.path = fmt::format("/api/bucket/{}/scope/{}/index/{}",
+                               utils::string_codec::v2::path_escape(bucket_name.value()),
+                               utils::string_codec::v2::path_escape(scope_name.value()),
+                               index.name);
   } else {
     encoded.path = fmt::format("/api/index/{}", index.name);
   }

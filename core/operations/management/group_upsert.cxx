@@ -46,11 +46,11 @@ group_upsert_request::encode_to(encoded_request_type& encoded,
   for (const auto& role : group.roles) {
     std::string spec = role.name;
     if (role.bucket) {
-      spec += fmt::format("[{}", role.bucket.value());
+      spec += fmt::format("[{}", utils::string_codec::v2::path_escape(role.bucket.value()));
       if (role.scope) {
-        spec += fmt::format(":{}", role.scope.value());
+        spec += fmt::format(":{}", utils::string_codec::v2::path_escape(role.scope.value()));
         if (role.collection) {
-          spec += fmt::format(":{}", role.collection.value());
+          spec += fmt::format(":{}", utils::string_codec::v2::path_escape(role.collection.value()));
         }
       }
       spec += "]";

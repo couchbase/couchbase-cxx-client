@@ -18,6 +18,7 @@
 #include "search_index_control_plan_freeze.hxx"
 
 #include "core/utils/json.hxx"
+#include "core/utils/url_codec.hxx"
 #include "error_utils.hxx"
 
 #include <fmt/core.h>
@@ -36,8 +37,8 @@ search_index_control_plan_freeze_request::encode_to(encoded_request_type& encode
   encoded.method = "POST";
   if (bucket_name.has_value() && scope_name.has_value()) {
     encoded.path = fmt::format("/api/bucket/{}/scope/{}/index/{}/planFreezeControl/{}",
-                               bucket_name.value(),
-                               scope_name.value(),
+                               utils::string_codec::v2::path_escape(bucket_name.value()),
+                               utils::string_codec::v2::path_escape(scope_name.value()),
                                index_name,
                                freeze ? "freeze" : "unfreeze");
   } else {

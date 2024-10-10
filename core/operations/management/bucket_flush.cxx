@@ -17,6 +17,7 @@
 
 #include "bucket_flush.hxx"
 
+#include "core/utils/url_codec.hxx"
 #include "error_utils.hxx"
 
 #include <fmt/core.h>
@@ -28,7 +29,8 @@ bucket_flush_request::encode_to(encoded_request_type& encoded,
                                 http_context& /* context */) const -> std::error_code
 {
   encoded.method = "POST";
-  encoded.path = fmt::format("/pools/default/buckets/{}/controller/doFlush", name);
+  encoded.path = fmt::format("/pools/default/buckets/{}/controller/doFlush",
+                             utils::string_codec::v2::path_escape(name));
   return {};
 }
 

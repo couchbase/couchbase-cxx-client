@@ -18,6 +18,7 @@
 #include "view_index_get.hxx"
 
 #include "core/utils/json.hxx"
+#include "core/utils/url_codec.hxx"
 #include "error_utils.hxx"
 
 #include <fmt/core.h>
@@ -31,7 +32,7 @@ view_index_get_request::encode_to(encoded_request_type& encoded,
 {
   encoded.method = "GET";
   encoded.path = fmt::format("/{}/_design/{}{}",
-                             bucket_name,
+                             utils::string_codec::v2::path_escape(bucket_name),
                              ns == design_document_namespace::development ? "dev_" : "",
                              document_name);
   return {};
