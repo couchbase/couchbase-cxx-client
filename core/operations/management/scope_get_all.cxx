@@ -19,6 +19,7 @@
 
 #include "core/topology/collections_manifest_json.hxx"
 #include "core/utils/json.hxx"
+#include "core/utils/url_codec.hxx"
 #include "error_utils.hxx"
 
 #include <fmt/core.h>
@@ -31,7 +32,8 @@ scope_get_all_request::encode_to(encoded_request_type& encoded,
                                  http_context& /* context */) const -> std::error_code
 {
   encoded.method = "GET";
-  encoded.path = fmt::format("/pools/default/buckets/{}/scopes", bucket_name);
+  encoded.path = fmt::format("/pools/default/buckets/{}/scopes",
+                             utils::string_codec::v2::path_escape(bucket_name));
   return {};
 }
 
