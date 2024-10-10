@@ -445,7 +445,7 @@ struct query_options : public common_options<query_options> {
            std::enable_if_t<codec::is_serializer_v<Serializer>, bool> = true>
   auto raw(std::string name, const Value& value) -> query_options&
   {
-    raw_[std::move(name)] = std::move(Serializer::template serialize(value));
+    raw_[std::move(name)] = std::move(Serializer::template serialize<const Value&>(value));
     return self();
   }
 
@@ -563,7 +563,8 @@ private:
            std::enable_if_t<codec::is_serializer_v<Serializer>, bool> = true>
   void encode_positional_parameters(const Parameter& parameter, Rest... args)
   {
-    positional_parameters_.emplace_back(std::move(Serializer::template serialize(parameter)));
+    positional_parameters_.emplace_back(
+      std::move(Serializer::template serialize<const Parameter&>(parameter)));
     if constexpr (sizeof...(args) > 0) {
       encode_positional_parameters<Serializer>(args...);
     }
@@ -577,7 +578,7 @@ private:
   void encode_named_parameters(const std::pair<Name, Parameter>& parameter, Rest... args)
   {
     named_parameters_[parameter.first] =
-      std::move(Serializer::template serialize(parameter.second));
+      std::move(Serializer::template serialize<Parameter>(parameter.second));
     if constexpr (sizeof...(args) > 0) {
       encode_named_parameters<Serializer>(args...);
     }

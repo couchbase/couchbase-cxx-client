@@ -192,7 +192,7 @@ struct search_options : public common_options<search_options> {
            std::enable_if_t<codec::is_serializer_v<Serializer>, bool> = true>
   auto raw(std::string name, const Value& value) -> search_options&
   {
-    raw_[std::move(name)] = std::move(Serializer::template serialize(value));
+    raw_[std::move(name)] = std::move(Serializer::template serialize<Value>(value));
     return self();
   }
 

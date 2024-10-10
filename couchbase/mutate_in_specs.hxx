@@ -235,7 +235,7 @@ public:
   template<typename Value, typename Transcoder = codec::default_json_transcoder>
   static auto upsert(std::string path, const Value& value) -> subdoc::upsert
   {
-    return { std::move(path), std::move(Transcoder::template encode(value).data) };
+    return { std::move(path), std::move(Transcoder::template encode<const Value&>(value).data) };
   }
 
   /**
@@ -453,7 +453,7 @@ public:
   template<typename Value, typename Transcoder = codec::default_json_transcoder>
   static auto array_add_unique(std::string path, const Value& value) -> subdoc::array_add_unique
   {
-    return { std::move(path), std::move(Transcoder::template encode(value).data) };
+    return { std::move(path), std::move(Transcoder::template encode<Value>(value).data) };
   }
 
   /**

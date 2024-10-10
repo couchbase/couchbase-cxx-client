@@ -1092,7 +1092,7 @@ public:
             if (cluster->session_) {
               cluster->session_->ping(collector->build_reporter(), timeout);
             }
-            cluster->for_each_bucket([&collector, &timeout](auto bucket) {
+            cluster->for_each_bucket([&collector, &timeout](const auto& bucket) {
               bucket->ping(collector, timeout);
             });
           }
@@ -1145,7 +1145,7 @@ public:
         }
         self->retry_backoff_.cancel();
 #endif
-        self->for_each_bucket([](auto bucket) {
+        self->for_each_bucket([](const auto& bucket) {
           bucket->close();
         });
         self->session_manager_->close();

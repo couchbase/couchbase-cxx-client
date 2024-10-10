@@ -47,7 +47,7 @@ public:
   static auto serialize([[maybe_unused]] Document document) -> binary
   {
     try {
-      if constexpr (std::is_null_pointer_v<Document>) {
+      if constexpr (std::is_null_pointer_v<std::remove_reference_t<Document>>) {
         return core::utils::json::generate_binary(tao::json::null);
       } else {
         return core::utils::json::generate_binary(tao::json::value(document));
