@@ -291,7 +291,7 @@ public:
                 }));
               return;
             }
-            impl->transactions_ = txns;
+            impl->transactions_ = std::move(txns);
             handler(ec, couchbase::cluster(std::move(impl)));
           });
       });
@@ -323,16 +323,17 @@ public:
                       {},
                       core::impl::to_core_service_types(options.service_types),
                       options.timeout,
-                      [handler = std::move(handler)](auto resp) mutable {
+                      [handler = std::move(handler)](const auto& resp) mutable {
                         return handler({}, core::impl::build_result(resp));
                       });
   };
 
   void diagnostics(const diagnostics_options::built& options, diagnostics_handler&& handler) const
   {
-    return core_.diagnostics(options.report_id, [handler = std::move(handler)](auto resp) mutable {
-      return handler({}, core::impl::build_result(resp));
-    });
+    return core_.diagnostics(options.report_id,
+                             [handler = std::move(handler)](const auto& resp) mutable {
+                               return handler({}, core::impl::build_result(resp));
+                             });
   }
 
   void search(std::string index_name,
@@ -342,7 +343,7 @@ public:
   {
     return core_.execute(
       core::impl::build_search_request(std::move(index_name), std::move(request), options, {}, {}),
-      [handler = std::move(handler)](auto resp) mutable {
+      [handler = std::move(handler)](const auto& resp) mutable {
         return handler(core::impl::make_error(resp.ctx),
                        search_result{ internal_search_result{ resp } });
       });

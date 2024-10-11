@@ -32,8 +32,8 @@ namespace couchbase::core::sasl::mechanism::scram
  * @return a sasl_prep'd string
  * @throws std::runtime_error if we encounter a multibyte character
  */
-const std::string&
-sasl_prep(const std::string& string);
+auto
+sasl_prep(const std::string& string) -> std::string;
 
 /**
  * According to https://www.ietf.org/rfc/rfc5802.txt all occurrences
@@ -42,7 +42,7 @@ sasl_prep(const std::string& string);
  * @param username the username to encode
  * @return the escaped string
  */
-std::string
-encode_username(const std::string& username);
+auto
+encode_username(const std::string& username) -> std::string;
 
 } // namespace couchbase::core::sasl::mechanism::scram

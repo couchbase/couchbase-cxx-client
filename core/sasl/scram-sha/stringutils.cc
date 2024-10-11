@@ -44,7 +44,7 @@ namespace couchbase::core::sasl::mechanism::scram
  *       - Tagging characters [StringPrep, C.9]
  */
 auto
-sasl_prep(const std::string& string) -> const std::string&
+sasl_prep(const std::string& string) -> std::string
 {
   for (const auto& c : string) {
     if ((static_cast<unsigned int>(c) & 0x80U) != 0) {

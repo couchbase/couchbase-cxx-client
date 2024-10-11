@@ -463,8 +463,8 @@ private:
 
   template<typename Handler, typename Delay>
   void create_staged_insert_error_handler(const core::document_id& id,
-                                          codec::encoded_value content,
-                                          uint64_t cas,
+                                          const codec::encoded_value& content,
+                                          std::uint64_t cas,
                                           Delay&& delay,
                                           const std::string& op_id,
                                           Handler&& cb,

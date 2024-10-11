@@ -97,7 +97,7 @@ scan_result::next() const -> std::future<std::pair<error, std::optional<scan_res
 {
   auto barrier =
     std::make_shared<std::promise<std::pair<error, std::optional<scan_result_item>>>>();
-  internal_->next([barrier](auto err, auto item) mutable {
+  internal_->next([barrier](const auto& err, const auto& item) mutable {
     barrier->set_value({ err, item });
   });
   return barrier->get_future();
