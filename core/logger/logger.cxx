@@ -25,6 +25,7 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <memory>
@@ -436,9 +437,7 @@ get_lowest_log_level() -> level
   auto lowest = spdlog::level::off;
   // Apply the function to each registered spdlog::logger except protocol logger
   spdlog::apply_all([&lowest](const std::shared_ptr<spdlog::logger>& l) {
-    if (auto level = l->level(); level < lowest) {
-      lowest = level;
-    }
+    lowest = std::min(l->level(), lowest);
   });
   return translate_level(lowest);
 }

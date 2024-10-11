@@ -24,6 +24,7 @@
 
 #include "core/platform/dirutils.h"
 
+#include <algorithm>
 #include <gsl/assert>
 #include <memory>
 #include <spdlog/details/file_helper.h>
@@ -49,9 +50,7 @@ find_first_logfile_id(const std::string& basename) -> unsigned long
     if (index != std::string::npos) {
       try {
         const unsigned long value = std::stoul(file.substr(index + 1));
-        if (value > id) {
-          id = value;
-        }
+        id = std::max(value, id);
       } catch (const std::invalid_argument&) {
         continue; /* ignore */
       } catch (const std::out_of_range&) {

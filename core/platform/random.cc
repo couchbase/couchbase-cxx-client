@@ -82,6 +82,8 @@ public:
 #ifdef WIN32
     return CryptGenRandom(handle, (DWORD)size, static_cast<BYTE*>(dest));
 #else
+    // TODO(CXXCBC-549)
+    // NOLINTNEXTLINE(clang-analyzer-unix.BlockInCriticalSection)
     return static_cast<std::size_t>(read(handle, dest, size)) == size;
 #endif
   }

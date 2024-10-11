@@ -111,7 +111,7 @@ public:
         }
         auto streamer = std::make_shared<row_streamer>(self->io_, resp.body(), "/results/^");
         return streamer->start(
-          [self, streamer, resp = std::move(resp)](auto metadata_header, auto ec) mutable {
+          [self, streamer, resp = std::move(resp)](const auto& metadata_header, auto ec) mutable {
             if (ec) {
               self->invoke_callback({}, { maybe_convert_error_code(ec) });
               return;

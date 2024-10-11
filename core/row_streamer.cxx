@@ -162,7 +162,7 @@ private:
 
     feeding_ = true;
 
-    body_.next([self = shared_from_this()](auto data, auto ec) mutable {
+    body_.next([self = shared_from_this()](const auto& data, auto ec) mutable {
       if (ec) {
         self->received_all_data_ = true;
         auto signal = row_stream_end_signal{ ec };

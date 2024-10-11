@@ -211,7 +211,7 @@ public:
         options.timeout,
         { options.retry_strategy },
       },
-      [handler = std::move(handler)](auto resp) mutable {
+      [handler = std::move(handler)](const auto& resp) mutable {
         return handler(core::impl::make_error(std::move(resp.ctx)), result{ resp.cas });
       });
   }
@@ -1390,7 +1390,7 @@ collection::scan(const couchbase::scan_type& scan_type, const couchbase::scan_op
 {
   auto barrier = std::make_shared<std::promise<std::pair<error, scan_result>>>();
   auto future = barrier->get_future();
-  scan(scan_type, options, [barrier](auto err, auto result) {
+  scan(scan_type, options, [barrier](const auto& err, auto result) {
     barrier->set_value({ err, std::move(result) });
   });
   return future;

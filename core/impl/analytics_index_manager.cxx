@@ -159,7 +159,7 @@ public:
         {},
         options.timeout,
       },
-      [dataverse_name, handler = std::move(handler)](auto resp) {
+      [dataverse_name, handler = std::move(handler)](const auto& resp) {
         CB_LOG_DEBUG(
           "Dataverse create for {} error code = {}", dataverse_name, resp.ctx.ec.value());
         handler(core::impl::make_error(resp.ctx));
@@ -177,7 +177,7 @@ public:
         {},
         options.timeout,
       },
-      [handler = std::move(handler)](auto resp) {
+      [handler = std::move(handler)](const auto& resp) {
         handler(core::impl::make_error(resp.ctx));
       });
   }
@@ -197,7 +197,7 @@ public:
         options.timeout,
         options.ignore_if_exists,
       },
-      [handler = std::move(handler)](auto resp) {
+      [handler = std::move(handler)](const auto& resp) {
         handler(core::impl::make_error(resp.ctx));
       });
   }
@@ -214,7 +214,7 @@ public:
         {},
         options.timeout,
       },
-      [handler = std::move(handler)](auto resp) {
+      [handler = std::move(handler)](const auto& resp) {
         handler(core::impl::make_error(resp.ctx));
       });
   }
@@ -262,7 +262,7 @@ public:
         {},
         options.timeout,
       },
-      [handler = std::move(handler)](auto resp) {
+      [handler = std::move(handler)](const auto& resp) {
         handler(core::impl::make_error(resp.ctx));
       });
   }
@@ -281,7 +281,7 @@ public:
         {},
         options.timeout,
       },
-      [handler = std::move(handler)](auto resp) {
+      [handler = std::move(handler)](const auto& resp) {
         handler(core::impl::make_error(resp.ctx));
       });
   }
@@ -324,7 +324,7 @@ public:
         {},
         options.timeout,
       },
-      [handler = std::move(handler)](auto resp) {
+      [handler = std::move(handler)](const auto& resp) {
         handler(core::impl::make_error(resp.ctx));
       });
   }
@@ -339,7 +339,7 @@ public:
         {},
         options.timeout,
       },
-      [handler = std::move(handler)](auto resp) {
+      [handler = std::move(handler)](const auto& resp) {
         handler(core::impl::make_error(resp.ctx));
       });
   }
@@ -386,7 +386,7 @@ public:
             {},
             options.timeout,
           },
-          [handler = std::move(handler)](auto resp) {
+          [handler = std::move(handler)](const auto& resp) {
             handler(core::impl::make_error(resp.ctx));
           });
 
@@ -398,7 +398,7 @@ public:
             {},
             options.timeout,
           },
-          [handler = std::move(handler)](auto resp) {
+          [handler = std::move(handler)](const auto& resp) {
             handler(core::impl::make_error(resp.ctx));
           });
 
@@ -410,7 +410,7 @@ public:
             {},
             options.timeout,
           },
-          [handler = std::move(handler)](auto resp) {
+          [handler = std::move(handler)](const auto& resp) {
             handler(core::impl::make_error(resp.ctx));
           });
     }
@@ -429,7 +429,7 @@ public:
             {},
             options.timeout,
           },
-          [handler = std::move(handler)](auto resp) {
+          [handler = std::move(handler)](const auto& resp) {
             handler(core::impl::make_error(resp.ctx));
           });
 
@@ -441,7 +441,7 @@ public:
             {},
             options.timeout,
           },
-          [handler = std::move(handler)](auto resp) {
+          [handler = std::move(handler)](const auto& resp) {
             handler(core::impl::make_error(resp.ctx));
           });
 
@@ -453,7 +453,7 @@ public:
             {},
             options.timeout,
           },
-          [handler = std::move(handler)](auto resp) {
+          [handler = std::move(handler)](const auto& resp) {
             handler(core::impl::make_error(resp.ctx));
           });
     }
@@ -471,7 +471,7 @@ public:
         {},
         options.timeout,
       },
-      [handler = std::move(handler)](auto resp) {
+      [handler = std::move(handler)](const auto& resp) {
         handler(core::impl::make_error(resp.ctx));
       });
   }

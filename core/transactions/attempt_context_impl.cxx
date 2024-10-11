@@ -2975,7 +2975,7 @@ attempt_context_impl::do_get(const core::document_id& id,
            allow_replica,
            resolving_missing_atr_entry = std::move(resolving_missing_atr_entry),
            cb = std::move(cb)](std::optional<error_class> ec,
-                               std::optional<std::string> err_message,
+                               const std::optional<std::string>& err_message,
                                std::optional<transaction_get_result> doc) mutable {
             if (!ec && !doc) {
               // it just isn't there.
@@ -3101,20 +3101,21 @@ template<typename LookupInRequest, typename Callback>
 void
 execute_lookup(attempt_context_impl* ctx, LookupInRequest& req, Callback&& cb)
 {
-  ctx->overall()->cluster_ref().execute(req, [ctx, cb = std::forward<Callback>(cb)](auto resp) {
-    auto ec = error_class_from_response(resp);
-    if (ec) {
-      CB_ATTEMPT_CTX_LOG_TRACE(ctx, "get_doc got error {} : {}", resp.ctx.ec().message(), *ec);
-      switch (*ec) {
-        case FAIL_PATH_NOT_FOUND:
-          return cb(ec, resp.ctx.ec().message(), transaction_get_result::create_from(resp));
-        default:
-          return cb(ec, resp.ctx.ec().message(), std::nullopt);
+  ctx->overall()->cluster_ref().execute(
+    req, [ctx, cb = std::forward<Callback>(cb)](const auto& resp) {
+      auto ec = error_class_from_response(resp);
+      if (ec) {
+        CB_ATTEMPT_CTX_LOG_TRACE(ctx, "get_doc got error {} : {}", resp.ctx.ec().message(), *ec);
+        switch (*ec) {
+          case FAIL_PATH_NOT_FOUND:
+            return cb(ec, resp.ctx.ec().message(), transaction_get_result::create_from(resp));
+          default:
+            return cb(ec, resp.ctx.ec().message(), std::nullopt);
+        }
+      } else {
+        return cb({}, {}, transaction_get_result::create_from(resp));
       }
-    } else {
-      return cb({}, {}, transaction_get_result::create_from(resp));
-    }
-  });
+    });
 }
 } // namespace
 
@@ -3161,7 +3162,7 @@ attempt_context_impl::get_doc(const core::document_id& id,
 template<typename Handler, typename Delay>
 void
 attempt_context_impl::create_staged_insert_error_handler(const core::document_id& id,
-                                                         codec::encoded_value content,
+                                                         const codec::encoded_value& content,
                                                          std::uint64_t cas,
                                                          Delay&& delay,
                                                          const std::string& op_id,

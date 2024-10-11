@@ -1089,8 +1089,7 @@ public:
     }
     state_ = diag::endpoint_state::connecting;
     if (stream_->is_open()) {
-      std::string old_id = stream_->id();
-      return stream_->close([self = shared_from_this(), old_id](std::error_code) {
+      return stream_->close([self = shared_from_this(), old_id = stream_->id()](std::error_code) {
         CB_LOG_DEBUG(R"({} reopened socket connection "{}" -> "{}", host="{}", port={})",
                      self->log_prefix_,
                      old_id,

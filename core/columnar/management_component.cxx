@@ -189,7 +189,7 @@ public:
       "SELECT d.* FROM `System`.`Metadata`.`Database` AS d",
       options.timeout,
     };
-    return execute(std::move(req), [cb = std::move(callback)](auto raw_res, auto err) {
+    return execute(std::move(req), [cb = std::move(callback)](const auto& raw_res, auto err) {
       if (err) {
         cb({}, std::move(err));
         return;
@@ -216,7 +216,7 @@ public:
     if (options.ignore_if_exists) {
       req.statement += " IF NOT EXISTS";
     }
-    return execute(std::move(req), [cb = std::move(callback)](auto /*raw_res*/, auto err) {
+    return execute(std::move(req), [cb = std::move(callback)](const auto& /*raw_res*/, auto err) {
       cb(std::move(err));
     });
   }
@@ -231,7 +231,7 @@ public:
     if (options.ignore_if_not_exists) {
       req.statement += " IF EXISTS";
     }
-    return execute(std::move(req), [cb = std::move(callback)](auto /*raw_res*/, auto err) {
+    return execute(std::move(req), [cb = std::move(callback)](const auto& /*raw_res*/, auto err) {
       cb(std::move(err));
     });
   }

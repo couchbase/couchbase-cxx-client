@@ -232,7 +232,7 @@ public:
         {},
         options.timeout,
       },
-      [handler = std::move(handler)](auto resp) {
+      [handler = std::move(handler)](const auto& resp) {
         handler(core::impl::make_error(resp.ctx));
       });
   }
@@ -259,7 +259,7 @@ public:
         {},
         options.timeout,
       },
-      [handler = std::move(handler)](auto resp) {
+      [handler = std::move(handler)](const auto& resp) {
         handler(core::impl::make_error(resp.ctx));
       });
   }
@@ -283,7 +283,7 @@ public:
         {},
         options.timeout,
       },
-      [handler = std::move(handler)](auto resp) {
+      [handler = std::move(handler)](const auto& resp) {
         handler(core::impl::make_error(resp.ctx));
       });
   }
@@ -342,7 +342,7 @@ public:
                                                                    std::move(list_resp.index_names),
                                                                    {},
                                                                    timeout },
-          [handler = std::move(handler)](auto build_resp) {
+          [handler = std::move(handler)](const auto& build_resp) {
             return handler(core::impl::make_error(build_resp.ctx));
           });
       });
@@ -390,7 +390,7 @@ query_index_manager::get_all_indexes(const std::string& bucket_name,
   auto barrier =
     std::make_shared<std::promise<std::pair<error, std::vector<management::query_index>>>>();
   auto future = barrier->get_future();
-  get_all_indexes(bucket_name, options, [barrier](auto err, auto resp) mutable {
+  get_all_indexes(bucket_name, options, [barrier](auto err, const auto& resp) mutable {
     barrier->set_value({ std::move(err), resp });
   });
   return future;
@@ -563,7 +563,7 @@ collection_query_index_manager::get_all_indexes(const get_all_query_indexes_opti
   auto barrier =
     std::make_shared<std::promise<std::pair<error, std::vector<management::query_index>>>>();
   auto future = barrier->get_future();
-  get_all_indexes(options, [barrier](auto err, auto resp) mutable {
+  get_all_indexes(options, [barrier](auto err, const auto& resp) mutable {
     barrier->set_value({ std::move(err), resp });
   });
   return future;

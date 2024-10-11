@@ -430,7 +430,7 @@ collection_id_cache_entry_impl::refresh_collection_id(
         self->manager_.lock()->remove(req->scope_name_, req->collection_name_);
         auto queue = self->swap_queue();
         queue->close();
-        return queue->drain([ec](auto r) {
+        return queue->drain([ec](const auto& r) {
           r->try_callback({}, ec);
         });
       }
@@ -443,7 +443,7 @@ collection_id_cache_entry_impl::refresh_collection_id(
                    res.collection_id);
       auto queue = self->swap_queue();
       queue->close();
-      return queue->drain([self](auto r) {
+      return queue->drain([self](const auto& r) {
         if (auto ec = self->assign_collection_id(r); ec) {
           CB_LOG_DEBUG("failed to set collection ID \"{}.{}\" on request (OP={}): {}",
                        r->scope_name_,

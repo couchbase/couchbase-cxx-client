@@ -182,7 +182,7 @@ encode(gsl::span<const std::byte> blob, bool pretty_print) -> std::string
   if (pretty_print) {
     // In pretty-print mode we insert a newline after adding
     // 16 chunks (four characters).
-    result.reserve(chunks * 4 + chunks / 16);
+    result.reserve((chunks * 4) + (chunks / 16));
   } else {
     result.reserve(chunks * 4);
   }

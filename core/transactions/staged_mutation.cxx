@@ -568,7 +568,7 @@ staged_mutation_queue::commit_doc(const std::shared_ptr<attempt_context_impl>& c
                   res,
                   item,
                   [ambiguity_resolution_mode, cas_zero_mode, handler = std::move(handler)](
-                    auto e) mutable {
+                    const auto& e) mutable {
                     if (e) {
                       return handler(e, ambiguity_resolution_mode, cas_zero_mode);
                     }
@@ -610,7 +610,7 @@ staged_mutation_queue::commit_doc(const std::shared_ptr<attempt_context_impl>& c
                 res,
                 item,
                 [ambiguity_resolution_mode, cas_zero_mode, handler = std::move(handler)](
-                  auto e) mutable {
+                  const auto& e) mutable {
                   if (e) {
                     return handler(e, ambiguity_resolution_mode, cas_zero_mode);
                   }
