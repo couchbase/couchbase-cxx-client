@@ -1,3 +1,9 @@
+%if 0%{?suse_version}
+%global license_dir %{_datadir}/doc
+%else
+%global license_dir %{_docdir}
+%endif
+
 Name: couchbase-cxx-client
 Summary: Couchbase C++ SDK
 Version: @COUCHBASE_CXX_CLIENT_PACKAGE_VERSION@
@@ -6,7 +12,11 @@ Vendor: Couchbase, Inc.
 Packager: Couchbase SDK Team <support@couchbase.com>
 License: ASL 2.0
 URL: https://docs.couchbase.com/cxx-sdk/current/hello-world/overview.html
+%if 0%{?suse_version} == 1500
+BuildRequires: gcc13, gcc13-c++
+%else
 BuildRequires: gcc, gcc-c++
+%endif
 BuildRequires: cmake >= 3.19
 Source0: @COUCHBASE_CXX_CLIENT_TARBALL_NAME@.tar.gz
 
@@ -37,6 +47,10 @@ Development files for the Couchbase C++ SDK.
 %if 0%{?rhel} == 8 || 0%{?rocky} == 8 || 0%{?ol} == 8
     -S "." -B "redhat-linux-build" \
 %endif
+%if 0%{?suse_version} == 1500
+    -DCMAKE_C_COMPILER=gcc-13 \
+    -DCMAKE_CXX_COMPILER=g++-13 \
+%endif
     -DBUILD_SHARED_LIBS=OFF \
     -DCOUCHBASE_CXX_CLIENT_INSTALL=ON \
     -DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON \
@@ -50,6 +64,9 @@ Development files for the Couchbase C++ SDK.
 %if 0%{?rhel} == 8 || 0%{?rocky} == 8 || 0%{?ol} == 8
 /usr/bin/cmake --build "redhat-linux-build" -j${RPM_BUILD_NCPUS} --verbose
 %else
+%if 0%{?suse_version} == 1500
+cd build
+%endif
 %cmake_build
 %endif
 
@@ -59,11 +76,17 @@ DESTDIR="%{buildroot}" /usr/bin/cmake --install "redhat-linux-build"
 %else
 %cmake_install
 %endif
+%if 0%{?suse_version} == 1500
+%{__mkdir_p} %{buildroot}%{license_dir}/tao/json %{buildroot}%{_libdir}/cmake
+%{__mv} %{buildroot}%{license_dir}/taocpp-json/tao/json/LICENSE %{buildroot}%{license_dir}/tao/json/LICENSE
+%{__mv} %{buildroot}%{_datadir}/taocpp-json/cmake %{buildroot}%{_libdir}/cmake/taocpp-json
+%{__mv} %{buildroot}%{_datadir}/pegtl/cmake %{buildroot}%{_libdir}/cmake/pegtl
+%endif
 
 %files
-%license %{_docdir}/couchbase_cxx_client/LICENSE.txt
-%license %{_docdir}/tao/pegtl/LICENSE
-%license %{_docdir}/tao/json/LICENSE
+%license %{license_dir}/couchbase_cxx_client/LICENSE.txt
+%license %{license_dir}/tao/pegtl/LICENSE
+%license %{license_dir}/tao/json/LICENSE
 %{_libdir}/libcouchbase_cxx_client.so.*
 
 %files tools

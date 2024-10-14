@@ -15,7 +15,7 @@ if(COUCHBASE_CXX_CLIENT_ENABLE_VALGRIND)
   if(VALGRIND)
     set(VALGRIND_COMMAND "${VALGRIND}")
     set(VALGRIND_COMMAND_OPTIONS
-        "-v --tool=memcheck --leak-check=full --track-fds=yes --num-callers=50 --show-reachable=yes --track-origins=yes --malloc-fill=0xff --free-fill=0xfe"
+        "-v --tool=memcheck --leak-check=full --track-fds=yes --num-callers=50 --show-reachable=yes --track-origins=yes --malloc-fill=0xff --free-fill=0xfe --suppressions=${PROJECT_SOURCE_DIR}/.valgrind_suppressions.txt"
     )
     set(MEMORYCHECK_COMMAND "${VALGRIND}")
     set(MEMORYCHECK_COMMAND_OPTIONS "${VALGRIND_COMMAND_OPTIONS}")
