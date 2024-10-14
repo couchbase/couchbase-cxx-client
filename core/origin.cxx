@@ -222,7 +222,7 @@ struct traits<couchbase::core::columnar::security_options> {
       { "trust_only_pem_string", o.trust_only_pem_string },
       { "trust_only_platform", o.trust_only_platform },
       { "trust_only_certificates", o.trust_only_certificates.size() },
-      // TODO: add if/when we support the cipher_suites option
+      // TODO(JC): add if/when we support the cipher_suites option
       // { "cipher_suites", utils::join_strings(o.cipher_suites, ":") },
     };
   }
