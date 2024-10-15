@@ -17,7 +17,6 @@
 
 #pragma once
 
-#include "core/error_context/key_value_error_context.hxx"
 #include <couchbase/mutation_token.hxx>
 #include <couchbase/persist_to.hxx>
 #include <couchbase/replicate_to.hxx>
@@ -26,8 +25,7 @@
 #include "core/utils/movable_function.hxx"
 
 #include <chrono>
-#include <functional>
-#include <memory>
+#include <system_error>
 
 namespace couchbase::core
 {
