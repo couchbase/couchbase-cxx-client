@@ -26,6 +26,7 @@
 
 #include <memory>
 #include <mutex>
+#include <system_error>
 
 namespace couchbase::core::impl
 {
@@ -240,8 +241,7 @@ public:
   void handle_response(observe_seqno_response&& response)
   {
     --expect_number_of_responses_;
-    auto r = std::move(response);
-    status_.examine(r);
+    status_.examine(response);
     maybe_finish();
   }
 
@@ -249,6 +249,8 @@ public:
   {
     poll_backoff_.cancel();
     poll_deadline_.cancel();
+    on_last_response(0, [](std::error_code) {
+    });
     observe_handler handler{};
     {
       const std::scoped_lock lock(handler_mutex_);
@@ -268,10 +270,16 @@ public:
         return;
       }
       if (status_.meets_condition(persist_to_, replicate_to_)) {
+        poll_backoff_.cancel();
+        poll_deadline_.cancel();
+        on_last_response(0, [](std::error_code) {
+        });
         std::swap(handler_, handler);
-      } else if (expect_number_of_responses_ == 0 && on_last_response_) {
-        poll_backoff_.expires_after(poll_backoff_interval_);
-        return poll_backoff_.async_wait(std::move(on_last_response_));
+      } else if (expect_number_of_responses_ == 0) {
+        if (auto on_last_response = std::move(on_last_response_); on_last_response) {
+          poll_backoff_.expires_after(poll_backoff_interval_);
+          return poll_backoff_.async_wait(std::move(on_last_response));
+        }
       }
     }
     if (handler) {
