@@ -20,13 +20,13 @@
 #include <couchbase/build_config.hxx>
 
 #include "core/impl/bootstrap_error.hxx"
+#include "core/metrics/meter_wrapper.hxx"
 #include "core/service_type_fmt.hxx"
 #include "core/tracing/constants.hxx"
 #include "core/utils/movable_function.hxx"
 #include "http_session.hxx"
 #include "http_traits.hxx"
 
-#include <couchbase/metrics/meter.hxx>
 #include <couchbase/tracing/request_tracer.hxx>
 
 #include <utility>
@@ -50,7 +50,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
   encoded_request_type encoded;
   std::shared_ptr<couchbase::tracing::request_tracer> tracer_;
   std::shared_ptr<couchbase::tracing::request_span> span_{ nullptr };
-  std::shared_ptr<couchbase::metrics::meter> meter_{};
+  std::shared_ptr<metrics::meter_wrapper> meter_{};
   std::shared_ptr<io::http_session> session_{};
   http_command_handler handler_{};
   std::chrono::milliseconds timeout_{};
@@ -63,7 +63,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
   http_command(asio::io_context& ctx,
                Request req,
                std::shared_ptr<couchbase::tracing::request_tracer> tracer,
-               std::shared_ptr<couchbase::metrics::meter> meter,
+               std::shared_ptr<metrics::meter_wrapper> meter,
                std::chrono::milliseconds default_timeout,
                std::chrono::milliseconds dispatch_timeout)
     : deadline(ctx)
@@ -83,7 +83,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
   http_command(asio::io_context& ctx,
                Request req,
                std::shared_ptr<couchbase::tracing::request_tracer> tracer,
-               std::shared_ptr<couchbase::metrics::meter> meter,
+               std::shared_ptr<metrics::meter_wrapper> meter,
                std::chrono::milliseconds default_timeout)
     : deadline(ctx)
     , request(req)
@@ -243,15 +243,12 @@ private:
           return self->invoke_handler(errc::common::ambiguous_timeout, std::move(msg));
         }
         if (self->meter_) {
-          static std::string meter_name = "db.couchbase.operations";
-          static std::map<std::string, std::string> tags = {
-            { "db.couchbase.service", fmt::format("{}", self->request.type) },
-            { "db.operation", self->encoded.path },
+          metrics::metric_attributes attrs{
+            service_type::key_value,
+            fmt::format("{}", self->encoded.path),
+            ec,
           };
-          self->meter_->get_value_recorder(meter_name, tags)
-            ->record_value(std::chrono::duration_cast<std::chrono::microseconds>(
-                             std::chrono::steady_clock::now() - start)
-                             .count());
+          self->meter_->record_value(std::move(attrs), start);
         }
         self->deadline.cancel();
         self->finish_dispatch(self->session_->remote_address(), self->session_->local_address());

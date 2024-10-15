@@ -25,6 +25,7 @@
 #include "core/io/mcbp_message.hxx"
 #include "core/logger/logger.hxx"
 #include "core/mcbp/codec.hxx"
+#include "core/metrics/meter_wrapper.hxx"
 #include "core/protocol/client_opcode.hxx"
 #include "core/protocol/client_request.hxx"
 #include "core/protocol/hello_feature.hxx"
@@ -42,7 +43,6 @@
 #include "retry_orchestrator.hxx"
 
 #include <couchbase/error_codes.hxx>
-#include <couchbase/metrics/meter.hxx>
 #include <couchbase/retry_reason.hxx>
 #include <couchbase/retry_strategy.hxx>
 #include <couchbase/tracing/request_tracer.hxx>
@@ -83,7 +83,7 @@ public:
               std::string name,
               couchbase::core::origin origin,
               std::shared_ptr<couchbase::tracing::request_tracer> tracer,
-              std::shared_ptr<couchbase::metrics::meter> meter,
+              std::shared_ptr<metrics::meter_wrapper> meter,
               std::vector<protocol::hello_feature> known_features,
               std::shared_ptr<impl::bootstrap_state_listener> state_listener,
               asio::io_context& ctx,
@@ -114,15 +114,11 @@ public:
                         std::optional<key_value_error_map_info> error_info)
   {
     // TODO(SA): copy from mcbp_command, subject to refactor later
-    static const std::string meter_name = "db.couchbase.operations";
-    static const std::map<std::string, std::string> tags = {
-      { "db.couchbase.service", "kv" },
-      { "db.operation", fmt::format("{}", req->command_) },
+    metrics::metric_attributes attrs{
+      service_type::key_value, fmt::format("{}", req->command_), ec, name_, req->scope_name_,
+      req->collection_name_,
     };
-    meter_->get_value_recorder(meter_name, tags)
-      ->record_value(std::chrono::duration_cast<std::chrono::microseconds>(
-                       std::chrono::steady_clock::now() - req->dispatched_time_)
-                       .count());
+    meter_->record_value(std::move(attrs), req->dispatched_time_);
 
     if (ec == asio::error::operation_aborted) {
       // TODO(SA): fix tracing
@@ -899,7 +895,7 @@ public:
     return tracer_;
   }
 
-  [[nodiscard]] auto meter() const -> std::shared_ptr<couchbase::metrics::meter>
+  [[nodiscard]] auto meter() const -> std::shared_ptr<metrics::meter_wrapper>
   {
     return meter_;
   }
@@ -953,7 +949,7 @@ private:
   const std::string log_prefix_;
   const origin origin_;
   const std::shared_ptr<couchbase::tracing::request_tracer> tracer_;
-  const std::shared_ptr<couchbase::metrics::meter> meter_;
+  const std::shared_ptr<metrics::meter_wrapper> meter_;
   const std::vector<protocol::hello_feature> known_features_;
   const std::shared_ptr<impl::bootstrap_state_listener> state_listener_;
   mcbp::codec codec_;
@@ -986,7 +982,7 @@ bucket::bucket(std::string client_id,
                asio::io_context& ctx,
                asio::ssl::context& tls,
                std::shared_ptr<couchbase::tracing::request_tracer> tracer,
-               std::shared_ptr<couchbase::metrics::meter> meter,
+               std::shared_ptr<metrics::meter_wrapper> meter,
                std::string name,
                couchbase::core::origin origin,
                std::vector<protocol::hello_feature> known_features,
@@ -1060,7 +1056,7 @@ bucket::tracer() const -> std::shared_ptr<couchbase::tracing::request_tracer>
 }
 
 auto
-bucket::meter() const -> std::shared_ptr<couchbase::metrics::meter>
+bucket::meter() const -> std::shared_ptr<metrics::meter_wrapper>
 {
   return impl_->meter();
 }

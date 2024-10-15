@@ -100,6 +100,8 @@ struct configuration {
   std::optional<std::uint64_t> collections_manifest_uid{};
   configuration_capabilities capabilities{};
   node_locator_type node_locator{ node_locator_type::unknown };
+  std::optional<std::string> cluster_name{};
+  std::optional<std::string> cluster_uuid{};
   bool force{ false };
 
   auto operator==(const configuration& other) const -> bool

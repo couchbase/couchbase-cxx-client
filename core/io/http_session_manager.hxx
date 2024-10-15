@@ -68,7 +68,7 @@ public:
     tracer_ = std::move(tracer);
   }
 
-  void set_meter(std::shared_ptr<couchbase::metrics::meter> meter)
+  void set_meter(std::shared_ptr<metrics::meter_wrapper> meter)
   {
     meter_ = std::move(meter);
   }
@@ -929,7 +929,7 @@ private:
   asio::io_context& ctx_;
   asio::ssl::context& tls_;
   std::shared_ptr<couchbase::tracing::request_tracer> tracer_{ nullptr };
-  std::shared_ptr<couchbase::metrics::meter> meter_{ nullptr };
+  std::shared_ptr<metrics::meter_wrapper> meter_{ nullptr };
   cluster_options options_{};
 
   topology::configuration config_{};

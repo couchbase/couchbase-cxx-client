@@ -18,6 +18,8 @@
 #pragma once
 
 #include "core/document_id_fmt.hxx"
+#include "core/error_context/key_value_error_map_info.hxx"
+#include "core/metrics/meter_wrapper.hxx"
 #include "core/platform/uuid.h"
 #include "core/protocol/client_request.hxx"
 #include "core/protocol/client_response.hxx"
@@ -30,7 +32,6 @@
 #include "mcbp_traits.hxx"
 #include "retry_orchestrator.hxx"
 
-#include "core/error_context/key_value_error_map_info.hxx"
 #include <couchbase/durability_level.hxx>
 #include <couchbase/error_codes.hxx>
 
@@ -265,16 +266,15 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
         retry_reason reason,
         io::mcbp_message&& msg,
         std::optional<key_value_error_map_info> /* error_info */) mutable {
-        static std::string meter_name = "db.couchbase.operations";
-        static std::map<std::string, std::string> tags = {
-          { "db.couchbase.service", "kv" },
-          { "db.operation", fmt::format("{}", encoded_request_type::body_type::opcode) },
+        metrics::metric_attributes attrs{
+          service_type::key_value,
+          fmt::format("{}", encoded_request_type::body_type::opcode),
+          ec,
+          self->request.id.bucket(),
+          self->request.id.scope(),
+          self->request.id.collection(),
         };
-        self->manager_->meter()
-          ->get_value_recorder(meter_name, tags)
-          ->record_value(std::chrono::duration_cast<std::chrono::microseconds>(
-                           std::chrono::steady_clock::now() - start)
-                           .count());
+        self->manager_->meter()->record_value(std::move(attrs), start);
 
         self->retry_backoff.cancel();
         if (ec == asio::error::operation_aborted) {
