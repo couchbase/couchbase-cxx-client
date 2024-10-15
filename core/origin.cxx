@@ -210,6 +210,24 @@ struct traits<couchbase::transactions::transactions_config::built> {
   }
 };
 
+template<>
+struct traits<couchbase::core::columnar::security_options> {
+  template<template<typename...> class Traits>
+  static void assign(tao::json::basic_value<Traits>& v,
+                     const couchbase::core::columnar::security_options& o)
+  {
+    v = {
+      { "trust_only_capella", o.trust_only_capella },
+      { "trust_only_pem_file", o.trust_only_pem_file },
+      { "trust_only_pem_string", o.trust_only_pem_string },
+      { "trust_only_platform", o.trust_only_platform },
+      { "trust_only_certificates", o.trust_only_certificates.size() },
+      // TODO: add if/when we support the cipher_suites option
+      // { "cipher_suites", utils::join_strings(o.cipher_suites, ":") },
+    };
+  }
+};
+
 } // namespace tao::json
 
 namespace couchbase::core
@@ -222,45 +240,47 @@ origin::to_json() const -> std::string
       "options",
       {
         { "bootstrap_timeout", options_.bootstrap_timeout },
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-        { "dispatch_timeout", options_.dispatch_timeout },
-#endif
         { "resolve_timeout", options_.resolve_timeout },
         { "connect_timeout", options_.connect_timeout },
-        { "key_value_timeout", options_.key_value_timeout },
-        { "key_value_durable_timeout", options_.key_value_durable_timeout },
-        { "view_timeout", options_.view_timeout },
         { "query_timeout", options_.query_timeout },
-        { "analytics_timeout", options_.analytics_timeout },
-        { "search_timeout", options_.search_timeout },
         { "management_timeout", options_.management_timeout },
-        { "enable_tls", options_.enable_tls },
         { "trust_certificate", options_.trust_certificate },
-        { "enable_mutation_tokens", options_.enable_mutation_tokens },
-        { "enable_tcp_keep_alive", options_.enable_tcp_keep_alive },
         { "use_ip_protocol", options_.use_ip_protocol },
         { "enable_dns_srv", options_.enable_dns_srv },
         { "dns_config", options_.dns_config },
+        { "enable_clustermap_notification", options_.enable_clustermap_notification },
+        { "config_poll_interval", options_.config_poll_interval },
+        { "config_poll_floor", options_.config_poll_floor },
+        { "user_agent_extra", options_.user_agent_extra },
+        { "dump_configuration", options_.dump_configuration },
+        { "disable_mozilla_ca_certificates", options_.disable_mozilla_ca_certificates },
+        { "network", options_.network },
+        { "tls_verify", options_.tls_verify },
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+        { "dispatch_timeout", options_.dispatch_timeout },
+        { "security_options", options_.security_options },
+#else
+        { "key_value_timeout", options_.key_value_timeout },
+        { "key_value_durable_timeout", options_.key_value_durable_timeout },
+        { "view_timeout", options_.view_timeout },
+        { "analytics_timeout", options_.analytics_timeout },
+        { "search_timeout", options_.search_timeout },
+        { "enable_tls", options_.enable_tls },
+        { "enable_mutation_tokens", options_.enable_mutation_tokens },
+        { "enable_tcp_keep_alive", options_.enable_tcp_keep_alive },
         { "show_queries", options_.show_queries },
         { "enable_unordered_execution", options_.enable_unordered_execution },
-        { "enable_clustermap_notification", options_.enable_clustermap_notification },
         { "enable_compression", options_.enable_compression },
         { "enable_tracing", options_.enable_tracing },
         { "enable_metrics", options_.enable_metrics },
         { "tcp_keep_alive_interval", options_.tcp_keep_alive_interval },
-        { "config_poll_interval", options_.config_poll_interval },
-        { "config_poll_floor", options_.config_poll_floor },
         { "config_idle_redial_timeout", options_.config_idle_redial_timeout },
         { "max_http_connections", options_.max_http_connections },
         { "idle_http_connection_timeout", options_.idle_http_connection_timeout },
-        { "user_agent_extra", options_.user_agent_extra },
-        { "dump_configuration", options_.dump_configuration },
-        { "disable_mozilla_ca_certificates", options_.disable_mozilla_ca_certificates },
         { "metrics_options", options_.metrics_options },
-        { "network", options_.network },
-        { "tls_verify", options_.tls_verify },
         { "tracing_options", options_.tracing_options },
         { "transactions_options", options_.transactions },
+#endif
       },
     },
   };
