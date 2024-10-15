@@ -39,6 +39,7 @@
 #include "core/mcbp/queue_request.hxx"
 #include "core/meta/version.hxx"
 #include "core/metrics/logging_meter.hxx"
+#include "core/metrics/meter_wrapper.hxx"
 #include "core/metrics/noop_meter.hxx"
 #include "core/operations/document_analytics.hxx"
 #include "core/operations/document_append.hxx"
@@ -366,16 +367,18 @@ public:
     tracer_->start();
     // ignore the metrics options if a meter was passed in.
     if (nullptr != origin_.options().meter) {
-      meter_ = origin_.options().meter;
+      meter_ = metrics::meter_wrapper::create(origin_.options().meter);
     } else {
       if (origin_.options().enable_metrics) {
-        meter_ = std::make_shared<metrics::logging_meter>(ctx_, origin_.options().metrics_options);
+        meter_ = metrics::meter_wrapper::create(
+          std::make_shared<metrics::logging_meter>(ctx_, origin_.options().metrics_options));
       } else {
-        meter_ = std::make_shared<metrics::noop_meter>();
+        meter_ = metrics::meter_wrapper::create(std::make_shared<metrics::noop_meter>());
       }
     }
     meter_->start();
     session_manager_->set_tracer(tracer_);
+    session_manager_->set_meter(meter_);
     if (origin_.options().enable_dns_srv) {
       std::string hostname;
       std::string port;
@@ -447,12 +450,13 @@ public:
     tracer_->start();
     // ignore the metrics options if a meter was passed in.
     if (nullptr != origin_.options().meter) {
-      meter_ = origin_.options().meter;
+      meter_ = metrics::meter_wrapper::create(origin_.options().meter);
     } else {
       if (origin_.options().enable_metrics) {
-        meter_ = std::make_shared<metrics::logging_meter>(ctx_, origin_.options().metrics_options);
+        meter_ = metrics::meter_wrapper::create(
+          std::make_shared<metrics::logging_meter>(ctx_, origin_.options().metrics_options));
       } else {
-        meter_ = std::make_shared<metrics::noop_meter>();
+        meter_ = metrics::meter_wrapper::create(std::make_shared<metrics::noop_meter>());
       }
     }
     meter_->start();
@@ -493,6 +497,9 @@ public:
         b = std::make_shared<bucket>(
           id_, ctx_, tls_, tracer_, meter_, bucket_name, origin, known_features, dns_srv_tracker_);
         buckets_.try_emplace(bucket_name, b);
+
+        // Register the meter for config updates to track Cluster name & UUID
+        b->on_configuration_update(meter_);
       }
     }
     if (b == nullptr) {
@@ -1232,7 +1239,7 @@ private:
   std::map<std::string, std::shared_ptr<bucket>> buckets_{};
   couchbase::core::origin origin_{};
   std::shared_ptr<couchbase::tracing::request_tracer> tracer_{ nullptr };
-  std::shared_ptr<couchbase::metrics::meter> meter_{ nullptr };
+  std::shared_ptr<metrics::meter_wrapper> meter_{ nullptr };
   std::atomic_bool stopped_{ false };
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
   std::shared_ptr<couchbase::core::io::cluster_config_tracker> config_tracker_{};

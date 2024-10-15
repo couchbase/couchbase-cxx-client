@@ -298,6 +298,11 @@ struct server_version {
   {
     return (major == 7 && minor == 6 && micro >= 2) || (major == 7 && minor > 6) || major > 7;
   }
+
+  [[nodiscard]] auto supports_cluster_labels() const -> bool
+  {
+    return (major == 7 && minor >= 7) || major > 7;
+  }
 };
 
 } // namespace test::utils

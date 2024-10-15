@@ -248,6 +248,7 @@ set(couchbase_cxx_client_FILES
     core/mcbp/server_duration.cxx
     core/meta/version.cxx
     core/metrics/logging_meter.cxx
+    core/metrics/meter_wrapper.cxx
     core/n1ql_query_options.cxx
     core/operations/document_analytics.cxx
     core/operations/document_append.cxx

@@ -319,6 +319,14 @@ struct traits<couchbase::core::topology::configuration> {
         }
       }
     }
+
+    if (const auto n = v.find("clusterName"); n != nullptr) {
+      result.cluster_name = n->get_string();
+    }
+    if (const auto u = v.find("clusterUUID"); u != nullptr) {
+      result.cluster_uuid = u->get_string();
+    }
+
     return result;
   }
 };
