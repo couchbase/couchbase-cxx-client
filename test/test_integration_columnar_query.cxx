@@ -618,3 +618,37 @@ TEST_CASE("integration: closing cluster while reading columnar query rows")
   auto [rows, rows_err] = buffer_rows(res);
   REQUIRE(rows_err.ec == couchbase::core::columnar::client_errc::canceled);
 }
+
+TEST_CASE("integration: columnar query component timeout in raw", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+  if (!integration.cluster_version().is_columnar()) {
+    SKIP("Requires a columnar cluster");
+  }
+
+  couchbase::core::columnar::agent agent{ integration.io, { { integration.cluster } } };
+
+  couchbase::core::columnar::query_options options{ "SELECT SLEEP(1,10000);" };
+  options.timeout = std::chrono::seconds(1);
+
+  // The first request will be sent with this timeout. The server tells us to retry the server
+  // timeout. This means that once we eventually time out in the client, the "server timeout" will
+  // be reported in the error context.
+  options.raw = { { "timeout", couchbase::core::json_string{ "\"1ms\"" } } };
+
+  couchbase::core::columnar::query_result result;
+  {
+    auto barrier = std::make_shared<std::promise<
+      std::pair<couchbase::core::columnar::query_result, couchbase::core::columnar::error>>>();
+    auto f = barrier->get_future();
+    auto resp = agent.execute_query(options, [barrier](auto res, auto err) mutable {
+      barrier->set_value({ std::move(res), err });
+    });
+    auto [res, err] = f.get();
+    REQUIRE(resp.has_value());
+    REQUIRE(err.ec == couchbase::core::columnar::errc::timeout);
+    REQUIRE(err.ctx["last_errors"].get_array()[0].get_object()["code"].get_signed() == 21002);
+    REQUIRE(err.ctx["last_errors"].get_array()[0].get_object()["msg"].get_string() ==
+            "Request timed out and will be cancelled");
+  }
+}

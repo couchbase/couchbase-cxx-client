@@ -95,10 +95,11 @@ public:
               bootstrap_error.error_message);
             self->invoke_callback({}, { maybe_convert_error_code(bootstrap_error.ec), message });
           } else {
-            auto ec = std::get<std::error_code>(err);
-            self->invoke_callback(
-              {},
-              { maybe_convert_error_code(ec), "Failed to execute the HTTP request for the query" });
+            auto ec = maybe_convert_error_code(std::get<std::error_code>(err));
+            if (ec == errc::timeout) {
+              return self->trigger_timeout();
+            }
+            self->invoke_callback({}, { ec, "Failed to execute the HTTP request for the query" });
           }
           return;
         }
@@ -328,7 +329,7 @@ private:
     // retryable errors should be listed.
     if (err.ec == errc::timeout && retry_info_.last_error) {
       if (const auto* e = retry_info_.last_error.ctx.find("errors"); e != nullptr) {
-        err.ctx["last_errors"] = e;
+        err.ctx["last_errors"] = e->get_array();
       }
     }
   }
