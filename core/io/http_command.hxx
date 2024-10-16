@@ -23,6 +23,7 @@
 #include "core/metrics/meter_wrapper.hxx"
 #include "core/service_type_fmt.hxx"
 #include "core/tracing/constants.hxx"
+#include "core/tracing/tracer_wrapper.hxx"
 #include "core/utils/movable_function.hxx"
 #include "http_session.hxx"
 #include "http_traits.hxx"
@@ -48,7 +49,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
   asio::steady_timer deadline;
   Request request;
   encoded_request_type encoded;
-  std::shared_ptr<couchbase::tracing::request_tracer> tracer_;
+  std::shared_ptr<tracing::tracer_wrapper> tracer_;
   std::shared_ptr<couchbase::tracing::request_span> span_{ nullptr };
   std::shared_ptr<metrics::meter_wrapper> meter_{};
   std::shared_ptr<io::http_session> session_{};
@@ -62,7 +63,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
 
   http_command(asio::io_context& ctx,
                Request req,
-               std::shared_ptr<couchbase::tracing::request_tracer> tracer,
+               std::shared_ptr<tracing::tracer_wrapper> tracer,
                std::shared_ptr<metrics::meter_wrapper> meter,
                std::chrono::milliseconds default_timeout,
                std::chrono::milliseconds dispatch_timeout)
@@ -82,7 +83,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
 #else
   http_command(asio::io_context& ctx,
                Request req,
-               std::shared_ptr<couchbase::tracing::request_tracer> tracer,
+               std::shared_ptr<tracing::tracer_wrapper> tracer,
                std::shared_ptr<metrics::meter_wrapper> meter,
                std::chrono::milliseconds default_timeout)
     : deadline(ctx)
@@ -113,12 +114,13 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
 
   void start(http_command_handler&& handler)
   {
-    span_ = tracer_->start_span(tracing::span_name_for_http_service(request.type), parent_span);
-    if (span_->uses_tags())
+    span_ = tracer_->create_span(tracing::span_name_for_http_service(request.type), parent_span);
+    if (span_->uses_tags()) {
       span_->add_tag(tracing::attributes::service,
                      tracing::service_name_for_http_service(request.type));
-    if (span_->uses_tags())
       span_->add_tag(tracing::attributes::operation_id, client_context_id_);
+    }
+
     handler_ = std::move(handler);
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
     dispatch_deadline_.expires_after(dispatch_timeout_);

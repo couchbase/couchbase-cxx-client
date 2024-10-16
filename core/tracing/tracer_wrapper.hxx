@@ -18,56 +18,40 @@
 #pragma once
 
 #include "core/config_listener.hxx"
-#include "core/service_type.hxx"
 #include "core/topology/configuration.hxx"
 
-#include <couchbase/metrics/meter.hxx>
+#include <couchbase/tracing/request_span.hxx>
+#include <couchbase/tracing/request_tracer.hxx>
 
-#include <chrono>
-#include <map>
+#include <memory>
 #include <optional>
 #include <shared_mutex>
 #include <string>
-#include <system_error>
 
-namespace couchbase::core::metrics
+namespace couchbase::core::tracing
 {
-struct metric_attributes {
-  couchbase::core::service_type service;
-  std::string operation;
-  std::error_code ec;
-  std::optional<std::string> bucket_name{};
-  std::optional<std::string> scope_name{};
-  std::optional<std::string> collection_name{};
-
-  struct {
-    std::optional<std::string> cluster_name{};
-    std::optional<std::string> cluster_uuid{};
-  } internal{};
-
-  [[nodiscard]] auto encode() const -> std::map<std::string, std::string>;
-};
-
-class meter_wrapper : public config_listener
+class tracer_wrapper : public config_listener
 {
 public:
-  explicit meter_wrapper(std::shared_ptr<couchbase::metrics::meter> meter);
+  explicit tracer_wrapper(std::shared_ptr<couchbase::tracing::request_tracer> tracer);
 
   void start();
   void stop();
 
-  void record_value(metric_attributes attrs, std::chrono::steady_clock::time_point start_time);
+  auto create_span(std::string span_name,
+                   std::shared_ptr<couchbase::tracing::request_span> parent_span)
+    -> std::shared_ptr<couchbase::tracing::request_span>;
 
   void update_config(topology::configuration config) override;
 
-  [[nodiscard]] static auto create(std::shared_ptr<couchbase::metrics::meter> meter)
-    -> std::shared_ptr<meter_wrapper>;
+  [[nodiscard]] static auto create(std::shared_ptr<couchbase::tracing::request_tracer> tracer)
+    -> std::shared_ptr<tracer_wrapper>;
 
 private:
-  std::shared_ptr<couchbase::metrics::meter> meter_;
+  std::shared_ptr<couchbase::tracing::request_tracer> tracer_;
 
   std::optional<std::string> cluster_name_{};
   std::optional<std::string> cluster_uuid_{};
   std::shared_mutex cluster_labels_mutex_{};
 };
-} // namespace couchbase::core::metrics
+} // namespace couchbase::core::tracing

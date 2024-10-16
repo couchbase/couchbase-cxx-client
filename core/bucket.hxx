@@ -33,10 +33,6 @@
 
 namespace couchbase
 {
-namespace tracing
-{
-class request_tracer;
-} // namespace tracing
 namespace core
 {
 namespace mcbp
@@ -48,6 +44,10 @@ namespace diag
 class ping_collector;
 struct diagnostics_result;
 } // namespace diag
+namespace tracing
+{
+class tracer_wrapper;
+} // namespace tracing
 namespace metrics
 {
 class meter_wrapper;
@@ -68,7 +68,7 @@ public:
   bucket(std::string client_id,
          asio::io_context& ctx,
          asio::ssl::context& tls,
-         std::shared_ptr<couchbase::tracing::request_tracer> tracer,
+         std::shared_ptr<tracing::tracer_wrapper> tracer,
          std::shared_ptr<metrics::meter_wrapper> meter,
          std::string name,
          couchbase::core::origin origin,
@@ -200,7 +200,7 @@ public:
 
   [[nodiscard]] auto name() const -> const std::string&;
   [[nodiscard]] auto log_prefix() const -> const std::string&;
-  [[nodiscard]] auto tracer() const -> std::shared_ptr<couchbase::tracing::request_tracer>;
+  [[nodiscard]] auto tracer() const -> std::shared_ptr<tracing::tracer_wrapper>;
   [[nodiscard]] auto meter() const -> std::shared_ptr<metrics::meter_wrapper>;
   [[nodiscard]] auto default_retry_strategy() const -> std::shared_ptr<couchbase::retry_strategy>;
   [[nodiscard]] auto is_closed() const -> bool;
