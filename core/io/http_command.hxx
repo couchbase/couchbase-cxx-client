@@ -49,13 +49,13 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
   asio::steady_timer deadline;
   Request request;
   encoded_request_type encoded;
-  std::shared_ptr<tracing::tracer_wrapper> tracer_;
+  std::shared_ptr<tracing::tracer_wrapper> tracer_{ nullptr };
   std::shared_ptr<couchbase::tracing::request_span> span_{ nullptr };
   std::shared_ptr<metrics::meter_wrapper> meter_{};
   std::shared_ptr<io::http_session> session_{};
   http_command_handler handler_{};
   std::chrono::milliseconds timeout_{};
-  std::string client_context_id_;
+  std::string client_context_id_{};
   std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
   std::chrono::milliseconds dispatch_timeout_{};

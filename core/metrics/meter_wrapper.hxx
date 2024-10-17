@@ -33,9 +33,9 @@
 namespace couchbase::core::metrics
 {
 struct metric_attributes {
-  couchbase::core::service_type service;
-  std::string operation;
-  std::error_code ec;
+  couchbase::core::service_type service{};
+  std::string operation{};
+  std::error_code ec{};
   std::optional<std::string> bucket_name{};
   std::optional<std::string> scope_name{};
   std::optional<std::string> collection_name{};

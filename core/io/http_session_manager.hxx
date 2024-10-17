@@ -208,8 +208,7 @@ public:
             std::scoped_lock lock(sessions_mutex_);
             busy_sessions_[type].push_back(session);
           }
-          operations::http_noop_request request{};
-          request.type = type;
+          operations::http_noop_request request{ type };
           request.timeout = timeout;
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
           auto cmd = std::make_shared<operations::http_command<operations::http_noop_request>>(
