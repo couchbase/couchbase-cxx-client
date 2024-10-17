@@ -301,7 +301,8 @@ struct server_version {
 
   [[nodiscard]] auto supports_cluster_labels() const -> bool
   {
-    return (major == 7 && minor >= 7) || major > 7;
+    // See MB-63870
+    return (major == 7 && minor == 6 && micro >= 4) || (major == 7 && minor > 6) || major > 7;
   }
 };
 

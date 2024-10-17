@@ -146,6 +146,7 @@
 #include "core/topology/capabilities.hxx"
 #include "core/tracing/noop_tracer.hxx"
 #include "core/tracing/threshold_logging_tracer.hxx"
+#include "core/tracing/tracer_wrapper.hxx"
 #include "core/utils/join_strings.hxx"
 #include "core/utils/movable_function.hxx"
 #include "crud_component.hxx"
@@ -353,32 +354,7 @@ public:
                  id_,
                  couchbase::core::meta::sdk_semver(),
                  origin_.to_json());
-    // ignore the enable_tracing flag if a tracer was passed in
-    if (nullptr != origin_.options().tracer) {
-      tracer_ = origin_.options().tracer;
-    } else {
-      if (origin_.options().enable_tracing) {
-        tracer_ = std::make_shared<tracing::threshold_logging_tracer>(
-          ctx_, origin_.options().tracing_options);
-      } else {
-        tracer_ = std::make_shared<tracing::noop_tracer>();
-      }
-    }
-    tracer_->start();
-    // ignore the metrics options if a meter was passed in.
-    if (nullptr != origin_.options().meter) {
-      meter_ = metrics::meter_wrapper::create(origin_.options().meter);
-    } else {
-      if (origin_.options().enable_metrics) {
-        meter_ = metrics::meter_wrapper::create(
-          std::make_shared<metrics::logging_meter>(ctx_, origin_.options().metrics_options));
-      } else {
-        meter_ = metrics::meter_wrapper::create(std::make_shared<metrics::noop_meter>());
-      }
-    }
-    meter_->start();
-    session_manager_->set_tracer(tracer_);
-    session_manager_->set_meter(meter_);
+    setup_observability();
     if (origin_.options().enable_dns_srv) {
       std::string hostname;
       std::string port;
@@ -436,31 +412,7 @@ public:
                  id_,
                  couchbase::core::meta::sdk_semver(),
                  origin_.to_json());
-    // ignore the enable_tracing flag if a tracer was passed in
-    if (nullptr != origin_.options().tracer) {
-      tracer_ = origin_.options().tracer;
-    } else {
-      if (origin_.options().enable_tracing) {
-        tracer_ = std::make_shared<tracing::threshold_logging_tracer>(
-          ctx_, origin_.options().tracing_options);
-      } else {
-        tracer_ = std::make_shared<tracing::noop_tracer>();
-      }
-    }
-    tracer_->start();
-    // ignore the metrics options if a meter was passed in.
-    if (nullptr != origin_.options().meter) {
-      meter_ = metrics::meter_wrapper::create(origin_.options().meter);
-    } else {
-      if (origin_.options().enable_metrics) {
-        meter_ = metrics::meter_wrapper::create(
-          std::make_shared<metrics::logging_meter>(ctx_, origin_.options().metrics_options));
-      } else {
-        meter_ = metrics::meter_wrapper::create(std::make_shared<metrics::noop_meter>());
-      }
-    }
-    meter_->start();
-    session_manager_->set_tracer(tracer_);
+    setup_observability();
     session_manager_->set_dispatch_timeout(origin_.options().dispatch_timeout);
     // at this point we will infinitely try to connect
     if (origin_.options().enable_dns_srv) {
@@ -498,7 +450,8 @@ public:
           id_, ctx_, tls_, tracer_, meter_, bucket_name, origin, known_features, dns_srv_tracker_);
         buckets_.try_emplace(bucket_name, b);
 
-        // Register the meter for config updates to track Cluster name & UUID
+        // Register the tracer & the meter for config updates to track Cluster name & UUID
+        b->on_configuration_update(tracer_);
         b->on_configuration_update(meter_);
       }
     }
@@ -1228,6 +1181,38 @@ public:
   }
 
 private:
+  void setup_observability()
+  {
+    // ignore the enable_tracing flag if a tracer was passed in
+    if (nullptr != origin_.options().tracer) {
+      tracer_ = tracing::tracer_wrapper::create(origin_.options().tracer);
+    } else {
+      if (origin_.options().enable_tracing) {
+        tracer_ =
+          tracing::tracer_wrapper::create(std::make_shared<tracing::threshold_logging_tracer>(
+            ctx_, origin_.options().tracing_options));
+      } else {
+        tracer_ = tracing::tracer_wrapper::create(std::make_shared<tracing::noop_tracer>());
+      }
+    }
+    tracer_->start();
+    // ignore the metrics options if a meter was passed in.
+    if (nullptr != origin_.options().meter) {
+      meter_ = metrics::meter_wrapper::create(origin_.options().meter);
+    } else {
+      if (origin_.options().enable_metrics) {
+        meter_ = metrics::meter_wrapper::create(
+          std::make_shared<metrics::logging_meter>(ctx_, origin_.options().metrics_options));
+      } else {
+        meter_ = metrics::meter_wrapper::create(std::make_shared<metrics::noop_meter>());
+      }
+    }
+    meter_->start();
+
+    session_manager_->set_tracer(tracer_);
+    session_manager_->set_meter(meter_);
+  }
+
   std::string id_{ uuid::to_string(uuid::random()) };
   asio::io_context& ctx_;
   asio::executor_work_guard<asio::io_context::executor_type> work_;
@@ -1238,7 +1223,7 @@ private:
   std::mutex buckets_mutex_{};
   std::map<std::string, std::shared_ptr<bucket>> buckets_{};
   couchbase::core::origin origin_{};
-  std::shared_ptr<couchbase::tracing::request_tracer> tracer_{ nullptr };
+  std::shared_ptr<tracing::tracer_wrapper> tracer_{ nullptr };
   std::shared_ptr<metrics::meter_wrapper> meter_{ nullptr };
   std::atomic_bool stopped_{ false };
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR

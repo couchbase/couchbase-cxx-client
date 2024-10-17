@@ -31,6 +31,7 @@
 #include "core/protocol/hello_feature.hxx"
 #include "core/response_handler.hxx"
 #include "core/service_type.hxx"
+#include "core/tracing/tracer_wrapper.hxx"
 #include "core/utils/movable_function.hxx"
 #include "dispatcher.hxx"
 #include "impl/bootstrap_state_listener.hxx"
@@ -45,7 +46,6 @@
 #include <couchbase/error_codes.hxx>
 #include <couchbase/retry_reason.hxx>
 #include <couchbase/retry_strategy.hxx>
-#include <couchbase/tracing/request_tracer.hxx>
 
 #include <asio/bind_executor.hpp>
 #include <asio/error.hpp>
@@ -82,7 +82,7 @@ public:
   bucket_impl(std::string client_id,
               std::string name,
               couchbase::core::origin origin,
-              std::shared_ptr<couchbase::tracing::request_tracer> tracer,
+              std::shared_ptr<tracing::tracer_wrapper> tracer,
               std::shared_ptr<metrics::meter_wrapper> meter,
               std::vector<protocol::hello_feature> known_features,
               std::shared_ptr<impl::bootstrap_state_listener> state_listener,
@@ -890,7 +890,7 @@ public:
     return configured_;
   }
 
-  [[nodiscard]] auto tracer() const -> std::shared_ptr<couchbase::tracing::request_tracer>
+  [[nodiscard]] auto tracer() const -> std::shared_ptr<tracing::tracer_wrapper>
   {
     return tracer_;
   }
@@ -948,7 +948,7 @@ private:
   const std::string name_;
   const std::string log_prefix_;
   const origin origin_;
-  const std::shared_ptr<couchbase::tracing::request_tracer> tracer_;
+  const std::shared_ptr<tracing::tracer_wrapper> tracer_;
   const std::shared_ptr<metrics::meter_wrapper> meter_;
   const std::vector<protocol::hello_feature> known_features_;
   const std::shared_ptr<impl::bootstrap_state_listener> state_listener_;
@@ -981,7 +981,7 @@ private:
 bucket::bucket(std::string client_id,
                asio::io_context& ctx,
                asio::ssl::context& tls,
-               std::shared_ptr<couchbase::tracing::request_tracer> tracer,
+               std::shared_ptr<tracing::tracer_wrapper> tracer,
                std::shared_ptr<metrics::meter_wrapper> meter,
                std::string name,
                couchbase::core::origin origin,
@@ -1050,7 +1050,7 @@ bucket::log_prefix() const -> const std::string&
 }
 
 auto
-bucket::tracer() const -> std::shared_ptr<couchbase::tracing::request_tracer>
+bucket::tracer() const -> std::shared_ptr<tracing::tracer_wrapper>
 {
   return impl_->tracer();
 }

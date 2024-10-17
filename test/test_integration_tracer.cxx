@@ -132,11 +132,37 @@ make_id(const test::utils::test_context& ctx, std::string key = "")
 }
 
 void
+assert_span_ok(test::utils::integration_test_guard& guard,
+               const std::shared_ptr<test_span>& span,
+               std::shared_ptr<test_span> parent = nullptr)
+{
+
+  REQUIRE(span->parent() == parent);
+  if (parent) {
+    // the parent span should not be closed yet
+    REQUIRE(parent->duration().count() == 0);
+  }
+
+  const auto& tags = span->string_tags();
+
+  REQUIRE(tags.at("db.system") == "couchbase");
+  if (guard.cluster_version().supports_cluster_labels()) {
+    REQUIRE_FALSE(tags.at("db.couchbase.cluster_name").empty());
+    REQUIRE_FALSE(tags.at("db.couchbase.cluster_uuid").empty());
+  } else {
+    REQUIRE(tags.find("db.couchbase.cluster_name") == tags.end());
+    REQUIRE(tags.find("db.couchbase.cluster_uuid") == tags.end());
+  }
+}
+
+void
 assert_kv_op_span_ok(test::utils::integration_test_guard& guard,
-                     std::shared_ptr<test_span> span,
+                     const std::shared_ptr<test_span>& span,
                      const std::string& op,
                      std::shared_ptr<test_span> parent = nullptr)
 {
+  assert_span_ok(guard, span, parent);
+
   auto server_duration = span->int_tags()["cb.server_duration"];
   REQUIRE(op == span->name());
   REQUIRE(static_cast<uint64_t>(span->duration().count()) >= server_duration);
@@ -146,30 +172,23 @@ assert_kv_op_span_ok(test::utils::integration_test_guard& guard,
   REQUIRE_FALSE(span->string_tags()["cb.remote_socket"].empty());
   REQUIRE_FALSE(span->string_tags()["cb.operation_id"].empty());
   REQUIRE(span->string_tags()["db.instance"] == guard.ctx.bucket);
-  REQUIRE(span->parent() == parent);
-  if (parent) {
-    // the parent span should not be closed yet
-    REQUIRE(parent->duration().count() == 0);
-  }
 }
 
 void
-assert_http_op_span_ok(std::shared_ptr<test_span> span,
+assert_http_op_span_ok(test::utils::integration_test_guard& guard,
+                       const std::shared_ptr<test_span>& span,
                        const std::string& op,
                        std::shared_ptr<test_span> parent = nullptr)
 {
+  assert_span_ok(guard, span, parent);
+
   REQUIRE(span->name().find(op) != std::string::npos);
   REQUIRE_FALSE(span->string_tags()["cb.local_id"].empty());
   REQUIRE_FALSE(span->string_tags()["cb.local_socket"].empty());
   REQUIRE_FALSE(span->string_tags()["cb.operation_id"].empty());
   REQUIRE_FALSE(span->string_tags()["cb.remote_socket"].empty());
   REQUIRE(span->string_tags()["cb.service"] == op);
-  REQUIRE(span->parent() == parent);
   REQUIRE(span->duration().count() > 0);
-  if (parent) {
-    // the parent span should not be closed yet
-    REQUIRE(parent->duration().count() == 0);
-  }
   // spec has some specific fields for query, analytics, etc...
 }
 
@@ -282,7 +301,7 @@ TEST_CASE("integration: enable external tracer", "[integration]")
       REQUIRE_SUCCESS(resp.ctx.ec);
       auto spans = tracer->spans();
       REQUIRE_FALSE(spans.empty());
-      assert_http_op_span_ok(spans.front(), "query", parent_span);
+      assert_http_op_span_ok(guard, spans.front(), "query", parent_span);
     }
     SECTION("search")
     {
@@ -296,7 +315,7 @@ TEST_CASE("integration: enable external tracer", "[integration]")
       REQUIRE(resp.ctx.ec);
       auto spans = tracer->spans();
       REQUIRE_FALSE(spans.empty());
-      assert_http_op_span_ok(spans.front(), "search", parent_span);
+      assert_http_op_span_ok(guard, spans.front(), "search", parent_span);
     }
     if (guard.cluster_version().supports_analytics()) {
       SECTION("analytics")
@@ -310,7 +329,7 @@ TEST_CASE("integration: enable external tracer", "[integration]")
         REQUIRE_SUCCESS(resp.ctx.ec);
         auto spans = tracer->spans();
         REQUIRE_FALSE(spans.empty());
-        assert_http_op_span_ok(spans.front(), "analytics", parent_span);
+        assert_http_op_span_ok(guard, spans.front(), "analytics", parent_span);
       }
     }
     if (guard.cluster_version().supports_views()) {
@@ -327,7 +346,7 @@ TEST_CASE("integration: enable external tracer", "[integration]")
         REQUIRE(resp.ctx.ec);
         auto spans = tracer->spans();
         REQUIRE_FALSE(spans.empty());
-        assert_http_op_span_ok(spans.front(), "views", parent_span);
+        assert_http_op_span_ok(guard, spans.front(), "views", parent_span);
       }
     }
   }

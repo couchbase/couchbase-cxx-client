@@ -24,10 +24,11 @@
 #include "core/columnar/bootstrap_notification_subscriber.hxx"
 #endif
 #include "core/logger/logger.hxx"
+#include "core/metrics/meter_wrapper.hxx"
 #include "core/operations/http_noop.hxx"
 #include "core/service_type.hxx"
 #include "core/tracing/noop_tracer.hxx"
-#include "couchbase/metrics/meter.hxx"
+#include "core/tracing/tracer_wrapper.hxx"
 #include "http_command.hxx"
 #include "http_context.hxx"
 #include "http_session.hxx"
@@ -63,7 +64,7 @@ public:
   {
   }
 
-  void set_tracer(std::shared_ptr<couchbase::tracing::request_tracer> tracer)
+  void set_tracer(std::shared_ptr<tracing::tracer_wrapper> tracer)
   {
     tracer_ = std::move(tracer);
   }
@@ -928,7 +929,7 @@ private:
   std::string client_id_;
   asio::io_context& ctx_;
   asio::ssl::context& tls_;
-  std::shared_ptr<couchbase::tracing::request_tracer> tracer_{ nullptr };
+  std::shared_ptr<tracing::tracer_wrapper> tracer_{ nullptr };
   std::shared_ptr<metrics::meter_wrapper> meter_{ nullptr };
   cluster_options options_{};
 

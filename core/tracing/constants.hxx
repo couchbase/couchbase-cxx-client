@@ -78,6 +78,9 @@ constexpr auto mcbp_internal = "cb.internal";
 namespace attributes
 {
 constexpr auto system = "db.system";
+constexpr auto cluster_name = "db.couchbase.cluster_name";
+constexpr auto cluster_uuid = "db.couchbase.cluster_uuid";
+
 constexpr auto span_kind = "span.kind";
 constexpr auto component = "db.couchbase.component";
 constexpr auto instance = "db.instance";
