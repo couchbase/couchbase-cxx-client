@@ -201,3 +201,8 @@
  * The Metrics API for OpenTelemetry was GA'd in version 1.7.0.
  */
 #define COUCHBASE_CXX_CLIENT_OTEL_METER_USES_GA_METRICS_API 1
+
+/**
+ * All options classes in the Public API expose the parent_span option.
+ */
+#define COUCHBASE_CXX_CLIENT_PUBLIC_API_PARENT_SPAN 1

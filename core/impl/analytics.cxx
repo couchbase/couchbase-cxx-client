@@ -167,6 +167,7 @@ build_analytics_request(std::string statement,
     std::move(options.client_context_id),
     options.timeout,
   };
+  request.parent_span = options.parent_span;
   if (!options.raw.empty()) {
     for (auto& [name, value] : options.raw) {
       request.raw[name] = std::move(value);

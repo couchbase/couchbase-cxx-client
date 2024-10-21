@@ -149,6 +149,7 @@ public:
           {},
           options.timeout,
           { options.retry_strategy },
+          options.parent_span,
         },
         [handler = std::move(handler)](auto resp) mutable {
           return handler(core::impl::make_error(std::move(resp.ctx)),
@@ -166,6 +167,7 @@ public:
         false,
         options.timeout,
         { options.retry_strategy },
+        options.parent_span,
       },
       [handler = std::move(handler)](auto resp) mutable {
         std::optional<std::chrono::system_clock::time_point> expiry_time{};
@@ -190,6 +192,7 @@ public:
         expiry,
         options.timeout,
         { options.retry_strategy },
+        options.parent_span,
       },
       [handler = std::move(handler)](auto resp) mutable {
         return handler(core::impl::make_error(std::move(resp.ctx)),
@@ -210,6 +213,7 @@ public:
         expiry,
         options.timeout,
         { options.retry_strategy },
+        options.parent_span,
       },
       [handler = std::move(handler)](const auto& resp) mutable {
         return handler(core::impl::make_error(std::move(resp.ctx)), result{ resp.cas });
@@ -279,6 +283,7 @@ public:
           options.durability_level,
           options.timeout,
           { options.retry_strategy },
+          options.parent_span,
         },
         [handler = std::move(handler)](auto resp) mutable {
           if (resp.ctx.ec()) {
@@ -290,7 +295,14 @@ public:
     }
 
     core::operations::remove_request request{
-      id, {}, {}, options.cas, durability_level::none, options.timeout, { options.retry_strategy },
+      id,
+      {},
+      {},
+      options.cas,
+      durability_level::none,
+      options.timeout,
+      { options.retry_strategy },
+      options.parent_span,
     };
     return core_.execute(std::move(request),
                          [core = core_, id = std::move(id), options, handler = std::move(handler)](
@@ -332,6 +344,7 @@ public:
         static_cast<uint32_t>(lock_duration.count()),
         options.timeout,
         { options.retry_strategy },
+        options.parent_span,
       },
       [handler = std::move(handler)](auto&& resp) mutable {
         return handler(core::impl::make_error(std::move(resp.ctx)),
@@ -352,6 +365,7 @@ public:
         cas,
         options.timeout,
         { options.retry_strategy },
+        options.parent_span,
       },
       [handler = std::move(handler)](auto&& resp) mutable {
         return handler(core::impl::make_error(std::move(resp.ctx)));
@@ -369,6 +383,7 @@ public:
         {},
         options.timeout,
         { options.retry_strategy },
+        options.parent_span,
       },
       [handler = std::move(handler)](auto&& resp) mutable {
         return handler(core::impl::make_error(std::move(resp.ctx)),
@@ -395,6 +410,7 @@ public:
         specs,
         options.timeout,
         { options.retry_strategy },
+        options.parent_span,
       },
       [handler = std::move(handler)](auto resp) mutable {
         if (resp.ctx.ec()) {
@@ -427,7 +443,7 @@ public:
         core::document_id{ bucket_name_, scope_name_, name_, std::move(document_key) },
         specs,
         options.timeout,
-        {},
+        options.parent_span,
         options.read_preference,
       },
       [handler = std::move(handler)](auto resp) mutable {
@@ -465,7 +481,7 @@ public:
         core::document_id{ bucket_name_, scope_name_, name_, std::move(document_key) },
         specs,
         options.timeout,
-        {},
+        options.parent_span,
         options.read_preference,
       },
       [handler = std::move(handler)](auto resp) mutable {
@@ -514,6 +530,7 @@ public:
           options.timeout,
           { options.retry_strategy },
           options.preserve_expiry,
+          options.parent_span,
         },
         [handler = std::move(handler)](auto resp) mutable {
           if (resp.ctx.ec()) {
@@ -548,6 +565,7 @@ public:
       options.timeout,
       { options.retry_strategy },
       options.preserve_expiry,
+      options.parent_span,
     };
     return core_.execute(
       std::move(request),
@@ -611,6 +629,7 @@ public:
           options.timeout,
           { options.retry_strategy },
           options.preserve_expiry,
+          options.parent_span,
         },
         [handler = std::move(handler)](auto resp) mutable {
           return handler(core::impl::make_error(std::move(resp.ctx)),
@@ -629,6 +648,7 @@ public:
       options.timeout,
       { options.retry_strategy },
       options.preserve_expiry,
+      options.parent_span,
     };
     return core_.execute(
       std::move(request),
@@ -681,6 +701,7 @@ public:
           options.durability_level,
           options.timeout,
           { options.retry_strategy },
+          options.parent_span,
         },
         [handler = std::move(handler)](auto&& resp) mutable {
           if (resp.ctx.ec()) {
@@ -701,6 +722,7 @@ public:
       durability_level::none,
       options.timeout,
       { options.retry_strategy },
+      options.parent_span,
     };
     return core_.execute(
       std::move(request),
@@ -754,6 +776,7 @@ public:
           options.timeout,
           { options.retry_strategy },
           options.preserve_expiry,
+          options.parent_span,
         },
         [handler = std::move(handler)](auto resp) mutable {
           if (resp.ctx.ec()) {
@@ -776,6 +799,7 @@ public:
       options.timeout,
       { options.retry_strategy },
       options.preserve_expiry,
+      options.parent_span,
     };
     return core_.execute(std::move(request),
                          [core = core_, id = std::move(id), options, handler = std::move(handler)](
