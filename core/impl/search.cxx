@@ -165,6 +165,7 @@ build_search_request(std::string index_name,
     options.client_context_id,
     options.timeout,
   };
+  request.parent_span = options.parent_span;
   return request;
 }
 
@@ -207,6 +208,7 @@ build_search_request(std::string index_name,
     options.client_context_id,
     options.timeout,
   };
+  core_request.parent_span = options.parent_span;
 
   if (auto vector_search = request.vector_search(); vector_search.has_value()) {
     core_request.vector_search = core::utils::json::generate_binary(vector_search->query);
