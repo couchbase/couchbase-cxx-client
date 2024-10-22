@@ -21,9 +21,9 @@ CPMAddPackage(
   NAME
   couchbase_cxx_client
   GIT_TAG
-  1.0.2
+  1.0.3
   VERSION
-  1.0.2
+  1.0.3
   GITHUB_REPOSITORY
   "couchbase/couchbase-cxx-client"
   OPTIONS
