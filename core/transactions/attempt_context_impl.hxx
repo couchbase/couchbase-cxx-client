@@ -92,36 +92,35 @@ private:
   // transaction_context needs access to the two functions below
   friend class transaction_context;
 
+  void insert(const core::document_id& id,
+              codec::encoded_value content,
+              core::transactions::async_attempt_context::Callback&& cb) override;
+
+  auto insert(const core::document_id& id,
+              codec::encoded_value content) -> core::transactions::transaction_get_result override;
+
+  void replace(const transaction_get_result& document,
+               codec::encoded_value content,
+               core::transactions::async_attempt_context::Callback&& cb) override;
+
+  auto replace(const transaction_get_result& document,
+               codec::encoded_value content) -> transaction_get_result override;
+
   auto insert_raw(const collection& coll, const std::string& id, codec::encoded_value content)
     -> std::pair<couchbase::error, couchbase::transactions::transaction_get_result> override;
-  auto insert_raw(const core::document_id& id, codec::encoded_value content)
-    -> core::transactions::transaction_get_result override;
 
   void insert_raw(const collection& coll,
                   std::string id,
                   codec::encoded_value content,
                   couchbase::transactions::async_result_handler&& handler) override;
 
-  void insert_raw(
-    const core::document_id& id,
-    codec::encoded_value content,
-    std::function<void(std::exception_ptr, std::optional<transaction_get_result>)>&& cb) override;
-
   auto replace_raw(const couchbase::transactions::transaction_get_result& doc,
                    codec::encoded_value content)
     -> std::pair<couchbase::error, couchbase::transactions::transaction_get_result> override;
 
-  auto replace_raw(const transaction_get_result& document,
-                   codec::encoded_value content) -> transaction_get_result override;
-
   void replace_raw(couchbase::transactions::transaction_get_result doc,
                    codec::encoded_value content,
                    couchbase::transactions::async_result_handler&& handler) override;
-
-  void replace_raw(
-    const transaction_get_result& document,
-    codec::encoded_value content,
-    std::function<void(std::exception_ptr, std::optional<transaction_get_result>)>&& cb) override;
 
   void remove_staged_insert(const core::document_id& id, VoidCallback&& cb);
 
@@ -200,7 +199,7 @@ private:
                                std::exception_ptr&& err)
   {
     try {
-      std::rethrow_exception(std::move(err));
+      std::rethrow_exception(err);
     } catch (const transaction_operation_failed& e) {
       // if this is a transaction_operation_failed, we need to cache it before
       // moving on...

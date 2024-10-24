@@ -200,26 +200,6 @@ public:
   }
 
   /**
-   * Content of the document.
-   *
-   * @return content of the document.
-   */
-  template<typename Document,
-           typename Transcoder = codec::default_json_transcoder,
-           std::enable_if_t<!codec::is_transcoder_v<Document>, bool> = true,
-           std::enable_if_t<codec::is_transcoder_v<Transcoder>, bool> = true>
-  [[nodiscard]] auto content() const -> Document
-  {
-    return Transcoder::template decode<Document>(content_);
-  }
-
-  template<typename Transcoder, std::enable_if_t<codec::is_transcoder_v<Transcoder>, bool> = true>
-  [[nodiscard]] auto content() const -> typename Transcoder::document_type
-  {
-    return Transcoder::decode(content_);
-  }
-
-  /**
    * Content of the document as raw byte vector
    *
    * @return content

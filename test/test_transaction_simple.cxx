@@ -98,7 +98,7 @@ TEST_CASE("transactions: arbitrary exception", "[transactions]")
     [](auto& txn, auto& id) {
       try {
         txn->run([&id](std::shared_ptr<couchbase::core::transactions::attempt_context> ctx) {
-          ctx->insert(id, content);
+          ctx->insert(id, couchbase::codec::default_json_transcoder::encode(content));
           throw 3;
         });
       } catch (const couchbase::core::transactions::transaction_exception& e) {
@@ -130,9 +130,10 @@ TEST_CASE("transactions: can get replica", "[transactions]")
 
   txn->run([id](std::shared_ptr<couchbase::core::transactions::attempt_context> ctx) {
     auto doc = ctx->get(id);
-    auto new_content = doc.content<tao::json::value>();
+    auto new_content =
+      couchbase::codec::default_json_transcoder::decode<tao::json::value>(doc.content());
     new_content["another one"] = 1;
-    ctx->replace(doc, new_content);
+    ctx->replace(doc, couchbase::codec::default_json_transcoder::encode(new_content));
   });
   // now add to the initial content, and compare
   const tao::json::value expected{
@@ -168,9 +169,10 @@ TEST_CASE("transactions: can use custom metadata collections per transactions", 
     couchbase::transactions::transaction_keyspace(integration.ctx.other_bucket));
   txn->run(cfg, [id](std::shared_ptr<couchbase::core::transactions::attempt_context> ctx) {
     auto doc = ctx->get(id);
-    auto new_content = doc.content<tao::json::value>();
+    auto new_content =
+      couchbase::codec::default_json_transcoder::decode<tao::json::value>(doc.content());
     new_content["another one"] = 1;
-    ctx->replace(doc, new_content);
+    ctx->replace(doc, couchbase::codec::default_json_transcoder::encode(new_content));
   });
 
   const tao::json::value expected{
@@ -206,9 +208,10 @@ TEST_CASE("transactions: can use custom metadata collections", "[transactions]")
   }
   txn->run([&](std::shared_ptr<couchbase::core::transactions::attempt_context> ctx) {
     auto doc = ctx->get(id);
-    auto new_content = doc.content<tao::json::value>();
+    auto new_content =
+      couchbase::codec::default_json_transcoder::decode<tao::json::value>(doc.content());
     new_content["another one"] = 1;
-    ctx->replace(doc, new_content);
+    ctx->replace(doc, couchbase::codec::default_json_transcoder::encode(new_content));
   });
   // now add to the original content, and compare
   const tao::json::value expected{
@@ -263,9 +266,10 @@ TEST_CASE("transactions: non existent scope in custom metadata collections", "[t
   try {
     txn->run([&](std::shared_ptr<couchbase::core::transactions::attempt_context> ctx) {
       auto doc = ctx->get(id);
-      auto new_content = doc.content<tao::json::value>();
+      auto new_content =
+        couchbase::codec::default_json_transcoder::decode<tao::json::value>(doc.content());
       new_content["another one"] = 1;
-      ctx->replace(doc, new_content);
+      ctx->replace(doc, couchbase::codec::default_json_transcoder::encode(new_content));
     });
     FAIL("expected txn to timeout");
   } catch (const couchbase::core::transactions::transaction_exception& e) {
@@ -308,9 +312,10 @@ TEST_CASE("transactions: non existent collection in custom metadata collections"
   try {
     txn->run([&](std::shared_ptr<couchbase::core::transactions::attempt_context> ctx) {
       auto doc = ctx->get(id);
-      auto new_content = doc.content<tao::json::value>();
+      auto new_content =
+        couchbase::codec::default_json_transcoder::decode<tao::json::value>(doc.content());
       new_content["another one"] = 1;
-      ctx->replace(doc, new_content);
+      ctx->replace(doc, couchbase::codec::default_json_transcoder::encode(new_content));
     });
     FAIL("expected txn to timeout");
   } catch (const couchbase::core::transactions::transaction_exception& e) {
@@ -342,7 +347,7 @@ TEST_CASE("transactions: raw std::strings become json strings", "[transactions]"
   }
   txn->run([id, new_content](std::shared_ptr<couchbase::core::transactions::attempt_context> ctx) {
     auto doc = ctx->get(id);
-    ctx->replace(doc, new_content);
+    ctx->replace(doc, couchbase::codec::default_json_transcoder::encode(new_content));
   });
   {
     couchbase::core::operations::get_request req{ id };
@@ -366,7 +371,7 @@ TEST_CASE("transactions: quoted std::strings end up with 2 quotes (that's bad)",
 
   txn->run(
     [id, quoted_json_string](std::shared_ptr<couchbase::core::transactions::attempt_context> ctx) {
-      ctx->insert(id, quoted_json_string);
+      ctx->insert(id, couchbase::codec::default_json_transcoder::encode(quoted_json_string));
       auto doc = ctx->get(id);
     });
   {
@@ -468,7 +473,7 @@ TEST_CASE("transactions: can get replace objects", "[transactions]")
 
   txn->run([id, o2](std::shared_ptr<couchbase::core::transactions::attempt_context> ctx) {
     auto doc = ctx->get(id);
-    ctx->replace(doc, o2);
+    ctx->replace(doc, couchbase::codec::default_json_transcoder::encode(o2));
   });
   {
     couchbase::core::operations::get_request req{ id };
@@ -504,7 +509,7 @@ TEST_CASE("transactions: can get replace mixed object strings", "[transactions]"
 
   txn->run([id, v2](std::shared_ptr<couchbase::core::transactions::attempt_context> ctx) {
     auto doc = ctx->get(id);
-    ctx->replace(doc, v2);
+    ctx->replace(doc, couchbase::codec::default_json_transcoder::encode(v2));
   });
   {
     couchbase::core::operations::get_request req{ id };
@@ -530,7 +535,7 @@ TEST_CASE("transactions: can rollback insert", "[transactions]")
     [](auto& txn, auto id) {
       txn->run([id](std::shared_ptr<couchbase::core::transactions::attempt_context> ctx) {
         SimpleObject o{ "someone", 100 };
-        ctx->insert(id, o);
+        ctx->insert(id, couchbase::codec::default_json_transcoder::encode(o));
         throw 3; // some arbitrary exception...
       });
     }(txn, id),
@@ -600,7 +605,7 @@ TEST_CASE("transactions: can rollback replace", "[transactions]")
         tao::json::value new_content{
           { "some number", 100 },
         };
-        ctx->replace(res, new_content);
+        ctx->replace(res, couchbase::codec::default_json_transcoder::encode(new_content));
         throw 3; // just throw some arbitrary exception to get rollback
       });
     }(txn, id),
@@ -739,7 +744,7 @@ TEST_CASE("transactions: query updates insert", "[transactions]")
   stream << "UPDATE `" << id.bucket() << "` USE KEYS '" << id.key() << "' SET `some_number` = 10";
   txn->run([id, statement = stream.str()](
              std::shared_ptr<couchbase::core::transactions::attempt_context> ctx) {
-    ctx->insert(id, content);
+    ctx->insert(id, couchbase::codec::default_json_transcoder::encode(content));
     ctx->query(statement);
   });
 
@@ -769,11 +774,13 @@ TEST_CASE("transactions: can KV get", "[transactions]")
   stream << "UPDATE `" << id.bucket() << "` USE KEYS '" << id.key() << "' SET `some_number` = 10";
   txn->run([id, statement = stream.str()](
              std::shared_ptr<couchbase::core::transactions::attempt_context> ctx) {
-    ctx->insert(id, content);
+    ctx->insert(id, couchbase::codec::default_json_transcoder::encode(content));
     auto payload = ctx->query(statement);
     CHECK(payload.rows.empty());
     auto doc = ctx->get(id);
-    CHECK(10 == doc.content<tao::json::value>()["some_number"].as<uint32_t>());
+    CHECK(10 == couchbase::codec::default_json_transcoder::decode<tao::json::value>(
+                  doc.content())["some_number"]
+                  .as<std::uint32_t>());
   });
   {
     couchbase::core::operations::get_request req{ id };
@@ -803,7 +810,7 @@ TEST_CASE("transactions: can KV insert", "[transactions]")
   txn->run([id, statement = stream.str()](
              std::shared_ptr<couchbase::core::transactions::attempt_context> ctx) {
     auto payload = ctx->query(statement);
-    ctx->insert(id, content);
+    ctx->insert(id, couchbase::codec::default_json_transcoder::encode(content));
   });
   {
     couchbase::core::operations::get_request req{ id };
@@ -832,7 +839,7 @@ TEST_CASE("transactions: can rollback KV insert", "[transactions]")
     [](auto& txn, auto id, auto statement) {
       txn->run([&](std::shared_ptr<couchbase::core::transactions::attempt_context> ctx) {
         auto payload = ctx->query(statement);
-        ctx->insert(id, content);
+        ctx->insert(id, couchbase::codec::default_json_transcoder::encode(content));
         throw 3;
       });
     }(txn, id, stream.str()),
@@ -872,9 +879,11 @@ TEST_CASE("transactions: can KV replace", "[transactions]")
              std::shared_ptr<couchbase::core::transactions::attempt_context> ctx) {
     auto payload = ctx->query(statement);
     auto doc = ctx->get(id);
-    auto new_content = doc.content<tao::json::value>();
+    auto new_content =
+      couchbase::codec::default_json_transcoder::decode<tao::json::value>(doc.content());
     new_content["some_number"] = 10;
-    auto replaced_doc = ctx->replace(doc, new_content);
+    auto replaced_doc =
+      ctx->replace(doc, couchbase::codec::default_json_transcoder::encode(new_content));
     CHECK(replaced_doc.cas() != doc.cas());
     CHECK_FALSE(replaced_doc.cas().empty());
   });
@@ -915,9 +924,11 @@ TEST_CASE("transactions: can rollback KV replace", "[transactions]")
         [id, statement](std::shared_ptr<couchbase::core::transactions::attempt_context> ctx) {
           auto payload = ctx->query(statement);
           auto doc = ctx->get(id);
-          auto new_content = doc.template content<tao::json::value>();
+          auto new_content =
+            couchbase::codec::default_json_transcoder::decode<tao::json::value>(doc.content());
           new_content["some_number"] = 10;
-          auto replaced_doc = ctx->replace(doc, new_content);
+          auto replaced_doc =
+            ctx->replace(doc, couchbase::codec::default_json_transcoder::encode(new_content));
           REQUIRE(replaced_doc.cas() != doc.cas());
           REQUIRE_FALSE(replaced_doc.cas().empty());
           throw 3;
@@ -1039,7 +1050,8 @@ TEST_CASE("transactions: can rollback retry bad KV replace", "[transactions]")
       txn->run([id, query](std::shared_ptr<couchbase::core::transactions::attempt_context> ctx) {
         auto doc = ctx->get(id);
         auto payload = ctx->query(query);
-        auto new_doc = ctx->replace(doc, "{\"some_number\": 20}");
+        auto new_doc = ctx->replace(
+          doc, couchbase::codec::default_json_transcoder::encode("{\"some_number\": 20}"));
       });
     }(txn, id, query),
     couchbase::core::transactions::transaction_exception);
@@ -1063,7 +1075,7 @@ TEST_CASE("transactions: atr and client_record are binary documents", "[transact
   };
 
   txn->run([id](std::shared_ptr<couchbase::core::transactions::attempt_context> ctx) {
-    ctx->insert(id, content);
+    ctx->insert(id, couchbase::codec::default_json_transcoder::encode(content));
   });
   {
     couchbase::core::document_id client_record_id{
@@ -1193,9 +1205,11 @@ TEST_CASE("transactions: sergey example", "[transactions]")
         fmt::format("UPDATE `default` USE KEYS '{}' SET `some_number` = 10 ", id_to_replace.key()));
       ctx->query(fmt::format("DELETE FROM `default` WHERE META().id = '{}'", id_to_remove.key()));
       auto insert_res = ctx->get(id_to_insert);
-      CHECK(insert_res.content<tao::json::value>() == content);
+      CHECK(couchbase::codec::default_json_transcoder::decode<tao::json::value>(
+              insert_res.content()) == content);
       auto replace_res = ctx->get(id_to_replace);
-      CHECK(replace_res.content<tao::json::value>()["some_number"] == 10);
+      CHECK(couchbase::codec::default_json_transcoder::decode<tao::json::value>(
+              replace_res.content())["some_number"] == 10);
       auto remove_res = ctx->get_optional(id_to_remove);
       CHECK_FALSE(remove_res.has_value());
     }));
