@@ -4,6 +4,7 @@ include(CMakePackageConfigHelpers)
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/couchbase DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(FILES LICENSE.txt DESTINATION ${CMAKE_INSTALL_DOCDIR})
 
+set(COUCHBASE_CXX_CLIENT_PKGCONFIG_VERSION "${COUCHBASE_CXX_CLIENT_SEMVER}" CACHE STRING "The version to use in couchbase_cxx_client.pc")
 configure_file(${PROJECT_SOURCE_DIR}/cmake/couchbase_cxx_client.pc.in
                ${PROJECT_BINARY_DIR}/packaging/couchbase_cxx_client.pc @ONLY)
 install(FILES ${PROJECT_BINARY_DIR}/packaging/couchbase_cxx_client.pc DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
@@ -279,4 +280,51 @@ if(COUCHBASE_CXX_CLIENT_RPM_TARGETS)
 
   # add target that depends on the last root
   add_custom_target(packaging_rpm DEPENDS ${last_output})
+endif()
+
+option(COUCHBASE_CXX_CLIENT_APK_TARGETS "Enable targets for building APKs (for Alpine Linux)" FALSE)
+if(COUCHBASE_CXX_CLIENT_APK_TARGETS)
+  find_program(ABUILD abuild REQUIRED) # apk add alpine-sdk
+
+  set(COUCHBASE_CXX_CLIENT_TARBALL_NAME_ALPINE "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}")
+  set(COUCHBASE_CXX_CLIENT_TARBALL_ALPINE
+      "${PROJECT_BINARY_DIR}/packaging/${COUCHBASE_CXX_CLIENT_TARBALL_NAME_ALPINE}.tar.gz")
+  if(${COUCHBASE_CXX_CLIENT_NUMBER_OF_COMMITS} GREATER 0)
+    set(COUCHBASE_CXX_CLIENT_TARBALL_NAME_ALPINE
+        "couchbase-cxx-client-${COUCHBASE_CXX_CLIENT_PACKAGE_VERSION}_p${COUCHBASE_CXX_CLIENT_NUMBER_OF_COMMITS}")
+    set(COUCHBASE_CXX_CLIENT_TARBALL_ALPINE
+        "${PROJECT_BINARY_DIR}/packaging/${COUCHBASE_CXX_CLIENT_TARBALL_NAME_ALPINE}.tar.gz")
+  endif()
+
+  set(cxxcbc_apkbuild_file "${PROJECT_BINARY_DIR}/packaging/APKBUILD")
+  configure_file(${PROJECT_SOURCE_DIR}/cmake/APKBUILD.in "${cxxcbc_apkbuild_file}" @ONLY)
+
+  if(NOT
+     "${COUCHBASE_CXX_CLIENT_TARBALL}"
+     STREQUAL
+     "${COUCHBASE_CXX_CLIENT_TARBALL_ALPINE}")
+    add_custom_command(
+      OUTPUT ${COUCHBASE_CXX_CLIENT_TARBALL_ALPINE}
+      WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/packaging"
+      COMMAND ${CMAKE_COMMAND} -E copy "${COUCHBASE_CXX_CLIENT_TARBALL}" "${COUCHBASE_CXX_CLIENT_TARBALL_ALPINE}"
+      DEPENDS ${COUCHBASE_CXX_CLIENT_TARBALL})
+  endif()
+
+  set(cxxcbc_apkbuild_checksum "${PROJECT_BINARY_DIR}/packaging/apk_checksum_updated.txt")
+  add_custom_command(
+    OUTPUT ${cxxcbc_apkbuild_checksum}
+    WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/packaging"
+    COMMAND ${ABUILD} checksum
+    COMMAND touch ${cxxcbc_apkbuild_checksum}
+    DEPENDS ${COUCHBASE_CXX_CLIENT_TARBALL_ALPINE} ${cxxcbc_apkbuild_file})
+
+  set(cxxcbc_apkbuild_timestamp "${PROJECT_BINARY_DIR}/packaging/apk_timestamp.txt")
+  add_custom_command(
+    OUTPUT ${cxxcbc_apkbuild_timestamp}
+    WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/packaging"
+    COMMAND ${ABUILD} -r
+    COMMAND touch ${cxxcbc_apkbuild_timestamp}
+    DEPENDS ${COUCHBASE_CXX_CLIENT_TARBALL_ALPINE} ${cxxcbc_apkbuild_checksum})
+
+  add_custom_target(packaging_apk DEPENDS ${cxxcbc_apkbuild_timestamp})
 endif()
