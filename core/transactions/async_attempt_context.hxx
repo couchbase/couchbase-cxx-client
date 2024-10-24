@@ -42,7 +42,9 @@ public:
   using VoidCallback = std::function<void(std::exception_ptr)>;
   using QueryCallback =
     std::function<void(std::exception_ptr, std::optional<core::operations::query_response>)>;
+
   virtual ~async_attempt_context() = default;
+
   /**
    * Gets a document from the specified Couchbase collection matching the
    * specified id.
@@ -91,6 +93,7 @@ public:
    *
    * If the mutation fails, the transaction will automatically rollback this
    * attempt, then retry.
+   *
    * @param document the doc to be updated
    * @param content the content to replace the doc with.
    * @param cb callback function called with the updated @ref
@@ -98,11 +101,10 @@ public:
    * transaction_operation_failed
    *
    */
-  template<typename Transcoder = codec::default_json_transcoder, typename Content>
-  void replace(const transaction_get_result& document, const Content& content, Callback&& cb)
-  {
-    return replace_raw(document, Transcoder::encode(content), std::move(cb));
-  }
+  virtual void replace(const transaction_get_result& document,
+                       codec::encoded_value content,
+                       Callback&& cb) = 0;
+
   /**
    * Inserts a new document into the specified Couchbase collection.
    *
@@ -119,11 +121,8 @@ public:
    * @param cb callback function called with a @ref transaction_get_result with
    * the new CAS value when successful, or @ref transaction_operation_failed
    */
-  template<typename Transcoder = codec::default_json_transcoder, typename Content>
-  void insert(const core::document_id& id, const Content& content, Callback&& cb)
-  {
-    return insert_raw(id, Transcoder::encode(content), std::move(cb));
-  }
+  virtual void insert(const core::document_id& id, codec::encoded_value content, Callback&& cb) = 0;
+
   /**
    * Removes the specified document, using the document's last
    * TransactionDocument#cas
@@ -195,17 +194,6 @@ public:
    * @param cb callback which is called when the rollback succeeds
    */
   virtual void rollback(VoidCallback&& cb) = 0;
-
-protected:
-  /** @internal */
-  virtual void insert_raw(const core::document_id& id,
-                          codec::encoded_value content,
-                          Callback&& cb) = 0;
-
-  /** @internal */
-  virtual void replace_raw(const transaction_get_result& document,
-                           codec::encoded_value content,
-                           Callback&& cb) = 0;
 };
 
 } // namespace couchbase::core::transactions

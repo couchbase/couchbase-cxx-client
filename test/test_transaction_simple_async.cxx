@@ -80,7 +80,8 @@ TEST_CASE("transactions: async get", "[transactions]")
         if (!err) {
           cb_called->store(true);
           CHECK(res);
-          CHECK(res->content<tao::json::value>() == async_content);
+          CHECK(couchbase::codec::default_json_transcoder::decode<tao::json::value>(
+                  res->content()) == async_content);
         }
       });
     },
@@ -225,7 +226,7 @@ TEST_CASE("transactions: RYOW on insert", "[transactions]")
     [cb_called, id](std::shared_ptr<async_attempt_context> ctx) {
       ctx->insert(
         id,
-        async_content,
+        couchbase::codec::default_json_transcoder::encode(async_content),
         [ctx, cb_called, id](std::exception_ptr err, std::optional<transaction_get_result> res) {
           CHECK_FALSE(err);
           CHECK(res);
@@ -233,7 +234,8 @@ TEST_CASE("transactions: RYOW on insert", "[transactions]")
             id, [cb_called, id](std::exception_ptr err, std::optional<transaction_get_result> res) {
               CHECK_FALSE(err);
               CHECK(res);
-              CHECK(res->content<tao::json::value>() == async_content);
+              CHECK(couchbase::codec::default_json_transcoder::decode<tao::json::value>(
+                      res->content()) == async_content);
               cb_called->store(res.has_value());
             });
         });
@@ -321,7 +323,7 @@ TEST_CASE("transactions: async replace", "[transactions]")
                                               std::optional<transaction_get_result> res) {
                  if (!err) {
                    ctx->replace(*res,
-                                new_content,
+                                couchbase::codec::default_json_transcoder::encode(new_content),
                                 [old_cas = res->cas(),
                                  cb_called](std::exception_ptr err,
                                             std::optional<transaction_get_result> result) {
@@ -380,7 +382,7 @@ TEST_CASE("transactions: async replace fail", "[transactions]")
                    if (!err) {
                      ctx->replace(
                        *res,
-                       new_content,
+                       couchbase::codec::default_json_transcoder::encode(new_content),
                        [cb_called](std::exception_ptr err, std::optional<transaction_get_result>) {
                          if (!err) {
                            cb_called->store(true);
@@ -425,7 +427,7 @@ TEST_CASE("transactions: async insert", "[transactions]")
   txn->run(
     [cb_called, id](std::shared_ptr<async_attempt_context> ctx) {
       ctx->insert(id,
-                  async_content,
+                  couchbase::codec::default_json_transcoder::encode(async_content),
                   [cb_called](std::exception_ptr err, std::optional<transaction_get_result> res) {
                     if (!err) {
                       CHECK_FALSE(res->cas().empty());
@@ -466,7 +468,7 @@ TEST_CASE("transactions: async insert can be rolled back", "[transactions]")
     txn->run(
       [cb_called, id, barrier](std::shared_ptr<async_attempt_context> ctx) {
         ctx->insert(id,
-                    async_content,
+                    couchbase::codec::default_json_transcoder::encode(async_content),
                     [cb_called](std::exception_ptr err, std::optional<transaction_get_result>) {
                       if (!err) {
                         cb_called->store(true);
@@ -811,7 +813,7 @@ TEST_CASE("transactions: async KV insert", "[transactions]")
           if (!err) {
             ctx->insert(
               id,
-              async_content,
+              couchbase::codec::default_json_transcoder::encode(async_content),
               [insert_called](std::exception_ptr err, std::optional<transaction_get_result>) {
                 insert_called->store(!err);
               });
@@ -860,7 +862,7 @@ TEST_CASE("transactions: rollback async KV insert", "[transactions]")
           if (!err) {
             ctx->insert(
               id,
-              async_content,
+              couchbase::codec::default_json_transcoder::encode(async_content),
               [insert_called](std::exception_ptr err, std::optional<transaction_get_result>) {
                 insert_called->store(!err);
                 // now roll it back
@@ -925,14 +927,15 @@ TEST_CASE("transactions: async KV replace", "[transactions]")
                          std::exception_ptr err,
                          std::optional<couchbase::core::operations::query_response>) {
                          if (!err) {
-                           ctx->replace(doc,
-                                        new_content,
-                                        [replace_called](std::exception_ptr err,
-                                                         std::optional<transaction_get_result>) {
-                                          if (!err) {
-                                            replace_called->store(true);
-                                          }
-                                        });
+                           ctx->replace(
+                             doc,
+                             couchbase::codec::default_json_transcoder::encode(new_content),
+                             [replace_called](std::exception_ptr err,
+                                              std::optional<transaction_get_result>) {
+                               if (!err) {
+                                 replace_called->store(true);
+                               }
+                             });
                          }
                        });
           }
@@ -994,15 +997,16 @@ TEST_CASE("transactions: rollback async KV replace", "[transactions]")
                          std::exception_ptr err,
                          std::optional<couchbase::core::operations::query_response>) {
                          if (!err) {
-                           ctx->replace(doc,
-                                        new_content,
-                                        [replace_called](std::exception_ptr err,
-                                                         std::optional<transaction_get_result>) {
-                                          if (!err) {
-                                            replace_called->store(true);
-                                            throw 3;
-                                          }
-                                        });
+                           ctx->replace(
+                             doc,
+                             couchbase::codec::default_json_transcoder::encode(new_content),
+                             [replace_called](std::exception_ptr err,
+                                              std::optional<transaction_get_result>) {
+                               if (!err) {
+                                 replace_called->store(true);
+                                 throw 3;
+                               }
+                             });
                          }
                        });
           }

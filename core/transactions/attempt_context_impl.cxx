@@ -587,9 +587,9 @@ attempt_context_impl::create_document_metadata(
 }
 
 void
-attempt_context_impl::replace_raw(const transaction_get_result& document,
-                                  codec::encoded_value content,
-                                  Callback&& cb)
+attempt_context_impl::replace(const transaction_get_result& document,
+                              codec::encoded_value content,
+                              Callback&& cb)
 {
 
   if (op_list_.get_mode().is_query()) {
@@ -852,19 +852,19 @@ attempt_context_impl::create_staged_replace(const transaction_get_result& docume
 }
 
 auto
-attempt_context_impl::replace_raw(const transaction_get_result& document,
-                                  codec::encoded_value content) -> transaction_get_result
+attempt_context_impl::replace(const transaction_get_result& document,
+                              codec::encoded_value content) -> transaction_get_result
 {
   auto barrier = std::make_shared<std::promise<transaction_get_result>>();
   auto f = barrier->get_future();
-  replace_raw(document,
-              std::move(content),
-              [barrier](const std::exception_ptr& err, std::optional<transaction_get_result> res) {
-                if (err) {
-                  return barrier->set_exception(err);
-                }
-                barrier->set_value(std::move(*res));
-              });
+  replace(document,
+          std::move(content),
+          [barrier](const std::exception_ptr& err, std::optional<transaction_get_result> res) {
+            if (err) {
+              return barrier->set_exception(err);
+            }
+            barrier->set_value(std::move(*res));
+          });
   return f.get();
 }
 
@@ -873,12 +873,12 @@ attempt_context_impl::replace_raw(couchbase::transactions::transaction_get_resul
                                   codec::encoded_value content,
                                   couchbase::transactions::async_result_handler&& handler)
 {
-  replace_raw(core::transactions::transaction_get_result(doc),
-              std::move(content),
-              [handler = std::move(handler)](const std::exception_ptr& err,
-                                             std::optional<transaction_get_result> res) mutable {
-                wrap_callback_for_async_public_api(err, std::move(res), std::move(handler));
-              });
+  replace(core::transactions::transaction_get_result(doc),
+          std::move(content),
+          [handler = std::move(handler)](const std::exception_ptr& err,
+                                         std::optional<transaction_get_result> res) mutable {
+            wrap_callback_for_async_public_api(err, std::move(res), std::move(handler));
+          });
 }
 
 auto
@@ -888,7 +888,7 @@ attempt_context_impl::replace_raw(const couchbase::transactions::transaction_get
 {
   return wrap_call_for_public_api(
     [self = shared_from_this(), doc, content = std::move(content)]() -> transaction_get_result {
-      return self->replace_raw(transaction_get_result(doc), content);
+      return self->replace(transaction_get_result(doc), content);
     });
 }
 
@@ -900,8 +900,8 @@ attempt_context_impl::insert_raw(const collection& coll,
 {
   return wrap_call_for_public_api(
     [self = shared_from_this(), coll, &id, content = std::move(content)]() mutable {
-      return self->insert_raw({ coll.bucket_name(), coll.scope_name(), coll.name(), id },
-                              std::move(content));
+      return self->insert({ coll.bucket_name(), coll.scope_name(), coll.name(), id },
+                          std::move(content));
     });
 }
 
@@ -911,35 +911,35 @@ attempt_context_impl::insert_raw(const collection& coll,
                                  codec::encoded_value content,
                                  couchbase::transactions::async_result_handler&& handler)
 {
-  insert_raw({ coll.bucket_name(), coll.scope_name(), coll.name(), std::move(id) },
-             std::move(content),
-             [handler = std::move(handler)](const std::exception_ptr& err,
-                                            std::optional<transaction_get_result> res) mutable {
-               wrap_callback_for_async_public_api(err, std::move(res), std::move(handler));
-             });
+  insert({ coll.bucket_name(), coll.scope_name(), coll.name(), std::move(id) },
+         std::move(content),
+         [handler = std::move(handler)](const std::exception_ptr& err,
+                                        std::optional<transaction_get_result> res) mutable {
+           wrap_callback_for_async_public_api(err, std::move(res), std::move(handler));
+         });
 }
 
 auto
-attempt_context_impl::insert_raw(const core::document_id& id,
-                                 codec::encoded_value content) -> transaction_get_result
+attempt_context_impl::insert(const core::document_id& id,
+                             codec::encoded_value content) -> transaction_get_result
 {
   auto barrier = std::make_shared<std::promise<transaction_get_result>>();
   auto f = barrier->get_future();
-  insert_raw(id,
-             std::move(content),
-             [barrier](const std::exception_ptr& err, std::optional<transaction_get_result> res) {
-               if (err) {
-                 return barrier->set_exception(err);
-               }
-               barrier->set_value(std::move(*res));
-             });
+  insert(id,
+         std::move(content),
+         [barrier](const std::exception_ptr& err, std::optional<transaction_get_result> res) {
+           if (err) {
+             return barrier->set_exception(err);
+           }
+           barrier->set_value(std::move(*res));
+         });
   return f.get();
 }
 
 void
-attempt_context_impl::insert_raw(const core::document_id& id,
-                                 codec::encoded_value content,
-                                 Callback&& cb)
+attempt_context_impl::insert(const core::document_id& id,
+                             codec::encoded_value content,
+                             Callback&& cb)
 {
   if (op_list_.get_mode().is_query()) {
     return insert_raw_with_query(id, std::move(content), std::move(cb));

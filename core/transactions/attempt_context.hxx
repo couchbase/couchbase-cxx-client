@@ -101,19 +101,8 @@ public:
    * @throws transaction_operation_failed which either should not be caught by
    * the lambda, or rethrown if it is caught.
    */
-  template<typename Transcoder = codec::default_json_transcoder, typename Content>
-  auto replace(const transaction_get_result& document,
-               const Content& content) -> transaction_get_result
-  {
-    codec::encoded_value data;
-    try {
-      data = Transcoder::encode(content);
-    } catch (std::runtime_error& e) {
-      throw transaction_operation_failed(
-        FAIL_OTHER, std::string("failed to encode content as JSON: ") + e.what());
-    }
-    return replace_raw(document, data);
-  }
+  virtual auto replace(const transaction_get_result& document,
+                       codec::encoded_value content) -> transaction_get_result = 0;
 
   /**
    * Inserts a new document into the specified Couchbase collection.
@@ -135,18 +124,9 @@ public:
    * @throws transaction_operation_failed which either should not be caught by
    * the lambda, or rethrown if it is caught.
    */
-  template<typename Transcoder = codec::default_json_transcoder, typename Content>
-  auto insert(const core::document_id& id, const Content& content) -> transaction_get_result
-  {
-    codec::encoded_value data;
-    try {
-      data = Transcoder::encode(content);
-    } catch (std::runtime_error& e) {
-      throw transaction_operation_failed(
-        FAIL_OTHER, std::string("failed to encode content as JSON: ") + e.what());
-    }
-    return insert_raw(id, data);
-  }
+  virtual auto insert(const core::document_id& id,
+                      codec::encoded_value content) -> transaction_get_result = 0;
+
   /**
    * Removes the specified document, using the document's last
    * TransactionDocument#cas
@@ -179,6 +159,7 @@ public:
   {
     return do_core_query(statement, opts, query_context);
   };
+
   /**
    * Performs a Query, within the current transaction.
    *
@@ -218,14 +199,6 @@ public:
   virtual void rollback() = 0;
 
 protected:
-  /** @internal */
-  virtual auto insert_raw(const core::document_id& id,
-                          codec::encoded_value content) -> transaction_get_result = 0;
-
-  /** @internal */
-  virtual auto replace_raw(const transaction_get_result& document,
-                           codec::encoded_value content) -> transaction_get_result = 0;
-
   virtual auto do_core_query(const std::string&,
                              const couchbase::transactions::transaction_query_options& opts,
                              std::optional<std::string> query_context)

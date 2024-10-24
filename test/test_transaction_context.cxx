@@ -429,7 +429,8 @@ TEST_CASE("transactions: RYOW get after insert", "[transactions]")
         CHECK(res);
         tx->get(id, [barrier](std::exception_ptr err, std::optional<transaction_get_result> res) {
           CHECK_FALSE(err);
-          CHECK(res->content<tao::json::value>() == tx_content);
+          CHECK(couchbase::codec::default_json_transcoder::decode<tao::json::value>(
+                  res->content()) == tx_content);
           barrier->set_value();
         });
       });
