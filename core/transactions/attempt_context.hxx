@@ -217,7 +217,6 @@ public:
    */
   virtual void rollback() = 0;
 
-protected:
   /** @internal */
   virtual auto insert_raw(const core::document_id& id,
                           codec::encoded_value content) -> transaction_get_result = 0;
@@ -226,6 +225,7 @@ protected:
   virtual auto replace_raw(const transaction_get_result& document,
                            codec::encoded_value content) -> transaction_get_result = 0;
 
+protected:
   virtual auto do_core_query(const std::string&,
                              const couchbase::transactions::transaction_query_options& opts,
                              std::optional<std::string> query_context)

@@ -196,7 +196,6 @@ public:
    */
   virtual void rollback(VoidCallback&& cb) = 0;
 
-protected:
   /** @internal */
   virtual void insert_raw(const core::document_id& id,
                           codec::encoded_value content,
