@@ -3932,6 +3932,13 @@ run_s3_link_test_core_api(test::utils::integration_test_guard& integration,
 
   {
     couchbase::core::operations::management::analytics_link_get_all_request req{};
+    req.link_name = link_name;
+    auto resp = test::utils::execute(integration.cluster, req);
+    REQUIRE(resp.ctx.ec == couchbase::errc::common::invalid_argument);
+  }
+
+  {
+    couchbase::core::operations::management::analytics_link_get_all_request req{};
     req.dataverse_name = dataverse_name;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
@@ -4543,6 +4550,13 @@ run_s3_link_test_public_api(test::utils::integration_test_guard& integration,
     };
     auto error = mgr.create_link(s3_link, {}).get();
     REQUIRE(error.ec() == couchbase::errc::analytics::link_exists);
+  }
+
+  {
+    auto opts = couchbase::get_links_analytics_options().name(link_name);
+    auto [error, res] = mgr.get_links(opts).get();
+    REQUIRE(error.ec() == couchbase::errc::common::invalid_argument);
+    REQUIRE(res.empty());
   }
 
   {

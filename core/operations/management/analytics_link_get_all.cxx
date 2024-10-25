@@ -38,25 +38,33 @@ analytics_link_get_all_request::encode_to(encoded_request_type& encoded,
   encoded.headers["content-type"] = "application/x-www-form-urlencoded";
   encoded.headers["accept"] = "application/json";
   encoded.method = "GET";
-  if (!link_type.empty()) {
-    values["type"] = link_type;
+  if (link_type.has_value() && !link_type.value().empty()) {
+    values["type"] = link_type.value();
   }
-  if (std::count(dataverse_name.begin(), dataverse_name.end(), '/') == 0) {
-    if (!dataverse_name.empty()) {
-      values["dataverse"] = dataverse_name;
-      if (!link_name.empty()) {
-        values["name"] = link_name;
+  if ((link_name.has_value() && !link_name.value().empty()) &&
+      (!dataverse_name.has_value() || dataverse_name.value().empty())) {
+    return couchbase::errc::common::invalid_argument;
+  }
+
+  if (dataverse_name.has_value() && !dataverse_name.value().empty()) {
+    if (std::count(dataverse_name.value().begin(), dataverse_name.value().end(), '/') == 0) {
+      values["dataverse"] = dataverse_name.value();
+      if (link_name.has_value() && !link_name.value().empty()) {
+        values["name"] = link_name.value();
+      }
+      encoded.path = "/analytics/link";
+    } else {
+      if (!link_name.has_value() || link_name.value().empty()) {
+        encoded.path = fmt::format("/analytics/link/{}",
+                                   utils::string_codec::v2::path_escape(dataverse_name.value()));
+      } else {
+        encoded.path = fmt::format("/analytics/link/{}/{}",
+                                   utils::string_codec::v2::path_escape(dataverse_name.value()),
+                                   link_name.value());
       }
     }
-    encoded.path = "/analytics/link";
   } else {
-    if (link_name.empty()) {
-      encoded.path =
-        fmt::format("/analytics/link/{}", utils::string_codec::v2::path_escape(dataverse_name));
-    } else {
-      encoded.path = fmt::format(
-        "/analytics/link/{}/{}", utils::string_codec::v2::path_escape(dataverse_name), link_name);
-    }
+    encoded.path = "/analytics/link";
   }
   if (!values.empty()) {
     encoded.path.append(fmt::format("?{}", utils::string_codec::v2::form_encode(values)));
