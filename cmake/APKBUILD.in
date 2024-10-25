@@ -1,0 +1,44 @@
+# Contributor: Couchbase SDK Team <support@couchbase.com>
+# Maintainer: Couchbase SDK Team <support@couchbase.com>
+pkgname=couchbase-cxx-client
+pkgver=@COUCHBASE_CXX_CLIENT_PACKAGE_VERSION@
+pkgrel=@COUCHBASE_CXX_CLIENT_PACKAGE_RELEASE@
+pkgdesc="Couchbase C++ SDK"
+url="https://docs.couchbase.com/cxx-sdk/current/hello-world/overview.html"
+arch="all"
+license="Apache-2.0"
+depends=""
+makedepends="
+    linux-headers
+	cmake
+	ninja
+"
+subpackages="$pkgname-dev $pkgname-tools"
+source="$pkgname-$pkgver.tar.gz"
+options="!check"
+
+build() {
+	cmake -B build -G Ninja \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_BUILD_TYPE=MinSizeRel \
+		-DBUILD_SHARED_LIBS=OFF \
+		-DCOUCHBASE_CXX_CLIENT_INSTALL=ON \
+		-DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON \
+		-DCOUCHBASE_CXX_CLIENT_BUILD_EXAMPLES=OFF \
+		-DCOUCHBASE_CXX_CLIENT_BUILD_TESTS=OFF \
+		-DCOUCHBASE_CXX_CLIENT_BUILD_TOOLS=ON \
+		-DCOUCHBASE_CXX_CLIENT_BUILD_STATIC=OFF \
+		-DCOUCHBASE_CXX_CLIENT_BUILD_SHARED=ON
+	cmake --build build
+}
+
+tools() {
+	pkgdesc="$pkgdesc (tools)"
+	depends="$pkgname=$pkgver-r$pkgrel"
+
+	amove usr/bin
+}
+
+package() {
+	DESTDIR="$pkgdir" cmake --install build
+}

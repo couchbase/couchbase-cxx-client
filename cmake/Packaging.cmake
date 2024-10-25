@@ -169,3 +169,28 @@ if(COUCHBASE_CXX_CLIENT_RPM_TARGETS)
   # add target that depends on the last root
   add_custom_target(packaging_rpm DEPENDS ${last_output})
 endif()
+
+option(COUCHBASE_CXX_CLIENT_APK_TARGETS "Enable targets for building APKs (for Alpine Linux)" FALSE)
+if(COUCHBASE_CXX_CLIENT_APK_TARGETS)
+  find_program(ABUILD abuild REQUIRED) # apk add alpine-sdk
+
+  set(cxxcbc_apkbuild_file "${PROJECT_BINARY_DIR}/packaging/APKBUILD")
+  configure_file(${PROJECT_SOURCE_DIR}/cmake/APKBUILD.in "${cxxcbc_apkbuild_file}" @ONLY)
+
+  set(cxxcbc_apkbuild_checksum "${PROJECT_BINARY_DIR}/packaging/checksum_updated.txt")
+  add_custom_command(
+    OUTPUT ${cxxcbc_apkbuild_checksum}
+    WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/packaging"
+    COMMAND ${ABUILD} checksum
+    COMMAND touch ${cxxcbc_apkbuild_checksum}
+    DEPENDS ${COUCHBASE_CXX_CLIENT_TARBALL} ${cxxcbc_apkbuild_file})
+
+  add_custom_command(
+    OUTPUT ${cxxcbc_apkbuild_timestamp}
+    WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/packaging"
+    COMMAND ${ABUILD} build -r
+    COMMAND touch ${cxxcbc_apkbuild_timestamp}
+    DEPENDS ${COUCHBASE_CXX_CLIENT_TARBALL} ${cxxcbc_apkbuild_checksum})
+
+  add_custom_target(packaging_apk DEPENDS ${cxxcbc_apkbuild_timestamp})
+endif()
