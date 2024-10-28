@@ -195,3 +195,9 @@
  * encode document content or decode results.
  */
 #define COUCHBASE_CXX_CLIENT_PUBLIC_API_USES_TAO_JSON_ONLY_FOR_CONTENT
+
+/**
+ * couchbase::metrics::otel_meter uses the GA version of the OpenTelemetry Metrics API.
+ * The Metrics API for OpenTelemetry was GA'd in version 1.7.0.
+ */
+#define COUCHBASE_CXX_CLIENT_OTEL_METER_USES_GA_METRICS_API 1
