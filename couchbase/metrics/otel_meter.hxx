@@ -20,6 +20,7 @@
 #include "opentelemetry/sdk/metrics/meter.h"
 #include <couchbase/metrics/meter.hxx>
 
+#include <algorithm>
 #include <iostream>
 #include <thread>
 #include <utility>
@@ -37,44 +38,39 @@ namespace couchbase::metrics
 class otel_sync_histogram
 {
 public:
-  otel_sync_histogram(nostd::shared_ptr<metrics_api::Histogram<long>> histogram_counter)
+  otel_sync_histogram(nostd::shared_ptr<metrics_api::Histogram<std::uint64_t>> histogram_counter)
     : histogram_counter_(histogram_counter)
   {
   }
-  void record(uint64_t value,
+
+  void record(std::uint64_t value,
               const opentelemetry::common::KeyValueIterable& tags,
               opentelemetry::context::Context& ctx)
   {
-    // overflow
-    if (value > LONG_MAX) {
-      value = LONG_MAX;
-    }
-    long lvalue = static_cast<long>(value);
-    histogram_counter_->Record(lvalue, tags, ctx);
+    histogram_counter_->Record(value, tags, ctx);
   }
 
 private:
-  nostd::shared_ptr<metrics_api::Histogram<long>> histogram_counter_;
+  nostd::shared_ptr<metrics_api::Histogram<std::uint64_t>> histogram_counter_;
   std::mutex mutex_;
 };
 
 class otel_value_recorder : public couchbase::metrics::value_recorder
 {
 public:
-  explicit otel_value_recorder(nostd::shared_ptr<metrics_api::Histogram<long>> histogram_counter,
-                               const std::map<std::string, std::string>& tags)
+  explicit otel_value_recorder(
+    nostd::shared_ptr<metrics_api::Histogram<std::uint64_t>> histogram_counter,
+    const std::map<std::string, std::string>& tags)
     : histogram_counter_(histogram_counter)
     , tags_(tags)
   {
   }
   void record_value(std::int64_t value) override
   {
-    if (value > LONG_MAX) {
-      value = LONG_MAX;
-    }
-    long lvalue = static_cast<long>(value);
+    value = std::max<int64_t>(value, 0);
+    auto uvalue = static_cast<std::uint64_t>(value);
     histogram_counter_->Record(
-      value, opentelemetry::common::KeyValueIterableView<decltype(tags_)>{ tags_ }, context_);
+      uvalue, opentelemetry::common::KeyValueIterableView<decltype(tags_)>{ tags_ }, context_);
   }
 
   const std::map<std::string, std::string> tags()
@@ -82,13 +78,13 @@ public:
     return tags_;
   }
 
-  nostd::shared_ptr<metrics_api::Histogram<long>> histogram_counter()
+  nostd::shared_ptr<metrics_api::Histogram<std::uint64_t>> histogram_counter()
   {
     return histogram_counter_;
   }
 
 private:
-  nostd::shared_ptr<metrics_api::Histogram<long>> histogram_counter_;
+  nostd::shared_ptr<metrics_api::Histogram<std::uint64_t>> histogram_counter_;
   const std::map<std::string, std::string> tags_;
   opentelemetry::context::Context context_{};
   std::mutex mutex_;
@@ -115,8 +111,8 @@ public:
       // api doesn't seem to allow this.
       return recorders_
         .insert({ name,
-                  std::make_shared<otel_value_recorder>(meter_->CreateLongHistogram(name, "", "us"),
-                                                        tags) })
+                  std::make_shared<otel_value_recorder>(
+                    meter_->CreateUInt64Histogram(name, "", "us"), tags) })
         ->second;
     }
     // so it is already, lets see if we already have one with those tags, or need
