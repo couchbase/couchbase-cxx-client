@@ -58,6 +58,29 @@ if(NOT TARGET spdlog::spdlog)
     "SPDLOG_FMT_EXTERNAL ON")
 endif()
 
+if(NOT TARGET opentelemetry_api)
+  # https://github.com/open-telemetry/opentelemetry-cpp/releases
+  cpmaddpackage(
+    NAME
+    opentelemetry
+    VERSION
+    1.17.0
+    GITHUB_REPOSITORY
+    "open-telemetry/opentelemetry-cpp"
+    EXCLUDE_FROM_ALL ON
+    OPTIONS
+    "OPENTELEMETRY_INSTALL OFF"
+    # "WITH_API_ONLY ON"
+    "WITH_OTLP_HTTP ON"
+    "WITH_BENCHMARK OFF"
+    "BUILD_TESTING OFF"
+    "BUILD_SHARED_LIBS OFF"
+    "CMAKE_C_VISIBILITY_PRESET hidden"
+    "CMAKE_CXX_VISIBILITY_PRESET hidden"
+    "CMAKE_POSITION_INDEPENDENT_CODE ON")
+endif()
+
+
 if(NOT TARGET Microsoft.GSL::GSL)
   # https://github.com/microsoft/GSL/releases
   cpmaddpackage(
