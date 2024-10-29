@@ -249,6 +249,7 @@ set(couchbase_cxx_client_FILES
     core/meta/version.cxx
     core/metrics/logging_meter.cxx
     core/metrics/meter_wrapper.cxx
+    core/metrics/otel_meter.cxx
     core/n1ql_query_options.cxx
     core/operations/document_analytics.cxx
     core/operations/document_append.cxx
