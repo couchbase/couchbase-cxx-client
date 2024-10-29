@@ -62,7 +62,7 @@ if(NOT TARGET opentelemetry_api)
   # https://github.com/open-telemetry/opentelemetry-cpp/releases
   cpmaddpackage(
     NAME
-    opentelemetry
+    opentelemetry_api
     VERSION
     1.17.0
     GITHUB_REPOSITORY
@@ -70,8 +70,9 @@ if(NOT TARGET opentelemetry_api)
     EXCLUDE_FROM_ALL ON
     OPTIONS
     "OPENTELEMETRY_INSTALL OFF"
-    # "WITH_API_ONLY ON"
+    "WITH_ABSEIL ON"
     "WITH_OTLP_HTTP ON"
+    "WITH_OTLP_GRPC OFF"
     "WITH_BENCHMARK OFF"
     "BUILD_TESTING OFF"
     "BUILD_SHARED_LIBS OFF"
@@ -79,7 +80,6 @@ if(NOT TARGET opentelemetry_api)
     "CMAKE_CXX_VISIBILITY_PRESET hidden"
     "CMAKE_POSITION_INDEPENDENT_CODE ON")
 endif()
-
 
 if(NOT TARGET Microsoft.GSL::GSL)
   # https://github.com/microsoft/GSL/releases
