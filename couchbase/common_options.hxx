@@ -76,9 +76,9 @@ public:
    * @since 1.0.4
    * @volatile
    */
-  auto parent_span(const std::shared_ptr<tracing::request_span>& span) -> derived_class&
+  auto parent_span(std::shared_ptr<tracing::request_span> span) -> derived_class&
   {
-    parent_span_ = span;
+    parent_span_ = std::move(span);
     return self();
   }
 
