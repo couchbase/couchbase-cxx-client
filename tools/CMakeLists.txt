@@ -40,7 +40,9 @@ target_link_libraries(
   taocpp::json
   spdlog::spdlog
   hdr_histogram_static
-  asio)
+  asio
+  opentelemetry_trace
+  opentelemetry_exporter_otlp_http)
 
 if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND WIN32)
   # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings, as we don't (atm) keep track fo the *.PDB

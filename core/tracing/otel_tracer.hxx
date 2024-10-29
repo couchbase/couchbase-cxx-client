@@ -22,41 +22,22 @@
 namespace couchbase::core::tracing
 {
 
-class noop_span : public couchbase::tracing::request_span
+class otel_request_tracer_impl;
+
+class otel_request_tracer : public couchbase::tracing::request_tracer
 {
-  void add_tag(const std::string& /* name */, std::uint64_t /* value */) override
-  {
-    /* do nothing */
-  }
-
-  void add_tag(const std::string& /* name */, const std::string& /* value */) override
-  {
-    /* do nothing */
-  }
-
-  void end() override
-  {
-    /* do nothing */
-  }
-
-  [[nodiscard]] auto uses_tags() const -> bool override
-  {
-    return false;
-  }
-};
-
-class noop_tracer : public couchbase::tracing::request_tracer
-{
-private:
-  std::shared_ptr<noop_span> instance_{ std::make_shared<noop_span>() };
-
 public:
-  auto start_span(std::string /* name */,
-                  std::shared_ptr<couchbase::tracing::request_span> /* parent */)
-    -> std::shared_ptr<couchbase::tracing::request_span> override
-  {
-    return instance_;
-  }
-};
+  otel_request_tracer();
+  otel_request_tracer(const otel_request_tracer&) = delete;
+  otel_request_tracer(otel_request_tracer&&) noexcept = default;
+  auto operator=(const otel_request_tracer&) = delete;
+  auto operator=(otel_request_tracer&&) -> otel_request_tracer& = default;
+  ~otel_request_tracer() override;
 
+  auto start_span(std::string name, std::shared_ptr<couchbase::tracing::request_span> parent)
+    -> std::shared_ptr<couchbase::tracing::request_span> override;
+
+private:
+  std::unique_ptr<otel_request_tracer_impl> impl_;
+};
 } // namespace couchbase::core::tracing

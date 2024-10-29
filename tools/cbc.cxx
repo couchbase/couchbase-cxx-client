@@ -26,8 +26,8 @@
 
 #include <spdlog/fmt/bundled/core.h>
 
-int
-main(int argc, const char** argv)
+auto
+main(int argc, const char** argv) -> int
 {
   CLI::App app{ "Talk to Couchbase Server.", "cbc" };
   app.set_version_flag("--version", fmt::format("cbc {}", couchbase::core::meta::sdk_semver()));

@@ -19,9 +19,20 @@
 #include "utils.hxx"
 
 #include <core/logger/logger.hxx>
+#include <core/tracing/otel_tracer.hxx>
+
 #include <couchbase/cluster.hxx>
 #include <couchbase/codec/raw_binary_transcoder.hxx>
 #include <couchbase/codec/tao_json_serializer.hxx>
+
+#include <opentelemetry/exporters/otlp/otlp_environment.h>
+#include <opentelemetry/exporters/otlp/otlp_http.h>
+#include <opentelemetry/exporters/otlp/otlp_http_exporter_factory.h>
+#include <opentelemetry/exporters/otlp/otlp_http_exporter_options.h>
+#include <opentelemetry/sdk/trace/simple_processor_factory.h>
+#include <opentelemetry/sdk/trace/tracer_provider_factory.h>
+#include <opentelemetry/trace/provider.h>
+#include <opentelemetry/trace/tracer_provider.h>
 
 #include <spdlog/fmt/bin_to_hex.h>
 #include <spdlog/fmt/bundled/chrono.h>
@@ -72,7 +83,7 @@ public:
     allow_extras(true);
   }
 
-  [[nodiscard]] int execute() const
+  [[nodiscard]] auto execute() const -> int
   {
     apply_logger_options(common_options_.logger);
 
@@ -88,10 +99,26 @@ public:
 
     const auto connection_string = common_options_.connection.connection_string;
 
+    {
+      opentelemetry::exporter::otlp::OtlpHttpExporterOptions opts;
+      auto exporter = opentelemetry::exporter::otlp::OtlpHttpExporterFactory::Create(opts);
+      auto processor =
+        opentelemetry::sdk::trace::SimpleSpanProcessorFactory::Create(std::move(exporter));
+      auto resource = opentelemetry::sdk::resource::Resource::Create({
+        { "service.name", "cbc" },
+      });
+      auto provider =
+        opentelemetry::sdk::trace::TracerProviderFactory::Create(std::move(processor), resource);
+      opentelemetry::trace::Provider::SetTracerProvider(
+        std::shared_ptr<opentelemetry::trace::TracerProvider>{ std::move(provider) });
+    }
+
+    cluster_options.tracing().tracer(
+      std::make_shared<couchbase::core::tracing::otel_request_tracer>());
+
     auto [connect_err, cluster] =
       couchbase::cluster::connect(connection_string, cluster_options).get();
     if (connect_err) {
-
       fail(fmt::format(
         "Failed to connect to the cluster at \"{}\": {}", connection_string, connect_err));
     }

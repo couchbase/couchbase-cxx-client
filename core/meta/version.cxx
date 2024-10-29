@@ -31,6 +31,7 @@
 #include <llhttp.h>
 #include <openssl/crypto.h>
 #include <openssl/x509.h>
+#include <opentelemetry/version.h>
 #include <snappy-stubs-public.h>
 #include <spdlog/fmt/bundled/core.h>
 #include <spdlog/version.h>
@@ -168,6 +169,7 @@ sdk_build_info() -> std::map<std::string, std::string>
 #if defined(__GLIBC__)
   info["libc"] = fmt::format("glibc {}.{}", __GLIBC__, __GLIBC_MINOR__);
 #endif
+  info["opentelemetry_api"] = OPENTELEMETRY_VERSION;
 
   return info;
 }
