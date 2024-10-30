@@ -78,6 +78,8 @@ if(COUCHBASE_CXX_CLIENT_GIT_DESCRIBE MATCHES
   endif()
 endif()
 
+set(COUCHBASE_CXX_CLIENT_WRAPPER_UNIFIED_ID "" CACHE STRING "Unified ID for wrapper SDK formatted as '<name>/<version>'")
+
 configure_file(${PROJECT_SOURCE_DIR}/cmake/build_version.hxx.in
                ${PROJECT_BINARY_DIR}/generated/couchbase/build_version.hxx @ONLY)
 configure_file(${PROJECT_SOURCE_DIR}/cmake/build_config.hxx.in

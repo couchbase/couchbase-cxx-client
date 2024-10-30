@@ -316,6 +316,28 @@ os() -> const std::string&
   return system;
 }
 
+namespace
+{
+constexpr auto
+has_wrapper_sdk_id() -> bool
+{
+  return COUCHBASE_CXX_CLIENT_WRAPPER_UNIFIED_ID != nullptr &&
+         COUCHBASE_CXX_CLIENT_WRAPPER_UNIFIED_ID[0] != '\0';
+}
+
+auto
+wrapper_sdk_id() -> std::string
+{
+  return COUCHBASE_CXX_CLIENT_WRAPPER_UNIFIED_ID;
+}
+
+auto
+cxx_sdk_id() -> std::string
+{
+  return fmt::format("cxx/{}", sdk_semver());
+}
+} // namespace
+
 constexpr const char* ssl_lib_id =
 #if defined(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
   "bssl"
@@ -329,16 +351,24 @@ user_agent_for_http(const std::string& client_id,
                     const std::string& session_id,
                     const std::string& extra) -> std::string
 {
-  auto user_agent = fmt::format("{};{}/0x{:x};client/{};session/{};{}",
-                                couchbase::core::meta::sdk_id(),
+  std::string user_agent{ has_wrapper_sdk_id() ? wrapper_sdk_id() : cxx_sdk_id() };
+  user_agent.append(" (");
+  if (has_wrapper_sdk_id()) {
+    user_agent.append(cxx_sdk_id()).append(";");
+  }
+
+  user_agent.append(fmt::format("{}/{};{}/0x{:x};client/{};session/{};{}",
+                                COUCHBASE_CXX_CLIENT_SYSTEM_NAME,
+                                COUCHBASE_CXX_CLIENT_SYSTEM_PROCESSOR,
                                 ssl_lib_id,
                                 OpenSSL_version_num(),
                                 client_id,
                                 session_id,
-                                couchbase::core::meta::os());
+                                couchbase::core::meta::os()));
   if (!extra.empty()) {
     user_agent.append(";").append(extra);
   }
+  user_agent.append(")");
   for (auto& ch : user_agent) {
     if (ch == '\n' || ch == '\r') {
       ch = ' ';
@@ -356,12 +386,22 @@ user_agent_for_mcbp(const std::string& client_id,
   tao::json::value user_agent{
     { "i", fmt::format("{}/{}", client_id, session_id) },
   };
-  const std::string core_id =
-    fmt::format("{};{}/0x{:x}", couchbase::core::meta::sdk_id(), ssl_lib_id, OpenSSL_version_num());
+  std::string core_id{ has_wrapper_sdk_id() ? wrapper_sdk_id() : cxx_sdk_id() };
+  core_id.append(" (");
+  if (has_wrapper_sdk_id()) {
+    core_id.append(cxx_sdk_id()).append(";");
+  }
+  core_id.append(fmt::format("{}/{};{}/0x{:x}",
+                             COUCHBASE_CXX_CLIENT_SYSTEM_NAME,
+                             COUCHBASE_CXX_CLIENT_SYSTEM_PROCESSOR,
+                             ssl_lib_id,
+                             OpenSSL_version_num()));
   std::string sdk_id = core_id;
+  core_id.append(")");
   if (!extra.empty()) {
     sdk_id.append(";").append(extra);
   }
+  sdk_id.append(")");
   if (max_length > 0) {
     auto current_length = utils::json::generate(user_agent).size();
     auto allowed_length = max_length - current_length;
@@ -373,7 +413,8 @@ user_agent_for_mcbp(const std::string& client_id,
         /* user-provided string is too weird, lets just fall back to just core */
         sdk_id = core_id;
       } else {
-        sdk_id.erase(allowed_length - escaped_characters);
+        sdk_id.erase(allowed_length - escaped_characters - 1);
+        sdk_id.append(")");
       }
     }
   }
