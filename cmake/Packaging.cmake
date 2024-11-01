@@ -107,6 +107,116 @@ add_custom_command(
 
 add_custom_target(packaging_tarball DEPENDS ${COUCHBASE_CXX_CLIENT_TARBALL})
 
+option(COUCHBASE_CXX_CLIENT_DEB_TARGETS "Enable targets for building DEBs" FALSE)
+if(COUCHBASE_CXX_CLIENT_DEB_TARGETS)
+  find_program(DPKG_BUILDPACKAGE dpkg-buildpackage REQUIRED) # apt install -y dpkg-dev
+  find_program(SUDO sudo REQUIRED) # apt install -y sudo
+  find_program(COWBUILDER cowbuilder REQUIRED) # apt install -y cowbuilder
+
+  string(TIMESTAMP COUCHBASE_CXX_CLIENT_DEB_DATE "%a, %d %b %Y %H:%M:%S %z" UTC)
+
+  file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/packaging/workspace/debian/source/")
+
+  set(COUCHBASE_CXX_CLIENT_DEBIAN_CHANGELOG "${PROJECT_BINARY_DIR}/packaging/workspace/debian/changelog")
+  configure_file(${PROJECT_SOURCE_DIR}/cmake/debian/changelog.in "${COUCHBASE_CXX_CLIENT_DEBIAN_CHANGELOG}" @ONLY)
+
+  file(COPY ${PROJECT_SOURCE_DIR}/cmake/debian/compat ${PROJECT_SOURCE_DIR}/cmake/debian/control
+            ${PROJECT_SOURCE_DIR}/cmake/debian/rules DESTINATION "${PROJECT_BINARY_DIR}/packaging/workspace/debian/")
+  file(COPY ${PROJECT_SOURCE_DIR}/cmake/debian/source/format
+       DESTINATION "${PROJECT_BINARY_DIR}/packaging/workspace/debian/source/")
+
+  set(COUCHBASE_CXX_CLIENT_DEBIAN_ORIG_TARBALL
+      "${PROJECT_BINARY_DIR}/packaging/couchbase-cxx-client_${COUCHBASE_CXX_CLIENT_PACKAGE_VERSION}.orig.tar.gz")
+  add_custom_command(
+    OUTPUT ${COUCHBASE_CXX_CLIENT_DEBIAN_ORIG_TARBALL}
+    WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/packaging"
+    COMMAND ${CMAKE_COMMAND} -E copy "${COUCHBASE_CXX_CLIENT_TARBALL}" "${COUCHBASE_CXX_CLIENT_DEBIAN_ORIG_TARBALL}"
+    DEPENDS ${COUCHBASE_CXX_CLIENT_TARBALL})
+
+  set(COUCHBASE_CXX_CLIENT_DEBIAN_TARBALL_EXTRACTED "${PROJECT_BINARY_DIR}/packaging/tarball_extracted.txt")
+  add_custom_command(
+    OUTPUT ${COUCHBASE_CXX_CLIENT_DEBIAN_TARBALL_EXTRACTED}
+    WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/packaging/workspace"
+    COMMAND ${TAR} --strip-components=1 -xf "${COUCHBASE_CXX_CLIENT_TARBALL}"
+    COMMAND touch ${COUCHBASE_CXX_CLIENT_DEBIAN_TARBALL_EXTRACTED}
+    DEPENDS ${COUCHBASE_CXX_CLIENT_TARBALL})
+
+  set(COUCHBASE_CXX_CLIENT_DEBIAN_DSC
+      "${PROJECT_BINARY_DIR}/packaging/couchbase-cxx-client_${COUCHBASE_CXX_CLIENT_PACKAGE_VERSION}-${COUCHBASE_CXX_CLIENT_PACKAGE_RELEASE}.dsc"
+  )
+  add_custom_command(
+    OUTPUT ${COUCHBASE_CXX_CLIENT_DEBIAN_DSC}
+    WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/packaging/workspace"
+    COMMAND ${DPKG_BUILDPACKAGE} -us -uc
+    DEPENDS ${COUCHBASE_CXX_CLIENT_DEBIAN_ORIG_TARBALL} ${COUCHBASE_CXX_CLIENT_DEBIAN_TARBALL_EXTRACTED})
+
+  function(select_mirror_options distro options)
+    if(${distro} STREQUAL "bookworm")
+      set(${options}
+          --components
+          main
+          --mirror
+          https://ftp.debian.org/debian
+          PARENT_SCOPE)
+    else()
+      if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "aarch64")
+        set(${options}
+            --components
+            "main universe"
+            --mirror
+            http://ports.ubuntu.com/ubuntu-ports
+            PARENT_SCOPE)
+      else()
+        set(${options}
+            --components
+            "main universe"
+            --mirror
+            http://archive.ubuntu.com/ubuntu
+            PARENT_SCOPE)
+      endif()
+    endif()
+  endfunction()
+
+  set(cowbuilder_results "${PROJECT_BINARY_DIR}/packaging/results")
+  file(MAKE_DIRECTORY "${cowbuilder_results}")
+
+  list(
+    APPEND
+    COUCHBASE_CXX_CLIENT_SUPPORTED_DISTROS
+    "jammy"
+    "noble"
+    "bookworm")
+
+  set(cowbuilder_root "${PROJECT_BINARY_DIR}/packaging/root.cow")
+  set(last_output "")
+  foreach(distro ${COUCHBASE_CXX_CLIENT_SUPPORTED_DISTROS})
+    select_mirror_options(${distro} mirror_options)
+    set(timestamp "${PROJECT_BINARY_DIR}/packaging/${distro}_done.txt")
+    set(dependencies ${COUCHBASE_CXX_CLIENT_DEBIAN_DSC})
+
+    if(last_output)
+      list(APPEND dependencies ${last_output})
+    endif()
+
+    add_custom_command(
+      COMMENT "Building DEB for ${distro}"
+      OUTPUT ${timestamp}
+      WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/packaging"
+      COMMAND ${SUDO} ${CMAKE_COMMAND} -E rm -rf "${cowbuilder_root}"
+      COMMAND ${SUDO} ${COWBUILDER} --create --basepath "${cowbuilder_root}" --distribution ${distro} ${mirror_options}
+      COMMAND
+        ${SUDO} ${COWBUILDER} --build --basepath "${cowbuilder_root}" --buildresult
+        "${cowbuilder_results}/couchbase-cxx-client-${COUCHBASE_CXX_CLIENT_PACKAGE_VERSION}-${COUCHBASE_CXX_CLIENT_PACKAGE_RELEASE}.${distro}.${CMAKE_SYSTEM_PROCESSOR}"
+        --debbuildopts -j8 --debbuildopts "-us -uc" ${COUCHBASE_CXX_CLIENT_DEBIAN_DSC}
+      COMMAND touch ${timestamp}
+      DEPENDS ${dependencies})
+
+    set(last_output ${timestamp})
+  endforeach()
+
+  add_custom_target(packaging_deb DEPENDS ${last_output})
+endif()
+
 option(COUCHBASE_CXX_CLIENT_RPM_TARGETS "Enable targets for building RPMs" FALSE)
 if(COUCHBASE_CXX_CLIENT_RPM_TARGETS)
   find_program(MOCK mock REQUIRED) # dnf install -y mock
@@ -132,26 +242,26 @@ if(COUCHBASE_CXX_CLIENT_RPM_TARGETS)
 
   add_custom_target(packaging_srpm DEPENDS ${COUCHBASE_CXX_CLIENT_SRPM})
 
-  list(APPEND COUCHBASE_CXX_CLIENT_SUPPORTED_ROOTS
+  list(
+    APPEND
+    COUCHBASE_CXX_CLIENT_SUPPORTED_ROOTS
     "opensuse-leap-15.5-${CMAKE_SYSTEM_PROCESSOR}"
     "rocky-9-${CMAKE_SYSTEM_PROCESSOR}"
     "rocky-8-${CMAKE_SYSTEM_PROCESSOR}"
     "amazonlinux-2023-${CMAKE_SYSTEM_PROCESSOR}"
     "fedora-41-${CMAKE_SYSTEM_PROCESSOR}"
-    "fedora-40-${CMAKE_SYSTEM_PROCESSOR}"
-  )
+    "fedora-40-${CMAKE_SYSTEM_PROCESSOR}")
 
   message(STATUS "Supported build roots for RPM packages: ${COUCHBASE_CXX_CLIENT_SUPPORTED_ROOTS}")
 
-  # Build the chain of the dependencies from the timestamps, so that everything
-  # will be executed one-by-one in order, because the mock cannot run multiple
-  # roots simultaneously
+  # Build the chain of the dependencies from the timestamps, so that everything will be executed one-by-one in order,
+  # because the mock cannot run multiple roots simultaneously
   set(last_output "")
   foreach(root ${COUCHBASE_CXX_CLIENT_SUPPORTED_ROOTS})
     set(timestamp "${PROJECT_BINARY_DIR}/packaging/rpm/${root}/done.txt")
     set(dependencies ${COUCHBASE_CXX_CLIENT_SRPM})
 
-    if (last_output)
+    if(last_output)
       list(APPEND dependencies ${last_output})
     endif()
 
@@ -159,8 +269,8 @@ if(COUCHBASE_CXX_CLIENT_RPM_TARGETS)
       COMMENT "Building RPM for ${root}"
       OUTPUT ${timestamp}
       WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/packaging"
-      COMMAND ${MOCK} --rebuild --root=${root}
-        --resultdir=${PROJECT_BINARY_DIR}/packaging/rpm/${root} "${COUCHBASE_CXX_CLIENT_SRPM}"
+      COMMAND ${MOCK} --rebuild --root=${root} --resultdir=${PROJECT_BINARY_DIR}/packaging/rpm/${root}
+              "${COUCHBASE_CXX_CLIENT_SRPM}"
       COMMAND touch ${timestamp}
       DEPENDS ${dependencies})
 

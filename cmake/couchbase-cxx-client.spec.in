@@ -30,13 +30,13 @@ Source0: @COUCHBASE_CXX_CLIENT_TARBALL_NAME@.tar.gz
 This is the client and protocol library for Couchbase project.
 
 %package tools
-Summary: Couchbase C++ SDK - Tools
+Summary: Couchbase C++ SDK, command line tools
 Requires: %{name}%{?_isa} = %{version}-%{release}
 %description -n %{name}-tools
 CLI tools from the Couchbase C++ SDK.
 
 %package devel
-Summary: Couchbase C++ SDK - Header files
+Summary: Couchbase C++ SDK, development files
 Requires: %{name}%{?_isa} = %{version}-%{release}
 %description devel
 Development files for the Couchbase C++ SDK.
