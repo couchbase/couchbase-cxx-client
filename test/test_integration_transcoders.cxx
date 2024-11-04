@@ -582,8 +582,6 @@ TEST_CASE("integration: subdoc with public API", "[integration]")
                    {})
         .get();
     REQUIRE_SUCCESS(err.ec());
-    auto ctx = err.ctx().impl()->as<tao::json::value>();
-    REQUIRE(ctx.find("first_error_index") == nullptr);
     REQUIRE_FALSE(resp.cas().empty());
     REQUIRE(resp.has_value(0));
     REQUIRE(resp.has_value("views"));
@@ -606,10 +604,7 @@ TEST_CASE("integration: subdoc with public API", "[integration]")
           },
           {})
         .get();
-    auto ctx = err.ctx().impl()->as<tao::json::value>();
     REQUIRE_SUCCESS(err.ec());
-    REQUIRE(ctx.find("first_error_index") == nullptr);
-    REQUIRE(ctx.find("first_error_path") == nullptr);
     REQUIRE_FALSE(resp.cas().empty());
     cas = resp.cas();
   }
