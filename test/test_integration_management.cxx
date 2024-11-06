@@ -261,7 +261,6 @@ TEST_CASE("integration: bucket management", "[integration]")
       std::uint64_t old_quota_mb{ 0 };
       {
         auto [error, buckets] = c.buckets().get_all_buckets({}).get();
-        INFO(error.ctx().impl()->as<couchbase::core::error_context::http>().http_body);
         REQUIRE_SUCCESS(error.ec());
         bool found = false;
         for (const auto& bucket : buckets) {
@@ -2778,7 +2777,6 @@ TEST_CASE("integration: query index management", "[integration]")
       {
         auto error = c.query_indexes().drop_index(integration.ctx.bucket, index_name, {}).get();
         couchbase::core::operations::management::query_index_drop_request req{};
-        INFO(error.ctx().impl()->as<couchbase::core::error_context::http>().http_body);
         REQUIRE_SUCCESS(error.ec());
       }
     }

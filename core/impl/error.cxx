@@ -115,59 +115,80 @@ namespace core::impl
 auto
 make_error(const core::error_context::query& core_ctx) -> error
 {
+  if (!core_ctx.ec) {
+    return {};
+  }
   return { core_ctx.ec, {}, internal_error_context::build_error_context(core_ctx) };
 }
 
 auto
 make_error(const query_error_context& core_ctx) -> error
 {
+  if (!core_ctx.ec()) {
+    return {};
+  }
   return { core_ctx.ec(), {}, internal_error_context::build_error_context(core_ctx) };
 }
 
 auto
 make_error(const core::error_context::search& core_ctx) -> error
 {
+  if (!core_ctx.ec) {
+    return {};
+  }
   return { core_ctx.ec, {}, internal_error_context::build_error_context(core_ctx) };
 }
 
 auto
 make_error(const core::error_context::analytics& core_ctx) -> error
 {
+  if (!core_ctx.ec) {
+    return {};
+  }
   return { core_ctx.ec, {}, internal_error_context::build_error_context(core_ctx) };
 }
 
 auto
 make_error(const core::error_context::http& core_ctx) -> error
 {
+  if (!core_ctx.ec) {
+    return {};
+  }
   return { core_ctx.ec, {}, internal_error_context::build_error_context(core_ctx) };
 }
 
 auto
 make_error(const couchbase::core::key_value_error_context& core_ctx) -> error
 {
+  if (!core_ctx.ec()) {
+    return {};
+  }
   return { core_ctx.ec(), {}, internal_error_context::build_error_context(core_ctx) };
 }
 
 auto
 make_error(const couchbase::core::subdocument_error_context& core_ctx) -> error
 {
+  if (!core_ctx.ec()) {
+    return {};
+  }
   return { core_ctx.ec(), {}, internal_error_context::build_error_context(core_ctx) };
 }
 
 auto
 make_error(const couchbase::core::transaction_error_context& ctx) -> error
 {
-  return { ctx.ec(), "", {}, { ctx.cause() } };
+  return { ctx.ec(), {}, {}, { ctx.cause() } };
 }
 
 auto
 make_error(const couchbase::core::transaction_op_error_context& ctx) -> error
 {
   if (std::holds_alternative<key_value_error_context>(ctx.cause())) {
-    return { ctx.ec(), "", {}, make_error(std::get<key_value_error_context>(ctx.cause())) };
+    return { ctx.ec(), {}, {}, make_error(std::get<key_value_error_context>(ctx.cause())) };
   }
   if (std::holds_alternative<query_error_context>(ctx.cause())) {
-    return { ctx.ec(), "", {}, make_error(std::get<query_error_context>(ctx.cause())) };
+    return { ctx.ec(), {}, {}, make_error(std::get<query_error_context>(ctx.cause())) };
   }
   return ctx.ec();
 }

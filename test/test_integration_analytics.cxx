@@ -508,6 +508,10 @@ TEST_CASE("integration: public API analytics query")
        * "errors": [{"code": 23027, "msg": "Bucket default on link Default.Local is not connected"}
        * ],
        */
+
+      if (!error.ec()) {
+        return true;
+      }
       return error.ctx().impl()->as<couchbase::core::error_context::analytics>().first_error_code !=
              23027;
     }));
