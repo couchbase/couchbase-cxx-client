@@ -43,6 +43,7 @@ struct analytics_link_disconnect_request {
   using error_context_type = error_context::http;
 
   static const inline service_type type = service_type::analytics;
+  static const inline std::string observability_identifier = "manager_analytics_disconnect_link";
 
   std::string dataverse_name{ "Default" };
   std::string link_name{ "Local" };

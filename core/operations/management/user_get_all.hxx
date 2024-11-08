@@ -37,6 +37,7 @@ struct user_get_all_request {
   using encoded_response_type = io::http_response;
   using error_context_type = error_context::http;
 
+  static const inline std::string observability_identifier = "manager_users_get_all_users";
   static const inline service_type type = service_type::management;
 
   couchbase::core::management::rbac::auth_domain domain{

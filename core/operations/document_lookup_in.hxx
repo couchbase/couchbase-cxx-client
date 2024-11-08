@@ -54,6 +54,8 @@ struct lookup_in_request {
   using encoded_request_type = protocol::client_request<protocol::lookup_in_request_body>;
   using encoded_response_type = protocol::client_response<protocol::lookup_in_response_body>;
 
+  static const inline std::string observability_identifier = "lookup_in";
+
   document_id id;
   std::uint16_t partition{};
   std::uint32_t opaque{};

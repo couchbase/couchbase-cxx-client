@@ -41,6 +41,8 @@ struct get_and_lock_request {
   using encoded_request_type = protocol::client_request<protocol::get_and_lock_request_body>;
   using encoded_response_type = protocol::client_response<protocol::get_and_lock_response_body>;
 
+  static const inline std::string observability_identifier = "get_and_lock";
+
   document_id id;
   std::uint16_t partition{};
   std::uint32_t opaque{};

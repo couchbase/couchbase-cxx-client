@@ -35,6 +35,8 @@ struct http_noop_request {
   using encoded_response_type = io::http_response;
   using error_context_type = error_context::http;
 
+  static const inline std::string observability_identifier = "noop";
+
   service_type type{};
 
   std::optional<std::string> client_context_id{};

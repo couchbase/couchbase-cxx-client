@@ -40,6 +40,8 @@ struct analytics_get_pending_mutations_request {
   using error_context_type = error_context::http;
 
   static const inline service_type type = service_type::analytics;
+  static const inline std::string observability_identifier =
+    "manager_analytics_get_pending_mutations";
 
   std::optional<std::string> client_context_id{};
   std::optional<std::chrono::milliseconds> timeout{};

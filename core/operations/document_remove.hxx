@@ -44,6 +44,8 @@ struct remove_request {
   using encoded_request_type = protocol::client_request<protocol::remove_request_body>;
   using encoded_response_type = protocol::client_response<protocol::remove_response_body>;
 
+  static const inline std::string observability_identifier = "remove";
+
   document_id id;
   std::uint16_t partition{};
   std::uint32_t opaque{};

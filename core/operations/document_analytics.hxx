@@ -80,6 +80,7 @@ struct analytics_request {
   using error_context_type = error_context::analytics;
 
   static const inline service_type type = service_type::analytics;
+  static const inline std::string observability_identifier = "analytics";
 
   std::string statement;
 

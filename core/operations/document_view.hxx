@@ -61,6 +61,7 @@ struct document_view_request {
   using error_context_type = error_context::view;
 
   static const inline service_type type = service_type::view;
+  static const inline std::string observability_identifier = "views";
 
   std::string bucket_name;
   std::string document_name;

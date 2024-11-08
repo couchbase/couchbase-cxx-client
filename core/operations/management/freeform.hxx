@@ -39,6 +39,8 @@ struct freeform_request {
   using encoded_response_type = io::http_response;
   using error_context_type = error_context::http;
 
+  static const inline std::string observability_identifier = "freeform_http";
+
   service_type type{};
   std::string method;
   std::string path;

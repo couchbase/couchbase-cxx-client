@@ -50,6 +50,8 @@ struct get_all_replicas_request {
   using encoded_response_type =
     core::protocol::client_response<core::protocol::get_replica_response_body>;
 
+  static const inline std::string observability_identifier = "get_all_replicas";
+
   core::document_id id;
   std::optional<std::chrono::milliseconds> timeout{};
   couchbase::read_preference read_preference{ couchbase::read_preference::no_preference };

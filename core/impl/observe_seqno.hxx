@@ -50,6 +50,8 @@ struct observe_seqno_request {
   using encoded_response_type =
     core::protocol::client_response<core::protocol::observe_seqno_response_body>;
 
+  static const inline std::string observability_identifier = "observe_seqno";
+
   core::document_id id;
   bool active{};
   std::uint64_t partition_uuid{};

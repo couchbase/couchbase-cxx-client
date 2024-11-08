@@ -76,6 +76,7 @@ struct bucket_describe_request {
   std::string name;
 
   static const inline service_type type = service_type::management;
+  static const inline std::string observability_identifier = "manager_buckets_describe_bucket";
 
   std::optional<std::string> client_context_id{};
   std::optional<std::chrono::milliseconds> timeout{};
