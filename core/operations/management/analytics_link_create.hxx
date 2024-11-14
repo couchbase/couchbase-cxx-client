@@ -51,6 +51,7 @@ struct analytics_link_create_request {
   using error_context_type = error_context::http;
 
   static const inline service_type type = service_type::analytics;
+  static const inline std::string observability_identifier = "manager_analytics_create_link";
 
   analytics_link_type link{};
   std::optional<std::string> client_context_id{};

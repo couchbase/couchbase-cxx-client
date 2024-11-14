@@ -246,8 +246,8 @@ private:
         }
         if (self->meter_) {
           metrics::metric_attributes attrs{
-            service_type::key_value,
-            fmt::format("{}", self->encoded.path),
+            self->request.type,
+            self->request.observability_identifier,
             ec,
           };
           self->meter_->record_value(std::move(attrs), start);

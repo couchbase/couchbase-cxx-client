@@ -37,6 +37,7 @@ struct view_index_upsert_request {
   using error_context_type = error_context::http;
 
   static const inline service_type type = service_type::view;
+  static const inline std::string observability_identifier = "manager_views_upsert_design_document";
 
   std::string bucket_name;
   couchbase::core::management::views::design_document document;

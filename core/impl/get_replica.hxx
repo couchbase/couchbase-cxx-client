@@ -41,6 +41,8 @@ struct get_replica_request {
   using encoded_response_type =
     core::protocol::client_response<core::protocol::get_replica_response_body>;
 
+  static const inline std::string observability_identifier = "get_replica";
+
   core::document_id id;
   std::optional<std::chrono::milliseconds> timeout{};
   std::uint16_t partition{};

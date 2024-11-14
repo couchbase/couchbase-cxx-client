@@ -37,6 +37,8 @@ struct collection_create_request {
   using error_context_type = error_context::http;
 
   static const inline service_type type = service_type::management;
+  static const inline std::string observability_identifier =
+    "manager_collections_create_collection";
 
   std::string bucket_name;
   std::string scope_name;

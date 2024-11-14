@@ -44,6 +44,8 @@ struct prepend_request {
   using encoded_request_type = protocol::client_request<protocol::prepend_request_body>;
   using encoded_response_type = protocol::client_response<protocol::prepend_response_body>;
 
+  static const inline std::string observability_identifier = "prepend";
+
   document_id id;
   std::vector<std::byte> value;
   std::uint16_t partition{};

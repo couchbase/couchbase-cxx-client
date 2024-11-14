@@ -40,6 +40,7 @@ struct search_index_get_all_request {
   using error_context_type = error_context::http;
 
   static const inline service_type type = service_type::search;
+  static const inline std::string observability_identifier = "manager_search_get_all_indexes";
 
   std::optional<std::string> bucket_name;
   std::optional<std::string> scope_name;

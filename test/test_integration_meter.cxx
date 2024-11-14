@@ -24,9 +24,12 @@
 #include "core/operations/document_insert.hxx"
 #include "core/operations/document_mutate_in.hxx"
 #include "core/operations/document_prepend.hxx"
+#include "core/operations/document_query.hxx"
 #include "core/operations/document_remove.hxx"
 #include "core/operations/document_replace.hxx"
 #include "core/operations/document_upsert.hxx"
+#include "core/operations/management/bucket_get.hxx"
+#include "core/operations/management/scope_get_all.hxx"
 #include "core/platform/uuid.h"
 
 #include <couchbase/metrics/meter.hxx>
@@ -95,10 +98,9 @@ public:
   void reset()
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    for (auto v : value_recorders_) {
-      v.second->reset();
-    }
+    value_recorders_.clear();
   }
+
   std::list<std::shared_ptr<test_value_recorder>> get_recorders(const std::string& name)
   {
     std::list<std::shared_ptr<test_value_recorder>> retval;
@@ -128,12 +130,36 @@ assert_kv_recorder_tags(test::utils::integration_test_guard& guard,
   const auto& tags = recorders.front()->tags();
 
   REQUIRE(tags.at("db.couchbase.service") == "kv");
-  // db.operation always _starts_ with the op -- like '<op> 0x<NN'
-  REQUIRE(tags.at("db.operation").find(op, 0) == 0);
+  REQUIRE(tags.at("db.operation") == op);
   REQUIRE(tags.at("outcome") == expected_outcome);
   REQUIRE(tags.at("db.name") == id.bucket());
   REQUIRE(tags.at("db.couchbase.scope") == id.scope());
   REQUIRE(tags.at("db.couchbase.collection") == id.collection());
+
+  if (guard.cluster_version().supports_cluster_labels()) {
+    REQUIRE_FALSE(tags.at("db.couchbase.cluster_name").empty());
+    REQUIRE_FALSE(tags.at("db.couchbase.cluster_uuid").empty());
+  } else {
+    REQUIRE(tags.find("db.couchbase.cluster_name") == tags.end());
+    REQUIRE(tags.find("db.couchbase.cluster_uuid") == tags.end());
+  }
+}
+
+void
+assert_http_recorder_tags(test::utils::integration_test_guard& guard,
+                          std::list<std::shared_ptr<test_value_recorder>> recorders,
+                          const std::string& op,
+                          const std::string& service,
+                          [[maybe_unused]] const std::string& expected_outcome = "Success")
+{
+  REQUIRE(recorders.size() == 1);
+
+  const auto& tags = recorders.front()->tags();
+
+  REQUIRE(tags.at("db.couchbase.service") == service);
+  REQUIRE(tags.at("db.operation") == op);
+  // TODO(CXXCBC-630): Enable assertion once bug recording all HTTP operations as 'Success' is
+  // resolved. REQUIRE(tags.at("outcome") == expected_outcome);
 
   if (guard.cluster_version().supports_cluster_labels()) {
     REQUIRE_FALSE(tags.at("db.couchbase.cluster_name").empty());
@@ -164,16 +190,16 @@ TEST_CASE("integration: use external meter", "[integration]")
   auto existing_id = make_id(guard.ctx, "foo");
   SECTION("add doc 'foo'")
   {
-    couchbase::core::operations::upsert_request r{ existing_id, value };
+    const couchbase::core::operations::upsert_request r{ existing_id, value };
     auto response = test::utils::execute(guard.cluster, r);
     REQUIRE_FALSE(response.ctx.ec());
   }
-  SECTION("test KV ops")
+  SECTION("with KV ops")
   {
     SECTION("upsert")
     {
       meter->reset();
-      couchbase::core::operations::upsert_request r{ existing_id, value };
+      const couchbase::core::operations::upsert_request r{ existing_id, value };
       auto response = test::utils::execute(guard.cluster, r);
       REQUIRE_FALSE(response.ctx.ec());
       auto recorders = meter->get_recorders("db.couchbase.operations");
@@ -184,7 +210,7 @@ TEST_CASE("integration: use external meter", "[integration]")
     {
       meter->reset();
       auto new_id = make_id(guard.ctx);
-      couchbase::core::operations::insert_request r{ new_id, value };
+      const couchbase::core::operations::insert_request r{ new_id, value };
       auto response = test::utils::execute(guard.cluster, r);
       REQUIRE_FALSE(response.ctx.ec());
       auto recorders = meter->get_recorders("db.couchbase.operations");
@@ -195,7 +221,7 @@ TEST_CASE("integration: use external meter", "[integration]")
     {
       meter->reset();
       auto new_value = couchbase::core::utils::to_binary("{\"some\": \"thing else\"");
-      couchbase::core::operations::replace_request r{ existing_id, new_value };
+      const couchbase::core::operations::replace_request r{ existing_id, new_value };
       auto response = test::utils::execute(guard.cluster, r);
       REQUIRE_FALSE(response.ctx.ec());
       auto recorders = meter->get_recorders("db.couchbase.operations");
@@ -205,7 +231,7 @@ TEST_CASE("integration: use external meter", "[integration]")
     SECTION("get")
     {
       meter->reset();
-      couchbase::core::operations::get_request r{ existing_id };
+      const couchbase::core::operations::get_request r{ existing_id };
       auto response = test::utils::execute(guard.cluster, r);
       REQUIRE_FALSE(response.ctx.ec());
       auto meters = meter->get_recorders("db.couchbase.operations");
@@ -216,12 +242,52 @@ TEST_CASE("integration: use external meter", "[integration]")
     {
       meter->reset();
       auto new_id = make_id(guard.ctx);
-      couchbase::core::operations::get_request r{ new_id };
+      const couchbase::core::operations::get_request r{ new_id };
       auto response = test::utils::execute(guard.cluster, r);
       REQUIRE(response.ctx.ec() == couchbase::errc::key_value::document_not_found);
       auto meters = meter->get_recorders("db.couchbase.operations");
       REQUIRE_FALSE(meters.empty());
       assert_kv_recorder_tags(guard, meters, "get", new_id, "DocumentNotFound");
+    }
+  }
+
+  SECTION("with HTTP ops")
+  {
+    SECTION("get_all_scopes")
+    {
+      if (!guard.cluster_version().supports_collections()) {
+        SKIP("cluster does not support collections");
+      }
+      meter->reset();
+      const couchbase::core::operations::management::scope_get_all_request r{ guard.ctx.bucket };
+      auto response = test::utils::execute(guard.cluster, r);
+      REQUIRE_SUCCESS(response.ctx.ec);
+      auto meters = meter->get_recorders("db.couchbase.operations");
+      REQUIRE_FALSE(meters.empty());
+      assert_http_recorder_tags(guard, meters, "manager_collections_get_all_scopes", "management");
+    }
+
+    SECTION("query")
+    {
+      meter->reset();
+      const couchbase::core::operations::query_request r{ "SELECT 1=1" };
+      auto response = test::utils::execute(guard.cluster, r);
+      REQUIRE_SUCCESS(response.ctx.ec);
+      auto meters = meter->get_recorders("db.couchbase.operations");
+      REQUIRE_FALSE(meters.empty());
+      assert_http_recorder_tags(guard, meters, "query", "query");
+    }
+
+    SECTION("get_bucket fails with bucket_not_found")
+    {
+      meter->reset();
+      couchbase::core::operations::management::bucket_get_request r{ "non-existent" };
+      auto response = test::utils::execute(guard.cluster, r);
+      REQUIRE(response.ctx.ec == couchbase::errc::common::bucket_not_found);
+      auto meters = meter->get_recorders("db.couchbase.operations");
+      REQUIRE_FALSE(meters.empty());
+      assert_http_recorder_tags(
+        guard, meters, "manager_buckets_get_bucket", "management", "BucketNotFound");
     }
   }
 }

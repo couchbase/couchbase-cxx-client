@@ -37,6 +37,7 @@ struct change_password_request {
   using error_context_type = error_context::http;
 
   static const inline service_type type = service_type::management;
+  static const inline std::string observability_identifier = "manager_users_change_password";
 
   std::string newPassword{};
 

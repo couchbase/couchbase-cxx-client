@@ -39,6 +39,8 @@ struct search_index_get_documents_count_request {
   using error_context_type = error_context::http;
 
   static const inline service_type type = service_type::search;
+  static const inline std::string observability_identifier =
+    "manager_search_get_indexed_documents_count";
 
   std::string index_name;
 

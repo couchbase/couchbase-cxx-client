@@ -40,6 +40,8 @@ struct collections_manifest_get_request {
   using encoded_response_type =
     protocol::client_response<protocol::get_collections_manifest_response_body>;
 
+  static const inline std::string observability_identifier = "get_collection_manifest";
+
   document_id id{};
   std::uint16_t partition{};
   std::uint32_t opaque{};

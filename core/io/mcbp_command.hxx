@@ -269,7 +269,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
         std::optional<key_value_error_map_info> /* error_info */) mutable {
         metrics::metric_attributes attrs{
           service_type::key_value,
-          fmt::format("{}", encoded_request_type::body_type::opcode),
+          self->request.observability_identifier,
           ec,
           self->request.id.bucket(),
           self->request.id.scope(),

@@ -44,6 +44,8 @@ struct insert_request {
   using encoded_request_type = protocol::client_request<protocol::insert_request_body>;
   using encoded_response_type = protocol::client_response<protocol::insert_response_body>;
 
+  static const inline std::string observability_identifier = "insert";
+
   document_id id;
   std::vector<std::byte> value;
   std::uint16_t partition{};

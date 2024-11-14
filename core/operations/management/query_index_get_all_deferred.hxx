@@ -40,6 +40,9 @@ struct query_index_get_all_deferred_request {
   using error_context_type = error_context::http;
 
   static const inline service_type type = service_type::query;
+  static const inline std::string observability_identifier =
+    "manager_query_get_all_deferred_indexes";
+
   static constexpr auto namespace_id = "default";
 
   std::string bucket_name;

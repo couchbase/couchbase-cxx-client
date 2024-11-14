@@ -59,6 +59,8 @@ struct lookup_in_any_replica_request {
   using encoded_response_type =
     core::protocol::client_response<core::protocol::lookup_in_replica_response_body>;
 
+  static const inline std::string observability_identifier = "lookup_in_any_replica";
+
   core::document_id id;
   std::vector<couchbase::core::impl::subdoc::command> specs{};
   std::optional<std::chrono::milliseconds> timeout{};

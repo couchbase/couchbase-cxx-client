@@ -61,6 +61,7 @@ struct cluster_describe_request {
   using error_context_type = error_context::http;
 
   static const inline service_type type = service_type::management;
+  static const inline std::string observability_identifier = "cluster_describe";
 
   std::optional<std::string> client_context_id{};
   std::optional<std::chrono::milliseconds> timeout{};

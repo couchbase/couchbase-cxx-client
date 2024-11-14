@@ -48,6 +48,7 @@ struct analytics_link_get_all_request {
   using error_context_type = error_context::http;
 
   static const inline service_type type = service_type::analytics;
+  static const inline std::string observability_identifier = "manager_analytics_get_links";
 
   std::optional<std::string> link_type{};
   std::optional<std::string> link_name{};
