@@ -98,10 +98,9 @@ public:
   void reset()
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    for (auto v : value_recorders_) {
-      v.second->reset();
-    }
+    value_recorders_.clear();
   }
+
   std::list<std::shared_ptr<test_value_recorder>> get_recorders(const std::string& name)
   {
     std::list<std::shared_ptr<test_value_recorder>> retval;
