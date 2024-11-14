@@ -256,6 +256,9 @@ TEST_CASE("integration: use external meter", "[integration]")
   {
     SECTION("get_all_scopes")
     {
+      if (!guard.cluster_version().supports_collections()) {
+        SKIP("cluster does not support collections");
+      }
       meter->reset();
       const couchbase::core::operations::management::scope_get_all_request r{ guard.ctx.bucket };
       auto response = test::utils::execute(guard.cluster, r);
