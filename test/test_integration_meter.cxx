@@ -28,6 +28,7 @@
 #include "core/operations/document_remove.hxx"
 #include "core/operations/document_replace.hxx"
 #include "core/operations/document_upsert.hxx"
+#include "core/operations/management/bucket_get.hxx"
 #include "core/operations/management/scope_get_all.hxx"
 #include "core/platform/uuid.h"
 
@@ -275,18 +276,16 @@ TEST_CASE("integration: use external meter", "[integration]")
       assert_http_recorder_tags(guard, meters, "query", "query");
     }
 
-    SECTION("query fails with parsing_failure")
+    SECTION("get_bucket fails with bucket_not_found")
     {
       meter->reset();
-
-      couchbase::core::operations::query_request r{ "SELECT * FROM" };
-      r.query_context = "default:`non-existent`.`non-existent`";
-
+      couchbase::core::operations::management::bucket_get_request r{ "non-existent" };
       auto response = test::utils::execute(guard.cluster, r);
-      REQUIRE(response.ctx.ec == couchbase::errc::common::parsing_failure);
+      REQUIRE(response.ctx.ec == couchbase::errc::common::bucket_not_found);
       auto meters = meter->get_recorders("db.couchbase.operations");
       REQUIRE_FALSE(meters.empty());
-      assert_http_recorder_tags(guard, meters, "query", "query", "ParsingFailure");
+      assert_http_recorder_tags(
+        guard, meters, "manager_buckets_get_bucket", "management", "BucketNotFound");
     }
   }
 }
