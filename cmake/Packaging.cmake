@@ -41,9 +41,13 @@ set(COUCHBASE_CXX_CLIENT_MANIFEST "${PROJECT_BINARY_DIR}/packaging/MANIFEST")
 if(APPLE)
   find_program(TAR gtar)
   find_program(SED gsed)
+  find_program(XARGS gxargs)
+  find_program(CP gcp)
 else()
   find_program(TAR tar)
   find_program(SED sed)
+  find_program(XARGS xargs)
+  find_program(CP cp)
 endif()
 
 add_custom_command(
@@ -86,12 +90,12 @@ add_custom_command(
     -DCPM_USE_LOCAL_PACKAGES=OFF -DCOUCHBASE_CXX_CLIENT_BUILD_STATIC=OFF -DCOUCHBASE_CXX_CLIENT_INSTALL=ON
     -DCOUCHBASE_CXX_RECORD_BUILD_INFO_FOR_TARBALL=ON
   COMMAND
-    xargs --arg-file=${COUCHBASE_CXX_TARBALL_THIRD_PARTY_GLOB_FILE} -I {} find
+    ${XARGS} --arg-file=${COUCHBASE_CXX_TARBALL_THIRD_PARTY_GLOB_FILE} -I {} find
     "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/cache" -wholename "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/cache/{}"
     -type f | grep -v "crypto_test_data\\|googletest" | uniq >
     "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/third_party_manifest.txt"
   COMMAND ${CMAKE_COMMAND} -E make_directory "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/filtered_cache"
-  COMMAND xargs --arg-file="${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/third_party_manifest.txt" -I {} cp --parents {}
+  COMMAND ${XARGS} --arg-file="${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/third_party_manifest.txt" -I {} ${CP} --parents {}
           "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/filtered_cache"
   COMMAND
     ${CMAKE_COMMAND} -E rename

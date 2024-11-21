@@ -76,6 +76,8 @@ include(cmake/OpenSSL.cmake)
 
 include(cmake/VersionInfo.cmake)
 
+include(cmake/RPath.cmake)
+
 add_subdirectory(core/platform)
 set(couchbase_cxx_client_FILES
     ${CMAKE_CURRENT_BINARY_DIR}/generated/mozilla_ca_bundle.cxx

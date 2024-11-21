@@ -70,11 +70,6 @@ function(set_project_warnings project_name)
   )
 
   set(CLANG_WARNINGS ${COMMON_WARNINGS})
-  if(CMAKE_CXX_COMPILER_ID MATCHES ".*Clang" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS_EQUAL "17.0.0")
-    set(CLANG_WARNINGS ${CLANG_WARNINGS} -Wshadow # warn the user if a variable declaration shadows one from a parent
-                                                  # context
-    )
-  endif()
 
   if(MSVC)
     set(PROJECT_WARNINGS ${MSVC_WARNINGS})
