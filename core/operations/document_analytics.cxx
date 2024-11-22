@@ -116,12 +116,16 @@ analytics_request::make_response(error_context::analytics&& ctx,
       response.ctx.ec = errc::common::parsing_failure;
       return response;
     }
-    response.meta.request_id = payload.at("requestID").get_string();
-    response.meta.client_context_id = payload.at("clientContextID").get_string();
-    if (response.ctx.client_context_id != response.meta.client_context_id) {
-      CB_LOG_WARNING(R"(unexpected clientContextID returned by service: "{}", expected "{}")",
-                     response.meta.client_context_id,
-                     response.ctx.client_context_id);
+    if (const auto* i = payload.find("requestID"); i != nullptr) {
+      response.meta.request_id = i->get_string();
+    }
+    if (const auto* i = payload.find("clientContextID"); i != nullptr) {
+      response.meta.client_context_id = i->get_string();
+      if (response.ctx.client_context_id != response.meta.client_context_id) {
+        CB_LOG_WARNING(R"(unexpected clientContextID returned by service: "{}", expected "{}")",
+                       response.meta.client_context_id,
+                       response.ctx.client_context_id);
+      }
     }
     if (auto& status_prop = payload.at("status"); status_prop.is_string()) {
       const auto& status = status_prop.get_string();
@@ -154,17 +158,19 @@ analytics_request::make_response(error_context::analytics&& ctx,
       response.meta.signature = couchbase::core::utils::json::generate(*s);
     }
 
-    const tao::json::value& metrics = payload.at("metrics");
-    response.meta.metrics.result_count = metrics.at("resultCount").get_unsigned();
-    response.meta.metrics.result_size = metrics.at("resultSize").get_unsigned();
-    response.meta.metrics.elapsed_time =
-      utils::parse_duration(metrics.at("elapsedTime").get_string());
-    response.meta.metrics.execution_time =
-      utils::parse_duration(metrics.at("executionTime").get_string());
-    response.meta.metrics.processed_objects = metrics.at("processedObjects").get_unsigned();
-    response.meta.metrics.error_count = metrics.optional<std::uint64_t>("errorCount").value_or(0);
-    response.meta.metrics.warning_count =
-      metrics.optional<std::uint64_t>("warningCount").value_or(0);
+    if (const auto* metrics = payload.find("metrics"); metrics != nullptr) {
+      response.meta.metrics.result_count = metrics->at("resultCount").get_unsigned();
+      response.meta.metrics.result_size = metrics->at("resultSize").get_unsigned();
+      response.meta.metrics.elapsed_time =
+        utils::parse_duration(metrics->at("elapsedTime").get_string());
+      response.meta.metrics.execution_time =
+        utils::parse_duration(metrics->at("executionTime").get_string());
+      response.meta.metrics.processed_objects = metrics->at("processedObjects").get_unsigned();
+      response.meta.metrics.error_count =
+        metrics->optional<std::uint64_t>("errorCount").value_or(0);
+      response.meta.metrics.warning_count =
+        metrics->optional<std::uint64_t>("warningCount").value_or(0);
+    }
 
     if (const auto* e = payload.find("errors"); e != nullptr) {
       for (const auto& err : e->get_array()) {
