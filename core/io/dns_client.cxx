@@ -98,6 +98,9 @@ public:
                         bytes_transferred1);
         if (ec1) {
           self->udp_deadline_.cancel();
+          if (ec1 == asio::error::operation_aborted) {
+            return;
+          }
           CB_LOG_DEBUG(
             "DNS UDP write operation has got error, retrying with TCP, address=\"{}:{}\", ec={}",
             self->address_.to_string(),
@@ -121,6 +124,9 @@ public:
 
             self->udp_deadline_.cancel();
             if (ec2) {
+              if (ec2 == asio::error::operation_aborted) {
+                return;
+              }
               CB_LOG_DEBUG(
                 "DNS UDP read operation has got error, retrying with TCP, address=\"{}:{}\", ec={}",
                 self->address_.to_string(),
@@ -151,11 +157,12 @@ public:
       if (ec == asio::error::operation_aborted) {
         return;
       }
+      self->udp_.cancel();
       CB_LOG_DEBUG("DNS UDP deadline has been reached, cancelling UDP operation and fall back to "
                    "TCP, address=\"{}:{}\"",
                    self->address_.to_string(),
                    self->port_);
-      self->udp_.cancel();
+      return self->retry_with_tcp();
     });
 
     deadline_.expires_after(total_timeout);
@@ -172,6 +179,7 @@ public:
       if (self->tcp_.is_open()) {
         self->tcp_.cancel();
       }
+      return self->handler_({ errc::common::unambiguous_timeout });
     });
   }
 
@@ -195,6 +203,9 @@ private:
     const asio::ip::tcp::endpoint endpoint(address_, port_);
     tcp_.async_connect(endpoint, [self = shared_from_this()](std::error_code ec1) mutable {
       if (ec1) {
+        if (ec1 == asio::error::operation_aborted) {
+          return;
+        }
         self->deadline_.cancel();
         CB_LOG_DEBUG("DNS TCP connection has been aborted, address=\"{}:{}\", ec={}",
                      self->address_.to_string(),
@@ -220,14 +231,14 @@ private:
                           ec2 ? ec2.message() : "ok",
                           bytes_transferred2);
           if (ec2) {
+            if (ec2 == asio::error::operation_aborted) {
+              return;
+            }
             CB_LOG_DEBUG("DNS TCP write operation has been aborted, address=\"{}:{}\", ec={}",
                          self->address_.to_string(),
                          self->port_,
                          ec2.message());
             self->deadline_.cancel();
-            if (ec2 == asio::error::operation_aborted) {
-              ec2 = errc::common::unambiguous_timeout;
-            }
             return self->handler_({ ec2 });
           }
           asio::async_read(
@@ -244,6 +255,9 @@ private:
                                reinterpret_cast<std::uint8_t*>(&self->recv_buf_size_) +
                                  bytes_transferred3));
               if (ec3) {
+                if (ec3 == asio::error::operation_aborted) {
+                  return;
+                }
                 CB_LOG_DEBUG(
                   "DNS TCP buf size read operation has been aborted, address=\"{}:{}\", ec={}",
                   self->address_.to_string(),
@@ -259,7 +273,6 @@ private:
                 self->tcp_,
                 asio::buffer(self->recv_buf_),
                 [self](std::error_code ec4, std::size_t bytes_transferred4) mutable {
-                  self->deadline_.cancel();
                   CB_LOG_PROTOCOL(
                     "[DNS, TCP, IN] host=\"{}\", port={}, rc={}, bytes_received={}{:a}",
                     self->address_.to_string(),
@@ -269,6 +282,10 @@ private:
                     spdlog::to_hex(self->recv_buf_.data(),
                                    self->recv_buf_.data() + bytes_transferred4));
 
+                  if (ec4 == asio::error::operation_aborted) {
+                    return;
+                  }
+                  self->deadline_.cancel();
                   if (ec4) {
                     CB_LOG_DEBUG(
                       "DNS TCP read operation has been aborted, address=\"{}:{}\", ec={}",
