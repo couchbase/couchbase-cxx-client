@@ -240,7 +240,7 @@ public:
 
   void open(const std::string& connection_string,
             const cluster_options& options,
-            cluster_connect_handler&& handler)
+            core::utils::movable_function<void(error, cluster)>&& handler)
   {
     core_.open(
       options_to_origin(connection_string, options),
@@ -512,15 +512,42 @@ cluster::search(std::string index_name,
   return barrier->get_future();
 }
 
+namespace
+{
+void
+connect_in_background(const std::string& connection_string,
+                      const cluster_options& options,
+                      core::utils::movable_function<void(error, cluster)>&& handler)
+{
+  // Spawn new thread for connection to ensure that cluster_impl pointer will
+  // not be deallocated in IO thread in case of error.
+  std::thread([connection_string, options, handler = std::move(handler)]() {
+    std::promise<std::pair<error, cluster>> barrier;
+    auto future = barrier.get_future();
+    {
+      auto impl = std::make_shared<cluster_impl>();
+      impl->open(
+        connection_string, options, [barrier = std::move(barrier)](auto err, auto c) mutable {
+          barrier.set_value({ std::move(err), std::move(c) });
+        });
+    }
+
+    auto [err, c] = future.get();
+    handler(std::move(err), std::move(c));
+  }).detach();
+}
+} // namespace
+
 auto
 cluster::connect(const std::string& connection_string,
                  const cluster_options& options) -> std::future<std::pair<error, cluster>>
 {
-  auto barrier = std::make_shared<std::promise<std::pair<error, cluster>>>();
-  auto future = barrier->get_future();
-  connect(connection_string, options, [barrier](auto err, auto c) {
-    barrier->set_value({ std::move(err), std::move(c) });
-  });
+  std::promise<std::pair<error, cluster>> barrier;
+  auto future = barrier.get_future();
+  connect_in_background(
+    connection_string, options, [barrier = std::move(barrier)](auto err, auto c) mutable {
+      barrier.set_value({ std::move(err), std::move(c) });
+    });
   return future;
 }
 
@@ -529,21 +556,7 @@ cluster::connect(const std::string& connection_string,
                  const cluster_options& options,
                  cluster_connect_handler&& handler)
 {
-  // Spawn new thread for connection to ensure that cluster_impl pointer will
-  // not be deallocated in IO thread in case of error.
-  std::thread([connection_string, options, handler = std::move(handler)]() {
-    auto barrier = std::make_shared<std::promise<std::pair<error, cluster>>>();
-    auto future = barrier->get_future();
-    {
-      auto impl = std::make_shared<cluster_impl>();
-      impl->open(connection_string, options, [barrier](auto err, auto c) {
-        barrier->set_value({ std::move(err), std::move(c) });
-      });
-    }
-
-    auto [err, c] = future.get();
-    handler(std::move(err), std::move(c));
-  }).detach();
+  connect_in_background(connection_string, options, std::move(handler));
 }
 
 auto
