@@ -15,25 +15,13 @@
  *   limitations under the License.
  */
 
-#pragma once
+#include <CLI/App.hpp>
 
-/**
- * @page cli Command Line Tools
- * @brief Indexes of the API grouped by stability.
- *
- * @subpage cbc
- *
- * @subpage cbc-get
- *
- * @subpage cbc-remove
- *
- * @subpage cbc-upsert
- *
- * @subpage cbc-query
- *
- * @subpage cbc-analytics
- *
- * @subpage cbc-pillowfight
- *
- * @subpage cbc-keygen
- */
+namespace cbc
+{
+auto
+make_keygen_command() -> std::shared_ptr<CLI::App>;
+
+auto
+execute_keygen_command(CLI::App* app) -> int;
+} // namespace cbc

@@ -54,6 +54,11 @@ Run simple workload generator. See [cbc-pillowfight](#cbc-pillowfight) for more 
 </dd>
 </dl>
 
+<dt>keygen</dt>
+<dd>
+Generate batches of keys with specific properties. See [cbc-keygen](#cbc-keygen) for more information.
+</dd>
+
 ### OPTIONS
 
 <dl>
