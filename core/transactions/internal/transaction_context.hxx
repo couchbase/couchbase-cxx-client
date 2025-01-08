@@ -98,6 +98,9 @@ public:
   // These functions just delegate to the current_attempt_context_
   void get(const core::document_id& id, async_attempt_context::Callback&& cb);
 
+  void get_replica_from_preferred_server_group(const core::document_id& id,
+                                               async_attempt_context::Callback&& cb);
+
   void get_optional(const core::document_id& id, async_attempt_context::Callback&& cb);
 
   void insert(const core::document_id& id,

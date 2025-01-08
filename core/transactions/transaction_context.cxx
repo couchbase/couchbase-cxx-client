@@ -166,6 +166,16 @@ transaction_context::get(const core::document_id& id, async_attempt_context::Cal
 }
 
 void
+transaction_context::get_replica_from_preferred_server_group(const core::document_id& id,
+                                                             async_attempt_context::Callback&& cb)
+{
+  if (current_attempt_context_) {
+    return current_attempt_context_->get_replica_from_preferred_server_group(id, std::move(cb));
+  }
+  throw transaction_operation_failed(FAIL_OTHER, "no current attempt context");
+}
+
+void
 transaction_context::get_optional(const core::document_id& id, async_attempt_context::Callback&& cb)
 {
   if (current_attempt_context_) {
