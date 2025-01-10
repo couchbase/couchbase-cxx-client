@@ -17,8 +17,8 @@
 
 #include "core/mcbp/big_endian.hxx"
 
-#include <fmt/format.h>
-#include <fmt/ranges.h>
+#include <spdlog/fmt/bundled/core.h>
+#include <spdlog/fmt/bundled/ranges.h>
 
 #include <chrono>
 #include <filesystem>

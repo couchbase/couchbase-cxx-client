@@ -2,6 +2,8 @@
 
 include(cmake/CPM.cmake)
 
+set(CPM_USE_LOCAL_PACKAGES OFF)
+
 # https://cmake.org/cmake/help/v3.28/policy/CMP0063.html
 set(CMAKE_POLICY_DEFAULT_CMP0063 NEW)
 
@@ -14,29 +16,6 @@ function(declare_system_library target)
   set_target_properties(${target} PROPERTIES INTERFACE_SYSTEM_INCLUDE_DIRECTORIES
                                              $<TARGET_PROPERTY:${target},INTERFACE_INCLUDE_DIRECTORIES>)
 endfunction()
-
-if(NOT TARGET fmt::fmt)
-  # https://github.com/fmtlib/fmt/releases
-  cpmaddpackage(
-    NAME
-    fmt
-    GIT_TAG
-    11.0.1
-    VERSION
-    11.0.1
-    GITHUB_REPOSITORY
-    "fmtlib/fmt"
-    EXCLUDE_FROM_ALL ON
-    OPTIONS
-    "FMT_INSTALL OFF"
-    # Unicode support for MSVC enabled in CompilerWarnings.cmake
-    "FMT_UNICODE OFF"
-    "FMT_DOC OFF"
-    "BUILD_SHARED_LIBS OFF"
-    "CMAKE_C_VISIBILITY_PRESET hidden"
-    "CMAKE_CXX_VISIBILITY_PRESET hidden"
-    "CMAKE_POSITION_INDEPENDENT_CODE ON")
-endif()
 
 if(NOT TARGET spdlog::spdlog)
   # https://github.com/gabime/spdlog/releases
@@ -54,8 +33,11 @@ if(NOT TARGET spdlog::spdlog)
     "CMAKE_C_VISIBILITY_PRESET hidden"
     "CMAKE_CXX_VISIBILITY_PRESET hidden"
     "CMAKE_POSITION_INDEPENDENT_CODE ON"
+    "NO_CMAKE_SYSTEM_PATH ON"
+    "NO_CMAKE_INSTALL_PREFIX ON"
+    "NO_CMAKE_SYSTEM_PACKAGE_REGISTRY ON"
     "SPDLOG_BUILD_SHARED OFF"
-    "SPDLOG_FMT_EXTERNAL ON")
+    "SPDLOG_FMT_EXTERNAL OFF")
 endif()
 
 if(NOT TARGET Microsoft.GSL::GSL)
@@ -246,6 +228,5 @@ declare_system_library(llhttp::llhttp)
 declare_system_library(hdr_histogram_static)
 declare_system_library(Microsoft.GSL::GSL)
 declare_system_library(spdlog::spdlog)
-declare_system_library(fmt::fmt)
 declare_system_library(asio)
 declare_system_library(taocpp::json)

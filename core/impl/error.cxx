@@ -36,13 +36,15 @@
 #include "core/impl/internal_error_context.hxx"
 #include "core/transactions/exceptions.hxx"
 #include "core/transactions/internal/exceptions_internal.hxx"
-#include "core/transactions/internal/exceptions_internal_fmt.hxx"
 
 #include <couchbase/error.hxx>
 #include <couchbase/error_codes.hxx>
 #include <couchbase/error_context.hxx>
 
+#include <spdlog/fmt/bundled/core.h>
 #include <tao/json/value.hpp>
+
+#include "core/transactions/internal/exceptions_internal_fmt.hxx"
 
 #include <memory>
 #include <optional>

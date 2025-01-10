@@ -19,8 +19,6 @@
 
 #include <couchbase/error.hxx>
 
-#include <fmt/core.h>
-
 /**
  * Helper for fmtlib to format @ref couchbase::error objects.
  *

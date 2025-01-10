@@ -22,12 +22,13 @@
 #include <couchbase/cluster.hxx>
 #include <couchbase/codec/raw_binary_transcoder.hxx>
 #include <couchbase/codec/tao_json_serializer.hxx>
+
+#include <spdlog/fmt/bin_to_hex.h>
+#include <spdlog/fmt/bundled/chrono.h>
+#include <tao/json.hpp>
+
 #include <couchbase/fmt/cas.hxx>
 #include <couchbase/fmt/error.hxx>
-
-#include <fmt/chrono.h>
-#include <spdlog/fmt/bin_to_hex.h>
-#include <tao/json.hpp>
 
 namespace cbc
 {

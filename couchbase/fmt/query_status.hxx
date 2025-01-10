@@ -19,8 +19,6 @@
 
 #include <couchbase/query_status.hxx>
 
-#include <fmt/core.h>
-
 /**
  * Helper for fmtlib to format @ref couchbase::query_status objects.
  *

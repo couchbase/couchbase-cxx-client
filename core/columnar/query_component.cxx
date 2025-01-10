@@ -33,9 +33,9 @@
 
 #include <asio/io_context.hpp>
 #include <asio/steady_timer.hpp>
-#include <fmt/chrono.h>
-#include <fmt/format.h>
 #include <gsl/util>
+#include <spdlog/fmt/bundled/chrono.h>
+#include <spdlog/fmt/bundled/core.h>
 #include <tao/json/value.hpp>
 #include <tl/expected.hpp>
 

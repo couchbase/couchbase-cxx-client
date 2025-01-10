@@ -42,7 +42,7 @@
 #include <asio/error.hpp>
 #include <asio/io_context.hpp>
 #include <asio/steady_timer.hpp>
-#include <fmt/format.h>
+#include <spdlog/fmt/bundled/core.h>
 #include <tao/json/value.hpp>
 #include <tao/pegtl/parse_error.hpp>
 #include <tl/expected.hpp>

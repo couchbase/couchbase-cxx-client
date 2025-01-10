@@ -24,12 +24,13 @@
 
 #include <couchbase/cluster.hxx>
 #include <couchbase/codec/tao_json_serializer.hxx>
+
+#include <spdlog/fmt/bundled/chrono.h>
+#include <spdlog/fmt/bundled/ranges.h>
+
 #include <couchbase/fmt/cas.hxx>
 #include <couchbase/fmt/error.hxx>
 #include <couchbase/fmt/retry_reason.hxx>
-
-#include <fmt/chrono.h>
-#include <fmt/ranges.h>
 
 #include <csignal>
 

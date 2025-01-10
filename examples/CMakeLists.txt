@@ -5,7 +5,6 @@ macro(define_example name)
     ${name}
     ${CMAKE_THREAD_LIBS_INIT}
     taocpp::json
-    fmt::fmt
     spdlog::spdlog
     asio
     ${couchbase_cxx_client_DEFAULT_LIBRARY})

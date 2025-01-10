@@ -515,7 +515,6 @@ foreach(TARGET ${couchbase_cxx_client_LIBRARIES})
     ${TARGET}
     PRIVATE project_options
             project_warnings
-            fmt::fmt
             spdlog::spdlog
             Microsoft.GSL::GSL
             asio

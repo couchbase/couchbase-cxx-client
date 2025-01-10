@@ -16,7 +16,8 @@
  */
 #pragma once
 
-#include <fmt/format.h>
+#include <spdlog/fmt/bundled/core.h>
+
 #include <optional>
 #include <string>
 
@@ -41,13 +42,13 @@ public:
   {
   }
 
-  bool has_value() const
+  [[nodiscard]] auto has_value() const -> bool
   {
     return bucket_name_.has_value() && !bucket_name_->empty() && scope_name_.has_value() &&
            !scope_name_->empty();
   }
 
-  std::string value() const
+  [[nodiscard]] auto value() const -> std::string
   {
     if (has_value()) {
       return fmt::format("{}:`{}`.`{}`", namespace_id_, bucket_name_.value(), scope_name_.value());
@@ -55,7 +56,7 @@ public:
     return {};
   }
 
-  std::string bucket_name() const
+  [[nodiscard]] auto bucket_name() const -> std::string
   {
     if (has_value()) {
       return bucket_name_.value();
@@ -63,7 +64,7 @@ public:
     return "";
   }
 
-  std::string scope_name() const
+  [[nodiscard]] auto scope_name() const -> std::string
   {
     if (has_value()) {
       return scope_name_.value();
@@ -71,7 +72,7 @@ public:
     return "";
   }
 
-  std::string namespace_id() const
+  [[nodiscard]] auto namespace_id() const -> std::string
   {
     return namespace_id_;
   }

@@ -25,7 +25,7 @@
 #include <couchbase/build_config.hxx>
 
 #include <asio/error.hpp>
-#include <fmt/chrono.h>
+#include <spdlog/fmt/bundled/chrono.h>
 #include <tl/expected.hpp>
 
 #include <memory>
@@ -269,8 +269,8 @@ public:
   ~pending_buffered_http_operation() override = default;
   pending_buffered_http_operation(const pending_buffered_http_operation&) = delete;
   pending_buffered_http_operation(pending_buffered_http_operation&&) = delete;
-  auto operator=(const pending_buffered_http_operation&) -> pending_buffered_http_operation =
-                                                              delete;
+  auto operator=(const pending_buffered_http_operation&)
+    -> pending_buffered_http_operation = delete;
   auto operator=(pending_buffered_http_operation&&) -> pending_buffered_http_operation = delete;
 
   void start(buffered_free_form_http_request_callback&& callback)

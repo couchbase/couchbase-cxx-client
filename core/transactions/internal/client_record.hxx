@@ -15,7 +15,8 @@
  */
 #pragma once
 
-#include <fmt/format.h>
+#include <spdlog/fmt/bundled/core.h>
+
 #include <string>
 #include <vector>
 
@@ -38,7 +39,7 @@ struct client_record_details {
   std::uint64_t cas_now_nanos;
 
   template<typename OStream>
-  friend OStream& operator<<(OStream& os, const client_record_details& details)
+  friend auto operator<<(OStream& os, const client_record_details& details) -> OStream&
   {
     os << "client_record_details{";
     os << "client_uuid: " << details.client_uuid;
@@ -50,7 +51,7 @@ struct client_record_details {
     os << ", override_expires: " << details.override_expires;
     os << ", cas_now_nanos: " << details.cas_now_nanos;
     os << ", expired_client_ids: [";
-    for (auto& id : details.expired_client_ids) {
+    for (const auto& id : details.expired_client_ids) {
       os << id << ",";
     }
     os << "]}";

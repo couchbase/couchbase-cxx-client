@@ -21,7 +21,7 @@
 #include "core/transactions/transaction_get_result.hxx"
 #include "logging.hxx"
 
-#include <fmt/format.h>
+#include <spdlog/fmt/bundled/core.h>
 
 #include <chrono>
 #include <memory>

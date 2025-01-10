@@ -27,7 +27,7 @@
 
 #include "level.hxx"
 
-#include <fmt/core.h>
+#include <spdlog/fmt/bundled/core.h>
 #include <spdlog/fwd.h>
 
 #include <memory>

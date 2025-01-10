@@ -21,9 +21,8 @@
 #include "core/utils/url_codec.hxx"
 #include "error_utils.hxx"
 
+#include <spdlog/fmt/bundled/core.h>
 #include <tao/json/contrib/traits.hpp>
-
-#include <fmt/core.h>
 
 namespace couchbase::core::operations::management
 {

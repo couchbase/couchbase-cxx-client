@@ -19,7 +19,7 @@
 #include "core/utils/url_codec.hxx"
 #include "error_utils.hxx"
 
-#include <fmt/core.h>
+#include <spdlog/fmt/bundled/core.h>
 
 namespace couchbase::core::operations::management
 {

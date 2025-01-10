@@ -29,7 +29,7 @@
 #include <couchbase/match_none_query.hxx>
 #include <utility>
 
-#include <fmt/core.h>
+#include <spdlog/fmt/bundled/core.h>
 
 namespace couchbase::core::impl
 {

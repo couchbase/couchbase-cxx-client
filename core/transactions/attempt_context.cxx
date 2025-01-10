@@ -18,7 +18,7 @@
 #include <couchbase/scope.hxx>
 #include <couchbase/transactions/attempt_context.hxx>
 
-#include <fmt/core.h>
+#include <spdlog/fmt/bundled/core.h>
 
 namespace couchbase::transactions
 {

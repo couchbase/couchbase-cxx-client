@@ -19,8 +19,6 @@
 
 #include <couchbase/durability_level.hxx>
 
-#include <fmt/core.h>
-
 /**
  * Helper for fmtlib to format @ref couchbase::durability_level objects.
  *

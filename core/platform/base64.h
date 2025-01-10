@@ -30,11 +30,11 @@ namespace couchbase::core::base64
  * @param source the string to encode
  * @return the base64 encoded value
  */
-std::string
-encode(gsl::span<const std::byte> blob, bool pretty_print = false);
+auto
+encode(gsl::span<const std::byte> blob, bool pretty_print = false) -> std::string;
 
-std::string
-encode(std::string_view blob, bool pretty_print = false);
+auto
+encode(std::string_view blob, bool pretty_print = false) -> std::string;
 
 /**
  * Decode a base64 encoded blob (which may be pretty-printed to avoid
@@ -43,10 +43,10 @@ encode(std::string_view blob, bool pretty_print = false);
  * @param source string to decode
  * @return the decoded data
  */
-std::vector<std::byte>
-decode(std::string_view blob);
+auto
+decode(std::string_view blob) -> std::vector<std::byte>;
 
-std::string
-decode_to_string(std::string_view blob);
+auto
+decode_to_string(std::string_view blob) -> std::string;
 
 } // namespace couchbase::core::base64

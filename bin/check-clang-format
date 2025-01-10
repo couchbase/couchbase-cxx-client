@@ -34,6 +34,7 @@ IFS=$'\n\t'
 
 cd "${PROJECT_ROOT}"
 
+${CB_CLANG_FORMAT} --version
 format_diff="$(${CB_GIT_CLANG_FORMAT} --binary ${CB_CLANG_FORMAT} --diff --commit HEAD^)"
 
 if [ "$format_diff" == "clang-format did not modify any files" ] || \

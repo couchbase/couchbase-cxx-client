@@ -55,7 +55,6 @@ macro(integration_test name)
     Microsoft.GSL::GSL
     asio
     taocpp::json
-    fmt::fmt
     spdlog::spdlog
     test_utils)
   if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
@@ -101,7 +100,6 @@ macro(transaction_test name)
     asio
     taocpp::json
     spdlog::spdlog
-    fmt::fmt
     ${couchbase_cxx_client_DEFAULT_LIBRARY}
     test_utils)
   if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
@@ -146,7 +144,6 @@ macro(unit_test name)
     asio
     taocpp::json
     spdlog::spdlog
-    fmt::fmt
     ${couchbase_cxx_client_DEFAULT_LIBRARY}
     test_utils)
   if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
@@ -193,7 +190,6 @@ macro(integration_benchmark name)
     asio
     taocpp::json
     spdlog::spdlog
-    fmt::fmt
     ${couchbase_cxx_client_DEFAULT_LIBRARY}
     test_utils)
   if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)

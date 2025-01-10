@@ -17,8 +17,8 @@
 
 #include "http_parser.hxx"
 
-#include <fmt/core.h>
 #include <llhttp.h>
+#include <spdlog/fmt/bundled/core.h>
 
 #include <algorithm>
 

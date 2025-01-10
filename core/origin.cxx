@@ -21,8 +21,8 @@
 #include "core/utils/connection_string.hxx"
 #include "topology/configuration.hxx"
 
-#include <fmt/chrono.h>
-#include <fmt/core.h>
+#include <spdlog/fmt/bundled/chrono.h>
+#include <spdlog/fmt/bundled/core.h>
 
 #include <tao/json.hpp>
 #include <utility>

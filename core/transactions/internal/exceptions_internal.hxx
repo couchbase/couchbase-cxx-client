@@ -22,8 +22,6 @@
 
 #include "core/error_context/transaction_op_error_context.hxx"
 
-#include <spdlog/spdlog.h>
-
 #include <algorithm>
 #include <list>
 

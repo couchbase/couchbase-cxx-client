@@ -19,8 +19,6 @@
 
 #include <couchbase/query_profile.hxx>
 
-#include <fmt/core.h>
-
 /**
  * Helper for fmtlib to format @ref couchbase::query_profile objects.
  *

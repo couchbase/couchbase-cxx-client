@@ -38,7 +38,6 @@ target_link_libraries(
   CLI11
   Microsoft.GSL::GSL
   taocpp::json
-  fmt::fmt
   spdlog::spdlog
   hdr_histogram_static
   asio)

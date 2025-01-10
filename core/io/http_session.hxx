@@ -20,7 +20,6 @@
 #include <couchbase/build_config.hxx>
 
 #include "core/diagnostics.hxx"
-#include "core/impl/bootstrap_error.hxx"
 #include "core/origin.hxx"
 #include "core/platform/base64.h"
 #include "core/utils/movable_function.hxx"
@@ -30,9 +29,12 @@
 #include "http_streaming_parser.hxx"
 #include "http_streaming_response.hxx"
 #include "streams.hxx"
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+#include "core/impl/bootstrap_error.hxx"
+#endif
 
 #include <asio.hpp>
-#include <spdlog/fmt/bin_to_hex.h>
+#include <spdlog/fmt/bundled/chrono.h>
 
 #include <memory>
 #include <optional>

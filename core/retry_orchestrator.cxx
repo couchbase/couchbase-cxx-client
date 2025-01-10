@@ -21,7 +21,7 @@
 
 #include <couchbase/fmt/retry_reason.hxx>
 
-#include <fmt/chrono.h>
+#include <spdlog/fmt/bundled/chrono.h>
 
 namespace couchbase::core
 {

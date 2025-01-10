@@ -22,8 +22,8 @@
 
 #include "core/fmt/key_value_status_code.hxx"
 
-#include <fmt/core.h>
 #include <spdlog/fmt/bin_to_hex.h>
+#include <spdlog/fmt/bundled/core.h>
 
 #include <iterator>
 

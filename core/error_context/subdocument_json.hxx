@@ -21,7 +21,7 @@
 
 #include <couchbase/fmt/retry_reason.hxx>
 
-#include <fmt/format.h>
+#include <spdlog/fmt/bundled/format.h>
 #include <tao/json/forward.hpp>
 
 #include "key_value_json.hxx"

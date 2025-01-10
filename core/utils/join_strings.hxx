@@ -17,7 +17,8 @@
 
 #pragma once
 
-#include <fmt/core.h>
+#include <spdlog/fmt/bundled/core.h>
+
 #include <sstream>
 
 namespace couchbase::core::utils
@@ -46,7 +47,6 @@ join_strings(const Range& values, const std::string& sep) -> std::string
  * Joins a list of objects together using fmt:: for formatting.
  */
 template<typename Range>
-
 auto
 join_strings_fmt(const Range& values, const std::string& sep) -> std::string
 {

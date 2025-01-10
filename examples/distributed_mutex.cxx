@@ -18,15 +18,16 @@
 #include <couchbase/best_effort_retry_strategy.hxx>
 #include <couchbase/cluster.hxx>
 #include <couchbase/codec/tao_json_serializer.hxx>
+
+#include <spdlog/fmt/bundled/chrono.h>
+#include <spdlog/fmt/bundled/format.h>
+
 #include <couchbase/fmt/error_context.hxx>
 
-#include <fmt/chrono.h>
-#include <fmt/format.h>
-
 #include <tao/json.hpp>
+#include <tao/json/from_string.hpp>
 
 #include <system_error>
-#include <tao/json/from_string.hpp>
 #include <thread>
 
 static constexpr auto connection_string{ "couchbase://127.0.0.1" };

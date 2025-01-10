@@ -22,7 +22,6 @@
 #include "core/transactions.hxx"
 #include "core/transactions/atr_ids.hxx"
 
-#include <spdlog/spdlog.h>
 #include <tao/json.hpp>
 
 #include <stdexcept>

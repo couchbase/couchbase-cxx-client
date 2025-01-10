@@ -90,7 +90,7 @@
 #include <couchbase/unlock_options.hxx>
 #include <couchbase/upsert_options.hxx>
 
-#include <fmt/format.h>
+#include <spdlog/fmt/bundled/core.h>
 
 #include <chrono>
 #include <cstdint>

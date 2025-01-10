@@ -17,8 +17,8 @@
 
 #include <couchbase/date_range.hxx>
 
-#include <fmt/chrono.h>
-#include <fmt/format.h>
+#include <spdlog/fmt/bundled/chrono.h>
+#include <spdlog/fmt/bundled/core.h>
 
 #include <chrono>
 #include <ctime>

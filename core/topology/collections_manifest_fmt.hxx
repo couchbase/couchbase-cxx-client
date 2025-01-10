@@ -21,7 +21,8 @@
 
 #include "core/utils/join_strings.hxx"
 
-#include <fmt/core.h>
+#include <spdlog/fmt/bundled/core.h>
+
 #include <vector>
 
 template<>

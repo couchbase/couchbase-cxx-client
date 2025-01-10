@@ -34,7 +34,7 @@
 #include "core/topology/collections_manifest_fmt.hxx"
 #include "core/utils/json.hxx"
 
-#include <fmt/chrono.h>
+#include <spdlog/fmt/bundled/chrono.h>
 #include <tao/json/value.hpp>
 
 namespace test::utils

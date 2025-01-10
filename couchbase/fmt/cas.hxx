@@ -19,8 +19,6 @@
 
 #include <couchbase/cas.hxx>
 
-#include <fmt/core.h>
-
 #ifdef COUCHBASE_CXX_CLIENT_DOXYGEN
 namespace fmt
 {

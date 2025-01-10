@@ -27,10 +27,8 @@
 #include <asio/ip/tcp.hpp>
 #include <asio/read.hpp>
 #include <asio/write.hpp>
-
-#include <fmt/chrono.h>
-
 #include <spdlog/fmt/bin_to_hex.h>
+#include <spdlog/fmt/bundled/chrono.h>
 
 #include <chrono>
 #include <memory>

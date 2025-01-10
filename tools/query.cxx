@@ -30,8 +30,8 @@
 #include <couchbase/fmt/query_profile.hxx>
 #include <couchbase/fmt/query_status.hxx>
 
-#include <fmt/chrono.h>
 #include <spdlog/fmt/bin_to_hex.h>
+#include <spdlog/fmt/bundled/chrono.h>
 #include <tao/json.hpp>
 
 #include <regex>

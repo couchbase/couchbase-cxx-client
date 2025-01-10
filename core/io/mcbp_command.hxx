@@ -36,7 +36,7 @@
 #include <couchbase/error_codes.hxx>
 
 #include <asio/steady_timer.hpp>
-#include <fmt/chrono.h>
+#include <spdlog/fmt/bundled/chrono.h>
 
 #include <functional>
 #include <utility>

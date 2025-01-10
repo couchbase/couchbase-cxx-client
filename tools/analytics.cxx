@@ -29,8 +29,8 @@
 #include <couchbase/fmt/error.hxx>
 
 #include <asio/io_context.hpp>
-#include <fmt/chrono.h>
 #include <spdlog/fmt/bin_to_hex.h>
+#include <spdlog/fmt/bundled/chrono.h>
 #include <tao/json.hpp>
 
 #include <regex>

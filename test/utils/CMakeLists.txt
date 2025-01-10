@@ -16,7 +16,6 @@ target_link_libraries(
           Microsoft.GSL::GSL
           asio
           taocpp::json
-          fmt::fmt
           spdlog::spdlog)
 target_include_directories(test_utils PRIVATE ${PROJECT_SOURCE_DIR})
 target_include_directories(test_utils PRIVATE ${PROJECT_BINARY_DIR}/generated)

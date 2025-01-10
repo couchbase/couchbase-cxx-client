@@ -15,11 +15,12 @@
  *   limitations under the License.
  */
 
-#include <couchbase/fmt/retry_reason.hxx>
-
 #include "core/error_context/query_error_context.hxx"
 
+#include <spdlog/fmt/bundled/core.h>
 #include <tao/json/to_string.hpp>
+
+#include <couchbase/fmt/retry_reason.hxx>
 
 namespace couchbase::core
 {
