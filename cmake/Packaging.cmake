@@ -4,7 +4,9 @@ include(CMakePackageConfigHelpers)
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/couchbase DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(FILES LICENSE.txt DESTINATION ${CMAKE_INSTALL_DOCDIR})
 
-set(COUCHBASE_CXX_CLIENT_PKGCONFIG_VERSION "${COUCHBASE_CXX_CLIENT_SEMVER}" CACHE STRING "The version to use in couchbase_cxx_client.pc")
+set(COUCHBASE_CXX_CLIENT_PKGCONFIG_VERSION
+    "${COUCHBASE_CXX_CLIENT_SEMVER}"
+    CACHE STRING "The version to use in couchbase_cxx_client.pc")
 configure_file(${PROJECT_SOURCE_DIR}/cmake/couchbase_cxx_client.pc.in
                ${PROJECT_BINARY_DIR}/packaging/couchbase_cxx_client.pc @ONLY)
 install(FILES ${PROJECT_BINARY_DIR}/packaging/couchbase_cxx_client.pc DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
@@ -17,6 +19,7 @@ write_basic_package_version_file(
   VERSION ${couchbase_cxx_client_VERSION}
   COMPATIBILITY SameMinorVersion)
 install(FILES ${PROJECT_BINARY_DIR}/couchbase_cxx_client-version.cmake
+              ${PROJECT_BINARY_DIR}/couchbase_cxx_client-config.cmake
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/couchbase_cxx_client)
 
 if(COUCHBASE_CXX_CLIENT_BUILD_TOOLS)
@@ -31,7 +34,7 @@ install(
 install(
   EXPORT couchbase_cxx_client-targets
   NAMESPACE couchbase_cxx_client::
-  FILE couchbase_cxx_client-config.cmake
+  FILE couchbase_cxx_client-targets.cmake
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/couchbase_cxx_client)
 
 set(COUCHBASE_CXX_CLIENT_TARBALL_NAME "couchbase-cxx-client-${COUCHBASE_CXX_CLIENT_SEMVER}")
