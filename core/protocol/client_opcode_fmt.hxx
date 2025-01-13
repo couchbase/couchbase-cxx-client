@@ -19,7 +19,7 @@
 
 #include "client_opcode.hxx"
 
-#include <fmt/core.h>
+#include <spdlog/fmt/bundled/core.h>
 
 template<>
 struct fmt::formatter<couchbase::core::protocol::client_opcode> {

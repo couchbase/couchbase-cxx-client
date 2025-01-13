@@ -52,8 +52,8 @@
 #include <asio/io_context.hpp>
 #include <asio/post.hpp>
 #include <asio/ssl/context.hpp>
-#include <fmt/format.h>
 #include <gsl/span>
+#include <spdlog/fmt/bundled/core.h>
 
 #include <algorithm>
 #include <chrono>
@@ -225,8 +225,8 @@ public:
     return {};
   }
 
-  auto direct_re_queue(const std::shared_ptr<mcbp::queue_request>& req,
-                       bool is_retry) -> std::error_code
+  auto direct_re_queue(const std::shared_ptr<mcbp::queue_request>& req, bool is_retry)
+    -> std::error_code
   {
     auto handle_error = [is_retry, req](std::error_code ec) {
       // We only want to log an error on retries if the error isn't cancelled.
@@ -281,8 +281,8 @@ public:
     return {};
   }
 
-  auto backoff_and_retry(const std::shared_ptr<mcbp::queue_request>& request,
-                         retry_reason reason) -> bool
+  auto backoff_and_retry(const std::shared_ptr<mcbp::queue_request>& request, retry_reason reason)
+    -> bool
   {
     auto action = retry_orchestrator::should_retry(request, reason);
     auto retried = action.need_to_retry();
@@ -314,8 +314,8 @@ public:
     return {};
   }
 
-  [[nodiscard]] auto server_by_vbucket(std::uint16_t vbucket,
-                                       std::size_t node_index) -> std::optional<std::size_t>
+  [[nodiscard]] auto server_by_vbucket(std::uint16_t vbucket, std::size_t node_index)
+    -> std::optional<std::size_t>
   {
     const std::scoped_lock lock(config_mutex_);
     if (config_) {
@@ -1141,8 +1141,8 @@ bucket::direct_dispatch(std::shared_ptr<mcbp::queue_request> req) -> std::error_
 }
 
 auto
-bucket::direct_re_queue(const std::shared_ptr<mcbp::queue_request>& req,
-                        bool is_retry) -> std::error_code
+bucket::direct_re_queue(const std::shared_ptr<mcbp::queue_request>& req, bool is_retry)
+  -> std::error_code
 {
   return impl_->direct_re_queue(req, is_retry);
 }

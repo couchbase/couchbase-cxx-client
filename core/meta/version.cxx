@@ -27,12 +27,12 @@
 #include <couchbase/build_version.hxx>
 
 #include <asio/version.hpp>
-#include <fmt/core.h>
 #include <hdr/hdr_histogram_version.h>
 #include <llhttp.h>
 #include <openssl/crypto.h>
 #include <openssl/x509.h>
 #include <snappy-stubs-public.h>
+#include <spdlog/fmt/bundled/core.h>
 #include <spdlog/version.h>
 
 #include <regex>

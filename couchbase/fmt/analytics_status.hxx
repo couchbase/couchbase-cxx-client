@@ -19,8 +19,6 @@
 
 #include <couchbase/analytics_status.hxx>
 
-#include <fmt/core.h>
-
 /**
  * Helper for fmtlib to format @ref couchbase::analytics_status objects.
  *

@@ -19,7 +19,7 @@
 
 #include "core/error_context/key_value_error_map_attribute.hxx"
 
-#include <fmt/core.h>
+#include <spdlog/fmt/bundled/core.h>
 
 template<>
 struct fmt::formatter<couchbase::core::key_value_error_map_attribute> {

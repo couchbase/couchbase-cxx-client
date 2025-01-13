@@ -15,7 +15,7 @@
 
 #include "agent_config.hxx"
 
-#include <fmt/format.h>
+#include <spdlog/fmt/bundled/core.h>
 
 #include <string>
 

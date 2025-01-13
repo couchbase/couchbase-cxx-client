@@ -15,7 +15,7 @@
 
 #include "core_sdk_shim.hxx"
 
-#include <fmt/format.h>
+#include <spdlog/fmt/bundled/core.h>
 
 #include <string>
 

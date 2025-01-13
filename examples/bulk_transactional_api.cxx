@@ -17,12 +17,13 @@
 
 #include <couchbase/cluster.hxx>
 #include <couchbase/codec/tao_json_serializer.hxx>
-#include <couchbase/fmt/error.hxx>
 #include <couchbase/transactions.hxx>
 
-#include <fmt/chrono.h>
-#include <fmt/format.h>
+#include <spdlog/fmt/bundled/chrono.h>
+#include <spdlog/fmt/bundled/format.h>
 #include <tao/json/to_string.hpp>
+
+#include <couchbase/fmt/error.hxx>
 
 #include <chrono>
 #include <future>

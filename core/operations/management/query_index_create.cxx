@@ -21,7 +21,7 @@
 #include "core/utils/keyspace.hxx"
 #include "error_utils.hxx"
 
-#include <fmt/core.h>
+#include <spdlog/fmt/bundled/core.h>
 #include <tao/json/value.hpp>
 
 #include <regex>

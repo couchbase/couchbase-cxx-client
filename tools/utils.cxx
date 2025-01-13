@@ -29,8 +29,8 @@
 #include <couchbase/fmt/query_scan_consistency.hxx>
 #include <couchbase/scope.hxx>
 
-#include <fmt/chrono.h>
 #include <spdlog/details/os.h>
+#include <spdlog/fmt/bundled/chrono.h>
 #include <spdlog/spdlog.h>
 #include <tao/json/value.hpp>
 

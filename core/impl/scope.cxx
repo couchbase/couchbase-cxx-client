@@ -31,7 +31,7 @@
 #include <couchbase/collection.hxx>
 #include <couchbase/scope.hxx>
 
-#include <fmt/core.h>
+#include <spdlog/fmt/bundled/core.h>
 
 #include <memory>
 #include <utility>
@@ -136,8 +136,8 @@ scope::query(std::string statement, const query_options& options, query_handler&
 }
 
 auto
-scope::query(std::string statement,
-             const query_options& options) const -> std::future<std::pair<error, query_result>>
+scope::query(std::string statement, const query_options& options) const
+  -> std::future<std::pair<error, query_result>>
 {
   auto barrier = std::make_shared<std::promise<std::pair<error, query_result>>>();
   auto future = barrier->get_future();
@@ -178,9 +178,8 @@ scope::search(std::string index_name,
 }
 
 auto
-scope::search(std::string index_name,
-              search_request request,
-              const search_options& options) const -> std::future<std::pair<error, search_result>>
+scope::search(std::string index_name, search_request request, const search_options& options) const
+  -> std::future<std::pair<error, search_result>>
 {
   auto barrier = std::make_shared<std::promise<std::pair<error, search_result>>>();
   auto future = barrier->get_future();

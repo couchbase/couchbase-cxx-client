@@ -22,7 +22,6 @@
 
 #include <couchbase/transactions/transaction_query_options.hxx>
 
-#include <future>
 #include <optional>
 #include <string>
 

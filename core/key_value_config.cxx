@@ -15,8 +15,8 @@
 
 #include "key_value_config.hxx"
 
-#include <fmt/chrono.h>
-#include <fmt/core.h>
+#include <spdlog/fmt/bundled/chrono.h>
+#include <spdlog/fmt/bundled/core.h>
 
 namespace couchbase::core
 {

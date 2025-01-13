@@ -25,8 +25,8 @@
 
 #include <CLI/CLI.hpp>
 
-#include <fmt/chrono.h>
-#include <fmt/core.h>
+#include <spdlog/fmt/bundled/chrono.h>
+#include <spdlog/fmt/bundled/core.h>
 
 #include <string>
 #include <vector>

@@ -56,12 +56,12 @@ struct query_index_build_request {
   std::optional<std::string> client_context_id{};
   std::optional<std::chrono::milliseconds> timeout{};
 
-  [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded,
-                                          http_context& context) const;
+  [[nodiscard]] auto encode_to(encoded_request_type& encoded, http_context& context) const
+    -> std::error_code;
 
-  [[nodiscard]] query_index_build_response make_response(
-    error_context::http&& ctx,
-    const encoded_response_type& encoded) const;
+  [[nodiscard]] auto make_response(error_context::http&& ctx,
+                                   const encoded_response_type& encoded) const
+    -> query_index_build_response;
 };
 
 } // namespace couchbase::core::operations::management

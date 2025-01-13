@@ -19,7 +19,7 @@
 
 #include "core/error_context/key_value_status_code.hxx"
 
-#include <fmt/core.h>
+#include <spdlog/fmt/bundled/core.h>
 
 /**
  * Helper for fmtlib to format @ref couchbase::core::key_value_status_code objects.

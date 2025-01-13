@@ -39,11 +39,11 @@
 #include <asio/error.hpp>
 #include <asio/io_context.hpp>
 #include <asio/steady_timer.hpp>
-#include <fmt/format.h>
 #include <gsl/span>
 #include <gsl/span_ext>
 #include <gsl/util>
 #include <snappy.h>
+#include <spdlog/fmt/bundled/core.h>
 #include <tao/json/value.hpp>
 #include <tl/expected.hpp>
 

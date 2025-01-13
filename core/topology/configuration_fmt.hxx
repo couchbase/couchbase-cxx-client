@@ -22,7 +22,7 @@
 #include "core/service_type_fmt.hxx"
 #include "core/utils/join_strings.hxx"
 
-#include <fmt/core.h>
+#include <spdlog/fmt/bundled/core.h>
 
 template<>
 struct fmt::formatter<couchbase::core::topology::configuration::node> {

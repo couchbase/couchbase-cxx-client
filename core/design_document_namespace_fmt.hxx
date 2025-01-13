@@ -19,7 +19,7 @@
 
 #include "design_document_namespace.hxx"
 
-#include <fmt/core.h>
+#include <spdlog/fmt/bundled/core.h>
 
 template<>
 struct fmt::formatter<couchbase::core::design_document_namespace> {

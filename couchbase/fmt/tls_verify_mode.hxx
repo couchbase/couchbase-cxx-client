@@ -19,8 +19,6 @@
 
 #include <couchbase/tls_verify_mode.hxx>
 
-#include <fmt/core.h>
-
 /**
  * Helper for fmtlib to format @ref couchbase::tls_verify_mode objects.
  *

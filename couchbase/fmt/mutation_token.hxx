@@ -19,8 +19,6 @@
 
 #include <couchbase/mutation_token.hxx>
 
-#include <fmt/core.h>
-
 /**
  * Helper for fmtlib to format @ref couchbase::mutation_token objects.
  *

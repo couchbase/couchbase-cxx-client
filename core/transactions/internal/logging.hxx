@@ -17,6 +17,8 @@
 
 #include <core/logger/logger.hxx>
 
+#include <spdlog/fmt/bundled/format.h>
+
 namespace couchbase::core::transactions
 {
 #define CB_ORIGINAL_FMT(fmt, ...) fmt

@@ -19,7 +19,7 @@
 
 #include "frame_info_id.hxx"
 
-#include <fmt/core.h>
+#include <spdlog/fmt/bundled/core.h>
 
 template<>
 struct fmt::formatter<couchbase::core::protocol::request_frame_info_id> {

@@ -12,6 +12,5 @@ target_link_libraries(
   couchbase_sasl
   PRIVATE project_options
           project_warnings
-          fmt::fmt
           Microsoft.GSL::GSL
           spdlog::spdlog)

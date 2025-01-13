@@ -20,11 +20,13 @@
 #include <couchbase/cluster.hxx>
 #include <couchbase/codec/codec_flags.hxx>
 #include <couchbase/codec/tao_json_serializer.hxx>
-#include <couchbase/fmt/cas.hxx>
-#include <couchbase/fmt/error.hxx>
 
+#include <spdlog/fmt/bundled/core.h>
 #include <tao/json.hpp>
 #include <tao/json/to_string.hpp>
+
+#include <couchbase/fmt/cas.hxx>
+#include <couchbase/fmt/error.hxx>
 
 namespace blocking_txn
 {
@@ -375,14 +377,9 @@ public:
   using iterator_category = std::output_iterator_tag;
   using value_type = void;
 
-  explicit byte_appender(std::vector<std::byte>& output)
-    : output_{ output }
-  {
-  }
-
   auto operator=(char ch) -> byte_appender&
   {
-    output_.push_back(static_cast<std::byte>(ch));
+    buffer_.push_back(static_cast<std::byte>(ch));
     return *this;
   }
 
@@ -401,8 +398,13 @@ public:
     return *this;
   }
 
+  [[nodiscard]] auto buffer() const -> const std::vector<std::byte>&
+  {
+    return buffer_;
+  }
+
 private:
-  std::vector<std::byte>& output_;
+  std::vector<std::byte> buffer_{};
 };
 
 template<>
@@ -450,8 +452,7 @@ public:
 
   [[nodiscard]] auto to_csv() const -> std::vector<std::byte>
   {
-    std::vector<std::byte> buffer;
-    byte_appender output(buffer);
+    byte_appender output;
 
     fmt::format_to(output, "Date,Description,Account,Debit,Credit\n");
     for (const auto& entry : entries_) {
@@ -463,7 +464,7 @@ public:
                      entry.debit,
                      entry.credit);
     }
-    return buffer;
+    return output.buffer();
   }
 
   static auto from_csv(const std::vector<std::byte>& blob) -> ledger

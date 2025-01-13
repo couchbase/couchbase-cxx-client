@@ -19,15 +19,16 @@
 
 #include "core/utils/url_codec.hxx"
 
+#include <spdlog/fmt/bundled/core.h>
+
 #include <algorithm>
-#include <fmt/core.h>
 #include <string>
 
 namespace couchbase::core::operations::management
 {
 template<typename analytics_link_type>
-std::string
-endpoint_from_analytics_link(const analytics_link_type& link)
+auto
+endpoint_from_analytics_link(const analytics_link_type& link) -> std::string
 {
   if (std::count(link.dataverse.begin(), link.dataverse.end(), '/') > 0) {
     return fmt::format("/analytics/link/{}/{}",

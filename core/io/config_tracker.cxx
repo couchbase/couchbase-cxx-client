@@ -29,7 +29,7 @@
 #include "mcbp_session.hxx"
 
 #include <asio/steady_timer.hpp>
-#include <fmt/chrono.h>
+#include <spdlog/fmt/bundled/chrono.h>
 
 namespace couchbase::core::io
 {

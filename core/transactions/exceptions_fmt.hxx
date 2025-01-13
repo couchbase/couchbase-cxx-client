@@ -18,7 +18,7 @@
 
 #include "exceptions.hxx"
 
-#include <fmt/core.h>
+#include <spdlog/fmt/bundled/core.h>
 
 template<>
 struct fmt::formatter<couchbase::core::transactions::external_exception> {

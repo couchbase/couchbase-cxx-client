@@ -19,8 +19,6 @@
 
 #include <couchbase/query_scan_consistency.hxx>
 
-#include <fmt/core.h>
-
 /**
  * Helper for fmtlib to format @ref couchbase::query_scan_consistency objects.
  *

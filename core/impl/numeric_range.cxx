@@ -17,7 +17,7 @@
 
 #include <couchbase/numeric_range.hxx>
 
-#include <fmt/chrono.h>
+#include <spdlog/fmt/bundled/chrono.h>
 
 namespace couchbase
 {

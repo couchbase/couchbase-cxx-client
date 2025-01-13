@@ -19,8 +19,6 @@
 
 #include <couchbase/analytics_scan_consistency.hxx>
 
-#include <fmt/core.h>
-
 /**
  * Helper for fmtlib to format @ref couchbase::analytics_scan_consistency objects.
  *

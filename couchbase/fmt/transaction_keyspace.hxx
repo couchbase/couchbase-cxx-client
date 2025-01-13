@@ -18,8 +18,6 @@
 
 #include <couchbase/transactions/transaction_keyspace.hxx>
 
-#include <fmt/core.h>
-
 template<>
 struct fmt::formatter<couchbase::transactions::transaction_keyspace> {
 public:

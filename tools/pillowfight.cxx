@@ -26,16 +26,17 @@
 #include <couchbase/cluster.hxx>
 #include <couchbase/codec/binary_noop_serializer.hxx>
 #include <couchbase/codec/raw_binary_transcoder.hxx>
-#include <couchbase/fmt/cas.hxx>
-#include <couchbase/fmt/error.hxx>
 
 #include <asio/io_context.hpp>
 #include <asio/steady_timer.hpp>
-#include <fmt/chrono.h>
-#include <fmt/std.h>
 #include <gsl/util>
 #include <hdr/hdr_histogram.h>
+#include <spdlog/fmt/bundled/chrono.h>
+#include <spdlog/fmt/bundled/std.h>
 #include <tao/json.hpp>
+
+#include <couchbase/fmt/cas.hxx>
+#include <couchbase/fmt/error.hxx>
 
 #include <csignal>
 #include <deque>

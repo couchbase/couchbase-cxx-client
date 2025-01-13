@@ -19,7 +19,7 @@
 
 #include <core/meta/version.hxx>
 
-#include <fmt/format.h>
+#include <spdlog/fmt/bundled/format.h>
 #include <tao/json.hpp>
 
 namespace

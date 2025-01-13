@@ -33,8 +33,8 @@
 #include "status.hxx"
 #include <couchbase/cas.hxx>
 
-#include <fmt/core.h>
 #include <gsl/assert>
+#include <spdlog/fmt/bundled/core.h>
 
 #include <cmath>
 #include <cstring>

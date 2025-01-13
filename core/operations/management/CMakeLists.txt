@@ -76,6 +76,5 @@ target_link_libraries(
   couchbase_operations_management
   PRIVATE project_options
           project_warnings
-          fmt::fmt
           spdlog::spdlog)
 target_include_directories(couchbase_operations_management PRIVATE ../../..)

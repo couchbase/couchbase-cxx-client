@@ -19,7 +19,7 @@
 
 #include "core/error_context/key_value_extended_error_info.hxx"
 
-#include <fmt/core.h>
+#include <spdlog/fmt/bundled/core.h>
 
 /**
  * Helper for fmtlib to format @ref couchbase::key_value_extended_error_info objects.

@@ -21,10 +21,12 @@
 #include "core/impl/retry_reason.hxx"
 
 #include <couchbase/error_codes.hxx>
-#include <couchbase/fmt/retry_reason.hxx>
 
+#include <spdlog/fmt/bundled/core.h>
 #include <tao/json/forward.hpp>
 #include <tao/json/value.hpp>
+
+#include <couchbase/fmt/retry_reason.hxx>
 
 namespace tao::json
 {

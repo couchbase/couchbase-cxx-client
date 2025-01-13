@@ -21,7 +21,7 @@
 #include <couchbase/retry_reason.hxx>
 #include <couchbase/retry_request.hxx>
 
-#include <fmt/format.h>
+#include <spdlog/fmt/bundled/core.h>
 
 #include <algorithm>
 #include <chrono>

@@ -21,8 +21,6 @@
 #include "core/transactions/attempt_context_impl.hxx"
 #include "simple_object.hxx"
 
-#include <spdlog/spdlog.h>
-
 #include <future>
 #include <list>
 #include <stdexcept>

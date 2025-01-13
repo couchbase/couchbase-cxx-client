@@ -21,8 +21,8 @@
 
 #include <couchbase/error_codes.hxx>
 
-#include <fmt/chrono.h>
-#include <fmt/format.h>
+#include <spdlog/fmt/bundled/chrono.h>
+#include <spdlog/fmt/bundled/core.h>
 #include <tao/json/type.hpp>
 
 #include <chrono>

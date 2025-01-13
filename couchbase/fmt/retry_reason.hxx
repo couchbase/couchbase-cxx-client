@@ -19,7 +19,11 @@
 
 #include <couchbase/retry_reason.hxx>
 
-#include <fmt/core.h>
+#ifdef COUCHBASE_CXX_CLIENT_DOXYGEN
+namespace fmt
+{
+}
+#endif
 
 /**
  * Helper for fmtlib to format @ref couchbase::retry_reason objects.

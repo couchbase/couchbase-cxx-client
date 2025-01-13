@@ -20,7 +20,7 @@
 #include "core/utils/binary.hxx"
 #include "core/utils/unsigned_leb128.hxx"
 
-#include <fmt/format.h>
+#include <spdlog/fmt/bundled/core.h>
 
 #include <algorithm>
 #include <cstddef>

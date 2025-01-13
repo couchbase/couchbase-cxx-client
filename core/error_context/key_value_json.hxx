@@ -22,7 +22,7 @@
 
 #include "key_value_error_context.hxx"
 
-#include <fmt/format.h>
+#include <spdlog/fmt/bundled/format.h>
 #include <tao/json/forward.hpp>
 
 namespace tao::json

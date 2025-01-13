@@ -20,7 +20,7 @@
 #include "cluster_options.hxx"
 #include "core/config_profile.hxx"
 
-#include <fmt/format.h>
+#include <spdlog/fmt/bundled/core.h>
 
 #include <chrono>
 #include <mutex>

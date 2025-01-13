@@ -20,8 +20,7 @@
 #include <couchbase/retry_reason.hxx>
 #include <couchbase/retry_request.hxx>
 
-#include <fmt/core.h>
-#include <fmt/format.h>
+#include <spdlog/fmt/bundled/format.h>
 
 #include <memory>
 #include <string>

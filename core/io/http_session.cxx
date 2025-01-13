@@ -19,10 +19,14 @@
 
 #include "core/logger/logger.hxx"
 #include "core/meta/version.hxx"
+#include "core/platform/base64.h"
 #include "core/platform/uuid.h"
 #include "core/service_type_fmt.hxx"
 
 #include <couchbase/error_codes.hxx>
+
+#include <spdlog/fmt/bin_to_hex.h>
+
 #include <utility>
 
 namespace couchbase::core::io

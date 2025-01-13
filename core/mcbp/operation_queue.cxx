@@ -23,7 +23,7 @@
 
 #include <couchbase/error_codes.hxx>
 
-#include <fmt/core.h>
+#include <spdlog/fmt/bundled/core.h>
 
 #include <algorithm>
 #include <iterator>

@@ -164,12 +164,10 @@
 #include <asio/executor_work_guard.hpp>
 #include <asio/post.hpp>
 #include <asio/ssl/verify_mode.hpp>
-#include <fmt/core.h>
 
 #include <atomic>
 #include <chrono>
 #include <cstring>
-#include <fmt/format.h>
 #include <map>
 #include <memory>
 #include <mutex>

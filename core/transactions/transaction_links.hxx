@@ -18,7 +18,7 @@
 
 #include <couchbase/codec/encoded_value.hxx>
 
-#include <fmt/format.h>
+#include <spdlog/fmt/bundled/core.h>
 #include <tao/json/value.hpp>
 
 #include <optional>

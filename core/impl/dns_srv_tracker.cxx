@@ -31,7 +31,7 @@
 #include <asio/bind_executor.hpp>
 #include <asio/io_context.hpp>
 #include <asio/post.hpp>
-#include <fmt/format.h>
+#include <spdlog/fmt/bundled/core.h>
 
 #include <functional>
 #include <memory>

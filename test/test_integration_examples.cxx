@@ -34,11 +34,10 @@
 #include <couchbase/query_string_query.hxx>
 #include <couchbase/term_facet.hxx>
 
+#include <spdlog/fmt/bundled/chrono.h>
+#include <spdlog/fmt/bundled/ranges.h>
 #include <tao/json.hpp>
 #include <tao/json/contrib/traits.hpp>
-
-#include <fmt/chrono.h>
-#include <fmt/ranges.h>
 
 #ifndef _WIN32
 #include <sys/wait.h>
@@ -273,8 +272,6 @@ namespace example_search
 #include <couchbase/fmt/mutation_token.hxx>
 
 #include <tao/json.hpp>
-
-#include <fmt/chrono.h>
 
 class github_actions_configuration_profile : public couchbase::configuration_profile
 {
@@ -724,7 +721,6 @@ namespace example_fork
 #include <couchbase/fmt/cas.hxx>
 #include <couchbase/fmt/mutation_token.hxx>
 
-#include <fmt/ranges.h>
 #include <tao/json.hpp>
 
 #include <sys/wait.h>
