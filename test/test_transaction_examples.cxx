@@ -377,6 +377,11 @@ public:
   using iterator_category = std::output_iterator_tag;
   using value_type = void;
 
+  explicit byte_appender(std::vector<std::byte>& output)
+    : buffer_{ output }
+  {
+  }
+
   auto operator=(char ch) -> byte_appender&
   {
     buffer_.push_back(static_cast<std::byte>(ch));
@@ -398,13 +403,8 @@ public:
     return *this;
   }
 
-  [[nodiscard]] auto buffer() const -> const std::vector<std::byte>&
-  {
-    return buffer_;
-  }
-
 private:
-  std::vector<std::byte> buffer_{};
+  std::vector<std::byte>& buffer_;
 };
 
 template<>
@@ -452,7 +452,14 @@ public:
 
   [[nodiscard]] auto to_csv() const -> std::vector<std::byte>
   {
-    byte_appender output;
+    if (entries_.empty()) {
+      return {
+        std::byte{ '\n' },
+      };
+    }
+
+    std::vector<std::byte> buffer;
+    byte_appender output{ buffer };
 
     fmt::format_to(output, "Date,Description,Account,Debit,Credit\n");
     for (const auto& entry : entries_) {
@@ -464,7 +471,7 @@ public:
                      entry.debit,
                      entry.credit);
     }
-    return output.buffer();
+    return buffer;
   }
 
   static auto from_csv(const std::vector<std::byte>& blob) -> ledger
