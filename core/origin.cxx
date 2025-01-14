@@ -280,6 +280,7 @@ origin::to_json() const -> std::string
         { "metrics_options", options_.metrics_options },
         { "tracing_options", options_.tracing_options },
         { "transactions_options", options_.transactions },
+        { "server_group", options_.server_group },
 #endif
       },
     },
