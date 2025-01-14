@@ -5,7 +5,7 @@ components:
     versions: [ 20200921 ]
   spdlog:
     bd-id: 7785114c-5b78-4aad-8771-72a739a1f06e
-    versions: [ v1.14.1 ]
+    versions: [ v1.15.0 ]
   gsl:
     bd-id: 9e753ffd-aa29-46e6-a7fc-d4b972710c0b
     versions: [ 4.0.0 ]

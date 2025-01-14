@@ -23,7 +23,7 @@ if(NOT TARGET spdlog::spdlog)
     NAME
     spdlog
     VERSION
-    1.14.1
+    1.15.0
     GITHUB_REPOSITORY
     "gabime/spdlog"
     EXCLUDE_FROM_ALL ON
