@@ -250,12 +250,13 @@ if(COUCHBASE_CXX_CLIENT_RPM_TARGETS)
   list(
     APPEND
     COUCHBASE_CXX_CLIENT_SUPPORTED_ROOTS
-    "opensuse-leap-15.5-${CMAKE_SYSTEM_PROCESSOR}"
-    "rocky-9-${CMAKE_SYSTEM_PROCESSOR}"
-    "rocky-8-${CMAKE_SYSTEM_PROCESSOR}"
-    "amazonlinux-2023-${CMAKE_SYSTEM_PROCESSOR}"
+    # "opensuse-leap-15.5-${CMAKE_SYSTEM_PROCESSOR}"
+    # "rocky-9-${CMAKE_SYSTEM_PROCESSOR}"
+    # "rocky-8-${CMAKE_SYSTEM_PROCESSOR}"
+    # "amazonlinux-2023-${CMAKE_SYSTEM_PROCESSOR}"
     "fedora-41-${CMAKE_SYSTEM_PROCESSOR}"
-    "fedora-40-${CMAKE_SYSTEM_PROCESSOR}")
+    # "fedora-40-${CMAKE_SYSTEM_PROCESSOR}"
+    )
 
   message(STATUS "Supported build roots for RPM packages: ${COUCHBASE_CXX_CLIENT_SUPPORTED_ROOTS}")
 
