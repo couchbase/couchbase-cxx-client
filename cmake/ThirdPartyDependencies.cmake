@@ -17,6 +17,8 @@ function(declare_system_library target)
                                              $<TARGET_PROPERTY:${target},INTERFACE_INCLUDE_DIRECTORIES>)
 endfunction()
 
+include(cmake/OpenSSL.cmake)
+
 if(NOT TARGET spdlog::spdlog)
   # https://github.com/gabime/spdlog/releases
   cpmaddpackage(
@@ -28,14 +30,11 @@ if(NOT TARGET spdlog::spdlog)
     "gabime/spdlog"
     EXCLUDE_FROM_ALL ON
     OPTIONS
-    "SPDLOG_INSTALL OFF"
+    "SPDLOG_INSTALL ON"
     "BUILD_SHARED_LIBS OFF"
     "CMAKE_C_VISIBILITY_PRESET hidden"
     "CMAKE_CXX_VISIBILITY_PRESET hidden"
     "CMAKE_POSITION_INDEPENDENT_CODE ON"
-    "NO_CMAKE_SYSTEM_PATH ON"
-    "NO_CMAKE_INSTALL_PREFIX ON"
-    "NO_CMAKE_SYSTEM_PACKAGE_REGISTRY ON"
     "SPDLOG_BUILD_SHARED OFF"
     "SPDLOG_FMT_EXTERNAL OFF")
 endif()
@@ -51,7 +50,7 @@ if(NOT TARGET Microsoft.GSL::GSL)
     "microsoft/gsl"
     EXCLUDE_FROM_ALL ON
     OPTIONS
-    "GSL_INSTALL OFF"
+    "GSL_INSTALL ON"
     "CMAKE_C_VISIBILITY_PRESET hidden"
     "CMAKE_CXX_VISIBILITY_PRESET hidden"
     "CMAKE_POSITION_INDEPENDENT_CODE ON")
@@ -111,7 +110,7 @@ if(NOT TARGET snappy)
     "google/snappy"
     EXCLUDE_FROM_ALL ON
     OPTIONS
-    "SNAPPY_INSTALL OFF"
+    "SNAPPY_INSTALL ON"
     "CMAKE_C_VISIBILITY_PRESET hidden"
     "CMAKE_CXX_VISIBILITY_PRESET hidden"
     "CMAKE_POSITION_INDEPENDENT_CODE ON"
@@ -153,7 +152,6 @@ if(NOT TARGET taocpp::json)
     "TAOCPP_JSON_BUILD_EXAMPLES OFF")
 endif()
 
-
 if(NOT TARGET asio::asio)
   # https://github.com/chriskohlhoff/asio/tags
   cpmaddpackage(
@@ -179,7 +177,15 @@ if(asio_ADDED)
 
   target_include_directories(asio SYSTEM PUBLIC ${asio_SOURCE_DIR}/asio/include)
   target_compile_definitions(asio PRIVATE ASIO_STANDALONE=1 ASIO_NO_DEPRECATED=1 ASIO_SEPARATE_COMPILATION=1)
-  target_link_libraries(asio PRIVATE Threads::Threads OpenSSL::SSL OpenSSL::Crypto)
+  target_link_libraries(asio PRIVATE Threads::Threads)
+  if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
+    target_link_libraries(asio PUBLIC $<TARGET_OBJECTS:ssl> $<TARGET_OBJECTS:crypto>)
+    target_include_directories(
+      asio SYSTEM PRIVATE $<BUILD_INTERFACE:$<TARGET_PROPERTY:ssl,INTERFACE_INCLUDE_DIRECTORIES>>
+                          $<BUILD_INTERFACE:$<TARGET_PROPERTY:crypto,INTERFACE_INCLUDE_DIRECTORIES>>)
+  else()
+    target_link_libraries(asio PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+  endif()
   set_target_properties(
     asio
     PROPERTIES C_VISIBILITY_PRESET hidden
