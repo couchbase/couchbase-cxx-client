@@ -21,6 +21,8 @@
 
 #include "bucket.hxx"
 #include "capella_ca.hxx"
+#include "core/app_telemetry_meter.hxx"
+#include "core/app_telemetry_reporter.hxx"
 #include "core/diagnostics.hxx"
 #include "core/impl/get_replica.hxx"
 #include "core/impl/lookup_in_replica.hxx"
@@ -444,13 +446,22 @@ public:
           }
         }
 
-        b = std::make_shared<bucket>(
-          id_, ctx_, tls_, tracer_, meter_, bucket_name, origin, known_features, dns_srv_tracker_);
+        b = std::make_shared<bucket>(id_,
+                                     ctx_,
+                                     tls_,
+                                     tracer_,
+                                     meter_,
+                                     app_telemetry_meter_,
+                                     bucket_name,
+                                     origin,
+                                     known_features,
+                                     dns_srv_tracker_);
         buckets_.try_emplace(bucket_name, b);
 
         // Register the tracer & the meter for config updates to track Cluster name & UUID
         b->on_configuration_update(tracer_);
         b->on_configuration_update(meter_);
+        b->on_configuration_update(app_telemetry_reporter_);
       }
     }
     if (b == nullptr) {
@@ -766,9 +777,9 @@ public:
           });
         }
       }
-      session_ = io::mcbp_session(id_, ctx_, tls_, origin_, dns_srv_tracker_);
+      session_ = io::mcbp_session(id_, {}, ctx_, tls_, origin_, dns_srv_tracker_);
     } else {
-      session_ = io::mcbp_session(id_, ctx_, origin_, dns_srv_tracker_);
+      session_ = io::mcbp_session(id_, {}, ctx_, origin_, dns_srv_tracker_);
     }
     session_->bootstrap([self = shared_from_this(), handler = std::move(handler)](
                           std::error_code ec, const topology::configuration& config) mutable {
@@ -793,8 +804,12 @@ public:
             self->origin_.options().network,
             utils::join_strings(self->origin_.get_nodes(), ","));
         }
+        // FIXME(SA): fix the session manager to receive initial configuration and cluster-wide
+        // session to poll for updates like the bucket does. Or just subscribe before the bootstrap.
         self->session_manager_->set_configuration(config, self->origin_.options());
         self->session_->on_configuration_update(self->session_manager_);
+        self->session_->on_configuration_update(self->app_telemetry_reporter_);
+        self->app_telemetry_reporter_->update_config(config);
         self->session_->on_stop([self]() {
           if (self->session_) {
             self->session_.reset();
@@ -972,6 +987,8 @@ public:
         } else {
           self->session_manager_->set_configuration(cfg, options);
           self->config_tracker_->on_configuration_update(self->session_manager_);
+          self->config_tracker_->on_configuration_update(self->app_telemetry_reporter_);
+          self->app_telemetry_reporter_->update_config(cfg);
           self->config_tracker_->register_state_listener();
         }
       });
@@ -1091,9 +1108,8 @@ public:
     stopped_ = true;
     asio::post(asio::bind_executor(
       ctx_, [self = shared_from_this(), handler = std::move(handler)]() mutable {
-        if (self->session_) {
-          self->session_->stop(retry_reason::do_not_retry);
-          self->session_.reset();
+        if (auto session = std::move(self->session_); session) {
+          session->stop(retry_reason::do_not_retry);
         }
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
         if (self->config_tracker_) {
@@ -1103,19 +1119,31 @@ public:
         }
         self->retry_backoff_.cancel();
 #endif
-        self->for_each_bucket([](const auto& bucket) {
+
+        std::map<std::string, std::shared_ptr<bucket>> buckets{};
+        {
+          const std::scoped_lock lock(self->buckets_mutex_);
+          buckets = std::move(self->buckets_);
+        }
+        for (const auto& [_, bucket] : buckets) {
           bucket->close();
-        });
-        self->session_manager_->close();
+        }
+        if (auto session_manager = std::move(self->session_manager_); session_manager) {
+          session_manager->close();
+        }
         self->work_.reset();
-        if (self->tracer_) {
-          self->tracer_->stop();
+        if (auto tracer = std::move(self->tracer_); tracer) {
+          tracer->stop();
         }
-        self->tracer_.reset();
-        if (self->meter_) {
-          self->meter_->stop();
+        if (auto meter = std::move(self->meter_); meter) {
+          meter->stop();
         }
-        self->meter_.reset();
+        if (auto meter = std::move(self->app_telemetry_meter_); meter) {
+          meter->disable();
+        }
+        if (auto reporter = std::move(self->app_telemetry_reporter_); reporter) {
+          reporter->stop();
+        }
         handler();
       }));
   }
@@ -1209,6 +1237,11 @@ private:
 
     session_manager_->set_tracer(tracer_);
     session_manager_->set_meter(meter_);
+
+    app_telemetry_meter_->update_agent(origin_.options().user_agent_extra);
+    session_manager_->set_app_telemetry_meter(app_telemetry_meter_);
+    app_telemetry_reporter_ = std::make_shared<app_telemetry_reporter>(
+      app_telemetry_meter_, origin_.options(), origin_.credentials(), ctx_, tls_);
   }
 
   std::string id_{ uuid::to_string(uuid::random()) };
@@ -1216,6 +1249,7 @@ private:
   asio::executor_work_guard<asio::io_context::executor_type> work_;
   asio::ssl::context tls_{ asio::ssl::context::tls_client };
   std::shared_ptr<io::http_session_manager> session_manager_;
+  std::shared_ptr<app_telemetry_reporter> app_telemetry_reporter_{};
   std::optional<io::mcbp_session> session_{};
   std::shared_ptr<impl::dns_srv_tracker> dns_srv_tracker_{};
   std::mutex buckets_mutex_{};
@@ -1224,6 +1258,10 @@ private:
   std::shared_ptr<tracing::tracer_wrapper> tracer_{ nullptr };
   std::shared_ptr<metrics::meter_wrapper> meter_{ nullptr };
   std::atomic_bool stopped_{ false };
+  std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter_{
+    std::make_shared<core::app_telemetry_meter>()
+  };
+
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
   std::shared_ptr<couchbase::core::io::cluster_config_tracker> config_tracker_{};
   asio::steady_timer retry_backoff_;

@@ -71,6 +71,7 @@ class http_session : public std::enable_shared_from_this<http_session>
 public:
   http_session(service_type type,
                std::string client_id,
+               std::string node_uuid,
                asio::io_context& ctx,
                cluster_credentials credentials,
                std::string hostname,
@@ -79,6 +80,7 @@ public:
 
   http_session(service_type type,
                std::string client_id,
+               std::string node_uuid,
                asio::io_context& ctx,
                asio::ssl::context& tls,
                cluster_credentials credentials,
@@ -95,6 +97,7 @@ public:
   [[nodiscard]] auto diag_info() -> diag::endpoint_diag_info;
   [[nodiscard]] auto log_prefix() -> std::string;
   [[nodiscard]] auto id() const -> const std::string&;
+  [[nodiscard]] auto node_uuid() const -> const std::string&;
   [[nodiscard]] auto credentials() const -> const cluster_credentials&;
   [[nodiscard]] auto is_connected() const -> bool;
   [[nodiscard]] auto type() const -> service_type;
@@ -196,6 +199,7 @@ private:
 
   service_type type_{};
   std::string client_id_;
+  std::string node_uuid_;
   std::string id_;
   asio::io_context& ctx_;
   asio::ip::tcp::resolver resolver_;

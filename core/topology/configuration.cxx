@@ -29,9 +29,8 @@
 namespace couchbase::core::topology
 {
 auto
-configuration::node::port_or(service_type type,
-                             bool is_tls,
-                             std::uint16_t default_value) const -> std::uint16_t
+configuration::node::port_or(service_type type, bool is_tls, std::uint16_t default_value) const
+  -> std::uint16_t
 {
   if (is_tls) {
     switch (type) {
@@ -90,7 +89,7 @@ configuration::node::hostname_for(const std::string& network) const -> const std
   }
   const auto& address = alt.find(network);
   if (address == alt.end()) {
-    CB_LOG_WARNING(R"(requested network "{}" is not found, fallback to "default" host)", network);
+    CB_LOG_DEBUG(R"(requested network "{}" is not found, fallback to "default" host)", network);
     return hostname;
   }
   return address->second.hostname;
@@ -107,10 +106,9 @@ configuration::node::port_or(const std::string& network,
   }
   const auto& address = alt.find(network);
   if (address == alt.end()) {
-    CB_LOG_WARNING(
-      R"(requested network "{}" is not found, fallback to "default" port of {} service)",
-      network,
-      type);
+    CB_LOG_DEBUG(R"(requested network "{}" is not found, fallback to "default" port of {} service)",
+                 network,
+                 type);
     return port_or(type, is_tls, default_value);
   }
   if (is_tls) {
@@ -163,9 +161,8 @@ configuration::node::port_or(const std::string& network,
 }
 
 auto
-configuration::node::endpoint(const std::string& network,
-                              service_type type,
-                              bool is_tls) const -> std::optional<std::string>
+configuration::node::endpoint(const std::string& network, service_type type, bool is_tls) const
+  -> std::optional<std::string>
 {
   auto p = port_or(type, is_tls, 0);
   if (p == 0) {
@@ -234,8 +231,8 @@ configuration::index_for_this_node() const -> std::size_t
 }
 
 auto
-configuration::server_by_vbucket(std::uint16_t vbucket,
-                                 std::size_t index) const -> std::optional<std::size_t>
+configuration::server_by_vbucket(std::uint16_t vbucket, std::size_t index) const
+  -> std::optional<std::size_t>
 {
   if (!vbmap.has_value() || vbucket >= vbmap->size()) {
     return {};

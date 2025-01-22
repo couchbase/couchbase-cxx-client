@@ -79,8 +79,8 @@ cluster::cluster(std::shared_ptr<cluster_impl> impl)
 namespace
 {
 auto
-options_to_origin(const std::string& connection_string,
-                  const couchbase::cluster_options& options) -> core::origin
+options_to_origin(const std::string& connection_string, const couchbase::cluster_options& options)
+  -> core::origin
 {
   auto opts = options.build();
 
@@ -192,6 +192,14 @@ options_to_origin(const std::string& connection_string,
     user_options.tracing_options.eventing_threshold = opts.tracing.eventing_threshold;
   }
   user_options.transactions = opts.transactions;
+
+  user_options.enable_app_telemetry = opts.application_telemetry.enabled;
+  if (opts.application_telemetry.enabled) {
+    user_options.app_telemetry_endpoint = opts.application_telemetry.endpoint;
+    user_options.app_telemetry_ping_interval = opts.application_telemetry.ping_interval;
+    user_options.app_telemetry_ping_deadline = opts.application_telemetry.ping_deadline;
+  }
+
   // connection string might override some user options
   return { auth, core::utils::parse_connection_string(connection_string, user_options) };
 }
@@ -423,8 +431,8 @@ cluster::query(std::string statement, const query_options& options, query_handle
 }
 
 auto
-cluster::query(std::string statement,
-               const query_options& options) const -> std::future<std::pair<error, query_result>>
+cluster::query(std::string statement, const query_options& options) const
+  -> std::future<std::pair<error, query_result>>
 {
   auto barrier = std::make_shared<std::promise<std::pair<error, query_result>>>();
   auto future = barrier->get_future();
@@ -500,9 +508,8 @@ cluster::search(std::string index_name,
 }
 
 auto
-cluster::search(std::string index_name,
-                search_request request,
-                const search_options& options) const -> std::future<std::pair<error, search_result>>
+cluster::search(std::string index_name, search_request request, const search_options& options) const
+  -> std::future<std::pair<error, search_result>>
 {
   auto barrier = std::make_shared<std::promise<std::pair<error, search_result>>>();
   search(
@@ -513,8 +520,8 @@ cluster::search(std::string index_name,
 }
 
 auto
-cluster::connect(const std::string& connection_string,
-                 const cluster_options& options) -> std::future<std::pair<error, cluster>>
+cluster::connect(const std::string& connection_string, const cluster_options& options)
+  -> std::future<std::pair<error, cluster>>
 {
   auto barrier = std::make_shared<std::promise<std::pair<error, cluster>>>();
   auto future = barrier->get_future();
