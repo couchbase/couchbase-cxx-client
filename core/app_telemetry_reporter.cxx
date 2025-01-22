@@ -1,0 +1,788 @@
+/* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
+/*
+ * Copyright 2024-Present Couchbase, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
+ * except in compliance with the License. You may obtain a copy of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under
+ * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF
+ * ANY KIND, either express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ */
+
+#include "app_telemetry_reporter.hxx"
+
+#include "core/app_telemetry_meter.hxx"
+#include "core/cluster_credentials.hxx"
+#include "core/cluster_options.hxx"
+#include "core/io/streams.hxx"
+#include "core/logger/logger.hxx"
+#include "core/platform/base64.h"
+#include "core/utils/url_codec.hxx"
+#include "core/websocket_codec.hxx"
+
+#include <couchbase/error_codes.hxx>
+
+#include <asio/io_context.hpp>
+#include <asio/ip/tcp.hpp>
+#include <asio/ssl/context.hpp>
+#include <asio/steady_timer.hpp>
+#include <llhttp.h>
+#include <spdlog/fmt/bin_to_hex.h>
+#include <spdlog/fmt/bundled/chrono.h>
+#include <spdlog/fmt/bundled/core.h>
+#include <tao/json/to_string.hpp>
+#include <tao/json/value.hpp>
+
+#include <chrono>
+#include <memory>
+#include <mutex>
+#include <queue>
+#include <random>
+#include <utility>
+
+namespace couchbase::core
+{
+
+namespace
+{
+struct telemetry_address {
+  std::string hostname;
+  std::string service;
+  std::string path;
+  std::string host_uuid;
+};
+
+class connection_state_listener
+{
+public:
+  connection_state_listener() = default;
+  connection_state_listener(const connection_state_listener&) = default;
+  connection_state_listener(connection_state_listener&&) = default;
+  auto operator=(connection_state_listener&&) -> connection_state_listener& = default;
+  auto operator=(const connection_state_listener&) -> connection_state_listener& = default;
+  virtual ~connection_state_listener() = default;
+
+  virtual void on_connected(const telemetry_address& address,
+                            std::unique_ptr<io::stream_impl>&& stream) = 0;
+  virtual void on_error(const telemetry_address& address, std::error_code ec) = 0;
+};
+
+class telemetry_dialer : public std::enable_shared_from_this<telemetry_dialer>
+{
+public:
+  static void dial(telemetry_address address,
+                   cluster_options options,
+                   asio::io_context& ctx,
+                   asio::ssl::context& tls,
+                   std::shared_ptr<connection_state_listener>&& handler)
+  {
+    auto dialer = std::make_shared<telemetry_dialer>(
+      std::move(address), std::move(options), ctx, tls, std::move(handler));
+    return dialer->resolve_address();
+  }
+
+  telemetry_dialer(telemetry_address address,
+                   cluster_options options,
+                   asio::io_context& ctx,
+                   asio::ssl::context& tls,
+                   std::shared_ptr<connection_state_listener>&& handler)
+    : address_{ std::move(address) }
+    , options_{ std::move(options) }
+    , ctx_(ctx)
+    , tls_(tls)
+    , connect_deadline_(ctx_)
+    , resolver_(ctx_)
+    , handler_{ std::move(handler) }
+  {
+  }
+
+private:
+  void complete_with_error(std::error_code ec)
+  {
+    connect_deadline_.cancel();
+    if (auto handler = std::move(handler_); handler) {
+      handler->on_error(address_, ec);
+    }
+  }
+
+  void complete_with_success()
+  {
+    connect_deadline_.cancel();
+    if (auto handler = std::move(handler_); handler) {
+      handler->on_connected(address_, std::move(stream_));
+    }
+  }
+
+  void reconnect_socket(std::error_code reconnect_reason)
+  {
+    last_error_ = reconnect_reason;
+    stream_->close([self = shared_from_this()](std::error_code ec) {
+      if (ec) {
+        CB_LOG_WARNING(
+          "unable to close app telemetry socket, but continue reconnecting anyway.  {}",
+          tao::json::to_string(tao::json::value{
+            { "message", ec.message() },
+            { "ec", ec.value() },
+          }));
+      }
+      self->connect_socket();
+    });
+  }
+
+  void connect_socket()
+  {
+    auto endpoint = next_endpoint_++;
+    if (endpoint == endpoints_.end()) {
+      if (!last_error_) {
+        last_error_ = errc::network::no_endpoints_left;
+      }
+      return complete_with_error(last_error_);
+    }
+
+    connect_deadline_.expires_after(options_.connect_timeout);
+    connect_deadline_.async_wait([self = shared_from_this()](auto ec) {
+      if (ec == asio::error::operation_aborted) {
+        return;
+      }
+      return self->reconnect_socket(ec);
+    });
+
+    if (options_.enable_tls) {
+      stream_ = std::make_unique<io::tls_stream_impl>(ctx_, tls_);
+    } else {
+      stream_ = std::make_unique<io::plain_stream_impl>(ctx_);
+    }
+    stream_->async_connect(endpoint->endpoint(), [self = shared_from_this()](auto ec) {
+      if (ec) {
+        return self->reconnect_socket(ec);
+      }
+      self->complete_with_success();
+    });
+  }
+
+  void resolve_address()
+  {
+    // TODO(SA): resolve deadline
+    io::async_resolve(options_.use_ip_protocol,
+                      resolver_,
+                      address_.hostname,
+                      address_.service,
+                      [self = shared_from_this()](auto ec, const auto& endpoints) {
+                        if (ec) {
+                          CB_LOG_DEBUG("failed to resolve address for app telemetry socket.  {}",
+                                       tao::json::to_string(tao::json::value{
+                                         { "message", ec.message() },
+                                         { "hostname", self->address_.hostname },
+                                       }));
+                          return self->complete_with_error(ec);
+                        }
+
+                        self->endpoints_ = endpoints;
+                        self->next_endpoint_ = self->endpoints_.begin();
+                        self->connect_socket();
+                      });
+  }
+
+  telemetry_address address_;
+  cluster_options options_;
+  asio::io_context& ctx_;
+  asio::ssl::context& tls_;
+  asio::steady_timer connect_deadline_;
+  asio::ip::tcp::resolver resolver_;
+  std::shared_ptr<connection_state_listener> handler_;
+  std::error_code last_error_{};
+  std::unique_ptr<io::stream_impl> stream_{};
+  asio::ip::tcp::resolver::results_type endpoints_{};
+  asio::ip::tcp::resolver::results_type::iterator next_endpoint_{};
+};
+
+enum class app_telemetry_opcode : std::uint8_t {
+  GET_TELEMETRY = 0x00,
+};
+
+constexpr auto
+is_valid_app_telemetry_opcode(std::byte opcode) -> bool
+{
+  return opcode == static_cast<std::byte>(app_telemetry_opcode::GET_TELEMETRY);
+}
+
+enum class app_telemetry_status : std::uint8_t {
+  SUCCESS = 0x00,
+  UNKNOWN_COMMAND = 0x01,
+};
+
+class websocket_session
+  : public websocket_callbacks
+  , public std::enable_shared_from_this<websocket_session>
+{
+public:
+  static auto start(asio::io_context& ctx,
+                    telemetry_address address,
+                    cluster_credentials credentials,
+                    std::unique_ptr<io::stream_impl>&& stream,
+                    std::shared_ptr<app_telemetry_meter> meter,
+                    std::shared_ptr<connection_state_listener> reporter,
+                    std::chrono::milliseconds ping_interval,
+                    std::chrono::milliseconds ping_deadline) -> std::shared_ptr<websocket_session>
+  {
+    auto handler = std::make_shared<websocket_session>(ctx,
+                                                       std::move(address),
+                                                       std::move(credentials),
+                                                       std::move(stream),
+                                                       std::move(meter),
+                                                       std::move(reporter),
+                                                       ping_interval,
+                                                       ping_deadline);
+    handler->start();
+    return handler;
+  }
+
+  websocket_session(asio::io_context& ctx,
+                    telemetry_address address,
+                    cluster_credentials credentials,
+                    std::unique_ptr<io::stream_impl>&& stream,
+                    std::shared_ptr<app_telemetry_meter> meter,
+                    std::shared_ptr<connection_state_listener> reporter,
+                    std::chrono::milliseconds ping_interval,
+                    std::chrono::milliseconds ping_deadline)
+    : ctx_{ ctx }
+    , address_{ std::move(address) }
+    , credentials_{ std::move(credentials) }
+    , stream_{ std::move(stream) }
+    , meter_{ std::move(meter) }
+    , reporter_{ std::move(reporter) }
+    , codec_{ this }
+    , ping_interval_timer_{ ctx_ }
+    , ping_deadline_timer_{ ctx_ }
+    , ping_interval_{ ping_interval }
+    , ping_deadline_{ ping_deadline }
+  {
+  }
+
+  void stop_and_error(std::error_code ec)
+  {
+    is_running_ = false;
+    if (auto reporter = std::move(reporter_); reporter) {
+      reporter->on_error(address_, ec);
+    }
+  }
+
+  void send_ping(const websocket_codec& ws)
+  {
+    write_buffer(ws.ping());
+    start_write();
+
+    ping_deadline_timer_.expires_after(ping_deadline_);
+    ping_deadline_timer_.async_wait([self = shared_from_this()](auto ec) {
+      if (ec == asio::error::operation_aborted) {
+        return;
+      }
+      self->ping_interval_timer_.cancel();
+      CB_LOG_DEBUG("app telemetry websocket did not respond in time for ping request.  {}",
+                   tao::json::to_string(tao::json::value{
+                     { "ping_interval", fmt::format("{}", self->ping_interval_) },
+                     { "ping_deadline", fmt::format("{}", self->ping_deadline_) },
+                     { "hostname", self->address_.hostname },
+                   }));
+      self->stop_and_error(errc::common::unambiguous_timeout);
+    });
+
+    ping_interval_timer_.expires_after(ping_interval_);
+    ping_interval_timer_.async_wait([self = shared_from_this(), &ws](auto ec) {
+      if (ec == asio::error::operation_aborted) {
+        return;
+      }
+      self->ping_deadline_timer_.cancel();
+      self->send_ping(ws);
+    });
+  }
+
+  void on_ready(const websocket_codec& ws) override
+  {
+    send_ping(ws);
+  }
+
+  void on_text(const websocket_codec& /* ws */, gsl::span<std::byte> payload) override
+  {
+    CB_LOG_WARNING("text messages are not supported.  {}",
+                   tao::json::to_string(tao::json::value{
+                     { "payload", base64::encode(payload) },
+                     { "hostname", address_.hostname },
+                   }));
+    return stop_and_error(errc::network::protocol_error);
+  }
+
+  void on_binary(const websocket_codec& ws, gsl::span<std::byte> payload) override
+  {
+    if (payload.size() < 1) {
+      CB_LOG_WARNING("binary message have to be at least a byte.  {}",
+                     tao::json::to_string(tao::json::value{
+                       { "payload", base64::encode(payload) },
+                       { "hostname", address_.hostname },
+                     }));
+      return stop_and_error(errc::network::protocol_error);
+    }
+    if (!is_valid_app_telemetry_opcode(payload[0])) {
+      CB_LOG_WARNING("binary message has unknown opcode.  {}",
+                     tao::json::to_string(tao::json::value{
+                       { "payload", base64::encode(payload) },
+                       { "hostname", address_.hostname },
+                     }));
+      return stop_and_error(errc::network::protocol_error);
+    }
+
+    auto opcode = static_cast<app_telemetry_opcode>(payload[0]);
+    switch (opcode) {
+      case app_telemetry_opcode::GET_TELEMETRY: {
+        std::vector<std::byte> response{};
+        response.emplace_back(static_cast<std::byte>(app_telemetry_status::SUCCESS));
+        meter_->generate_report(response);
+        write_buffer(ws.binary({ response.data(), response.size() }));
+        start_write();
+      } break;
+    }
+  }
+
+  void on_ping(const websocket_codec& ws, gsl::span<std::byte> payload) override
+  {
+    write_buffer(ws.pong(payload));
+    start_write();
+  }
+
+  void on_pong(const websocket_codec& ws, gsl::span<std::byte> /* payload */) override
+  {
+    send_ping(ws);
+  }
+
+  void on_close(const websocket_codec& /* ws */, gsl::span<std::byte> payload) override
+  {
+    CB_LOG_DEBUG("remote peer closed WebSocket.  {}",
+                 tao::json::to_string(tao::json::value{
+                   { "payload", base64::encode(payload) },
+                   { "hostname", address_.hostname },
+                 }));
+    return stop_and_error({});
+  }
+
+  void on_error(const websocket_codec& /* ws */, const std::string& message) override
+  {
+    CB_LOG_WARNING("error from WebSocket codec.  {}",
+                   tao::json::to_string(tao::json::value{
+                     { "message", message },
+                     { "hostname", address_.hostname },
+                   }));
+    return stop_and_error(errc::network::protocol_error);
+  }
+
+private:
+  auto build_handshake_message() -> std::vector<std::byte>
+  {
+    auto credentials = fmt::format("{}:{}", credentials_.username, credentials_.password);
+    auto message = fmt::format("GET {} HTTP/1.1\r\n"
+                               "Authorization: Basic {}\r\n"
+                               "Upgrade: websocket\r\n"
+                               "Connection: Upgrade\r\n"
+                               "Host: {}:{}\r\n"
+                               "Sec-WebSocket-Version: 13\r\n"
+                               "Sec-WebSocket-Key: {}\r\n"
+                               "\r\n",
+                               address_.path,
+                               base64::encode(gsl::as_bytes(gsl::span{
+                                 credentials.data(),
+                                 credentials.size(),
+                               })),
+                               address_.hostname,
+                               address_.service,
+                               codec_.session_key());
+    return {
+      reinterpret_cast<const std::byte*>(message.data()),
+      reinterpret_cast<const std::byte*>(message.data()) + message.size(),
+    };
+  }
+
+  void write_buffer(std::vector<std::byte>&& buffer)
+  {
+    std::scoped_lock lock(mutex_);
+    buffers_.emplace(std::move(buffer));
+  }
+
+  void start()
+  {
+    is_running_ = true;
+    write_buffer(build_handshake_message());
+    start_write();
+  }
+
+  void start_write()
+  {
+    if (!is_running_) {
+      return;
+    }
+
+    if (!is_writing_) {
+      asio::post(stream_->get_executor(), [self = shared_from_this()]() {
+        self->do_write();
+      });
+      is_writing_ = true;
+    }
+  }
+
+  void do_write()
+  {
+    std::vector<asio::const_buffer> buffers;
+    std::vector<std::vector<std::byte>> active_buffers;
+
+    {
+      std::scoped_lock lock(mutex_);
+
+      while (!buffers_.empty()) {
+        active_buffers.emplace_back(std::move(buffers_.front()));
+        buffers_.pop();
+        buffers.emplace_back(asio::buffer(active_buffers.back()));
+      }
+    }
+
+    if (!buffers.empty()) {
+      stream_->async_write(buffers,
+                           [self = shared_from_this(), active_buffers = std::move(active_buffers)](
+                             auto ec, auto bytes_transferred) mutable {
+                             if (ec == asio::error::operation_aborted) {
+                               return;
+                             }
+                             self->handle_write(ec, bytes_transferred);
+                           });
+      start_read();
+    } else {
+      is_writing_ = false;
+    }
+  }
+
+  void handle_write(std::error_code ec, std::size_t /* bytes_transferred */)
+  {
+    if (ec) {
+      is_writing_ = false;
+      CB_LOG_DEBUG("unable to write to app telemetry socket.  {}",
+                   tao::json::to_string(tao::json::value{
+                     { "message", ec.message() },
+                     { "hostname", address_.hostname },
+                   }));
+      return stop_and_error(ec);
+    }
+
+    if (std::scoped_lock lock(mutex_); !buffers_.empty()) {
+      start_write();
+    } else {
+      is_writing_ = false;
+    }
+  }
+
+  void start_read()
+  {
+    if (!is_running_) {
+      return;
+    }
+
+    if (!is_reading_) {
+      is_reading_ = true;
+      do_read();
+    }
+  }
+
+  void do_read()
+  {
+    stream_->async_read_some(asio::buffer(read_buffer_),
+                             [self = shared_from_this()](auto ec, auto bytes_transferred) {
+                               if (ec == asio::error::operation_aborted) {
+                                 return;
+                               }
+                               self->handle_read(ec, bytes_transferred);
+                             });
+  }
+
+  void handle_read(std::error_code ec, std::size_t bytes_transferred)
+  {
+    if (ec) {
+      is_reading_ = false;
+      CB_LOG_DEBUG("unable to read from app telemetry socket.  {}",
+                   tao::json::to_string(tao::json::value{
+                     { "message", ec.message() },
+                     { "hostname", address_.hostname },
+                   }));
+      return stop_and_error(ec);
+    }
+    codec_.feed(gsl::span(read_buffer_.data(), bytes_transferred));
+    do_read();
+  }
+
+  asio::io_context& ctx_;
+  telemetry_address address_;
+  cluster_credentials credentials_;
+  std::unique_ptr<io::stream_impl> stream_;
+  std::shared_ptr<app_telemetry_meter> meter_;
+  std::shared_ptr<connection_state_listener> reporter_;
+  websocket_codec codec_;
+
+  asio::steady_timer ping_interval_timer_;
+  asio::steady_timer ping_deadline_timer_;
+  std::chrono::milliseconds ping_interval_;
+  std::chrono::milliseconds ping_deadline_;
+
+  std::atomic<bool> is_running_{ false };
+  std::queue<std::vector<std::byte>> buffers_;
+  std::mutex mutex_;
+  std::atomic<bool> is_writing_{ false };
+  std::array<std::byte, 1024> read_buffer_{};
+  std::atomic<bool> is_reading_{ false };
+};
+
+class backoff_calculator
+{
+public:
+  backoff_calculator() = default;
+  backoff_calculator(const backoff_calculator&) = default;
+  backoff_calculator(backoff_calculator&&) = default;
+  auto operator=(backoff_calculator&&) -> backoff_calculator& = default;
+  auto operator=(const backoff_calculator&) -> backoff_calculator& = default;
+  virtual ~backoff_calculator() = default;
+
+  [[nodiscard]] virtual auto retry_after(std::size_t retry_attempts) const
+    -> std::chrono::milliseconds = 0;
+};
+
+class no_backoff : public backoff_calculator
+{
+public:
+  static auto instance() -> backoff_calculator&
+  {
+    static no_backoff default_instance;
+    return default_instance;
+  }
+
+  [[nodiscard]] auto retry_after(std::size_t /* retry_attempts */) const
+    -> std::chrono::milliseconds override
+  {
+    return std::chrono::milliseconds::zero();
+  }
+};
+
+class exponential_backoff_with_full_jitter : public backoff_calculator
+{
+public:
+  static auto instance() -> backoff_calculator&
+  {
+    static exponential_backoff_with_full_jitter default_instance(
+      std::chrono::milliseconds{ 100 }, std::chrono::seconds{ 20 }, 2);
+    return default_instance;
+  }
+
+  exponential_backoff_with_full_jitter(std::chrono::milliseconds min,
+                                       std::chrono::milliseconds max,
+                                       double factor)
+    : min_{ static_cast<double>(min.count()) }
+    , max_{ static_cast<double>(max.count()) }
+    , factor_{ factor }
+  {
+  }
+
+  [[nodiscard]] auto retry_after(std::size_t retry_attempts) const
+    -> std::chrono::milliseconds override
+  {
+    const std::int32_t max_backoff = static_cast<std::int32_t>(
+      std::round(std::min(max_, min_ * std::pow(factor_, retry_attempts))));
+
+    static thread_local std::default_random_engine gen{ std::random_device{}() };
+    std::uniform_int_distribution<std::int32_t> distrib(0, max_backoff);
+
+    return std::chrono::milliseconds(distrib(gen));
+  }
+
+private:
+  double min_;
+  double max_;
+  double factor_;
+};
+
+} // namespace
+
+class app_telemetry_reporter_impl
+  : public std::enable_shared_from_this<app_telemetry_reporter_impl>
+  , public connection_state_listener
+{
+public:
+  app_telemetry_reporter_impl(std::shared_ptr<app_telemetry_meter> meter,
+                              cluster_options options,
+                              cluster_credentials credentials,
+                              asio::io_context& ctx,
+                              asio::ssl::context& tls)
+    : meter_{ std::move(meter) }
+    , options_{ std::move(options) }
+    , credentials_{ std::move(credentials) }
+    , ctx_{ ctx }
+    , tls_{ tls }
+    , backoff_{ ctx }
+  {
+    if (!options_.app_telemetry_endpoint.empty()) {
+      auto url = couchbase::core::utils::string_codec::url_parse(options_.app_telemetry_endpoint);
+      if (url.host.empty() || url.scheme != "ws") {
+        CB_LOG_WARNING(
+          "unable to use \"{}\" as a app telemetry endpoint (expected ws:// and hostname).  {}",
+          tao::json::to_string(tao::json::value{
+            { "app_telemetry_endpoint", "options_.app_telemetry_endpoint" },
+          }));
+        return;
+      }
+      addresses_.push_back({
+        url.host,
+        std::to_string(url.port),
+        url.path,
+        {},
+      });
+    }
+  }
+
+  void on_connected(const telemetry_address& address,
+                    std::unique_ptr<io::stream_impl>&& stream) override
+  {
+    CB_LOG_WARNING("connected app telemetry endpoint.  {}",
+                   tao::json::to_string(tao::json::value{
+                     { "stream", stream->id() },
+                     { "hostname", address.hostname },
+                   }));
+    websocket_session_ = websocket_session::start(ctx_,
+                                                  address,
+                                                  credentials_,
+                                                  std::move(stream),
+                                                  meter_,
+                                                  shared_from_this(),
+                                                  options_.app_telemetry_ping_interval,
+                                                  options_.app_telemetry_ping_deadline);
+    retry_backoff_calculator_ = no_backoff::instance();
+    ++next_address_index_;
+    connection_attempt_ = 0;
+  }
+
+  void on_error(const telemetry_address& address, std::error_code ec) override
+  {
+    websocket_session_ = nullptr;
+
+    if (addresses_.empty()) {
+      CB_LOG_WARNING("do not reconnect WebSocket for Application Telemetry, none of the nodes "
+                     "exposes the collector endpoint. {}",
+                     tao::json::to_string(tao::json::value{
+                       { "message", ec.message() },
+                       { "ec", ec.value() },
+                       { "hostname", address.hostname },
+                     }));
+      return;
+    }
+
+    ++connection_attempt_;
+    ++next_address_index_;
+    if (next_address_index_ >= addresses_.size()) {
+      static thread_local std::default_random_engine gen{ std::random_device{}() };
+      std::shuffle(addresses_.begin(), addresses_.end(), gen);
+      next_address_index_ = 0;
+      retry_backoff_calculator_ = exponential_backoff_with_full_jitter::instance();
+    }
+    auto next_address = addresses_[next_address_index_];
+    auto backoff = retry_backoff_calculator_.retry_after(connection_attempt_);
+    CB_LOG_WARNING("error from app telemetry endpoint, reconnecting in {}.  {}",
+                   backoff,
+                   tao::json::to_string(tao::json::value{
+                     { "message", ec.message() },
+                     { "ec", ec.value() },
+                     { "connection_attempt", connection_attempt_ },
+                     { "hostname", address.hostname },
+                     { "next_hostname", next_address.hostname },
+                   }));
+    if (backoff > std::chrono::milliseconds::zero()) {
+      backoff_.expires_after(backoff);
+      backoff_.async_wait([self = shared_from_this(), next_address](auto ec) {
+        if (ec == asio::error::operation_aborted) {
+          return;
+        }
+        return telemetry_dialer::dial(next_address, self->options_, self->ctx_, self->tls_, self);
+      });
+    }
+    return telemetry_dialer::dial(next_address, options_, ctx_, tls_, shared_from_this());
+  }
+
+  void update_config(topology::configuration&& config)
+  {
+    meter_->update_config(config);
+
+    if (options_.app_telemetry_endpoint.empty()) {
+      std::vector<telemetry_address> addresses;
+      addresses.reserve(config.nodes.size());
+      for (const auto& node : config.nodes) {
+        if (auto app_telemetry_path = node.app_telemetry_path; app_telemetry_path) {
+          auto node_uuid = node.node_uuid;
+          if (node_uuid.empty()) {
+            continue;
+          }
+          auto port =
+            node.port_or(options_.network, service_type::management, options_.enable_tls, 0);
+
+          if (port != 0) {
+            addresses.push_back({
+              node.hostname_for(options_.network),
+              std::to_string(port),
+              app_telemetry_path.value(),
+              node_uuid,
+            });
+          }
+        }
+      }
+
+      static thread_local std::default_random_engine gen{ std::random_device{}() };
+      std::shuffle(addresses.begin(), addresses.end(), gen);
+      addresses_ = std::move(addresses);
+      next_address_index_ = 0;
+    }
+
+    if (!websocket_session_ && !addresses_.empty()) {
+      telemetry_dialer::dial(
+        addresses_[next_address_index_], options_, ctx_, tls_, shared_from_this());
+    }
+  }
+
+private:
+  std::shared_ptr<app_telemetry_meter> meter_;
+  cluster_options options_;
+  cluster_credentials credentials_;
+  asio::io_context& ctx_;
+  asio::ssl::context& tls_;
+  asio::steady_timer backoff_;
+
+  std::shared_ptr<websocket_session> websocket_session_{};
+  std::vector<telemetry_address> addresses_{};
+  std::size_t next_address_index_{ 0 };
+
+  backoff_calculator& retry_backoff_calculator_{ no_backoff::instance() };
+  std::size_t connection_attempt_{ 0 };
+};
+
+app_telemetry_reporter::app_telemetry_reporter(std::shared_ptr<app_telemetry_meter> meter,
+                                               const cluster_options& options,
+                                               const cluster_credentials& credentials,
+                                               asio::io_context& ctx,
+                                               asio::ssl::context& tls)
+  : impl_{
+    std::make_shared<app_telemetry_reporter_impl>(std::move(meter), options, credentials, ctx, tls)
+  }
+{
+}
+
+app_telemetry_reporter::~app_telemetry_reporter() = default;
+
+void
+app_telemetry_reporter::update_config(topology::configuration config)
+{
+  return impl_->update_config(std::move(config));
+}
+
+} // namespace couchbase::core

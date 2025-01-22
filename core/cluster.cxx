@@ -21,6 +21,8 @@
 
 #include "bucket.hxx"
 #include "capella_ca.hxx"
+#include "core/app_telemetry_meter.hxx"
+#include "core/app_telemetry_reporter.hxx"
 #include "core/diagnostics.hxx"
 #include "core/impl/get_replica.hxx"
 #include "core/impl/lookup_in_replica.hxx"
@@ -444,13 +446,22 @@ public:
           }
         }
 
-        b = std::make_shared<bucket>(
-          id_, ctx_, tls_, tracer_, meter_, bucket_name, origin, known_features, dns_srv_tracker_);
+        b = std::make_shared<bucket>(id_,
+                                     ctx_,
+                                     tls_,
+                                     tracer_,
+                                     meter_,
+                                     app_telemetry_meter_,
+                                     bucket_name,
+                                     origin,
+                                     known_features,
+                                     dns_srv_tracker_);
         buckets_.try_emplace(bucket_name, b);
 
         // Register the tracer & the meter for config updates to track Cluster name & UUID
         b->on_configuration_update(tracer_);
         b->on_configuration_update(meter_);
+        b->on_configuration_update(app_telemetry_reporter_);
       }
     }
     if (b == nullptr) {
@@ -766,9 +777,9 @@ public:
           });
         }
       }
-      session_ = io::mcbp_session(id_, ctx_, tls_, origin_, dns_srv_tracker_);
+      session_ = io::mcbp_session(id_, {}, ctx_, tls_, origin_, dns_srv_tracker_);
     } else {
-      session_ = io::mcbp_session(id_, ctx_, origin_, dns_srv_tracker_);
+      session_ = io::mcbp_session(id_, {}, ctx_, origin_, dns_srv_tracker_);
     }
     session_->bootstrap([self = shared_from_this(), handler = std::move(handler)](
                           std::error_code ec, const topology::configuration& config) mutable {
@@ -1209,6 +1220,13 @@ private:
 
     session_manager_->set_tracer(tracer_);
     session_manager_->set_meter(meter_);
+
+    if (origin_.options().enable_app_telemetry) {
+      app_telemetry_meter_ = std::make_shared<default_app_telemetry_meter>();
+    }
+    session_manager_->set_app_telemetry_meter(app_telemetry_meter_);
+    app_telemetry_reporter_ = std::make_shared<app_telemetry_reporter>(
+      app_telemetry_meter_, origin_.options(), origin_.credentials(), ctx_, tls_);
   }
 
   std::string id_{ uuid::to_string(uuid::random()) };
@@ -1216,6 +1234,7 @@ private:
   asio::executor_work_guard<asio::io_context::executor_type> work_;
   asio::ssl::context tls_{ asio::ssl::context::tls_client };
   std::shared_ptr<io::http_session_manager> session_manager_;
+  std::shared_ptr<app_telemetry_reporter> app_telemetry_reporter_{};
   std::optional<io::mcbp_session> session_{};
   std::shared_ptr<impl::dns_srv_tracker> dns_srv_tracker_{};
   std::mutex buckets_mutex_{};
@@ -1224,6 +1243,9 @@ private:
   std::shared_ptr<tracing::tracer_wrapper> tracer_{ nullptr };
   std::shared_ptr<metrics::meter_wrapper> meter_{ nullptr };
   std::atomic_bool stopped_{ false };
+  std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter_{
+    std::make_shared<noop_app_telemetry_meter>()
+  };
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
   std::shared_ptr<couchbase::core::io::cluster_config_tracker> config_tracker_{};
   asio::steady_timer retry_backoff_;

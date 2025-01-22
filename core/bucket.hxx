@@ -31,9 +31,7 @@
 #include <utility>
 #include <vector>
 
-namespace couchbase
-{
-namespace core
+namespace couchbase::core
 {
 namespace mcbp
 {
@@ -57,6 +55,8 @@ namespace impl
 class bootstrap_state_listener;
 } // namespace impl
 
+class app_telemetry_meter;
+
 class bucket_impl;
 struct origin;
 
@@ -70,6 +70,7 @@ public:
          asio::ssl::context& tls,
          std::shared_ptr<tracing::tracer_wrapper> tracer,
          std::shared_ptr<metrics::meter_wrapper> meter,
+         std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter,
          std::string name,
          couchbase::core::origin origin,
          std::vector<protocol::hello_feature> known_features,
@@ -202,13 +203,14 @@ public:
   [[nodiscard]] auto log_prefix() const -> const std::string&;
   [[nodiscard]] auto tracer() const -> std::shared_ptr<tracing::tracer_wrapper>;
   [[nodiscard]] auto meter() const -> std::shared_ptr<metrics::meter_wrapper>;
+  [[nodiscard]] auto app_telemetry_meter() const -> std::shared_ptr<app_telemetry_meter>;
   [[nodiscard]] auto default_retry_strategy() const -> std::shared_ptr<couchbase::retry_strategy>;
   [[nodiscard]] auto is_closed() const -> bool;
   [[nodiscard]] auto is_configured() const -> bool;
 
   auto direct_dispatch(std::shared_ptr<mcbp::queue_request> req) -> std::error_code;
-  auto direct_re_queue(const std::shared_ptr<mcbp::queue_request>& req,
-                       bool is_retry) -> std::error_code;
+  auto direct_re_queue(const std::shared_ptr<mcbp::queue_request>& req, bool is_retry)
+    -> std::error_code;
 
 private:
   [[nodiscard]] auto default_timeout() const -> std::chrono::milliseconds;
@@ -222,5 +224,4 @@ private:
   asio::io_context& ctx_;
   std::shared_ptr<bucket_impl> impl_;
 };
-} // namespace core
-} // namespace couchbase
+} // namespace couchbase::core

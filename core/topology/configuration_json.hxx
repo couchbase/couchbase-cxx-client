@@ -61,6 +61,12 @@ struct traits<couchbase::core::topology::configuration> {
         if (const auto& group = o.find("serverGroup"); group != o.end()) {
           n.server_group = group->second.get_string();
         }
+        if (const auto& path = o.find("appTelemetryPath"); path != o.end()) {
+          n.app_telemetry_path = path->second.get_string();
+        }
+        if (const auto& uuid = o.find("nodeUUID"); uuid != o.end()) {
+          n.node_uuid = uuid->second.get_string();
+        }
         const auto& s = o.at("services");
         n.services_plain.key_value = s.template optional<std::uint16_t>("kv");
         n.services_plain.management = s.template optional<std::uint16_t>("mgmt");

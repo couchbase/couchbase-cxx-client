@@ -18,6 +18,7 @@
 #include "bucket.hxx"
 
 #include "collection_id_cache_entry.hxx"
+#include "core/app_telemetry_meter.hxx"
 #include "core/config_listener.hxx"
 #include "core/document_id.hxx"
 #include "core/error_context/key_value_error_map_info.hxx"
@@ -84,6 +85,7 @@ public:
               couchbase::core::origin origin,
               std::shared_ptr<tracing::tracer_wrapper> tracer,
               std::shared_ptr<metrics::meter_wrapper> meter,
+              std::shared_ptr<core::app_telemetry_meter> app_telemetry,
               std::vector<protocol::hello_feature> known_features,
               std::shared_ptr<impl::bootstrap_state_listener> state_listener,
               asio::io_context& ctx,
@@ -94,6 +96,7 @@ public:
     , origin_{ std::move(origin) }
     , tracer_{ std::move(tracer) }
     , meter_{ std::move(meter) }
+    , app_telemetry_meter_{ std::move(app_telemetry) }
     , known_features_{ std::move(known_features) }
     , state_listener_{ std::move(state_listener) }
     , codec_{ { known_features_.begin(), known_features_.end() } }
@@ -417,9 +420,16 @@ public:
         origin_.credentials(), hostname, port, origin_.options());
       io::mcbp_session session =
         origin_.options().enable_tls
-          ? io::mcbp_session(
-              client_id_, ctx_, tls_, origin, state_listener_, name_, known_features_)
-          : io::mcbp_session(client_id_, ctx_, origin, state_listener_, name_, known_features_);
+          ? io::mcbp_session(client_id_,
+                             node.node_uuid,
+                             ctx_,
+                             tls_,
+                             origin,
+                             state_listener_,
+                             name_,
+                             known_features_)
+          : io::mcbp_session(
+              client_id_, node.node_uuid, ctx_, origin, state_listener_, name_, known_features_);
       CB_LOG_DEBUG(R"({} rev={}, restart idx={}, session="{}", address="{}:{}")",
                    log_prefix_,
                    config_->rev_str(),
@@ -479,8 +489,9 @@ public:
     }
     io::mcbp_session new_session =
       origin_.options().enable_tls
-        ? io::mcbp_session(client_id_, ctx_, tls_, origin_, state_listener_, name_, known_features_)
-        : io::mcbp_session(client_id_, ctx_, origin_, state_listener_, name_, known_features_);
+        ? io::mcbp_session(
+            client_id_, {}, ctx_, tls_, origin_, state_listener_, name_, known_features_)
+        : io::mcbp_session(client_id_, {}, ctx_, origin_, state_listener_, name_, known_features_);
     new_session.bootstrap([self = shared_from_this(), new_session, h = std::move(handler)](
                             std::error_code ec, topology::configuration cfg) mutable {
       if (ec) {
@@ -792,9 +803,16 @@ public:
           origin_.credentials(), hostname, port, origin_.options());
         io::mcbp_session session =
           origin_.options().enable_tls
-            ? io::mcbp_session(
-                client_id_, ctx_, tls_, origin, state_listener_, name_, known_features_)
-            : io::mcbp_session(client_id_, ctx_, origin, state_listener_, name_, known_features_);
+            ? io::mcbp_session(client_id_,
+                               node.node_uuid,
+                               ctx_,
+                               tls_,
+                               origin,
+                               state_listener_,
+                               name_,
+                               known_features_)
+            : io::mcbp_session(
+                client_id_, node.node_uuid, ctx_, origin, state_listener_, name_, known_features_);
         CB_LOG_DEBUG(R"({} rev={}, add session="{}", address="{}:{}", index={})",
                      log_prefix_,
                      config.rev_str(),
@@ -900,6 +918,11 @@ public:
     return meter_;
   }
 
+  [[nodiscard]] auto app_telemetry_meter() const -> std::shared_ptr<core::app_telemetry_meter>
+  {
+    return app_telemetry_meter_;
+  }
+
   void export_diag_info(diag::diagnostics_result& res) const
   {
     std::map<size_t, io::mcbp_session> sessions;
@@ -950,6 +973,7 @@ private:
   const origin origin_;
   const std::shared_ptr<tracing::tracer_wrapper> tracer_;
   const std::shared_ptr<metrics::meter_wrapper> meter_;
+  const std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter_;
   const std::vector<protocol::hello_feature> known_features_;
   const std::shared_ptr<impl::bootstrap_state_listener> state_listener_;
   mcbp::codec codec_;
@@ -983,6 +1007,7 @@ bucket::bucket(std::string client_id,
                asio::ssl::context& tls,
                std::shared_ptr<tracing::tracer_wrapper> tracer,
                std::shared_ptr<metrics::meter_wrapper> meter,
+               std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter,
                std::string name,
                couchbase::core::origin origin,
                std::vector<protocol::hello_feature> known_features,
@@ -994,6 +1019,7 @@ bucket::bucket(std::string client_id,
                                          std::move(origin),
                                          std::move(tracer),
                                          std::move(meter),
+                                         std::move(app_telemetry_meter),
                                          std::move(known_features),
                                          std::move(state_listener),
                                          ctx,
@@ -1059,6 +1085,12 @@ auto
 bucket::meter() const -> std::shared_ptr<metrics::meter_wrapper>
 {
   return impl_->meter();
+}
+
+auto
+bucket::app_telemetry_meter() const -> std::shared_ptr<core::app_telemetry_meter>
+{
+  return impl_->app_telemetry_meter();
 }
 
 auto

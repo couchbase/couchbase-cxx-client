@@ -99,8 +99,8 @@ public:
   {
     io::mcbp_session new_session =
       origin_.options().enable_tls
-        ? io::mcbp_session(client_id_, ctx_, tls_, origin_, state_listener_)
-        : io::mcbp_session(client_id_, ctx_, origin_, state_listener_);
+        ? io::mcbp_session(client_id_, {}, ctx_, tls_, origin_, state_listener_)
+        : io::mcbp_session(client_id_, {}, ctx_, origin_, state_listener_);
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
     new_session.add_background_bootstrap_listener(shared_from_this());
 #endif
@@ -395,8 +395,8 @@ private:
         origin_.credentials(), hostname, port, origin_.options());
       io::mcbp_session session =
         origin_.options().enable_tls
-          ? io::mcbp_session(client_id_, ctx_, tls_, origin, state_listener_)
-          : io::mcbp_session(client_id_, ctx_, origin, state_listener_);
+          ? io::mcbp_session(client_id_, node.node_uuid, ctx_, tls_, origin, state_listener_)
+          : io::mcbp_session(client_id_, node.node_uuid, ctx_, origin, state_listener_);
       CB_LOG_DEBUG(R"({} rev={}, add cluster session="{}", address="{}:{}")",
                    log_prefix_,
                    config.rev_str(),
@@ -500,8 +500,8 @@ private:
         origin_.credentials(), hostname, port, origin_.options());
       io::mcbp_session session =
         origin_.options().enable_tls
-          ? io::mcbp_session(client_id_, ctx_, tls_, origin, state_listener_)
-          : io::mcbp_session(client_id_, ctx_, origin, state_listener_);
+          ? io::mcbp_session(client_id_, node.node_uuid, ctx_, tls_, origin, state_listener_)
+          : io::mcbp_session(client_id_, node.node_uuid, ctx_, origin, state_listener_);
       CB_LOG_DEBUG(R"({} rev={}, restart cluster session="{}", address="{}:{}")",
                    log_prefix_,
                    config_->rev_str(),

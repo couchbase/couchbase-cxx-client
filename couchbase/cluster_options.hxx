@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <couchbase/application_telemetry_options.hxx>
 #include <couchbase/behavior_options.hxx>
 #include <couchbase/certificate_authenticator.hxx>
 #include <couchbase/compression_options.hxx>
@@ -254,6 +255,7 @@ public:
     behavior_options::built behavior;
     transactions::transactions_config::built transactions;
     std::shared_ptr<retry_strategy> default_retry_strategy;
+    application_telemetry_options::built application_telemetry;
   };
 
   [[nodiscard]] auto build() const -> built
@@ -274,6 +276,7 @@ public:
       behavior_.build(),
       transactions_.build(),
       default_retry_strategy_,
+      application_telemetry_.build(),
     };
   }
 
@@ -294,6 +297,7 @@ private:
   behavior_options behavior_{};
   transactions::transactions_config transactions_{};
   std::shared_ptr<retry_strategy> default_retry_strategy_{ nullptr };
+  application_telemetry_options application_telemetry_{};
 };
 
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
