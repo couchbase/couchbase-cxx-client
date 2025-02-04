@@ -266,6 +266,8 @@ public:
   void stop_and_error(std::error_code ec)
   {
     is_running_ = false;
+    ping_interval_timer_.cancel();
+    ping_deadline_timer_.cancel();
     if (auto reporter = std::move(reporter_); reporter) {
       reporter->on_error(address_, ec);
     }
@@ -281,7 +283,6 @@ public:
       if (ec == asio::error::operation_aborted) {
         return;
       }
-      self->ping_interval_timer_.cancel();
       CB_LOG_DEBUG("app telemetry websocket did not respond in time for ping request.  {}",
                    tao::json::to_string(tao::json::value{
                      { "ping_interval", fmt::format("{}", self->ping_interval_) },
@@ -296,7 +297,6 @@ public:
       if (ec == asio::error::operation_aborted) {
         return;
       }
-      self->ping_deadline_timer_.cancel();
       self->send_ping(ws);
     });
   }
@@ -353,9 +353,9 @@ public:
     start_write();
   }
 
-  void on_pong(const websocket_codec& ws, gsl::span<std::byte> /* payload */) override
+  void on_pong(const websocket_codec& /* ws */, gsl::span<std::byte> /* payload */) override
   {
-    send_ping(ws);
+    ping_deadline_timer_.cancel();
   }
 
   void on_close(const websocket_codec& /* ws */, gsl::span<std::byte> payload) override
