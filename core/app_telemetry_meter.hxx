@@ -28,6 +28,7 @@ namespace topology
 {
 struct configuration;
 } // namespace topology
+struct cluster_options;
 
 enum class app_telemetry_latency : std::uint8_t {
   unknown,
@@ -199,7 +200,8 @@ class default_app_telemetry_meter_impl;
 class default_app_telemetry_meter : public app_telemetry_meter
 {
 public:
-  default_app_telemetry_meter();
+  explicit default_app_telemetry_meter(const cluster_options& options);
+  default_app_telemetry_meter() = delete;
   default_app_telemetry_meter(default_app_telemetry_meter&&) = default;
   default_app_telemetry_meter(const default_app_telemetry_meter&) = delete;
   auto operator=(default_app_telemetry_meter&&) -> default_app_telemetry_meter& = default;

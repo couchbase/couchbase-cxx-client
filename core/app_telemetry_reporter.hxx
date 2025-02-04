@@ -38,7 +38,7 @@ struct cluster_credentials;
 class app_telemetry_reporter : public config_listener
 {
 public:
-  app_telemetry_reporter() = default;
+  app_telemetry_reporter() = delete;
   app_telemetry_reporter(app_telemetry_reporter&&) = default;
   app_telemetry_reporter(const app_telemetry_reporter&) = delete;
   auto operator=(app_telemetry_reporter&&) -> app_telemetry_reporter& = default;

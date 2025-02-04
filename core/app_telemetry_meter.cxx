@@ -15,10 +15,15 @@
 
 #include "app_telemetry_meter.hxx"
 
+#include "core/cluster_options.hxx"
+#include "core/meta/version.hxx"
 #include "core/topology/configuration.hxx"
+#include "core/utils/json.hxx"
 
 #include <chrono>
+#include <spdlog/fmt/bin_to_hex.h>
 #include <spdlog/fmt/bundled/core.h>
+#include <tao/json/value.hpp>
 
 #include <algorithm>
 #include <array>
@@ -110,7 +115,8 @@ struct kv_non_durable_histogram {
   void generate_to(byte_appender& output,
                    const std::string& node_uuid,
                    const node_labels& labels,
-                   const std::string& bucket)
+                   const std::string& bucket,
+                   const std::string& agent)
   {
     if (count > 0) {
       std::string lbuf{};
@@ -124,15 +130,16 @@ struct kv_non_durable_histogram {
       if (!bucket.empty()) {
         fmt::format_to(back_inserter(lbuf), ",bucket=\"{}\"", bucket);
       }
-      fmt::format_to(output, "{}_ms_bucket{{le=\"1\",{}}} {}\n", name, lbuf, le_1ms.load());
-      fmt::format_to(output, "{}_ms_bucket{{le=\"10\",{}}} {}\n", name, lbuf, le_10ms.load());
-      fmt::format_to(output, "{}_ms_bucket{{le=\"100\",{}}} {}\n", name, lbuf, le_100ms.load());
-      fmt::format_to(output, "{}_ms_bucket{{le=\"500\",{}}} {}\n", name, lbuf, le_500ms.load());
-      fmt::format_to(output, "{}_ms_bucket{{le=\"1000\",{}}} {}\n", name, lbuf, le_1s.load());
-      fmt::format_to(output, "{}_ms_bucket{{le=\"2500\",{}}} {}\n", name, lbuf, le_2_5s.load());
-      fmt::format_to(output, "{}_ms_bucket{{le=\"+Inf\",{}}} {}\n", name, lbuf, inf.load());
-      fmt::format_to(output, "{}_ms_sum{{{}}} {}\n", name, lbuf, sum.load());
-      fmt::format_to(output, "{}_ms_count{{{}}} {}\n", name, lbuf, count.load());
+      fmt::format_to(back_inserter(lbuf), ",agent={}", agent);
+      fmt::format_to(output, "{}_bucket{{le=\"1\",{}}} {}\n", name, lbuf, le_1ms.load());
+      fmt::format_to(output, "{}_bucket{{le=\"10\",{}}} {}\n", name, lbuf, le_10ms.load());
+      fmt::format_to(output, "{}_bucket{{le=\"100\",{}}} {}\n", name, lbuf, le_100ms.load());
+      fmt::format_to(output, "{}_bucket{{le=\"500\",{}}} {}\n", name, lbuf, le_500ms.load());
+      fmt::format_to(output, "{}_bucket{{le=\"1000\",{}}} {}\n", name, lbuf, le_1s.load());
+      fmt::format_to(output, "{}_bucket{{le=\"2500\",{}}} {}\n", name, lbuf, le_2_5s.load());
+      fmt::format_to(output, "{}_bucket{{le=\"+Inf\",{}}} {}\n", name, lbuf, inf.load());
+      fmt::format_to(output, "{}_sum{{{}}} {}\n", name, lbuf, sum.load());
+      fmt::format_to(output, "{}_count{{{}}} {}\n", name, lbuf, count.load());
     }
   }
 };
@@ -152,7 +159,8 @@ struct kv_durable_histogram {
   void generate_to(byte_appender& output,
                    const std::string& node_uuid,
                    const node_labels& labels,
-                   const std::string& bucket)
+                   const std::string& bucket,
+                   const std::string& agent)
   {
     if (count > 0) {
       std::string lbuf{};
@@ -166,15 +174,16 @@ struct kv_durable_histogram {
       if (!bucket.empty()) {
         fmt::format_to(back_inserter(lbuf), ",bucket=\"{}\"", bucket);
       }
-      fmt::format_to(output, "{}_ms_bucket{{le=\"10\",{}}} {}\n", name, lbuf, le_10ms.load());
-      fmt::format_to(output, "{}_ms_bucket{{le=\"100\",{}}} {}\n", name, lbuf, le_100ms.load());
-      fmt::format_to(output, "{}_ms_bucket{{le=\"500\",{}}} {}\n", name, lbuf, le_500ms.load());
-      fmt::format_to(output, "{}_ms_bucket{{le=\"1000\",{}}} {}\n", name, lbuf, le_1s.load());
-      fmt::format_to(output, "{}_ms_bucket{{le=\"2000\",{}}} {}\n", name, lbuf, le_2s.load());
-      fmt::format_to(output, "{}_ms_bucket{{le=\"10000\",{}}} {}\n", name, lbuf, le_10s.load());
-      fmt::format_to(output, "{}_ms_bucket{{le=\"+Inf\",{}}} {}\n", name, lbuf, inf.load());
-      fmt::format_to(output, "{}_ms_sum{{{}}} {}\n", name, lbuf, sum.load());
-      fmt::format_to(output, "{}_ms_count{{{}}} {}\n", name, lbuf, count.load());
+      fmt::format_to(back_inserter(lbuf), ",agent={}", agent);
+      fmt::format_to(output, "{}_bucket{{le=\"10\",{}}} {}\n", name, lbuf, le_10ms.load());
+      fmt::format_to(output, "{}_bucket{{le=\"100\",{}}} {}\n", name, lbuf, le_100ms.load());
+      fmt::format_to(output, "{}_bucket{{le=\"500\",{}}} {}\n", name, lbuf, le_500ms.load());
+      fmt::format_to(output, "{}_bucket{{le=\"1000\",{}}} {}\n", name, lbuf, le_1s.load());
+      fmt::format_to(output, "{}_bucket{{le=\"2000\",{}}} {}\n", name, lbuf, le_2s.load());
+      fmt::format_to(output, "{}_bucket{{le=\"10000\",{}}} {}\n", name, lbuf, le_10s.load());
+      fmt::format_to(output, "{}_bucket{{le=\"+Inf\",{}}} {}\n", name, lbuf, inf.load());
+      fmt::format_to(output, "{}_sum{{{}}} {}\n", name, lbuf, sum.load());
+      fmt::format_to(output, "{}_count{{{}}} {}\n", name, lbuf, count.load());
     }
   }
 };
@@ -193,7 +202,8 @@ struct http_histogram {
   void generate_to(byte_appender& output,
                    const std::string& node_uuid,
                    const node_labels& labels,
-                   const std::string& bucket)
+                   const std::string& bucket,
+                   const std::string& agent)
   {
     if (count > 0) {
       std::string lbuf{};
@@ -207,14 +217,15 @@ struct http_histogram {
       if (!bucket.empty()) {
         fmt::format_to(back_inserter(lbuf), ",bucket=\"{}\"", bucket);
       }
-      fmt::format_to(output, "{}_ms_bucket{{le=\"100\",{}}} {}\n", name, lbuf, le_100ms.load());
-      fmt::format_to(output, "{}_ms_bucket{{le=\"1000\",{}}} {}\n", name, lbuf, le_1s.load());
-      fmt::format_to(output, "{}_ms_bucket{{le=\"10000\",{}}} {}\n", name, lbuf, le_10s.load());
-      fmt::format_to(output, "{}_ms_bucket{{le=\"30000\",{}}} {}\n", name, lbuf, le_30s.load());
-      fmt::format_to(output, "{}_ms_bucket{{le=\"75000\",{}}} {}\n", name, lbuf, le_75s.load());
-      fmt::format_to(output, "{}_ms_bucket{{le=\"+Inf\",{}}} {}\n", name, lbuf, inf.load());
-      fmt::format_to(output, "{}_ms_sum{{{}}} {}\n", name, lbuf, sum.load() / 1000);
-      fmt::format_to(output, "{}_ms_count{{{}}} {}\n", name, lbuf, count.load());
+      fmt::format_to(back_inserter(lbuf), ",agent={}", agent);
+      fmt::format_to(output, "{}_bucket{{le=\"100\",{}}} {}\n", name, lbuf, le_100ms.load());
+      fmt::format_to(output, "{}_bucket{{le=\"1000\",{}}} {}\n", name, lbuf, le_1s.load());
+      fmt::format_to(output, "{}_bucket{{le=\"10000\",{}}} {}\n", name, lbuf, le_10s.load());
+      fmt::format_to(output, "{}_bucket{{le=\"30000\",{}}} {}\n", name, lbuf, le_30s.load());
+      fmt::format_to(output, "{}_bucket{{le=\"75000\",{}}} {}\n", name, lbuf, le_75s.load());
+      fmt::format_to(output, "{}_bucket{{le=\"+Inf\",{}}} {}\n", name, lbuf, inf.load());
+      fmt::format_to(output, "{}_sum{{{}}} {}\n", name, lbuf, sum.load() / 1000);
+      fmt::format_to(output, "{}_count{{{}}} {}\n", name, lbuf, count.load());
     }
   }
 };
@@ -439,14 +450,14 @@ private:
   std::string bucket_name_;
   std::array<std::atomic_uint64_t, max_number_of_counters> counters_{};
 
-  kv_non_durable_histogram kv_retrieval_{ "sdk_kv_retrieval" };
-  kv_non_durable_histogram kv_mutation_nondurable_{ "sdk_kv_mutation_nondurable" };
-  kv_durable_histogram kv_mutation_durable_{ "sdk_kv_mutation_durable" };
-  http_histogram query_{ "sdk_query" };
-  http_histogram search_{ "sdk_search" };
-  http_histogram analytics_{ "sdk_analytics" };
-  http_histogram management_{ "sdk_management" };
-  http_histogram eventing_{ "sdk_eventing" };
+  kv_non_durable_histogram kv_retrieval_{ "sdk_kv_retrieval_duration_ms" };
+  kv_non_durable_histogram kv_mutation_nondurable_{ "sdk_kv_mutation_nondurable_duration_ms" };
+  kv_durable_histogram kv_mutation_durable_{ "sdk_kv_mutation_durable_duration_ms" };
+  http_histogram query_{ "sdk_query_duration_ms" };
+  http_histogram search_{ "sdk_search_duration_ms" };
+  http_histogram analytics_{ "sdk_analytics_duration_ms" };
+  http_histogram management_{ "sdk_management_duration_ms" };
+  http_histogram eventing_{ "sdk_eventing_duration_ms" };
 };
 
 constexpr auto
@@ -515,6 +526,20 @@ app_telemetry_counter_name(std::size_t name) -> const char*
 class default_app_telemetry_meter_impl
 {
 public:
+  explicit default_app_telemetry_meter_impl(cluster_options options)
+    : options_{ std::move(options) }
+  {
+    constexpr auto uuid{ "00000000-0000-0000-0000-000000000000" };
+    auto hello = meta::user_agent_for_mcbp(uuid, uuid, options_.user_agent_extra);
+    auto json = utils::json::parse(hello.data(), hello.size());
+    agent_ = utils::json::generate(json["a"]);
+  }
+
+  [[nodiscard]] auto options() const -> const cluster_options&
+  {
+    return options_;
+  }
+
   auto value_recorder(const std::string& node_uuid, const std::string& bucket_name)
     -> std::shared_ptr<app_telemetry_value_recorder>
   {
@@ -572,24 +597,26 @@ public:
             if (const auto& alt = labels.alt_node; alt && !alt->empty()) {
               fmt::format_to(output, ",alt_node=\"{}\"", alt.value());
             }
-            fmt::format_to(output, "}} {} {}\n", value, now);
+            fmt::format_to(output, "agent={}}} {} {}", agent_, value, now);
           }
         }
 
-        recorder->kv_retrieval_.generate_to(output, node_uuid, labels, bucket);
-        recorder->kv_mutation_nondurable_.generate_to(output, node_uuid, labels, bucket);
-        recorder->kv_mutation_durable_.generate_to(output, node_uuid, labels, bucket);
-        recorder->query_.generate_to(output, node_uuid, labels, bucket);
-        recorder->search_.generate_to(output, node_uuid, labels, bucket);
-        recorder->analytics_.generate_to(output, node_uuid, labels, bucket);
-        recorder->management_.generate_to(output, node_uuid, labels, bucket);
-        recorder->eventing_.generate_to(output, node_uuid, labels, bucket);
+        recorder->kv_retrieval_.generate_to(output, node_uuid, labels, bucket, agent_);
+        recorder->kv_mutation_nondurable_.generate_to(output, node_uuid, labels, bucket, agent_);
+        recorder->kv_mutation_durable_.generate_to(output, node_uuid, labels, bucket, agent_);
+        recorder->query_.generate_to(output, node_uuid, labels, bucket, agent_);
+        recorder->search_.generate_to(output, node_uuid, labels, bucket, agent_);
+        recorder->analytics_.generate_to(output, node_uuid, labels, bucket, agent_);
+        recorder->management_.generate_to(output, node_uuid, labels, bucket, agent_);
+        recorder->eventing_.generate_to(output, node_uuid, labels, bucket, agent_);
       }
     }
   }
 
 private:
-  std::mutex mutex_;
+  cluster_options options_;
+  std::string agent_{};
+  std::mutex mutex_{};
   // node_uuid -> bucket_name -> recorders
   std::map<std::string,
            std::map<std::string, std::shared_ptr<default_app_telemetry_value_recorder>>>
@@ -616,8 +643,8 @@ noop_app_telemetry_meter::generate_report(std::vector<std::byte>& /* output_buff
 {
 }
 
-default_app_telemetry_meter::default_app_telemetry_meter()
-  : impl_{ std::make_unique<default_app_telemetry_meter_impl>() }
+default_app_telemetry_meter::default_app_telemetry_meter(const cluster_options& options)
+  : impl_{ std::make_unique<default_app_telemetry_meter_impl>(options) }
 {
 }
 
@@ -640,11 +667,12 @@ default_app_telemetry_meter::value_recorder(const std::string& node_uuid,
 void
 default_app_telemetry_meter::generate_report(std::vector<std::byte>& output_buffer)
 {
-  auto meter = std::make_unique<default_app_telemetry_meter_impl>();
+  auto meter = std::make_unique<default_app_telemetry_meter_impl>(impl_->options());
   std::swap(meter, impl_);
   /* auto old_length = output_buffer.size(); */
   meter->generate_to(output_buffer);
-  /* fmt::println("{}", std::string(reinterpret_cast<const char*>(output_buffer.data()) +
-   * old_length)); */
+  /* fmt::println("generated\n\n\n===========\n{}\n===========\n\n\n", */
+  /*              std::string(reinterpret_cast<const char*>(output_buffer.data()) + old_length, */
+  /*                          output_buffer.size() - old_length)); */
 }
 } // namespace couchbase::core

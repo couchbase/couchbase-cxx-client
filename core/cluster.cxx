@@ -1222,7 +1222,7 @@ private:
     session_manager_->set_meter(meter_);
 
     if (origin_.options().enable_app_telemetry) {
-      app_telemetry_meter_ = std::make_shared<default_app_telemetry_meter>();
+      app_telemetry_meter_ = std::make_shared<default_app_telemetry_meter>(origin_.options());
     }
     session_manager_->set_app_telemetry_meter(app_telemetry_meter_);
     app_telemetry_reporter_ = std::make_shared<app_telemetry_reporter>(
