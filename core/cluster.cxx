@@ -806,6 +806,7 @@ public:
         }
         self->session_manager_->set_configuration(config, self->origin_.options());
         self->session_->on_configuration_update(self->session_manager_);
+        self->session_->on_configuration_update(self->app_telemetry_reporter_);
         self->session_->on_stop([self]() {
           if (self->session_) {
             self->session_.reset();
@@ -983,6 +984,7 @@ public:
         } else {
           self->session_manager_->set_configuration(cfg, options);
           self->config_tracker_->on_configuration_update(self->session_manager_);
+          self->config_tracker_->on_configuration_update(self->app_telemetry_reporter_);
           self->config_tracker_->register_state_listener();
         }
       });
