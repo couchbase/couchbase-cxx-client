@@ -223,6 +223,19 @@ public:
   }
 
   /**
+   * Returns the Application Telemetry options.
+   *
+   * @return application telemetry options.
+   *
+   * @since 1.1.0
+   * @committed
+   */
+  [[nodiscard]] auto application_telemetry() -> application_telemetry_options&
+  {
+    return application_telemetry_;
+  }
+
+  /**
    * Override default retry strategy
    *
    * @return cluster options object for chaining
