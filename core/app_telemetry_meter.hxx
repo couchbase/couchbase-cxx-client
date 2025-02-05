@@ -20,6 +20,7 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace couchbase::core
@@ -28,7 +29,6 @@ namespace topology
 {
 struct configuration;
 } // namespace topology
-struct cluster_options;
 
 enum class app_telemetry_latency : std::uint8_t {
   unknown,
@@ -169,53 +169,30 @@ public:
   virtual void update_counter(app_telemetry_counter name) = 0;
 };
 
+class app_telemetry_meter_impl;
+
 class app_telemetry_meter
 {
 public:
-  app_telemetry_meter() = default;
+  app_telemetry_meter();
   app_telemetry_meter(app_telemetry_meter&&) = default;
   app_telemetry_meter(const app_telemetry_meter&) = delete;
   auto operator=(app_telemetry_meter&&) -> app_telemetry_meter& = default;
   auto operator=(const app_telemetry_meter&) -> app_telemetry_meter& = delete;
+  ~app_telemetry_meter();
 
-  virtual ~app_telemetry_meter() = default;
+  void disable();
+  void enable();
 
-  virtual void update_config(const topology::configuration& config) = 0;
-  virtual auto value_recorder(const std::string& node_uuid, const std::string& bucket_name)
-    -> std::shared_ptr<app_telemetry_value_recorder> = 0;
-  virtual void generate_report(std::vector<std::byte>& output_buffer) = 0;
-};
-
-class noop_app_telemetry_meter : public app_telemetry_meter
-{
-public:
-  void update_config(const topology::configuration& config) override;
+  void update_agent(const std::string& extra);
+  void update_config(const topology::configuration& config);
   auto value_recorder(const std::string& node_uuid, const std::string& bucket_name)
-    -> std::shared_ptr<app_telemetry_value_recorder> override;
-  void generate_report(std::vector<std::byte>& output_buffer) override;
-};
-
-class default_app_telemetry_meter_impl;
-
-class default_app_telemetry_meter : public app_telemetry_meter
-{
-public:
-  explicit default_app_telemetry_meter(const cluster_options& options);
-  default_app_telemetry_meter() = delete;
-  default_app_telemetry_meter(default_app_telemetry_meter&&) = default;
-  default_app_telemetry_meter(const default_app_telemetry_meter&) = delete;
-  auto operator=(default_app_telemetry_meter&&) -> default_app_telemetry_meter& = default;
-  auto operator=(const default_app_telemetry_meter&) -> default_app_telemetry_meter& = delete;
-
-  ~default_app_telemetry_meter() override;
-
-  void update_config(const topology::configuration& config) override;
-  auto value_recorder(const std::string& node_uuid, const std::string& bucket_name)
-    -> std::shared_ptr<app_telemetry_value_recorder> override;
-  void generate_report(std::vector<std::byte>& output_buffer) override;
+    -> std::shared_ptr<app_telemetry_value_recorder>;
+  void generate_report(std::vector<std::byte>& output_buffer);
 
 private:
-  std::unique_ptr<default_app_telemetry_meter_impl> impl_;
+  std::string agent_;
+  std::unique_ptr<app_telemetry_meter_impl> impl_;
 };
 
 } // namespace couchbase::core

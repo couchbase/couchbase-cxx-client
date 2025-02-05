@@ -15,14 +15,15 @@
 
 #include "app_telemetry_reporter.hxx"
 
-#include "core/app_telemetry_meter.hxx"
-#include "core/cluster_credentials.hxx"
-#include "core/cluster_options.hxx"
-#include "core/io/streams.hxx"
-#include "core/logger/logger.hxx"
-#include "core/platform/base64.h"
-#include "core/utils/url_codec.hxx"
-#include "core/websocket_codec.hxx"
+#include "app_telemetry_address.hxx"
+#include "app_telemetry_meter.hxx"
+#include "cluster_credentials.hxx"
+#include "cluster_options.hxx"
+#include "io/streams.hxx"
+#include "logger/logger.hxx"
+#include "platform/base64.h"
+#include "utils/url_codec.hxx"
+#include "websocket_codec.hxx"
 
 #include <couchbase/error_codes.hxx>
 
@@ -38,9 +39,9 @@
 #include <tao/json/value.hpp>
 
 #include <chrono>
+#include <cstdint>
 #include <memory>
 #include <mutex>
-#include <queue>
 #include <random>
 #include <utility>
 
@@ -49,11 +50,10 @@ namespace couchbase::core
 
 namespace
 {
-struct telemetry_address {
-  std::string hostname;
-  std::string service;
-  std::string path;
-  std::string host_uuid;
+enum class connection_state : std::uint8_t {
+  disconnected,
+  connecting,
+  connected,
 };
 
 class connection_state_listener
@@ -66,15 +66,17 @@ public:
   auto operator=(const connection_state_listener&) -> connection_state_listener& = default;
   virtual ~connection_state_listener() = default;
 
-  virtual void on_connected(const telemetry_address& address,
+  virtual void on_connection_pending(const app_telemetry_address& address) = 0;
+  virtual void on_connected(const app_telemetry_address& address,
                             std::unique_ptr<io::stream_impl>&& stream) = 0;
-  virtual void on_error(const telemetry_address& address, std::error_code ec) = 0;
+  virtual void on_websocket_ready() = 0;
+  virtual void on_error(const app_telemetry_address& address, std::error_code ec) = 0;
 };
 
 class telemetry_dialer : public std::enable_shared_from_this<telemetry_dialer>
 {
 public:
-  static void dial(telemetry_address address,
+  static void dial(app_telemetry_address address,
                    cluster_options options,
                    asio::io_context& ctx,
                    asio::ssl::context& tls,
@@ -85,7 +87,7 @@ public:
     return dialer->resolve_address();
   }
 
-  telemetry_dialer(telemetry_address address,
+  telemetry_dialer(app_telemetry_address address,
                    cluster_options options,
                    asio::io_context& ctx,
                    asio::ssl::context& tls,
@@ -187,7 +189,7 @@ private:
                       });
   }
 
-  telemetry_address address_;
+  app_telemetry_address address_;
   cluster_options options_;
   asio::io_context& ctx_;
   asio::ssl::context& tls_;
@@ -221,7 +223,7 @@ class websocket_session
 {
 public:
   static auto start(asio::io_context& ctx,
-                    telemetry_address address,
+                    app_telemetry_address address,
                     cluster_credentials credentials,
                     std::unique_ptr<io::stream_impl>&& stream,
                     std::shared_ptr<app_telemetry_meter> meter,
@@ -242,7 +244,7 @@ public:
   }
 
   websocket_session(asio::io_context& ctx,
-                    telemetry_address address,
+                    app_telemetry_address address,
                     cluster_credentials credentials,
                     std::unique_ptr<io::stream_impl>&& stream,
                     std::shared_ptr<app_telemetry_meter> meter,
@@ -303,6 +305,7 @@ public:
 
   void on_ready(const websocket_codec& ws) override
   {
+    reporter_->on_websocket_ready();
     send_ping(ws);
   }
 
@@ -375,6 +378,7 @@ public:
                      { "message", message },
                      { "hostname", address_.hostname },
                    }));
+
     return stop_and_error(errc::network::protocol_error);
   }
 
@@ -519,7 +523,7 @@ private:
   }
 
   asio::io_context& ctx_;
-  telemetry_address address_;
+  app_telemetry_address address_;
   cluster_credentials credentials_;
   std::unique_ptr<io::stream_impl> stream_;
   std::shared_ptr<app_telemetry_meter> meter_;
@@ -625,28 +629,43 @@ public:
     , tls_{ tls }
     , backoff_{ ctx }
   {
-    if (!options_.app_telemetry_endpoint.empty()) {
-      auto url = couchbase::core::utils::string_codec::url_parse(options_.app_telemetry_endpoint);
-      if (url.host.empty() || url.scheme != "ws") {
-        CB_LOG_WARNING(
-          "unable to use \"{}\" as a app telemetry endpoint (expected ws:// and hostname).  {}",
-          tao::json::to_string(tao::json::value{
-            { "app_telemetry_endpoint", "options_.app_telemetry_endpoint" },
-          }));
-        return;
+    if (options_.enable_app_telemetry) {
+      if (!options_.app_telemetry_endpoint.empty()) {
+        auto url = couchbase::core::utils::string_codec::url_parse(options_.app_telemetry_endpoint);
+        if (url.host.empty() || url.scheme != "ws") {
+          CB_LOG_WARNING(
+            "unable to use \"{}\" as a app telemetry endpoint (expected ws:// and hostname).  {}",
+            tao::json::to_string(tao::json::value{
+              { "app_telemetry_endpoint", "options_.app_telemetry_endpoint" },
+            }));
+          return;
+        }
+        addresses_.push_back({
+          url.host,
+          std::to_string(url.port),
+          url.path,
+          {},
+        });
       }
-      addresses_.push_back({
-        url.host,
-        std::to_string(url.port),
-        url.path,
-        {},
-      });
+    } else {
+      meter_->disable();
     }
   }
 
-  void on_connected(const telemetry_address& address,
+  void on_connection_pending(const app_telemetry_address& address) override
+  {
+    websocket_state_ = connection_state::connecting;
+    CB_LOG_WARNING("connecting app telemetry WebSocket.  {}",
+                   tao::json::to_string(tao::json::value{
+                     { "hostname", address.hostname },
+                   }));
+  }
+
+  void on_connected(const app_telemetry_address& address,
                     std::unique_ptr<io::stream_impl>&& stream) override
   {
+    backoff_.cancel();
+    websocket_state_ = connection_state::connected;
     CB_LOG_WARNING("connected app telemetry endpoint.  {}",
                    tao::json::to_string(tao::json::value{
                      { "stream", stream->id() },
@@ -662,11 +681,16 @@ public:
                                                   options_.app_telemetry_ping_deadline);
     retry_backoff_calculator_ = no_backoff::instance();
     ++next_address_index_;
+  }
+
+  void on_websocket_ready() override
+  {
     connection_attempt_ = 0;
   }
 
-  void on_error(const telemetry_address& address, std::error_code ec) override
+  void on_error(const app_telemetry_address& address, std::error_code ec) override
   {
+    websocket_state_ = connection_state::disconnected;
     websocket_session_ = nullptr;
 
     if (addresses_.empty()) {
@@ -705,7 +729,9 @@ public:
         if (ec == asio::error::operation_aborted) {
           return;
         }
-        return telemetry_dialer::dial(next_address, self->options_, self->ctx_, self->tls_, self);
+        if (self->websocket_state_ == connection_state::disconnected) {
+          return telemetry_dialer::dial(next_address, self->options_, self->ctx_, self->tls_, self);
+        }
       });
     }
     return telemetry_dialer::dial(next_address, options_, ctx_, tls_, shared_from_this());
@@ -716,37 +742,18 @@ public:
     meter_->update_config(config);
 
     if (options_.app_telemetry_endpoint.empty()) {
-      std::vector<telemetry_address> addresses;
-      addresses.reserve(config.nodes.size());
-      for (const auto& node : config.nodes) {
-        if (auto app_telemetry_path = node.app_telemetry_path; app_telemetry_path) {
-          auto node_uuid = node.node_uuid;
-          if (node_uuid.empty()) {
-            continue;
-          }
-          auto port =
-            node.port_or(options_.network, service_type::management, options_.enable_tls, 0);
-
-          if (port != 0) {
-            addresses.push_back({
-              node.hostname_for(options_.network),
-              std::to_string(port),
-              app_telemetry_path.value(),
-              node_uuid,
-            });
-          }
-        }
-      }
-
-      static thread_local std::default_random_engine gen{ std::random_device{}() };
-      std::shuffle(addresses.begin(), addresses.end(), gen);
-      addresses_ = std::move(addresses);
+      addresses_ = get_app_telemetry_addresses(config, options_.enable_tls, options_.network);
       next_address_index_ = 0;
     }
 
-    if (!websocket_session_ && !addresses_.empty()) {
-      telemetry_dialer::dial(
-        addresses_[next_address_index_], options_, ctx_, tls_, shared_from_this());
+    if (addresses_.empty()) {
+      meter_->disable();
+    } else {
+      meter_->enable();
+      if (websocket_state_ == connection_state::disconnected) {
+        telemetry_dialer::dial(
+          addresses_[next_address_index_], options_, ctx_, tls_, shared_from_this());
+      }
     }
   }
 
@@ -758,8 +765,9 @@ private:
   asio::ssl::context& tls_;
   asio::steady_timer backoff_;
 
+  connection_state websocket_state_{ connection_state::disconnected };
   std::shared_ptr<websocket_session> websocket_session_{};
-  std::vector<telemetry_address> addresses_{};
+  std::vector<app_telemetry_address> addresses_{};
   std::size_t next_address_index_{ 0 };
 
   backoff_calculator& retry_backoff_calculator_{ no_backoff::instance() };

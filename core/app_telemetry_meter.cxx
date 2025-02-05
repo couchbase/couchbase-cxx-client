@@ -15,24 +15,44 @@
 
 #include "app_telemetry_meter.hxx"
 
-#include "core/cluster_options.hxx"
-#include "core/meta/version.hxx"
-#include "core/topology/configuration.hxx"
-#include "core/utils/json.hxx"
+#include "logger/logger.hxx"
+#include "meta/version.hxx"
+#include "topology/configuration.hxx"
+#include "utils/json.hxx"
 
-#include <chrono>
 #include <spdlog/fmt/bin_to_hex.h>
 #include <spdlog/fmt/bundled/core.h>
+#include <tao/json/to_string.hpp>
 #include <tao/json/value.hpp>
 
-#include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <map>
 #include <mutex>
 #include <utility>
 
 namespace couchbase::core
+{
+class app_telemetry_meter_impl
+{
+public:
+  app_telemetry_meter_impl() = default;
+  app_telemetry_meter_impl(app_telemetry_meter_impl&&) = default;
+  app_telemetry_meter_impl(const app_telemetry_meter_impl&) = delete;
+  auto operator=(app_telemetry_meter_impl&&) -> app_telemetry_meter_impl& = default;
+  auto operator=(const app_telemetry_meter_impl&) -> app_telemetry_meter_impl& = delete;
+  virtual ~app_telemetry_meter_impl() = default;
+
+  virtual auto enabled() -> bool = 0;
+  virtual auto nothing_to_report() -> bool = 0;
+  virtual void update_config(const topology::configuration& config) = 0;
+  virtual auto value_recorder(const std::string& node_uuid, const std::string& bucket_name)
+    -> std::shared_ptr<app_telemetry_value_recorder> = 0;
+  virtual void generate_to(std::vector<std::byte>& output_buffer, const std::string& agent) = 0;
+};
+
+namespace detail
 {
 class byte_appender
 {
@@ -69,32 +89,18 @@ public:
 private:
   std::vector<std::byte>& buffer_;
 };
+} // namespace detail
 } // namespace couchbase::core
 
 template<>
-struct fmt::detail::is_output_iterator<couchbase::core::byte_appender, char> : std::true_type {
+struct fmt::detail::is_output_iterator<couchbase::core::detail::byte_appender, char>
+  : std::true_type {
 };
 
 namespace couchbase::core
 {
 namespace
 {
-
-class noop_app_telemetry_value_recorder : public app_telemetry_value_recorder
-{
-public:
-  void record_latency(app_telemetry_latency /* name */,
-                      std::chrono::milliseconds /* interval */) override
-  {
-    /* do nothing */
-  }
-
-  void update_counter(app_telemetry_counter /* name */) override
-  {
-    /* do nothing */
-  }
-};
-
 struct node_labels {
   std::string node;
   std::optional<std::string> alt_node;
@@ -112,7 +118,7 @@ struct kv_non_durable_histogram {
   std::atomic_uint64_t sum{};
   std::atomic_uint64_t count{};
 
-  void generate_to(byte_appender& output,
+  void generate_to(detail::byte_appender& output,
                    const std::string& node_uuid,
                    const node_labels& labels,
                    const std::string& bucket,
@@ -156,7 +162,7 @@ struct kv_durable_histogram {
   std::atomic_uint64_t sum{};
   std::atomic_uint64_t count{};
 
-  void generate_to(byte_appender& output,
+  void generate_to(detail::byte_appender& output,
                    const std::string& node_uuid,
                    const node_labels& labels,
                    const std::string& bucket,
@@ -199,7 +205,7 @@ struct http_histogram {
   std::atomic_uint64_t sum{};
   std::atomic_uint64_t count{};
 
-  void generate_to(byte_appender& output,
+  void generate_to(detail::byte_appender& output,
                    const std::string& node_uuid,
                    const node_labels& labels,
                    const std::string& bucket,
@@ -232,6 +238,113 @@ struct http_histogram {
 
 constexpr auto max_number_of_counters{ static_cast<std::size_t>(
   app_telemetry_counter::number_of_elements) };
+
+constexpr auto
+is_valid_app_telemetry_counter(std::size_t name) -> bool
+{
+  return name > static_cast<std::size_t>(app_telemetry_counter::unknown) &&
+         name < static_cast<std::size_t>(app_telemetry_counter::number_of_elements);
+}
+
+constexpr auto
+app_telemetry_counter_name(std::size_t name) -> const char*
+{
+  switch (static_cast<app_telemetry_counter>(name)) {
+
+    case app_telemetry_counter::kv_r_timedout:
+      return "sdk_kv_r_timedout";
+    case app_telemetry_counter::kv_r_canceled:
+      return "sdk_kv_r_canceled";
+    case app_telemetry_counter::kv_r_total:
+      return "sdk_kv_r_total";
+
+    case app_telemetry_counter::query_r_timedout:
+      return "sdk_query_r_timedout";
+    case app_telemetry_counter::query_r_canceled:
+      return "sdk_query_r_canceled";
+    case app_telemetry_counter::query_r_total:
+      return "sdk_query_r_total";
+
+    case app_telemetry_counter::search_r_timedout:
+      return "sdk_search_r_timeout";
+    case app_telemetry_counter::search_r_canceled:
+      return "sdk_search_r_canceled";
+    case app_telemetry_counter::search_r_total:
+      return "sdk_search_r_total";
+
+    case app_telemetry_counter::analytics_r_timedout:
+      return "sdk_analytics_r_timedout";
+    case app_telemetry_counter::analytics_r_canceled:
+      return "sdk_analytics_r_canceled";
+    case app_telemetry_counter::analytics_r_total:
+      return "sdk_analytics_r_total";
+
+    case app_telemetry_counter::management_r_timedout:
+      return "sdk_management_r_timedout";
+    case app_telemetry_counter::management_r_canceled:
+      return "sdk_management_r_canceled";
+    case app_telemetry_counter::management_r_total:
+      return "sdk_management_r_total";
+
+    case app_telemetry_counter::eventing_r_timedout:
+      return "sdk_eventing_r_timedout";
+    case app_telemetry_counter::eventing_r_canceled:
+      return "sdk_eventing_r_canceled";
+    case app_telemetry_counter::eventing_r_total:
+      return "sdk_eventing_r_total";
+
+    case app_telemetry_counter::unknown:
+    case app_telemetry_counter::number_of_elements:
+      break;
+  }
+  return "";
+}
+
+class null_app_telemetry_value_recorder : public app_telemetry_value_recorder
+{
+public:
+  void record_latency(app_telemetry_latency /* name */,
+                      std::chrono::milliseconds /* interval */) override
+  {
+    /* do nothing */
+  }
+
+  void update_counter(app_telemetry_counter /* name */) override
+  {
+    /* do nothing */
+  }
+};
+
+class null_app_telemetry_meter_impl : public app_telemetry_meter_impl
+{
+public:
+  void update_config(const topology::configuration& /* config */) override
+  {
+    /* do nothing */
+  }
+
+  auto value_recorder(const std::string& /* node_uuid */, const std::string& /* bucket_name */)
+    -> std::shared_ptr<app_telemetry_value_recorder> override
+  {
+    return std::make_shared<null_app_telemetry_value_recorder>();
+  }
+
+  auto enabled() -> bool override
+  {
+    return false;
+  }
+
+  auto nothing_to_report() -> bool override
+  {
+    return true;
+  }
+
+  void generate_to(std::vector<std::byte>& /* output_buffer */,
+                   const std::string& /* agent */) override
+  {
+    /* do nothing */
+  }
+};
 
 class default_app_telemetry_value_recorder : public app_telemetry_value_recorder
 {
@@ -444,7 +557,7 @@ public:
   }
 
 private:
-  friend class core::default_app_telemetry_meter_impl;
+  friend class default_app_telemetry_meter_impl;
 
   std::string node_uuid_;
   std::string bucket_name_;
@@ -462,88 +575,11 @@ private:
   http_histogram eventing_{ "sdk_eventing_duration_milliseconds" };
 };
 
-constexpr auto
-is_valid_app_telemetry_counter(std::size_t name) -> bool
-{
-  return name > static_cast<std::size_t>(app_telemetry_counter::unknown) &&
-         name < static_cast<std::size_t>(app_telemetry_counter::number_of_elements);
-}
-
-constexpr auto
-app_telemetry_counter_name(std::size_t name) -> const char*
-{
-  switch (static_cast<app_telemetry_counter>(name)) {
-
-    case app_telemetry_counter::kv_r_timedout:
-      return "sdk_kv_r_timedout";
-    case app_telemetry_counter::kv_r_canceled:
-      return "sdk_kv_r_canceled";
-    case app_telemetry_counter::kv_r_total:
-      return "sdk_kv_r_total";
-
-    case app_telemetry_counter::query_r_timedout:
-      return "sdk_query_r_timedout";
-    case app_telemetry_counter::query_r_canceled:
-      return "sdk_query_r_canceled";
-    case app_telemetry_counter::query_r_total:
-      return "sdk_query_r_total";
-
-    case app_telemetry_counter::search_r_timedout:
-      return "sdk_search_r_timeout";
-    case app_telemetry_counter::search_r_canceled:
-      return "sdk_search_r_canceled";
-    case app_telemetry_counter::search_r_total:
-      return "sdk_search_r_total";
-
-    case app_telemetry_counter::analytics_r_timedout:
-      return "sdk_analytics_r_timedout";
-    case app_telemetry_counter::analytics_r_canceled:
-      return "sdk_analytics_r_canceled";
-    case app_telemetry_counter::analytics_r_total:
-      return "sdk_analytics_r_total";
-
-    case app_telemetry_counter::management_r_timedout:
-      return "sdk_management_r_timedout";
-    case app_telemetry_counter::management_r_canceled:
-      return "sdk_management_r_canceled";
-    case app_telemetry_counter::management_r_total:
-      return "sdk_management_r_total";
-
-    case app_telemetry_counter::eventing_r_timedout:
-      return "sdk_eventing_r_timedout";
-    case app_telemetry_counter::eventing_r_canceled:
-      return "sdk_eventing_r_canceled";
-    case app_telemetry_counter::eventing_r_total:
-      return "sdk_eventing_r_total";
-
-    case app_telemetry_counter::unknown:
-    case app_telemetry_counter::number_of_elements:
-      break;
-  }
-  return "";
-}
-
-} // namespace
-
-class default_app_telemetry_meter_impl
+class default_app_telemetry_meter_impl : public app_telemetry_meter_impl
 {
 public:
-  explicit default_app_telemetry_meter_impl(cluster_options options)
-    : options_{ std::move(options) }
-  {
-    constexpr auto uuid{ "00000000-0000-0000-0000-000000000000" };
-    auto hello = meta::user_agent_for_mcbp(uuid, uuid, options_.user_agent_extra);
-    auto json = utils::json::parse(hello.data(), hello.size());
-    agent_ = utils::json::generate(json["a"]);
-  }
-
-  [[nodiscard]] auto options() const -> const cluster_options&
-  {
-    return options_;
-  }
-
   auto value_recorder(const std::string& node_uuid, const std::string& bucket_name)
-    -> std::shared_ptr<app_telemetry_value_recorder>
+    -> std::shared_ptr<app_telemetry_value_recorder> override
   {
     std::lock_guard<std::mutex> lock(mutex_);
 
@@ -557,7 +593,7 @@ public:
     return recorder;
   }
 
-  void update_config(const topology::configuration& config)
+  void update_config(const topology::configuration& config) override
   {
     for (const auto& node : config.nodes) {
       std::optional<std::string> alt_node{};
@@ -573,12 +609,23 @@ public:
     }
   }
 
-  void generate_to(std::vector<std::byte>& buffer)
+  auto enabled() -> bool override
+  {
+    return true;
+  }
+
+  auto nothing_to_report() -> bool override
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return recorders_.empty();
+  }
+
+  void generate_to(std::vector<std::byte>& buffer, const std::string& agent) override
   {
     auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
                  std::chrono::system_clock::now().time_since_epoch())
                  .count();
-    byte_appender output{ buffer };
+    detail::byte_appender output{ buffer };
     for (const auto& [node_uuid, buckets] : recorders_) {
       auto labels = labels_cache_[node_uuid];
       for (const auto& [bucket, recorder] : buckets) {
@@ -599,25 +646,23 @@ public:
             if (const auto& alt = labels.alt_node; alt && !alt->empty()) {
               fmt::format_to(output, ",alt_node=\"{}\"", alt.value());
             }
-            fmt::format_to(output, "agent={}}} {} {}", agent_, value, now);
+            fmt::format_to(output, ",agent={}}} {} {}\n", agent, value, now);
           }
         }
 
-        recorder->kv_retrieval_.generate_to(output, node_uuid, labels, bucket, agent_);
-        recorder->kv_mutation_nondurable_.generate_to(output, node_uuid, labels, bucket, agent_);
-        recorder->kv_mutation_durable_.generate_to(output, node_uuid, labels, bucket, agent_);
-        recorder->query_.generate_to(output, node_uuid, labels, bucket, agent_);
-        recorder->search_.generate_to(output, node_uuid, labels, bucket, agent_);
-        recorder->analytics_.generate_to(output, node_uuid, labels, bucket, agent_);
-        recorder->management_.generate_to(output, node_uuid, labels, bucket, agent_);
-        recorder->eventing_.generate_to(output, node_uuid, labels, bucket, agent_);
+        recorder->kv_retrieval_.generate_to(output, node_uuid, labels, bucket, agent);
+        recorder->kv_mutation_nondurable_.generate_to(output, node_uuid, labels, bucket, agent);
+        recorder->kv_mutation_durable_.generate_to(output, node_uuid, labels, bucket, agent);
+        recorder->query_.generate_to(output, node_uuid, labels, bucket, agent);
+        recorder->search_.generate_to(output, node_uuid, labels, bucket, agent);
+        recorder->analytics_.generate_to(output, node_uuid, labels, bucket, agent);
+        recorder->management_.generate_to(output, node_uuid, labels, bucket, agent);
+        recorder->eventing_.generate_to(output, node_uuid, labels, bucket, agent);
       }
     }
   }
 
 private:
-  cluster_options options_;
-  std::string agent_{};
   std::mutex mutex_{};
   // node_uuid -> bucket_name -> recorders
   std::map<std::string,
@@ -626,55 +671,75 @@ private:
   std::map<std::string, node_labels> labels_cache_{};
 };
 
-void
-noop_app_telemetry_meter::update_config(const topology::configuration& /* config */)
-{
-  /* do nothing */
-}
-
 auto
-noop_app_telemetry_meter::value_recorder(const std::string& /* node_uuid */,
-                                         const std::string& /* bucket_name */)
-  -> std::shared_ptr<app_telemetry_value_recorder>
+generate_agent_string(const std::string& extra = {}) -> std::string
 {
-  return std::make_shared<noop_app_telemetry_value_recorder>();
+  constexpr auto uuid{ "00000000-0000-0000-0000-000000000000" };
+  auto hello = meta::user_agent_for_mcbp(uuid, uuid, extra);
+  auto json = utils::json::parse(hello.data(), hello.size());
+  return utils::json::generate(json["a"]);
+}
+
+} // namespace
+
+app_telemetry_meter::app_telemetry_meter()
+  : impl_{ std::make_unique<default_app_telemetry_meter_impl>() }
+{
+  agent_ = generate_agent_string();
 }
 
 void
-noop_app_telemetry_meter::generate_report(std::vector<std::byte>& /* output_buffer */)
+app_telemetry_meter::disable()
 {
+  if (!impl_->enabled()) {
+    return;
+  }
+  CB_LOG_DEBUG("Disable app telemetry meter.  {}",
+               tao::json::to_string(tao::json::value{
+                 { "nothing_to_report", impl_->nothing_to_report() },
+               }));
+  impl_ = std::make_unique<null_app_telemetry_meter_impl>();
 }
-
-default_app_telemetry_meter::default_app_telemetry_meter(const cluster_options& options)
-  : impl_{ std::make_unique<default_app_telemetry_meter_impl>(options) }
-{
-}
-
-default_app_telemetry_meter::~default_app_telemetry_meter() = default;
 
 void
-default_app_telemetry_meter::update_config(const topology::configuration& config)
+app_telemetry_meter::enable()
+{
+  if (impl_->enabled()) {
+    return;
+  }
+  CB_LOG_DEBUG("Enable app telemetry meter.");
+  impl_ = std::make_unique<default_app_telemetry_meter_impl>();
+}
+
+void
+app_telemetry_meter::update_agent(const std::string& extra)
+{
+  agent_ = generate_agent_string(extra);
+}
+
+app_telemetry_meter::~app_telemetry_meter() = default;
+
+void
+app_telemetry_meter::update_config(const topology::configuration& config)
 {
   return impl_->update_config(config);
 }
 
 auto
-default_app_telemetry_meter::value_recorder(const std::string& node_uuid,
-                                            const std::string& bucket_name)
+app_telemetry_meter::value_recorder(const std::string& node_uuid, const std::string& bucket_name)
   -> std::shared_ptr<app_telemetry_value_recorder>
 {
   return impl_->value_recorder(node_uuid, bucket_name);
 }
 
 void
-default_app_telemetry_meter::generate_report(std::vector<std::byte>& output_buffer)
+app_telemetry_meter::generate_report(std::vector<std::byte>& output_buffer)
 {
-  auto meter = std::make_unique<default_app_telemetry_meter_impl>(impl_->options());
-  std::swap(meter, impl_);
-  /* auto old_length = output_buffer.size(); */
-  meter->generate_to(output_buffer);
-  /* fmt::println("generated\n\n\n===========\n{}\n===========\n\n\n", */
-  /*              std::string(reinterpret_cast<const char*>(output_buffer.data()) + old_length, */
-  /*                          output_buffer.size() - old_length)); */
+  if (impl_->nothing_to_report()) {
+    return;
+  }
+  auto old_impl = std::move(impl_);
+  impl_ = std::make_unique<default_app_telemetry_meter_impl>();
+  old_impl->generate_to(output_buffer, agent_);
 }
 } // namespace couchbase::core

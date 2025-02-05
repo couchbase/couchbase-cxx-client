@@ -1221,9 +1221,7 @@ private:
     session_manager_->set_tracer(tracer_);
     session_manager_->set_meter(meter_);
 
-    if (origin_.options().enable_app_telemetry) {
-      app_telemetry_meter_ = std::make_shared<default_app_telemetry_meter>(origin_.options());
-    }
+    app_telemetry_meter_->update_agent(origin_.options().user_agent_extra);
     session_manager_->set_app_telemetry_meter(app_telemetry_meter_);
     app_telemetry_reporter_ = std::make_shared<app_telemetry_reporter>(
       app_telemetry_meter_, origin_.options(), origin_.credentials(), ctx_, tls_);
@@ -1244,8 +1242,9 @@ private:
   std::shared_ptr<metrics::meter_wrapper> meter_{ nullptr };
   std::atomic_bool stopped_{ false };
   std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter_{
-    std::make_shared<noop_app_telemetry_meter>()
+    std::make_shared<core::app_telemetry_meter>()
   };
+
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
   std::shared_ptr<couchbase::core::io::cluster_config_tracker> config_tracker_{};
   asio::steady_timer retry_backoff_;
