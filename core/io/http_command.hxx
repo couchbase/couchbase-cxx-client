@@ -184,6 +184,14 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
     if (auto handler = std::move(handler_); handler) {
       auto telemetry_recorder = app_telemetry_meter_->value_recorder(session_->node_uuid(), {});
       telemetry_recorder->update_counter(total_counter_for_service_type(request.type));
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+      std::error_code ec{};
+      if (std::holds_alternative<std::error_code>(error)) {
+        ec = std::get<std::error_code>(error);
+      } else if (std::holds_alternative<impl::bootstrap_error>(error)) {
+        ec = std::get<impl::bootstrap_error>(error).ec;
+      }
+#endif
       if (ec == errc::common::ambiguous_timeout || ec == errc::common::ambiguous_timeout) {
         telemetry_recorder->update_counter(timedout_counter_for_service_type(request.type));
       } else if (ec == errc::common::request_canceled) {
