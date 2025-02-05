@@ -17,6 +17,7 @@
 
 #include "topology/configuration.hxx"
 
+#include <algorithm>
 #include <random>
 
 namespace couchbase::core

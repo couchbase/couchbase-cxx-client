@@ -370,12 +370,12 @@ public:
       session.reset();
     }
     if (!session) {
-      auto [hostname, port, node_uuid] =
+      auto [hostname, port, uuid] =
         preferred_node.empty() ? next_node(type) : lookup_node(type, preferred_node);
       if (port == 0) {
         return { errc::common::service_not_available, nullptr };
       }
-      session = create_session(type, credentials, hostname, port, node_uuid);
+      session = create_session(type, credentials, hostname, port, uuid);
     }
     if (session->is_connected()) {
       busy_sessions_[type].push_back(session);

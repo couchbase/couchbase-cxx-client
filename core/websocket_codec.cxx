@@ -24,6 +24,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <cstring>
 #include <map>
 #include <optional>
@@ -72,13 +73,13 @@ auto
 generate_masking_key() -> std::array<std::byte, 4>
 {
   thread_local std::random_device rd;
-  thread_local std::uniform_int_distribution<std::uint8_t> dist(0, 0xff);
+  thread_local std::uniform_int_distribution<std::uint16_t> dist(0, 0xff);
 
   return {
-    std::byte{ dist(rd) },
-    std::byte{ dist(rd) },
-    std::byte{ dist(rd) },
-    std::byte{ dist(rd) },
+    static_cast<std::byte>(dist(rd)),
+    static_cast<std::byte>(dist(rd)),
+    static_cast<std::byte>(dist(rd)),
+    static_cast<std::byte>(dist(rd)),
   };
 }
 

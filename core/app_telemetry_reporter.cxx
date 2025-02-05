@@ -42,6 +42,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <queue>
 #include <random>
 #include <utility>
 

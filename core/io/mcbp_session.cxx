@@ -1720,7 +1720,7 @@ private:
     if (ec) {
       return stop(retry_reason::node_not_available);
     }
-    if (node_uuid_.empty()) {
+    if (node_uuid_.empty() && config_.has_value()) {
       for (const auto& node : config_.value().nodes) {
         if (node.this_node) {
           node_uuid_ = node.node_uuid;

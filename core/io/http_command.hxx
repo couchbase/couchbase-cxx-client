@@ -192,7 +192,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
         ec = std::get<impl::bootstrap_error>(error).ec;
       }
 #endif
-      if (ec == errc::common::ambiguous_timeout || ec == errc::common::ambiguous_timeout) {
+      if (ec == errc::common::ambiguous_timeout || ec == errc::common::unambiguous_timeout) {
         telemetry_recorder->update_counter(timedout_counter_for_service_type(request.type));
       } else if (ec == errc::common::request_canceled) {
         telemetry_recorder->update_counter(canceled_counter_for_service_type(request.type));

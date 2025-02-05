@@ -17,7 +17,10 @@
 
 #include <gsl/span>
 
+#include <cstddef>
 #include <memory>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace couchbase::core
