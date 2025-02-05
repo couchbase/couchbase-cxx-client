@@ -804,9 +804,12 @@ public:
             self->origin_.options().network,
             utils::join_strings(self->origin_.get_nodes(), ","));
         }
+        // FIXME(SA): fix the session manager to receive initial configuration and cluster-wide
+        // session to poll for updates like the bucket does. Or just subscribe before the bootstrap.
         self->session_manager_->set_configuration(config, self->origin_.options());
         self->session_->on_configuration_update(self->session_manager_);
         self->session_->on_configuration_update(self->app_telemetry_reporter_);
+        self->app_telemetry_reporter_->update_config(config);
         self->session_->on_stop([self]() {
           if (self->session_) {
             self->session_.reset();
@@ -985,6 +988,7 @@ public:
           self->session_manager_->set_configuration(cfg, options);
           self->config_tracker_->on_configuration_update(self->session_manager_);
           self->config_tracker_->on_configuration_update(self->app_telemetry_reporter_);
+          self->app_telemetry_reporter_->update_config(cfg);
           self->config_tracker_->register_state_listener();
         }
       });
