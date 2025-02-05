@@ -450,14 +450,16 @@ private:
   std::string bucket_name_;
   std::array<std::atomic_uint64_t, max_number_of_counters> counters_{};
 
-  kv_non_durable_histogram kv_retrieval_{ "sdk_kv_retrieval_duration_ms" };
-  kv_non_durable_histogram kv_mutation_nondurable_{ "sdk_kv_mutation_nondurable_duration_ms" };
-  kv_durable_histogram kv_mutation_durable_{ "sdk_kv_mutation_durable_duration_ms" };
-  http_histogram query_{ "sdk_query_duration_ms" };
-  http_histogram search_{ "sdk_search_duration_ms" };
-  http_histogram analytics_{ "sdk_analytics_duration_ms" };
-  http_histogram management_{ "sdk_management_duration_ms" };
-  http_histogram eventing_{ "sdk_eventing_duration_ms" };
+  kv_non_durable_histogram kv_retrieval_{ "sdk_kv_retrieval_duration_milliseconds" };
+  kv_non_durable_histogram kv_mutation_nondurable_{
+    "sdk_kv_mutation_nondurable_duration_milliseconds"
+  };
+  kv_durable_histogram kv_mutation_durable_{ "sdk_kv_mutation_durable_duration_milliseconds" };
+  http_histogram query_{ "sdk_query_duration_milliseconds" };
+  http_histogram search_{ "sdk_search_duration_milliseconds" };
+  http_histogram analytics_{ "sdk_analytics_duration_milliseconds" };
+  http_histogram management_{ "sdk_management_duration_milliseconds" };
+  http_histogram eventing_{ "sdk_eventing_duration_milliseconds" };
 };
 
 constexpr auto
