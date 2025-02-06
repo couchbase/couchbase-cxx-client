@@ -646,6 +646,9 @@ public:
             if (const auto& alt = labels.alt_node; alt && !alt->empty()) {
               fmt::format_to(output, ",alt_node=\"{}\"", alt.value());
             }
+            if (!bucket.empty()) {
+              fmt::format_to(output, ",bucket=\"{}\"", bucket);
+            }
             fmt::format_to(output, ",agent={}}} {} {}\n", agent, value, now);
           }
         }
