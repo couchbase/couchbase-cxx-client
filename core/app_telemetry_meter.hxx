@@ -93,17 +93,17 @@ timedout_counter_for_service_type(service_type value) -> app_telemetry_counter
 {
   switch (value) {
     case service_type::key_value:
-      return app_telemetry_counter::kv_r_canceled;
+      return app_telemetry_counter::kv_r_timedout;
     case service_type::query:
-      return app_telemetry_counter::query_r_canceled;
+      return app_telemetry_counter::query_r_timedout;
     case service_type::analytics:
-      return app_telemetry_counter::analytics_r_canceled;
+      return app_telemetry_counter::analytics_r_timedout;
     case service_type::search:
-      return app_telemetry_counter::search_r_canceled;
+      return app_telemetry_counter::search_r_timedout;
     case service_type::management:
-      return app_telemetry_counter::management_r_canceled;
+      return app_telemetry_counter::management_r_timedout;
     case service_type::eventing:
-      return app_telemetry_counter::eventing_r_canceled;
+      return app_telemetry_counter::eventing_r_timedout;
     default:
       break;
   }
