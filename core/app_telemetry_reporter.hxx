@@ -51,6 +51,7 @@ public:
                          asio::ssl::context& tls);
   ~app_telemetry_reporter() override;
   void update_config(topology::configuration config) override;
+  void stop();
 
 private:
   std::shared_ptr<app_telemetry_reporter_impl> impl_{};

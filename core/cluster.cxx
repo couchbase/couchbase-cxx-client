@@ -1108,9 +1108,8 @@ public:
     stopped_ = true;
     asio::post(asio::bind_executor(
       ctx_, [self = shared_from_this(), handler = std::move(handler)]() mutable {
-        if (self->session_) {
-          self->session_->stop(retry_reason::do_not_retry);
-          self->session_.reset();
+        if (auto session = std::move(self->session_); session) {
+          session->stop(retry_reason::do_not_retry);
         }
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
         if (self->config_tracker_) {
@@ -1120,19 +1119,31 @@ public:
         }
         self->retry_backoff_.cancel();
 #endif
-        self->for_each_bucket([](const auto& bucket) {
+
+        std::map<std::string, std::shared_ptr<bucket>> buckets{};
+        {
+          const std::scoped_lock lock(self->buckets_mutex_);
+          buckets = std::move(self->buckets_);
+        }
+        for (const auto& [_, bucket] : buckets) {
           bucket->close();
-        });
-        self->session_manager_->close();
+        }
+        if (auto session_manager = std::move(self->session_manager_); session_manager) {
+          session_manager->close();
+        }
         self->work_.reset();
-        if (self->tracer_) {
-          self->tracer_->stop();
+        if (auto tracer = std::move(self->tracer_); tracer) {
+          tracer->stop();
         }
-        self->tracer_.reset();
-        if (self->meter_) {
-          self->meter_->stop();
+        if (auto meter = std::move(self->meter_); meter) {
+          meter->stop();
         }
-        self->meter_.reset();
+        if (auto meter = std::move(self->app_telemetry_meter_); meter) {
+          meter->disable();
+        }
+        if (auto reporter = std::move(self->app_telemetry_reporter_); reporter) {
+          reporter->stop();
+        }
         handler();
       }));
   }

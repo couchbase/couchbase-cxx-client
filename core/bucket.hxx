@@ -96,7 +96,10 @@ public:
     if (is_configured()) {
       return map_and_send(cmd);
     }
-    return defer_command([self = shared_from_this(), cmd]() {
+    return defer_command([self = shared_from_this(), cmd](std::error_code ec) {
+      if (ec == errc::common::request_canceled) {
+        return cmd->cancel(retry_reason::do_not_retry);
+      }
       self->map_and_send(cmd);
     });
   }
@@ -138,7 +141,10 @@ public:
         session.has_value() ? session->bootstrap_address() : "",
         session.has_value() && session->has_config(),
         config_rev());
-      return defer_command([self = shared_from_this(), cmd]() {
+      return defer_command([self = shared_from_this(), cmd](std::error_code ec) {
+        if (ec == errc::common::request_canceled) {
+          return cmd->cancel(retry_reason::do_not_retry);
+        }
         self->map_and_send(cmd);
       });
     }
@@ -197,7 +203,7 @@ public:
   void export_diag_info(diag::diagnostics_result& res) const;
   void ping(const std::shared_ptr<diag::ping_collector>& collector,
             std::optional<std::chrono::milliseconds> timeout);
-  void defer_command(utils::movable_function<void()> command);
+  void defer_command(utils::movable_function<void(std::error_code)> command);
 
   [[nodiscard]] auto name() const -> const std::string&;
   [[nodiscard]] auto log_prefix() const -> const std::string&;

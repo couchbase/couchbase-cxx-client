@@ -55,6 +55,7 @@ enum class connection_state : std::uint8_t {
   disconnected,
   connecting,
   connected,
+  stopped,
 };
 
 class connection_state_listener
@@ -77,15 +78,17 @@ public:
 class telemetry_dialer : public std::enable_shared_from_this<telemetry_dialer>
 {
 public:
-  static void dial(app_telemetry_address address,
+  static auto dial(app_telemetry_address address,
                    cluster_options options,
                    asio::io_context& ctx,
                    asio::ssl::context& tls,
                    std::shared_ptr<connection_state_listener>&& handler)
+    -> std::shared_ptr<telemetry_dialer>
   {
     auto dialer = std::make_shared<telemetry_dialer>(
       std::move(address), std::move(options), ctx, tls, std::move(handler));
-    return dialer->resolve_address();
+    dialer->resolve_address();
+    return dialer;
   }
 
   telemetry_dialer(app_telemetry_address address,
@@ -101,6 +104,13 @@ public:
     , resolver_(ctx_)
     , handler_{ std::move(handler) }
   {
+  }
+
+  void stop()
+  {
+    resolver_.cancel();
+    connect_deadline_.cancel();
+    complete_with_error(asio::error::operation_aborted);
   }
 
 private:
@@ -266,11 +276,18 @@ public:
   {
   }
 
-  void stop_and_error(std::error_code ec)
+  void stop()
   {
     is_running_ = false;
     ping_interval_timer_.cancel();
     ping_deadline_timer_.cancel();
+    stream_->close([](auto /* ec */) {
+    });
+  }
+
+  void stop_and_error(std::error_code ec)
+  {
+    stop();
     if (auto reporter = std::move(reporter_); reporter) {
       reporter->on_error(address_, ec);
     }
@@ -468,6 +485,9 @@ private:
 
   void handle_write(std::error_code ec, std::size_t /* bytes_transferred */)
   {
+    if (!is_running_) {
+      return;
+    }
     if (ec) {
       is_writing_ = false;
       CB_LOG_DEBUG("unable to write to app telemetry socket.  {}",
@@ -510,6 +530,9 @@ private:
 
   void handle_read(std::error_code ec, std::size_t bytes_transferred)
   {
+    if (!is_running_) {
+      return;
+    }
     if (ec) {
       is_reading_ = false;
       CB_LOG_DEBUG("unable to read from app telemetry socket.  {}",
@@ -653,6 +676,20 @@ public:
     }
   }
 
+  void stop()
+  {
+    websocket_state_ = connection_state::stopped;
+
+    meter_->disable();
+    if (auto dialer = std::move(dialer_); dialer) {
+      dialer->stop();
+    }
+    backoff_.cancel();
+    if (auto session = std::move(websocket_session_); session) {
+      session->stop();
+    }
+  }
+
   void on_connection_pending(const app_telemetry_address& address) override
   {
     websocket_state_ = connection_state::connecting;
@@ -665,7 +702,13 @@ public:
   void on_connected(const app_telemetry_address& address,
                     std::unique_ptr<io::stream_impl>&& stream) override
   {
+    dialer_ = nullptr;
     backoff_.cancel();
+
+    if (websocket_state_ == connection_state::stopped) {
+      return;
+    }
+
     websocket_state_ = connection_state::connected;
     CB_LOG_WARNING("connected app telemetry endpoint.  {}",
                    tao::json::to_string(tao::json::value{
@@ -691,6 +734,10 @@ public:
 
   void on_error(const app_telemetry_address& address, std::error_code ec) override
   {
+    if (ec == asio::error::operation_aborted || websocket_state_ == connection_state::stopped) {
+      return;
+    }
+
     websocket_state_ = connection_state::disconnected;
     websocket_session_ = nullptr;
 
@@ -731,11 +778,12 @@ public:
           return;
         }
         if (self->websocket_state_ == connection_state::disconnected) {
-          return telemetry_dialer::dial(next_address, self->options_, self->ctx_, self->tls_, self);
+          self->dialer_ =
+            telemetry_dialer::dial(next_address, self->options_, self->ctx_, self->tls_, self);
         }
       });
     }
-    return telemetry_dialer::dial(next_address, options_, ctx_, tls_, shared_from_this());
+    dialer_ = telemetry_dialer::dial(next_address, options_, ctx_, tls_, shared_from_this());
   }
 
   void update_config(topology::configuration&& config)
@@ -752,7 +800,7 @@ public:
     } else {
       meter_->enable();
       if (websocket_state_ == connection_state::disconnected) {
-        telemetry_dialer::dial(
+        dialer_ = telemetry_dialer::dial(
           addresses_[next_address_index_], options_, ctx_, tls_, shared_from_this());
       }
     }
@@ -765,6 +813,8 @@ private:
   asio::io_context& ctx_;
   asio::ssl::context& tls_;
   asio::steady_timer backoff_;
+
+  std::shared_ptr<telemetry_dialer> dialer_{ nullptr };
 
   connection_state websocket_state_{ connection_state::disconnected };
   std::shared_ptr<websocket_session> websocket_session_{};
@@ -792,6 +842,12 @@ void
 app_telemetry_reporter::update_config(topology::configuration config)
 {
   return impl_->update_config(std::move(config));
+}
+
+void
+app_telemetry_reporter::stop()
+{
+  return impl_->stop();
 }
 
 } // namespace couchbase::core

@@ -204,7 +204,10 @@ public:
       return errc::network::bucket_closed;
     }
     if (!configured_) {
-      return defer_command([self = shared_from_this(), req]() {
+      return defer_command([self = shared_from_this(), req](std::error_code ec) {
+        if (ec == errc::common::request_canceled) {
+          return req->cancel(ec);
+        }
         self->direct_dispatch(req);
       });
     }
@@ -213,7 +216,10 @@ public:
 
     auto session = route_request(req);
     if (!session || !session->has_config()) {
-      return defer_command([self = shared_from_this(), req]() mutable {
+      return defer_command([self = shared_from_this(), req](std::error_code ec) mutable {
+        if (ec == errc::common::request_canceled) {
+          return req->cancel(ec);
+        }
         self->direct_dispatch(std::move(req));
       });
     }
@@ -244,7 +250,10 @@ public:
 
     auto session = route_request(req);
     if (!session || !session->has_config()) {
-      return defer_command([self = shared_from_this(), req]() {
+      return defer_command([self = shared_from_this(), req](std::error_code ec) {
+        if (ec == errc::common::request_canceled) {
+          return req->cancel(ec);
+        }
         self->direct_dispatch(req);
       });
     }
@@ -448,7 +457,7 @@ public:
           session.on_stop([id = session.id(), self]() {
             self->remove_session(id);
           });
-          self->drain_deferred_queue();
+          self->drain_deferred_queue({});
         },
         true);
       sessions_.insert_or_assign(index, std::move(session));
@@ -512,7 +521,7 @@ public:
           self->sessions_.insert_or_assign(this_index, std::move(new_session));
         }
         self->update_config(cfg);
-        self->drain_deferred_queue();
+        self->drain_deferred_queue({});
         self->poll_config({});
       }
       asio::post(
@@ -540,26 +549,27 @@ public:
       return handler(errc::network::configuration_not_available, topology::configuration{});
     }
     const std::scoped_lock lock(deferred_commands_mutex_);
-    deferred_commands_.emplace([self = shared_from_this(), handler = std::move(handler)]() mutable {
-      if (self->closed_ || !self->configured_) {
-        return handler(errc::network::configuration_not_available, topology::configuration{});
-      }
+    deferred_commands_.emplace(
+      [self = shared_from_this(), handler = std::move(handler)](std::error_code ec) mutable {
+        if (ec == errc::common::request_canceled || self->closed_ || !self->configured_) {
+          return handler(errc::network::configuration_not_available, topology::configuration{});
+        }
 
-      std::optional<topology::configuration> config{};
-      {
-        const std::scoped_lock config_lock(self->config_mutex_);
-        config = self->config_;
-      }
-      if (config) {
-        return handler({}, config.value());
-      }
-      return handler(errc::network::configuration_not_available, topology::configuration{});
-    });
+        std::optional<topology::configuration> config{};
+        {
+          const std::scoped_lock config_lock(self->config_mutex_);
+          config = self->config_;
+        }
+        if (config) {
+          return handler({}, config.value());
+        }
+        return handler(errc::network::configuration_not_available, topology::configuration{});
+      });
   }
 
-  void drain_deferred_queue()
+  void drain_deferred_queue(std::error_code ec)
   {
-    std::queue<utils::movable_function<void()>> commands{};
+    std::queue<utils::movable_function<void(std::error_code)>> commands{};
     {
       const std::scoped_lock lock(deferred_commands_mutex_);
       std::swap(deferred_commands_, commands);
@@ -569,7 +579,7 @@ public:
         R"({} draining deferred operation queue, size={})", log_prefix_, commands.size());
     }
     while (!commands.empty()) {
-      commands.front()();
+      commands.front()(ec);
       commands.pop();
     }
   }
@@ -639,7 +649,7 @@ public:
 
     heartbeat_timer_.cancel();
 
-    drain_deferred_queue();
+    drain_deferred_queue(errc::common::request_canceled);
 
     if (state_listener_ != nullptr) {
       state_listener_->unregister_config_listener(shared_from_this());
@@ -839,7 +849,7 @@ public:
             session.on_stop([id = session.id(), self]() {
               self->remove_session(id);
             });
-            self->drain_deferred_queue();
+            self->drain_deferred_queue({});
           },
           true);
         new_sessions.insert_or_assign(next_index, std::move(session));
@@ -959,7 +969,7 @@ public:
     config_listeners_.emplace_back(std::move(handler));
   }
 
-  auto defer_command(utils::movable_function<void()> command) -> std::error_code
+  auto defer_command(utils::movable_function<void(std::error_code)> command) -> std::error_code
   {
     const std::scoped_lock lock_for_deferred_commands(deferred_commands_mutex_);
     deferred_commands_.emplace(std::move(command));
@@ -994,7 +1004,7 @@ private:
   std::vector<std::shared_ptr<config_listener>> config_listeners_{};
   std::mutex config_listeners_mutex_{};
 
-  std::queue<utils::movable_function<void()>> deferred_commands_{};
+  std::queue<utils::movable_function<void(std::error_code)>> deferred_commands_{};
   std::mutex deferred_commands_mutex_{};
 
   std::map<size_t, io::mcbp_session> sessions_{};
@@ -1131,7 +1141,7 @@ bucket::is_configured() const -> bool
 }
 
 void
-bucket::defer_command(utils::movable_function<void()> command)
+bucket::defer_command(utils::movable_function<void(std::error_code)> command)
 {
   impl_->defer_command(std::move(command));
 }
