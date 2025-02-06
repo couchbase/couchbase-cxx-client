@@ -582,6 +582,10 @@ extract_options(connection_string& connstr)
     } else if (name == "server_group") {
       parse_option(connstr.options.server_group, name, value, connstr.warnings);
 #endif
+    } else if (name == "enable_app_telemetry") {
+      parse_option(connstr.options.enable_app_telemetry, name, value, connstr.warnings);
+    } else if (name == "app_telemetry_endpoint") {
+      parse_option(connstr.options.app_telemetry_endpoint, name, value, connstr.warnings);
     } else {
       connstr.warnings.push_back(
         fmt::format(R"(unknown parameter "{}" in connection string (value "{}"))", name, value));

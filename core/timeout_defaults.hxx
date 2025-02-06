@@ -42,4 +42,7 @@ constexpr std::chrono::milliseconds config_poll_interval{ 2'500 };
 constexpr std::chrono::milliseconds config_poll_floor{ 50 };
 constexpr std::chrono::milliseconds config_idle_redial_timeout{ 5 * 60'000 };
 constexpr std::chrono::milliseconds idle_http_connection_timeout{ 1'000 };
+
+constexpr std::chrono::milliseconds app_telemetry_ping_interval{ 30'000 };
+constexpr std::chrono::milliseconds app_telemetry_ping_deadline{ 1'000 };
 } // namespace couchbase::core::timeout_defaults

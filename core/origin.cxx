@@ -298,11 +298,6 @@ origin::to_json() const -> std::string
   return tao::json::to_string(json);
 }
 
-auto
-cluster_credentials::uses_certificate() const -> bool
-{
-  return !certificate_path.empty();
-}
 } // namespace couchbase::core
 
 couchbase::core::origin::origin(const couchbase::core::origin& other)

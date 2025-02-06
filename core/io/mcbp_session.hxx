@@ -90,6 +90,7 @@ public:
   auto operator=(mcbp_session&& other) -> mcbp_session& = default;
 
   mcbp_session(const std::string& client_id,
+               const std::string& node_uuid,
                asio::io_context& ctx,
                couchbase::core::origin origin,
                std::shared_ptr<impl::bootstrap_state_listener> state_listener,
@@ -97,6 +98,7 @@ public:
                std::vector<protocol::hello_feature> known_features = {});
 
   mcbp_session(const std::string& client_id,
+               const std::string& node_uuid,
                asio::io_context& ctx,
                asio::ssl::context& tls,
                couchbase::core::origin origin,
@@ -115,6 +117,7 @@ public:
   [[nodiscard]] auto supports_feature(protocol::hello_feature feature) -> bool;
   [[nodiscard]] auto supported_features() const -> std::vector<protocol::hello_feature>;
   [[nodiscard]] auto id() const -> const std::string&;
+  [[nodiscard]] auto node_uuid() const -> const std::string&;
   [[nodiscard]] auto remote_address() const -> std::string;
   [[nodiscard]] auto local_address() const -> std::string;
   [[nodiscard]] auto bootstrap_address() const -> const std::string&;

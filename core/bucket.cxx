@@ -18,6 +18,7 @@
 #include "bucket.hxx"
 
 #include "collection_id_cache_entry.hxx"
+#include "core/app_telemetry_meter.hxx"
 #include "core/config_listener.hxx"
 #include "core/document_id.hxx"
 #include "core/error_context/key_value_error_map_info.hxx"
@@ -84,6 +85,7 @@ public:
               couchbase::core::origin origin,
               std::shared_ptr<tracing::tracer_wrapper> tracer,
               std::shared_ptr<metrics::meter_wrapper> meter,
+              std::shared_ptr<core::app_telemetry_meter> app_telemetry,
               std::vector<protocol::hello_feature> known_features,
               std::shared_ptr<impl::bootstrap_state_listener> state_listener,
               asio::io_context& ctx,
@@ -94,6 +96,7 @@ public:
     , origin_{ std::move(origin) }
     , tracer_{ std::move(tracer) }
     , meter_{ std::move(meter) }
+    , app_telemetry_meter_{ std::move(app_telemetry) }
     , known_features_{ std::move(known_features) }
     , state_listener_{ std::move(state_listener) }
     , codec_{ { known_features_.begin(), known_features_.end() } }
@@ -201,7 +204,10 @@ public:
       return errc::network::bucket_closed;
     }
     if (!configured_) {
-      return defer_command([self = shared_from_this(), req]() {
+      return defer_command([self = shared_from_this(), req](std::error_code ec) {
+        if (ec == errc::common::request_canceled) {
+          return req->cancel(ec);
+        }
         self->direct_dispatch(req);
       });
     }
@@ -210,7 +216,10 @@ public:
 
     auto session = route_request(req);
     if (!session || !session->has_config()) {
-      return defer_command([self = shared_from_this(), req]() mutable {
+      return defer_command([self = shared_from_this(), req](std::error_code ec) mutable {
+        if (ec == errc::common::request_canceled) {
+          return req->cancel(ec);
+        }
         self->direct_dispatch(std::move(req));
       });
     }
@@ -241,7 +250,10 @@ public:
 
     auto session = route_request(req);
     if (!session || !session->has_config()) {
-      return defer_command([self = shared_from_this(), req]() {
+      return defer_command([self = shared_from_this(), req](std::error_code ec) {
+        if (ec == errc::common::request_canceled) {
+          return req->cancel(ec);
+        }
         self->direct_dispatch(req);
       });
     }
@@ -417,9 +429,16 @@ public:
         origin_.credentials(), hostname, port, origin_.options());
       io::mcbp_session session =
         origin_.options().enable_tls
-          ? io::mcbp_session(
-              client_id_, ctx_, tls_, origin, state_listener_, name_, known_features_)
-          : io::mcbp_session(client_id_, ctx_, origin, state_listener_, name_, known_features_);
+          ? io::mcbp_session(client_id_,
+                             node.node_uuid,
+                             ctx_,
+                             tls_,
+                             origin,
+                             state_listener_,
+                             name_,
+                             known_features_)
+          : io::mcbp_session(
+              client_id_, node.node_uuid, ctx_, origin, state_listener_, name_, known_features_);
       CB_LOG_DEBUG(R"({} rev={}, restart idx={}, session="{}", address="{}:{}")",
                    log_prefix_,
                    config_->rev_str(),
@@ -438,7 +457,7 @@ public:
           session.on_stop([id = session.id(), self]() {
             self->remove_session(id);
           });
-          self->drain_deferred_queue();
+          self->drain_deferred_queue({});
         },
         true);
       sessions_.insert_or_assign(index, std::move(session));
@@ -479,8 +498,9 @@ public:
     }
     io::mcbp_session new_session =
       origin_.options().enable_tls
-        ? io::mcbp_session(client_id_, ctx_, tls_, origin_, state_listener_, name_, known_features_)
-        : io::mcbp_session(client_id_, ctx_, origin_, state_listener_, name_, known_features_);
+        ? io::mcbp_session(
+            client_id_, {}, ctx_, tls_, origin_, state_listener_, name_, known_features_)
+        : io::mcbp_session(client_id_, {}, ctx_, origin_, state_listener_, name_, known_features_);
     new_session.bootstrap([self = shared_from_this(), new_session, h = std::move(handler)](
                             std::error_code ec, topology::configuration cfg) mutable {
       if (ec) {
@@ -501,7 +521,7 @@ public:
           self->sessions_.insert_or_assign(this_index, std::move(new_session));
         }
         self->update_config(cfg);
-        self->drain_deferred_queue();
+        self->drain_deferred_queue({});
         self->poll_config({});
       }
       asio::post(
@@ -529,26 +549,27 @@ public:
       return handler(errc::network::configuration_not_available, topology::configuration{});
     }
     const std::scoped_lock lock(deferred_commands_mutex_);
-    deferred_commands_.emplace([self = shared_from_this(), handler = std::move(handler)]() mutable {
-      if (self->closed_ || !self->configured_) {
-        return handler(errc::network::configuration_not_available, topology::configuration{});
-      }
+    deferred_commands_.emplace(
+      [self = shared_from_this(), handler = std::move(handler)](std::error_code ec) mutable {
+        if (ec == errc::common::request_canceled || self->closed_ || !self->configured_) {
+          return handler(errc::network::configuration_not_available, topology::configuration{});
+        }
 
-      std::optional<topology::configuration> config{};
-      {
-        const std::scoped_lock config_lock(self->config_mutex_);
-        config = self->config_;
-      }
-      if (config) {
-        return handler({}, config.value());
-      }
-      return handler(errc::network::configuration_not_available, topology::configuration{});
-    });
+        std::optional<topology::configuration> config{};
+        {
+          const std::scoped_lock config_lock(self->config_mutex_);
+          config = self->config_;
+        }
+        if (config) {
+          return handler({}, config.value());
+        }
+        return handler(errc::network::configuration_not_available, topology::configuration{});
+      });
   }
 
-  void drain_deferred_queue()
+  void drain_deferred_queue(std::error_code ec)
   {
-    std::queue<utils::movable_function<void()>> commands{};
+    std::queue<utils::movable_function<void(std::error_code)>> commands{};
     {
       const std::scoped_lock lock(deferred_commands_mutex_);
       std::swap(deferred_commands_, commands);
@@ -558,7 +579,7 @@ public:
         R"({} draining deferred operation queue, size={})", log_prefix_, commands.size());
     }
     while (!commands.empty()) {
-      commands.front()();
+      commands.front()(ec);
       commands.pop();
     }
   }
@@ -628,7 +649,7 @@ public:
 
     heartbeat_timer_.cancel();
 
-    drain_deferred_queue();
+    drain_deferred_queue(errc::common::request_canceled);
 
     if (state_listener_ != nullptr) {
       state_listener_->unregister_config_listener(shared_from_this());
@@ -792,9 +813,16 @@ public:
           origin_.credentials(), hostname, port, origin_.options());
         io::mcbp_session session =
           origin_.options().enable_tls
-            ? io::mcbp_session(
-                client_id_, ctx_, tls_, origin, state_listener_, name_, known_features_)
-            : io::mcbp_session(client_id_, ctx_, origin, state_listener_, name_, known_features_);
+            ? io::mcbp_session(client_id_,
+                               node.node_uuid,
+                               ctx_,
+                               tls_,
+                               origin,
+                               state_listener_,
+                               name_,
+                               known_features_)
+            : io::mcbp_session(
+                client_id_, node.node_uuid, ctx_, origin, state_listener_, name_, known_features_);
         CB_LOG_DEBUG(R"({} rev={}, add session="{}", address="{}:{}", index={})",
                      log_prefix_,
                      config.rev_str(),
@@ -821,7 +849,7 @@ public:
             session.on_stop([id = session.id(), self]() {
               self->remove_session(id);
             });
-            self->drain_deferred_queue();
+            self->drain_deferred_queue({});
           },
           true);
         new_sessions.insert_or_assign(next_index, std::move(session));
@@ -900,6 +928,11 @@ public:
     return meter_;
   }
 
+  [[nodiscard]] auto app_telemetry_meter() const -> std::shared_ptr<core::app_telemetry_meter>
+  {
+    return app_telemetry_meter_;
+  }
+
   void export_diag_info(diag::diagnostics_result& res) const
   {
     std::map<size_t, io::mcbp_session> sessions;
@@ -936,7 +969,7 @@ public:
     config_listeners_.emplace_back(std::move(handler));
   }
 
-  auto defer_command(utils::movable_function<void()> command) -> std::error_code
+  auto defer_command(utils::movable_function<void(std::error_code)> command) -> std::error_code
   {
     const std::scoped_lock lock_for_deferred_commands(deferred_commands_mutex_);
     deferred_commands_.emplace(std::move(command));
@@ -950,6 +983,7 @@ private:
   const origin origin_;
   const std::shared_ptr<tracing::tracer_wrapper> tracer_;
   const std::shared_ptr<metrics::meter_wrapper> meter_;
+  const std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter_;
   const std::vector<protocol::hello_feature> known_features_;
   const std::shared_ptr<impl::bootstrap_state_listener> state_listener_;
   mcbp::codec codec_;
@@ -970,7 +1004,7 @@ private:
   std::vector<std::shared_ptr<config_listener>> config_listeners_{};
   std::mutex config_listeners_mutex_{};
 
-  std::queue<utils::movable_function<void()>> deferred_commands_{};
+  std::queue<utils::movable_function<void(std::error_code)>> deferred_commands_{};
   std::mutex deferred_commands_mutex_{};
 
   std::map<size_t, io::mcbp_session> sessions_{};
@@ -983,6 +1017,7 @@ bucket::bucket(std::string client_id,
                asio::ssl::context& tls,
                std::shared_ptr<tracing::tracer_wrapper> tracer,
                std::shared_ptr<metrics::meter_wrapper> meter,
+               std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter,
                std::string name,
                couchbase::core::origin origin,
                std::vector<protocol::hello_feature> known_features,
@@ -994,6 +1029,7 @@ bucket::bucket(std::string client_id,
                                          std::move(origin),
                                          std::move(tracer),
                                          std::move(meter),
+                                         std::move(app_telemetry_meter),
                                          std::move(known_features),
                                          std::move(state_listener),
                                          ctx,
@@ -1062,6 +1098,12 @@ bucket::meter() const -> std::shared_ptr<metrics::meter_wrapper>
 }
 
 auto
+bucket::app_telemetry_meter() const -> std::shared_ptr<core::app_telemetry_meter>
+{
+  return impl_->app_telemetry_meter();
+}
+
+auto
 bucket::default_retry_strategy() const -> std::shared_ptr<couchbase::retry_strategy>
 {
   return impl_->default_retry_strategy();
@@ -1099,7 +1141,7 @@ bucket::is_configured() const -> bool
 }
 
 void
-bucket::defer_command(utils::movable_function<void()> command)
+bucket::defer_command(utils::movable_function<void(std::error_code)> command)
 {
   impl_->defer_command(std::move(command));
 }

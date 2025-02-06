@@ -22,6 +22,7 @@
 #include <cctype>
 #include <climits>
 #include <cstdint>
+#include <regex>
 
 namespace couchbase::core::utils::string_codec
 {
@@ -408,5 +409,30 @@ escape(const std::string& s, encoding mode) -> std::string
 }
 
 } // namespace v2
+
+auto
+url_parse(const std::string& src) -> url
+{
+  // very basic URL parser, only cares about scheme://host[:port][/path]
+  static const std::regex url_regexp{
+    R"(^([a-zA-Z][a-zA-Z\d+\-.]+):\/\/([^\/:]+)(?::(\d+))?(\/[^?#]*)?$)"
+  };
+
+  url u{};
+
+  std::smatch matches;
+  if (std::regex_match(src, matches, url_regexp)) {
+    u.scheme = matches[1].str();
+    u.host = matches[2].str();
+    if (matches[3].length() > 0) {
+      u.port = static_cast<std::uint16_t>(std::stoul(matches[3].str()));
+    } else {
+      u.port = (u.scheme == "https" || u.scheme == "wss") ? 443 : 80;
+    }
+    u.path = matches[4].str();
+  }
+
+  return u;
+}
 
 } // namespace couchbase::core::utils::string_codec

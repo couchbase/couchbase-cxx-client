@@ -858,12 +858,14 @@ class mcbp_session_impl
 public:
   mcbp_session_impl() = delete;
   mcbp_session_impl(std::string_view client_id,
+                    std::string_view node_uuid,
                     asio::io_context& ctx,
                     couchbase::core::origin origin,
                     std::shared_ptr<impl::bootstrap_state_listener> state_listener,
                     std::optional<std::string> bucket_name = {},
                     std::vector<protocol::hello_feature> known_features = {})
     : client_id_(client_id)
+    , node_uuid_(node_uuid)
     , ctx_(ctx)
     , resolver_(ctx_)
     , stream_(std::make_unique<plain_stream_impl>(ctx_))
@@ -883,6 +885,7 @@ public:
   }
 
   mcbp_session_impl(std::string_view client_id,
+                    std::string_view node_uuid,
                     asio::io_context& ctx,
                     asio::ssl::context& tls,
                     couchbase::core::origin origin,
@@ -890,6 +893,7 @@ public:
                     std::optional<std::string> bucket_name = {},
                     std::vector<protocol::hello_feature> known_features = {})
     : client_id_(client_id)
+    , node_uuid_(node_uuid)
     , ctx_(ctx)
     , resolver_(ctx_)
     , stream_(std::make_unique<tls_stream_impl>(ctx_, tls))
@@ -1152,6 +1156,11 @@ public:
   [[nodiscard]] auto id() const -> const std::string&
   {
     return id_;
+  }
+
+  [[nodiscard]] auto node_uuid() const -> const std::string&
+  {
+    return node_uuid_;
   }
 
   [[nodiscard]] auto is_stopped() const -> bool
@@ -1711,6 +1720,13 @@ private:
     if (ec) {
       return stop(retry_reason::node_not_available);
     }
+    if (node_uuid_.empty() && config_.has_value()) {
+      for (const auto& node : config_.value().nodes) {
+        if (node.this_node) {
+          node_uuid_ = node.node_uuid;
+        }
+      }
+    }
     state_ = diag::endpoint_state::connected;
     const std::scoped_lock lock(pending_buffer_mutex_);
     bootstrapped_ = true;
@@ -2020,6 +2036,7 @@ private:
   }
 
   const std::string client_id_;
+  std::string node_uuid_;
   const std::string id_{ uuid::to_string(uuid::random()) };
   asio::io_context& ctx_;
   asio::ip::tcp::resolver resolver_;
@@ -2092,12 +2109,14 @@ private:
 };
 
 mcbp_session::mcbp_session(const std::string& client_id,
+                           const std::string& node_uuid,
                            asio::io_context& ctx,
                            core::origin origin,
                            std::shared_ptr<impl::bootstrap_state_listener> state_listener,
                            std::optional<std::string> bucket_name,
                            std::vector<protocol::hello_feature> known_features)
   : impl_{ std::make_shared<mcbp_session_impl>(client_id,
+                                               node_uuid,
                                                ctx,
                                                std::move(origin),
                                                std::move(state_listener),
@@ -2107,6 +2126,7 @@ mcbp_session::mcbp_session(const std::string& client_id,
 }
 
 mcbp_session::mcbp_session(const std::string& client_id,
+                           const std::string& node_uuid,
                            asio::io_context& ctx,
                            asio::ssl::context& tls,
                            core::origin origin,
@@ -2114,6 +2134,7 @@ mcbp_session::mcbp_session(const std::string& client_id,
                            std::optional<std::string> bucket_name,
                            std::vector<protocol::hello_feature> known_features)
   : impl_{ std::make_shared<mcbp_session_impl>(client_id,
+                                               node_uuid,
                                                ctx,
                                                tls,
                                                std::move(origin),
@@ -2175,6 +2196,12 @@ auto
 mcbp_session::id() const -> const std::string&
 {
   return impl_->id();
+}
+
+auto
+mcbp_session::node_uuid() const -> const std::string&
+{
+  return impl_->node_uuid();
 }
 
 auto

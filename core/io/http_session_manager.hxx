@@ -19,6 +19,7 @@
 
 #include <couchbase/build_config.hxx>
 
+#include "core/app_telemetry_meter.hxx"
 #include "core/config_listener.hxx"
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
 #include "core/columnar/bootstrap_notification_subscriber.hxx"
@@ -72,6 +73,11 @@ public:
   void set_meter(std::shared_ptr<metrics::meter_wrapper> meter)
   {
     meter_ = std::move(meter);
+  }
+
+  void set_app_telemetry_meter(std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter)
+  {
+    app_telemetry_meter_ = std::move(app_telemetry_meter);
   }
 
   auto configuration_capabilities() const -> configuration_capabilities
@@ -203,7 +209,7 @@ public:
         std::uint16_t port = node.port_or(options_.network, type, options_.enable_tls, 0);
         if (port != 0) {
           const auto& hostname = node.hostname_for(options_.network);
-          auto session = create_session(type, credentials, hostname, port);
+          auto session = create_session(type, credentials, hostname, port, node.node_uuid);
           if (session->is_connected()) {
             std::scoped_lock lock(sessions_mutex_);
             busy_sessions_[type].push_back(session);
@@ -217,11 +223,17 @@ public:
             request,
             tracer_,
             meter_,
+            app_telemetry_meter_,
             options_.default_timeout_for(request.type),
             dispatch_timeout_);
 #else
           auto cmd = std::make_shared<operations::http_command<operations::http_noop_request>>(
-            ctx_, request, tracer_, meter_, options_.default_timeout_for(request.type));
+            ctx_,
+            request,
+            tracer_,
+            meter_,
+            app_telemetry_meter_,
+            options_.default_timeout_for(request.type));
 #endif
 
           cmd->start([start = std::chrono::steady_clock::now(),
@@ -300,10 +312,13 @@ public:
                  const std::string& undesired_node = {})
     -> std::pair<std::error_code, std::shared_ptr<http_session>>
   {
+    std::string node_uuid{};
+
     if (preferred_node.empty() && !undesired_node.empty()) {
-      auto [hostname, port] = pick_random_node(type, undesired_node);
+      auto [hostname, port, uuid] = pick_random_node(type, undesired_node);
       if (port != 0) {
         preferred_node = fmt::format("{}:{}", hostname, port);
+        node_uuid = uuid;
       }
     }
 
@@ -343,7 +358,7 @@ public:
             break;
           }
         } else {
-          session = create_session(type, credentials, hostname, port);
+          session = create_session(type, credentials, hostname, port, node_uuid);
           break;
         }
       }
@@ -355,12 +370,12 @@ public:
       session.reset();
     }
     if (!session) {
-      auto [hostname, port] =
+      auto [hostname, port, uuid] =
         preferred_node.empty() ? next_node(type) : lookup_node(type, preferred_node);
       if (port == 0) {
         return { errc::common::service_not_available, nullptr };
       }
-      session = create_session(type, credentials, hostname, port);
+      session = create_session(type, credentials, hostname, port, uuid);
     }
     if (session->is_connected()) {
       busy_sessions_[type].push_back(session);
@@ -472,13 +487,19 @@ public:
       request,
       tracer_,
       meter_,
+      app_telemetry_meter_,
       options_.default_timeout_for(request.type),
       dispatch_timeout_);
     cmd->start([self = shared_from_this(), cmd, handler = std::forward<Handler>(handler)](
                  error_union err, io::http_response&& msg) mutable {
 #else
     auto cmd = std::make_shared<operations::http_command<Request>>(
-      ctx_, request, tracer_, meter_, options_.default_timeout_for(request.type));
+      ctx_,
+      request,
+      tracer_,
+      meter_,
+      app_telemetry_meter_,
+      options_.default_timeout_for(request.type));
     cmd->start([self = shared_from_this(), cmd, handler = std::forward<Handler>(handler)](
                  std::error_code ec, io::http_response&& msg) mutable {
 #endif
@@ -571,15 +592,15 @@ public:
 
         // stop this session and create a new one w/ new hostname + port
         session->stop();
-        auto [hostname, port] = preferred_node.empty()
-                                  ? self->next_node(session->type())
-                                  : self->lookup_node(session->type(), preferred_node);
+        auto [hostname, port, node_uuid] = preferred_node.empty()
+                                             ? self->next_node(session->type())
+                                             : self->lookup_node(session->type(), preferred_node);
         if (port == 0) {
           cb(errc::common::service_not_available, {});
           return;
         }
         auto new_session =
-          self->create_session(session->type(), session->credentials(), hostname, port);
+          self->create_session(session->type(), session->credentials(), hostname, port, node_uuid);
         if (new_session->is_connected()) {
           {
             const std::scoped_lock inner_lock(self->sessions_mutex_);
@@ -679,15 +700,15 @@ private:
         }
         // stop this session and create a new one w/ new hostname + port
         session->stop();
-        auto [hostname, port] = preferred_node.empty()
-                                  ? self->next_node(session->type())
-                                  : self->lookup_node(session->type(), preferred_node);
+        auto [hostname, port, node_uuid] = preferred_node.empty()
+                                             ? self->next_node(session->type())
+                                             : self->lookup_node(session->type(), preferred_node);
         if (port == 0) {
           cmd->invoke_handler(errc::common::service_not_available, {});
           return;
         }
         auto new_session =
-          self->create_session(session->type(), session->credentials(), hostname, port);
+          self->create_session(session->type(), session->credentials(), hostname, port, node_uuid);
         cmd->set_command_session(new_session);
         if (new_session->is_connected()) {
           std::scoped_lock inner_lock(self->sessions_mutex_);
@@ -707,13 +728,15 @@ private:
   auto create_session(service_type type,
                       const couchbase::core::cluster_credentials& credentials,
                       const std::string& hostname,
-                      std::uint16_t port) -> std::shared_ptr<http_session>
+                      std::uint16_t port,
+                      const std::string& node_uuid) -> std::shared_ptr<http_session>
   {
     std::shared_ptr<http_session> session;
     if (options_.enable_tls) {
       session = std::make_shared<http_session>(
         type,
         client_id_,
+        node_uuid,
         ctx_,
         tls_,
         credentials,
@@ -724,6 +747,7 @@ private:
       session = std::make_shared<http_session>(
         type,
         client_id_,
+        node_uuid,
         ctx_,
         credentials,
         hostname,
@@ -763,6 +787,7 @@ private:
       request,
       tracer_,
       meter_,
+      app_telemetry_meter_,
       options_.default_timeout_for(request.type),
       dispatch_timeout_);
     cmd->start([self = shared_from_this(), cmd, handler = std::forward<Handler>(handler)](
@@ -852,7 +877,7 @@ private:
   }
 #endif
 
-  auto next_node(service_type type) -> std::pair<std::string, std::uint16_t>
+  auto next_node(service_type type) -> std::tuple<std::string, std::uint16_t, std::string>
   {
     std::scoped_lock lock(config_mutex_);
     auto candidates = config_.nodes.size();
@@ -863,10 +888,18 @@ private:
       next_index_ = (next_index_ + 1) % config_.nodes.size();
       std::uint16_t port = node.port_or(options_.network, type, options_.enable_tls, 0);
       if (port != 0) {
-        return { node.hostname_for(options_.network), port };
+        return {
+          node.hostname_for(options_.network),
+          port,
+          node.node_uuid,
+        };
       }
     }
-    return { "", static_cast<std::uint16_t>(0U) };
+    return {
+      "",
+      static_cast<std::uint16_t>(0U),
+      "",
+    };
   }
 
   auto split_host_port(const std::string& address) -> std::pair<std::string, std::uint16_t>
@@ -880,24 +913,30 @@ private:
     return { hostname, port };
   }
 
-  auto lookup_node(service_type type,
-                   const std::string& preferred_node) -> std::pair<std::string, std::uint16_t>
+  auto lookup_node(service_type type, const std::string& preferred_node)
+    -> std::tuple<std::string, std::uint16_t, std::string>
   {
     std::scoped_lock lock(config_mutex_);
     auto [hostname, port] = split_host_port(preferred_node);
-    if (std::none_of(config_.nodes.begin(),
-                     config_.nodes.end(),
-                     [this, type, &h = hostname, &p = port](const auto& node) {
-                       return node.hostname_for(options_.network) == h &&
-                              node.port_or(options_.network, type, options_.enable_tls, 0) == p;
-                     })) {
-      return { "", static_cast<std::uint16_t>(0U) };
+    for (const auto& node : config_.nodes) {
+      if (node.hostname_for(options_.network) == hostname &&
+          node.port_or(options_.network, type, options_.enable_tls, 0) == port) {
+        return {
+          hostname,
+          port,
+          node.node_uuid,
+        };
+      }
     }
-    return { hostname, port };
+    return {
+      "",
+      static_cast<std::uint16_t>(0U),
+      "",
+    };
   }
 
-  auto pick_random_node(service_type type,
-                        const std::string& undesired_node) -> std::pair<std::string, std::uint16_t>
+  auto pick_random_node(service_type type, const std::string& undesired_node)
+    -> std::tuple<std::string, std::uint16_t, std::string>
   {
     std::vector<topology::configuration::node> candidate_nodes{};
     {
@@ -913,7 +952,11 @@ private:
 
     if (candidate_nodes.empty()) {
       // Could not find any other nodes
-      return { "", static_cast<std::uint16_t>(0U) };
+      return {
+        "",
+        static_cast<std::uint16_t>(0U),
+        "",
+      };
     }
 
     std::vector<topology::configuration::node> selected{};
@@ -922,8 +965,12 @@ private:
                 std::back_inserter(selected),
                 1,
                 std::mt19937{ std::random_device{}() });
-    return { selected.at(0).hostname_for(options_.network),
-             selected.at(0).port_or(options_.network, type, options_.enable_tls, 0) };
+    const auto& first_selected = selected.at(0);
+    return {
+      first_selected.hostname_for(options_.network),
+      first_selected.port_or(options_.network, type, options_.enable_tls, 0),
+      first_selected.node_uuid,
+    };
   }
 
   std::string client_id_;
@@ -931,6 +978,7 @@ private:
   asio::ssl::context& tls_;
   std::shared_ptr<tracing::tracer_wrapper> tracer_{ nullptr };
   std::shared_ptr<metrics::meter_wrapper> meter_{ nullptr };
+  std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter_{ nullptr };
   cluster_options options_{};
 
   topology::configuration config_{};
