@@ -100,6 +100,7 @@ public:
     , options_{ std::move(options) }
     , ctx_(ctx)
     , tls_(tls)
+    , resolve_deadline_(ctx_)
     , connect_deadline_(ctx_)
     , resolver_(ctx_)
     , handler_{ std::move(handler) }
@@ -142,6 +143,9 @@ private:
             { "ec", ec.value() },
           }));
       }
+      if (self->endpoints_.empty()) {
+        return self->resolve_address();
+      }
       self->connect_socket();
     });
   }
@@ -179,12 +183,19 @@ private:
 
   void resolve_address()
   {
-    // TODO(SA): resolve deadline
+    resolve_deadline_.expires_after(options_.resolve_timeout);
+    resolve_deadline_.async_wait([self = shared_from_this()](auto ec) {
+      if (ec == asio::error::operation_aborted) {
+        return;
+      }
+      return self->complete_with_error(errc::common::unambiguous_timeout);
+    });
     io::async_resolve(options_.use_ip_protocol,
                       resolver_,
                       address_.hostname,
                       address_.service,
                       [self = shared_from_this()](auto ec, const auto& endpoints) {
+                        self->resolve_deadline_.cancel();
                         if (ec) {
                           CB_LOG_DEBUG("failed to resolve address for app telemetry socket.  {}",
                                        tao::json::to_string(tao::json::value{
@@ -204,6 +215,7 @@ private:
   cluster_options options_;
   asio::io_context& ctx_;
   asio::ssl::context& tls_;
+  asio::steady_timer resolve_deadline_;
   asio::steady_timer connect_deadline_;
   asio::ip::tcp::resolver resolver_;
   std::shared_ptr<connection_state_listener> handler_;
