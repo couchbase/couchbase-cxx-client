@@ -198,6 +198,7 @@ options_to_origin(const std::string& connection_string, const couchbase::cluster
     user_options.app_telemetry_endpoint = opts.application_telemetry.endpoint;
     user_options.app_telemetry_ping_interval = opts.application_telemetry.ping_interval;
     user_options.app_telemetry_ping_timeout = opts.application_telemetry.ping_timeout;
+    user_options.app_telemetry_backoff_interval = opts.application_telemetry.backoff_interval;
   }
 
   // connection string might override some user options

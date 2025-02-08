@@ -607,12 +607,6 @@ public:
 class no_backoff : public backoff_calculator
 {
 public:
-  static auto instance() -> backoff_calculator&
-  {
-    static no_backoff default_instance;
-    return default_instance;
-  }
-
   [[nodiscard]] auto retry_after(std::size_t /* retry_attempts */) const
     -> std::chrono::milliseconds override
   {
@@ -623,17 +617,6 @@ public:
 class exponential_backoff_with_jitter : public backoff_calculator
 {
 public:
-  static auto instance() -> backoff_calculator&
-  {
-    static exponential_backoff_with_jitter default_instance{
-      std::chrono::milliseconds{ 100 },
-      std::chrono::seconds{ 20 },
-      2 /* backoff factor */,
-      0.5 /* jitter factor */,
-    };
-    return default_instance;
-  }
-
   exponential_backoff_with_jitter(std::chrono::milliseconds min,
                                   std::chrono::milliseconds max,
                                   double factor,
@@ -698,16 +681,20 @@ public:
     , ctx_{ ctx }
     , tls_{ tls }
     , backoff_{ ctx }
+    , exponential_backoff_calculator_{
+      std::chrono::milliseconds{ 100 },
+      options_.app_telemetry_backoff_interval,
+      2 /* backoff factor */,
+      0.5 /* jitter factor */,
+    }
   {
     if (options_.enable_app_telemetry) {
       if (!options_.app_telemetry_endpoint.empty()) {
         auto url = couchbase::core::utils::string_codec::url_parse(options_.app_telemetry_endpoint);
         if (url.host.empty() || url.scheme != "ws") {
           CB_LOG_WARNING(
-            "unable to use \"{}\" as a app telemetry endpoint (expected ws:// and hostname).  {}",
-            tao::json::to_string(tao::json::value{
-              { "app_telemetry_endpoint", "options_.app_telemetry_endpoint" },
-            }));
+            "unable to use \"{}\" as a app telemetry endpoint (expected ws:// and hostname)",
+            options_.app_telemetry_endpoint);
           return;
         }
         addresses_.push_back({
@@ -769,7 +756,7 @@ public:
                                                   shared_from_this(),
                                                   options_.app_telemetry_ping_interval,
                                                   options_.app_telemetry_ping_timeout);
-    retry_backoff_calculator_ = &no_backoff::instance();
+    retry_backoff_calculator_ = &no_backoff_calculator_;
     ++next_address_index_;
   }
 
@@ -806,7 +793,7 @@ public:
       static thread_local std::default_random_engine gen{ std::random_device{}() };
       std::shuffle(addresses_.begin(), addresses_.end(), gen);
       next_address_index_ = 0;
-      retry_backoff_calculator_ = &exponential_backoff_with_jitter::instance();
+      retry_backoff_calculator_ = &exponential_backoff_calculator_;
     }
     auto next_address = addresses_[next_address_index_];
     auto backoff = retry_backoff_calculator_->retry_after(connection_attempt_);
@@ -866,6 +853,7 @@ private:
   asio::io_context& ctx_;
   asio::ssl::context& tls_;
   asio::steady_timer backoff_;
+  const exponential_backoff_with_jitter exponential_backoff_calculator_;
 
   std::shared_ptr<telemetry_dialer> dialer_{ nullptr };
 
@@ -874,7 +862,8 @@ private:
   std::vector<app_telemetry_address> addresses_{};
   std::size_t next_address_index_{ 0 };
 
-  const backoff_calculator* retry_backoff_calculator_{ &no_backoff::instance() };
+  const no_backoff no_backoff_calculator_{};
+  const backoff_calculator* retry_backoff_calculator_{ &no_backoff_calculator_ };
   std::size_t connection_attempt_{ 0 };
 };
 

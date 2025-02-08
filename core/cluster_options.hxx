@@ -104,6 +104,9 @@ public:
   std::chrono::milliseconds app_telemetry_ping_timeout{
     timeout_defaults::app_telemetry_ping_timeout
   };
+  std::chrono::milliseconds app_telemetry_backoff_interval{
+    timeout_defaults::app_telemetry_backoff_interval
+  };
 };
 
 } // namespace couchbase::core
