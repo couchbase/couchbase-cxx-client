@@ -27,7 +27,7 @@ class application_telemetry_options
 {
 public:
   static constexpr std::chrono::milliseconds default_ping_interval{ std::chrono::seconds{ 30 } };
-  static constexpr std::chrono::milliseconds default_ping_deadline{ std::chrono::seconds{ 2 } };
+  static constexpr std::chrono::milliseconds default_ping_timeout{ std::chrono::seconds{ 2 } };
 
   auto enable(bool enable) -> application_telemetry_options&
   {
@@ -50,7 +50,7 @@ public:
   struct built {
     bool enabled;
     std::chrono::milliseconds ping_interval;
-    std::chrono::milliseconds ping_deadline;
+    std::chrono::milliseconds ping_timeout;
     std::string endpoint;
   };
 
@@ -59,7 +59,7 @@ public:
     return {
       enabled_,
       ping_interval_,
-      ping_deadline_,
+      ping_timeout,
       endpoint_,
     };
   }
@@ -67,7 +67,7 @@ public:
 private:
   bool enabled_{ true };
   std::chrono::milliseconds ping_interval_{ default_ping_interval };
-  std::chrono::milliseconds ping_deadline_{ default_ping_deadline };
+  std::chrono::milliseconds ping_timeout{ default_ping_timeout };
   std::string endpoint_{};
 };
 } // namespace couchbase

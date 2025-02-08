@@ -261,7 +261,7 @@ public:
                     std::shared_ptr<app_telemetry_meter> meter,
                     std::shared_ptr<connection_state_listener> reporter,
                     std::chrono::milliseconds ping_interval,
-                    std::chrono::milliseconds ping_deadline) -> std::shared_ptr<websocket_session>
+                    std::chrono::milliseconds ping_timeout) -> std::shared_ptr<websocket_session>
   {
     auto handler = std::make_shared<websocket_session>(ctx,
                                                        std::move(address),
@@ -270,7 +270,7 @@ public:
                                                        std::move(meter),
                                                        std::move(reporter),
                                                        ping_interval,
-                                                       ping_deadline);
+                                                       ping_timeout);
     handler->start();
     return handler;
   }
@@ -282,7 +282,7 @@ public:
                     std::shared_ptr<app_telemetry_meter> meter,
                     std::shared_ptr<connection_state_listener> reporter,
                     std::chrono::milliseconds ping_interval,
-                    std::chrono::milliseconds ping_deadline)
+                    std::chrono::milliseconds ping_timeout)
     : ctx_{ ctx }
     , address_{ std::move(address) }
     , credentials_{ std::move(credentials) }
@@ -291,9 +291,9 @@ public:
     , reporter_{ std::move(reporter) }
     , codec_{ this }
     , ping_interval_timer_{ ctx_ }
-    , ping_deadline_timer_{ ctx_ }
+    , ping_timeout_timer_{ ctx_ }
     , ping_interval_{ ping_interval }
-    , ping_deadline_{ ping_deadline }
+    , ping_timeout_{ ping_timeout }
   {
   }
 
@@ -301,7 +301,7 @@ public:
   {
     is_running_ = false;
     ping_interval_timer_.cancel();
-    ping_deadline_timer_.cancel();
+    ping_timeout_timer_.cancel();
     stream_->close([](auto /* ec */) {
     });
   }
@@ -319,15 +319,15 @@ public:
     write_buffer(ws.ping());
     start_write();
 
-    ping_deadline_timer_.expires_after(ping_deadline_);
-    ping_deadline_timer_.async_wait([self = shared_from_this()](auto ec) {
+    ping_timeout_timer_.expires_after(ping_timeout_);
+    ping_timeout_timer_.async_wait([self = shared_from_this()](auto ec) {
       if (ec == asio::error::operation_aborted) {
         return;
       }
       CB_LOG_DEBUG("app telemetry websocket did not respond in time for ping request.  {}",
                    tao::json::to_string(tao::json::value{
                      { "ping_interval", fmt::format("{}", self->ping_interval_) },
-                     { "ping_deadline", fmt::format("{}", self->ping_deadline_) },
+                     { "ping_timeout", fmt::format("{}", self->ping_timeout_) },
                      { "hostname", self->address_.hostname },
                    }));
       self->stop_and_error(errc::common::unambiguous_timeout, "server did not respond in time");
@@ -398,7 +398,7 @@ public:
 
   void on_pong(const websocket_codec& /* ws */, gsl::span<std::byte> /* payload */) override
   {
-    ping_deadline_timer_.cancel();
+    ping_timeout_timer_.cancel();
   }
 
   void on_close(const websocket_codec& /* ws */, gsl::span<std::byte> payload) override
@@ -578,9 +578,9 @@ private:
   websocket_codec codec_;
 
   asio::steady_timer ping_interval_timer_;
-  asio::steady_timer ping_deadline_timer_;
+  asio::steady_timer ping_timeout_timer_;
   std::chrono::milliseconds ping_interval_;
-  std::chrono::milliseconds ping_deadline_;
+  std::chrono::milliseconds ping_timeout_;
 
   std::atomic<bool> is_running_{ false };
   std::queue<std::vector<std::byte>> buffers_;
@@ -768,7 +768,7 @@ public:
                                                   meter_,
                                                   shared_from_this(),
                                                   options_.app_telemetry_ping_interval,
-                                                  options_.app_telemetry_ping_deadline);
+                                                  options_.app_telemetry_ping_timeout);
     retry_backoff_calculator_ = &no_backoff::instance();
     ++next_address_index_;
   }

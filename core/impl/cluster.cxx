@@ -197,7 +197,7 @@ options_to_origin(const std::string& connection_string, const couchbase::cluster
   if (opts.application_telemetry.enabled) {
     user_options.app_telemetry_endpoint = opts.application_telemetry.endpoint;
     user_options.app_telemetry_ping_interval = opts.application_telemetry.ping_interval;
-    user_options.app_telemetry_ping_deadline = opts.application_telemetry.ping_deadline;
+    user_options.app_telemetry_ping_timeout = opts.application_telemetry.ping_timeout;
   }
 
   // connection string might override some user options

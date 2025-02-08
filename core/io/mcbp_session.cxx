@@ -872,7 +872,7 @@ public:
     , bootstrap_deadline_(ctx_)
     , connection_deadline_(ctx_)
     , retry_backoff_(ctx_)
-    , ping_deadline_(ctx_)
+    , ping_timeout_(ctx_)
     , origin_{ std::move(origin) }
     , bucket_name_{ std::move(bucket_name) }
     , supported_features_{ std::move(known_features) }
@@ -900,7 +900,7 @@ public:
     , bootstrap_deadline_(ctx_)
     , connection_deadline_(ctx_)
     , retry_backoff_(ctx_)
-    , ping_deadline_(ctx_)
+    , ping_timeout_(ctx_)
     , origin_(std::move(origin))
     , bucket_name_(std::move(bucket_name))
     , supported_features_(std::move(known_features))
@@ -1002,8 +1002,8 @@ public:
           error,
         });
       });
-    ping_deadline_.expires_after(timeout.value_or(origin_.options().key_value_timeout));
-    ping_deadline_.async_wait(
+    ping_timeout_.expires_after(timeout.value_or(origin_.options().key_value_timeout));
+    ping_timeout_.async_wait(
       [self = this->shared_from_this(), opaque = req.opaque()](std::error_code ec) {
         if (ec == asio::error::operation_aborted) {
           return;
@@ -1203,7 +1203,7 @@ public:
     bootstrap_deadline_.cancel();
     connection_deadline_.cancel();
     retry_backoff_.cancel();
-    ping_deadline_.cancel();
+    ping_timeout_.cancel();
     resolver_.cancel();
     stream_->close([](std::error_code) {
     });
@@ -2044,7 +2044,7 @@ private:
   asio::steady_timer bootstrap_deadline_;
   asio::steady_timer connection_deadline_;
   asio::steady_timer retry_backoff_;
-  asio::steady_timer ping_deadline_;
+  asio::steady_timer ping_timeout_;
   couchbase::core::origin origin_;
   std::optional<std::string> bucket_name_;
   mcbp_parser parser_;

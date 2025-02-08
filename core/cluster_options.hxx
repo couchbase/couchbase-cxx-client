@@ -101,8 +101,8 @@ public:
   std::chrono::milliseconds app_telemetry_ping_interval{
     timeout_defaults::app_telemetry_ping_interval
   };
-  std::chrono::milliseconds app_telemetry_ping_deadline{
-    timeout_defaults::app_telemetry_ping_deadline
+  std::chrono::milliseconds app_telemetry_ping_timeout{
+    timeout_defaults::app_telemetry_ping_timeout
   };
 };
 
