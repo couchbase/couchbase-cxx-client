@@ -182,7 +182,8 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
       span_ = nullptr;
     }
     if (auto handler = std::move(handler_); handler) {
-      auto telemetry_recorder = app_telemetry_meter_->value_recorder(session_->node_uuid(), {});
+      const auto& node_uuid = session_ ? session_->node_uuid() : "";
+      auto telemetry_recorder = app_telemetry_meter_->value_recorder(node_uuid, {});
       telemetry_recorder->update_counter(total_counter_for_service_type(request.type));
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
       std::error_code ec{};

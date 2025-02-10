@@ -44,6 +44,6 @@ constexpr std::chrono::milliseconds config_idle_redial_timeout{ 5 * 60'000 };
 constexpr std::chrono::milliseconds idle_http_connection_timeout{ 1'000 };
 
 constexpr std::chrono::milliseconds app_telemetry_ping_interval{ 30'000 };
-constexpr std::chrono::milliseconds app_telemetry_ping_timeout{ 1'000 };
+constexpr std::chrono::milliseconds app_telemetry_ping_timeout{ 2'000 };
 constexpr std::chrono::milliseconds app_telemetry_backoff_interval{ 5'000 };
 } // namespace couchbase::core::timeout_defaults
