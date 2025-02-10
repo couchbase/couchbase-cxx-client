@@ -30,24 +30,75 @@ public:
   static constexpr std::chrono::milliseconds default_ping_timeout{ std::chrono::seconds{ 2 } };
   static constexpr std::chrono::milliseconds default_backoff_interval{ std::chrono::seconds{ 5 } };
 
+  /**
+   * Whether to enable application telemetry.
+   *
+   * @param enable true if the application service telemetry have to be enabled.
+   *
+   * @since 1.1.0
+   */
   auto enable(bool enable) -> application_telemetry_options&
   {
     enabled_ = enable;
     return *this;
   }
 
+  /**
+   * How often the SDK should ping application service telemetry collector.
+   *
+   * @param interval ping interval in milliseconds.
+   *
+   * @since 1.1.0
+   */
   auto ping_interval(std::chrono::milliseconds interval) -> application_telemetry_options&
   {
     ping_interval_ = interval;
     return *this;
   }
 
+  /**
+   * How long the SDK should wait for ping response (pong frame) back from application service
+   * telemetry collector.
+   *
+   * @param timeout ping timeout in milliseconds.
+   *
+   * @since 1.1.0
+   */
+  auto ping_timeout(std::chrono::milliseconds timeout) -> application_telemetry_options&
+  {
+    ping_timeout_ = timeout;
+    return *this;
+  }
+
+  /**
+   * Override the endpoint for the application service telementry.
+   *
+   * The endpoint must use WebSocket protocol and the string should start from `ws://` and might
+   * have URL path.
+   *
+   * @param endpoint connection string for the telementry collector.
+   *
+   * @since 1.1.0
+   */
   auto override_endpoint(std::string endpoint) -> application_telemetry_options&
   {
     endpoint_ = std::move(endpoint);
     return *this;
   }
 
+  /**
+   * How long should the SDK wait between connection attempts to the collector to avoid performance
+   * and stability issues on the collector side.
+   *
+   * @param interval backoff interval in milliseconds
+   *
+   * @since 1.1.0
+   */
+  auto backoff_interval(std::chrono::milliseconds interval) -> application_telemetry_options&
+  {
+    backoff_interval_ = interval;
+    return *this;
+  }
   struct built {
     bool enabled;
     std::chrono::milliseconds ping_interval;
@@ -59,14 +110,14 @@ public:
   [[nodiscard]] auto build() const -> built
   {
     return {
-      enabled_, ping_interval_, ping_timeout, backoff_interval_, endpoint_,
+      enabled_, ping_interval_, ping_timeout_, backoff_interval_, endpoint_,
     };
   }
 
 private:
   bool enabled_{ true };
   std::chrono::milliseconds ping_interval_{ default_ping_interval };
-  std::chrono::milliseconds ping_timeout{ default_ping_timeout };
+  std::chrono::milliseconds ping_timeout_{ default_ping_timeout };
   std::chrono::milliseconds backoff_interval_{ default_backoff_interval };
   std::string endpoint_{};
 };
