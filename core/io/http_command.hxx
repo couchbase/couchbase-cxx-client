@@ -19,6 +19,7 @@
 
 #include <couchbase/build_config.hxx>
 
+#include "core/app_telemetry_meter.hxx"
 #include "core/impl/bootstrap_error.hxx"
 #include "core/metrics/meter_wrapper.hxx"
 #include "core/service_type_fmt.hxx"
@@ -52,6 +53,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
   std::shared_ptr<tracing::tracer_wrapper> tracer_;
   std::shared_ptr<couchbase::tracing::request_span> span_{ nullptr };
   std::shared_ptr<metrics::meter_wrapper> meter_{};
+  std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter_{ nullptr };
   std::shared_ptr<io::http_session> session_{};
   http_command_handler handler_{};
   std::chrono::milliseconds timeout_{};
@@ -65,12 +67,14 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
                Request req,
                std::shared_ptr<tracing::tracer_wrapper> tracer,
                std::shared_ptr<metrics::meter_wrapper> meter,
+               std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter,
                std::chrono::milliseconds default_timeout,
                std::chrono::milliseconds dispatch_timeout)
     : deadline(ctx)
     , request(req)
     , tracer_(std::move(tracer))
     , meter_(std::move(meter))
+    , app_telemetry_meter_(std::move(app_telemetry_meter))
     , timeout_(request.timeout.value_or(default_timeout))
     , client_context_id_(request.client_context_id.value_or(uuid::to_string(uuid::random())))
     , dispatch_timeout_(dispatch_timeout)
@@ -85,11 +89,13 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
                Request req,
                std::shared_ptr<tracing::tracer_wrapper> tracer,
                std::shared_ptr<metrics::meter_wrapper> meter,
+               std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter,
                std::chrono::milliseconds default_timeout)
     : deadline(ctx)
     , request(req)
     , tracer_(std::move(tracer))
     , meter_(std::move(meter))
+    , app_telemetry_meter_(std::move(app_telemetry_meter))
     , timeout_(request.timeout.value_or(default_timeout))
     , client_context_id_(request.client_context_id.value_or(uuid::to_string(uuid::random())))
   {
@@ -176,6 +182,22 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
       span_ = nullptr;
     }
     if (auto handler = std::move(handler_); handler) {
+      const auto& node_uuid = session_ ? session_->node_uuid() : "";
+      auto telemetry_recorder = app_telemetry_meter_->value_recorder(node_uuid, {});
+      telemetry_recorder->update_counter(total_counter_for_service_type(request.type));
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+      std::error_code ec{};
+      if (std::holds_alternative<std::error_code>(error)) {
+        ec = std::get<std::error_code>(error);
+      } else if (std::holds_alternative<impl::bootstrap_error>(error)) {
+        ec = std::get<impl::bootstrap_error>(error).ec;
+      }
+#endif
+      if (ec == errc::common::ambiguous_timeout || ec == errc::common::unambiguous_timeout) {
+        telemetry_recorder->update_counter(timedout_counter_for_service_type(request.type));
+      } else if (ec == errc::common::request_canceled) {
+        telemetry_recorder->update_counter(canceled_counter_for_service_type(request.type));
+      }
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
       handler(error, std::move(msg));
     }
@@ -195,8 +217,9 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
     if (!handler_) {
       return;
     }
-    if (span_->uses_tags())
+    if (span_->uses_tags()) {
       span_->add_tag(tracing::attributes::local_id, session_->id());
+    }
     send();
   }
 
@@ -244,6 +267,12 @@ private:
         if (ec == asio::error::operation_aborted) {
           return self->invoke_handler(errc::common::ambiguous_timeout, std::move(msg));
         }
+
+        auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::steady_clock::now() - start);
+        self->app_telemetry_meter_->value_recorder(self->session_->node_uuid(), {})
+          ->record_latency(latency_for_service_type(self->request.type), latency);
+
         if (self->meter_) {
           metrics::metric_attributes attrs{
             self->request.type,

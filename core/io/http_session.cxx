@@ -100,6 +100,7 @@ http_session_info::log_prefix() const -> const std::string&
 
 http_session::http_session(couchbase::core::service_type type,
                            std::string client_id,
+                           std::string node_uuid,
                            asio::io_context& ctx,
                            couchbase::core::cluster_credentials credentials,
                            std::string hostname,
@@ -107,6 +108,7 @@ http_session::http_session(couchbase::core::service_type type,
                            couchbase::core::http_context http_ctx)
   : type_(type)
   , client_id_(std::move(client_id))
+  , node_uuid_(std::move(node_uuid))
   , id_(uuid::to_string(uuid::random()))
   , ctx_(ctx)
   , resolver_(ctx_)
@@ -125,6 +127,7 @@ http_session::http_session(couchbase::core::service_type type,
 
 http_session::http_session(couchbase::core::service_type type,
                            std::string client_id,
+                           std::string node_uuid,
                            asio::io_context& ctx,
                            asio::ssl::context& tls,
                            couchbase::core::cluster_credentials credentials,
@@ -133,6 +136,7 @@ http_session::http_session(couchbase::core::service_type type,
                            couchbase::core::http_context http_ctx)
   : type_(type)
   , client_id_(std::move(client_id))
+  , node_uuid_(std::move(node_uuid))
   , id_(uuid::to_string(uuid::random()))
   , ctx_(ctx)
   , resolver_(ctx_)
@@ -205,6 +209,12 @@ auto
 http_session::id() const -> const std::string&
 {
   return id_;
+}
+
+auto
+http_session::node_uuid() const -> const std::string&
+{
+  return node_uuid_;
 }
 
 auto

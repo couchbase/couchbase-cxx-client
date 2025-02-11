@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2014 Couchbase, Inc
+ *   Copyright 2020-2021 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -14,26 +14,14 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  */
-#pragma once
 
-#include <cstddef>
-#include <cstdint>
+#include "cluster_credentials.hxx"
 
 namespace couchbase::core
 {
-class RandomGeneratorProvider;
-
-/**
- * The RandomGenerator use windows crypto framework on windows and
- * /dev/urandom on the other platforms in order to get random data.
- */
-class RandomGenerator
+auto
+cluster_credentials::uses_certificate() const -> bool
 {
-public:
-  RandomGenerator();
-
-  auto next() -> std::uint64_t;
-
-  static auto getBytes(void* dest, size_t size) -> bool;
-};
+  return !certificate_path.empty();
+}
 } // namespace couchbase::core

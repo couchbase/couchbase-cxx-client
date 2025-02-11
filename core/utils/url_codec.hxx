@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cinttypes>
 #include <map>
 #include <sstream>
 #include <string>
@@ -68,5 +69,15 @@ form_encode(const std::map<std::string, std::string>& values) -> std::string
   return ss.str();
 }
 } // namespace v2
+
+struct url {
+  std::string scheme;
+  std::string host;
+  std::uint16_t port;
+  std::string path;
+};
+
+auto
+url_parse(const std::string& src) -> url;
 
 } // namespace couchbase::core::utils::string_codec

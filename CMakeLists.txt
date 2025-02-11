@@ -438,6 +438,11 @@ set(couchbase_cxx_client_FILES
     core/utils/split_string.cxx
     core/utils/url_codec.cxx
     core/view_query_options.cxx
+    core/websocket_codec.cxx
+    core/app_telemetry_address.cxx
+    core/app_telemetry_meter.cxx
+    core/app_telemetry_reporter.cxx
+    core/cluster_credentials.cxx
 )
 
 set(couchbase_cxx_client_LIBRARIES)

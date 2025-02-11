@@ -95,6 +95,18 @@ public:
   bool dump_configuration{ false };
   bool disable_mozilla_ca_certificates{ false };
   couchbase::core::columnar::security_options security_options{};
+
+  bool enable_app_telemetry{ true };
+  std::string app_telemetry_endpoint{};
+  std::chrono::milliseconds app_telemetry_ping_interval{
+    timeout_defaults::app_telemetry_ping_interval
+  };
+  std::chrono::milliseconds app_telemetry_ping_timeout{
+    timeout_defaults::app_telemetry_ping_timeout
+  };
+  std::chrono::milliseconds app_telemetry_backoff_interval{
+    timeout_defaults::app_telemetry_backoff_interval
+  };
 };
 
 } // namespace couchbase::core

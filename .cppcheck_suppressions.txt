@@ -19,6 +19,7 @@ unusedFunction:*
 unusedStructMember:*
 unusedVariable:*
 useStlAlgorithm:*
+unusedPrivateFunction:*
 
 # these are not very useful
 checkersReport:*
@@ -34,3 +35,4 @@ variableScope:*/test/test_*
 
 # do not scan third-party code
 *:*/_deps/*
+

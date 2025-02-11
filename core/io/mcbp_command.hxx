@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "core/app_telemetry_meter.hxx"
 #include "core/document_id_fmt.hxx"
 #include "core/error_context/key_value_error_map_info.hxx"
 #include "core/metrics/meter_wrapper.hxx"
@@ -146,7 +147,12 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
       span_ = nullptr;
     }
     if (handler) {
+      const auto& node_uuid = session_ ? session_->node_uuid() : "";
+      auto telemetry_recorder =
+        manager_->app_telemetry_meter()->value_recorder(node_uuid, manager_->name());
+      telemetry_recorder->update_counter(app_telemetry_counter::kv_r_total);
       if (ec == errc::common::unambiguous_timeout || ec == errc::common::ambiguous_timeout) {
+        telemetry_recorder->update_counter(app_telemetry_counter::kv_r_timedout);
         auto time_left = deadline.expiry() - std::chrono::steady_clock::now();
         CB_LOG_TRACE(R"([{}] timeout operation id="{}", {}, key="{}", partition={}, time_left={})",
                      session_ ? session_->log_prefix() : manager_->log_prefix(),
@@ -155,6 +161,8 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                      request.id,
                      request.partition,
                      time_left);
+      } else if (ec == errc::common::request_canceled) {
+        telemetry_recorder->update_counter(app_telemetry_counter::kv_r_canceled);
       }
       handler(ec, std::move(msg));
     }
@@ -267,6 +275,35 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
         retry_reason reason,
         io::mcbp_message&& msg,
         std::optional<key_value_error_map_info> /* error_info */) mutable {
+        {
+          auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - start);
+          auto category = app_telemetry_latency::kv_retrieval;
+          switch (encoded_request_type::body_type::opcode) {
+            case protocol::client_opcode::upsert:
+            case protocol::client_opcode::insert:
+            case protocol::client_opcode::replace:
+            case protocol::client_opcode::remove:
+            case protocol::client_opcode::increment:
+            case protocol::client_opcode::decrement:
+            case protocol::client_opcode::append:
+            case protocol::client_opcode::prepend:
+              category = app_telemetry_latency::kv_mutation_nondurable;
+              if constexpr (io::mcbp_traits::supports_durability_v<Request>) {
+                if (self->request.durability_level != durability_level::none) {
+                  category = app_telemetry_latency::kv_mutation_durable;
+                }
+              }
+              break;
+            default:
+              break;
+          }
+
+          auto telemetry_recorder = self->manager_->app_telemetry_meter()->value_recorder(
+            self->session_->node_uuid(), self->manager_->name());
+          telemetry_recorder->record_latency(category, latency);
+        }
+
         metrics::metric_attributes attrs{
           service_type::key_value,
           self->request.observability_identifier,
@@ -279,16 +316,18 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
 
         self->retry_backoff.cancel();
         if (ec == asio::error::operation_aborted) {
-          if (self->span_->uses_tags())
+          if (self->span_->uses_tags()) {
             self->span_->add_tag(tracing::attributes::orphan, "aborted");
+          }
           return self->invoke_handler(make_error_code(self->request.retries.idempotent()
                                                         ? errc::common::unambiguous_timeout
                                                         : errc::common::ambiguous_timeout));
         }
         if (ec == errc::common::request_canceled) {
           if (!self->request.retries.idempotent() && !allows_non_idempotent_retry(reason)) {
-            if (self->span_->uses_tags())
+            if (self->span_->uses_tags()) {
               self->span_->add_tag(tracing::attributes::orphan, "canceled");
+            }
             return self->invoke_handler(ec);
           }
           return io::retry_orchestrator::maybe_retry(self->manager_, self, reason, ec);
