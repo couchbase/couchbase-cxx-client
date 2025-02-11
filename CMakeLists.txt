@@ -402,6 +402,7 @@ set(couchbase_cxx_client_FILES
     core/search_query_options.cxx
     core/seed_config.cxx
     core/topology/configuration.cxx
+    core/tracing/otel_tracer.cxx
     core/tracing/threshold_logging_tracer.cxx
     core/tracing/tracer_wrapper.cxx
     core/transactions/active_transaction_record.cxx
@@ -528,6 +529,7 @@ foreach(TARGET ${couchbase_cxx_client_LIBRARIES})
             snappy
             jsonsl
             couchbase_backtrace
+            opentelemetry_api
             hdr_histogram_static)
 
   if(WIN32)
