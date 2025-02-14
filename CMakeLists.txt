@@ -35,14 +35,14 @@ include(cmake/PreventInSourceBuilds.cmake)
 include(cmake/StandardProjectSettings.cmake)
 
 # 'library' to set the c++ standard / compile-time options requested
-add_library(project_options INTERFACE)
+add_library(project_options INTERFACE IMPORTED)
 target_compile_features(project_options INTERFACE cxx_std_17)
 if(MSVC)
   target_compile_options(project_options INTERFACE /bigobj)
 endif()
 
 # 'library' to use the warnings specified in CompilerWarnings.cmake
-add_library(project_warnings INTERFACE)
+add_library(project_warnings INTERFACE IMPORTED)
 
 include(cmake/BuildTracing.cmake)
 
@@ -73,8 +73,6 @@ endif()
 find_package(Threads REQUIRED)
 
 include(cmake/ThirdPartyDependencies.cmake)
-
-include(cmake/OpenSSL.cmake)
 
 include(cmake/VersionInfo.cmake)
 
@@ -512,8 +510,11 @@ foreach(TARGET ${couchbase_cxx_client_LIBRARIES})
                       $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/generated_$<CONFIG>>)
 
   target_include_directories(
-    ${TARGET} SYSTEM PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/cxx_function>
-                             $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/expected/include>)
+    ${TARGET} SYSTEM
+    PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/cxx_function>
+            $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/expected/include>
+            $<BUILD_INTERFACE:$<TARGET_PROPERTY:jsonsl,INTERFACE_INCLUDE_DIRECTORIES>>
+            $<BUILD_INTERFACE:$<TARGET_PROPERTY:asio,INTERFACE_INCLUDE_DIRECTORIES>>)
 
   target_include_directories(${TARGET} PUBLIC $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
@@ -525,14 +526,17 @@ foreach(TARGET ${couchbase_cxx_client_LIBRARIES})
             project_warnings
             spdlog::spdlog
             Microsoft.GSL::GSL
-            asio
             llhttp::llhttp
             taocpp::json
             snappy
-            jsonsl
-            couchbase_backtrace
-            hdr_histogram_static)
+            hdr_histogram_static
+            $<TARGET_OBJECTS:asio>
+            $<TARGET_OBJECTS:couchbase_backtrace>
+            $<TARGET_OBJECTS:jsonsl>)
 
+  if(HAVE_BACKTRACE)
+    target_link_libraries(${TARGET} PRIVATE ${PLATFORM_LIBRARIES})
+  endif()
   if(WIN32)
     target_link_libraries(${TARGET} PRIVATE iphlpapi)
   endif()
@@ -550,7 +554,10 @@ foreach(TARGET ${couchbase_cxx_client_LIBRARIES})
       if(MINGW)
         target_link_libraries(${TARGET} PUBLIC ws2_32)
       endif()
-      target_link_libraries(${TARGET} PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+      target_link_libraries(${TARGET} PUBLIC $<TARGET_OBJECTS:ssl> $<TARGET_OBJECTS:crypto>)
+      target_include_directories(
+        ${TARGET} SYSTEM PRIVATE $<BUILD_INTERFACE:$<TARGET_PROPERTY:ssl,INTERFACE_INCLUDE_DIRECTORIES>>
+                                 $<BUILD_INTERFACE:$<TARGET_PROPERTY:crypto,INTERFACE_INCLUDE_DIRECTORIES>>)
     else()
       if(TARGET PkgConfig::PKG_CONFIG_OPENSSL)
         target_link_libraries(${TARGET} PUBLIC PkgConfig::PKG_CONFIG_OPENSSL)
