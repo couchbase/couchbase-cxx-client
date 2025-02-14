@@ -92,8 +92,8 @@ struct lookup_in_any_replica_request {
         return core->with_bucket_configuration(
           id.bucket(),
           [core, id, timeout, specs, parent_span, read_preference, h = std::forward<Handler>(h)](
-            std::error_code ec, const topology::configuration& config) mutable {
-            if (!config.capabilities.supports_subdoc_read_replica()) {
+            std::error_code ec, std::shared_ptr<topology::configuration> config) mutable {
+            if (!config->capabilities.supports_subdoc_read_replica()) {
               ec = errc::common::feature_not_available;
             }
             const auto [e, origin] = core->origin();
@@ -108,7 +108,7 @@ struct lookup_in_any_replica_request {
                 "Unable to retrieve replicas for \"{}\", server_group={}, number_of_replicas={}",
                 id,
                 origin.options().server_group,
-                config.num_replicas.value_or(0));
+                config->num_replicas.value_or(0));
               ec = errc::key_value::document_irretrievable;
             }
 

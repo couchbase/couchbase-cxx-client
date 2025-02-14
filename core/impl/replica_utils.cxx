@@ -25,7 +25,7 @@ namespace couchbase::core::impl
 
 auto
 effective_nodes(const document_id& id,
-                const topology::configuration& config,
+                const std::shared_ptr<topology::configuration>& config,
                 const read_preference& preference,
                 const std::string& preferred_server_group) -> std::vector<readable_node>
 {
@@ -37,12 +37,12 @@ effective_nodes(const document_id& id,
   std::vector<readable_node> available_nodes{};
   std::vector<readable_node> local_nodes{};
 
-  for (std::size_t idx = 0U; idx <= config.num_replicas.value_or(0U); ++idx) {
-    auto [vbid, server] = config.map_key(id.key(), idx);
-    if (server.has_value() && server.value() < config.nodes.size()) {
+  for (std::size_t idx = 0U; idx <= config->num_replicas.value_or(0U); ++idx) {
+    auto [vbid, server] = config->map_key(id.key(), idx);
+    if (server.has_value() && server.value() < config->nodes.size()) {
       const bool is_replica = idx != 0;
       available_nodes.emplace_back(readable_node{ is_replica, idx });
-      if (preferred_server_group == config.nodes[server.value()].server_group) {
+      if (preferred_server_group == config->nodes[server.value()].server_group) {
         local_nodes.emplace_back(readable_node{ is_replica, idx });
       }
     }

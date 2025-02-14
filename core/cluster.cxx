@@ -578,12 +578,12 @@ public:
         return self->with_bucket_configuration(
           bucket_name,
           [self, cap, request = std::move(request), handler = std::forward<Handler>(handler)](
-            std::error_code ec, const topology::configuration& config) mutable {
+            std::error_code ec, const std::shared_ptr<topology::configuration>& config) mutable {
             if (ec) {
               handler(request.make_response({ ec }, {}));
               return;
             }
-            if (!config.capabilities.has_bucket_capability(cap)) {
+            if (!config->capabilities.has_bucket_capability(cap)) {
               handler(request.make_response({ errc::common::feature_not_available }, {}));
               return;
             }
@@ -980,10 +980,11 @@ public:
 
   void with_bucket_configuration(
     const std::string& bucket_name,
-    utils::movable_function<void(std::error_code, topology::configuration)>&& handler)
+    utils::movable_function<void(std::error_code, std::shared_ptr<topology::configuration>)>&&
+      handler)
   {
     if (stopped_) {
-      return handler(errc::network::cluster_closed, {});
+      return handler(errc::network::cluster_closed, nullptr);
     }
     if (auto bucket = find_bucket_by_name(bucket_name); bucket != nullptr) {
       return bucket->with_configuration(std::move(handler));
@@ -992,13 +993,13 @@ public:
       bucket_name,
       [self = shared_from_this(), bucket_name, handler = std::move(handler)](auto ec) mutable {
         if (ec) {
-          return handler(ec, {});
+          return handler(ec, nullptr);
         }
 
         if (auto bucket = self->find_bucket_by_name(bucket_name); bucket != nullptr) {
           return bucket->with_configuration(std::move(handler));
         }
-        return handler(errc::common::bucket_not_found, {});
+        return handler(errc::common::bucket_not_found, nullptr);
       });
   }
 
@@ -1326,7 +1327,8 @@ cluster::ping(std::optional<std::string> report_id,
 void
 cluster::with_bucket_configuration(
   const std::string& bucket_name,
-  utils::movable_function<void(std::error_code, topology::configuration)>&& handler) const
+  utils::movable_function<void(std::error_code, std::shared_ptr<topology::configuration>)>&&
+    handler) const
 {
   if (impl_) {
     impl_->with_bucket_configuration(bucket_name, std::move(handler));

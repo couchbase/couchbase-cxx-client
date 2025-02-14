@@ -356,7 +356,7 @@ public:
   void restart_sessions()
   {
     const std::scoped_lock lock(config_mutex_, sessions_mutex_);
-    if (!config_.has_value()) {
+    if (!config_) {
       return;
     }
 
@@ -512,37 +512,38 @@ public:
   }
 
   void with_configuration(
-    utils::movable_function<void(std::error_code, topology::configuration)>&& handler)
+    utils::movable_function<void(std::error_code, std::shared_ptr<topology::configuration>)>&&
+      handler)
   {
     if (closed_) {
-      return handler(errc::network::configuration_not_available, topology::configuration{});
+      return handler(errc::network::configuration_not_available, nullptr);
     }
     if (configured_) {
-      std::optional<topology::configuration> config{};
+      std::shared_ptr<topology::configuration> config{};
       {
         const std::scoped_lock config_lock(config_mutex_);
         config = config_;
       }
       if (config) {
-        return handler({}, config.value());
+        return handler({}, config);
       }
-      return handler(errc::network::configuration_not_available, topology::configuration{});
+      return handler(errc::network::configuration_not_available, nullptr);
     }
     const std::scoped_lock lock(deferred_commands_mutex_);
     deferred_commands_.emplace([self = shared_from_this(), handler = std::move(handler)]() mutable {
       if (self->closed_ || !self->configured_) {
-        return handler(errc::network::configuration_not_available, topology::configuration{});
+        return handler(errc::network::configuration_not_available, nullptr);
       }
 
-      std::optional<topology::configuration> config{};
+      std::shared_ptr<topology::configuration> config{};
       {
         const std::scoped_lock config_lock(self->config_mutex_);
         config = self->config_;
       }
       if (config) {
-        return handler({}, config.value());
+        return handler({}, std::move(config));
       }
-      return handler(errc::network::configuration_not_available, topology::configuration{});
+      return handler(errc::network::configuration_not_available, nullptr);
     });
   }
 
@@ -715,7 +716,7 @@ public:
                      config_->rev_str(),
                      config.rev_str());
         return;
-      } else if (config_ < config) {
+      } else if (*config_ < config) {
         CB_LOG_DEBUG("{} will update the configuration old={} -> new={}",
                      log_prefix_,
                      config_->rev_str(),
@@ -742,7 +743,7 @@ public:
         added = config.nodes;
       }
       config_.reset();
-      config_ = config;
+      config_ = std::make_shared<topology::configuration>(config);
       configured_ = true;
 
       {
@@ -964,7 +965,7 @@ private:
   std::atomic_bool closed_{ false };
   std::atomic_bool configured_{ false };
 
-  std::optional<topology::configuration> config_{};
+  std::shared_ptr<topology::configuration> config_{};
   mutable std::mutex config_mutex_{};
 
   std::vector<std::shared_ptr<config_listener>> config_listeners_{};
@@ -1081,7 +1082,8 @@ bucket::bootstrap(utils::movable_function<void(std::error_code, topology::config
 
 void
 bucket::with_configuration(
-  utils::movable_function<void(std::error_code, topology::configuration)>&& handler)
+  utils::movable_function<void(std::error_code, std::shared_ptr<topology::configuration>)>&&
+    handler)
 {
   return impl_->with_configuration(std::move(handler));
 }

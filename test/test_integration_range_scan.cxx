@@ -31,7 +31,9 @@
 #include <chrono>
 #include <utility>
 
-static auto
+namespace
+{
+auto
 populate_documents_for_range_scan(const couchbase::collection& collection,
                                   const std::vector<std::string>& ids,
                                   const std::vector<std::byte>& value,
@@ -53,11 +55,12 @@ populate_documents_for_range_scan(const couchbase::collection& collection,
   return mutations;
 }
 
-std::vector<couchbase::core::range_scan_item>
+auto
 do_range_scan(couchbase::core::agent agent,
               std::uint16_t vbucket_id,
               const couchbase::core::range_scan_create_options& create_options,
               const couchbase::core::range_scan_continue_options& continue_options)
+  -> std::vector<couchbase::core::range_scan_item>
 {
   std::vector<std::byte> scan_uuid;
 
@@ -111,7 +114,7 @@ do_range_scan(couchbase::core::agent agent,
   return data;
 }
 
-static auto
+auto
 make_binary_value(std::size_t number_of_bytes)
 {
   std::vector<std::byte> value(number_of_bytes);
@@ -121,27 +124,30 @@ make_binary_value(std::size_t number_of_bytes)
   return value;
 }
 
-static couchbase::core::topology::configuration::vbucket_map
+auto
 get_vbucket_map(const test::utils::integration_test_guard& integration)
+  -> couchbase::core::topology::configuration::vbucket_map
 {
   auto barrier = std::make_shared<std::promise<
     tl::expected<couchbase::core::topology::configuration::vbucket_map, std::error_code>>>();
   auto f = barrier->get_future();
   integration.cluster.with_bucket_configuration(
     integration.ctx.bucket,
-    [barrier](std::error_code ec, const couchbase::core::topology::configuration& config) mutable {
+    [barrier](std::error_code ec,
+              const std::shared_ptr<couchbase::core::topology::configuration>& config) mutable {
       if (ec) {
         return barrier->set_value(tl::unexpected(ec));
       }
-      if (!config.vbmap || config.vbmap->empty()) {
+      if (!config->vbmap || config->vbmap->empty()) {
         return barrier->set_value(tl::unexpected(couchbase::errc::common::feature_not_available));
       }
-      barrier->set_value(config.vbmap.value());
+      barrier->set_value(config->vbmap.value());
     });
   auto vbucket_map = f.get();
   EXPECT_SUCCESS(vbucket_map);
   return vbucket_map.value();
 }
+} // namespace
 
 TEST_CASE("integration: range scan large values", "[integration]")
 {
@@ -1466,7 +1472,7 @@ TEST_CASE("integration: orchestrator prefix scan, get 10 items and cancel", "[in
   EXPECT_SUCCESS(result);
 
   std::set<std::string> entry_ids{};
-  std::size_t const expected_id_count = 10;
+  const std::size_t expected_id_count = 10;
 
   for (std::size_t i = 0; i < expected_id_count; i++) {
     auto entry = result->next();
