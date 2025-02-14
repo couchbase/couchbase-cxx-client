@@ -25,6 +25,7 @@ auto
 http_noop_request::encode_to(http_noop_request::encoded_request_type& encoded,
                              http_context& /* context */) -> std::error_code
 {
+  encoded.type = type;
   encoded.headers["connection"] = "keep-alive";
   encoded.method = "GET";
   encoded.path = "/";
