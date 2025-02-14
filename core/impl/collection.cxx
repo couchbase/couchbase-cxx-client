@@ -884,13 +884,14 @@ public:
         return core_.with_bucket_configuration(
           bucket_name_,
           [this, handler = std::move(handler), orchestrator_opts, core_scan_type](
-            std::error_code ec, const core::topology::configuration& config) mutable {
+            std::error_code ec,
+            const std::shared_ptr<core::topology::configuration>& config) mutable {
             if (ec) {
               return handler(
                 error(ec, "An error occurred when attempting to fetch the bucket configuration."),
                 {});
             }
-            if (!config.capabilities.supports_range_scan()) {
+            if (!config->capabilities.supports_range_scan()) {
               return handler(error(errc::common::feature_not_available,
                                    "This bucket does not support range scan."),
                              {});
@@ -913,7 +914,7 @@ public:
                         bucket_name_)),
                 {});
             }
-            if (!config.vbmap.has_value() || config.vbmap->empty()) {
+            if (!config->vbmap.has_value() || config->vbmap->empty()) {
               CB_LOG_WARNING("Unable to get vbucket map for `{}` - cannot perform scan operation",
                              bucket_name_);
               return handler(error(errc::common::request_canceled,
@@ -923,7 +924,7 @@ public:
 
             auto orchestrator = core::range_scan_orchestrator(core_.io_context(),
                                                               agent.value(),
-                                                              config.vbmap.value(),
+                                                              config->vbmap.value(),
                                                               scope_name_,
                                                               name_,
                                                               core_scan_type,
@@ -993,8 +994,8 @@ collection::get(std::string document_id, const get_options& options, get_handler
 }
 
 auto
-collection::get(std::string document_id,
-                const get_options& options) const -> std::future<std::pair<error, get_result>>
+collection::get(std::string document_id, const get_options& options) const
+  -> std::future<std::pair<error, get_result>>
 {
   auto barrier = std::make_shared<std::promise<std::pair<error, get_result>>>();
   auto future = barrier->get_future();
@@ -1296,9 +1297,8 @@ collection::unlock(std::string document_id,
 }
 
 auto
-collection::unlock(std::string document_id,
-                   couchbase::cas cas,
-                   const unlock_options& options) const -> std::future<error>
+collection::unlock(std::string document_id, couchbase::cas cas, const unlock_options& options) const
+  -> std::future<error>
 {
   auto barrier = std::make_shared<std::promise<error>>();
   auto future = barrier->get_future();
@@ -1409,8 +1409,9 @@ collection::scan(const couchbase::scan_type& scan_type,
 }
 
 auto
-collection::scan(const couchbase::scan_type& scan_type, const couchbase::scan_options& options)
-  const -> std::future<std::pair<error, scan_result>>
+collection::scan(const couchbase::scan_type& scan_type,
+                 const couchbase::scan_options& options) const
+  -> std::future<std::pair<error, scan_result>>
 {
   auto barrier = std::make_shared<std::promise<std::pair<error, scan_result>>>();
   auto future = barrier->get_future();

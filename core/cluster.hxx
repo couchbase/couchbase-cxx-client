@@ -77,7 +77,8 @@ public:
 
   void with_bucket_configuration(
     const std::string& bucket_name,
-    utils::movable_function<void(std::error_code, topology::configuration)>&& handler) const;
+    utils::movable_function<void(std::error_code, std::shared_ptr<topology::configuration>)>&&
+      handler) const;
 
   void execute(o::analytics_request request, mf<void(o::analytics_response)>&& handler) const;
   void execute(o::append_request request, mf<void(o::append_response)>&& handler) const;

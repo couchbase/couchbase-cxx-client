@@ -26,7 +26,6 @@
 #include "core/utils/movable_function.hxx"
 #include "couchbase/error_codes.hxx"
 
-#include <functional>
 #include <memory>
 #include <mutex>
 
@@ -65,8 +64,8 @@ struct get_all_replicas_request {
        id = id,
        timeout = timeout,
        read_preference = read_preference,
-       h = std::forward<Handler>(handler)](std::error_code ec,
-                                           const topology::configuration& config) mutable {
+       h = std::forward<Handler>(handler)](
+        std::error_code ec, std::shared_ptr<topology::configuration> config) mutable {
         if (ec) {
           return h(response_type{ make_key_value_error_context(ec, id) });
         }
@@ -82,7 +81,7 @@ struct get_all_replicas_request {
             "Unable to retrieve replicas for \"{}\", server_group={}, number_of_replicas={}",
             id,
             origin.options().server_group,
-            config.num_replicas.value_or(0));
+            config->num_replicas.value_or(0));
           return h(response_type{
             make_key_value_error_context(errc::key_value::document_irretrievable, id) });
         }
