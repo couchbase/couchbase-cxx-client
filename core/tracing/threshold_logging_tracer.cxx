@@ -251,6 +251,7 @@ convert(const std::shared_ptr<threshold_logging_span>& span) -> reported_span
 }
 
 class threshold_logging_tracer_impl
+  : public std::enable_shared_from_this<threshold_logging_tracer_impl>
 {
 public:
   threshold_logging_tracer_impl(const threshold_logging_options& options, asio::io_context& ctx)
@@ -316,24 +317,24 @@ private:
   void rearm_orphan_reporter()
   {
     emit_orphan_report_.expires_after(options_.orphaned_emit_interval);
-    emit_orphan_report_.async_wait([this](std::error_code ec) {
+    emit_orphan_report_.async_wait([self = shared_from_this()](std::error_code ec) {
       if (ec == asio::error::operation_aborted) {
         return;
       }
-      log_orphan_report();
-      rearm_orphan_reporter();
+      self->log_orphan_report();
+      self->rearm_orphan_reporter();
     });
   }
 
   void rearm_threshold_reporter()
   {
     emit_threshold_report_.expires_after(options_.threshold_emit_interval);
-    emit_threshold_report_.async_wait([this](std::error_code ec) {
+    emit_threshold_report_.async_wait([self = shared_from_this()](std::error_code ec) {
       if (ec == asio::error::operation_aborted) {
         return;
       }
-      log_threshold_report();
-      rearm_threshold_reporter();
+      self->log_threshold_report();
+      self->rearm_threshold_reporter();
     });
   }
 
