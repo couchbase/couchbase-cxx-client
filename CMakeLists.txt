@@ -55,6 +55,8 @@ include(cmake/CompilerWarnings.cmake)
 # sanitizer options if supported by compiler
 include(cmake/Sanitizers.cmake)
 
+include(cmake/Profiler.cmake)
+
 # allow for static analysis options
 include(cmake/StaticAnalyzers.cmake)
 
@@ -516,6 +518,7 @@ foreach(TARGET ${couchbase_cxx_client_LIBRARIES})
   target_include_directories(${TARGET} PUBLIC $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
   enable_sanitizers(${TARGET})
+  enable_profiler(${TARGET})
   target_link_libraries(
     ${TARGET}
     PRIVATE project_options
