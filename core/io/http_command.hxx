@@ -134,12 +134,9 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
       if (ec == asio::error::operation_aborted) {
         return;
       }
-      CB_LOG_DEBUG(
-        R"(HTTP request timed out before dispatch: {}, method={}, path="{}", client_context_id="{}")",
-        self->encoded.type,
-        self->encoded.method,
-        self->encoded.path,
-        self->client_context_id_);
+      CB_LOG_DEBUG(R"(HTTP request timed out before dispatch: {}, client_context_id="{}")",
+                   self->request.type,
+                   self->client_context_id_);
       self->cancel(errc::common::unambiguous_timeout);
     });
 #endif
@@ -148,10 +145,8 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
       if (ec == asio::error::operation_aborted) {
         return;
       }
-      CB_LOG_DEBUG(R"(HTTP request timed out: {}, method={}, path="{}", client_context_id="{}")",
-                   self->encoded.type,
-                   self->encoded.method,
-                   self->encoded.path,
+      CB_LOG_DEBUG(R"(HTTP request timed out: {}, client_context_id="{}")",
+                   self->request.type,
                    self->client_context_id_);
       if constexpr (io::http_traits::supports_readonly_v<Request>) {
         if (self->request.readonly) {

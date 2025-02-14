@@ -295,6 +295,7 @@ public:
                                         error });
             self->check_in(type, cmd->session_);
           });
+
           cmd->set_command_session(session);
           if (!session->is_connected()) {
             connect_then_send(session, cmd, {}, true);
