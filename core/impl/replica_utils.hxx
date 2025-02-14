@@ -23,6 +23,7 @@
 
 #include "couchbase/read_preference.hxx"
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -42,7 +43,7 @@ struct readable_node {
  */
 auto
 effective_nodes(const document_id& id,
-                const topology::configuration& config,
+                const std::shared_ptr<topology::configuration>& config,
                 const read_preference& preference,
                 const std::string& preferred_server_group) -> std::vector<readable_node>;
 } // namespace couchbase::core::impl

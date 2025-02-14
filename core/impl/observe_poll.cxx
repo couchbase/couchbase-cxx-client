@@ -96,24 +96,24 @@ number_of_replica_nodes_required(couchbase::replicate_to replicate_to) -> std::u
 }
 
 auto
-validate_replicas(const topology::configuration& config,
+validate_replicas(const std::shared_ptr<topology::configuration>& config,
                   couchbase::persist_to persist_to,
                   couchbase::replicate_to replicate_to) -> std::pair<std::error_code, std::uint32_t>
 {
-  if (config.node_locator != topology::configuration::node_locator_type::vbucket) {
+  if (config->node_locator != topology::configuration::node_locator_type::vbucket) {
     return { errc::common::feature_not_available, {} };
   }
 
   if (touches_replica(persist_to, replicate_to)) {
-    if (!config.num_replicas) {
+    auto number_of_replicas = config->num_replicas;
+    if (!number_of_replicas.has_value()) {
       return { errc::key_value::durability_impossible, {} };
     }
-    auto number_of_replicas = config.num_replicas.value();
     if (number_of_replica_nodes_required(persist_to) > number_of_replicas ||
         number_of_replica_nodes_required(replicate_to) > number_of_replicas) {
       return { errc::key_value::durability_impossible, {} };
     }
-    return { {}, number_of_replicas };
+    return { {}, number_of_replicas.value() };
   }
   return { {}, 0 };
 }
@@ -335,8 +335,8 @@ observe_poll(const cluster& core, std::shared_ptr<observe_context> ctx)
   const std::string bucket_name = ctx->bucket_name();
   core.with_bucket_configuration(
     bucket_name,
-    [core, ctx = std::move(ctx)](std::error_code ec,
-                                 const core::topology::configuration& config) mutable {
+    [core, ctx = std::move(ctx)](
+      std::error_code ec, const std::shared_ptr<core::topology::configuration>& config) mutable {
       if (ec) {
         return ctx->finish(ec);
       }
