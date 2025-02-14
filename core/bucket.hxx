@@ -196,7 +196,8 @@ public:
   void update_config(topology::configuration config) override;
   void bootstrap(utils::movable_function<void(std::error_code, topology::configuration)>&& handler);
   void with_configuration(
-    utils::movable_function<void(std::error_code, topology::configuration)>&& handler);
+    utils::movable_function<void(std::error_code, std::shared_ptr<topology::configuration>)>&&
+      handler);
 
   void on_configuration_update(std::shared_ptr<config_listener> handler);
   void close();
