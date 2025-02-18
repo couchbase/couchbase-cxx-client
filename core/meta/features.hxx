@@ -206,3 +206,10 @@
  * All options classes in the Public API expose the parent_span option.
  */
 #define COUCHBASE_CXX_CLIENT_PUBLIC_API_PARENT_SPAN 1
+
+/**
+ * The library can be configured to use application telemetry (default is enabled)
+ * See couchbase::application_telemetry_options for available options
+ * to pass into couchbase::cluster_options
+ */
+#define COUCHBASE_CXX_CLIENT_SUPPORTS_APP_TELEMETRY 1
