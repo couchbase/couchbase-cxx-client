@@ -206,3 +206,8 @@
  * All options classes in the Public API expose the parent_span option.
  */
 #define COUCHBASE_CXX_CLIENT_PUBLIC_API_PARENT_SPAN 1
+
+/**
+ * core API like with_bucket_configuration() yields shared_ptr instead of configuration copy
+ */
+#define COUCHBASE_CXX_CLIENT_CORE_RETURNS_POINTER_TO_CONFIG 1
