@@ -224,11 +224,26 @@ fork_event_to_asio(fork_event event) -> asio::execution_context::fork_event
 class cluster_impl : public std::enable_shared_from_this<cluster_impl>
 {
 public:
-  cluster_impl() = default;
+  cluster_impl(std::string connection_string, cluster_options options)
+    : connection_string_{ std::move(connection_string) }
+    , options_{ std::move(options) }
+  {
+  }
+
   cluster_impl(const cluster_impl&) = delete;
   cluster_impl(cluster_impl&&) = delete;
   auto operator=(const cluster_impl&) = delete;
   auto operator=(cluster_impl&&) = delete;
+
+  [[nodiscard]] auto connection_string() const -> const std::string&
+  {
+    return connection_string_;
+  }
+
+  [[nodiscard]] auto options() const -> const cluster_options&
+  {
+    return options_;
+  }
 
   ~cluster_impl()
   {
@@ -247,12 +262,10 @@ public:
     future.get();
   }
 
-  void open(const std::string& connection_string,
-            const cluster_options& options,
-            cluster_connect_handler&& handler)
+  void open(cluster_connect_handler&& handler)
   {
     core_.open(
-      options_to_origin(connection_string, options),
+      options_to_origin(connection_string_, options_),
       [impl = shared_from_this(), handler = std::move(handler)](std::error_code ec) mutable {
         if (ec) {
           return handler(ec, {});
@@ -359,7 +372,7 @@ public:
     }
     io_.notify_fork(fork_event_to_asio(event));
 
-    if (transactions_) {
+    if (event != fork_event::child && transactions_) {
       transactions_->notify_fork(event);
     }
   }
@@ -402,6 +415,8 @@ private:
     }
   }
 
+  std::string connection_string_;
+  cluster_options options_;
   asio::io_context io_{ ASIO_CONCURRENCY_HINT_SAFE };
   core::cluster core_{ io_ };
   std::shared_ptr<core::transactions::transactions> transactions_{ nullptr };
@@ -543,8 +558,8 @@ cluster::connect(const std::string& connection_string,
     auto barrier = std::make_shared<std::promise<std::pair<error, cluster>>>();
     auto future = barrier->get_future();
     {
-      auto impl = std::make_shared<cluster_impl>();
-      impl->open(connection_string, options, [barrier](auto err, auto c) {
+      auto impl = std::make_shared<cluster_impl>(connection_string, options);
+      impl->open([barrier](auto err, auto c) {
         barrier->set_value({ std::move(err), std::move(c) });
       });
     }
@@ -560,7 +575,30 @@ cluster::notify_fork(fork_event event) -> void
   if (!impl_) {
     return;
   }
-  return impl_->notify_fork(event);
+  impl_->notify_fork(event);
+  if (event != fork_event::child) {
+    return;
+  }
+
+  auto new_impl = std::make_shared<cluster_impl>(impl_->connection_string(), impl_->options());
+  impl_.reset();
+
+  {
+    auto barrier = std::make_shared<std::promise<void>>();
+    auto future = barrier->get_future();
+
+    new_impl->open([this, barrier, new_impl](const auto& err, const auto& /* c */) {
+      if (err.ec()) {
+        // TODO(SA): we should fall to background reconnect loop similar to Columnar build
+        CB_LOG_ERROR("Unable to reconnect instance after fork: {}", err.ec().message());
+        return;
+      }
+      impl_ = new_impl;
+      barrier->set_value();
+    });
+
+    future.get();
+  }
 }
 
 void
