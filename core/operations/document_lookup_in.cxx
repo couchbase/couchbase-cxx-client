@@ -31,6 +31,10 @@ auto
 lookup_in_request::encode_to(lookup_in_request::encoded_request_type& encoded,
                              mcbp_context&& context) -> std::error_code
 {
+  if (specs.empty()) {
+    return errc::common::invalid_argument;
+  }
+
   for (std::size_t i = 0; i < specs.size(); ++i) {
     specs[i].original_index_ = i;
 

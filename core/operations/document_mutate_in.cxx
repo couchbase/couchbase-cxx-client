@@ -36,6 +36,9 @@ mutate_in_request::encode_to(mutate_in_request::encoded_request_type& encoded,
       !context.supports_feature(protocol::hello_feature::subdoc_create_as_deleted)) {
     return errc::common::unsupported_operation;
   }
+  if (specs.empty()) {
+    return errc::common::invalid_argument;
+  }
   for (std::size_t i = 0; i < specs.size(); ++i) {
     auto& entry = specs[i];
     entry.original_index_ = i;

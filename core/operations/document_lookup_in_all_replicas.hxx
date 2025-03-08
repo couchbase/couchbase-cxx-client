@@ -115,6 +115,10 @@ struct lookup_in_all_replicas_request {
               ec = errc::key_value::document_irretrievable;
             }
 
+            if (!ec && specs.empty()) {
+              ec = errc::common::invalid_argument;
+            }
+
             if (ec) {
               return h(response_type{ make_subdocument_error_context(
                 make_key_value_error_context(ec, id), ec, {}, {}, false) });
