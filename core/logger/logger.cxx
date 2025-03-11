@@ -322,7 +322,7 @@ create_file_logger(const configuration& logger_settings) -> std::optional<std::s
   if (error) {
     return error;
   }
-  file_logger = std::move(logger);
+  update_file_logger(logger);
   return {};
 }
 

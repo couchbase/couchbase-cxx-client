@@ -213,3 +213,8 @@
  * to pass into couchbase::cluster_options
  */
 #define COUCHBASE_CXX_CLIENT_SUPPORTS_APP_TELEMETRY 1
+
+/**
+ * core API like with_bucket_configuration() yields shared_ptr instead of configuration copy
+ */
+#define COUCHBASE_CXX_CLIENT_CORE_RETURNS_POINTER_TO_CONFIG 1
