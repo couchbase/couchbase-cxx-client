@@ -76,15 +76,13 @@ DESTDIR="%{buildroot}" /usr/bin/cmake --install "redhat-linux-build"
 %else
 %cmake_install
 %endif
-%if 0%{?suse_version} == 1500
-%{__mkdir_p} %{buildroot}%{license_dir}/tao/json %{buildroot}%{_libdir}/cmake
-%{__mv} %{buildroot}%{license_dir}/taocpp-json/tao/json/LICENSE %{buildroot}%{license_dir}/tao/json/LICENSE
-%{__mv} %{buildroot}%{_datadir}/taocpp-json/cmake %{buildroot}%{_libdir}/cmake/taocpp-json
-%{__mv} %{buildroot}%{_datadir}/pegtl/cmake %{buildroot}%{_libdir}/cmake/pegtl
-%endif
 
 %files
+%if 0%{?suse_version} == 1500
+%license %{license_dir}/packages/couchbase-cxx-client/LICENSE.txt
+%else
 %license %{license_dir}/couchbase_cxx_client/LICENSE.txt
+%endif
 %license %{license_dir}/tao/pegtl/LICENSE
 %license %{license_dir}/tao/json/LICENSE
 %{_libdir}/libcouchbase_cxx_client.so.*
