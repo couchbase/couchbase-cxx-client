@@ -1,4 +1,5 @@
 name: sanitizers
+permissions: {}
 
 on:
   push:
