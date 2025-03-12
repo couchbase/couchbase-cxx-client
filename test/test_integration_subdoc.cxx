@@ -1818,6 +1818,66 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
   }
 }
 
+TEST_CASE("integration: subdoc invalid_argument if empty specs", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+
+  SECTION("core API")
+  {
+    couchbase::core::document_id id{
+      integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("empty_specs")
+    };
+
+    couchbase::core::operations::lookup_in_request lookupin_req{ id };
+    auto lookupin_resp = test::utils::execute(integration.cluster, lookupin_req);
+    REQUIRE(lookupin_resp.ctx.ec() == couchbase::errc::common::invalid_argument);
+
+    if (integration.has_bucket_capability("subdoc.ReplicaRead")) {
+      couchbase::core::operations::lookup_in_any_replica_request lookupin_any_replica_req{ id };
+      auto lookupin_any_replica_resp =
+        test::utils::execute(integration.cluster, lookupin_any_replica_req);
+      REQUIRE(lookupin_any_replica_resp.ctx.ec() == couchbase::errc::common::invalid_argument);
+
+      couchbase::core::operations::lookup_in_all_replicas_request lookup_in_all_replicas_req{ id };
+      auto lookup_in_all_replicas_resp =
+        test::utils::execute(integration.cluster, lookup_in_all_replicas_req);
+      REQUIRE(lookup_in_all_replicas_resp.ctx.ec() == couchbase::errc::common::invalid_argument);
+    }
+
+    couchbase::core::operations::mutate_in_request mutatein_req{ id };
+    auto mutatein_resp = test::utils::execute(integration.cluster, mutatein_req);
+    REQUIRE(mutatein_resp.ctx.ec() == couchbase::errc::common::invalid_argument);
+  }
+
+  SECTION("public API")
+  {
+    auto test_ctx = integration.ctx;
+    auto [e, cluster] =
+      couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+    REQUIRE_SUCCESS(e.ec());
+
+    auto collection = cluster.bucket(test_ctx.bucket).scope("_default").collection("_default");
+
+    auto key = test::utils::uniq_id("empty_specs");
+    auto [lookupin_err, lookupin_resp] = collection.lookup_in(key, {}).get();
+    REQUIRE(lookupin_err.ec() == couchbase::errc::common::invalid_argument);
+
+    if (integration.has_bucket_capability("subdoc.ReplicaRead")) {
+      auto [lookup_in_any_replica_err, lookup_in_any_replica_resp] =
+        collection.lookup_in_any_replica(key, {}).get();
+      REQUIRE(lookup_in_any_replica_err.ec() == couchbase::errc::common::invalid_argument);
+
+      auto [lookup_in_all_replicas_err, lookup_in_all_replicas_resp] =
+        collection.lookup_in_all_replicas(key, {}).get();
+      REQUIRE(lookup_in_all_replicas_err.ec() == couchbase::errc::common::invalid_argument);
+      REQUIRE(lookup_in_all_replicas_resp.empty());
+    }
+
+    auto [mutate_in_err, mutate_in_resp] = collection.mutate_in(key, {}).get();
+    REQUIRE(mutate_in_err.ec() == couchbase::errc::common::invalid_argument);
+  }
+}
+
 TEST_CASE("integration: public API lookup in per-spec errors", "[integration]")
 {
   test::utils::integration_test_guard integration;
