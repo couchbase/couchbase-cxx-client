@@ -28,6 +28,7 @@ append_request::encode_to(protocol::client_request<protocol::append_request_body
 {
   encoded.opaque(opaque);
   encoded.partition(partition);
+  encoded.cas(cas);
   encoded.body().id(id);
   encoded.body().content(value);
   return {};
