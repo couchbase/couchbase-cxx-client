@@ -1,7 +1,7 @@
 prefix=@CMAKE_INSTALL_PREFIX@
 exec_prefix=@CMAKE_INSTALL_PREFIX@
 includedir=@CMAKE_INSTALL_PREFIX@/include
-libdir=@CMAKE_INSTALL_LIBDIR@
+libdir=@CMAKE_INSTALL_PREFIX@/@CMAKE_INSTALL_LIBDIR@
 
 Name: couchbase-cxx-client @COUCHBASE_CXX_CLIENT_PKGCONFIG_VERSION@
 Description: Couchbase C++ SDK
