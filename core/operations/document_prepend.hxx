@@ -50,6 +50,7 @@ struct prepend_request {
   std::vector<std::byte> value;
   std::uint16_t partition{};
   std::uint32_t opaque{};
+  couchbase::cas cas{ 0 };
   couchbase::durability_level durability_level{ durability_level::none };
   std::optional<std::chrono::milliseconds> timeout{};
   io::retry_context<false> retries{};
