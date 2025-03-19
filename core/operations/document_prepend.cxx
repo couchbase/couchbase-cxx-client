@@ -28,6 +28,7 @@ prepend_request::encode_to(prepend_request::encoded_request_type& encoded,
 {
   encoded.opaque(opaque);
   encoded.partition(partition);
+  encoded.cas(cas);
   encoded.body().id(id);
   encoded.body().content(value);
   return {};
