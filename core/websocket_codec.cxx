@@ -86,6 +86,7 @@ generate_masking_key() -> std::array<std::byte, 4>
 auto
 generate_session_key() -> std::string
 {
+  const couchbase::core::RandomGenerator randomGenerator;
   std::array<std::byte, 16> key{};
   if (!core::RandomGenerator::getBytes(key.data(), key.size())) {
     throw std::bad_alloc();
