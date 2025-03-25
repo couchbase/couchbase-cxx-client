@@ -62,7 +62,7 @@ namespace transactions
  * insert and delete documents, as well as commit or rollback the transaction.
  */
 class transactions;
-enum class forward_compat_stage;
+enum class forward_compat_stage : std::uint8_t;
 class staged_mutation_queue;
 class staged_mutation;
 struct attempt_context_testing_hooks;
@@ -96,15 +96,15 @@ private:
               codec::encoded_value content,
               core::transactions::async_attempt_context::Callback&& cb) override;
 
-  auto insert(const core::document_id& id,
-              codec::encoded_value content) -> core::transactions::transaction_get_result override;
+  auto insert(const core::document_id& id, codec::encoded_value content)
+    -> core::transactions::transaction_get_result override;
 
   void replace(const transaction_get_result& document,
                codec::encoded_value content,
                core::transactions::async_attempt_context::Callback&& cb) override;
 
-  auto replace(const transaction_get_result& document,
-               codec::encoded_value content) -> transaction_get_result override;
+  auto replace(const transaction_get_result& document, codec::encoded_value content)
+    -> transaction_get_result override;
 
   auto insert_raw(const collection& coll, const std::string& id, codec::encoded_value content)
     -> std::pair<couchbase::error, couchbase::transactions::transaction_get_result> override;

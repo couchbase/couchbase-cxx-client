@@ -576,8 +576,8 @@ attempt_context_impl::create_document_metadata(
       }),
     });
     txn["fc"] = {
-      { to_string(forward_compat_stage::WWC_INSERTING), fc_check },
-      { to_string(forward_compat_stage::WWC_INSERTING_GET), fc_check },
+      { to_string(forward_compat_stage::WRITE_WRITE_CONFLICT_INSERTING), fc_check },
+      { to_string(forward_compat_stage::WRITE_WRITE_CONFLICT_INSERTING_GET), fc_check },
       { to_string(forward_compat_stage::GETS), fc_check },
       { to_string(forward_compat_stage::CLEANUP_ENTRY), fc_check },
     };
@@ -637,7 +637,7 @@ attempt_context_impl::replace(const transaction_get_result& document,
 
             self->check_and_handle_blocking_transactions(
               document,
-              forward_compat_stage::WWC_REPLACING,
+              forward_compat_stage::WRITE_WRITE_CONFLICT_REPLACING,
               [self,
                existing_sm,
                document,
@@ -1097,8 +1097,8 @@ attempt_context_impl::check_atr_entry_for_blocking_document(const transaction_ge
                   return e.attempt_id() == doc.links().staged_attempt_id();
                 });
                 if (it != entries.end()) {
-                  auto fwd_err = check_forward_compat(forward_compat_stage::WWC_READING_ATR,
-                                                      it->forward_compat());
+                  auto fwd_err = check_forward_compat(
+                    forward_compat_stage::WRITE_WRITE_CONFLICT_READING_ATR, it->forward_compat());
                   if (fwd_err) {
                     return cb(fwd_err);
                   }
@@ -1189,7 +1189,7 @@ attempt_context_impl::remove(const transaction_get_result& document, VoidCallbac
         }
         return self->check_and_handle_blocking_transactions(
           document,
-          forward_compat_stage::WWC_REMOVING,
+          forward_compat_stage::WRITE_WRITE_CONFLICT_REMOVING,
           [self, document, cb = std::move(cb), op_id, error_handler = std::move(error_handler)](
             std::optional<transaction_operation_failed> err1) mutable {
             if (err1) {
@@ -3302,8 +3302,9 @@ attempt_context_impl::create_staged_insert_error_handler(const core::document_id
                     doc->links().is_document_in_transaction(),
                     doc->links().is_deleted());
 
-                  if (auto err = check_forward_compat(forward_compat_stage::WWC_INSERTING_GET,
-                                                      doc->links().forward_compat());
+                  if (auto err = check_forward_compat(
+                        forward_compat_stage::WRITE_WRITE_CONFLICT_INSERTING_GET,
+                        doc->links().forward_compat());
                       err) {
                     return self->op_completed_with_error(std::forward<Handler>(cb), *err);
                   }
@@ -3352,7 +3353,7 @@ attempt_context_impl::create_staged_insert_error_handler(const core::document_id
                   }
                   self->check_and_handle_blocking_transactions(
                     *doc,
-                    forward_compat_stage::WWC_INSERTING,
+                    forward_compat_stage::WRITE_WRITE_CONFLICT_INSERTING,
                     [self, id, op_id, content, doc, cb = std::forward<Handler>(cb), delay](
                       std::optional<transaction_operation_failed> err) mutable {
                       if (err) {

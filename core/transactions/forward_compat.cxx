@@ -127,19 +127,19 @@ auto
 create_forward_compat_stage(const std::string& str) -> forward_compat_stage
 {
   if (str == "WW_R") {
-    return forward_compat_stage::WWC_READING_ATR;
+    return forward_compat_stage::WRITE_WRITE_CONFLICT_READING_ATR;
   }
   if (str == "WW_RP") {
-    return forward_compat_stage::WWC_REPLACING;
+    return forward_compat_stage::WRITE_WRITE_CONFLICT_REPLACING;
   }
   if (str == "WW_RM") {
-    return forward_compat_stage::WWC_REMOVING;
+    return forward_compat_stage::WRITE_WRITE_CONFLICT_REMOVING;
   }
   if (str == "WW_I") {
-    return forward_compat_stage::WWC_INSERTING;
+    return forward_compat_stage::WRITE_WRITE_CONFLICT_INSERTING;
   }
   if (str == "WW_IG") {
-    return forward_compat_stage::WWC_INSERTING_GET;
+    return forward_compat_stage::WRITE_WRITE_CONFLICT_INSERTING_GET;
   }
   if (str == "G") {
     return forward_compat_stage::GETS;
@@ -228,4 +228,48 @@ check_forward_compat(forward_compat_stage stage, std::optional<tao::json::value>
   return std::nullopt;
 }
 
+auto
+to_string(forward_compat_stage value) -> std::string
+{
+  switch (value) {
+    case forward_compat_stage::WRITE_WRITE_CONFLICT_READING_ATR:
+      return "WW_R";
+    case forward_compat_stage::WRITE_WRITE_CONFLICT_REPLACING:
+      return "WW_RP";
+    case forward_compat_stage::WRITE_WRITE_CONFLICT_REMOVING:
+      return "WW_RM";
+    case forward_compat_stage::WRITE_WRITE_CONFLICT_INSERTING:
+      return "WW_I";
+    case forward_compat_stage::WRITE_WRITE_CONFLICT_INSERTING_GET:
+      return "WW_IG";
+    case forward_compat_stage::GETS:
+      return "G";
+    case forward_compat_stage::GETS_READING_ATR:
+      return "G_A";
+    case forward_compat_stage::CLEANUP_ENTRY:
+      return "CL_E";
+  };
+  throw std::runtime_error("Unknown forward compatibility stage");
+}
+auto
+create_forward_compat_behavior(const std::string& str) -> forward_compat_behavior
+{
+  if (str == "r") {
+    return forward_compat_behavior::RETRY_TXN;
+  }
+  return forward_compat_behavior::FAIL_FAST_TXN;
+}
+auto
+forward_compat_behavior_name(forward_compat_behavior b) -> const char*
+{
+  switch (b) {
+    case forward_compat_behavior::CONTINUE:
+      return "CONTINUE";
+    case forward_compat_behavior::RETRY_TXN:
+      return "RETRY_TXN";
+    case forward_compat_behavior::FAIL_FAST_TXN:
+      return "FAIL_FAST_TRANSACTION";
+  }
+  return "unknown behavior";
+}
 } // namespace couchbase::core::transactions
