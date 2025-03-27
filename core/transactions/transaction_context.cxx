@@ -91,6 +91,12 @@ transaction_context::remaining() const -> std::chrono::nanoseconds
   return config_.timeout - expired_nanos;
 }
 
+auto
+transaction_context::expiry_time() const -> std::chrono::steady_clock::time_point
+{
+  return start_time_client_ + config_.timeout;
+}
+
 [[nodiscard]] auto
 transaction_context::has_expired_client_side() -> bool
 {

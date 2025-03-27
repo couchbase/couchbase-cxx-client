@@ -137,6 +137,18 @@ public:
     , cause_(external_exception_from_error_class(ec))
   {
   }
+  explicit transaction_operation_failed(error_class ec,
+                                        std::optional<external_exception> cause,
+                                        const std::string& what)
+    : std::runtime_error(what)
+    , ec_(ec)
+    , retry_(false)
+    , rollback_(true)
+    , to_raise_(FAILED)
+    , cause_(cause.value_or(UNKNOWN) == UNKNOWN ? external_exception_from_error_class(ec)
+                                                : cause.value_or(UNKNOWN))
+  {
+  }
   explicit transaction_operation_failed(const client_error& client_err)
     : std::runtime_error(client_err.what())
     , ec_(client_err.ec())

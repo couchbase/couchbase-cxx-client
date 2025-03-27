@@ -15,11 +15,14 @@
  */
 #pragma once
 
-#include "core/error_context/subdocument_error_context.hxx"
 #include "core/operations/document_query.hxx"
-#include "exceptions.hxx"
+#include "transaction_get_multi_mode.hxx"
+#include "transaction_get_multi_replicas_from_preferred_server_group_mode.hxx"
+#include "transaction_get_multi_replicas_from_preferred_server_group_result.hxx"
+#include "transaction_get_multi_result.hxx"
 #include "transaction_get_result.hxx"
 
+// FIXME(SA): remove public API from the core
 #include <couchbase/transactions/transaction_query_options.hxx>
 
 #include <optional>
@@ -42,6 +45,11 @@ public:
   using QueryCallback =
     std::function<void(std::exception_ptr, std::optional<core::operations::query_response>)>;
 
+  async_attempt_context() = default;
+  async_attempt_context(async_attempt_context&&) = default;
+  async_attempt_context(const async_attempt_context&) noexcept = default;
+  auto operator=(async_attempt_context&&) -> async_attempt_context& = default;
+  auto operator=(const async_attempt_context&) noexcept -> async_attempt_context& = default;
   virtual ~async_attempt_context() = default;
 
   /**
@@ -77,6 +85,18 @@ public:
   virtual void get_replica_from_preferred_server_group(
     const core::document_id& id,
     std::function<void(std::exception_ptr, std::optional<transaction_get_result>)>&& cb) = 0;
+
+  virtual void get_multi(
+    const std::vector<core::document_id>& ids,
+    transaction_get_multi_mode mode,
+    std::function<void(std::exception_ptr, std::optional<transaction_get_multi_result>)>&& cb) = 0;
+
+  virtual void get_multi_replicas_from_preferred_server_group(
+    const std::vector<core::document_id>& ids,
+    transaction_get_multi_replicas_from_preferred_server_group_mode mode,
+    std::function<void(
+      std::exception_ptr,
+      std::optional<transaction_get_multi_replicas_from_preferred_server_group_result>)>&& cb) = 0;
 
   /**
    * Mutates the specified document with new content, using the document's last
