@@ -35,6 +35,7 @@
 #include "core/error_context/transaction_op_error_context.hxx"
 #include "core/impl/internal_error_context.hxx"
 #include "core/transactions/exceptions.hxx"
+#include "core/transactions/exceptions_fmt.hxx"
 #include "core/transactions/internal/exceptions_internal.hxx"
 
 #include <couchbase/error.hxx>

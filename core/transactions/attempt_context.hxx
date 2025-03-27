@@ -15,10 +15,14 @@
  */
 #pragma once
 
+#include "core/operations/document_query.hxx"
+#include "transaction_get_multi_mode.hxx"
+#include "transaction_get_multi_replicas_from_preferred_server_group_mode.hxx"
+#include "transaction_get_multi_replicas_from_preferred_server_group_result.hxx"
+#include "transaction_get_multi_result.hxx"
 #include "transaction_get_result.hxx"
 
-#include "internal/exceptions_internal.hxx"
-
+// TODO(SA): remove public API from core interfaces
 #include <couchbase/transactions/transaction_query_options.hxx>
 
 #include <optional>
@@ -37,7 +41,13 @@ namespace couchbase::core::transactions
 class attempt_context
 {
 public:
+  attempt_context() = default;
+  attempt_context(attempt_context&&) noexcept = default;
+  attempt_context(const attempt_context&) = default;
+  auto operator=(attempt_context&&) noexcept -> attempt_context& = default;
+  auto operator=(const attempt_context&) -> attempt_context& = default;
   virtual ~attempt_context() = default;
+
   /**
    * Gets a document from the specified Couchbase collection matching the
    * specified id.
@@ -80,6 +90,14 @@ public:
   virtual auto get_replica_from_preferred_server_group(const core::document_id& id)
     -> std::optional<transaction_get_result> = 0;
 
+  virtual auto get_multi(const std::vector<core::document_id>& ids, transaction_get_multi_mode mode)
+    -> transaction_get_multi_result = 0;
+
+  virtual auto get_multi_replicas_from_preferred_server_group(
+    const std::vector<core::document_id>& ids,
+    transaction_get_multi_replicas_from_preferred_server_group_mode mode)
+    -> transaction_get_multi_replicas_from_preferred_server_group_result = 0;
+
   /**
    * Mutates the specified document with new content, using the document's last
    * TransactionDocument#cas().
@@ -101,8 +119,8 @@ public:
    * @throws transaction_operation_failed which either should not be caught by
    * the lambda, or rethrown if it is caught.
    */
-  virtual auto replace(const transaction_get_result& document,
-                       codec::encoded_value content) -> transaction_get_result = 0;
+  virtual auto replace(const transaction_get_result& document, codec::encoded_value content)
+    -> transaction_get_result = 0;
 
   /**
    * Inserts a new document into the specified Couchbase collection.
@@ -124,8 +142,8 @@ public:
    * @throws transaction_operation_failed which either should not be caught by
    * the lambda, or rethrown if it is caught.
    */
-  virtual auto insert(const core::document_id& id,
-                      codec::encoded_value content) -> transaction_get_result = 0;
+  virtual auto insert(const core::document_id& id, codec::encoded_value content)
+    -> transaction_get_result = 0;
 
   /**
    * Removes the specified document, using the document's last
@@ -157,7 +175,7 @@ public:
              const couchbase::transactions::transaction_query_options& opts,
              std::optional<std::string> query_context = {}) -> core::operations::query_response
   {
-    return do_core_query(statement, opts, query_context);
+    return do_core_query(statement, opts, std::move(query_context));
   };
 
   /**

@@ -150,7 +150,19 @@ create_forward_compat_stage(const std::string& str) -> forward_compat_stage
   if (str == "CL_E") {
     return forward_compat_stage::CLEANUP_ENTRY;
   }
-  throw std::runtime_error("Unknown forward compatibility stage");
+  if (str == "CM_C") {
+    return forward_compat_stage::CAS_MISMATCH_DURING_COMMIT;
+  }
+  if (str == "CM_R") {
+    return forward_compat_stage::CAS_MISMATCH_DURING_ROLLBACK;
+  }
+  if (str == "CM_S") {
+    return forward_compat_stage::CAS_MISMATCH_DURING_STAGING;
+  }
+  if (str == "GM_G") {
+    return forward_compat_stage::GET_MULTI_GET;
+  }
+  throw std::runtime_error(fmt::format("Unknown forward compatibility stage: {}", str));
 }
 
 class forward_compat
@@ -248,8 +260,17 @@ to_string(forward_compat_stage value) -> std::string
       return "G_A";
     case forward_compat_stage::CLEANUP_ENTRY:
       return "CL_E";
+    case forward_compat_stage::CAS_MISMATCH_DURING_COMMIT:
+      return "CM_C";
+    case forward_compat_stage::CAS_MISMATCH_DURING_ROLLBACK:
+      return "CM_R";
+    case forward_compat_stage::CAS_MISMATCH_DURING_STAGING:
+      return "CM_S";
+    case forward_compat_stage::GET_MULTI_GET:
+      return "GM_G";
   };
-  throw std::runtime_error("Unknown forward compatibility stage");
+  throw std::runtime_error(
+    fmt::format("Unknown forward compatibility stage: {}", static_cast<std::uint8_t>(value)));
 }
 auto
 create_forward_compat_behavior(const std::string& str) -> forward_compat_behavior

@@ -29,7 +29,7 @@ effective_nodes(const document_id& id,
                 const read_preference& preference,
                 const std::string& preferred_server_group) -> std::vector<readable_node>
 {
-  if (preference != read_preference::no_preference && preferred_server_group.empty()) {
+  if (preference == read_preference::selected_server_group && preferred_server_group.empty()) {
     CB_LOG_WARNING("Preferred server group is required for zone-aware replica reads");
     return {};
   }

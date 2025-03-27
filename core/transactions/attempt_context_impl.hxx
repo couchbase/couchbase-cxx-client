@@ -24,11 +24,20 @@
 #include "attempt_state.hxx"
 #include "internal/atr_cleanup_entry.hxx"
 #include "internal/exceptions_internal.hxx"
+#include "transaction_get_multi_mode.hxx"
 #include "transaction_get_result.hxx"
 
+// TODO(SA): do not mix public and core APIs in the single class
+#include <chrono>
 #include <couchbase/codec/encoded_value.hxx>
 #include <couchbase/transactions/async_attempt_context.hxx>
 #include <couchbase/transactions/attempt_context.hxx>
+#include <couchbase/transactions/transaction_get_multi_options.hxx>
+#include <couchbase/transactions/transaction_get_multi_replicas_from_preferred_server_group_options.hxx>
+#include <couchbase/transactions/transaction_get_multi_replicas_from_preferred_server_group_result.hxx>
+#include <couchbase/transactions/transaction_get_multi_replicas_from_preferred_server_group_spec.hxx>
+#include <couchbase/transactions/transaction_get_multi_result.hxx>
+#include <couchbase/transactions/transaction_get_multi_spec.hxx>
 #include <couchbase/transactions/transaction_query_options.hxx>
 
 #include <cstdint>
@@ -159,12 +168,24 @@ private:
 
   void handle_err_from_callback(const std::exception_ptr& e);
 
+  template<typename Cb, typename E, typename T>
+  void op_completed_with_callback(Cb&& cb, E e, std::optional<T> t)
+  {
+    try {
+      op_list_.decrement_in_flight();
+      std::forward<Cb>(cb)(std::make_exception_ptr(std::forward<E>(e)), t);
+      op_list_.decrement_ops();
+    } catch (...) {
+      handle_err_from_callback(std::current_exception());
+    }
+  }
+
   template<typename Cb, typename T>
   void op_completed_with_callback(Cb&& cb, std::optional<T> t)
   {
     try {
       op_list_.decrement_in_flight();
-      cb({}, t);
+      std::forward<Cb>(cb)({}, t);
       op_list_.decrement_ops();
     } catch (...) {
       handle_err_from_callback(std::current_exception());
@@ -176,7 +197,7 @@ private:
   {
     try {
       op_list_.decrement_in_flight();
-      cb({});
+      std::forward<Cb>(cb)({});
       op_list_.decrement_ops();
     } catch (...) {
       handle_err_from_callback(std::current_exception());
@@ -237,7 +258,7 @@ private:
   void op_completed_with_error_no_cache(VoidCallback cb, std::exception_ptr err)
   {
     try {
-      cb(err);
+      cb(std::move(err));
     } catch (...) {
       // just eat it.
     }
@@ -285,11 +306,12 @@ private:
     }
   }
 
-  [[nodiscard]] auto cluster_ref() const -> const core::cluster&;
-
   explicit attempt_context_impl(const std::shared_ptr<transaction_context>& transaction_ctx);
 
 public:
+  [[nodiscard]] auto cluster_ref() const -> const core::cluster&;
+  [[nodiscard]] auto expiry_time() const -> std::chrono::steady_clock::time_point;
+
   static auto create(const std::shared_ptr<transaction_context>& transaction_ctx)
     -> std::shared_ptr<attempt_context_impl>;
 
@@ -326,6 +348,56 @@ public:
     const couchbase::collection& coll,
     const std::string& id,
     couchbase::transactions::async_result_handler&& handler) override;
+
+  auto get_multi(const std::vector<core::document_id>& ids, transaction_get_multi_mode mode)
+    -> transaction_get_multi_result override;
+  void get_multi(const std::vector<core::document_id>& ids,
+                 transaction_get_multi_mode mode,
+                 std::function<void(std::exception_ptr,
+                                    std::optional<transaction_get_multi_result>)>&& cb) override;
+  auto get_multi(const std::vector<couchbase::transactions::transaction_get_multi_spec>& specs,
+                 const couchbase::transactions::transaction_get_multi_options& options)
+    -> std::pair<error,
+                 std::optional<couchbase::transactions::transaction_get_multi_result>> override;
+  void get_multi(
+    const std::vector<couchbase::transactions::transaction_get_multi_spec>& specs,
+    const couchbase::transactions::transaction_get_multi_options& options,
+    std::function<void(error,
+                       std::optional<couchbase::transactions::transaction_get_multi_result>)>&& cb)
+    override;
+
+  auto get_multi_replicas_from_preferred_server_group(
+    const std::vector<core::document_id>& ids,
+    transaction_get_multi_replicas_from_preferred_server_group_mode mode)
+    -> transaction_get_multi_replicas_from_preferred_server_group_result override;
+  void get_multi_replicas_from_preferred_server_group(
+    const std::vector<core::document_id>& ids,
+    transaction_get_multi_replicas_from_preferred_server_group_mode mode,
+    std::function<
+      void(std::exception_ptr,
+           std::optional<transaction_get_multi_replicas_from_preferred_server_group_result>)>&& cb)
+    override;
+  auto get_multi_replicas_from_preferred_server_group(
+    const std::vector<
+      couchbase::transactions::transaction_get_multi_replicas_from_preferred_server_group_spec>&
+      specs,
+    const couchbase::transactions::
+      transaction_get_multi_replicas_from_preferred_server_group_options& options)
+    -> std::pair<
+      error,
+      std::optional<couchbase::transactions::
+                      transaction_get_multi_replicas_from_preferred_server_group_result>> override;
+  void get_multi_replicas_from_preferred_server_group(
+    const std::vector<
+      couchbase::transactions::transaction_get_multi_replicas_from_preferred_server_group_spec>&
+      specs,
+    const couchbase::transactions::
+      transaction_get_multi_replicas_from_preferred_server_group_options& options,
+    std::function<void(
+      error,
+      std::optional<couchbase::transactions::
+                      transaction_get_multi_replicas_from_preferred_server_group_result>)>&& cb)
+    override;
 
   void remove(const transaction_get_result& document) override;
   auto remove(const couchbase::transactions::transaction_get_result& doc)
@@ -438,6 +510,7 @@ private:
   void get_doc(const core::document_id& id,
                bool allow_replica,
                std::function<void(std::optional<error_class>,
+                                  std::optional<external_exception>,
                                   std::optional<std::string>,
                                   std::optional<transaction_get_result>)>&& cb);
 
@@ -475,7 +548,7 @@ private:
                                           const std::string& message);
 
   void ensure_open_bucket(const std::string& bucket_name,
-                          std::function<void(std::error_code)>&& handler);
+                          std::function<void(std::error_code)>&& handler) const;
 
   void supports_replace_body_with_xattr(const std::string& bucket_name,
                                         std::function<void(std::error_code, bool)>&& handler) const;

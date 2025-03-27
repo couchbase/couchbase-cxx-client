@@ -133,6 +133,7 @@ public:
   void handle_error(const std::exception_ptr& err, txn_complete_callback&& callback);
 
   auto remaining() const -> std::chrono::nanoseconds;
+  [[nodiscard]] auto expiry_time() const -> std::chrono::steady_clock::time_point;
 
 private:
   transaction_context(transactions& txns,

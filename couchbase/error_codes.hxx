@@ -1142,6 +1142,7 @@ enum class transaction_op {
   rollback_not_permitted = 1317,
   transaction_already_aborted = 1318,
   transaction_already_committed = 1319,
+  document_unretrievable = 1320,
 
   /**
    * @internal

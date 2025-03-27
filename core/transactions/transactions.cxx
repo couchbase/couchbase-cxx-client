@@ -21,6 +21,7 @@
 #include "core/meta/version.hxx"
 #include "core/transactions.hxx"
 
+#include "couchbase/error_codes.hxx"
 #include "internal/exceptions_internal.hxx"
 #include "internal/logging.hxx"
 #include "internal/transaction_context.hxx"
@@ -173,11 +174,19 @@ wrap_public_api_run(transactions& txns,
 {
   return wrap_run(txns, config, max_attempts, [fn = std::forward<Handler>(fn)](const auto& ctx) {
     const couchbase::error err = fn(ctx);
-    if (err && err.ec() != errc::transaction_op::transaction_op_failed) {
-      if (err.ec().category() == core::impl::transaction_op_category()) {
-        throw op_exception(err);
+    if (err) {
+      if (err.ec() == errc::transaction_op::transaction_op_failed) {
+        if (auto cause = err.cause(); cause) {
+          throw transaction_operation_failed(FAIL_OTHER, err.message())
+            .cause(external_exception_from_transaction_op_errc(
+              errc::transaction_op(cause->ec().value())));
+        }
+      } else {
+        if (err.ec().category() == core::impl::transaction_op_category()) {
+          throw op_exception(err);
+        }
+        throw std::runtime_error(err.ec().message());
       }
-      throw std::runtime_error(err.ec().message());
     }
   });
 }
@@ -190,8 +199,8 @@ transactions::run(logic&& code) -> ::couchbase::transactions::transaction_result
 }
 
 auto
-transactions::run(const couchbase::transactions::transaction_options& config,
-                  logic&& code) -> ::couchbase::transactions::transaction_result
+transactions::run(const couchbase::transactions::transaction_options& config, logic&& code)
+  -> ::couchbase::transactions::transaction_result
 {
   return wrap_run(*this, config, max_attempts_, std::move(code));
 }

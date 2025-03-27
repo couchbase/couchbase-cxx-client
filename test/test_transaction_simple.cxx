@@ -22,6 +22,8 @@
 #include "core/transactions.hxx"
 #include "core/transactions/atr_ids.hxx"
 
+#include <couchbase/codec/tao_json_serializer.hxx>
+
 #include <tao/json.hpp>
 
 #include <stdexcept>

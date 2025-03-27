@@ -29,4 +29,12 @@ doc_record::create_from(const tao::json::value& obj) -> doc_record
   const std::string id = obj.at(ATR_FIELD_PER_DOC_ID).get_string();
   return { bucket_name, scope_name, collection_name, id };
 }
+
+auto
+operator==(const doc_record& doc, const core::document_id& id) -> bool
+{
+  return doc.id_.bucket() == id.bucket() && doc.id_.scope() == id.scope() &&
+         doc.id_.collection() == id.collection() && doc.id_.key() == id.key();
+}
+
 } // namespace couchbase::core::transactions
