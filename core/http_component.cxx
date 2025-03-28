@@ -155,6 +155,9 @@ public:
     if (!callback_) {
       return;
     }
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+    dispatch_deadline_.cancel();
+#endif
     session_ = std::move(session);
 
     auto start_op = [self = shared_from_this()]() {
@@ -344,6 +347,9 @@ public:
     if (!callback_) {
       return;
     }
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+    dispatch_deadline_.cancel();
+#endif
     session_ = std::move(session);
 
     session_->write_and_subscribe(
