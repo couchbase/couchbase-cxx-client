@@ -187,7 +187,11 @@ struct lookup_in_all_replicas_request {
                       }
                     }
                     if (local_handler) {
-                      return local_handler({ std::move(resp.ctx), std::move(ctx->result_) });
+                      if (ctx->result_.empty()) {
+                        // Return an error only when we have no results from any replica.
+                        return local_handler({ std::move(resp.ctx), {} });
+                      }
+                      return local_handler({ {}, std::move(ctx->result_) });
                     }
                   });
               } else {
@@ -231,7 +235,11 @@ struct lookup_in_all_replicas_request {
                       }
                     }
                     if (local_handler) {
-                      return local_handler({ std::move(resp.ctx), std::move(ctx->result_) });
+                      if (ctx->result_.empty()) {
+                        // Return an error only when we have no results from any replica.
+                        return local_handler({ std::move(resp.ctx), {} });
+                      }
+                      return local_handler({ {}, std::move(ctx->result_) });
                     }
                   });
               }
