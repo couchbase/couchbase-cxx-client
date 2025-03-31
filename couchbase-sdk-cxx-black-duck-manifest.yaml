@@ -17,7 +17,7 @@ components:
     versions: [ v9.2.1 ]
   snappy:
     bd-id: fd5e5c60-2c67-4d20-8be9-b7648156cef3
-    versions: [ 1.2.1 ]
+    versions: [ 1.2.2 ]
   asio:
     bd-id: 3739d5e9-9ad8-4845-8077-1770167a69c2
     versions: [ 1.31.0 ]
