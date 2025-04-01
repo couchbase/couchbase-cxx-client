@@ -104,9 +104,9 @@ if(NOT TARGET snappy)
     NAME
     snappy
     GIT_TAG
-    1.2.1
+    1.2.2
     VERSION
-    1.2.1
+    1.2.2
     GITHUB_REPOSITORY
     "google/snappy"
     EXCLUDE_FROM_ALL ON
