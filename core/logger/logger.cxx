@@ -59,6 +59,10 @@ std::shared_ptr<spdlog::logger> file_logger{};
 std::mutex file_logger_mutex;
 std::atomic_int file_logger_version{ 0 };
 
+std::shared_ptr<couchbase::core::logger::log_callback> log_callback{};
+std::mutex log_callback_mutex;
+std::atomic_int log_callback_version{ 0 };
+
 auto
 get_file_logger() -> std::shared_ptr<spdlog::logger>
 {
@@ -70,6 +74,27 @@ get_file_logger() -> std::shared_ptr<spdlog::logger>
     version = file_logger_version;
   }
   return logger;
+}
+
+auto
+get_custom_callback() -> std::shared_ptr<couchbase::core::logger::log_callback>
+{
+  thread_local std::shared_ptr<couchbase::core::logger::log_callback> callback{ nullptr };
+  thread_local int version{ -1 };
+  if (version != log_callback_version) {
+    const std::scoped_lock lock(log_callback_mutex);
+    callback = log_callback;
+    version = log_callback_version;
+  }
+  return callback;
+}
+
+void
+update_callback_logger(const std::shared_ptr<couchbase::core::logger::log_callback>& new_callback)
+{
+  const std::scoped_lock lock(log_callback_mutex);
+  log_callback = new_callback;
+  ++log_callback_version;
 }
 
 void
@@ -179,6 +204,14 @@ log(const char* file, int line, const char* function, level lvl, std::string_vie
   if (is_initialized()) {
     return get_file_logger()->log(
       spdlog::source_loc{ file, line, function }, translate_level(lvl), msg);
+  }
+}
+
+void
+log_custom_logger(const char* file, int line, const char* function, level lvl, std::string_view msg)
+{
+  if (auto callback = get_custom_callback()) {
+    (*callback)(msg, lvl, { file, function, line });
   }
 }
 } // namespace detail
@@ -394,6 +427,19 @@ create_console_logger()
   new_logger->set_level(spdlog::level::info);
   new_logger->set_pattern(log_pattern);
   update_file_logger(new_logger);
+}
+
+void
+register_log_callback(log_callback callback)
+{
+  auto new_callback = std::make_shared<log_callback>(std::move(callback));
+  update_callback_logger(new_callback);
+}
+
+void
+unregister_log_callback()
+{
+  update_callback_logger(nullptr);
 }
 
 void

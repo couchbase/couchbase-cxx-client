@@ -47,7 +47,58 @@ convert_log_level(couchbase::logger::log_level level) -> core::logger::level
   }
   return core::logger::level::off;
 }
+
+auto
+convert_log_level(core::logger::level level) -> couchbase::logger::log_level
+{
+  switch (level) {
+    case core::logger::level::trace:
+      return log_level::trace;
+    case core::logger::level::debug:
+      return log_level::debug;
+    case core::logger::level::info:
+      return log_level::info;
+    case core::logger::level::warn:
+      return log_level::warn;
+    case core::logger::level::err:
+      return log_level::error;
+    case core::logger::level::critical:
+      return log_level::critical;
+    case core::logger::level::off:
+    default:
+      break;
+  }
+  return log_level::off;
+}
+
+auto
+convert_log_location(const core::logger::log_location& location) -> couchbase::logger::log_location
+{
+  return couchbase::logger::log_location{ location.file, location.function, location.line };
+}
 } // namespace
+
+void
+register_log_callback(const log_callback& callback)
+{
+  if (callback == nullptr) {
+    return;
+  }
+
+  auto core_callback = [callback](const std::string_view msg,
+                                  const core::logger::level level,
+                                  const core::logger::log_location& location) {
+    callback(msg, convert_log_level(level), convert_log_location(location));
+  };
+
+  couchbase::core::logger::register_log_callback(std::move(core_callback));
+}
+
+void
+unregister_log_callback()
+{
+  couchbase::core::logger::unregister_log_callback();
+}
 
 void
 set_level(log_level level)
