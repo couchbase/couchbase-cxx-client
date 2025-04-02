@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include <functional>
+#include <string>
 #include <string_view>
 
 namespace couchbase::logger
@@ -30,6 +32,20 @@ enum class log_level {
   critical,
   off,
 };
+
+struct log_location {
+  std::string file;
+  std::string function;
+  int line;
+};
+
+using log_callback = std::function<void(std::string_view, log_level, log_location)>;
+
+void
+register_log_callback(const log_callback& callback);
+
+void
+unregister_log_callback();
 
 void
 set_level(log_level level);

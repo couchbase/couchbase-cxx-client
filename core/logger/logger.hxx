@@ -25,6 +25,8 @@
 
 #pragma once
 
+#include <functional>
+
 #include "level.hxx"
 
 #include <spdlog/fmt/bundled/core.h>
@@ -36,7 +38,16 @@
 
 namespace couchbase::core::logger
 {
+
 struct configuration;
+
+struct log_location {
+  std::string file;
+  std::string function;
+  int line;
+};
+
+using log_callback = std::function<void(std::string_view, level, log_location)>;
 
 auto
 level_from_str(const std::string& str) -> level;
@@ -113,6 +124,12 @@ get() -> spdlog::logger*;
 void
 reset();
 
+void
+register_log_callback(log_callback callback);
+
+void
+unregister_log_callback();
+
 /**
  * Engines that create their own instances of an spdlog::logger should register the logger here to
  * ensure that the verbosity of the logger is updated when memcached receives a request to update
@@ -179,6 +196,13 @@ log(const char* file, int line, const char* function, level lvl, std::string_vie
 
 void
 log_protocol(const char* file, int line, const char* function, std::string_view msg);
+
+void
+log_custom_logger(const char* file,
+                  int line,
+                  const char* function,
+                  level lvl,
+                  std::string_view msg);
 } // namespace detail
 
 /**
@@ -197,6 +221,19 @@ log(const char* file,
     Args&&... args)
 {
   detail::log(file, line, function, lvl, fmt::format(msg, std::forward<Args>(args)...));
+}
+
+template<typename... Args>
+inline void
+log_custom_logger(const char* file,
+                  int line,
+                  const char* function,
+                  level lvl,
+                  fmt::format_string<Args...> msg,
+                  Args&&... args)
+{
+  detail::log_custom_logger(
+    file, line, function, lvl, fmt::format(msg, std::forward<Args>(args)...));
 }
 
 template<typename... Args>
@@ -228,7 +265,6 @@ shutdown();
  */
 auto
 is_initialized() -> bool;
-
 } // namespace couchbase::core::logger
 
 #if defined(__GNUC__) || defined(__clang__)
@@ -243,6 +279,8 @@ is_initialized() -> bool;
  */
 #define COUCHBASE_LOG(file, line, function, severity, ...)                                         \
   do {                                                                                             \
+    couchbase::core::logger::log_custom_logger(file, line, function, severity, __VA_ARGS__);       \
+                                                                                                   \
     if (couchbase::core::logger::should_log(severity)) {                                           \
       couchbase::core::logger::log(file, line, function, severity, __VA_ARGS__);                   \
     }                                                                                              \
@@ -305,6 +343,8 @@ is_initialized() -> bool;
  */
 #define COUCHBASE_LOG_RAW(file, line, function, severity, msg)                                     \
   do {                                                                                             \
+    couchbase::core::logger::log_custom_logger(file, line, function, severity, msg);               \
+                                                                                                   \
     if (couchbase::core::logger::should_log(severity)) {                                           \
       couchbase::core::logger::detail::log(file, line, function, severity, msg);                   \
     }                                                                                              \
