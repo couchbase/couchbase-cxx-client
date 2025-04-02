@@ -218,3 +218,8 @@
  * core API like with_bucket_configuration() yields shared_ptr instead of configuration copy
  */
 #define COUCHBASE_CXX_CLIENT_CORE_RETURNS_POINTER_TO_CONFIG 1
+
+/**
+ * bucket_settings in both the public and core management APIs have a num_vbuckets attribute
+ */
+#define COUCHBASE_CXX_CLIENT_HAS_BUCKET_SETTINGS_NUM_VBUCKETS 1

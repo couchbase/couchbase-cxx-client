@@ -61,6 +61,7 @@ map_bucket_settings(const couchbase::core::management::cluster::bucket_settings&
   bucket_settings.flush_enabled = bucket.flush_enabled;
   bucket_settings.history_retention_bytes = bucket.history_retention_bytes;
   bucket_settings.history_retention_duration = bucket.history_retention_duration;
+  bucket_settings.num_vbuckets = bucket.num_vbuckets;
   switch (bucket.conflict_resolution_type) {
     case core::management::cluster::bucket_conflict_resolution::unknown:
       bucket_settings.conflict_resolution_type =
@@ -169,6 +170,7 @@ map_bucket_settings(const couchbase::management::cluster::bucket_settings& bucke
     bucket.history_retention_collection_default;
   bucket_settings.history_retention_bytes = bucket.history_retention_bytes;
   bucket_settings.history_retention_duration = bucket.history_retention_duration;
+  bucket_settings.num_vbuckets = bucket.num_vbuckets;
   switch (bucket.conflict_resolution_type) {
     case management::cluster::bucket_conflict_resolution::unknown:
       bucket_settings.conflict_resolution_type =

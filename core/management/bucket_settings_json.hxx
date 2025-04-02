@@ -56,6 +56,10 @@ struct traits<couchbase::core::management::cluster::bucket_settings> {
         history_retention_duration->template as<std::optional<std::uint32_t>>();
     }
 
+    if (auto* num_vbuckets = v.find("numVBuckets"); num_vbuckets != nullptr) {
+      result.num_vbuckets = num_vbuckets->template as<std::optional<std::uint16_t>>();
+    }
+
     if (auto& str = v.at("bucketType").get_string(); str == "couchbase" || str == "membase") {
       result.bucket_type = couchbase::core::management::cluster::bucket_type::couchbase;
     } else if (str == "ephemeral") {
