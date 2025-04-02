@@ -86,6 +86,9 @@ bucket_create_request::encode_to(encoded_request_type& encoded,
   if (bucket.flush_enabled.has_value()) {
     encoded.body.append(fmt::format("&flushEnabled={}", bucket.flush_enabled.value() ? "1" : "0"));
   }
+  if (bucket.num_vbuckets.has_value()) {
+    encoded.body.append(fmt::format("&numVBuckets={}", bucket.num_vbuckets.value()));
+  }
 
   switch (bucket.eviction_policy) {
     case couchbase::core::management::cluster::bucket_eviction_policy::full:

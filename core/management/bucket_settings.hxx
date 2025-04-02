@@ -136,6 +136,7 @@ struct bucket_settings {
   std::optional<bool> history_retention_collection_default{};
   std::optional<std::uint32_t> history_retention_bytes{};
   std::optional<std::uint32_t> history_retention_duration{};
+  std::optional<std::uint16_t> num_vbuckets{};
 
   /**
    * UNCOMMITTED: This API may change in the future
