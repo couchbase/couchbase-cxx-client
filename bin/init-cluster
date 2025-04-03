@@ -162,3 +162,14 @@ if options[:sample_buckets].include?("travel-sample") && services.include?("fts"
   index_definition_path = File.join(__dir__, "travel-sample-index#{"-v6" if has_v6_nodes}.json")
   ensure_search_index_created(index_definition_path, options.merge(service_address))
 end
+
+current_cluster_name = api.get("/pools/default")["clusterName"]
+if current_cluster_name == ""
+  new_name = "test-cluster"
+  api.post_form("/pools/default", {"clusterName" => new_name})
+  puts "Cluster name set to \"test-cluster\""
+elsif current_cluster_name != nil
+  puts "Cluster name is already set to \"#{current_cluster_name}\""
+else
+  puts "Server version does not support setting cluster name"
+end
