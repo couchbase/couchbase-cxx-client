@@ -41,6 +41,8 @@
 #include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/lookup_in_specs.hxx>
 
+#include <tao/json/from_string.hpp>
+
 TEST_CASE("integration: trivial non-data query", "[integration]")
 {
   test::utils::integration_test_guard integration;
@@ -381,8 +383,10 @@ TEST_CASE("integration: streaming query results with stop in the middle", "[inte
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
     REQUIRE(rows.size() == 2);
-    REQUIRE(rows[0] == R"({"data":{"tech":"C++"}})");
-    REQUIRE(rows[1] == R"({"data":{"tech":"Ruby"}})");
+    REQUIRE(tao::json::from_string(rows[0]) ==
+            tao::json::from_string(R"({"data":{"tech":"C++"}})"));
+    REQUIRE(tao::json::from_string(rows[1]) ==
+            tao::json::from_string(R"({"data":{"tech":"Ruby"}})"));
   }
 }
 
@@ -413,9 +417,12 @@ TEST_CASE("integration: streaming analytics results", "[integration]")
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
     REQUIRE(rows.size() == 3);
-    REQUIRE(rows[0] == R"({ "data": { "tech": "C++" } })");
-    REQUIRE(rows[1] == R"({ "data": { "tech": "Ruby" } })");
-    REQUIRE(rows[2] == R"({ "data": { "tech": "Couchbase" } })");
+    REQUIRE(tao::json::from_string(rows[0]) ==
+            tao::json::from_string(R"({ "data": { "tech": "C++" } })"));
+    REQUIRE(tao::json::from_string(rows[1]) ==
+            tao::json::from_string(R"({ "data": { "tech": "Ruby" } })"));
+    REQUIRE(tao::json::from_string(rows[2]) ==
+            tao::json::from_string(R"({ "data": { "tech": "Couchbase" } })"));
   }
 }
 
@@ -437,7 +444,7 @@ TEST_CASE("integration: sticking query to the service node", "[integration]")
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
     REQUIRE(resp.rows.size() == 1);
-    REQUIRE(resp.rows[0] == R"({"answer":42})");
+    REQUIRE(tao::json::from_string(resp.rows[0]) == tao::json::from_string(R"({"answer":42})"));
     REQUIRE_FALSE(resp.served_by_node.empty());
     node_to_stick_queries = resp.served_by_node;
   }
@@ -457,7 +464,8 @@ TEST_CASE("integration: sticking query to the service node", "[integration]")
         couchbase::core::operations::query_request req{ fmt::format(R"(SELECT {} AS answer)", i) };
         auto resp = test::utils::execute(cluster, req);
         if (resp.ctx.ec || resp.served_by_node.empty() || resp.rows.size() != 1 ||
-            resp.rows[0] != fmt::format(R"({{"answer":{}}})", i)) {
+            tao::json::from_string(resp.rows[0]) !=
+              tao::json::from_string(fmt::format(R"({{"answer":{}}})", i))) {
           return;
         }
         std::scoped_lock lock(used_nodes_mutex);
@@ -483,7 +491,8 @@ TEST_CASE("integration: sticking query to the service node", "[integration]")
         req.send_to_node = node_to_stick_queries;
         auto resp = test::utils::execute(cluster, req);
         if (resp.ctx.ec || resp.served_by_node.empty() || resp.rows.size() != 1 ||
-            resp.rows[0] != fmt::format(R"({{"answer":{}}})", i)) {
+            tao::json::from_string(resp.rows[0]) !=
+              tao::json::from_string(fmt::format(R"({{"answer":{}}})", i))) {
           return;
         }
         std::scoped_lock lock(used_nodes_mutex);
