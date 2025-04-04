@@ -414,10 +414,11 @@ class mcbp_session_impl
               const protocol::client_response<protocol::sasl_list_mechs_response_body> resp(
                 std::move(msg));
               if (resp.status() != key_value_status_code::success) {
-                auto error_msg =
-                  fmt::format("unexpected message status during bootstrap: {} (opaque={})",
-                              resp.error_message(),
-                              resp.opaque());
+                auto error_msg = fmt::format(
+                  "unexpected message status during bootstrap: {} (opaque={}, context={})",
+                  resp.error_message(),
+                  resp.opaque(),
+                  resp.error_info() ? resp.error_info()->context() : "");
                 last_bootstrap_error_ = { errc::common::authentication_failure,
                                           std::move(error_msg),
                                           session_->bootstrap_hostname(),
@@ -443,8 +444,11 @@ class mcbp_session_impl
                   req.body().sasl_data(sasl_payload);
                   session_->write_and_flush(req.data());
                 } else {
-                  auto error_msg = fmt::format(
-                    "unable to authenticate: (sasl_code={}, opaque={})", sasl_code, resp.opaque());
+                  auto error_msg =
+                    fmt::format("unable to authenticate: (sasl_code={}, opaque={}, context={})",
+                                sasl_code,
+                                resp.opaque(),
+                                resp.error_info() ? resp.error_info()->context() : "");
                   last_bootstrap_error_ = { errc::common::authentication_failure,
                                             std::move(error_msg),
                                             session_->bootstrap_hostname(),
@@ -453,11 +457,12 @@ class mcbp_session_impl
                   return complete(errc::common::authentication_failure);
                 }
               } else {
-                auto error_msg =
-                  fmt::format("{} unexpected message status during bootstrap: {} (opaque={})",
-                              session_->log_prefix_,
-                              resp.error_message(),
-                              resp.opaque());
+                auto error_msg = fmt::format(
+                  "{} unexpected message status during bootstrap: {} (opaque={}, context={})",
+                  session_->log_prefix_,
+                  resp.error_message(),
+                  resp.opaque(),
+                  resp.error_info() ? resp.error_info()->context() : "");
                 last_bootstrap_error_ = { errc::common::authentication_failure,
                                           std::move(error_msg),
                                           session_->bootstrap_hostname(),
@@ -473,10 +478,11 @@ class mcbp_session_impl
                 return auth_success();
               }
               auto error_msg =
-                fmt::format("unable to authenticate (opcode={}, status={}, opaque={})",
+                fmt::format("unable to authenticate (opcode={}, status={}, opaque={}, context={})",
                             opcode,
                             resp.status(),
-                            resp.opaque());
+                            resp.opaque(),
+                            resp.error_info() ? resp.error_info()->context() : "");
               last_bootstrap_error_ = { errc::common::authentication_failure,
                                         std::move(error_msg),
                                         session_->bootstrap_hostname(),
