@@ -28,7 +28,7 @@ class application_telemetry_options
 public:
   static constexpr std::chrono::milliseconds default_ping_interval{ std::chrono::seconds{ 30 } };
   static constexpr std::chrono::milliseconds default_ping_timeout{ std::chrono::seconds{ 2 } };
-  static constexpr std::chrono::milliseconds default_backoff_interval{ std::chrono::seconds{ 5 } };
+  static constexpr std::chrono::milliseconds default_backoff_interval{ std::chrono::hours{ 1 } };
 
   /**
    * Whether to enable application telemetry.
