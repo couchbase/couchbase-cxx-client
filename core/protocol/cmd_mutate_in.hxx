@@ -151,6 +151,15 @@ public:
     }
   }
 
+  void revive_document(bool value)
+  {
+    if (value) {
+      flags_ |= doc_flag_revive_document;
+    } else {
+      flags_ &= ~doc_flag_revive_document;
+    }
+  }
+
   void store_semantics(couchbase::store_semantics semantics)
   {
     flags_ &= std::byte{ 0b1111'1100U }; /* reset first two bits */
