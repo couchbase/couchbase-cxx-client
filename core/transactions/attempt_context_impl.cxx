@@ -2965,13 +2965,14 @@ attempt_context_impl::do_get(const core::document_id& id,
 
     // Check if we already have a staged insert/replace for this document AND we have the content
     // for it (i.e. the cluster does not support replace body_with_xattr)
-    if (const staged_mutation* own_write = check_for_own_write(id);
-        own_write != nullptr && own_write->content().has_value()) {
-      CB_ATTEMPT_CTX_LOG_DEBUG(this, "found own-write of mutated doc {}", id);
-      return cb(
-        std::nullopt,
-        std::nullopt,
-        transaction_get_result::create_from(own_write->doc(), own_write->content().value()));
+    if (const staged_mutation* own_write = check_for_own_write(id); own_write != nullptr) {
+      if (own_write->content().has_value()) {
+        CB_ATTEMPT_CTX_LOG_DEBUG(this, "found own-write of mutated doc {}", id);
+        return cb(
+          std::nullopt,
+          std::nullopt,
+          transaction_get_result::create_from(own_write->doc(), own_write->content().value()));
+      }
     }
     if (const staged_mutation* own_remove = staged_mutations_->find_remove(id);
         own_remove != nullptr) {
@@ -3596,7 +3597,7 @@ attempt_context_impl::supports_replace_body_with_xattr(
   cluster_ref().with_bucket_configuration(
     bucket_name,
     [handler = std::move(handler)](std::error_code ec,
-                                   std::shared_ptr<topology::configuration> config) {
+                                   const std::shared_ptr<topology::configuration>& config) {
       if (ec) {
         handler(ec, {});
         return;
