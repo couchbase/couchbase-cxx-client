@@ -17,7 +17,7 @@ jobs:
       fail-fast: false
       matrix:
         server:
-          - 7.6.2
+          - 7.6.5
         sanitizer:
           - asan
           - lsan
