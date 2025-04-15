@@ -19,6 +19,8 @@
 #include "attempt_context_impl.hxx"
 #include "attempt_context_testing_hooks.hxx"
 #include "core/cluster.hxx"
+#include "core/impl/subdoc/opcode.hxx"
+#include "core/impl/subdoc/path_flags.hxx"
 #include "core/logger/logger.hxx"
 #include "core/operations.hxx"
 #include "core/transactions/internal/logging.hxx"
@@ -537,23 +539,72 @@ staged_mutation_queue::commit_doc(const std::shared_ptr<attempt_context_impl>& c
         ctx,
         item.doc().id().key(),
         [handler = std::move(handler), ctx, &item, delay, ambiguity_resolution_mode, cas_zero_mode](
-          std::optional<error_class> ec) mutable {
+          const std::optional<error_class> ec) mutable {
           if (ec) {
             return handler(client_error(*ec, "before_doc_committed hook threw error"),
                            ambiguity_resolution_mode,
                            cas_zero_mode);
           }
           // move staged content into doc
-          CB_ATTEMPT_CTX_LOG_TRACE(ctx,
-                                   "commit doc id {}, content {}, cas {}",
-                                   item.doc().id(),
-                                   to_string(item.content().data),
-                                   item.doc().cas().value());
+          CB_ATTEMPT_CTX_LOG_TRACE(
+            ctx, "commit doc id {}, cas {}", item.doc().id(), item.doc().cas().value());
 
           if (item.type() == staged_mutation_type::INSERT && !cas_zero_mode) {
-            core::operations::insert_request req{ item.doc().id(), item.content().data };
-            req.flags = item.content().flags;
+            if (item.content().has_value()) {
+              // We have stored the content for the staged mutation. This means that the cluster
+              // does not support replace_body_with_xattr. Perform a regular KV insert.
+              operations::insert_request req{ item.doc().id(), item.content().value().data };
+              req.flags = item.content().value().flags;
+              wrap_durable_request(req, ctx->overall()->config());
+              return ctx->cluster_ref().execute(
+                req,
+                [handler = std::move(handler),
+                 ctx,
+                 &item,
+                 delay,
+                 ambiguity_resolution_mode,
+                 cas_zero_mode](const core::operations::insert_response& resp) mutable {
+                  auto res = result::create_from_mutation_response(resp);
+                  return validate_commit_doc_result(
+                    ctx,
+                    res,
+                    item,
+                    [ambiguity_resolution_mode, cas_zero_mode, handler = std::move(handler)](
+                      const auto& e) mutable {
+                      if (e) {
+                        return handler(e, ambiguity_resolution_mode, cas_zero_mode);
+                      }
+                      // Commit successful
+                      return handler({}, {}, {});
+                    });
+                });
+            }
+
+            const bool is_staged_binary = item.doc().links().is_staged_content_binary();
+
+            // We have not stored the content for the staged mutation. This means that the cluster
+            // supports replace_body_with_xattr.
+            operations::mutate_in_request req{ item.doc().id() };
+            req.specs = {
+              impl::subdoc::command{
+                impl::subdoc::opcode::replace_body_with_xattr,
+                !is_staged_binary ? STAGED_DATA : STAGED_BINARY_DATA,
+                {},
+                impl::subdoc::build_mutate_in_path_flags(true, false, false, is_staged_binary),
+              },
+              impl::subdoc::command{
+                impl::subdoc::opcode::remove,
+                TRANSACTION_INTERFACE_PREFIX_ONLY,
+                {},
+                impl::subdoc::build_mutate_in_path_flags(true, false, false, false),
+              },
+            };
+            req.cas = couchbase::cas{ item.doc().cas() };
+            req.access_deleted = true;
+            req.revive_document = true;
+            req.flags = item.doc().links().staged_user_flags();
             wrap_durable_request(req, ctx->overall()->config());
+
             return ctx->cluster_ref().execute(
               req,
               [handler = std::move(handler),
@@ -561,7 +612,7 @@ staged_mutation_queue::commit_doc(const std::shared_ptr<attempt_context_impl>& c
                &item,
                delay,
                ambiguity_resolution_mode,
-               cas_zero_mode](const core::operations::insert_response& resp) mutable {
+               cas_zero_mode](const operations::mutate_in_response& resp) mutable {
                 auto res = result::create_from_mutation_response(resp);
                 return validate_commit_doc_result(
                   ctx,
@@ -577,25 +628,78 @@ staged_mutation_queue::commit_doc(const std::shared_ptr<attempt_context_impl>& c
                   });
               });
           }
-          core::operations::mutate_in_request req{ item.doc().id() };
-          req.specs =
-            couchbase::mutate_in_specs{
-              // TODO(SA): upsert null to "txn" to match Java implementation
-              //
-              // from CoreTransactionAttemptContext.java:
-              // > Upsert this field to better handle illegal doc mutation.
-              // > E.g. run shadowDocSameTxnKVInsert without this, fails
-              // > at this point as path has been removed. Could also handle
-              // > with a spec change to handle that.
-              couchbase::mutate_in_specs::remove(TRANSACTION_INTERFACE_PREFIX_ONLY).xattr(),
-              // subdoc::opcode::set_doc used in replace w/ empty path
-              couchbase::mutate_in_specs::replace_raw("", item.content().data),
-            }
-              .specs();
-          req.store_semantics = couchbase::store_semantics::replace;
-          req.cas = couchbase::cas(cas_zero_mode ? 0 : item.doc().cas().value());
-          req.flags = item.content().flags;
+
+          if (item.content().has_value()) {
+            // We have stored the content for the staged mutation. This means that the cluster does
+            // not support replace_body_with_xattr.
+            operations::mutate_in_request req{ item.doc().id() };
+            req.specs =
+              couchbase::mutate_in_specs{
+                // TODO(SA): upsert null to "txn" to match Java implementation
+                //
+                // from CoreTransactionAttemptContext.java:
+                // > Upsert this field to better handle illegal doc mutation.
+                // > E.g. run shadowDocSameTxnKVInsert without this, fails
+                // > at this point as path has been removed. Could also handle
+                // > with a spec change to handle that.
+                couchbase::mutate_in_specs::remove(TRANSACTION_INTERFACE_PREFIX_ONLY).xattr(),
+                // subdoc::opcode::set_doc used in replace w/ empty path
+                couchbase::mutate_in_specs::replace_raw("", item.content().value().data),
+              }
+                .specs();
+            req.store_semantics = couchbase::store_semantics::replace;
+            req.cas = couchbase::cas(cas_zero_mode ? 0 : item.doc().cas().value());
+            req.flags = item.content().value().flags;
+            wrap_durable_request(req, ctx->overall()->config());
+            return ctx->cluster_ref().execute(
+              req,
+              [handler = std::move(handler),
+               ctx,
+               &item,
+               delay,
+               ambiguity_resolution_mode,
+               cas_zero_mode](const core::operations::mutate_in_response& resp) mutable {
+                auto res = result::create_from_subdoc_response(resp);
+                return validate_commit_doc_result(
+                  ctx,
+                  res,
+                  item,
+                  [ambiguity_resolution_mode, cas_zero_mode, handler = std::move(handler)](
+                    const auto& e) mutable {
+                    if (e) {
+                      return handler(e, ambiguity_resolution_mode, cas_zero_mode);
+                    }
+                    // Commit successful
+                    return handler({}, {}, {});
+                  });
+              });
+          }
+
+          const bool is_staged_binary = item.doc().links().is_staged_content_binary();
+
+          // We have not stored the content for the staged mutation. This means that the cluster
+          // supports replace_body_with_xattr.
+          operations::mutate_in_request req{ item.doc().id() };
+          req.specs = {
+            impl::subdoc::command{
+              impl::subdoc::opcode::replace_body_with_xattr,
+              !is_staged_binary ? STAGED_DATA : STAGED_BINARY_DATA,
+              {},
+              impl::subdoc::build_mutate_in_path_flags(true, false, false, is_staged_binary),
+            },
+            impl::subdoc::command{
+              impl::subdoc::opcode::remove,
+              TRANSACTION_INTERFACE_PREFIX_ONLY,
+              {},
+              impl::subdoc::build_mutate_in_path_flags(true, false, false, false),
+            },
+          };
+          if (!cas_zero_mode) {
+            req.cas = item.doc().cas();
+          }
+          req.flags = item.doc().links().staged_user_flags();
           wrap_durable_request(req, ctx->overall()->config());
+
           return ctx->cluster_ref().execute(
             req,
             [handler = std::move(handler),
@@ -603,8 +707,8 @@ staged_mutation_queue::commit_doc(const std::shared_ptr<attempt_context_impl>& c
              &item,
              delay,
              ambiguity_resolution_mode,
-             cas_zero_mode](const core::operations::mutate_in_response& resp) mutable {
-              auto res = result::create_from_subdoc_response(resp);
+             cas_zero_mode](const operations::mutate_in_response& resp) mutable {
+              auto res = result::create_from_mutation_response(resp);
               return validate_commit_doc_result(
                 ctx,
                 res,
@@ -785,6 +889,11 @@ staged_mutation_queue::handle_commit_doc_error(
         ambiguity_resolution_mode = true;
         throw retry_operation("FAIL_AMBIGUOUS in commit_doc");
       case FAIL_CAS_MISMATCH:
+        if (ambiguity_resolution_mode) {
+          throw transaction_operation_failed(ec, e.what()).no_rollback().failed_post_commit();
+        }
+        cas_zero_mode = true;
+        throw retry_operation("FAIL_CAS_MISMATCH in commit_doc");
       case FAIL_DOC_ALREADY_EXISTS:
         if (ambiguity_resolution_mode) {
           throw transaction_operation_failed(ec, e.what()).no_rollback().failed_post_commit();
@@ -824,7 +933,7 @@ staged_mutation_queue::handle_remove_doc_error(
   utils::movable_function<void(std::exception_ptr)> callback)
 {
   try {
-    auto ec = e.ec();
+    const auto ec = e.ec();
     if (ctx->expiry_overtime_mode_.load()) {
       CB_ATTEMPT_CTX_LOG_TRACE(
         ctx, "remove_doc for {} error while in overtime mode {}", item.doc().id(), e.what());
@@ -870,7 +979,7 @@ staged_mutation_queue::handle_rollback_insert_error(
         .expired();
     }
     CB_ATTEMPT_CTX_LOG_TRACE(ctx, "rollback_insert for {} error {}", item.doc().id(), e.what());
-    switch (auto ec = e.ec(); ec) {
+    switch (const auto ec = e.ec(); ec) {
       case FAIL_HARD:
       case FAIL_CAS_MISMATCH:
         throw transaction_operation_failed(ec, e.what()).no_rollback();
@@ -922,7 +1031,7 @@ staged_mutation_queue::handle_rollback_remove_or_replace_error(
     }
     CB_ATTEMPT_CTX_LOG_TRACE(
       ctx, "rollback_remove_or_replace_error for {} error {}", item.doc().id(), e.what());
-    switch (auto ec = e.ec(); ec) {
+    switch (const auto ec = e.ec(); ec) {
       case FAIL_HARD:
       case FAIL_DOC_NOT_FOUND:
       case FAIL_CAS_MISMATCH:
@@ -956,7 +1065,6 @@ staged_mutation_queue::handle_rollback_remove_or_replace_error(
 auto
 staged_mutation::is_staged_binary() const -> bool
 {
-  return codec::codec_flags::has_common_flags(content_.flags,
-                                              codec::codec_flags::binary_common_flags);
+  return doc_.links().is_staged_content_binary();
 }
 } // namespace couchbase::core::transactions

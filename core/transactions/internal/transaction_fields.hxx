@@ -62,6 +62,7 @@ static const std::string ATR_BUCKET_NAME = TRANSACTION_INTERFACE_PREFIX + "atr.b
 static const std::string ATR_COLL_NAME = TRANSACTION_INTERFACE_PREFIX + "atr.coll";
 static const std::string ATR_SCOPE_NAME = TRANSACTION_INTERFACE_PREFIX + "atr.scp";
 static const std::string STAGED_DATA = TRANSACTION_INTERFACE_PREFIX + "op.stgd";
+static const std::string STAGED_BINARY_DATA = TRANSACTION_INTERFACE_PREFIX + "op.bin";
 static const std::string TYPE = TRANSACTION_INTERFACE_PREFIX + "op.type";
 static const std::string CRC32_OF_STAGING = TRANSACTION_INTERFACE_PREFIX + "op.crc32";
 static const std::string FORWARD_COMPAT = TRANSACTION_INTERFACE_PREFIX + "fc";

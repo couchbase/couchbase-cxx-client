@@ -473,6 +473,9 @@ private:
 
   void ensure_open_bucket(const std::string& bucket_name,
                           std::function<void(std::error_code)>&& handler);
+
+  void supports_replace_body_with_xattr(const std::string& bucket_name,
+                                        std::function<void(std::error_code, bool)>&& handler) const;
 };
 
 } // namespace transactions
