@@ -263,7 +263,7 @@ staged_mutation_queue::commit(const std::shared_ptr<attempt_context_impl>& ctx)
     }
 
     // TODO(CXXCBC-549): clang-tidy reports potential memory leak here
-    // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
+    // NOLINTNEXTLINE(cplusplus.NewDeleteLeaks)
     futures.push_back(std::move(future));
   }
 
@@ -353,7 +353,7 @@ staged_mutation_queue::rollback(const std::shared_ptr<attempt_context_impl>& ctx
     }
 
     // TODO(CXXCBC-549): clang-tidy reports potential memory leak here
-    // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
+    // NOLINTNEXTLINE(cplusplus.NewDeleteLeaks)
     futures.push_back(std::move(future));
   }
 
