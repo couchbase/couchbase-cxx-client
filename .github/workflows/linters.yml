@@ -33,7 +33,7 @@ jobs:
           CB_CLANG_FORMAT: /usr/bin/clang-format-19
 
   clang_static_analyzer:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
