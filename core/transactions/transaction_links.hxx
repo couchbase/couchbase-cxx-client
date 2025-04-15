@@ -172,6 +172,16 @@ public:
     return staged_content_json_.value_or(staged_content_binary_.value_or(codec::encoded_value{}));
   }
 
+  [[nodiscard]] auto staged_user_flags() const -> std::uint32_t
+  {
+    return staged_content_json_or_binary().flags;
+  }
+
+  [[nodiscard]] auto is_staged_content_binary() const -> bool
+  {
+    return staged_content_binary_.has_value();
+  }
+
   [[nodiscard]] auto staged_content_json() const -> codec::encoded_value
   {
     return staged_content_json_.value_or(codec::encoded_value{});

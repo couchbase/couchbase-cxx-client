@@ -63,6 +63,7 @@ mutate_in_request::encode_to(mutate_in_request::encoded_request_type& encoded,
   }
   encoded.body().access_deleted(access_deleted);
   encoded.body().create_as_deleted(create_as_deleted);
+  encoded.body().revive_document(revive_document);
   encoded.body().store_semantics(store_semantics);
   encoded.body().specs(specs);
   if (preserve_expiry) {
