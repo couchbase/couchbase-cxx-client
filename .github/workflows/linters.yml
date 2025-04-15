@@ -33,7 +33,7 @@ jobs:
           CB_CLANG_FORMAT: /usr/bin/clang-format-19
 
   clang_static_analyzer:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -43,15 +43,15 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y libssl-dev cmake curl wget gnupg2
           wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-          sudo bash -c "echo 'deb https://apt.llvm.org/focal/ llvm-toolchain-focal-11 main' >> /etc/apt/sources.list"
+          sudo bash -c "echo 'deb https://apt.llvm.org/noble/ llvm-toolchain-noble-19 main' >> /etc/apt/sources.list"
           sudo apt-get update -y
-          sudo apt-get install -y clang-11 clang-tools-11
+          sudo apt-get install -y clang-19 clang-tools-19
       - name: Run scan build
         run: ./bin/check-clang-static-analyzer
         env:
-          CB_CC: /usr/bin/clang-11
-          CB_CXX: /usr/bin/clang++-11
-          CB_SCAN_BUILD: /usr/bin/scan-build-11
+          CB_CC: /usr/bin/clang-19
+          CB_CXX: /usr/bin/clang++-19
+          CB_SCAN_BUILD: /usr/bin/scan-build-19
       - name: Upload scan-build report
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4
