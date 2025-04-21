@@ -166,9 +166,8 @@ public:
   {
   }
 
-  auto get_and_maybe_insert(std::string scope_name,
-                            std::string collection_name,
-                            std::uint32_t id) -> std::shared_ptr<collection_id_cache_entry>
+  auto get_and_maybe_insert(std::string scope_name, std::string collection_name, std::uint32_t id)
+    -> std::shared_ptr<collection_id_cache_entry>
   {
     const std::scoped_lock lock(cache_mutex_);
     auto key = build_key(scope_name, collection_name);
@@ -298,8 +297,8 @@ public:
     return req;
   }
 
-  auto direct_re_queue(std::shared_ptr<mcbp::queue_request> request,
-                       bool is_retry) -> std::error_code
+  auto direct_re_queue(std::shared_ptr<mcbp::queue_request> request, bool is_retry)
+    -> std::error_code
   {
     return dispatcher_.direct_re_queue(std::move(request), is_retry);
   }
@@ -455,6 +454,9 @@ collection_id_cache_entry_impl::refresh_collection_id(
         self->manager_.lock()->direct_re_queue(r, false);
       });
     });
+#if defined(__clang__) && defined(__clang_analyzer__)
+  [[clang::suppress]]
+#endif
   // TODO(CXXCBC-549)
   // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
   if (op) {
