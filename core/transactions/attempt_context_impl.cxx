@@ -866,15 +866,13 @@ attempt_context_impl::create_staged_replace(const transaction_get_result& docume
               return self->op_completed_with_callback(std::forward<Handler>(cb),
                                                       std::optional(out));
             });
-
-
         });
     });
 }
 
 auto
-attempt_context_impl::replace(const transaction_get_result& document,
-                              codec::encoded_value content) -> transaction_get_result
+attempt_context_impl::replace(const transaction_get_result& document, codec::encoded_value content)
+  -> transaction_get_result
 {
   auto barrier = std::make_shared<std::promise<transaction_get_result>>();
   auto f = barrier->get_future();
@@ -941,8 +939,8 @@ attempt_context_impl::insert_raw(const collection& coll,
 }
 
 auto
-attempt_context_impl::insert(const core::document_id& id,
-                             codec::encoded_value content) -> transaction_get_result
+attempt_context_impl::insert(const core::document_id& id, codec::encoded_value content)
+  -> transaction_get_result
 {
   auto barrier = std::make_shared<std::promise<transaction_get_result>>();
   auto f = barrier->get_future();
@@ -1830,8 +1828,8 @@ attempt_context_impl::do_public_query(
 }
 
 auto
-make_params(const core::document_id& id,
-            std::optional<codec::encoded_value> content) -> std::vector<core::json_string>
+make_params(const core::document_id& id, std::optional<codec::encoded_value> content)
+  -> std::vector<core::json_string>
 {
   if (content && !codec::codec_flags::has_common_flags(content->flags,
                                                        codec::codec_flags::json_common_flags)) {
@@ -2966,12 +2964,11 @@ attempt_context_impl::do_get(const core::document_id& id,
     // Check if we already have a staged insert/replace for this document AND we have the content
     // for it (i.e. the cluster does not support replace body_with_xattr)
     if (const staged_mutation* own_write = check_for_own_write(id); own_write != nullptr) {
-      if (own_write->content().has_value()) {
+      if (auto own_write_content = own_write->content(); own_write_content.has_value()) {
         CB_ATTEMPT_CTX_LOG_DEBUG(this, "found own-write of mutated doc {}", id);
-        return cb(
-          std::nullopt,
-          std::nullopt,
-          transaction_get_result::create_from(own_write->doc(), own_write->content().value()));
+        return cb(std::nullopt,
+                  std::nullopt,
+                  transaction_get_result::create_from(own_write->doc(), own_write_content.value()));
       }
     }
     if (const staged_mutation* own_remove = staged_mutations_->find_remove(id);
