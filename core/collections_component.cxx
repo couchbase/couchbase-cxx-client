@@ -456,7 +456,7 @@ collection_id_cache_entry_impl::refresh_collection_id(
       });
     });
   // TODO(CXXCBC-549)
-  // NOLINTNEXTLINE(cplusplus.NewDeleteLeaks)
+  // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
   if (op) {
     return {};
   }

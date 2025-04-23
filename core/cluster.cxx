@@ -371,7 +371,7 @@ public:
               origin::node_list nodes, std::error_code ec) mutable {
               if (ec) {
                 // TODO(CXXCBC-549): clang-tidy-19 reports potential memory leak here
-                // NOLINTNEXTLINE(cplusplus.NewDeleteLeaks)
+                // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
                 return self->close([ec, handler = std::move(handler)]() mutable {
                   handler(ec);
                 });
@@ -743,7 +743,7 @@ public:
                          origin_.options().trust_certificate,
                          ec.message());
             // TODO(CXXCBC-549): clang-tidy-19 reports potential memory leak here
-            // NOLINTNEXTLINE(cplusplus.NewDeleteLeaks)
+            // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
             return close([ec, handler = std::move(handler)]() mutable {
               return handler(ec);
             });
@@ -760,7 +760,7 @@ public:
                        origin_.certificate_path(),
                        ec.message());
           // TODO(CXXCBC-549): clang-tidy-19 reports potential memory leak here
-          // NOLINTNEXTLINE(cplusplus.NewDeleteLeaks)
+          // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
           return close([ec, handler = std::move(handler)]() mutable {
             return handler(ec);
           });
@@ -771,7 +771,7 @@ public:
           CB_LOG_ERROR(
             "[{}]: unable to load private key \"{}\": {}", id_, origin_.key_path(), ec.message());
           // TODO(CXXCBC-549): clang-tidy-19 reports potential memory leak here
-          // NOLINTNEXTLINE(cplusplus.NewDeleteLeaks)
+          // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
           return close([ec, handler = std::move(handler)]() mutable {
             return handler(ec);
           });
@@ -818,7 +818,7 @@ public:
       }
       if (ec) {
         // TODO(CXXCBC-549): clang-tidy-19 reports potential memory leak here
-        // NOLINTNEXTLINE(cplusplus.NewDeleteLeaks)
+        // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
         return self->close([ec, handler = std::move(handler)]() mutable {
           handler(ec);
         });
