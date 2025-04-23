@@ -16,10 +16,26 @@
 
 PROJECT_ROOT="$( cd "$(dirname "$0"/..)" >/dev/null 2>&1 ; pwd -P )"
 
-CB_CMAKE=${CB_CMAKE:-$(which cmake)}
-CB_CC=${CB_CC:-$(which clang)}
-CB_CXX=${CB_CXX:-$(which clang++)}
-CB_SCAN_BUILD=${CB_SCAN_BUILD:-$(which scan-build)}
+CB_DEFAULT_CMAKE=$(which cmake)
+CB_DEFAULT_CC=$(which clang)
+CB_DEFAULT_CXX=$(which clang++)
+CB_DEFAULT_SCAN_BUILD=$(which scan-build)
+
+if [[ "$(uname)" == "Darwin" ]]
+then
+    CB_LLVM_PREFIX=$(brew --prefix llvm 2>/dev/null)
+    if [ -d ${CB_LLVM_PREFIX} ]
+    then
+        CB_DEFAULT_CC="${CB_LLVM_PREFIX}/bin/clang"
+        CB_DEFAULT_CXX="${CB_LLVM_PREFIX}/bin/clang++"
+        CB_DEFAULT_SCAN_BUILD="${CB_LLVM_PREFIX}/bin/scan-build"
+    fi
+fi
+
+CB_CMAKE=${CB_CMAKE:-${CB_DEFAULT_CMAKE}}
+CB_CC=${CB_CC:-${CB_DEFAULT_CC}}
+CB_CXX=${CB_CXX:-${CB_DEFAULT_CXX}}
+CB_SCAN_BUILD=${CB_SCAN_BUILD:-${CB_DEFAULT_SCAN_BUILD}}
 CB_NUMBER_OF_JOBS=${CB_NUMBER_OF_JOBS:-2}
 
 echo "CB_CC=${CB_CC}"
@@ -28,6 +44,10 @@ echo "CB_SCAN_BUILD=${CB_SCAN_BUILD}"
 echo "CB_CMAKE=${CB_CMAKE}"
 
 set -exuo pipefail
+
+${CB_CXX} --version
+${CB_CMAKE} --version
+ls -l ${CB_SCAN_BUILD}
 
 BUILD_DIR="${PROJECT_ROOT}/cmake-build-clang-analyzer"
 REPORT_DIR="${PROJECT_ROOT}/cmake-build-report"
