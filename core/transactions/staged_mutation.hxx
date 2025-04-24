@@ -40,12 +40,12 @@ class staged_mutation
 private:
   transaction_get_result doc_;
   staged_mutation_type type_;
-  codec::encoded_value content_;
+  std::optional<codec::encoded_value> content_;
   std::string operation_id_;
 
 public:
   staged_mutation(transaction_get_result doc,
-                  codec::encoded_value content,
+                  std::optional<codec::encoded_value> content,
                   staged_mutation_type type,
                   std::string operation_id = uid_generator::next())
     : doc_(std::move(doc))
@@ -88,7 +88,7 @@ public:
 
   [[nodiscard]] auto is_staged_binary() const -> bool;
 
-  [[nodiscard]] auto content() const -> const codec::encoded_value&
+  [[nodiscard]] auto content() const -> const std::optional<codec::encoded_value>&
   {
     return content_;
   }

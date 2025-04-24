@@ -63,6 +63,7 @@ struct mutate_in_request {
   couchbase::cas cas{ 0 };
   bool access_deleted{ false };
   bool create_as_deleted{ false };
+  bool revive_document{ false };
   std::optional<std::uint32_t> expiry{};
   couchbase::store_semantics store_semantics{ couchbase::store_semantics::replace };
   std::vector<couchbase::core::impl::subdoc::command> specs{};
