@@ -480,7 +480,7 @@ staged_mutation_queue::rollback_remove_or_replace(
             }
               .specs();
           req.cas = item.doc().cas();
-          req.flags = item.doc().content().flags;
+          req.flags = item.current_user_flags();
           wrap_durable_request(req, ctx->overall()->config());
           return ctx->cluster_ref().execute(
             req,
