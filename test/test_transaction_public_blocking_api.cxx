@@ -156,6 +156,7 @@ TEST_CASE("transactions public blocking API: can insert", "[transactions]")
       auto [e, doc] = ctx->insert(coll, id, content);
       CHECK_FALSE(e.ec());
       CHECK(doc.id() == id);
+      CHECK(doc.content_as<tao::json::value>() == content);
       auto [e2, inserted_doc] = ctx->get(coll, id);
       CHECK_FALSE(e2.ec());
       CHECK(inserted_doc.content_as<tao::json::value>() == content);
@@ -223,8 +224,7 @@ TEST_CASE("transactions public blocking API: can replace", "[transactions]")
       CHECK_FALSE(e.ec());
       CHECK(doc.id() == replaced_doc.id());
       CHECK(doc.content_as<tao::json::value>() == content);
-      // FIXME(JCBC-2152)
-      // CHECK(replaced_doc.content<tao::json::value>() == new_content);
+      CHECK(replaced_doc.content_as<tao::json::value>() == new_content);
       return {};
     },
     txn_opts());

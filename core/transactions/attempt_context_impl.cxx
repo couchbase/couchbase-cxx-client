@@ -806,14 +806,14 @@ attempt_context_impl::create_staged_replace(const transaction_get_result& docume
           std::optional<codec::encoded_value> staged_content_binary{};
           if (codec::codec_flags::has_common_flags(content.flags,
                                                    codec::codec_flags::json_common_flags)) {
-            staged_content_json = std::move(content);
+            staged_content_json = content;
           } else if (codec::codec_flags::has_common_flags(
                        content.flags, codec::codec_flags::binary_common_flags)) {
-            staged_content_binary = std::move(content);
+            staged_content_binary = content;
           }
           transaction_get_result out{
             document.id(),
-            document.content(),
+            content,
             resp.cas.value(),
             transaction_links{
               self->atr_id_->key(),
@@ -843,6 +843,7 @@ attempt_context_impl::create_staged_replace(const transaction_get_result& docume
             [self,
              out = std::move(out),
              error_handler = std::move(error_handler),
+             current_flags = document.content().flags,
              cb = std::forward<Handler>(cb)](auto ec, bool supports) mutable {
               if (ec) {
                 return error_handler(
@@ -862,6 +863,7 @@ attempt_context_impl::create_staged_replace(const transaction_get_result& docume
                                                            // the cluster supports
                                                            // replace_body_with_xattr
                 staged_mutation_type::REPLACE,
+                current_flags,
               });
               return self->op_completed_with_callback(std::forward<Handler>(cb),
                                                       std::optional(out));
@@ -1274,8 +1276,8 @@ attempt_context_impl::remove(const transaction_get_result& document, VoidCallbac
                             // TODO(SA): this copy...  can we do better?
                             transaction_get_result new_res = document;
                             new_res.cas(resp.cas.value());
-                            self->staged_mutations_->add(
-                              staged_mutation(new_res, {}, staged_mutation_type::REMOVE));
+                            self->staged_mutations_->add(staged_mutation(
+                              new_res, {}, staged_mutation_type::REMOVE, document.content().flags));
                             return self->op_completed_with_callback(cb);
                           });
                       });
@@ -3330,8 +3332,8 @@ attempt_context_impl::create_staged_insert_error_handler(const core::document_id
                       // this is us dealing with resolving an ambiguity.  So, lets
                       // just update the staged_mutation with the correct cas and
                       // continue...
-                      self->staged_mutations_->add(
-                        staged_mutation(*doc, content, staged_mutation_type::INSERT));
+                      self->staged_mutations_->add(staged_mutation(
+                        *doc, content, staged_mutation_type::INSERT, content.flags));
                       return self->op_completed_with_callback(std::forward<Handler>(cb), doc);
                     }
                     return self->op_completed_with_error(
@@ -3524,15 +3526,15 @@ attempt_context_impl::create_staged_insert(const core::document_id& id,
               std::optional<codec::encoded_value> staged_content_binary{};
               if (codec::codec_flags::has_common_flags(content.flags,
                                                        codec::codec_flags::json_common_flags)) {
-                staged_content_json = std::move(content);
+                staged_content_json = content;
               } else if (codec::codec_flags::has_common_flags(
                            content.flags, codec::codec_flags::binary_common_flags)) {
-                staged_content_binary = std::move(content);
+                staged_content_binary = content;
               }
 
               transaction_get_result out{
                 id,
-                {},
+                content,
                 resp.cas.value(),
                 transaction_links{
                   self->atr_id_->key(),
@@ -3565,6 +3567,7 @@ attempt_context_impl::create_staged_insert(const core::document_id& id,
                                                            // the cluster supports
                                                            // replace_body_with_xattr
                 staged_mutation_type::INSERT,
+                out.links().staged_content_json_or_binary().flags,
               });
               return self->op_completed_with_callback(std::forward<Handler>(cb),
                                                       std::optional{ std::move(out) });

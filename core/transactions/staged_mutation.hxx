@@ -41,16 +41,19 @@ private:
   transaction_get_result doc_;
   staged_mutation_type type_;
   std::optional<codec::encoded_value> content_;
+  std::uint32_t current_user_flags_;
   std::string operation_id_;
 
 public:
   staged_mutation(transaction_get_result doc,
                   std::optional<codec::encoded_value> content,
                   staged_mutation_type type,
+                  std::uint32_t current_user_flags,
                   std::string operation_id = uid_generator::next())
     : doc_(std::move(doc))
     , type_(type)
     , content_(std::move(content))
+    , current_user_flags_(current_user_flags)
     , operation_id_(std::move(operation_id))
   {
   }
@@ -98,7 +101,7 @@ public:
    */
   [[nodiscard]] auto current_user_flags() const -> std::uint32_t
   {
-    return doc_.content().flags;
+    return current_user_flags_;
   }
 
   void content(const codec::encoded_value& content)
