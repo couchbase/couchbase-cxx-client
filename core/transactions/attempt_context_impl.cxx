@@ -670,7 +670,7 @@ attempt_context_impl::replace(const transaction_get_result& document,
                         self, "found existing INSERT of {} while replacing", document);
                       self->create_staged_insert(document.id(),
                                                  std::move(content),
-                                                 existing_sm->doc().cas().value(),
+                                                 existing_sm->cas().value(),
                                                  exp_delay(std::chrono::milliseconds(5),
                                                            std::chrono::milliseconds(300),
                                                            self->overall()->config().timeout),
@@ -678,7 +678,13 @@ attempt_context_impl::replace(const transaction_get_result& document,
                                                  std::move(cb));
                       return;
                     }
-                    self->create_staged_replace(document, std::move(content), op_id, std::move(cb));
+                    self->create_staged_replace(document.id(),
+                                                std::move(content),
+                                                document.content().flags,
+                                                document.cas(),
+                                                op_id,
+                                                document.metadata(),
+                                                std::move(cb));
                   });
               });
           } catch (const client_error& e) {
@@ -714,15 +720,19 @@ external_exception_from_response(const Response& resp) -> external_exception
 
 template<typename Handler>
 void
-attempt_context_impl::create_staged_replace(const transaction_get_result& document,
-                                            codec::encoded_value content,
-                                            const std::string& op_id,
-                                            Handler&& cb)
+attempt_context_impl::create_staged_replace(
+  const document_id& id,
+  codec::encoded_value content,
+  std::uint32_t original_flags,
+  const couchbase::cas& cas,
+  const std::string& op_id,
+  const std::optional<document_metadata>& document_metadata,
+  Handler&& cb)
 {
-  operations::mutate_in_request req{ document.id() };
+  operations::mutate_in_request req{ id };
   const bool binary =
     codec::codec_flags::has_common_flags(content.flags, codec::codec_flags::binary_common_flags);
-  auto txn = create_document_metadata("replace", op_id, document.metadata(), content.flags);
+  auto txn = create_document_metadata("replace", op_id, document_metadata, content.flags);
   req.specs =
     mutate_in_specs{
       mutate_in_specs::upsert_raw("txn", utils::to_binary(jsonify(txn))).xattr().create_path(),
@@ -735,8 +745,8 @@ attempt_context_impl::create_staged_replace(const transaction_get_result& docume
     }
       .specs();
   req.durability_level = overall()->config().level;
-  req.cas = document.cas();
-  req.flags = document.content().flags;
+  req.cas = cas;
+  req.flags = original_flags;
   req.access_deleted = true;
   auto error_handler = [self = shared_from_this()](error_class ec,
                                                    external_exception cause,
@@ -757,25 +767,26 @@ attempt_context_impl::create_staged_replace(const transaction_get_result& docume
         return self->op_completed_with_error(std::forward<Handler>(cb), err);
     }
   };
-  auto ec =
-    wait_for_hook([self = shared_from_this(), key = document.id().key()](auto handler) mutable {
-      return self->hooks_.before_staged_replace(self, key, std::move(handler));
-    });
+  auto ec = wait_for_hook([self = shared_from_this(), key = id.key()](auto handler) mutable {
+    return self->hooks_.before_staged_replace(self, key, std::move(handler));
+  });
   if (ec) {
     return error_handler(
       *ec, UNKNOWN, "before_staged_replace hook raised error", std::forward<Handler>(cb));
   }
   CB_ATTEMPT_CTX_LOG_TRACE(this,
                            "about to replace doc {} with cas {} in txn {}",
-                           document.id(),
-                           document.cas().value(),
+                           id,
+                           cas.value(),
                            overall()->transaction_id());
   overall()->cluster_ref().execute(
     req,
     [self = shared_from_this(),
-     operation_id = op_id,
-     document,
+     operation_id = std::move(op_id),
+     id = std::move(id),
+     document_metadata = std::move(document_metadata),
      content = std::move(content),
+     original_flags,
      cb = std::forward<Handler>(cb),
      error_handler = std::move(error_handler)](core::operations::mutate_in_response resp) mutable {
       if (auto ec2 = error_class_from_response(resp); ec2) {
@@ -787,11 +798,13 @@ attempt_context_impl::create_staged_replace(const transaction_get_result& docume
       }
       return self->hooks_.after_staged_replace_complete(
         self,
-        document.id().key(),
+        id.key(),
         [self,
          operation_id,
-         document,
+         id,
+         document_metadata = std::move(document_metadata),
          content = std::move(content),
+         original_flags,
          error_handler = std::move(error_handler),
          cb = std::forward<Handler>(cb),
          resp = std::move(resp)](auto ec) mutable {
@@ -812,14 +825,14 @@ attempt_context_impl::create_staged_replace(const transaction_get_result& docume
             staged_content_binary = content;
           }
           transaction_get_result out{
-            document.id(),
+            id,
             content,
             resp.cas.value(),
             transaction_links{
               self->atr_id_->key(),
-              document.id().bucket(),
-              document.id().scope(),
-              document.id().collection(),
+              id.bucket(),
+              id.scope(),
+              id.collection(),
               self->overall()->transaction_id(),
               self->id(),
               operation_id,
@@ -833,17 +846,17 @@ attempt_context_impl::create_staged_replace(const transaction_get_result& docume
               std::nullopt,
               false,
             },
-            document.metadata(),
+            document_metadata,
           };
 
           CB_ATTEMPT_CTX_LOG_TRACE(self, "replace staged content, result {}", out);
 
           self->supports_replace_body_with_xattr(
-            document.bucket(),
+            id.bucket(),
             [self,
              out = std::move(out),
              error_handler = std::move(error_handler),
-             current_flags = document.content().flags,
+             original_flags,
              cb = std::forward<Handler>(cb)](auto ec, bool supports) mutable {
               if (ec) {
                 return error_handler(
@@ -853,17 +866,19 @@ attempt_context_impl::create_staged_replace(const transaction_get_result& docume
                   std::forward<Handler>(cb));
               }
 
+              auto [staged_content, staged_flags] = out.links().staged_content_json_or_binary();
+
               self->staged_mutations_->add(staged_mutation{
-                out,
-                (supports)
-                  ? std::nullopt
-                  : std::make_optional(
-                      out.links()
-                        .staged_content_json_or_binary()), // We don't store the staged contents if
-                                                           // the cluster supports
-                                                           // replace_body_with_xattr
                 staged_mutation_type::REPLACE,
-                current_flags,
+                out.id(),
+                out.cas(),
+                supports ? std::nullopt
+                         : std::make_optional(staged_content), // We don't store the staged contents
+                                                               // if the cluster supports
+                                                               // replace_body_with_xattr
+                staged_flags,
+                original_flags,
+                out.metadata(),
               });
               return self->op_completed_with_callback(std::forward<Handler>(cb),
                                                       std::optional(out));
@@ -1002,8 +1017,13 @@ attempt_context_impl::insert(const core::document_id& id,
                 }
                 if (existing_sm != nullptr && existing_sm->type() == staged_mutation_type::REMOVE) {
                   CB_ATTEMPT_CTX_LOG_DEBUG(self, "found existing remove of {} while inserting", id);
-                  return self->create_staged_replace(
-                    existing_sm->doc(), std::move(content), op_id, std::move(cb));
+                  return self->create_staged_replace(existing_sm->id(),
+                                                     std::move(content),
+                                                     existing_sm->current_user_flags(),
+                                                     existing_sm->cas(),
+                                                     op_id,
+                                                     existing_sm->doc_metadata(),
+                                                     std::move(cb));
                 }
                 const std::uint64_t cas = 0;
                 self->create_staged_insert(id,
@@ -1273,11 +1293,16 @@ attempt_context_impl::remove(const transaction_get_result& document, VoidCallbac
                                                      document.id(),
                                                      resp.cas.value(),
                                                      resp.ctx.ec().message());
-                            // TODO(SA): this copy...  can we do better?
-                            transaction_get_result new_res = document;
-                            new_res.cas(resp.cas.value());
-                            self->staged_mutations_->add(staged_mutation(
-                              new_res, {}, staged_mutation_type::REMOVE, document.content().flags));
+
+                            self->staged_mutations_->add(staged_mutation{
+                              staged_mutation_type::REMOVE,
+                              document.id(),
+                              resp.cas,
+                              {},
+                              document.content().flags,
+                              document.content().flags,
+                              document.metadata(),
+                            });
                             return self->op_completed_with_callback(cb);
                           });
                       });
@@ -1434,11 +1459,11 @@ attempt_context_impl::query_begin_work(const std::optional<std::string>& query_c
   if (!staged_mutations_->empty()) {
     staged_mutations_->iterate([&mutations](staged_mutation& mut) {
       mutations.push_back(tao::json::value{
-        { "scp", mut.doc().id().scope() },
-        { "coll", mut.doc().id().collection() },
-        { "bkt", mut.doc().id().bucket() },
-        { "id", mut.doc().id().key() },
-        { "cas", std::to_string(mut.doc().cas().value()) },
+        { "scp", mut.id().scope() },
+        { "coll", mut.id().collection() },
+        { "bkt", mut.id().bucket() },
+        { "id", mut.id().key() },
+        { "cas", std::to_string(mut.cas().value()) },
         { "type", mut.type_as_string() },
       });
     });
@@ -2966,11 +2991,18 @@ attempt_context_impl::do_get(const core::document_id& id,
     // Check if we already have a staged insert/replace for this document AND we have the content
     // for it (i.e. the cluster does not support replace body_with_xattr)
     if (const staged_mutation* own_write = check_for_own_write(id); own_write != nullptr) {
-      if (auto own_write_content = own_write->content(); own_write_content.has_value()) {
+      if (auto own_write_content = own_write->staged_content(); own_write_content.has_value()) {
         CB_ATTEMPT_CTX_LOG_DEBUG(this, "found own-write of mutated doc {}", id);
-        return cb(std::nullopt,
-                  std::nullopt,
-                  transaction_get_result::create_from(own_write->doc(), own_write_content.value()));
+        return cb(
+          std::nullopt,
+          std::nullopt,
+          transaction_get_result{
+            own_write->id(),
+            codec::encoded_value{ own_write->staged_content().value(), own_write->staged_flags() },
+            own_write->cas().value(),
+            {},
+            {},
+          });
       }
     }
     if (const staged_mutation* own_remove = staged_mutations_->find_remove(id);
@@ -3332,8 +3364,15 @@ attempt_context_impl::create_staged_insert_error_handler(const core::document_id
                       // this is us dealing with resolving an ambiguity.  So, lets
                       // just update the staged_mutation with the correct cas and
                       // continue...
-                      self->staged_mutations_->add(staged_mutation(
-                        *doc, content, staged_mutation_type::INSERT, content.flags));
+                      self->staged_mutations_->add(staged_mutation{
+                        staged_mutation_type::INSERT,
+                        doc->id(),
+                        doc->cas(),
+                        content.data,
+                        content.flags,
+                        doc->content().flags,
+                        doc->metadata(),
+                      });
                       return self->op_completed_with_callback(std::forward<Handler>(cb), doc);
                     }
                     return self->op_completed_with_error(
@@ -3557,17 +3596,19 @@ attempt_context_impl::create_staged_insert(const core::document_id& id,
                 std::nullopt,
               };
 
+              auto [staged_content, staged_flags] = out.links().staged_content_json_or_binary();
+
               self->staged_mutations_->add(staged_mutation{
-                out,
-                supports
-                  ? std::nullopt
-                  : std::make_optional(
-                      out.links()
-                        .staged_content_json_or_binary()), // We don't store the staged contents if
-                                                           // the cluster supports
-                                                           // replace_body_with_xattr
                 staged_mutation_type::INSERT,
-                out.links().staged_content_json_or_binary().flags,
+                id,
+                resp.cas,
+                supports ? std::nullopt
+                         : std::make_optional(staged_content), // We don't store the staged contents
+                                                               // if the cluster supports
+                                                               // replace_body_with_xattr
+                staged_flags,
+                staged_flags,
+                out.metadata(),
               });
               return self->op_completed_with_callback(std::forward<Handler>(cb),
                                                       std::optional{ std::move(out) });
