@@ -223,3 +223,9 @@
  * bucket_settings in both the public and core management APIs have a num_vbuckets attribute
  */
 #define COUCHBASE_CXX_CLIENT_HAS_BUCKET_SETTINGS_NUM_VBUCKETS 1
+
+/**
+ * couchbase::query_options and couchbase::analytics_options allow setting both positional and named
+ * parameters.
+ */
+#define COUCHBASE_CXX_CLIENT_QUERY_SUPPORTS_BOTH_POSITIONAL_NAMED_PARAMETERS 1
