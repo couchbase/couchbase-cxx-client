@@ -869,7 +869,7 @@ staged_mutation_queue::validate_commit_doc_result(const std::shared_ptr<attempt_
       if (ec) {
         return handler(client_error(*ec, "after_doc_committed_before_saving_cas threw error"));
       }
-      item.cas(couchbase::cas{ std::move(res.cas) });
+      item.cas(couchbase::cas{ res.cas });
       return ctx->hooks_.after_doc_committed(
         ctx, key, [item = std::move(item), handler = std::move(handler)](auto ec) mutable {
           if (ec) {
