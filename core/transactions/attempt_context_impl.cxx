@@ -2991,14 +2991,14 @@ attempt_context_impl::do_get(const core::document_id& id,
     // Check if we already have a staged insert/replace for this document AND we have the content
     // for it (i.e. the cluster does not support replace body_with_xattr)
     if (const staged_mutation* own_write = check_for_own_write(id); own_write != nullptr) {
-      if (own_write->staged_content().has_value()) {
-        const auto own_write_content = own_write->staged_content().value();
+      const auto own_write_content = own_write->staged_content();
+      if (own_write_content.has_value()) {
         CB_ATTEMPT_CTX_LOG_DEBUG(this, "found own-write of mutated doc {}", id);
         return cb(std::nullopt,
                   std::nullopt,
                   transaction_get_result{
                     own_write->id(),
-                    codec::encoded_value{ own_write_content, own_write->staged_flags() },
+                    codec::encoded_value{ own_write_content.value(), own_write->staged_flags() },
                     own_write->cas().value(),
                     {},
                     {},
