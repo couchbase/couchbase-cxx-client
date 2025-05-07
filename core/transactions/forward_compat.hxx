@@ -33,6 +33,10 @@ enum class forward_compat_stage : std::uint8_t {
   GETS,
   GETS_READING_ATR,
   CLEANUP_ENTRY,
+  CAS_MISMATCH_DURING_COMMIT,
+  CAS_MISMATCH_DURING_ROLLBACK,
+  CAS_MISMATCH_DURING_STAGING,
+  GET_MULTI_GET,
 };
 
 auto
@@ -76,6 +80,7 @@ struct forward_compat_supported {
     "TI",     // ExtTransactionId
     "TS",     // ExtThreadSafety
     "UA",     // ExtUnknownATRStates
+    "GM",     // ExtGetMulti
   };
 };
 

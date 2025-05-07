@@ -223,3 +223,8 @@
  * bucket_settings in both the public and core management APIs have a num_vbuckets attribute
  */
 #define COUCHBASE_CXX_CLIENT_HAS_BUCKET_SETTINGS_NUM_VBUCKETS 1
+
+/**
+ * get_multi API is implemented for transactions
+ */
+#define COUCHBASE_CXX_CLIENT_HAS_TRANSACTIONS_GET_MULTI 1

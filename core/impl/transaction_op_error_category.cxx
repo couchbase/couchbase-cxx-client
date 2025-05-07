@@ -70,6 +70,8 @@ struct transaction_op_error_category : std::error_category {
         return "transaction_already_aborted (1318)";
       case errc::transaction_op::transaction_already_committed:
         return "transaction_already_committed (1319)";
+      case errc::transaction_op::document_unretrievable:
+        return "document_unretrievable (1320)";
       case errc::transaction_op::transaction_op_failed:
         return "transaction_op_failed (1399)";
     }
