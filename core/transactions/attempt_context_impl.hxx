@@ -455,9 +455,12 @@ private:
                             Handler&& cb);
 
   template<typename Handler>
-  void create_staged_replace(const transaction_get_result& document,
+  void create_staged_replace(const document_id& id,
                              codec::encoded_value content,
+                             std::uint32_t original_flags,
+                             const couchbase::cas& cas,
                              const std::string& op_id,
+                             const std::optional<document_metadata>& document_metadata,
                              Handler&& cb);
 
   template<typename Handler, typename Delay>

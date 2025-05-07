@@ -35,6 +35,100 @@
 
 namespace couchbase::core::transactions
 {
+staged_mutation::staged_mutation(staged_mutation_type type,
+                                 document_id doc_id,
+                                 couchbase::cas cas,
+                                 std::optional<codec::binary> staged_content,
+                                 std::uint32_t staged_flags,
+                                 std::uint32_t current_user_flags,
+                                 std::optional<document_metadata> doc_metadata,
+                                 std::string operation_id)
+  : type_{ type }
+  , doc_id_{ std::move(doc_id) }
+  , cas_{ cas }
+  , staged_content_{ std::move(staged_content) }
+  , staged_flags_{ staged_flags }
+  , current_user_flags_{ current_user_flags }
+  , doc_metadata_{ std::move(doc_metadata) }
+  , operation_id_{ std::move(operation_id) }
+{
+}
+
+auto
+staged_mutation::id() const -> const document_id&
+{
+  return doc_id_;
+}
+
+auto
+staged_mutation::cas() const -> const couchbase::cas&
+{
+  return cas_;
+}
+
+auto
+staged_mutation::type() const -> const staged_mutation_type&
+{
+  return type_;
+}
+
+auto
+staged_mutation::is_staged_binary() const -> bool
+{
+  return codec::codec_flags::extract_common_flags(staged_flags_) ==
+         codec::codec_flags::common_flags::binary;
+}
+
+auto
+staged_mutation::staged_content() const -> const std::optional<codec::binary>&
+{
+  return staged_content_;
+}
+
+auto
+staged_mutation::staged_flags() const -> std::uint32_t
+{
+  return staged_flags_;
+}
+
+auto
+staged_mutation::current_user_flags() const -> std::uint32_t
+{
+  return current_user_flags_;
+}
+
+auto
+staged_mutation::doc_metadata() const -> const std::optional<document_metadata>&
+{
+  return doc_metadata_;
+}
+
+auto
+staged_mutation::operation_id() const -> const std::string&
+{
+  return operation_id_;
+}
+
+auto
+staged_mutation::type_as_string() const -> std::string
+{
+  switch (type_) {
+    case staged_mutation_type::INSERT:
+      return "INSERT";
+    case staged_mutation_type::REMOVE:
+      return "REMOVE";
+    case staged_mutation_type::REPLACE:
+      return "REPLACE";
+  }
+  throw std::runtime_error("unknown type of staged mutation");
+}
+
+void
+staged_mutation::cas(couchbase::cas cas)
+{
+  cas_ = cas;
+}
+
 auto
 unstaging_state::wait_until_unstage_possible() -> bool
 {
@@ -100,11 +194,10 @@ staged_mutation_queue::extract_to(const std::string& prefix,
   tao::json::value removes = tao::json::empty_array;
 
   for (const auto& mutation : queue_) {
-    const tao::json::value doc{ { ATR_FIELD_PER_DOC_ID, mutation.doc().id().key() },
-                                { ATR_FIELD_PER_DOC_BUCKET, mutation.doc().id().bucket() },
-                                { ATR_FIELD_PER_DOC_SCOPE, mutation.doc().id().scope() },
-                                { ATR_FIELD_PER_DOC_COLLECTION,
-                                  mutation.doc().id().collection() } };
+    const tao::json::value doc{ { ATR_FIELD_PER_DOC_ID, mutation.id().key() },
+                                { ATR_FIELD_PER_DOC_BUCKET, mutation.id().bucket() },
+                                { ATR_FIELD_PER_DOC_SCOPE, mutation.id().scope() },
+                                { ATR_FIELD_PER_DOC_COLLECTION, mutation.id().collection() } };
     switch (mutation.type()) {
       case staged_mutation_type::INSERT:
         inserts.push_back(doc);
@@ -151,7 +244,7 @@ staged_mutation_queue::find_any(const core::document_id& id) -> staged_mutation*
 {
   const std::lock_guard<std::mutex> lock(mutex_);
   for (auto& item : queue_) {
-    if (document_ids_equal(item.doc().id(), id)) {
+    if (document_ids_equal(item.id(), id)) {
       return &item;
     }
   }
@@ -163,7 +256,7 @@ staged_mutation_queue::find_replace(const core::document_id& id) -> staged_mutat
 {
   const std::lock_guard<std::mutex> lock(mutex_);
   for (auto& item : queue_) {
-    if (item.type() == staged_mutation_type::REPLACE && document_ids_equal(item.doc().id(), id)) {
+    if (item.type() == staged_mutation_type::REPLACE && document_ids_equal(item.id(), id)) {
       return &item;
     }
   }
@@ -175,7 +268,7 @@ staged_mutation_queue::find_insert(const core::document_id& id) -> staged_mutati
 {
   const std::lock_guard<std::mutex> lock(mutex_);
   for (auto& item : queue_) {
-    if (item.type() == staged_mutation_type::INSERT && document_ids_equal(item.doc().id(), id)) {
+    if (item.type() == staged_mutation_type::INSERT && document_ids_equal(item.id(), id)) {
       return &item;
     }
   }
@@ -187,7 +280,7 @@ staged_mutation_queue::find_remove(const core::document_id& id) -> staged_mutati
 {
   const std::lock_guard<std::mutex> lock(mutex_);
   for (auto& item : queue_) {
-    if (item.type() == staged_mutation_type::REMOVE && document_ids_equal(item.doc().id(), id)) {
+    if (item.type() == staged_mutation_type::REMOVE && document_ids_equal(item.id(), id)) {
       return &item;
     }
   }
@@ -259,7 +352,7 @@ staged_mutation_queue::commit(const std::shared_ptr<attempt_context_impl>& ctx)
                                "caught exception while trying to initiate commit for {}. Aborting "
                                "rest of commit and waiting for "
                                "in-flight rollback operations to finish",
-                               item.doc().id());
+                               item.id());
       aborted = true;
       break;
     }
@@ -349,7 +442,7 @@ staged_mutation_queue::rollback(const std::shared_ptr<attempt_context_impl>& ctx
                                "caught exception while trying to initiate rollback for {}. "
                                "Aborting rollback and waiting for "
                                "in-flight rollback operations to finish",
-                               item.doc().id());
+                               item.id());
       aborted = true;
       break;
     }
@@ -385,10 +478,8 @@ staged_mutation_queue::rollback_insert(const std::shared_ptr<attempt_context_imp
                                        async_exp_delay& delay,
                                        utils::movable_function<void(std::exception_ptr)> callback)
 {
-  CB_ATTEMPT_CTX_LOG_TRACE(ctx,
-                           "rolling back staged insert for {} with cas {}",
-                           item.doc().id(),
-                           item.doc().cas().value());
+  CB_ATTEMPT_CTX_LOG_TRACE(
+    ctx, "rolling back staged insert for {} with cas {}", item.id(), item.cas().value());
 
   asio::post(asio::bind_executor(
     ctx->cluster_ref().io_context(),
@@ -401,34 +492,33 @@ staged_mutation_queue::rollback_insert(const std::shared_ptr<attempt_context_imp
         return callback({});
       };
 
-      auto ec =
-        ctx->error_if_expired_and_not_in_overtime(STAGE_DELETE_INSERTED, item.doc().id().key());
+      auto ec = ctx->error_if_expired_and_not_in_overtime(STAGE_DELETE_INSERTED, item.id().key());
       if (ec) {
         return handler(client_error(*ec, "expired in rollback and not in overtime mode"));
       }
 
       return ctx->hooks_.before_rollback_delete_inserted(
         ctx,
-        item.doc().id().key(),
+        item.id().key(),
         [handler = std::move(handler), ctx, &item, delay](std::optional<error_class> ec) mutable {
           if (ec) {
             return handler(client_error(*ec, "before_rollback_delete_insert hook threw error"));
           }
-          core::operations::mutate_in_request req{ item.doc().id() };
+          core::operations::mutate_in_request req{ item.id() };
           req.specs =
             couchbase::mutate_in_specs{
               couchbase::mutate_in_specs::remove(TRANSACTION_INTERFACE_PREFIX_ONLY).xattr(),
             }
               .specs();
           req.access_deleted = true;
-          req.cas = item.doc().cas();
+          req.cas = item.cas();
           wrap_durable_request(req, ctx->overall()->config());
           return ctx->cluster_ref().execute(
             req,
             [handler = std::move(handler), ctx, &item, delay](
               const core::operations::mutate_in_response& resp) mutable {
               CB_ATTEMPT_CTX_LOG_TRACE(
-                ctx, "mutate_in for {} with cas {}", item.doc().id(), item.doc().cas().value());
+                ctx, "mutate_in for {} with cas {}", item.id(), item.cas().value());
 
               auto res = result::create_from_subdoc_response(resp);
               return validate_rollback_insert_result(ctx, res, item, std::move(handler));
@@ -444,10 +534,8 @@ staged_mutation_queue::rollback_remove_or_replace(
   async_exp_delay& delay,
   utils::movable_function<void(std::exception_ptr)> callback)
 {
-  CB_ATTEMPT_CTX_LOG_TRACE(ctx,
-                           "rolling back staged remove/replace for {} with cas {}",
-                           item.doc().id(),
-                           item.doc().cas().value());
+  CB_ATTEMPT_CTX_LOG_TRACE(
+    ctx, "rolling back staged remove/replace for {} with cas {}", item.id(), item.cas().value());
 
   asio::post(asio::bind_executor(
     ctx->cluster_ref().io_context(),
@@ -460,26 +548,25 @@ staged_mutation_queue::rollback_remove_or_replace(
         }
         return callback({});
       };
-      auto ec =
-        ctx->error_if_expired_and_not_in_overtime(STAGE_ROLLBACK_DOC, item.doc().id().key());
+      auto ec = ctx->error_if_expired_and_not_in_overtime(STAGE_ROLLBACK_DOC, item.id().key());
       if (ec) {
         return handler(
           client_error(*ec, "expired in rollback_remove_or_replace and not in expiry overtime"));
       }
       ctx->hooks_.before_doc_rolled_back(
         ctx,
-        item.doc().id().key(),
+        item.id().key(),
         [handler = std::move(handler), ctx, &item, delay](std::optional<error_class> ec) mutable {
           if (ec) {
             return handler(client_error(*ec, "before_doc_rolled_back hook threw error"));
           }
-          core::operations::mutate_in_request req{ item.doc().id() };
+          core::operations::mutate_in_request req{ item.id() };
           req.specs =
             couchbase::mutate_in_specs{
               couchbase::mutate_in_specs::remove(TRANSACTION_INTERFACE_PREFIX_ONLY).xattr(),
             }
               .specs();
-          req.cas = item.doc().cas();
+          req.cas = item.cas();
           req.flags = item.current_user_flags();
           wrap_durable_request(req, ctx->overall()->config());
           return ctx->cluster_ref().execute(
@@ -503,7 +590,7 @@ staged_mutation_queue::commit_doc(const std::shared_ptr<attempt_context_impl>& c
 {
   CB_ATTEMPT_CTX_LOG_TRACE(ctx,
                            "commit doc {}, cas_zero_mode {}, ambiguity_resolution_mode {}",
-                           item.doc().id(),
+                           item.id(),
                            cas_zero_mode,
                            ambiguity_resolution_mode);
 
@@ -517,7 +604,7 @@ staged_mutation_queue::commit_doc(const std::shared_ptr<attempt_context_impl>& c
      cas_zero_mode,
      ambiguity_resolution_mode]() mutable {
       ctx->check_expiry_during_commit_or_rollback(
-        STAGE_COMMIT_DOC, std::optional<const std::string>(item.doc().id().key()));
+        STAGE_COMMIT_DOC, std::optional<const std::string>(item.id().key()));
 
       auto handler = [this, callback = std::move(callback), ctx, &item, delay](
                        const std::optional<client_error>& e,
@@ -537,7 +624,7 @@ staged_mutation_queue::commit_doc(const std::shared_ptr<attempt_context_impl>& c
 
       ctx->hooks_.before_doc_committed(
         ctx,
-        item.doc().id().key(),
+        item.id().key(),
         [handler = std::move(handler), ctx, &item, delay, ambiguity_resolution_mode, cas_zero_mode](
           const std::optional<error_class> ec) mutable {
           if (ec) {
@@ -546,15 +633,14 @@ staged_mutation_queue::commit_doc(const std::shared_ptr<attempt_context_impl>& c
                            cas_zero_mode);
           }
           // move staged content into doc
-          CB_ATTEMPT_CTX_LOG_TRACE(
-            ctx, "commit doc id {}, cas {}", item.doc().id(), item.doc().cas().value());
+          CB_ATTEMPT_CTX_LOG_TRACE(ctx, "commit doc id {}, cas {}", item.id(), item.cas().value());
 
           if (item.type() == staged_mutation_type::INSERT && !cas_zero_mode) {
-            if (item.content().has_value()) {
+            if (item.staged_content().has_value()) {
               // We have stored the content for the staged mutation. This means that the cluster
               // does not support replace_body_with_xattr. Perform a regular KV insert.
-              operations::insert_request req{ item.doc().id(), item.content().value().data };
-              req.flags = item.content().value().flags;
+              operations::insert_request req{ item.id(), item.staged_content().value() };
+              req.flags = item.staged_flags();
               wrap_durable_request(req, ctx->overall()->config());
               return ctx->cluster_ref().execute(
                 req,
@@ -580,17 +666,16 @@ staged_mutation_queue::commit_doc(const std::shared_ptr<attempt_context_impl>& c
                 });
             }
 
-            const bool is_staged_binary = item.doc().links().is_staged_content_binary();
-
             // We have not stored the content for the staged mutation. This means that the cluster
             // supports replace_body_with_xattr.
-            operations::mutate_in_request req{ item.doc().id() };
+            operations::mutate_in_request req{ item.id() };
             req.specs = {
               impl::subdoc::command{
                 impl::subdoc::opcode::replace_body_with_xattr,
-                !is_staged_binary ? STAGED_DATA : STAGED_BINARY_DATA,
+                !item.is_staged_binary() ? STAGED_DATA : STAGED_BINARY_DATA,
                 {},
-                impl::subdoc::build_mutate_in_path_flags(true, false, false, is_staged_binary),
+                impl::subdoc::build_mutate_in_path_flags(
+                  true, false, false, item.is_staged_binary()),
               },
               impl::subdoc::command{
                 impl::subdoc::opcode::remove,
@@ -599,10 +684,10 @@ staged_mutation_queue::commit_doc(const std::shared_ptr<attempt_context_impl>& c
                 impl::subdoc::build_mutate_in_path_flags(true, false, false, false),
               },
             };
-            req.cas = couchbase::cas{ item.doc().cas() };
+            req.cas = couchbase::cas{ item.cas() };
             req.access_deleted = true;
             req.revive_document = true;
-            req.flags = item.doc().links().staged_user_flags();
+            req.flags = item.staged_flags();
             wrap_durable_request(req, ctx->overall()->config());
 
             return ctx->cluster_ref().execute(
@@ -629,10 +714,10 @@ staged_mutation_queue::commit_doc(const std::shared_ptr<attempt_context_impl>& c
               });
           }
 
-          if (item.content().has_value()) {
+          if (item.staged_content().has_value()) {
             // We have stored the content for the staged mutation. This means that the cluster does
             // not support replace_body_with_xattr.
-            operations::mutate_in_request req{ item.doc().id() };
+            operations::mutate_in_request req{ item.id() };
             req.specs =
               couchbase::mutate_in_specs{
                 // TODO(SA): upsert null to "txn" to match Java implementation
@@ -644,12 +729,12 @@ staged_mutation_queue::commit_doc(const std::shared_ptr<attempt_context_impl>& c
                 // > with a spec change to handle that.
                 couchbase::mutate_in_specs::remove(TRANSACTION_INTERFACE_PREFIX_ONLY).xattr(),
                 // subdoc::opcode::set_doc used in replace w/ empty path
-                couchbase::mutate_in_specs::replace_raw("", item.content().value().data),
+                couchbase::mutate_in_specs::replace_raw("", item.staged_content().value()),
               }
                 .specs();
             req.store_semantics = couchbase::store_semantics::replace;
-            req.cas = couchbase::cas(cas_zero_mode ? 0 : item.doc().cas().value());
-            req.flags = item.content().value().flags;
+            req.cas = couchbase::cas(cas_zero_mode ? 0 : item.cas().value());
+            req.flags = item.staged_flags();
             wrap_durable_request(req, ctx->overall()->config());
             return ctx->cluster_ref().execute(
               req,
@@ -675,17 +760,15 @@ staged_mutation_queue::commit_doc(const std::shared_ptr<attempt_context_impl>& c
               });
           }
 
-          const bool is_staged_binary = item.doc().links().is_staged_content_binary();
-
           // We have not stored the content for the staged mutation. This means that the cluster
           // supports replace_body_with_xattr.
-          operations::mutate_in_request req{ item.doc().id() };
+          operations::mutate_in_request req{ item.id() };
           req.specs = {
             impl::subdoc::command{
               impl::subdoc::opcode::replace_body_with_xattr,
-              !is_staged_binary ? STAGED_DATA : STAGED_BINARY_DATA,
+              !item.is_staged_binary() ? STAGED_DATA : STAGED_BINARY_DATA,
               {},
-              impl::subdoc::build_mutate_in_path_flags(true, false, false, is_staged_binary),
+              impl::subdoc::build_mutate_in_path_flags(true, false, false, item.is_staged_binary()),
             },
             impl::subdoc::command{
               impl::subdoc::opcode::remove,
@@ -695,9 +778,9 @@ staged_mutation_queue::commit_doc(const std::shared_ptr<attempt_context_impl>& c
             },
           };
           if (!cas_zero_mode) {
-            req.cas = item.doc().cas();
+            req.cas = item.cas();
           }
-          req.flags = item.doc().links().staged_user_flags();
+          req.flags = item.staged_flags();
           wrap_durable_request(req, ctx->overall()->config());
 
           return ctx->cluster_ref().execute(
@@ -732,7 +815,7 @@ staged_mutation_queue::remove_doc(const std::shared_ptr<attempt_context_impl>& c
                                   async_constant_delay& delay,
                                   utils::movable_function<void(std::exception_ptr)> callback)
 {
-  CB_ATTEMPT_CTX_LOG_TRACE(ctx, "remove doc {}", item.doc().id());
+  CB_ATTEMPT_CTX_LOG_TRACE(ctx, "remove doc {}", item.id());
 
   asio::post(asio::bind_executor(
     ctx->cluster_ref().io_context(),
@@ -746,15 +829,13 @@ staged_mutation_queue::remove_doc(const std::shared_ptr<attempt_context_impl>& c
       };
 
       ctx->check_expiry_during_commit_or_rollback(
-        STAGE_REMOVE_DOC, std::optional<const std::string>(item.doc().id().key()));
+        STAGE_REMOVE_DOC, std::optional<const std::string>(item.id().key()));
       return ctx->hooks_.before_doc_removed(
-        ctx,
-        item.doc().id().key(),
-        [ctx, &item, delay, handler = std::move(handler)](auto ec) mutable {
+        ctx, item.id().key(), [ctx, &item, delay, handler = std::move(handler)](auto ec) mutable {
           if (ec) {
             return handler(client_error(*ec, "before_doc_removed hook threw error"));
           }
-          core::operations::remove_request req{ item.doc().id() };
+          core::operations::remove_request req{ item.id() };
           wrap_durable_request(req, ctx->overall()->config());
           return ctx->cluster_ref().execute(
             req,
@@ -780,7 +861,7 @@ staged_mutation_queue::validate_commit_doc_result(const std::shared_ptr<attempt_
   }
   CB_ATTEMPT_CTX_LOG_TRACE(ctx, "commit doc result {}", res);
   // TODO(SA): mutation tokens
-  const auto key = item.doc().id().key();
+  const auto key = item.id().key();
   ctx->hooks_.after_doc_committed_before_saving_cas(
     ctx,
     key,
@@ -788,9 +869,9 @@ staged_mutation_queue::validate_commit_doc_result(const std::shared_ptr<attempt_
       if (ec) {
         return handler(client_error(*ec, "after_doc_committed_before_saving_cas threw error"));
       }
-      item.doc().cas(res.cas);
+      item.cas(couchbase::cas{ res.cas });
       return ctx->hooks_.after_doc_committed(
-        ctx, key, [res, item = std::move(item), handler = std::move(handler)](auto ec) mutable {
+        ctx, key, [item = std::move(item), handler = std::move(handler)](auto ec) mutable {
           if (ec) {
             return handler(client_error(*ec, "after_doc_committed threw error"));
           }
@@ -812,7 +893,7 @@ staged_mutation_queue::validate_remove_doc_result(const std::shared_ptr<attempt_
   }
   CB_ATTEMPT_CTX_LOG_TRACE(ctx, "remove doc result {}", res);
   return ctx->hooks_.after_doc_removed_pre_retry(
-    ctx, item.doc().id().key(), [handler = std::move(handler)](auto ec) {
+    ctx, item.id().key(), [handler = std::move(handler)](auto ec) {
       if (ec) {
         return handler(client_error(*ec, "after_doc_removed_pre_retry threw error"));
       }
@@ -834,7 +915,7 @@ staged_mutation_queue::validate_rollback_insert_result(
   }
   CB_ATTEMPT_CTX_LOG_TRACE(ctx, "rollback insert result {}", res);
   return ctx->hooks_.after_rollback_delete_inserted(
-    ctx, item.doc().id().key(), [handler = std::move(handler)](auto ec) {
+    ctx, item.id().key(), [handler = std::move(handler)](auto ec) {
       if (ec) {
         return handler(client_error(*ec, "after_rollback_delete_insert hook threw error"));
       }
@@ -856,7 +937,7 @@ staged_mutation_queue::validate_rollback_remove_or_replace_result(
   }
   CB_ATTEMPT_CTX_LOG_TRACE(ctx, "rollback remove or replace result {}", res);
   return ctx->hooks_.after_rollback_replace_or_remove(
-    ctx, item.doc().id().key(), [handler = std::move(handler)](auto ec) {
+    ctx, item.id().key(), [handler = std::move(handler)](auto ec) {
       if (ec) {
         return handler(client_error(*ec, "after_rollback_replace_or_remove hook threw error"));
       }
@@ -878,12 +959,12 @@ staged_mutation_queue::handle_commit_doc_error(
   try {
     if (ctx->expiry_overtime_mode_.load()) {
       CB_ATTEMPT_CTX_LOG_TRACE(
-        ctx, "commit_doc for {} error while in overtime mode {}", item.doc().id(), e.what());
+        ctx, "commit_doc for {} error while in overtime mode {}", item.id(), e.what());
       throw transaction_operation_failed(FAIL_EXPIRY, "expired during commit")
         .no_rollback()
         .failed_post_commit();
     }
-    CB_ATTEMPT_CTX_LOG_TRACE(ctx, "commit_doc for {} error {}", item.doc().id(), e.what());
+    CB_ATTEMPT_CTX_LOG_TRACE(ctx, "commit_doc for {} error {}", item.id(), e.what());
     switch (ec) {
       case FAIL_AMBIGUOUS:
         ambiguity_resolution_mode = true;
@@ -936,10 +1017,10 @@ staged_mutation_queue::handle_remove_doc_error(
     const auto ec = e.ec();
     if (ctx->expiry_overtime_mode_.load()) {
       CB_ATTEMPT_CTX_LOG_TRACE(
-        ctx, "remove_doc for {} error while in overtime mode {}", item.doc().id(), e.what());
+        ctx, "remove_doc for {} error while in overtime mode {}", item.id(), e.what());
       throw transaction_operation_failed(ec, e.what()).no_rollback().failed_post_commit();
     }
-    CB_ATTEMPT_CTX_LOG_TRACE(ctx, "remove_doc for {} error {}", item.doc().id(), e.what());
+    CB_ATTEMPT_CTX_LOG_TRACE(ctx, "remove_doc for {} error {}", item.id(), e.what());
     switch (ec) {
       case FAIL_AMBIGUOUS:
         throw retry_operation("remove_doc got FAIL_AMBIGUOUS");
@@ -972,13 +1053,13 @@ staged_mutation_queue::handle_rollback_insert_error(
   try {
     if (ctx->expiry_overtime_mode_.load()) {
       CB_ATTEMPT_CTX_LOG_TRACE(
-        ctx, "rollback_insert for {} error while in overtime mode {}", item.doc().id(), e.what());
+        ctx, "rollback_insert for {} error while in overtime mode {}", item.id(), e.what());
       throw transaction_operation_failed(
         FAIL_EXPIRY, std::string("expired while rolling back insert with {} ") + e.what())
         .no_rollback()
         .expired();
     }
-    CB_ATTEMPT_CTX_LOG_TRACE(ctx, "rollback_insert for {} error {}", item.doc().id(), e.what());
+    CB_ATTEMPT_CTX_LOG_TRACE(ctx, "rollback_insert for {} error {}", item.id(), e.what());
     switch (const auto ec = e.ec(); ec) {
       case FAIL_HARD:
       case FAIL_CAS_MISMATCH:
@@ -1023,14 +1104,14 @@ staged_mutation_queue::handle_rollback_remove_or_replace_error(
       CB_ATTEMPT_CTX_LOG_TRACE(
         ctx,
         "rollback_remove_or_replace_error for {} error while in overtime mode {}",
-        item.doc().id(),
+        item.id(),
         e.what());
       throw transaction_operation_failed(FAIL_EXPIRY,
                                          std::string("expired while handling ") + e.what())
         .no_rollback();
     }
     CB_ATTEMPT_CTX_LOG_TRACE(
-      ctx, "rollback_remove_or_replace_error for {} error {}", item.doc().id(), e.what());
+      ctx, "rollback_remove_or_replace_error for {} error {}", item.id(), e.what());
     switch (const auto ec = e.ec(); ec) {
       case FAIL_HARD:
       case FAIL_DOC_NOT_FOUND:
@@ -1060,11 +1141,5 @@ staged_mutation_queue::handle_rollback_remove_or_replace_error(
   } catch (const transaction_operation_failed&) {
     callback(std::current_exception());
   }
-}
-
-auto
-staged_mutation::is_staged_binary() const -> bool
-{
-  return doc_.links().is_staged_content_binary();
 }
 } // namespace couchbase::core::transactions

@@ -37,26 +37,15 @@ enum class staged_mutation_type {
 
 class staged_mutation
 {
-private:
-  transaction_get_result doc_;
-  staged_mutation_type type_;
-  std::optional<codec::encoded_value> content_;
-  std::uint32_t current_user_flags_;
-  std::string operation_id_;
-
 public:
-  staged_mutation(transaction_get_result doc,
-                  std::optional<codec::encoded_value> content,
-                  staged_mutation_type type,
+  staged_mutation(staged_mutation_type type,
+                  document_id doc_id,
+                  cas cas,
+                  std::optional<codec::binary> staged_content,
+                  std::uint32_t staged_flags,
                   std::uint32_t current_user_flags,
-                  std::string operation_id = uid_generator::next())
-    : doc_(std::move(doc))
-    , type_(type)
-    , content_(std::move(content))
-    , current_user_flags_(current_user_flags)
-    , operation_id_(std::move(operation_id))
-  {
-  }
+                  std::optional<document_metadata> doc_metadata,
+                  std::string operation_id = uid_generator::next());
 
   ~staged_mutation() = default;
   staged_mutation(const staged_mutation&) = delete;
@@ -64,68 +53,28 @@ public:
   auto operator=(const staged_mutation&) -> staged_mutation& = delete;
   auto operator=(staged_mutation&&) -> staged_mutation& = default;
 
-  [[nodiscard]] auto id() const -> const core::document_id&
-  {
-    return doc_.id();
-  }
-
-  [[nodiscard]] auto doc() const -> const transaction_get_result&
-  {
-    return doc_;
-  }
-
-  [[nodiscard]] auto doc() -> transaction_get_result&
-  {
-    return doc_;
-  }
-
-  [[nodiscard]] auto type() const -> const staged_mutation_type&
-  {
-    return type_;
-  }
-
-  void type(staged_mutation_type& type)
-  {
-    type_ = type;
-  }
-
+  [[nodiscard]] auto id() const -> const document_id&;
+  [[nodiscard]] auto cas() const -> const couchbase::cas&;
+  [[nodiscard]] auto type() const -> const staged_mutation_type&;
   [[nodiscard]] auto is_staged_binary() const -> bool;
+  [[nodiscard]] auto staged_content() const -> const std::optional<codec::binary>&;
+  [[nodiscard]] auto staged_flags() const -> std::uint32_t;
+  [[nodiscard]] auto current_user_flags() const -> std::uint32_t;
+  [[nodiscard]] auto doc_metadata() const -> const std::optional<document_metadata>&;
+  [[nodiscard]] auto operation_id() const -> const std::string&;
+  [[nodiscard]] auto type_as_string() const -> std::string;
 
-  [[nodiscard]] auto content() const -> const std::optional<codec::encoded_value>&
-  {
-    return content_;
-  }
+  void cas(couchbase::cas cas);
 
-  /**
-   * @return current user flags before the staging of the document
-   */
-  [[nodiscard]] auto current_user_flags() const -> std::uint32_t
-  {
-    return current_user_flags_;
-  }
-
-  void content(const codec::encoded_value& content)
-  {
-    content_ = content;
-  }
-
-  [[nodiscard]] auto type_as_string() const -> std::string
-  {
-    switch (type_) {
-      case staged_mutation_type::INSERT:
-        return "INSERT";
-      case staged_mutation_type::REMOVE:
-        return "REMOVE";
-      case staged_mutation_type::REPLACE:
-        return "REPLACE";
-    }
-    throw std::runtime_error("unknown type of staged mutation");
-  }
-
-  [[nodiscard]] auto operation_id() const -> const std::string&
-  {
-    return operation_id_;
-  }
+private:
+  staged_mutation_type type_;
+  document_id doc_id_;
+  couchbase::cas cas_;
+  std::optional<codec::binary> staged_content_;
+  std::uint32_t staged_flags_;
+  std::uint32_t current_user_flags_;
+  std::optional<document_metadata> doc_metadata_;
+  std::string operation_id_;
 };
 
 struct unstaging_state {
