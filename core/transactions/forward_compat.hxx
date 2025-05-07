@@ -16,91 +16,72 @@
 #pragma once
 
 #include "internal/exceptions_internal.hxx"
+
 #include <cstdint>
-#include <list>
 #include <optional>
-#include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace couchbase::core::transactions
 {
-// TODO(SA): rename using long and human-readable names
-enum class forward_compat_stage {
-  WWC_READING_ATR,
-  WWC_REPLACING,
-  WWC_REMOVING,
-  WWC_INSERTING,
-  WWC_INSERTING_GET,
+enum class forward_compat_stage : std::uint8_t {
+  WRITE_WRITE_CONFLICT_READING_ATR,
+  WRITE_WRITE_CONFLICT_REPLACING,
+  WRITE_WRITE_CONFLICT_REMOVING,
+  WRITE_WRITE_CONFLICT_INSERTING,
+  WRITE_WRITE_CONFLICT_INSERTING_GET,
   GETS,
   GETS_READING_ATR,
-  CLEANUP_ENTRY
+  CLEANUP_ENTRY,
 };
 
-inline auto
-to_string(forward_compat_stage value) -> const char*
-{
-  switch (value) {
-    case forward_compat_stage::WWC_READING_ATR:
-      return "WW_R";
-    case forward_compat_stage::WWC_REPLACING:
-      return "WW_RP";
-    case forward_compat_stage::WWC_REMOVING:
-      return "WW_RM";
-    case forward_compat_stage::WWC_INSERTING:
-      return "WW_I";
-    case forward_compat_stage::WWC_INSERTING_GET:
-      return "WW_IG";
-    case forward_compat_stage::GETS:
-      return "G";
-    case forward_compat_stage::GETS_READING_ATR:
-      return "G_A";
-    case forward_compat_stage::CLEANUP_ENTRY:
-      return "CL_E";
-  };
-  throw std::runtime_error("Unknown forward compatibility stage");
-}
+auto
+to_string(forward_compat_stage value) -> std::string;
 
-enum class forward_compat_behavior {
+enum class forward_compat_behavior : std::uint8_t {
   CONTINUE,
   RETRY_TXN,
   FAIL_FAST_TXN
 };
 
-inline auto
-create_forward_compat_behavior(const std::string& str) -> forward_compat_behavior
-{
-  if (str == "r") {
-    return forward_compat_behavior::RETRY_TXN;
-  }
-  return forward_compat_behavior::FAIL_FAST_TXN;
-}
+auto
+create_forward_compat_behavior(const std::string& str) -> forward_compat_behavior;
 
 // used only for logging
-inline auto
-forward_compat_behavior_name(forward_compat_behavior b) -> const char*
-{
-  switch (b) {
-    case forward_compat_behavior::CONTINUE:
-      return "CONTINUE";
-    case forward_compat_behavior::RETRY_TXN:
-      return "RETRY_TXN";
-    case forward_compat_behavior::FAIL_FAST_TXN:
-      return "FAIL_FAST_TRANSACTION";
-  }
-  return "unknown behavior";
-}
+auto
+forward_compat_behavior_name(forward_compat_behavior b) -> const char*;
 
 struct forward_compat_supported {
   std::uint32_t protocol_major = 2;
   std::uint32_t protocol_minor = 0;
   std::list<std::string> extensions{
-    "TI",     "MO", "BM", "QU", "SD", "BF3787", "BF3705", "BF3838", "RC", "UA", "CO",
-    "BF3791", "CM", "SI", "QC", "IX", "TS",     "PU",     "BS",     "RP", "RX",
+    "BF3705", // BF-CBD-3705
+    "BF3787", // BF-CBD-3787
+    "BF3791", // BF-CBD-3791
+    "BF3838", // BF-CBD-3838
+    "BM",     // ExtBinaryMetadata
+    "BS",     // ExtBinarySupport
+    "CM",     // ExtCustomMetadataCollection
+    "CO",     // ExtAllKVCombinations
+    "IX",     // ExtInsertExisting
+    "MO",     // ExtMemoryOptUnstaging
+    "PU",     // ExtParallelUnstaging
+    "QC",     // ExtQueryContext
+    "QU",     // ExtQuery
+    "RC",     // ExtRemoveCompleted
+    "RP",     // ExtReplicaFromPreferredGroup
+    "RX",     // ExtReplaceBodyWithXattr
+    "SD",     // ExtStoreDurability
+    "SI",     // ExtSDKIntegration
+    "TI",     // ExtTransactionId
+    "TS",     // ExtThreadSafety
+    "UA",     // ExtUnknownATRStates
   };
 };
 
 class transaction_operation_failed;
 
-std::optional<transaction_operation_failed>
-check_forward_compat(forward_compat_stage stage, std::optional<tao::json::value> json);
+auto
+check_forward_compat(forward_compat_stage stage, std::optional<tao::json::value> json)
+  -> std::optional<transaction_operation_failed>;
 } // namespace couchbase::core::transactions
