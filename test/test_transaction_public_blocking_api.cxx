@@ -765,3 +765,62 @@ TEST_CASE("transactions public blocking API: can remove doc in bucket not yet op
     CHECK(get_err.ec() == couchbase::errc::key_value::document_not_found);
   });
 }
+
+TEST_CASE("transactions public blocking API: insert then replace with illegal document "
+          "modification in-between",
+          "[transactions]")
+{
+  auto doc_id = test::utils::uniq_id("txn");
+  auto txn_content_initial = tao::json::value{ { "num", 12 } };
+  auto txn_content_updated = tao::json::value{ { "num", 20 } };
+  auto illegal_content = tao::json::value{ { "illegal", "content" } };
+
+  const test::utils::integration_test_guard integration;
+  auto cluster = integration.public_cluster();
+  auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
+
+  auto [tx_err, result] = cluster.transactions()->run(
+    [&doc_id, &collection, &txn_content_initial, &txn_content_updated, &illegal_content](
+      std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
+      // Stage an insert
+      {
+        auto [err, res] = ctx->insert(collection, doc_id, txn_content_initial);
+        if (err) {
+          return err;
+        }
+        REQUIRE(res.content_as<tao::json::value>() == txn_content_initial);
+      }
+
+      // Do an illegal non-transactional insert that will override any staged content and txn
+      // metadata
+      {
+        auto [err, res] = collection.insert(doc_id, illegal_content).get();
+        REQUIRE_SUCCESS(err.ec());
+      }
+
+      {
+        // Now that we implement ExtReplaceBodyWithXattr, this will fetch the document from the
+        // server (post-illegal mutation) as the staged content of the staged mutation is not stored
+        // in memory.
+        auto [get_err, get_res] = ctx->get(collection, doc_id);
+        if (get_err) {
+          return get_err;
+        }
+        REQUIRE(get_res.content_as<tao::json::value>() == illegal_content);
+
+        // This replace will use the CAS from the transaction_get_result, which should be the one
+        // after the illegal insert. This means the operation will succeed, and will result in a
+        // staged insert with the CAS from the transaction_get_result.
+        // When committing, the replace_body_with_xattr op, and the transaction, will succeed.
+        auto [replace_err, replace_res] = ctx->replace(get_res, txn_content_updated);
+        if (replace_err) {
+          return replace_err;
+        }
+        REQUIRE(replace_res.content_as<tao::json::value>() == txn_content_updated);
+      }
+
+      return {};
+    });
+
+  REQUIRE_SUCCESS(tx_err.ec());
+}
