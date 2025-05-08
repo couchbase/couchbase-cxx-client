@@ -35,16 +35,16 @@ analytics_request::encode_to(analytics_request::encoded_request_type& encoded,
   tao::json::value body{ { "statement", statement },
                          { "client_context_id", encoded.client_context_id },
                          { "timeout", fmt::format("{}ms", encoded.timeout.count()) } };
-  if (positional_parameters.empty()) {
-    for (const auto& [name, value] : named_parameters) {
-      Expects(name.empty() == false);
-      std::string key = name;
-      if (key[0] != '$') {
-        key.insert(key.begin(), '$');
-      }
-      body[key] = utils::json::parse(value);
+
+  for (const auto& [name, value] : named_parameters) {
+    Expects(name.empty() == false);
+    std::string key = name;
+    if (key[0] != '$') {
+      key.insert(key.begin(), '$');
     }
-  } else {
+    body[key] = utils::json::parse(value);
+  }
+  if (!positional_parameters.empty()) {
     std::vector<tao::json::value> parameters;
     parameters.reserve(positional_parameters.size());
     for (const auto& value : positional_parameters) {

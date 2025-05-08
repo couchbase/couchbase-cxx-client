@@ -722,3 +722,32 @@ TEST_CASE("integration: query from scope with public API", "[integration]")
     REQUIRE(rows[0][collection_name] == value);
   }
 }
+
+TEST_CASE("integration: public API query using both named and positional parameters",
+          "[integration]")
+{
+  test::utils::integration_test_guard integration;
+
+  if (!integration.cluster_version().supports_query()) {
+    SKIP("cluster does not support query");
+  }
+
+  auto cluster = integration.public_cluster();
+
+  auto opts = couchbase::query_options().positional_parameters(20, "foo").named_parameters(
+    std::pair{ "x", 10 });
+
+  auto [err, res] = cluster.query("SELECT $x fieldA, $1 fieldB, $2 fieldC", opts).get();
+  if (err) {
+    fmt::println("{}", err.ctx().to_json());
+  }
+  REQUIRE_SUCCESS(err.ec());
+
+  auto rows = res.rows_as<couchbase::codec::tao_json_serializer, tao::json::value>();
+  REQUIRE(rows.size() == 1);
+
+  auto row = rows[0].get_object();
+  REQUIRE(row["fieldA"].as<std::uint32_t>() == 10);
+  REQUIRE(row["fieldB"].as<std::uint32_t>() == 20);
+  REQUIRE(row["fieldC"].as<std::string>() == "foo");
+}

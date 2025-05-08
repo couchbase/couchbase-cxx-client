@@ -232,3 +232,9 @@
  *   - clear_named_parameters
  */
 #define COUCHBASE_CXX_CLIENT_QUERY_OPTIONS_HAVE_ADD_PARAMETER 1
+
+/**
+ * couchbase::query_options and couchbase::analytics_options allow setting both positional and named
+ * parameters.
+ */
+#define COUCHBASE_CXX_CLIENT_QUERY_SUPPORTS_BOTH_POSITIONAL_NAMED_PARAMETERS 1
