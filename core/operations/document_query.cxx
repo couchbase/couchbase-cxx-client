@@ -64,16 +64,16 @@ query_request::encode_to(query_request::encoded_request_type& encoded,
     timeout_for_service -= std::chrono::milliseconds(500);
   }
   body["timeout"] = fmt::format("{}ms", timeout_for_service.count());
-  if (positional_parameters.empty()) {
-    for (const auto& [name, value] : named_parameters) {
-      Expects(name.empty() == false);
-      std::string key = name;
-      if (key[0] != '$') {
-        key.insert(key.begin(), '$');
-      }
-      body[key] = utils::json::parse(value);
+
+  for (const auto& [name, value] : named_parameters) {
+    Expects(name.empty() == false);
+    std::string key = name;
+    if (key[0] != '$') {
+      key.insert(key.begin(), '$');
     }
-  } else {
+    body[key] = utils::json::parse(value);
+  }
+  if (!positional_parameters.empty()) {
     std::vector<tao::json::value> parameters;
     parameters.reserve(positional_parameters.size());
     for (const auto& value : positional_parameters) {

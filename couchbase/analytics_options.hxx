@@ -246,7 +246,8 @@ struct analytics_options : public common_options<analytics_options> {
   }
 
   /**
-   * Set list of positional parameters for a query.
+   * Set list of positional parameters for a query. Any existing positional parameters will be
+   * overridden.
    *
    * @tparam Parameters types for the parameters
    * @param parameters the sequence of positional parameters. Each entry will be encoded into JSON.
@@ -260,14 +261,13 @@ struct analytics_options : public common_options<analytics_options> {
            std::enable_if_t<codec::is_serializer_v<Serializer>, bool> = true>
   auto positional_parameters(const Parameters&... parameters) -> analytics_options&
   {
-    named_parameters_.clear();
     positional_parameters_.clear();
     encode_positional_parameters<Serializer>(parameters...);
     return self();
   }
 
   /**
-   * Set list of named parameters for a query.
+   * Set list of named parameters for a query. Any existing named parameters will be overridden.
    *
    * @tparam Parameters types for the parameter pairs
    * @param parameters the sequence of name-value pairs. Each value will be encoded into JSON.
@@ -282,7 +282,6 @@ struct analytics_options : public common_options<analytics_options> {
   auto named_parameters(const Parameters&... parameters) -> analytics_options&
   {
     named_parameters_.clear();
-    positional_parameters_.clear();
     encode_named_parameters<Serializer>(parameters...);
     return self();
   }
@@ -325,7 +324,6 @@ struct analytics_options : public common_options<analytics_options> {
    */
   auto encoded_positional_parameters(std::vector<codec::binary> parameters) -> analytics_options&
   {
-    named_parameters_.clear();
     positional_parameters_ = std::move(parameters);
     return self();
   }
@@ -348,7 +346,6 @@ struct analytics_options : public common_options<analytics_options> {
     -> analytics_options&
   {
     named_parameters_ = std::move(parameters);
-    positional_parameters_.clear();
     return self();
   }
 
