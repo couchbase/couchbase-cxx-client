@@ -182,6 +182,33 @@ transaction_context::get_replica_from_preferred_server_group(const core::documen
 }
 
 void
+transaction_context::get_multi_replicas_from_preferred_server_group(
+  const std::vector<core::document_id>& ids,
+  transaction_get_multi_replicas_from_preferred_server_group_mode mode,
+  std::function<
+    void(std::exception_ptr,
+         std::optional<transaction_get_multi_replicas_from_preferred_server_group_result>)>&& cb)
+{
+  if (current_attempt_context_) {
+    return current_attempt_context_->get_multi_replicas_from_preferred_server_group(
+      ids, mode, std::move(cb));
+  }
+  throw transaction_operation_failed(FAIL_OTHER, "no current attempt context");
+}
+
+void
+transaction_context::get_multi(
+  const std::vector<core::document_id>& ids,
+  transaction_get_multi_mode mode,
+  std::function<void(std::exception_ptr, std::optional<transaction_get_multi_result>)>&& cb)
+{
+  if (current_attempt_context_) {
+    return current_attempt_context_->get_multi(ids, mode, std::move(cb));
+  }
+  throw transaction_operation_failed(FAIL_OTHER, "no current attempt context");
+}
+
+void
 transaction_context::get_optional(const core::document_id& id, async_attempt_context::Callback&& cb)
 {
   if (current_attempt_context_) {

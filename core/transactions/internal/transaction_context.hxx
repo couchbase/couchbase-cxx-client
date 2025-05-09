@@ -101,6 +101,18 @@ public:
   void get_replica_from_preferred_server_group(const core::document_id& id,
                                                async_attempt_context::Callback&& cb);
 
+  void get_multi_replicas_from_preferred_server_group(
+    const std::vector<core::document_id>& ids,
+    transaction_get_multi_replicas_from_preferred_server_group_mode mode,
+    std::function<
+      void(std::exception_ptr,
+           std::optional<transaction_get_multi_replicas_from_preferred_server_group_result>)>&& cb);
+
+  void get_multi(
+    const std::vector<core::document_id>& ids,
+    transaction_get_multi_mode mode,
+    std::function<void(std::exception_ptr, std::optional<transaction_get_multi_result>)>&& cb);
+
   void get_optional(const core::document_id& id, async_attempt_context::Callback&& cb);
 
   void insert(const core::document_id& id,
