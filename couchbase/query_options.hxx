@@ -491,6 +491,73 @@ struct query_options : public common_options<query_options> {
   }
 
   /**
+   * Adds a positional parameter to the current list of positional parameters.
+   *
+   * @tparam Parameter type for the parameter.
+   * @param parameter the positional parameter. It will be encoded into JSON.
+   * @return this options builder for chaining purposes.
+   *
+   * @since 1.1.0
+   * @committed
+   */
+  template<typename Serializer = codec::tao_json_serializer,
+           typename Parameter,
+           std::enable_if_t<codec::is_serializer_v<Serializer>, bool> = true>
+  auto add_positional_parameter(const Parameter& parameter) -> query_options&
+  {
+    encode_positional_parameters<Serializer>(parameter);
+    return self();
+  }
+
+  /**
+   * Adds a named parameter to the current list of named parameters.
+   *
+   * @tparam Value type for the named parameter's value.
+   * @param name the named parameter's name
+   * @param value the named parameter's value. It will be encoded into JSON.
+   * @return this options builder for chaining purposes.
+   *
+   * @since 1.1.0
+   * @committed
+   */
+  template<typename Serializer = codec::tao_json_serializer,
+           typename Value,
+           std::enable_if_t<codec::is_serializer_v<Serializer>, bool> = true>
+  auto add_named_parameter(const std::string& name, const Value& value) -> query_options&
+  {
+    encode_named_parameters<Serializer>(std::make_pair(name, value));
+    return self();
+  }
+
+  /**
+   * Clears the list of positional parameters.
+   *
+   * @return this options builder for chaining purposes.
+   *
+   * @since 1.1.0
+   * @committed
+   */
+  auto clear_positional_parameters() -> query_options&
+  {
+    positional_parameters_.clear();
+    return self();
+  }
+
+  /**
+   * Clears the list of named parameters.
+   *
+   * @return this options builder for chaining purposes.
+   *
+   * @since 1.1.0
+   * @committed
+   */
+  auto clear_named_parameters() -> query_options&
+  {
+    named_parameters_.clear();
+    return self();
+  }
+
+  /**
    * Set map of raw options for a query.
    *
    * This function expects that all parameters encoded into pairs containing mapping names of the

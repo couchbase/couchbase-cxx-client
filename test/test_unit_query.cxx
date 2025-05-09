@@ -21,6 +21,8 @@
 
 #include "core/operations/document_query.hxx"
 
+#include <couchbase/codec/tao_json_serializer.hxx>
+
 #include <tao/json/value.hpp>
 
 couchbase::core::http_context
@@ -73,5 +75,72 @@ TEST_CASE("unit: query with read from replica", "[unit]")
     auto body = couchbase::core::utils::json::parse(http_req.body);
     REQUIRE(body.is_object());
     REQUIRE_FALSE(body.get_object().count("use_replica"));
+  }
+}
+
+TEST_CASE("unit: Public API query options - add/clear parameters")
+{
+  SECTION("positional parameters")
+  {
+    couchbase::query_options opts;
+    opts.positional_parameters(10, 20);
+    REQUIRE(opts.build().positional_parameters ==
+            std::vector<couchbase::codec::binary>{
+              couchbase::codec::tao_json_serializer::serialize(10),
+              couchbase::codec::tao_json_serializer::serialize(20) });
+
+    opts.clear_positional_parameters();
+    REQUIRE(opts.build().positional_parameters.empty());
+
+    opts.add_positional_parameter(25);
+    REQUIRE(opts.build().positional_parameters ==
+            std::vector<couchbase::codec::binary>{
+              couchbase::codec::tao_json_serializer::serialize(25) });
+
+    opts.add_positional_parameter("foo");
+    REQUIRE(opts.build().positional_parameters ==
+            std::vector<couchbase::codec::binary>{
+              couchbase::codec::tao_json_serializer::serialize(25),
+              couchbase::codec::tao_json_serializer::serialize("foo") });
+
+    opts.positional_parameters(4, 5);
+    REQUIRE(
+      opts.build().positional_parameters ==
+      std::vector<couchbase::codec::binary>{ couchbase::codec::tao_json_serializer::serialize(4),
+                                             couchbase::codec::tao_json_serializer::serialize(5) });
+  }
+
+  SECTION("named parameters")
+  {
+    couchbase::query_options opts;
+    opts.named_parameters(std::make_pair("foo", 10), std::make_pair("bar", 20));
+    REQUIRE(opts.build().named_parameters ==
+            std::map<std::string, couchbase::codec::binary, std::less<>>{
+              { "foo", couchbase::codec::tao_json_serializer::serialize(10) },
+              { "bar", couchbase::codec::tao_json_serializer::serialize(20) },
+            });
+
+    opts.clear_named_parameters();
+    REQUIRE(opts.build().named_parameters.empty());
+
+    opts.add_named_parameter("foo", 25);
+    REQUIRE(opts.build().named_parameters ==
+            std::map<std::string, couchbase::codec::binary, std::less<>>{
+              { "foo", couchbase::codec::tao_json_serializer::serialize(25) },
+            });
+
+    opts.add_named_parameter("bar", "baz");
+    REQUIRE(opts.build().named_parameters ==
+            std::map<std::string, couchbase::codec::binary, std::less<>>{
+              { "foo", couchbase::codec::tao_json_serializer::serialize(25) },
+              { "bar", couchbase::codec::tao_json_serializer::serialize("baz") },
+            });
+
+    opts.named_parameters(std::make_pair("foo", 3), std::make_pair("bar", 4));
+    REQUIRE(opts.build().named_parameters ==
+            std::map<std::string, couchbase::codec::binary, std::less<>>{
+              { "foo", couchbase::codec::tao_json_serializer::serialize(3) },
+              { "bar", couchbase::codec::tao_json_serializer::serialize(4) },
+            });
   }
 }
