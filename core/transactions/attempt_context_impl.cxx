@@ -670,7 +670,7 @@ attempt_context_impl::replace(const transaction_get_result& document,
                         self, "found existing INSERT of {} while replacing", document);
                       self->create_staged_insert(document.id(),
                                                  std::move(content),
-                                                 existing_sm->cas().value(),
+                                                 document.cas().value(),
                                                  exp_delay(std::chrono::milliseconds(5),
                                                            std::chrono::milliseconds(300),
                                                            self->overall()->config().timeout),
