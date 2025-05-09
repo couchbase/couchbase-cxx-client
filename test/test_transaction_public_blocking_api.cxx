@@ -770,12 +770,20 @@ TEST_CASE("transactions public blocking API: insert then replace with illegal do
           "modification in-between",
           "[transactions]")
 {
+  test::utils::integration_test_guard integration;
+
+  if (!integration.cluster_version().supports_replace_body_with_xattr()) {
+    // If replace_body_with_xattr is not supported, we have the staged insert's content in memory,
+    // so the transactional get will not fetch the document from the server, which would give the
+    // up-to-date CAS.
+    SKIP("the server does not support replace_body_with_xattr");
+  }
+
   auto doc_id = test::utils::uniq_id("txn");
   auto txn_content_initial = tao::json::value{ { "num", 12 } };
   auto txn_content_updated = tao::json::value{ { "num", 20 } };
   auto illegal_content = tao::json::value{ { "illegal", "content" } };
 
-  const test::utils::integration_test_guard integration;
   auto cluster = integration.public_cluster();
   auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
 

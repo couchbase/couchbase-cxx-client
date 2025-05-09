@@ -304,6 +304,11 @@ struct server_version {
     // See MB-63870
     return (major == 7 && minor == 6 && micro >= 4) || (major == 7 && minor > 6) || major > 7;
   }
+
+  [[nodiscard]] auto supports_replace_body_with_xattr() const -> bool
+  {
+    return (major == 7 && minor == 1) || (major == 7 && minor > 1) || major > 7;
+  }
 };
 
 } // namespace test::utils
