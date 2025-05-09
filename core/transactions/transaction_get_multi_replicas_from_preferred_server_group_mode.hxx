@@ -22,5 +22,6 @@ namespace couchbase::core::transactions
 enum class transaction_get_multi_replicas_from_preferred_server_group_mode : std::uint8_t {
   prioritise_latency,
   disable_read_skew_detection,
+  prioritise_read_skew_detection,
 };
 } // namespace couchbase::core::transactions

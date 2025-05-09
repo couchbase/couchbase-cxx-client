@@ -62,6 +62,9 @@ convert_mode(transaction_get_multi_replicas_from_preferred_server_group_mode mod
     case transaction_get_multi_replicas_from_preferred_server_group_mode::
       disable_read_skew_detection:
       return get_multi_mode::disable_read_skew_detection;
+    case transaction_get_multi_replicas_from_preferred_server_group_mode::
+      prioritise_read_skew_detection:
+      return get_multi_mode::prioritise_read_skew_detection;
   }
   return get_multi_mode::prioritise_latency;
 }

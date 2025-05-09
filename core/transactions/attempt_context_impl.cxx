@@ -573,6 +573,11 @@ from_public_api(
       disable_read_skew_detection:
       return transaction_get_multi_replicas_from_preferred_server_group_mode::
         disable_read_skew_detection;
+    case couchbase::transactions::transaction_get_multi_replicas_from_preferred_server_group_mode::
+      prioritise_read_skew_detection:
+      return transaction_get_multi_replicas_from_preferred_server_group_mode::
+        prioritise_read_skew_detection;
+      break;
   }
   return transaction_get_multi_replicas_from_preferred_server_group_mode::prioritise_latency;
 }
