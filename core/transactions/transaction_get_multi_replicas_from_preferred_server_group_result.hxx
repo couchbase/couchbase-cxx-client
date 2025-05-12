@@ -17,6 +17,8 @@
 
 #include <couchbase/codec/default_json_transcoder.hxx>
 
+#include <gsl/assert>
+
 #include <optional>
 #include <vector>
 
@@ -42,8 +44,21 @@ public:
   {
   }
 
-  [[nodiscard]] auto content(std::size_t spec_index) const -> bool;
-  [[nodiscard]] auto exists(std::size_t spec_index) const -> bool;
+  [[nodiscard]] auto content(std::size_t spec_index) const -> const codec::encoded_value&
+  {
+    Expects(exists(spec_index));
+    return content_[spec_index].value();
+  }
+
+  [[nodiscard]] auto exists(std::size_t spec_index) const -> bool
+  {
+    return spec_index >= content_.size() && content_[spec_index].has_value();
+  }
+
+  [[nodiscard]] auto content() const -> const std::vector<std::optional<codec::encoded_value>>&
+  {
+    return content_;
+  }
 
   [[nodiscard]] auto content() -> std::vector<std::optional<codec::encoded_value>>&&
   {

@@ -50,6 +50,11 @@ public:
     return spec_index >= content_.size() && content_[spec_index].has_value();
   }
 
+  [[nodiscard]] auto content() const -> const std::vector<std::optional<codec::encoded_value>>&
+  {
+    return content_;
+  }
+
   [[nodiscard]] auto content() -> std::vector<std::optional<codec::encoded_value>>&&
   {
     return std::move(content_);
