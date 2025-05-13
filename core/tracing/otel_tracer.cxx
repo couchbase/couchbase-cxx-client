@@ -22,50 +22,62 @@
 #if defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wsign-conversion"
+#pragma GCC diagnostic ignored "-Wdeprecated-builtins"
+#elif defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-builtins"
 #endif
 #include <opentelemetry/trace/provider.h>
 #include <opentelemetry/trace/tracer.h>
 #if defined(__GNUC__)
 #pragma GCC diagnostic pop
+#elif defined(__clang__)
+#pragma clang diagnostic pop
 #endif
 
 namespace couchbase::core::tracing
 {
-namespace
+
+auto
+otel_request_span::wrapped_span() -> std::shared_ptr<opentelemetry::trace::Span>
 {
-class otel_request_span : public couchbase::tracing::request_span
+  return span_;
+}
+
+void
+otel_request_span::end()
 {
-public:
-  explicit otel_request_span(opentelemetry::nostd::shared_ptr<opentelemetry::trace::Span> span)
-    : span_(std::move(span))
-  {
-  }
+  span_->End();
+}
 
-  void add_tag(const std::string& name, const std::string& value) override
-  {
-    span_->SetAttribute(name, value);
-  }
+void
+otel_request_span::add_tag(const std::string& name, std::uint64_t value)
+{
+  span_->SetAttribute(name, value);
+}
 
-  void add_tag(const std::string& name, std::uint64_t value) override
-  {
-    span_->SetAttribute(name, value);
-  }
+void
+otel_request_span::add_tag(const std::string& name, const std::string& value)
+{
+  span_->SetAttribute(name, value);
+}
 
-  void end() override
-  {
-    span_->End();
-  }
+otel_request_span::otel_request_span(std::shared_ptr<opentelemetry::trace::Span> span)
+  : span_(std::move(span))
+{
+}
 
-  auto wrapped_span() -> opentelemetry::nostd::shared_ptr<opentelemetry::trace::Span>
-  {
-    return span_;
-  }
+otel_request_span::~otel_request_span()
+{
+  span_->End();
+}
 
-private:
-  opentelemetry::nostd::shared_ptr<opentelemetry::trace::Span> span_;
-};
-
-} // namespace
+auto
+otel_request_span::wrap(std::shared_ptr<opentelemetry::trace::Span> span)
+  -> std::shared_ptr<otel_request_span>
+{
+  return std::make_shared<otel_request_span>(span);
+}
 
 class otel_request_tracer_impl
 {
@@ -80,13 +92,30 @@ public:
   {
   }
 
+  explicit otel_request_tracer_impl(std::shared_ptr<opentelemetry::trace::Tracer> tracer)
+    : tracer_{ std::move(tracer) }
+  {
+  }
+
 private:
-  opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> tracer_;
+  std::shared_ptr<opentelemetry::trace::Tracer> tracer_;
 };
 
 otel_request_tracer::otel_request_tracer()
   : impl_{ std::make_unique<otel_request_tracer_impl>() }
 {
+}
+
+otel_request_tracer::otel_request_tracer(std::shared_ptr<opentelemetry::trace::Tracer> tracer)
+  : impl_{ std::make_unique<otel_request_tracer_impl>(std::move(tracer)) }
+{
+}
+
+auto
+otel_request_tracer::wrap(std::shared_ptr<opentelemetry::trace::Tracer> tracer)
+  -> std::shared_ptr<otel_request_tracer>
+{
+  return std::make_shared<couchbase::core::tracing::otel_request_tracer>(std::move(tracer));
 }
 
 otel_request_tracer::~otel_request_tracer() = default;
@@ -100,9 +129,9 @@ otel_request_tracer::start_span(std::string name,
   if (wrapped_parent) {
     opentelemetry::trace::StartSpanOptions opts;
     opts.parent = wrapped_parent->wrapped_span()->GetContext();
-    return std::make_shared<otel_request_span>(impl_->tracer_->StartSpan(name, opts));
+    return otel_request_span::wrap(impl_->tracer_->StartSpan(name, opts));
   }
-  return std::make_shared<otel_request_span>(impl_->tracer_->StartSpan(name));
+  return otel_request_span::wrap(impl_->tracer_->StartSpan(name));
 }
 
 } // namespace couchbase::core::tracing

@@ -42,7 +42,8 @@ target_link_libraries(
   hdr_histogram_static
   asio
   opentelemetry_trace
-  opentelemetry_exporter_otlp_http)
+  opentelemetry_exporter_otlp_http
+  opentelemetry_exporter_otlp_http_log)
 
 if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND WIN32)
   # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings, as we don't (atm) keep track fo the *.PDB
