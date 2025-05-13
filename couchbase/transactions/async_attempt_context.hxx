@@ -15,6 +15,12 @@
  */
 #pragma once
 
+#include <couchbase/transactions/transaction_get_multi_options.hxx>
+#include <couchbase/transactions/transaction_get_multi_replicas_from_preferred_server_group_options.hxx>
+#include <couchbase/transactions/transaction_get_multi_replicas_from_preferred_server_group_result.hxx>
+#include <couchbase/transactions/transaction_get_multi_replicas_from_preferred_server_group_spec.hxx>
+#include <couchbase/transactions/transaction_get_multi_result.hxx>
+#include <couchbase/transactions/transaction_get_multi_spec.hxx>
 #include <couchbase/transactions/transaction_get_result.hxx>
 #include <couchbase/transactions/transaction_query_options.hxx>
 #include <couchbase/transactions/transaction_query_result.hxx>
@@ -40,8 +46,14 @@ using async_err_handler = std::function<void(error)>;
  */
 class async_attempt_context
 {
-
 public:
+  virtual ~async_attempt_context() = default;
+  async_attempt_context() = default;
+  async_attempt_context(async_attempt_context&&) noexcept = default;
+  async_attempt_context(const async_attempt_context&) = default;
+  auto operator=(async_attempt_context&&) -> async_attempt_context& = default;
+  auto operator=(const async_attempt_context&) -> async_attempt_context& = default;
+
   /**
    * Get document from a collection.
    *
@@ -80,6 +92,18 @@ public:
                                                        const std::string& id,
                                                        async_result_handler&& handler) = 0;
 
+  virtual void get_multi(
+    const std::vector<transaction_get_multi_spec>& specs,
+    const transaction_get_multi_options& options,
+    std::function<void(error, std::optional<transaction_get_multi_result>)>&& cb) = 0;
+
+  virtual void get_multi_replicas_from_preferred_server_group(
+    const std::vector<transaction_get_multi_replicas_from_preferred_server_group_spec>& specs,
+    const transaction_get_multi_replicas_from_preferred_server_group_options& options,
+    std::function<void(
+      error,
+      std::optional<transaction_get_multi_replicas_from_preferred_server_group_result>)>&& cb) = 0;
+
   /**
    * Remove a document from a collection.
    *
@@ -114,7 +138,8 @@ public:
               Document&& content,
               async_result_handler&& handler)
   {
-    return insert_raw(coll, id, Transcoder::encode(content), std::move(handler));
+    return insert_raw(
+      coll, id, Transcoder::encode(std::forward<Document>(content)), std::move(handler));
   }
   /**
    * Replace the contents of a document in a collection.
@@ -134,7 +159,8 @@ public:
            std::enable_if_t<!std::is_same_v<codec::encoded_value, Document>, bool> = true>
   void replace(transaction_get_result doc, Document&& content, async_result_handler&& handler)
   {
-    return replace_raw(std::move(doc), Transcoder::encode(content), std::move(handler));
+    return replace_raw(
+      std::move(doc), Transcoder::encode(std::forward<Document>(content)), std::move(handler));
   }
   /**
    * Perform a query, within a scope.
@@ -177,8 +203,6 @@ public:
   {
     return query(std::move(statement), {}, std::move(handler));
   }
-
-  virtual ~async_attempt_context() = default;
 
 protected:
   /** @private */

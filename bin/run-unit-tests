@@ -115,7 +115,13 @@ if [ "x${STATUS}" != "x0" ]
 then
     if [ -e /usr/bin/coredumpctl ]
     then
-        /usr/bin/coredumpctl list --no-pager
+        /usr/bin/coredumpctl list --no-pager --json=pretty
+        executable="$(coredumpctl --json=pretty list | jq -r .[-1].exe)"
+        if [ -f "${executable}" ]
+        then
+            file "${executable}"
+            ldd "${executable}"
+        fi
         /usr/bin/coredumpctl -1 info
     elif [ -e /usr/bin/apport-unpack ]
     then
@@ -126,6 +132,11 @@ then
              echo $crash
              /usr/bin/apport-unpack $crash /tmp/the_crash/
              executable=$(cat /tmp/the_crash/ExecutablePath)
+             if [ -f "${executable}" ]
+             then
+                 file "${executable}"
+                 ldd "${executable}"
+             fi
              gdb $executable /tmp/the_crash/CoreDump --batch -ex "thread apply all bt"
              rm -rf $crash /tmp/the_crash
            fi
@@ -138,6 +149,11 @@ then
             echo $core
             executable=$(file $core | ruby -e "print ARGF.read[/execfn: '([^']+)'/, 1]")
             echo $executable
+             if [ -f "${executable}" ]
+             then
+                 file "${executable}"
+                 ldd "${executable}"
+             fi
             gdb $executable $core --batch -ex "thread apply all bt"
             rm -f $core
         fi

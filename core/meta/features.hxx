@@ -238,3 +238,8 @@
  * parameters.
  */
 #define COUCHBASE_CXX_CLIENT_QUERY_SUPPORTS_BOTH_POSITIONAL_NAMED_PARAMETERS 1
+
+/**
+ * get_multi API is implemented for transactions
+ */
+#define COUCHBASE_CXX_CLIENT_HAS_TRANSACTIONS_GET_MULTI 1

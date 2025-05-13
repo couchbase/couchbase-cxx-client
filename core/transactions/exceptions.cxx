@@ -17,6 +17,7 @@
 #include "internal/transaction_context.hxx"
 
 #include "exceptions.hxx"
+#include "exceptions_fmt.hxx"
 
 namespace couchbase::core::transactions
 {
@@ -156,6 +157,8 @@ transaction_op_errc_from_external_exception(external_exception e) -> errc::trans
       return errc::transaction_op::transaction_already_aborted;
     case external_exception::TRANSACTION_ALREADY_COMMITTED:
       return errc::transaction_op::transaction_already_committed;
+    case external_exception::DOCUMENT_UNRETRIEVABLE_EXCEPTION:
+      return errc::transaction_op::document_unretrievable;
   }
   return errc::transaction_op::generic;
 }
@@ -204,6 +207,8 @@ external_exception_from_transaction_op_errc(errc::transaction_op ec) -> external
       return external_exception::TRANSACTION_ALREADY_ABORTED;
     case errc::transaction_op::transaction_already_committed:
       return external_exception::TRANSACTION_ALREADY_COMMITTED;
+    case errc::transaction_op::document_unretrievable:
+      return external_exception::DOCUMENT_UNRETRIEVABLE_EXCEPTION;
     default:
       return external_exception::UNKNOWN;
   }

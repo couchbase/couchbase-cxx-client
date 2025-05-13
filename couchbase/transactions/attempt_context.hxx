@@ -15,11 +15,18 @@
  */
 #pragma once
 
+#include <couchbase/transactions/transaction_get_multi_options.hxx>
+#include <couchbase/transactions/transaction_get_multi_replicas_from_preferred_server_group_options.hxx>
+#include <couchbase/transactions/transaction_get_multi_replicas_from_preferred_server_group_result.hxx>
+#include <couchbase/transactions/transaction_get_multi_replicas_from_preferred_server_group_spec.hxx>
+#include <couchbase/transactions/transaction_get_multi_result.hxx>
+#include <couchbase/transactions/transaction_get_multi_spec.hxx>
 #include <couchbase/transactions/transaction_get_result.hxx>
 #include <couchbase/transactions/transaction_query_options.hxx>
 #include <couchbase/transactions/transaction_query_result.hxx>
 
 #include <stdexcept>
+#include <vector>
 
 namespace couchbase
 {
@@ -62,8 +69,8 @@ public:
    *
    * @see transactions::transaction_get_result for more complete example
    */
-  virtual auto get(const couchbase::collection& coll,
-                   const std::string& id) -> std::pair<error, transaction_get_result> = 0;
+  virtual auto get(const couchbase::collection& coll, const std::string& id)
+    -> std::pair<error, transaction_get_result> = 0;
 
   /**
    * Get a document copy from the selected server group.
@@ -91,6 +98,17 @@ public:
                                                        const std::string& id)
     -> std::pair<error, transaction_get_result> = 0;
 
+  virtual auto get_multi(const std::vector<transaction_get_multi_spec>& specs,
+                         const transaction_get_multi_options& options)
+    -> std::pair<error, std::optional<transaction_get_multi_result>> = 0;
+
+  virtual auto get_multi_replicas_from_preferred_server_group(
+    const std::vector<transaction_get_multi_replicas_from_preferred_server_group_spec>& specs,
+    const transaction_get_multi_replicas_from_preferred_server_group_options& options)
+    -> std::pair<
+      error,
+      std::optional<transaction_get_multi_replicas_from_preferred_server_group_result>> = 0;
+
   /**
    * Insert a document into a collection.
    *
@@ -109,9 +127,8 @@ public:
   template<typename Transcoder = codec::default_json_transcoder,
            typename Document,
            std::enable_if_t<!std::is_same_v<codec::encoded_value, Document>, bool> = true>
-  auto insert(const couchbase::collection& coll,
-              const std::string& id,
-              const Document& content) -> std::pair<error, transaction_get_result>
+  auto insert(const couchbase::collection& coll, const std::string& id, const Document& content)
+    -> std::pair<error, transaction_get_result>
   {
     codec::encoded_value data;
     try {
@@ -151,8 +168,8 @@ public:
   template<typename Transcoder = codec::default_json_transcoder,
            typename Document,
            std::enable_if_t<!std::is_same_v<codec::encoded_value, Document>, bool> = true>
-  auto replace(const transaction_get_result& doc,
-               const Document& content) -> std::pair<error, transaction_get_result>
+  auto replace(const transaction_get_result& doc, const Document& content)
+    -> std::pair<error, transaction_get_result>
   {
     codec::encoded_value data;
     try {

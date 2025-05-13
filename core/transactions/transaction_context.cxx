@@ -91,6 +91,12 @@ transaction_context::remaining() const -> std::chrono::nanoseconds
   return config_.timeout - expired_nanos;
 }
 
+auto
+transaction_context::expiry_time() const -> std::chrono::steady_clock::time_point
+{
+  return start_time_client_ + config_.timeout;
+}
+
 [[nodiscard]] auto
 transaction_context::has_expired_client_side() -> bool
 {
@@ -171,6 +177,33 @@ transaction_context::get_replica_from_preferred_server_group(const core::documen
 {
   if (current_attempt_context_) {
     return current_attempt_context_->get_replica_from_preferred_server_group(id, std::move(cb));
+  }
+  throw transaction_operation_failed(FAIL_OTHER, "no current attempt context");
+}
+
+void
+transaction_context::get_multi_replicas_from_preferred_server_group(
+  const std::vector<core::document_id>& ids,
+  transaction_get_multi_replicas_from_preferred_server_group_mode mode,
+  std::function<
+    void(std::exception_ptr,
+         std::optional<transaction_get_multi_replicas_from_preferred_server_group_result>)>&& cb)
+{
+  if (current_attempt_context_) {
+    return current_attempt_context_->get_multi_replicas_from_preferred_server_group(
+      ids, mode, std::move(cb));
+  }
+  throw transaction_operation_failed(FAIL_OTHER, "no current attempt context");
+}
+
+void
+transaction_context::get_multi(
+  const std::vector<core::document_id>& ids,
+  transaction_get_multi_mode mode,
+  std::function<void(std::exception_ptr, std::optional<transaction_get_multi_result>)>&& cb)
+{
+  if (current_attempt_context_) {
+    return current_attempt_context_->get_multi(ids, mode, std::move(cb));
   }
   throw transaction_operation_failed(FAIL_OTHER, "no current attempt context");
 }

@@ -217,6 +217,8 @@ set(couchbase_cxx_client_FILES
     core/impl/term_query.cxx
     core/impl/term_range_query.cxx
     core/impl/transaction_error_category.cxx
+    core/impl/transaction_get_multi_replicas_from_preferred_server_group_spec.cxx
+    core/impl/transaction_get_multi_spec.cxx
     core/impl/transaction_get_result.cxx
     core/impl/transaction_op_error_category.cxx
     core/impl/vector_query.cxx
@@ -417,6 +419,7 @@ set(couchbase_cxx_client_FILES
     core/transactions/cleanup_testing_hooks.cxx
     core/transactions/exceptions.cxx
     core/transactions/forward_compat.cxx
+    core/transactions/get_multi_orchestrator.cxx
     core/transactions/internal/doc_record.cxx
     core/transactions/result.cxx
     core/transactions/staged_mutation.cxx

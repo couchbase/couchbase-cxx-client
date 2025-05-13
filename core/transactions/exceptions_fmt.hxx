@@ -99,6 +99,9 @@ struct fmt::formatter<couchbase::core::transactions::external_exception> {
       case couchbase::core::transactions::TRANSACTION_ALREADY_COMMITTED:
         name = "TRANSACTION_ALREADY_COMMITTED";
         break;
+      case couchbase::core::transactions::DOCUMENT_UNRETRIEVABLE_EXCEPTION:
+        name = "DOCUMENT_UNRETRIEVABLE_EXCEPTION";
+        break;
     }
     return format_to(ctx.out(), "{}", name);
   }

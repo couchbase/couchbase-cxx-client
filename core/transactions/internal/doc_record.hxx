@@ -38,28 +38,33 @@ public:
   {
   }
 
-  [[nodiscard]] const std::string& bucket_name() const
+  [[nodiscard]] auto bucket_name() const -> const std::string&
   {
     return id_.bucket();
   }
 
-  [[nodiscard]] const std::string& id() const
+  [[nodiscard]] auto id() const -> const std::string&
   {
     return id_.key();
   }
 
-  [[nodiscard]] const std::string& collection_name() const
+  [[nodiscard]] auto scope_name() const -> const std::string&
+  {
+    return id_.scope();
+  }
+
+  [[nodiscard]] auto collection_name() const -> const std::string&
   {
     return id_.collection();
   }
 
-  [[nodiscard]] const core::document_id& document_id() const
+  [[nodiscard]] auto document_id() const -> const core::document_id&
   {
     return id_;
   }
 
   template<typename OStream>
-  friend OStream& operator<<(OStream& os, const doc_record& dr)
+  friend auto operator<<(OStream& os, const doc_record& dr) -> OStream&
   {
     os << "doc_record{";
     os << "bucket: " << dr.id_.bucket() << ",";
@@ -70,7 +75,13 @@ public:
     return os;
   }
 
+  friend auto operator==(const doc_record& doc, const core::document_id& id) -> bool;
+
 private:
   core::document_id id_;
 };
+
+auto
+operator==(const doc_record& doc, const core::document_id& id) -> bool;
+
 } // namespace couchbase::core::transactions
