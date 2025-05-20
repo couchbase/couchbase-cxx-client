@@ -42,6 +42,7 @@ target_link_libraries(
   hdr_histogram_static
   asio
   opentelemetry_trace
+  opentelemetry_exporter_ostream_logs
   opentelemetry_exporter_otlp_http
   opentelemetry_exporter_otlp_http_log)
 

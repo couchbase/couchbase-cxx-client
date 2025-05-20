@@ -38,6 +38,9 @@
 #include <opentelemetry/sdk/trace/simple_processor_factory.h>
 #include <opentelemetry/sdk/trace/tracer_provider_factory.h>
 
+#include <opentelemetry/exporters/ostream/log_record_exporter.h>
+#include <opentelemetry/exporters/ostream/log_record_exporter_factory.h>
+
 #include <opentelemetry/exporters/otlp/otlp_environment.h>
 #include <opentelemetry/exporters/otlp/otlp_http.h>
 #include <opentelemetry/exporters/otlp/otlp_http_exporter_factory.h>
@@ -71,22 +74,6 @@ init_otel_tracer()
     opentelemetry::sdk::trace::TracerProviderFactory::Create(std::move(processor), resource);
   opentelemetry::trace::Provider::SetTracerProvider(
     std::shared_ptr<opentelemetry::trace::TracerProvider>{ std::move(provider) });
-}
-
-void
-init_otel_logger()
-{
-  opentelemetry::exporter::otlp::OtlpHttpLogRecordExporterOptions logger_options;
-  auto exporter =
-    opentelemetry::exporter::otlp::OtlpHttpLogRecordExporterFactory::Create(logger_options);
-  auto processor =
-    opentelemetry::sdk::logs::SimpleLogRecordProcessorFactory::Create(std::move(exporter));
-  std::vector<std::unique_ptr<opentelemetry::sdk::logs::LogRecordProcessor>> processors;
-  processors.emplace_back(std::move(processor));
-  auto context = opentelemetry::sdk::logs::LoggerContextFactory::Create(std::move(processors));
-  std::shared_ptr<opentelemetry::logs::LoggerProvider> provider =
-    opentelemetry::sdk::logs::LoggerProviderFactory::Create(std::move(context));
-  opentelemetry::logs::Provider::SetLoggerProvider(provider);
 }
 
 class get_app : public CLI::App
@@ -123,6 +110,8 @@ public:
              json_lines_,
              "Use JSON Lines format (https://jsonlines.org) to print results.");
 
+    add_flag("--use-http-logger", use_http_logger_, "Use HTTP logger instead of ostream.");
+
     add_common_options(this, common_options_);
     allow_extras(true);
   }
@@ -130,13 +119,13 @@ public:
   [[nodiscard]] auto get_otel_tracer() const -> std::shared_ptr<opentelemetry::trace::Tracer>
   {
     auto provider = opentelemetry::trace::Provider::GetTracerProvider();
-    return provider->GetTracer("cbc", couchbase::core::meta::sdk_version());
+    return provider->GetTracer("cbc", couchbase::core::meta::sdk_semver());
   }
 
   [[nodiscard]] auto get_otel_logger() const -> std::shared_ptr<opentelemetry::logs::Logger>
   {
     auto provider = opentelemetry::logs::Provider::GetLoggerProvider();
-    return provider->GetLogger("cbc_logger", "cbc", OPENTELEMETRY_SDK_VERSION);
+    return provider->GetLogger("cbc_logger", "cbc", couchbase::core::meta::sdk_semver());
   }
 
   [[nodiscard]] auto execute() const -> int
@@ -204,7 +193,16 @@ public:
         auto get_options = common_get_options;
         get_options.parent_span(couchbase::core::tracing::otel_request_span::wrap(span));
         auto [err, resp] = collection.get(document_id, get_options).get();
-        logger->Error("error: {}", err.ec().message(), span->GetContext());
+        logger->Warn("this is the message error");
+        logger->Warn("this is the message error: {msg}",
+                     opentelemetry::common::MakeAttributes({
+                       { "msg", err.ec().message() },
+                     }));
+        logger->Warn("this is the message error: {msg} and some context",
+                     opentelemetry::common::MakeAttributes({
+                       { "msg", err.ec().message() },
+                     }), span->GetContext());
+        logger->Error("this is the message error: {}", err.ec().message(), span->GetContext());
 
         if (json_lines_) {
           print_result_json_line(bucket_name, scope_name, collection_name, document_id, err, resp);
@@ -313,6 +311,32 @@ private:
     }
   }
 
+  void init_otel_logger() const
+  {
+    using namespace opentelemetry;
+
+    if (use_http_logger_) {
+      exporter::otlp::OtlpHttpLogRecordExporterOptions logger_options;
+      auto exporter = exporter::otlp::OtlpHttpLogRecordExporterFactory::Create(logger_options);
+      auto processor = sdk::logs::SimpleLogRecordProcessorFactory::Create(std::move(exporter));
+      std::vector<std::unique_ptr<sdk::logs::LogRecordProcessor>> processors;
+      processors.emplace_back(std::move(processor));
+      auto context = sdk::logs::LoggerContextFactory::Create(std::move(processors));
+      std::shared_ptr<logs::LoggerProvider> provider =
+        sdk::logs::LoggerProviderFactory::Create(std::move(context));
+      logs::Provider::SetLoggerProvider(provider);
+    } else {
+      auto exporter = exporter::logs::OStreamLogRecordExporterFactory::Create(std::cerr);
+      auto processor = sdk::logs::SimpleLogRecordProcessorFactory::Create(std::move(exporter));
+      std::vector<std::unique_ptr<sdk::logs::LogRecordProcessor>> processors;
+      processors.emplace_back(std::move(processor));
+      auto context = sdk::logs::LoggerContextFactory::Create(std::move(processors));
+      std::shared_ptr<logs::LoggerProvider> provider =
+        sdk::logs::LoggerProviderFactory::Create(std::move(context));
+      logs::Provider::SetLoggerProvider(provider);
+    }
+  }
+
   common_options common_options_{};
 
   std::string bucket_name_{ default_bucket_name };
@@ -325,6 +349,8 @@ private:
   bool pretty_json_{ false };
   bool json_lines_{ false };
   bool verbose_{ false };
+
+  bool use_http_logger_{ false };
 
   std::vector<std::string> ids_{};
 };
