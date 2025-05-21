@@ -590,10 +590,10 @@ attempt_context_impl::get_multi(
   std::function<void(std::exception_ptr, std::optional<transaction_get_multi_result>)>&& cb)
 {
   if (op_list_.get_mode().is_query()) {
-    return cb(
-      std::make_exception_ptr(transaction_operation_failed(
-        FAIL_OTHER, FEATURE_NOT_AVAILABLE_EXCEPTION, "Get Multi is not supported in Query Mode")),
-      {});
+    return cb(std::make_exception_ptr(op_exception({ errc::transaction_op::feature_not_available },
+                                                   "Get Multi is not supported in Query Mode",
+                                                   FEATURE_NOT_AVAILABLE_EXCEPTION)),
+              {});
   }
 
   auto manager = std::make_shared<get_multi_orchestrator>(shared_from_this(), ids);
@@ -679,11 +679,11 @@ attempt_context_impl::get_multi_replicas_from_preferred_server_group(
          std::optional<transaction_get_multi_replicas_from_preferred_server_group_result>)>&& cb)
 {
   if (op_list_.get_mode().is_query()) {
-    return cb(std::make_exception_ptr(
-                transaction_operation_failed(FAIL_OTHER,
-                                             FEATURE_NOT_AVAILABLE_EXCEPTION,
-                                             "Get Multi Replica is not supported in Query Mode")),
-              {});
+    return cb(
+      std::make_exception_ptr(op_exception({ errc::transaction_op::feature_not_available },
+                                           "Get Multi Replica is not supported in Query Mode",
+                                           FEATURE_NOT_AVAILABLE_EXCEPTION)),
+      {});
   }
 
   auto manager = std::make_shared<get_multi_orchestrator>(shared_from_this(), ids);

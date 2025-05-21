@@ -152,6 +152,12 @@ public:
     return { ec, transaction_op_errc_from_external_exception(cause_) };
   }
 };
+
+/**
+ * op_exception represents errors raised from transactions operations that are _not_ wrapped in a
+ * transaction_operation_failed. They might be wrapped in a transaction_operation_failed eventually,
+ * or they might be raised directly from the lambda.
+ */
 class op_exception : public std::runtime_error
 {
 private:
@@ -162,6 +168,15 @@ public:
   explicit op_exception(transaction_op_error_context ctx,
                         external_exception cause = COUCHBASE_EXCEPTION)
     : std::runtime_error(ctx.ec().message())
+    , cause_(cause)
+    , ctx_(std::move(ctx))
+  {
+  }
+
+  explicit op_exception(transaction_op_error_context ctx,
+                        const std::string& what,
+                        external_exception cause = COUCHBASE_EXCEPTION)
+    : std::runtime_error(what)
     , cause_(cause)
     , ctx_(std::move(ctx))
   {
@@ -179,6 +194,10 @@ public:
 
   [[nodiscard]] auto cause() const -> external_exception
   {
+    // TODO(DC): This doesn't appear to be a 'cause' in the sense that we use it elsewhere, but more
+    // like the 'external_exception' equivalent of the error code inside the ctx. We should probably
+    // rename this or simplify this class. This is used to set the 'cause' field of
+    // transaction_operation_failed.
     return cause_;
   }
 
