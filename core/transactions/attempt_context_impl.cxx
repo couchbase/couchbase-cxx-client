@@ -595,9 +595,20 @@ attempt_context_impl::get_multi(
                                                    FEATURE_NOT_AVAILABLE_EXCEPTION)),
               {});
   }
-
-  auto manager = std::make_shared<get_multi_orchestrator>(shared_from_this(), ids);
-  manager->get_multi(mode, std::move(cb));
+  cache_error_async(cb, [self = shared_from_this(), ids, mode, cb]() mutable {
+    self->check_if_done(cb);
+    const auto manager = std::make_shared<get_multi_orchestrator>(self, ids);
+    manager->get_multi(
+      mode,
+      [self, cb = std::move(cb)](std::exception_ptr err,
+                                 std::optional<transaction_get_multi_result> res) mutable {
+        if (err) {
+          self->op_completed_with_error(std::move(cb), std::move(err));
+          return;
+        }
+        self->op_completed_with_callback(std::move(cb), std::move(res));
+      });
+  });
 }
 
 auto
@@ -686,8 +697,22 @@ attempt_context_impl::get_multi_replicas_from_preferred_server_group(
       {});
   }
 
-  auto manager = std::make_shared<get_multi_orchestrator>(shared_from_this(), ids);
-  manager->get_multi_replicas_from_preferred_server_group(mode, std::move(cb));
+  cache_error_async(cb, [self = shared_from_this(), ids, mode, cb]() mutable {
+    self->check_if_done(cb);
+    const auto manager = std::make_shared<get_multi_orchestrator>(self, ids);
+    manager->get_multi_replicas_from_preferred_server_group(
+      mode,
+      [self, cb = std::move(cb)](
+        std::exception_ptr err,
+        std::optional<transaction_get_multi_replicas_from_preferred_server_group_result>
+          res) mutable {
+        if (err) {
+          self->op_completed_with_error(std::move(cb), std::move(err));
+          return;
+        }
+        self->op_completed_with_callback(std::move(cb), std::move(res));
+      });
+  });
 }
 
 auto
