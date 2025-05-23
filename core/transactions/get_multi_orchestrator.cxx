@@ -460,13 +460,13 @@ public:
     auto handler = [spec, self = shared_from_this()](const std::exception_ptr& error,
                                                      std::optional<transaction_get_result> res) {
       if (res) {
-        auto err =
+        auto forward_compat_err =
           check_forward_compat(forward_compat_stage::GET_MULTI_GET, res->links().forward_compat());
-        if (err) {
-          self->handle_individual_document_error(spec, std::make_exception_ptr(err.value()));
-        } else {
-          self->handle_individual_document_success(spec, std::move(res));
+        if (forward_compat_err) {
+          self->invoke_callback(std::make_exception_ptr(forward_compat_err.value()));
+          return;
         }
+        self->handle_individual_document_success(spec, std::move(res));
       } else {
         self->handle_individual_document_error(spec, error);
       }
