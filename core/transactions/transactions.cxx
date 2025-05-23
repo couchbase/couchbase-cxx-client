@@ -29,6 +29,7 @@
 #include "internal/utils.hxx"
 
 #include <couchbase/error.hxx>
+#include <couchbase/fmt/error.hxx>
 
 #include <system_error>
 #include <utility>
@@ -174,19 +175,14 @@ wrap_public_api_run(transactions& txns,
 {
   return wrap_run(txns, config, max_attempts, [fn = std::forward<Handler>(fn)](const auto& ctx) {
     const couchbase::error err = fn(ctx);
-    if (err) {
-      if (err.ec() == errc::transaction_op::transaction_op_failed) {
-        if (auto cause = err.cause(); cause) {
-          throw transaction_operation_failed(FAIL_OTHER, err.message())
-            .cause(external_exception_from_transaction_op_errc(
-              errc::transaction_op(cause->ec().value())));
-        }
-      } else {
-        if (err.ec().category() == core::impl::transaction_op_category()) {
-          throw op_exception(err);
-        }
-        throw std::runtime_error(err.ec().message());
+    if (err && err.ec() != errc::transaction_op::transaction_op_failed) {
+      // We intentionally don't handle transaction_op_failed here, as we must have cached the
+      // transaction error internally already, which has the full context with the right error class
+      // etc.
+      if (err.ec().category() == core::impl::transaction_op_category()) {
+        throw op_exception(err);
       }
+      throw std::system_error(err.ec(), fmt::format("{}", err));
     }
   });
 }
