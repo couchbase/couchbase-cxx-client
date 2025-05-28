@@ -35,6 +35,7 @@ target_link_libraries(
   PRIVATE
   ${CMAKE_THREAD_LIBS_INIT}
   ${couchbase_cxx_client_DEFAULT_LIBRARY}
+  couchbase_observability
   CLI11
   Microsoft.GSL::GSL
   taocpp::json

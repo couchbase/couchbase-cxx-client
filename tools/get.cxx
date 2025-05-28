@@ -16,19 +16,22 @@
  */
 
 #include "get.hxx"
-#include "core/meta/version.hxx"
-#include "opentelemetry/trace/span_startoptions.h"
+
 #include "utils.hxx"
 
 #include <core/logger/logger.hxx>
+#include <core/meta/version.hxx>
 #include <core/tracing/otel_tracer.hxx>
 
 #include <couchbase/cluster.hxx>
 #include <couchbase/codec/raw_binary_transcoder.hxx>
 #include <couchbase/codec/tao_json_serializer.hxx>
 
+#include <observability/fmt_log_record_exporter.hxx>
+
 #include <opentelemetry/logs/provider.h>
 #include <opentelemetry/trace/provider.h>
+#include <opentelemetry/trace/span_startoptions.h>
 #include <opentelemetry/trace/tracer_provider.h>
 
 #include <opentelemetry/sdk/logs/logger.h>
@@ -54,7 +57,94 @@
 #include <couchbase/fmt/cas.hxx>
 #include <couchbase/fmt/error.hxx>
 
+#include <cstdint>
 #include <memory>
+
+#include <thread>
+#ifdef __linux__
+#include <sys/syscall.h>
+#endif
+#if defined(_WIN32)
+#include <processthreadsapi.h>
+#include <vector>
+#include <windows.h>
+#elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__linux__)
+#include <pthread.h>
+#endif
+
+namespace
+{
+inline auto
+thread_id() noexcept -> std::uint64_t
+{
+#ifdef _WIN32
+  return static_cast<std::uint64_t>(::GetCurrentThreadId());
+#elif defined(__linux__)
+  return static_cast<std::uint64_t>(::syscall(SYS_gettid));
+#elif __APPLE__
+  uint64_t tid;
+#ifdef MAC_OS_X_VERSION_MAX_ALLOWED
+  {
+#if (MAC_OS_X_VERSION_MAX_ALLOWED < 1060) || defined(__POWERPC__)
+    tid = pthread_mach_thread_np(pthread_self());
+#elif MAC_OS_X_VERSION_MIN_REQUIRED < 1060
+    if (&pthread_threadid_np) {
+      pthread_threadid_np(nullptr, &tid);
+    } else {
+      tid = pthread_mach_thread_np(pthread_self());
+    }
+#else
+    pthread_threadid_np(nullptr, &tid);
+#endif
+  }
+#else
+  pthread_threadid_np(nullptr, &tid);
+#endif
+  return static_cast<std::uint64_t>(tid);
+#else
+  return static_cast<std::uint64_t>(std::hash<std::thread::id>()(std::this_thread::get_id()));
+#endif
+}
+
+inline auto
+process_id() noexcept -> int
+{
+#ifdef _WIN32
+  return static_cast<int>(::GetCurrentProcessId());
+#else
+  return static_cast<int>(::getpid());
+#endif
+}
+
+inline auto
+thread_name() -> std::string
+{
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__linux__)
+  std::string name(100, '\0');
+  int res = ::pthread_getname_np(::pthread_self(), name.data(), name.size());
+  if (res == 0) {
+    name.resize(strnlen(name.data(), name.size()));
+    return name;
+  }
+  return {};
+#elif defined(_WIN32)
+  HANDLE hThread = GetCurrentThread();
+  PWSTR data = nullptr;
+  HRESULT hr = GetThreadDescription(hThread, &data);
+  if (SUCCEEDED(hr) && data) {
+    int len = WideCharToMultiByte(CP_UTF8, 0, data, -1, nullptr, 0, nullptr, nullptr);
+    std::string name(len - 1, '\0');
+    WideCharToMultiByte(CP_UTF8, 0, data, -1, name.data(), len, nullptr, nullptr);
+    LocalFree(data);
+    return name;
+  }
+  return {};
+#else
+  return {};
+#endif
+}
+
+} // namespace
 
 namespace cbc
 {
@@ -124,8 +214,17 @@ public:
 
   [[nodiscard]] auto get_otel_logger() const -> std::shared_ptr<opentelemetry::logs::Logger>
   {
-    auto provider = opentelemetry::logs::Provider::GetLoggerProvider();
-    return provider->GetLogger("cbc_logger", "cbc", couchbase::core::meta::sdk_semver());
+    thread_local auto logger = opentelemetry::logs::Provider::GetLoggerProvider()->GetLogger(
+      "cbc_logger",
+      "cxxcbc.cbc",
+      couchbase::core::meta::sdk_semver(),
+      "",
+      {
+        { "process_id", process_id() },
+        { "thread_id", thread_id() },
+        { "thread_name", thread_name() },
+      });
+    return logger;
   }
 
   [[nodiscard]] auto execute() const -> int
@@ -193,6 +292,7 @@ public:
         auto get_options = common_get_options;
         get_options.parent_span(couchbase::core::tracing::otel_request_span::wrap(span));
         auto [err, resp] = collection.get(document_id, get_options).get();
+        logger->Warn("");
         logger->Warn("this is the message error");
         logger->Warn("this is the message error: {msg}",
                      opentelemetry::common::MakeAttributes({
@@ -201,7 +301,8 @@ public:
         logger->Warn("this is the message error: {msg} and some context",
                      opentelemetry::common::MakeAttributes({
                        { "msg", err.ec().message() },
-                     }), span->GetContext());
+                     }),
+                     span->GetContext());
         logger->Error("this is the message error: {}", err.ec().message(), span->GetContext());
 
         if (json_lines_) {
@@ -319,14 +420,29 @@ private:
       exporter::otlp::OtlpHttpLogRecordExporterOptions logger_options;
       auto exporter = exporter::otlp::OtlpHttpLogRecordExporterFactory::Create(logger_options);
       auto processor = sdk::logs::SimpleLogRecordProcessorFactory::Create(std::move(exporter));
+      auto resource = sdk::resource::Resource::Create({
+        { "service.name", "cbc" },
+        { "service.version", couchbase::core::meta::sdk_semver() },
+      });
       std::vector<std::unique_ptr<sdk::logs::LogRecordProcessor>> processors;
       processors.emplace_back(std::move(processor));
-      auto context = sdk::logs::LoggerContextFactory::Create(std::move(processors));
+      auto context = sdk::logs::LoggerContextFactory::Create(std::move(processors), resource);
       std::shared_ptr<logs::LoggerProvider> provider =
         sdk::logs::LoggerProviderFactory::Create(std::move(context));
       logs::Provider::SetLoggerProvider(provider);
+
+      thread_local auto logger = opentelemetry::logs::Provider::GetLoggerProvider()->GetLogger(
+        "cbc_logger",
+        "cxxcbc",
+        couchbase::core::meta::sdk_semver(),
+        "",
+        {
+          { "process_id", process_id() },
+          { "thread_id", thread_id() },
+          { "thread_name", thread_name() },
+        });
     } else {
-      auto exporter = exporter::logs::OStreamLogRecordExporterFactory::Create(std::cerr);
+      auto exporter = std::make_unique<couchbase::observability::fmt_log_exporter>(stderr);
       auto processor = sdk::logs::SimpleLogRecordProcessorFactory::Create(std::move(exporter));
       std::vector<std::unique_ptr<sdk::logs::LogRecordProcessor>> processors;
       processors.emplace_back(std::move(processor));
