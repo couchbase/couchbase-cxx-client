@@ -20,11 +20,12 @@
 #include "core/error_context/key_value.hxx"
 #include "core/impl/get_replica.hxx"
 #include "core/impl/replica_utils.hxx"
-#include "core/logger/logger.hxx"
 #include "core/operations/document_get.hxx"
 #include "core/operations/operation_traits.hxx"
 #include "core/utils/movable_function.hxx"
 #include "couchbase/error_codes.hxx"
+
+#include "observability/logger.hxx"
 
 #include <memory>
 #include <mutex>
@@ -77,11 +78,12 @@ struct get_all_replicas_request {
         auto nodes =
           impl::effective_nodes(id, config, read_preference, origin.options().server_group);
         if (nodes.empty()) {
-          CB_LOG_DEBUG(
-            "Unable to retrieve replicas for \"{}\", server_group={}, number_of_replicas={}",
-            id,
-            origin.options().server_group,
-            config->num_replicas.value_or(0));
+          CB_LOG_DEBUG("Unable to retrieve replicas for {document_id}",
+                       opentelemetry::common::MakeAttributes({
+                         { "document_id", id },
+                         { "server_group", origin.options().server_group },
+                         { "number_of_replicas", config->num_replicas.value_or(0) },
+                       }));
           return h(response_type{
             make_key_value_error_context(errc::key_value::document_irretrievable, id) });
         }

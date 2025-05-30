@@ -24,7 +24,6 @@
 #include "core/error_context/key_value_error_map_info.hxx"
 #include "core/error_context/key_value_status_code.hxx"
 #include "core/io/mcbp_message.hxx"
-#include "core/logger/logger.hxx"
 #include "core/mcbp/codec.hxx"
 #include "core/metrics/meter_wrapper.hxx"
 #include "core/protocol/client_opcode.hxx"
@@ -43,6 +42,8 @@
 #include "ping_collector.hxx"
 #include "protocol/cmd_get_cluster_config.hxx"
 #include "retry_orchestrator.hxx"
+
+#include "observability/logger.hxx"
 
 #include <couchbase/error_codes.hxx>
 #include <couchbase/retry_reason.hxx>
@@ -240,13 +241,20 @@ public:
     auto handle_error = [is_retry, req](std::error_code ec) {
       // We only want to log an error on retries if the error isn't cancelled.
       if (!is_retry || (is_retry && ec != errc::common::request_canceled)) {
-        CB_LOG_ERROR("reschedule failed, failing request ({})", ec.message());
+        CB_LOG_ERROR("reschedule failed, failing request",
+                     opentelemetry::common::MakeAttributes({
+                       { "ec", ec.message() },
+                     }));
       }
 
       req->try_callback({}, ec);
     };
 
-    CB_LOG_DEBUG("request being re-queued. opaque={}, opcode={}", req->opaque_, req->command_);
+    CB_LOG_DEBUG("request being re-queued",
+                 opentelemetry::common::MakeAttributes({
+                   { "opaque", req->opaque_ },
+                   { "opcode", fmt::format("{}", req->command_) },
+                 }));
 
     auto session = route_request(req);
     if (!session || !session->has_config()) {
@@ -267,7 +275,10 @@ public:
     req->opaque_ = session->next_opaque();
     auto data = codec_.encode_packet(*req);
     if (!data) {
-      CB_LOG_DEBUG("unable to encode packet. ec={}", data.error().message());
+      CB_LOG_DEBUG("unable to encode packet",
+                   opentelemetry::common::MakeAttributes({
+                     { "ec", data.error().message() },
+                   }));
       handle_error(data.error());
       return data.error();
     }
@@ -392,33 +403,36 @@ public:
 
         if (auto found_kv_node_index = ptr->first; found_kv_node_index != kv_node_index) {
           if (auto current = sessions_.find(kv_node_index); current == sessions_.end()) {
-            CB_LOG_WARNING(
-              R"({} KV node index mismatch: config rev={} states that address="{}:{}" should be at idx={}, )"
-              R"(but it is at idx={} ("{}"). Moving session to idx={}.)",
-              log_prefix_,
-              config_->rev_str(),
-              hostname,
-              port,
-              kv_node_index,
-              found_kv_node_index,
-              ptr->second.id(),
-              kv_node_index);
+            CB_LOG_WARNING("KV node index mismatch: config {rev} states that {address} should be "
+                           "at index {excpected_index}, but it is at {actual_index} "
+                           "({node_id}). Moving session to index {target_index}.",
+                           opentelemetry::common::MakeAttributes({
+                             { "log_prefix", log_prefix_ },
+                             { "rev", config_->rev_str() },
+                             { "address", fmt::format("{}:{}", hostname, port) },
+                             { "expected_index", kv_node_index },
+                             { "actual_index", found_kv_node_index },
+                             { "node_id", ptr->second.id() },
+                             { "target_index", kv_node_index },
+                           }));
             sessions_.insert_or_assign(kv_node_index, std::move(ptr->second));
             sessions_.erase(ptr);
           } else {
-            CB_LOG_WARNING(
-              R"({} KV node index mismatch: config rev={} states that address="{}:{}" should be at idx={}, )"
-              R"(but it is at idx={} ("{}"). Slot with idx={} is holds session with address="{}" ("{}"), swapping them.)",
-              log_prefix_,
-              config_->rev_str(),
-              hostname,
-              port,
-              kv_node_index,
-              found_kv_node_index,
-              ptr->second.id(),
-              kv_node_index,
-              current->second.bootstrap_address(),
-              current->second.id());
+            CB_LOG_WARNING("KV node index mismatch: config {rev} states that {address} should be "
+                           "at index {expected_index}, but it is at {actual_index} ({node_id}). "
+                           "Slot with index {target_index} is holds session with {target_address} "
+                           "({target_node_id}), swapping them.)",
+                           opentelemetry::common::MakeAttributes({
+                             { "log_prefix", log_prefix_ },
+                             { "rev", config_->rev_str() },
+                             { "address", fmt::format("{}:{}", hostname, port) },
+                             { "expected_index", kv_node_index },
+                             { "actual_index", found_kv_node_index },
+                             { "node_id", ptr->second.id() },
+                             { "target_index", kv_node_index },
+                             { "target_address", current->second.bootstrap_address() },
+                             { "target_node_id", current->second.id() },
+                           }));
             std::swap(current->second, ptr->second);
           }
         }
@@ -439,13 +453,14 @@ public:
                              known_features_)
           : io::mcbp_session(
               client_id_, node.node_uuid, ctx_, origin, state_listener_, name_, known_features_);
-      CB_LOG_DEBUG(R"({} rev={}, restart idx={}, session="{}", address="{}:{}")",
-                   log_prefix_,
-                   config_->rev_str(),
-                   node.index,
-                   session.id(),
-                   hostname,
-                   port);
+      CB_LOG_DEBUG("config {rev}, restart session {session_id}",
+                   opentelemetry::common::MakeAttributes({
+                     { "log_prefix", log_prefix_ },
+                     { "rev", config_->rev_str() },
+                     { "index", node.index },
+                     { "session_id", session.id() },
+                     { "address", fmt::format("{}:{}", hostname, port) },
+                   }));
       session.bootstrap(
         [self = shared_from_this(), session](std::error_code err,
                                              topology::configuration cfg) mutable {
@@ -471,12 +486,16 @@ public:
     const std::scoped_lock lock(sessions_mutex_);
     for (auto ptr = sessions_.cbegin(); ptr != sessions_.cend();) {
       if (ptr->second.id() == id) {
-        CB_LOG_DEBUG(R"({} removed session id="{}", address="{}", bootstrap_address="{}:{}")",
-                     log_prefix_,
-                     ptr->second.id(),
-                     ptr->second.remote_address(),
-                     ptr->second.bootstrap_hostname(),
-                     ptr->second.bootstrap_port());
+        CB_LOG_DEBUG(
+          "removed session {session_id}, address={address}, bootstrap_address={bootstrap_address}",
+          opentelemetry::common::MakeAttributes({
+            { "log_prefix", log_prefix_ },
+            { "session_id", ptr->second.id() },
+            { "address", ptr->second.remote_address() },
+            { "bootstrap_address",
+              fmt::format(
+                "{}:{}", ptr->second.bootstrap_hostname(), ptr->second.bootstrap_port()) },
+          }));
         ptr = sessions_.erase(ptr);
         found = true;
       } else {
@@ -504,10 +523,12 @@ public:
     new_session.bootstrap([self = shared_from_this(), new_session, h = std::move(handler)](
                             std::error_code ec, topology::configuration cfg) mutable {
       if (ec) {
-        CB_LOG_WARNING(R"({} failed to bootstrap session ec={}, bucket="{}")",
-                       new_session.log_prefix(),
-                       ec.message(),
-                       self->name_);
+        CB_LOG_WARNING("failed to bootstrap session",
+                       opentelemetry::common::MakeAttributes({
+                         { "log_prefix", new_session.log_prefix() },
+                         { "ec", ec.message() },
+                         { "bucket", self->name_ },
+                       }));
         self->remove_session(new_session.id());
       } else {
         const std::size_t this_index = new_session.index();
@@ -576,8 +597,11 @@ public:
       std::swap(deferred_commands_, commands);
     }
     if (!commands.empty()) {
-      CB_LOG_TRACE(
-        R"({} draining deferred operation queue, size={})", log_prefix_, commands.size());
+      CB_LOG_TRACE("draining deferred operation queue",
+                   opentelemetry::common::MakeAttributes({
+                     { "log_prefix", log_prefix_ },
+                     { "log_prefix", commands.size() },
+                   }));
     }
     while (!commands.empty()) {
       commands.front()(ec);
@@ -594,9 +618,12 @@ public:
     {
       const std::scoped_lock lock(sessions_mutex_);
       if (sessions_.empty()) {
-        CB_LOG_WARNING(R"({} unable to find connected session (sessions_ is empty), retry in {})",
-                       log_prefix_,
-                       heartbeat_interval_);
+        CB_LOG_WARNING(
+          "unable to find connected session (sessions_ is empty), retry in {backoff_duration}}",
+          opentelemetry::common::MakeAttributes({
+            { "log_prefix", log_prefix_ },
+            { "backoff_duration", fmt::format("{}", heartbeat_interval_) },
+          }));
         return;
       }
 
@@ -616,9 +643,12 @@ public:
       req.opaque(session->next_opaque());
       session->write_and_flush(req.data());
     } else {
-      CB_LOG_WARNING(R"({} unable to find connected session with GCCCP support, retry in {})",
-                     log_prefix_,
-                     heartbeat_interval_);
+      CB_LOG_WARNING(
+        "unable to find connected session with GCCCP support, retry in {backoff_interval}",
+        opentelemetry::common::MakeAttributes({
+          { "log_prefix", log_prefix_ },
+          { "backoff_duration", fmt::format("{}", heartbeat_interval_) },
+        }));
     }
   }
 
@@ -712,36 +742,52 @@ public:
       if (config.vbmap && config.vbmap->empty()) {
         if (!config_) {
           CB_LOG_WARNING(
-            "{} will not initialize configuration rev={} because config has an empty partition map",
-            log_prefix_,
-            config.rev_str());
+            "will not initialize configuration {rev} because config has an empty partition map",
+            opentelemetry::common::MakeAttributes({
+              { "log_prefix", log_prefix_ },
+              { "rev", config.rev_str() },
+            }));
         } else {
-          CB_LOG_WARNING("{} will not update the configuration old={} -> new={}, because new "
+          CB_LOG_WARNING("will not update the configuration {old_rev} -> {new_rev}, because new "
                          "config has an empty partition map",
-                         log_prefix_,
-                         config_->rev_str(),
-                         config.rev_str());
+                         opentelemetry::common::MakeAttributes({
+                           { "log_prefix", log_prefix_ },
+                           { "old_rev", config_->rev_str() },
+                           { "new_rev", config.rev_str() },
+                         }));
         }
         // this is to make sure we can get a correct config soon
         poll_config(errc::network::configuration_not_available);
         return;
       }
       if (!config_) {
-        CB_LOG_DEBUG("{} initialize configuration rev={}", log_prefix_, config.rev_str());
+        CB_LOG_DEBUG("initialize configuration {rev}",
+                     opentelemetry::common::MakeAttributes({
+                       { "log_prefix", log_prefix_ },
+                       { "rev", config.rev_str() },
+                     }));
       } else if (config.force) {
-        CB_LOG_DEBUG("{} forced to accept configuration rev={}", log_prefix_, config.rev_str());
+        CB_LOG_DEBUG("forced to accept configuration {rev}",
+                     opentelemetry::common::MakeAttributes({
+                       { "log_prefix", log_prefix_ },
+                       { "rev", config.rev_str() },
+                     }));
       } else if (!config.vbmap) {
-        CB_LOG_DEBUG("{} will not update the configuration old={} -> new={}, because new config "
+        CB_LOG_DEBUG("will not update the configuration {old_rev} -> {new_rev}, because new config "
                      "does not have partition map",
-                     log_prefix_,
-                     config_->rev_str(),
-                     config.rev_str());
+                     opentelemetry::common::MakeAttributes({
+                       { "log_prefix", log_prefix_ },
+                       { "old_rev", config_->rev_str() },
+                       { "new_rev", config.rev_str() },
+                     }));
         return;
       } else if (*config_ < config) {
-        CB_LOG_DEBUG("{} will update the configuration old={} -> new={}",
-                     log_prefix_,
-                     config_->rev_str(),
-                     config.rev_str());
+        CB_LOG_DEBUG("will update the configuration {old_rev} -> {new_rev}",
+                     opentelemetry::common::MakeAttributes({
+                       { "log_prefix", log_prefix_ },
+                       { "old_rev", config_->rev_str() },
+                       { "new_rev", config.rev_str() },
+                     }));
       } else {
         return;
       }
@@ -791,14 +837,17 @@ public:
         for (auto it = sessions_.begin(); it != sessions_.end(); ++it) {
           if (it->second.bootstrap_hostname() == hostname &&
               it->second.bootstrap_port_number() == port) {
-            CB_LOG_DEBUG(R"({} rev={}, preserve session="{}", address="{}:{}", index={}->{})",
-                         log_prefix_,
-                         config.rev_str(),
-                         it->second.id(),
-                         it->second.bootstrap_hostname(),
-                         it->second.bootstrap_port(),
-                         it->first,
-                         next_index);
+            CB_LOG_DEBUG(
+              R"(config {rev}, preserve session {session_id} {old_index} -> {new_index})",
+              opentelemetry::common::MakeAttributes(
+                { { "log_prefix", log_prefix_ },
+                  { "rev", config.rev_str() },
+                  { "session_id", it->second.id() },
+                  { "address",
+                    fmt::format(
+                      "{}:{}", it->second.bootstrap_hostname(), it->second.bootstrap_port()) },
+                  { "old_index", it->first },
+                  { "new_index", next_index } }));
             new_sessions.insert_or_assign(next_index, std::move(it->second));
             reused_session = true;
             ++next_index;
@@ -824,25 +873,28 @@ public:
                                known_features_)
             : io::mcbp_session(
                 client_id_, node.node_uuid, ctx_, origin, state_listener_, name_, known_features_);
-        CB_LOG_DEBUG(R"({} rev={}, add session="{}", address="{}:{}", index={})",
-                     log_prefix_,
-                     config.rev_str(),
-                     session.id(),
-                     hostname,
-                     port,
-                     node.index);
+        CB_LOG_DEBUG("config {rev}, add session {session_id}",
+                     opentelemetry::common::MakeAttributes({
+                       { "log_prefix", log_prefix_ },
+                       { "rev", config.rev_str() },
+                       { "session_id", session.id() },
+                       { "address", fmt::format("{}:{}", hostname, port) },
+                       { "index", node.index },
+                     }));
         session.bootstrap(
           [self = shared_from_this(), session, idx = next_index](
             std::error_code err, topology::configuration cfg) mutable {
             if (err) {
               CB_LOG_WARNING(
-                R"({} failed to bootstrap session="{}", address="{}:{}", index={}, ec={})",
-                session.log_prefix(),
-                session.id(),
-                session.bootstrap_hostname(),
-                session.bootstrap_port(),
-                idx,
-                err.message());
+                "failed to bootstrap session {session_id}",
+                opentelemetry::common::MakeAttributes({
+                  { "log_prefix", session.log_prefix() },
+                  { "session_id", session.id() },
+                  { "address",
+                    fmt::format("{}:{}", session.bootstrap_hostname(), session.bootstrap_port()) },
+                  { "index", idx },
+                  { "ec", err.message() },
+                }));
               return self->remove_session(session.id());
             }
             self->update_config(std::move(cfg));
@@ -859,13 +911,16 @@ public:
       std::swap(sessions_, new_sessions);
 
       for (auto it = new_sessions.begin(); it != new_sessions.end(); ++it) {
-        CB_LOG_DEBUG(R"({} rev={}, drop session="{}", address="{}:{}", index={})",
-                     log_prefix_,
-                     config.rev_str(),
-                     it->second.id(),
-                     it->second.bootstrap_hostname(),
-                     it->second.bootstrap_port(),
-                     it->first);
+        CB_LOG_DEBUG(
+          "config {rev}, drop session {session_id}",
+          opentelemetry::common::MakeAttributes({
+            { "log_prefix", log_prefix_ },
+            { "rev", config.rev_str() },
+            { "session_id", it->second.id() },
+            { "address",
+              fmt::format("{}:{}", it->second.bootstrap_hostname(), it->second.bootstrap_port()) },
+            { "index", it->first },
+          }));
         asio::post(asio::bind_executor(ctx_, [session = std::move(it->second)]() mutable {
           return session.stop(retry_reason::do_not_retry);
         }));

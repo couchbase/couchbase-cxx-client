@@ -493,6 +493,8 @@ if(WIN32 OR NOT COUCHBASE_CXX_CLIENT_BUILD_SHARED)
   set(COUCHBASE_CXX_CLIENT_VARIANT couchbase_cxx_client_static)
 endif()
 
+add_subdirectory(observability)
+
 foreach(TARGET ${couchbase_cxx_client_LIBRARIES})
   include(cmake/DetectStandardFilesystem.cmake)
   couchbase_cxx_check_filesystem(
@@ -535,6 +537,10 @@ foreach(TARGET ${couchbase_cxx_client_LIBRARIES})
             jsonsl
             couchbase_backtrace
             hdr_histogram_static)
+
+  target_link_libraries(
+    ${TARGET}
+    PUBLIC couchbase_observability)
 
   if(WIN32)
     target_link_libraries(${TARGET} PRIVATE iphlpapi)
