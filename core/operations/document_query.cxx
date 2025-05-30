@@ -237,7 +237,9 @@ query_request::make_response(error_context::query&& ctx,
       response.ctx.ec = errc::common::parsing_failure;
       return response;
     }
-    response.meta.request_id = payload.at("requestID").get_string();
+    if (const auto* i = payload.find("requestID"); i != nullptr) {
+      response.meta.request_id = i->get_string();
+    }
 
     if (const auto* i = payload.find("clientContextID"); i != nullptr) {
       response.meta.client_context_id = i->get_string();

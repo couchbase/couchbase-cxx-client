@@ -59,6 +59,12 @@ TEST_CASE("integration: trivial non-data query", "[integration]")
     couchbase::core::operations::query_request req{ R"(SELECT "ruby rules" AS greeting)" };
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
+    REQUIRE(resp.rows.size() == 1);
+    REQUIRE(tao::json::from_string(resp.rows[0]) ==
+            tao::json::value{ { "greeting", "ruby rules" } });
+    REQUIRE_FALSE(resp.meta.client_context_id.empty());
+    REQUIRE_FALSE(resp.meta.request_id.empty());
+    REQUIRE(resp.meta.status == "success");
   }
 }
 
