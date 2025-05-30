@@ -15,6 +15,8 @@
  *   limitations under the License.
  */
 
+#pragma once
+
 #include <opentelemetry/logs/log_record.h>
 #include <opentelemetry/sdk/logs/exporter.h>
 

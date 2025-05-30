@@ -46,6 +46,8 @@ struct program_arguments {
   static auto load_from_environment() -> program_arguments
   {
     program_arguments arguments;
+
+    // NOLINTBEGIN(concurrency-mt-unsafe)
     if (const auto* val = getenv("CB_CONNECTION_STRING"); val != nullptr && val[0] != '\0') {
       arguments.connection_string = val;
     }
@@ -100,12 +102,14 @@ struct program_arguments {
         arguments.transaction_timeout = std::chrono::seconds{ int_val };
       }
     }
+    // NOLINTEND(concurrency-mt-unsafe)
+
     return arguments;
   }
 };
 
-std::string
-random_text(std::size_t length)
+auto
+random_text(std::size_t length) -> std::string
 {
   std::string alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
   static thread_local std::mt19937_64 gen{ std::random_device()() };
@@ -161,7 +165,7 @@ run_workload(const std::shared_ptr<couchbase::transactions::transactions>& trans
     for (std::size_t i = 0; i < arguments.number_of_transactions; ++i) {
       transactions->run(
         [&collection, &document_ids, &arguments, &errors](
-          std::shared_ptr<couchbase::transactions::async_attempt_context> attempt)
+          const std::shared_ptr<couchbase::transactions::async_attempt_context>& attempt)
           -> couchbase::error {
           std::vector<std::string> selected_keys;
           std::sample(document_ids.begin(),
@@ -172,12 +176,14 @@ run_workload(const std::shared_ptr<couchbase::transactions::transactions>& trans
 
           for (const auto& id : selected_keys) {
             attempt->get(
-              collection, id, [attempt, &collection, id, &arguments, &errors](auto ctx, auto res) {
+              collection,
+              id,
+              [attempt, &collection, id, &arguments, &errors](const auto& ctx, auto res) {
                 if (ctx.ec() == couchbase::errc::transaction_op::document_not_found) {
                   attempt->insert(collection,
                                   id,
                                   generate_document(arguments.document_body_size),
-                                  [&errors](auto ctx, auto) {
+                                  [&errors](const auto& ctx, const auto& /* res */) {
                                     if (ctx.ec()) {
                                       errors[ctx.ec().message()]++;
                                     }
@@ -185,9 +191,9 @@ run_workload(const std::shared_ptr<couchbase::transactions::transactions>& trans
                 } else if (ctx.ec()) {
                   errors[ctx.ec().message()]++;
                 } else {
-                  attempt->replace(res,
+                  attempt->replace(std::move(res),
                                    generate_document(arguments.document_body_size),
-                                   [&errors](auto ctx, auto) {
+                                   [&errors](const auto& ctx, const auto& /* res */) {
                                      if (ctx.ec()) {
                                        errors[ctx.ec().message()]++;
                                      }
@@ -198,18 +204,18 @@ run_workload(const std::shared_ptr<couchbase::transactions::transactions>& trans
           return {};
         },
         [&promise = results[i]](auto err, auto result) {
-          promise.set_value({ err, result });
+          promise.set_value({ std::move(err), std::move(result) });
         });
     }
 
     auto schedule_end = std::chrono::system_clock::now();
     fmt::print(
-      "\rScheduled {} transactions with {} GET+[INSERT|REPLACE] operations in {}ms ({}us, {}s)\n",
+      "\rScheduled {} transactions with {} GET+[INSERT|REPLACE] operations in {} ({}, {})\n",
       arguments.number_of_transactions,
       arguments.number_of_keys_per_transaction,
-      std::chrono::duration_cast<std::chrono::milliseconds>(schedule_end - schedule_start).count(),
-      std::chrono::duration_cast<std::chrono::microseconds>(schedule_end - schedule_start).count(),
-      std::chrono::duration_cast<std::chrono::seconds>(schedule_end - schedule_start).count());
+      std::chrono::duration_cast<std::chrono::milliseconds>(schedule_end - schedule_start),
+      std::chrono::duration_cast<std::chrono::microseconds>(schedule_end - schedule_start),
+      std::chrono::duration_cast<std::chrono::seconds>(schedule_end - schedule_start));
 
     std::map<std::string, std::size_t> transactions_errors;
     auto exec_start = std::chrono::system_clock::now();
@@ -224,16 +230,15 @@ run_workload(const std::shared_ptr<couchbase::transactions::transactions>& trans
     }
     auto exec_end = std::chrono::system_clock::now();
 
-    fmt::print(
-      "\rExecuted {} transactions with {} GET+[INSERT|REPLACE] operations in {}ms ({}us, {}s), "
-      "average latency: {}ms\n",
-      arguments.number_of_transactions,
-      arguments.number_of_keys_per_transaction,
-      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::microseconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::seconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start).count() /
-        arguments.number_of_keys_per_transaction);
+    fmt::print("\rExecuted {} transactions with {} GET+[INSERT|REPLACE] operations in {} ({}, {}), "
+               "average latency: {}\n",
+               arguments.number_of_transactions,
+               arguments.number_of_keys_per_transaction,
+               std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start),
+               std::chrono::duration_cast<std::chrono::microseconds>(exec_end - exec_start),
+               std::chrono::duration_cast<std::chrono::seconds>(exec_end - exec_start),
+               std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start) /
+                 arguments.number_of_keys_per_transaction);
     if (transactions_errors.empty()) {
       fmt::print("\tAll transactions completed successfully\n");
     } else {
@@ -260,8 +265,8 @@ run_workload(const std::shared_ptr<couchbase::transactions::transactions>& trans
              std::chrono::duration_cast<std::chrono::seconds>(end - start).count());
 }
 
-int
-main()
+auto
+main() -> int
 {
   auto arguments = program_arguments::load_from_environment();
 

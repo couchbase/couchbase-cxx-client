@@ -17,8 +17,8 @@
 
 #pragma once
 
-#include "core/logger/logger.hxx"
 #include "core/protocol/client_opcode_fmt.hxx"
+#include "observability/logger.hxx"
 
 #include <couchbase/best_effort_retry_strategy.hxx>
 #include <couchbase/fmt/retry_reason.hxx>
@@ -33,8 +33,8 @@ namespace priv
 {
 template<class Command>
 auto
-cap_duration(std::chrono::milliseconds uncapped,
-             std::shared_ptr<Command> command) -> std::chrono::milliseconds
+cap_duration(std::chrono::milliseconds uncapped, std::shared_ptr<Command> command)
+  -> std::chrono::milliseconds
 {
   auto theoretical_deadline = std::chrono::steady_clock::now() + uncapped;
   auto absolute_deadline = command->deadline.expiry();
@@ -59,15 +59,18 @@ retry_with_duration(std::shared_ptr<Manager> manager,
 {
   command->request.retries.record_retry_attempt(reason);
   CB_LOG_TRACE(
-    R"({} retrying operation {} (duration={}ms, id="{}", vbucket_id={}, reason={}, attempts={}, last_dispatched_to="{}"))",
-    manager->log_prefix(),
-    decltype(command->request)::encoded_request_type::body_type::opcode,
-    duration.count(),
-    command->id_,
-    command->request.partition,
-    reason,
-    command->request.retries.retry_attempts(),
-    command->session_ ? command->session_->remote_address() : "");
+    "retrying operation {opcode}",
+    opentelemetry::common::MakeAttributes({
+      { "log_prefix", manager->log_prefix() },
+      { "opcode",
+        fmt::format("{}", decltype(command->request)::encoded_request_type::body_type::opcode) },
+      { "duration", fmt::format("{}", duration) },
+      { "id", command->id_ },
+      { "vbucket_id", command->request.partition },
+      { "reason", fmt::format("{}", reason) },
+      { "attempts", command->request.retries.retry_attempts() },
+      { "last_dispatched_to", command->session_ ? command->session_->remote_address() : "" },
+    }));
   manager->schedule_for_retry(command, duration);
 }
 
@@ -95,14 +98,17 @@ maybe_retry(std::shared_ptr<Manager> manager,
       manager, command, reason, priv::cap_duration(action.duration(), command));
   }
 
-  CB_LOG_TRACE(R"({} not retrying operation {} (id="{}", reason={}, attempts={}, ec={} ({})))",
-               manager->log_prefix(),
-               decltype(command->request)::encoded_request_type::body_type::opcode,
-               command->id_,
-               reason,
-               command->request.retries.retry_attempts(),
-               ec.value(),
-               ec.message());
+  CB_LOG_TRACE(
+    "not retrying operation {}",
+    opentelemetry::common::MakeAttributes({
+      { "log_prefix", manager->log_prefix() },
+      { "opcode",
+        fmt::format("{}", decltype(command->request)::encoded_request_type::body_type::opcode) },
+      { "id", command->id_ },
+      { "reason", fmt::format("{}", reason) },
+      { "attempts", command->request.retries.retry_attempts() },
+      { "ec", ec.message() },
+    }));
   return command->invoke_handler(ec);
 }
 

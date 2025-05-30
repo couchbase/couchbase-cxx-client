@@ -17,7 +17,7 @@
 
 #include "otel_tracer.hxx"
 
-#include "../meta/version.hxx"
+#include "core/meta/version.hxx"
 
 #if defined(__GNUC__)
 #pragma GCC diagnostic push

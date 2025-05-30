@@ -19,7 +19,7 @@
 
 #include <couchbase/metrics/meter.hxx>
 
-namespace couchbase::core::metrics
+namespace couchbase::observability
 {
 
 class otel_meter_impl;
@@ -33,4 +33,4 @@ public:
 private:
   std::unique_ptr<otel_meter_impl> impl_;
 };
-} // namespace couchbase::core::metrics
+} // namespace couchbase::observability
