@@ -406,7 +406,6 @@ set(couchbase_cxx_client_FILES
     core/search_query_options.cxx
     core/seed_config.cxx
     core/topology/configuration.cxx
-    core/tracing/otel_tracer.cxx
     core/tracing/threshold_logging_tracer.cxx
     core/tracing/tracer_wrapper.cxx
     core/transactions/active_transaction_record.cxx
@@ -494,6 +493,8 @@ if(WIN32 OR NOT COUCHBASE_CXX_CLIENT_BUILD_SHARED)
   set(COUCHBASE_CXX_CLIENT_VARIANT couchbase_cxx_client_static)
 endif()
 
+add_subdirectory(observability)
+
 foreach(TARGET ${couchbase_cxx_client_LIBRARIES})
   include(cmake/DetectStandardFilesystem.cmake)
   couchbase_cxx_check_filesystem(
@@ -535,8 +536,11 @@ foreach(TARGET ${couchbase_cxx_client_LIBRARIES})
             snappy
             jsonsl
             couchbase_backtrace
-            opentelemetry_api
             hdr_histogram_static)
+
+  target_link_libraries(
+    ${TARGET}
+    PUBLIC couchbase_observability)
 
   if(WIN32)
     target_link_libraries(${TARGET} PRIVATE iphlpapi)
@@ -588,7 +592,6 @@ endif()
 
 option(COUCHBASE_CXX_CLIENT_BUILD_TOOLS "Build tools" ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT})
 if(COUCHBASE_CXX_CLIENT_BUILD_TOOLS)
-  add_subdirectory(observability)
   add_subdirectory(tools)
 endif()
 

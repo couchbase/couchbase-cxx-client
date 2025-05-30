@@ -25,21 +25,17 @@
 #include <opentelemetry/metrics/provider.h>
 
 #include <algorithm>
-#include <iostream>
-#include <thread>
-#include <utility>
 
-namespace couchbase::core::metrics
+namespace couchbase::observability
 {
 namespace
 {
 class otel_sync_histogram
 {
 public:
-  otel_sync_histogram(
-    opentelemetry::nostd::shared_ptr<opentelemetry::metrics::Histogram<std::uint64_t>>
-      histogram_counter)
-    : histogram_counter_(histogram_counter)
+  explicit otel_sync_histogram(
+    std::shared_ptr<opentelemetry::metrics::Histogram<std::uint64_t>> histogram_counter)
+    : histogram_counter_(std::move(histogram_counter))
   {
   }
 
@@ -51,8 +47,7 @@ public:
   }
 
 private:
-  opentelemetry::nostd::shared_ptr<opentelemetry::metrics::Histogram<std::uint64_t>>
-    histogram_counter_;
+  std::shared_ptr<opentelemetry::metrics::Histogram<std::uint64_t>> histogram_counter_;
   std::mutex mutex_;
 };
 
@@ -60,7 +55,7 @@ class otel_value_recorder : public couchbase::metrics::value_recorder
 {
 public:
   explicit otel_value_recorder(
-    nostd::shared_ptr<metrics_api::Histogram<std::uint64_t>> histogram_counter,
+    std::shared_ptr<metrics_api::Histogram<std::uint64_t>> histogram_counter,
     const std::map<std::string, std::string>& tags)
     : histogram_counter_(histogram_counter)
     , tags_(tags)
@@ -143,4 +138,4 @@ otel_meter::get_value_recorder(const std::string& name,
       { name, std::make_shared<otel_value_recorder>(it.first->second->histogram_counter(), tags) })
     ->second;
 }
-} // namespace couchbase::core::metrics
+} // namespace couchbase::observability

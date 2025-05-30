@@ -35,17 +35,12 @@ target_link_libraries(
   PRIVATE
   ${CMAKE_THREAD_LIBS_INIT}
   ${couchbase_cxx_client_DEFAULT_LIBRARY}
-  couchbase_observability
   CLI11
   Microsoft.GSL::GSL
   taocpp::json
   spdlog::spdlog
   hdr_histogram_static
-  asio
-  opentelemetry_trace
-  opentelemetry_exporter_ostream_logs
-  opentelemetry_exporter_otlp_http
-  opentelemetry_exporter_otlp_http_log)
+  asio)
 
 if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND WIN32)
   # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings, as we don't (atm) keep track fo the *.PDB

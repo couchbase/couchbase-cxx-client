@@ -26,7 +26,6 @@
 #include "core/diagnostics.hxx"
 #include "core/impl/bootstrap_error.hxx"
 #include "core/impl/bootstrap_state_listener.hxx"
-#include "core/logger/logger.hxx"
 #include "core/mcbp/codec.hxx"
 #include "core/mcbp/queue_request.hxx"
 #include "core/meta/version.hxx"
@@ -56,11 +55,14 @@
 #include "retry_orchestrator.hxx"
 #include "streams.hxx"
 
+#include "observability/logger.hxx"
+
 #include <couchbase/error_codes.hxx>
 #include <couchbase/fmt/retry_reason.hxx>
 
 #include <asio.hpp>
 #include <spdlog/fmt/bin_to_hex.h>
+#include <spdlog/fmt/chrono.h>
 
 #include <cstring>
 #include <utility>
@@ -290,10 +292,13 @@ class mcbp_session_impl
       auto user_agent = meta::user_agent_for_mcbp(
         session_->client_id_, session_->id_, session_->origin_.options().user_agent_extra, 250);
       hello_req.body().user_agent(user_agent);
-      CB_LOG_DEBUG("{} user_agent={}, requested_features=[{}]",
-                   session_->log_prefix_,
-                   user_agent,
-                   utils::join_strings_fmt(hello_req.body().features(), ", "));
+      CB_LOG_DEBUG(
+        "starting MCBP handshake",
+        opentelemetry::common::MakeAttributes({
+          { "log_prefix", session_->log_prefix_ },
+          { "user_agent", user_agent },
+          { "requested_features", utils::join_strings_fmt(hello_req.body().features(), ", ") },
+        }));
       session_->write(hello_req.data());
 
       if (!session_->origin_.credentials().uses_certificate()) {
@@ -345,7 +350,7 @@ class mcbp_session_impl
         return;
       }
       Expects(protocol::is_valid_magic(msg.header.magic));
-      switch (auto magic = static_cast<protocol::magic>(msg.header.magic)) {
+      switch (static_cast<protocol::magic>(msg.header.magic)) {
         case protocol::magic::client_response:
         case protocol::magic::alt_client_response:
           Expects(protocol::is_valid_client_opcode(msg.header.opcode));
@@ -364,7 +369,14 @@ class mcbp_session_impl
                                         std::move(error_msg),
                                         session_->bootstrap_hostname(),
                                         session_->bootstrap_port() };
-              CB_LOG_DEBUG("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
+              CB_LOG_DEBUG(
+                last_bootstrap_error_.error_message,
+                opentelemetry::common::MakeAttributes({
+                  { "log_prefix", session_->log_prefix_ },
+                  { "bootstrap_address",
+                    fmt::format(
+                      "{}:{}", session_->bootstrap_hostname(), session_->bootstrap_port()) },
+                }));
               return complete(errc::common::rate_limited);
             }
             case key_value_status_code::scope_size_limit_exceeded: {
@@ -378,7 +390,14 @@ class mcbp_session_impl
                                         std::move(error_msg),
                                         session_->bootstrap_hostname(),
                                         session_->bootstrap_port() };
-              CB_LOG_DEBUG("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
+              CB_LOG_DEBUG(
+                last_bootstrap_error_.error_message,
+                opentelemetry::common::MakeAttributes({
+                  { "log_prefix", session_->log_prefix_ },
+                  { "bootstrap_address",
+                    fmt::format(
+                      "{}:{}", session_->bootstrap_hostname(), session_->bootstrap_port()) },
+                }));
               return complete(errc::common::quota_limited);
             }
             default:
@@ -389,12 +408,17 @@ class mcbp_session_impl
               protocol::client_response<protocol::hello_response_body> resp(std::move(msg));
               if (resp.status() == key_value_status_code::success) {
                 session_->supported_features_ = resp.body().supported_features();
-                CB_LOG_DEBUG("{} supported_features=[{}]",
-                             session_->log_prefix_,
-                             utils::join_strings_fmt(session_->supported_features_, ", "));
+                CB_LOG_DEBUG("handshake successful",
+                             opentelemetry::common::MakeAttributes({
+                               { "log_prefix", session_->log_prefix_ },
+                               { "supported_features",
+                                 utils::join_strings_fmt(session_->supported_features_, ", ") },
+                             }));
                 if (session_->origin_.credentials().uses_certificate()) {
-                  CB_LOG_DEBUG("{} skip SASL authentication, because TLS certificate was specified",
-                               session_->log_prefix_);
+                  CB_LOG_DEBUG("skip SASL authentication, because TLS certificate was specified",
+                               opentelemetry::common::MakeAttributes({
+                                 { "log_prefix", session_->log_prefix_ },
+                               }));
                   return auth_success();
                 }
               } else {
@@ -406,7 +430,14 @@ class mcbp_session_impl
                                           std::move(error_msg),
                                           session_->bootstrap_hostname(),
                                           session_->bootstrap_port() };
-                CB_LOG_WARNING("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
+                CB_LOG_WARNING(
+                  last_bootstrap_error_.error_message,
+                  opentelemetry::common::MakeAttributes({
+                    { "log_prefix", session_->log_prefix_ },
+                    { "bootstrap_address",
+                      fmt::format(
+                        "{}:{}", session_->bootstrap_hostname(), session_->bootstrap_port()) },
+                  }));
                 return complete(errc::network::handshake_failure);
               }
             } break;
@@ -423,7 +454,14 @@ class mcbp_session_impl
                                           std::move(error_msg),
                                           session_->bootstrap_hostname(),
                                           session_->bootstrap_port() };
-                CB_LOG_WARNING("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
+                CB_LOG_WARNING(
+                  last_bootstrap_error_.error_message,
+                  opentelemetry::common::MakeAttributes({
+                    { "log_prefix", session_->log_prefix_ },
+                    { "bootstrap_address",
+                      fmt::format(
+                        "{}:{}", session_->bootstrap_hostname(), session_->bootstrap_port()) },
+                  }));
                 return complete(errc::common::authentication_failure);
               }
             } break;
@@ -453,7 +491,14 @@ class mcbp_session_impl
                                             std::move(error_msg),
                                             session_->bootstrap_hostname(),
                                             session_->bootstrap_port() };
-                  CB_LOG_ERROR("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
+                  CB_LOG_ERROR(
+                    last_bootstrap_error_.error_message,
+                    opentelemetry::common::MakeAttributes({
+                      { "log_prefix", session_->log_prefix_ },
+                      { "bootstrap_address",
+                        fmt::format(
+                          "{}:{}", session_->bootstrap_hostname(), session_->bootstrap_port()) },
+                    }));
                   return complete(errc::common::authentication_failure);
                 }
               } else {
@@ -467,7 +512,14 @@ class mcbp_session_impl
                                           std::move(error_msg),
                                           session_->bootstrap_hostname(),
                                           session_->bootstrap_port() };
-                CB_LOG_WARNING("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
+                CB_LOG_WARNING(
+                  last_bootstrap_error_.error_message,
+                  opentelemetry::common::MakeAttributes({
+                    { "log_prefix", session_->log_prefix_ },
+                    { "bootstrap_address",
+                      fmt::format(
+                        "{}:{}", session_->bootstrap_hostname(), session_->bootstrap_port()) },
+                  }));
                 return complete(errc::common::authentication_failure);
               }
             } break;
@@ -487,7 +539,14 @@ class mcbp_session_impl
                                         std::move(error_msg),
                                         session_->bootstrap_hostname(),
                                         session_->bootstrap_port() };
-              CB_LOG_ERROR("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
+              CB_LOG_ERROR(
+                last_bootstrap_error_.error_message,
+                opentelemetry::common::MakeAttributes({
+                  { "log_prefix", session_->log_prefix_ },
+                  { "bootstrap_address",
+                    fmt::format(
+                      "{}:{}", session_->bootstrap_hostname(), session_->bootstrap_port()) },
+                }));
               return complete(errc::common::authentication_failure);
             }
             case protocol::client_opcode::get_error_map: {
@@ -504,16 +563,25 @@ class mcbp_session_impl
                                           std::move(error_msg),
                                           session_->bootstrap_hostname(),
                                           session_->bootstrap_port() };
-                CB_LOG_WARNING("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
+                CB_LOG_WARNING(
+                  last_bootstrap_error_.error_message,
+                  opentelemetry::common::MakeAttributes({
+                    { "log_prefix", session_->log_prefix_ },
+                    { "bootstrap_address",
+                      fmt::format(
+                        "{}:{}", session_->bootstrap_hostname(), session_->bootstrap_port()) },
+                  }));
                 return complete(errc::network::protocol_error);
               }
             } break;
             case protocol::client_opcode::select_bucket: {
               protocol::client_response<protocol::select_bucket_response_body> resp(std::move(msg));
               if (resp.status() == key_value_status_code::success) {
-                CB_LOG_DEBUG("{} selected bucket: {}",
-                             session_->log_prefix_,
-                             session_->bucket_name_.value_or(""));
+                CB_LOG_DEBUG("selected bucket",
+                             opentelemetry::common::MakeAttributes({
+                               { "log_prefix", session_->log_prefix_ },
+                               { "bucket_name", session_->bucket_name_.value_or("") },
+                             }));
                 session_->bucket_selected_ = true;
               } else if (resp.status() == key_value_status_code::not_found) {
                 auto error_msg =
@@ -526,7 +594,14 @@ class mcbp_session_impl
                                           std::move(error_msg),
                                           session_->bootstrap_hostname(),
                                           session_->bootstrap_port() };
-                CB_LOG_DEBUG("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
+                CB_LOG_DEBUG(
+                  last_bootstrap_error_.error_message,
+                  opentelemetry::common::MakeAttributes({
+                    { "log_prefix", session_->log_prefix_ },
+                    { "bootstrap_address",
+                      fmt::format(
+                        "{}:{}", session_->bootstrap_hostname(), session_->bootstrap_port()) },
+                  }));
                 return complete(errc::network::configuration_not_available);
               } else if (resp.status() == key_value_status_code::no_access) {
                 auto error_msg =
@@ -536,7 +611,14 @@ class mcbp_session_impl
                                           std::move(error_msg),
                                           session_->bootstrap_hostname(),
                                           session_->bootstrap_port() };
-                CB_LOG_DEBUG("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
+                CB_LOG_DEBUG(
+                  last_bootstrap_error_.error_message,
+                  opentelemetry::common::MakeAttributes({
+                    { "log_prefix", session_->log_prefix_ },
+                    { "bootstrap_address",
+                      fmt::format(
+                        "{}:{}", session_->bootstrap_hostname(), session_->bootstrap_port()) },
+                  }));
                 session_->bucket_selected_ = false;
                 return complete(errc::common::bucket_not_found);
               } else {
@@ -549,7 +631,14 @@ class mcbp_session_impl
                                           std::move(error_msg),
                                           session_->bootstrap_hostname(),
                                           session_->bootstrap_port() };
-                CB_LOG_WARNING("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
+                CB_LOG_WARNING(
+                  last_bootstrap_error_.error_message,
+                  opentelemetry::common::MakeAttributes({
+                    { "log_prefix", session_->log_prefix_ },
+                    { "bootstrap_address",
+                      fmt::format(
+                        "{}:{}", session_->bootstrap_hostname(), session_->bootstrap_port()) },
+                  }));
                 return complete(errc::common::bucket_not_found);
               }
             } break;
@@ -560,13 +649,15 @@ class mcbp_session_impl
                 std::move(msg), info);
               if (session_->origin_.options().dump_configuration) {
                 if (const auto& text = resp.body().config_text(); text.has_value()) {
-                  CB_LOG_TRACE("{} configuration from get_cluster_config request (bootstrap, "
-                               "size={}, endpoint=\"{}:{}\"), {}",
-                               session_->log_prefix_,
-                               text.value().size(),
-                               info.endpoint_address,
-                               info.endpoint_port,
-                               text.value());
+                  CB_LOG_TRACE(
+                    "configuration from get_cluster_config request (bootstrap)",
+                    opentelemetry::common::MakeAttributes({
+                      { "log_prefix", session_->log_prefix_ },
+                      { "size", text.value().size() },
+                      { "endpoint",
+                        fmt::format("{}:{}", info.endpoint_address, info.endpoint_port) },
+                      { "text", text.value() },
+                    }));
                 }
               }
               if (resp.status() == key_value_status_code::success) {
@@ -577,8 +668,10 @@ class mcbp_session_impl
                 // and we cannot use a config w/ an empty vbucket map).
                 if (const auto vbmap = resp.body().config().vbmap;
                     vbmap.has_value() && vbmap->empty()) {
-                  CB_LOG_WARNING("{} received a configuration with an empty vbucket map, retrying",
-                                 session_->log_prefix_);
+                  CB_LOG_WARNING("received a configuration with an empty vbucket map, retrying",
+                                 opentelemetry::common::MakeAttributes({
+                                   { "log_prefix", session_->log_prefix_ },
+                                 }));
                   return complete(errc::network::configuration_not_available);
                 }
                 session_->update_configuration(resp.body().config());
@@ -594,15 +687,24 @@ class mcbp_session_impl
                                           std::move(error_msg),
                                           session_->bootstrap_hostname(),
                                           session_->bootstrap_port() };
-                CB_LOG_DEBUG("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
+                CB_LOG_DEBUG(
+                  last_bootstrap_error_.error_message,
+                  opentelemetry::common::MakeAttributes({
+                    { "log_prefix", session_->log_prefix_ },
+                    { "bootstrap_address",
+                      fmt::format(
+                        "{}:{}", session_->bootstrap_hostname(), session_->bootstrap_port()) },
+                  }));
                 return complete(errc::network::configuration_not_available);
               } else if (resp.status() == key_value_status_code::no_bucket &&
                          !session_->bucket_name_) {
                 // bucket-less session, but the server wants bucket
                 session_->supports_gcccp_ = false;
-                CB_LOG_WARNING("{} this server does not support GCCCP, open bucket before making "
-                               "any cluster-level command",
-                               session_->log_prefix_);
+                CB_LOG_WARNING("this server does not support GCCCP, open bucket before making any "
+                               "cluster-level command",
+                               opentelemetry::common::MakeAttributes({
+                                 { "log_prefix", session_->log_prefix_ },
+                               }));
                 session_->update_configuration(
                   topology::make_blank_configuration(session_->connection_endpoints_.remote_address,
                                                      session_->connection_endpoints_.remote.port(),
@@ -618,7 +720,14 @@ class mcbp_session_impl
                                           std::move(error_msg),
                                           session_->bootstrap_hostname(),
                                           session_->bootstrap_port() };
-                CB_LOG_WARNING("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
+                CB_LOG_WARNING(
+                  last_bootstrap_error_.error_message,
+                  opentelemetry::common::MakeAttributes({
+                    { "log_prefix", session_->log_prefix_ },
+                    { "bootstrap_address",
+                      fmt::format(
+                        "{}:{}", session_->bootstrap_hostname(), session_->bootstrap_port()) },
+                  }));
                 return complete(errc::network::protocol_error);
               }
             } break;
@@ -628,7 +737,14 @@ class mcbp_session_impl
                                         std::move(error_msg),
                                         session_->bootstrap_hostname(),
                                         session_->bootstrap_port() };
-              CB_LOG_WARNING("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
+              CB_LOG_WARNING(
+                last_bootstrap_error_.error_message,
+                opentelemetry::common::MakeAttributes({
+                  { "log_prefix", session_->log_prefix_ },
+                  { "bootstrap_address",
+                    fmt::format(
+                      "{}:{}", session_->bootstrap_hostname(), session_->bootstrap_port()) },
+                }));
               return complete(errc::network::protocol_error);
           }
           break;
@@ -642,13 +758,15 @@ class mcbp_session_impl
                 std::move(msg), info);
               if (session_->origin_.options().dump_configuration) {
                 if (const auto& text = req.body().config_text(); text.has_value()) {
-                  CB_LOG_TRACE("{} configuration from cluster_map_change_notification request "
-                               "(size={}, endpoint=\"{}:{}\"), {}",
-                               session_->log_prefix_,
-                               text.value().size(),
-                               info.endpoint_address,
-                               info.endpoint_port,
-                               text.value());
+                  CB_LOG_TRACE(
+                    "configuration from cluster_map_change_notification request",
+                    opentelemetry::common::MakeAttributes({
+                      { "log_prefix", session_->log_prefix_ },
+                      { "size", text.value().size() },
+                      { "endpoint",
+                        fmt::format("{}:{}", info.endpoint_address, info.endpoint_port) },
+                      { "text", text.value() },
+                    }));
                 }
               }
               std::optional<topology::configuration> config = req.body().config();
@@ -663,24 +781,26 @@ class mcbp_session_impl
               }
             } break;
             default:
-              CB_LOG_WARNING("{} unexpected server request: opcode={:x}, opaque={}{:a}{:a}",
-                             session_->log_prefix_,
-                             msg.header.opcode,
-                             utils::byte_swap(msg.header.opaque),
-                             spdlog::to_hex(msg.header_data()),
-                             spdlog::to_hex(msg.body));
+              CB_LOG_WARNING("unexpected server request",
+                             opentelemetry::common::MakeAttributes({
+                               { "log_prefix", session_->log_prefix_ },
+                               { "opcode", fmt::format("0x{:02x}", msg.header.opcode) },
+                               { "opaque", utils::byte_swap(msg.header.opaque) },
+                               { "header", fmt::format("{}", mcbp_header_view(msg.header_data())) },
+                             }));
           }
           break;
         case protocol::magic::client_request:
         case protocol::magic::alt_client_request:
         case protocol::magic::server_response:
-          CB_LOG_WARNING("{} unexpected magic: {} (opcode={:x}, opaque={}){:a}{:a}",
-                         session_->log_prefix_,
-                         magic,
-                         msg.header.opcode,
-                         utils::byte_swap(msg.header.opaque),
-                         spdlog::to_hex(msg.header_data()),
-                         spdlog::to_hex(msg.body));
+          CB_LOG_WARNING("unexpected magic",
+                         opentelemetry::common::MakeAttributes({
+                           { "log_prefix", session_->log_prefix_ },
+                           { "magic", fmt::format("0x{:02x}", msg.header.magic) },
+                           { "opcode", fmt::format("0x{:02x}", msg.header.opcode) },
+                           { "opaque", fmt::format("{}", utils::byte_swap(msg.header.opaque)) },
+                           { "header", fmt::format("{}", mcbp_header_view(msg.header_data())) },
+                         }));
           break;
       }
     }
@@ -722,7 +842,7 @@ class mcbp_session_impl
         return;
       }
       Expects(protocol::is_valid_magic(msg.header.magic));
-      switch (auto magic = static_cast<protocol::magic>(msg.header.magic)) {
+      switch (static_cast<protocol::magic>(msg.header.magic)) {
         case protocol::magic::client_response:
         case protocol::magic::alt_client_response:
           Expects(protocol::is_valid_client_opcode(msg.header.opcode));
@@ -734,13 +854,15 @@ class mcbp_session_impl
                 std::move(msg), info);
               if (session_->origin_.options().dump_configuration) {
                 if (const auto& text = resp.body().config_text(); text.has_value()) {
-                  CB_LOG_TRACE("{} configuration from get_cluster_config response (size={}, "
-                               "endpoint=\"{}:{}\"), {}",
-                               session_->log_prefix_,
-                               text.value().size(),
-                               info.endpoint_address,
-                               info.endpoint_port,
-                               text.value());
+                  CB_LOG_TRACE(
+                    "configuration from get_cluster_config response",
+                    opentelemetry::common::MakeAttributes({
+                      { "log_prefix", session_->log_prefix_ },
+                      { "size", session_->log_prefix_ },
+                      { "endpoint",
+                        fmt::format("{}:{}", info.endpoint_address, info.endpoint_port) },
+                      { "text", text.value() },
+                    }));
                 }
               }
               if (resp.status() == key_value_status_code::success) {
@@ -748,10 +870,12 @@ class mcbp_session_impl
                   session_->update_configuration(resp.body().config());
                 }
               } else {
-                CB_LOG_WARNING("{} unexpected message status: {} (opaque={})",
-                               session_->log_prefix_,
-                               resp.error_message(),
-                               resp.opaque());
+                CB_LOG_WARNING("unexpected message status",
+                               opentelemetry::common::MakeAttributes({
+                                 { "log_prefix", session_->log_prefix_ },
+                                 { "error", resp.error_message() },
+                                 { "opaque", resp.opaque() },
+                               }));
               }
             } break;
             case protocol::client_opcode::noop:
@@ -785,26 +909,31 @@ class mcbp_session_impl
 
               std::uint32_t opaque = utils::byte_swap(msg.header.opaque);
               if (session_->handle_request(opcode, status, opaque, std::move(msg))) {
-                CB_LOG_TRACE("{} MCBP invoked operation handler: opcode={}, opaque={}, status={}",
-                             session_->log_prefix_,
-                             opcode,
-                             opaque,
-                             protocol::status_to_string(status));
+                CB_LOG_TRACE("MCBP invoked operation handler",
+                             opentelemetry::common::MakeAttributes({
+                               { "log_prefix", session_->log_prefix_ },
+                               { "opcode", fmt::format("{}", opcode) },
+                               { "opaque", opaque },
+                               { "status", protocol::status_to_string(status) },
+                             }));
               } else {
-                CB_LOG_DEBUG("{} unexpected orphan response: opcode={}, opaque={}, status={}",
-                             session_->log_prefix_,
-                             opcode,
-                             opaque,
-                             protocol::status_to_string(status));
+                CB_LOG_DEBUG("unexpected orphan response",
+                             opentelemetry::common::MakeAttributes({
+                               { "log_prefix", session_->log_prefix_ },
+                               { "opcode", fmt::format("{}", opcode) },
+                               { "opaque", opaque },
+                               { "status", protocol::status_to_string(status) },
+                             }));
               }
             } break;
             default:
-              CB_LOG_WARNING("{} unexpected client response: opcode={}, opaque={}{:a}{:a})",
-                             session_->log_prefix_,
-                             opcode,
-                             msg.header.opaque,
-                             spdlog::to_hex(msg.header_data()),
-                             spdlog::to_hex(msg.body));
+              CB_LOG_WARNING("unexpected client response",
+                             opentelemetry::common::MakeAttributes({
+                               { "log_prefix", session_->log_prefix_ },
+                               { "opcode", fmt::format("{}", opcode) },
+                               { "opaque", utils::byte_swap(msg.header.opaque) },
+                               { "header", fmt::format("{}", mcbp_header_view(msg.header_data())) },
+                             }));
           }
           break;
         case protocol::magic::server_request:
@@ -817,13 +946,15 @@ class mcbp_session_impl
                 std::move(msg), info);
               if (session_->origin_.options().dump_configuration) {
                 if (const auto& text = req.body().config_text(); text.has_value()) {
-                  CB_LOG_TRACE("{} configuration from cluster_map_change_notification request "
-                               "(size={}, endpoint=\"{}:{}\"), {}",
-                               session_->log_prefix_,
-                               text.value().size(),
-                               info.endpoint_address,
-                               info.endpoint_port,
-                               text.value());
+                  CB_LOG_TRACE(
+                    "configuration from cluster_map_change_notification request",
+                    opentelemetry::common::MakeAttributes({
+                      { "log_prefix", session_->log_prefix_ },
+                      { "size", text.value().size() },
+                      { "endpoint",
+                        fmt::format("{}:{}", info.endpoint_address, info.endpoint_port) },
+                      { "text", text.value() },
+                    }));
                 }
               }
               std::optional<topology::configuration> config = req.body().config();
@@ -838,24 +969,26 @@ class mcbp_session_impl
               }
             } break;
             default:
-              CB_LOG_WARNING("{} unexpected server request: opcode={:x}, opaque={}{:a}{:a}",
-                             session_->log_prefix_,
-                             msg.header.opcode,
-                             msg.header.opaque,
-                             spdlog::to_hex(msg.header_data()),
-                             spdlog::to_hex(msg.body));
+              CB_LOG_WARNING("unexpected server request",
+                             opentelemetry::common::MakeAttributes({
+                               { "log_prefix", session_->log_prefix_ },
+                               { "opcode", fmt::format("0x{:02x}", msg.header.opcode) },
+                               { "opaque", utils::byte_swap(msg.header.opaque) },
+                               { "header", fmt::format("{}", mcbp_header_view(msg.header_data())) },
+                             }));
           }
           break;
         case protocol::magic::client_request:
         case protocol::magic::alt_client_request:
         case protocol::magic::server_response:
-          CB_LOG_WARNING("{} unexpected magic: {} (opcode={:x}, opaque={}){:a}{:a}",
-                         session_->log_prefix_,
-                         magic,
-                         msg.header.opcode,
-                         msg.header.opaque,
-                         spdlog::to_hex(msg.header_data()),
-                         spdlog::to_hex(msg.body));
+          CB_LOG_WARNING("unexpected magic",
+                         opentelemetry::common::MakeAttributes({
+                           { "log_prefix", session_->log_prefix_ },
+                           { "magic", fmt::format("0x{:02x}", msg.header.magic) },
+                           { "opcode", fmt::format("0x{:02x}", msg.header.opcode) },
+                           { "opaque", fmt::format("{}", utils::byte_swap(msg.header.opaque)) },
+                           { "header", fmt::format("{}", mcbp_header_view(msg.header_data())) },
+                         }));
           break;
       }
     }
@@ -925,7 +1058,10 @@ public:
 
   ~mcbp_session_impl() override
   {
-    CB_LOG_DEBUG("{} destroy MCBP connection", log_prefix_);
+    CB_LOG_DEBUG("destroy MCBP connection",
+                 opentelemetry::common::MakeAttributes({
+                   { "log_prefix", log_prefix_ },
+                 }));
     stop(retry_reason::do_not_retry);
   }
 
@@ -1053,9 +1189,11 @@ public:
               self->bootstrap_port_ });
         }
         auto backoff = std::chrono::milliseconds(500);
-        CB_LOG_DEBUG("{} unable to connect in time, waiting for {}ms before retry",
-                     self->log_prefix_,
-                     backoff.count());
+        CB_LOG_DEBUG("unable to connect in time, waiting for {backoff_interval} before retry",
+                     opentelemetry::common::MakeAttributes({
+                       { "log_prefix", self->log_prefix_ },
+                       { "backoff_interval", fmt::format("{}", backoff) },
+                     }));
         self->retry_backoff_.expires_after(backoff);
         self->retry_backoff_.async_wait([self](std::error_code ec) mutable {
           if (ec == asio::error::operation_aborted || self->stopped_) {
@@ -1068,7 +1206,10 @@ public:
         if (!ec) {
           ec = errc::common::unambiguous_timeout;
         }
-        CB_LOG_WARNING("{} unable to bootstrap in time", self->log_prefix_);
+        CB_LOG_WARNING("unable to bootstrap in time",
+                       opentelemetry::common::MakeAttributes({
+                         { "log_prefix", self->log_prefix_ },
+                       }));
         if (auto h = std::move(self->bootstrap_callback_); h) {
           h(ec, {});
         }
@@ -1078,7 +1219,10 @@ public:
       if (!ec) {
         ec = errc::common::unambiguous_timeout;
       }
-      CB_LOG_WARNING("{} unable to bootstrap in time", self->log_prefix_);
+      CB_LOG_WARNING("unable to bootstrap in time",
+                     opentelemetry::common::MakeAttributes({
+                       { "log_prefix", self->log_prefix_ },
+                     }));
       if (auto h = std::move(self->bootstrap_callback_); h) {
         h(ec, {});
       }
@@ -1100,12 +1244,14 @@ public:
     state_ = diag::endpoint_state::connecting;
     if (stream_->is_open()) {
       return stream_->close([self = shared_from_this(), old_id = stream_->id()](std::error_code) {
-        CB_LOG_DEBUG(R"({} reopened socket connection "{}" -> "{}", host="{}", port={})",
-                     self->log_prefix_,
-                     old_id,
-                     self->stream_->id(),
-                     self->bootstrap_hostname_,
-                     self->bootstrap_port_);
+        CB_LOG_DEBUG("reopened socket connection {old_stream_id} -> {new_stream_id}",
+                     opentelemetry::common::MakeAttributes({
+                       { "log_prefix", self->log_prefix_ },
+                       { "old_stream_id", old_id },
+                       { "new_stream_id", self->stream_->id() },
+                       { "bootstrap_address",
+                         fmt::format("{}:{}", self->bootstrap_hostname_, self->bootstrap_port_) },
+                     }));
         return self->initiate_bootstrap();
       });
     }
@@ -1124,9 +1270,12 @@ public:
       }
 #endif
       auto backoff = std::chrono::milliseconds(500);
-      CB_LOG_DEBUG("{} reached the end of list of bootstrap nodes, waiting for {}ms before restart",
-                   log_prefix_,
-                   backoff.count());
+      CB_LOG_DEBUG(
+        "reached the end of list of bootstrap nodes, waiting for {backoff_interval} before restart",
+        opentelemetry::common::MakeAttributes({
+          { "log_prefix", log_prefix_ },
+          { "backoff_interval", fmt::format("{}", backoff) },
+        }));
       retry_backoff_.expires_after(backoff);
       retry_backoff_.async_wait([self = shared_from_this()](std::error_code ec) mutable {
         if (ec == asio::error::operation_aborted || self->stopped_) {
@@ -1147,7 +1296,10 @@ public:
                               stream_->log_prefix(),
                               bucket_name_.value_or("-"),
                               bootstrap_address_);
-    CB_LOG_DEBUG("{} attempt to establish MCBP connection", log_prefix_);
+    CB_LOG_DEBUG("attempt to establish MCBP connection",
+                 opentelemetry::common::MakeAttributes({
+                   { "log_prefix", log_prefix_ },
+                 }));
 
     async_resolve(origin_.options().use_ip_protocol,
                   resolver_,
@@ -1193,18 +1345,24 @@ public:
     if (reason == retry_reason::socket_closed_while_in_flight && !bootstrapped_) {
       return stream_->close([self = shared_from_this(), old_id = stream_->id()](std::error_code) {
         CB_LOG_DEBUG(
-          R"({} reopened socket connection due to IO error, "{}" -> "{}", host="{}", port={})",
-          self->log_prefix_,
-          old_id,
-          self->stream_->id(),
-          self->bootstrap_hostname_,
-          self->bootstrap_port_);
+          "reopened socket connection due to IO error, {old_stream_id} -> {new_stream_id}",
+          opentelemetry::common::MakeAttributes({
+            { "log_prefix", self->log_prefix_ },
+            { "old_stream_id", old_id },
+            { "new_stream_id", self->stream_->id() },
+            { "bootstrap_address",
+              fmt::format("{}:{}", self->bootstrap_hostname_, self->bootstrap_port_) },
+          }));
         return self->initiate_bootstrap();
       });
     }
 
     state_ = diag::endpoint_state::disconnecting;
-    CB_LOG_DEBUG("{} stop MCBP connection, reason={}", log_prefix_, reason);
+    CB_LOG_DEBUG("stop MCBP connection",
+                 opentelemetry::common::MakeAttributes({
+                   { "log_prefix", log_prefix_ },
+                   { "reason", fmt::format("{}", reason) },
+                 }));
     stopped_ = true;
     bootstrap_deadline_.cancel();
     connection_deadline_.cancel();
@@ -1229,10 +1387,12 @@ public:
       const std::scoped_lock lock(command_handlers_mutex_);
       for (auto& [opaque, handler] : command_handlers_) {
         if (handler) {
-          CB_LOG_DEBUG("{} MCBP cancel operation during session close, opaque={}, ec={}",
-                       log_prefix_,
-                       opaque,
-                       ec.message());
+          CB_LOG_DEBUG("MCBP cancel operation during session close",
+                       opentelemetry::common::MakeAttributes({
+                         { "log_prefix", log_prefix_ },
+                         { "opaque", opaque },
+                         { "ec", ec.message() },
+                       }));
           auto fun = std::move(handler);
           fun(ec, reason, {}, {});
         }
@@ -1245,10 +1405,12 @@ public:
       for (auto& [opaque, operation] : operations) {
         auto& [request, handler] = operation;
         if (handler) {
-          CB_LOG_DEBUG("{} MCBP cancel operation during session close, opaque={}, ec={}",
-                       log_prefix_,
-                       opaque,
-                       ec.message());
+          CB_LOG_DEBUG("MCBP cancel operation during session close",
+                       opentelemetry::common::MakeAttributes({
+                         { "log_prefix", log_prefix_ },
+                         { "opaque", opaque },
+                         { "ec", ec.message() },
+                       }));
           handler->handle_response(std::move(request), {}, reason, {}, {});
         }
       }
@@ -1271,7 +1433,11 @@ public:
     if (stopped_) {
       return;
     }
-    CB_LOG_TRACE("{} MCBP send {}", log_prefix_, mcbp_header_view(buf));
+    CB_LOG_TRACE("MCBP send",
+                 opentelemetry::common::MakeAttributes({
+                   { "log_prefix", log_prefix_ },
+                   { "header", fmt::format("{}", mcbp_header_view(buf)) },
+                 }));
     const std::scoped_lock lock(output_buffer_mutex_);
     output_buffer_.emplace_back(std::move(buf));
   }
@@ -1369,14 +1535,22 @@ public:
     auto opaque = request->opaque_;
     auto data = codec_.encode_packet(*request);
     if (!data) {
-      CB_LOG_DEBUG("unable to encode packet. opaque={}, ec={}", opaque, data.error().message());
+      CB_LOG_DEBUG("unable to encode packet",
+                   opentelemetry::common::MakeAttributes({
+                     { "log_prefix", log_prefix_ },
+                     { "opaque", opaque },
+                     { "ec", data.error().message() },
+                   }));
       request->try_callback({}, data.error());
       return;
     }
 
     if (stopped_) {
-      CB_LOG_WARNING("cancel operation while trying to write to closed mcbp session, opaque={}",
-                     opaque);
+      CB_LOG_WARNING("cancel operation while trying to write to closed mcbp session",
+                     opentelemetry::common::MakeAttributes({
+                       { "log_prefix", log_prefix_ },
+                       { "opaque", opaque },
+                     }));
       handler->handle_response(request,
                                errc::common::request_canceled,
                                retry_reason::socket_closed_while_in_flight,
@@ -1388,9 +1562,11 @@ public:
     if (bootstrapped_ && stream_->is_open()) {
       write_and_flush(std::move(data.value()));
     } else {
-      CB_LOG_DEBUG("{} the stream is not ready yet, put the message into pending buffer, opaque={}",
-                   log_prefix_,
-                   opaque);
+      CB_LOG_DEBUG("the stream is not ready yet, put the message into pending buffer",
+                   opentelemetry::common::MakeAttributes({
+                     { "log_prefix", log_prefix_ },
+                     { "opaque", opaque },
+                   }));
       const std::scoped_lock lock(pending_buffer_mutex_);
       if (bootstrapped_ && stream_->is_open()) {
         write_and_flush(std::move(data.value()));
@@ -1405,9 +1581,11 @@ public:
                            command_handler&& handler)
   {
     if (stopped_) {
-      CB_LOG_WARNING("{} MCBP cancel operation, while trying to write to closed session, opaque={}",
-                     log_prefix_,
-                     opaque);
+      CB_LOG_WARNING("MCBP cancel operation, while trying to write to closed session",
+                     opentelemetry::common::MakeAttributes({
+                       { "log_prefix", log_prefix_ },
+                       { "opaque", opaque },
+                     }));
       handler(errc::common::request_canceled, retry_reason::socket_closed_while_in_flight, {}, {});
       return;
     }
@@ -1418,9 +1596,11 @@ public:
     if (bootstrapped_ && stream_->is_open()) {
       write_and_flush(std::move(data));
     } else {
-      CB_LOG_DEBUG("{} the stream is not ready yet, put the message into pending buffer, opaque={}",
-                   log_prefix_,
-                   opaque);
+      CB_LOG_DEBUG("the stream is not ready yet, put the message into pending buffer",
+                   opentelemetry::common::MakeAttributes({
+                     { "log_prefix", log_prefix_ },
+                     { "opaque", opaque },
+                   }));
       const std::scoped_lock lock(pending_buffer_mutex_);
       if (bootstrapped_ && stream_->is_open()) {
         write_and_flush(std::move(data));
@@ -1437,11 +1617,12 @@ public:
     }
     command_handlers_mutex_.lock();
     if (auto handler = command_handlers_.find(opaque); handler != command_handlers_.end()) {
-      CB_LOG_DEBUG("{} MCBP cancel operation, opaque={}, ec={} ({})",
-                   log_prefix_,
-                   opaque,
-                   ec.value(),
-                   ec.message());
+      CB_LOG_DEBUG("MCBP cancel operation",
+                   opentelemetry::common::MakeAttributes({
+                     { "log_prefix", log_prefix_ },
+                     { "opaque", opaque },
+                     { "ec", ec.message() },
+                   }));
       if (handler->second) {
         auto fun = std::move(handler->second);
         command_handlers_.erase(handler);
@@ -1558,28 +1739,36 @@ public:
     // should already have a config w/ a non-empty vbucket map (bootstrap will not complete
     // successfully unless we have a config w/ a non-empty vbucket map).
     if (config.vbmap && config.vbmap->empty()) {
-      CB_LOG_DEBUG("{} received a configuration with an empty vbucket map, ignoring", log_prefix_);
+      CB_LOG_DEBUG("received a configuration with an empty vbucket map, ignoring",
+                   opentelemetry::common::MakeAttributes({
+                     { "log_prefix", log_prefix_ },
+                   }));
       return;
     }
     if (config_) {
       if (config_->vbmap && config.vbmap && config_->vbmap->size() != config.vbmap->size()) {
-        CB_LOG_DEBUG("{} received a configuration with a different number of vbuckets, ignoring",
-                     log_prefix_);
+        CB_LOG_DEBUG("received a configuration with a different number of vbuckets, ignoring",
+                     opentelemetry::common::MakeAttributes({
+                       { "log_prefix", log_prefix_ },
+                     }));
         return;
       }
       if (config == config_) {
-        CB_LOG_TRACE(
-          "{} received a configuration with identical revision (new={}, old={}), ignoring",
-          log_prefix_,
-          config.rev_str(),
-          config_->rev_str());
+        CB_LOG_TRACE("received a configuration with identical revision, ignoring",
+                     opentelemetry::common::MakeAttributes({
+                       { "log_prefix", log_prefix_ },
+                       { "old_rev", config.rev_str() },
+                       { "new_rev", config_->rev_str() },
+                     }));
         return;
       }
       if (config < config_) {
-        CB_LOG_DEBUG("{} received a configuration with older revision (new={}, old={}), ignoring",
-                     log_prefix_,
-                     config.rev_str(),
-                     config_->rev_str());
+        CB_LOG_DEBUG("received a configuration with older revision, ignoring",
+                     opentelemetry::common::MakeAttributes({
+                       { "log_prefix", log_prefix_ },
+                       { "old_rev", config.rev_str() },
+                       { "new_rev", config_->rev_str() },
+                     }));
         return;
       }
     }
@@ -1638,21 +1827,23 @@ public:
                                       msg.body.size() - static_cast<std::size_t>(offset) };
         if (origin_.options().dump_configuration) {
           CB_LOG_TRACE(
-            "{} configuration from not_my_vbucket response (size={}, endpoint=\"{}:{}\"), {}",
-            log_prefix_,
-            config_text.size(),
-            bootstrap_hostname_,
-            bootstrap_port_number_,
-            config_text);
+            "configuration from not_my_vbucket response",
+            opentelemetry::common::MakeAttributes({
+              { "log_prefix", log_prefix_ },
+              { "size", config_text.size() },
+              { "endpoint", fmt::format("{}:{}", bootstrap_hostname_, bootstrap_port_number_) },
+              { "text", config_text },
+            }));
         }
         auto config =
           protocol::parse_config(config_text, bootstrap_hostname_, bootstrap_port_number_);
-        CB_LOG_DEBUG(
-          "{} received not_my_vbucket status for {}, opaque={} with config rev={} in the payload",
-          log_prefix_,
-          protocol::client_opcode(msg.header.opcode),
-          utils::byte_swap(msg.header.opaque),
-          config.rev_str());
+        CB_LOG_DEBUG("received not_my_vbucket status for {opcode}",
+                     opentelemetry::common::MakeAttributes({
+                       { "log_prefix", log_prefix_ },
+                       { "opcode", fmt::format("{}", protocol::client_opcode(msg.header.opcode)) },
+                       { "opaque", utils::byte_swap(msg.header.opaque) },
+                       { "rev", config.rev_str() },
+                     }));
         update_configuration(std::move(config));
       }
     }
@@ -1693,16 +1884,18 @@ private:
       return initiate_bootstrap();
     }
     if (retry_bootstrap_on_bucket_not_found_ && ec == errc::common::bucket_not_found) {
-      CB_LOG_DEBUG(R"({} server returned {} ({}), it must be transient condition, retrying)",
-                   log_prefix_,
-                   ec.value(),
-                   ec.message());
+      CB_LOG_DEBUG("server returned bucket_not_found, it must be transient condition, retrying",
+                   opentelemetry::common::MakeAttributes({
+                     { "log_prefix", log_prefix_ },
+                   }));
       return initiate_bootstrap();
     }
     if (!origin_.exhausted() && ec == errc::common::authentication_failure) {
-      CB_LOG_DEBUG(
-        R"({} server returned authentication_failure, but the bootstrap list is not exhausted yet. It must be transient condition, retrying)",
-        log_prefix_);
+      CB_LOG_DEBUG("server returned authentication_failure, but the bootstrap list is not "
+                   "exhausted yet. It must be transient condition, retrying",
+                   opentelemetry::common::MakeAttributes({
+                     { "log_prefix", log_prefix_ },
+                   }));
       return initiate_bootstrap();
     }
 
@@ -1756,16 +1949,22 @@ private:
     connection_deadline_.cancel();
     last_active_ = std::chrono::steady_clock::now();
     if (ec) {
-      CB_LOG_ERROR("{} error on resolve: {} ({})", log_prefix_, ec.value(), ec.message());
+      CB_LOG_ERROR("error on resolve",
+                   opentelemetry::common::MakeAttributes({
+                     { "log_prefix", log_prefix_ },
+                     { "ec", ec.message() },
+                   }));
       last_bootstrap_error_ = { ec, ec.message(), bootstrap_hostname_, bootstrap_port_ };
       return initiate_bootstrap();
     }
     endpoints_ = endpoints;
-    CB_LOG_TRACE("{} resolved \"{}:{}\" to {} endpoint(s)",
-                 log_prefix_,
-                 bootstrap_hostname_,
-                 bootstrap_port_,
-                 endpoints_.size());
+    CB_LOG_TRACE(
+      "resolved {bootstrap_address} to {number_of_endpoints} endpoint(s)",
+      opentelemetry::common::MakeAttributes({
+        { "log_prefix", log_prefix_ },
+        { "bootstrap_address", fmt::format("{}:{}", bootstrap_hostname_, bootstrap_port_) },
+        { "number_of_endpoints", endpoints_.size() },
+      }));
     do_connect(endpoints_.begin());
     connection_deadline_.expires_after(origin_.options().resolve_timeout);
     connection_deadline_.async_wait([self = shared_from_this()](const auto timer_ec) {
@@ -1785,25 +1984,27 @@ private:
     if (it != endpoints_.end()) {
       auto hostname = it->endpoint().address().to_string();
       auto port = it->endpoint().port();
-      CB_LOG_DEBUG("{} connecting to {}:{} (\"{}:{}\"), timeout={}ms",
-                   log_prefix_,
-                   hostname,
-                   port,
-                   bootstrap_hostname_,
-                   bootstrap_port_,
-                   origin_.options().connect_timeout.count());
+      CB_LOG_DEBUG(
+        "connecting to {address} ({bootstrap_address})",
+        opentelemetry::common::MakeAttributes({
+          { "log_prefix", log_prefix_ },
+          { "address", fmt::format("{}:{}", hostname, port) },
+          { "bootstrap_address", fmt::format("{}:{}", bootstrap_hostname_, bootstrap_port_) },
+          { "timeout", fmt::format("{}", origin_.options().connect_timeout) },
+        }));
       connection_deadline_.expires_after(origin_.options().connect_timeout);
       connection_deadline_.async_wait(
         [self = shared_from_this(), hostname, port](const auto timer_ec) {
           if (timer_ec == asio::error::operation_aborted || self->stopped_) {
             return;
           }
-          CB_LOG_DEBUG("{} unable to connect to {}:{} (\"{}:{}\") in time, reconnecting",
-                       self->log_prefix_,
-                       hostname,
-                       port,
-                       self->bootstrap_hostname_,
-                       self->bootstrap_port_);
+          CB_LOG_DEBUG("unable to connect to {address} ({bootstrap_address}) in time, reconnecting",
+                       opentelemetry::common::MakeAttributes({
+                         { "log_prefix", self->log_prefix_ },
+                         { "address", fmt::format("{}:{}", hostname, port) },
+                         { "bootstrap_address",
+                           fmt::format("{}:{}", self->bootstrap_hostname_, self->bootstrap_port_) },
+                       }));
           self->initiate_bootstrap();
         });
       stream_->async_connect(it->endpoint(), [capture0 = shared_from_this(), it](auto&& PH1) {
@@ -1817,7 +2018,12 @@ private:
       last_bootstrap_error_ = {
         errc::network::no_endpoints_left, std::move(error_msg), bootstrap_hostname_, bootstrap_port_
       };
-      CB_LOG_ERROR("{} {}", log_prefix_, last_bootstrap_error_.value().error_message);
+      CB_LOG_ERROR(
+        last_bootstrap_error_->error_message,
+        opentelemetry::common::MakeAttributes({
+          { "log_prefix", log_prefix_ },
+          { "bootstrap_address", fmt::format("{}:{}", bootstrap_hostname_, bootstrap_port_) },
+        }));
       if (state_listener_) {
         state_listener_->report_bootstrap_error(
           fmt::format("{}:{}", bootstrap_hostname_, bootstrap_port_),
@@ -1844,25 +2050,34 @@ private:
                              ? ERR_error_string(static_cast<unsigned long>(ec.value()), nullptr)
                              : ec.message();
 #endif
-      CB_LOG_WARNING("{} unable to connect to {}:{}: {} ({}){}. is_open={}",
-                     log_prefix_,
-                     it->endpoint().address().to_string(),
-                     it->endpoint().port(),
-                     ec.value(),
-                     error_message,
-                     (ec == asio::error::connection_refused)
-                       ? ", check server ports and cluster encryption setting"
-                       : "",
-                     stream_->is_open());
+      CB_LOG_WARNING(
+        "unable to connect to {endpoint}: {ec} ({ec_text}) {note}",
+        opentelemetry::common::MakeAttributes({
+          { "log_prefix", log_prefix_ },
+          { "endpoint",
+            fmt::format("{}:{}", it->endpoint().address().to_string(), it->endpoint().port()) },
+          { "ec", ec.value() },
+          { "ec_text", error_message },
+          { "note",
+            (ec == asio::error::connection_refused)
+              ? "check server ports and cluster encryption setting"
+              : "" },
+          { "is_open", stream_->is_open() },
+        }));
       if (stream_->is_open()) {
         stream_->close([self = shared_from_this(), next_address = ++it](std::error_code ec) {
           if (ec) {
             CB_LOG_WARNING(
-              "{} unable to close socket, but continue connecting attempt to {}:{}: {}",
-              self->log_prefix_,
-              next_address->endpoint().address().to_string(),
-              next_address->endpoint().port(),
-              ec.value());
+              "unable to close socket, but continue connecting attempt to {next_address}",
+              opentelemetry::common::MakeAttributes({
+                { "log_prefix", self->log_prefix_ },
+                { "ec", ec.value() },
+                { "ec_text", ec.message() },
+                { "next_address",
+                  fmt::format("{}:{}",
+                              next_address->endpoint().address().to_string(),
+                              next_address->endpoint().port()) },
+              }));
           }
           self->do_connect(next_address);
         });
@@ -1872,10 +2087,14 @@ private:
     } else {
       stream_->set_options();
       connection_endpoints_ = { it->endpoint(), stream_->local_endpoint() };
-      CB_LOG_DEBUG("{} connected to {}:{}",
-                   log_prefix_,
-                   connection_endpoints_.remote_address,
-                   connection_endpoints_.remote.port());
+      CB_LOG_DEBUG(
+        "connected to {address}",
+        opentelemetry::common::MakeAttributes({
+          { "log_prefix", log_prefix_ },
+          { "address",
+            fmt::format(
+              "{}:{}", connection_endpoints_.remote_address, connection_endpoints_.remote.port()) },
+        }));
       log_prefix_ = fmt::format("[{}/{}/{}/{}] <{}/{}:{}>",
                                 client_id_,
                                 id_,
@@ -1896,12 +2115,17 @@ private:
         if (timer_ec == asio::error::operation_aborted || self->stopped_) {
           return;
         }
-        CB_LOG_DEBUG("{} unable to boostrap single node at {}:{} (\"{}:{}\") in time, reconnecting",
-                     self->log_prefix_,
-                     self->connection_endpoints_.remote_address,
-                     self->connection_endpoints_.remote.port(),
-                     self->bootstrap_hostname_,
-                     self->bootstrap_port_);
+        CB_LOG_DEBUG(
+          "unable to boostrap single node at {address} ({bootstrap_address}) in time, reconnecting",
+          opentelemetry::common::MakeAttributes({
+            { "log_prefix", self->log_prefix_ },
+            { "address",
+              fmt::format("{}:{}",
+                          self->connection_endpoints_.remote_address,
+                          self->connection_endpoints_.remote.port()) },
+            { "bootstrap_address",
+              fmt::format("{}:{}", self->bootstrap_hostname_, self->bootstrap_port_) },
+          }));
         return self->initiate_bootstrap();
       });
     }
@@ -1919,40 +2143,45 @@ private:
                                                              std::size_t bytes_transferred) {
         if (ec == asio::error::operation_aborted || self->stopped_) {
           self->reading_ = false;
-          CB_LOG_PROTOCOL("[MCBP, IN] host=\"{}\", port={}, rc={}, bytes_received={}",
-                          self->connection_endpoints_.remote_address,
-                          self->connection_endpoints_.remote.port(),
-                          ec ? ec.message() : "ok",
-                          bytes_transferred);
+          // CB_LOG_PROTOCOL("[MCBP, IN] host=\"{}\", port={}, rc={},
+          // bytes_received={}",
+          //                 self->connection_endpoints_.remote_address,
+          //                 self->connection_endpoints_.remote.port(),
+          //                 ec ? ec.message() : "ok",
+          //                 bytes_transferred);
           return;
         }
-        CB_LOG_PROTOCOL("[MCBP, IN] host=\"{}\", port={}, rc={}, bytes_received={}{:a}",
-                        self->connection_endpoints_.remote_address,
-                        self->connection_endpoints_.remote.port(),
-                        ec ? ec.message() : "ok",
-                        bytes_transferred,
-                        spdlog::to_hex(self->input_buffer_.data(),
-                                       self->input_buffer_.data() +
-                                         static_cast<std::ptrdiff_t>(bytes_transferred)));
+        // CB_LOG_PROTOCOL("[MCBP, IN] host=\"{}\", port={}, rc={},
+        // bytes_received={}{:a}",
+        //                 self->connection_endpoints_.remote_address,
+        //                 self->connection_endpoints_.remote.port(),
+        //                 ec ? ec.message() : "ok",
+        //                 bytes_transferred,
+        //                 spdlog::to_hex(self->input_buffer_.data(),
+        //                                self->input_buffer_.data() +
+        //                                  static_cast<std::ptrdiff_t>(bytes_transferred)));
 
         self->last_active_ = std::chrono::steady_clock::now();
         if (ec) {
           self->reading_ = false;
           if (stream_id != self->stream_->id()) {
-            CB_LOG_ERROR(
-              R"({} ignore IO error while reading from the socket: {} ({}), old_id="{}", new_id="{}")",
-              self->log_prefix_,
-              ec.value(),
-              ec.message(),
-              stream_id,
-              self->stream_->id());
+            CB_LOG_ERROR("ignore IO error while reading from the socket",
+                         opentelemetry::common::MakeAttributes({
+                           { "log_prefix", self->log_prefix_ },
+                           { "ec", ec.value() },
+                           { "ec_text", ec.message() },
+                           { "old_stream_id", stream_id },
+                           { "new_stream_id", self->stream_->id() },
+                         }));
             return;
           }
-          CB_LOG_ERROR(R"({} IO error while reading from the socket("{}"): {} ({}))",
-                       self->log_prefix_,
-                       self->stream_->id(),
-                       ec.value(),
-                       ec.message());
+          CB_LOG_ERROR("IO error while reading from the socket",
+                       opentelemetry::common::MakeAttributes({
+                         { "log_prefix", self->log_prefix_ },
+                         { "stream_id", self->stream_->id() },
+                         { "ec", ec.value() },
+                         { "ec_text", ec.message() },
+                       }));
           return self->stop(retry_reason::socket_closed_while_in_flight);
         }
         self->parser_.feed(self->input_buffer_.data(),
@@ -1966,8 +2195,11 @@ private:
               if (self->stopped_) {
                 return;
               }
-              CB_LOG_TRACE(
-                "{} MCBP recv {}", self->log_prefix_, mcbp_header_view(msg.header_data()));
+              CB_LOG_TRACE("MCBP recv",
+                           opentelemetry::common::MakeAttributes({
+                             { "log_prefix", self->log_prefix_ },
+                             { "header", fmt::format("{}", mcbp_header_view(msg.header_data())) },
+                           }));
               if (self->bootstrapped_) {
                 self->handler_->handle(std::move(msg));
               } else if (self->bootstrap_handler_) {
@@ -2003,31 +2235,34 @@ private:
     std::vector<asio::const_buffer> buffers;
     buffers.reserve(writing_buffer_.size());
     for (auto& buf : writing_buffer_) {
-      CB_LOG_PROTOCOL("[MCBP, OUT] host=\"{}\", port={}, buffer_size={}{:a}",
-                      connection_endpoints_.remote_address,
-                      connection_endpoints_.remote.port(),
-                      buf.size(),
-                      spdlog::to_hex(buf));
+      // CB_LOG_PROTOCOL("[MCBP, OUT] host=\"{}\", port={}, buffer_size={}{:a}",
+      //                 connection_endpoints_.remote_address,
+      //                 connection_endpoints_.remote.port(),
+      //                 buf.size(),
+      //                 spdlog::to_hex(buf));
       buffers.emplace_back(asio::buffer(buf));
     }
     stream_->async_write(
-      buffers, [self = shared_from_this()](std::error_code ec, std::size_t bytes_transferred) {
-        CB_LOG_PROTOCOL("[MCBP, OUT] host=\"{}\", port={}, rc={}, bytes_sent={}",
-                        self->connection_endpoints_.remote_address,
-                        self->connection_endpoints_.remote.port(),
-                        ec ? ec.message() : "ok",
-                        bytes_transferred);
+      buffers,
+      [self = shared_from_this()](std::error_code ec, std::size_t /* bytes_transferred */) {
+        // CB_LOG_PROTOCOL("[MCBP, OUT] host=\"{}\", port={}, rc={}, bytes_sent={}",
+        //                 self->connection_endpoints_.remote_address,
+        //                 self->connection_endpoints_.remote.port(),
+        //                 ec ? ec.message() : "ok",
+        //                 bytes_transferred);
         if (ec == asio::error::operation_aborted || self->stopped_) {
           return;
         }
         self->last_active_ = std::chrono::steady_clock::now();
 
         if (ec) {
-          CB_LOG_ERROR(R"({} IO error while writing to the socket("{}"): {} ({}))",
-                       self->log_prefix_,
-                       self->stream_->id(),
-                       ec.value(),
-                       ec.message());
+          CB_LOG_ERROR("IO error while writing to the socket",
+                       opentelemetry::common::MakeAttributes({
+                         { "log_prefix", self->log_prefix_ },
+                         { "stream_id", self->stream_->id() },
+                         { "ec", ec.value() },
+                         { "ec_text", ec.message() },
+                       }));
           return self->stop(retry_reason::socket_closed_while_in_flight);
         }
         {
