@@ -96,7 +96,11 @@ atr_cleanup_entry::atr_cleanup_entry(const std::shared_ptr<attempt_context>& ctx
 void
 atr_cleanup_entry::clean(transactions_cleanup_attempt* result)
 {
-  CB_ATTEMPT_CLEANUP_LOG_TRACE("cleaning {}", *this);
+  CB_LOG_TRACE("cleaning {cleanup_entry_ptr}",
+               opentelemetry::common::MakeAttributes({
+                 { "subsystem", "transactions_cleanup" },
+                 { "cleanup_entry_ptr", fmt::format("{}", *this) },
+               }));
   // get atr entry if needed
   const atr_entry entry;
   if (nullptr == atr_entry_) {
@@ -110,10 +114,18 @@ atr_cleanup_entry::clean(transactions_cleanup_attempt* result)
         atr_entry_ = &(*it);
         return check_atr_and_cleanup(result);
       }
-      CB_ATTEMPT_CLEANUP_LOG_TRACE("could not find attempt {}, nothing to clean", attempt_id_);
+      CB_LOG_TRACE("could not find attempt {attempt_id}, nothing to clean",
+                   opentelemetry::common::MakeAttributes({
+                     { "subsystem", "transactions_cleanup" },
+                     { "attempt_id", attempt_id_ },
+                   }));
       return;
     }
-    CB_ATTEMPT_CLEANUP_LOG_TRACE("could not find atr {}, nothing to clean", atr_id_);
+    CB_LOG_TRACE("could not find atr {attempt_id}, nothing to clean",
+                 opentelemetry::common::MakeAttributes({
+                   { "subsystem", "transactions_cleanup" },
+                   { "attempt_id", attempt_id_ },
+                 }));
     return;
   }
   check_atr_and_cleanup(result);
@@ -173,8 +185,11 @@ atr_cleanup_entry::cleanup_docs(durability_level dl)
       remove_txn_links(atr_entry_->removed_ids(), dl);
       break;
     default:
-      CB_ATTEMPT_CLEANUP_LOG_TRACE("attempt in {}, nothing to do in cleanup_docs",
-                                   attempt_state_name(atr_entry_->state()));
+      CB_LOG_TRACE("attempt in {state}, nothing to do in cleanup_docs",
+                   opentelemetry::common::MakeAttributes({
+                     { "subsystem", "transactions_cleanup" },
+                     { "state", attempt_state_name(atr_entry_->state()) },
+                   }));
   }
 }
 
