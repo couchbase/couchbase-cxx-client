@@ -863,15 +863,13 @@ staged_mutation_queue::validate_commit_doc_result(const std::shared_ptr<attempt_
   // TODO(SA): mutation tokens
   const auto key = item.id().key();
   ctx->hooks_.after_doc_committed_before_saving_cas(
-    ctx,
-    key,
-    [ctx, res, key, item = std::move(item), handler = std::move(handler)](auto ec) mutable {
+    ctx, key, [ctx, res, key, &item, handler = std::move(handler)](auto ec) mutable {
       if (ec) {
         return handler(client_error(*ec, "after_doc_committed_before_saving_cas threw error"));
       }
       item.cas(couchbase::cas{ res.cas });
       return ctx->hooks_.after_doc_committed(
-        ctx, key, [item = std::move(item), handler = std::move(handler)](auto ec) mutable {
+        ctx, key, [handler = std::move(handler)](auto ec) mutable {
           if (ec) {
             return handler(client_error(*ec, "after_doc_committed threw error"));
           }
