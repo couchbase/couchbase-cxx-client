@@ -103,7 +103,7 @@ wrap_call_for_public_api(std::function<transaction_get_result()>&& handler)
   } catch (const transaction_operation_failed& e) {
     return { core::impl::make_error(e), {} };
   } catch (const op_exception& ex) {
-    return { core::impl::make_error(ex.ctx()), {} };
+    return { core::impl::make_error(ex), {} };
   } catch (...) {
     // the handler should catch everything else, but just in case...
     return { { errc::transaction_op::generic }, {} };
@@ -123,7 +123,7 @@ wrap_callback_for_async_public_api(
     try {
       std::rethrow_exception(err);
     } catch (const op_exception& e) {
-      return cb(core::impl::make_error(e.ctx()), {});
+      return cb(core::impl::make_error(e), {});
     } catch (const transaction_operation_failed& e) {
       return cb(core::impl::make_error(e), {});
     } catch (...) {
@@ -649,7 +649,7 @@ attempt_context_impl::get_multi(
       try {
         std::rethrow_exception(err);
       } catch (const op_exception& e) {
-        return cb(core::impl::make_error(e.ctx()), {});
+        return cb(core::impl::make_error(e), {});
       } catch (const transaction_operation_failed& e) {
         return cb(core::impl::make_error(e), {});
       } catch (...) {
@@ -766,7 +766,7 @@ attempt_context_impl::get_multi_replicas_from_preferred_server_group(
         try {
           std::rethrow_exception(err);
         } catch (const op_exception& e) {
-          return cb(core::impl::make_error(e.ctx()), {});
+          return cb(core::impl::make_error(e), {});
         } catch (const transaction_operation_failed& e) {
           return cb(core::impl::make_error(e), {});
         } catch (...) {
@@ -2139,11 +2139,25 @@ attempt_context_impl::do_public_query(
   try {
     auto result = do_core_query(statement, opts, query_context);
     auto [ctx, res] = core::impl::build_transaction_query_result(result);
-    return std::make_pair(core::impl::make_error(ctx), res);
+    if (ctx.ec()) {
+      // This should have already been converted to an exception by handle_query_error, which we
+      // handle above. Let's return an error here just in case
+      std::string msg = "Txns query error occured that should have been handled further upstream, "
+                        "which might indicate a bug.";
+      if (std::holds_alternative<query_error_context>(ctx.cause())) {
+        return { { ctx.ec(),
+                   std::move(msg),
+                   {},
+                   impl::make_error(std::get<query_error_context>(ctx.cause())) },
+                 {} };
+      }
+      return { { ctx.ec(), std::move(msg) }, {} };
+    }
+    return { {}, res };
   } catch (const transaction_operation_failed& e) {
     return { core::impl::make_error(e), {} };
   } catch (const op_exception& qe) {
-    return { core::impl::make_error(qe.ctx()), {} };
+    return { core::impl::make_error(qe), {} };
   } catch (...) {
     // should not be necessary, but just in case...
     return { { couchbase::errc::transaction_op::generic }, {} };
@@ -2267,7 +2281,7 @@ attempt_context_impl::insert_raw_with_query(const core::document_id& id,
               std::rethrow_exception(err);
             } catch (const transaction_operation_failed& e) {
               return self->op_completed_with_error(std::move(cb), e);
-            } catch (const document_exists& ex) {
+            } catch (const op_exception& ex) {
               return self->op_completed_with_error(std::move(cb), ex);
             } catch (const std::exception& e) {
               return self->op_completed_with_error(
@@ -4029,14 +4043,28 @@ attempt_context_impl::query(std::string statement,
             } catch (const transaction_operation_failed& e) {
               return handler(core::impl::make_error(e), {});
             } catch (const op_exception& ex) {
-              return handler(core::impl::make_error(ex.ctx()), {});
+              return handler(core::impl::make_error(ex), {});
             } catch (...) {
               // just in case...
               return handler({ couchbase::errc::transaction_op::generic }, {});
             }
           }
           auto [ctx, res] = core::impl::build_transaction_query_result(*resp);
-          handler(core::impl::make_error(ctx), res);
+          if (ctx.ec()) {
+            // This should have already been converted to an exception by handle_query_error,
+            // which we handle above. Let's return an error here just in case
+            std::string msg = "Txns query error occured that should have been handled further "
+                              "upstream, which might indicate a bug.";
+            if (std::holds_alternative<query_error_context>(ctx.cause())) {
+              return handler({ ctx.ec(),
+                               std::move(msg),
+                               {},
+                               impl::make_error(std::get<query_error_context>(ctx.cause())) },
+                             {});
+            }
+            return handler({ ctx.ec(), std::move(msg) }, {});
+          }
+          return handler({}, res);
         });
 }
 
