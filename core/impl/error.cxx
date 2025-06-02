@@ -185,15 +185,30 @@ make_error(const couchbase::core::transaction_error_context& ctx) -> error
 }
 
 auto
-make_error(const couchbase::core::transaction_op_error_context& ctx) -> error
+make_error(const core::transactions::op_exception& exc) -> error
 {
-  if (std::holds_alternative<key_value_error_context>(ctx.cause())) {
-    return { ctx.ec(), {}, {}, make_error(std::get<key_value_error_context>(ctx.cause())) };
+  std::optional<error> cause;
+  if (std::holds_alternative<key_value_error_context>(exc.ctx().cause())) {
+    cause = make_error(std::get<key_value_error_context>(exc.ctx().cause()));
   }
-  if (std::holds_alternative<query_error_context>(ctx.cause())) {
-    return { ctx.ec(), {}, {}, make_error(std::get<query_error_context>(ctx.cause())) };
+  if (std::holds_alternative<query_error_context>(exc.ctx().cause())) {
+    cause = make_error(std::get<query_error_context>(exc.ctx().cause()));
   }
-  return ctx.ec();
+
+  if (cause.has_value()) {
+    return error{
+      transaction_op_errc_from_external_exception(exc.cause()),
+      exc.what(),
+      {},
+      cause.value(),
+    };
+  }
+
+  return error{
+    transaction_op_errc_from_external_exception(exc.cause()),
+    exc.what(),
+    {},
+  };
 }
 
 auto
