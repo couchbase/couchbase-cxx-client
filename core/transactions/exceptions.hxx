@@ -223,6 +223,16 @@ public:
     : op_exception(std::move(ctx), DOCUMENT_EXISTS_EXCEPTION)
   {
   }
+
+  explicit document_exists(transaction_op_error_context ctx, const std::string& what)
+    : op_exception(std::move(ctx), what, DOCUMENT_EXISTS_EXCEPTION)
+  {
+  }
+
+  explicit document_exists(const std::string& what)
+    : op_exception({ errc::transaction_op::document_exists }, what, DOCUMENT_EXISTS_EXCEPTION)
+  {
+  }
 };
 
 class query_attempt_not_found : public op_exception

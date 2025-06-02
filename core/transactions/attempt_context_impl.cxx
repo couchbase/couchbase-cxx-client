@@ -1296,8 +1296,7 @@ attempt_context_impl::insert(const core::document_id& id,
                 self, "found existing insert or replace of {} while inserting", id);
               return self->op_completed_with_error(
                 std::move(cb),
-                transaction_operation_failed(FAIL_DOC_ALREADY_EXISTS,
-                                             "found existing insert or replace of same document"));
+                document_exists("found existing insert or replace of same document"));
             }
             if (self->check_expiry_pre_commit(STAGE_INSERT, id.key())) {
               return self->op_completed_with_error(
@@ -3694,9 +3693,7 @@ attempt_context_impl::create_staged_insert_error_handler(const core::document_id
                   if (doc->links().op() && *doc->links().op() != "insert") {
                     return self->op_completed_with_error(
                       std::forward<Handler>(cb),
-                      transaction_operation_failed(FAIL_DOC_ALREADY_EXISTS,
-                                                   "doc exists, not a staged insert")
-                        .cause(DOCUMENT_EXISTS_EXCEPTION));
+                      document_exists("doc exists, not a staged insert"));
                   }
                   self->check_and_handle_blocking_transactions(
                     *doc,
