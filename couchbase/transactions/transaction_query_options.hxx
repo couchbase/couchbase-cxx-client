@@ -17,9 +17,6 @@
 
 #include <couchbase/query_options.hxx>
 
-// NOTE: when query is in public api, we will hold a query_options struct instead, and
-// import that from the public api.
-
 namespace couchbase::transactions
 {
 class transaction_context;
@@ -243,6 +240,19 @@ public:
   auto max_parallelism(std::uint64_t max) -> transaction_query_options&
   {
     opts_.max_parallelism(max);
+    return *this;
+  }
+
+  /**
+   * Tells the query engine to use a flex index (utilizing the search service).
+   *
+   * @see query_options::max_parallelism for details.
+   * @param flex_index if a flex index should be used, false is the default.
+   * @return reference to this object, convenient for chaining calls.
+   */
+  auto flex_index(bool flex_index) -> transaction_query_options&
+  {
+    opts_.flex_index(flex_index);
     return *this;
   }
 
