@@ -243,3 +243,8 @@
  * get_multi API is implemented for transactions
  */
 #define COUCHBASE_CXX_CLIENT_HAS_TRANSACTIONS_GET_MULTI 1
+
+/**
+ * couchbase::transactions::transaction_query_options has a flex_index option
+ */
+#define COUCHBASE_CXX_CLIENT_TRANSACTION_QUERY_OPTIONS_HAVE_FLEX_INDEX 1
