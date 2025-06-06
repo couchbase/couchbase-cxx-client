@@ -51,7 +51,7 @@ public:
     /* do nothing */
   }
 
-  virtual auto start_span(std::string name, std::shared_ptr<request_span> parent = {})
+  virtual auto start_span(std::string name, std::shared_ptr<request_span> parent)
     -> std::shared_ptr<request_span> = 0;
 };
 

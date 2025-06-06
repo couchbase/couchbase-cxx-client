@@ -17,9 +17,10 @@
 
 #pragma once
 
+#include "opentelemetry/common/key_value_iterable_view.h"
 #include "rbac.hxx"
 
-#include "core/logger/logger.hxx"
+#include "observability/logger.hxx"
 
 #include <tao/json/forward.hpp>
 
@@ -37,7 +38,10 @@ struct traits<couchbase::core::management::rbac::user_and_metadata> {
     } else if (domain == "external") {
       result.domain = couchbase::core::management::rbac::auth_domain::external;
     } else {
-      CB_LOG_ERROR(R"("unexpected domain for user with metadata: "{}")", domain);
+      CB_LOG_ERROR("unexpected domain for user with metadata",
+                   opentelemetry::common::MakeAttributes({
+                     { "domain", domain },
+                   }));
     }
     result.username = v.at("id").get_string();
     if (const auto* display_name = v.find("name");

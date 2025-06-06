@@ -20,7 +20,6 @@
 
 #include "core/error_context/analytics_json.hxx"
 #include "core/impl/internal_error_context.hxx"
-#include "core/logger/logger.hxx"
 #include "core/utils/binary.hxx"
 #include "core/utils/json.hxx"
 

@@ -18,6 +18,7 @@
 #include <couchbase/cluster.hxx>
 #include <couchbase/codec/tao_json_serializer.hxx>
 
+#include <spdlog/fmt/bundled/chrono.h>
 #include <spdlog/fmt/bundled/format.h>
 #include <tao/json/to_string.hpp>
 
@@ -40,6 +41,7 @@ struct program_arguments {
 
   static auto load_from_environment() -> program_arguments
   {
+    // NOLINTBEGIN(concurrency-mt-unsafe)
     program_arguments arguments;
     if (const auto* val = getenv("CB_CONNECTION_STRING"); val != nullptr && val[0] != '\0') {
       arguments.connection_string = val;
@@ -73,12 +75,13 @@ struct program_arguments {
         arguments.document_body_size = int_val;
       }
     }
+    // NOLINTEND(concurrency-mt-unsafe)
     return arguments;
   }
 };
 
-std::string
-random_text(std::size_t length)
+auto
+random_text(std::size_t length) -> std::string
 {
   std::string alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
   static thread_local std::mt19937_64 gen{ std::random_device()() };
@@ -137,14 +140,13 @@ run_workload_sequential(const couchbase::collection& collection, const program_a
     }
     auto exec_end = std::chrono::system_clock::now();
 
-    fmt::print(
-      "\rExecuted {} upsert operations in {}ms ({}us, {}s), average latency: {}ms\n",
-      arguments.number_of_operations,
-      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::microseconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::seconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start).count() /
-        arguments.number_of_operations);
+    fmt::print("\rExecuted {} upsert operations in {} ({}, {}), average latency: {}\n",
+               arguments.number_of_operations,
+               std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start),
+               std::chrono::duration_cast<std::chrono::microseconds>(exec_end - exec_start),
+               std::chrono::duration_cast<std::chrono::seconds>(exec_end - exec_start),
+               std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start) /
+                 arguments.number_of_operations);
 
     if (errors.empty()) {
       fmt::print("\tAll operations completed successfully\n");
@@ -169,14 +171,13 @@ run_workload_sequential(const couchbase::collection& collection, const program_a
     }
     auto exec_end = std::chrono::system_clock::now();
 
-    fmt::print(
-      "\rExecuted {} get operations in {}ms ({}us, {}s), average latency: {}ms\n",
-      arguments.number_of_operations,
-      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::microseconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::seconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start).count() /
-        arguments.number_of_operations);
+    fmt::print("\rExecuted {} get operations in {} ({}, {}), average latency: {}\n",
+               arguments.number_of_operations,
+               std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start),
+               std::chrono::duration_cast<std::chrono::microseconds>(exec_end - exec_start),
+               std::chrono::duration_cast<std::chrono::seconds>(exec_end - exec_start),
+               std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start) /
+                 arguments.number_of_operations);
 
     if (errors.empty()) {
       fmt::print("\tAll operations completed successfully\n");
@@ -250,24 +251,19 @@ run_workload_bulk(const couchbase::collection& collection, const program_argumen
     }
     auto completion_end = std::chrono::system_clock::now();
     fmt::print(
-      "\rCompleted {} upsert operations in {}ms ({}us, {}s)\n",
+      "\rCompleted {} upsert operations in {} ({}, {})\n",
       arguments.number_of_operations,
-      std::chrono::duration_cast<std::chrono::milliseconds>(completion_end - completion_start)
-        .count(),
-      std::chrono::duration_cast<std::chrono::microseconds>(completion_end - completion_start)
-        .count(),
-      std::chrono::duration_cast<std::chrono::seconds>(completion_end - completion_start).count());
+      std::chrono::duration_cast<std::chrono::milliseconds>(completion_end - completion_start),
+      std::chrono::duration_cast<std::chrono::microseconds>(completion_end - completion_start),
+      std::chrono::duration_cast<std::chrono::seconds>(completion_end - completion_start));
 
     fmt::print(
-      "Executed {} upsert operations in {}ms ({}us, {}s), average latency: {}ms\n",
+      "Executed {} upsert operations in {} ({}, {}), average latency: {}\n",
       arguments.number_of_operations,
-      std::chrono::duration_cast<std::chrono::milliseconds>(completion_end - schedule_start)
-        .count(),
-      std::chrono::duration_cast<std::chrono::microseconds>(completion_end - schedule_start)
-        .count(),
-      std::chrono::duration_cast<std::chrono::seconds>(completion_end - schedule_start).count(),
-      std::chrono::duration_cast<std::chrono::milliseconds>(completion_end - schedule_start)
-          .count() /
+      std::chrono::duration_cast<std::chrono::milliseconds>(completion_end - schedule_start),
+      std::chrono::duration_cast<std::chrono::microseconds>(completion_end - schedule_start),
+      std::chrono::duration_cast<std::chrono::seconds>(completion_end - schedule_start),
+      std::chrono::duration_cast<std::chrono::milliseconds>(completion_end - schedule_start) /
         arguments.number_of_operations);
 
     if (errors.empty()) {
@@ -310,24 +306,19 @@ run_workload_bulk(const couchbase::collection& collection, const program_argumen
     }
     auto completion_end = std::chrono::system_clock::now();
     fmt::print(
-      "\rCompleted {} get operations in {}ms ({}us, {}s)\n",
+      "\rCompleted {} get operations in {} ({}, {})\n",
       arguments.number_of_operations,
-      std::chrono::duration_cast<std::chrono::milliseconds>(completion_end - completion_start)
-        .count(),
-      std::chrono::duration_cast<std::chrono::microseconds>(completion_end - completion_start)
-        .count(),
-      std::chrono::duration_cast<std::chrono::seconds>(completion_end - completion_start).count());
+      std::chrono::duration_cast<std::chrono::milliseconds>(completion_end - completion_start),
+      std::chrono::duration_cast<std::chrono::microseconds>(completion_end - completion_start),
+      std::chrono::duration_cast<std::chrono::seconds>(completion_end - completion_start));
 
     fmt::print(
-      "Executed {} get operations in {}ms ({}us, {}s), average latency: {}ms\n",
+      "Executed {} get operations in {} ({}, {}), average latency: {}\n",
       arguments.number_of_operations,
-      std::chrono::duration_cast<std::chrono::milliseconds>(completion_end - schedule_start)
-        .count(),
-      std::chrono::duration_cast<std::chrono::microseconds>(completion_end - schedule_start)
-        .count(),
-      std::chrono::duration_cast<std::chrono::seconds>(completion_end - schedule_start).count(),
-      std::chrono::duration_cast<std::chrono::milliseconds>(completion_end - schedule_start)
-          .count() /
+      std::chrono::duration_cast<std::chrono::milliseconds>(completion_end - schedule_start),
+      std::chrono::duration_cast<std::chrono::microseconds>(completion_end - schedule_start),
+      std::chrono::duration_cast<std::chrono::seconds>(completion_end - schedule_start),
+      std::chrono::duration_cast<std::chrono::milliseconds>(completion_end - schedule_start) /
         arguments.number_of_operations);
 
     if (errors.empty()) {
@@ -342,16 +333,16 @@ run_workload_bulk(const couchbase::collection& collection, const program_argumen
 
   auto end = std::chrono::system_clock::now();
 
-  fmt::print("Total time for bulk execution {}ms ({}us, {}s)\n",
-             std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count(),
-             std::chrono::duration_cast<std::chrono::microseconds>(end - start).count(),
-             std::chrono::duration_cast<std::chrono::seconds>(end - start).count(),
-             std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() /
+  fmt::print("Total time for bulk execution {} ({}, {})\n",
+             std::chrono::duration_cast<std::chrono::milliseconds>(end - start),
+             std::chrono::duration_cast<std::chrono::microseconds>(end - start),
+             std::chrono::duration_cast<std::chrono::seconds>(end - start),
+             std::chrono::duration_cast<std::chrono::microseconds>(end - start) /
                arguments.number_of_operations);
 }
 
-int
-main()
+auto
+main() -> int
 {
   auto arguments = program_arguments::load_from_environment();
 

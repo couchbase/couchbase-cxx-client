@@ -85,11 +85,13 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
       if (request.durability_level != durability_level::none &&
           timeout_ < durability_timeout_floor) {
         CB_LOG_DEBUG(
-          R"(Timeout is too low for operation with durability, increasing to sensible value. timeout={}ms, floor={}ms, id="{}")",
-          request.id,
-          timeout_.count(),
-          durability_timeout_floor.count(),
-          id_);
+          "timeout is too low for operation with durability, increasing to sensible value",
+          opentelemetry::common::MakeAttributes({
+            { "document_id", fmt::format("{}", request.id) },
+            { "operation_id", id_ },
+            { "timeout", fmt::format("{}", timeout_) },
+            { "floor", fmt::format("{}", durability_timeout_floor) },
+          }));
         timeout_ = durability_timeout_floor;
       }
     }
@@ -154,13 +156,14 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
       if (ec == errc::common::unambiguous_timeout || ec == errc::common::ambiguous_timeout) {
         telemetry_recorder->update_counter(app_telemetry_counter::kv_r_timedout);
         auto time_left = deadline.expiry() - std::chrono::steady_clock::now();
-        CB_LOG_TRACE(R"([{}] timeout operation id="{}", {}, key="{}", partition={}, time_left={})",
-                     session_ ? session_->log_prefix() : manager_->log_prefix(),
-                     id_,
-                     encoded_request_type::body_type::opcode,
-                     request.id,
-                     request.partition,
-                     time_left);
+        CB_LOG_TRACE("timeout operation",
+                     opentelemetry::common::MakeAttributes({
+                       { "log_prefix", session_ ? session_->log_prefix() : manager_->log_prefix() },
+                       { "operation_id", id_ },
+                       { "opcode", fmt::format("{}", encoded_request_type::body_type::opcode) },
+                       { "partition", request.partition },
+                       { "time_left", fmt::format("{}", time_left) },
+                     }));
       } else if (ec == errc::common::request_canceled) {
         telemetry_recorder->update_counter(app_telemetry_counter::kv_r_canceled);
       }
@@ -208,11 +211,13 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
   {
     auto backoff = std::chrono::milliseconds(500);
     auto time_left = deadline.expiry() - std::chrono::steady_clock::now();
-    CB_LOG_DEBUG(R"({} unknown collection response for "{}", time_left={}ms, id="{}")",
-                 session_->log_prefix(),
-                 request.id,
-                 std::chrono::duration_cast<std::chrono::milliseconds>(time_left).count(),
-                 id_);
+    CB_LOG_DEBUG("unknown collection response",
+                 opentelemetry::common::MakeAttributes({
+                   { "log_prefix", session_->log_prefix() },
+                   { "document_id", fmt::format("{}", request.id) },
+                   { "time_left", fmt::format("{}", time_left) },
+                   { "operation_id", id_ },
+                 }));
     request.retries.add_reason(retry_reason::key_value_collection_outdated);
     if (time_left < backoff) {
       return invoke_handler(make_error_code(request.retries.idempotent()
@@ -241,12 +246,13 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
         if (collection_id) {
           request.id.collection_uid(collection_id.value());
         } else {
-          CB_LOG_DEBUG(
-            R"({} no cache entry for collection, resolve collection id for "{}", timeout={}ms, id="{}")",
-            session_->log_prefix(),
-            request.id,
-            timeout_.count(),
-            id_);
+          CB_LOG_DEBUG("no cache entry for collection, resolve collection id",
+                       opentelemetry::common::MakeAttributes({
+                         { "log_prefix", session_->log_prefix() },
+                         { "document_id", fmt::format("{}", request.id) },
+                         { "timeout", fmt::format("{}", timeout_) },
+                         { "operation_id", id_ },
+                       }));
           return request_collection_id();
         }
       } else {
@@ -347,13 +353,13 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
           return self->handle_unknown_collection();
         }
         if (status == key_value_status_code::config_only) {
-          CB_LOG_DEBUG("{} server returned status 0x{:02x} ({}) meaning that the node does not "
-                       "serve data operations, "
-                       "requesting new "
-                       "configuration and retrying",
-                       self->session_->log_prefix(),
-                       msg.header.status(),
-                       status);
+          CB_LOG_DEBUG("server returned status {status} meaning that the node does not serve data "
+                       "operations, requesting new configuration and retrying",
+                       opentelemetry::common::MakeAttributes({
+                         { "log_prefix", self->session_->log_prefix() },
+                         { "status", fmt::format("0x{:02x}", msg.header.status()) },
+                         { "status_text", fmt::format("{}", status) },
+                       }));
           self->manager_->fetch_config();
           return io::retry_orchestrator::maybe_retry(
             self->manager_, self, retry_reason::service_response_code_indicated, ec);

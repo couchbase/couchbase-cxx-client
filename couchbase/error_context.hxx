@@ -39,6 +39,9 @@ public:
   [[nodiscard]] auto to_json(
     error_context_json_format format = error_context_json_format::compact) const -> std::string;
 
+  [[nodiscard]] auto to_attributes(
+    error_context_json_format format = error_context_json_format::compact) const -> std::string;
+
   [[nodiscard]] auto impl() const -> std::shared_ptr<internal_error_context>;
 
 private:

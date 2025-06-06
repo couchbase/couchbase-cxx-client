@@ -44,6 +44,8 @@ struct program_arguments {
   static auto load_from_environment() -> program_arguments
   {
     program_arguments arguments;
+
+    // NOLINTBEGIN(concurrency-mt-unsafe)
     if (const auto* val = getenv("CB_CONNECTION_STRING"); val != nullptr && val[0] != '\0') {
       arguments.connection_string = val;
     }
@@ -83,12 +85,13 @@ struct program_arguments {
         arguments.transaction_timeout = std::chrono::seconds{ int_val };
       }
     }
+    // NOLINTEND(concurrency-mt-unsafe)
     return arguments;
   }
 };
 
-std::string
-random_text(std::size_t length)
+auto
+random_text(std::size_t length) -> std::string
 {
   std::string alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
   static thread_local std::mt19937_64 gen{ std::random_device()() };
@@ -181,9 +184,10 @@ run_workload_sequential(const std::shared_ptr<couchbase::transactions::transacti
     std::map<std::string, std::size_t> errors;
 
     auto exec_start = std::chrono::system_clock::now();
-    auto [err, result] = transactions->run(
-      [&collection, &document_ids, &document, &arguments, &errors](
-        std::shared_ptr<couchbase::transactions::attempt_context> attempt) -> couchbase::error {
+    auto [err, result] =
+      transactions->run([&collection, &document_ids, &document, &arguments, &errors](
+                          const std::shared_ptr<couchbase::transactions::attempt_context>& attempt)
+                          -> couchbase::error {
         for (std::size_t i = 0; i < arguments.number_of_operations; ++i) {
           auto [err, res] = attempt->insert(collection, document_ids[i], document);
           if (err.ec()) {
@@ -196,15 +200,14 @@ run_workload_sequential(const std::shared_ptr<couchbase::transactions::transacti
       });
     auto exec_end = std::chrono::system_clock::now();
 
-    fmt::print(
-      "\rExecuted transaction with {} INSERT operations in {}ms ({}us, {}s), average latency: "
-      "{}ms\n",
-      arguments.number_of_operations,
-      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::microseconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::seconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start).count() /
-        arguments.number_of_operations);
+    fmt::print("\rExecuted transaction with {} INSERT operations in {} ({}, {}), average latency: "
+               "{}ms\n",
+               arguments.number_of_operations,
+               std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start),
+               std::chrono::duration_cast<std::chrono::microseconds>(exec_end - exec_start),
+               std::chrono::duration_cast<std::chrono::seconds>(exec_end - exec_start),
+               std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start) /
+                 arguments.number_of_operations);
     if (err.ec()) {
       fmt::print("\tTransaction completed with error {}, cause={}\n",
                  err.ec().message(),
@@ -230,9 +233,10 @@ run_workload_sequential(const std::shared_ptr<couchbase::transactions::transacti
     std::map<std::string, std::size_t> errors;
 
     auto exec_start = std::chrono::system_clock::now();
-    auto [err, result] = transactions->run(
-      [&collection, &document_ids, &arguments, &errors](
-        std::shared_ptr<couchbase::transactions::attempt_context> attempt) -> couchbase::error {
+    auto [err, result] =
+      transactions->run([&collection, &document_ids, &arguments, &errors](
+                          const std::shared_ptr<couchbase::transactions::attempt_context>& attempt)
+                          -> couchbase::error {
         for (std::size_t i = 0; i < arguments.number_of_operations; ++i) {
           auto [err, res] = attempt->get(collection, document_ids[i]);
           if (err.ec()) {
@@ -246,12 +250,12 @@ run_workload_sequential(const std::shared_ptr<couchbase::transactions::transacti
     auto exec_end = std::chrono::system_clock::now();
 
     fmt::print(
-      "\rExecuted transaction with {} GET operations in {}ms ({}us, {}s), average latency: {}ms\n",
+      "\rExecuted transaction with {} GET operations in {} ({}, {}), average latency: {}\n",
       arguments.number_of_operations,
-      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::microseconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::seconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start).count() /
+      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start),
+      std::chrono::duration_cast<std::chrono::microseconds>(exec_end - exec_start),
+      std::chrono::duration_cast<std::chrono::seconds>(exec_end - exec_start),
+      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start) /
         arguments.number_of_operations);
     if (err.ec()) {
       fmt::print("\tTransaction completed with error {}, cause={}\n",
@@ -360,42 +364,43 @@ run_workload_bulk(const std::shared_ptr<couchbase::transactions::transactions>& 
     auto schedule_start = std::chrono::system_clock::now();
     transactions->run(
       [&collection, &document_ids, &document, &arguments, &errors](
-        std::shared_ptr<couchbase::transactions::async_attempt_context> attempt)
+        const std::shared_ptr<couchbase::transactions::async_attempt_context>& attempt)
         -> couchbase::error {
         for (std::size_t i = 0; i < arguments.number_of_operations; ++i) {
-          attempt->insert(collection, document_ids[i], document, [&errors](auto ctx, auto) {
-            if (ctx.ec()) {
-              errors[ctx.ec().message()]++;
-            }
-          });
+          attempt->insert(collection,
+                          document_ids[i],
+                          document,
+                          [&errors](const auto& ctx, const auto& /* res */) {
+                            if (ctx.ec()) {
+                              errors[ctx.ec().message()]++;
+                            }
+                          });
         }
         return {};
       },
       [tx_promise](auto err, auto result) {
-        tx_promise->set_value({ err, result });
+        tx_promise->set_value({ std::move(err), std::move(result) });
       });
 
     auto schedule_end = std::chrono::system_clock::now();
-    fmt::print(
-      "\rScheduled transaction with {} INSERT operations in {}ms ({}us, {}s)\n",
-      arguments.number_of_operations,
-      std::chrono::duration_cast<std::chrono::milliseconds>(schedule_end - schedule_start).count(),
-      std::chrono::duration_cast<std::chrono::microseconds>(schedule_end - schedule_start).count(),
-      std::chrono::duration_cast<std::chrono::seconds>(schedule_end - schedule_start).count());
+    fmt::print("\rScheduled transaction with {} INSERT operations in {} ({}, {})\n",
+               arguments.number_of_operations,
+               std::chrono::duration_cast<std::chrono::milliseconds>(schedule_end - schedule_start),
+               std::chrono::duration_cast<std::chrono::microseconds>(schedule_end - schedule_start),
+               std::chrono::duration_cast<std::chrono::seconds>(schedule_end - schedule_start));
 
     auto exec_start = std::chrono::system_clock::now();
     auto [err, result] = tx_future.get();
     auto exec_end = std::chrono::system_clock::now();
 
-    fmt::print(
-      "\rExecuted transaction with {} INSERT operations in {}ms ({}us, {}s), average latency: "
-      "{}ms\n",
-      arguments.number_of_operations,
-      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::microseconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::seconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start).count() /
-        arguments.number_of_operations);
+    fmt::print("\rExecuted transaction with {} INSERT operations in {} ({}, {}), average latency: "
+               "{}ms\n",
+               arguments.number_of_operations,
+               std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start),
+               std::chrono::duration_cast<std::chrono::microseconds>(exec_end - exec_start),
+               std::chrono::duration_cast<std::chrono::seconds>(exec_end - exec_start),
+               std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start) /
+                 arguments.number_of_operations);
     if (err.ec()) {
       fmt::print("\tTransaction completed with error {}, cause={}\n",
                  err.ec().message(),
@@ -427,40 +432,40 @@ run_workload_bulk(const std::shared_ptr<couchbase::transactions::transactions>& 
     auto schedule_start = std::chrono::system_clock::now();
     transactions->run(
       [&collection, &document_ids, &arguments, &errors](
-        std::shared_ptr<couchbase::transactions::async_attempt_context> attempt)
+        const std::shared_ptr<couchbase::transactions::async_attempt_context>& attempt)
         -> couchbase::error {
         for (std::size_t i = 0; i < arguments.number_of_operations; ++i) {
-          attempt->get(collection, document_ids[i], [&errors](auto ctx, auto) {
-            if (ctx.ec()) {
-              errors[ctx.ec().message()]++;
-            }
-          });
+          attempt->get(
+            collection, document_ids[i], [&errors](const auto& ctx, const auto& /* res */) {
+              if (ctx.ec()) {
+                errors[ctx.ec().message()]++;
+              }
+            });
         }
         return {};
       },
       [tx_promise](auto err, auto result) {
-        tx_promise->set_value({ err, result });
+        tx_promise->set_value({ std::move(err), std::move(result) });
       });
 
     auto schedule_end = std::chrono::system_clock::now();
-    fmt::print(
-      "\rScheduled transaction with {} GET operations in {}ms ({}us, {}s)\n",
-      arguments.number_of_operations,
-      std::chrono::duration_cast<std::chrono::milliseconds>(schedule_end - schedule_start).count(),
-      std::chrono::duration_cast<std::chrono::microseconds>(schedule_end - schedule_start).count(),
-      std::chrono::duration_cast<std::chrono::seconds>(schedule_end - schedule_start).count());
+    fmt::print("\rScheduled transaction with {} GET operations in {} ({}, {})\n",
+               arguments.number_of_operations,
+               std::chrono::duration_cast<std::chrono::milliseconds>(schedule_end - schedule_start),
+               std::chrono::duration_cast<std::chrono::microseconds>(schedule_end - schedule_start),
+               std::chrono::duration_cast<std::chrono::seconds>(schedule_end - schedule_start));
 
     auto exec_start = std::chrono::system_clock::now();
     auto [err, result] = tx_future.get();
     auto exec_end = std::chrono::system_clock::now();
 
     fmt::print(
-      "\rExecuted transaction with {} GET operations in {}ms ({}us, {}s), average latency: {}ms\n",
+      "\rExecuted transaction with {} GET operations in {} ({}, {}), average latency: {}\n",
       arguments.number_of_operations,
-      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::microseconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::seconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start).count() /
+      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start),
+      std::chrono::duration_cast<std::chrono::microseconds>(exec_end - exec_start),
+      std::chrono::duration_cast<std::chrono::seconds>(exec_end - exec_start),
+      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start) /
         arguments.number_of_operations);
     if (err.ec()) {
       fmt::print("\tTransaction completed with error {}, cause={}\n",
@@ -488,14 +493,14 @@ run_workload_bulk(const std::shared_ptr<couchbase::transactions::transactions>& 
   }
   auto end = std::chrono::system_clock::now();
 
-  fmt::print("Total time for bulk execution {}ms ({}us, {}s)\n",
-             std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count(),
-             std::chrono::duration_cast<std::chrono::microseconds>(end - start).count(),
-             std::chrono::duration_cast<std::chrono::seconds>(end - start).count());
+  fmt::print("Total time for bulk execution {} ({}, {})\n",
+             std::chrono::duration_cast<std::chrono::milliseconds>(end - start),
+             std::chrono::duration_cast<std::chrono::microseconds>(end - start),
+             std::chrono::duration_cast<std::chrono::seconds>(end - start));
 }
 
-int
-main()
+auto
+main() -> int
 {
   auto arguments = program_arguments::load_from_environment();
 

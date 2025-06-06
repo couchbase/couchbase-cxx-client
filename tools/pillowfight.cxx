@@ -143,7 +143,7 @@ private:
                                       operation::cmd_query };
   operation_weights weights_;
   std::vector<std::size_t> weights_vector_;
-  std::discrete_distribution<> distribution_;
+  std::discrete_distribution<std::size_t> distribution_;
 };
 
 constexpr const char* default_bucket_name{ "default" };
@@ -440,11 +440,13 @@ public:
     stats_timer.cancel();
 
     fmt::print("\n\nTotal operations: {}\n", total);
-    fmt::print(
-      "Total keys used: {}\n",
-      std::accumulate(known_keys.begin(), known_keys.end(), 0, [](auto count, const auto& keys) {
-        return count + keys.size();
-      }));
+    fmt::print("Total keys used: {}\n",
+               std::accumulate(known_keys.begin(),
+                               known_keys.end(),
+                               static_cast<std::size_t>(0),
+                               [](auto count, const auto& keys) {
+                                 return count + keys.size();
+                               }));
     const auto total_time = finish_time - start_time;
     fmt::print("Total time: {}s ({}ms)\n",
                std::chrono::duration_cast<std::chrono::seconds>(total_time).count(),
@@ -549,9 +551,7 @@ private:
 
       for (auto&& [start, future] : futures) {
         std::visit(
-          [&stopping, start = start, &known_keys, verbose = verbose_](auto f) mutable {
-            using T = std::decay_t<decltype(f)>;
-
+          [&stopping, start = start, verbose = verbose_](auto f) mutable {
             while (f.wait_for(std::chrono::milliseconds{ 200 }) != std::future_status::ready) {
               if (!running.test_and_set()) {
                 stopping = true;
