@@ -21,7 +21,6 @@
 #include <couchbase/configuration_profile.hxx>
 
 #include <chrono>
-#include <string>
 
 namespace couchbase
 {
@@ -39,6 +38,8 @@ public:
     timeouts.analytics_timeout(std::chrono::minutes(2));
     timeouts.search_timeout(std::chrono::minutes(2));
     timeouts.management_timeout(std::chrono::minutes(2));
+    timeouts.resolve_timeout(std::chrono::seconds(20));  // timeout to resolve hostnames
+    timeouts.bootstrap_timeout(std::chrono::minutes(2)); // overall timeout to bootstrab
   }
 };
 } // namespace couchbase
