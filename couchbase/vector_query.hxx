@@ -1,5 +1,3 @@
-#include <utility>
-
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
  *   Copyright 2023-Present Couchbase, Inc.
@@ -18,6 +16,12 @@
  */
 
 #pragma once
+
+#include <couchbase/search_query.hxx>
+
+#include <memory>
+#include <optional>
+#include <string>
 
 namespace couchbase
 {
@@ -102,6 +106,24 @@ public:
   }
 
   /**
+   * Sets a prefilter, which allows defining a subset of the vector index, over which the vector
+   * search will be executed.
+   *
+   * @param prefilter the prefilter search query
+   *
+   * @return this vector_query for chaining purposes.
+   *
+   * @since 1.2.0
+   * @committed
+   */
+  template<typename SearchQuery>
+  auto prefilter(SearchQuery prefilter) -> vector_query&
+  {
+    prefilter_ = std::make_shared<SearchQuery>(std::move(prefilter));
+    return *this;
+  }
+
+  /**
    * @return encoded representation of the query.
    *
    * @since 1.0.0
@@ -115,5 +137,6 @@ private:
   std::optional<std::vector<double>> vector_query_{};
   std::optional<std::string> base64_vector_query_{};
   std::optional<double> boost_{};
+  std::shared_ptr<search_query> prefilter_{};
 };
 } // namespace couchbase
