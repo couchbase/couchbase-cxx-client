@@ -26,6 +26,14 @@ vector_query::encode() const -> encoded_search_query
 {
   encoded_search_query built;
   built.query = tao::json::empty_object;
+  if (prefilter_) {
+    auto [ec, encoded_prefilter] = prefilter_->encode();
+    if (ec) {
+      built.ec = ec;
+      return built;
+    }
+    built.query["filter"] = encoded_prefilter;
+  }
   if (boost_) {
     built.query["boost"] = boost_.value();
   }

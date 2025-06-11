@@ -248,3 +248,8 @@
  * couchbase::transactions::transaction_query_options has a flex_index option
  */
 #define COUCHBASE_CXX_CLIENT_TRANSACTION_QUERY_OPTIONS_HAVE_FLEX_INDEX 1
+
+/**
+ * couchbase::vector_query has a prefilter option.
+ */
+#define COUCHBASE_CXX_CLIENT_HAS_VECTOR_SEARCH_PREFILTER 1
