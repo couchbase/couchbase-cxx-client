@@ -55,29 +55,31 @@ struct origin {
          const std::string& port,
          cluster_options options);
   origin(cluster_credentials auth, const utils::connection_string& connstr);
-  origin& operator=(origin&& other) = default;
-  origin& operator=(const origin& other);
+  auto operator=(origin&& other) -> origin& = default;
+  auto operator=(const origin& other) -> origin&;
 
-  [[nodiscard]] const std::string& username() const;
-  [[nodiscard]] const std::string& password() const;
-  [[nodiscard]] const std::string& certificate_path() const;
-  [[nodiscard]] const std::string& key_path() const;
+  [[nodiscard]] auto connection_string() const -> const std::string&;
+  [[nodiscard]] auto username() const -> const std::string&;
+  [[nodiscard]] auto password() const -> const std::string&;
+  [[nodiscard]] auto certificate_path() const -> const std::string&;
+  [[nodiscard]] auto key_path() const -> const std::string&;
 
-  [[nodiscard]] std::vector<std::string> get_hostnames() const;
-  [[nodiscard]] std::vector<std::string> get_nodes() const;
+  [[nodiscard]] auto get_hostnames() const -> std::vector<std::string>;
+  [[nodiscard]] auto get_nodes() const -> std::vector<std::string>;
 
+  void shuffle_nodes();
   void set_nodes(node_list nodes);
   void set_nodes_from_config(const topology::configuration& config);
 
-  [[nodiscard]] std::pair<std::string, std::string> next_address();
+  [[nodiscard]] auto next_address() -> std::pair<std::string, std::string>;
 
-  [[nodiscard]] bool exhausted() const;
+  [[nodiscard]] auto exhausted() const -> bool;
 
   void restart();
 
-  [[nodiscard]] const couchbase::core::cluster_options& options() const;
-  [[nodiscard]] couchbase::core::cluster_options& options();
-  [[nodiscard]] const couchbase::core::cluster_credentials& credentials() const;
+  [[nodiscard]] auto options() const -> const couchbase::core::cluster_options&;
+  [[nodiscard]] auto options() -> couchbase::core::cluster_options&;
+  [[nodiscard]] auto credentials() const -> const couchbase::core::cluster_credentials&;
   [[nodiscard]] auto to_json() const -> std::string;
 
 private:
@@ -86,6 +88,7 @@ private:
   node_list nodes_{};
   node_list::iterator next_node_{};
   bool exhausted_{ false };
+  std::string connection_string_{};
 };
 
 } // namespace couchbase::core

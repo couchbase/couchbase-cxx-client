@@ -15,11 +15,14 @@
  *   limitations under the License.
  */
 
+#include "core/origin.hxx"
 #include "test_helper.hxx"
 
 #include "core/utils/connection_string.hxx"
 
 #include <couchbase/build_config.hxx>
+
+#include <spdlog/fmt/bundled/ranges.h>
 
 TEST_CASE("unit: connection string", "[unit]")
 {
@@ -584,5 +587,56 @@ TEST_CASE("unit: connection string", "[unit]")
         "couchbase://2001:db8:85a3:8d3:1319:8a2e:370:7348")
         .error.value() ==
       R"(failed to parse connection string (column: 18, trailer: "db8:85a3:8d3:1319:8a2e:370:7348"))");
+  }
+}
+
+TEST_CASE("unit: bootstrap nodes randomization", "[unit]")
+{
+  std::vector<std::string> source_hostnames{
+    "192.168.0.10", "192.168.0.11", "192.168.0.12", "192.168.0.13", "192.168.0.14", "192.168.0.15",
+    "192.168.0.16", "192.168.0.17", "192.168.0.18", "192.168.0.19", "192.168.0.20", "192.168.0.21",
+    "192.168.0.22", "192.168.0.23", "192.168.0.24", "192.168.0.25", "192.168.0.26", "192.168.0.27",
+    "192.168.0.28", "192.168.0.29", "192.168.0.30", "192.168.0.31", "192.168.0.32", "192.168.0.33",
+    "192.168.0.34", "192.168.0.35", "192.168.0.36", "192.168.0.37", "192.168.0.38", "192.168.0.39",
+  };
+
+  SECTION("preserve_bootstrap_nodes_order = false")
+  {
+    auto connstr = couchbase::core::utils::parse_connection_string(
+      fmt::format("couchbase://{}", fmt::join(source_hostnames, ",")));
+
+    CHECK(connstr.options.preserve_bootstrap_nodes_order == false);
+    for (std::size_t idx = 0; idx < source_hostnames.size(); ++idx) {
+      CHECK(source_hostnames[idx] == connstr.bootstrap_nodes[idx].address);
+    }
+
+    auto origin_1 = couchbase::core::origin({}, connstr);
+    auto bootstrap_hostnames_1 = origin_1.get_hostnames();
+    CHECK(source_hostnames.size() == bootstrap_hostnames_1.size());
+    CHECK(source_hostnames != bootstrap_hostnames_1);
+
+    auto origin_2 = couchbase::core::origin({}, connstr);
+    auto bootstrap_hostnames_2 = origin_2.get_hostnames();
+    CHECK(source_hostnames.size() == bootstrap_hostnames_2.size());
+    CHECK(source_hostnames != bootstrap_hostnames_2);
+
+    CHECK(bootstrap_hostnames_1 != bootstrap_hostnames_2);
+  }
+
+  SECTION("preserve_bootstrap_nodes_order = true")
+  {
+    auto connstr = couchbase::core::utils::parse_connection_string(fmt::format(
+      "couchbase://{}?preserve_bootstrap_nodes_order=true", fmt::join(source_hostnames, ",")));
+
+    CHECK(connstr.options.preserve_bootstrap_nodes_order == true);
+    for (std::size_t idx = 0; idx < source_hostnames.size(); ++idx) {
+      CHECK(source_hostnames[idx] == connstr.bootstrap_nodes[idx].address);
+    }
+
+    auto origin = couchbase::core::origin({}, connstr);
+    auto bootstrap_hostnames = origin.get_hostnames();
+
+    CHECK(source_hostnames.size() == bootstrap_hostnames.size());
+    CHECK(source_hostnames == bootstrap_hostnames);
   }
 }

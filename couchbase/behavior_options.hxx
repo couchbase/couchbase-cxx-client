@@ -67,6 +67,12 @@ public:
     return *this;
   }
 
+  auto preserve_bootstrap_nodes_order(bool enable) -> behavior_options&
+  {
+    preserve_bootstrap_nodes_order_ = enable;
+    return *this;
+  }
+
   struct built {
     std::string user_agent_extra;
     bool show_queries;
@@ -75,6 +81,7 @@ public:
     bool enable_unordered_execution;
     bool dump_configuration;
     std::string network;
+    bool preserve_bootstrap_nodes_order;
   };
 
   [[nodiscard]] auto build() const -> built
@@ -87,6 +94,7 @@ public:
       enable_unordered_execution_,
       dump_configuration_,
       network_,
+      preserve_bootstrap_nodes_order_,
     };
   }
 
@@ -98,5 +106,6 @@ private:
   bool enable_unordered_execution_{ true };
   bool dump_configuration_{ false };
   std::string network_{ "auto" };
+  bool preserve_bootstrap_nodes_order_{ false };
 };
 } // namespace couchbase

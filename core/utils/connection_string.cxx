@@ -586,6 +586,8 @@ extract_options(connection_string& connstr)
       parse_option(connstr.options.enable_app_telemetry, name, value, connstr.warnings);
     } else if (name == "app_telemetry_endpoint") {
       parse_option(connstr.options.app_telemetry_endpoint, name, value, connstr.warnings);
+    } else if (name == "preserve_bootstrap_nodes_order") {
+      parse_option(connstr.options.preserve_bootstrap_nodes_order, name, value, connstr.warnings);
     } else {
       connstr.warnings.push_back(
         fmt::format(R"(unknown parameter "{}" in connection string (value "{}"))", name, value));
@@ -598,6 +600,7 @@ auto
 parse_connection_string(const std::string& input, cluster_options options) -> connection_string
 {
   connection_string res{};
+  res.input = input;
   res.options = std::move(options);
 
   if (input.empty()) {
