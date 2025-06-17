@@ -57,6 +57,7 @@ struct connection_string {
     }
   };
 
+  std::string input;
   std::string scheme{ "couchbase" };
   bool tls{ false };
   std::map<std::string, std::string> params{};

@@ -350,9 +350,10 @@ public:
     }
 
     origin_ = std::move(origin);
-    CB_LOG_DEBUG(R"(open cluster, id: "{}", core version: "{}", {})",
+    CB_LOG_DEBUG(R"(open cluster, id: "{}", core version: "{}", connection string: {}, {})",
                  id_,
                  couchbase::core::meta::sdk_semver(),
+                 origin_.connection_string(),
                  origin_.to_json());
     setup_observability();
     if (origin_.options().enable_dns_srv) {

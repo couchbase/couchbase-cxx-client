@@ -107,6 +107,7 @@ public:
   std::chrono::milliseconds app_telemetry_backoff_interval{
     timeout_defaults::app_telemetry_backoff_interval
   };
+  bool preserve_bootstrap_nodes_order{ false };
 };
 
 } // namespace couchbase::core
