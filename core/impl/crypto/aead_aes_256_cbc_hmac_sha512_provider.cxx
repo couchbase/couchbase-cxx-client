@@ -186,7 +186,7 @@ auto
 generate_initialization_vector() -> std::pair<error, std::vector<std::byte>>
 {
   std::vector<std::byte> iv{ 16 };
-  if (RAND_bytes(reinterpret_cast<unsigned char*>(iv.data()), iv.size()) != 1) {
+  if (RAND_bytes(reinterpret_cast<unsigned char*>(iv.data()), static_cast<int>(iv.size())) != 1) {
     return { error{ errc::field_level_encryption::encryption_failure,
                     "Failed to generate random initialization vector" },
              {} };

@@ -34,7 +34,6 @@ template<>
 struct Catch::StringMaker<couchbase::error> {
   static auto convert(const couchbase::error& err) -> std::string
   {
-    std::string cause{ "unset" };
     return fmt::format("couchbase::error{{ ec: {}, msg: {}, ctx:{}, cause:{} }}",
                        err.ec().message(),
                        err.message(),
