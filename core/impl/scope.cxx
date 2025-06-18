@@ -41,11 +41,15 @@ namespace couchbase
 class scope_impl
 {
 public:
-  scope_impl(core::cluster core, std::string_view bucket_name, std::string_view name)
+  scope_impl(core::cluster core,
+             std::string_view bucket_name,
+             std::string_view name,
+             std::shared_ptr<crypto::manager> crypto_manager)
     : core_{ std::move(core) }
     , bucket_name_{ bucket_name }
     , name_{ name }
     , query_context_{ fmt::format("default:`{}`.`{}`", bucket_name_, name_) }
+    , crypto_manager_{ std::move(crypto_manager) }
   {
   }
 
@@ -62,6 +66,11 @@ public:
   [[nodiscard]] auto core() const -> const core::cluster&
   {
     return core_;
+  }
+
+  [[nodiscard]] auto crypto_manager() const -> const std::shared_ptr<crypto::manager>&
+  {
+    return crypto_manager_;
   }
 
   void query(std::string statement, query_options::built options, query_handler&& handler) const
@@ -104,10 +113,15 @@ private:
   std::string bucket_name_;
   std::string name_;
   std::string query_context_;
+  std::shared_ptr<crypto::manager> crypto_manager_;
 };
 
-scope::scope(core::cluster core, std::string_view bucket_name, std::string_view name)
-  : impl_(std::make_shared<scope_impl>(std::move(core), bucket_name, name))
+scope::scope(core::cluster core,
+             std::string_view bucket_name,
+             std::string_view name,
+             std::shared_ptr<crypto::manager> crypto_manager)
+  : impl_(
+      std::make_shared<scope_impl>(std::move(core), bucket_name, name, std::move(crypto_manager)))
 {
 }
 
@@ -126,7 +140,9 @@ scope::name() const -> const std::string&
 auto
 scope::collection(std::string_view collection_name) const -> couchbase::collection
 {
-  return { impl_->core(), impl_->bucket_name(), impl_->name(), collection_name };
+  return {
+    impl_->core(), impl_->bucket_name(), impl_->name(), collection_name, impl_->crypto_manager()
+  };
 }
 
 void

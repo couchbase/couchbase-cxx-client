@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-Present Couchbase, Inc.
+ *   Copyright 2025. Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -15,23 +15,25 @@
  *   limitations under the License.
  */
 
-#pragma once
+#include <couchbase/crypto/key.hxx>
 
-#include <type_traits>
-
-namespace couchbase::codec
+namespace couchbase::crypto
 {
-template<typename T>
-struct is_transcoder : public std::false_type {
-};
+key::key(std::string id, std::vector<std::byte> bytes)
+  : id_{ std::move(id) }
+  , bytes_{ std::move(bytes) }
+{
+}
 
-template<typename T>
-inline constexpr bool is_transcoder_v = is_transcoder<T>::value;
+auto
+key::id() const -> const std::string&
+{
+  return id_;
+}
 
-template<typename T>
-struct is_crypto_transcoder : public std::false_type {
-};
-
-template<typename T>
-inline constexpr bool is_crypto_transcoder_v = is_crypto_transcoder<T>::value;
-} // namespace couchbase::codec
+auto
+key::bytes() const -> const std::vector<std::byte>&
+{
+  return bytes_;
+}
+} // namespace couchbase::crypto

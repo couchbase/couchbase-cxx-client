@@ -33,6 +33,10 @@ class cluster;
 } // namespace core
 class cluster;
 class bucket_impl;
+namespace crypto
+{
+class manager;
+} // namespace crypto
 #endif
 
 /**
@@ -117,7 +121,7 @@ public:
 private:
   friend cluster;
 
-  bucket(core::cluster core, std::string_view name);
+  bucket(core::cluster core, std::string_view name, std::shared_ptr<crypto::manager>);
 
   std::shared_ptr<bucket_impl> impl_;
 };

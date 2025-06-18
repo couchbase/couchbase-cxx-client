@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-Present Couchbase, Inc.
+ *   Copyright 2025. Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -17,21 +17,17 @@
 
 #pragma once
 
-#include <type_traits>
+#include <optional>
+#include <string>
+#include <vector>
 
-namespace couchbase::codec
+namespace couchbase::crypto
 {
-template<typename T>
-struct is_transcoder : public std::false_type {
+struct encrypted_field {
+  std::vector<std::string> field_path;
+  std::optional<std::string> encrypter_alias{};
 };
 
-template<typename T>
-inline constexpr bool is_transcoder_v = is_transcoder<T>::value;
-
-template<typename T>
-struct is_crypto_transcoder : public std::false_type {
-};
-
-template<typename T>
-inline constexpr bool is_crypto_transcoder_v = is_crypto_transcoder<T>::value;
-} // namespace couchbase::codec
+template<typename Document>
+inline const std::vector<encrypted_field> encrypted_fields = {};
+} // namespace couchbase::crypto

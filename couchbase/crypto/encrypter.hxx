@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-Present Couchbase, Inc.
+ *   Copyright 2025. Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -17,21 +17,24 @@
 
 #pragma once
 
-#include <type_traits>
+#include <couchbase/crypto/encryption_result.hxx>
+#include <couchbase/error.hxx>
 
-namespace couchbase::codec
+#include <utility>
+#include <vector>
+
+namespace couchbase::crypto
 {
-template<typename T>
-struct is_transcoder : public std::false_type {
+class encrypter
+{
+public:
+  encrypter() = default;
+  encrypter(const encrypter& other) = default;
+  encrypter(encrypter&& other) = default;
+  auto operator=(const encrypter& other) -> encrypter& = default;
+  auto operator=(encrypter&& other) -> encrypter& = default;
+  virtual ~encrypter() = default;
+
+  virtual auto encrypt(std::vector<std::byte> plaintext) -> std::pair<error, encryption_result> = 0;
 };
-
-template<typename T>
-inline constexpr bool is_transcoder_v = is_transcoder<T>::value;
-
-template<typename T>
-struct is_crypto_transcoder : public std::false_type {
-};
-
-template<typename T>
-inline constexpr bool is_crypto_transcoder_v = is_crypto_transcoder<T>::value;
-} // namespace couchbase::codec
+} // namespace couchbase::crypto

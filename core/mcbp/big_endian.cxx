@@ -70,4 +70,12 @@ put_uint32(gsl::span<std::byte> bytes, std::uint32_t value)
   bytes[2] = static_cast<std::byte>(value >> 8);
   bytes[3] = static_cast<std::byte>(value);
 }
+
+void
+put_uint64(gsl::span<std::byte> bytes, std::uint64_t value)
+{
+  for (std::size_t i = 0; i < 8; ++i) {
+    bytes[i] = static_cast<std::byte>(value >> (56 - i * 8));
+  }
+}
 } // namespace couchbase::core::mcbp::big_endian

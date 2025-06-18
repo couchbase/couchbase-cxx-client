@@ -22,12 +22,37 @@
 #include "utils/test_data.hxx"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_tostring.hpp>
+#include <spdlog/fmt/bundled/format.h>
+
+#include <couchbase/fmt/error.hxx>
+
+/**
+ * This will make Catch2 show the contents of the error when used in an assertion that fails.
+ */
+template<>
+struct Catch::StringMaker<couchbase::error> {
+  static auto convert(const couchbase::error& err) -> std::string
+  {
+    std::string cause{ "unset" };
+    return fmt::format("couchbase::error{{ ec: {}, msg: {}, ctx:{}, cause:{} }}",
+                       err.ec().message(),
+                       err.message(),
+                       err.ctx().to_json(),
+                       err.cause().has_value() ? convert(err) : "<unset>");
+  }
+};
 
 #define REQUIRE_SUCCESS(ec)                                                                        \
   INFO((ec).message());                                                                            \
   REQUIRE_FALSE(ec)
 #define EXPECT_SUCCESS(result)                                                                     \
-  if (!result) {                                                                                   \
-    INFO(result.error().message());                                                                \
+  if (!(result)) {                                                                                 \
+    INFO((result).error().message());                                                              \
   }                                                                                                \
   REQUIRE(result)
+#define REQUIRE_NO_ERROR(err)                                                                      \
+  if (err) {                                                                                       \
+    INFO(fmt::format("Expected no error. Got: {}.", err));                                         \
+  }                                                                                                \
+  REQUIRE_FALSE((err));

@@ -225,6 +225,13 @@ set(couchbase_cxx_client_FILES
     core/impl/vector_search.cxx
     core/impl/view_error_category.cxx
     core/impl/wildcard_query.cxx
+    core/impl/crypto/aead_aes_256_cbc_hmac_sha512_provider.cxx
+    core/impl/crypto/default_manager.cxx
+    core/impl/crypto/encryption_result.cxx
+    core/impl/crypto/insecure_keyring.cxx
+    core/impl/crypto/key.cxx
+    core/impl/crypto/transcoder.cxx
+    core/impl/crypto/document.cxx
     core/io/config_tracker.cxx
     core/io/dns_client.cxx
     core/io/dns_config.cxx

@@ -27,6 +27,12 @@
 
 namespace couchbase
 {
+#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
+namespace crypto
+{
+class manager;
+} // namespace crypto
+#endif
 
 /**
  * Represents result of @ref collection#get
@@ -55,10 +61,12 @@ public:
    */
   get_result(couchbase::cas cas,
              codec::encoded_value value,
-             std::optional<std::chrono::system_clock::time_point> expiry_time)
+             std::optional<std::chrono::system_clock::time_point> expiry_time,
+             std::shared_ptr<crypto::manager> crypto_manager = {})
     : result{ cas }
     , value_{ std::move(value) }
     , expiry_time_{ expiry_time }
+    , crypto_manager_{ std::move(crypto_manager) }
   {
   }
 
@@ -79,7 +87,11 @@ public:
            std::enable_if_t<codec::is_transcoder_v<Transcoder>, bool> = true>
   [[nodiscard]] auto content_as() const -> Document
   {
-    return Transcoder::template decode<Document>(value_);
+    if constexpr (codec::is_crypto_transcoder_v<Transcoder>) {
+      return Transcoder::template decode<Document>(value_, crypto_manager_);
+    } else {
+      return Transcoder::template decode<Document>(value_);
+    }
   }
 
   /**
@@ -102,7 +114,11 @@ public:
   template<typename Transcoder, std::enable_if_t<codec::is_transcoder_v<Transcoder>, bool> = true>
   [[nodiscard]] auto content_as() const -> typename Transcoder::document_type
   {
-    return Transcoder::decode(value_);
+    if constexpr (codec::is_crypto_transcoder_v<Transcoder>) {
+      return Transcoder::decode(value_, crypto_manager_);
+    } else {
+      return Transcoder::decode(value_);
+    }
   }
 
   /**
@@ -127,6 +143,7 @@ public:
 private:
   codec::encoded_value value_{};
   std::optional<std::chrono::system_clock::time_point> expiry_time_{};
+  std::shared_ptr<crypto::manager> crypto_manager_{};
 };
 
 } // namespace couchbase
