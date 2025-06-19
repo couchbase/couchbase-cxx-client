@@ -28,6 +28,17 @@ struct encrypted_field {
   std::optional<std::string> encrypter_alias{};
 };
 
+template<typename Document, typename = void>
+struct has_encrypted_fields : std::false_type {
+};
+
 template<typename Document>
-inline const std::vector<encrypted_field> encrypted_fields = {};
+struct has_encrypted_fields<Document, std::void_t<decltype(Document::encrypted_fields)>>
+  : std::is_same<decltype(Document::encrypted_fields),
+                 const std::vector<couchbase::crypto::encrypted_field>> {
+};
+
+template<typename Document>
+constexpr bool has_encrypted_fields_v = has_encrypted_fields<Document>::value;
+
 } // namespace couchbase::crypto

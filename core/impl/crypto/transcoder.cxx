@@ -50,7 +50,6 @@ decrypt_top_level_object_fields(tao::json::value& object,
         return std::move(err);
       }
 
-      auto demangled_key = crypto_manager->demangle(k);
       object[crypto_manager->demangle(k)] = core::utils::json::parse_binary(decrypted);
       encrypted_keys.push_back(k);
     }
@@ -107,6 +106,14 @@ encrypt(const codec::binary& raw,
   }
 
   for (const auto& [path, alias] : ordered_encrypted_fields) {
+    if (path.empty()) {
+      return { error{
+                 errc::field_level_encryption::encryption_failure,
+                 fmt::format("Empty path is not allowed for encryption"),
+               },
+               {} };
+    }
+
     tao::json::value* blob = &document;
 
     for (std::size_t i = 0; i < path.size() - 1; ++i) {
@@ -119,10 +126,21 @@ encrypt(const codec::binary& raw,
                  },
                  {} };
       }
+      if (!blob->is_object()) {
+        return { error{
+                   errc::field_level_encryption::encryption_failure,
+                   fmt::format(
+                     "Path '{}' in document for encryption points to {} instead of an object",
+                     fmt::join(path, "."),
+                     tao::json::to_string(blob->type())),
+                 },
+                 {} };
+      }
     }
     auto current_field_key = path.at(path.size() - 1);
-    auto [err, encrypted] = crypto_manager->encrypt(
-      core::utils::json::generate_binary(blob->at(current_field_key)), alias);
+    const auto& current_field_value = blob->at(current_field_key);
+    auto [err, encrypted] =
+      crypto_manager->encrypt(core::utils::json::generate_binary(current_field_value), alias);
     if (err) {
       return { err, {} };
     }

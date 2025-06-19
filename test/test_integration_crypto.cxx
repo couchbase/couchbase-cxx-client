@@ -59,10 +59,6 @@ make_crypto_manager() -> std::shared_ptr<couchbase::crypto::default_manager>
   return manager;
 }
 
-template<>
-inline const auto couchbase::crypto::encrypted_fields<profile> =
-  std::vector{ encrypted_field{ { "full_name" } } };
-
 TEST_CASE("integration: upsert and get with encryption", "[integration]")
 {
   test::utils::integration_test_guard integration;
@@ -75,6 +71,9 @@ TEST_CASE("integration: upsert and get with encryption", "[integration]")
   REQUIRE_NO_ERROR(err);
 
   profile albert{ "this_guy_again", "Albert Einstein", 1879 };
+
+  static_assert(couchbase::crypto::has_encrypted_fields_v<profile>,
+                "profile should have encrypted_fields");
 
   const auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
   {

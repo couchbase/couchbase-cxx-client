@@ -65,8 +65,11 @@ public:
                               "crypto manager is not set, cannot use transcoder with FLE");
     }
     auto data = Serializer::serialize(document);
-    auto [err, encrypted_data] =
-      internal::encrypt(data, encrypted_fields<Document>, crypto_manager);
+
+    static const std::vector<encrypted_field> no_fields_to_encrypt{};
+    constexpr const std::vector<encrypted_field>& encrypted_fields =
+      has_encrypted_fields_v<Document> ? Document::encrypted_fields : no_fields_to_encrypt;
+    auto [err, encrypted_data] = internal::encrypt(data, encrypted_fields, crypto_manager);
     if (err) {
       throw std::system_error(err.ec(), "Failed to encrypt document: " + err.message());
     }

@@ -44,6 +44,13 @@ struct doc {
   {
     return maxim == other.maxim;
   }
+
+  inline static const std::vector<couchbase::crypto::encrypted_field> encrypted_fields{
+    {
+      /* .field_path = */ { "maxim" },
+      /* .encrypter_alias = */ {},
+    },
+  };
 };
 
 template<>
@@ -55,17 +62,13 @@ struct tao::json::traits<doc> {
   }
 
   template<template<typename...> class Traits>
-  static doc as(const tao::json::basic_value<Traits>& v)
+  static auto as(const tao::json::basic_value<Traits>& v) -> doc
   {
     doc d;
     d.maxim = v.at("maxim").get_string();
     return d;
   }
 };
-
-template<>
-inline const auto couchbase::crypto::encrypted_fields<doc> =
-  std::vector{ encrypted_field{ { "maxim" } } };
 
 const auto KEY =
   make_bytes({ 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c,
@@ -94,6 +97,9 @@ TEST_CASE("unit: crypto transcoder", "[unit]")
   const auto crypto_manager = make_crypto_manager();
 
   const doc d{ "The enemy knows the system." };
+
+  static_assert(couchbase::crypto::has_encrypted_fields_v<doc>,
+                "profile should have encrypted_fields");
 
   SECTION("encoding")
   {

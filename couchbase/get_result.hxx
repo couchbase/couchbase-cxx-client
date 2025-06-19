@@ -22,6 +22,7 @@
 
 #include <chrono>
 #include <cinttypes>
+#include <memory>
 #include <optional>
 #include <vector>
 
