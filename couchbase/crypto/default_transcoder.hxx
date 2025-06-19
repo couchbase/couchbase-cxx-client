@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-Present Couchbase, Inc.
+ *   Copyright 2025. Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -17,21 +17,30 @@
 
 #pragma once
 
-#include <type_traits>
+#include <couchbase/codec/transcoder_traits.hxx>
+#include <couchbase/crypto/transcoder.hxx>
 
-namespace couchbase::codec
+namespace couchbase
 {
-template<typename T>
-struct is_transcoder : public std::false_type {
+namespace codec
+{
+class tao_json_serializer;
+} // namespace codec
+
+namespace crypto
+{
+using default_transcoder = transcoder<codec::tao_json_serializer>;
+} // namespace crypto
+} // namespace couchbase
+
+#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
+template<>
+struct couchbase::codec::is_transcoder<couchbase::crypto::default_transcoder>
+  : public std::true_type {
 };
 
-template<typename T>
-inline constexpr bool is_transcoder_v = is_transcoder<T>::value;
-
-template<typename T>
-struct is_crypto_transcoder : public std::false_type {
+template<>
+struct couchbase::codec::is_crypto_transcoder<couchbase::crypto::default_transcoder>
+  : public std::true_type {
 };
-
-template<typename T>
-inline constexpr bool is_crypto_transcoder_v = is_crypto_transcoder<T>::value;
-} // namespace couchbase::codec
+#endif

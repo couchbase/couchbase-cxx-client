@@ -206,7 +206,10 @@ public:
 private:
   friend class bucket;
 
-  scope(core::cluster core, std::string_view bucket_name, std::string_view name);
+  scope(core::cluster core,
+        std::string_view bucket_name,
+        std::string_view name,
+        std::shared_ptr<crypto::manager> crypto_manager);
 
   std::shared_ptr<scope_impl> impl_;
 };

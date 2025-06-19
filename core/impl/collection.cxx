@@ -111,11 +111,13 @@ public:
   collection_impl(core::cluster core,
                   std::string_view bucket_name,
                   std::string_view scope_name,
-                  std::string_view name)
+                  std::string_view name,
+                  std::shared_ptr<crypto::manager> crypto_manager)
     : core_{ std::move(core) }
     , bucket_name_{ bucket_name }
     , scope_name_{ scope_name }
     , name_{ name }
+    , crypto_manager_{ std::move(crypto_manager) }
   {
   }
 
@@ -139,6 +141,11 @@ public:
     return core_;
   }
 
+  [[nodiscard]] auto crypto_manager() const -> const std::shared_ptr<crypto::manager>&
+  {
+    return crypto_manager_;
+  }
+
   void get(std::string document_key, get_options::built options, get_handler&& handler) const
   {
     if (!options.with_expiry && options.projections.empty()) {
@@ -151,9 +158,11 @@ public:
           { options.retry_strategy },
           options.parent_span,
         },
-        [handler = std::move(handler)](auto resp) mutable {
-          return handler(core::impl::make_error(std::move(resp.ctx)),
-                         get_result{ resp.cas, { std::move(resp.value), resp.flags }, {} });
+        [crypto_manager = crypto_manager_, handler = std::move(handler)](auto resp) mutable {
+          return handler(
+            core::impl::make_error(std::move(resp.ctx)),
+            get_result{
+              resp.cas, { std::move(resp.value), resp.flags }, {}, std::move(crypto_manager) });
         });
     }
     return core_.execute(
@@ -169,13 +178,16 @@ public:
         { options.retry_strategy },
         options.parent_span,
       },
-      [handler = std::move(handler)](auto resp) mutable {
+      [crypto_manager = crypto_manager_, handler = std::move(handler)](auto resp) mutable {
         std::optional<std::chrono::system_clock::time_point> expiry_time{};
         if (resp.expiry && resp.expiry.value() > 0) {
           expiry_time.emplace(std::chrono::seconds{ resp.expiry.value() });
         }
         return handler(core::impl::make_error(std::move(resp.ctx)),
-                       get_result{ resp.cas, { std::move(resp.value), resp.flags }, expiry_time });
+                       get_result{ resp.cas,
+                                   { std::move(resp.value), resp.flags },
+                                   expiry_time,
+                                   std::move(crypto_manager) });
       });
   }
 
@@ -194,9 +206,11 @@ public:
         { options.retry_strategy },
         options.parent_span,
       },
-      [handler = std::move(handler)](auto resp) mutable {
-        return handler(core::impl::make_error(std::move(resp.ctx)),
-                       get_result{ resp.cas, { std::move(resp.value), resp.flags }, {} });
+      [crypto_manager = crypto_manager_, handler = std::move(handler)](auto resp) mutable {
+        return handler(
+          core::impl::make_error(std::move(resp.ctx)),
+          get_result{
+            resp.cas, { std::move(resp.value), resp.flags }, {}, std::move(crypto_manager) });
       });
   }
 
@@ -230,12 +244,13 @@ public:
         options.timeout,
         options.read_preference,
       },
-      [handler = std::move(handler)](auto resp) mutable {
+      [crypto_manager = crypto_manager_, handler = std::move(handler)](auto resp) mutable {
         return handler(core::impl::make_error(std::move(resp.ctx)),
                        get_replica_result{
                          resp.cas,
                          resp.replica,
                          { std::move(resp.value), resp.flags },
+                         std::move(crypto_manager),
                        });
       });
   }
@@ -250,13 +265,14 @@ public:
         options.timeout,
         options.read_preference,
       },
-      [handler = std::move(handler)](auto resp) mutable {
+      [crypto_manager = crypto_manager_, handler = std::move(handler)](auto resp) mutable {
         get_all_replicas_result result{};
         for (auto& entry : resp.entries) {
           result.emplace_back(get_replica_result{
             entry.cas,
             entry.replica,
             { std::move(entry.value), entry.flags },
+            crypto_manager,
           });
         }
         return handler(core::impl::make_error(std::move(resp.ctx)), std::move(result));
@@ -346,9 +362,11 @@ public:
         { options.retry_strategy },
         options.parent_span,
       },
-      [handler = std::move(handler)](auto&& resp) mutable {
-        return handler(core::impl::make_error(std::move(resp.ctx)),
-                       get_result{ resp.cas, { std::move(resp.value), resp.flags }, {} });
+      [crypto_manager = crypto_manager_, handler = std::move(handler)](auto&& resp) mutable {
+        return handler(
+          core::impl::make_error(std::move(resp.ctx)),
+          get_result{
+            resp.cas, { std::move(resp.value), resp.flags }, {}, std::move(crypto_manager) });
       });
   }
 
@@ -932,12 +950,13 @@ public:
                                                               core_scan_type,
                                                               orchestrator_opts);
             return orchestrator.scan(
-              [handler = std::move(handler)](auto ec, auto core_scan_result) mutable {
+              [crypto_manager = crypto_manager_,
+               handler = std::move(handler)](auto ec, auto core_scan_result) mutable {
                 if (ec) {
                   return handler(error(ec, "Error while starting the range scan"), {});
                 }
-                auto internal_result =
-                  std::make_shared<internal_scan_result>(std::move(core_scan_result));
+                auto internal_result = std::make_shared<internal_scan_result>(
+                  std::move(core_scan_result), std::move(crypto_manager));
                 return handler({}, scan_result{ internal_result });
               });
           });
@@ -949,13 +968,19 @@ private:
   std::string bucket_name_;
   std::string scope_name_;
   std::string name_;
+  std::shared_ptr<crypto::manager> crypto_manager_;
 };
 
 collection::collection(core::cluster core,
                        std::string_view bucket_name,
                        std::string_view scope_name,
-                       std::string_view name)
-  : impl_(std::make_shared<collection_impl>(std::move(core), bucket_name, scope_name, name))
+                       std::string_view name,
+                       std::shared_ptr<crypto::manager> crypto_manager)
+  : impl_(std::make_shared<collection_impl>(std::move(core),
+                                            bucket_name,
+                                            scope_name,
+                                            name,
+                                            std::move(crypto_manager)))
 {
 }
 
@@ -987,6 +1012,12 @@ auto
 collection::binary() const -> binary_collection
 {
   return { impl_->core(), impl_->bucket_name(), impl_->scope_name(), impl_->name() };
+}
+
+auto
+collection::crypto_manager() const -> const std::shared_ptr<crypto::manager>&
+{
+  return impl_->crypto_manager();
 }
 
 void

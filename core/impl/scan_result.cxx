@@ -36,38 +36,42 @@ namespace couchbase
 namespace
 {
 auto
-to_scan_result_item(core::range_scan_item core_item) -> scan_result_item
+to_scan_result_item(core::range_scan_item core_item,
+                    const std::shared_ptr<crypto::manager>& crypto_manager) -> scan_result_item
 {
   if (!core_item.body) {
-    return scan_result_item{ core_item.key };
+    return scan_result_item{ std::move(core_item.key) };
   }
   return scan_result_item{
-    core_item.key,
+    std::move(core_item.key),
     core_item.body.value().cas,
-    couchbase::codec::encoded_value{ core_item.body.value().value, core_item.body.value().flags },
+    codec::encoded_value{ std::move(core_item.body.value().value), core_item.body.value().flags },
     core_item.body.value().expiry_time(),
+    crypto_manager,
   };
 }
 } // namespace
 
-internal_scan_result::internal_scan_result(core::scan_result core_result)
+internal_scan_result::internal_scan_result(core::scan_result core_result,
+                                           std::shared_ptr<crypto::manager> crypto_manager)
   : core_result_{ std::move(core_result) }
+  , crypto_manager_{ std::move(crypto_manager) }
 {
 }
 
 void
 internal_scan_result::next(scan_item_handler&& handler)
 {
-  return core_result_.next(
-    [handler = std::move(handler)](core::range_scan_item item, std::error_code ec) mutable {
-      if (ec == couchbase::errc::key_value::range_scan_completed) {
-        return handler({}, {});
-      }
-      if (ec) {
-        return handler(error(ec, "Error getting the next scan result item."), {});
-      }
-      handler({}, to_scan_result_item(std::move(item)));
-    });
+  return core_result_.next([crypto_manager = crypto_manager_, handler = std::move(handler)](
+                             core::range_scan_item item, std::error_code ec) mutable {
+    if (ec == couchbase::errc::key_value::range_scan_completed) {
+      return handler({}, {});
+    }
+    if (ec) {
+      return handler(error(ec, "Error getting the next scan result item."), {});
+    }
+    handler({}, to_scan_result_item(std::move(item), std::move(crypto_manager)));
+  });
 }
 
 void

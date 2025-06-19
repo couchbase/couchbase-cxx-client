@@ -1033,7 +1033,7 @@ encrypt(const Cipher cipher, std::string_view key, std::string_view iv, std::str
                                 std::to_string(iv.size()) + " (expected 16)");
   }
 
-  return encrypt(cipher, key, iv, data);
+  return internal::encrypt(cipher, key, iv, data);
 }
 
 auto
@@ -1057,7 +1057,7 @@ decrypt(const Cipher cipher, std::string_view key, std::string_view iv, std::str
                                 std::to_string(iv.size()) + " (expected 16)");
   }
 
-  return decrypt(cipher, key, iv, data);
+  return internal::decrypt(cipher, key, iv, data);
 }
 
 auto
