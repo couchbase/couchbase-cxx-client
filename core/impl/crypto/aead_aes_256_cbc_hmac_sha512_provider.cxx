@@ -20,6 +20,7 @@
 #include "core/mcbp/big_endian.hxx"
 #include "core/utils/binary.hxx"
 
+#include <couchbase/build_config.hxx>
 #include <couchbase/crypto/aead_aes_256_cbc_hmac_sha512_provider.hxx>
 #include <couchbase/error_codes.hxx>
 
@@ -186,7 +187,12 @@ auto
 generate_initialization_vector() -> std::pair<error, std::vector<std::byte>>
 {
   std::vector<std::byte> iv{ 16 };
-  if (RAND_bytes(reinterpret_cast<unsigned char*>(iv.data()), iv.size()) != 1) {
+#ifdef COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL
+  auto iv_size = iv.size();
+#else
+  auto iv_size = static_cast<int>(iv.size());
+#endif
+  if (RAND_bytes(reinterpret_cast<unsigned char*>(iv.data()), iv_size) != 1) {
     return { error{ errc::field_level_encryption::encryption_failure,
                     "Failed to generate random initialization vector" },
              {} };
