@@ -62,7 +62,7 @@ internal_scan_result::internal_scan_result(core::scan_result core_result,
 void
 internal_scan_result::next(scan_item_handler&& handler)
 {
-  return core_result_.next([crypto_manager = crypto_manager_, handler = std::move(handler)](
+  return core_result_.next([&crypto_manager = crypto_manager_, handler = std::move(handler)](
                              core::range_scan_item item, std::error_code ec) mutable {
     if (ec == couchbase::errc::key_value::range_scan_completed) {
       return handler({}, {});
@@ -70,7 +70,7 @@ internal_scan_result::next(scan_item_handler&& handler)
     if (ec) {
       return handler(error(ec, "Error getting the next scan result item."), {});
     }
-    handler({}, to_scan_result_item(std::move(item), std::move(crypto_manager)));
+    handler({}, to_scan_result_item(std::move(item), crypto_manager));
   });
 }
 

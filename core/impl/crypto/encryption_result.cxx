@@ -19,6 +19,8 @@
 
 #include "core/platform/base64.h"
 
+#include <stdexcept>
+
 namespace couchbase::crypto
 {
 encryption_result::encryption_result(std::string algorithm)

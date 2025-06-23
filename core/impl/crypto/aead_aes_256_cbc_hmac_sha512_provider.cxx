@@ -30,6 +30,8 @@
 #include "core/crypto/cbcrypto.h"
 #include "core/platform/base64.h"
 
+#include <stdexcept>
+
 namespace couchbase::core::impl::crypto
 {
 auto
