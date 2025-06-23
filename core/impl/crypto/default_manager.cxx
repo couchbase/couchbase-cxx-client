@@ -78,7 +78,8 @@ default_manager::decrypt(std::map<std::string, std::string> encrypted_node)
                                 enc_result.algorithm()) },
              {} };
   }
-  return algorithm_to_decrypter_.at(enc_result.algorithm())->decrypt(std::move(enc_result));
+  const auto decrypter = algorithm_to_decrypter_.at(enc_result.algorithm());
+  return decrypter->decrypt(std::move(enc_result));
 }
 
 auto

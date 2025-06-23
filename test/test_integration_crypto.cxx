@@ -66,9 +66,9 @@ TEST_CASE("integration: upsert and get with encryption", "[integration]")
   auto cluster_options = integration.ctx.build_options();
   cluster_options.crypto_manager(make_crypto_manager());
 
-  auto [err, cluster] =
+  auto [connect_err, cluster] =
     couchbase::cluster::connect(integration.ctx.connection_string, cluster_options).get();
-  REQUIRE_NO_ERROR(err);
+  REQUIRE_NO_ERROR(connect_err);
 
   profile albert{ "this_guy_again", "Albert Einstein", 1879 };
 

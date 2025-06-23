@@ -35,8 +35,7 @@ public:
   auto register_decrypter(std::shared_ptr<decrypter> decrypter) -> error;
   auto register_default_encrypter(std::shared_ptr<encrypter> encrypter) -> error;
 
-  auto encrypt(std::vector<std::byte> plaintext,
-               const std::optional<std::string>& encrypter_alias = {})
+  auto encrypt(std::vector<std::byte> plaintext, const std::optional<std::string>& encrypter_alias)
     -> std::pair<error, std::map<std::string, std::string>> override;
   auto decrypt(std::map<std::string, std::string> encrypted_node)
     -> std::pair<error, std::vector<std::byte>> override;
