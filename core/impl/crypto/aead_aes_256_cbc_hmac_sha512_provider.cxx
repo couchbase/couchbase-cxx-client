@@ -46,11 +46,10 @@ aead_aes_256_cbc_hmac_sha512_encrypt(std::vector<std::byte> key,
       error{ errc::field_level_encryption::invalid_crypto_key, "Key must be 64 bytes long." }, {}
     };
   }
-  auto hmac_key = std::vector<std::byte>{ key.begin(), key.begin() + 32 };
-  auto aes_key = std::vector<std::byte>{ key.begin() + 32, key.end() };
 
   std::vector<std::byte> ciphertext;
   try {
+    auto aes_key = std::vector<std::byte>{ key.begin() + 32, key.end() };
     ciphertext = core::utils::to_binary(
       core::crypto::encrypt(core::crypto::Cipher::AES_256_cbc,
                             { reinterpret_cast<char*>(aes_key.data()), aes_key.size() },
@@ -76,6 +75,7 @@ aead_aes_256_cbc_hmac_sha512_encrypt(std::vector<std::byte> key,
 
   std::vector<std::byte> auth_tag;
   try {
+    auto hmac_key = std::vector<std::byte>{ key.begin(), key.begin() + 32 };
     auth_tag = core::utils::to_binary(
       core::crypto::CBC_HMAC(core::crypto::Algorithm::ALG_SHA512,
                              { reinterpret_cast<char*>(hmac_key.data()), hmac_key.size() },
@@ -116,8 +116,6 @@ aead_aes_256_cbc_hmac_sha512_decrypt(std::vector<std::byte> key,
       error{ errc::field_level_encryption::invalid_crypto_key, "key must be 64 bytes long." }, {}
     };
   }
-  auto hmac_key = std::vector<std::byte>{ key.begin(), key.begin() + 32 };
-  auto aes_key = std::vector<std::byte>{ key.begin() + 32, key.end() };
 
   std::vector<std::byte> associated_data_length{ sizeof(std::uint64_t) };
   mcbp::big_endian::put_uint64(associated_data_length, associated_data.size() * 8); // In bits
@@ -134,6 +132,7 @@ aead_aes_256_cbc_hmac_sha512_decrypt(std::vector<std::byte> key,
 
   std::vector<std::byte> auth_tag;
   try {
+    auto hmac_key = std::vector<std::byte>{ key.begin(), key.begin() + 32 };
     auth_tag = core::utils::to_binary(
       core::crypto::CBC_HMAC(core::crypto::Algorithm::ALG_SHA512,
                              { reinterpret_cast<char*>(hmac_key.data()), hmac_key.size() },
@@ -162,11 +161,12 @@ aead_aes_256_cbc_hmac_sha512_decrypt(std::vector<std::byte> key,
              {} };
   }
 
-  auto iv = std::vector<std::byte>{ ciphertext.begin(), ciphertext.begin() + 16 };
-  ciphertext.erase(ciphertext.begin(), ciphertext.begin() + 16);
-
   std::vector<std::byte> plaintext;
   try {
+    auto iv = std::vector<std::byte>{ ciphertext.begin(), ciphertext.begin() + 16 };
+    ciphertext.erase(ciphertext.begin(), ciphertext.begin() + 16);
+
+    auto aes_key = std::vector<std::byte>{ key.begin() + 32, key.end() };
     plaintext = core::utils::to_binary(
       core::crypto::decrypt(core::crypto::Cipher::AES_256_cbc,
                             { reinterpret_cast<char*>(aes_key.data()), aes_key.size() },
