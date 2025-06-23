@@ -169,3 +169,149 @@ TEST_CASE("unit: crypto transcoder", "[unit]")
     REQUIRE(decoded_doc_as_tao_json.find("encrypted$maxim") == nullptr);
   }
 }
+
+struct doc_with_empty_path {
+  std::string maxim;
+
+  auto operator==(const doc& other) const -> bool
+  {
+    return maxim == other.maxim;
+  }
+
+  inline static const std::vector<couchbase::crypto::encrypted_field> encrypted_fields{
+    {
+      /* .field_path = */ { "maxim" },
+      /* .encrypter_alias = */ {},
+    },
+    {
+      /* by mistake the user might add an extra empty default-initialized encrypted_field
+         which would have empty path */
+    },
+  };
+};
+
+template<>
+struct tao::json::traits<doc_with_empty_path> {
+  template<template<typename...> class Traits>
+  static void assign(tao::json::basic_value<Traits>& v, const doc_with_empty_path& d)
+  {
+    v = { { "maxim", d.maxim } };
+  }
+
+  template<template<typename...> class Traits>
+  static auto as(const tao::json::basic_value<Traits>& v) -> doc_with_empty_path
+  {
+    doc_with_empty_path d;
+    d.maxim = v.at("maxim").get_string();
+    return d;
+  }
+};
+
+TEST_CASE("unit: crypto transcoder with document that has empty encrypted field path", "[unit]")
+{
+  const auto crypto_manager = make_crypto_manager();
+
+  const doc_with_empty_path d{ "The enemy knows the system." };
+
+  try {
+    const auto _ = couchbase::crypto::default_transcoder::encode(d, crypto_manager);
+    FAIL("Expected exception to be thrown, but was not.");
+  } catch (const std::system_error& e) {
+    REQUIRE(e.code() == couchbase::errc::field_level_encryption::encryption_failure);
+  }
+}
+
+struct doc_with_non_existent_path {
+  std::string maxim;
+
+  auto operator==(const doc_with_non_existent_path& other) const -> bool
+  {
+    return maxim == other.maxim;
+  }
+
+  inline static const std::vector<couchbase::crypto::encrypted_field> encrypted_fields{
+    {
+      /* .field_path = */ { "this-does-not-exist" },
+    },
+  };
+};
+
+template<>
+struct tao::json::traits<doc_with_non_existent_path> {
+  template<template<typename...> class Traits>
+  static void assign(tao::json::basic_value<Traits>& v, const doc_with_non_existent_path& d)
+  {
+    v = { { "maxim", d.maxim } };
+  }
+
+  template<template<typename...> class Traits>
+  static auto as(const tao::json::basic_value<Traits>& v) -> doc_with_non_existent_path
+  {
+    doc_with_non_existent_path d;
+    d.maxim = v.at("maxim").get_string();
+    return d;
+  }
+};
+
+TEST_CASE("unit: crypto transcoder with document that has encrypted field path that does not exist",
+          "[unit]")
+{
+  const auto crypto_manager = make_crypto_manager();
+
+  const doc_with_non_existent_path d{ "The enemy knows the system." };
+
+  try {
+    const auto _ = couchbase::crypto::default_transcoder::encode(d, crypto_manager);
+    FAIL("Expected exception to be thrown, but was not.");
+  } catch (const std::system_error& e) {
+    REQUIRE(e.code() == couchbase::errc::field_level_encryption::encryption_failure);
+  }
+}
+
+struct doc_with_invalid_encrypter_alias {
+  std::string maxim;
+
+  auto operator==(const doc_with_invalid_encrypter_alias& other) const -> bool
+  {
+    return maxim == other.maxim;
+  }
+
+  inline static const std::vector<couchbase::crypto::encrypted_field> encrypted_fields{
+    {
+      /* .field_path = */ { "maxim" },
+      /* .encrypter_alias = */ { "does-not-exist" },
+    },
+  };
+};
+
+template<>
+struct tao::json::traits<doc_with_invalid_encrypter_alias> {
+  template<template<typename...> class Traits>
+  static void assign(tao::json::basic_value<Traits>& v, const doc_with_invalid_encrypter_alias& d)
+  {
+    v = { { "maxim", d.maxim } };
+  }
+
+  template<template<typename...> class Traits>
+  static auto as(const tao::json::basic_value<Traits>& v) -> doc_with_invalid_encrypter_alias
+  {
+    doc_with_invalid_encrypter_alias d;
+    d.maxim = v.at("maxim").get_string();
+    return d;
+  }
+};
+
+TEST_CASE("unit: crypto transcoder with document that has encrypter alias that cannot be found",
+          "[unit]")
+{
+  const auto crypto_manager = make_crypto_manager();
+
+  const doc_with_invalid_encrypter_alias d{ "The enemy knows the system." };
+
+  try {
+    const auto _ = couchbase::crypto::default_transcoder::encode(d, crypto_manager);
+    FAIL("Expected exception to be thrown, but was not.");
+  } catch (const std::system_error& e) {
+    REQUIRE(e.code() == couchbase::errc::field_level_encryption::encrypter_not_found);
+  }
+}

@@ -23,6 +23,8 @@
 #include <spdlog/fmt/bundled/ranges.h>
 #include <tao/json/value.hpp>
 
+#include "core/logger/logger.hxx"
+
 namespace couchbase::crypto::internal
 {
 namespace
@@ -138,6 +140,14 @@ encrypt(const codec::binary& raw,
       }
     }
     auto current_field_key = path.at(path.size() - 1);
+    if (blob->find(current_field_key) == nullptr) {
+      return { error{
+                 errc::field_level_encryption::encryption_failure,
+                 fmt::format("Failed to find path '{}' in document for encryption",
+                             fmt::join(path, ".")),
+               },
+               {} };
+    }
     const auto& current_field_value = blob->at(current_field_key);
     auto [err, encrypted] =
       crypto_manager->encrypt(core::utils::json::generate_binary(current_field_value), alias);
