@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <couchbase/cas.hxx>
 #include <couchbase/cluster_options.hxx>
 #include <couchbase/codec/encoded_value.hxx>
 #include <couchbase/codec/transcoder_traits.hxx>
@@ -33,8 +34,8 @@
 
 namespace std::chrono
 {
-inline bool
-lexical_cast(const std::string& input, std::chrono::milliseconds& value)
+inline auto
+lexical_cast(const std::string& input, std::chrono::milliseconds& value) -> bool
 {
   try {
     value = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -53,8 +54,8 @@ lexical_cast(const std::string& input, std::chrono::milliseconds& value)
   return true;
 }
 
-inline std::ostream&
-operator<<(std::ostream& os, std::chrono::milliseconds duration)
+inline auto
+operator<<(std::ostream& os, std::chrono::milliseconds duration) -> std::ostream&
 {
   os << fmt::format("{}", duration);
   return os;
@@ -67,6 +68,12 @@ constexpr std::string_view default_bucket_name{ "default" };
 
 struct passthrough_transcoder {
   using document_type = std::pair<std::vector<std::byte>, std::uint32_t>;
+
+  static auto encode(const couchbase::codec::encoded_value& document)
+    -> couchbase::codec::encoded_value
+  {
+    return { document.data, document.flags };
+  }
 
   static auto decode(const couchbase::codec::encoded_value& encoded) -> document_type
   {
@@ -206,6 +213,24 @@ struct keyspace_with_id {
 auto
 extract_inlined_keyspace(const std::string& id) -> std::optional<keyspace_with_id>;
 
+struct document_id_with_value {
+  std::string id;
+  couchbase::codec::encoded_value value;
+};
+
+auto
+extract_inlined_value(const std::string& id, const std::optional<std::string>& separator)
+  -> std::optional<document_id_with_value>;
+
+struct document_id_with_cas {
+  std::string id;
+  couchbase::cas cas;
+};
+
+auto
+extract_inlined_cas(const std::string& id, const std::optional<std::string>& separator)
+  -> std::optional<document_id_with_cas>;
+
 auto
 available_query_scan_consistency_modes() -> std::vector<std::string>;
 
@@ -214,6 +239,9 @@ available_analytics_scan_consistency_modes() -> std::vector<std::string>;
 
 [[noreturn]] void
 fail(std::string_view message);
+
+[[nodiscard]] auto
+cas_to_time_point(couchbase::cas cas) -> std::chrono::system_clock::time_point;
 } // namespace cbc
 
 template<>

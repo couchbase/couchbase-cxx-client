@@ -1,42 +1,60 @@
-# cbc-query - Execute N1QL Query {#cbc-query}
+# cbc-upsert - Store Documents on the Server {#cbc-upsert}
 
 ### NAME
 
-`cbc query` - perform N1QL query.
+`cbc upsert` - store document on the server
 
 ### SYNOPSIS
 
-`cbc query [options] <statement>...`<br/>
-`cbc query [options] --param=NAME=VALUE... <statement>...`<br/>
-`cbc query [options] --raw=NAME=VALUE... <statement>...`<br/>
-`cbc query (-h|--help)`<br/>
+`cbc upsert [options] <id>...`<br/>
+`cbc upsert [options] --inlined-value-separator=/ <id>/<value>...`<br/>
+`cbc upsert (-h|--help)`
 
 ### DESCRIPTION
 
-Execute one or more N1QL queries and print results to standard output.
+Store one or more documents on the server.
+
+By default the document content read from the local filesystem, where `<id>` is
+the file path to the document, but the value could be embedded with the `<id>`
+and `--inlined-value-separator` switch.
 
 ### OPTIONS
 
 <dl>
-<dt>`-h|--help`</dt><dd>Show this screen.</dd>
-<dt>`--param=NAME=VALUE`</dt><dd>Parameters for the query. Without '=' sign value will be treated as positional parameter.</dd>
-<dt>`--prepare`</dt><dd>Prepare statement.</dd>
-<dt>`--read-only`</dt><dd>Mark query as read only. Any mutations will fail.</dd>
-<dt>`--preserve-expiry`</dt><dd>Ensure that expiry will be preserved after mutations.</dd>
-<dt>`--disable-metrics`</dt><dd>Do not request metrics.</dd>
-<dt>`--profile=MODE`</dt><dd>Request the service to profile the query and return report (allowed values: `off`, `phases`, `timings`).</dd>
-<dt>`--bucket-name=STRING`</dt><dd>Name of the bucket where the scope is defined (see --scope-name).</dd>
-<dt>`--scope-name=STRING`</dt><dd>Name of the scope.</dd>
-<dt>`--client-context-id=STRING`</dt><dd>Override client context ID for the query(-ies).</dd>
-<dt>`--flex-index`</dt><dd>Tell query service to utilize flex index (full text search).</dd>
-<dt>`--maximum-parallelism=INTEGER`</dt><dd>Parallelism for query execution (0 to disable).</dd>
-<dt>`--scan-cap=INTEGER`</dt><dd>Maximum buffer size between indexer and query service.</dd>
-<dt>`--scan-wait=DURATION`</dt><dd>How long query engine will wait for indexer to catch up on scan consistency.</dd>
-<dt>`--scan-consistency=MODE`</dt><dd>Set consistency guarantees for the query (allowed values: `not_bounded`, `request_plus`).</dd>
-<dt>`--pipeline-batch=INTEGER`</dt><dd>Number of items execution operators can batch for fetch from the Key/Value service.</dd>
-<dt>`--pipeline-cap=INTEGER`</dt><dd>Maximum number of items each execution operator can buffer between various operators.</dd>
-<dt>`--raw=NAME=VALUE`</dt><dd>Set any query option for the query. Read the documentation: https://docs.couchbase.com/server/current/n1ql/n1ql-rest-api.</dd>
+<dt>`-h,--help`</dt><dd>Print this help message and exit</dd>
+<dt>`--verbose`</dt><dd>Include more context and information where it is applicable.</dd>
+<dt>`--bucket-name TEXT`</dt><dd>Name of the bucket. [default: `default`]</dd>
+<dt>`--scope-name TEXT`</dt><dd>Name of the scope. [default `_default`]</dd>
+<dt>`--collection-name TEXT`</dt><dd>Name of the collection. [default: `_default`]</dd>
+<dt>`--inlined-value-separator TEXT`</dt><dd>Specify value with the key instead of filesystem.</dd>
+<dt>`--inlined-keyspace`</dt><dd>Extract bucket, scope, collection and key from the IDs (captures will be done with `/^(.*?):(.*?)\.(.*?):(.*)$/`).</dd>
 <dt>`--json-lines`</dt><dd>Use JSON Lines format (https://jsonlines.org) to print results.</dd>
+<dt>`--preserve-expiry`</dt><dd>Whether an existing document's expiry should be preserved. [default: `0`]</dd>
+<dt>`--override-document-flags UINT`</dt><dd>Override document flags instead of derived from the content.</dd>
+</dl>
+
+### EXPIRATION
+
+Set expiration time for the document(s). Either `--expire-relative` or `--expire-absolute` switch is allowed.
+
+<dl>
+<dt>`--expire-relative INT`</dt><dd>Expiration time in seconds from now</dd>
+<dt>`--expire-absolute TEXT`</dt><dd>Absolute expiration time (format: **YYYY-MM-DDTHH:MM:SS**, e.g. the output of: <code>date --utc --iso-8601=seconds --date 'next month'</code>)</dd>
+</dl>
+
+### DURABILITY
+
+Extra persistency requirements. Either `--durability-level` or combination of `--persist-to` and `--replicate-to` switches is allowed.
+
+<dl>
+<dt>`--durability-level TEXT`</dt><dd>Durability level for the server. (allowed values: `none`, `majority`, `majority_and_persist_to_active`, `persist_to_majority`)</dt>
+</dl>
+
+The following switches implement client-side poll-based durability requirements.
+
+<dl>
+<dt>`--persist-to TEXT`</dt><dd>Number of the nodes that have to have the document persisted. (allowed values: `none`, `active`, `one`, `two`, `three`, `four`)</dt>
+<dt>`--replicate-to TEXT`</dt><dd>Number of the nodes that have to have the document replicated. (allowed values: `none`, `one`, `two`, `three`)</dt>
 </dl>
 
 ### LOGGER OPTIONS
@@ -167,13 +185,36 @@ Execute one or more N1QL queries and print results to standard output.
 
 ### EXAMPLES
 
-1. Query with positional parameters:
+1. Create document the default collection of the `default` bucket with the key `myfile.json`, and contents of this file on the local system:
 
-       cbc query --param 1 --param 2 'SELECT $1 + $2'
-2. Query with named parameters:
+       cbc upsert myfile.json
+2. Create document the default collection of the `default` bucket with the key `foo`, and content `{"bar":42}`:
 
-       cbc query --param a=1 --param b=2 'SELECT $a + $b'
+       cbc upsert --inlined-value-separator=/ foo/{"bar":42}
+3. Create document in the scope `myapp`, collection `users` of the bucket `accounts`:
+
+       cbc upsert --bucket-name=accounts --scope-name=myapp --collection=users --inlined-value-separator=/ user_1/{"name":"john"}
+4. All above, but inline bucket, scope, collection and value into the `<id>` to store two documents:
+
+       cbc upsert --inlined-keyspace --inlined-value-separator=/ \
+            accounts:myapp:users:user_1/{"name":"john"} \
+            accounts:myapp:users:user_2/{"name":"jane"}
+5. Create document with expiration time of 5 seconds:
+
+       cbc upsert --expire-relative=5 my_file
+6. Create document with abosolute expiration time in a year from now:
+
+       TIMESTAMP=$(date --utc --iso-8601=seconds --date 'next year')
+       # 2026-06-24T21:14:51+00:00
+
+       cbc upsert --expire-absolute=$TIMESTAMP my_file
+7. Persist document to majority of the replica set:
+
+       cbc upsert --durability-level=majority --inlined-value-separator=/ foo/{"bar":42}
+8. Wait until document will be persisted on at least one node from the replica set, but replicated to two nodes (and give it maximum time of 10 seconds to wait):
+
+       cbc upsert --key-value-timeout=10s --persist-to=one --replicate-to=two --inlined-value-separator=/ foo/{"bar":42}
 
 ### SEE ALSO
 
-[cbc](#cbc), [cbc-get](#cbc-get).
+[cbc](#cbc), [cbc-get](#cbc-get), [cbc-remove](#cbc-remove).

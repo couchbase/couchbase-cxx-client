@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-Present Couchbase, Inc.
+ *   Copyright 2023-Present Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -15,43 +15,13 @@
  *   limitations under the License.
  */
 
-#pragma once
+#include <CLI/App.hpp>
 
-#include <cstdint>
-
-namespace couchbase
+namespace cbc
 {
-enum class replicate_to : std::uint8_t {
-  /**
-   * Do not apply any replication requirements.
-   *
-   * @since 1.0.0
-   * @committed
-   */
-  none = 0,
+auto
+make_remove_command() -> std::shared_ptr<CLI::App>;
 
-  /**
-   * Wait for replication to at least one node.
-   *
-   * @since 1.0.0
-   * @committed
-   */
-  one = 1,
-
-  /**
-   * Wait for replication to at least two nodes.
-   *
-   * @since 1.0.0
-   * @committed
-   */
-  two = 2,
-
-  /**
-   * Wait for replication to all three replica nodes.
-   *
-   * @since 1.0.0
-   * @committed
-   */
-  three = 3,
-};
-} // namespace couchbase
+auto
+execute_remove_command(const CLI::App* app) -> int;
+} // namespace cbc

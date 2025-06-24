@@ -19,6 +19,7 @@
 #include "core/logger/configuration.hxx"
 #include "core/logger/logger.hxx"
 #include "core/meta/version.hxx"
+#include "core/utils/binary.hxx"
 #include "core/utils/duration_parser.hxx"
 #include "core/utils/json.hxx"
 
@@ -32,6 +33,7 @@
 #include <spdlog/details/os.h>
 #include <spdlog/fmt/bundled/chrono.h>
 #include <spdlog/spdlog.h>
+#include <stdexcept>
 #include <tao/json/value.hpp>
 
 #include <chrono>
@@ -388,8 +390,8 @@ add_options(CLI::App* app, tracing_options& options)
     ->type_name("DURATION");
 }
 
-std::string
-full_user_agent(std::string extra)
+auto
+full_user_agent(const std::string& extra) -> std::string
 {
   constexpr auto uuid{ "00000000-0000-0000-0000-000000000000" };
   auto hello = couchbase::core::meta::user_agent_for_mcbp(uuid, uuid, extra);
@@ -670,6 +672,54 @@ extract_inlined_keyspace(const std::string& id) -> std::optional<keyspace_with_i
 }
 
 auto
+extract_inlined_value(const std::string& id, const std::optional<std::string>& separator)
+  -> std::optional<document_id_with_value>
+{
+  if (separator.has_value()) {
+    auto pos = id.find(separator.value());
+    if (pos == std::string::npos || pos == 0) {
+      return {};
+    }
+    document_id_with_value result;
+    result.id = id.substr(0, pos);
+    result.value.data =
+      couchbase::core::utils::to_binary(id.data() + (pos + 1), id.size() - (pos + 1));
+    try {
+      auto json = couchbase::core::utils::json::parse_binary(result.value.data);
+      result.value.flags = couchbase::codec::codec_flags::json_common_flags;
+    } catch (const tao::pegtl::parse_error&) {
+      result.value.flags = couchbase::codec::codec_flags::binary_common_flags;
+    }
+    return result;
+  }
+
+  return {};
+}
+
+auto
+extract_inlined_cas(const std::string& id, const std::optional<std::string>& separator)
+  -> std::optional<document_id_with_cas>
+{
+  if (separator.has_value()) {
+    auto pos = id.find(separator.value());
+    if (pos == std::string::npos || pos == 0) {
+      return {};
+    }
+    document_id_with_cas result;
+    result.id = id.substr(0, pos);
+    try {
+      result.cas =
+        couchbase::cas{ std::stoull(id.substr(pos + 1), nullptr, 0 /* auto detect base */) };
+    } catch (const std::logic_error&) {
+      return {};
+    }
+    return result;
+  }
+
+  return {};
+}
+
+auto
 available_query_scan_consistency_modes() -> std::vector<std::string>
 {
   return {
@@ -692,5 +742,11 @@ fail(std::string_view message)
 {
   fmt::print(stderr, "ERROR: {}\n", message);
   exit(EXIT_FAILURE);
+}
+
+auto
+cas_to_time_point(couchbase::cas cas) -> std::chrono::system_clock::time_point
+{
+  return std::chrono::system_clock::time_point{ std::chrono::milliseconds(cas.value()) / 1000000 };
 }
 } // namespace cbc

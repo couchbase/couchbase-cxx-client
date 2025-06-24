@@ -17,9 +17,11 @@
 
 #pragma once
 
+#include <cstdint>
+
 namespace couchbase
 {
-enum class persist_to {
+enum class persist_to : std::uint8_t {
   /**
    * Do not apply any persistence requirements
    *

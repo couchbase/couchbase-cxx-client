@@ -20,6 +20,8 @@
 #include "get.hxx"
 #include "pillowfight.hxx"
 #include "query.hxx"
+#include "remove.hxx"
+#include "upsert.hxx"
 #include "version.hxx"
 
 #include "core/meta/version.hxx"
@@ -36,10 +38,12 @@ main(int argc, const char** argv)
 
   app.add_subcommand(cbc::make_version_command());
   app.add_subcommand(cbc::make_get_command());
-  app.add_subcommand(cbc::make_query_command());
+  app.add_subcommand(cbc::make_upsert_command());
+  app.add_subcommand(cbc::make_remove_command());
   app.add_subcommand(cbc::make_analytics_command());
   app.add_subcommand(cbc::make_pillowfight_command());
   app.add_subcommand(cbc::make_beam_command());
+  app.add_subcommand(cbc::make_query_command());
 
   try {
     app.parse(argc, argv);
@@ -51,8 +55,14 @@ main(int argc, const char** argv)
     if (item->get_name() == "version") {
       return cbc::execute_version_command(item);
     }
+    if (item->get_name() == "upsert") {
+      return cbc::execute_upsert_command(item);
+    }
     if (item->get_name() == "get") {
       return cbc::execute_get_command(item);
+    }
+    if (item->get_name() == "remove") {
+      return cbc::execute_remove_command(item);
     }
     if (item->get_name() == "query") {
       return cbc::execute_query_command(item);

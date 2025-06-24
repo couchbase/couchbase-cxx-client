@@ -151,12 +151,12 @@ Retrieve one or more documents from the server and print them to standard output
 ### ENVIRONMENT
 
 <dl>
-<dt>CBC_LOG_LEVEL</dt><dd>Overrides default value for `--log-level`.</dd>
-<dt>CBC_CONNECTION_STRING</dt><dd>Overrides default value for `--connection-string`.</dd>
-<dt>CBC_USERNAME</dt><dd>Overrides default value for `--username`.</dd>
-<dt>CBC_PASSWORD</dt><dd>Overrides default value for `--password`.</dd>
+<dt>`CBC_LOG_LEVEL`</dt><dd>Overrides default value for `--log-level`.</dd>
+<dt>`CBC_CONNECTION_STRING`</dt><dd>Overrides default value for `--connection-string`.</dd>
+<dt>`CBC_USERNAME`</dt><dd>Overrides default value for `--username`.</dd>
+<dt>`CBC_PASSWORD`</dt><dd>Overrides default value for `--password`.</dd>
 </dl>
 
 ### SEE ALSO
 
-[cbc](#cbc), [cbc-query](#cbc-query).
+[cbc](#cbc), [cbc-upsert](#cbc-upsert), [cbc-remove](#cbc-remove), [cbc-query](#cbc-query).

@@ -56,19 +56,7 @@ class query_app : public CLI::App
 {
 public:
   query_app()
-    : CLI::App{ R"(Perform N1QL query.
-
-Examples:
-
-1. Query with positional parameters:
-
-    cbc query --param 1 --param 2 'SELECT $1 + $2'
-
-2. Query with named parameters:
-
-    cbc query --param a=1 --param b=2 'SELECT $a + $b'
-)",
-                "query" }
+    : CLI::App{ "Perform N1QL query.", "query" }
   {
     const std::vector<std::string> allowed_profile_modes{ "off", "phases", "timings" };
 
@@ -126,7 +114,7 @@ Examples:
     allow_extras(true);
   }
 
-  [[nodiscard]] int execute() const
+  [[nodiscard]] auto execute() const -> int
   {
     apply_logger_options(common_options_.logger);
 
