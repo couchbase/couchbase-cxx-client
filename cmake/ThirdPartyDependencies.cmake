@@ -160,9 +160,9 @@ if(NOT TARGET asio::asio)
     NAME
     asio
     GIT_TAG
-    asio-1-31-0
+    asio-1-34-2
     VERSION
-    1.31.0
+    1.34.2
     GITHUB_REPOSITORY
     "chriskohlhoff/asio"
     EXCLUDE_FROM_ALL ON)
