@@ -450,10 +450,8 @@ attempt_context_impl::get_replica_from_preferred_server_group(
                     .no_rollback());
               case FAIL_OTHER:
                 if (cause == DOCUMENT_UNRETRIEVABLE_EXCEPTION) {
-                  return self->op_completed_with_callback(
-                    std::move(cb),
-                    transaction_operation_failed(FAIL_OTHER, cause, "failed to retrieve document"),
-                    std::move(res));
+                  return self->op_completed_with_error(
+                    std::move(cb), document_unretrievable("failed to retrieve document"));
                 }
                 [[fallthrough]];
               default: {

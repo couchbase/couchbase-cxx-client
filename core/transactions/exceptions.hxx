@@ -235,6 +235,17 @@ public:
   }
 };
 
+class document_unretrievable : public op_exception
+{
+public:
+  explicit document_unretrievable(const std::string& what)
+    : op_exception({ errc::transaction_op::document_unretrievable },
+                   what,
+                   DOCUMENT_UNRETRIEVABLE_EXCEPTION)
+  {
+  }
+};
+
 class query_attempt_not_found : public op_exception
 {
 public:
