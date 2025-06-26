@@ -43,6 +43,7 @@
 #include <couchbase/cluster_options.hxx>
 #include <couchbase/diagnostics_options.hxx>
 #include <couchbase/diagnostics_result.hxx>
+#include <couchbase/fmt/error.hxx>
 #include <couchbase/fork_event.hxx>
 #include <couchbase/ip_protocol.hxx>
 #include <couchbase/ping_options.hxx>
@@ -263,13 +264,35 @@ public:
     future.get();
   }
 
+  static auto do_close_on_open(std::shared_ptr<cluster_impl>&& impl,
+                               cluster_connect_handler&& handler,
+                               std::error_code ec)
+  {
+    auto& io_context = impl->core_.io_context();
+    asio::post(asio::bind_executor(
+      io_context, [ec, impl = std::move(impl), handler = std::move(handler)]() mutable {
+        std::thread([ec, impl = std::move(impl), handler = std::move(handler)]() mutable {
+          {
+            auto tmp = std::move(impl);
+            auto barrier = std::make_shared<std::promise<void>>();
+            auto future = barrier->get_future();
+            tmp->close([barrier] {
+              barrier->set_value();
+            });
+            future.get();
+          }
+          handler(ec, {});
+        }).detach();
+      }));
+  }
+
   void open(cluster_connect_handler&& handler)
   {
     core_.open(
       options_to_origin(connection_string_, options_),
       [impl = shared_from_this(), handler = std::move(handler)](std::error_code ec) mutable {
         if (ec) {
-          return handler(ec, {});
+          return do_close_on_open(std::move(impl), std::move(handler), ec);
         }
         return core::transactions::transactions::create(
           impl->core_,
@@ -283,23 +306,7 @@ public:
               // will have chance to cleanup, and also we have to spawn separate
               // thread to actually deallocate the half-baked connection and stop
               // IO thread.
-              auto& io_context = impl->core_.io_context();
-              asio::post(asio::bind_executor(
-                io_context, [ec, impl = std::move(impl), handler = std::move(handler)]() mutable {
-                  std::thread([ec, impl = std::move(impl), handler = std::move(handler)]() mutable {
-                    {
-                      auto tmp = std::move(impl);
-                      auto barrier = std::make_shared<std::promise<void>>();
-                      auto future = barrier->get_future();
-                      tmp->close([barrier] {
-                        barrier->set_value();
-                      });
-                      future.get();
-                    }
-                    handler(ec, {});
-                  }).detach();
-                }));
-              return;
+              return do_close_on_open(std::move(impl), std::move(handler), ec);
             }
             impl->transactions_ = std::move(txns);
             handler(ec, couchbase::cluster(std::move(impl)));
