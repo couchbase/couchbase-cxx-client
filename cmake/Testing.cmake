@@ -1,4 +1,4 @@
-if(NOT TARGET Catch2::Catch2WithMain)
+if(NOT TARGET Catch2::Catch2)
   cpmaddpackage(
     NAME
     catch2
@@ -50,7 +50,7 @@ macro(integration_test name)
     project_options
     project_warnings
     ${couchbase_cxx_client_DEFAULT_LIBRARY}
-    Catch2::Catch2WithMain
+    test_main
     Threads::Threads
     Microsoft.GSL::GSL
     asio
@@ -94,7 +94,7 @@ macro(transaction_test name)
     test_transaction_${name}
     project_options
     project_warnings
-    Catch2::Catch2WithMain
+    test_main
     Threads::Threads
     Microsoft.GSL::GSL
     asio
@@ -138,7 +138,7 @@ macro(unit_test name)
     test_unit_${name}
     project_options
     project_warnings
-    Catch2::Catch2WithMain
+    test_main
     Threads::Threads
     Microsoft.GSL::GSL
     asio
@@ -184,7 +184,7 @@ macro(integration_benchmark name)
     benchmark_integration_${name}
     project_options
     project_warnings
-    Catch2::Catch2WithMain
+    test_main
     Threads::Threads
     Microsoft.GSL::GSL
     asio
@@ -209,6 +209,16 @@ macro(integration_benchmark name)
     "benchmark")
   set_property(GLOBAL APPEND PROPERTY COUCHBASE_BENCHMARKS "benchmark_integration_${name}")
 endmacro()
+
+add_library(test_main OBJECT ${PROJECT_SOURCE_DIR}/test/main.cxx)
+target_link_libraries(test_main PUBLIC Catch2::Catch2)
+
+if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
+  target_link_libraries(test_main PUBLIC OpenSSL::SSL)
+  if(WIN32)
+    set_target_properties(test_main PROPERTIES LINK_FLAGS "/ignore:4099")
+  endif()
+endif()
 
 add_subdirectory(${PROJECT_SOURCE_DIR}/test)
 

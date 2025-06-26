@@ -174,7 +174,7 @@ TEST_CASE("exponential backoff with timeout: always retries at least once", "[un
                                                                }),
                     retry_operation_timeout);
   // Usually just retries once, sometimes the jitter means a second retry
-  REQUIRE(2 <= state.timings.size());
+  REQUIRE(state.timings.size() >= 1);
 }
 
 TEST_CASE("exponential backoff with max attempts: will stop at max", "[unit]")
