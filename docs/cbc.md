@@ -25,22 +25,32 @@ Display version information.
 
 <dt>get</dt>
 <dd>
-Retrieve document from the server. See [cbc-get](md_docs_2cbc-get) for more information.
+Retrieve document from the server. See [cbc-get](#cbc-get) for more information.
+</dd>
+
+<dt>upsert</dt>
+<dd>
+Store the document on the server. See [cbc-upsert](#cbc-upsert) for more information.
+</dd>
+
+<dt>remove</dt>
+<dd>
+Remove the document on the server. See [cbc-remove](#cbc-remove) for more information.
 </dd>
 
 <dt>query</dt>
 <dd>
-Perform N1QL query. See [cbc-query](md_docs_2cbc-query) for more information.
+Perform N1QL query. See [cbc-query](#cbc-query) for more information.
 </dd>
 
 <dt>analytics</dt>
 <dd>
-Perform Analytics query. See [cbc-analytics](md_docs_2cbc-analytics) for more information.
+Perform Analytics query. See [cbc-analytics](#cbc-analytics) for more information.
 </dd>
 
 <dt>pillowfight</dt>
 <dd>
-Run simple workload generator. See [cbc-pillowfight](md_docs_2cbc-pillowfight) for more information.
+Run simple workload generator. See [cbc-pillowfight](#cbc-pillowfight) for more information.
 </dd>
 </dl>
 
@@ -53,4 +63,4 @@ Run simple workload generator. See [cbc-pillowfight](md_docs_2cbc-pillowfight) f
 
 ### SEE ALSO
 
-[cbc-get](#cbc-get), [cbc-query](#cbc-query).
+[cbc-get](#cbc-get), [cbc-upsert](#cbc-upsert), [cbc-remove](#cbc-remove), [cbc-query](#cbc-query).

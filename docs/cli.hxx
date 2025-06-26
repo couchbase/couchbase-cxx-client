@@ -25,6 +25,10 @@
  *
  * @subpage cbc-get
  *
+ * @subpage cbc-remove
+ *
+ * @subpage cbc-upsert
+ *
  * @subpage cbc-query
  *
  * @subpage cbc-analytics

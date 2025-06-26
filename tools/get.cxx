@@ -40,6 +40,9 @@ public:
   get_app()
     : CLI::App{ "Retrieve document from the server.", "get" }
   {
+    alias("cat");
+    alias("show");
+
     add_option("id", ids_, "IDs of the documents to retrieve.")->required(true);
     add_flag("--verbose", verbose_, "Include more context and information where it is applicable.");
     add_option("--bucket-name", bucket_name_, "Name of the bucket.")
@@ -72,7 +75,7 @@ public:
     allow_extras(true);
   }
 
-  [[nodiscard]] int execute() const
+  [[nodiscard]] auto execute() const -> int
   {
     apply_logger_options(common_options_.logger);
 
@@ -181,20 +184,23 @@ private:
       }
     } else {
       auto [value, flags] = resp.content_as<passthrough_transcoder>();
+      std::string verbose_cas = fmt::format(" ({})", cas_to_time_point(resp.cas()));
       if (const auto& exptime = resp.expiry_time(); exptime.has_value()) {
         fmt::print(stderr,
-                   "{}, size: {}, CAS: 0x{}, flags: 0x{:08x}, expiry: {}\n",
+                   "{}, size: {}, CAS: 0x{}{}, flags: 0x{:08x}, expiry: {}\n",
                    prefix,
                    value.size(),
                    resp.cas(),
+                   verbose_ ? verbose_cas : "",
                    flags,
                    exptime.value());
       } else {
         fmt::print(stderr,
-                   "{}, size: {}, CAS: 0x{}, flags: 0x{:08x}\n",
+                   "{}, size: {}, CAS: 0x{}{}, flags: 0x{:08x}\n",
                    prefix,
                    value.size(),
                    resp.cas(),
+                   verbose_ ? verbose_cas : "",
                    flags);
       }
       (void)fflush(stderr);

@@ -27,6 +27,8 @@ add_executable(
   get.cxx
   pillowfight.cxx
   query.cxx
+  remove.cxx
+  upsert.cxx
   version.cxx)
 target_include_directories(cbc PRIVATE ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/private)
 
