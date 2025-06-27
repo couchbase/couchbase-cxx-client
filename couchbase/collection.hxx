@@ -58,6 +58,10 @@ class cluster;
 class bucket;
 class scope;
 class collection_impl;
+namespace crypto
+{
+class manager;
+} // namespace crypto
 #endif
 
 /**
@@ -459,8 +463,15 @@ public:
               const upsert_options& options,
               upsert_handler&& handler) const
   {
-    return upsert(
-      std::move(document_id), Transcoder::encode(document), options, std::move(handler));
+    if constexpr (codec::is_crypto_transcoder_v<Transcoder>) {
+      return upsert(std::move(document_id),
+                    Transcoder::encode(document, crypto_manager()),
+                    options,
+                    std::move(handler));
+    } else {
+      return upsert(
+        std::move(document_id), Transcoder::encode(document), options, std::move(handler));
+    }
   }
 
   /**
@@ -506,7 +517,12 @@ public:
                             const upsert_options& options = {}) const
     -> std::future<std::pair<error, mutation_result>>
   {
-    return upsert(std::move(document_id), Transcoder::encode(document), options);
+    if constexpr (codec::is_crypto_transcoder_v<Transcoder>) {
+      return upsert(
+        std::move(document_id), Transcoder::encode(document, crypto_manager()), options);
+    } else {
+      return upsert(std::move(document_id), Transcoder::encode(document), options);
+    }
   }
 
   /**
@@ -555,8 +571,15 @@ public:
               const insert_options& options,
               insert_handler&& handler) const
   {
-    return insert(
-      std::move(document_id), Transcoder::encode(document), options, std::move(handler));
+    if constexpr (codec::is_crypto_transcoder_v<Transcoder>) {
+      return insert(std::move(document_id),
+                    Transcoder::encode(document, crypto_manager()),
+                    options,
+                    std::move(handler));
+    } else {
+      return insert(
+        std::move(document_id), Transcoder::encode(document), options, std::move(handler));
+    }
   }
 
   /**
@@ -605,7 +628,12 @@ public:
                             const insert_options& options = {}) const
     -> std::future<std::pair<error, mutation_result>>
   {
-    return insert(std::move(document_id), Transcoder::encode(document), options);
+    if constexpr (codec::is_crypto_transcoder_v<Transcoder>) {
+      return insert(
+        std::move(document_id), Transcoder::encode(document, crypto_manager()), options);
+    } else {
+      return insert(std::move(document_id), Transcoder::encode(document), options);
+    }
   }
 
   /**
@@ -656,8 +684,15 @@ public:
                const replace_options& options,
                replace_handler&& handler) const
   {
-    return replace(
-      std::move(document_id), Transcoder::encode(document), options, std::move(handler));
+    if constexpr (codec::is_crypto_transcoder_v<Transcoder>) {
+      return replace(std::move(document_id),
+                     Transcoder::encode(document, crypto_manager()),
+                     options,
+                     std::move(handler));
+    } else {
+      return replace(
+        std::move(document_id), Transcoder::encode(document), options, std::move(handler));
+    }
   }
 
   /**
@@ -708,7 +743,11 @@ public:
                              const replace_options& options = {}) const
     -> std::future<std::pair<error, mutation_result>>
   {
-    return replace(std::move(document_id), Transcoder::encode(document), options);
+    if constexpr (codec::is_crypto_transcoder_v<Transcoder>) {
+      return replace(std::move(document_id), Transcoder::encode(document.crypto_manager_), options);
+    } else {
+      return replace(std::move(document_id), Transcoder::encode(document), options);
+    }
   }
 
   /**
@@ -1083,10 +1122,13 @@ private:
   friend class bucket;
   friend class scope;
 
+  [[nodiscard]] auto crypto_manager() const -> const std::shared_ptr<crypto::manager>&;
+
   collection(core::cluster core,
              std::string_view bucket_name,
              std::string_view scope_name,
-             std::string_view name);
+             std::string_view name,
+             std::shared_ptr<crypto::manager> crypto_manager);
 
   std::shared_ptr<collection_impl> impl_;
 };

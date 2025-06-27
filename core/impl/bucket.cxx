@@ -37,9 +37,12 @@ namespace couchbase
 class bucket_impl : public std::enable_shared_from_this<bucket_impl>
 {
 public:
-  bucket_impl(core::cluster core, std::string_view name)
+  bucket_impl(core::cluster core,
+              std::string_view name,
+              std::shared_ptr<crypto::manager> crypto_mgr)
     : core_{ std::move(core) }
     , name_{ name }
+    , crypto_manager_{ std::move(crypto_mgr) }
   {
   }
 
@@ -51,6 +54,11 @@ public:
   [[nodiscard]] auto core() const -> const core::cluster&
   {
     return core_;
+  }
+
+  [[nodiscard]] auto crypto_manager() const -> const std::shared_ptr<crypto::manager>&
+  {
+    return crypto_manager_;
   }
 
   void ping(const ping_options::built& options, ping_handler&& handler) const
@@ -67,29 +75,36 @@ public:
 private:
   core::cluster core_;
   std::string name_;
+  std::shared_ptr<crypto::manager> crypto_manager_;
 };
 
-bucket::bucket(core::cluster core, std::string_view name)
-  : impl_(std::make_shared<bucket_impl>(std::move(core), name))
+bucket::bucket(core::cluster core,
+               std::string_view name,
+               std::shared_ptr<crypto::manager> crypto_mgr)
+  : impl_(std::make_shared<bucket_impl>(std::move(core), name, std::move(crypto_mgr)))
 {
 }
 
 auto
 bucket::default_scope() const -> couchbase::scope
 {
-  return { impl_->core(), impl_->name(), scope::default_name };
+  return { impl_->core(), impl_->name(), scope::default_name, impl_->crypto_manager() };
 }
 
 auto
 bucket::default_collection() const -> couchbase::collection
 {
-  return { impl_->core(), impl_->name(), scope::default_name, collection::default_name };
+  return { impl_->core(),
+           impl_->name(),
+           scope::default_name,
+           collection::default_name,
+           impl_->crypto_manager() };
 }
 
 auto
 bucket::scope(std::string_view scope_name) const -> couchbase::scope
 {
-  return { impl_->core(), impl_->name(), scope_name };
+  return { impl_->core(), impl_->name(), scope_name, impl_->crypto_manager() };
 }
 
 void

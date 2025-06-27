@@ -79,11 +79,8 @@ cluster::cluster(std::shared_ptr<cluster_impl> impl)
 namespace
 {
 auto
-options_to_origin(const std::string& connection_string, const couchbase::cluster_options& options)
-  -> core::origin
+options_to_origin(const std::string& connection_string, cluster_options::built opts) -> core::origin
 {
-  auto opts = options.build();
-
   core::cluster_credentials auth;
   auth.username = std::move(opts.username);
   auth.password = std::move(opts.password);
@@ -225,7 +222,13 @@ fork_event_to_asio(fork_event event) -> asio::execution_context::fork_event
 class cluster_impl : public std::enable_shared_from_this<cluster_impl>
 {
 public:
-  cluster_impl(std::string connection_string, cluster_options options)
+  cluster_impl(std::string connection_string, const cluster_options& options)
+    : connection_string_{ std::move(connection_string) }
+    , options_{ options.build() }
+  {
+  }
+
+  cluster_impl(std::string connection_string, cluster_options::built options)
     : connection_string_{ std::move(connection_string) }
     , options_{ std::move(options) }
   {
@@ -241,7 +244,7 @@ public:
     return connection_string_;
   }
 
-  [[nodiscard]] auto options() const -> const cluster_options&
+  [[nodiscard]] auto options() const -> const cluster_options::built&
   {
     return options_;
   }
@@ -417,7 +420,7 @@ private:
   }
 
   std::string connection_string_;
-  cluster_options options_;
+  cluster_options::built options_;
   asio::io_context io_{ ASIO_CONCURRENCY_HINT_SAFE };
   core::cluster core_{ io_ };
   std::shared_ptr<core::transactions::transactions> transactions_{ nullptr };
@@ -637,7 +640,7 @@ cluster::analytics_indexes() const -> analytics_index_manager
 auto
 cluster::bucket(std::string_view bucket_name) const -> couchbase::bucket
 {
-  return { impl_->core(), bucket_name };
+  return { impl_->core(), bucket_name, impl_->options().crypto_manager };
 }
 
 auto
