@@ -181,6 +181,8 @@ classify_error(const std::exception_ptr& err) -> classified_error
 {
   try {
     std::rethrow_exception(err);
+  } catch (const op_exception& e) {
+    return classified_error{ error_class_from_external_exception(e.cause()), e.cause() };
   } catch (const transaction_operation_failed& e) {
     return classified_error{ e.ec(), e.cause() };
   } catch (...) {
