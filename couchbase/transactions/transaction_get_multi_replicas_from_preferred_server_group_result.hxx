@@ -91,7 +91,10 @@ public:
    */
   [[nodiscard]] auto exists(std::size_t spec_index) const -> bool
   {
-    return spec_index >= content_.size() && content_[spec_index].has_value();
+    if (spec_index >= content_.size()) {
+      throw std::invalid_argument("spec index " + std::to_string(spec_index) + " is not valid");
+    }
+    return content_[spec_index].has_value();
   }
 
 private:
