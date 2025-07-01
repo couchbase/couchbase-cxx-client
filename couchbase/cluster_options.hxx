@@ -22,6 +22,7 @@
 #include <couchbase/certificate_authenticator.hxx>
 #include <couchbase/compression_options.hxx>
 #include <couchbase/configuration_profiles_registry.hxx>
+#include <couchbase/crypto/manager.hxx>
 #include <couchbase/dns_options.hxx>
 #include <couchbase/error.hxx>
 #include <couchbase/metrics_options.hxx>
@@ -252,6 +253,15 @@ public:
     return *this;
   }
 
+  auto crypto_manager(std::shared_ptr<crypto::manager> crypto_manager) -> cluster_options&
+  {
+    if (crypto_manager == nullptr) {
+      throw std::invalid_argument("crypto manager cannot be null");
+    }
+    crypto_manager_ = std::move(crypto_manager);
+    return *this;
+  }
+
   struct built {
     std::string username;
     std::string password;
@@ -269,6 +279,7 @@ public:
     transactions::transactions_config::built transactions;
     std::shared_ptr<retry_strategy> default_retry_strategy;
     application_telemetry_options::built application_telemetry;
+    std::shared_ptr<crypto::manager> crypto_manager;
   };
 
   [[nodiscard]] auto build() const -> built
@@ -290,6 +301,7 @@ public:
       transactions_.build(),
       default_retry_strategy_,
       application_telemetry_.build(),
+      crypto_manager_,
     };
   }
 
@@ -311,6 +323,7 @@ private:
   transactions::transactions_config transactions_{};
   std::shared_ptr<retry_strategy> default_retry_strategy_{ nullptr };
   application_telemetry_options application_telemetry_{};
+  std::shared_ptr<crypto::manager> crypto_manager_{};
 };
 
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN

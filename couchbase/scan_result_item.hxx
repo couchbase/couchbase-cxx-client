@@ -37,6 +37,13 @@
  */
 namespace couchbase
 {
+#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
+namespace crypto
+{
+class manager;
+} // namespace crypto
+#endif
+
 class scan_result_item : public result
 {
 public:
@@ -62,12 +69,14 @@ public:
   scan_result_item(std::string id,
                    couchbase::cas cas,
                    codec::encoded_value value,
-                   std::optional<std::chrono::system_clock::time_point> expiry_time)
+                   std::optional<std::chrono::system_clock::time_point> expiry_time,
+                   std::shared_ptr<crypto::manager> crypto_manager = {})
     : result{ cas }
     , id_{ std::move(id) }
     , id_only_{ false }
     , value_{ std::move(value) }
     , expiry_time_{ expiry_time }
+    , crypto_manager_{ std::move(crypto_manager) }
   {
   }
 
@@ -141,7 +150,11 @@ public:
     if (id_only_) {
       return {};
     }
-    return Transcoder::template decode<Document>(value_);
+    if constexpr (codec::is_crypto_transcoder_v<Transcoder>) {
+      return Transcoder::template decode<Document>(value_, crypto_manager_);
+    } else {
+      return Transcoder::template decode<Document>(value_);
+    }
   }
 
   /**
@@ -168,5 +181,6 @@ private:
   bool id_only_{};
   codec::encoded_value value_{};
   std::optional<std::chrono::system_clock::time_point> expiry_time_{};
+  std::shared_ptr<crypto::manager> crypto_manager_{};
 };
 } // namespace couchbase

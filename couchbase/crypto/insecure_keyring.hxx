@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-Present Couchbase, Inc.
+ *   Copyright 2025. Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -17,21 +17,25 @@
 
 #pragma once
 
-#include <type_traits>
+#include <couchbase/crypto/key.hxx>
+#include <couchbase/crypto/keyring.hxx>
 
-namespace couchbase::codec
+#include <map>
+#include <string>
+
+namespace couchbase::crypto
 {
-template<typename T>
-struct is_transcoder : public std::false_type {
+class insecure_keyring : public keyring
+{
+public:
+  insecure_keyring() = default;
+  explicit insecure_keyring(const std::vector<key>& keys);
+
+  void add_key(key k);
+
+  [[nodiscard]] auto get(const std::string& key_id) const -> std::pair<error, key> override;
+
+private:
+  std::map<std::string, key> keys_;
 };
-
-template<typename T>
-inline constexpr bool is_transcoder_v = is_transcoder<T>::value;
-
-template<typename T>
-struct is_crypto_transcoder : public std::false_type {
-};
-
-template<typename T>
-inline constexpr bool is_crypto_transcoder_v = is_crypto_transcoder<T>::value;
-} // namespace couchbase::codec
+} // namespace couchbase::crypto
