@@ -218,8 +218,7 @@ make_error(const couchbase::core::transactions::transaction_operation_failed& co
   return { couchbase::errc::transaction_op::transaction_op_failed,
            core_tof.what(),
            internal_error_context::build_error_context(tao::json::empty_object, core_tof),
-           error(errc::make_error_code(
-             transaction_op_errc_from_external_exception(core_tof.cause()))) };
+           error(transaction_op_errc_from_external_exception(core_tof.cause())) };
 }
 } // namespace core::impl
 } // namespace couchbase

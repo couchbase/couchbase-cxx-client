@@ -290,7 +290,7 @@ public:
 
   [[nodiscard]] transaction_op_error_context get_error_ctx() const
   {
-    errc::transaction_op ec = transaction_op_errc_from_external_exception(cause_);
+    std::error_code ec = transaction_op_errc_from_external_exception(cause_);
     return { ec };
   }
 
