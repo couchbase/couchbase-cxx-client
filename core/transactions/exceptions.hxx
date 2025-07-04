@@ -67,8 +67,7 @@ enum external_exception {
 };
 
 auto
-transaction_op_errc_from_external_exception(external_exception e)
-  -> couchbase::errc::transaction_op;
+transaction_op_errc_from_external_exception(external_exception e) -> std::error_code;
 
 auto
 external_exception_from_transaction_op_errc(couchbase::errc::transaction_op ec)
