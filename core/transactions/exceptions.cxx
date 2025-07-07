@@ -112,12 +112,13 @@ transaction_exception::transaction_exception(const std::runtime_error& cause,
 }
 
 auto
-transaction_op_errc_from_external_exception(external_exception e) -> errc::transaction_op
+transaction_op_errc_from_external_exception(external_exception e) -> std::error_code
 {
   switch (e) {
+    case external_exception::NOT_SET:
+      return {};
     case external_exception::UNKNOWN:
     case external_exception::COUCHBASE_EXCEPTION:
-    case external_exception::NOT_SET:
       return errc::transaction_op::generic;
     case external_exception::ACTIVE_TRANSACTION_RECORD_ENTRY_NOT_FOUND:
       return errc::transaction_op::active_transaction_record_entry_not_found;
