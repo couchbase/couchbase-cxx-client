@@ -463,15 +463,8 @@ public:
               const upsert_options& options,
               upsert_handler&& handler) const
   {
-    if constexpr (codec::is_crypto_transcoder_v<Transcoder>) {
-      return upsert(std::move(document_id),
-                    Transcoder::encode(document, crypto_manager()),
-                    options,
-                    std::move(handler));
-    } else {
-      return upsert(
-        std::move(document_id), Transcoder::encode(document), options, std::move(handler));
-    }
+    return upsert(
+      std::move(document_id), encode_document<Transcoder>(document), options, std::move(handler));
   }
 
   /**
@@ -517,12 +510,7 @@ public:
                             const upsert_options& options = {}) const
     -> std::future<std::pair<error, mutation_result>>
   {
-    if constexpr (codec::is_crypto_transcoder_v<Transcoder>) {
-      return upsert(
-        std::move(document_id), Transcoder::encode(document, crypto_manager()), options);
-    } else {
-      return upsert(std::move(document_id), Transcoder::encode(document), options);
-    }
+    return upsert(std::move(document_id), encode_document<Transcoder>(document), options);
   }
 
   /**
@@ -571,15 +559,8 @@ public:
               const insert_options& options,
               insert_handler&& handler) const
   {
-    if constexpr (codec::is_crypto_transcoder_v<Transcoder>) {
-      return insert(std::move(document_id),
-                    Transcoder::encode(document, crypto_manager()),
-                    options,
-                    std::move(handler));
-    } else {
-      return insert(
-        std::move(document_id), Transcoder::encode(document), options, std::move(handler));
-    }
+    return insert(
+      std::move(document_id), encode_document<Transcoder>(document), options, std::move(handler));
   }
 
   /**
@@ -628,12 +609,7 @@ public:
                             const insert_options& options = {}) const
     -> std::future<std::pair<error, mutation_result>>
   {
-    if constexpr (codec::is_crypto_transcoder_v<Transcoder>) {
-      return insert(
-        std::move(document_id), Transcoder::encode(document, crypto_manager()), options);
-    } else {
-      return insert(std::move(document_id), Transcoder::encode(document), options);
-    }
+    return insert(std::move(document_id), encode_document<Transcoder>(document), options);
   }
 
   /**
@@ -684,15 +660,8 @@ public:
                const replace_options& options,
                replace_handler&& handler) const
   {
-    if constexpr (codec::is_crypto_transcoder_v<Transcoder>) {
-      return replace(std::move(document_id),
-                     Transcoder::encode(document, crypto_manager()),
-                     options,
-                     std::move(handler));
-    } else {
-      return replace(
-        std::move(document_id), Transcoder::encode(document), options, std::move(handler));
-    }
+    return replace(
+      std::move(document_id), encode_document<Transcoder>(document), options, std::move(handler));
   }
 
   /**
@@ -743,11 +712,7 @@ public:
                              const replace_options& options = {}) const
     -> std::future<std::pair<error, mutation_result>>
   {
-    if constexpr (codec::is_crypto_transcoder_v<Transcoder>) {
-      return replace(std::move(document_id), Transcoder::encode(document.crypto_manager_), options);
-    } else {
-      return replace(std::move(document_id), Transcoder::encode(document), options);
-    }
+    return replace(std::move(document_id), encode_document<Transcoder>(document), options);
   }
 
   /**
@@ -1123,6 +1088,16 @@ private:
   friend class scope;
 
   [[nodiscard]] auto crypto_manager() const -> const std::shared_ptr<crypto::manager>&;
+
+  template<typename Transcoder, typename Document>
+  [[nodiscard]] auto encode_document(const Document& document) const -> codec::encoded_value
+  {
+    if constexpr (codec::is_crypto_transcoder_v<Transcoder>) {
+      return Transcoder::encode(document, crypto_manager());
+    } else {
+      return Transcoder::encode(document);
+    }
+  }
 
   collection(core::cluster core,
              std::string_view bucket_name,
