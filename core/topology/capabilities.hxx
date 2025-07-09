@@ -19,6 +19,8 @@
 
 #include <set>
 
+#include "core/cluster_options.hxx"
+
 namespace couchbase::core
 {
 enum class bucket_capability {
@@ -59,6 +61,7 @@ enum class cluster_capability {
 struct configuration_capabilities {
   std::set<bucket_capability> bucket{};
   std::set<cluster_capability> cluster{};
+  std::optional<std::string> prod_name{};
 
   [[nodiscard]] auto has_cluster_capability(cluster_capability cap) const -> bool
   {
@@ -111,6 +114,8 @@ struct configuration_capabilities {
   {
     return has_cluster_capability(cluster_capability::search_vector_search);
   }
+
+  [[nodiscard]] auto supports_operational_client(const cluster_options& options) const -> bool;
 };
 
 } // namespace couchbase::core

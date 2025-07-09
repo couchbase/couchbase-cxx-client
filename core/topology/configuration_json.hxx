@@ -332,6 +332,10 @@ struct traits<couchbase::core::topology::configuration> {
     if (const auto u = v.find("clusterUUID"); u != nullptr) {
       result.cluster_uuid = u->get_string();
     }
+    if (const auto n = v.find("prodName"); n != nullptr) {
+      result.prod_name = n->get_string();
+      result.capabilities.prod_name = result.prod_name;
+    }
 
     return result;
   }

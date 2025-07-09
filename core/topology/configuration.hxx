@@ -102,6 +102,7 @@ struct configuration {
   node_locator_type node_locator{ node_locator_type::unknown };
   std::optional<std::string> cluster_name{};
   std::optional<std::string> cluster_uuid{};
+  std::optional<std::string> prod_name{};
   bool force{ false };
 
   auto operator==(const configuration& other) const -> bool

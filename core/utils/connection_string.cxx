@@ -588,6 +588,8 @@ extract_options(connection_string& connstr)
       parse_option(connstr.options.app_telemetry_endpoint, name, value, connstr.warnings);
     } else if (name == "preserve_bootstrap_nodes_order") {
       parse_option(connstr.options.preserve_bootstrap_nodes_order, name, value, connstr.warnings);
+    } else if (name == "allow_enterprise_analytics") {
+      parse_option(connstr.options.allow_enterprise_analytics, name, value, connstr.warnings);
     } else {
       connstr.warnings.push_back(
         fmt::format(R"(unknown parameter "{}" in connection string (value "{}"))", name, value));
