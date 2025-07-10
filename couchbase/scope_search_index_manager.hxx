@@ -58,7 +58,7 @@ public:
    * @param handler  handler that implements @ref get_search_index_handler
    *
    * @since 1.0.0
-   * @volatile
+   * @committed
    */
   void get_index(std::string index_name,
                  const get_search_index_options& options,
@@ -74,7 +74,7 @@ public:
    * @param handler  handler that implements @ref get_all_search_indexes_handler
    *
    * @since 1.0.0
-   * @volatile
+   * @committed
    */
   void get_all_indexes(const get_all_search_indexes_options& options,
                        get_all_search_indexes_handler&& handler) const;
@@ -90,7 +90,7 @@ public:
    * @param handler  handler that implements @ref upsert_search_index_handler
    *
    * @since 1.0.0
-   * @volatile
+   * @committed
    */
   void upsert_index(const management::search::index& search_index,
                     const upsert_search_index_options& options,
@@ -108,7 +108,7 @@ public:
    * @param handler  handler that implements @ref drop_search_index_handler
    *
    * @since 1.0.0
-   * @volatile
+   * @committed
    */
   void drop_index(std::string index_name,
                   const drop_search_index_options& options,
@@ -126,7 +126,7 @@ public:
    * @param handler  handler that implements @ref get_indexed_search_index_handler
    *
    * @since 1.0.0
-   * @volatile
+   * @committed
    */
   void get_indexed_documents_count(std::string index_name,
                                    const get_indexed_search_index_options& options,
@@ -145,7 +145,7 @@ public:
    * @param handler  handler that implements @ref pause_ingest_search_index_handler
    *
    * @since 1.0.0
-   * @volatile
+   * @committed
    */
   void pause_ingest(std::string index_name,
                     const pause_ingest_search_index_options& options,
@@ -163,7 +163,7 @@ public:
    * @param handler  handler that implements @ref resume_ingest_search_index_handler
    *
    * @since 1.0.0
-   * @volatile
+   * @committed
    */
   void resume_ingest(std::string index_name,
                      const resume_ingest_search_index_options& options,
@@ -181,7 +181,7 @@ public:
    * @param handler  handler that implements @ref allow_querying_search_index_handler
    *
    * @since 1.0.0
-   * @volatile
+   * @committed
    */
   void allow_querying(std::string index_name,
                       const allow_querying_search_index_options& options,
@@ -199,7 +199,7 @@ public:
    * @param handler  handler that implements @ref disallow_querying_search_index_handler
    *
    * @since 1.0.0
-   * @volatile
+   * @committed
    */
   void disallow_querying(std::string index_name,
                          const disallow_querying_search_index_options& options,
@@ -217,7 +217,7 @@ public:
    * @param handler  handler that implements @ref  freeze_plan_search_index_handler
    *
    * @since 1.0.0
-   * @volatile
+   * @committed
    */
   void freeze_plan(std::string index_name,
                    const freeze_plan_search_index_options& options,
@@ -235,7 +235,7 @@ public:
    * @param handler  handler that implements @ref  unfreeze_plan_search_index_handler
    *
    * @since 1.0.0
-   * @volatile
+   * @committed
    */
   void unfreeze_plan(std::string index_name,
                      const unfreeze_plan_search_index_options& options,
@@ -254,7 +254,7 @@ public:
    * @param handler  handler that implements @ref analyze_document_handler
    *
    * @since 1.0.0
-   * @volatile
+   * @committed
    */
   template<typename Document>
   void analyze_document(std::string index_name,
@@ -292,7 +292,7 @@ public:
    * @param handler  handler that implements @ref analyze_document_handler
    *
    * @since 1.0.0
-   * @volatile
+   * @committed
    */
   void analyze_document(std::string index_name,
                         std::string document,

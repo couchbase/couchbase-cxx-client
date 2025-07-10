@@ -199,7 +199,7 @@ public:
    * @return a manager instance
    *
    * @since 1.0.0
-   * @volatile
+   * @committed
    */
   [[nodiscard]] auto search_indexes() const -> scope_search_index_manager;
 
