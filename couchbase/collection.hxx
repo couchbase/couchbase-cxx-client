@@ -58,6 +58,10 @@ class cluster;
 class bucket;
 class scope;
 class collection_impl;
+namespace crypto
+{
+class manager;
+} // namespace crypto
 #endif
 
 /**
@@ -460,7 +464,7 @@ public:
               upsert_handler&& handler) const
   {
     return upsert(
-      std::move(document_id), Transcoder::encode(document), options, std::move(handler));
+      std::move(document_id), encode_document<Transcoder>(document), options, std::move(handler));
   }
 
   /**
@@ -506,7 +510,7 @@ public:
                             const upsert_options& options = {}) const
     -> std::future<std::pair<error, mutation_result>>
   {
-    return upsert(std::move(document_id), Transcoder::encode(document), options);
+    return upsert(std::move(document_id), encode_document<Transcoder>(document), options);
   }
 
   /**
@@ -556,7 +560,7 @@ public:
               insert_handler&& handler) const
   {
     return insert(
-      std::move(document_id), Transcoder::encode(document), options, std::move(handler));
+      std::move(document_id), encode_document<Transcoder>(document), options, std::move(handler));
   }
 
   /**
@@ -605,7 +609,7 @@ public:
                             const insert_options& options = {}) const
     -> std::future<std::pair<error, mutation_result>>
   {
-    return insert(std::move(document_id), Transcoder::encode(document), options);
+    return insert(std::move(document_id), encode_document<Transcoder>(document), options);
   }
 
   /**
@@ -657,7 +661,7 @@ public:
                replace_handler&& handler) const
   {
     return replace(
-      std::move(document_id), Transcoder::encode(document), options, std::move(handler));
+      std::move(document_id), encode_document<Transcoder>(document), options, std::move(handler));
   }
 
   /**
@@ -708,7 +712,7 @@ public:
                              const replace_options& options = {}) const
     -> std::future<std::pair<error, mutation_result>>
   {
-    return replace(std::move(document_id), Transcoder::encode(document), options);
+    return replace(std::move(document_id), encode_document<Transcoder>(document), options);
   }
 
   /**
@@ -1083,10 +1087,23 @@ private:
   friend class bucket;
   friend class scope;
 
+  [[nodiscard]] auto crypto_manager() const -> const std::shared_ptr<crypto::manager>&;
+
+  template<typename Transcoder, typename Document>
+  [[nodiscard]] auto encode_document(const Document& document) const -> codec::encoded_value
+  {
+    if constexpr (codec::is_crypto_transcoder_v<Transcoder>) {
+      return Transcoder::encode(document, crypto_manager());
+    } else {
+      return Transcoder::encode(document);
+    }
+  }
+
   collection(core::cluster core,
              std::string_view bucket_name,
              std::string_view scope_name,
-             std::string_view name);
+             std::string_view name,
+             std::shared_ptr<crypto::manager> crypto_manager);
 
   std::shared_ptr<collection_impl> impl_;
 };

@@ -28,4 +28,10 @@ struct is_transcoder : public std::false_type {
 template<typename T>
 inline constexpr bool is_transcoder_v = is_transcoder<T>::value;
 
+template<typename T>
+struct is_crypto_transcoder : public std::false_type {
+};
+
+template<typename T>
+inline constexpr bool is_crypto_transcoder_v = is_crypto_transcoder<T>::value;
 } // namespace couchbase::codec

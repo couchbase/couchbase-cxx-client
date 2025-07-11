@@ -225,6 +225,7 @@ set(couchbase_cxx_client_FILES
     core/impl/vector_search.cxx
     core/impl/view_error_category.cxx
     core/impl/wildcard_query.cxx
+    core/impl/crypto.cxx
     core/io/config_tracker.cxx
     core/io/dns_client.cxx
     core/io/dns_config.cxx

@@ -43,4 +43,7 @@ read(gsl::span<std::byte> buffer, std::size_t offset, std::size_t length) -> std
 
 void
 put_uint32(gsl::span<std::byte> bytes, std::uint32_t value);
+
+void
+put_uint64(gsl::span<std::byte> bytes, std::uint64_t value);
 } // namespace couchbase::core::mcbp::big_endian

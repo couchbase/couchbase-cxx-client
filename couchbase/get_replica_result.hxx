@@ -24,6 +24,12 @@
 
 namespace couchbase
 {
+#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
+namespace crypto
+{
+class manager;
+} // namespace crypto
+#endif
 
 /**
  * Represents result of @ref collection#get_any_replica operations, also returned by @ref
@@ -51,10 +57,14 @@ public:
    * @since 1.0.0
    * @committed
    */
-  get_replica_result(couchbase::cas cas, bool is_replica, codec::encoded_value value)
+  get_replica_result(couchbase::cas cas,
+                     bool is_replica,
+                     codec::encoded_value value,
+                     std::shared_ptr<crypto::manager> crypto_manager = {})
     : result{ cas }
     , is_replica_{ is_replica }
     , value_{ std::move(value) }
+    , crypto_manager_{ std::move(crypto_manager) }
   {
   }
 
@@ -90,7 +100,11 @@ public:
   template<typename Transcoder, std::enable_if_t<codec::is_transcoder_v<Transcoder>, bool> = true>
   [[nodiscard]] auto content_as() const -> typename Transcoder::document_type
   {
-    return Transcoder::decode(value_);
+    if constexpr (codec::is_crypto_transcoder_v<Transcoder>) {
+      return Transcoder::decode(value_, crypto_manager_);
+    } else {
+      return Transcoder::decode(value_);
+    }
   }
 
   /**
@@ -110,12 +124,17 @@ public:
            std::enable_if_t<codec::is_transcoder_v<Transcoder>, bool> = true>
   [[nodiscard]] auto content_as() const -> Document
   {
-    return Transcoder::template decode<Document>(value_);
+    if constexpr (codec::is_crypto_transcoder_v<Transcoder>) {
+      return Transcoder::template decode<Document>(value_, crypto_manager_);
+    } else {
+      return Transcoder::template decode<Document>(value_);
+    }
   }
 
 private:
   bool is_replica_{ false };
   codec::encoded_value value_{};
+  std::shared_ptr<crypto::manager> crypto_manager_{};
 };
 
 } // namespace couchbase

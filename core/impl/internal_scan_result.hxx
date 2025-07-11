@@ -27,7 +27,8 @@ class internal_scan_result
 {
 
 public:
-  explicit internal_scan_result(core::scan_result core_result);
+  explicit internal_scan_result(core::scan_result core_result,
+                                std::shared_ptr<crypto::manager> crypto_manager);
   internal_scan_result(const internal_scan_result&) = delete;
   internal_scan_result(internal_scan_result&&) noexcept = default;
   auto operator=(const internal_scan_result&) -> internal_scan_result& = delete;
@@ -39,5 +40,6 @@ public:
 
 private:
   core::scan_result core_result_;
+  std::shared_ptr<crypto::manager> crypto_manager_;
 };
 } // namespace couchbase
