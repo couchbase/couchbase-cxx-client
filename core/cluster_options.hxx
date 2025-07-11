@@ -108,6 +108,7 @@ public:
     timeout_defaults::app_telemetry_backoff_interval
   };
   bool preserve_bootstrap_nodes_order{ false };
+  bool allow_enterprise_analytics{ false };
 };
 
 } // namespace couchbase::core

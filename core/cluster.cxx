@@ -246,14 +246,16 @@ namespace
 template<typename Request>
 auto
 is_feature_supported(const Request& /* request */,
-                     const configuration_capabilities& /* capabilities */) -> bool
+                     const configuration_capabilities& /* capabilities */,
+                     const cluster_options& /* options */) -> bool
 {
   return true;
 }
 
 auto
 is_feature_supported(const operations::search_request& request,
-                     const configuration_capabilities& capabilities) -> bool
+                     const configuration_capabilities& capabilities,
+                     const cluster_options& /* options */) -> bool
 {
   if (request.scope_name && !capabilities.supports_scoped_search_indexes()) {
     return false;
@@ -266,8 +268,17 @@ is_feature_supported(const operations::search_request& request,
 }
 
 auto
+is_feature_supported(const operations::analytics_request& /*request*/,
+                     const configuration_capabilities& capabilities,
+                     const cluster_options& options) -> bool
+{
+  return capabilities.supports_operational_client(options);
+}
+
+auto
 is_feature_supported(const operations::management::search_index_upsert_request& request,
-                     const configuration_capabilities& capabilities) -> bool
+                     const configuration_capabilities& capabilities,
+                     const cluster_options& /* options */) -> bool
 {
   return !request.index.is_vector_index() || capabilities.supports_vector_search();
 }
@@ -554,7 +565,8 @@ public:
     if (stopped_) {
       return handler(request.make_response({ errc::network::cluster_closed }, response_type{}));
     }
-    if (!is_feature_supported(request, session_manager_->configuration_capabilities())) {
+    if (!is_feature_supported(
+          request, session_manager_->configuration_capabilities(), origin_.options())) {
       return handler(
         request.make_response({ errc::common::feature_not_available }, response_type{}));
     }
