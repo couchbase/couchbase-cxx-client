@@ -371,17 +371,20 @@ public:
     if (event == fork_event::prepare) {
       io_.stop();
       io_thread_.join();
+      io_.notify_fork(fork_event_to_asio(event));
+      if (transactions_) {
+        transactions_->notify_fork(event);
+      }
     } else {
       // TODO(SA): close all sockets in fork_event::child
       io_.restart();
+      io_.notify_fork(fork_event_to_asio(event));
+      if (event == fork_event::parent && transactions_) {
+        transactions_->notify_fork(event);
+      }
       io_thread_ = std::thread{ [&io = io_] {
         io.run();
       } };
-    }
-    io_.notify_fork(fork_event_to_asio(event));
-
-    if (event != fork_event::child && transactions_) {
-      transactions_->notify_fork(event);
     }
   }
 
@@ -599,9 +602,9 @@ cluster::notify_fork(fork_event event) -> void
       if (err.ec()) {
         // TODO(SA): we should fall to background reconnect loop similar to Columnar build
         CB_LOG_ERROR("Unable to reconnect instance after fork: {}", err.ec().message());
-        return;
+      } else {
+        impl_ = new_impl;
       }
-      impl_ = new_impl;
       barrier->set_value();
     });
 
@@ -612,10 +615,11 @@ cluster::notify_fork(fork_event event) -> void
 void
 cluster::close(std::function<void()>&& handler)
 {
-  if (!impl_) {
-    return handler();
+  if (auto impl = std::move(impl_); impl) {
+    impl->close(std::move(handler));
+  } else {
+    handler();
   }
-  impl_->close(std::move(handler));
 }
 
 auto
