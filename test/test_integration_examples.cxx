@@ -79,8 +79,8 @@ namespace start_using
 #include <tao/json.hpp>
 #include <tao/json/contrib/traits.hpp>
 
-int
-main(int argc, const char* argv[])
+auto
+main(int argc, const char* argv[]) -> int
 {
   if (argc != 4) {
     fmt::print("USAGE: ./start_using couchbase://127.0.0.1 Administrator password\n");
@@ -284,8 +284,8 @@ public:
   }
 };
 
-int
-main(int argc, const char* argv[])
+auto
+main(int argc, const char* argv[]) -> int
 {
   if (argc != 4) {
     fmt::print("USAGE: ./example_search couchbase://127.0.0.1 Administrator password\n");
@@ -594,8 +594,8 @@ namespace example_buckets
 //! [example-buckets]
 #include <couchbase/cluster.hxx>
 
-int
-main(int argc, const char* argv[])
+auto
+main(int argc, const char* argv[]) -> int
 {
   if (argc != 4) {
     fmt::print("USAGE: ./example_buckets couchbase://127.0.0.1 Administrator password\n");
@@ -725,8 +725,8 @@ namespace example_fork
 
 #include <sys/wait.h>
 
-int
-main(int argc, const char* argv[])
+auto
+main(int argc, const char* argv[]) -> int
 {
   if (argc != 4) {
     fmt::print("USAGE: ./example_fork couchbase://127.0.0.1 Administrator password\n");
@@ -747,14 +747,13 @@ main(int argc, const char* argv[])
     return 1;
   }
 
-  auto bucket = cluster.bucket(bucket_name);
-
   cluster.notify_fork(couchbase::fork_event::prepare);
   auto child_pid = fork();
   if (child_pid == 0) {
     cluster.notify_fork(couchbase::fork_event::child);
 
     fmt::print("CHILD(pid={}): continue after fork()\n", getpid());
+    auto bucket = cluster.bucket(bucket_name);
     auto collection = bucket.scope("tenant_agent_00").collection("users");
 
     {
@@ -790,6 +789,7 @@ main(int argc, const char* argv[])
     cluster.notify_fork(couchbase::fork_event::parent);
     fmt::print("PARENT(pid={}): continue after fork() child_pid={}\n", getpid(), child_pid);
 
+    auto bucket = cluster.bucket(bucket_name);
     {
       auto collection = bucket.scope("tenant_agent_00").collection("users");
       std::string doc_id = "tenant_agent_00";
