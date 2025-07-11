@@ -211,13 +211,10 @@ macro(integration_benchmark name)
 endmacro()
 
 add_library(test_main OBJECT ${PROJECT_SOURCE_DIR}/test/main.cxx)
-target_link_libraries(test_main PUBLIC Catch2::Catch2)
+target_link_libraries(test_main PUBLIC Catch2::Catch2 OpenSSL::SSL)
 
-if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
-  target_link_libraries(test_main PUBLIC OpenSSL::SSL)
-  if(WIN32)
-    set_target_properties(test_main PROPERTIES LINK_FLAGS "/ignore:4099")
-  endif()
+if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND WIN32)
+  set_target_properties(test_main PROPERTIES LINK_FLAGS "/ignore:4099")
 endif()
 
 add_subdirectory(${PROJECT_SOURCE_DIR}/test)
