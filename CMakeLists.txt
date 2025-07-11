@@ -510,14 +510,14 @@ foreach(TARGET ${couchbase_cxx_client_LIBRARIES})
   set_target_properties(${TARGET} PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
   target_include_directories(
-    ${TARGET} PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>
-                      $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/generated>
+    ${TARGET} PRIVATE $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/generated>
                       $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/generated_$<CONFIG>>)
 
   target_include_directories(
     ${TARGET} SYSTEM PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/cxx_function>
                              $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/expected/include>)
 
+  target_include_directories(${TARGET} PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>)
   target_include_directories(${TARGET} PUBLIC $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
   enable_sanitizers(${TARGET})
