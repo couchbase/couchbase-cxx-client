@@ -18,6 +18,7 @@
 #include "analytics.hxx"
 #include "beam.hxx"
 #include "get.hxx"
+#include "keygen.hxx"
 #include "pillowfight.hxx"
 #include "query.hxx"
 #include "remove.hxx"
@@ -44,6 +45,7 @@ main(int argc, const char** argv)
   app.add_subcommand(cbc::make_pillowfight_command());
   app.add_subcommand(cbc::make_beam_command());
   app.add_subcommand(cbc::make_query_command());
+  app.add_subcommand(cbc::make_keygen_command());
 
   try {
     app.parse(argc, argv);
@@ -51,31 +53,39 @@ main(int argc, const char** argv)
     return app.exit(e);
   }
 
-  for (const auto& item : app.get_subcommands()) {
-    if (item->get_name() == "version") {
-      return cbc::execute_version_command(item);
+  try {
+    for (const auto& item : app.get_subcommands()) {
+      if (item->get_name() == "version") {
+        return cbc::execute_version_command(item);
+      }
+      if (item->get_name() == "upsert") {
+        return cbc::execute_upsert_command(item);
+      }
+      if (item->get_name() == "get") {
+        return cbc::execute_get_command(item);
+      }
+      if (item->get_name() == "remove") {
+        return cbc::execute_remove_command(item);
+      }
+      if (item->get_name() == "query") {
+        return cbc::execute_query_command(item);
+      }
+      if (item->get_name() == "analytics") {
+        return cbc::execute_analytics_command(item);
+      }
+      if (item->get_name() == "pillowfight") {
+        return cbc::execute_pillowfight_command(item);
+      }
+      if (item->get_name() == "beam") {
+        return cbc::execute_beam_command(item);
+      }
+      if (item->get_name() == "keygen") {
+        return cbc::execute_keygen_command(item);
+      }
     }
-    if (item->get_name() == "upsert") {
-      return cbc::execute_upsert_command(item);
-    }
-    if (item->get_name() == "get") {
-      return cbc::execute_get_command(item);
-    }
-    if (item->get_name() == "remove") {
-      return cbc::execute_remove_command(item);
-    }
-    if (item->get_name() == "query") {
-      return cbc::execute_query_command(item);
-    }
-    if (item->get_name() == "analytics") {
-      return cbc::execute_analytics_command(item);
-    }
-    if (item->get_name() == "pillowfight") {
-      return cbc::execute_pillowfight_command(item);
-    }
-    if (item->get_name() == "beam") {
-      return cbc::execute_beam_command(item);
-    }
+  } catch (const std::exception& e) {
+    fmt::println(stderr, "Runtime error: {}", e.what());
+    return EXIT_FAILURE;
   }
 
   return 0;

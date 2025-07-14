@@ -22,9 +22,11 @@ add_executable(
   cbc
   cbc.cxx
   utils.cxx
+  key_generator.cxx
   analytics.cxx
   beam.cxx
   get.cxx
+  keygen.cxx
   pillowfight.cxx
   query.cxx
   remove.cxx
