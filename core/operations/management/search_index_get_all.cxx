@@ -71,8 +71,8 @@ search_index_get_all_request::make_response(error_context::http&& ctx,
         for (const auto& [name, index] : indexes->get_object()) {
           response.indexes.emplace_back(index.as<couchbase::core::management::search::index>());
         }
-        return response;
       }
+      return response;
     } else if (encoded.status_code == 404) {
       tao::json::value payload{};
       try {
