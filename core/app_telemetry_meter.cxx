@@ -50,8 +50,8 @@ public:
   virtual ~app_telemetry_meter_impl() = default;
 
   virtual auto enabled() -> bool = 0;
-  [[nodiscard]] virtual auto labels_cache() const -> const std::map<std::string, node_labels>& = 0;
-  virtual void set_labels_cache(const std::map<std::string, node_labels>&) = 0;
+  [[nodiscard]] virtual auto current_node_labels() const -> std::map<std::string, node_labels> = 0;
+  virtual void set_node_labels_cache(std::map<std::string, node_labels>) = 0;
   virtual auto nothing_to_report() -> bool = 0;
   virtual void update_config(const topology::configuration& config) = 0;
   virtual auto value_recorder(const std::string& node_uuid, const std::string& bucket_name)
@@ -352,13 +352,12 @@ public:
     /* do nothing */
   }
 
-  [[nodiscard]] auto labels_cache() const -> const std::map<std::string, node_labels>& override
+  [[nodiscard]] auto current_node_labels() const -> std::map<std::string, node_labels> override
   {
-    static const std::map<std::string, node_labels> empty_labels_cache{};
-    return empty_labels_cache;
+    return {};
   }
 
-  void set_labels_cache(const std::map<std::string, node_labels>&) override
+  void set_node_labels_cache(std::map<std::string, node_labels>) override
   {
     /* do nothing */
   }
@@ -613,6 +612,7 @@ public:
 
   void update_config(const topology::configuration& config) override
   {
+    node_uuids_in_last_config_.clear();
     for (const auto& node : config.nodes) {
       std::optional<std::string> alt_node{};
       if (auto it = node.alt.find("external"); it != node.alt.end()) {
@@ -624,6 +624,7 @@ public:
         node.hostname,
         alt_node,
       };
+      node_uuids_in_last_config_.push_back(node.node_uuid);
     }
   }
 
@@ -638,14 +639,21 @@ public:
     return recorders_.empty();
   }
 
-  [[nodiscard]] auto labels_cache() const -> const std::map<std::string, node_labels>& override
+  [[nodiscard]] auto current_node_labels() const -> std::map<std::string, node_labels> override
   {
-    return labels_cache_;
+    std::map<std::string, node_labels> labels{};
+    for (const auto& node_uuid : node_uuids_in_last_config_) {
+      labels[node_uuid] = labels_cache_.at(node_uuid);
+    }
+    return labels;
   }
 
-  void set_labels_cache(const std::map<std::string, node_labels>& labels) override
+  void set_node_labels_cache(std::map<std::string, node_labels> labels) override
   {
-    labels_cache_ = labels;
+    for (const auto& [node_uuid, _] : labels) {
+      node_uuids_in_last_config_.push_back(node_uuid);
+    }
+    labels_cache_ = std::move(labels);
   }
 
   void generate_to(std::vector<std::byte>& buffer, const std::string& agent) override
@@ -700,6 +708,7 @@ private:
            std::map<std::string, std::shared_ptr<default_app_telemetry_value_recorder>>>
     recorders_{};
   std::map<std::string, node_labels> labels_cache_{};
+  std::vector<std::string> node_uuids_in_last_config_{};
 };
 
 auto
@@ -776,7 +785,7 @@ app_telemetry_meter::generate_report(std::vector<std::byte>& output_buffer)
   }
   const auto old_impl = std::move(impl_);
   impl_ = std::make_unique<default_app_telemetry_meter_impl>();
-  impl_->set_labels_cache(old_impl->labels_cache());
+  impl_->set_node_labels_cache(old_impl->current_node_labels());
   old_impl->generate_to(output_buffer, agent_);
 }
 } // namespace couchbase::core
