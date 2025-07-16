@@ -73,7 +73,8 @@ search_index_get_all_request::make_response(error_context::http&& ctx,
         }
       }
       return response;
-    } else if (encoded.status_code == 404) {
+    }
+    if (encoded.status_code == 404) {
       tao::json::value payload{};
       try {
         payload = utils::json::parse(encoded.body.data());
