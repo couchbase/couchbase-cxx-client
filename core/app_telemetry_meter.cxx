@@ -34,17 +34,24 @@
 
 namespace couchbase::core
 {
+struct node_labels {
+  std::string node;
+  std::optional<std::string> alt_node;
+};
+
 class app_telemetry_meter_impl
 {
 public:
   app_telemetry_meter_impl() = default;
-  app_telemetry_meter_impl(app_telemetry_meter_impl&&) = default;
+  app_telemetry_meter_impl(app_telemetry_meter_impl&&) = delete;
   app_telemetry_meter_impl(const app_telemetry_meter_impl&) = delete;
-  auto operator=(app_telemetry_meter_impl&&) -> app_telemetry_meter_impl& = default;
+  auto operator=(app_telemetry_meter_impl&&) -> app_telemetry_meter_impl& = delete;
   auto operator=(const app_telemetry_meter_impl&) -> app_telemetry_meter_impl& = delete;
   virtual ~app_telemetry_meter_impl() = default;
 
   virtual auto enabled() -> bool = 0;
+  [[nodiscard]] virtual auto current_node_labels() const -> std::map<std::string, node_labels> = 0;
+  virtual void set_node_labels_cache(std::map<std::string, node_labels>) = 0;
   virtual auto nothing_to_report() -> bool = 0;
   virtual void update_config(const topology::configuration& config) = 0;
   virtual auto value_recorder(const std::string& node_uuid, const std::string& bucket_name)
@@ -101,11 +108,6 @@ namespace couchbase::core
 {
 namespace
 {
-struct node_labels {
-  std::string node;
-  std::optional<std::string> alt_node;
-};
-
 struct kv_non_durable_histogram {
   const char* name;
   std::atomic_uint64_t le_1ms{};
@@ -346,6 +348,16 @@ public:
 
   void generate_to(std::vector<std::byte>& /* output_buffer */,
                    const std::string& /* agent */) override
+  {
+    /* do nothing */
+  }
+
+  [[nodiscard]] auto current_node_labels() const -> std::map<std::string, node_labels> override
+  {
+    return {};
+  }
+
+  void set_node_labels_cache(std::map<std::string, node_labels>) override
   {
     /* do nothing */
   }
@@ -600,6 +612,7 @@ public:
 
   void update_config(const topology::configuration& config) override
   {
+    node_uuids_in_last_config_.clear();
     for (const auto& node : config.nodes) {
       std::optional<std::string> alt_node{};
       if (auto it = node.alt.find("external"); it != node.alt.end()) {
@@ -611,6 +624,7 @@ public:
         node.hostname,
         alt_node,
       };
+      node_uuids_in_last_config_.push_back(node.node_uuid);
     }
   }
 
@@ -623,6 +637,23 @@ public:
   {
     const std::lock_guard<std::mutex> lock(mutex_);
     return recorders_.empty();
+  }
+
+  [[nodiscard]] auto current_node_labels() const -> std::map<std::string, node_labels> override
+  {
+    std::map<std::string, node_labels> labels{};
+    for (const auto& node_uuid : node_uuids_in_last_config_) {
+      labels[node_uuid] = labels_cache_.at(node_uuid);
+    }
+    return labels;
+  }
+
+  void set_node_labels_cache(std::map<std::string, node_labels> labels) override
+  {
+    for (const auto& [node_uuid, _] : labels) {
+      node_uuids_in_last_config_.push_back(node_uuid);
+    }
+    labels_cache_ = std::move(labels);
   }
 
   void generate_to(std::vector<std::byte>& buffer, const std::string& agent) override
@@ -677,6 +708,7 @@ private:
            std::map<std::string, std::shared_ptr<default_app_telemetry_value_recorder>>>
     recorders_{};
   std::map<std::string, node_labels> labels_cache_{};
+  std::vector<std::string> node_uuids_in_last_config_{};
 };
 
 auto
@@ -699,6 +731,7 @@ app_telemetry_meter::app_telemetry_meter()
 void
 app_telemetry_meter::disable()
 {
+  const std::scoped_lock lock{ impl_mutex_ };
   if (!impl_->enabled()) {
     return;
   }
@@ -712,6 +745,7 @@ app_telemetry_meter::disable()
 void
 app_telemetry_meter::enable()
 {
+  const std::scoped_lock lock{ impl_mutex_ };
   if (impl_->enabled()) {
     return;
   }
@@ -730,6 +764,7 @@ app_telemetry_meter::~app_telemetry_meter() = default;
 void
 app_telemetry_meter::update_config(const topology::configuration& config)
 {
+  const std::shared_lock lock{ impl_mutex_ };
   return impl_->update_config(config);
 }
 
@@ -737,17 +772,20 @@ auto
 app_telemetry_meter::value_recorder(const std::string& node_uuid, const std::string& bucket_name)
   -> std::shared_ptr<app_telemetry_value_recorder>
 {
+  const std::shared_lock lock{ impl_mutex_ };
   return impl_->value_recorder(node_uuid, bucket_name);
 }
 
 void
 app_telemetry_meter::generate_report(std::vector<std::byte>& output_buffer)
 {
+  const std::scoped_lock lock{ impl_mutex_ };
   if (impl_->nothing_to_report()) {
     return;
   }
-  auto old_impl = std::move(impl_);
+  const auto old_impl = std::move(impl_);
   impl_ = std::make_unique<default_app_telemetry_meter_impl>();
+  impl_->set_node_labels_cache(old_impl->current_node_labels());
   old_impl->generate_to(output_buffer, agent_);
 }
 } // namespace couchbase::core
