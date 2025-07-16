@@ -20,6 +20,7 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <shared_mutex>
 #include <string>
 #include <vector>
 
@@ -175,9 +176,9 @@ class app_telemetry_meter
 {
 public:
   app_telemetry_meter();
-  app_telemetry_meter(app_telemetry_meter&&) = default;
+  app_telemetry_meter(app_telemetry_meter&&) = delete;
   app_telemetry_meter(const app_telemetry_meter&) = delete;
-  auto operator=(app_telemetry_meter&&) -> app_telemetry_meter& = default;
+  auto operator=(app_telemetry_meter&&) -> app_telemetry_meter& = delete;
   auto operator=(const app_telemetry_meter&) -> app_telemetry_meter& = delete;
   ~app_telemetry_meter();
 
@@ -193,6 +194,7 @@ public:
 private:
   std::string agent_;
   std::unique_ptr<app_telemetry_meter_impl> impl_;
+  std::shared_mutex impl_mutex_{};
 };
 
 } // namespace couchbase::core
