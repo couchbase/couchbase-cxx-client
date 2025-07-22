@@ -61,7 +61,7 @@ enum class cluster_capability {
 struct configuration_capabilities {
   std::set<bucket_capability> bucket{};
   std::set<cluster_capability> cluster{};
-  std::optional<std::string> prod_name{};
+  std::optional<std::string> prod{};
 
   [[nodiscard]] auto has_cluster_capability(cluster_capability cap) const -> bool
   {
@@ -115,7 +115,7 @@ struct configuration_capabilities {
     return has_cluster_capability(cluster_capability::search_vector_search);
   }
 
-  [[nodiscard]] auto supports_operational_client(const cluster_options& options) const -> bool;
+  [[nodiscard]] auto is_analytics_cluster(const cluster_options& options) const -> bool;
 };
 
 } // namespace couchbase::core
