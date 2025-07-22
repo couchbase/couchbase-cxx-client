@@ -272,7 +272,7 @@ is_feature_supported(const operations::analytics_request& /*request*/,
                      const configuration_capabilities& capabilities,
                      const cluster_options& options) -> bool
 {
-  return capabilities.supports_operational_client(options);
+  return !capabilities.is_analytics_cluster(options);
 }
 
 auto
