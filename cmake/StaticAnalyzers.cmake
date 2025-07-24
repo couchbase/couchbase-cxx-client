@@ -33,10 +33,16 @@ if(ENABLE_CLANG_TIDY)
       ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE)
   endif()
 
+  set(CLANGTIDY_CANDIDATES
+    clang-tidy-20
+    clang-tidy-19
+    clang-tidy-18
+    clang-tidy
+  )
   if(LLVM_ROOT_DIR)
-    find_program(CLANGTIDY clang-tidy HINTS "${LLVM_ROOT_DIR}/bin")
+    find_program(CLANGTIDY ${CLANGTIDY_CANDIDATES} HINTS "${LLVM_ROOT_DIR}/bin")
   else()
-    find_program(CLANGTIDY clang-tidy)
+    find_program(CLANGTIDY ${CLANGTIDY_CANDIDATES})
   endif()
   if(CLANGTIDY)
     set(COUCHBASE_CXX_CLIENT_CLANG_TIDY "${CLANGTIDY};-extra-arg=-Wno-unknown-warning-option")
