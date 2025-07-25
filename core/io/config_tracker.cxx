@@ -449,9 +449,9 @@ private:
       if (!should_update_config(config)) {
         return;
       }
-      if (config_) {
-        diff_nodes(config_->nodes, config.nodes, added);
-        diff_nodes(config.nodes, config_->nodes, removed);
+      if (auto current_config = config_; current_config) {
+        diff_nodes(current_config->nodes, config.nodes, added);
+        diff_nodes(config.nodes, current_config->nodes, removed);
       } else {
         added = config.nodes;
       }
@@ -474,12 +474,14 @@ private:
   void restart_sessions()
   {
     const std::scoped_lock lock(config_mutex_, sessions_mutex_);
-    if (!config_.has_value()) {
+
+    std::optional<topology::configuration> current_config = config_;
+    if (!current_config.has_value()) {
       return;
     }
 
-    for (std::size_t index = 0; index < config_->nodes.size(); ++index) {
-      const auto& node = config_->nodes[index];
+    for (std::size_t index = 0; index < current_config->nodes.size(); ++index) {
+      const auto& node = current_config->nodes[index];
 
       const auto& hostname = node.hostname_for(origin_.options().network);
       auto port = node.port_or(
@@ -504,7 +506,7 @@ private:
           : io::mcbp_session(client_id_, node.node_uuid, ctx_, origin, state_listener_);
       CB_LOG_DEBUG(R"({} rev={}, restart cluster session="{}", address="{}:{}")",
                    log_prefix_,
-                   config_->rev_str(),
+                   current_config->rev_str(),
                    session.id(),
                    hostname,
                    port);
