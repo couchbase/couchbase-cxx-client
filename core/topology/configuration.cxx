@@ -196,14 +196,13 @@ auto
 configuration::select_network(const std::string& bootstrap_hostname) const -> std::string
 {
   for (const auto& n : nodes) {
-    if (n.this_node) {
-      if (n.hostname == bootstrap_hostname) {
-        return "default";
-      }
-      for (const auto& [network, address] : n.alt) {
-        if (address.hostname == bootstrap_hostname) {
-          return network;
-        }
+    if (n.hostname == bootstrap_hostname) {
+      return "default";
+    }
+
+    if (auto network = n.alt.find("external"); network != n.alt.end()) {
+      if (network->second.hostname == bootstrap_hostname) {
+        return "external";
       }
     }
   }
