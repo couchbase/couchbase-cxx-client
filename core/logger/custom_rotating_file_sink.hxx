@@ -55,8 +55,11 @@ public:
   ~custom_rotating_file_sink() override;
 
 protected:
+  // Explicitly instantiated in custom_rotating_file_sink.cxx
+  // NOLINTBEGIN(portability-template-virtual-member-function)
   void sink_it_(const spdlog::details::log_msg& msg) override;
   void flush_() override;
+  // NOLINTEND(portability-template-virtual-member-function)
 
 private:
   void add_hook(const std::string& hook);

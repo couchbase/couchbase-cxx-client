@@ -382,8 +382,10 @@ public:
             [self, hostname = std::move(hostname), handler = std::move(handler)](
               origin::node_list nodes, std::error_code ec) mutable {
               if (ec) {
+#ifdef __clang_analyzer__
                 // TODO(CXXCBC-549): clang-tidy-19 reports potential memory leak here
-                // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
+                [[clang::suppress]]
+#endif
                 return self->close([ec, handler = std::move(handler)]() mutable {
                   handler(ec);
                 });
@@ -755,8 +757,10 @@ public:
                          id_,
                          origin_.options().trust_certificate,
                          ec.message());
+#ifdef __clang_analyzer__
             // TODO(CXXCBC-549): clang-tidy-19 reports potential memory leak here
-            // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
+            [[clang::suppress]]
+#endif
             return close([ec, handler = std::move(handler)]() mutable {
               return handler(ec);
             });
@@ -772,8 +776,10 @@ public:
                        id_,
                        origin_.certificate_path(),
                        ec.message());
+#ifdef __clang_analyzer__
           // TODO(CXXCBC-549): clang-tidy-19 reports potential memory leak here
-          // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
+          [[clang::suppress]]
+#endif
           return close([ec, handler = std::move(handler)]() mutable {
             return handler(ec);
           });
@@ -783,9 +789,11 @@ public:
         if (ec) {
           CB_LOG_ERROR(
             "[{}]: unable to load private key \"{}\": {}", id_, origin_.key_path(), ec.message());
-          // TODO(CXXCBC-549): clang-tidy-19 reports potential memory leak here
-          // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
           return close([ec, handler = std::move(handler)]() mutable {
+#ifdef __clang_analyzer__
+            // TODO(CXXCBC-549): clang-tidy-19 reports potential memory leak here
+            [[clang::suppress]]
+#endif
             return handler(ec);
           });
         }
@@ -830,8 +838,10 @@ public:
         });
       }
       if (ec) {
+#ifdef __clang_analyzer__
         // TODO(CXXCBC-549): clang-tidy-19 reports potential memory leak here
-        // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
+        [[clang::suppress]]
+#endif
         return self->close([ec, handler = std::move(handler)]() mutable {
           handler(ec);
         });
