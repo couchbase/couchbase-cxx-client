@@ -455,10 +455,9 @@ collection_id_cache_entry_impl::refresh_collection_id(
       });
     });
 #if defined(__clang__) && defined(__clang_analyzer__)
+  // TODO(CXXCBC-549)
   [[clang::suppress]]
 #endif
-  // TODO(CXXCBC-549)
-  // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
   if (op) {
     return {};
   }
