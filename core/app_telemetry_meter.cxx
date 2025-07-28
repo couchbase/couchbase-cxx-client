@@ -357,7 +357,7 @@ public:
     return {};
   }
 
-  void set_node_labels_cache(std::map<std::string, node_labels>) override
+  void set_node_labels_cache(std::map<std::string, node_labels> /* labels */) override
   {
     /* do nothing */
   }
