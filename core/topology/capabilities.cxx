@@ -22,30 +22,25 @@
 namespace couchbase::core
 {
 auto
-configuration_capabilities::supports_operational_client(const cluster_options& options) const
-  -> bool
+configuration_capabilities::is_analytics_cluster(const cluster_options& options) const -> bool
 {
   if (options.allow_enterprise_analytics) {
-    CB_LOG_DEBUG("Bypassing cluster prod_name check as allow_enterprise_analytics is enabled");
-    return true;
+    CB_LOG_DEBUG("Bypassing cluster prod check as allow_enterprise_analytics is enabled");
+    return false;
   }
 
-  if (!prod_name.has_value()) {
-    return true;
+  if (!prod.has_value()) {
+    return false;
   }
 
-  if (prod_name.value().rfind("Couchbase Server", 0) == 0) {
-    return true;
+  if (prod.value() != "analytics") {
+    return false;
   }
 
-  std::string msg = fmt::format("This {} cluster cannot be used with this SDK, which is intended "
-                                "for use with operational clusters. ",
-                                prod_name.value());
-  if (prod_name.value().rfind("Enterprise Analytics", 0) == 0) {
-    msg.append("For this cluster, an Enterprise Analytics SDK should be used.");
-  }
-  CB_LOG_ERROR(msg);
+  CB_LOG_ERROR("This analytics cluster cannot be used with this SDK, which is intended for use "
+               "with operational clusters. "
+               "For this cluster, an Enterprise Analytics SDK should be used. ");
 
-  return false;
+  return true;
 }
 } // namespace couchbase::core
