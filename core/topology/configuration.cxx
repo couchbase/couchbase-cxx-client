@@ -192,21 +192,63 @@ configuration::has_node(const std::string& network,
   });
 }
 
+namespace
+{
+struct evanescent_config {
+  std::vector<std::pair<std::string, std::uint16_t>> kv_plain_endpoints;
+  std::vector<std::pair<std::string, std::uint16_t>> kv_tls_endpoints;
+  std::vector<std::pair<std::string, std::uint16_t>> mgmt_plain_endpoints;
+  std::vector<std::pair<std::string, std::uint16_t>> mgmt_tls_endpoints;
+
+  [[nodiscard]] auto is_valid() const -> bool
+  {
+    if (!kv_tls_endpoints.empty() && !mgmt_tls_endpoints.empty()) {
+      return true;
+    }
+    if (!kv_plain_endpoints.empty() && !mgmt_plain_endpoints.empty()) {
+      return true;
+    }
+    return false;
+  }
+};
+} // namespace
+
 auto
 configuration::select_network(const std::string& bootstrap_hostname) const -> std::string
 {
+  evanescent_config alt_conf;
+
   for (const auto& n : nodes) {
-    if (n.this_node) {
-      if (n.hostname == bootstrap_hostname) {
-        return "default";
+    if (n.hostname == bootstrap_hostname) {
+      return "default";
+    }
+    if (auto network = n.alt.find("external"); network != n.alt.end()) {
+      if (network->second.hostname == bootstrap_hostname) {
+        // we have a match with bootstrap host, external network is definitely usable
+        return "external";
       }
-      for (const auto& [network, address] : n.alt) {
-        if (address.hostname == bootstrap_hostname) {
-          return network;
-        }
+
+      // try to build endpoints for temporary config
+      if (auto port = n.services_plain.key_value; port) {
+        alt_conf.kv_plain_endpoints.emplace_back(network->second.hostname, *port);
+      }
+      if (auto port = n.services_tls.key_value; port) {
+        alt_conf.kv_tls_endpoints.emplace_back(network->second.hostname, *port);
+      }
+      if (auto port = n.services_plain.management; port) {
+        alt_conf.mgmt_plain_endpoints.emplace_back(network->second.hostname, *port);
+      }
+      if (auto port = n.services_tls.management; port) {
+        alt_conf.mgmt_tls_endpoints.emplace_back(network->second.hostname, *port);
       }
     }
   }
+
+  // check if external network allow us to use the cluster regardless bootstrap_hostname
+  if (alt_conf.is_valid()) {
+    return "external";
+  }
+
   return "default";
 }
 
