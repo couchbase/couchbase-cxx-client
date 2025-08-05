@@ -82,6 +82,8 @@ struct analytics_request {
   static const inline service_type type = service_type::analytics;
   static const inline std::string observability_identifier = "analytics";
 
+  static inline bool allow_enterprise_analytics = false;
+
   std::string statement;
 
   bool readonly{ false };
