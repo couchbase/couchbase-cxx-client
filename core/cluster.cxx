@@ -272,6 +272,9 @@ is_feature_supported(const operations::analytics_request& /*request*/,
                      const configuration_capabilities& capabilities,
                      const cluster_options& options) -> bool
 {
+  if (operations::analytics_request::allow_enterprise_analytics) {
+    return true;
+  }
   return !capabilities.is_analytics_cluster(options);
 }
 
