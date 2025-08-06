@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <iterator>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -58,4 +59,7 @@ to_binary(Container container, OutputIterator result) noexcept -> OutputIterator
 {
   return to_binary(std::begin(container), std::end(container), result);
 }
+
+auto
+to_string(const std::vector<std::byte>& input) -> std::string;
 } // namespace couchbase::core::utils

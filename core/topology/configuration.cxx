@@ -341,9 +341,9 @@ make_blank_configuration(const std::vector<std::pair<std::string, std::string>>&
   for (const auto& [hostname, port] : endpoints) {
     configuration::node node{ false, idx++, hostname };
     if (use_tls) {
-      node.services_tls.key_value = std::stol(port);
+      node.services_tls.key_value = static_cast<std::uint16_t>(std::stol(port));
     } else {
-      node.services_plain.key_value = std::stol(port);
+      node.services_plain.key_value = static_cast<std::uint16_t>(std::stol(port));
     }
     result.nodes.emplace_back(node);
   }

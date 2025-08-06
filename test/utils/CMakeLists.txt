@@ -9,11 +9,11 @@ add_library(
   test_data.cxx
   wait_until.cxx)
 set_target_properties(test_utils PROPERTIES POSITION_INDEPENDENT_CODE ON)
+set_project_warnings(test_utils)
+set_project_options(test_utils)
 target_link_libraries(
   test_utils
-  PRIVATE project_options
-          project_warnings
-          Microsoft.GSL::GSL
+  PRIVATE Microsoft.GSL::GSL
           asio
           taocpp::json
           spdlog::spdlog)

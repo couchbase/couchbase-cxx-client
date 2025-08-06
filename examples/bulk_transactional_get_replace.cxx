@@ -104,8 +104,8 @@ struct program_arguments {
   }
 };
 
-std::string
-random_text(std::size_t length)
+auto
+random_text(std::size_t length) -> std::string
 {
   std::string alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
   static thread_local std::mt19937_64 gen{ std::random_device()() };
@@ -204,12 +204,12 @@ run_workload(const std::shared_ptr<couchbase::transactions::transactions>& trans
 
     auto schedule_end = std::chrono::system_clock::now();
     fmt::print(
-      "\rScheduled {} transactions with {} GET+[INSERT|REPLACE] operations in {}ms ({}us, {}s)\n",
+      "\rScheduled {} transactions with {} GET+[INSERT|REPLACE] operations in {} ({}, {})\n",
       arguments.number_of_transactions,
       arguments.number_of_keys_per_transaction,
-      std::chrono::duration_cast<std::chrono::milliseconds>(schedule_end - schedule_start).count(),
-      std::chrono::duration_cast<std::chrono::microseconds>(schedule_end - schedule_start).count(),
-      std::chrono::duration_cast<std::chrono::seconds>(schedule_end - schedule_start).count());
+      std::chrono::duration_cast<std::chrono::milliseconds>(schedule_end - schedule_start),
+      std::chrono::duration_cast<std::chrono::microseconds>(schedule_end - schedule_start),
+      std::chrono::duration_cast<std::chrono::seconds>(schedule_end - schedule_start));
 
     std::map<std::string, std::size_t> transactions_errors;
     auto exec_start = std::chrono::system_clock::now();
@@ -224,16 +224,15 @@ run_workload(const std::shared_ptr<couchbase::transactions::transactions>& trans
     }
     auto exec_end = std::chrono::system_clock::now();
 
-    fmt::print(
-      "\rExecuted {} transactions with {} GET+[INSERT|REPLACE] operations in {}ms ({}us, {}s), "
-      "average latency: {}ms\n",
-      arguments.number_of_transactions,
-      arguments.number_of_keys_per_transaction,
-      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::microseconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::seconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start).count() /
-        arguments.number_of_keys_per_transaction);
+    fmt::print("\rExecuted {} transactions with {} GET+[INSERT|REPLACE] operations in {} ({}, {}), "
+               "average latency: {}\n",
+               arguments.number_of_transactions,
+               arguments.number_of_keys_per_transaction,
+               std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start),
+               std::chrono::duration_cast<std::chrono::microseconds>(exec_end - exec_start),
+               std::chrono::duration_cast<std::chrono::seconds>(exec_end - exec_start),
+               std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start) /
+                 arguments.number_of_keys_per_transaction);
     if (transactions_errors.empty()) {
       fmt::print("\tAll transactions completed successfully\n");
     } else {
@@ -254,14 +253,14 @@ run_workload(const std::shared_ptr<couchbase::transactions::transactions>& trans
 
   auto end = std::chrono::system_clock::now();
 
-  fmt::print("Total time for bulk execution {}ms ({}us, {}s)\n",
-             std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count(),
-             std::chrono::duration_cast<std::chrono::microseconds>(end - start).count(),
-             std::chrono::duration_cast<std::chrono::seconds>(end - start).count());
+  fmt::print("Total time for bulk execution {} ({}, {})\n",
+             std::chrono::duration_cast<std::chrono::milliseconds>(end - start),
+             std::chrono::duration_cast<std::chrono::microseconds>(end - start),
+             std::chrono::duration_cast<std::chrono::seconds>(end - start));
 }
 
-int
-main()
+auto
+main() -> int
 {
   auto arguments = program_arguments::load_from_environment();
 

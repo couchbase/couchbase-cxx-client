@@ -302,8 +302,9 @@ atr_cleanup_entry::commit_docs(std::optional<std::vector<doc_record>> docs, dura
             });
           wrap_operation_future(f);
         }
-        CB_ATTEMPT_CLEANUP_LOG_TRACE(
-          "commit_docs replaced content of doc {} with {}", doc.id(), to_string(content.data));
+        CB_ATTEMPT_CLEANUP_LOG_TRACE("commit_docs replaced content of doc {} with {}",
+                                     doc.id(),
+                                     utils::to_string(content.data));
       } else {
         CB_ATTEMPT_CLEANUP_LOG_TRACE("commit_docs skipping document {}, no staged content",
                                      doc.id());

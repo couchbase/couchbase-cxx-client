@@ -17,6 +17,8 @@ function(declare_system_library target)
                                              $<TARGET_PROPERTY:${target},INTERFACE_INCLUDE_DIRECTORIES>)
 endfunction()
 
+include(cmake/OpenSSL.cmake)
+
 if(NOT TARGET spdlog::spdlog)
   # https://github.com/gabime/spdlog/releases
   cpmaddpackage(
@@ -27,15 +29,13 @@ if(NOT TARGET spdlog::spdlog)
     GITHUB_REPOSITORY
     "gabime/spdlog"
     EXCLUDE_FROM_ALL ON
+    SYSTEM NO
     OPTIONS
-    "SPDLOG_INSTALL OFF"
+    "SPDLOG_INSTALL ON"
     "BUILD_SHARED_LIBS OFF"
     "CMAKE_C_VISIBILITY_PRESET hidden"
     "CMAKE_CXX_VISIBILITY_PRESET hidden"
     "CMAKE_POSITION_INDEPENDENT_CODE ON"
-    "NO_CMAKE_SYSTEM_PATH ON"
-    "NO_CMAKE_INSTALL_PREFIX ON"
-    "NO_CMAKE_SYSTEM_PACKAGE_REGISTRY ON"
     "SPDLOG_BUILD_SHARED OFF"
     "SPDLOG_FMT_EXTERNAL OFF")
 endif()
@@ -50,8 +50,9 @@ if(NOT TARGET Microsoft.GSL::GSL)
     GITHUB_REPOSITORY
     "microsoft/gsl"
     EXCLUDE_FROM_ALL ON
+    SYSTEM NO
     OPTIONS
-    "GSL_INSTALL OFF"
+    "GSL_INSTALL ON"
     "CMAKE_C_VISIBILITY_PRESET hidden"
     "CMAKE_CXX_VISIBILITY_PRESET hidden"
     "CMAKE_POSITION_INDEPENDENT_CODE ON")
@@ -69,6 +70,7 @@ if(NOT TARGET hdr_histogram_static)
     GITHUB_REPOSITORY
     "HdrHistogram/HdrHistogram_c"
     EXCLUDE_FROM_ALL ON
+    SYSTEM NO
     OPTIONS
     "CMAKE_C_VISIBILITY_PRESET hidden"
     "CMAKE_CXX_VISIBILITY_PRESET hidden"
@@ -90,6 +92,7 @@ if(NOT TARGET llhttp::llhttp)
     GITHUB_REPOSITORY
     "nodejs/llhttp"
     EXCLUDE_FROM_ALL ON
+    SYSTEM NO
     OPTIONS
     "CMAKE_C_VISIBILITY_PRESET hidden"
     "CMAKE_CXX_VISIBILITY_PRESET hidden"
@@ -110,8 +113,9 @@ if(NOT TARGET snappy)
     GITHUB_REPOSITORY
     "google/snappy"
     EXCLUDE_FROM_ALL ON
+    SYSTEM NO
     OPTIONS
-    "SNAPPY_INSTALL OFF"
+    "SNAPPY_INSTALL ON"
     "CMAKE_C_VISIBILITY_PRESET hidden"
     "CMAKE_CXX_VISIBILITY_PRESET hidden"
     "CMAKE_POSITION_INDEPENDENT_CODE ON"
@@ -153,7 +157,6 @@ if(NOT TARGET taocpp::json)
     "TAOCPP_JSON_BUILD_EXAMPLES OFF")
 endif()
 
-
 if(NOT TARGET asio::asio)
   # https://github.com/chriskohlhoff/asio/tags
   cpmaddpackage(
@@ -165,7 +168,8 @@ if(NOT TARGET asio::asio)
     1.34.2
     GITHUB_REPOSITORY
     "chriskohlhoff/asio"
-    EXCLUDE_FROM_ALL ON)
+    EXCLUDE_FROM_ALL ON
+    SYSTEM NO)
 endif()
 
 # ASIO doesn't use CMake, we have to configure it manually. Extra notes for using on Windows:
@@ -179,7 +183,15 @@ if(asio_ADDED)
 
   target_include_directories(asio SYSTEM PUBLIC ${asio_SOURCE_DIR}/asio/include)
   target_compile_definitions(asio PRIVATE ASIO_STANDALONE=1 ASIO_NO_DEPRECATED=1 ASIO_SEPARATE_COMPILATION=1)
-  target_link_libraries(asio PRIVATE Threads::Threads OpenSSL::SSL OpenSSL::Crypto)
+  target_link_libraries(asio PRIVATE Threads::Threads)
+  if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
+    target_link_libraries(asio PUBLIC $<TARGET_OBJECTS:ssl> $<TARGET_OBJECTS:crypto>)
+    target_include_directories(
+      asio SYSTEM PRIVATE $<BUILD_INTERFACE:$<TARGET_PROPERTY:ssl,INTERFACE_INCLUDE_DIRECTORIES>>
+                          $<BUILD_INTERFACE:$<TARGET_PROPERTY:crypto,INTERFACE_INCLUDE_DIRECTORIES>>)
+  else()
+    target_link_libraries(asio PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+  endif()
   set_target_properties(
     asio
     PROPERTIES C_VISIBILITY_PRESET hidden
@@ -191,17 +203,39 @@ if(asio_ADDED)
     macro(get_win32_winnt version)
       if(CMAKE_SYSTEM_VERSION)
         set(ver ${CMAKE_SYSTEM_VERSION})
-        string(REGEX MATCH "^([0-9]+).([0-9])" ver ${ver})
-        string(REGEX MATCH "^([0-9]+)" verMajor ${ver})
+        string(
+          REGEX MATCH
+                "^([0-9]+).([0-9])"
+                ver
+                ${ver})
+        string(
+          REGEX MATCH
+                "^([0-9]+)"
+                verMajor
+                ${ver})
         # Check for Windows 10, b/c we'll need to convert to hex 'A'.
         if("${verMajor}" MATCHES "10")
           set(verMajor "A")
-          string(REGEX REPLACE "^([0-9]+)" ${verMajor} ver ${ver})
+          string(
+            REGEX
+            REPLACE "^([0-9]+)"
+                    ${verMajor}
+                    ver
+                    ${ver})
         endif("${verMajor}" MATCHES "10")
         # Remove all remaining '.' characters.
-        string(REPLACE "." "" ver ${ver})
+        string(
+          REPLACE "."
+                  ""
+                  ver
+                  ${ver})
         # Prepend each digit with a zero.
-        string(REGEX REPLACE "([0-9A-Z])" "0\\1" ver ${ver})
+        string(
+          REGEX
+          REPLACE "([0-9A-Z])"
+                  "0\\1"
+                  ver
+                  ${ver})
         set(${version} "0x${ver}")
       endif()
     endmacro()
@@ -214,6 +248,7 @@ if(asio_ADDED)
     message(STATUS "Set _WIN32_WINNT=${_WIN32_WINNT}")
 
     target_compile_definitions(asio INTERFACE _WIN32_WINNT=${_WIN32_WINNT} WIN32_LEAN_AND_MEAN)
+    target_compile_options(asio INTERFACE /bigobj)
   endif()
 
   add_library(asio::asio ALIAS asio)

@@ -33,7 +33,7 @@ if(NOT COUCHBASE_CXX_CLIENT_BUILD_TIMESTAMP)
       OUTPUT_STRIP_TRAILING_WHITESPACE
       OUTPUT_VARIABLE last_tag)
 
-    if (tag_result EQUAL 0)
+    if(tag_result EQUAL 0)
       execute_process(
         COMMAND git log --max-count=1 --no-patch --format=%cd --date=format:%Y-%m-%dT%H:%M:%S ${last_tag}
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}

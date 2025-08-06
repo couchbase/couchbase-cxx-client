@@ -42,28 +42,25 @@ macro(integration_test name)
   target_include_directories(test_integration_${name} PRIVATE ${PROJECT_SOURCE_DIR} ${PROJECT_BINARY_DIR}/generated
                                                               ${PROJECT_BINARY_DIR}/generated_$<CONFIG>)
   target_include_directories(
-    test_integration_${name} SYSTEM PRIVATE
-                            ${PROJECT_SOURCE_DIR}/third_party/cxx_function
-                            ${PROJECT_SOURCE_DIR}/third_party/expected/include)
+    test_integration_${name} SYSTEM BEFORE
+    PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/cxx_function>
+            $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/expected/include>
+            $<BUILD_INTERFACE:$<TARGET_PROPERTY:spdlog::spdlog,INTERFACE_INCLUDE_DIRECTORIES>>
+            $<BUILD_INTERFACE:$<TARGET_PROPERTY:asio,INTERFACE_INCLUDE_DIRECTORIES>>)
+  set_project_warnings(test_integration_${name})
+  set_project_options(test_integration_${name})
   target_link_libraries(
     test_integration_${name}
-    project_options
-    project_warnings
-    ${couchbase_cxx_client_DEFAULT_LIBRARY}
-    test_main
-    Threads::Threads
-    Microsoft.GSL::GSL
-    asio
-    taocpp::json
-    spdlog::spdlog
-    test_utils)
-  if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
-    target_link_libraries(test_integration_${name} OpenSSL::SSL)
-    if(WIN32)
-      # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings, as we don't (atm) keep track fo the
-      # *.PDB from the BoringSSL build
-      set_target_properties(test_integration_${name} PROPERTIES LINK_FLAGS "/ignore:4099")
-    endif()
+    PRIVATE ${couchbase_cxx_client_DEFAULT_LIBRARY}
+            test_main
+            Threads::Threads
+            $<BUILD_INTERFACE:Microsoft.GSL::GSL>
+            $<BUILD_INTERFACE:taocpp::json>
+            test_utils)
+  if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND WIN32)
+    # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings, as we don't (atm) keep track fo the
+    # *.PDB from the BoringSSL build
+    set_target_properties(test_integration_${name} PROPERTIES LINK_FLAGS "/ignore:4099")
   endif()
   catch_discover_tests(
     test_integration_${name}
@@ -87,28 +84,25 @@ macro(transaction_test name)
   target_include_directories(test_transaction_${name} PRIVATE ${PROJECT_SOURCE_DIR} ${PROJECT_BINARY_DIR}/generated
                                                               ${PROJECT_BINARY_DIR}/generated_$<CONFIG>)
   target_include_directories(
-    test_transaction_${name} SYSTEM PRIVATE
-                            ${PROJECT_SOURCE_DIR}/third_party/cxx_function
-                            ${PROJECT_SOURCE_DIR}/third_party/expected/include)
+    test_transaction_${name} SYSTEM BEFORE
+    PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/cxx_function>
+            $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/expected/include>
+            $<BUILD_INTERFACE:$<TARGET_PROPERTY:spdlog::spdlog,INTERFACE_INCLUDE_DIRECTORIES>>
+            $<BUILD_INTERFACE:$<TARGET_PROPERTY:asio,INTERFACE_INCLUDE_DIRECTORIES>>)
+  set_project_warnings(test_transaction_${name})
+  set_project_options(test_transaction_${name})
   target_link_libraries(
     test_transaction_${name}
-    project_options
-    project_warnings
-    test_main
-    Threads::Threads
-    Microsoft.GSL::GSL
-    asio
-    taocpp::json
-    spdlog::spdlog
-    ${couchbase_cxx_client_DEFAULT_LIBRARY}
-    test_utils)
-  if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
-    target_link_libraries(test_transaction_${name} OpenSSL::SSL)
-    if(WIN32)
-      # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings, as we don't (atm) keep track fo the
-      # *.PDB from the BoringSSL build
-      set_target_properties(test_transaction_${name} PROPERTIES LINK_FLAGS "/ignore:4099")
-    endif()
+    PRIVATE test_main
+            Threads::Threads
+            $<BUILD_INTERFACE:Microsoft.GSL::GSL>
+            $<BUILD_INTERFACE:taocpp::json>
+            ${couchbase_cxx_client_DEFAULT_LIBRARY}
+            test_utils)
+  if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND WIN32)
+    # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings, as we don't (atm) keep track fo the
+    # *.PDB from the BoringSSL build
+    set_target_properties(test_transaction_${name} PROPERTIES LINK_FLAGS "/ignore:4099")
   endif()
   catch_discover_tests(
     test_transaction_${name}
@@ -131,28 +125,25 @@ macro(unit_test name)
   target_include_directories(test_unit_${name} PRIVATE ${PROJECT_SOURCE_DIR} ${PROJECT_BINARY_DIR}/generated
                                                        ${PROJECT_BINARY_DIR}/generated_$<CONFIG>)
   target_include_directories(
-    test_unit_${name} SYSTEM PRIVATE
-                            ${PROJECT_SOURCE_DIR}/third_party/cxx_function
-                            ${PROJECT_SOURCE_DIR}/third_party/expected/include)
+    test_unit_${name} SYSTEM BEFORE
+    PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/cxx_function>
+            $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/expected/include>
+            $<BUILD_INTERFACE:$<TARGET_PROPERTY:spdlog::spdlog,INTERFACE_INCLUDE_DIRECTORIES>>
+            $<BUILD_INTERFACE:$<TARGET_PROPERTY:asio,INTERFACE_INCLUDE_DIRECTORIES>>)
+  set_project_warnings(test_unit_${name})
+  set_project_options(test_unit_${name})
   target_link_libraries(
     test_unit_${name}
-    project_options
-    project_warnings
-    test_main
-    Threads::Threads
-    Microsoft.GSL::GSL
-    asio
-    taocpp::json
-    spdlog::spdlog
-    ${couchbase_cxx_client_DEFAULT_LIBRARY}
-    test_utils)
-  if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
-    target_link_libraries(test_unit_${name} OpenSSL::SSL)
-    if(WIN32)
-      # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings, as we don't (atm) keep track fo the
-      # *.PDB from the BoringSSL build
-      set_target_properties(test_unit_${name} PROPERTIES LINK_FLAGS "/ignore:4099")
-    endif()
+    PRIVATE test_main
+            Threads::Threads
+            $<BUILD_INTERFACE:Microsoft.GSL::GSL>
+            $<BUILD_INTERFACE:taocpp::json>
+            ${couchbase_cxx_client_DEFAULT_LIBRARY}
+            test_utils)
+  if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND WIN32)
+    # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings, as we don't (atm) keep track fo the
+    # *.PDB from the BoringSSL build
+    set_target_properties(test_unit_${name} PROPERTIES LINK_FLAGS "/ignore:4099")
   endif()
   catch_discover_tests(
     test_unit_${name}
@@ -176,29 +167,26 @@ macro(integration_benchmark name)
     benchmark_integration_${name} PRIVATE ${PROJECT_SOURCE_DIR} ${PROJECT_BINARY_DIR}/generated
                                           ${PROJECT_BINARY_DIR}/generated_$<CONFIG>)
   target_include_directories(
-    benchmark_integration_${name} SYSTEM PRIVATE
-                            ${PROJECT_SOURCE_DIR}/third_party/cxx_function
-                            ${PROJECT_SOURCE_DIR}/third_party/expected/include)
+    benchmark_integration_${name} SYSTEM BEFORE
+    PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/cxx_function>
+            $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/expected/include>
+            $<BUILD_INTERFACE:$<TARGET_PROPERTY:spdlog::spdlog,INTERFACE_INCLUDE_DIRECTORIES>>
+            $<BUILD_INTERFACE:$<TARGET_PROPERTY:asio,INTERFACE_INCLUDE_DIRECTORIES>>)
 
+  set_project_warnings(benchmark_integration_${name})
+  set_project_options(benchmark_integration_${name})
   target_link_libraries(
     benchmark_integration_${name}
-    project_options
-    project_warnings
-    test_main
-    Threads::Threads
-    Microsoft.GSL::GSL
-    asio
-    taocpp::json
-    spdlog::spdlog
-    ${couchbase_cxx_client_DEFAULT_LIBRARY}
-    test_utils)
-  if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
-    target_link_libraries(benchmark_integration_${name} OpenSSL::SSL)
-    if(WIN32)
-      # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings, as we don't (atm) keep track fo the
-      # *.PDB from the BoringSSL build
-      set_target_properties(benchmark_integration_${name} PROPERTIES LINK_FLAGS "/ignore:4099")
-    endif()
+    PRIVATE test_main
+            Threads::Threads
+            $<BUILD_INTERFACE:Microsoft.GSL::GSL>
+            $<BUILD_INTERFACE:taocpp::json>
+            ${couchbase_cxx_client_DEFAULT_LIBRARY}
+            test_utils)
+  if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND WIN32)
+    # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings, as we don't (atm) keep track fo the
+    # *.PDB from the BoringSSL build
+    set_target_properties(benchmark_integration_${name} PROPERTIES LINK_FLAGS "/ignore:4099")
   endif()
   catch_discover_tests(
     benchmark_integration_${name}

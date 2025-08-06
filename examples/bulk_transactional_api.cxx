@@ -87,8 +87,8 @@ struct program_arguments {
   }
 };
 
-std::string
-random_text(std::size_t length)
+auto
+random_text(std::size_t length) -> std::string
 {
   std::string alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
   static thread_local std::mt19937_64 gen{ std::random_device()() };
@@ -156,12 +156,11 @@ run_workload_sequential(const std::shared_ptr<couchbase::transactions::transacti
     }
     auto cleanup_end = std::chrono::system_clock::now();
 
-    fmt::print(
-      "Removed {} keys in {}ms ({}us, {}s)\n",
-      arguments.number_of_operations,
-      std::chrono::duration_cast<std::chrono::milliseconds>(cleanup_end - cleanup_start).count(),
-      std::chrono::duration_cast<std::chrono::microseconds>(cleanup_end - cleanup_start).count(),
-      std::chrono::duration_cast<std::chrono::seconds>(cleanup_end - cleanup_start).count());
+    fmt::print("Removed {} keys in {} ({}, {})\n",
+               arguments.number_of_operations,
+               std::chrono::duration_cast<std::chrono::milliseconds>(cleanup_end - cleanup_start),
+               std::chrono::duration_cast<std::chrono::microseconds>(cleanup_end - cleanup_start),
+               std::chrono::duration_cast<std::chrono::seconds>(cleanup_end - cleanup_start));
 
     if (errors.empty()) {
       fmt::print("\tAll operations completed successfully\n");
@@ -197,13 +196,12 @@ run_workload_sequential(const std::shared_ptr<couchbase::transactions::transacti
     auto exec_end = std::chrono::system_clock::now();
 
     fmt::print(
-      "\rExecuted transaction with {} INSERT operations in {}ms ({}us, {}s), average latency: "
-      "{}ms\n",
+      "\rExecuted transaction with {} INSERT operations in {} ({}, {}), average latency: {}\n",
       arguments.number_of_operations,
-      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::microseconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::seconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start).count() /
+      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start),
+      std::chrono::duration_cast<std::chrono::microseconds>(exec_end - exec_start),
+      std::chrono::duration_cast<std::chrono::seconds>(exec_end - exec_start),
+      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start) /
         arguments.number_of_operations);
     if (err.ec()) {
       fmt::print("\tTransaction completed with error {}, cause={}\n",
@@ -246,12 +244,12 @@ run_workload_sequential(const std::shared_ptr<couchbase::transactions::transacti
     auto exec_end = std::chrono::system_clock::now();
 
     fmt::print(
-      "\rExecuted transaction with {} GET operations in {}ms ({}us, {}s), average latency: {}ms\n",
+      "\rExecuted transaction with {} GET operations in {} ({}, {}), average latency: {}\n",
       arguments.number_of_operations,
-      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::microseconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::seconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start).count() /
+      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start),
+      std::chrono::duration_cast<std::chrono::microseconds>(exec_end - exec_start),
+      std::chrono::duration_cast<std::chrono::seconds>(exec_end - exec_start),
+      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start) /
         arguments.number_of_operations);
     if (err.ec()) {
       fmt::print("\tTransaction completed with error {}, cause={}\n",
@@ -276,10 +274,10 @@ run_workload_sequential(const std::shared_ptr<couchbase::transactions::transacti
 
   auto end = std::chrono::system_clock::now();
 
-  fmt::print("Total time for sequential execution {}ms ({}us, {}s)\n",
-             std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count(),
-             std::chrono::duration_cast<std::chrono::microseconds>(end - start).count(),
-             std::chrono::duration_cast<std::chrono::seconds>(end - start).count());
+  fmt::print("Total time for sequential execution {} ({}, {})\n",
+             std::chrono::duration_cast<std::chrono::milliseconds>(end - start),
+             std::chrono::duration_cast<std::chrono::microseconds>(end - start),
+             std::chrono::duration_cast<std::chrono::seconds>(end - start));
 }
 
 void
@@ -329,12 +327,11 @@ run_workload_bulk(const std::shared_ptr<couchbase::transactions::transactions>& 
     }
     auto cleanup_end = std::chrono::system_clock::now();
 
-    fmt::print(
-      "Removed {} keys in {}ms ({}us, {}s)\n",
-      arguments.number_of_operations,
-      std::chrono::duration_cast<std::chrono::milliseconds>(cleanup_end - cleanup_start).count(),
-      std::chrono::duration_cast<std::chrono::microseconds>(cleanup_end - cleanup_start).count(),
-      std::chrono::duration_cast<std::chrono::seconds>(cleanup_end - cleanup_start).count());
+    fmt::print("Removed {} keys in {} ({}, {})\n",
+               arguments.number_of_operations,
+               std::chrono::duration_cast<std::chrono::milliseconds>(cleanup_end - cleanup_start),
+               std::chrono::duration_cast<std::chrono::microseconds>(cleanup_end - cleanup_start),
+               std::chrono::duration_cast<std::chrono::seconds>(cleanup_end - cleanup_start));
 
     if (errors.empty()) {
       fmt::print("\tAll operations completed successfully\n");
@@ -376,25 +373,23 @@ run_workload_bulk(const std::shared_ptr<couchbase::transactions::transactions>& 
       });
 
     auto schedule_end = std::chrono::system_clock::now();
-    fmt::print(
-      "\rScheduled transaction with {} INSERT operations in {}ms ({}us, {}s)\n",
-      arguments.number_of_operations,
-      std::chrono::duration_cast<std::chrono::milliseconds>(schedule_end - schedule_start).count(),
-      std::chrono::duration_cast<std::chrono::microseconds>(schedule_end - schedule_start).count(),
-      std::chrono::duration_cast<std::chrono::seconds>(schedule_end - schedule_start).count());
+    fmt::print("\rScheduled transaction with {} INSERT operations in {} ({}, {})\n",
+               arguments.number_of_operations,
+               std::chrono::duration_cast<std::chrono::milliseconds>(schedule_end - schedule_start),
+               std::chrono::duration_cast<std::chrono::microseconds>(schedule_end - schedule_start),
+               std::chrono::duration_cast<std::chrono::seconds>(schedule_end - schedule_start));
 
     auto exec_start = std::chrono::system_clock::now();
     auto [err, result] = tx_future.get();
     auto exec_end = std::chrono::system_clock::now();
 
     fmt::print(
-      "\rExecuted transaction with {} INSERT operations in {}ms ({}us, {}s), average latency: "
-      "{}ms\n",
+      "\rExecuted transaction with {} INSERT operations in {} ({}, {}), average latency: {}\n",
       arguments.number_of_operations,
-      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::microseconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::seconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start).count() /
+      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start),
+      std::chrono::duration_cast<std::chrono::microseconds>(exec_end - exec_start),
+      std::chrono::duration_cast<std::chrono::seconds>(exec_end - exec_start),
+      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start) /
         arguments.number_of_operations);
     if (err.ec()) {
       fmt::print("\tTransaction completed with error {}, cause={}\n",
@@ -443,24 +438,23 @@ run_workload_bulk(const std::shared_ptr<couchbase::transactions::transactions>& 
       });
 
     auto schedule_end = std::chrono::system_clock::now();
-    fmt::print(
-      "\rScheduled transaction with {} GET operations in {}ms ({}us, {}s)\n",
-      arguments.number_of_operations,
-      std::chrono::duration_cast<std::chrono::milliseconds>(schedule_end - schedule_start).count(),
-      std::chrono::duration_cast<std::chrono::microseconds>(schedule_end - schedule_start).count(),
-      std::chrono::duration_cast<std::chrono::seconds>(schedule_end - schedule_start).count());
+    fmt::print("\rScheduled transaction with {} GET operations in {} ({}, {})\n",
+               arguments.number_of_operations,
+               std::chrono::duration_cast<std::chrono::milliseconds>(schedule_end - schedule_start),
+               std::chrono::duration_cast<std::chrono::microseconds>(schedule_end - schedule_start),
+               std::chrono::duration_cast<std::chrono::seconds>(schedule_end - schedule_start));
 
     auto exec_start = std::chrono::system_clock::now();
     auto [err, result] = tx_future.get();
     auto exec_end = std::chrono::system_clock::now();
 
     fmt::print(
-      "\rExecuted transaction with {} GET operations in {}ms ({}us, {}s), average latency: {}ms\n",
+      "\rExecuted transaction with {} GET operations in {} ({}, {}), average latency: {}\n",
       arguments.number_of_operations,
-      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::microseconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::seconds>(exec_end - exec_start).count(),
-      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start).count() /
+      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start),
+      std::chrono::duration_cast<std::chrono::microseconds>(exec_end - exec_start),
+      std::chrono::duration_cast<std::chrono::seconds>(exec_end - exec_start),
+      std::chrono::duration_cast<std::chrono::milliseconds>(exec_end - exec_start) /
         arguments.number_of_operations);
     if (err.ec()) {
       fmt::print("\tTransaction completed with error {}, cause={}\n",
@@ -488,14 +482,14 @@ run_workload_bulk(const std::shared_ptr<couchbase::transactions::transactions>& 
   }
   auto end = std::chrono::system_clock::now();
 
-  fmt::print("Total time for bulk execution {}ms ({}us, {}s)\n",
-             std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count(),
-             std::chrono::duration_cast<std::chrono::microseconds>(end - start).count(),
-             std::chrono::duration_cast<std::chrono::seconds>(end - start).count());
+  fmt::print("Total time for bulk execution {} ({}, {})\n",
+             std::chrono::duration_cast<std::chrono::milliseconds>(end - start),
+             std::chrono::duration_cast<std::chrono::microseconds>(end - start),
+             std::chrono::duration_cast<std::chrono::seconds>(end - start));
 }
 
-int
-main()
+auto
+main() -> int
 {
   auto arguments = program_arguments::load_from_environment();
 
