@@ -4,7 +4,7 @@ if(NOT TARGET CLI11::CLI11)
     NAME
     cli11
     VERSION
-    2.4.1
+    2.5.0
     GITHUB_REPOSITORY
     "cliutils/cli11"
     EXCLUDE_FROM_ALL ON

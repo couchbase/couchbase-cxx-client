@@ -84,9 +84,9 @@ if(NOT TARGET llhttp::llhttp)
     NAME
     llhttp
     GIT_TAG
-    release/v9.2.1
+    release/v9.3.0
     VERSION
-    9.2.1
+    9.3.0
     GITHUB_REPOSITORY
     "nodejs/llhttp"
     EXCLUDE_FROM_ALL ON
