@@ -23,6 +23,7 @@ cli11/*/cli11/cmake/*
 cli11/*/cli11/fuzz/CMakeLists.txt
 cli11/*/cli11/include/*
 cli11/*/cli11/include/**/*
+cli11/*/cli11/single-include/CMakeLists.txt
 cli11/*/cli11/src/*
 cli11/*/cli11/src/**/*
 cpm/*.cmake

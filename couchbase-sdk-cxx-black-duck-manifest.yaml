@@ -14,7 +14,7 @@ components:
     versions: [ 0.11.8 ]
   llhttp:
     bd-id: 0bcb0de9-f810-47e1-826b-4c3696a0c276
-    versions: [ v9.2.1 ]
+    versions: [ v9.3.0 ]
   snappy:
     bd-id: fd5e5c60-2c67-4d20-8be9-b7648156cef3
     versions: [ 1.2.2 ]
