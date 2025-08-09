@@ -70,7 +70,7 @@ read_file_content(const std::string& filename) -> couchbase::codec::encoded_valu
   file.seekg(0, std::ios::beg);
 
   couchbase::codec::encoded_value result;
-  result.data.resize(size, std::byte{ 0 });
+  result.data.resize(static_cast<std::size_t>(size), std::byte{ 0 });
 
   if (!file.read(reinterpret_cast<char*>(result.data.data()), size)) {
     throw std::filesystem::filesystem_error(

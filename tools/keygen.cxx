@@ -120,7 +120,7 @@ public:
       if (!config.vbmap) {
         fail(fmt::format("vBucketMap for bucket {:?} is empty", bucket_name_));
       }
-      number_of_vbuckets = config.vbmap->size();
+      number_of_vbuckets = static_cast<std::uint16_t>(config.vbmap->size());
     }
 
     key_generator generator(key_generator_options{
