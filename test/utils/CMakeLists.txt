@@ -11,15 +11,18 @@ add_library(
 set_target_properties(test_utils PROPERTIES POSITION_INDEPENDENT_CODE ON)
 set_project_warnings(test_utils)
 set_project_options(test_utils)
-target_link_libraries(
-  test_utils
-  PRIVATE Microsoft.GSL::GSL
-          asio
-          taocpp::json
-          spdlog::spdlog)
-target_include_directories(test_utils PRIVATE ${PROJECT_SOURCE_DIR})
-target_include_directories(test_utils PRIVATE ${PROJECT_BINARY_DIR}/generated)
-if(TARGET PkgConfig::PKG_CONFIG_OPENSSL)
+target_include_directories(
+  test_utils SYSTEM BEFORE PRIVATE $<BUILD_INTERFACE:$<TARGET_PROPERTY:spdlog::spdlog,INTERFACE_INCLUDE_DIRECTORIES>>
+                                   $<BUILD_INTERFACE:$<TARGET_PROPERTY:asio,INTERFACE_INCLUDE_DIRECTORIES>>)
+propagate_public_compile_definitions(test_utils spdlog::spdlog asio)
+target_link_libraries(test_utils PRIVATE Microsoft.GSL::GSL taocpp::json)
+target_include_directories(test_utils PRIVATE ${PROJECT_SOURCE_DIR} ${PROJECT_BINARY_DIR}/generated)
+
+if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
+  target_include_directories(
+    test_utils SYSTEM PRIVATE $<BUILD_INTERFACE:$<TARGET_PROPERTY:ssl,INTERFACE_INCLUDE_DIRECTORIES>>
+                              $<BUILD_INTERFACE:$<TARGET_PROPERTY:crypto,INTERFACE_INCLUDE_DIRECTORIES>>)
+elseif(TARGET PkgConfig::PKG_CONFIG_OPENSSL)
   target_link_libraries(test_utils PUBLIC PkgConfig::PKG_CONFIG_OPENSSL)
 else()
   target_link_libraries(test_utils PUBLIC OpenSSL::SSL)

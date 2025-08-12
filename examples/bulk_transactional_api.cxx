@@ -44,46 +44,72 @@ struct program_arguments {
   static auto load_from_environment() -> program_arguments
   {
     program_arguments arguments;
-    if (const auto* val = getenv("CB_CONNECTION_STRING"); val != nullptr && val[0] != '\0') {
-      arguments.connection_string = val;
+    if (const auto val = safe_getenv("CB_CONNECTION_STRING"); val) {
+      arguments.connection_string = *val;
     }
-    if (const auto* val = getenv("CB_USERNAME"); val != nullptr && val[0] != '\0') {
-      arguments.username = val;
+    if (const auto val = safe_getenv("CB_USERNAME"); val) {
+      arguments.username = *val;
     }
-    if (const auto* val = getenv("CB_PASSWORD"); val != nullptr && val[0] != '\0') {
-      arguments.password = val;
+    if (const auto val = safe_getenv("CB_PASSWORD"); val) {
+      arguments.password = *val;
     }
-    if (const auto* val = getenv("CB_BUCKET_NAME"); val != nullptr && val[0] != '\0') {
-      arguments.bucket_name = val;
+    if (const auto val = safe_getenv("CB_BUCKET_NAME"); val) {
+      arguments.bucket_name = *val;
     }
-    if (const auto* val = getenv("CB_SCOPE_NAME"); val != nullptr && val[0] != '\0') {
-      arguments.scope_name = val;
+    if (const auto val = safe_getenv("CB_SCOPE_NAME"); val) {
+      arguments.scope_name = *val;
     }
-    if (const auto* val = getenv("CB_COLLECTION_NAME"); val != nullptr && val[0] != '\0') {
-      arguments.collection_name = val;
+    if (const auto val = safe_getenv("CB_COLLECTION_NAME"); val) {
+      arguments.collection_name = *val;
     }
-    if (const auto* val = getenv("CB_NUMBER_OF_OPERATIONS"); val != nullptr && val[0] != '\0') {
-      char* end = nullptr;
-      auto int_val = std::strtoul(val, &end, 10);
-      if (end != val) {
+    if (const auto val = safe_getenv("CB_NUMBER_OF_OPERATIONS"); val) {
+      std::size_t pos{};
+      auto int_val = std::stoul(*val, &pos, 10);
+      if (pos != 0) {
         arguments.number_of_operations = int_val;
       }
     }
-    if (const auto* val = getenv("CB_DOCUMENT_BODY_SIZE"); val != nullptr && val[0] != '\0') {
-      char* end = nullptr;
-      auto int_val = std::strtoul(val, &end, 10);
-      if (end != val) {
+    if (const auto val = safe_getenv("CB_DOCUMENT_BODY_SIZE"); val) {
+      std::size_t pos{};
+      auto int_val = std::stoul(*val, &pos, 10);
+      if (pos != 0) {
         arguments.document_body_size = int_val;
       }
     }
-    if (const auto* val = getenv("CB_TRANSACTION_TIMEOUT"); val != nullptr && val[0] != '\0') {
-      char* end = nullptr;
-      auto int_val = std::strtoul(val, &end, 10);
-      if (end != val) {
+    if (const auto val = safe_getenv("CB_TRANSACTION_TIMEOUT"); val) {
+      std::size_t pos{};
+      auto int_val = std::stoul(*val, &pos, 10);
+      if (pos != 0) {
         arguments.transaction_timeout = std::chrono::seconds{ int_val };
       }
     }
     return arguments;
+  }
+
+private:
+  static auto safe_getenv(const char* name) noexcept -> std::optional<std::string>
+  {
+    if (!name || name[0] == '\0')
+      return std::nullopt;
+
+#if defined(_WIN32)
+    char* buf = nullptr;
+    size_t len = 0;
+    if (_dupenv_s(&buf, &len, name) == 0 && buf != nullptr) {
+      std::string value(buf);
+      free(buf);
+      if (!value.empty())
+        return value;
+    }
+    return std::nullopt;
+
+#else
+    if (const char* val = std::getenv(name)) {
+      if (val[0] != '\0')
+        return std::string(val);
+    }
+    return std::nullopt;
+#endif
   }
 };
 

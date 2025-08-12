@@ -60,6 +60,7 @@
 #include <couchbase/fmt/retry_reason.hxx>
 
 #include <asio.hpp>
+#include <asio/ssl/error.hpp>
 #include <spdlog/fmt/bin_to_hex.h>
 #include <spdlog/fmt/chrono.h>
 

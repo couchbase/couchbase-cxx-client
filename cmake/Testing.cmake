@@ -47,6 +47,7 @@ macro(integration_test name)
             $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/expected/include>
             $<BUILD_INTERFACE:$<TARGET_PROPERTY:spdlog::spdlog,INTERFACE_INCLUDE_DIRECTORIES>>
             $<BUILD_INTERFACE:$<TARGET_PROPERTY:asio,INTERFACE_INCLUDE_DIRECTORIES>>)
+  propagate_public_compile_definitions(test_integration_${name} spdlog::spdlog asio)
   set_project_warnings(test_integration_${name})
   set_project_options(test_integration_${name})
   target_link_libraries(
@@ -89,6 +90,7 @@ macro(transaction_test name)
             $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/expected/include>
             $<BUILD_INTERFACE:$<TARGET_PROPERTY:spdlog::spdlog,INTERFACE_INCLUDE_DIRECTORIES>>
             $<BUILD_INTERFACE:$<TARGET_PROPERTY:asio,INTERFACE_INCLUDE_DIRECTORIES>>)
+  propagate_public_compile_definitions(test_transaction_${name} spdlog::spdlog asio)
   set_project_warnings(test_transaction_${name})
   set_project_options(test_transaction_${name})
   target_link_libraries(
@@ -130,6 +132,7 @@ macro(unit_test name)
             $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/expected/include>
             $<BUILD_INTERFACE:$<TARGET_PROPERTY:spdlog::spdlog,INTERFACE_INCLUDE_DIRECTORIES>>
             $<BUILD_INTERFACE:$<TARGET_PROPERTY:asio,INTERFACE_INCLUDE_DIRECTORIES>>)
+  propagate_public_compile_definitions(test_unit_${name} spdlog::spdlog asio)
   set_project_warnings(test_unit_${name})
   set_project_options(test_unit_${name})
   target_link_libraries(
@@ -172,7 +175,7 @@ macro(integration_benchmark name)
             $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/expected/include>
             $<BUILD_INTERFACE:$<TARGET_PROPERTY:spdlog::spdlog,INTERFACE_INCLUDE_DIRECTORIES>>
             $<BUILD_INTERFACE:$<TARGET_PROPERTY:asio,INTERFACE_INCLUDE_DIRECTORIES>>)
-
+  propagate_public_compile_definitions(benchmark_integration_${name} spdlog::spdlog asio)
   set_project_warnings(benchmark_integration_${name})
   set_project_options(benchmark_integration_${name})
   target_link_libraries(

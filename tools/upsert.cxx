@@ -188,11 +188,11 @@ public:
 
     upsert_options.preserve_expiry(preserve_expiry_);
 
-    if (auto expiry = expiry_relative_; expiry) {
-      upsert_options.expiry(expiry.value());
-    } else if (auto expiry = expiry_absolute_; expiry) {
+    if (auto rel_exp = expiry_relative_; rel_exp) {
+      upsert_options.expiry(rel_exp.value());
+    } else if (auto abs_exp = expiry_absolute_; abs_exp) {
       constexpr auto* date_format{ "%Y-%m-%dT%H:%M:%S" };
-      std::istringstream ss(expiry.value());
+      std::istringstream ss(abs_exp.value());
       std::tm tm = {};
       ss >> std::get_time(&tm, date_format);
       if (ss.fail()) {

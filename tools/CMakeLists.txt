@@ -34,6 +34,9 @@ add_executable(
   version.cxx)
 target_include_directories(cbc PRIVATE ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/private)
 
+set_project_warnings(cbc)
+set_project_options(cbc)
+
 target_link_libraries(
   cbc
   PRIVATE ${CMAKE_THREAD_LIBS_INIT}
@@ -44,6 +47,7 @@ target_link_libraries(
           $<BUILD_INTERFACE:spdlog::spdlog>
           $<BUILD_INTERFACE:hdr_histogram_static>
           $<BUILD_INTERFACE:asio>)
+propagate_public_compile_definitions(cbc spdlog::spdlog asio)
 
 if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND WIN32)
   # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings, as we don't (atm) keep track fo the *.PDB

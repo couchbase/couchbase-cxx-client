@@ -95,7 +95,7 @@ function(bundle_static_library tgt_name bundled_tgt_name)
       COMMENT "Bundling ${bundled_tgt_name}"
       VERBATIM)
   elseif(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
-    find_program(find find)
+    find_program(find NAMES find REQUIRED)
 
     set(AR_EXTRACT_DIR "${CMAKE_CURRENT_BINARY_DIR}/tmp_ar_extract")
     set(EXTRACT_COMMANDS "")
@@ -117,7 +117,11 @@ function(bundle_static_library tgt_name bundled_tgt_name)
       COMMENT "Bundling ${bundled_tgt_name}"
       VERBATIM)
   elseif(MSVC)
-    find_program(lib_tool lib)
+    get_filename_component(LINKER_DIR "${CMAKE_LINKER}" DIRECTORY)
+    find_program(
+      lib_tool
+      NAMES lib
+      HINTS "${LINKER_DIR}" REQUIRED)
 
     foreach(tgt IN LISTS static_libs)
       list(APPEND static_libs_full_names $<TARGET_FILE:${tgt}>)

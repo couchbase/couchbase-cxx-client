@@ -6,6 +6,7 @@ macro(define_example name)
   target_include_directories(
     ${name} SYSTEM BEFORE PRIVATE $<BUILD_INTERFACE:$<TARGET_PROPERTY:spdlog::spdlog,INTERFACE_INCLUDE_DIRECTORIES>>
                                   $<BUILD_INTERFACE:$<TARGET_PROPERTY:asio,INTERFACE_INCLUDE_DIRECTORIES>>)
+  propagate_public_compile_definitions(${name} spdlog::spdlog asio)
   target_link_libraries(${name} PRIVATE ${CMAKE_THREAD_LIBS_INIT} taocpp::json ${couchbase_cxx_client_DEFAULT_LIBRARY})
   if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND WIN32)
     # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings, as we don't (atm) keep track fo the

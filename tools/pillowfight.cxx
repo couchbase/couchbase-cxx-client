@@ -126,9 +126,9 @@ private:
     try {
       return std::stoull(term);
     } catch (const std::invalid_argument&) {
-      return default_value;
+      /* fall through */
     } catch (const std::out_of_range&) {
-      return default_value;
+      /* fall through */
     }
     return default_value;
   }
@@ -259,9 +259,9 @@ dump_stats(asio::steady_timer& timer, std::chrono::system_clock::time_point star
     }
     std::uint64_t window_ops{ 0 };
     std::uint64_t window_err{ 0 };
-    for (const auto& [_, operations, errors] : stats_window) {
-      window_ops += operations;
-      window_err += errors;
+    for (const auto& [_, ops, errs] : stats_window) {
+      window_ops += ops;
+      window_err += errs;
     }
     const auto window_size = static_cast<double>(stats_window.size());
     double ops_rate{ 0 };
