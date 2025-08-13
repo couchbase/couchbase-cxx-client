@@ -82,10 +82,10 @@ extract_eventing_error_code(const tao::json::value& response)
     return {};
   }
   if (const auto& name = response.find("name"); name != nullptr && name->is_string()) {
-    std::string description =
-      response.find("description") != nullptr && response.find("description")->is_string()
-        ? response.at("description").get_string()
-        : std::string{};
+    std::string description;
+    if (const auto* desc = response.find("description"); desc != nullptr && desc->is_string()) {
+      description = desc->get_string();
+    }
     const eventing_problem problem{
       response.at("code").get_unsigned(),
       name->get_string(),
