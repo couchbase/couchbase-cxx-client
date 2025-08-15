@@ -19,6 +19,7 @@
 
 #include <spdlog/details/os.h>
 
+#include <cstdint>
 #include <cstring>
 
 namespace test::utils
@@ -61,7 +62,7 @@ test_context::load_from_environment() -> test_context
   }
 
   if (auto var = spdlog::details::os::getenv("TEST_DNS_PORT"); !var.empty()) {
-    ctx.dns_port = std::stol(var);
+    ctx.dns_port = static_cast<std::uint16_t>(std::stol(var));
   }
 
   if (auto var = spdlog::details::os::getenv("TEST_DEPLOYMENT_TYPE"); !var.empty()) {

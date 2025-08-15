@@ -1,6 +1,7 @@
 add_library(couchbase_crypto OBJECT cbcrypto.cc)
 set_target_properties(couchbase_crypto PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_link_libraries(couchbase_crypto PRIVATE project_options project_warnings)
+set_project_warnings(couchbase_crypto)
+set_project_options(couchbase_crypto)
 target_include_directories(couchbase_crypto PRIVATE ${PROJECT_BINARY_DIR}/generated ${PROJECT_SOURCE_DIR})
 
 if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND COUCHBASE_CXX_CLIENT_USE_BORINGSSL_PREFIX)

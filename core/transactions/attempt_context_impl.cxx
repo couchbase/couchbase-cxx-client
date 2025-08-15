@@ -907,7 +907,7 @@ attempt_context_impl::replace(const transaction_get_result& document,
                   .cause(external_exception::DOCUMENT_NOT_FOUND_EXCEPTION));
             }
             CB_ATTEMPT_CTX_LOG_TRACE(
-              self, "replacing {} with {}", document, to_string(content.data));
+              self, "replacing {} with {}", document, utils::to_string(content.data));
             self->check_if_done(cb);
             staged_mutation* existing_sm = self->staged_mutations_->find_any(document.id());
             if (existing_sm != nullptr && existing_sm->type() == staged_mutation_type::REMOVE) {

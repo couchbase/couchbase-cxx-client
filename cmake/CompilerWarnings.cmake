@@ -31,7 +31,7 @@ function(set_project_warnings project_name)
       /w14906 # string literal cast to 'LPWSTR'
       /w14928 # illegal copy-initialization; more than one user-defined conversion has been implicitly applied
       /permissive- # standards conformance mode for MSVC compiler.
-      /utf-8  # enable Unicode support
+      /utf-8 # enable Unicode support
   )
 
   set(COMMON_WARNINGS
@@ -94,6 +94,6 @@ function(set_project_warnings project_name)
     message(AUTHOR_WARNING "No compiler warnings set for '${CMAKE_CXX_COMPILER_ID}' compiler.")
   endif()
 
-  target_compile_options(${project_name} INTERFACE ${PROJECT_WARNINGS})
+  target_compile_options(${project_name} PRIVATE ${PROJECT_WARNINGS})
 
 endfunction()

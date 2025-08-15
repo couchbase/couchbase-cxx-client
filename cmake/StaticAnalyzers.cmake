@@ -34,11 +34,10 @@ if(ENABLE_CLANG_TIDY)
   endif()
 
   set(CLANGTIDY_CANDIDATES
-    clang-tidy-20
-    clang-tidy-19
-    clang-tidy-18
-    clang-tidy
-  )
+      clang-tidy-20
+      clang-tidy-19
+      clang-tidy-18
+      clang-tidy)
   if(LLVM_ROOT_DIR)
     find_program(CLANGTIDY ${CLANGTIDY_CANDIDATES} HINTS "${LLVM_ROOT_DIR}/bin")
   else()

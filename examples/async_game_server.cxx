@@ -23,7 +23,6 @@
 
 #include <couchbase/fmt/error.hxx>
 
-#include <functional>
 #include <iostream>
 #include <random>
 #include <string>
@@ -31,8 +30,8 @@
 
 using namespace couchbase::transactions;
 
-std::string
-make_uuid()
+auto
+make_uuid() -> std::string
 {
   static std::random_device dev;
   static std::mt19937 rng(dev());
@@ -138,17 +137,17 @@ public:
   {
   }
 
-  [[nodiscard]] int calculate_level_for_experience(int experience) const
+  [[nodiscard]] auto calculate_level_for_experience(int experience) const -> int
   {
     return experience / 100;
   }
 
-  std::future<std::pair<couchbase::error, transaction_result>> player_hits_monster(
-    int damage,
-    const couchbase::collection& collection,
-    const std::string& player_id,
-    const std::string& monster_id,
-    std::atomic<bool>& exists)
+  auto player_hits_monster(int damage,
+                           const couchbase::collection& collection,
+                           const std::string& player_id,
+                           const std::string& monster_id,
+                           std::atomic<bool>& exists)
+    -> std::future<std::pair<couchbase::error, transaction_result>>
   {
     auto barrier =
       std::make_shared<std::promise<std::pair<couchbase::error, transaction_result>>>();
@@ -159,10 +158,9 @@ public:
         ctx->get(
           collection,
           monster_id,
-          [ctx, this, collection, monster_id, player_id, &exists, damage = std::move(damage)](
-            auto e, auto monster) {
+          [ctx, this, collection, monster_id, player_id, &exists, damage](auto e, auto monster) {
             if (e.ec() == couchbase::errc::transaction_op::document_not_found) {
-              std::cout << "monster no longer exists" << std::endl;
+              std::cout << "monster no longer exists\n";
               exists = false;
               return;
             }
@@ -172,73 +170,74 @@ public:
 
             std::cout << "Monster " << monster_id << " had " << monster_hitpoints
                       << " hitpoints, took " << damage << " damage, now has "
-                      << monster_new_hitpoints << " hitpoints" << std::endl;
+                      << monster_new_hitpoints << " hitpoints\n";
             if (monster_new_hitpoints <= 0) {
               // Monster is killed. The remove is just for demoing, and a more realistic examples
               // would set a "dead" flag or similar.
               ctx->remove(monster, [](auto e) {
                 if (e.ec()) {
-                  std::cout << "error removing monster: " << e.ec().message() << std::endl;
+                  std::cout << "error removing monster: " << e.ec().message() << "\n";
                 }
               });
               // also, in parallel, get/update player
-              ctx->get(
-                collection,
-                player_id,
-                [ctx, player_id, monster_id, monster_body, this](auto e, auto player) {
-                  if (e.ec()) {
-                    std::cout << "error getting player: " << e.ec().message() << std::endl;
-                    return;
-                  }
-                  const Player& player_body = player.template content_as<Player>();
+              ctx->get(collection,
+                       player_id,
+                       [ctx, player_id, monster_id, monster_body, this](auto e, auto player) {
+                         if (e.ec()) {
+                           std::cout << "error getting player: " << e.ec().message() << "\n";
+                           return;
+                         }
+                         const Player& player_body = player.template content_as<Player>();
 
-                  // the player earns experience for killing the monster
-                  int experience_for_killing_monster = monster_body.experience_when_killed;
-                  int player_experience = player_body.experience;
-                  int player_new_experience = player_experience + experience_for_killing_monster;
-                  int player_new_level = calculate_level_for_experience(player_new_experience);
+                         // the player earns experience for killing the monster
+                         int experience_for_killing_monster = monster_body.experience_when_killed;
+                         int player_experience = player_body.experience;
+                         int player_new_experience =
+                           player_experience + experience_for_killing_monster;
+                         int player_new_level =
+                           calculate_level_for_experience(player_new_experience);
 
-                  std::cout << "Monster " << monster_id << " was killed. Player " << player_id
-                            << " gains " << experience_for_killing_monster
-                            << " experience, now has level " << player_new_level << std::endl;
+                         std::cout << "Monster " << monster_id << " was killed. Player "
+                                   << player_id << " gains " << experience_for_killing_monster
+                                   << " experience, now has level " << player_new_level << "\n";
 
-                  Player player_new_body = player_body;
-                  player_new_body.experience = player_new_experience;
-                  player_new_body.level = player_new_level;
-                  ctx->replace(player, player_new_body, [](auto e, auto) {
-                    if (e.ec()) {
-                      std::cout << "Error updating player :" << e.ec().message() << std::endl;
-                    }
-                  });
-                });
+                         Player player_new_body = player_body;
+                         player_new_body.experience = player_new_experience;
+                         player_new_body.level = player_new_level;
+                         ctx->replace(player, player_new_body, [](auto e, auto) {
+                           if (e.ec()) {
+                             std::cout << "Error updating player :" << e.ec().message() << "\n";
+                           }
+                         });
+                       });
             } else {
-              std::cout << "Monster " << monster_id << " is damaged but alive" << std::endl;
+              std::cout << "Monster " << monster_id << " is damaged but alive\n";
 
               Monster monster_new_body = monster_body;
               monster_new_body.hitpoints = monster_new_hitpoints;
-              ctx->replace(monster, monster_new_body, [monster_new_body](auto e, auto res) {
+              ctx->replace(monster, monster_new_body, [monster_new_body](auto e, auto /* res */) {
                 if (e.ec()) {
-                  std::cout << "Error updating monster :" << e.ec().message() << std::endl;
+                  std::cout << "Error updating monster :" << e.ec().message() << "\n";
                 } else {
                   auto body = couchbase::codec::tao_json_serializer::serialize(monster_new_body);
                   std::cout << "Monster body updated to :"
                             << std::string(reinterpret_cast<char*>(&body.front()), body.size())
-                            << std::endl;
+                            << "\n";
                 }
               });
             }
           });
         return {};
       },
-      [barrier](auto err, auto res) {
-        barrier->set_value({ err, res });
+      [barrier](auto err, auto res) mutable {
+        barrier->set_value({ std::move(err), std::move(res) });
       });
     return f;
   }
 };
 
-int
-main()
+auto
+main() -> int
 {
   couchbase::logger::initialize_console_logger();
   couchbase::logger::set_level(couchbase::logger::log_level::trace);
@@ -247,9 +246,11 @@ main()
   std::atomic<bool> monster_exists = true;
   std::string bucket_name = "default";
 
-  std::uniform_int_distribution<int> hit_distribution(1, 6);
-  std::mt19937 random_number_engine; // pseudorandom number generator
-  auto rand = std::bind(hit_distribution, random_number_engine);
+  auto rand = [] {
+    thread_local std::mt19937 random_number_engine(std::random_device{}());
+    std::uniform_int_distribution<int> hit_distribution(1, 80);
+    return hit_distribution(random_number_engine);
+  };
 
   auto options = couchbase::cluster_options("Administrator", "password");
   options.transactions().cleanup_config().cleanup_window(std::chrono::seconds(60));
@@ -259,11 +260,11 @@ main()
 
   auto [connect_err, cluster] = couchbase::cluster::connect("couchbase://localhost", options).get();
   if (connect_err) {
-    std::cout << "Error opening cluster: " << fmt::format("{}", connect_err) << std::endl;
+    std::cout << "Error opening cluster: " << fmt::format("{}", connect_err) << "\n";
     return -1;
   }
 
-  auto collection = cluster.bucket("default").default_collection();
+  auto collection = cluster.bucket(bucket_name).default_collection();
 
   std::string player_id{ "player_data" };
   Player player_data{ 14248, 23832, "player", 141, true, "Jane", make_uuid() };
@@ -276,7 +277,7 @@ main()
     auto [err, resp] = collection.upsert(player_id, player_data, {}).get();
     if (!err) {
       std::cout << "Upserted sample player document: " << player_id
-                << "with cas:" << resp.cas().value() << std::endl;
+                << "with cas:" << resp.cas().value() << "\n";
     }
   }
   // upsert a monster document
@@ -284,7 +285,7 @@ main()
     auto [err, resp] = collection.upsert(monster_id, monster_data, {}).get();
     if (!err) {
       std::cout << "Upserted sample monster document: " << monster_id
-                << "with cas:" << resp.cas().value() << std::endl;
+                << "with cas:" << resp.cas().value() << "\n";
     }
   }
 
@@ -297,21 +298,21 @@ main()
         while (monster_exists.load()) {
           try {
             std::cout << "[thread " << std::this_thread::get_id()
-                      << "]Monster exists -- lets hit it!" << std::endl;
+                      << "]Monster exists -- lets hit it!\n";
 
             auto [err, res] =
               game_server
-                .player_hits_monster(rand() % 80, collection, player_id, monster_id, monster_exists)
+                .player_hits_monster(rand(), collection, player_id, monster_id, monster_exists)
                 .get();
             if (!err.ec()) {
-              std::cout << "[thread " << std::this_thread::get_id() << "] success" << std::endl;
+              std::cout << "[thread " << std::this_thread::get_id() << "] success\n";
             } else {
               std::cout << "[thread " << std::this_thread::get_id() << "] " << err.ec().message()
-                        << std::endl;
+                        << "\n";
             }
           } catch (const std::exception& e) {
             std::cout << "[thread " << std::this_thread::get_id() << "] got exception " << e.what()
-                      << std::endl;
+                      << "\n";
           }
         }
       });

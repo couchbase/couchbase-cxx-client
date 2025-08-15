@@ -4,14 +4,10 @@ include(CMakePackageConfigHelpers)
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/couchbase DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(FILES LICENSE.txt DESTINATION ${CMAKE_INSTALL_DOCDIR})
 
-set(COUCHBASE_CXX_CLIENT_PKGCONFIG_VERSION "${COUCHBASE_CXX_CLIENT_SEMVER}" CACHE STRING "The version to use in couchbase_cxx_client.pc")
-configure_file(${PROJECT_SOURCE_DIR}/cmake/couchbase_cxx_client.pc.in
-               ${PROJECT_BINARY_DIR}/packaging/couchbase_cxx_client.pc @ONLY)
-install(FILES ${PROJECT_BINARY_DIR}/packaging/couchbase_cxx_client.pc DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
+set(COUCHBASE_CXX_CLIENT_PKGCONFIG_VERSION
+    "${COUCHBASE_CXX_CLIENT_SEMVER}"
+    CACHE STRING "The version to use in couchbase_cxx_client.pc")
 
-configure_package_config_file(
-  ${PROJECT_SOURCE_DIR}/cmake/couchbase_cxx_client-config.cmake.in couchbase_cxx_client-config.cmake
-  INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/couchbase_cxx_client)
 write_basic_package_version_file(
   couchbase_cxx_client-version.cmake
   VERSION ${couchbase_cxx_client_VERSION}
@@ -23,16 +19,46 @@ if(COUCHBASE_CXX_CLIENT_BUILD_TOOLS)
   install(TARGETS cbc RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
-install(
-  TARGETS ${couchbase_cxx_client_LIBRARIES}
-  EXPORT couchbase_cxx_client-targets
-  DESTINATION ${CMAKE_INSTALL_LIBDIR})
+if(COUCHBASE_CXX_CLIENT_BUILD_STATIC)
+  get_target_property(couchbase_cxx_client_static_IMPORTED_LOCATION couchbase_cxx_client_static IMPORTED_LOCATION)
 
-install(
-  EXPORT couchbase_cxx_client-targets
-  NAMESPACE couchbase_cxx_client::
-  FILE couchbase_cxx_client-config.cmake
-  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/couchbase_cxx_client)
+  configure_package_config_file(
+    ${PROJECT_SOURCE_DIR}/cmake/couchbase_cxx_client_static-config.cmake.in
+    ${PROJECT_BINARY_DIR}/couchbase_cxx_client_static-config.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/couchbase_cxx_client_static)
+  install(FILES ${PROJECT_BINARY_DIR}/couchbase_cxx_client_static-config.cmake
+          DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/couchbase_cxx_client_static)
+
+  configure_file(${PROJECT_SOURCE_DIR}/cmake/couchbase_cxx_client_static.pc.in
+                 ${PROJECT_BINARY_DIR}/packaging/couchbase_cxx_client_static.pc @ONLY)
+  install(FILES ${PROJECT_BINARY_DIR}/packaging/couchbase_cxx_client_static.pc
+          DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
+
+  install(FILES ${couchbase_cxx_client_static_IMPORTED_LOCATION} DESTINATION ${CMAKE_INSTALL_LIBDIR})
+endif()
+
+if(COUCHBASE_CXX_CLIENT_BUILD_SHARED)
+  configure_file(${PROJECT_SOURCE_DIR}/cmake/couchbase_cxx_client.pc.in
+                 ${PROJECT_BINARY_DIR}/packaging/couchbase_cxx_client.pc @ONLY)
+  install(FILES ${PROJECT_BINARY_DIR}/packaging/couchbase_cxx_client.pc DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
+  configure_package_config_file(
+    ${PROJECT_SOURCE_DIR}/cmake/couchbase_cxx_client-config.cmake.in
+    ${PROJECT_BINARY_DIR}/couchbase_cxx_client-config.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/couchbase_cxx_client)
+  install(FILES ${PROJECT_BINARY_DIR}/couchbase_cxx_client-config.cmake
+          DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/couchbase_cxx_client)
+
+  install(
+    TARGETS couchbase_cxx_client
+    EXPORT couchbase_cxx_client-targets
+    DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+  install(
+    EXPORT couchbase_cxx_client-targets
+    NAMESPACE couchbase_cxx_client::
+    FILE couchbase_cxx_client-targets.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/couchbase_cxx_client)
+endif()
 
 set(COUCHBASE_CXX_CLIENT_TARBALL_NAME "couchbase-cxx-client-${COUCHBASE_CXX_CLIENT_SEMVER}")
 set(COUCHBASE_CXX_CLIENT_TARBALL "${PROJECT_BINARY_DIR}/packaging/${COUCHBASE_CXX_CLIENT_TARBALL_NAME}.tar.gz")
@@ -87,16 +113,16 @@ add_custom_command(
     -DCOUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE_ROOT="${PROJECT_BINARY_DIR}/packaging/${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/cache"
     -DCOUCHBASE_CXX_CLIENT_BUILD_TESTS=OFF -DCOUCHBASE_CXX_CLIENT_BUILD_TOOLS=ON -DCOUCHBASE_CXX_CLIENT_BUILD_DOCS=OFF
     -DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON -DCPM_DOWNLOAD_ALL=ON -DCPM_USE_NAMED_CACHE_DIRECTORIES=ON
-    -DCPM_USE_LOCAL_PACKAGES=OFF -DCOUCHBASE_CXX_CLIENT_BUILD_STATIC=OFF -DCOUCHBASE_CXX_CLIENT_INSTALL=ON
-    -DCOUCHBASE_CXX_RECORD_BUILD_INFO_FOR_TARBALL=ON
+    -DCPM_USE_LOCAL_PACKAGES=OFF -DCOUCHBASE_CXX_CLIENT_BUILD_STATIC=ON -DCOUCHBASE_CXX_CLIENT_BUILD_SHARED=ON
+    -DCOUCHBASE_CXX_CLIENT_INSTALL=ON -DCOUCHBASE_CXX_RECORD_BUILD_INFO_FOR_TARBALL=ON
   COMMAND
     ${XARGS} --arg-file=${COUCHBASE_CXX_TARBALL_THIRD_PARTY_GLOB_FILE} -I {} find
     "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/cache" -wholename "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/cache/{}"
     -type f | grep -v "crypto_test_data\\|googletest" | uniq >
     "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/third_party_manifest.txt"
   COMMAND ${CMAKE_COMMAND} -E make_directory "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/filtered_cache"
-  COMMAND ${XARGS} --arg-file="${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/third_party_manifest.txt" -I {} ${CP} --parents {}
-          "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/filtered_cache"
+  COMMAND ${XARGS} --arg-file="${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/third_party_manifest.txt" -I {} ${CP} --parents
+          {} "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/filtered_cache"
   COMMAND
     ${CMAKE_COMMAND} -E rename
     "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/filtered_cache/${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/cache"
@@ -127,7 +153,7 @@ if(COUCHBASE_CXX_CLIENT_DEB_TARGETS)
 
   file(COPY ${PROJECT_SOURCE_DIR}/cmake/debian/compat ${PROJECT_SOURCE_DIR}/cmake/debian/control
             ${PROJECT_SOURCE_DIR}/cmake/debian/rules DESTINATION "${PROJECT_BINARY_DIR}/packaging/workspace/debian/")
-  file(COPY ${PROJECT_SOURCE_DIR}/cmake/debian/source/format
+  file(COPY ${PROJECT_SOURCE_DIR}/cmake/debian/source/format ${PROJECT_SOURCE_DIR}/cmake/debian/source/options
        DESTINATION "${PROJECT_BINARY_DIR}/packaging/workspace/debian/source/")
 
   set(COUCHBASE_CXX_CLIENT_DEBIAN_ORIG_TARBALL
@@ -156,7 +182,7 @@ if(COUCHBASE_CXX_CLIENT_DEB_TARGETS)
     DEPENDS ${COUCHBASE_CXX_CLIENT_DEBIAN_ORIG_TARBALL} ${COUCHBASE_CXX_CLIENT_DEBIAN_TARBALL_EXTRACTED})
 
   function(select_mirror_options distro options)
-    if(${distro} STREQUAL "bookworm")
+    if(${distro} STREQUAL "bookworm" OR ${distro} STREQUAL "trixie")
       set(${options}
           --components
           main
@@ -190,8 +216,10 @@ if(COUCHBASE_CXX_CLIENT_DEB_TARGETS)
     COUCHBASE_CXX_CLIENT_SUPPORTED_DISTROS
     "jammy"
     "noble"
-    "bookworm")
+    "bookworm"
+    "trixie")
 
+  set(pbuilder_root "${PROJECT_BINARY_DIR}/packaging/base.cow")
   set(cowbuilder_root "${PROJECT_BINARY_DIR}/packaging/root.cow")
   set(last_output "")
   foreach(distro ${COUCHBASE_CXX_CLIENT_SUPPORTED_DISTROS})
@@ -208,9 +236,10 @@ if(COUCHBASE_CXX_CLIENT_DEB_TARGETS)
       OUTPUT ${timestamp}
       WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/packaging"
       COMMAND ${SUDO} ${CMAKE_COMMAND} -E rm -rf "${cowbuilder_root}"
-      COMMAND ${SUDO} ${COWBUILDER} --create --basepath "${cowbuilder_root}" --distribution ${distro} ${mirror_options}
+      COMMAND ${SUDO} ${COWBUILDER} --create --buildplace "${pbuilder_root}" --basepath "${cowbuilder_root}"
+              --distribution ${distro} ${mirror_options}
       COMMAND
-        ${SUDO} ${COWBUILDER} --build --basepath "${cowbuilder_root}" --buildresult
+        ${SUDO} ${COWBUILDER} --build --buildplace "${pbuilder_root}" --basepath "${cowbuilder_root}" --buildresult
         "${cowbuilder_results}/couchbase-cxx-client-${COUCHBASE_CXX_CLIENT_PACKAGE_VERSION}-${COUCHBASE_CXX_CLIENT_PACKAGE_RELEASE}.${distro}.${CMAKE_SYSTEM_PROCESSOR}"
         --debbuildopts -j8 --debbuildopts "-us -uc" ${COUCHBASE_CXX_CLIENT_DEBIAN_DSC}
       COMMAND touch ${timestamp}
@@ -250,12 +279,13 @@ if(COUCHBASE_CXX_CLIENT_RPM_TARGETS)
   list(
     APPEND
     COUCHBASE_CXX_CLIENT_SUPPORTED_ROOTS
-    "opensuse-leap-15.5-${CMAKE_SYSTEM_PROCESSOR}"
+    "opensuse-leap-15.6-${CMAKE_SYSTEM_PROCESSOR}"
     "rocky-9-${CMAKE_SYSTEM_PROCESSOR}"
     "rocky-8-${CMAKE_SYSTEM_PROCESSOR}"
     "amazonlinux-2023-${CMAKE_SYSTEM_PROCESSOR}"
-    "fedora-41-${CMAKE_SYSTEM_PROCESSOR}"
-    "fedora-40-${CMAKE_SYSTEM_PROCESSOR}")
+    "fedora-43-${CMAKE_SYSTEM_PROCESSOR}"
+    "fedora-42-${CMAKE_SYSTEM_PROCESSOR}"
+    "fedora-41-${CMAKE_SYSTEM_PROCESSOR}")
 
   message(STATUS "Supported build roots for RPM packages: ${COUCHBASE_CXX_CLIENT_SUPPORTED_ROOTS}")
 

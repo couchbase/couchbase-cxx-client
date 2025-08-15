@@ -23,7 +23,10 @@ project(
   couchbase_cxx_client
   VERSION "1.1.0"
   LANGUAGES CXX C)
-message(STATUS "Couchbase C++ client ${couchbase_cxx_client_VERSION} build ${couchbase_cxx_client_BUILD_NUMBER}, master: ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT}")
+message(
+  STATUS
+    "Couchbase C++ client ${couchbase_cxx_client_VERSION} build ${couchbase_cxx_client_BUILD_NUMBER}, master: ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT}"
+)
 message(STATUS "System: ${CMAKE_SYSTEM_NAME}, ${CMAKE_SYSTEM_VERSION}, ${CMAKE_SYSTEM_PROCESSOR}")
 if(WIN32)
   message(STATUS "Windows SDK: ${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}")
@@ -34,23 +37,13 @@ include(cmake/TarballRelease.cmake OPTIONAL)
 include(cmake/PreventInSourceBuilds.cmake)
 include(cmake/StandardProjectSettings.cmake)
 
-# 'library' to set the c++ standard / compile-time options requested
-add_library(project_options INTERFACE)
-target_compile_features(project_options INTERFACE cxx_std_17)
-if(MSVC)
-  target_compile_options(project_options INTERFACE /bigobj)
-endif()
-
-# 'library' to use the warnings specified in CompilerWarnings.cmake
-add_library(project_warnings INTERFACE)
-
-include(cmake/BuildTracing.cmake)
-
 # enable cache system
 include(cmake/Cache.cmake)
 
 # standard compiler warnings
 include(cmake/CompilerWarnings.cmake)
+
+include(cmake/CompilerOptions.cmake)
 
 # sanitizer options if supported by compiler
 include(cmake/Sanitizers.cmake)
@@ -60,11 +53,7 @@ include(cmake/Profiler.cmake)
 # allow for static analysis options
 include(cmake/StaticAnalyzers.cmake)
 
-include(cmake/Backtrace.cmake)
-enable_sanitizers(project_options)
-
 if(COUCHBASE_CXX_CLIENT_MASTER_PROJECT)
-  set_project_warnings(project_warnings)
   if(WIN32)
     add_definitions(-D_WIN32_WINNT=0x0601)
   endif()
@@ -73,8 +62,6 @@ endif()
 find_package(Threads REQUIRED)
 
 include(cmake/ThirdPartyDependencies.cmake)
-
-include(cmake/OpenSSL.cmake)
 
 include(cmake/VersionInfo.cmake)
 
@@ -94,10 +81,10 @@ set(couchbase_cxx_client_FILES
     core/cluster_agent_config.cxx
     core/cluster_options.cxx
     core/collections_component.cxx
-    core/columnar/agent.cxx
-    core/columnar/agent_config.cxx
+    core/columnar/columnar_agent.cxx
+    core/columnar/columnar_agent_config.cxx
     core/columnar/backoff_calculator.cxx
-    core/columnar/error.cxx
+    core/columnar/columnar_error.cxx
     core/columnar/error_codes.cxx
     core/columnar/management_component.cxx
     core/columnar/query_component.cxx
@@ -118,9 +105,9 @@ set(couchbase_cxx_client_FILES
     core/impl/binary_collection.cxx
     core/impl/boolean_field_query.cxx
     core/impl/boolean_query.cxx
-    core/impl/bucket.cxx
+    core/impl/public_bucket.cxx
     core/impl/bucket_manager.cxx
-    core/impl/cluster.cxx
+    core/impl/public_cluster.cxx
     core/impl/collection.cxx
     core/impl/collection_manager.cxx
     core/impl/common_error_category.cxx
@@ -154,7 +141,7 @@ set(couchbase_cxx_client_FILES
     core/impl/internal_term_facet_result.cxx
     core/impl/key_value_error_category.cxx
     core/impl/key_value_error_context.cxx
-    core/impl/logger.cxx
+    core/impl/public_logger.cxx
     core/impl/lookup_in_replica.cxx
     core/impl/management_error_category.cxx
     core/impl/match_all_query.cxx
@@ -179,7 +166,7 @@ set(couchbase_cxx_client_FILES
     core/impl/replica_utils.cxx
     core/impl/retry_action.cxx
     core/impl/retry_reason.cxx
-    core/impl/scan_result.cxx
+    core/impl/public_scan_result.cxx
     core/impl/scope.cxx
     core/impl/search.cxx
     core/impl/search_error_category.cxx
@@ -219,7 +206,7 @@ set(couchbase_cxx_client_FILES
     core/impl/transaction_error_category.cxx
     core/impl/transaction_get_multi_replicas_from_preferred_server_group_spec.cxx
     core/impl/transaction_get_multi_spec.cxx
-    core/impl/transaction_get_result.cxx
+    core/impl/public_transaction_get_result.cxx
     core/impl/transaction_op_error_category.cxx
     core/impl/vector_query.cxx
     core/impl/vector_search.cxx
@@ -417,7 +404,6 @@ set(couchbase_cxx_client_FILES
     core/transactions/attempt_context.cxx
     core/transactions/attempt_context_impl.cxx
     core/transactions/attempt_context_testing_hooks.cxx
-    core/transactions/binary.cxx
     core/transactions/cleanup_testing_hooks.cxx
     core/transactions/exceptions.cxx
     core/transactions/forward_compat.cxx
@@ -449,26 +435,24 @@ set(couchbase_cxx_client_FILES
     core/app_telemetry_address.cxx
     core/app_telemetry_meter.cxx
     core/app_telemetry_reporter.cxx
-    core/cluster_credentials.cxx
-)
+    core/cluster_credentials.cxx)
 
 set(couchbase_cxx_client_LIBRARIES)
 set(couchbase_cxx_client_DEFAULT_LIBRARY)
 
 option(COUCHBASE_CXX_CLIENT_BUILD_STATIC "Build with static library" ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT})
 if(COUCHBASE_CXX_CLIENT_BUILD_STATIC)
-  add_library(couchbase_cxx_client_static STATIC ${couchbase_cxx_client_FILES})
-  add_library(couchbase_cxx_client::couchbase_cxx_client_static ALIAS couchbase_cxx_client_static)
-  target_compile_definitions(couchbase_cxx_client_static PRIVATE COUCHBASE_CXX_CLIENT_STATIC_TARGET)
+  add_library(couchbase_cxx_client_static_intermediate STATIC ${couchbase_cxx_client_FILES})
+  target_compile_definitions(couchbase_cxx_client_static_intermediate PRIVATE COUCHBASE_CXX_CLIENT_STATIC_TARGET)
 
   option(COUCHBASE_CXX_CLIENT_STATIC_STDLIB "Statically link C++ standard library" FALSE)
   if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
     if(COUCHBASE_CXX_CLIENT_STATIC_STDLIB)
-      target_compile_options(couchbase_cxx_client_static PRIVATE -static-libgcc -static-libstdc++)
-      target_link_libraries(couchbase_cxx_client_static PRIVATE -static-libgcc -static-libstdc++)
+      target_compile_options(couchbase_cxx_client_static_intermediate PRIVATE -static-libgcc -static-libstdc++)
+      target_link_libraries(couchbase_cxx_client_static_intermediate PRIVATE -static-libgcc -static-libstdc++)
     endif()
   endif()
-  list(APPEND couchbase_cxx_client_LIBRARIES couchbase_cxx_client_static)
+  list(APPEND couchbase_cxx_client_LIBRARIES couchbase_cxx_client_static_intermediate)
   set(couchbase_cxx_client_DEFAULT_LIBRARY couchbase_cxx_client_static)
 endif()
 
@@ -477,9 +461,8 @@ if(COUCHBASE_CXX_CLIENT_BUILD_SHARED OR BUILD_SHARED_LIBS)
   add_library(couchbase_cxx_client SHARED ${couchbase_cxx_client_FILES})
   add_library(couchbase_cxx_client::couchbase_cxx_client ALIAS couchbase_cxx_client)
 
-  set_target_properties(couchbase_cxx_client PROPERTIES
-      VERSION ${couchbase_cxx_client_VERSION_MAJOR}
-      SOVERSION ${couchbase_cxx_client_VERSION})
+  set_target_properties(couchbase_cxx_client PROPERTIES VERSION ${couchbase_cxx_client_VERSION_MAJOR}
+                                                        SOVERSION ${couchbase_cxx_client_VERSION})
   list(APPEND couchbase_cxx_client_LIBRARIES couchbase_cxx_client)
   if(NOT WIN32)
     set(couchbase_cxx_client_DEFAULT_LIBRARY couchbase_cxx_client)
@@ -489,10 +472,6 @@ endif()
 if(NOT couchbase_cxx_client_DEFAULT_LIBRARY)
   message(FATAL_ERROR "Either static or shared version of couchbase-cxx-client
 have to be selected")
-endif()
-
-if(WIN32 OR NOT COUCHBASE_CXX_CLIENT_BUILD_SHARED)
-  set(COUCHBASE_CXX_CLIENT_VARIANT couchbase_cxx_client_static)
 endif()
 
 foreach(TARGET ${couchbase_cxx_client_LIBRARIES})
@@ -511,33 +490,38 @@ foreach(TARGET ${couchbase_cxx_client_LIBRARIES})
 
   set_target_properties(${TARGET} PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-  target_include_directories(
-    ${TARGET} PRIVATE $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/generated>
-                      $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/generated_$<CONFIG>>)
+  target_include_directories(${TARGET} PRIVATE $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/generated>
+                                               $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/generated_$<CONFIG>>)
 
   target_include_directories(
-    ${TARGET} SYSTEM PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/cxx_function>
-                             $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/expected/include>)
+    ${TARGET} SYSTEM
+    PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/cxx_function>
+            $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/expected/include>
+            $<BUILD_INTERFACE:$<TARGET_PROPERTY:jsonsl,INTERFACE_INCLUDE_DIRECTORIES>>
+            $<BUILD_INTERFACE:$<TARGET_PROPERTY:asio,INTERFACE_INCLUDE_DIRECTORIES>>)
 
   target_include_directories(${TARGET} PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>)
   target_include_directories(${TARGET} PUBLIC $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
   enable_sanitizers(${TARGET})
   enable_profiler(${TARGET})
+  set_project_warnings(${TARGET})
+  set_project_options(${TARGET})
+  target_link_libraries(${TARGET} PUBLIC $<BUILD_INTERFACE:spdlog::spdlog>)
   target_link_libraries(
     ${TARGET}
-    PRIVATE project_options
-            project_warnings
-            spdlog::spdlog
-            Microsoft.GSL::GSL
-            asio
-            llhttp::llhttp
-            taocpp::json
-            snappy
-            jsonsl
-            couchbase_backtrace
-            hdr_histogram_static)
+    PRIVATE $<BUILD_INTERFACE:llhttp::llhttp>
+            $<BUILD_INTERFACE:taocpp::json>
+            $<BUILD_INTERFACE:snappy>
+            $<BUILD_INTERFACE:hdr_histogram_static>
+            $<BUILD_INTERFACE:Microsoft.GSL::GSL>
+            $<BUILD_INTERFACE:asio>
+            $<BUILD_INTERFACE:couchbase_backtrace>
+            $<BUILD_INTERFACE:jsonsl>)
 
+  if(HAVE_BACKTRACE)
+    target_link_libraries(${TARGET} PRIVATE ${PLATFORM_LIBRARIES})
+  endif()
   if(WIN32)
     target_link_libraries(${TARGET} PRIVATE iphlpapi)
   endif()
@@ -555,7 +539,10 @@ foreach(TARGET ${couchbase_cxx_client_LIBRARIES})
       if(MINGW)
         target_link_libraries(${TARGET} PUBLIC ws2_32)
       endif()
-      target_link_libraries(${TARGET} PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+      target_link_libraries(${TARGET} PRIVATE $<BUILD_INTERFACE:ssl> $<BUILD_INTERFACE:crypto>)
+      target_include_directories(
+        ${TARGET} SYSTEM PRIVATE $<BUILD_INTERFACE:$<TARGET_PROPERTY:ssl,INTERFACE_INCLUDE_DIRECTORIES>>
+                                 $<BUILD_INTERFACE:$<TARGET_PROPERTY:crypto,INTERFACE_INCLUDE_DIRECTORIES>>)
     else()
       if(TARGET PkgConfig::PKG_CONFIG_OPENSSL)
         target_link_libraries(${TARGET} PUBLIC PkgConfig::PKG_CONFIG_OPENSSL)
@@ -570,6 +557,15 @@ foreach(TARGET ${couchbase_cxx_client_LIBRARIES})
     message(STATUS "clang-tidy: ${COUCHBASE_CXX_CLIENT_CLANG_TIDY}")
   endif()
 endforeach()
+
+if(COUCHBASE_CXX_CLIENT_BUILD_STATIC)
+  include(cmake/Bundler.cmake)
+  bundle_static_library(couchbase_cxx_client_static_intermediate couchbase_cxx_client_static)
+  add_library(couchbase_cxx_client::couchbase_cxx_client_static ALIAS couchbase_cxx_client_static)
+endif()
+if(WIN32 OR NOT COUCHBASE_CXX_CLIENT_BUILD_SHARED)
+  set(COUCHBASE_CXX_CLIENT_VARIANT couchbase_cxx_client_static)
+endif()
 
 option(COUCHBASE_CXX_CLIENT_BUILD_TESTS "Build test programs" ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT})
 if(COUCHBASE_CXX_CLIENT_BUILD_TESTS)

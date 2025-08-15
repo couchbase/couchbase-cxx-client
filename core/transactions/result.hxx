@@ -18,7 +18,7 @@
 
 #include "core/utils/json.hxx"
 
-#include "core/transactions/internal/binary.hxx"
+#include "core/utils/binary.hxx"
 
 #include "couchbase/codec/tao_json_serializer.hxx"
 
@@ -248,11 +248,12 @@ struct result : result_base {
     os << "is_deleted:" << std::boolalpha << res.is_deleted << ",";
     os << "datatype:" << res.datatype << ",";
     os << "flags:" << res.flags << ",";
-    os << "raw_value" << to_string(res.raw_value);
+    os << "raw_value" << utils::to_string(res.raw_value);
     if (!res.values.empty()) {
       os << ",values:[";
       for (const auto& v : res.values) {
-        os << "{" << to_string(v.raw_value) << "," << static_cast<std::uint32_t>(v.status) << "},";
+        os << "{" << utils::to_string(v.raw_value) << "," << static_cast<std::uint32_t>(v.status)
+           << "},";
       }
       os << "]";
     }

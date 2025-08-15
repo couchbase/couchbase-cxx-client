@@ -24,4 +24,10 @@ to_binary(std::string_view value) noexcept -> binary
 {
   return to_binary(value.data(), value.size());
 }
+
+auto
+to_string(const std::vector<std::byte>& input) -> std::string
+{
+  return { reinterpret_cast<const char*>(input.data()), input.size() };
+}
 } // namespace couchbase::core::utils
