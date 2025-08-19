@@ -23,7 +23,8 @@
 
 namespace couchbase::core::columnar
 {
-error::operator bool() const
+error::
+operator bool() const
 {
   return ec.operator bool();
 }

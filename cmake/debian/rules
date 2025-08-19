@@ -10,7 +10,11 @@ override_dh_strip:
 override_dh_auto_configure:
 	echo "usr/include/couchbase" \
 		> debian/couchbase-cxx-client-dev.install
+	echo "usr/include/tao" \
+		>> debian/couchbase-cxx-client-dev.install
 	echo "usr/lib/$(DEB_HOST_MULTIARCH)/libcouchbase_cxx_client.so" \
+		>> debian/couchbase-cxx-client-dev.install
+	echo "usr/lib/$(DEB_HOST_MULTIARCH)/libcouchbase_cxx_client_static.a" \
 		>> debian/couchbase-cxx-client-dev.install
 	echo "usr/lib/$(DEB_HOST_MULTIARCH)/cmake" \
 		>> debian/couchbase-cxx-client-dev.install
@@ -34,7 +38,7 @@ override_dh_auto_configure:
 		-DCOUCHBASE_CXX_CLIENT_BUILD_EXAMPLES=OFF \
 		-DCOUCHBASE_CXX_CLIENT_BUILD_TESTS=OFF \
 		-DCOUCHBASE_CXX_CLIENT_BUILD_TOOLS=ON \
-		-DCOUCHBASE_CXX_CLIENT_BUILD_STATIC=OFF \
+		-DCOUCHBASE_CXX_CLIENT_BUILD_STATIC=ON \
 		-DCOUCHBASE_CXX_CLIENT_BUILD_SHARED=ON
 
 override_dh_auto_build:

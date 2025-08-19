@@ -5,7 +5,16 @@ if(DOXYGEN_FOUND AND DOT)
   find_package(Java COMPONENTS Runtime)
   if(Java_Runtime_FOUND)
     include(UseJava)
-    find_jar(PLANTUML_JAR_PATH NAMES plantuml)
+    find_jar(
+      PLANTUML_JAR_PATH
+      NAMES
+      plantuml
+      plantuml.jar
+      PATHS
+      /usr/share/plantuml
+      /usr/local/opt/plantuml/libexec
+      /opt/homebrew/opt/plantuml/libexec
+    )
     message(STATUS "Found plantuml: ${PLANTUML_JAR_PATH}")
   endif()
   file(

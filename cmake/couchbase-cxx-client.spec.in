@@ -57,7 +57,7 @@ Development files for the Couchbase C++ SDK.
     -DCOUCHBASE_CXX_CLIENT_BUILD_EXAMPLES=OFF \
     -DCOUCHBASE_CXX_CLIENT_BUILD_TESTS=OFF \
     -DCOUCHBASE_CXX_CLIENT_BUILD_TOOLS=ON \
-    -DCOUCHBASE_CXX_CLIENT_BUILD_STATIC=OFF \
+    -DCOUCHBASE_CXX_CLIENT_BUILD_STATIC=ON \
     -DCOUCHBASE_CXX_CLIENT_BUILD_SHARED=ON
 
 %build
@@ -97,7 +97,9 @@ DESTDIR="%{buildroot}" /usr/bin/cmake --install "redhat-linux-build"
 %{_includedir}/tao
 %{_libdir}/cmake/*/*.cmake
 %{_libdir}/libcouchbase_cxx_client.so
+%{_libdir}/libcouchbase_cxx_client_static.a
 %{_libdir}/pkgconfig/couchbase_cxx_client.pc
+%{_libdir}/pkgconfig/couchbase_cxx_client_static.pc
 
 %changelog
 * @COUCHBASE_CXX_CLIENT_RPM_DATE@ Couchbase SDK Team <support@couchbase.com> - @COUCHBASE_CXX_CLIENT_PACKAGE_VERSION@-@COUCHBASE_CXX_CLIENT_PACKAGE_RELEASE@

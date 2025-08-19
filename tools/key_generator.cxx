@@ -79,7 +79,7 @@ hash_crc32(const std::string& data) -> std::uint32_t
 }
 
 auto
-map_key_to_vbucket_id(const std::string& key, std::uint16_t number_of_vbuckets) -> std::uint16_t
+map_key_to_vbucket_id(const std::string& key, std::size_t number_of_vbuckets) -> std::uint16_t
 {
   auto digest = hash_crc32(key);
   return static_cast<std::uint16_t>(digest % number_of_vbuckets);
@@ -95,12 +95,12 @@ constexpr std::array default_alphabet = {
 void
 update_state(gsl::span<char> alphabet, std::string& state, bool can_grow)
 {
-  for (std::size_t i = 0; i < state.size(); ++i) {
-    const auto it = std::find(alphabet.begin(), alphabet.end(), state[i]);
+  for (char& symbol : state) {
+    const auto it = std::find(alphabet.begin(), alphabet.end(), symbol);
     if (it == alphabet.end() - 1) {
-      state[i] = alphabet.front();
+      symbol = alphabet.front();
     } else {
-      state[i] = *(it + 1);
+      symbol = *(it + 1);
       return;
     }
   }

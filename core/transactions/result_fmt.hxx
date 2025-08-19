@@ -41,7 +41,7 @@ public:
                      r.is_deleted,
                      r.datatype,
                      r.flags,
-                     couchbase::core::transactions::to_string(r.raw_value),
+                     couchbase::core::utils::to_string(r.raw_value),
                      r.raw_value.size() > 1024 ? 1024 : r.raw_value.size());
   }
 };
