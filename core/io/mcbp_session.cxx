@@ -1892,8 +1892,8 @@ private:
                                 id_,
                                 stream_->log_prefix(),
                                 bucket_name_.value_or("-"),
-                                bootstrap_hostname_,
                                 connection_endpoints_.local.port(),
+                                bootstrap_hostname_,
                                 connection_endpoints_.remote_address,
                                 connection_endpoints_.remote.port());
       parser_.reset();
