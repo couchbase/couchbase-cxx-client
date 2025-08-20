@@ -882,10 +882,6 @@ enum class management {
   /// Occurs when a function is paused but the action does not expect it to
   /// name is "ERR_APP_PAUSED"
   eventing_function_paused = 614,
-
-  /// Occurs when an invalid request is sent to the eventing service
-  /// name is "ERR_INVALID_REQUEST"
-  eventing_function_invalid_request = 615,
 };
 
 /**

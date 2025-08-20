@@ -59,8 +59,6 @@ struct management_error_category : std::error_category {
         return "eventing_function_deployed (613)";
       case errc::management::eventing_function_paused:
         return "eventing_function_paused (614)";
-      case errc::management::eventing_function_invalid_request:
-        return "eventing_function_invalid_request (615)";
     }
     return "FIXME: unknown error code (recompile with newer library): couchbase.key_value." +
            std::to_string(ev);
