@@ -80,7 +80,7 @@ class range_scan_stream : public std::enable_shared_from_this<range_scan_stream>
 
   // The stream is currently running
   struct running {
-    std::vector<std::byte> uuid;
+    std::vector<std::byte> uuid{};
   };
 
   // The stream has completed and the items have been retrieved
@@ -305,27 +305,30 @@ private:
 
   [[nodiscard]] auto uuid() const -> std::vector<std::byte>
   {
-    try {
-      return std::get<running>(state_).uuid;
-    } catch (std::bad_variant_access&) {
+    if (!is_running()) {
       return {};
     }
+
+    auto uuid = std::get<running>(state_).uuid;
+    return uuid;
   }
 
   [[nodiscard]] auto error() const -> std::error_code
   {
-    if (is_failed()) {
-      return std::get<failed>(state_).ec;
+    if (!is_failed()) {
+      return {};
     }
-    return {};
+
+    return std::get<failed>(state_).ec;
   }
 
   [[nodiscard]] auto error_is_fatal() const -> bool
   {
-    if (is_failed()) {
-      return std::get<failed>(state_).fatal;
+    if (!is_failed()) {
+      return {};
     }
-    return {};
+
+    return std::get<failed>(state_).fatal;
   }
 
   [[nodiscard]] auto is_sampling_scan() const -> bool

@@ -20,7 +20,6 @@
 #include <couchbase/retry_reason.hxx>
 #include <couchbase/retry_strategy.hxx>
 
-#include <chrono>
 #include <memory>
 #include <mutex>
 #include <set>
