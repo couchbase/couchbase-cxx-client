@@ -1882,15 +1882,17 @@ private:
     } else {
       stream_->set_options();
       connection_endpoints_ = { it->endpoint(), stream_->local_endpoint() };
-      CB_LOG_DEBUG("{} connected to {}:{}",
+      CB_LOG_DEBUG("{} connected to {}:{}:{}",
                    log_prefix_,
+                   connection_endpoints_.local.port(),
                    connection_endpoints_.remote_address,
                    connection_endpoints_.remote.port());
-      log_prefix_ = fmt::format("[{}/{}/{}/{}] <{}/{}:{}>",
+      log_prefix_ = fmt::format("[{}/{}/{}/{}] <{}:{}/{}:{}>",
                                 client_id_,
                                 id_,
                                 stream_->log_prefix(),
                                 bucket_name_.value_or("-"),
+                                connection_endpoints_.local.port(),
                                 bootstrap_hostname_,
                                 connection_endpoints_.remote_address,
                                 connection_endpoints_.remote.port());
@@ -1906,12 +1908,14 @@ private:
         if (timer_ec == asio::error::operation_aborted || self->stopped_) {
           return;
         }
-        CB_LOG_DEBUG("{} unable to boostrap single node at {}:{} (\"{}:{}\") in time, reconnecting",
-                     self->log_prefix_,
-                     self->connection_endpoints_.remote_address,
-                     self->connection_endpoints_.remote.port(),
-                     self->bootstrap_hostname_,
-                     self->bootstrap_port_);
+        CB_LOG_DEBUG(
+          "{} unable to boostrap single node at {}:{}:{} (\"{}:{}\") in time, reconnecting",
+          self->log_prefix_,
+          self->connection_endpoints_.local.port(),
+          self->connection_endpoints_.remote_address,
+          self->connection_endpoints_.remote.port(),
+          self->bootstrap_hostname_,
+          self->bootstrap_port_);
         return self->initiate_bootstrap();
       });
     }
@@ -1929,15 +1933,17 @@ private:
                                                              std::size_t bytes_transferred) {
         if (ec == asio::error::operation_aborted || self->stopped_) {
           self->reading_ = false;
-          CB_LOG_PROTOCOL("[MCBP, IN] host=\"{}\", port={}, rc={}, bytes_received={}",
+          CB_LOG_PROTOCOL("[MCBP, IN] host=\"{}\", sport={}, dport={}, rc={}, bytes_received={}",
                           self->connection_endpoints_.remote_address,
+                          self->connection_endpoints_.local.port(),
                           self->connection_endpoints_.remote.port(),
                           ec ? ec.message() : "ok",
                           bytes_transferred);
           return;
         }
-        CB_LOG_PROTOCOL("[MCBP, IN] host=\"{}\", port={}, rc={}, bytes_received={}{:a}",
+        CB_LOG_PROTOCOL("[MCBP, IN] host=\"{}\", sport={}, dport={}, rc={}, bytes_received={}{:a}",
                         self->connection_endpoints_.remote_address,
+                        self->connection_endpoints_.local.port(),
                         self->connection_endpoints_.remote.port(),
                         ec ? ec.message() : "ok",
                         bytes_transferred,
@@ -2013,8 +2019,9 @@ private:
     std::vector<asio::const_buffer> buffers;
     buffers.reserve(writing_buffer_.size());
     for (auto& buf : writing_buffer_) {
-      CB_LOG_PROTOCOL("[MCBP, OUT] host=\"{}\", port={}, buffer_size={}{:a}",
+      CB_LOG_PROTOCOL("[MCBP, OUT] host=\"{}\", sport={}, dport={}, buffer_size={}{:a}",
                       connection_endpoints_.remote_address,
+                      connection_endpoints_.local.port(),
                       connection_endpoints_.remote.port(),
                       buf.size(),
                       spdlog::to_hex(buf));
@@ -2022,8 +2029,9 @@ private:
     }
     stream_->async_write(
       buffers, [self = shared_from_this()](std::error_code ec, std::size_t bytes_transferred) {
-        CB_LOG_PROTOCOL("[MCBP, OUT] host=\"{}\", port={}, rc={}, bytes_sent={}",
+        CB_LOG_PROTOCOL("[MCBP, OUT] host=\"{}\", sport={}, dport={}, rc={}, bytes_sent={}",
                         self->connection_endpoints_.remote_address,
+                        self->connection_endpoints_.local.port(),
                         self->connection_endpoints_.remote.port(),
                         ec ? ec.message() : "ok",
                         bytes_transferred);
