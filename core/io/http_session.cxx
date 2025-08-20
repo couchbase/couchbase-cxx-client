@@ -61,9 +61,10 @@ http_session_info::http_session_info(const std::string& client_id,
       fmt::format("{}:{}", remote_endpoint_address_, remote_endpoint_.port());
   }
 
-  log_prefix_ = fmt::format("[{}/{}] <{}:{}>",
+  log_prefix_ = fmt::format("[{}/{}] <{}:{}:{}>",
                             client_id,
                             session_id,
+                            local_endpoint_.port(),
                             remote_endpoint_.address().to_string(),
                             remote_endpoint_.port());
 }
