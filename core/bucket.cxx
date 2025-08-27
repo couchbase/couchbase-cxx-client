@@ -323,7 +323,7 @@ public:
       req->vbucket_ = partition;
       return find_session_by_index(server.value());
     }
-    return {};
+    return std::nullopt;
   }
 
   [[nodiscard]] auto server_by_vbucket(std::uint16_t vbucket, std::size_t node_index)
@@ -333,7 +333,7 @@ public:
     if (config_) {
       return config_->server_by_vbucket(vbucket, node_index);
     }
-    return {};
+    return std::nullopt;
   }
 
   [[nodiscard]] auto map_id(const document_id& id)
@@ -343,7 +343,7 @@ public:
     if (config_) {
       return config_->map_key(id.key(), id.node_index());
     }
-    return { 0, {} };
+    return { 0, std::nullopt };
   }
 
   auto config_rev() const -> std::string
@@ -362,7 +362,7 @@ public:
     if (config_) {
       return config_->map_key(key, node_index);
     }
-    return { 0, {} };
+    return { 0, std::nullopt };
   }
 
   void restart_sessions()
