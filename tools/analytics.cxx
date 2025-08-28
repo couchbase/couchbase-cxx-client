@@ -170,18 +170,14 @@ public:
                                   : do_analytics(cluster, statement, analytics_options))
                              .get();
 
+      auto ctx = error.ctx() && error.ctx().impl()
+                   ? error.ctx().impl()->as<couchbase::core::error_context::analytics>()
+                   : couchbase::core::error_context::analytics{};
+
       if (json_lines_) {
-        print_result_json_line(scope_id,
-                               statement,
-                               error.ctx().impl()->as<couchbase::core::error_context::analytics>(),
-                               resp,
-                               analytics_options);
+        print_result_json_line(scope_id, statement, ctx, resp, analytics_options);
       } else {
-        print_result(scope_id,
-                     statement,
-                     error.ctx().impl()->as<couchbase::core::error_context::analytics>(),
-                     resp,
-                     analytics_options);
+        print_result(scope_id, statement, ctx, resp, analytics_options);
       }
     }
 
