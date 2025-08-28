@@ -532,11 +532,11 @@ TEST_CASE("integration: bucket management", "[integration]")
         bucket_settings.name = bucket_name;
         bucket_settings.bucket_type = couchbase::management::cluster::bucket_type::memcached;
         bucket_settings.num_replicas = 0;
-        auto err = c.buckets().create_bucket(bucket_settings, {}).get();
+        auto error = c.buckets().create_bucket(bucket_settings, {}).get();
         if (integration.cluster_version().supports_memcached_buckets()) {
-          REQUIRE_SUCCESS(err.ec());
+          REQUIRE_SUCCESS(error.ec());
         } else {
-          REQUIRE(err.ec() == couchbase::errc::common::invalid_argument);
+          REQUIRE(error.ec() == couchbase::errc::common::invalid_argument);
         }
       }
 
