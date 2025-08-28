@@ -35,7 +35,7 @@
 #include "core/operations/management/collection_create.hxx"
 #include "core/operations/management/collections.hxx"
 
-TEST_CASE("integration: analytics query")
+TEST_CASE("integration: analytics query", "[integration]")
 {
   test::utils::integration_test_guard integration;
 
@@ -208,7 +208,7 @@ TEST_CASE("integration: analytics query")
   }
 }
 
-TEST_CASE("integration: analytics scope query")
+TEST_CASE("integration: analytics scope query", "[integration]")
 {
   test::utils::integration_test_guard integration;
 
@@ -304,7 +304,7 @@ make_http_context()
   return ctx;
 }
 
-TEST_CASE("unit: analytics query")
+TEST_CASE("unit: analytics query", "[unit]")
 {
   SECTION("priority true")
   {
@@ -331,7 +331,7 @@ TEST_CASE("unit: analytics query")
   }
 }
 
-TEST_CASE("integration: public API analytics query")
+TEST_CASE("integration: public API analytics query", "[integration]")
 {
   test::utils::integration_test_guard integration;
 
@@ -540,7 +540,7 @@ TEST_CASE("integration: public API analytics query")
   }
 }
 
-TEST_CASE("integration: public API analytics scope query")
+TEST_CASE("integration: public API analytics scope query", "[integration]")
 {
   test::utils::integration_test_guard integration;
 

@@ -1,0 +1,52 @@
+#!/usr/bin/env ruby
+
+require 'find'
+require 'set'
+
+ALLOWED_LABELS = [
+    'unit',
+    'integration',
+    'benchmark',
+    'transactions',
+].freeze
+
+test_dir = File.expand_path('../test', __dir__)
+tests_missing_label = []
+invalid_labels = Set[]
+
+Find.find(test_dir) do |path|
+    next unless File.file?(path)
+    next unless File.basename(path).start_with?('test_')
+    content = File.read(path)
+    content.delete("\n").scan(/TEST_CASE\(("(.*?)")\)/) do |match|
+        labels = match[0].scan(/\[(.*?)\]/)
+        if labels.empty?
+            tests_missing_label << "#{match[0]} (#{path})"
+        else
+            labels.flatten.each do |label|
+                unless ALLOWED_LABELS.include?(label)
+                    invalid_labels << label
+                end
+            end
+        end
+    end
+end
+
+unless tests_missing_label.empty?
+    puts "Tests missing label:"
+    tests_missing_label.each do |test|
+        puts "  #{test}"
+    end
+end
+
+unless invalid_labels.empty?
+    puts "Invalid labels found:"
+    invalid_labels.each do |label|
+        puts "  #{label}"
+    end
+end
+
+unless tests_missing_label.empty? && invalid_labels.empty?
+    puts "\nERROR: Missing or unexpected test labels found. This can result in tests not being run in CI."
+    exit 1
+end

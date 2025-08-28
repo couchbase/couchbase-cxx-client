@@ -44,7 +44,7 @@
 
 using Catch::Matchers::StartsWith;
 
-TEST_CASE("integration: search query")
+TEST_CASE("integration: search query", "[integration]")
 {
   test::utils::integration_test_guard integration;
 
@@ -506,7 +506,7 @@ TEST_CASE("integration: search query consistency", "[integration]")
   }
 }
 
-TEST_CASE("integration: search query collections")
+TEST_CASE("integration: search query collections", "[integration]")
 {
   test::utils::integration_test_guard integration;
 

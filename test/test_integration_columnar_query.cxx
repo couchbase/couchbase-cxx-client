@@ -339,7 +339,7 @@ TEST_CASE("integration: columnar query component request with database & scope n
   REQUIRE(row_count == 100);
 }
 
-TEST_CASE("integration: columnar query read some rows and cancel")
+TEST_CASE("integration: columnar query read some rows and cancel", "[integration]")
 {
   test::utils::integration_test_guard integration;
   if (!integration.cluster_version().is_columnar()) {
@@ -390,7 +390,7 @@ TEST_CASE("integration: columnar query read some rows and cancel")
   REQUIRE_FALSE(result.metadata().has_value());
 }
 
-TEST_CASE("integration: columnar query cancel operation")
+TEST_CASE("integration: columnar query cancel operation", "[integration]")
 {
   test::utils::integration_test_guard integration;
   if (!integration.cluster_version().is_columnar()) {
@@ -413,7 +413,7 @@ TEST_CASE("integration: columnar query cancel operation")
   REQUIRE(err.ec == couchbase::core::columnar::client_errc::canceled);
 }
 
-TEST_CASE("integration: columnar query operation timeout")
+TEST_CASE("integration: columnar query operation timeout", "[integration]")
 {
   test::utils::integration_test_guard integration;
   if (!integration.cluster_version().is_columnar()) {
@@ -437,7 +437,7 @@ TEST_CASE("integration: columnar query operation timeout")
   REQUIRE(err.ec == couchbase::core::columnar::errc::timeout);
 }
 
-TEST_CASE("integration: columnar query global timeout")
+TEST_CASE("integration: columnar query global timeout", "[integration]")
 {
   test::utils::integration_test_guard integration;
   if (!integration.cluster_version().is_columnar()) {
@@ -462,7 +462,7 @@ TEST_CASE("integration: columnar query global timeout")
   REQUIRE(err.ec == couchbase::core::columnar::errc::timeout);
 }
 
-TEST_CASE("integration: columnar query collection does not exist")
+TEST_CASE("integration: columnar query collection does not exist", "[integration]")
 {
   test::utils::integration_test_guard integration;
   if (!integration.cluster_version().is_columnar()) {
@@ -498,7 +498,7 @@ TEST_CASE("integration: columnar query collection does not exist")
   REQUIRE(err.message_with_ctx().find("\"code\":24045") != std::string::npos);
 }
 
-TEST_CASE("integration: columnar query positional parameters")
+TEST_CASE("integration: columnar query positional parameters", "[integration]")
 {
   test::utils::integration_test_guard integration;
   if (!integration.cluster_version().is_columnar()) {
@@ -526,7 +526,7 @@ TEST_CASE("integration: columnar query positional parameters")
           tao::json::value{ { "foo", "bar" } });
 }
 
-TEST_CASE("integration: columnar query named parameters")
+TEST_CASE("integration: columnar query named parameters", "[integration]")
 {
   test::utils::integration_test_guard integration;
   if (!integration.cluster_version().is_columnar()) {
@@ -554,7 +554,7 @@ TEST_CASE("integration: columnar query named parameters")
           tao::json::value{ { "foo", "bar" } });
 }
 
-TEST_CASE("integration: closing cluster before columnar query returns")
+TEST_CASE("integration: closing cluster before columnar query returns", "[integration]")
 {
   test::utils::integration_test_guard integration;
   if (!integration.cluster_version().is_columnar()) {
@@ -585,7 +585,7 @@ TEST_CASE("integration: closing cluster before columnar query returns")
   REQUIRE(err.ec == couchbase::core::columnar::client_errc::canceled);
 }
 
-TEST_CASE("integration: closing cluster while reading columnar query rows")
+TEST_CASE("integration: closing cluster while reading columnar query rows", "[integration]")
 {
   test::utils::integration_test_guard integration;
   if (!integration.cluster_version().is_columnar()) {
