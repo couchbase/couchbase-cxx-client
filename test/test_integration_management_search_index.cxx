@@ -443,20 +443,29 @@ TEST_CASE("integration: search index management analyze document", "[integration
   REQUIRE(test::utils::wait_for_search_pindexes_ready(
     integration.cluster, integration.ctx.bucket, index_name));
 
-  couchbase::core::operations::management::search_index_analyze_document_response resp;
-  bool operation_completed = test::utils::wait_until(
-    [&integration, &index_name, &resp]() {
-      couchbase::core::operations::management::search_index_analyze_document_request req{};
-      req.index_name = index_name;
-      req.encoded_document = R"({ "name": "hello world" })";
-      resp = test::utils::execute(integration.cluster, req);
-      return resp.ctx.ec != couchbase::errc::common::internal_server_failure;
-    },
-    std::chrono::minutes{ 5 },
-    std::chrono::seconds{ 1 });
-  REQUIRE(operation_completed);
-  REQUIRE_SUCCESS(resp.ctx.ec);
-  REQUIRE_FALSE(resp.analysis.empty());
+  {
+    couchbase::core::operations::management::search_index_analyze_document_response resp;
+    bool operation_completed = test::utils::wait_until(
+      [&integration, &index_name, &resp]() {
+        couchbase::core::operations::management::search_index_analyze_document_request req{};
+        req.index_name = index_name;
+        req.encoded_document = R"({ "name": "hello world" })";
+        resp = test::utils::execute(integration.cluster, req);
+        return resp.ctx.ec != couchbase::errc::common::internal_server_failure;
+      },
+      std::chrono::minutes{ 5 },
+      std::chrono::seconds{ 1 });
+    REQUIRE(operation_completed);
+    REQUIRE_SUCCESS(resp.ctx.ec);
+    REQUIRE_FALSE(resp.analysis.empty());
+  }
+
+  {
+    couchbase::core::operations::management::search_index_drop_request req{};
+    req.index_name = index_name;
+    auto resp = test::utils::execute(integration.cluster, req);
+    REQUIRE_SUCCESS(resp.ctx.ec);
+  }
 }
 
 TEST_CASE("integration: search index management analyze document public API", "[integration]")
