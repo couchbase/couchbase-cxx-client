@@ -79,6 +79,9 @@ TEST_CASE("integration: search query")
                                      beer_sample_doc_count);
   REQUIRE(completed);
 
+  REQUIRE(test::utils::wait_for_search_pindexes_ready(
+    integration.cluster, integration.ctx.bucket, index_name));
+
   couchbase::core::json_string simple_query(R"({"query": "description:belgian"})");
 
   // Wait until expected documents are indexed
