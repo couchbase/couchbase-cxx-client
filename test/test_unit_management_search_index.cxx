@@ -19,7 +19,7 @@
 
 #include "core/management/search_index.hxx"
 
-TEST_CASE("unit: can determine if an index is a vector index")
+TEST_CASE("unit: can determine if an index is a vector index", "[unit]")
 {
   SECTION("vector index")
   {

@@ -513,7 +513,7 @@ TEST_CASE("integration: sticking query to the service node", "[integration]")
   }
 }
 
-TEST_CASE("analytics create dataset")
+TEST_CASE("integration: analytics create dataset", "[integration]")
 {
   test::utils::integration_test_guard integration;
 

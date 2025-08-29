@@ -1007,7 +1007,7 @@ TEST_CASE("integration: subdoc multi mutation", "[integration]")
   }
 }
 
-TEST_CASE("integration: subdoc expiry")
+TEST_CASE("integration: subdoc expiry", "[integration]")
 {
   test::utils::integration_test_guard integration;
 

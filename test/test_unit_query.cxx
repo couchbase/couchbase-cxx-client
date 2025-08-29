@@ -78,7 +78,7 @@ TEST_CASE("unit: query with read from replica", "[unit]")
   }
 }
 
-TEST_CASE("unit: Public API query options - add/clear parameters")
+TEST_CASE("unit: Public API query options - add/clear parameters", "[unit]")
 {
   SECTION("positional parameters")
   {
