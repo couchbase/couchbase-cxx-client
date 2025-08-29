@@ -494,52 +494,57 @@ TEST_CASE("integration: bucket management", "[integration]")
     }
   }
 
-  if (integration.cluster_version().supports_memcached_buckets()) {
-    SECTION("memcached")
+  SECTION("memcached")
+  {
+    SECTION("core api")
     {
-      SECTION("core api")
       {
-        {
-          couchbase::core::management::cluster::bucket_settings bucket_settings;
-          bucket_settings.name = bucket_name;
-          bucket_settings.bucket_type =
-            couchbase::core::management::cluster::bucket_type::memcached;
-          bucket_settings.num_replicas = 0;
-          couchbase::core::operations::management::bucket_create_request req{ bucket_settings };
-          auto resp = test::utils::execute(integration.cluster, req);
+        couchbase::core::management::cluster::bucket_settings bucket_settings;
+        bucket_settings.name = bucket_name;
+        bucket_settings.bucket_type = couchbase::core::management::cluster::bucket_type::memcached;
+        bucket_settings.num_replicas = 0;
+        couchbase::core::operations::management::bucket_create_request req{ bucket_settings };
+        auto resp = test::utils::execute(integration.cluster, req);
+        if (integration.cluster_version().supports_memcached_buckets()) {
           REQUIRE_SUCCESS(resp.ctx.ec);
-        }
-
-        {
-          REQUIRE(wait_for_bucket_created(integration, bucket_name));
-          couchbase::core::operations::management::bucket_get_request req{ bucket_name };
-          auto resp = test::utils::execute(integration.cluster, req);
-          REQUIRE(resp.bucket.bucket_type ==
-                  couchbase::core::management::cluster::bucket_type::memcached);
+        } else {
+          REQUIRE(resp.ctx.ec == couchbase::errc::common::invalid_argument);
         }
       }
-      SECTION("public api")
+
+      if (integration.cluster_version().supports_memcached_buckets()) {
+        REQUIRE(wait_for_bucket_created(integration, bucket_name));
+        couchbase::core::operations::management::bucket_get_request req{ bucket_name };
+        auto resp = test::utils::execute(integration.cluster, req);
+        REQUIRE(resp.bucket.bucket_type ==
+                couchbase::core::management::cluster::bucket_type::memcached);
+      }
+    }
+    SECTION("public api")
+    {
+      auto test_ctx = integration.ctx;
+      auto [err, c] =
+        couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
+      REQUIRE_SUCCESS(err.ec());
+
       {
-        auto test_ctx = integration.ctx;
-        auto [err, c] =
-          couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-        REQUIRE_SUCCESS(err.ec());
-
-        {
-          couchbase::management::cluster::bucket_settings bucket_settings;
-          bucket_settings.name = bucket_name;
-          bucket_settings.bucket_type = couchbase::management::cluster::bucket_type::memcached;
-          bucket_settings.num_replicas = 0;
-          auto error = c.buckets().create_bucket(bucket_settings, {}).get();
+        couchbase::management::cluster::bucket_settings bucket_settings;
+        bucket_settings.name = bucket_name;
+        bucket_settings.bucket_type = couchbase::management::cluster::bucket_type::memcached;
+        bucket_settings.num_replicas = 0;
+        auto error = c.buckets().create_bucket(bucket_settings, {}).get();
+        if (integration.cluster_version().supports_memcached_buckets()) {
           REQUIRE_SUCCESS(error.ec());
+        } else {
+          REQUIRE(error.ec() == couchbase::errc::common::invalid_argument);
         }
+      }
 
-        {
-          REQUIRE(wait_for_bucket_created(integration, bucket_name));
-          auto [error, bucket] = c.buckets().get_bucket(bucket_name, {}).get();
-          REQUIRE_SUCCESS(error.ec());
-          REQUIRE(bucket.bucket_type == couchbase::management::cluster::bucket_type::memcached);
-        }
+      if (integration.cluster_version().supports_memcached_buckets()) {
+        REQUIRE(wait_for_bucket_created(integration, bucket_name));
+        auto [error, bucket] = c.buckets().get_bucket(bucket_name, {}).get();
+        REQUIRE_SUCCESS(error.ec());
+        REQUIRE(bucket.bucket_type == couchbase::management::cluster::bucket_type::memcached);
       }
     }
   }

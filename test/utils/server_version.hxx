@@ -256,7 +256,7 @@ struct server_version {
 
   [[nodiscard]] auto supports_memcached_buckets() const -> bool
   {
-    return !is_serverless_config_profile();
+    return !is_serverless_config_profile() && major < 8;
   }
 
   [[nodiscard]] auto is_serverless_config_profile() const -> bool
