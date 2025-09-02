@@ -67,6 +67,7 @@ public:
    * Tells the server to operate on replica vbucket instead of active
    */
   static const inline std::uint8_t doc_flag_replica_read = 0b0010'0000;
+  static const inline std::uint8_t doc_flag_access_deleted = 0b0000'0100;
 
 private:
   std::vector<std::byte> key_;
@@ -83,6 +84,13 @@ public:
   {
     if (value) {
       flags_ = flags_ | doc_flag_replica_read;
+    }
+  }
+
+  void access_deleted(bool value)
+  {
+    if (value) {
+      flags_ = flags_ | doc_flag_access_deleted;
     }
   }
 

@@ -73,6 +73,9 @@ struct fmt::formatter<couchbase::core::bucket_capability> {
       case couchbase::core::bucket_capability::subdoc_replica_read:
         name = "subdoc_replica_read";
         break;
+      case couchbase::core::bucket_capability::subdoc_access_deleted:
+        name = "subdoc_access_deleted";
+        break;
       case couchbase::core::bucket_capability::non_deduped_history:
         name = "non_deduped_history";
         break;

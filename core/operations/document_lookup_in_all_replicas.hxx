@@ -68,6 +68,7 @@ struct lookup_in_all_replicas_request {
   std::optional<std::chrono::milliseconds> timeout{};
   std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
   couchbase::read_preference read_preference{ couchbase::read_preference::no_preference };
+  bool access_deleted{ false };
 
   template<typename Core, typename Handler>
   void execute(Core core, Handler handler)
@@ -80,6 +81,7 @@ struct lookup_in_all_replicas_request {
        specs = specs,
        parent_span = parent_span,
        read_preference = read_preference,
+       access_deleted = access_deleted,
        h = std::forward<Handler>(handler)](std::error_code ec) mutable {
         if (ec) {
           std::optional<std::string> first_error_path{};
@@ -93,8 +95,15 @@ struct lookup_in_all_replicas_request {
         }
         core->with_bucket_configuration(
           id.bucket(),
-          [core, id, timeout, specs, parent_span, read_preference, h = std::forward<Handler>(h)](
-            std::error_code ec, std::shared_ptr<topology::configuration> config) mutable {
+          [core,
+           id,
+           timeout,
+           specs,
+           parent_span,
+           read_preference,
+           access_deleted,
+           h = std::forward<Handler>(h)](std::error_code ec,
+                                         std::shared_ptr<topology::configuration> config) mutable {
             if (!config->capabilities.supports_subdoc_read_replica()) {
               ec = errc::common::feature_not_available;
             }
@@ -146,54 +155,55 @@ struct lookup_in_all_replicas_request {
               if (node.is_replica) {
                 document_id replica_id{ id };
                 replica_id.node_index(node.index);
-                core->execute(
-                  impl::lookup_in_replica_request{
-                    std::move(replica_id), specs, timeout, parent_span },
-                  [ctx](auto&& resp) {
-                    handler_type local_handler{};
-                    {
-                      std::scoped_lock lock(ctx->mutex_);
-                      if (ctx->done_) {
+                auto replica_req = impl::lookup_in_replica_request{
+                  std::move(replica_id), specs, timeout, parent_span
+                };
+                replica_req.access_deleted = access_deleted;
+                core->execute(replica_req, [ctx](auto&& resp) {
+                  handler_type local_handler{};
+                  {
+                    std::scoped_lock lock(ctx->mutex_);
+                    if (ctx->done_) {
+                      return;
+                    }
+                    --ctx->expected_responses_;
+                    if (resp.ctx.ec()) {
+                      if (ctx->expected_responses_ > 0) {
+                        // just ignore the response
                         return;
                       }
-                      --ctx->expected_responses_;
-                      if (resp.ctx.ec()) {
-                        if (ctx->expected_responses_ > 0) {
-                          // just ignore the response
-                          return;
-                        }
-                      } else {
-                        lookup_in_all_replicas_response::entry top_entry{};
-                        top_entry.cas = resp.cas;
-                        top_entry.deleted = resp.deleted;
-                        top_entry.is_replica = true;
-                        for (auto& field : resp.fields) {
-                          lookup_in_all_replicas_response::entry::lookup_in_entry lookup_in_entry{};
-                          lookup_in_entry.path = field.path;
-                          lookup_in_entry.value = field.value;
-                          lookup_in_entry.status = field.status;
-                          lookup_in_entry.ec = field.ec;
-                          lookup_in_entry.exists = field.exists;
-                          lookup_in_entry.original_index = field.original_index;
-                          lookup_in_entry.opcode = field.opcode;
-                          top_entry.fields.emplace_back(lookup_in_entry);
-                        }
-                        ctx->result_.emplace_back(
-                          lookup_in_all_replicas_response::entry{ top_entry });
+                    } else {
+                      lookup_in_all_replicas_response::entry top_entry{};
+                      top_entry.cas = resp.cas;
+                      top_entry.deleted = resp.deleted;
+                      top_entry.is_replica = true;
+                      for (auto& field : resp.fields) {
+                        lookup_in_all_replicas_response::entry::lookup_in_entry lookup_in_entry{};
+                        lookup_in_entry.path = field.path;
+                        lookup_in_entry.value = field.value;
+                        lookup_in_entry.status = field.status;
+                        lookup_in_entry.ec = field.ec;
+                        lookup_in_entry.exists = field.exists;
+                        lookup_in_entry.original_index = field.original_index;
+                        lookup_in_entry.opcode = field.opcode;
+                        top_entry.fields.emplace_back(lookup_in_entry);
                       }
-                      if (ctx->expected_responses_ == 0) {
-                        ctx->done_ = true;
-                        std::swap(local_handler, ctx->handler_);
-                      }
+                      ctx->result_.emplace_back(
+                        lookup_in_all_replicas_response::entry{ top_entry });
                     }
-                    if (local_handler) {
-                      if (ctx->result_.empty()) {
-                        // Return an error only when we have no results from any replica.
-                        return local_handler({ std::move(resp.ctx), {} });
-                      }
-                      return local_handler({ {}, std::move(ctx->result_) });
+                    if (ctx->expected_responses_ == 0) {
+                      ctx->done_ = true;
+                      std::swap(local_handler, ctx->handler_);
                     }
-                  });
+                  }
+                  if (local_handler) {
+                    if (ctx->result_.empty()) {
+                      // Return an error only when we have no results from any replica.
+                      return local_handler({ std::move(resp.ctx), {} });
+                    }
+                    return local_handler({ {}, std::move(ctx->result_) });
+                  }
+                });
               } else {
                 core->execute(
                   lookup_in_request{ document_id{ id }, {}, {}, false, specs, timeout },
