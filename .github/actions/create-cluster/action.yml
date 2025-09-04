@@ -1,0 +1,56 @@
+name: create-cluster
+description: Sets up a Couchbase cluster using cbdinocluster
+inputs:
+  version:
+    description: 'Couchbase Server version to use'
+    required: true
+outputs:
+  ip:
+    description: 'The IP address of a node of the cluster'
+    value: ${{ steps.start-cluster.outputs.ip }}
+  connstr:
+    description: 'Connection string to connect to the cluster'
+    value: ${{ steps.start-cluster.outputs.connstr }}
+  tls-connstr:
+    description: 'Connection string to connect to the cluster over TLS'
+    value: ${{ steps.start-cluster.outputs.tls-connstr }}
+runs:
+  using: composite
+  steps:
+    - name: Install cbdinocluster
+      shell: bash
+      run: |
+        mkdir -p "$HOME/bin"
+        wget -nv -O $HOME/bin/cbdinocluster https://github.com/couchbaselabs/cbdinocluster/releases/download/v0.0.41/cbdinocluster-linux-amd64
+        chmod +x $HOME/bin/cbdinocluster
+        echo "$HOME/bin" >> $GITHUB_PATH
+    - name: Initialize cbdinocluster
+      shell: bash
+      run: |
+        cbdinocluster -v init --auto
+    - name: Start Couchbase cluster
+      id: start-cluster
+      shell: bash
+      env:
+        CLUSTER_CONFIG: |
+          nodes:
+            - count: 1
+              version: ${{ inputs.version }}
+              services: [kv, n1ql, index]
+            - count: 1
+              version: ${{ inputs.version }}
+              services: [kv, fts]
+            - count: 1
+              version: ${{ inputs.version }}
+              services: [kv, cbas, eventing]
+          docker:
+            kv-memory: 512
+            fts-memory: 4096
+      run: |
+        CBDC_ID=$(cbdinocluster -v alloc --def="${CLUSTER_CONFIG}")
+        CBDC_CONNSTR=$(cbdinocluster -v connstr --no-tls $CBDC_ID)
+        CBDC_TLS_CONNSTR=$(cbdinocluster -v connstr --tls $CBDC_ID)
+        CBDC_IP=$(cbdinocluster -v ip $CBDC_ID)
+        echo "ip=$CBDC_IP" >> "$GITHUB_OUTPUT"
+        echo "connstr=$CBDC_CONNSTR" >> "$GITHUB_OUTPUT"
+        echo "tls-connstr=$CBDC_TLS_CONNSTR" >> "$GITHUB_OUTPUT"
