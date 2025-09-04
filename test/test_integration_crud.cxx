@@ -263,9 +263,6 @@ TEST_CASE("integration: pessimistic locking", "[integration]")
   {
     couchbase::core::operations::get_and_lock_request req{ id };
     req.lock_time = lock_time;
-    if (integration.ctx.use_wan_development_profile) {
-      req.timeout = std::chrono::seconds{ 2 };
-    }
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE(resp.ctx.ec() == couchbase::errc::common::ambiguous_timeout);
     REQUIRE(resp.ctx.retried_because_of(couchbase::retry_reason::key_value_locked));
@@ -873,10 +870,7 @@ TEST_CASE("integration: extract core from public API cluster", "[integration]")
 {
   test::utils::integration_test_guard integration;
 
-  auto test_ctx = integration.ctx;
-  auto [e, public_api_cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(e.ec());
+  auto public_api_cluster = integration.public_cluster();
 
   auto id = test::utils::uniq_id("counter");
 
@@ -903,14 +897,9 @@ TEST_CASE("integration: pessimistic locking with public API", "[integration]")
 {
   test::utils::integration_test_guard integration;
 
-  auto test_ctx = integration.ctx;
-  auto [e, cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(e.ec());
+  auto cluster = integration.public_cluster();
 
-  auto collection = cluster.bucket(integration.ctx.bucket)
-                      .scope(couchbase::scope::default_name)
-                      .collection(couchbase::collection::default_name);
+  auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
 
   auto id = test::utils::uniq_id("counter");
   std::chrono::seconds lock_time{ 10 };
@@ -944,9 +933,6 @@ TEST_CASE("integration: pessimistic locking with public API", "[integration]")
   // it is not allowed to lock the same key twice
   {
     couchbase::get_and_lock_options options{};
-    if (integration.ctx.use_wan_development_profile) {
-      options.timeout(std::chrono::seconds{ 2 });
-    }
     auto [err, resp] = collection.get_and_lock(id, lock_time, options).get();
     REQUIRE(err.ec() == couchbase::errc::common::ambiguous_timeout);
     auto retry_reasons = err.ctx().impl()->as<tao::json::value>().at("retry_reasons").get_array();
@@ -1003,14 +989,8 @@ TEST_CASE("integration: exists with public API", "[integration]")
 {
   test::utils::integration_test_guard integration;
 
-  auto test_ctx = integration.ctx;
-  auto [e, cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(e.ec());
-
-  auto collection = cluster.bucket(integration.ctx.bucket)
-                      .scope(couchbase::scope::default_name)
-                      .collection(couchbase::collection::default_name);
+  auto cluster = integration.public_cluster();
+  auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
 
   auto id = test::utils::uniq_id("exists");
 
@@ -1050,14 +1030,8 @@ TEST_CASE("integration: get with expiry with public API", "[integration]")
 {
   test::utils::integration_test_guard integration;
 
-  auto test_ctx = integration.ctx;
-  auto [e, cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(e.ec());
-
-  auto collection = cluster.bucket(integration.ctx.bucket)
-                      .scope(couchbase::scope::default_name)
-                      .collection(couchbase::collection::default_name);
+  auto cluster = integration.public_cluster();
+  auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
 
   auto id = test::utils::uniq_id("get_expiry");
 

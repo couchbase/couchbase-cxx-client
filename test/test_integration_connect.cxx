@@ -165,6 +165,10 @@ TEST_CASE("integration: destroy cluster without waiting for close completion", "
 
   auto origin = couchbase::core::origin(
     ctx.build_auth(), couchbase::core::utils::parse_connection_string(ctx.connection_string));
+  if (ctx.use_wan_development_profile) {
+    origin.options().apply_profile("wan_development");
+  }
+
   test::utils::open_cluster(cluster, origin);
   test::utils::open_bucket(cluster, ctx.bucket);
 
@@ -203,6 +207,10 @@ TEST_CASE("integration: connecting with a custom transactions metadata collectio
   auto ctx = test::utils::test_context::load_from_environment();
 
   auto opts = couchbase::cluster_options(ctx.username, ctx.password);
+  if (ctx.use_wan_development_profile) {
+    opts.apply_profile("wan_development");
+  }
+
   opts.transactions().metadata_collection(couchbase::transactions::transaction_keyspace{
     "nonexistent",
     "_default",

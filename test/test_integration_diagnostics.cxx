@@ -65,10 +65,7 @@ TEST_CASE("integration: fetch diagnostics after N1QL query", "[integration]")
 
   SECTION("Public API")
   {
-    auto test_ctx = integration.ctx;
-    auto [e, cluster] =
-      couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-    REQUIRE_SUCCESS(e.ec());
+    auto cluster = integration.public_cluster();
 
     {
       auto [ctx, res] = cluster.query("SELECT 'hello, couchbase' AS greetings", {}).get();
@@ -143,10 +140,7 @@ TEST_CASE("integration: ping", "[integration]")
 
   SECTION("Public API")
   {
-    auto test_ctx = integration.ctx;
-    auto [e, cluster] =
-      couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-    REQUIRE_SUCCESS(e.ec());
+    auto cluster = integration.public_cluster();
 
     auto [err, res] = cluster.ping(couchbase::ping_options().report_id("my_report_id")).get();
     REQUIRE(res.endpoints().size() > 0);
@@ -214,10 +208,7 @@ TEST_CASE("integration: ping allows to select services", "[integration]")
 
   SECTION("Public API")
   {
-    auto test_ctx = integration.ctx;
-    auto [e, cluster] =
-      couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-    REQUIRE_SUCCESS(e.ec());
+    auto cluster = integration.public_cluster();
 
     auto opts = couchbase::ping_options().service_types(
       { couchbase::service_type::key_value, couchbase::service_type::query });
@@ -260,10 +251,7 @@ TEST_CASE("integration: ping allows to select bucket and opens it automatically"
 
   SECTION("Public API")
   {
-    auto test_ctx = integration.ctx;
-    auto [e, cluster] =
-      couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-    REQUIRE_SUCCESS(e.ec());
+    auto cluster = integration.public_cluster();
 
     auto bucket = cluster.bucket(integration.ctx.bucket);
 
@@ -350,10 +338,7 @@ TEST_CASE("integration: ping allows setting timeout", "[integration]")
 
   SECTION("Public API")
   {
-    auto test_ctx = integration.ctx;
-    auto [e, cluster] =
-      couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-    REQUIRE_SUCCESS(e.ec());
+    auto cluster = integration.public_cluster();
 
     auto [err, res] =
       cluster.ping(couchbase::ping_options().timeout(std::chrono::milliseconds(0))).get();

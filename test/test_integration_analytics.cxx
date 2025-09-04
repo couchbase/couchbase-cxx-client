@@ -343,12 +343,8 @@ TEST_CASE("integration: public API analytics query", "[integration]")
     SKIP("cluster does not support analytics");
   }
 
-  auto test_ctx = integration.ctx;
-  auto [err, cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(err.ec());
-  auto bucket = cluster.bucket(integration.ctx.bucket);
-  auto collection = bucket.default_collection();
+  auto cluster = integration.public_cluster();
+  auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
 
   auto dataset_name = test::utils::uniq_id("dataset");
 
@@ -555,10 +551,7 @@ TEST_CASE("integration: public API analytics scope query", "[integration]")
     SKIP("cluster does not support collections");
   }
 
-  auto test_ctx = integration.ctx;
-  auto [err, cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(err.ec());
+  auto cluster = integration.public_cluster();
   auto bucket = cluster.bucket(integration.ctx.bucket);
 
   auto scope_name = test::utils::uniq_id("scope");

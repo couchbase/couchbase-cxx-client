@@ -48,24 +48,6 @@ with_new_guard(std::function<void(test::utils::integration_test_guard&)> fn)
     // noop
   }
 }
-void
-with_new_cluster(test::utils::integration_test_guard& integration,
-                 std::function<void(couchbase::cluster&)> fn)
-{
-  // make new virginal public cluster
-  auto test_ctx = integration.ctx;
-  auto [err, cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(err.ec());
-
-  try {
-    if (!err) {
-      fn(cluster);
-    }
-  } catch (...) {
-    // noop, just eat it.
-  }
-}
 
 void
 upsert_scope_and_collection(const couchbase::core::cluster& cluster,
