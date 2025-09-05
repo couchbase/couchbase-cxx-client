@@ -43,6 +43,9 @@ lookup_in_replica_request::encode_to(lookup_in_replica_request::encoded_request_
   encoded.partition(partition);
   encoded.body().id(id);
   encoded.body().read_replica(true);
+  if (access_deleted) {
+    encoded.body().access_deleted(true);
+  }
   encoded.body().specs(specs);
   return {};
 }

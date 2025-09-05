@@ -3533,10 +3533,20 @@ attempt_context_impl::get_doc(const core::document_id& id,
 
   try {
     if (allow_replica) {
-      core::operations::lookup_in_any_replica_request req{ id };
-      req.read_preference = couchbase::read_preference::selected_server_group_or_all_available;
-      req.specs = specs;
-      execute_lookup(this, req, cb);
+      cluster_ref().with_bucket_configuration(
+        id.bucket(),
+        [this, id, specs, cb = std::move(cb)](
+          std::error_code ec, const std::shared_ptr<topology::configuration>& config) {
+          if (ec) {
+            cb(FAIL_OTHER, std::nullopt, ec.message(), std::nullopt);
+            return;
+          }
+          core::operations::lookup_in_any_replica_request req{ id };
+          req.read_preference = couchbase::read_preference::selected_server_group_or_all_available;
+          req.specs = specs;
+          req.access_deleted = config->capabilities.supports_subdoc_access_deleted();
+          execute_lookup(this, req, cb);
+        });
     } else {
       core::operations::lookup_in_request req{ id };
       req.access_deleted = true;

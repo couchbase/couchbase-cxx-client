@@ -263,6 +263,9 @@ struct traits<couchbase::core::topology::configuration> {
         } else if (name == "subdoc.ReplicaRead") {
           result.capabilities.bucket.insert(
             couchbase::core::bucket_capability::subdoc_replica_read);
+        } else if (name == "subdoc.AccessDeleted") {
+          result.capabilities.bucket.insert(
+            couchbase::core::bucket_capability::subdoc_access_deleted);
         } else if (name == "nonDedupedHistory") {
           result.capabilities.bucket.insert(
             couchbase::core::bucket_capability::non_deduped_history);

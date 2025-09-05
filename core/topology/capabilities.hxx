@@ -45,6 +45,7 @@ enum class bucket_capability {
   query_system_collection,
   mobile_system_collection,
   subdoc_replica_read,
+  subdoc_access_deleted,
 };
 
 enum class cluster_capability {
@@ -98,6 +99,11 @@ struct configuration_capabilities {
   [[nodiscard]] auto supports_subdoc_read_replica() const -> bool
   {
     return has_bucket_capability(bucket_capability::subdoc_replica_read);
+  }
+
+  [[nodiscard]] auto supports_subdoc_access_deleted() const -> bool
+  {
+    return has_bucket_capability(bucket_capability::subdoc_access_deleted);
   }
 
   [[nodiscard]] auto supports_non_deduped_history() const -> bool
