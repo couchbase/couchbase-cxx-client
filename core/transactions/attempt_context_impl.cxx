@@ -3538,7 +3538,7 @@ attempt_context_impl::get_doc(const core::document_id& id,
         [this, id, specs, cb = std::move(cb)](
           std::error_code ec, const std::shared_ptr<topology::configuration>& config) {
           if (ec) {
-            cb(FAIL_OTHER, std::nullopt, ec.message(), std::nullopt);
+            cb(FAIL_OTHER, std::nullopt, "failed to check whether access_deleted is supported: " + ec.message(), std::nullopt);
             return;
           }
           core::operations::lookup_in_any_replica_request req{ id };
