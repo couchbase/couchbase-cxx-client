@@ -406,13 +406,14 @@ attempt_context_impl::get_replica_from_preferred_server_group(
   const core::document_id& id,
   std::function<void(std::exception_ptr, std::optional<transaction_get_result>)>&& cb)
 {
-  if (op_list_.get_mode().is_query()) {
-    return cb(
-      std::make_exception_ptr(transaction_operation_failed(
-        FAIL_OTHER, FEATURE_NOT_AVAILABLE_EXCEPTION, "Get Replica is not supported in Query Mode")),
-      {});
-  }
   cache_error_async(cb, [self = shared_from_this(), id, cb]() mutable {
+    if (self->op_list_.get_mode().is_query()) {
+      return self->op_completed_with_error(
+        std::move(cb),
+        transaction_operation_failed(FAIL_OTHER,
+                                     FEATURE_NOT_AVAILABLE_EXCEPTION,
+                                     "Get Replica is not supported in Query Mode"));
+    }
     self->check_if_done(cb);
     self->do_get(
       id,
