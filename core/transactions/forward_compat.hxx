@@ -81,6 +81,7 @@ struct forward_compat_supported {
     "TS",     // ExtThreadSafety
     "UA",     // ExtUnknownATRStates
     "GM",     // ExtGetMulti
+    "RPP1",   // ExtReplicaFromPreferredGroupPatch1
   };
 };
 

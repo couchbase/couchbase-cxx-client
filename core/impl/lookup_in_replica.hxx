@@ -62,9 +62,10 @@ struct lookup_in_replica_request {
   std::uint16_t partition{};
   std::uint32_t opaque{};
   io::retry_context<false> retries{};
+  bool access_deleted{ false };
 
-  [[nodiscard]] auto encode_to(encoded_request_type& encoded,
-                               mcbp_context&& context) -> std::error_code;
+  [[nodiscard]] auto encode_to(encoded_request_type& encoded, mcbp_context&& context)
+    -> std::error_code;
 
   [[nodiscard]] auto make_response(key_value_error_context&& ctx,
                                    const encoded_response_type& encoded) const
