@@ -27,6 +27,12 @@ namespace couchbase
 class retry_request
 {
 public:
+  retry_request() = default;
+  retry_request(const retry_request&) = default;
+  retry_request(retry_request&&) = default;
+  auto operator=(const retry_request&) -> retry_request& = default;
+  auto operator=(retry_request&&) -> retry_request& = default;
+
   [[nodiscard]] virtual auto retry_attempts() const -> std::size_t = 0;
   [[nodiscard]] virtual auto identifier() const -> std::string = 0;
   [[nodiscard]] virtual auto idempotent() const -> bool = 0;

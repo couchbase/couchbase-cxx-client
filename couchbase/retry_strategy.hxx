@@ -21,13 +21,17 @@
 #include <couchbase/retry_reason.hxx>
 #include <couchbase/retry_request.hxx>
 
-#include <cstddef>
-
 namespace couchbase
 {
 class retry_strategy
 {
 public:
+  retry_strategy() = default;
+  retry_strategy(const retry_strategy&) = default;
+  retry_strategy(retry_strategy&&) = default;
+  auto operator=(const retry_strategy&) -> retry_strategy& = default;
+  auto operator=(retry_strategy&&) -> retry_strategy& = default;
+
   virtual ~retry_strategy() = default;
   virtual auto retry_after(const retry_request& request, retry_reason reason) -> retry_action = 0;
   [[nodiscard]] virtual auto to_string() const -> std::string = 0;

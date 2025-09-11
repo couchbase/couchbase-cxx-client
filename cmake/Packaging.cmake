@@ -127,6 +127,8 @@ add_custom_command(
     ${CMAKE_COMMAND} -E rename
     "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/filtered_cache/${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/cache"
     "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/third_party_cache"
+  COMMAND ${SED} -i "s/VERSION 3.25.0/VERSION 3.22.0/g"
+          "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/third_party_cache/llhttp/*/llhttp/CMakeLists.txt"
   COMMAND ${SED} -i "s/Git REQUIRED/Git/g\;s/NOT GIT/NOT CHECK_DIRTY OR NOT GIT/g"
           "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/third_party_cache/cpm/CPM_*.cmake"
   COMMAND ${CMAKE_COMMAND} -E rm -rf "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp"
@@ -280,6 +282,7 @@ if(COUCHBASE_CXX_CLIENT_RPM_TARGETS)
     APPEND
     COUCHBASE_CXX_CLIENT_SUPPORTED_ROOTS
     "opensuse-leap-15.6-${CMAKE_SYSTEM_PROCESSOR}"
+    "rocky-10-${CMAKE_SYSTEM_PROCESSOR}"
     "rocky-9-${CMAKE_SYSTEM_PROCESSOR}"
     "rocky-8-${CMAKE_SYSTEM_PROCESSOR}"
     "amazonlinux-2023-${CMAKE_SYSTEM_PROCESSOR}"
