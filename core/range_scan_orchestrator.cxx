@@ -305,11 +305,11 @@ private:
 
   [[nodiscard]] auto uuid() const -> std::vector<std::byte>
   {
-    try {
-      return std::get<running>(state_).uuid;
-    } catch (std::bad_variant_access&) {
+    if (!is_running()) {
       return {};
     }
+    auto uuid = std::get<running>(state_).uuid;
+    return uuid;
   }
 
   [[nodiscard]] auto error() const -> std::error_code
