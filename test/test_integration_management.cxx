@@ -140,7 +140,13 @@ TEST_CASE("integration: bucket management", "[integration]")
         REQUIRE(bucket_settings.max_expiry == resp.bucket.max_expiry);
         REQUIRE(bucket_settings.eviction_policy == resp.bucket.eviction_policy);
         REQUIRE(bucket_settings.compression_mode == resp.bucket.compression_mode);
-        REQUIRE(bucket_settings.replica_indexes == resp.bucket.replica_indexes);
+        if (resp.bucket.storage_backend ==
+            couchbase::core::management::cluster::bucket_storage_backend::magma) {
+          // Magma buckets don't support views – replica_indexes is a views-related setting
+          REQUIRE(std::nullopt == resp.bucket.replica_indexes);
+        } else {
+          REQUIRE(bucket_settings.replica_indexes == resp.bucket.replica_indexes);
+        }
       }
 
       {
@@ -171,7 +177,13 @@ TEST_CASE("integration: bucket management", "[integration]")
           REQUIRE(bucket_settings.max_expiry == bucket.max_expiry);
           REQUIRE(bucket_settings.eviction_policy == bucket.eviction_policy);
           REQUIRE(bucket_settings.compression_mode == bucket.compression_mode);
-          REQUIRE(bucket_settings.replica_indexes == bucket.replica_indexes);
+          if (bucket.storage_backend ==
+              couchbase::core::management::cluster::bucket_storage_backend::magma) {
+            // Magma buckets don't support views – replica_indexes is a views-related setting
+            REQUIRE(std::nullopt == bucket.replica_indexes);
+          } else {
+            REQUIRE(bucket_settings.replica_indexes == bucket.replica_indexes);
+          }
           break;
         }
         REQUIRE(found);
@@ -256,7 +268,13 @@ TEST_CASE("integration: bucket management", "[integration]")
         REQUIRE(bucket_settings.max_expiry == bucket.max_expiry);
         REQUIRE(bucket_settings.eviction_policy == bucket.eviction_policy);
         REQUIRE(bucket_settings.compression_mode == bucket.compression_mode);
-        REQUIRE(bucket_settings.replica_indexes == bucket.replica_indexes);
+        if (bucket.storage_backend ==
+            couchbase::management::cluster::bucket_storage_backend::magma) {
+          // Magma buckets don't support views – replica_indexes is a views-related setting
+          REQUIRE(std::nullopt == bucket.replica_indexes);
+        } else {
+          REQUIRE(bucket_settings.replica_indexes == bucket.replica_indexes);
+        }
       }
       std::uint64_t old_quota_mb{ 0 };
       {
@@ -277,7 +295,13 @@ TEST_CASE("integration: bucket management", "[integration]")
           REQUIRE(bucket_settings.max_expiry == bucket.max_expiry);
           REQUIRE(bucket_settings.eviction_policy == bucket.eviction_policy);
           REQUIRE(bucket_settings.compression_mode == bucket.compression_mode);
-          REQUIRE(bucket_settings.replica_indexes == bucket.replica_indexes);
+          if (bucket.storage_backend ==
+              couchbase::management::cluster::bucket_storage_backend::magma) {
+            // Magma buckets don't support views – replica_indexes is a views-related setting
+            REQUIRE(std::nullopt == bucket.replica_indexes);
+          } else {
+            REQUIRE(bucket_settings.replica_indexes == bucket.replica_indexes);
+          }
           break;
         }
         REQUIRE(found);

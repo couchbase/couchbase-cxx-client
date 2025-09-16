@@ -309,6 +309,21 @@ struct server_version {
   {
     return (major == 7 && minor == 1) || (major == 7 && minor > 1) || major > 7;
   }
+
+  [[nodiscard]] auto has_eventing_mb_68567_bug() const -> bool
+  {
+    // handler_headers eventing function setting is ignored, see MB-68567.
+    // TODO(DC): Remove if this is fixed before 8.0.0 release.
+    return major == 8 && minor == 0 && micro == 0;
+  }
+
+  [[nodiscard]] auto supports_eventing_mb_67773_errors() const -> bool
+  {
+    // See MB-67773. A few errors have changed in eventing, most notably, many specific errors were
+    // replaced with ERR_INVALID_REQUEST. Some operations now also result in success instead of an
+    // error. e.g. when an already undeployed function is undeployed.
+    return major >= 8;
+  }
 };
 
 } // namespace test::utils
