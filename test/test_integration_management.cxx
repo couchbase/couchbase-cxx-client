@@ -725,8 +725,16 @@ TEST_CASE("integration: bucket management", "[integration]")
           auto resp = test::utils::execute(integration.cluster, req);
           REQUIRE(resp.bucket.bucket_type ==
                   couchbase::core::management::cluster::bucket_type::couchbase);
-          REQUIRE(resp.bucket.eviction_policy ==
-                  couchbase::core::management::cluster::bucket_eviction_policy::value_only);
+
+          // MB-68456: The default eviction policy is "full" when the default storage backend is
+          // Magma
+          auto expected_eviction_policy =
+            (resp.bucket.storage_backend ==
+             couchbase::core::management::cluster::bucket_storage_backend::magma)
+              ? couchbase::core::management::cluster::bucket_eviction_policy::full
+              : couchbase::core::management::cluster::bucket_eviction_policy::value_only;
+
+          REQUIRE(expected_eviction_policy == resp.bucket.eviction_policy);
         }
       }
 
@@ -818,9 +826,17 @@ TEST_CASE("integration: bucket management", "[integration]")
           REQUIRE(wait_for_bucket_created(integration, bucket_name));
           auto [error, bucket] = c.buckets().get_bucket(bucket_name, {}).get();
           REQUIRE_SUCCESS(error.ec());
+
+          // MB-68456: The default eviction policy is "full" when the default storage backend is
+          // Magma
+          auto expected_eviction_policy =
+            (bucket.storage_backend ==
+             couchbase::management::cluster::bucket_storage_backend::magma)
+              ? couchbase::management::cluster::bucket_eviction_policy::full
+              : couchbase::management::cluster::bucket_eviction_policy::value_only;
+
           REQUIRE(bucket.bucket_type == couchbase::management::cluster::bucket_type::couchbase);
-          REQUIRE(bucket.eviction_policy ==
-                  couchbase::management::cluster::bucket_eviction_policy::value_only);
+          REQUIRE(bucket.eviction_policy == expected_eviction_policy);
         }
       }
 
