@@ -83,14 +83,8 @@ TEST_CASE("integration: increment with public API", "[integration]")
 {
   test::utils::integration_test_guard integration;
 
-  auto test_ctx = integration.ctx;
-  auto [e, cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(e.ec());
-
-  auto collection = cluster.bucket(integration.ctx.bucket)
-                      .scope(couchbase::scope::default_name)
-                      .collection(couchbase::collection::default_name);
+  auto cluster = integration.public_cluster();
+  auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
 
   auto id = test::utils::uniq_id("counter");
 
@@ -188,14 +182,8 @@ TEST_CASE("integration: decrement with public API", "[integration]")
 {
   test::utils::integration_test_guard integration;
 
-  auto test_ctx = integration.ctx;
-  auto [e, cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(e.ec());
-
-  auto collection = cluster.bucket(integration.ctx.bucket)
-                      .scope(couchbase::scope::default_name)
-                      .collection(couchbase::collection::default_name);
+  auto cluster = integration.public_cluster();
+  auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
 
   auto id = test::utils::uniq_id("counter");
 

@@ -316,10 +316,7 @@ TEST_CASE("integration: search index management public API", "[integration]")
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
   }
 
-  auto test_ctx = integration.ctx;
-  auto [e, c] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(e.ec());
+  auto c = integration.public_cluster();
 
   auto index_name = test::utils::uniq_id("index");
 
@@ -487,10 +484,7 @@ TEST_CASE("integration: search index management analyze document public API", "[
   auto index_name = test::utils::uniq_id("index");
 
   {
-    auto test_ctx = integration.ctx;
-    auto [e, c] =
-      couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-    REQUIRE_SUCCESS(e.ec());
+    auto c = integration.public_cluster();
 
     {
       couchbase::management::search::index index;
@@ -533,10 +527,7 @@ TEST_CASE("integration: scope search index management public API", "[integration
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
   }
 
-  auto test_ctx = integration.ctx;
-  auto [e, c] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(e.ec());
+  auto c = integration.public_cluster();
 
   auto manager = c.bucket(integration.ctx.bucket).scope("_default").search_indexes();
   auto index_name = test::utils::uniq_id("index");
@@ -637,10 +628,7 @@ TEST_CASE("integration: scope search index management analyze document public AP
     SKIP("Wait for search pindexes ready is used in this test, which doesn't work against Capella");
   }
 
-  auto test_ctx = integration.ctx;
-  auto [e, c] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(e.ec());
+  auto c = integration.public_cluster();
 
   auto manager = c.bucket(integration.ctx.bucket).scope("_default").search_indexes();
   auto index_name = test::utils::uniq_id("index");
@@ -682,10 +670,7 @@ TEST_CASE("integration: scope search returns feature not available", "[integrati
   if (integration.cluster_version().supports_scope_search()) {
     SKIP("cluster supports scope search");
   }
-  auto test_ctx = integration.ctx;
-  auto [e, c] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(e.ec());
+  auto c = integration.public_cluster();
 
   auto manager = c.bucket(integration.ctx.bucket).scope("_default").search_indexes();
   auto index_name = test::utils::uniq_id("index");
@@ -706,10 +691,7 @@ TEST_CASE("integration: upsert vector index feature not available", "[integratio
     SKIP("cluster supports vector search");
   }
 
-  auto test_ctx = integration.ctx;
-  auto [e, c] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(e.ec());
+  auto c = integration.public_cluster();
 
   auto manager = c.search_indexes();
   {

@@ -1478,10 +1478,7 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
 
   SECTION("public API")
   {
-    auto test_ctx = integration.ctx;
-    auto [e, cluster] =
-      couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-    REQUIRE_SUCCESS(e.ec());
+    auto cluster = integration.public_cluster();
 
     auto collection =
       cluster.bucket(integration.ctx.bucket).scope("_default").collection("_default");
@@ -1761,10 +1758,7 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
 
   SECTION("public API")
   {
-    auto test_ctx = integration.ctx;
-    auto [e, cluster] =
-      couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-    REQUIRE_SUCCESS(e.ec());
+    auto cluster = integration.public_cluster();
 
     auto collection =
       cluster.bucket(integration.ctx.bucket).scope("_default").collection("_default");
@@ -1851,12 +1845,9 @@ TEST_CASE("integration: subdoc invalid_argument if empty specs", "[integration]"
 
   SECTION("public API")
   {
-    auto test_ctx = integration.ctx;
-    auto [e, cluster] =
-      couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-    REQUIRE_SUCCESS(e.ec());
+    auto cluster = integration.public_cluster();
 
-    auto collection = cluster.bucket(test_ctx.bucket).scope("_default").collection("_default");
+    auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
 
     auto key = test::utils::uniq_id("empty_specs");
     auto [lookupin_err, lookupin_resp] = collection.lookup_in(key, {}).get();
@@ -1882,10 +1873,7 @@ TEST_CASE("integration: public API lookup in per-spec errors", "[integration]")
 {
   test::utils::integration_test_guard integration;
 
-  auto test_ctx = integration.ctx;
-  auto [e, cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(e.ec());
+  auto cluster = integration.public_cluster();
 
   auto collection = cluster.bucket(integration.ctx.bucket).scope("_default").collection("_default");
 

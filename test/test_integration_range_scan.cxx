@@ -157,10 +157,7 @@ TEST_CASE("integration: range scan large values", "[integration]")
     SKIP("cluster does not support range_scan");
   }
 
-  auto test_ctx = integration.ctx;
-  auto [err, cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(err.ec());
+  auto cluster = integration.public_cluster();
 
   auto collection = cluster.bucket(integration.ctx.bucket)
                       .scope(couchbase::scope::default_name)
@@ -219,10 +216,7 @@ TEST_CASE("integration: range scan small values", "[integration]")
     SKIP("cluster does not support range_scan");
   }
 
-  auto test_ctx = integration.ctx;
-  auto [err, cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(err.ec());
+  auto cluster = integration.public_cluster();
 
   auto collection = cluster.bucket(integration.ctx.bucket)
                       .scope(couchbase::scope::default_name)
@@ -288,10 +282,7 @@ TEST_CASE("integration: range scan collection retry", "[integration]")
 
   const test::utils::collection_guard new_collection(integration);
 
-  auto test_ctx = integration.ctx;
-  auto [err, cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(err.ec());
+  auto cluster = integration.public_cluster();
 
   auto collection = cluster.bucket(integration.ctx.bucket)
                       .scope(couchbase::scope::default_name)
@@ -359,10 +350,7 @@ TEST_CASE("integration: range scan only keys", "[integration]")
     SKIP("cluster does not support range_scan");
   }
 
-  auto test_ctx = integration.ctx;
-  auto [err, cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(err.ec());
+  auto cluster = integration.public_cluster();
 
   auto collection = cluster.bucket(integration.ctx.bucket)
                       .scope(couchbase::scope::default_name)
@@ -424,10 +412,7 @@ TEST_CASE("integration: range scan cancellation before continue", "[integration]
     SKIP("cluster does not support range_scan");
   }
 
-  auto test_ctx = integration.ctx;
-  auto [err, cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(err.ec());
+  auto cluster = integration.public_cluster();
 
   auto collection = cluster.bucket(integration.ctx.bucket)
                       .scope(couchbase::scope::default_name)
@@ -539,10 +524,7 @@ TEST_CASE("integration: range scan cancel during streaming using protocol cancel
     SKIP("cluster does not support range_scan");
   }
 
-  auto test_ctx = integration.ctx;
-  auto [err, cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(err.ec());
+  auto cluster = integration.public_cluster();
 
   auto collection = cluster.bucket(integration.ctx.bucket)
                       .scope(couchbase::scope::default_name)
@@ -662,10 +644,7 @@ TEST_CASE("integration: range scan cancel during streaming using pending_operati
     SKIP("cluster does not support range_scan");
   }
 
-  auto test_ctx = integration.ctx;
-  auto [err, cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(err.ec());
+  auto cluster = integration.public_cluster();
 
   auto collection = cluster.bucket(integration.ctx.bucket)
                       .scope(couchbase::scope::default_name)
@@ -779,10 +758,7 @@ TEST_CASE("integration: sampling scan keys only", "[integration]")
     SKIP("cluster does not support range_scan");
   }
 
-  auto test_ctx = integration.ctx;
-  auto [err, cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(err.ec());
+  auto cluster = integration.public_cluster();
 
   auto collection = cluster.bucket(integration.ctx.bucket)
                       .scope(couchbase::scope::default_name)
@@ -856,10 +832,7 @@ TEST_CASE("integration: orchestrator scan range without content", "[integration]
     SKIP("cluster does not support range_scan");
   }
 
-  auto test_ctx = integration.ctx;
-  auto [err, cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(err.ec());
+  auto cluster = integration.public_cluster();
 
   auto collection = cluster.bucket(integration.ctx.bucket)
                       .scope(couchbase::scope::default_name)
@@ -923,10 +896,7 @@ TEST_CASE("integration: orchestrator scan range with content", "[integration]")
     SKIP("cluster does not support range_scan");
   }
 
-  auto test_ctx = integration.ctx;
-  auto [err, cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(err.ec());
+  auto cluster = integration.public_cluster();
 
   auto collection = cluster.bucket(integration.ctx.bucket)
                       .scope(couchbase::scope::default_name)
@@ -992,10 +962,7 @@ TEST_CASE("integration: orchestrator sampling scan with custom collection", "[in
 
   const test::utils::collection_guard new_collection(integration);
 
-  auto test_ctx = integration.ctx;
-  auto [err, cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(err.ec());
+  auto cluster = integration.public_cluster();
 
   auto collection = cluster.bucket(integration.ctx.bucket)
                       .scope(couchbase::scope::default_name)
@@ -1062,10 +1029,7 @@ TEST_CASE("integration: orchestrator sampling scan with seed & custom collection
 
   const test::utils::collection_guard new_collection(integration);
 
-  auto test_ctx = integration.ctx;
-  auto [err, cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(err.ec());
+  auto cluster = integration.public_cluster();
 
   auto collection = cluster.bucket(integration.ctx.bucket)
                       .scope(couchbase::scope::default_name)
@@ -1157,10 +1121,7 @@ TEST_CASE("integration: orchestrator prefix scan without content", "[integration
     SKIP("cluster does not support range_scan");
   }
 
-  auto test_ctx = integration.ctx;
-  auto [err, cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(err.ec());
+  auto cluster = integration.public_cluster();
 
   auto collection = cluster.bucket(integration.ctx.bucket)
                       .scope(couchbase::scope::default_name)
@@ -1225,10 +1186,7 @@ TEST_CASE(
 
   const test::utils::collection_guard new_collection(integration);
 
-  auto test_ctx = integration.ctx;
-  auto [err, cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(err.ec());
+  auto cluster = integration.public_cluster();
 
   auto collection = cluster.bucket(integration.ctx.bucket)
                       .scope(couchbase::scope::default_name)
@@ -1299,10 +1257,7 @@ TEST_CASE("integration: orchestrator sampling scan with custom collection and up
 
   const test::utils::collection_guard new_collection(integration);
 
-  auto test_ctx = integration.ctx;
-  auto [err, cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(err.ec());
+  auto cluster = integration.public_cluster();
 
   auto collection = cluster.bucket(integration.ctx.bucket)
                       .scope(couchbase::scope::default_name)
@@ -1370,10 +1325,7 @@ TEST_CASE("integration: orchestrator prefix scan without content and up to 5 con
     SKIP("cluster does not support range_scan");
   }
 
-  auto test_ctx = integration.ctx;
-  auto [err, cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(err.ec());
+  auto cluster = integration.public_cluster();
 
   auto collection = cluster.bucket(integration.ctx.bucket)
                       .scope(couchbase::scope::default_name)
@@ -1435,10 +1387,7 @@ TEST_CASE("integration: orchestrator prefix scan, get 10 items and cancel", "[in
     SKIP("cluster does not support range_scan");
   }
 
-  auto test_ctx = integration.ctx;
-  auto [err, cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(err.ec());
+  auto cluster = integration.public_cluster();
 
   auto collection = cluster.bucket(integration.ctx.bucket)
                       .scope(couchbase::scope::default_name)
@@ -1508,10 +1457,7 @@ TEST_CASE("integration: orchestrator prefix scan with concurrency 0 (invalid arg
     SKIP("cluster does not support range_scan");
   }
 
-  auto test_ctx = integration.ctx;
-  auto [err, cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(err.ec());
+  auto cluster = integration.public_cluster();
 
   auto collection = cluster.bucket(integration.ctx.bucket)
                       .scope(couchbase::scope::default_name)
@@ -1556,10 +1502,7 @@ TEST_CASE("integration: range scan public API feature not available", "[integrat
     SKIP("cluster supports range scan");
   }
 
-  auto test_ctx = integration.ctx;
-  auto [e, cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(e.ec());
+  auto cluster = integration.public_cluster();
 
   auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
 
@@ -1637,10 +1580,7 @@ TEST_CASE("integration: range scan public API", "[integration]")
     SKIP("cluster does not support range scan");
   }
 
-  auto test_ctx = integration.ctx;
-  auto [e, cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(e.ec());
+  auto cluster = integration.public_cluster();
 
   auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
 

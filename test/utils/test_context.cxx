@@ -146,7 +146,7 @@ test_context::build_options() const -> couchbase::cluster_options
     };
   }() };
 
-  if (deployment == deployment_type::capella || deployment == deployment_type::elixir) {
+  if (use_wan_development_profile) {
     options.apply_profile("wan_development");
   }
   options.dns().nameserver(

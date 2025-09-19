@@ -21,8 +21,8 @@ jobs:
       fail-fast: false
       matrix:
         server:
-          - 7.6.5
-          - 7.2.7
+          - 7.6.7
+          - 7.2.8
           - 7.1.6
           - 7.0.5
         suite:
@@ -33,14 +33,6 @@ jobs:
             suite: unit
 
     runs-on: ubuntu-24.04
-    services:
-      couchbase:
-        image: couchbase:enterprise-${{ matrix.server }}
-        ports:
-          - 8091-8096:8091-8096
-          - 11210:11210
-          - 18091-18096:18091-18096
-          - 11207:11207
     steps:
       - name: Install build environment
         run: |
@@ -51,16 +43,12 @@ jobs:
           submodules: recursive
       - name: Validate test labels
         run: ./bin/validate-test-labels
-      - name: Initialize couchbase for transactions testing
-        if: ${{ matrix.suite  == 'transaction' }}
-        env:
-          CB_SEC_BUCKET: 'secBucket'
-        run: ./bin/init-cluster
-      - name: Initialize couchbase for non-transactions testing
-        if: ${{ matrix.suite != 'transaction' }}
-        env:
-          CB_TRAVEL_SAMPLE: yes
-        run: ./bin/init-cluster
+      - name: Create Couchbase cluster with cbdinocluster
+        id: cbdino
+        uses: ./.github/actions/create-cluster
+        with:
+          version: ${{ matrix.server }}
+          suite: ${{ matrix.suite }}
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
@@ -71,11 +59,17 @@ jobs:
           CB_TEST_SUITE: ${{ matrix.suite }}
         run: ./bin/build-tests
       - name: Check couchbase
+        env:
+          HOST: ${{ steps.cbdino.outputs.ip }}
         run: ./bin/check-cluster
       - name: Run tests
         timeout-minutes: 40
         env:
           TEST_SERVER_VERSION: ${{ matrix.server }}
-          TEST_CONNECTION_STRING: couchbase://127.0.0.1
+          TEST_CONNECTION_STRING: ${{ steps.cbdino.outputs.connstr }}
           TEST_LOG_LEVEL: trace
         run: ./bin/run-${{ matrix.suite }}-tests
+      - name: Remove Couchbase cluster
+        uses: ./.github/actions/remove-cluster
+        with:
+          id: ${{ steps.cbdino.outputs.id }}
