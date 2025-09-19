@@ -866,6 +866,13 @@ public:
     }
     if (options.timeout.has_value()) {
       orchestrator_opts.timeout = options.timeout.value();
+    } else {
+      auto [ec, origin] = core_.origin();
+      if (ec) {
+        handler({ ec }, {});
+        return;
+      }
+      orchestrator_opts.timeout = origin.options().key_value_scan_timeout;
     }
 
     std::variant<std::monostate, core::range_scan, core::prefix_scan, core::sampling_scan>

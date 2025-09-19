@@ -99,6 +99,7 @@ options_to_origin(const std::string& connection_string, cluster_options::built o
   user_options.connect_timeout = opts.timeouts.connect_timeout;
   user_options.key_value_timeout = opts.timeouts.key_value_timeout;
   user_options.key_value_durable_timeout = opts.timeouts.key_value_durable_timeout;
+  user_options.key_value_scan_timeout = opts.timeouts.key_value_scan_timeout;
   user_options.view_timeout = opts.timeouts.view_timeout;
   user_options.query_timeout = opts.timeouts.query_timeout;
   user_options.analytics_timeout = opts.timeouts.analytics_timeout;
