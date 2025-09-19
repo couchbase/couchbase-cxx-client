@@ -578,18 +578,15 @@ public:
         auto now = std::chrono::steady_clock::now();
         if (session->is_stopped()) {
           // Session was forced to stop (e.g. due to cluster being closed or cancellation)
-          cb(errc::common::request_canceled, {});
           return;
         }
         if (dispatch_deadline < now || deadline < now) {
           session->stop();
-          cb(errc::common::unambiguous_timeout, {});
           return;
         }
 #else
         if (deadline < std::chrono::steady_clock::now()) {
           session->stop();
-          return cb(errc::common::unambiguous_timeout, {});
           return;
         }
 #endif
@@ -618,9 +615,9 @@ public:
             self->pending_sessions_[new_session->type()].push_back(new_session);
           }
           self->connect_then_send_pending_op(
-            new_session, preferred_node, dispatch_deadline, deadline, cb);
+            new_session, preferred_node, dispatch_deadline, deadline, std::move(cb));
 #else
-          self->connect_then_send_pending_op(new_session, preferred_node, deadline, cb);
+          self->connect_then_send_pending_op(new_session, preferred_node, deadline, std::move(cb));
 #endif
         }
       } else {
@@ -628,13 +625,11 @@ public:
         auto now = std::chrono::steady_clock::now();
         if (dispatch_deadline < now || deadline < now) {
           session->stop();
-          cb(errc::common::unambiguous_timeout, {});
           return;
         }
 #else
         if (deadline < std::chrono::steady_clock::now()) {
           session->stop();
-          cb(errc::common::unambiguous_timeout, {});
           return;
         }
 #endif
