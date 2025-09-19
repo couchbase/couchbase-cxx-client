@@ -33,6 +33,8 @@ public:
     std::chrono::seconds{ 10 }
   };
   static constexpr std::chrono::milliseconds default_key_value_timeout{ 2'500 };
+  static constexpr std::chrono::milliseconds default_key_value_scan_timeout{ std::chrono::seconds{
+    75 } };
   static constexpr std::chrono::milliseconds default_management_timeout{ std::chrono::seconds{
     75 } };
   static constexpr std::chrono::milliseconds default_query_timeout{ std::chrono::seconds{ 75 } };
@@ -69,6 +71,12 @@ public:
   auto key_value_timeout(std::chrono::milliseconds timeout) -> timeout_options&
   {
     key_value_timeout_ = timeout;
+    return *this;
+  }
+
+  auto key_value_scan_timeout(std::chrono::milliseconds timeout) -> timeout_options&
+  {
+    key_value_scan_timeout_ = timeout;
     return *this;
   }
 
@@ -114,6 +122,7 @@ public:
     std::chrono::milliseconds eventing_timeout;
     std::chrono::milliseconds key_value_durable_timeout;
     std::chrono::milliseconds key_value_timeout;
+    std::chrono::milliseconds key_value_scan_timeout;
     std::chrono::milliseconds management_timeout;
     std::chrono::milliseconds query_timeout;
     std::chrono::milliseconds search_timeout;
@@ -125,9 +134,9 @@ public:
   [[nodiscard]] auto build() const -> built
   {
     return {
-      analytics_timeout_, connect_timeout_,    eventing_timeout_, key_value_durable_timeout_,
-      key_value_timeout_, management_timeout_, query_timeout_,    search_timeout_,
-      view_timeout_,      bootstrap_timeout_,  resolve_timeout_,
+      analytics_timeout_, connect_timeout_,        eventing_timeout_,   key_value_durable_timeout_,
+      key_value_timeout_, key_value_scan_timeout_, management_timeout_, query_timeout_,
+      search_timeout_,    view_timeout_,           bootstrap_timeout_,  resolve_timeout_,
     };
   }
 
@@ -137,6 +146,7 @@ private:
   std::chrono::milliseconds eventing_timeout_{ default_eventing_timeout };
   std::chrono::milliseconds key_value_durable_timeout_{ default_key_value_durable_timeout };
   std::chrono::milliseconds key_value_timeout_{ default_key_value_timeout };
+  std::chrono::milliseconds key_value_scan_timeout_{ default_key_value_scan_timeout };
   std::chrono::milliseconds management_timeout_{ default_management_timeout };
   std::chrono::milliseconds query_timeout_{ default_query_timeout };
   std::chrono::milliseconds search_timeout_{ default_search_timeout };

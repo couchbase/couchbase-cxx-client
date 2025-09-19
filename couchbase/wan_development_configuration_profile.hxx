@@ -32,6 +32,7 @@ public:
     auto& timeouts = options.timeouts();
     timeouts.key_value_timeout(std::chrono::seconds(20));
     timeouts.key_value_durable_timeout(std::chrono::seconds(20));
+    timeouts.key_value_scan_timeout(std::chrono::minutes(2));
     timeouts.connect_timeout(std::chrono::seconds(20));
     timeouts.view_timeout(std::chrono::minutes(2));
     timeouts.query_timeout(std::chrono::minutes(2));
@@ -39,7 +40,7 @@ public:
     timeouts.search_timeout(std::chrono::minutes(2));
     timeouts.management_timeout(std::chrono::minutes(2));
     timeouts.resolve_timeout(std::chrono::seconds(20));  // timeout to resolve hostnames
-    timeouts.bootstrap_timeout(std::chrono::minutes(2)); // overall timeout to bootstrab
+    timeouts.bootstrap_timeout(std::chrono::minutes(2)); // overall timeout to bootstrap
   }
 };
 } // namespace couchbase

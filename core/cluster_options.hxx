@@ -49,6 +49,7 @@ public:
   std::chrono::milliseconds connect_timeout = timeout_defaults::connect_timeout;
   std::chrono::milliseconds key_value_timeout = timeout_defaults::key_value_timeout;
   std::chrono::milliseconds key_value_durable_timeout = timeout_defaults::key_value_durable_timeout;
+  std::chrono::milliseconds key_value_scan_timeout = timeout_defaults::key_value_scan_timeout;
   std::chrono::milliseconds view_timeout = timeout_defaults::view_timeout;
   std::chrono::milliseconds query_timeout = timeout_defaults::query_timeout;
   std::chrono::milliseconds analytics_timeout = timeout_defaults::analytics_timeout;

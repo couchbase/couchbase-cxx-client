@@ -54,6 +54,7 @@ TEST_CASE("unit: can apply wan_development profile", "[unit]")
   opts.apply_profile("wan_development");
   CHECK(opts.key_value_timeout.count() == 20'000);
   CHECK(opts.key_value_durable_timeout.count() == 20'000);
+  CHECK(opts.key_value_scan_timeout.count() == 120'000);
   CHECK(opts.connect_timeout.count() == 20'000);
   CHECK(opts.view_timeout.count() == 120'000);
   CHECK(opts.query_timeout.count() == 120'000);

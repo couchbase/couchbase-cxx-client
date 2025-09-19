@@ -36,6 +36,7 @@ public:
   {
     opts.key_value_timeout = std::chrono::seconds(20);
     opts.key_value_durable_timeout = std::chrono::seconds(20);
+    opts.key_value_scan_timeout = std::chrono::minutes(2);
     opts.connect_timeout = std::chrono::seconds(20);
     opts.view_timeout = std::chrono::minutes(2);
     opts.query_timeout = std::chrono::minutes(2);
