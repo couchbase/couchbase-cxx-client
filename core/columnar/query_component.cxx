@@ -170,8 +170,9 @@ public:
       if (ec == asio::error::operation_aborted) {
         return;
       }
-      CB_LOG_DEBUG(R"(Columnar Query request timed out: retry_attempts={})",
-                   self->retry_info_.retry_attempts);
+      CB_LOG_DEBUG(R"(Columnar Query request timed out: retry_attempts={}, client_context_id={})",
+                   self->retry_info_.retry_attempts,
+                   self->client_context_id_);
       self->trigger_timeout();
     });
 
@@ -334,8 +335,8 @@ private:
     }
   }
 
-  auto parse_error(const std::uint32_t& http_status_code,
-                   const tao::json::value& metadata_header) -> error_parse_result
+  auto parse_error(const std::uint32_t& http_status_code, const tao::json::value& metadata_header)
+    -> error_parse_result
   {
     const auto* errors_json = metadata_header.find("errors");
     if (errors_json == nullptr) {
