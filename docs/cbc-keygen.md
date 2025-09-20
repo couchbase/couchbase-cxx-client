@@ -32,6 +32,7 @@ You can also set the number of vbuckets with the `--number-of-vbuckets` switch.
 <dt>`--vbucket=INTEGER ...`</dt><dd>Pin generated keys to the given vBucket.</dd>
 <dt>`--parent-key=STRING ...`</dt><dd>Pin generated keys to the same vBucket as the given key.</dd>
 <dt>`--all-vbuckets`</dt><dd>Generate key(s) for each available vBucket.</dd>
+<dt>`--vbuckets-for-nodes=STRING`</dt><dd>Generate key(s) for each available vBucket on the given type for each of the nodes (allowed values are: `active`, `replica_1`, `replica_2`, `replica_3`).[</dd>
 <dt>`--number-of-vbuckets=INTEGER`</dt><dd>Override number of vBuckets. Otherwise try to connect to cluster and infer number of vBuckets from the bucket configuration.</dd>
 <dt>`--bucket-name=BUCKET_NAME`</dt><dd>Name of the bucket (only used when `--number-of-vbuckets` switch is not specified). [default: `default`]</dd>
 <dt>`--json`</dt><dd>Output generation result as JSON.</dd>
@@ -176,6 +177,11 @@ You can also set the number of vbuckets with the `--number-of-vbuckets` switch.
 3. Generate 10 random keys so that they will be mapped to the same vBucket as key `foo`:
 
        cbc keygen --number-of-keys=10 --randomize --parent-key foo
+
+4. Generate 3 keys for each of the nodes in the cluster that map to the first
+   replica and print results as a JSON:
+
+       cbc keygen --vbuckets-for-nodes=replica_1 --json --number-of-keys=3
 
 ### SEE ALSO
 
