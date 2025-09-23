@@ -111,15 +111,9 @@ TEST_CASE("integration: legacy durability persist to active and replicate to one
                      integration.number_of_replicas()));
   }
 
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
-
   std::string key = test::utils::uniq_id("upsert_legacy");
 
-  auto test_ctx = integration.ctx;
-  auto [e, cluster] =
-    couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-  REQUIRE_SUCCESS(e.ec());
-
+  auto cluster = integration.public_cluster();
   auto collection = cluster.bucket(integration.ctx.bucket)
                       .scope(couchbase::scope::default_name)
                       .collection(couchbase::collection::default_name);

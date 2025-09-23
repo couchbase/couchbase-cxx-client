@@ -116,10 +116,7 @@ TEST_CASE("integration: get any replica", "[integration]")
   }
 
   {
-    auto test_ctx = integration.ctx;
-    auto [e, cluster] =
-      couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-    REQUIRE_SUCCESS(e.ec());
+    auto cluster = integration.public_cluster();
 
     auto collection =
       cluster.bucket(integration.ctx.bucket).scope(scope_name).collection(collection_name);
@@ -165,10 +162,7 @@ TEST_CASE("integration: get all replicas", "[integration]")
   }
 
   {
-    auto test_ctx = integration.ctx;
-    auto [e, cluster] =
-      couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-    REQUIRE_SUCCESS(e.ec());
+    auto cluster = integration.public_cluster();
 
     auto collection =
       cluster.bucket(integration.ctx.bucket).scope(scope_name).collection(collection_name);
@@ -198,10 +192,7 @@ TEST_CASE("integration: get all replicas with missing key", "[integration]")
   test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
   {
-    auto test_ctx = integration.ctx;
-    auto [e, cluster] =
-      couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-    REQUIRE_SUCCESS(e.ec());
+    auto cluster = integration.public_cluster();
 
     const std::string scope_name{ "_default" };
     const std::string collection_name{ "_default" };
@@ -232,10 +223,7 @@ TEST_CASE("integration: get any replica with missing key", "[integration]")
   std::string key = test::utils::uniq_id("get_any_replica_missing_key");
 
   {
-    auto test_ctx = integration.ctx;
-    auto [e, cluster] =
-      couchbase::cluster::connect(test_ctx.connection_string, test_ctx.build_options()).get();
-    REQUIRE_SUCCESS(e.ec());
+    auto cluster = integration.public_cluster();
 
     auto collection =
       cluster.bucket(integration.ctx.bucket).scope(scope_name).collection(collection_name);
@@ -688,6 +676,9 @@ TEST_CASE("integration: zone-aware read replicas on balanced cluster", "[integra
                            : couchbase::cluster_options(couchbase::certificate_authenticator(
                                integration.ctx.certificate_path, integration.ctx.certificate_path));
   cluster_options.network().preferred_server_group(server_groups.front());
+  if (integration.ctx.use_wan_development_profile) {
+    cluster_options.apply_profile("wan_development");
+  }
   auto [e, c] =
     couchbase::cluster::connect(integration.ctx.connection_string, cluster_options).get();
   REQUIRE_SUCCESS(e.ec());
@@ -829,6 +820,9 @@ TEST_CASE("integration: zone-aware read replicas on unbalanced cluster", "[integ
   //! [select-preferred_server_group]
   cluster_options.network().preferred_server_group(selected_server_group);
   //! [select-preferred_server_group]
+  if (integration.ctx.use_wan_development_profile) {
+    cluster_options.apply_profile("wan_development");
+  }
   auto [e, cluster] =
     couchbase::cluster::connect(integration.ctx.connection_string, cluster_options).get();
   REQUIRE_SUCCESS(e.ec());

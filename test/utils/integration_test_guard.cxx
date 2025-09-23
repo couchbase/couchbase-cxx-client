@@ -316,7 +316,7 @@ auto
 integration_test_guard::public_cluster() const -> couchbase::cluster
 {
   auto options = ctx.build_options();
-  options.transactions().timeout(std::chrono::seconds(2));
+
   auto [err, c] = couchbase::cluster::connect(ctx.connection_string, options).get();
   if (err.ec()) {
     CB_LOG_CRITICAL("unable to connect to cluster (public API): {}", err.message());
