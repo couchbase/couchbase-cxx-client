@@ -17,6 +17,9 @@
 
 #include "key_generator.hxx"
 
+#include "core/topology/configuration.hxx"
+
+#include <optional>
 #include <spdlog/fmt/bundled/core.h>
 
 #include <gsl/assert>
@@ -145,8 +148,16 @@ key_generator::next_key() -> std::string
 }
 
 auto
-key_generator::next_keys(std::size_t count) -> std::vector<std::string>
+key_generator::next_keys(std::size_t count, bool skip_duplicates) -> std::vector<std::string>
 {
+  if (skip_duplicates) {
+    std::set<std::string> result;
+    while (result.size() < count) {
+      result.insert(next_key());
+    }
+    return { result.begin(), result.end() };
+  }
+
   std::vector<std::string> result;
   result.reserve(count);
   for (std::size_t i = 0; i < count; ++i) {
@@ -166,13 +177,52 @@ key_generator::next_key_for_vbucket(std::uint16_t vbucket) -> std::string
 }
 
 auto
-key_generator::next_keys_for_vbucket(std::size_t count, std::uint16_t vbucket)
+key_generator::next_keys_for_vbucket(std::size_t count, std::uint16_t vbucket, bool skip_duplicates)
   -> std::vector<std::string>
 {
+  if (skip_duplicates) {
+    std::set<std::string> result;
+    while (result.size() < count) {
+      result.insert(next_key_for_vbucket(vbucket));
+    }
+    return { result.begin(), result.end() };
+  }
+
   std::vector<std::string> result;
   result.reserve(count);
   for (std::size_t i = 0; i < count; ++i) {
     result.push_back(next_key_for_vbucket(vbucket));
+  }
+  return result;
+}
+
+auto
+key_generator::next_key_for_vbucket_set(const std::set<std::uint16_t>& vbuckets) -> std::string
+{
+  std::string result;
+  do {
+    result = next_key();
+  } while (vbuckets.find(map_key_to_vbucket_id(result, number_of_vbuckets_)) == vbuckets.end());
+  return result;
+}
+
+auto
+key_generator::next_keys_for_vbucket_set(std::size_t count,
+                                         const std::set<std::uint16_t>& vbuckets,
+                                         bool skip_duplicates) -> std::vector<std::string>
+{
+  if (skip_duplicates) {
+    std::set<std::string> result;
+    while (result.size() < count) {
+      result.insert(next_key_for_vbucket_set(vbuckets));
+    }
+    return { result.begin(), result.end() };
+  }
+
+  std::vector<std::string> result;
+  result.reserve(count);
+  for (std::size_t i = 0; i < count; ++i) {
+    result.push_back(next_key_for_vbucket_set(vbuckets));
   }
   return result;
 }
@@ -185,11 +235,110 @@ key_generator::next_key_for_parent(const std::string& parent_key) -> std::string
 }
 
 auto
-key_generator::next_keys_for_parent(std::size_t count, const std::string& parent_key)
-  -> std::vector<std::string>
+key_generator::next_keys_for_parent(std::size_t count,
+                                    const std::string& parent_key,
+                                    bool skip_duplicates) -> std::vector<std::string>
 {
   auto parent_vbucket = map_key_to_vbucket_id(parent_key, number_of_vbuckets_);
-  return next_keys_for_vbucket(count, parent_vbucket);
+  return next_keys_for_vbucket(count, parent_vbucket, skip_duplicates);
 }
 
+auto
+key_generator::next_key_for_node(const key_value_node& node, const std::string& type) -> std::string
+{
+  return next_key_for_vbucket_set(node.vbuckets(type));
+}
+
+auto
+key_generator::next_keys_for_node(std::size_t count,
+                                  const key_value_node& node,
+                                  const std::string& type,
+                                  bool skip_duplicates) -> std::vector<std::string>
+{
+  return next_keys_for_vbucket_set(count, node.vbuckets(type), skip_duplicates);
+}
+
+namespace
+{
+auto
+extract_endpoints(const couchbase::core::topology::configuration& config)
+  -> std::vector<std::string>
+{
+  std::vector<std::string> default_plain_endpoints;
+  std::vector<std::string> default_tls_endpoints;
+  std::vector<std::string> external_plain_endpoints;
+  std::vector<std::string> external_tls_endpoints;
+
+  for (const auto& node : config.nodes) {
+    if (auto port = node.services_plain.key_value; port) {
+      default_plain_endpoints.push_back(fmt::format("{}:{}", node.hostname, *port));
+    }
+    if (auto port = node.services_tls.key_value; port) {
+      default_tls_endpoints.push_back(fmt::format("{}:{}", node.hostname, *port));
+    }
+    if (auto external = node.alt.find("external"); external != node.alt.end()) {
+      const auto& alt_node = external->second;
+      if (auto port = alt_node.services_plain.key_value; port) {
+        external_plain_endpoints.push_back(fmt::format("{}:{}", alt_node.hostname, *port));
+      }
+      if (auto port = alt_node.services_tls.key_value; port) {
+        external_tls_endpoints.push_back(fmt::format("{}:{}", alt_node.hostname, *port));
+      }
+    }
+  }
+
+  // prefer external addresses if all nodes have them
+  if (external_tls_endpoints.size() >= default_plain_endpoints.size()) {
+    return external_tls_endpoints;
+  }
+  if (external_plain_endpoints.size() >= default_plain_endpoints.size()) {
+    return external_plain_endpoints;
+  }
+  // prefer TLS addresses if all nodes have them
+  if (default_tls_endpoints.size() >= default_plain_endpoints.size()) {
+    return default_tls_endpoints;
+  }
+  return default_plain_endpoints;
+}
+} // namespace
+
+auto
+extract_vbucket_map(const couchbase::core::topology::configuration& config)
+  -> std::map<std::string, key_value_node>
+{
+
+  auto vbmap_opt = config.vbmap;
+  if (!vbmap_opt) {
+    return {};
+  }
+  const auto& vbmap = *vbmap_opt;
+
+  std::map<std::string, key_value_node> result;
+
+  auto endpoints = extract_endpoints(config);
+  for (std::size_t node_idx = 0; node_idx < endpoints.size(); ++node_idx) {
+    const auto& endpoint = endpoints[node_idx];
+    key_value_node node(node_idx, endpoint);
+
+    auto this_node_idx = static_cast<std::int16_t>(node_idx);
+    for (std::uint16_t vb = 0; vb < static_cast<std::uint16_t>(vbmap.size()); ++vb) {
+      if (vbmap[vb][0] == this_node_idx) {
+        node.add_active(vb);
+      }
+      if (vbmap[vb][1] == this_node_idx) {
+        node.add_replica_1(vb);
+      }
+      if (vbmap[vb][2] == this_node_idx) {
+        node.add_replica_2(vb);
+      }
+      if (vbmap[vb][3] == this_node_idx) {
+        node.add_replica_3(vb);
+      }
+    }
+
+    result.emplace(endpoint, node);
+  }
+
+  return result;
+}
 } // namespace cbc

@@ -60,6 +60,11 @@ public:
     add_option(
       "--parent-key", parent_keys_, "Pin generated keys to the same vBucket as the given key.");
     add_flag("--all-vbuckets", all_vbuckets_, "Generate key(s) for each available vBucket.");
+    add_flag("--vbuckets-for-nodes",
+             vbuckets_for_nodes_,
+             "Generate key(s) for vBuckets and group them by nodes of given level.")
+      ->transform(CLI::IsMember({ "active", "replica_1", "replica_2", "replica_3" }));
+
     add_option("--number-of-vbuckets",
                number_of_vbuckets_,
                "Override number of vBuckets. Otherwise try to connect to cluster and infer number "
@@ -82,7 +87,14 @@ public:
     apply_logger_options(common_options_.logger);
 
     std::uint16_t number_of_vbuckets{};
+    std::map<std::string, key_value_node> vbuckets_by_node{};
+
     if (number_of_vbuckets_) {
+      if (!vbuckets_for_nodes_.empty()) {
+        fail(
+          "--vbuckets-for-nodes requires cluster connection to fetch configuration and cannot be "
+          "used with --number-of-vbuckets.");
+      }
       number_of_vbuckets = number_of_vbuckets_.value();
     } else {
       auto cluster_options = build_cluster_options(common_options_);
@@ -120,13 +132,31 @@ public:
       if (!config.vbmap) {
         fail(fmt::format("vBucketMap for bucket {:?} is empty", bucket_name_));
       }
+
       number_of_vbuckets = static_cast<std::uint16_t>(config.vbmap->size());
+
+      if (!vbuckets_for_nodes_.empty()) {
+        vbuckets_by_node = extract_vbucket_map(config);
+
+        if (std::all_of(vbuckets_by_node.begin(),
+                        vbuckets_by_node.end(),
+                        [vbucket_type = vbuckets_for_nodes_](const auto& pair) {
+                          return pair.second.vbuckets(vbucket_type).empty();
+                        })) {
+
+          fail(fmt::format(
+            "--vbucket-for-nodes={} specified, but the none of the nodes have {} vBuckets",
+            vbuckets_for_nodes_,
+            vbuckets_for_nodes_));
+        }
+      }
     }
 
     key_generator generator(key_generator_options{
       prefix_,
       randomize_,
       number_of_vbuckets,
+      vbuckets_by_node,
       fixed_length_,
     });
 
@@ -140,26 +170,32 @@ public:
 
     tao::json::value result;
     if (!parent_keys_.empty()) {
+      // Group keys by parent.
+      // Determine vBucket of each parent key and generate group of keys that will be mapped to the
+      // same vBucket.
       result = tao::json::empty_object;
       for (const auto& parent_key : parent_keys_) {
-        result[parent_key] = generator.next_keys_for_parent(number_of_keys_, parent_key);
-        if (no_duplicates_) {
-          remove_duplicates(result[parent_key].get_array());
-        }
+        result[parent_key] =
+          generator.next_keys_for_parent(number_of_keys_, parent_key, no_duplicates_);
       }
     } else if (!vbuckets_.empty()) {
+      // Group keys by vBucket
+      // Generate keys for given vBucket directly
       result = tao::json::empty_object;
       for (const auto& vbucket : vbuckets_) {
-        result[std::to_string(vbucket)] = generator.next_keys_for_vbucket(number_of_keys_, vbucket);
-        if (no_duplicates_) {
-          remove_duplicates(result[std::to_string(vbucket)].get_array());
-        }
+        result[std::to_string(vbucket)] =
+          generator.next_keys_for_vbucket(number_of_keys_, vbucket, no_duplicates_);
+      }
+    } else if (!vbuckets_for_nodes_.empty()) {
+      // Group keys by node.
+      // Generate requested number of the keys for each node without specific vBucket selection.
+      for (const auto& [endpoint, node] : vbuckets_by_node) {
+        result[endpoint] =
+          generator.next_keys_for_node(number_of_keys_, node, vbuckets_for_nodes_, no_duplicates_);
       }
     } else {
-      result = generator.next_keys(number_of_keys_);
-      if (no_duplicates_) {
-        remove_duplicates(result.get_array());
-      }
+      // No special rule, just generate group of unique keys.
+      result = generator.next_keys(number_of_keys_, no_duplicates_);
     }
 
     if (json_) {
@@ -196,6 +232,7 @@ private:
   bool verbose_{ false };
   bool no_duplicates_{ false };
   bool all_vbuckets_{ false };
+  std::string vbuckets_for_nodes_{};
   std::size_t number_of_keys_{};
   std::size_t fixed_length_{};
   std::vector<std::string> parent_keys_{};
