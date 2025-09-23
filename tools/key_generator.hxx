@@ -64,7 +64,7 @@ public:
 
   [[nodiscard]] auto has_vbuckets(const std::string& type) const -> bool
   {
-    return vbuckets(type).empty();
+    return !vbuckets(type).empty();
   }
 
   void add_active(std::uint16_t vbucket)
