@@ -593,13 +593,18 @@ http_session::do_connect(asio::ip::tcp::resolver::results_type::iterator it)
                    self->info_.log_prefix(),
                    self->hostname_,
                    self->service_);
-      return self->stream_->close([self, next_address = ++it](std::error_code ec) {
+      return self->stream_->close([self, next_address = (it != self->endpoints_.end() ? ++it : it)](
+                                    std::error_code ec) {
         if (ec) {
           CB_LOG_WARNING("{} unable to close socket, but continue connecting attempt to {}:{}: {}",
                          self->info_.log_prefix(),
                          next_address->endpoint().address().to_string(),
                          next_address->endpoint().port(),
                          ec.value());
+        }
+        if (next_address == self->endpoints_.end()) {
+          CB_LOG_DEBUG("{} Closed socket, no more endpoints left to connect.",
+                       self->info_.log_prefix());
         }
         self->do_connect(next_address);
       });
@@ -624,6 +629,7 @@ http_session::on_connect(const std::error_code& ec,
   if (ec == asio::error::operation_aborted || stopped_) {
     return;
   }
+  connect_deadline_timer_.cancel();
   last_active_ = std::chrono::steady_clock::now();
   if (!stream_->is_open() || ec) {
     CB_LOG_WARNING("{} unable to connect to {}:{}: {}{}",
@@ -635,7 +641,8 @@ http_session::on_connect(const std::error_code& ec,
                      ? ", check server ports and cluster encryption setting"
                      : "");
     if (stream_->is_open()) {
-      stream_->close([self = shared_from_this(), next_address = ++it](std::error_code ec) {
+      stream_->close([self = shared_from_this(),
+                      next_address = (it != endpoints_.end() ? ++it : it)](std::error_code ec) {
         if (ec) {
           CB_LOG_WARNING("{} unable to close socket, but continue connecting attempt to {}:{}: {}",
                          self->info_.log_prefix(),
@@ -646,7 +653,7 @@ http_session::on_connect(const std::error_code& ec,
         self->do_connect(next_address);
       });
     } else {
-      do_connect(++it);
+      do_connect((it != endpoints_.end() ? ++it : it));
     }
   } else {
     state_ = diag::endpoint_state::connected;
@@ -659,7 +666,6 @@ http_session::on_connect(const std::error_code& ec,
       const std::scoped_lock lock(info_mutex_);
       info_ = http_session_info(client_id_, id_, stream_->local_endpoint(), it->endpoint());
     }
-    connect_deadline_timer_.cancel();
     invoke_connect_callback();
     flush();
   }
