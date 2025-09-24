@@ -85,7 +85,6 @@ constexpr auto span_kind = "span.kind";
 constexpr auto component = "db.couchbase.component";
 constexpr auto instance = "db.instance";
 
-constexpr auto orphan = "cb.orphan";
 constexpr auto service = "cb.service";
 constexpr auto operation_id = "cb.operation_id";
 
