@@ -101,7 +101,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
   {
     span_ = tracer_->create_span(tracing::span_name_for_http_service(request.type), parent_span_);
     if (span_->uses_tags()) {
-      span_->add_tag(tracing::attributes::service,
+      span_->add_tag(tracing::attributes::op::service,
                      tracing::service_name_for_http_service(request.type));
     }
 

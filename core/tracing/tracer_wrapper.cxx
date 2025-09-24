@@ -46,7 +46,11 @@ tracer_wrapper::create_span(std::string span_name,
   -> std::shared_ptr<couchbase::tracing::request_span>
 {
   auto span = tracer_->start_span(std::move(span_name), std::move(parent_span));
-  span->add_tag(attributes::system, "couchbase");
+  if (!span->uses_tags()) {
+    return span;
+  }
+
+  span->add_tag(attributes::common::system, "couchbase");
 
   std::optional<std::string> cluster_name;
   std::optional<std::string> cluster_uuid;
@@ -57,10 +61,10 @@ tracer_wrapper::create_span(std::string span_name,
   }
 
   if (cluster_name) {
-    span->add_tag(attributes::cluster_name, cluster_name.value());
+    span->add_tag(attributes::common::cluster_name, cluster_name.value());
   }
   if (cluster_uuid) {
-    span->add_tag(attributes::cluster_uuid, cluster_uuid.value());
+    span->add_tag(attributes::common::cluster_uuid, cluster_uuid.value());
   }
 
   return span;

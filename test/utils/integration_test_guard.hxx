@@ -128,7 +128,9 @@ public:
   [[nodiscard]] auto transactions() const
     -> std::shared_ptr<couchbase::core::transactions::transactions>;
 
-  [[nodiscard]] auto public_cluster() const -> couchbase::cluster;
+  [[nodiscard]] auto public_cluster(
+    std::function<void(couchbase::cluster_options&)> options_customizer = nullptr) const
+    -> couchbase::cluster;
 
   auto cluster_version() -> server_version;
 

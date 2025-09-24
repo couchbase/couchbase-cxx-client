@@ -93,7 +93,7 @@ public:
 
   void add_tag(const std::string& tag_name, const std::string& value) override
   {
-    if (tag_name == tracing::attributes::service) {
+    if (tag_name == tracing::attributes::op::service) {
       service_ = value;
     }
     if (tag_name == tracing::attributes::dispatch::local_id) {

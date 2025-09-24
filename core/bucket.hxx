@@ -81,6 +81,9 @@ public:
   template<typename Request, typename Handler>
   void execute(Request request, Handler&& handler)
   {
+    CB_LOG_CRITICAL("bucket execute called. request has parent span: {}",
+                    request.parent_span ? request.parent_span->name() : "<none>");
+
     if (is_closed()) {
       return;
     }
