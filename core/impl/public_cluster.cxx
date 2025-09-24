@@ -178,8 +178,8 @@ options_to_origin(const std::string& connection_string, cluster_options::built o
   user_options.enable_tracing = opts.tracing.enabled;
   if (opts.tracing.enabled) {
     user_options.tracer = opts.tracing.tracer;
-    user_options.tracing_options.orphaned_emit_interval = opts.tracing.orphaned_emit_interval;
-    user_options.tracing_options.orphaned_sample_size = opts.tracing.orphaned_sample_size;
+    user_options.orphan_options.emit_interval = opts.tracing.orphaned_emit_interval;
+    user_options.orphan_options.sample_size = opts.tracing.orphaned_sample_size;
 
     user_options.tracing_options.threshold_emit_interval = opts.tracing.threshold_emit_interval;
     user_options.tracing_options.threshold_sample_size = opts.tracing.threshold_sample_size;
