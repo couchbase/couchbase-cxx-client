@@ -54,8 +54,6 @@ elseif(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
       )
     endif()
   endif()
-  declare_system_library(ssl)
-  declare_system_library(crypto)
   add_library(OpenSSL::SSL ALIAS ssl)
   add_library(OpenSSL::Crypto ALIAS crypto)
 else()
@@ -279,3 +277,17 @@ mozilla_ca_certs_sha256() -> std::string_view
 }
 } // namespace couchbase::core::default_ca
 ")
+
+set(OPENSSL_HEADERS_TO_PROXY
+    crypto.h
+    evp.h
+    hmac.h
+    md5.h
+    rand.h
+    sha.h
+    ssl.h
+    x509.h)
+foreach(HEADER_NAME IN LISTS OPENSSL_HEADERS_TO_PROXY)
+  configure_file("${PROJECT_SOURCE_DIR}/cmake/include_ssl.hxx.in"
+                 "${CMAKE_CURRENT_BINARY_DIR}/generated/include_ssl/${HEADER_NAME}" @ONLY)
+endforeach()
