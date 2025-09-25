@@ -1633,9 +1633,8 @@ TEST_CASE("integration: collection management update collection with max expiry"
     REQUIRE(test::utils::wait_until([&]() {
       collection =
         get_collection(integration.cluster, integration.ctx.bucket, scope_name, collection_name);
-      return collection.has_value();
+      return collection.has_value() && collection->max_expiry == 0;
     }));
-    REQUIRE(collection->max_expiry == 0);
   }
 
   SECTION("positive max expiry")
@@ -1663,9 +1662,8 @@ TEST_CASE("integration: collection management update collection with max expiry"
     REQUIRE(test::utils::wait_until([&]() {
       collection =
         get_collection(integration.cluster, integration.ctx.bucket, scope_name, collection_name);
-      return collection.has_value();
+      return collection.has_value() && collection->max_expiry == 3600;
     }));
-    REQUIRE(collection->max_expiry == 3600);
   }
 
   SECTION("setting max expiry to no-expiry")
@@ -1694,9 +1692,8 @@ TEST_CASE("integration: collection management update collection with max expiry"
       REQUIRE(test::utils::wait_until([&]() {
         collection =
           get_collection(integration.cluster, integration.ctx.bucket, scope_name, collection_name);
-        return collection.has_value();
+        return collection.has_value() && collection->max_expiry == -1;
       }));
-      REQUIRE(collection->max_expiry == -1);
     } else {
       SECTION("core API")
       {
