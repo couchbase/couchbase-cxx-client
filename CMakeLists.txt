@@ -466,7 +466,7 @@ if(COUCHBASE_CXX_CLIENT_BUILD_SHARED OR BUILD_SHARED_LIBS)
   set_target_properties(couchbase_cxx_client PROPERTIES VERSION ${couchbase_cxx_client_VERSION_MAJOR}
                                                         SOVERSION ${couchbase_cxx_client_VERSION})
   list(APPEND couchbase_cxx_client_LIBRARIES couchbase_cxx_client)
-  if (NOT WIN32)
+  if(NOT WIN32)
     set(couchbase_cxx_client_DEFAULT_LIBRARY couchbase_cxx_client::couchbase_cxx_client)
   endif()
 endif()
@@ -543,8 +543,8 @@ foreach(TARGET ${couchbase_cxx_client_LIBRARIES})
       endif()
       target_link_libraries(${TARGET} PRIVATE $<BUILD_INTERFACE:ssl> $<BUILD_INTERFACE:crypto>)
       target_include_directories(
-        ${TARGET} SYSTEM PRIVATE $<BUILD_INTERFACE:$<TARGET_PROPERTY:ssl,INTERFACE_INCLUDE_DIRECTORIES>>
-                                 $<BUILD_INTERFACE:$<TARGET_PROPERTY:crypto,INTERFACE_INCLUDE_DIRECTORIES>>)
+        ${TARGET} PRIVATE $<BUILD_INTERFACE:$<TARGET_PROPERTY:ssl,INTERFACE_INCLUDE_DIRECTORIES>>
+                          $<BUILD_INTERFACE:$<TARGET_PROPERTY:crypto,INTERFACE_INCLUDE_DIRECTORIES>>)
     else()
       if(TARGET PkgConfig::PKG_CONFIG_OPENSSL)
         target_link_libraries(${TARGET} PUBLIC PkgConfig::PKG_CONFIG_OPENSSL)

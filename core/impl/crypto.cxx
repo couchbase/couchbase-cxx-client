@@ -23,7 +23,7 @@
 #include "core/mcbp/big_endian.hxx"
 #include "core/utils/binary.hxx"
 
-#include <openssl/rand.h>
+#include "include_ssl/rand.h"
 #include <spdlog/fmt/bundled/format.h>
 
 namespace couchbase::crypto::internal

@@ -33,7 +33,7 @@
 
 #include <couchbase/error_codes.hxx>
 
-#include <openssl/crypto.h>
+#include "include_ssl/crypto.h"
 #include <tao/json.hpp>
 
 TEST_CASE("unit: transformer to deduplicate JSON keys", "[unit]")

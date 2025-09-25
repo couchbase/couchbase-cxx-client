@@ -203,6 +203,8 @@ endmacro()
 
 add_library(test_main OBJECT ${PROJECT_SOURCE_DIR}/test/main.cxx)
 target_link_libraries(test_main PUBLIC Catch2::Catch2 OpenSSL::SSL)
+target_include_directories(test_main PRIVATE ${PROJECT_SOURCE_DIR} ${PROJECT_BINARY_DIR}/generated
+                                             ${PROJECT_BINARY_DIR}/generated_$<CONFIG>)
 
 if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND WIN32)
   set_target_properties(test_main PROPERTIES LINK_FLAGS "/ignore:4099")

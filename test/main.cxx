@@ -19,7 +19,7 @@
 
 #include <catch2/catch_session.hpp>
 
-#include <openssl/ssl.h>
+#include "include_ssl/ssl.h"
 
 auto
 main(int argc, char* argv[]) -> int
