@@ -91,15 +91,25 @@ public:
             auto bootstrap_error = std::get<impl::bootstrap_error>(err);
             auto message = fmt::format(
               "Failed to execute the HTTP request for the query due to a bootstrap error.  "
-              "See logs for further details.  bootstrap_error.message={}",
-              bootstrap_error.error_message);
+              "See logs for further details.  bootstrap_error.message={}, client_context_id={}",
+              bootstrap_error.error_message,
+              self->client_context_id_);
+            self->cleanup();
             self->invoke_callback({}, { maybe_convert_error_code(bootstrap_error.ec), message });
           } else {
             auto ec = maybe_convert_error_code(std::get<std::error_code>(err));
             if (ec == errc::timeout) {
               return self->trigger_timeout();
             }
-            self->invoke_callback({}, { ec, "Failed to execute the HTTP request for the query" });
+            CB_LOG_DEBUG(
+              R"(Failed to execute the HTTP request for the query. client_context_id={}, ec={})",
+              self->client_context_id_,
+              ec.message());
+            self->cleanup();
+            auto message =
+              fmt::format("Failed to execute the HTTP request for the query. client_context_id={}",
+                          self->client_context_id_);
+            self->invoke_callback({}, { ec, message });
           }
           return;
         }
@@ -110,27 +120,54 @@ public:
           self->retry_info_.last_dispatched_to = op_info->dispatched_to();
           self->retry_info_.last_dispatched_to_host = op_info->dispatched_to_host();
         }
-        auto streamer = std::make_shared<row_streamer>(self->io_, resp.body(), "/results/^");
-        return streamer->start(
-          [self, streamer, resp = std::move(resp)](const auto& metadata_header, auto ec) mutable {
-            if (ec) {
-              self->invoke_callback({}, { maybe_convert_error_code(ec) });
-              return;
-            }
-            auto error_parse_res =
-              self->parse_error(resp.status_code(), utils::json::parse(metadata_header));
 
-            if (error_parse_res.retriable) {
-              self->retry_info_.last_error = error_parse_res.err;
-              return self->maybe_retry();
-            }
+        auto streamer = std::make_shared<row_streamer>(
+          self->io_, resp.body(), "/results/^", self->client_context_id_);
+        return streamer->start([self, streamer, resp = std::move(resp)](const auto& metadata_header,
+                                                                        auto ec) mutable {
+          if (ec) {
+            self->invoke_callback({}, { maybe_convert_error_code(ec) });
+            return;
+          }
+          auto error_parse_res =
+            self->parse_error(resp.status_code(), utils::json::parse(metadata_header));
 
-            if (error_parse_res.err) {
-              self->invoke_callback({}, { error_parse_res.err });
-              return;
-            }
-            self->invoke_callback(query_result{ std::move(*streamer) }, {});
+          if (error_parse_res.retriable) {
+            self->retry_info_.last_error = error_parse_res.err;
+            CB_LOG_DEBUG(
+              R"(Attempting to retry failed request. client_context_id={}, ec={}, message={})",
+              self->client_context_id_,
+              error_parse_res.err.ec.message(),
+              error_parse_res.err.message);
+            return self->maybe_retry();
+          }
+
+          if (error_parse_res.err) {
+            CB_LOG_DEBUG(
+              R"(Query request failed (not retriable). client_context_id={}, ec={}, message={})",
+              self->client_context_id_,
+              error_parse_res.err.ec.message(),
+              error_parse_res.err.message);
+            self->invoke_callback({}, { error_parse_res.err });
+            return;
+          }
+          // Successfully moved to streaming rows; add the done callback and timeout
+          // to cleanup when finished (or timed out).
+          auto remaining_time = self->deadline_.expiry() - std::chrono::steady_clock::now();
+          if (remaining_time <= std::chrono::milliseconds::zero()) {
+            CB_LOG_DEBUG(
+              R"(Columnar Query request timed out before streaming rows could complete. client_context_id={})",
+              self->client_context_id_);
+            self->trigger_timeout();
+            return;
+          }
+          streamer->set_streamer_done_callback([self]() {
+            self->cleanup();
           });
+          streamer->set_streamer_timeout(
+            std::chrono::duration_cast<std::chrono::milliseconds>(remaining_time));
+          self->invoke_callback(query_result{ std::move(*streamer) }, {});
+        });
       });
 
     if (op.has_value()) {
@@ -138,21 +175,24 @@ public:
       pending_op_ = op.value();
       return {};
     }
-    retry_timer_.cancel();
-    deadline_.cancel();
+    CB_LOG_DEBUG("Failed to create the HTTP pending operation for the query. client_context_id={}",
+                 client_context_id_);
+    cleanup();
     error return_error{};
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
     if (std::holds_alternative<impl::bootstrap_error>(op.error())) {
       auto bootstrap_error = std::get<impl::bootstrap_error>(op.error());
-      auto message =
-        fmt::format("Failed to create the HTTP pending operation due to a bootstrap error.  "
-                    "See logs for further details.  bootstrap_error.message={}",
-                    bootstrap_error.error_message);
+      auto message = fmt::format(
+        "Failed to create the HTTP pending operation due to a bootstrap error.  "
+        "See logs for further details.  bootstrap_error.message={}, client_context_id={}",
+        bootstrap_error.error_message,
+        client_context_id_);
       return_error.ec = bootstrap_error.ec;
       return_error.message = message;
     } else {
       return_error.ec = std::get<std::error_code>(op.error());
-      return_error.message = "Failed to create the HTTP pending operation.";
+      return_error.message = fmt::format(
+        "Failed to create the HTTP pending operation. client_context_id={}", client_context_id_);
     }
 #else
     return_error.ec = op.error();
@@ -170,7 +210,7 @@ public:
       if (ec == asio::error::operation_aborted) {
         return;
       }
-      CB_LOG_DEBUG(R"(Columnar Query request timed out: retry_attempts={}, client_context_id={})",
+      CB_LOG_DEBUG(R"(Columnar Query request timed out. retry_attempts={}, client_context_id={})",
                    self->retry_info_.retry_attempts,
                    self->client_context_id_);
       self->trigger_timeout();
@@ -182,8 +222,8 @@ public:
   void cancel() override
   {
     cancelled_ = true;
-    retry_timer_.cancel();
-    deadline_.cancel();
+    CB_LOG_DEBUG("Canceling pending query operation. client_context_id={}", client_context_id_);
+    cleanup();
     std::shared_ptr<pending_operation> op;
     {
       const std::scoped_lock lock{ pending_op_mutex_ };
@@ -197,6 +237,11 @@ public:
     invoke_callback({},
                     { couchbase::core::columnar::client_errc::canceled,
                       "The query operation was canceled by the caller." });
+  }
+
+  auto client_context_id() const -> const std::string& override
+  {
+    return client_context_id_;
   }
 
 private:
@@ -217,8 +262,15 @@ private:
     auto backoff = backoff_calculator_(retry_info_.retry_attempts);
     if (std::chrono::steady_clock::now() + backoff >= deadline_.expiry()) {
       // Retrying will exceed the deadline, time out immediately instead.
+      CB_LOG_DEBUG("Not retrying query as backoff would exceed deadline. client_context_id={}, "
+                   "retry_attempts={}, backoff={}",
+                   client_context_id_,
+                   retry_info_.retry_attempts,
+                   backoff);
       return trigger_timeout();
     }
+    CB_LOG_DEBUG(
+      "Scheduling query retry. client_context_id={}, backoff={}", client_context_id_, backoff);
     retry_timer_.expires_after(backoff);
     retry_timer_.async_wait([self = shared_from_this()](auto ec) {
       if (ec == asio::error::operation_aborted) {
@@ -459,6 +511,14 @@ private:
     }
 
     return res;
+  }
+
+  void cleanup()
+  {
+    CB_LOG_DEBUG("Cleaning up pending query operation timers, client_context_id={}",
+                 client_context_id_);
+    retry_timer_.cancel();
+    deadline_.cancel();
   }
 
   std::string client_context_id_;
