@@ -23,6 +23,7 @@
 #include "core/io/retry_context.hxx"
 #include "core/protocol/client_request.hxx"
 #include "core/protocol/cmd_observe_seqno.hxx"
+#include "core/public_fwd.hxx"
 #include "core/timeout_defaults.hxx"
 
 namespace couchbase::core::impl
@@ -59,6 +60,7 @@ struct observe_seqno_request {
   std::uint16_t partition{};
   std::uint32_t opaque{};
   io::retry_context<true> retries{};
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
   [[nodiscard]] auto encode_to(encoded_request_type& encoded,
                                core::mcbp_context&& context) const -> std::error_code;

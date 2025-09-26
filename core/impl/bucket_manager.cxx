@@ -270,6 +270,7 @@ public:
         std::move(bucket_name),
         {},
         options.timeout,
+        options.parent_span,
       },
       [handler = std::move(handler)](const auto& resp) mutable {
         return handler(core::impl::make_error(resp.ctx), map_bucket_settings(resp.bucket));
@@ -283,6 +284,7 @@ public:
       core::operations::management::bucket_get_all_request{
         {},
         options.timeout,
+        options.parent_span,
       },
       [handler = std::move(handler)](const auto& resp) mutable {
         return handler(core::impl::make_error(resp.ctx), map_all_bucket_settings(resp.buckets));
@@ -298,6 +300,7 @@ public:
         map_bucket_settings(bucket_settings),
         {},
         options.timeout,
+        options.parent_span,
       },
       [handler = std::move(handler)](const auto& resp) mutable {
         return handler(core::impl::make_error(resp.ctx));
@@ -313,6 +316,7 @@ public:
         map_bucket_settings(bucket_settings),
         {},
         options.timeout,
+        options.parent_span,
       },
       [handler = std::move(handler)](const auto& resp) mutable {
         return handler(core::impl::make_error(resp.ctx));
@@ -328,6 +332,7 @@ public:
         std::move(bucket_name),
         {},
         options.timeout,
+        options.parent_span,
       },
       [handler = std::move(handler)](const auto& resp) mutable {
         return handler(core::impl::make_error(resp.ctx));
@@ -343,6 +348,7 @@ public:
         std::move(bucket_name),
         {},
         options.timeout,
+        options.parent_span,
       },
       [handler = std::move(handler)](const auto& resp) mutable {
         return handler(core::impl::make_error(resp.ctx));

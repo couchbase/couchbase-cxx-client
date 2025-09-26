@@ -174,11 +174,4 @@ struct search_request {
 
   std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 };
-
 } // namespace couchbase::core::operations
-namespace couchbase::core::io::http_traits
-{
-template<>
-struct supports_parent_span<couchbase::core::operations::search_request> : public std::true_type {
-};
-} // namespace couchbase::core::io::http_traits

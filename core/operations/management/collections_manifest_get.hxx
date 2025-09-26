@@ -23,6 +23,7 @@
 #include "core/io/retry_context.hxx"
 #include "core/protocol/client_request.hxx"
 #include "core/protocol/cmd_get_collections_manifest.hxx"
+#include "core/public_fwd.hxx"
 #include "core/timeout_defaults.hxx"
 #include "core/topology/collections_manifest.hxx"
 
@@ -48,6 +49,7 @@ struct collections_manifest_get_request {
 
   std::optional<std::chrono::milliseconds> timeout{};
   io::retry_context<true> retries{};
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
   [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded,
                                           mcbp_context&& /* context */) const;

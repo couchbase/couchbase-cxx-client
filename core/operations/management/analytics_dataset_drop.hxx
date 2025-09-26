@@ -22,6 +22,7 @@
 #include "core/io/http_context.hxx"
 #include "core/io/http_message.hxx"
 #include "core/platform/uuid.h"
+#include "core/public_fwd.hxx"
 #include "core/timeout_defaults.hxx"
 
 namespace couchbase::core::operations::management
@@ -47,6 +48,7 @@ struct analytics_dataset_drop_request {
   bool ignore_if_does_not_exist{ false };
   std::optional<std::string> client_context_id{};
   std::optional<std::chrono::milliseconds> timeout{};
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
   [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded,
                                           http_context& context) const;

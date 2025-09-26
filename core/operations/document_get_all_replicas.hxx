@@ -17,14 +17,16 @@
 
 #pragma once
 
+#include <couchbase/error_codes.hxx>
+
 #include "core/error_context/key_value.hxx"
 #include "core/impl/get_replica.hxx"
 #include "core/impl/replica_utils.hxx"
 #include "core/logger/logger.hxx"
 #include "core/operations/document_get.hxx"
 #include "core/operations/operation_traits.hxx"
+#include "core/public_fwd.hxx"
 #include "core/utils/movable_function.hxx"
-#include "couchbase/error_codes.hxx"
 
 #include <memory>
 #include <mutex>
@@ -54,6 +56,7 @@ struct get_all_replicas_request {
   core::document_id id;
   std::optional<std::chrono::milliseconds> timeout{};
   couchbase::read_preference read_preference{ couchbase::read_preference::no_preference };
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
   template<typename Core, typename Handler>
   void execute(Core core, Handler handler)

@@ -149,7 +149,13 @@ public:
   {
     core_.execute(
       core::operations::management::search_index_get_request{
-        std::move(index_name), bucket_name_, scope_name_, {}, options.timeout },
+        std::move(index_name),
+        bucket_name_,
+        scope_name_,
+        {},
+        options.timeout,
+        options.parent_span,
+      },
       [handler = std::move(handler)](const auto& resp) mutable {
         return handler(core::impl::make_error(resp.ctx), map_search_index(resp.index));
       });
@@ -160,7 +166,12 @@ public:
   {
     core_.execute(
       core::operations::management::search_index_get_all_request{
-        bucket_name_, scope_name_, {}, options.timeout },
+        bucket_name_,
+        scope_name_,
+        {},
+        options.timeout,
+        options.parent_span,
+      },
       [handler = std::move(handler)](const auto& resp) mutable {
         return handler(core::impl::make_error(resp.ctx), map_all_search_indexes(resp.indexes));
       });
@@ -172,7 +183,13 @@ public:
   {
     core_.execute(
       core::operations::management::search_index_upsert_request{
-        map_search_index(search_index), bucket_name_, scope_name_, {}, options.timeout },
+        map_search_index(search_index),
+        bucket_name_,
+        scope_name_,
+        {},
+        options.timeout,
+        options.parent_span,
+      },
       [handler = std::move(handler)](const auto& resp) mutable {
         return handler(core::impl::make_error(resp.ctx));
       });
@@ -184,7 +201,13 @@ public:
   {
     core_.execute(
       core::operations::management::search_index_drop_request{
-        std::move(index_name), bucket_name_, scope_name_, {}, options.timeout },
+        std::move(index_name),
+        bucket_name_,
+        scope_name_,
+        {},
+        options.timeout,
+        options.parent_span,
+      },
       [handler = std::move(handler)](const auto& resp) mutable {
         return handler(core::impl::make_error(resp.ctx));
       });
@@ -196,7 +219,13 @@ public:
   {
     core_.execute(
       core::operations::management::search_index_get_documents_count_request{
-        std::move(index_name), bucket_name_, scope_name_, {}, options.timeout },
+        std::move(index_name),
+        bucket_name_,
+        scope_name_,
+        {},
+        options.timeout,
+        options.parent_span,
+      },
       [handler = std::move(handler)](const auto& resp) mutable {
         return handler(core::impl::make_error(resp.ctx), resp.count);
       });
@@ -208,7 +237,14 @@ public:
   {
     core_.execute(
       core::operations::management::search_index_control_ingest_request{
-        std::move(index_name), true, bucket_name_, scope_name_, {}, options.timeout },
+        std::move(index_name),
+        true,
+        bucket_name_,
+        scope_name_,
+        {},
+        options.timeout,
+        options.parent_span,
+      },
       [handler = std::move(handler)](const auto& resp) mutable {
         return handler(core::impl::make_error(resp.ctx));
       });
@@ -220,7 +256,14 @@ public:
   {
     core_.execute(
       core::operations::management::search_index_control_ingest_request{
-        std::move(index_name), false, bucket_name_, scope_name_, {}, options.timeout },
+        std::move(index_name),
+        false,
+        bucket_name_,
+        scope_name_,
+        {},
+        options.timeout,
+        options.parent_span,
+      },
       [handler = std::move(handler)](const auto& resp) mutable {
         return handler(core::impl::make_error(resp.ctx));
       });
@@ -232,7 +275,14 @@ public:
   {
     core_.execute(
       core::operations::management::search_index_control_query_request{
-        std::move(index_name), true, bucket_name_, scope_name_, {}, options.timeout },
+        std::move(index_name),
+        true,
+        bucket_name_,
+        scope_name_,
+        {},
+        options.timeout,
+        options.parent_span,
+      },
       [handler = std::move(handler)](const auto& resp) mutable {
         return handler(core::impl::make_error(resp.ctx));
       });
@@ -244,7 +294,14 @@ public:
   {
     core_.execute(
       core::operations::management::search_index_control_query_request{
-        std::move(index_name), false, bucket_name_, scope_name_, {}, options.timeout },
+        std::move(index_name),
+        false,
+        bucket_name_,
+        scope_name_,
+        {},
+        options.timeout,
+        options.parent_span,
+      },
       [handler = std::move(handler)](const auto& resp) mutable {
         return handler(core::impl::make_error(resp.ctx));
       });
@@ -256,7 +313,14 @@ public:
   {
     core_.execute(
       core::operations::management::search_index_control_plan_freeze_request{
-        std::move(index_name), true, bucket_name_, scope_name_, {}, options.timeout },
+        std::move(index_name),
+        true,
+        bucket_name_,
+        scope_name_,
+        {},
+        options.timeout,
+        options.parent_span,
+      },
       [handler = std::move(handler)](const auto& resp) mutable {
         return handler(core::impl::make_error(resp.ctx));
       });
@@ -268,7 +332,14 @@ public:
   {
     core_.execute(
       core::operations::management::search_index_control_plan_freeze_request{
-        std::move(index_name), false, bucket_name_, scope_name_, {}, options.timeout },
+        std::move(index_name),
+        false,
+        bucket_name_,
+        scope_name_,
+        {},
+        options.timeout,
+        options.parent_span,
+      },
       [handler = std::move(handler)](const auto& resp) mutable {
         return handler(core::impl::make_error(resp.ctx));
       });
@@ -280,12 +351,15 @@ public:
                         analyze_document_handler&& handler) const
   {
     core_.execute(
-      core::operations::management::search_index_analyze_document_request{ std::move(index_name),
-                                                                           std::move(document),
-                                                                           bucket_name_,
-                                                                           scope_name_,
-                                                                           {},
-                                                                           options.timeout },
+      core::operations::management::search_index_analyze_document_request{
+        std::move(index_name),
+        std::move(document),
+        bucket_name_,
+        scope_name_,
+        {},
+        options.timeout,
+        options.parent_span,
+      },
       [handler = std::move(handler)](const auto& resp) mutable {
         return handler(core::impl::make_error(resp.ctx), convert_analysis(resp.analysis));
       });
