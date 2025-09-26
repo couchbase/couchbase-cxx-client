@@ -29,13 +29,6 @@ template<typename T>
 inline constexpr bool supports_sticky_node_v = supports_sticky_node<T>::value;
 
 template<typename T>
-struct supports_parent_span : public std::false_type {
-};
-
-template<typename T>
-inline constexpr bool supports_parent_span_v = supports_parent_span<T>::value;
-
-template<typename T>
 struct supports_readonly : public std::false_type {
 };
 

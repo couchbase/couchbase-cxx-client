@@ -58,7 +58,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
   http_command_handler handler_{};
   std::chrono::milliseconds timeout_{};
   std::string client_context_id_;
-  std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
+  std::shared_ptr<couchbase::tracing::request_span> parent_span_{ nullptr };
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
   std::chrono::milliseconds dispatch_timeout_{};
   asio::steady_timer dispatch_deadline_;
@@ -77,12 +77,10 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
     , app_telemetry_meter_(std::move(app_telemetry_meter))
     , timeout_(request.timeout.value_or(default_timeout))
     , client_context_id_(request.client_context_id.value_or(uuid::to_string(uuid::random())))
+    , parent_span_(request.parent_span)
     , dispatch_timeout_(dispatch_timeout)
     , dispatch_deadline_(ctx)
   {
-    if constexpr (io::http_traits::supports_parent_span_v<Request>) {
-      parent_span = request.parent_span;
-    }
   }
 #else
   http_command(asio::io_context& ctx,
@@ -98,10 +96,8 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
     , app_telemetry_meter_(std::move(app_telemetry_meter))
     , timeout_(request.timeout.value_or(default_timeout))
     , client_context_id_(request.client_context_id.value_or(uuid::to_string(uuid::random())))
+    , parent_span_(request.parent_span)
   {
-    if constexpr (io::http_traits::supports_parent_span_v<Request>) {
-      parent_span = request.parent_span;
-    }
   }
 #endif
 
@@ -120,7 +116,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
 
   void start(http_command_handler&& handler)
   {
-    span_ = tracer_->create_span(tracing::span_name_for_http_service(request.type), parent_span);
+    span_ = tracer_->create_span(tracing::span_name_for_http_service(request.type), parent_span_);
     if (span_->uses_tags()) {
       span_->add_tag(tracing::attributes::service,
                      tracing::service_name_for_http_service(request.type));

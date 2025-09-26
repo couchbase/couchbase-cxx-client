@@ -105,11 +105,3 @@ struct document_view_request {
 };
 
 } // namespace couchbase::core::operations
-
-namespace couchbase::core::io::http_traits
-{
-template<>
-struct supports_parent_span<couchbase::core::operations::document_view_request>
-  : public std::true_type {
-};
-} // namespace couchbase::core::io::http_traits

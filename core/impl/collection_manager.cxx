@@ -100,6 +100,7 @@ public:
         std::move(collection_name),
         {},
         options.timeout,
+        options.parent_span,
       },
       [handler = std::move(handler)](const auto& resp) mutable {
         return handler(core::impl::make_error(resp.ctx));
@@ -121,6 +122,7 @@ public:
         settings.history,
         {},
         options.timeout,
+        options.parent_span,
       },
       [handler = std::move(handler)](const auto& resp) mutable {
         return handler(core::impl::make_error(resp.ctx));
@@ -142,6 +144,7 @@ public:
         settings.history,
         {},
         options.timeout,
+        options.parent_span,
       },
       [handler = std::move(handler)](const auto& resp) mutable {
         return handler(core::impl::make_error(resp.ctx));
@@ -156,6 +159,7 @@ public:
         bucket_name_,
         {},
         options.timeout,
+        options.parent_span,
       },
       [handler = std::move(handler)](auto resp) mutable {
         return handler(core::impl::make_error(resp.ctx), map_scope_specs(resp.manifest));
@@ -172,6 +176,7 @@ public:
         std::move(scope_name),
         {},
         options.timeout,
+        options.parent_span,
       },
       [handler = std::move(handler)](const auto& resp) mutable {
         return handler(core::impl::make_error(resp.ctx));
@@ -188,6 +193,7 @@ public:
         std::move(scope_name),
         {},
         options.timeout,
+        options.parent_span,
       },
       [handler = std::move(handler)](const auto& resp) mutable {
         return handler(core::impl::make_error(resp.ctx));
