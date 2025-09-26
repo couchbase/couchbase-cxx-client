@@ -15,6 +15,8 @@
 
 #pragma once
 
+#include <string>
+
 namespace couchbase::core
 {
 class pending_operation
@@ -22,5 +24,13 @@ class pending_operation
 public:
   virtual ~pending_operation() = default;
   virtual void cancel() = 0;
+
+  virtual auto client_context_id() const -> const std::string&
+  {
+    return default_client_context_id_;
+  }
+
+protected:
+  static inline const std::string default_client_context_id_ = "";
 };
 } // namespace couchbase::core
