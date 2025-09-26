@@ -26,11 +26,11 @@
 #include <couchbase/build_info.hxx>
 #include <couchbase/build_version.hxx>
 
+#include "include_ssl/crypto.h"
+#include "include_ssl/x509.h"
 #include <asio/version.hpp>
 #include <hdr/hdr_histogram_version.h>
 #include <llhttp.h>
-#include <openssl/crypto.h>
-#include <openssl/x509.h>
 #include <snappy-stubs-public.h>
 #include <spdlog/fmt/bundled/core.h>
 #include <spdlog/version.h>

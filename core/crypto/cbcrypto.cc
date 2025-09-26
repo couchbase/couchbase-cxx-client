@@ -589,10 +589,10 @@ decrypt(const couchbase::core::crypto::Cipher cipher,
 
 #else
 
-#include <openssl/evp.h>
-#include <openssl/hmac.h>
-#include <openssl/md5.h>
-#include <openssl/sha.h>
+#include "include_ssl/evp.h"
+#include "include_ssl/hmac.h"
+#include "include_ssl/md5.h"
+#include "include_ssl/sha.h"
 
 // OpenSSL
 
