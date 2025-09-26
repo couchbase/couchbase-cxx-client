@@ -85,6 +85,7 @@ public:
               couchbase::core::origin origin,
               std::shared_ptr<tracing::tracer_wrapper> tracer,
               std::shared_ptr<metrics::meter_wrapper> meter,
+              std::shared_ptr<orphan_reporter> orphan_reporter,
               std::shared_ptr<core::app_telemetry_meter> app_telemetry,
               std::vector<protocol::hello_feature> known_features,
               std::shared_ptr<impl::bootstrap_state_listener> state_listener,
@@ -96,6 +97,7 @@ public:
     , origin_{ std::move(origin) }
     , tracer_{ std::move(tracer) }
     , meter_{ std::move(meter) }
+    , orphan_reporter_{ std::move(orphan_reporter) }
     , app_telemetry_meter_{ std::move(app_telemetry) }
     , known_features_{ std::move(known_features) }
     , state_listener_{ std::move(state_listener) }
@@ -929,6 +931,11 @@ public:
     return meter_;
   }
 
+  [[nodiscard]] auto orphan_reporter() const -> std::shared_ptr<core::orphan_reporter>
+  {
+    return orphan_reporter_;
+  }
+
   [[nodiscard]] auto app_telemetry_meter() const -> std::shared_ptr<core::app_telemetry_meter>
   {
     return app_telemetry_meter_;
@@ -984,6 +991,7 @@ private:
   const origin origin_;
   const std::shared_ptr<tracing::tracer_wrapper> tracer_;
   const std::shared_ptr<metrics::meter_wrapper> meter_;
+  const std::shared_ptr<core::orphan_reporter> orphan_reporter_;
   const std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter_;
   const std::vector<protocol::hello_feature> known_features_;
   const std::shared_ptr<impl::bootstrap_state_listener> state_listener_;
@@ -1018,6 +1026,7 @@ bucket::bucket(std::string client_id,
                asio::ssl::context& tls,
                std::shared_ptr<tracing::tracer_wrapper> tracer,
                std::shared_ptr<metrics::meter_wrapper> meter,
+               std::shared_ptr<core::orphan_reporter> orphan_reporter,
                std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter,
                std::string name,
                couchbase::core::origin origin,
@@ -1030,6 +1039,7 @@ bucket::bucket(std::string client_id,
                                          std::move(origin),
                                          std::move(tracer),
                                          std::move(meter),
+                                         std::move(orphan_reporter),
                                          std::move(app_telemetry_meter),
                                          std::move(known_features),
                                          std::move(state_listener),
@@ -1096,6 +1106,12 @@ auto
 bucket::meter() const -> std::shared_ptr<metrics::meter_wrapper>
 {
   return impl_->meter();
+}
+
+auto
+bucket::orphan_reporter() const -> std::shared_ptr<core::orphan_reporter>
+{
+  return impl_->orphan_reporter();
 }
 
 auto

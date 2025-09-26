@@ -100,14 +100,25 @@ struct traits<couchbase::core::io::dns::dns_config> {
 };
 
 template<>
+struct traits<couchbase::core::orphan_reporter_options> {
+  template<template<typename...> class Traits>
+  static void assign(tao::json::basic_value<Traits>& v,
+                     const couchbase::core::orphan_reporter_options& o)
+  {
+    v = {
+      { "emit_interval", o.emit_interval },
+      { "sample_size", o.sample_size },
+    };
+  }
+};
+
+template<>
 struct traits<couchbase::core::tracing::threshold_logging_options> {
   template<template<typename...> class Traits>
   static void assign(tao::json::basic_value<Traits>& v,
                      const couchbase::core::tracing::threshold_logging_options& o)
   {
     v = {
-      { "orphaned_emit_interval", o.orphaned_emit_interval },
-      { "orphaned_sample_size", o.orphaned_sample_size },
       { "threshold_emit_interval", o.threshold_emit_interval },
       { "threshold_sample_size", o.threshold_sample_size },
       { "key_value_threshold", o.key_value_threshold },
@@ -275,12 +286,14 @@ origin::to_json() const -> std::string
         { "enable_compression", options_.enable_compression },
         { "enable_tracing", options_.enable_tracing },
         { "enable_metrics", options_.enable_metrics },
+        { "enable_orphan_reporting", options_.enable_orphan_reporting },
         { "tcp_keep_alive_interval", options_.tcp_keep_alive_interval },
         { "config_idle_redial_timeout", options_.config_idle_redial_timeout },
         { "max_http_connections", options_.max_http_connections },
         { "idle_http_connection_timeout", options_.idle_http_connection_timeout },
         { "metrics_options", options_.metrics_options },
         { "tracing_options", options_.tracing_options },
+        { "orphan_reporter_options", options_.orphan_options },
         { "transactions_options", options_.transactions },
         { "server_group", options_.server_group },
 #endif

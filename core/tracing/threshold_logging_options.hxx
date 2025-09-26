@@ -24,9 +24,6 @@
 namespace couchbase::core::tracing
 {
 struct threshold_logging_options {
-  std::chrono::milliseconds orphaned_emit_interval{ std::chrono::seconds{ 10 } };
-  std::size_t orphaned_sample_size{ 64 };
-
   std::chrono::milliseconds threshold_emit_interval{ std::chrono::seconds{ 10 } };
   std::size_t threshold_sample_size{ 64 };
   std::chrono::milliseconds key_value_threshold{ 500 };

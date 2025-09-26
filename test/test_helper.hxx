@@ -22,6 +22,7 @@
 #include "utils/test_data.hxx"
 
 #include <catch2/catch_test_macros.hpp>
+#include <tao/json/stream.hpp>
 
 #define REQUIRE_SUCCESS(ec)                                                                        \
   INFO((ec).message());                                                                            \
