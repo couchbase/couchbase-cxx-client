@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2025, windows-2022]
+        os: [windows-2025, windows-2022, windows-11-arm]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Install dependencies
@@ -41,4 +41,6 @@ jobs:
           # CB_CMAKE_BUILD_TYPE: Release
           CB_CMAKE_BUILD_TYPE: RelWithDebInfo
           CB_NUMBER_OF_JOBS: 2
+          # No OpenSSL ASM exists for Window-11=arm.
+          CB_OPENSSL_NO_ASM: ${{ matrix.os == 'windows-11-arm' && '1' || '' }}
         run: ruby ./bin/build-tests.rb
