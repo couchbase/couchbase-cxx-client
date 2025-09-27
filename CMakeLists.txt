@@ -32,6 +32,12 @@ if(WIN32)
   message(STATUS "Windows SDK: ${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}")
 endif()
 
+# This disables Microsoft’s C++ overloads for _Interlocked* and fixes the ARM64 build.
+if (WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 8 AND CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64")
+    message(STATUS "Applying WinBase Interlocked macro for Windows ARM64")
+    add_compile_definitions(MICROSOFT_WINDOWS_WINBASE_H_DEFINE_INTERLOCKED_CPLUSPLUS_OVERLOADS=0)
+endif()
+
 include(cmake/TarballRelease.cmake OPTIONAL)
 
 include(cmake/PreventInSourceBuilds.cmake)
