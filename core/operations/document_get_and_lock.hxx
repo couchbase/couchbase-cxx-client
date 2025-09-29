@@ -58,13 +58,4 @@ struct get_and_lock_request {
                                    const encoded_response_type& encoded) const
     -> get_and_lock_response;
 };
-
 } // namespace couchbase::core::operations
-
-namespace couchbase::core::io::mcbp_traits
-{
-template<>
-struct supports_parent_span<couchbase::core::operations::get_and_lock_request>
-  : public std::true_type {
-};
-} // namespace couchbase::core::io::mcbp_traits

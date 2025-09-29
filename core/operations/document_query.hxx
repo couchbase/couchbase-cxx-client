@@ -131,10 +131,6 @@ struct supports_sticky_node<couchbase::core::operations::query_request> : public
 };
 
 template<>
-struct supports_parent_span<couchbase::core::operations::query_request> : public std::true_type {
-};
-
-template<>
 struct supports_readonly<couchbase::core::operations::query_request> : public std::true_type {
 };
 } // namespace couchbase::core::io::http_traits

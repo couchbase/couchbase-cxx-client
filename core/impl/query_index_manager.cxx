@@ -198,6 +198,7 @@ public:
         {},
         {},
         options.timeout,
+        options.parent_span,
       },
       [handler = std::move(handler)](
         const core::operations::management::query_index_get_all_response& resp) {
@@ -231,6 +232,7 @@ public:
         options.num_replicas,
         {},
         options.timeout,
+        options.parent_span,
       },
       [handler = std::move(handler)](const auto& resp) {
         handler(core::impl::make_error(resp.ctx));
@@ -258,6 +260,7 @@ public:
         options.num_replicas,
         {},
         options.timeout,
+        options.parent_span,
       },
       [handler = std::move(handler)](const auto& resp) {
         handler(core::impl::make_error(resp.ctx));
@@ -282,6 +285,7 @@ public:
         options.ignore_if_not_exists,
         {},
         options.timeout,
+        options.parent_span,
       },
       [handler = std::move(handler)](const auto& resp) {
         handler(core::impl::make_error(resp.ctx));
@@ -305,6 +309,7 @@ public:
         options.ignore_if_not_exists,
         {},
         options.timeout,
+        options.parent_span,
       },
       [handler =
          std::move(handler)](const core::operations::management::query_index_drop_response& resp) {
@@ -319,14 +324,23 @@ public:
                               build_deferred_query_indexes_handler&& handler) const
   {
     auto timeout = options.timeout;
+    auto parent_span = options.parent_span;
     return core_.execute(
       core::operations::management::query_index_get_all_deferred_request{
-        bucket_name, scope_name, collection_name, {}, {}, timeout },
+        bucket_name,
+        scope_name,
+        collection_name,
+        {},
+        {},
+        timeout,
+        parent_span,
+      },
       [self = shared_from_this(),
        bucket = bucket_name,
        scope = scope_name,
        collection = collection_name,
        timeout,
+       parent_span,
        handler = std::move(handler)](auto list_resp) mutable {
         if (list_resp.ctx.ec) {
           return handler(core::impl::make_error(list_resp.ctx));
@@ -335,13 +349,16 @@ public:
           return handler(core::impl::make_error(list_resp.ctx));
         }
         self->core_.execute(
-          core::operations::management::query_index_build_request{ std::move(bucket),
-                                                                   scope,
-                                                                   collection,
-                                                                   {},
-                                                                   std::move(list_resp.index_names),
-                                                                   {},
-                                                                   timeout },
+          core::operations::management::query_index_build_request{
+            std::move(bucket),
+            scope,
+            collection,
+            {},
+            std::move(list_resp.index_names),
+            {},
+            timeout,
+            parent_span,
+          },
           [handler = std::move(handler)](const auto& build_resp) {
             return handler(core::impl::make_error(build_resp.ctx));
           });

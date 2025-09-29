@@ -55,11 +55,4 @@ struct touch_request {
   [[nodiscard]] auto make_response(key_value_error_context&& ctx,
                                    const encoded_response_type& encoded) const -> touch_response;
 };
-
 } // namespace couchbase::core::operations
-namespace couchbase::core::io::mcbp_traits
-{
-template<>
-struct supports_parent_span<couchbase::core::operations::touch_request> : public std::true_type {
-};
-} // namespace couchbase::core::io::mcbp_traits

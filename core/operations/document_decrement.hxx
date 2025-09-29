@@ -79,9 +79,4 @@ namespace couchbase::core::io::mcbp_traits
 template<>
 struct supports_durability<couchbase::core::operations::decrement_request> : public std::true_type {
 };
-
-template<>
-struct supports_parent_span<couchbase::core::operations::decrement_request>
-  : public std::true_type {
-};
 } // namespace couchbase::core::io::mcbp_traits

@@ -115,11 +115,6 @@ struct analytics_request {
 namespace couchbase::core::io::http_traits
 {
 template<>
-struct supports_parent_span<couchbase::core::operations::analytics_request>
-  : public std::true_type {
-};
-
-template<>
 struct supports_readonly<couchbase::core::operations::analytics_request> : public std::true_type {
 };
 } // namespace couchbase::core::io::http_traits

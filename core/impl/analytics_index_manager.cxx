@@ -158,6 +158,7 @@ public:
         options.ignore_if_exists,
         {},
         options.timeout,
+        options.parent_span,
       },
       [dataverse_name, handler = std::move(handler)](const auto& resp) {
         CB_LOG_DEBUG(
@@ -176,6 +177,7 @@ public:
         options.ignore_if_not_exists,
         {},
         options.timeout,
+        options.parent_span,
       },
       [handler = std::move(handler)](const auto& resp) {
         handler(core::impl::make_error(resp.ctx));
@@ -196,6 +198,7 @@ public:
         {},
         options.timeout,
         options.ignore_if_exists,
+        options.parent_span,
       },
       [handler = std::move(handler)](const auto& resp) {
         handler(core::impl::make_error(resp.ctx));
@@ -213,6 +216,7 @@ public:
         options.ignore_if_not_exists,
         {},
         options.timeout,
+        options.parent_span,
       },
       [handler = std::move(handler)](const auto& resp) {
         handler(core::impl::make_error(resp.ctx));
@@ -226,6 +230,7 @@ public:
       core::operations::management::analytics_dataset_get_all_request{
         {},
         options.timeout,
+        options.parent_span,
       },
       [handler = std::move(handler)](
         const core::operations::management::analytics_dataset_get_all_response& resp) {
@@ -261,6 +266,7 @@ public:
         options.ignore_if_exists,
         {},
         options.timeout,
+        options.parent_span,
       },
       [handler = std::move(handler)](const auto& resp) {
         handler(core::impl::make_error(resp.ctx));
@@ -280,6 +286,7 @@ public:
         options.ignore_if_not_exists,
         {},
         options.timeout,
+        options.parent_span,
       },
       [handler = std::move(handler)](const auto& resp) {
         handler(core::impl::make_error(resp.ctx));
@@ -293,6 +300,7 @@ public:
       core::operations::management::analytics_index_get_all_request{
         {},
         options.timeout,
+        options.parent_span,
       },
       [handler = std::move(handler)](
         const core::operations::management::analytics_index_get_all_response& resp) {
@@ -323,6 +331,7 @@ public:
         options.force,
         {},
         options.timeout,
+        options.parent_span,
       },
       [handler = std::move(handler)](const auto& resp) {
         handler(core::impl::make_error(resp.ctx));
@@ -338,6 +347,7 @@ public:
         options.link_name.value_or(DEFAULT_LINK_NAME),
         {},
         options.timeout,
+        options.parent_span,
       },
       [handler = std::move(handler)](const auto& resp) {
         handler(core::impl::make_error(resp.ctx));
@@ -351,6 +361,7 @@ public:
       core::operations::management::analytics_get_pending_mutations_request{
         {},
         options.timeout,
+        options.parent_span,
       },
       [handler = std::move(handler)](
         const core::operations::management::analytics_get_pending_mutations_response& resp) {
@@ -385,6 +396,7 @@ public:
             to_core_s3_external_link(link),
             {},
             options.timeout,
+            options.parent_span,
           },
           [handler = std::move(handler)](const auto& resp) {
             handler(core::impl::make_error(resp.ctx));
@@ -397,6 +409,7 @@ public:
             to_core_azure_blob_external_link(link),
             {},
             options.timeout,
+            options.parent_span,
           },
           [handler = std::move(handler)](const auto& resp) {
             handler(core::impl::make_error(resp.ctx));
@@ -409,6 +422,7 @@ public:
             to_core_couchbase_remote_link(link),
             {},
             options.timeout,
+            options.parent_span,
           },
           [handler = std::move(handler)](const auto& resp) {
             handler(core::impl::make_error(resp.ctx));
@@ -428,6 +442,7 @@ public:
             to_core_s3_external_link(link),
             {},
             options.timeout,
+            options.parent_span,
           },
           [handler = std::move(handler)](const auto& resp) {
             handler(core::impl::make_error(resp.ctx));
@@ -440,6 +455,7 @@ public:
             to_core_azure_blob_external_link(link),
             {},
             options.timeout,
+            options.parent_span,
           },
           [handler = std::move(handler)](const auto& resp) {
             handler(core::impl::make_error(resp.ctx));
@@ -452,6 +468,7 @@ public:
             to_core_couchbase_remote_link(link),
             {},
             options.timeout,
+            options.parent_span,
           },
           [handler = std::move(handler)](const auto& resp) {
             handler(core::impl::make_error(resp.ctx));
@@ -470,6 +487,7 @@ public:
         dataverse_name,
         {},
         options.timeout,
+        options.parent_span,
       },
       [handler = std::move(handler)](const auto& resp) {
         handler(core::impl::make_error(resp.ctx));
@@ -480,7 +498,7 @@ public:
                  get_links_analytics_handler&& handler) const
   {
     core::operations::management::analytics_link_get_all_request req{
-      {}, {}, {}, {}, options.timeout,
+      {}, {}, {}, {}, options.timeout, options.parent_span,
     };
     if (options.name.has_value()) {
       req.link_name = options.name.value();

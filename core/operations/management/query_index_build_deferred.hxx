@@ -21,6 +21,7 @@
 #include "core/operations/management/query_index_build.hxx"
 #include "core/operations/management/query_index_get_all_deferred.hxx"
 #include "core/operations/operation_traits.hxx"
+#include "core/public_fwd.hxx"
 #include "core/query_context.hxx"
 #include "couchbase/management/query_index.hxx"
 
@@ -56,6 +57,7 @@ struct query_index_build_deferred_request {
 
   std::optional<std::string> client_context_id{};
   std::optional<std::chrono::milliseconds> timeout{};
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
   [[nodiscard]] response_type make_response(error_context::http&& ctx,
                                             const encoded_response_type& /* encoded */) const

@@ -72,13 +72,4 @@ struct lookup_in_request {
                                    const encoded_response_type& encoded) const
     -> lookup_in_response;
 };
-
 } // namespace couchbase::core::operations
-namespace couchbase::core::io::mcbp_traits
-{
-
-template<>
-struct supports_parent_span<couchbase::core::operations::lookup_in_request>
-  : public std::true_type {
-};
-} // namespace couchbase::core::io::mcbp_traits

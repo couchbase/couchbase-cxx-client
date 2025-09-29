@@ -57,10 +57,3 @@ struct get_request {
                                    const encoded_response_type& encoded) const -> get_response;
 };
 } // namespace couchbase::core::operations
-
-namespace couchbase::core::io::mcbp_traits
-{
-template<>
-struct supports_parent_span<couchbase::core::operations::get_request> : public std::true_type {
-};
-} // namespace couchbase::core::io::mcbp_traits

@@ -67,7 +67,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                                static_cast<std::uint8_t>(encoded_request_type::body_type::opcode),
                                uuid::to_string(uuid::random())) };
   std::shared_ptr<couchbase::tracing::request_span> span_{ nullptr };
-  std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
+  std::shared_ptr<couchbase::tracing::request_span> parent_span_{ nullptr };
   std::optional<std::string> last_dispatched_from_{};
   std::optional<std::string> last_dispatched_to_{};
 
@@ -80,6 +80,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     , request(req)
     , manager_(manager)
     , timeout_(request.timeout.value_or(default_timeout))
+    , parent_span_(request.parent_span)
   {
     if constexpr (io::mcbp_traits::supports_durability_v<Request>) {
       if (request.durability_level != durability_level::none &&
@@ -93,15 +94,12 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
         timeout_ = durability_timeout_floor;
       }
     }
-    if constexpr (io::mcbp_traits::supports_parent_span_v<Request>) {
-      parent_span = request.parent_span;
-    }
   }
 
   void start(mcbp_command_handler&& handler)
   {
     span_ = manager_->tracer()->create_span(
-      tracing::span_name_for_mcbp_command(encoded_request_type::body_type::opcode), parent_span);
+      tracing::span_name_for_mcbp_command(encoded_request_type::body_type::opcode), parent_span_);
     if (span_->uses_tags()) {
       span_->add_tag(tracing::attributes::service, tracing::service::key_value);
       span_->add_tag(tracing::attributes::instance, request.id.bucket());

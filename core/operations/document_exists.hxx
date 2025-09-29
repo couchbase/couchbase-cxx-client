@@ -67,10 +67,3 @@ struct exists_request {
 };
 
 } // namespace couchbase::core::operations
-
-namespace couchbase::core::io::mcbp_traits
-{
-template<>
-struct supports_parent_span<couchbase::core::operations::exists_request> : public std::true_type {
-};
-} // namespace couchbase::core::io::mcbp_traits
