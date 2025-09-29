@@ -19,6 +19,7 @@
 
 #include "utils/movable_function.hxx"
 
+#include <chrono>
 #include <memory>
 #include <optional>
 #include <string>
@@ -31,6 +32,7 @@ class io_context;
 
 namespace couchbase::core
 {
+
 class row_streamer_impl;
 class http_response_body;
 
@@ -39,7 +41,8 @@ class row_streamer
 public:
   row_streamer(asio::io_context& io,
                http_response_body body,
-               const std::string& pointer_expression);
+               const std::string& pointer_expression,
+               const std::string& client_context_id);
 
   /**
    *  Starts the row stream and returns all the metadata preceding the first row. This typically
@@ -61,6 +64,17 @@ public:
    * If all rows have been streamed, returns the metadata encoded as JSON.
    */
   auto metadata() -> std::optional<std::string>;
+
+  /**
+   * Enables the streamer to timeout after the specified duration.
+   */
+  void set_streamer_timeout(std::chrono::milliseconds timeout);
+
+  /**
+   * Enables the streamer execute upstream functionality after streaming completes or the request
+   * times out (if the streamer timeout has been set).
+   */
+  void set_streamer_done_callback(utils::movable_function<void()>&& done_callback);
 
 private:
   std::shared_ptr<row_streamer_impl> impl_;

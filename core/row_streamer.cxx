@@ -17,7 +17,13 @@
 
 #include "row_streamer.hxx"
 
-#include <couchbase/error_codes.hxx>
+#include <couchbase/build_config.hxx>
+
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+#include "core/columnar/error_codes.hxx"
+#else
+#include "couchbase/error_codes.hxx"
+#endif
 
 #include "free_form_http_request.hxx"
 #include "logger/logger.hxx"
@@ -29,6 +35,7 @@
 #include <asio/experimental/channel_error.hpp>
 #include <asio/experimental/concurrent_channel.hpp>
 #include <asio/io_context.hpp>
+#include <asio/steady_timer.hpp>
 
 #include <atomic>
 #include <memory>
@@ -54,11 +61,14 @@ public:
 
   row_streamer_impl(asio::io_context& io,
                     http_response_body body,
-                    const std::string& pointer_expression)
+                    const std::string& pointer_expression,
+                    const std::string& client_context_id)
     : io_{ io }
     , body_{ std::move(body) }
+    , client_context_id_{ client_context_id }
     , rows_{ io_, ROW_BUFFER_SIZE }
     , lexer_{ pointer_expression, LEXER_DEPTH }
+    , deadline_{ io_ }
   {
   }
 
@@ -93,6 +103,8 @@ public:
     lexer_.on_complete([self = shared_from_this()](
                          std::error_code ec, std::size_t /*number_of_rows*/, std::string&& meta) {
       row_stream_end_signal signal{ ec, std::move(meta) };
+      self->deadline_.cancel();
+      self->invoke_done_callback();
       self->rows_.async_send({}, std::move(signal), [self](auto ec) {
         if (ec) {
           if (ec != asio::experimental::error::channel_closed &&
@@ -110,7 +122,16 @@ public:
   void next_row(utils::movable_function<void(std::string, std::error_code)>&& handler)
   {
     if (!rows_.is_open()) {
-      handler({}, errc::common::request_canceled);
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+      auto err = deadline_.expiry() <= std::chrono::steady_clock::now()
+                   ? make_error_code(columnar::errc::timeout)
+                   : make_error_code(columnar::client_errc::canceled);
+#else
+      auto err = deadline_.expiry() <= std::chrono::steady_clock::now()
+                   ? errc::common::ambiguous_timeout
+                   : errc::common::request_canceled;
+#endif
+      handler({}, err);
       return;
     }
     rows_.async_receive(
@@ -119,14 +140,18 @@ public:
         if (ec) {
           if (ec == asio::experimental::error::channel_closed ||
               ec == asio::experimental::error::channel_cancelled) {
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+            return handler({}, columnar::client_errc::canceled);
+#else
             return handler({}, errc::common::request_canceled);
+#endif
           }
           return handler({}, ec);
         }
         if (std::holds_alternative<row_stream_end_signal>(row)) {
           auto signal = std::get<row_stream_end_signal>(row);
           if (!signal.metadata.empty()) {
-            std::lock_guard<std::mutex> const lock{ self->metadata_mutex_ };
+            const std::lock_guard<std::mutex> lock{ self->metadata_mutex_ };
             self->metadata_ = std::move(signal.metadata);
           }
           return handler({}, signal.ec);
@@ -149,8 +174,26 @@ public:
 
   auto metadata() -> std::optional<std::string>
   {
-    std::lock_guard<std::mutex> const lock{ metadata_mutex_ };
+    const std::lock_guard<std::mutex> lock{ metadata_mutex_ };
     return metadata_;
+  }
+
+  void set_streamer_timeout(std::chrono::milliseconds timeout)
+  {
+    deadline_.expires_after(timeout);
+    deadline_.async_wait([self = shared_from_this()](auto ec) {
+      if (ec == asio::error::operation_aborted) {
+        return;
+      }
+      CB_LOG_DEBUG(R"(Row stream timed out: client_context_id={})", self->client_context_id_);
+      self->cancel();
+      self->invoke_done_callback();
+    });
+  }
+
+  void set_streamer_done_callback(utils::movable_function<void()>&& done_callback)
+  {
+    done_callback_ = std::move(done_callback);
   }
 
 private:
@@ -191,8 +234,17 @@ private:
     });
   }
 
+  void invoke_done_callback()
+  {
+    const std::scoped_lock lock{ done_callback_mutex_ };
+    if (auto cb = std::move(done_callback_); cb) {
+      cb();
+    }
+  }
+
   asio::io_context& io_;
   http_response_body body_;
+  std::string client_context_id_;
   asio::experimental::concurrent_channel<void(std::error_code,
                                               std::variant<std::string, row_stream_end_signal>)>
     rows_;
@@ -204,12 +256,18 @@ private:
   utils::json::streaming_lexer lexer_;
   std::mutex data_feed_mutex_{};
   std::mutex metadata_mutex_{};
+  asio::steady_timer deadline_;
+  std::mutex done_callback_mutex_{};
+  utils::movable_function<void()> done_callback_{};
 };
 
 row_streamer::row_streamer(asio::io_context& io,
                            couchbase::core::http_response_body body,
-                           const std::string& pointer_expression)
-  : impl_{ std::make_shared<row_streamer_impl>(io, std::move(body), pointer_expression) }
+                           const std::string& pointer_expression,
+                           const std::string& client_context_id)
+  : impl_{
+    std::make_shared<row_streamer_impl>(io, std::move(body), pointer_expression, client_context_id)
+  }
 {
 }
 
@@ -236,4 +294,17 @@ row_streamer::metadata() -> std::optional<std::string>
 {
   return impl_->metadata();
 }
+
+void
+row_streamer::set_streamer_done_callback(utils::movable_function<void()>&& done_callback)
+{
+  impl_->set_streamer_done_callback(std::move(done_callback));
+}
+
+void
+row_streamer::set_streamer_timeout(std::chrono::milliseconds timeout)
+{
+  impl_->set_streamer_timeout(timeout);
+}
+
 } // namespace couchbase::core
