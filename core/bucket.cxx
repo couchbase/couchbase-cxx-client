@@ -594,9 +594,9 @@ public:
     {
       const std::scoped_lock lock(sessions_mutex_);
       if (sessions_.empty()) {
-        CB_LOG_WARNING(R"({} unable to find connected session (sessions_ is empty), retry in {})",
-                       log_prefix_,
-                       heartbeat_interval_);
+        CB_LOG_DEBUG(R"({} unable to find connected session (sessions_ is empty), retry in {})",
+                     log_prefix_,
+                     heartbeat_interval_);
         return;
       }
 
@@ -616,9 +616,9 @@ public:
       req.opaque(session->next_opaque());
       session->write_and_flush(req.data());
     } else {
-      CB_LOG_WARNING(R"({} unable to find connected session with GCCCP support, retry in {})",
-                     log_prefix_,
-                     heartbeat_interval_);
+      CB_LOG_DEBUG(R"({} unable to find connected session with GCCCP support, retry in {})",
+                   log_prefix_,
+                   heartbeat_interval_);
     }
   }
 

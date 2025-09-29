@@ -78,9 +78,9 @@ dns_srv_tracker::get_srv_nodes(
                                            self->address_,
                                            resp.ec.message());
                           } else if (resp.targets.empty() && self->address_ != "localhost") {
-                            CB_LOG_WARNING("DNS SRV query returned 0 records for \"{}\", assuming "
-                                           "that cluster is listening this address",
-                                           self->address_);
+                            CB_LOG_DEBUG("DNS SRV query returned 0 records for \"{}\", assuming "
+                                         "that cluster is listening this address",
+                                         self->address_);
                           } else {
                             nodes.reserve(resp.targets.size());
                             for (const auto& address : resp.targets) {
