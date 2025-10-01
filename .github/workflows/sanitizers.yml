@@ -21,7 +21,7 @@ jobs:
       fail-fast: false
       matrix:
         server:
-          - 7.6.5
+          - 7.6.7
         sanitizer:
           - asan
           - lsan
@@ -32,14 +32,6 @@ jobs:
           - tls
           - plain
     runs-on: ubuntu-24.04
-    services:
-      couchbase:
-        image: couchbase:enterprise-${{ matrix.server }}
-        ports:
-          - 8091-8096:8091-8096
-          - 11210:11210
-          - 18091-18096:18091-18096
-          - 11207:11207
     steps:
       - name: Install dependencies
         run: |
@@ -48,10 +40,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - name: Initialize couchbase
-        env:
-          CB_TRAVEL_SAMPLE: yes
-        run: ./bin/init-cluster
+      - name: Create Couchbase cluster with cbdinocluster
+        id: cbdino
+        uses: ./.github/actions/create-cluster
+        with:
+          version: ${{ matrix.server }}
+          suite: unit
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
@@ -64,15 +58,21 @@ jobs:
           CB_BORINGSSL: OFF
         run: ./bin/build-tests
       - name: Check couchbase
+        env:
+          HOST: ${{ steps.cbdino.outputs.ip }}
         run: ./bin/check-cluster
       - name: Run tests
         timeout-minutes: 120
         env:
           CB_SANITIZER: ${{ matrix.sanitizer }}
           TEST_SERVER_VERSION: ${{ matrix.server }}
-          TEST_CONNECTION_STRING: ${{ matrix.tls == 'tls' && 'couchbases://127.0.0.1?trust_certificate=cluster.crt' || 'couchbase://127.0.0.1' }}
+          TEST_CONNECTION_STRING: ${{ matrix.tls == 'tls' && format('{0}?trust_certificate=cluster.crt', steps.cbdino.outputs.tls-connstr) || steps.cbdino.outputs.connstr }}
           TEST_LOG_LEVEL: trace
         run: ./bin/run-unit-tests
+      - name: Remove Couchbase cluster
+        uses: ./.github/actions/remove-cluster
+        with:
+          id: ${{ steps.cbdino.outputs.id }}
       - name: Upload report
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4

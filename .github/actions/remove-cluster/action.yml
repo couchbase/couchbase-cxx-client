@@ -1,0 +1,13 @@
+name: remove-cluster
+description: Removes a cbdinocluster cluster
+inputs:
+  id:
+    description: 'cbdinocluster ID'
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Remove cbdinocluster cluster
+      shell: bash
+      run: |
+        cbdinocluster -v rm ${{ inputs.id }}
