@@ -24,7 +24,7 @@
 #include "core/meta/version.hxx"
 #include "core/platform/uuid.h"
 #include "core/service_type_fmt.hxx"
-#include "core/utils/concurrent_fixed_queue.hxx"
+#include "core/utils/concurrent_fixed_priority_queue.hxx"
 #include "core/utils/json.hxx"
 
 #include <asio/steady_timer.hpp>
@@ -43,6 +43,11 @@ struct reported_span {
   auto operator<(const reported_span& other) const -> bool
   {
     return duration < other.duration;
+  }
+
+  auto operator>(const reported_span& other) const -> bool
+  {
+    return duration > other.duration;
   }
 };
 
@@ -148,7 +153,7 @@ public:
   }
 };
 
-using fixed_span_queue = utils::concurrent_fixed_queue<reported_span>;
+using fixed_span_queue = utils::concurrent_fixed_priority_queue<reported_span>;
 
 auto
 convert(const std::shared_ptr<threshold_logging_span>& span) -> reported_span

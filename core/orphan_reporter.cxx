@@ -20,7 +20,7 @@
 #include <couchbase/build_info.hxx>
 
 #include "logger/logger.hxx"
-#include "utils/concurrent_fixed_queue.hxx"
+#include "utils/concurrent_fixed_priority_queue.hxx"
 #include "utils/json.hxx"
 
 #include <asio/steady_timer.hpp>
@@ -32,6 +32,12 @@ auto
 orphan_attributes::operator<(const orphan_attributes& other) const -> bool
 {
   return total_duration < other.total_duration;
+}
+
+auto
+orphan_attributes::operator>(const orphan_attributes& other) const -> bool
+{
+  return total_duration > other.total_duration;
 }
 
 auto
@@ -122,7 +128,7 @@ private:
   }
 
   orphan_reporter_options options_;
-  utils::concurrent_fixed_queue<orphan_attributes> orphan_queue_;
+  utils::concurrent_fixed_priority_queue<orphan_attributes> orphan_queue_;
   asio::steady_timer emit_timer_;
 };
 

@@ -43,6 +43,7 @@ struct orphan_attributes {
   std::string operation_name;
 
   auto operator<(const orphan_attributes& other) const -> bool;
+  auto operator>(const orphan_attributes& other) const -> bool;
   auto to_json() const -> tao::json::value;
 };
 
