@@ -743,11 +743,11 @@ public:
     }
 
     websocket_state_ = connection_state::connected;
-    CB_LOG_WARNING("connected app telemetry endpoint.  {}",
-                   tao::json::to_string(tao::json::value{
-                     { "stream", stream->id() },
-                     { "hostname", address.hostname },
-                   }));
+    CB_LOG_DEBUG("connected app telemetry endpoint.  {}",
+                 tao::json::to_string(tao::json::value{
+                   { "stream", stream->id() },
+                   { "hostname", address.hostname },
+                 }));
     websocket_session_ = websocket_session::start(ctx_,
                                                   address,
                                                   credentials_,
