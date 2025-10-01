@@ -70,6 +70,8 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
   std::shared_ptr<couchbase::tracing::request_span> parent_span_{ nullptr };
   std::optional<std::string> last_dispatched_from_{};
   std::optional<std::string> last_dispatched_to_{};
+  std::chrono::time_point<std::chrono::steady_clock> started_at_{};
+  std::vector<std::chrono::microseconds> server_durations_{};
 
   mcbp_command(asio::io_context& ctx,
                std::shared_ptr<Manager> manager,
@@ -98,6 +100,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
 
   void start(mcbp_command_handler&& handler)
   {
+    started_at_ = std::chrono::steady_clock::now();
     span_ = manager_->tracer()->create_span(
       tracing::span_name_for_mcbp_command(encoded_request_type::body_type::opcode), parent_span_);
     if (span_->uses_tags()) {
@@ -137,9 +140,10 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     std::swap(handler, handler_);
     if (span_ != nullptr) {
       if (msg) {
-        auto server_duration_us =
+        const auto server_duration_us =
           static_cast<std::uint64_t>(protocol::parse_server_duration_us(msg.value()));
         span_->add_tag(tracing::attributes::server_duration, server_duration_us);
+        server_durations_.emplace_back(std::chrono::microseconds(server_duration_us));
       }
       span_->end();
       span_ = nullptr;
@@ -314,18 +318,14 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
 
         self->retry_backoff.cancel();
         if (ec == asio::error::operation_aborted) {
-          if (self->span_->uses_tags()) {
-            self->span_->add_tag(tracing::attributes::orphan, "aborted");
-          }
+          self->manager_->orphan_reporter()->add_orphan(self->create_orphan_attributes());
           return self->invoke_handler(make_error_code(self->request.retries.idempotent()
                                                         ? errc::common::unambiguous_timeout
                                                         : errc::common::ambiguous_timeout));
         }
         if (ec == errc::common::request_canceled) {
           if (!self->request.retries.idempotent() && !allows_non_idempotent_retry(reason)) {
-            if (self->span_->uses_tags()) {
-              self->span_->add_tag(tracing::attributes::orphan, "canceled");
-            }
+            self->manager_->orphan_reporter()->add_orphan(self->create_orphan_attributes());
             return self->invoke_handler(ec);
           }
           return io::retry_orchestrator::maybe_retry(self->manager_, self, reason, ec);
@@ -404,6 +404,28 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     if (span_->uses_tags())
       span_->add_tag(tracing::attributes::local_id, session_->id());
     send();
+  }
+
+private:
+  auto create_orphan_attributes() -> orphan_attributes
+  {
+    orphan_attributes attrs;
+
+    attrs.operation_name = Request::observability_identifier;
+    attrs.connection_id = session_->id();
+    attrs.operation_id = fmt::format("0x{:x}", request.opaque);
+    attrs.last_remote_socket = session_->remote_address();
+    attrs.last_local_socket = session_->local_address();
+    if (!server_durations_.empty()) {
+      attrs.last_server_duration = server_durations_.back();
+      for (const auto d : server_durations_) {
+        attrs.total_server_duration += d;
+      }
+    }
+    attrs.total_duration = std::chrono::duration_cast<std::chrono::microseconds>(
+      std::chrono::steady_clock::now() - started_at_);
+
+    return attrs;
   }
 };
 

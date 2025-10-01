@@ -70,7 +70,8 @@ public:
          asio::ssl::context& tls,
          std::shared_ptr<tracing::tracer_wrapper> tracer,
          std::shared_ptr<metrics::meter_wrapper> meter,
-         std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter,
+         std::shared_ptr<orphan_reporter> orphan_reporter,
+         std::shared_ptr<app_telemetry_meter> app_telemetry_meter,
          std::string name,
          couchbase::core::origin origin,
          std::vector<protocol::hello_feature> known_features,
@@ -210,6 +211,7 @@ public:
   [[nodiscard]] auto log_prefix() const -> const std::string&;
   [[nodiscard]] auto tracer() const -> std::shared_ptr<tracing::tracer_wrapper>;
   [[nodiscard]] auto meter() const -> std::shared_ptr<metrics::meter_wrapper>;
+  [[nodiscard]] auto orphan_reporter() const -> std::shared_ptr<orphan_reporter>;
   [[nodiscard]] auto app_telemetry_meter() const -> std::shared_ptr<app_telemetry_meter>;
   [[nodiscard]] auto default_retry_strategy() const -> std::shared_ptr<couchbase::retry_strategy>;
   [[nodiscard]] auto is_closed() const -> bool;

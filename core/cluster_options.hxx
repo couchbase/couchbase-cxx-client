@@ -21,6 +21,7 @@
 #include "core/io/dns_config.hxx"
 #include "core/io/ip_protocol.hxx"
 #include "core/metrics/logging_meter_options.hxx"
+#include "core/orphan_reporter.hxx"
 #include "core/tracing/threshold_logging_options.hxx"
 #include "service_type.hxx"
 #include "timeout_defaults.hxx"
@@ -72,9 +73,11 @@ public:
   bool enable_compression{ true };
   bool enable_tracing{ true };
   bool enable_metrics{ true };
+  bool enable_orphan_reporting{ true };
   std::string network{ "auto" };
   tracing::threshold_logging_options tracing_options{};
   metrics::logging_meter_options metrics_options{};
+  orphan_reporter_options orphan_options{};
   tls_verify_mode tls_verify{ tls_verify_mode::peer };
   std::shared_ptr<couchbase::tracing::request_tracer> tracer{ nullptr };
   std::shared_ptr<couchbase::metrics::meter> meter{ nullptr };

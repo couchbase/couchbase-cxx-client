@@ -435,7 +435,9 @@ set(couchbase_cxx_client_FILES
     core/app_telemetry_address.cxx
     core/app_telemetry_meter.cxx
     core/app_telemetry_reporter.cxx
-    core/cluster_credentials.cxx)
+    core/cluster_credentials.cxx
+    core/orphan_reporter.cxx
+)
 
 set(couchbase_cxx_client_LIBRARIES)
 set(couchbase_cxx_client_DEFAULT_LIBRARY)

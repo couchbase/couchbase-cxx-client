@@ -141,6 +141,7 @@
 #include "core/operations/management/view_index_get.hxx"
 #include "core/operations/management/view_index_get_all.hxx"
 #include "core/operations/management/view_index_upsert.hxx"
+#include "core/orphan_reporter.hxx"
 #include "core/platform/uuid.h"
 #include "core/protocol/hello_feature.hxx"
 #include "core/service_type.hxx"
@@ -468,6 +469,7 @@ public:
                                      tls_,
                                      tracer_,
                                      meter_,
+                                     orphan_reporter_,
                                      app_telemetry_meter_,
                                      bucket_name,
                                      origin,
@@ -1155,21 +1157,24 @@ public:
         for (const auto& [_, bucket] : buckets) {
           bucket->close();
         }
-        if (auto session_manager = std::move(self->session_manager_); session_manager) {
+        if (const auto session_manager = std::move(self->session_manager_); session_manager) {
           session_manager->close();
         }
         self->work_.reset();
-        if (auto tracer = std::move(self->tracer_); tracer) {
+        if (const auto tracer = std::move(self->tracer_); tracer) {
           tracer->stop();
         }
-        if (auto meter = std::move(self->meter_); meter) {
+        if (const auto meter = std::move(self->meter_); meter) {
           meter->stop();
         }
-        if (auto meter = std::move(self->app_telemetry_meter_); meter) {
+        if (const auto meter = std::move(self->app_telemetry_meter_); meter) {
           meter->disable();
         }
-        if (auto reporter = std::move(self->app_telemetry_reporter_); reporter) {
+        if (const auto reporter = std::move(self->app_telemetry_reporter_); reporter) {
           reporter->stop();
+        }
+        if (const auto orphan_reporter = std::move(self->orphan_reporter_); orphan_reporter) {
+          orphan_reporter->stop();
         }
         handler();
       }));
@@ -1269,6 +1274,11 @@ private:
     session_manager_->set_app_telemetry_meter(app_telemetry_meter_);
     app_telemetry_reporter_ = std::make_shared<app_telemetry_reporter>(
       app_telemetry_meter_, origin_.options(), origin_.credentials(), ctx_, tls_);
+
+    if (origin_.options().enable_orphan_reporting) {
+      orphan_reporter_ = std::make_shared<orphan_reporter>(ctx_, origin_.options().orphan_options);
+      orphan_reporter_->start();
+    }
   }
 
   std::string id_{ uuid::to_string(uuid::random()) };
@@ -1284,6 +1294,7 @@ private:
   couchbase::core::origin origin_{};
   std::shared_ptr<tracing::tracer_wrapper> tracer_{ nullptr };
   std::shared_ptr<metrics::meter_wrapper> meter_{ nullptr };
+  std::shared_ptr<orphan_reporter> orphan_reporter_{ nullptr };
   std::atomic_bool stopped_{ false };
   std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter_{
     std::make_shared<core::app_telemetry_meter>()

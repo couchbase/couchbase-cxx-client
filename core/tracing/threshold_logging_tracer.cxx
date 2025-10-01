@@ -24,13 +24,13 @@
 #include "core/meta/version.hxx"
 #include "core/platform/uuid.h"
 #include "core/service_type_fmt.hxx"
+#include "core/utils/concurrent_fixed_priority_queue.hxx"
 #include "core/utils/json.hxx"
 
 #include <asio/steady_timer.hpp>
 #include <tao/json/value.hpp>
 
 #include <chrono>
-#include <mutex>
 #include <queue>
 #include <utility>
 
@@ -43,6 +43,11 @@ struct reported_span {
   auto operator<(const reported_span& other) const -> bool
   {
     return duration < other.duration;
+  }
+
+  auto operator>(const reported_span& other) const -> bool
+  {
+    return duration > other.duration;
   }
 };
 
@@ -110,11 +115,6 @@ public:
     return total_server_duration_us_;
   }
 
-  [[nodiscard]] auto orphan() const -> bool
-  {
-    return string_tags_.find(tracing::attributes::orphan) != string_tags_.end();
-  }
-
   [[nodiscard]] auto is_key_value() const -> bool
   {
     auto service_tag = string_tags_.find(tracing::attributes::service);
@@ -153,65 +153,7 @@ public:
   }
 };
 
-template<typename T>
-class concurrent_fixed_queue
-{
-private:
-  std::mutex mutex_;
-  std::priority_queue<T> data_;
-  std::size_t capacity_{};
-
-public:
-  using size_type = typename std::priority_queue<T>::size_type;
-
-  explicit concurrent_fixed_queue(std::size_t capacity)
-    : capacity_(capacity)
-  {
-  }
-
-  concurrent_fixed_queue(const concurrent_fixed_queue&) = delete;
-  concurrent_fixed_queue(concurrent_fixed_queue&&) = delete;
-  auto operator=(const concurrent_fixed_queue&) -> concurrent_fixed_queue& = delete;
-  auto operator=(concurrent_fixed_queue&&) -> concurrent_fixed_queue& = delete;
-  ~concurrent_fixed_queue() = default;
-
-  void pop()
-  {
-    std::unique_lock<std::mutex> lock(mutex_);
-    data_.pop();
-  }
-
-  auto size() -> size_type
-  {
-    std::unique_lock<std::mutex> lock(mutex_);
-    return data_.size();
-  }
-
-  auto empty() -> bool
-  {
-    const std::unique_lock<std::mutex> lock(mutex_);
-    return data_.empty();
-  }
-
-  void emplace(const T&& item)
-  {
-    const std::unique_lock<std::mutex> lock(mutex_);
-    data_.emplace(std::forward<const T>(item));
-    if (data_.size() > capacity_) {
-      data_.pop();
-    }
-  }
-
-  auto steal_data() -> std::priority_queue<T>
-  {
-    std::priority_queue<T> data;
-    const std::unique_lock<std::mutex> lock(mutex_);
-    std::swap(data, data_);
-    return data;
-  }
-};
-
-using fixed_span_queue = concurrent_fixed_queue<reported_span>;
+using fixed_span_queue = utils::concurrent_fixed_priority_queue<reported_span>;
 
 auto
 convert(const std::shared_ptr<threshold_logging_span>& span) -> reported_span
@@ -255,9 +197,7 @@ class threshold_logging_tracer_impl
 public:
   threshold_logging_tracer_impl(const threshold_logging_options& options, asio::io_context& ctx)
     : options_(options)
-    , emit_orphan_report_(ctx)
     , emit_threshold_report_(ctx)
-    , orphan_queue_{ options.orphaned_sample_size }
   {
     threshold_queues_.try_emplace(service_type::key_value, options.threshold_sample_size);
     threshold_queues_.try_emplace(service_type::query, options.threshold_sample_size);
@@ -274,28 +214,19 @@ public:
 
   ~threshold_logging_tracer_impl()
   {
-    emit_orphan_report_.cancel();
     emit_threshold_report_.cancel();
 
-    log_orphan_report();
     log_threshold_report();
   }
 
   void start()
   {
-    rearm_orphan_reporter();
     rearm_threshold_reporter();
   }
 
   void stop()
   {
-    emit_orphan_report_.cancel();
     emit_threshold_report_.cancel();
-  }
-
-  void add_orphan(const std::shared_ptr<threshold_logging_span>& span)
-  {
-    orphan_queue_.emplace(convert(span));
   }
 
   void check_threshold(const std::shared_ptr<threshold_logging_span>& span)
@@ -313,18 +244,6 @@ public:
   }
 
 private:
-  void rearm_orphan_reporter()
-  {
-    emit_orphan_report_.expires_after(options_.orphaned_emit_interval);
-    emit_orphan_report_.async_wait([this](std::error_code ec) {
-      if (ec == asio::error::operation_aborted) {
-        return;
-      }
-      log_orphan_report();
-      rearm_orphan_reporter();
-    });
-  }
-
   void rearm_threshold_reporter()
   {
     emit_threshold_report_.expires_after(options_.threshold_emit_interval);
@@ -337,35 +256,13 @@ private:
     });
   }
 
-  void log_orphan_report()
-  {
-    if (orphan_queue_.empty()) {
-      return;
-    }
-    auto queue = orphan_queue_.steal_data();
-    tao::json::value report{
-      { "count", queue.size() },
-#if COUCHBASE_CXX_CLIENT_DEBUG_BUILD
-      { "emit_interval_ms", options_.orphaned_emit_interval.count() },
-      { "sample_size", options_.orphaned_sample_size },
-#endif
-    };
-    tao::json::value entries = tao::json::empty_array;
-    while (!queue.empty()) {
-      entries.emplace_back(queue.top().payload);
-      queue.pop();
-    }
-    report["top"] = entries;
-    CB_LOG_WARNING("Orphan responses observed: {}", utils::json::generate(report));
-  }
-
   void log_threshold_report()
   {
     for (auto& [service, threshold_queue] : threshold_queues_) {
       if (threshold_queue.empty()) {
         continue;
       }
-      auto queue = threshold_queue.steal_data();
+      auto [queue, _] = threshold_queue.steal_data();
       tao::json::value report{
         { "count", queue.size() },
         { "service", fmt::format("{}", service) },
@@ -390,9 +287,7 @@ private:
 
   const threshold_logging_options& options_;
 
-  asio::steady_timer emit_orphan_report_;
   asio::steady_timer emit_threshold_report_;
-  fixed_span_queue orphan_queue_;
   std::map<service_type, fixed_span_queue> threshold_queues_{};
 };
 
@@ -407,11 +302,7 @@ threshold_logging_tracer::start_span(std::string name,
 void
 threshold_logging_tracer::report(const std::shared_ptr<threshold_logging_span>& span)
 {
-  if (span->orphan()) {
-    impl_->add_orphan(span);
-  } else {
-    impl_->check_threshold(span);
-  }
+  impl_->check_threshold(span);
 }
 
 threshold_logging_tracer::threshold_logging_tracer(asio::io_context& ctx,

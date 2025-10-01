@@ -23,6 +23,7 @@
 
 #include "core/meta/version.hxx"
 #include "core/platform/base64.h"
+#include "core/utils/concurrent_fixed_priority_queue.hxx"
 #include "core/utils/join_strings.hxx"
 #include "core/utils/json.hxx"
 #include "core/utils/movable_function.hxx"
@@ -292,6 +293,64 @@ TEST_CASE("unit: semantic version string", "[unit]")
   REQUIRE(couchbase::core::meta::parse_git_describe_output("1.0.0-beta.4-0-gfbc9922") ==
           with_build("1.0.0-beta.4"));
   REQUIRE(couchbase::core::meta::parse_git_describe_output("1.0.0-beta.4") == "1.0.0-beta.4");
+}
+
+TEST_CASE("unit: concurrent fixed queue", "[unit]")
+{
+  auto queue = couchbase::core::utils::concurrent_fixed_priority_queue<int>(3);
+  REQUIRE(queue.empty());
+
+  SECTION("fewer items than capacity")
+  {
+    queue.emplace(1);
+    queue.emplace(2);
+
+    auto [data, dropped] = queue.steal_data();
+    REQUIRE(dropped == 0);
+    REQUIRE(data.size() == 2);
+    REQUIRE(data.top() == 2);
+    data.pop();
+    REQUIRE(data.top() == 1);
+    data.pop();
+  }
+
+  SECTION("at capacity")
+  {
+    queue.emplace(10);
+    queue.emplace(1);
+    queue.emplace(2);
+
+    auto [data, dropped] = queue.steal_data();
+    REQUIRE(dropped == 0);
+    REQUIRE(data.size() == 3);
+    REQUIRE(data.top() == 10);
+    data.pop();
+    REQUIRE(data.top() == 2);
+    data.pop();
+    REQUIRE(data.top() == 1);
+    data.pop();
+  }
+
+  SECTION("more items than capacity")
+  {
+    queue.emplace(2);
+    queue.emplace(10);
+    queue.emplace(1);
+    queue.emplace(20);
+    queue.emplace(5);
+
+    auto [data, dropped] = queue.steal_data();
+    REQUIRE(dropped == 2);
+    REQUIRE(data.size() == 3);
+    REQUIRE(data.top() == 20);
+    data.pop();
+    REQUIRE(data.top() == 10);
+    data.pop();
+    REQUIRE(data.top() == 5);
+    data.pop();
+  }
+
+  REQUIRE(queue.empty());
 }
 
 #if 0
