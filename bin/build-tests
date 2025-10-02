@@ -99,10 +99,6 @@ cd "${BUILD_DIR}"
 CB_CMAKE_BUILD_EXTRAS=
 if [ "x${CB_TEST_SUITE}" != "x" ] ; then
     CB_CMAKE_BUILD_EXTRAS="--target build_${CB_TEST_SUITE}_tests"
-    if [ "x${CB_TEST_SUITE}" = "xunit" ]; then
-        # always run integration tests if "unit" target selected
-        CB_CMAKE_BUILD_EXTRAS="${CB_CMAKE_BUILD_EXTRAS} --target build_integration_tests"
-    fi
 fi
 
 ${CB_CMAKE}  \
