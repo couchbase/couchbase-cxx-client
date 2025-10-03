@@ -55,7 +55,7 @@ orphan_attributes::to_json() const -> tao::json::value
   };
 }
 
-class orphan_reporter_impl
+class orphan_reporter_impl : public std::enable_shared_from_this<orphan_reporter_impl>
 {
 public:
   orphan_reporter_impl(asio::io_context& ctx, const orphan_reporter_options& options)
@@ -114,16 +114,16 @@ private:
   void rearm()
   {
     emit_timer_.expires_after(options_.emit_interval);
-    emit_timer_.async_wait([this](std::error_code ec) {
+    emit_timer_.async_wait([self = shared_from_this()](std::error_code ec) -> void {
       if (ec == asio::error::operation_aborted) {
         return;
       }
 
-      if (auto report = flush_and_create_output(); report.has_value()) {
+      if (auto report = self->flush_and_create_output(); report.has_value()) {
         CB_LOG_WARNING("Orphan responses observed: {}", report.value());
       }
 
-      rearm();
+      self->rearm();
     });
   }
 
