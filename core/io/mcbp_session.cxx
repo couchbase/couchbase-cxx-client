@@ -219,7 +219,7 @@ class mcbp_session_impl
     std::shared_ptr<mcbp_session_impl> session_;
     sasl::ClientContext sasl_;
     std::atomic_bool stopped_{ false };
-    impl::bootstrap_error last_bootstrap_error_;
+    std::optional<impl::bootstrap_error> last_bootstrap_error_;
 
   public:
     bootstrap_handler(const bootstrap_handler&) = delete;
@@ -251,12 +251,12 @@ class mcbp_session_impl
       return { "SCRAM-SHA512", "SCRAM-SHA256", "SCRAM-SHA1" };
     }
 
-    auto last_bootstrap_error() && -> impl::bootstrap_error
+    auto last_bootstrap_error() && -> std::optional<impl::bootstrap_error>
     {
       return std::move(last_bootstrap_error_);
     }
 
-    [[nodiscard]] auto last_bootstrap_error() const& -> const impl::bootstrap_error&
+    [[nodiscard]] auto last_bootstrap_error() const& -> const std::optional<impl::bootstrap_error>&
     {
       return last_bootstrap_error_;
     }
@@ -364,7 +364,8 @@ class mcbp_session_impl
                                         std::move(error_msg),
                                         session_->bootstrap_hostname(),
                                         session_->bootstrap_port() };
-              CB_LOG_DEBUG("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
+              CB_LOG_DEBUG(
+                "{} {}", session_->log_prefix_, last_bootstrap_error_.value().error_message);
               return complete(errc::common::rate_limited);
             }
             case key_value_status_code::scope_size_limit_exceeded: {
@@ -378,7 +379,8 @@ class mcbp_session_impl
                                         std::move(error_msg),
                                         session_->bootstrap_hostname(),
                                         session_->bootstrap_port() };
-              CB_LOG_DEBUG("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
+              CB_LOG_DEBUG(
+                "{} {}", session_->log_prefix_, last_bootstrap_error_.value().error_message);
               return complete(errc::common::quota_limited);
             }
             default:
@@ -406,7 +408,8 @@ class mcbp_session_impl
                                           std::move(error_msg),
                                           session_->bootstrap_hostname(),
                                           session_->bootstrap_port() };
-                CB_LOG_WARNING("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
+                CB_LOG_WARNING(
+                  "{} {}", session_->log_prefix_, last_bootstrap_error_.value().error_message);
                 return complete(errc::network::handshake_failure);
               }
             } break;
@@ -423,7 +426,8 @@ class mcbp_session_impl
                                           std::move(error_msg),
                                           session_->bootstrap_hostname(),
                                           session_->bootstrap_port() };
-                CB_LOG_WARNING("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
+                CB_LOG_WARNING(
+                  "{} {}", session_->log_prefix_, last_bootstrap_error_.value().error_message);
                 return complete(errc::common::authentication_failure);
               }
             } break;
@@ -453,7 +457,8 @@ class mcbp_session_impl
                                             std::move(error_msg),
                                             session_->bootstrap_hostname(),
                                             session_->bootstrap_port() };
-                  CB_LOG_ERROR("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
+                  CB_LOG_ERROR(
+                    "{} {}", session_->log_prefix_, last_bootstrap_error_.value().error_message);
                   return complete(errc::common::authentication_failure);
                 }
               } else {
@@ -467,7 +472,8 @@ class mcbp_session_impl
                                           std::move(error_msg),
                                           session_->bootstrap_hostname(),
                                           session_->bootstrap_port() };
-                CB_LOG_WARNING("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
+                CB_LOG_WARNING(
+                  "{} {}", session_->log_prefix_, last_bootstrap_error_.value().error_message);
                 return complete(errc::common::authentication_failure);
               }
             } break;
@@ -487,7 +493,8 @@ class mcbp_session_impl
                                         std::move(error_msg),
                                         session_->bootstrap_hostname(),
                                         session_->bootstrap_port() };
-              CB_LOG_ERROR("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
+              CB_LOG_ERROR(
+                "{} {}", session_->log_prefix_, last_bootstrap_error_.value().error_message);
               return complete(errc::common::authentication_failure);
             }
             case protocol::client_opcode::get_error_map: {
@@ -504,7 +511,8 @@ class mcbp_session_impl
                                           std::move(error_msg),
                                           session_->bootstrap_hostname(),
                                           session_->bootstrap_port() };
-                CB_LOG_WARNING("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
+                CB_LOG_WARNING(
+                  "{} {}", session_->log_prefix_, last_bootstrap_error_.value().error_message);
                 return complete(errc::network::protocol_error);
               }
             } break;
@@ -526,7 +534,8 @@ class mcbp_session_impl
                                           std::move(error_msg),
                                           session_->bootstrap_hostname(),
                                           session_->bootstrap_port() };
-                CB_LOG_DEBUG("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
+                CB_LOG_DEBUG(
+                  "{} {}", session_->log_prefix_, last_bootstrap_error_.value().error_message);
                 return complete(errc::network::configuration_not_available);
               } else if (resp.status() == key_value_status_code::no_access) {
                 auto error_msg =
@@ -536,7 +545,8 @@ class mcbp_session_impl
                                           std::move(error_msg),
                                           session_->bootstrap_hostname(),
                                           session_->bootstrap_port() };
-                CB_LOG_DEBUG("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
+                CB_LOG_DEBUG(
+                  "{} {}", session_->log_prefix_, last_bootstrap_error_.value().error_message);
                 session_->bucket_selected_ = false;
                 return complete(errc::common::bucket_not_found);
               } else {
@@ -549,7 +559,8 @@ class mcbp_session_impl
                                           std::move(error_msg),
                                           session_->bootstrap_hostname(),
                                           session_->bootstrap_port() };
-                CB_LOG_WARNING("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
+                CB_LOG_WARNING(
+                  "{} {}", session_->log_prefix_, last_bootstrap_error_.value().error_message);
                 return complete(errc::common::bucket_not_found);
               }
             } break;
@@ -594,7 +605,8 @@ class mcbp_session_impl
                                           std::move(error_msg),
                                           session_->bootstrap_hostname(),
                                           session_->bootstrap_port() };
-                CB_LOG_DEBUG("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
+                CB_LOG_DEBUG(
+                  "{} {}", session_->log_prefix_, last_bootstrap_error_.value().error_message);
                 return complete(errc::network::configuration_not_available);
               } else if (resp.status() == key_value_status_code::no_bucket &&
                          !session_->bucket_name_) {
@@ -618,7 +630,8 @@ class mcbp_session_impl
                                           std::move(error_msg),
                                           session_->bootstrap_hostname(),
                                           session_->bootstrap_port() };
-                CB_LOG_WARNING("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
+                CB_LOG_WARNING(
+                  "{} {}", session_->log_prefix_, last_bootstrap_error_.value().error_message);
                 return complete(errc::network::protocol_error);
               }
             } break;
@@ -628,7 +641,8 @@ class mcbp_session_impl
                                         std::move(error_msg),
                                         session_->bootstrap_hostname(),
                                         session_->bootstrap_port() };
-              CB_LOG_WARNING("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
+              CB_LOG_WARNING(
+                "{} {}", session_->log_prefix_, last_bootstrap_error_.value().error_message);
               return complete(errc::network::protocol_error);
           }
           break;
