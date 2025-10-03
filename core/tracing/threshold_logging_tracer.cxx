@@ -36,6 +36,7 @@
 
 namespace couchbase::core::tracing
 {
+
 struct reported_span {
   std::chrono::microseconds duration;
   tao::json::value payload;

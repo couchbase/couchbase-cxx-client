@@ -40,50 +40,60 @@
 #include <couchbase/tracing/request_tracer.hxx>
 
 #include <catch2/generators/catch_generators.hpp>
+#include <utility>
 
 class test_span : public couchbase::tracing::request_span
 {
 public:
-  test_span(const std::string& name)
+  explicit test_span(const std::string& name)
     : test_span(name, nullptr)
   {
   }
+
   test_span(const std::string& name, std::shared_ptr<couchbase::tracing::request_span> parent)
-    : request_span(name, parent)
+    : request_span(name, std::move(parent))
   {
     start_ = std::chrono::steady_clock::now();
     id_ = test::utils::uniq_id("span");
   }
+
   void add_tag(const std::string& name, std::uint64_t value) override
   {
     int_tags_[name] = value;
   }
+
   void add_tag(const std::string& name, const std::string& value) override
   {
     string_tags_[name] = value;
   }
+
   void end() override
   {
     duration_ = std::chrono::duration_cast<std::chrono::nanoseconds>(
       std::chrono::steady_clock::now() - start_);
   }
-  std::map<std::string, std::string> string_tags()
+
+  auto string_tags() -> std::map<std::string, std::string>
   {
     return string_tags_;
   }
-  std::map<std::string, std::uint64_t> int_tags()
+
+  auto int_tags() -> std::map<std::string, std::uint64_t>
   {
     return int_tags_;
   }
-  std::chrono::nanoseconds duration()
+
+  auto duration() -> std::chrono::nanoseconds
   {
     return duration_;
   }
-  std::chrono::time_point<std::chrono::steady_clock> start()
+
+  auto start() -> std::chrono::time_point<std::chrono::steady_clock>
   {
     return start_;
   }
-  std::string id()
+
+  auto id() -> std::string
   {
     return id_;
   }
@@ -99,9 +109,8 @@ private:
 class test_tracer : public couchbase::tracing::request_tracer
 {
 public:
-  std::shared_ptr<couchbase::tracing::request_span> start_span(
-    std::string name,
-    std::shared_ptr<couchbase::tracing::request_span> parent = {})
+  auto start_span(std::string name, std::shared_ptr<couchbase::tracing::request_span> parent)
+    -> std::shared_ptr<couchbase::tracing::request_span> override
   {
     std::lock_guard<std::mutex> lock(mutex_);
     spans_.push_back(std::make_shared<test_span>(name, parent));
