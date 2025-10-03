@@ -156,10 +156,10 @@ TEST_CASE("integration: destroy cluster without waiting for close completion", "
          "SDK. FIXME");
   }
 
-  asio::io_context io{};
+  asio::io_context io{ ASIO_CONCURRENCY_HINT_SAFE };
 
   couchbase::core::cluster cluster(io);
-  auto io_thread = std::thread([&io]() {
+  auto io_thread = std::thread([&io]() -> void {
     io.run();
   });
 
