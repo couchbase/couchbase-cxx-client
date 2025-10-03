@@ -72,6 +72,6 @@ runs:
         cbdinocluster buckets add $CBDC_ID secBucket --ram-quota-mb 100
     - name: Load travel-sample bucket
       shell: bash
-      if: ${{ inputs.suite == 'unit' }}
+      if: ${{ inputs.suite == 'integration' }}
       run: |
         cbdinocluster buckets load-sample $CBDC_ID travel-sample

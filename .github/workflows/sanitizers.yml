@@ -16,21 +16,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  sanitize:
+  build:
     strategy:
       fail-fast: false
       matrix:
-        server:
-          - 7.6.7
         sanitizer:
           - asan
           - lsan
           - tsan
           - ubsan
           - valgrind
-        tls:
-          - tls
-          - plain
     runs-on: ubuntu-24.04
     steps:
       - name: Install dependencies
@@ -40,12 +35,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - name: Create Couchbase cluster with cbdinocluster
-        id: cbdino
-        uses: ./.github/actions/create-cluster
-        with:
-          version: ${{ matrix.server }}
-          suite: unit
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
@@ -56,7 +45,90 @@ jobs:
           # SA: see CXXCBC-571, Valgrind reports memory leak, because ASIO does
           # not deallocate thread-local state of OpenSSL properly
           CB_BORINGSSL: OFF
+          CB_NUMBER_OF_JOBS: 8
         run: ./bin/build-tests
+      - name: Upload build artifacts
+        if: ${{ success() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.sanitizer }}
+          path: ./cmake-build-tests-${{ matrix.sanitizer }}
+  unit:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer:
+          - asan
+          - lsan
+          - tsan
+          - ubsan
+          - valgrind
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y libssl-dev cmake curl wget gnupg2 gdb clang clang-tools valgrind
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-${{ matrix.sanitizer }}
+          path: ./cmake-build-tests-${{ matrix.sanitizer }}
+      - name: Run tests
+        timeout-minutes: 60
+        env:
+          CB_SANITIZER: ${{ matrix.sanitizer }}
+          TEST_LOG_LEVEL: trace
+        run: |
+          chmod -R +x ./cmake-build-tests-${{ matrix.sanitizer }}
+          ./bin/run-unit-tests
+      - name: Upload report
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-unit-${{ matrix.sanitizer }}
+          path: |
+            cmake-build-tests-${{ matrix.sanitizer }}/Testing/Temporary/*.log
+  integration:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer:
+          - asan
+          - lsan
+          - tsan
+          - ubsan
+          - valgrind
+        server:
+          - 7.6.7
+        tls:
+          - plain
+          - tls
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y libssl-dev cmake curl wget gnupg2 gdb clang clang-tools valgrind
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-${{ matrix.sanitizer }}
+          path: ./cmake-build-tests-${{ matrix.sanitizer }}
+      - name: Create Couchbase cluster with cbdinocluster
+        id: cbdino
+        uses: ./.github/actions/create-cluster
+        with:
+          version: ${{ matrix.server }}
+          suite: integration
       - name: Check couchbase
         env:
           HOST: ${{ steps.cbdino.outputs.ip }}
@@ -68,7 +140,9 @@ jobs:
           TEST_SERVER_VERSION: ${{ matrix.server }}
           TEST_CONNECTION_STRING: ${{ matrix.tls == 'tls' && format('{0}?trust_certificate=cluster.crt', steps.cbdino.outputs.tls-connstr) || steps.cbdino.outputs.connstr }}
           TEST_LOG_LEVEL: trace
-        run: ./bin/run-unit-tests
+        run: |
+          chmod -R +x ./cmake-build-tests-${{ matrix.sanitizer }}
+          ./bin/run-integration-tests
       - name: Remove Couchbase cluster
         uses: ./.github/actions/remove-cluster
         with:
@@ -77,6 +151,6 @@ jobs:
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
-          name: report-${{ matrix.sanitizer }}-${{ matrix.tls }}-${{ matrix.server }}
+          name: report-integration-${{ matrix.sanitizer }}-${{ matrix.tls }}-${{ matrix.server }}
           path: |
             cmake-build-tests-${{ matrix.sanitizer }}/Testing/Temporary/*.log
