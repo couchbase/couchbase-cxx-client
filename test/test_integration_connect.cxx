@@ -115,14 +115,15 @@ TEST_CASE("integration: can connect with handler capturing non-copyable object",
 
   // test opening a bucket
   {
-    auto barrier = std::make_shared<std::promise<std::error_code>>();
-    auto f = barrier->get_future();
+    std::promise<std::error_code> barrier;
+    auto f = barrier.get_future();
     test::utils::move_only_context ctx("foobar");
     std::string output;
     cluster.open_bucket(integration.ctx.bucket,
-                        [barrier, ctx = std::move(ctx), &output](std::error_code ec) {
+                        [barrier = std::move(barrier), ctx = std::move(ctx), &output](
+                          std::error_code ec) mutable -> void {
                           output = ctx.payload();
-                          barrier->set_value(ec);
+                          barrier.set_value(ec);
                         });
     auto rc = f.get();
     REQUIRE(!rc);
