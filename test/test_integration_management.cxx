@@ -1915,9 +1915,9 @@ TEST_CASE("integration: collection management bucket dedup", "[integration]")
     std::optional<couchbase::core::topology::collections_manifest::collection> collection{};
     REQUIRE(test::utils::wait_until([&]() {
       collection = get_collection(integration.cluster, bucket_name, scope_name, collection_name);
-      return collection.has_value();
+      return collection.has_value() && collection->history.has_value() &&
+             !collection->history.value();
     }));
-    REQUIRE_FALSE(collection->history.value_or(false));
   }
 
   // Clean up the bucket that was created for this test
