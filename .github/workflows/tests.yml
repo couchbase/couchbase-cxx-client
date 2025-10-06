@@ -1,5 +1,7 @@
 name: tests
-permissions: {}
+permissions:
+  contents: read
+  packages: read
 
 on:
   push:
@@ -76,6 +78,7 @@ jobs:
       fail-fast: false
       matrix:
         server:
+          - 8.0.0-3777
           - 7.6.7
           - 7.2.8
           - 7.1.6
@@ -106,6 +109,8 @@ jobs:
         with:
           version: ${{ matrix.server }}
           suite: ${{ matrix.suite }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Check couchbase
         env:
           HOST: ${{ steps.cbdino.outputs.ip }}
