@@ -16,6 +16,8 @@
 
 PROJECT_ROOT="$( cd "$(dirname "$0"/..)" >/dev/null 2>&1 ; pwd -P )"
 
+[ -f $PROJECT_ROOT/bin/sanitizer-options.sh ] && source $PROJECT_ROOT/bin/sanitizer-options.sh
+
 CB_CTEST=${CB_CTEST:-$(which ctest)}
 CB_CTEST_EXTRAS=${CB_CTEST_EXTRAS:-""}
 CB_SANITIZER=${CB_SANITIZER:-""}
@@ -31,6 +33,9 @@ fi
 if [ "x${CB_SANITIZER}" = "xvalgrind" ]; then
     CB_CTEST_EXTRAS="--test-action memcheck"
 fi
+
+export ASAN_OPTIONS="$(IFS=:; echo "${asan_opts[*]}")"
+export TSAN_OPTIONS="$(IFS=:; echo "${tsan_opts[*]}")"
 
 cd "${BUILD_DIR}"
 

@@ -114,7 +114,7 @@ public:
   void update_config(topology::configuration config) override
   {
     {
-      std::scoped_lock config_lock(config_mutex_, sessions_mutex_, next_index_mutex_);
+      std::scoped_lock config_lock(sessions_mutex_, config_mutex_, next_index_mutex_);
       config_ = std::move(config);
       if (!config_.nodes.empty() && next_index_ >= config_.nodes.size()) {
         next_index_ = 0;
