@@ -57,16 +57,18 @@ class threshold_logging_span
 {
 private:
   std::chrono::system_clock::time_point start_{ std::chrono::system_clock::now() };
-  std::string id_{ uuid::to_string(uuid::random()) };
-  std::map<std::string, std::uint64_t> integer_tags_{};
-  std::map<std::string, std::string> string_tags_{
-    { attributes::system, "couchbase" },
-    { attributes::span_kind, "client" },
-    { attributes::component, couchbase::core::meta::sdk_id() },
-  };
-  std::chrono::microseconds duration_{ 0 };
+  std::chrono::microseconds total_duration_{ 0 };
+
   std::uint64_t last_server_duration_us_{ 0 };
   std::uint64_t total_server_duration_us_{ 0 };
+  std::optional<std::string> operation_id_{};
+  std::optional<std::string> last_local_id_{};
+  std::optional<std::string> service_{};
+  std::optional<std::string> peer_hostname_{};
+  std::optional<std::uint16_t> peer_port_{};
+
+  // Used by legacy top-level spans. TODO(CXXCBC-738): Remove once HTTP dispatch spans are added.
+  std::optional<std::string> last_remote_socket_{};
 
   std::shared_ptr<threshold_logging_tracer> tracer_{};
 
@@ -79,30 +81,64 @@ public:
   {
   }
 
-  void add_tag(const std::string& name, std::uint64_t value) override
+  void add_tag(const std::string& tag_name, std::uint64_t value) override
   {
-    if (name == tracing::attributes::server_duration) {
+    if (tag_name == tracing::attributes::dispatch::server_duration) {
       last_server_duration_us_ = value;
-      total_server_duration_us_ += value;
+      if (name() != tracing::operation::step_dispatch) {
+        total_server_duration_us_ += value;
+      }
     }
-    integer_tags_.try_emplace(name, value);
+    if (tag_name == tracing::attributes::dispatch::peer_port) {
+      peer_port_ = static_cast<std::uint16_t>(value);
+    }
   }
 
-  void add_tag(const std::string& name, const std::string& value) override
+  void add_tag(const std::string& tag_name, const std::string& value) override
   {
-    string_tags_.try_emplace(name, value);
+    if (tag_name == tracing::attributes::service) {
+      service_ = value;
+    }
+    if (tag_name == tracing::attributes::remote_socket) {
+      last_remote_socket_ = value;
+    }
+    if (tag_name == tracing::attributes::dispatch::local_id) {
+      last_local_id_ = value;
+    }
+    if (tag_name == tracing::attributes::dispatch::operation_id) {
+      operation_id_ = value;
+    }
+    if (tag_name == tracing::attributes::dispatch::peer_address) {
+      peer_hostname_ = value;
+    }
   }
 
   void end() override;
 
-  [[nodiscard]] auto string_tags() const -> const auto&
+  void set_last_remote_socket(const std::string& socket)
   {
-    return string_tags_;
+    last_remote_socket_ = socket;
   }
 
-  [[nodiscard]] auto duration() const -> std::chrono::microseconds
+  void set_last_local_id(const std::string& id)
   {
-    return duration_;
+    last_local_id_ = id;
+  }
+
+  void set_operation_id(const std::string& id)
+  {
+    operation_id_ = id;
+  }
+
+  void add_server_duration(const std::uint64_t duration_us)
+  {
+    last_server_duration_us_ = duration_us;
+    total_server_duration_us_ += duration_us;
+  }
+
+  [[nodiscard]] auto total_duration() const -> std::chrono::microseconds
+  {
+    return total_duration_;
   }
 
   [[nodiscard]] auto last_server_duration_us() const -> std::uint64_t
@@ -115,22 +151,32 @@ public:
     return total_server_duration_us_;
   }
 
+  [[nodiscard]] auto operation_id() const -> std::optional<std::string>
+  {
+    return operation_id_;
+  }
+
+  [[nodiscard]] auto last_remote_socket() const -> std::optional<std::string>
+  {
+    return last_remote_socket_;
+  }
+
+  [[nodiscard]] auto last_local_id() const -> std::optional<std::string>
+  {
+    return last_local_id_;
+  }
+
   [[nodiscard]] auto is_key_value() const -> bool
   {
-    auto service_tag = string_tags_.find(tracing::attributes::service);
-    if (service_tag == string_tags_.end()) {
-      return false;
-    }
-    return service_tag->second == tracing::service::key_value;
+    return service_.has_value() && service_.value() == tracing::service::key_value;
   }
 
   [[nodiscard]] auto service() const -> std::optional<service_type>
   {
-    auto service_tag = string_tags_.find(tracing::attributes::service);
-    if (service_tag == string_tags_.end()) {
+    if (!service_.has_value()) {
       return {};
     }
-    const auto& service_name = service_tag->second;
+    const auto& service_name = service_.value();
     if (service_name == tracing::service::key_value) {
       return service_type::key_value;
     }
@@ -161,35 +207,26 @@ convert(const std::shared_ptr<threshold_logging_span>& span) -> reported_span
   tao::json::value entry{
     { "operation_name", span->name() },
     { "total_duration_us",
-      std::chrono::duration_cast<std::chrono::microseconds>(span->duration()).count() }
+      std::chrono::duration_cast<std::chrono::microseconds>(span->total_duration()).count() }
   };
   if (span->is_key_value()) {
     entry["last_server_duration_us"] = span->last_server_duration_us();
     entry["total_server_duration_us"] = span->total_server_duration_us();
   }
 
-  const auto& tags = span->string_tags();
-  auto pair = tags.find(attributes::operation_id);
-  if (pair != tags.end()) {
-    entry["last_operation_id"] = pair->second;
+  if (span->operation_id().has_value()) {
+    entry["last_operation_id"] = span->operation_id().value();
   }
 
-  pair = tags.find(attributes::local_id);
-  if (pair != tags.end()) {
-    entry["last_local_id"] = pair->second;
+  if (span->last_local_id().has_value()) {
+    entry["last_local_id"] = span->last_local_id().value();
   }
 
-  pair = tags.find(attributes::local_socket);
-  if (pair != tags.end()) {
-    entry["last_local_socket"] = pair->second;
+  if (span->last_remote_socket().has_value()) {
+    entry["last_remote_socket"] = span->last_remote_socket().value();
   }
 
-  pair = tags.find(attributes::remote_socket);
-  if (pair != tags.end()) {
-    entry["last_remote_socket"] = pair->second;
-  }
-
-  return { span->duration(), std::move(entry) };
+  return { span->total_duration(), std::move(entry) };
 }
 
 class threshold_logging_tracer_impl
@@ -232,13 +269,13 @@ public:
 
   void check_threshold(const std::shared_ptr<threshold_logging_span>& span)
   {
-    auto service = span->service();
+    const auto service = span->service();
     if (!service.has_value()) {
       return;
     }
-    if (span->duration() > options_.threshold_for_service(service.value())) {
-      auto queue = threshold_queues_.find(service.value());
-      if (queue != threshold_queues_.end()) {
+    if (span->total_duration() > options_.threshold_for_service(service.value())) {
+      if (const auto queue = threshold_queues_.find(service.value());
+          queue != threshold_queues_.end()) {
         queue->second.emplace(convert(span));
       }
     }
@@ -328,9 +365,27 @@ threshold_logging_tracer::stop()
 void
 threshold_logging_span::end()
 {
-  duration_ = std::chrono::duration_cast<std::chrono::microseconds>(
+  total_duration_ = std::chrono::duration_cast<std::chrono::microseconds>(
     std::chrono::system_clock::now() - start_);
-  tracer_->report(shared_from_this());
+  if (service_.has_value()) {
+    tracer_->report(shared_from_this());
+  }
+  if (name() == tracing::operation::step_dispatch) {
+    // Transfer the relevant attributes to the operation-level span
+    if (const auto p = std::dynamic_pointer_cast<threshold_logging_span>(parent()); p) {
+      if (last_local_id_.has_value()) {
+        p->set_last_local_id(last_local_id_.value());
+      }
+      if (operation_id_.has_value()) {
+        p->set_operation_id(operation_id_.value());
+      }
+      if (peer_hostname_.has_value() && peer_port_.has_value()) {
+        p->set_last_remote_socket(fmt::format("{}:{}", peer_hostname_.value(), peer_port_.value()));
+      }
+      if (last_server_duration_us_ > 0) {
+        p->add_server_duration(last_server_duration_us_);
+      }
+    }
+  }
 }
-
 } // namespace couchbase::core::tracing

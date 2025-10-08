@@ -120,7 +120,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
     if (span_->uses_tags()) {
       span_->add_tag(tracing::attributes::service,
                      tracing::service_name_for_http_service(request.type));
-      span_->add_tag(tracing::attributes::operation_id, client_context_id_);
+      span_->add_tag(tracing::attributes::dispatch::operation_id, client_context_id_);
     }
 
     handler_ = std::move(handler);
@@ -209,7 +209,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
       return;
     }
     if (span_->uses_tags()) {
-      span_->add_tag(tracing::attributes::local_id, session_->id());
+      span_->add_tag(tracing::attributes::dispatch::local_id, session_->id());
     }
     send();
   }

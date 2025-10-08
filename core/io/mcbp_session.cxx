@@ -943,6 +943,16 @@ public:
     return connection_endpoints_.remote_address_with_port;
   }
 
+  auto remote_hostname() const -> std::string
+  {
+    return connection_endpoints_.remote_address;
+  }
+
+  auto remote_port() const -> std::uint16_t
+  {
+    return connection_endpoints_.remote.port();
+  }
+
   auto local_address() const -> std::string
   {
     return connection_endpoints_.local_address_with_port;
@@ -1533,6 +1543,16 @@ public:
     return bootstrap_port_number_;
   }
 
+  [[nodiscard]] auto canonical_hostname() const -> const std::string&
+  {
+    return canonical_hostname_;
+  }
+
+  [[nodiscard]] auto canonical_port_number() const -> std::uint16_t
+  {
+    return canonical_port_number_;
+  }
+
   [[nodiscard]] auto next_opaque() -> std::uint32_t
   {
     return ++opaque_;
@@ -1743,10 +1763,18 @@ private:
     if (ec) {
       return stop(retry_reason::node_not_available);
     }
-    if (node_uuid_.empty() && config_.has_value()) {
+    if (config_.has_value()) {
       for (const auto& node : config_.value().nodes) {
         if (node.this_node) {
-          node_uuid_ = node.node_uuid;
+          if (node_uuid_.empty()) {
+            node_uuid_ = node.node_uuid;
+          }
+          if (canonical_hostname_.empty()) {
+            canonical_hostname_ = node.hostname;
+          }
+          if (canonical_port_number_ == 0) {
+            canonical_port_number_ = node.port_or(service_type::key_value, is_tls_, 0);
+          }
         }
       }
     }
@@ -2112,6 +2140,10 @@ private:
   std::optional<error_map> error_map_;
   collection_cache collection_cache_;
 
+  // Only used for tracing & metrics. They represent the address of the node as given in the config.
+  std::string canonical_hostname_{};
+  std::uint16_t canonical_port_number_{};
+
   const bool is_tls_;
   std::shared_ptr<impl::bootstrap_state_listener> state_listener_{ nullptr };
 
@@ -2242,6 +2274,18 @@ mcbp_session::remote_address() const -> std::string
 }
 
 auto
+mcbp_session::remote_hostname() const -> std::string
+{
+  return impl_->remote_hostname();
+}
+
+auto
+mcbp_session::remote_port() const -> std::uint16_t
+{
+  return impl_->remote_port();
+}
+
+auto
 mcbp_session::local_address() const -> std::string
 {
   return impl_->local_address();
@@ -2275,6 +2319,18 @@ auto
 mcbp_session::last_bootstrap_error() const& -> const std::optional<impl::bootstrap_error>&
 {
   return impl_->last_bootstrap_error();
+}
+
+auto
+mcbp_session::canonical_hostname() const -> const std::string&
+{
+  return impl_->canonical_hostname();
+}
+
+auto
+mcbp_session::canonical_port_number() const -> std::uint16_t
+{
+  return impl_->canonical_port_number();
 }
 
 void

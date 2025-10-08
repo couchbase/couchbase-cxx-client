@@ -139,12 +139,6 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     mcbp_command_handler handler{};
     std::swap(handler, handler_);
     if (span_ != nullptr) {
-      if (msg) {
-        const auto server_duration_us =
-          static_cast<std::uint64_t>(protocol::parse_server_duration_us(msg.value()));
-        span_->add_tag(tracing::attributes::server_duration, server_duration_us);
-        server_durations_.emplace_back(std::chrono::microseconds(server_duration_us));
-      }
       span_->end();
       span_ = nullptr;
     }
@@ -234,9 +228,6 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
   {
     opaque_ = session_->next_opaque();
     request.opaque = *opaque_;
-    if (span_->uses_tags()) {
-      span_->add_tag(tracing::attributes::operation_id, fmt::format("0x{:x}", request.opaque));
-    }
     if (request.id.use_collections() && !request.id.is_collection_resolved()) {
       if (session_->supports_feature(protocol::hello_feature::collections)) {
         auto collection_id = session_->get_collection_uid(request.id.collection_path());
@@ -269,14 +260,23 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
       }
     }
 
+    auto dispatch_span = create_dispatch_span();
     session_->write_and_subscribe(
       request.opaque,
       encoded.data(session_->supports_feature(protocol::hello_feature::snappy)),
-      [self = this->shared_from_this(), start = std::chrono::steady_clock::now()](
+      [self = this->shared_from_this(),
+       start = std::chrono::steady_clock::now(),
+       dispatch_span = std::move(dispatch_span)](
         std::error_code ec,
         retry_reason reason,
         io::mcbp_message&& msg,
         std::optional<key_value_error_map_info> /* error_info */) mutable {
+        {
+          const auto server_duration_us =
+            static_cast<std::uint64_t>(protocol::parse_server_duration_us(msg));
+          self->server_durations_.emplace_back(std::chrono::microseconds(server_duration_us));
+          self->close_dispatch_span(dispatch_span, server_duration_us);
+        }
         {
           auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - start);
@@ -306,15 +306,17 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
           telemetry_recorder->record_latency(category, latency);
         }
 
-        metrics::metric_attributes attrs{
-          service_type::key_value,
-          self->request.observability_identifier,
-          ec,
-          self->request.id.bucket(),
-          self->request.id.scope(),
-          self->request.id.collection(),
-        };
-        self->manager_->meter()->record_value(std::move(attrs), start);
+        {
+          metrics::metric_attributes attrs{
+            service_type::key_value,
+            self->request.observability_identifier,
+            ec,
+            self->request.id.bucket(),
+            self->request.id.scope(),
+            self->request.id.collection(),
+          };
+          self->manager_->meter()->record_value(std::move(attrs), start);
+        }
 
         self->retry_backoff.cancel();
         if (ec == asio::error::operation_aborted) {
@@ -397,12 +399,6 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
       return;
     }
     session_ = std::move(session);
-    if (span_->uses_tags())
-      span_->add_tag(tracing::attributes::remote_socket, session_->remote_address());
-    if (span_->uses_tags())
-      span_->add_tag(tracing::attributes::local_socket, session_->local_address());
-    if (span_->uses_tags())
-      span_->add_tag(tracing::attributes::local_id, session_->id());
     send();
   }
 
@@ -426,6 +422,35 @@ private:
       std::chrono::steady_clock::now() - started_at_);
 
     return attrs;
+  }
+
+  auto create_dispatch_span() const -> std::shared_ptr<couchbase::tracing::request_span>
+  {
+    std::shared_ptr<couchbase::tracing::request_span> dispatch_span =
+      manager_->tracer()->create_span(tracing::operation::step_dispatch, span_);
+    if (dispatch_span->uses_tags()) {
+      dispatch_span->add_tag(tracing::attributes::dispatch::network_transport, "tcp");
+      dispatch_span->add_tag(tracing::attributes::dispatch::operation_id,
+                             fmt::format("0x{:x}", request.opaque));
+      dispatch_span->add_tag(tracing::attributes::dispatch::local_id, session_->id());
+    }
+    return dispatch_span;
+  }
+
+  void close_dispatch_span(const std::shared_ptr<couchbase::tracing::request_span>& dispatch_span,
+                           const std::uint64_t server_duration_us) const
+  {
+    if (dispatch_span->uses_tags()) {
+      dispatch_span->add_tag(tracing::attributes::dispatch::server_duration, server_duration_us);
+      dispatch_span->add_tag(tracing::attributes::dispatch::server_address,
+                             session_->canonical_hostname());
+      dispatch_span->add_tag(tracing::attributes::dispatch::server_port,
+                             session_->canonical_port_number());
+      dispatch_span->add_tag(tracing::attributes::dispatch::peer_address,
+                             session_->remote_hostname());
+      dispatch_span->add_tag(tracing::attributes::dispatch::peer_port, session_->remote_port());
+    }
+    dispatch_span->end();
   }
 };
 

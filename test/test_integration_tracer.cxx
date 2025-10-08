@@ -39,7 +39,9 @@
 #include <couchbase/mutate_in_specs.hxx>
 #include <couchbase/tracing/request_tracer.hxx>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <spdlog/fmt/bundled/ranges.h>
 
 class test_span : public couchbase::tracing::request_span
 {
@@ -48,42 +50,65 @@ public:
     : test_span(name, nullptr)
   {
   }
+
   test_span(const std::string& name, std::shared_ptr<couchbase::tracing::request_span> parent)
     : request_span(name, parent)
   {
     start_ = std::chrono::steady_clock::now();
     id_ = test::utils::uniq_id("span");
   }
+
   void add_tag(const std::string& name, std::uint64_t value) override
   {
     int_tags_[name] = value;
   }
+
   void add_tag(const std::string& name, const std::string& value) override
   {
     string_tags_[name] = value;
   }
+
   void end() override
   {
     duration_ = std::chrono::duration_cast<std::chrono::nanoseconds>(
       std::chrono::steady_clock::now() - start_);
   }
-  std::map<std::string, std::string> string_tags()
+
+  void add_child_span(const std::shared_ptr<test_span>& child)
+  {
+    const auto child_span_name = child->name();
+    if (child_spans_.count(child_span_name) == 0) {
+      child_spans_.insert({ child_span_name, {} });
+    }
+    child_spans_[child_span_name].emplace_back(child);
+  }
+
+  auto child_spans() -> const std::map<std::string, std::vector<std::weak_ptr<test_span>>>&
+  {
+    return child_spans_;
+  }
+
+  auto string_tags() -> std::map<std::string, std::string>
   {
     return string_tags_;
   }
-  std::map<std::string, std::uint64_t> int_tags()
+
+  auto int_tags() -> std::map<std::string, std::uint64_t>
   {
     return int_tags_;
   }
-  std::chrono::nanoseconds duration()
+
+  auto duration() -> std::chrono::nanoseconds
   {
     return duration_;
   }
-  std::chrono::time_point<std::chrono::steady_clock> start()
+
+  auto start() -> std::chrono::time_point<std::chrono::steady_clock>
   {
     return start_;
   }
-  std::string id()
+
+  auto id() -> std::string
   {
     return id_;
   }
@@ -94,26 +119,34 @@ private:
   std::chrono::nanoseconds duration_{ 0 };
   std::map<std::string, std::string> string_tags_;
   std::map<std::string, std::uint64_t> int_tags_;
+  std::map<std::string, std::vector<std::weak_ptr<test_span>>> child_spans_{};
 };
 
 class test_tracer : public couchbase::tracing::request_tracer
 {
 public:
-  std::shared_ptr<couchbase::tracing::request_span> start_span(
-    std::string name,
-    std::shared_ptr<couchbase::tracing::request_span> parent = {})
+  auto start_span(std::string name, std::shared_ptr<couchbase::tracing::request_span> parent = {})
+    -> std::shared_ptr<couchbase::tracing::request_span>
   {
-    std::lock_guard<std::mutex> lock(mutex_);
+    const std::lock_guard<std::mutex> lock(mutex_);
     spans_.push_back(std::make_shared<test_span>(name, parent));
+
+    if (parent != nullptr) {
+      const auto parent_test_span = std::dynamic_pointer_cast<test_span>(parent);
+      parent_test_span->add_child_span(spans_.back());
+    }
+
     return spans_.back();
   }
-  std::vector<std::shared_ptr<test_span>> spans()
+
+  auto spans() -> std::vector<std::shared_ptr<test_span>>
   {
     return spans_;
   }
+
   void reset()
   {
-    std::lock_guard<std::mutex> lock(mutex_);
+    const std::lock_guard<std::mutex> lock(mutex_);
     spans_.clear();
   }
 
@@ -122,8 +155,8 @@ private:
   std::mutex mutex_;
 };
 
-couchbase::core::document_id
-make_id(const test::utils::test_context& ctx, std::string key = "")
+auto
+make_id(const test::utils::test_context& ctx, std::string key = "") -> couchbase::core::document_id
 {
   if (key.empty()) {
     key = test::utils::uniq_id("tracer");
@@ -134,18 +167,19 @@ make_id(const test::utils::test_context& ctx, std::string key = "")
 void
 assert_span_ok(test::utils::integration_test_guard& guard,
                const std::shared_ptr<test_span>& span,
+               bool is_top_level_op_span,
                std::shared_ptr<test_span> parent = nullptr)
 {
 
   REQUIRE(span->parent() == parent);
-  if (parent) {
-    // the parent span should not be closed yet
+  if (parent && is_top_level_op_span) {
+    // the parent span that was given to the operation's options should not be closed yet
     REQUIRE(parent->duration().count() == 0);
   }
 
   const auto& tags = span->string_tags();
 
-  REQUIRE(tags.at("db.system") == "couchbase");
+  REQUIRE(tags.at("db.system.name") == "couchbase");
   if (guard.cluster_version().supports_cluster_labels()) {
     REQUIRE_FALSE(tags.at("db.couchbase.cluster_name").empty());
     REQUIRE_FALSE(tags.at("db.couchbase.cluster_uuid").empty());
@@ -156,22 +190,50 @@ assert_span_ok(test::utils::integration_test_guard& guard,
 }
 
 void
+assert_kv_dispatch_span_ok(test::utils::integration_test_guard& guard,
+                           const std::shared_ptr<test_span>& span,
+                           std::shared_ptr<test_span> parent)
+{
+  assert_span_ok(guard, span, false, parent);
+
+  INFO(fmt::format("Dispatch span string tags: {}", fmt::join(span->string_tags(), ", ")));
+  INFO(fmt::format("Dispatch span integer tags: {}", fmt::join(span->int_tags(), ", ")));
+
+  std::size_t expected_tag_count = (guard.cluster_version().supports_cluster_labels()) ? 11 : 9;
+  REQUIRE(span->string_tags().size() + span->int_tags().size() == expected_tag_count);
+  REQUIRE("dispatch_to_server" == span->name());
+
+  REQUIRE(static_cast<uint64_t>(span->duration().count()) >=
+          span->int_tags()["db.couchbase.server_duration"]);
+  REQUIRE_FALSE(span->string_tags()["db.couchbase.local_id"].empty());
+  REQUIRE_FALSE(span->string_tags()["server.address"].empty());
+  REQUIRE(span->int_tags()["server.port"] != 0);
+  REQUIRE_FALSE(span->string_tags()["network.peer.address"].empty());
+  REQUIRE(span->int_tags()["network.peer.port"] != 0);
+  REQUIRE(span->string_tags()["network.transport"] == "tcp");
+  REQUIRE_FALSE(span->string_tags()["db.couchbase.operation_id"].empty());
+}
+
+void
 assert_kv_op_span_ok(test::utils::integration_test_guard& guard,
                      const std::shared_ptr<test_span>& span,
                      const std::string& op,
                      std::shared_ptr<test_span> parent = nullptr)
 {
-  assert_span_ok(guard, span, parent);
+  assert_span_ok(guard, span, true, parent);
 
-  auto server_duration = span->int_tags()["cb.server_duration"];
   REQUIRE(op == span->name());
-  REQUIRE(static_cast<uint64_t>(span->duration().count()) >= server_duration);
   REQUIRE(span->string_tags()["cb.service"] == "kv");
-  REQUIRE_FALSE(span->string_tags()["cb.local_id"].empty());
-  REQUIRE_FALSE(span->string_tags()["cb.local_socket"].empty());
-  REQUIRE_FALSE(span->string_tags()["cb.remote_socket"].empty());
-  REQUIRE_FALSE(span->string_tags()["cb.operation_id"].empty());
   REQUIRE(span->string_tags()["db.instance"] == guard.ctx.bucket);
+
+  // There must be at least one dispatch span
+  auto dispatch_spans = span->child_spans().find("dispatch_to_server");
+  REQUIRE(dispatch_spans != span->child_spans().end());
+  REQUIRE_FALSE(dispatch_spans->second.empty());
+
+  for (const auto& dispatch_span : dispatch_spans->second) {
+    assert_kv_dispatch_span_ok(guard, dispatch_span.lock(), span);
+  }
 }
 
 void
@@ -180,12 +242,12 @@ assert_http_op_span_ok(test::utils::integration_test_guard& guard,
                        const std::string& op,
                        std::shared_ptr<test_span> parent = nullptr)
 {
-  assert_span_ok(guard, span, parent);
+  assert_span_ok(guard, span, true, parent);
 
   REQUIRE(span->name().find(op) != std::string::npos);
-  REQUIRE_FALSE(span->string_tags()["cb.local_id"].empty());
+  REQUIRE_FALSE(span->string_tags()["db.couchbase.local_id"].empty());
   REQUIRE_FALSE(span->string_tags()["cb.local_socket"].empty());
-  REQUIRE_FALSE(span->string_tags()["cb.operation_id"].empty());
+  REQUIRE_FALSE(span->string_tags()["db.couchbase.operation_id"].empty());
   REQUIRE_FALSE(span->string_tags()["cb.remote_socket"].empty());
   REQUIRE(span->string_tags()["cb.service"] == op);
   REQUIRE(span->duration().count() > 0);
@@ -350,4 +412,6 @@ TEST_CASE("integration: enable external tracer", "[integration]")
       }
     }
   }
+
+  tracer->reset();
 }
