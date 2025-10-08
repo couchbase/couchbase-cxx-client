@@ -27,8 +27,9 @@ namespace couchbase::core::tracing
 {
 namespace operation
 {
-constexpr auto step_dispatch = "cb.dispatch_to_server";
-constexpr auto step_request_encoding = "cb.request_encoding";
+constexpr auto step_dispatch = "dispatch_to_server";
+constexpr auto step_request_encoding = "request_encoding";
+
 constexpr auto http_query = "cb.query";
 constexpr auto http_analytics = "cb.analytics";
 constexpr auto http_search = "cb.search";
@@ -77,7 +78,7 @@ constexpr auto mcbp_internal = "cb.internal";
 
 namespace attributes
 {
-constexpr auto system = "db.system";
+constexpr auto system = "db.system.name";
 constexpr auto cluster_name = "db.couchbase.cluster_name";
 constexpr auto cluster_uuid = "db.couchbase.cluster_uuid";
 
@@ -86,12 +87,20 @@ constexpr auto component = "db.couchbase.component";
 constexpr auto instance = "db.instance";
 
 constexpr auto service = "cb.service";
-constexpr auto operation_id = "cb.operation_id";
-
-constexpr auto server_duration = "cb.server_duration";
-constexpr auto local_id = "cb.local_id";
 constexpr auto local_socket = "cb.local_socket";
 constexpr auto remote_socket = "cb.remote_socket";
+
+namespace dispatch
+{
+constexpr auto server_duration = "db.couchbase.server_duration";
+constexpr auto local_id = "db.couchbase.local_id";
+constexpr auto server_address = "server.address";
+constexpr auto server_port = "server.port";
+constexpr auto peer_address = "network.peer.address";
+constexpr auto peer_port = "network.peer.port";
+constexpr auto network_transport = "network.transport";
+constexpr auto operation_id = "db.couchbase.operation_id";
+} // namespace dispatch
 } // namespace attributes
 
 namespace service

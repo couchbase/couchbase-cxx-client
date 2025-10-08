@@ -119,6 +119,8 @@ public:
   [[nodiscard]] auto id() const -> const std::string&;
   [[nodiscard]] auto node_uuid() const -> const std::string&;
   [[nodiscard]] auto remote_address() const -> std::string;
+  [[nodiscard]] auto remote_hostname() const -> std::string;
+  [[nodiscard]] auto remote_port() const -> std::uint16_t;
   [[nodiscard]] auto local_address() const -> std::string;
   [[nodiscard]] auto bootstrap_address() const -> const std::string&;
   [[nodiscard]] auto bootstrap_hostname() const -> const std::string&;
@@ -126,6 +128,8 @@ public:
   [[nodiscard]] auto bootstrap_port_number() const -> std::uint16_t;
   [[nodiscard]] auto last_bootstrap_error() && -> std::optional<impl::bootstrap_error>;
   [[nodiscard]] auto last_bootstrap_error() const& -> const std::optional<impl::bootstrap_error>&;
+  [[nodiscard]] auto canonical_hostname() const -> const std::string&;
+  [[nodiscard]] auto canonical_port_number() const -> std::uint16_t;
   void write_and_flush(std::vector<std::byte>&& buffer);
   void write_and_subscribe(const std::shared_ptr<mcbp::queue_request>&,
                            const std::shared_ptr<response_handler>& handler);

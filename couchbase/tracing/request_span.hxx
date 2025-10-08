@@ -56,7 +56,7 @@ public:
     return parent_;
   }
 
-  virtual auto uses_tags() const -> bool
+  [[nodiscard]] virtual auto uses_tags() const -> bool
   {
     return true;
   }
