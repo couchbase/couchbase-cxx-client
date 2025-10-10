@@ -35,18 +35,14 @@
 
 namespace couchbase::core::operations
 {
-
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-using http_command_handler = utils::movable_function<void(error_union, io::http_response&&)>;
-#else
-using http_command_handler = utils::movable_function<void(std::error_code, io::http_response&&)>;
-#endif
-
 template<typename Request>
 struct http_command : public std::enable_shared_from_this<http_command<Request>> {
   using encoded_request_type = typename Request::encoded_request_type;
   using encoded_response_type = typename Request::encoded_response_type;
   using error_context_type = typename Request::error_context_type;
+  using response_type = typename Request::response_type;
+  using handler_type = utils::movable_function<void(response_type&&)>;
+
   asio::steady_timer deadline;
   Request request;
   encoded_request_type encoded;
@@ -55,7 +51,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
   std::shared_ptr<metrics::meter_wrapper> meter_{};
   std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter_{ nullptr };
   std::shared_ptr<io::http_session> session_{};
-  http_command_handler handler_{};
+  handler_type handler_{};
   std::chrono::milliseconds timeout_{};
   std::string client_context_id_;
   std::shared_ptr<couchbase::tracing::request_span> parent_span_{ nullptr };
@@ -114,7 +110,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
     span_ = nullptr;
   }
 
-  void start(http_command_handler&& handler)
+  void start(handler_type&& handler)
   {
     span_ = tracer_->create_span(tracing::span_name_for_http_service(request.type), parent_span_);
     if (span_->uses_tags()) {
@@ -172,7 +168,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
       span_->end();
       span_ = nullptr;
     }
-    if (auto handler = std::move(handler_); handler) {
+    if (handler_type handler = std::move(handler_); handler) {
       const auto& node_uuid = session_ ? session_->node_uuid() : "";
       auto telemetry_recorder = app_telemetry_meter_->value_recorder(node_uuid, {});
       telemetry_recorder->update_counter(total_counter_for_service_type(request.type));
@@ -189,13 +185,39 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
       } else if (ec == errc::common::request_canceled) {
         telemetry_recorder->update_counter(canceled_counter_for_service_type(request.type));
       }
+      encoded_response_type encoded_resp{ std::move(msg) };
+      error_context_type ctx{};
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-      handler(error, std::move(msg));
-    }
-    dispatch_deadline_.cancel();
+      if (!std::holds_alternative<std::monostate>(error)) {
+        if (std::holds_alternative<impl::bootstrap_error>(error)) {
+          auto bootstrap_error = std::get<impl::bootstrap_error>(error);
+          if (bootstrap_error.ec == errc::common::unambiguous_timeout) {
+            CB_LOG_DEBUG("Timeout caused by bootstrap error. code={}, ec_message={}, message={}.",
+                         bootstrap_error.ec.value(),
+                         bootstrap_error.ec.message(),
+                         bootstrap_error.error_message);
+          }
+          ctx.ec = bootstrap_error.ec;
+        } else {
+          ctx.ec = std::get<std::error_code>(error);
+        }
+      }
 #else
-      handler(ec, std::move(msg));
+      ctx.ec = ec;
+#endif
+      ctx.client_context_id = client_context_id_;
+      ctx.method = encoded.method;
+      ctx.path = encoded.path;
+      ctx.http_status = encoded_resp.status_code;
+      ctx.http_body = encoded_resp.body.data();
+      ctx.last_dispatched_from = session_->local_address();
+      ctx.last_dispatched_to = session_->remote_address();
+      ctx.hostname = session_->http_context().hostname;
+      ctx.port = session_->http_context().port;
+      handler(request.make_response(std::move(ctx), std::move(encoded_resp)));
     }
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+    dispatch_deadline_.cancel();
 #endif
     deadline.cancel();
   }

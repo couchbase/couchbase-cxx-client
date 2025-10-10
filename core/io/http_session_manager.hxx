@@ -238,47 +238,26 @@ public:
             app_telemetry_meter_,
             options_.default_timeout_for(request.type));
 #endif
-
           cmd->start([start = std::chrono::steady_clock::now(),
                       self = shared_from_this(),
                       type,
                       cmd,
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-                      handler = collector->build_reporter()](error_union err,
-                                                             io::http_response&& msg) {
+                      handler =
+                        collector->build_reporter()](operations::http_noop_response&& resp) {
             diag::ping_state state = diag::ping_state::ok;
             std::optional<std::string> error{};
-            if (!std::holds_alternative<std::monostate>(err)) {
-              auto ec = std::holds_alternative<impl::bootstrap_error>(err)
-                          ? std::get<impl::bootstrap_error>(err).ec
-                          : std::get<std::error_code>(err);
-              if (ec) {
-                if (ec == errc::common::unambiguous_timeout ||
-                    ec == errc::common::ambiguous_timeout) {
-                  state = diag::ping_state::timeout;
-                } else {
-                  state = diag::ping_state::error;
-                }
-                error.emplace(fmt::format(
-                  "code={}, message={}, http_code={}", ec.value(), ec.message(), msg.status_code));
-              }
-            }
-#else
-                      handler = collector->build_reporter()](std::error_code ec,
-                                                             io::http_response&& msg) {
-            diag::ping_state state = diag::ping_state::ok;
-            std::optional<std::string> error{};
-            if (ec) {
+            if (auto ec = resp.ctx.ec; ec) {
               if (ec == errc::common::unambiguous_timeout ||
                   ec == errc::common::ambiguous_timeout) {
                 state = diag::ping_state::timeout;
               } else {
                 state = diag::ping_state::error;
               }
-              error.emplace(fmt::format(
-                "code={}, message={}, http_code={}", ec.value(), ec.message(), msg.status_code));
+              error.emplace(fmt::format("code={}, message={}, http_code={}",
+                                        ec.value(),
+                                        ec.message(),
+                                        resp.ctx.http_status));
             }
-#endif
             auto remote_address = cmd->session_->remote_address();
             // If not connected, the remote address will be empty.  Better to
             // give the user some context on the "attempted" remote address.
@@ -481,8 +460,8 @@ public:
     if (error) {
       typename Request::error_context_type ctx{};
       ctx.ec = error;
-      using response_type = typename Request::encoded_response_type;
-      return handler(request.make_response(std::move(ctx), response_type{}));
+      using encoded_response_type = typename Request::encoded_response_type;
+      return handler(request.make_response(std::move(ctx), encoded_response_type{}));
     }
 
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
@@ -494,8 +473,6 @@ public:
       app_telemetry_meter_,
       options_.default_timeout_for(request.type),
       dispatch_timeout_);
-    cmd->start([self = shared_from_this(), cmd, handler = std::forward<Handler>(handler)](
-                 error_union err, io::http_response&& msg) mutable {
 #else
     auto cmd = std::make_shared<operations::http_command<Request>>(
       ctx_,
@@ -504,42 +481,12 @@ public:
       meter_,
       app_telemetry_meter_,
       options_.default_timeout_for(request.type));
+#endif
+
+    using response_type = typename Request::response_type;
     cmd->start([self = shared_from_this(), cmd, handler = std::forward<Handler>(handler)](
-                 std::error_code ec, io::http_response&& msg) mutable {
-#endif
-      using command_type = typename decltype(cmd)::element_type;
-      using encoded_response_type = typename command_type::encoded_response_type;
-      using error_context_type = typename command_type::error_context_type;
-      encoded_response_type resp{ std::move(msg) };
-      error_context_type ctx{};
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-      if (!std::holds_alternative<std::monostate>(err)) {
-        if (std::holds_alternative<impl::bootstrap_error>(err)) {
-          auto bootstrap_error = std::get<impl::bootstrap_error>(err);
-          if (bootstrap_error.ec == errc::common::unambiguous_timeout) {
-            CB_LOG_DEBUG("Timeout caused by bootstrap error. code={}, ec_message={}, message={}.",
-                         bootstrap_error.ec.value(),
-                         bootstrap_error.ec.message(),
-                         bootstrap_error.error_message);
-          }
-          ctx.ec = bootstrap_error.ec;
-        } else {
-          ctx.ec = std::get<std::error_code>(err);
-        }
-      }
-#else
-      ctx.ec = ec;
-#endif
-      ctx.client_context_id = cmd->client_context_id_;
-      ctx.method = cmd->encoded.method;
-      ctx.path = cmd->encoded.path;
-      ctx.http_status = resp.status_code;
-      ctx.http_body = resp.body.data();
-      ctx.last_dispatched_from = cmd->session_->local_address();
-      ctx.last_dispatched_to = cmd->session_->remote_address();
-      ctx.hostname = cmd->session_->http_context().hostname;
-      ctx.port = cmd->session_->http_context().port;
-      handler(cmd->request.make_response(std::move(ctx), std::move(resp)));
+                 response_type&& resp) mutable {
+      handler(std::move(resp));
       self->check_in(cmd->request.type, cmd->session_);
     });
     cmd->set_command_session(session);
@@ -794,39 +741,10 @@ private:
       app_telemetry_meter_,
       options_.default_timeout_for(request.type),
       dispatch_timeout_);
+    using response_type = typename Request::response_type;
     cmd->start([self = shared_from_this(), cmd, handler = std::forward<Handler>(handler)](
-                 error_union err, io::http_response&& msg) mutable {
-      using command_type = typename decltype(cmd)::element_type;
-      using encoded_response_type = typename command_type::encoded_response_type;
-      using error_context_type = typename command_type::error_context_type;
-      encoded_response_type resp{ std::move(msg) };
-      error_context_type ctx{};
-      if (!std::holds_alternative<std::monostate>(err)) {
-        if (std::holds_alternative<impl::bootstrap_error>(err)) {
-          auto bootstrap_error = std::get<impl::bootstrap_error>(err);
-          if (bootstrap_error.ec == errc::common::unambiguous_timeout) {
-            CB_LOG_DEBUG("Timeout caused by bootstrap error. code={}, ec_message={}, message={}.",
-                         bootstrap_error.ec.value(),
-                         bootstrap_error.ec.message(),
-                         bootstrap_error.error_message);
-          }
-          ctx.ec = bootstrap_error.ec;
-        } else {
-          ctx.ec = std::get<std::error_code>(err);
-        }
-      }
-      ctx.client_context_id = cmd->client_context_id_;
-      ctx.method = cmd->encoded.method;
-      ctx.path = cmd->encoded.path;
-      ctx.http_status = resp.status_code;
-      ctx.http_body = resp.body.data();
-      if (cmd->session_) {
-        ctx.last_dispatched_from = cmd->session_->local_address();
-        ctx.last_dispatched_to = cmd->session_->remote_address();
-        ctx.hostname = cmd->session_->http_context().hostname;
-        ctx.port = cmd->session_->http_context().port;
-      }
-      handler(cmd->request.make_response(std::move(ctx), std::move(resp)));
+                 response_type&& resp) mutable {
+      handler(std::move(resp));
       self->check_in(cmd->request.type, cmd->session_);
     });
     CB_LOG_DEBUG(R"(Adding HTTP request to deferred queue: {}, client_context_id="{}")",
