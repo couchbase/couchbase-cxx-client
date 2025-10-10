@@ -403,7 +403,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
   }
 
 private:
-  auto create_orphan_attributes() -> orphan_attributes
+  [[nodiscard]] auto create_orphan_attributes() -> orphan_attributes
   {
     orphan_attributes attrs;
 
@@ -424,7 +424,8 @@ private:
     return attrs;
   }
 
-  auto create_dispatch_span() const -> std::shared_ptr<couchbase::tracing::request_span>
+  [[nodiscard]] auto create_dispatch_span() const
+    -> std::shared_ptr<couchbase::tracing::request_span>
   {
     std::shared_ptr<couchbase::tracing::request_span> dispatch_span =
       manager_->tracer()->create_span(tracing::operation::step_dispatch, span_);
