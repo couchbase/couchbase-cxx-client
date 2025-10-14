@@ -186,6 +186,13 @@ http_session::local_address() -> std::string
 }
 
 auto
+http_session::remote_endpoint() -> const asio::ip::tcp::endpoint&
+{
+  const std::scoped_lock lock(info_mutex_);
+  return info_.remote_endpoint();
+}
+
+auto
 http_session::diag_info() -> diag::endpoint_diag_info
 {
   return { type_,

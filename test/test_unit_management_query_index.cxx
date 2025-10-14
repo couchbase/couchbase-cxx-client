@@ -37,7 +37,11 @@ make_http_context()
   static couchbase::core::cluster_options cluster_options{};
   std::string hostname{};
   std::uint16_t port{};
-  couchbase::core::http_context ctx{ config, cluster_options, query_cache, hostname, port };
+  std::string canonical_hostname{};
+  std::uint16_t canonical_port{};
+  couchbase::core::http_context ctx{
+    config, cluster_options, query_cache, hostname, port, canonical_hostname, canonical_port,
+  };
   return ctx;
 }
 

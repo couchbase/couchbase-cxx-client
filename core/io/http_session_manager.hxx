@@ -212,7 +212,17 @@ public:
         std::uint16_t port = node.port_or(options_.network, type, options_.enable_tls, 0);
         if (port != 0) {
           const auto& hostname = node.hostname_for(options_.network);
-          auto session = create_session(type, credentials, hostname, port, node.node_uuid);
+          const auto& canonical_hostname = node.hostname;
+          std::uint16_t canonical_port = node.port_or(type, options_.enable_tls, 0);
+          auto session = create_session(type,
+                                        credentials,
+                                        node_details{
+                                          hostname,
+                                          port,
+                                          node.node_uuid,
+                                          canonical_hostname,
+                                          canonical_port,
+                                        });
           if (session->is_connected()) {
             std::scoped_lock lock(sessions_mutex_);
             busy_sessions_[type].push_back(session);
@@ -289,19 +299,35 @@ public:
     }
   }
 
+  struct node_details {
+    std::string hostname{};
+    std::uint16_t port{};
+    std::string node_uuid{};
+    std::string canonical_hostname{};
+    std::uint16_t canonical_port{};
+  };
+
   auto check_out(service_type type,
                  const couchbase::core::cluster_credentials& credentials,
-                 std::string preferred_node,
-                 const std::string& undesired_node = {})
+                 std::string preferred_node_address,
+                 const std::string& undesired_node_address = {})
     -> std::pair<std::error_code, std::shared_ptr<http_session>>
   {
-    std::string node_uuid{};
+    node_details preferred_node{};
 
-    if (preferred_node.empty() && !undesired_node.empty()) {
-      auto [hostname, port, uuid] = pick_random_node(type, undesired_node);
-      if (port != 0) {
-        preferred_node = fmt::format("{}:{}", hostname, port);
-        node_uuid = uuid;
+    if (preferred_node_address.empty() && !undesired_node_address.empty()) {
+      // This is currently only used by Columnar to avoid the node
+      // that was last used and to satisfy the requirement for retrying on a different randomly
+      // selected node (as opposed to any node we have an idle session to).
+      if (auto n = pick_random_node(type, undesired_node_address); n.port != 0) {
+        preferred_node_address = fmt::format("{}:{}", n.hostname, n.port);
+        preferred_node = std::move(n);
+      }
+    } else if (!preferred_node_address.empty()) {
+      // A 'sticky' node was specified. We should populate the node details.
+      preferred_node = lookup_node(type, preferred_node_address);
+      if (preferred_node.port == 0) {
+        return { errc::common::service_not_available, nullptr };
       }
     }
 
@@ -317,21 +343,21 @@ public:
     });
     std::shared_ptr<http_session> session{};
     while (!idle_sessions_[type].empty()) {
-      if (preferred_node.empty()) {
+      if (preferred_node_address.empty()) {
         session = idle_sessions_[type].front();
         idle_sessions_[type].pop_front();
         if (session->reset_idle()) {
           break;
         }
       } else {
-        auto [hostname, port] = split_host_port(preferred_node);
-
         auto ptr = std::find_if(idle_sessions_[type].begin(),
                                 idle_sessions_[type].end(),
-                                [&preferred_node, &h = hostname, &p = port](const auto& s) {
+                                [&preferred_node_address,
+                                 &h = preferred_node.hostname,
+                                 &p = preferred_node.port](const auto& s) {
                                   // Check for a match using both the unresolved hostname & IP
                                   // address
-                                  return (s->remote_address() == preferred_node ||
+                                  return (s->remote_address() == preferred_node_address ||
                                           (s->hostname() == h && s->port() == std::to_string(p)));
                                 });
         if (ptr != idle_sessions_[type].end()) {
@@ -341,7 +367,7 @@ public:
             break;
           }
         } else {
-          session = create_session(type, credentials, hostname, port, node_uuid);
+          session = create_session(type, credentials, preferred_node);
           break;
         }
       }
@@ -353,12 +379,12 @@ public:
       session.reset();
     }
     if (!session) {
-      auto [hostname, port, uuid] =
-        preferred_node.empty() ? next_node(type) : lookup_node(type, preferred_node);
-      if (port == 0) {
+      auto node = preferred_node_address.empty() ? next_node(type)
+                                                 : lookup_node(type, preferred_node_address);
+      if (node.port == 0) {
         return { errc::common::service_not_available, nullptr };
       }
-      session = create_session(type, credentials, hostname, port, uuid);
+      session = create_session(type, credentials, node);
     }
     if (session->is_connected()) {
       busy_sessions_[type].push_back(session);
@@ -543,15 +569,14 @@ public:
 
         // stop this session and create a new one w/ new hostname + port
         session->stop();
-        auto [hostname, port, node_uuid] = preferred_node.empty()
-                                             ? self->next_node(session->type())
-                                             : self->lookup_node(session->type(), preferred_node);
-        if (port == 0) {
+        const auto node = preferred_node.empty()
+                            ? self->next_node(session->type())
+                            : self->lookup_node(session->type(), preferred_node);
+        if (node.port == 0) {
           cb(errc::common::service_not_available, {});
           return;
         }
-        auto new_session =
-          self->create_session(session->type(), session->credentials(), hostname, port, node_uuid);
+        auto new_session = self->create_session(session->type(), session->credentials(), node);
         if (new_session->is_connected()) {
           {
             const std::scoped_lock inner_lock(self->sessions_mutex_);
@@ -651,15 +676,14 @@ private:
         }
         // stop this session and create a new one w/ new hostname + port
         session->stop();
-        auto [hostname, port, node_uuid] = preferred_node.empty()
-                                             ? self->next_node(session->type())
-                                             : self->lookup_node(session->type(), preferred_node);
-        if (port == 0) {
+        const auto node = preferred_node.empty()
+                            ? self->next_node(session->type())
+                            : self->lookup_node(session->type(), preferred_node);
+        if (node.port == 0) {
           cmd->invoke_handler(errc::common::service_not_available, {});
           return;
         }
-        auto new_session =
-          self->create_session(session->type(), session->credentials(), hostname, port, node_uuid);
+        auto new_session = self->create_session(session->type(), session->credentials(), node);
         cmd->set_command_session(new_session);
         if (new_session->is_connected()) {
           std::scoped_lock inner_lock(self->sessions_mutex_);
@@ -678,36 +702,48 @@ private:
 
   auto create_session(service_type type,
                       const couchbase::core::cluster_credentials& credentials,
-                      const std::string& hostname,
-                      std::uint16_t port,
-                      const std::string& node_uuid) -> std::shared_ptr<http_session>
+                      const node_details& node) -> std::shared_ptr<http_session>
   {
     std::shared_ptr<http_session> session;
     if (options_.enable_tls) {
-      session = std::make_shared<http_session>(
-        type,
-        client_id_,
-        node_uuid,
-        ctx_,
-        tls_,
-        credentials,
-        hostname,
-        std::to_string(port),
-        http_context{ config_, options_, query_cache_, hostname, port });
+      session = std::make_shared<http_session>(type,
+                                               client_id_,
+                                               node.node_uuid,
+                                               ctx_,
+                                               tls_,
+                                               credentials,
+                                               node.hostname,
+                                               std::to_string(node.port),
+                                               http_context{
+                                                 config_,
+                                                 options_,
+                                                 query_cache_,
+                                                 node.hostname,
+                                                 node.port,
+                                                 node.canonical_hostname,
+                                                 node.canonical_port,
+                                               });
     } else {
-      session = std::make_shared<http_session>(
-        type,
-        client_id_,
-        node_uuid,
-        ctx_,
-        credentials,
-        hostname,
-        std::to_string(port),
-        http_context{ config_, options_, query_cache_, hostname, port });
+      session = std::make_shared<http_session>(type,
+                                               client_id_,
+                                               node.node_uuid,
+                                               ctx_,
+                                               credentials,
+                                               node.hostname,
+                                               std::to_string(node.port),
+                                               http_context{
+                                                 config_,
+                                                 options_,
+                                                 query_cache_,
+                                                 node.hostname,
+                                                 node.port,
+                                                 node.canonical_hostname,
+                                                 node.canonical_port,
+                                               });
     }
 
     session->on_stop([type, id = session->id(), self = this->shared_from_this()]() {
-      std::scoped_lock inner_lock(self->sessions_mutex_);
+      const std::scoped_lock inner_lock(self->sessions_mutex_);
       self->busy_sessions_[type].remove_if([&id](const auto& s) {
         return !s || s->id() == id;
       });
@@ -799,34 +835,29 @@ private:
   }
 #endif
 
-  auto next_node(service_type type) -> std::tuple<std::string, std::uint16_t, std::string>
+  auto next_node(service_type type) -> node_details
   {
     std::scoped_lock lock(config_mutex_);
     auto candidates = config_.nodes.size();
     while (candidates > 0) {
       --candidates;
-      std::scoped_lock index_lock(next_index_mutex_);
+      const std::scoped_lock index_lock(next_index_mutex_);
       const auto& node = config_.nodes[next_index_];
       next_index_ = (next_index_ + 1) % config_.nodes.size();
-      std::uint16_t port = node.port_or(options_.network, type, options_.enable_tls, 0);
+      const std::uint16_t port = node.port_or(options_.network, type, options_.enable_tls, 0);
       if (port != 0) {
         return {
-          node.hostname_for(options_.network),
-          port,
-          node.node_uuid,
+          node.hostname_for(options_.network),        port, node.node_uuid, node.hostname,
+          node.port_or(type, options_.enable_tls, 0),
         };
       }
     }
-    return {
-      "",
-      static_cast<std::uint16_t>(0U),
-      "",
-    };
+    return {};
   }
 
   auto split_host_port(const std::string& address) -> std::pair<std::string, std::uint16_t>
   {
-    auto last_colon = address.find_last_of(':');
+    const auto last_colon = address.find_last_of(':');
     if (last_colon == std::string::npos || address.size() - 1 == last_colon) {
       return { "", static_cast<std::uint16_t>(0U) };
     }
@@ -835,30 +866,22 @@ private:
     return { hostname, port };
   }
 
-  auto lookup_node(service_type type, const std::string& preferred_node)
-    -> std::tuple<std::string, std::uint16_t, std::string>
+  auto lookup_node(service_type type, const std::string& preferred_node_address) -> node_details
   {
-    std::scoped_lock lock(config_mutex_);
-    auto [hostname, port] = split_host_port(preferred_node);
+    const std::scoped_lock lock(config_mutex_);
+    auto [hostname, port] = split_host_port(preferred_node_address);
     for (const auto& node : config_.nodes) {
       if (node.hostname_for(options_.network) == hostname &&
           node.port_or(options_.network, type, options_.enable_tls, 0) == port) {
         return {
-          hostname,
-          port,
-          node.node_uuid,
+          hostname, port, node.node_uuid, node.hostname, node.port_or(type, options_.enable_tls, 0),
         };
       }
     }
-    return {
-      "",
-      static_cast<std::uint16_t>(0U),
-      "",
-    };
+    return {};
   }
 
-  auto pick_random_node(service_type type, const std::string& undesired_node)
-    -> std::tuple<std::string, std::uint16_t, std::string>
+  auto pick_random_node(service_type type, const std::string& undesired_node) -> node_details
   {
     std::vector<topology::configuration::node> candidate_nodes{};
     {
@@ -874,11 +897,7 @@ private:
 
     if (candidate_nodes.empty()) {
       // Could not find any other nodes
-      return {
-        "",
-        static_cast<std::uint16_t>(0U),
-        "",
-      };
+      return {};
     }
 
     std::vector<topology::configuration::node> selected{};
@@ -892,6 +911,8 @@ private:
       first_selected.hostname_for(options_.network),
       first_selected.port_or(options_.network, type, options_.enable_tls, 0),
       first_selected.node_uuid,
+      first_selected.hostname,
+      first_selected.port_or(type, options_.enable_tls, 0),
     };
   }
 

@@ -85,10 +85,7 @@ constexpr auto cluster_uuid = "db.couchbase.cluster_uuid";
 constexpr auto span_kind = "span.kind";
 constexpr auto component = "db.couchbase.component";
 constexpr auto instance = "db.instance";
-
 constexpr auto service = "cb.service";
-constexpr auto local_socket = "cb.local_socket";
-constexpr auto remote_socket = "cb.remote_socket";
 
 namespace dispatch
 {
