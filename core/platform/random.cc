@@ -25,7 +25,7 @@
 #include <mutex>
 #include <system_error>
 
-#ifdef WIN32
+#ifdef _WIN32
 // We need to include windows.h _before_ wincrypt.h
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
