@@ -94,6 +94,7 @@ public:
   [[nodiscard]] auto http_context() -> couchbase::core::http_context&;
   [[nodiscard]] auto remote_address() -> std::string;
   [[nodiscard]] auto local_address() -> std::string;
+  [[nodiscard]] auto remote_endpoint() -> const asio::ip::tcp::endpoint&;
   [[nodiscard]] auto diag_info() -> diag::endpoint_diag_info;
   [[nodiscard]] auto log_prefix() -> std::string;
   [[nodiscard]] auto id() const -> const std::string&;

@@ -67,9 +67,6 @@ private:
   std::optional<std::string> peer_hostname_{};
   std::optional<std::uint16_t> peer_port_{};
 
-  // Used by legacy top-level spans. TODO(CXXCBC-738): Remove once HTTP dispatch spans are added.
-  std::optional<std::string> last_remote_socket_{};
-
   std::shared_ptr<threshold_logging_tracer> tracer_{};
 
 public:
@@ -99,9 +96,6 @@ public:
     if (tag_name == tracing::attributes::service) {
       service_ = value;
     }
-    if (tag_name == tracing::attributes::remote_socket) {
-      last_remote_socket_ = value;
-    }
     if (tag_name == tracing::attributes::dispatch::local_id) {
       last_local_id_ = value;
     }
@@ -115,11 +109,6 @@ public:
 
   void end() override;
 
-  void set_last_remote_socket(const std::string& socket)
-  {
-    last_remote_socket_ = socket;
-  }
-
   void set_last_local_id(const std::string& id)
   {
     last_local_id_ = id;
@@ -128,6 +117,24 @@ public:
   void set_operation_id(const std::string& id)
   {
     operation_id_ = id;
+  }
+
+  void set_peer_hostname(const std::string& hostname)
+  {
+    peer_hostname_ = hostname;
+  }
+
+  void set_peer_port(const std::uint16_t port)
+  {
+    peer_port_ = port;
+  }
+
+  [[nodiscard]] auto last_remote_socket() const -> std::optional<std::string>
+  {
+    if (peer_hostname_.has_value() && peer_port_.has_value()) {
+      return fmt::format("{}:{}", peer_hostname_.value(), peer_port_.value());
+    }
+    return {};
   }
 
   void add_server_duration(const std::uint64_t duration_us)
@@ -154,11 +161,6 @@ public:
   [[nodiscard]] auto operation_id() const -> std::optional<std::string>
   {
     return operation_id_;
-  }
-
-  [[nodiscard]] auto last_remote_socket() const -> std::optional<std::string>
-  {
-    return last_remote_socket_;
   }
 
   [[nodiscard]] auto last_local_id() const -> std::optional<std::string>
@@ -379,8 +381,11 @@ threshold_logging_span::end()
       if (operation_id_.has_value()) {
         p->set_operation_id(operation_id_.value());
       }
-      if (peer_hostname_.has_value() && peer_port_.has_value()) {
-        p->set_last_remote_socket(fmt::format("{}:{}", peer_hostname_.value(), peer_port_.value()));
+      if (peer_hostname_.has_value()) {
+        p->set_peer_hostname(peer_hostname_.value());
+      }
+      if (peer_port_.has_value()) {
+        p->set_peer_port(peer_port_.value());
       }
       if (last_server_duration_us_ > 0) {
         p->add_server_duration(last_server_duration_us_);

@@ -168,13 +168,19 @@ void
 assert_span_ok(test::utils::integration_test_guard& guard,
                const std::shared_ptr<test_span>& span,
                bool is_top_level_op_span,
-               std::shared_ptr<test_span> parent = nullptr)
+               std::shared_ptr<test_span> expected_parent = nullptr)
 {
+  fmt::println("TEST SPAN `{}`,\n  Parent: `{}`,\n  Tags: `[string] {}, [int] {}`",
+               span->name(),
+               span->parent() ? span->parent()->name() : "<none>",
+               fmt::join(span->string_tags(), ", "),
+               fmt::join(span->int_tags(), ", "));
 
-  REQUIRE(span->parent() == parent);
-  if (parent && is_top_level_op_span) {
+  auto parent_test_span = std::dynamic_pointer_cast<test_span>(span->parent());
+  REQUIRE(parent_test_span == expected_parent);
+  if (parent_test_span && is_top_level_op_span) {
     // the parent span that was given to the operation's options should not be closed yet
-    REQUIRE(parent->duration().count() == 0);
+    REQUIRE(parent_test_span->duration().count() == 0);
   }
 
   const auto& tags = span->string_tags();
@@ -190,21 +196,14 @@ assert_span_ok(test::utils::integration_test_guard& guard,
 }
 
 void
-assert_kv_dispatch_span_ok(test::utils::integration_test_guard& guard,
-                           const std::shared_ptr<test_span>& span,
-                           std::shared_ptr<test_span> parent)
+assert_dispatch_span_ok(test::utils::integration_test_guard& guard,
+                        const std::shared_ptr<test_span>& span,
+                        std::shared_ptr<test_span> parent)
 {
   assert_span_ok(guard, span, false, parent);
 
-  INFO(fmt::format("Dispatch span string tags: {}", fmt::join(span->string_tags(), ", ")));
-  INFO(fmt::format("Dispatch span integer tags: {}", fmt::join(span->int_tags(), ", ")));
-
-  std::size_t expected_tag_count = (guard.cluster_version().supports_cluster_labels()) ? 11 : 9;
-  REQUIRE(span->string_tags().size() + span->int_tags().size() == expected_tag_count);
   REQUIRE("dispatch_to_server" == span->name());
 
-  REQUIRE(static_cast<uint64_t>(span->duration().count()) >=
-          span->int_tags()["db.couchbase.server_duration"]);
   REQUIRE_FALSE(span->string_tags()["db.couchbase.local_id"].empty());
   REQUIRE_FALSE(span->string_tags()["server.address"].empty());
   REQUIRE(span->int_tags()["server.port"] != 0);
@@ -212,6 +211,21 @@ assert_kv_dispatch_span_ok(test::utils::integration_test_guard& guard,
   REQUIRE(span->int_tags()["network.peer.port"] != 0);
   REQUIRE(span->string_tags()["network.transport"] == "tcp");
   REQUIRE_FALSE(span->string_tags()["db.couchbase.operation_id"].empty());
+}
+
+void
+assert_kv_dispatch_span_ok(test::utils::integration_test_guard& guard,
+                           const std::shared_ptr<test_span>& span,
+                           std::shared_ptr<test_span> parent)
+{
+  assert_dispatch_span_ok(guard, span, parent);
+
+  const std::size_t expected_tag_count =
+    (guard.cluster_version().supports_cluster_labels()) ? 11 : 9;
+  REQUIRE(span->string_tags().size() + span->int_tags().size() == expected_tag_count);
+
+  REQUIRE(static_cast<uint64_t>(span->duration().count()) >=
+          span->int_tags()["db.couchbase.server_duration"]);
 }
 
 void
@@ -237,6 +251,21 @@ assert_kv_op_span_ok(test::utils::integration_test_guard& guard,
 }
 
 void
+assert_http_dispatch_span_ok(test::utils::integration_test_guard& guard,
+                             const std::shared_ptr<test_span>& span,
+                             std::shared_ptr<test_span> parent)
+{
+  assert_dispatch_span_ok(guard, span, parent);
+
+  const std::size_t expected_tag_count =
+    (guard.cluster_version().supports_cluster_labels()) ? 10 : 8;
+  REQUIRE(span->string_tags().size() + span->int_tags().size() == expected_tag_count);
+
+  // server_duration is only available for KV operations
+  REQUIRE_FALSE(span->int_tags().count("db.couchbase.server_duration"));
+}
+
+void
 assert_http_op_span_ok(test::utils::integration_test_guard& guard,
                        const std::shared_ptr<test_span>& span,
                        const std::string& op,
@@ -245,13 +274,18 @@ assert_http_op_span_ok(test::utils::integration_test_guard& guard,
   assert_span_ok(guard, span, true, parent);
 
   REQUIRE(span->name().find(op) != std::string::npos);
-  REQUIRE_FALSE(span->string_tags()["db.couchbase.local_id"].empty());
-  REQUIRE_FALSE(span->string_tags()["cb.local_socket"].empty());
-  REQUIRE_FALSE(span->string_tags()["db.couchbase.operation_id"].empty());
-  REQUIRE_FALSE(span->string_tags()["cb.remote_socket"].empty());
   REQUIRE(span->string_tags()["cb.service"] == op);
   REQUIRE(span->duration().count() > 0);
   // spec has some specific fields for query, analytics, etc...
+
+  // There must be at least one dispatch span
+  auto dispatch_spans = span->child_spans().find("dispatch_to_server");
+  REQUIRE(dispatch_spans != span->child_spans().end());
+  REQUIRE_FALSE(dispatch_spans->second.empty());
+
+  for (const auto& dispatch_span : dispatch_spans->second) {
+    assert_http_dispatch_span_ok(guard, dispatch_span.lock(), span);
+  }
 }
 
 TEST_CASE("integration: enable external tracer", "[integration]")

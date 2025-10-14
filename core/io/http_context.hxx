@@ -29,6 +29,8 @@ struct http_context {
   query_cache& cache;
   std::string hostname;
   std::uint16_t port;
+  std::string canonical_hostname;
+  std::uint16_t canonical_port;
 };
 
 namespace priv

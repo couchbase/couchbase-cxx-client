@@ -97,26 +97,12 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
   }
 #endif
 
-  void finish_dispatch(const std::string& remote_address, const std::string& local_address)
-  {
-    if (span_ == nullptr) {
-      return;
-    }
-    if (span_->uses_tags())
-      span_->add_tag(tracing::attributes::remote_socket, remote_address);
-    if (span_->uses_tags())
-      span_->add_tag(tracing::attributes::local_socket, local_address);
-    span_->end();
-    span_ = nullptr;
-  }
-
   void start(handler_type&& handler)
   {
     span_ = tracer_->create_span(tracing::span_name_for_http_service(request.type), parent_span_);
     if (span_->uses_tags()) {
       span_->add_tag(tracing::attributes::service,
                      tracing::service_name_for_http_service(request.type));
-      span_->add_tag(tracing::attributes::dispatch::operation_id, client_context_id_);
     }
 
     handler_ = std::move(handler);
@@ -164,10 +150,6 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
   void invoke_handler(std::error_code ec, io::http_response&& msg)
 #endif
   {
-    if (span_ != nullptr) {
-      span_->end();
-      span_ = nullptr;
-    }
     if (handler_type handler = std::move(handler_); handler) {
       const auto& node_uuid = session_ ? session_->node_uuid() : "";
       auto telemetry_recorder = app_telemetry_meter_->value_recorder(node_uuid, {});
@@ -214,7 +196,14 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
       ctx.last_dispatched_to = session_->remote_address();
       ctx.hostname = session_->http_context().hostname;
       ctx.port = session_->http_context().port;
-      handler(request.make_response(std::move(ctx), std::move(encoded_resp)));
+
+      // Can raise priv::retry_http_request when a retry is required
+      auto resp = request.make_response(std::move(ctx), std::move(encoded_resp));
+
+      span_->end();
+      span_ = nullptr;
+
+      handler(std::move(resp));
     }
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
     dispatch_deadline_.cancel();
@@ -229,9 +218,6 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
 #endif
     if (!handler_) {
       return;
-    }
-    if (span_->uses_tags()) {
-      span_->add_tag(tracing::attributes::dispatch::local_id, session_->id());
     }
     send();
   }
@@ -265,6 +251,7 @@ private:
       return invoke_handler(ec, {});
     }
     encoded.headers["client-context-id"] = client_context_id_;
+
     CB_LOG_TRACE(
       R"({} HTTP request: {}, method={}, path="{}", client_context_id="{}", timeout={}ms)",
       session_->log_prefix(),
@@ -273,18 +260,27 @@ private:
       encoded.path,
       client_context_id_,
       timeout_.count());
+
+    auto dispatch_span = create_dispatch_span();
+
     session_->write_and_subscribe(
       encoded,
       [self = this->shared_from_this(),
+       dispatch_span = std::move(dispatch_span),
        start = std::chrono::steady_clock::now()](std::error_code ec, io::http_response&& msg) {
         if (ec == asio::error::operation_aborted) {
+          dispatch_span->end();
           return self->invoke_handler(errc::common::ambiguous_timeout, std::move(msg));
         }
 
-        auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
-          std::chrono::steady_clock::now() - start);
-        self->app_telemetry_meter_->value_recorder(self->session_->node_uuid(), {})
-          ->record_latency(latency_for_service_type(self->request.type), latency);
+        dispatch_span->end();
+
+        {
+          auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - start);
+          self->app_telemetry_meter_->value_recorder(self->session_->node_uuid(), {})
+            ->record_latency(latency_for_service_type(self->request.type), latency);
+        }
 
         if (self->meter_) {
           metrics::metric_attributes attrs{
@@ -294,8 +290,8 @@ private:
           };
           self->meter_->record_value(std::move(attrs), start);
         }
+
         self->deadline.cancel();
-        self->finish_dispatch(self->session_->remote_address(), self->session_->local_address());
         CB_LOG_TRACE(R"({} HTTP response: {}, client_context_id="{}", ec={}, status={}, body={})",
                      self->session_->log_prefix(),
                      self->request.type,
@@ -312,6 +308,28 @@ private:
           self->send();
         }
       });
+  }
+
+  [[nodiscard]] auto create_dispatch_span() const
+    -> std::shared_ptr<couchbase::tracing::request_span>
+  {
+    std::shared_ptr<couchbase::tracing::request_span> dispatch_span =
+      tracer_->create_span(tracing::operation::step_dispatch, span_);
+    if (dispatch_span->uses_tags()) {
+      dispatch_span->add_tag(tracing::attributes::dispatch::network_transport, "tcp");
+      dispatch_span->add_tag(tracing::attributes::dispatch::operation_id, client_context_id_);
+      dispatch_span->add_tag(tracing::attributes::dispatch::local_id, session_->id());
+      dispatch_span->add_tag(tracing::attributes::dispatch::server_address,
+                             session_->http_context().canonical_hostname);
+      dispatch_span->add_tag(tracing::attributes::dispatch::server_port,
+                             session_->http_context().canonical_port);
+
+      const auto& peer_endpoint = session_->remote_endpoint();
+      dispatch_span->add_tag(tracing::attributes::dispatch::peer_address,
+                             peer_endpoint.address().to_string());
+      dispatch_span->add_tag(tracing::attributes::dispatch::peer_port, peer_endpoint.port());
+    }
+    return dispatch_span;
   }
 };
 
