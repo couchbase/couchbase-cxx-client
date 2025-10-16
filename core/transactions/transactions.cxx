@@ -204,7 +204,7 @@ transactions::run(const couchbase::transactions::transaction_options& config, lo
 auto
 transactions::run(couchbase::transactions::txn_logic&& code,
                   const couchbase::transactions::transaction_options& config)
-  -> std::pair<error, couchbase::transactions::transaction_result>
+  -> std::pair<couchbase::error, couchbase::transactions::transaction_result>
 {
   try {
     return { {}, wrap_public_api_run(*this, config, max_attempts_, std::move(code)) };

@@ -634,8 +634,8 @@ void
 attempt_context_impl::get_multi(
   const std::vector<couchbase::transactions::transaction_get_multi_spec>& specs,
   const couchbase::transactions::transaction_get_multi_options& options,
-  std::function<void(error, std::optional<couchbase::transactions::transaction_get_multi_result>)>&&
-    cb)
+  std::function<void(couchbase::error,
+                     std::optional<couchbase::transactions::transaction_get_multi_result>)>&& cb)
 {
   std::vector<core::document_id> ids;
   ids.reserve(specs.size());
@@ -666,17 +666,19 @@ auto
 attempt_context_impl::get_multi(
   const std::vector<couchbase::transactions::transaction_get_multi_spec>& specs,
   const couchbase::transactions::transaction_get_multi_options& options)
-  -> std::pair<error, std::optional<couchbase::transactions::transaction_get_multi_result>>
+  -> std::pair<couchbase::error,
+               std::optional<couchbase::transactions::transaction_get_multi_result>>
 {
   auto barrier = std::make_shared<std::promise<
-    std::pair<error, std::optional<couchbase::transactions::transaction_get_multi_result>>>>();
+    std::pair<couchbase::error,
+              std::optional<couchbase::transactions::transaction_get_multi_result>>>>();
   auto f = barrier->get_future();
-  get_multi(
-    specs,
-    options,
-    [barrier](error err, std::optional<couchbase::transactions::transaction_get_multi_result> res) {
-      return barrier->set_value(std::make_pair(std::move(err), std::move(res)));
-    });
+  get_multi(specs,
+            options,
+            [barrier](couchbase::error err,
+                      std::optional<couchbase::transactions::transaction_get_multi_result> res) {
+              return barrier->set_value(std::make_pair(std::move(err), std::move(res)));
+            });
   return f.get();
 }
 
@@ -749,7 +751,7 @@ attempt_context_impl::get_multi_replicas_from_preferred_server_group(
   const couchbase::transactions::transaction_get_multi_replicas_from_preferred_server_group_options&
     options,
   std::function<
-    void(error,
+    void(couchbase::error,
          std::optional<couchbase::transactions::
                          transaction_get_multi_replicas_from_preferred_server_group_result>)>&& cb)
 {
@@ -790,12 +792,12 @@ attempt_context_impl::get_multi_replicas_from_preferred_server_group(
   const couchbase::transactions::transaction_get_multi_replicas_from_preferred_server_group_options&
     options)
   -> std::pair<
-    error,
+    couchbase::error,
     std::optional<
       couchbase::transactions::transaction_get_multi_replicas_from_preferred_server_group_result>>
 {
   auto barrier = std::make_shared<std::promise<std::pair<
-    error,
+    couchbase::error,
     std::optional<couchbase::transactions::
                     transaction_get_multi_replicas_from_preferred_server_group_result>>>>();
   auto f = barrier->get_future();
@@ -803,7 +805,7 @@ attempt_context_impl::get_multi_replicas_from_preferred_server_group(
     specs,
     options,
     [barrier](
-      error err,
+      couchbase::error err,
       std::optional<
         couchbase::transactions::transaction_get_multi_replicas_from_preferred_server_group_result>
         res) {

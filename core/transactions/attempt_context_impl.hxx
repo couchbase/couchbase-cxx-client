@@ -357,12 +357,12 @@ public:
                                     std::optional<transaction_get_multi_result>)>&& cb) override;
   auto get_multi(const std::vector<couchbase::transactions::transaction_get_multi_spec>& specs,
                  const couchbase::transactions::transaction_get_multi_options& options)
-    -> std::pair<error,
+    -> std::pair<couchbase::error,
                  std::optional<couchbase::transactions::transaction_get_multi_result>> override;
   void get_multi(
     const std::vector<couchbase::transactions::transaction_get_multi_spec>& specs,
     const couchbase::transactions::transaction_get_multi_options& options,
-    std::function<void(error,
+    std::function<void(couchbase::error,
                        std::optional<couchbase::transactions::transaction_get_multi_result>)>&& cb)
     override;
 
@@ -384,7 +384,7 @@ public:
     const couchbase::transactions::
       transaction_get_multi_replicas_from_preferred_server_group_options& options)
     -> std::pair<
-      error,
+      couchbase::error,
       std::optional<couchbase::transactions::
                       transaction_get_multi_replicas_from_preferred_server_group_result>> override;
   void get_multi_replicas_from_preferred_server_group(
@@ -394,7 +394,7 @@ public:
     const couchbase::transactions::
       transaction_get_multi_replicas_from_preferred_server_group_options& options,
     std::function<void(
-      error,
+      couchbase::error,
       std::optional<couchbase::transactions::
                       transaction_get_multi_replicas_from_preferred_server_group_result>)>&& cb)
     override;

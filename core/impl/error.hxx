@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "core/error.hxx"
 #include "core/error_context/key_value_error_context.hxx"
 #include "core/error_context/query_error_context.hxx"
 #include "core/error_context/subdocument_error_context.hxx"
@@ -33,32 +34,36 @@
 namespace couchbase::core::impl
 {
 auto
-make_error(const core::error_context::query& core_ctx) -> error;
+make_error(const core::error_context::query& core_ctx) -> couchbase::error;
 
 auto
-make_error(const core::error_context::search& core_ctx) -> error;
+make_error(const core::error_context::search& core_ctx) -> couchbase::error;
 
 auto
-make_error(const core::error_context::analytics& core_ctx) -> error;
+make_error(const core::error_context::analytics& core_ctx) -> couchbase::error;
 
 auto
-make_error(const core::error_context::http& core_ctx) -> error;
+make_error(const core::error_context::http& core_ctx) -> couchbase::error;
 
 auto
-make_error(const couchbase::core::key_value_error_context& core_ctx) -> error;
+make_error(const couchbase::core::key_value_error_context& core_ctx) -> couchbase::error;
 
 auto
-make_error(const couchbase::core::subdocument_error_context& core_ctx) -> error;
+make_error(const couchbase::core::subdocument_error_context& core_ctx) -> couchbase::error;
 
 auto
-make_error(const couchbase::core::query_error_context& core_ctx) -> error;
+make_error(const couchbase::core::query_error_context& core_ctx) -> couchbase::error;
 
 auto
-make_error(const couchbase::core::transaction_error_context& core_ctx) -> error;
+make_error(const couchbase::core::transaction_error_context& core_ctx) -> couchbase::error;
 
 auto
-make_error(const couchbase::core::transactions::op_exception& exc) -> error;
+make_error(const couchbase::core::transactions::op_exception& exc) -> couchbase::error;
 
 auto
-make_error(const couchbase::core::transactions::transaction_operation_failed& core_tof) -> error;
+make_error(const couchbase::core::transactions::transaction_operation_failed& core_tof)
+  -> couchbase::error;
+
+auto
+make_error(const core::error& err) -> couchbase::error;
 } // namespace couchbase::core::impl

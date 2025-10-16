@@ -65,7 +65,8 @@ private:
   std::optional<std::chrono::milliseconds> timeout_{};
 };
 
-using movable_get_any_replica_handler = utils::movable_function<void(error, get_replica_result)>;
+using movable_get_any_replica_handler =
+  utils::movable_function<void(couchbase::error, get_replica_result)>;
 
 void
 initiate_get_any_replica_operation(std::shared_ptr<cluster> core,
