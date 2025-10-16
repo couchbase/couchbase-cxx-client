@@ -35,5 +35,6 @@ private:
   std::string key_path_;
 
   friend class cluster_options;
+  friend class cluster;
 };
 } // namespace couchbase

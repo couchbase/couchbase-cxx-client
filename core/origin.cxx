@@ -468,6 +468,11 @@ couchbase::core::origin::set_nodes_from_config(const topology::configuration& co
   }
   next_node_ = nodes_.begin();
 }
+void
+couchbase::core::origin::update_credentials(cluster_credentials auth)
+{
+  credentials_ = std::move(auth);
+}
 auto
 couchbase::core::origin::next_address() -> std::pair<std::string, std::string>
 {
