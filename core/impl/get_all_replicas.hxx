@@ -70,7 +70,7 @@ private:
 };
 
 using movable_get_all_replicas_handler =
-  utils::movable_function<void(error, get_all_replicas_result)>;
+  utils::movable_function<void(couchbase::error, get_all_replicas_result)>;
 
 void
 initiate_get_all_replicas_operation(std::shared_ptr<cluster> core,
