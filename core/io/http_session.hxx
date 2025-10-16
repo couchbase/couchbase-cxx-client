@@ -33,6 +33,8 @@
 #include "core/impl/bootstrap_error.hxx"
 #endif
 
+#include "core/logger/logger.hxx"
+
 #include <asio.hpp>
 #include <spdlog/fmt/bundled/chrono.h>
 
@@ -133,6 +135,7 @@ public:
     }
     request.headers["user-agent"] = user_agent_;
     auto credentials = fmt::format("{}:{}", credentials_.username, credentials_.password);
+    CB_LOG_CRITICAL("Credentials: {}", credentials);
     request.headers["authorization"] = fmt::format(
       "Basic {}",
       base64::encode(gsl::as_bytes(gsl::span{ credentials.data(), credentials.size() })));

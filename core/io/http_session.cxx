@@ -279,8 +279,11 @@ http_session::initiate_connect()
     return;
   }
   if (state_ != diag::endpoint_state::connecting) {
-    CB_LOG_DEBUG(
-      "{} {}:{} attempt to establish HTTP connection", info_.log_prefix(), hostname_, service_);
+    CB_LOG_DEBUG("{} {}:{} attempt to establish HTTP connection with username: {}",
+                 info_.log_prefix(),
+                 hostname_,
+                 service_,
+                 credentials_.username);
     state_ = diag::endpoint_state::connecting;
     async_resolve(http_ctx_.options.use_ip_protocol,
                   resolver_,
@@ -584,13 +587,14 @@ http_session::do_connect(asio::ip::tcp::resolver::results_type::iterator it)
     return;
   }
   if (it != endpoints_.end()) {
-    CB_LOG_DEBUG("{} connecting to {}:{} (\"{}:{}\"), timeout={}ms",
+    CB_LOG_DEBUG("{} connecting to {}:{} (\"{}:{}\"), timeout={}ms username={}",
                  info_.log_prefix(),
                  it->endpoint().address().to_string(),
                  it->endpoint().port(),
                  hostname_,
                  service_,
-                 http_ctx_.options.connect_timeout.count());
+                 http_ctx_.options.connect_timeout.count(),
+                 credentials_.username);
     connect_deadline_timer_.expires_after(http_ctx_.options.connect_timeout);
     connect_deadline_timer_.async_wait([self = shared_from_this(),
                                         it](const auto timer_ec) mutable {
@@ -659,10 +663,11 @@ http_session::on_connect(const std::error_code& ec,
   } else {
     state_ = diag::endpoint_state::connected;
     connected_ = true;
-    CB_LOG_DEBUG("{} connected to {}:{}",
+    CB_LOG_DEBUG("{} connected to {}:{} username={}",
                  info_.log_prefix(),
                  it->endpoint().address().to_string(),
-                 it->endpoint().port());
+                 it->endpoint().port(),
+                 credentials_.username);
     {
       const std::scoped_lock lock(info_mutex_);
       info_ = http_session_info(client_id_, id_, stream_->local_endpoint(), it->endpoint());
