@@ -24,4 +24,11 @@ cluster_credentials::uses_certificate() const -> bool
 {
   return !certificate_path.empty();
 }
+
+auto
+cluster_credentials::requires_tls() const -> bool
+{
+  return !certificate_path.empty() && !key_path.empty();
+}
+
 } // namespace couchbase::core
