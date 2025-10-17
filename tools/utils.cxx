@@ -17,6 +17,7 @@
 
 #include "utils.hxx"
 #include "CLI/CLI.hpp"
+#include "core/file_signal_sink.hxx"
 #include "core/logger/configuration.hxx"
 #include "core/logger/logger.hxx"
 #include "core/meta/version.hxx"
@@ -664,6 +665,10 @@ add_options(CLI::App* app, behavior_options& options)
   group->add_flag("--dump-configuration",
                   options.dump_configuration,
                   "Dump every new configuration on TRACE log level.");
+  group->add_option("--write-telemetry-to-file",
+                    options.write_telemetry_to_file,
+                    "Replace meter and tracer implementations by one that serializes signals into "
+                    "JSON and writes to given file.");
 }
 
 auto
@@ -952,6 +957,40 @@ apply_options(couchbase::cluster_options& options, const tracing_options& tracin
   options.tracing().view_threshold(tracing.threshold_view);
 }
 
+auto
+open_file(const std::string& path_str) -> FILE*
+{
+  std::filesystem::path file_path(path_str);
+  std::filesystem::path parent_dir = file_path.parent_path();
+
+  if (parent_dir.empty()) {
+    parent_dir = ".";
+  }
+
+  std::error_code ec;
+  if (!std::filesystem::exists(parent_dir, ec) || ec) {
+    throw CLI::ValidationError(
+      fmt::format("Parent directory does not exist: \"{}\"", parent_dir.string()));
+  }
+
+  if (!std::filesystem::is_directory(parent_dir, ec) || ec) {
+    throw CLI::ValidationError(
+      fmt::format("Parent path is not directory: \"{}\"", parent_dir.string()));
+  }
+
+  if (ACCESS(parent_dir.string().c_str(), W_OK) != 0) {
+    throw CLI::ValidationError(
+      fmt::format("Parent path is not writable: \"{}\"", parent_dir.string()));
+  }
+
+  FILE* output = std::fopen(file_path.string().c_str(), "we+");
+  if (output == nullptr) {
+    throw CLI::ValidationError(fmt::format("Failed to open file: \"{}\"", file_path.string()));
+  }
+
+  return output;
+}
+
 void
 apply_options(couchbase::cluster_options& options, const behavior_options& behavior)
 {
@@ -961,6 +1000,18 @@ apply_options(couchbase::cluster_options& options, const behavior_options& behav
   options.behavior().enable_clustermap_notification(!behavior.disable_clustermap_notifications);
   options.behavior().enable_mutation_tokens(!behavior.disable_mutation_tokens);
   options.behavior().enable_unordered_execution(!behavior.disable_unordered_execution);
+
+  if (auto path = behavior.write_telemetry_to_file; path) {
+    static FILE* output = open_file(path.value());
+    static auto sink = std::make_shared<couchbase::core::file_signal_sink>(output);
+    options.tracing().tracer(sink->tracer());
+    options.metrics().meter(sink->meter());
+    sink->start();
+    std::atexit([]() -> void {
+      sink->stop();
+      fclose(output); // NOLINT(cppcoreguidelines-owning-memory)
+    });
+  }
 }
 } // namespace
 

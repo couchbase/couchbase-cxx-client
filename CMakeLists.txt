@@ -81,6 +81,7 @@ set(couchbase_cxx_client_FILES
     core/app_telemetry_meter.cxx
     core/app_telemetry_reporter.cxx
     core/bucket.cxx
+    core/chrono_utils.cxx
     core/cluster.cxx
     core/cluster_agent.cxx
     core/cluster_agent_config.cxx
@@ -102,6 +103,7 @@ set(couchbase_cxx_client_FILES
     core/dispatcher.cxx
     core/document_id.cxx
     core/error_context/key_value.cxx
+    core/file_signal_sink.cxx
     core/free_form_http_request.cxx
     core/http_component.cxx
     core/impl/analytics.cxx
@@ -233,6 +235,7 @@ set(couchbase_cxx_client_FILES
     core/io/mcbp_session.cxx
     core/io/streams.cxx
     core/key_value_config.cxx
+    core/log_entry.cxx
     core/logger/custom_rotating_file_sink.cxx
     core/logger/logger.cxx
     core/management/analytics_link_azure_blob_external.cxx
@@ -249,6 +252,7 @@ set(couchbase_cxx_client_FILES
     core/mcbp/queue_request.cxx
     core/mcbp/server_duration.cxx
     core/meta/version.cxx
+    core/metric_measurement.cxx
     core/metrics/logging_meter.cxx
     core/metrics/meter_wrapper.cxx
     core/n1ql_query_options.cxx
@@ -402,8 +406,11 @@ set(couchbase_cxx_client_FILES
     core/scan_result.cxx
     core/search_query_options.cxx
     core/seed_config.cxx
+    core/signal_bridge.cxx
+    core/signal_data.cxx
     core/topology/capabilities.cxx
     core/topology/configuration.cxx
+    core/trace_span.cxx
     core/tracing/threshold_logging_tracer.cxx
     core/tracing/tracer_wrapper.cxx
     core/tracing/wrapper_sdk_tracer.cxx
