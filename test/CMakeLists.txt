@@ -63,3 +63,8 @@ if(COUCHBASE_CXX_CLIENT_COLUMNAR)
   integration_test(columnar_management)
   unit_test(columnar_retry)
 endif()
+
+unit_test(metric_measurement)
+unit_test(chrono_utils)
+unit_test(signal_data)
+unit_test(signal_bridge)
