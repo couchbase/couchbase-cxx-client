@@ -1779,16 +1779,20 @@ private:
       }
     }
     state_ = diag::endpoint_state::connected;
-    const std::scoped_lock lock(pending_buffer_mutex_);
     bootstrapped_ = true;
     bootstrap_handler_->stop();
     handler_ = std::make_shared<message_handler>(shared_from_this());
     handler_->start();
-    if (!pending_buffer_.empty()) {
-      for (auto& buf : pending_buffer_) {
+
+    std::vector<std::vector<std::byte>> pending_buffer{};
+    {
+      const std::scoped_lock lock(pending_buffer_mutex_);
+      std::swap(pending_buffer, pending_buffer_);
+    }
+    if (!pending_buffer.empty()) {
+      for (auto& buf : pending_buffer) {
         write(std::move(buf));
       }
-      pending_buffer_.clear();
       flush();
     }
   }
