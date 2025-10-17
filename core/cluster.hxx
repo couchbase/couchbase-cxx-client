@@ -38,6 +38,11 @@ namespace couchbase::core
 class crud_component;
 class cluster_impl;
 
+namespace tracing
+{
+class tracer_wrapper;
+} // namespace tracing
+
 namespace mcbp
 {
 class queue_request;
@@ -311,6 +316,8 @@ public:
     -> std::pair<std::error_code, std::shared_ptr<io::http_session_manager>>;
 
   [[nodiscard]] auto to_string() const -> std::string;
+
+  [[nodiscard]] auto tracer() const -> const std::shared_ptr<tracing::tracer_wrapper>&;
 
 private:
   std::shared_ptr<cluster_impl> impl_;

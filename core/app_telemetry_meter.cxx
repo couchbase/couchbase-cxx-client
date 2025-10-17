@@ -18,6 +18,7 @@
 #include "logger/logger.hxx"
 #include "meta/version.hxx"
 #include "topology/configuration.hxx"
+#include "utils/binary.hxx"
 #include "utils/json.hxx"
 
 #include <spdlog/fmt/bin_to_hex.h>

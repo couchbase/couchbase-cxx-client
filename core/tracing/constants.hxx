@@ -43,50 +43,66 @@ constexpr auto http_manager_collections = "cb.manager_collections";
 constexpr auto http_manager_search = "cb.manager_search";
 constexpr auto http_manager_users = "cb.manager_users";
 constexpr auto http_manager_views = "cb.manager_views";
-constexpr auto mcbp_get = "cb.get";
-constexpr auto mcbp_get_replica = "cb.get_replica";
-constexpr auto mcbp_upsert = "cb.upsert";
-constexpr auto mcbp_replace = "cb.replace";
-constexpr auto mcbp_insert = "cb.insert";
-constexpr auto mcbp_remove = "cb.remove";
-constexpr auto mcbp_get_and_lock = "cb.get_and_lock";
-constexpr auto mcbp_get_and_touch = "cb.get_and_touch";
-constexpr auto mcbp_exists = "cb.exists";
-constexpr auto mcbp_touch = "cb.touch";
-constexpr auto mcbp_unlock = "cb.unlock";
-constexpr auto mcbp_lookup_in = "cb.lookup_in";
-constexpr auto mcbp_mutate_in = "cb.mutate_in";
-constexpr auto mcbp_append = "cb.append";
-constexpr auto mcbp_prepend = "cb.prepend";
-constexpr auto mcbp_increment = "cb.increment";
-constexpr auto mcbp_decrement = "cb.decrement";
-constexpr auto mcbp_observe = "cb.observe";
-constexpr auto mcbp_range_scan_create = "cb.range_scan_create";
-constexpr auto mcbp_range_scan_continue = "cb.range_scan_continue";
-constexpr auto mcbp_range_scan_cancel = "cb.range_scan_cancel";
-/* multi-command operations */
-constexpr auto mcbp_get_all_replicas = "cb.get_all_replicas";
-constexpr auto mcbp_get_any_replica = "cb.get_any_replica";
-constexpr auto mcbp_list = "cb.list";
-constexpr auto mcbp_set = "cb.set";
-constexpr auto mcbp_map = "cb.map";
-constexpr auto mcbp_queue = "cb.queue";
-constexpr auto mcbp_ping = "cb.ping";
 
-constexpr auto mcbp_internal = "cb.internal";
+// KV operations
+constexpr auto mcbp_get = "get";
+constexpr auto mcbp_get_replica = "get_replica";
+constexpr auto mcbp_upsert = "upsert";
+constexpr auto mcbp_replace = "replace";
+constexpr auto mcbp_insert = "insert";
+constexpr auto mcbp_remove = "remove";
+constexpr auto mcbp_get_and_lock = "get_and_lock";
+constexpr auto mcbp_get_and_touch = "get_and_touch";
+constexpr auto mcbp_exists = "exists";
+constexpr auto mcbp_touch = "touch";
+constexpr auto mcbp_unlock = "unlock";
+constexpr auto mcbp_lookup_in = "lookup_in";
+constexpr auto mcbp_lookup_in_replica = "lookup_in_replica";
+constexpr auto mcbp_mutate_in = "mutate_in";
+constexpr auto mcbp_append = "append";
+constexpr auto mcbp_prepend = "prepend";
+constexpr auto mcbp_increment = "increment";
+constexpr auto mcbp_decrement = "decrement";
+constexpr auto mcbp_range_scan_create = "range_scan_create";
+constexpr auto mcbp_range_scan_continue = "range_scan_continue";
+constexpr auto mcbp_range_scan_cancel = "range_scan_cancel";
+constexpr auto mcbp_internal = "internal";
+
+// Multi-command operations
+constexpr auto mcbp_get_all_replicas = "get_all_replicas";
+constexpr auto mcbp_get_any_replica = "get_any_replica";
+constexpr auto mcbp_lookup_in_all_replicas = "lookup_in_all_replicas";
+constexpr auto mcbp_lookup_in_any_replica = "lookup_in_any_replica";
+constexpr auto mcbp_scan = "scan";
+constexpr auto mcbp_ping = "ping";
+constexpr auto mcbp_diagnostics = "diagnostics";
+
 } // namespace operation
 
 namespace attributes
 {
+// Attributes present on all spans
+namespace common
+{
 constexpr auto system = "db.system.name";
 constexpr auto cluster_name = "db.couchbase.cluster_name";
 constexpr auto cluster_uuid = "db.couchbase.cluster_uuid";
+} // namespace common
 
-constexpr auto span_kind = "span.kind";
-constexpr auto component = "db.couchbase.component";
-constexpr auto instance = "db.instance";
-constexpr auto service = "cb.service";
+// Operation-level attributes
+namespace op
+{
+constexpr auto service = "db.couchbase.service";
+constexpr auto retry_count = "db.couchbase.retries";
+constexpr auto durability_level = "db.couchbase.durability";
+constexpr auto bucket_name = "db.namespace";
+constexpr auto scope_name = "db.couchbase.scope";
+constexpr auto collection_name = "db.couchbase.collection";
+constexpr auto query_statement = "db.query.text";
+constexpr auto operation_name = "db.operation.name";
+} // namespace op
 
+// Dispatch-level attributes
 namespace dispatch
 {
 constexpr auto server_duration = "db.couchbase.server_duration";
@@ -109,6 +125,7 @@ constexpr auto view = "views";
 constexpr auto analytics = "analytics";
 constexpr auto management = "management";
 constexpr auto eventing = "eventing";
+constexpr auto transactions = "transactions";
 } // namespace service
 
 constexpr auto

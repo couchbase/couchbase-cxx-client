@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2020 Couchbase, Inc.
+ *     Copyright 2025 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -15,13 +15,9 @@
  *   limitations under the License.
  */
 
-#pragma once
+#include "attribute_helpers.hxx"
 
-#cmakedefine COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE "@COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE@"
-#cmakedefine COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE
-#cmakedefine COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_DATE "@COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_DATE@"
-#cmakedefine COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_SHA256 "@COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_SHA256@"
-#cmakedefine COUCHBASE_CXX_CLIENT_BORINGSSL_SHA "@COUCHBASE_CXX_CLIENT_BORINGSSL_SHA@"
-#cmakedefine COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL
-#cmakedefine COUCHBASE_CXX_CLIENT_COLUMNAR
-#cmakedefine COUCHBASE_CXX_CLIENT_CREATE_OPERATION_SPAN_IN_CORE
+namespace couchbase::core::tracing
+{
+
+} // namespace couchbase::core::tracing

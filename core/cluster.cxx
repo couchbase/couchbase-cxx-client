@@ -536,6 +536,9 @@ public:
              int> = 0>
   void execute(Request request, Handler&& handler)
   {
+    CB_LOG_CRITICAL("cluster execute called. request has parent span: {}",
+                    request.parent_span ? request.parent_span->name() : "<none>");
+
     using response_type = typename Request::encoded_response_type;
     if (stopped_) {
       return handler(request.make_response(
@@ -1236,6 +1239,11 @@ public:
       return { errc::network::cluster_closed, {} };
     }
     return { {}, session_manager_ };
+  }
+
+  auto tracer() const -> const std::shared_ptr<tracing::tracer_wrapper>&
+  {
+    return tracer_;
   }
 
 private:
@@ -2402,4 +2410,11 @@ cluster::to_string() const -> std::string
                      impl_ ? static_cast<const void*>(impl_.get()) : "(none)",
                      impl_ ? std::to_string(impl_.use_count()) : "(none)");
 }
+
+auto
+cluster::tracer() const -> const std::shared_ptr<tracing::tracer_wrapper>&
+{
+  return impl_->tracer();
+}
+
 } // namespace couchbase::core
