@@ -312,10 +312,15 @@ integration_test_guard::transactions() const
   }
   return txns;
 }
+
 auto
-integration_test_guard::public_cluster() const -> couchbase::cluster
+integration_test_guard::public_cluster(
+  std::function<void(couchbase::cluster_options&)> options_customizer) const -> couchbase::cluster
 {
   auto options = ctx.build_options();
+  if (options_customizer) {
+    options_customizer(options);
+  }
 
   auto [err, c] = couchbase::cluster::connect(ctx.connection_string, options).get();
   if (err.ec()) {

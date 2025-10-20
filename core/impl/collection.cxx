@@ -53,6 +53,8 @@
 #include "core/range_scan_orchestrator.hxx"
 #include "core/range_scan_orchestrator_options.hxx"
 #include "core/topology/configuration.hxx"
+#include "core/tracing/constants.hxx"
+#include "core/tracing/tracer_wrapper.hxx"
 
 #include <couchbase/binary_collection.hxx>
 #include <couchbase/cas.hxx>
@@ -103,6 +105,8 @@
 #include <variant>
 #include <vector>
 
+#include "core/tracing/attribute_helpers.hxx"
+
 namespace couchbase
 {
 class collection_impl : public std::enable_shared_from_this<collection_impl>
@@ -146,43 +150,72 @@ public:
     return crypto_manager_;
   }
 
+  [[nodiscard]] auto tracer() const -> const std::shared_ptr<core::tracing::tracer_wrapper>&
+  {
+    return core_.tracer();
+  }
+
   void get(std::string document_key, get_options::built options, get_handler&& handler) const
   {
+    auto span = create_kv_span(core::tracing::operation::mcbp_get, options.parent_span);
+
     if (!options.with_expiry && options.projections.empty()) {
-      return core_.execute(
-        core::operations::get_request{
-          core::document_id{ bucket_name_, scope_name_, name_, std::move(document_key) },
-          {},
-          {},
-          options.timeout,
-          { options.retry_strategy },
-          options.parent_span,
+      core::operations::get_request request{
+        core::document_id{
+          bucket_name_,
+          scope_name_,
+          name_,
+          std::move(document_key),
         },
-        [crypto_manager = crypto_manager_, handler = std::move(handler)](auto resp) mutable {
+        {},
+        {},
+        options.timeout,
+        { options.retry_strategy },
+        span,
+      };
+      return core_.execute(
+        std::move(request),
+        [span = std::move(span), crypto_manager = crypto_manager_, handler = std::move(handler)](
+          auto resp) mutable {
+          if (auto retries = resp.ctx.retry_attempts(); span->uses_tags() && retries > 0) {
+            span->add_tag(core::tracing::attributes::op::retry_count, retries);
+          }
+          span->end();
           return handler(
             core::impl::make_error(std::move(resp.ctx)),
             get_result{
               resp.cas, { std::move(resp.value), resp.flags }, {}, std::move(crypto_manager) });
         });
     }
-    return core_.execute(
-      core::operations::get_projected_request{
-        core::document_id{ bucket_name_, scope_name_, name_, std::move(document_key) },
-        {},
-        {},
-        options.projections,
-        options.with_expiry,
-        {},
-        false,
-        options.timeout,
-        { options.retry_strategy },
-        options.parent_span,
+    core::operations::get_projected_request request{
+      core::document_id{
+        bucket_name_,
+        scope_name_,
+        name_,
+        std::move(document_key),
       },
-      [crypto_manager = crypto_manager_, handler = std::move(handler)](auto resp) mutable {
+      {},
+      {},
+      options.projections,
+      options.with_expiry,
+      {},
+      false,
+      options.timeout,
+      { options.retry_strategy },
+      span,
+    };
+    return core_.execute(
+      std::move(request),
+      [span = std::move(span), crypto_manager = crypto_manager_, handler = std::move(handler)](
+        auto resp) mutable {
         std::optional<std::chrono::system_clock::time_point> expiry_time{};
         if (resp.expiry && resp.expiry.value() > 0) {
           expiry_time.emplace(std::chrono::seconds{ resp.expiry.value() });
         }
+        if (auto retries = resp.ctx.retry_attempts(); span->uses_tags() && retries > 0) {
+          span->add_tag(core::tracing::attributes::op::retry_count, retries);
+        }
+        span->end();
         return handler(core::impl::make_error(std::move(resp.ctx)),
                        get_result{ resp.cas,
                                    { std::move(resp.value), resp.flags },
@@ -196,17 +229,31 @@ public:
                      get_and_touch_options::built options,
                      get_and_touch_handler&& handler) const
   {
-    return core_.execute(
-      core::operations::get_and_touch_request{
-        core::document_id{ bucket_name_, scope_name_, name_, std::move(document_key) },
-        {},
-        {},
-        expiry,
-        options.timeout,
-        { options.retry_strategy },
-        options.parent_span,
+    auto span = create_kv_span(core::tracing::operation::mcbp_get_and_touch, options.parent_span);
+
+    core::operations::get_and_touch_request request{
+      core::document_id{
+        bucket_name_,
+        scope_name_,
+        name_,
+        std::move(document_key),
       },
-      [crypto_manager = crypto_manager_, handler = std::move(handler)](auto resp) mutable {
+      {},
+      {},
+      expiry,
+      options.timeout,
+      { options.retry_strategy },
+      span,
+    };
+
+    return core_.execute(
+      std::move(request),
+      [span = std::move(span), crypto_manager = crypto_manager_, handler = std::move(handler)](
+        auto resp) mutable {
+        if (auto retries = resp.ctx.retry_attempts(); span->uses_tags() && retries > 0) {
+          span->add_tag(core::tracing::attributes::op::retry_count, retries);
+        }
+        span->end();
         return handler(
           core::impl::make_error(std::move(resp.ctx)),
           get_result{
@@ -219,17 +266,29 @@ public:
              touch_options::built options,
              touch_handler&& handler) const
   {
-    return core_.execute(
-      core::operations::touch_request{
-        core::document_id{ bucket_name_, scope_name_, name_, std::move(document_key) },
-        {},
-        {},
-        expiry,
-        options.timeout,
-        { options.retry_strategy },
-        options.parent_span,
+    auto span = create_kv_span(core::tracing::operation::mcbp_touch, options.parent_span);
+
+    core::operations::touch_request request{
+      core::document_id{
+        bucket_name_,
+        scope_name_,
+        name_,
+        std::move(document_key),
       },
-      [handler = std::move(handler)](const auto& resp) mutable {
+      {},
+      {},
+      expiry,
+      options.timeout,
+      { options.retry_strategy },
+      span,
+    };
+    return core_.execute(
+      std::move(request),
+      [span = std::move(span), handler = std::move(handler)](const auto& resp) mutable {
+        if (auto retries = resp.ctx.retry_attempts(); span->uses_tags() && retries > 0) {
+          span->add_tag(core::tracing::attributes::op::retry_count, retries);
+        }
+        span->end();
         return handler(core::impl::make_error(std::move(resp.ctx)), result{ resp.cas });
       });
   }
@@ -238,13 +297,23 @@ public:
                        const get_any_replica_options::built& options,
                        core::impl::movable_get_any_replica_handler&& handler) const
   {
-    return core_.execute(
-      core::operations::get_any_replica_request{
-        core::document_id{ bucket_name_, scope_name_, name_, std::move(document_key) },
-        options.timeout,
-        options.read_preference,
+    auto span = create_kv_span(core::tracing::operation::mcbp_get_any_replica, options.parent_span);
+
+    core::operations::get_any_replica_request request{
+      core::document_id{
+        bucket_name_,
+        scope_name_,
+        name_,
+        std::move(document_key),
       },
-      [crypto_manager = crypto_manager_, handler = std::move(handler)](auto resp) mutable {
+      options.timeout,
+      options.read_preference,
+    };
+    return core_.execute(
+      std::move(request),
+      [span = std::move(span), crypto_manager = crypto_manager_, handler = std::move(handler)](
+        auto resp) mutable {
+        span->end();
         return handler(core::impl::make_error(std::move(resp.ctx)),
                        get_replica_result{
                          resp.cas,
@@ -259,13 +328,23 @@ public:
                         const get_all_replicas_options::built& options,
                         core::impl::movable_get_all_replicas_handler&& handler) const
   {
-    return core_.execute(
-      core::operations::get_all_replicas_request{
-        core::document_id{ bucket_name_, scope_name_, name_, std::move(document_key) },
-        options.timeout,
-        options.read_preference,
+    auto span =
+      create_kv_span(core::tracing::operation::mcbp_get_all_replicas, options.parent_span);
+
+    core::operations::get_all_replicas_request request{
+      core::document_id{
+        bucket_name_,
+        scope_name_,
+        name_,
+        std::move(document_key),
       },
-      [crypto_manager = crypto_manager_, handler = std::move(handler)](auto resp) mutable {
+      options.timeout,
+      options.read_preference,
+    };
+    return core_.execute(
+      std::move(request),
+      [span = std::move(span), crypto_manager = crypto_manager_, handler = std::move(handler)](
+        auto resp) mutable {
         get_all_replicas_result result{};
         for (auto& entry : resp.entries) {
           result.emplace_back(get_replica_result{
@@ -275,6 +354,7 @@ public:
             crypto_manager,
           });
         }
+        span->end();
         return handler(core::impl::make_error(std::move(resp.ctx)), std::move(result));
       });
   }
@@ -283,6 +363,8 @@ public:
               remove_options::built options,
               remove_handler&& handler) const
   {
+    auto span = create_kv_span(core::tracing::operation::mcbp_remove, options.parent_span);
+
     auto id = core::document_id{
       bucket_name_,
       scope_name_,
@@ -290,18 +372,23 @@ public:
       std::move(document_key),
     };
     if (options.persist_to == persist_to::none && options.replicate_to == replicate_to::none) {
+      core::operations::remove_request request{
+        std::move(id),
+        {},
+        {},
+        options.cas,
+        options.durability_level,
+        options.timeout,
+        { options.retry_strategy },
+        options.parent_span,
+      };
       return core_.execute(
-        core::operations::remove_request{
-          std::move(id),
-          {},
-          {},
-          options.cas,
-          options.durability_level,
-          options.timeout,
-          { options.retry_strategy },
-          options.parent_span,
-        },
-        [handler = std::move(handler)](auto resp) mutable {
+        std::move(request),
+        [span = std::move(span), handler = std::move(handler)](auto resp) mutable {
+          if (auto retries = resp.ctx.retry_attempts(); span->uses_tags() && retries > 0) {
+            span->add_tag(core::tracing::attributes::op::retry_count, retries);
+          }
+          span->end();
           if (resp.ctx.ec()) {
             return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{});
           }
@@ -320,31 +407,42 @@ public:
       { options.retry_strategy },
       options.parent_span,
     };
-    return core_.execute(std::move(request),
-                         [core = core_, id = std::move(id), options, handler = std::move(handler)](
-                           auto&& resp) mutable {
-                           if (resp.ctx.ec()) {
-                             return handler(core::impl::make_error(std::move(resp.ctx)),
-                                            mutation_result{ resp.cas, std::move(resp.token) });
-                           }
-                           auto token = resp.token;
-                           core::impl::initiate_observe_poll(
-                             core,
-                             std::move(id),
-                             token,
-                             options.timeout,
-                             options.persist_to,
-                             options.replicate_to,
-                             [resp, handler = std::move(handler)](std::error_code ec) mutable {
-                               if (ec) {
-                                 resp.ctx.override_ec(ec);
-                                 return handler(core::impl::make_error(std::move(resp.ctx)),
-                                                mutation_result{});
-                               }
-                               return handler(core::impl::make_error(std::move(resp.ctx)),
-                                              mutation_result{ resp.cas, std::move(resp.token) });
-                             });
-                         });
+    return core_.execute(
+      std::move(request),
+      [span = std::move(span),
+       core = core_,
+       id = std::move(id),
+       options,
+       handler = std::move(handler)](auto&& resp) mutable {
+        if (resp.ctx.ec()) {
+          if (auto retries = resp.ctx.retry_attempts(); span->uses_tags() && retries > 0) {
+            span->add_tag(core::tracing::attributes::op::retry_count, retries);
+          }
+          span->end();
+          return handler(core::impl::make_error(std::move(resp.ctx)),
+                         mutation_result{ resp.cas, std::move(resp.token) });
+        }
+        auto token = resp.token;
+        core::impl::initiate_observe_poll(
+          core,
+          std::move(id),
+          token,
+          options.timeout,
+          options.persist_to,
+          options.replicate_to,
+          [span = std::move(span), resp, handler = std::move(handler)](std::error_code ec) mutable {
+            if (auto retries = resp.ctx.retry_attempts(); span->uses_tags() && retries > 0) {
+              span->add_tag(core::tracing::attributes::op::retry_count, retries);
+            }
+            span->end();
+            if (ec) {
+              resp.ctx.override_ec(ec);
+              return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{});
+            }
+            return handler(core::impl::make_error(std::move(resp.ctx)),
+                           mutation_result{ resp.cas, std::move(resp.token) });
+          });
+      });
   }
 
   void get_and_lock(std::string document_key,
@@ -352,17 +450,30 @@ public:
                     get_and_lock_options::built options,
                     get_and_lock_handler&& handler) const
   {
-    core_.execute(
-      core::operations::get_and_lock_request{
-        core::document_id{ bucket_name_, scope_name_, name_, std::move(document_key) },
-        {},
-        {},
-        static_cast<uint32_t>(lock_duration.count()),
-        options.timeout,
-        { options.retry_strategy },
-        options.parent_span,
+    auto span = create_kv_span(core::tracing::operation::mcbp_get_and_lock, options.parent_span);
+
+    core::operations::get_and_lock_request request{
+      core::document_id{
+        bucket_name_,
+        scope_name_,
+        name_,
+        std::move(document_key),
       },
-      [crypto_manager = crypto_manager_, handler = std::move(handler)](auto&& resp) mutable {
+      {},
+      {},
+      static_cast<uint32_t>(lock_duration.count()),
+      options.timeout,
+      { options.retry_strategy },
+      options.parent_span,
+    };
+    core_.execute(
+      std::move(request),
+      [span = std::move(span), crypto_manager = crypto_manager_, handler = std::move(handler)](
+        auto&& resp) mutable {
+        if (auto retries = resp.ctx.retry_attempts(); span->uses_tags() && retries > 0) {
+          span->add_tag(core::tracing::attributes::op::retry_count, retries);
+        }
+        span->end();
         return handler(
           core::impl::make_error(std::move(resp.ctx)),
           get_result{
@@ -375,35 +486,59 @@ public:
               unlock_options::built options,
               unlock_handler&& handler) const
   {
-    core_.execute(
-      core::operations::unlock_request{
-        core::document_id{ bucket_name_, scope_name_, name_, std::move(document_key) },
-        {},
-        {},
-        cas,
-        options.timeout,
-        { options.retry_strategy },
-        options.parent_span,
+    auto span = create_kv_span(core::tracing::operation::mcbp_unlock, options.parent_span);
+
+    core::operations::unlock_request request{
+      core::document_id{
+        bucket_name_,
+        scope_name_,
+        name_,
+        std::move(document_key),
       },
-      [handler = std::move(handler)](auto&& resp) mutable {
-        return handler(core::impl::make_error(std::move(resp.ctx)));
-      });
+      {},
+      {},
+      cas,
+      options.timeout,
+      { options.retry_strategy },
+      options.parent_span,
+    };
+    core_.execute(std::move(request),
+                  [span = std::move(span), handler = std::move(handler)](auto&& resp) mutable {
+                    if (auto retries = resp.ctx.retry_attempts();
+                        span->uses_tags() && retries > 0) {
+                      span->add_tag(core::tracing::attributes::op::retry_count, retries);
+                    }
+                    span->end();
+                    return handler(core::impl::make_error(std::move(resp.ctx)));
+                  });
   }
 
   void exists(std::string document_key,
               exists_options::built options,
               exists_handler&& handler) const
   {
-    core_.execute(
-      core::operations::exists_request{
-        core::document_id{ bucket_name_, scope_name_, name_, std::move(document_key) },
-        {},
-        {},
-        options.timeout,
-        { options.retry_strategy },
-        options.parent_span,
+    auto span = create_kv_span(core::tracing::operation::mcbp_exists, options.parent_span);
+
+    core::operations::exists_request request{
+      core::document_id{
+        bucket_name_,
+        scope_name_,
+        name_,
+        std::move(document_key),
       },
-      [handler = std::move(handler)](auto&& resp) mutable {
+      {},
+      {},
+      options.timeout,
+      { options.retry_strategy },
+      options.parent_span,
+    };
+    core_.execute(
+      std::move(request),
+      [span = std::move(span), handler = std::move(handler)](auto&& resp) mutable {
+        if (auto retries = resp.ctx.retry_attempts(); span->uses_tags() && retries > 0) {
+          span->add_tag(core::tracing::attributes::op::retry_count, retries);
+        }
+        span->end();
         return handler(core::impl::make_error(std::move(resp.ctx)),
                        exists_result{ resp.cas, resp.exists() });
       });
@@ -414,23 +549,31 @@ public:
                  lookup_in_options::built options,
                  lookup_in_handler&& handler) const
   {
-    return core_.execute(
-      core::operations::lookup_in_request{
-        core::document_id{
-          bucket_name_,
-          scope_name_,
-          name_,
-          std::move(document_key),
-        },
-        {},
-        {},
-        options.access_deleted,
-        specs,
-        options.timeout,
-        { options.retry_strategy },
-        options.parent_span,
+    auto span = create_kv_span(core::tracing::operation::mcbp_lookup_in, options.parent_span);
+
+    core::operations::lookup_in_request request{
+      core::document_id{
+        bucket_name_,
+        scope_name_,
+        name_,
+        std::move(document_key),
       },
-      [handler = std::move(handler)](auto resp) mutable {
+      {},
+      {},
+      options.access_deleted,
+      specs,
+      options.timeout,
+      { options.retry_strategy },
+      span,
+    };
+    return core_.execute(
+      std::move(request),
+      [span = std::move(span), handler = std::move(handler)](auto resp) mutable {
+        if (auto retries = resp.ctx.retry_attempts(); span->uses_tags() && retries > 0) {
+          span->add_tag(core::tracing::attributes::op::retry_count, retries);
+        }
+        span->end();
+
         if (resp.ctx.ec()) {
           return handler(core::impl::make_error(std::move(resp.ctx)), lookup_in_result{});
         }
@@ -456,15 +599,24 @@ public:
                               const lookup_in_all_replicas_options::built& options,
                               lookup_in_all_replicas_handler&& handler) const
   {
-    return core_.execute(
-      core::operations::lookup_in_all_replicas_request{
-        core::document_id{ bucket_name_, scope_name_, name_, std::move(document_key) },
-        specs,
-        options.timeout,
-        options.parent_span,
-        options.read_preference,
+    auto span =
+      create_kv_span(core::tracing::operation::mcbp_lookup_in_all_replicas, options.parent_span);
+
+    core::operations::lookup_in_all_replicas_request request{
+      core::document_id{
+        bucket_name_,
+        scope_name_,
+        name_,
+        std::move(document_key),
       },
-      [handler = std::move(handler)](auto resp) mutable {
+      specs,
+      options.timeout,
+      span,
+      options.read_preference,
+    };
+    return core_.execute(
+      std::move(request),
+      [span = std::move(span), handler = std::move(handler)](auto resp) mutable {
         lookup_in_all_replicas_result result{};
         for (auto& res : resp.entries) {
           std::vector<lookup_in_result::entry> entries;
@@ -485,6 +637,7 @@ public:
             res.is_replica,
           });
         }
+        span->end();
         return handler(core::impl::make_error(std::move(resp.ctx)), result);
       });
   }
@@ -494,15 +647,24 @@ public:
                              const lookup_in_any_replica_options::built& options,
                              lookup_in_any_replica_handler&& handler) const
   {
-    return core_.execute(
-      core::operations::lookup_in_any_replica_request{
-        core::document_id{ bucket_name_, scope_name_, name_, std::move(document_key) },
-        specs,
-        options.timeout,
-        options.parent_span,
-        options.read_preference,
+    auto span =
+      create_kv_span(core::tracing::operation::mcbp_lookup_in_any_replica, options.parent_span);
+
+    core::operations::lookup_in_any_replica_request request{
+      core::document_id{
+        bucket_name_,
+        scope_name_,
+        name_,
+        std::move(document_key),
       },
-      [handler = std::move(handler)](auto resp) mutable {
+      specs,
+      options.timeout,
+      span,
+      options.read_preference,
+    };
+    return core_.execute(
+      std::move(request),
+      [span = std::move(span), handler = std::move(handler)](auto resp) mutable {
         std::vector<lookup_in_result::entry> entries;
         entries.reserve(resp.fields.size());
         for (auto& field : resp.fields) {
@@ -514,7 +676,7 @@ public:
             field.ec,
           });
         }
-        entries.reserve(resp.fields.size());
+        span->end();
         return handler(
           core::impl::make_error(std::move(resp.ctx)),
           lookup_in_replica_result{ resp.cas, std::move(entries), resp.deleted, resp.is_replica });
@@ -526,6 +688,9 @@ public:
                  mutate_in_options::built options,
                  mutate_in_handler&& handler) const
   {
+    auto span = create_kv_span(
+      core::tracing::operation::mcbp_mutate_in, options.parent_span, options.durability_level);
+
     auto id = core::document_id{
       bucket_name_,
       scope_name_,
@@ -533,25 +698,30 @@ public:
       std::move(document_key),
     };
     if (options.persist_to == persist_to::none && options.replicate_to == replicate_to::none) {
+      core::operations::mutate_in_request request{
+        std::move(id),
+        {},
+        {},
+        options.cas,
+        options.access_deleted,
+        options.create_as_deleted,
+        false,
+        options.expiry,
+        options.store_semantics,
+        specs,
+        options.durability_level,
+        options.timeout,
+        { options.retry_strategy },
+        options.preserve_expiry,
+        span,
+      };
       return core_.execute(
-        core::operations::mutate_in_request{
-          std::move(id),
-          {},
-          {},
-          options.cas,
-          options.access_deleted,
-          options.create_as_deleted,
-          false,
-          options.expiry,
-          options.store_semantics,
-          specs,
-          options.durability_level,
-          options.timeout,
-          { options.retry_strategy },
-          options.preserve_expiry,
-          options.parent_span,
-        },
-        [handler = std::move(handler)](auto resp) mutable {
+        std::move(request),
+        [span = std::move(span), handler = std::move(handler)](auto resp) mutable {
+          if (auto retries = resp.ctx.retry_attempts(); span->uses_tags() && retries > 0) {
+            span->add_tag(core::tracing::attributes::op::retry_count, retries);
+          }
+          span->end();
           if (resp.ctx.ec()) {
             return handler(core::impl::make_error(std::move(resp.ctx)), mutate_in_result{});
           }
@@ -585,13 +755,20 @@ public:
       options.timeout,
       { options.retry_strategy },
       options.preserve_expiry,
-      options.parent_span,
+      span,
     };
     return core_.execute(
       std::move(request),
-      [core = core_, id = std::move(id), options, handler = std::move(handler)](
-        auto&& resp) mutable {
+      [span = std::move(span),
+       core = core_,
+       id = std::move(id),
+       options,
+       handler = std::move(handler)](auto&& resp) mutable {
+        if (auto retries = resp.ctx.retry_attempts(); span->uses_tags() && retries > 0) {
+          span->add_tag(core::tracing::attributes::op::retry_count, retries);
+        }
         if (resp.ctx.ec()) {
+          span->end();
           return handler(core::impl::make_error(std::move(resp.ctx)), mutate_in_result{});
         }
 
@@ -603,7 +780,8 @@ public:
           options.timeout,
           options.persist_to,
           options.replicate_to,
-          [resp, handler = std::move(handler)](std::error_code ec) mutable {
+          [span = std::move(span), resp, handler = std::move(handler)](std::error_code ec) mutable {
+            span->end();
             if (ec) {
               resp.ctx.override_ec(ec);
               return handler(core::impl::make_error(std::move(resp.ctx)), mutate_in_result{});
@@ -629,6 +807,9 @@ public:
               upsert_options::built options,
               upsert_handler&& handler) const
   {
+    auto span = create_kv_span(
+      core::tracing::operation::mcbp_upsert, options.parent_span, options.durability_level);
+
     auto value = std::move(encoded);
     auto id = core::document_id{
       bucket_name_,
@@ -637,21 +818,26 @@ public:
       std::move(document_key),
     };
     if (options.persist_to == persist_to::none && options.replicate_to == replicate_to::none) {
+      core::operations::upsert_request request{
+        std::move(id),
+        std::move(value.data),
+        {},
+        {},
+        value.flags,
+        options.expiry,
+        options.durability_level,
+        options.timeout,
+        { options.retry_strategy },
+        options.preserve_expiry,
+        span,
+      };
       return core_.execute(
-        core::operations::upsert_request{
-          std::move(id),
-          std::move(value.data),
-          {},
-          {},
-          value.flags,
-          options.expiry,
-          options.durability_level,
-          options.timeout,
-          { options.retry_strategy },
-          options.preserve_expiry,
-          options.parent_span,
-        },
-        [handler = std::move(handler)](auto resp) mutable {
+        std::move(request),
+        [span = std::move(span), handler = std::move(handler)](auto resp) mutable {
+          if (auto retries = resp.ctx.retry_attempts(); span->uses_tags() && retries > 0) {
+            span->add_tag(core::tracing::attributes::op::retry_count, retries);
+          }
+          span->end();
           return handler(core::impl::make_error(std::move(resp.ctx)),
                          mutation_result{ resp.cas, std::move(resp.token) });
         });
@@ -668,12 +854,20 @@ public:
       options.timeout,
       { options.retry_strategy },
       options.preserve_expiry,
-      options.parent_span,
+      span,
     };
     return core_.execute(
       std::move(request),
-      [core = core_, id = std::move(id), options, handler = std::move(handler)](auto resp) mutable {
+      [span = std::move(span),
+       core = core_,
+       id = std::move(id),
+       options,
+       handler = std::move(handler)](auto resp) mutable {
+        if (auto retries = resp.ctx.retry_attempts(); span->uses_tags() && retries > 0) {
+          span->add_tag(core::tracing::attributes::op::retry_count, retries);
+        }
         if (resp.ctx.ec()) {
+          span->end();
           return handler(core::impl::make_error(std::move(resp.ctx)),
                          mutation_result{ resp.cas, std::move(resp.token) });
         }
@@ -686,7 +880,8 @@ public:
           options.timeout,
           options.persist_to,
           options.replicate_to,
-          [resp, handler = std::move(handler)](std::error_code ec) mutable {
+          [span = std::move(span), resp, handler = std::move(handler)](std::error_code ec) mutable {
+            span->end();
             if (ec) {
               resp.ctx.override_ec(ec);
               return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{});
@@ -702,6 +897,9 @@ public:
               insert_options::built options,
               insert_handler&& handler) const
   {
+    auto span = create_kv_span(
+      core::tracing::operation::mcbp_insert, options.parent_span, options.durability_level);
+
     auto value = std::move(encoded);
     auto id = core::document_id{
       bucket_name_,
@@ -710,20 +908,25 @@ public:
       std::move(document_key),
     };
     if (options.persist_to == persist_to::none && options.replicate_to == replicate_to::none) {
+      core::operations::insert_request request{
+        std::move(id),
+        std::move(value.data),
+        {},
+        {},
+        value.flags,
+        options.expiry,
+        options.durability_level,
+        options.timeout,
+        { options.retry_strategy },
+        span,
+      };
       return core_.execute(
-        core::operations::insert_request{
-          std::move(id),
-          std::move(value.data),
-          {},
-          {},
-          value.flags,
-          options.expiry,
-          options.durability_level,
-          options.timeout,
-          { options.retry_strategy },
-          options.parent_span,
-        },
-        [handler = std::move(handler)](auto&& resp) mutable {
+        std::move(request),
+        [span = std::move(span), handler = std::move(handler)](auto&& resp) mutable {
+          if (auto retries = resp.ctx.retry_attempts(); span->uses_tags() && retries > 0) {
+            span->add_tag(core::tracing::attributes::op::retry_count, retries);
+          }
+          span->end();
           if (resp.ctx.ec()) {
             return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{});
           }
@@ -742,11 +945,19 @@ public:
       durability_level::none,
       options.timeout,
       { options.retry_strategy },
-      options.parent_span,
+      span,
     };
     return core_.execute(
       std::move(request),
-      [core = core_, id = std::move(id), options, handler = std::move(handler)](auto resp) mutable {
+      [span = std::move(span),
+       core = core_,
+       id = std::move(id),
+       options,
+       handler = std::move(handler)](auto resp) mutable {
+        if (auto retries = resp.ctx.retry_attempts(); span->uses_tags() && retries > 0) {
+          span->add_tag(core::tracing::attributes::op::retry_count, retries);
+        }
+
         if (resp.ctx.ec()) {
           return handler(core::impl::make_error(std::move(resp.ctx)),
                          mutation_result{ resp.cas, std::move(resp.token) });
@@ -760,7 +971,8 @@ public:
           options.timeout,
           options.persist_to,
           options.replicate_to,
-          [resp, handler = std::move(handler)](std::error_code ec) mutable {
+          [span = std::move(span), resp, handler = std::move(handler)](std::error_code ec) mutable {
+            span->end();
             if (ec) {
               resp.ctx.override_ec(ec);
               return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{});
@@ -775,6 +987,9 @@ public:
                replace_options::built options,
                replace_handler&& handler) const
   {
+    auto span = create_kv_span(
+      core::tracing::operation::mcbp_replace, options.parent_span, options.durability_level);
+
     auto value = std::move(encoded);
     auto id = core::document_id{
       bucket_name_,
@@ -783,22 +998,27 @@ public:
       std::move(document_key),
     };
     if (options.persist_to == persist_to::none && options.replicate_to == replicate_to::none) {
+      core::operations::replace_request request{
+        std::move(id),
+        std::move(value.data),
+        {},
+        {},
+        value.flags,
+        options.expiry,
+        options.cas,
+        options.durability_level,
+        options.timeout,
+        { options.retry_strategy },
+        options.preserve_expiry,
+        span,
+      };
       return core_.execute(
-        core::operations::replace_request{
-          std::move(id),
-          std::move(value.data),
-          {},
-          {},
-          value.flags,
-          options.expiry,
-          options.cas,
-          options.durability_level,
-          options.timeout,
-          { options.retry_strategy },
-          options.preserve_expiry,
-          options.parent_span,
-        },
-        [handler = std::move(handler)](auto resp) mutable {
+        std::move(request),
+        [span = std::move(span), handler = std::move(handler)](auto resp) mutable {
+          if (auto retries = resp.ctx.retry_attempts(); span->uses_tags() && retries > 0) {
+            span->add_tag(core::tracing::attributes::op::retry_count, retries);
+          }
+          span->end();
           if (resp.ctx.ec()) {
             return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{});
           }
@@ -819,11 +1039,18 @@ public:
       options.timeout,
       { options.retry_strategy },
       options.preserve_expiry,
-      options.parent_span,
+      span,
     };
     return core_.execute(std::move(request),
-                         [core = core_, id = std::move(id), options, handler = std::move(handler)](
-                           auto&& resp) mutable {
+                         [span = std::move(span),
+                          core = core_,
+                          id = std::move(id),
+                          options,
+                          handler = std::move(handler)](auto&& resp) mutable {
+                           if (auto retries = resp.ctx.retry_attempts();
+                               span->uses_tags() && retries > 0) {
+                             span->add_tag(core::tracing::attributes::op::retry_count, retries);
+                           }
                            if (resp.ctx.ec()) {
                              return handler(core::impl::make_error(std::move(resp.ctx)),
                                             mutation_result{ resp.cas, std::move(resp.token) });
@@ -837,7 +1064,9 @@ public:
                              options.timeout,
                              options.persist_to,
                              options.replicate_to,
-                             [resp, handler = std::move(handler)](std::error_code ec) mutable {
+                             [span = std::move(span), resp, handler = std::move(handler)](
+                               std::error_code ec) mutable {
+                               span->end();
                                if (ec) {
                                  resp.ctx.override_ec(ec);
                                  return handler(core::impl::make_error(std::move(resp.ctx)),
@@ -851,6 +1080,8 @@ public:
 
   void scan(scan_type::built scan_type, scan_options::built options, scan_handler&& handler) const
   {
+    auto span = create_kv_span(core::tracing::operation::mcbp_scan, options.parent_span);
+
     core::range_scan_orchestrator_options orchestrator_opts{ options.ids_only };
     if (!options.mutation_state.empty()) {
       orchestrator_opts.consistent_with = core::mutation_state{ options.mutation_state };
@@ -903,22 +1134,31 @@ public:
 
     return core_.open_bucket(
       bucket_name_,
-      [this, handler = std::move(handler), orchestrator_opts, core_scan_type](
-        std::error_code ec) mutable {
+      [this,
+       span = std::move(span),
+       handler = std::move(handler),
+       orchestrator_opts,
+       core_scan_type](std::error_code ec) mutable {
         if (ec) {
+          span->end();
           return handler(error(ec), {});
         }
         return core_.with_bucket_configuration(
           bucket_name_,
-          [this, handler = std::move(handler), orchestrator_opts, core_scan_type](
-            std::error_code ec,
-            const std::shared_ptr<core::topology::configuration>& config) mutable {
+          [this,
+           span = std::move(span),
+           handler = std::move(handler),
+           orchestrator_opts,
+           core_scan_type](std::error_code ec,
+                           const std::shared_ptr<core::topology::configuration>& config) mutable {
             if (ec) {
+              span->end();
               return handler(
                 error(ec, "An error occurred when attempting to fetch the bucket configuration."),
                 {});
             }
             if (!config->capabilities.supports_range_scan()) {
+              span->end();
               return handler(error(errc::common::feature_not_available,
                                    "This bucket does not support range scan."),
                              {});
@@ -927,6 +1167,7 @@ public:
               core::agent_group(core_.io_context(), core::agent_group_config{ { core_ } });
             ec = agent_group.open_bucket(bucket_name_);
             if (ec) {
+              span->end();
               return handler(error(ec,
                                    fmt::format("An error occurred while opening the `{}` bucket.",
                                                bucket_name_)),
@@ -934,6 +1175,7 @@ public:
             }
             auto agent = agent_group.get_agent(bucket_name_);
             if (!agent.has_value()) {
+              span->end();
               return handler(
                 error(agent.error(),
                       fmt::format(
@@ -944,6 +1186,7 @@ public:
             if (!config->vbmap.has_value() || config->vbmap->empty()) {
               CB_LOG_WARNING("Unable to get vbucket map for `{}` - cannot perform scan operation",
                              bucket_name_);
+              span->end();
               return handler(error(errc::common::request_canceled,
                                    "No vbucket map included with the bucket config"),
                              {});
@@ -957,8 +1200,10 @@ public:
                                                               core_scan_type,
                                                               orchestrator_opts);
             return orchestrator.scan(
-              [crypto_manager = crypto_manager_,
+              [span = std::move(span),
+               crypto_manager = crypto_manager_,
                handler = std::move(handler)](auto ec, auto core_scan_result) mutable {
+                span->end();
                 if (ec) {
                   return handler(error(ec, "Error while starting the range scan"), {});
                 }
@@ -971,6 +1216,25 @@ public:
   }
 
 private:
+  auto create_kv_span(const std::string& operation_name,
+                      const std::shared_ptr<tracing::request_span>& parent_span,
+                      const std::optional<durability_level> durability = {}) const
+    -> std::shared_ptr<tracing::request_span>
+  {
+    auto span = tracer()->create_span(operation_name, parent_span);
+    if (span->uses_tags()) {
+      span->add_tag(core::tracing::attributes::op::service, core::tracing::service::key_value);
+      span->add_tag(core::tracing::attributes::op::bucket_name, bucket_name_);
+      span->add_tag(core::tracing::attributes::op::scope_name, scope_name_);
+      span->add_tag(core::tracing::attributes::op::collection_name, name_);
+      span->add_tag(core::tracing::attributes::op::operation_name, operation_name);
+      if (durability.has_value()) {
+        core::tracing::set_durability_level_attribute(span, durability.value());
+      }
+    }
+    return span;
+  }
+
   core::cluster core_;
   std::string bucket_name_;
   std::string scope_name_;

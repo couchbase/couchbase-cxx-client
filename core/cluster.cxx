@@ -1238,6 +1238,11 @@ public:
     return { {}, session_manager_ };
   }
 
+  auto tracer() const -> const std::shared_ptr<tracing::tracer_wrapper>&
+  {
+    return tracer_;
+  }
+
 private:
   void setup_observability()
   {
@@ -2402,4 +2407,11 @@ cluster::to_string() const -> std::string
                      impl_ ? static_cast<const void*>(impl_.get()) : "(none)",
                      impl_ ? std::to_string(impl_.use_count()) : "(none)");
 }
+
+auto
+cluster::tracer() const -> const std::shared_ptr<tracing::tracer_wrapper>&
+{
+  return impl_->tracer();
+}
+
 } // namespace couchbase::core
