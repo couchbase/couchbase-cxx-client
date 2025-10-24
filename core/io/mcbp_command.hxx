@@ -66,7 +66,9 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
   std::string id_{ fmt::format("{:02x}/{}",
                                static_cast<std::uint8_t>(encoded_request_type::body_type::opcode),
                                uuid::to_string(uuid::random())) };
+#ifdef COUCHBASE_CXX_CLIENT_CREATE_OPERATION_SPAN_IN_CORE
   std::shared_ptr<couchbase::tracing::request_span> span_{ nullptr };
+#endif
   std::shared_ptr<couchbase::tracing::request_span> parent_span_{ nullptr };
   std::optional<std::string> last_dispatched_from_{};
   std::optional<std::string> last_dispatched_to_{};
@@ -101,12 +103,14 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
   void start(mcbp_command_handler&& handler)
   {
     started_at_ = std::chrono::steady_clock::now();
+#ifdef COUCHBASE_CXX_CLIENT_CREATE_OPERATION_SPAN_IN_CORE
     span_ = manager_->tracer()->create_span(
       tracing::span_name_for_mcbp_command(encoded_request_type::body_type::opcode), parent_span_);
     if (span_->uses_tags()) {
-      span_->add_tag(tracing::attributes::service, tracing::service::key_value);
-      span_->add_tag(tracing::attributes::instance, request.id.bucket());
+      span_->add_tag(tracing::attributes::op::service, tracing::service::key_value);
+      span_->add_tag(tracing::attributes::op::bucket_name, request.id.bucket());
     }
+#endif
 
     handler_ = std::move(handler);
     deadline.expires_after(timeout_);
@@ -138,10 +142,12 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     deadline.cancel();
     mcbp_command_handler handler{};
     std::swap(handler, handler_);
+#ifdef COUCHBASE_CXX_CLIENT_CREATE_OPERATION_SPAN_IN_CORE
     if (span_ != nullptr) {
       span_->end();
       span_ = nullptr;
     }
+#endif
     if (handler) {
       const auto& node_uuid = session_ ? session_->node_uuid() : "";
       auto telemetry_recorder =
@@ -395,7 +401,14 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
 
   void send_to(io::mcbp_session session)
   {
-    if (!handler_ || !span_) {
+    if (!handler_) {
+#ifdef COUCHBASE_CXX_CLIENT_CREATE_OPERATION_SPAN_IN_CORE
+      if (!span_) {
+        // TODO(DC): Is this necessary? Background:
+        // https://github.com/couchbase/couchbase-cxx-client/pull/160
+        return;
+      }
+#endif
       return;
     }
     session_ = std::move(session);
@@ -427,8 +440,13 @@ private:
   [[nodiscard]] auto create_dispatch_span() const
     -> std::shared_ptr<couchbase::tracing::request_span>
   {
+#ifdef COUCHBASE_CXX_CLIENT_CREATE_OPERATION_SPAN_IN_CORE
     std::shared_ptr<couchbase::tracing::request_span> dispatch_span =
       manager_->tracer()->create_span(tracing::operation::step_dispatch, span_);
+#else
+    std::shared_ptr<couchbase::tracing::request_span> dispatch_span =
+      manager_->tracer()->create_span(tracing::operation::step_dispatch, parent_span_);
+#endif
     if (dispatch_span->uses_tags()) {
       dispatch_span->add_tag(tracing::attributes::dispatch::network_transport, "tcp");
       dispatch_span->add_tag(tracing::attributes::dispatch::operation_id,
