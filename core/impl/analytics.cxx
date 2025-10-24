@@ -149,7 +149,8 @@ auto
 build_analytics_request(std::string statement,
                         analytics_options::built options,
                         std::optional<std::string> bucket_name,
-                        std::optional<std::string> scope_name)
+                        std::optional<std::string> scope_name,
+                        std::shared_ptr<couchbase::tracing::request_span> op_span)
   -> core::operations::analytics_request
 {
   core::operations::analytics_request request{
@@ -167,7 +168,7 @@ build_analytics_request(std::string statement,
     std::move(options.client_context_id),
     options.timeout,
   };
-  request.parent_span = options.parent_span;
+  request.parent_span = std::move(op_span);
   if (!options.raw.empty()) {
     for (auto& [name, value] : options.raw) {
       request.raw[name] = std::move(value);

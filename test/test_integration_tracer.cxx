@@ -17,25 +17,9 @@
 
 #include "test_helper_integration.hxx"
 
-#include "core/operations/document_analytics.hxx"
-#include "core/operations/document_append.hxx"
-#include "core/operations/document_decrement.hxx"
-#include "core/operations/document_get.hxx"
-#include "core/operations/document_increment.hxx"
-#include "core/operations/document_insert.hxx"
-#include "core/operations/document_lookup_in.hxx"
-#include "core/operations/document_mutate_in.hxx"
-#include "core/operations/document_prepend.hxx"
-#include "core/operations/document_query.hxx"
-#include "core/operations/document_remove.hxx"
-#include "core/operations/document_replace.hxx"
-#include "core/operations/document_search.hxx"
-#include "core/operations/document_upsert.hxx"
-#include "core/operations/document_view.hxx"
-#include "core/platform/uuid.h"
-
 #include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/lookup_in_specs.hxx>
+#include <couchbase/match_all_query.hxx>
 #include <couchbase/mutate_in_specs.hxx>
 #include <couchbase/tracing/request_tracer.hxx>
 
@@ -189,11 +173,11 @@ assert_span_ok(test::utils::integration_test_guard& guard,
 
   REQUIRE(tags.at("db.system.name") == "couchbase");
   if (guard.cluster_version().supports_cluster_labels()) {
-    REQUIRE_FALSE(tags.at("db.couchbase.cluster_name").empty());
     REQUIRE_FALSE(tags.at("db.couchbase.cluster_uuid").empty());
+    REQUIRE_FALSE(tags.at("db.couchbase.cluster_name").empty());
   } else {
-    REQUIRE(tags.find("db.couchbase.cluster_name") == tags.end());
     REQUIRE(tags.find("db.couchbase.cluster_uuid") == tags.end());
+    REQUIRE(tags.find("db.couchbase.cluster_name") == tags.end());
   }
 }
 
@@ -278,14 +262,38 @@ void
 assert_http_op_span_ok(test::utils::integration_test_guard& guard,
                        const std::shared_ptr<test_span>& span,
                        const std::string& op,
-                       std::shared_ptr<test_span> parent = nullptr)
+                       const std::optional<std::string>& expected_service,
+                       const std::optional<std::string>& expected_bucket_name,
+                       const std::optional<std::string>& expected_scope_name,
+                       const std::optional<std::string>& expected_collection_name,
+                       std::shared_ptr<test_span> parent = nullptr,
+                       bool is_top_level_op_span = true)
 {
-  assert_span_ok(guard, span, true, parent);
+  assert_span_ok(guard, span, is_top_level_op_span, std::move(parent));
 
   REQUIRE(span->name().find(op) != std::string::npos);
-  REQUIRE(span->string_tags()["db.couchbase.service"] == op);
+  REQUIRE(span->string_tags()["db.operation.name"] == op);
   REQUIRE(span->duration().count() > 0);
-  // spec has some specific fields for query, analytics, etc...
+  if (expected_service.has_value()) {
+    REQUIRE(span->string_tags()["db.couchbase.service"] == expected_service.value());
+  } else {
+    REQUIRE(span->string_tags().count("db.couchbase.service") == 0);
+  }
+  if (expected_bucket_name.has_value()) {
+    REQUIRE(span->string_tags()["db.namespace"] == expected_bucket_name.value());
+  } else {
+    REQUIRE(span->string_tags().count("db.namespace") == 0);
+  }
+  if (expected_scope_name.has_value()) {
+    REQUIRE(span->string_tags()["db.couchbase.scope"] == expected_scope_name.value());
+  } else {
+    REQUIRE(span->string_tags().count("db.couchbase.scope") == 0);
+  }
+  if (expected_collection_name.has_value()) {
+    REQUIRE(span->string_tags()["db.couchbase.collection"] == expected_collection_name.value());
+  } else {
+    REQUIRE(span->string_tags().count("db.couchbase.collection") == 0);
+  }
 
   // There must be at least one dispatch span
   auto dispatch_spans = span->child_spans().find("dispatch_to_server");
@@ -294,6 +302,71 @@ assert_http_op_span_ok(test::utils::integration_test_guard& guard,
 
   for (const auto& dispatch_span : dispatch_spans->second) {
     assert_http_dispatch_span_ok(guard, dispatch_span.lock(), span);
+  }
+}
+
+void
+assert_compound_http_op_span_ok(
+  test::utils::integration_test_guard& guard,
+  const std::shared_ptr<test_span>& span,
+  const std::string& op,
+  const std::vector<std::pair<std::string, std::size_t>>& expected_sub_ops,
+  const std::optional<std::string>& expected_service,
+  const std::optional<std::string>& expected_bucket_name,
+  const std::optional<std::string>& expected_scope_name,
+  const std::optional<std::string>& expected_collection_name,
+  std::shared_ptr<test_span> parent = nullptr)
+{
+  assert_span_ok(guard, span, true, parent);
+
+  REQUIRE(span->name().find(op) != std::string::npos);
+  REQUIRE(span->string_tags()["db.operation.name"] == op);
+  REQUIRE(span->duration().count() > 0);
+  if (expected_service.has_value()) {
+    REQUIRE(span->string_tags()["db.couchbase.service"] == expected_service.value());
+  } else {
+    REQUIRE(span->string_tags().count("db.couchbase.service") == 0);
+  }
+  if (expected_bucket_name.has_value()) {
+    REQUIRE(span->string_tags()["db.namespace"] == expected_bucket_name.value());
+  } else {
+    REQUIRE(span->string_tags().count("db.namespace") == 0);
+  }
+  if (expected_scope_name.has_value()) {
+    REQUIRE(span->string_tags()["db.couchbase.scope"] == expected_scope_name.value());
+  } else {
+    REQUIRE(span->string_tags().count("db.couchbase.scope") == 0);
+  }
+  if (expected_collection_name.has_value()) {
+    REQUIRE(span->string_tags()["db.couchbase.collection"] == expected_collection_name.value());
+  } else {
+    REQUIRE(span->string_tags().count("db.couchbase.collection") == 0);
+  }
+
+  auto sub_op_spans = span->child_spans();
+  for (const auto& [expected_sub_op, expected_sub_op_count] : expected_sub_ops) {
+    auto it = sub_op_spans.find(expected_sub_op);
+    REQUIRE(it != sub_op_spans.end());
+
+    if (expected_sub_op_count > 0) {
+      REQUIRE(it->second.size() == expected_sub_op_count);
+    } else {
+      // We don't expect a specific number of sub-operations. For example, in watch_indexes there
+      // can be any number of get_all_indexes calls.
+      REQUIRE(it->second.size() > 0);
+    }
+
+    for (const auto& sub_op_span : it->second) {
+      assert_http_op_span_ok(guard,
+                             sub_op_span.lock(),
+                             expected_sub_op,
+                             expected_service,
+                             expected_bucket_name,
+                             expected_scope_name,
+                             expected_collection_name,
+                             span,
+                             false);
+    }
   }
 }
 
@@ -402,76 +475,572 @@ TEST_CASE("integration: enable external tracer - KV operations", "[integration]"
 
 TEST_CASE("integration: enable external tracer - HTTP operations", "[integration]")
 {
-  couchbase::core::cluster_options opts{};
+  test::utils::integration_test_guard integration;
+
   auto tracer = std::make_shared<test_tracer>();
-  opts.tracer = tracer;
-  test::utils::integration_test_guard guard(opts);
-  test::utils::open_bucket(guard.cluster, guard.ctx.bucket);
+  auto cluster = integration.public_cluster([tracer](couchbase::cluster_options& opts) {
+    opts.tracing().tracer(tracer);
+  });
+
+  auto scope = cluster.bucket(integration.ctx.bucket).default_scope();
+
   auto parent_span =
     GENERATE(std::shared_ptr<test_span>{ nullptr }, std::make_shared<test_span>("parent"));
 
-  SECTION("test http ops:")
+  tracer->reset();
+
+  SECTION("search")
   {
-    SECTION("query")
-    {
-      if (!guard.cluster_version().supports_query()) {
-        SKIP("cluster does not support query");
-      }
-      tracer->reset();
-      couchbase::core::operations::query_request req{ R"(SELECT "ruby rules" AS greeting)" };
-      req.parent_span = parent_span;
-      auto resp = test::utils::execute(guard.cluster, req);
-      REQUIRE_SUCCESS(resp.ctx.ec);
-      auto spans = tracer->spans();
-      REQUIRE_FALSE(spans.empty());
-      assert_http_op_span_ok(guard, spans.front(), "query", parent_span);
-    }
-    SECTION("search")
-    {
-      tracer->reset();
-      couchbase::core::operations::search_request req{};
-      req.parent_span = parent_span;
-      req.index_name = "idontexist";
-      req.query = R"("foo")";
-      auto resp = test::utils::execute(guard.cluster, req);
-      // we didn't create an index, so this will fail
-      REQUIRE(resp.ctx.ec);
-      auto spans = tracer->spans();
-      REQUIRE_FALSE(spans.empty());
-      assert_http_op_span_ok(guard, spans.front(), "search", parent_span);
-    }
-    if (guard.cluster_version().supports_analytics()) {
-      SECTION("analytics")
+    if (integration.cluster_version().supports_scope_search()) {
+      SECTION("scope-level")
       {
-        tracer->reset();
-        couchbase::core::operations::analytics_request req{};
-        req.parent_span = parent_span;
-        req.bucket_name = guard.ctx.bucket;
-        req.statement = R"(SELECT "ruby rules" AS greeting)";
-        auto resp = test::utils::execute(guard.cluster, req);
-        REQUIRE_SUCCESS(resp.ctx.ec);
+        auto [err, _] = scope
+                          .search("does-not-exist",
+                                  couchbase::search_request(couchbase::match_all_query()),
+                                  couchbase::search_options().parent_span(parent_span))
+                          .get();
+        REQUIRE(err.ec() == couchbase::errc::common::index_not_found);
         auto spans = tracer->spans();
         REQUIRE_FALSE(spans.empty());
-        assert_http_op_span_ok(guard, spans.front(), "analytics", parent_span);
+        assert_http_op_span_ok(integration,
+                               spans.front(),
+                               "search",
+                               "search",
+                               integration.ctx.bucket,
+                               "_default",
+                               {},
+                               parent_span);
       }
     }
-    if (guard.cluster_version().supports_views()) {
-      SECTION("view")
+
+    SECTION("cluster-level")
+    {
+      auto [err, _] = cluster
+                        .search("does-not-exist",
+                                couchbase::search_request(couchbase::match_all_query()),
+                                couchbase::search_options().parent_span(parent_span))
+                        .get();
+      REQUIRE(err.ec() == couchbase::errc::common::index_not_found);
+      auto spans = tracer->spans();
+      REQUIRE_FALSE(spans.empty());
+      assert_http_op_span_ok(integration,
+                             spans.front(),
+                             "search",
+                             "search",
+                             std::nullopt,
+                             std::nullopt,
+                             std::nullopt,
+                             parent_span);
+    }
+  }
+
+  SECTION("query")
+  {
+    if (integration.cluster_version().supports_scoped_queries()) {
+      SECTION("scope-level")
       {
-        tracer->reset();
-        couchbase::core::operations::document_view_request req{};
-        req.parent_span = parent_span;
-        req.bucket_name = guard.ctx.bucket;
-        req.view_name = "idontexist";
-        req.document_name = "nordoi";
-        auto resp = test::utils::execute(guard.cluster, req);
-        // we didn't setup a view, so this will fail.
-        REQUIRE(resp.ctx.ec);
+        std::optional<std::string> expected_statement{};
+
+        SECTION("no parameters")
+        {
+          auto [err, _] =
+            scope.query("SELECT 1=1", couchbase::query_options().parent_span(parent_span)).get();
+          expected_statement = std::nullopt;
+        }
+
+        SECTION("positional parameters")
+        {
+          const auto statement = "SELECT $1=$2";
+          auto [err, _] =
+            scope
+              .query(
+                statement,
+                couchbase::query_options().positional_parameters(1, 1).parent_span(parent_span))
+              .get();
+          REQUIRE_SUCCESS(err.ec());
+          expected_statement = statement;
+        }
+
+        SECTION("named parameters")
+        {
+          const auto statement = "SELECT $a=$b";
+          expected_statement = statement;
+          auto [err, _] =
+            scope
+              .query(statement,
+                     couchbase::query_options()
+                       .named_parameters(std::make_pair("a", 1), std::make_pair("b", 1))
+                       .parent_span(parent_span))
+              .get();
+          REQUIRE_SUCCESS(err.ec());
+          expected_statement = statement;
+        }
+
         auto spans = tracer->spans();
         REQUIRE_FALSE(spans.empty());
-        assert_http_op_span_ok(guard, spans.front(), "views", parent_span);
+        const auto span = spans.front();
+        if (expected_statement.has_value()) {
+          REQUIRE(span->string_tags()["db.query.text"] == expected_statement.value());
+        } else {
+          REQUIRE(span->string_tags().count("db.query.text") == 0);
+        }
+        assert_http_op_span_ok(integration,
+                               spans.front(),
+                               "query",
+                               "query",
+                               integration.ctx.bucket,
+                               "_default",
+                               {},
+                               parent_span);
       }
     }
+
+    SECTION("cluster-level")
+    {
+      std::optional<std::string> expected_statement{};
+
+      SECTION("no parameters")
+      {
+        auto [err, _] =
+          cluster.query("SELECT 1=1", couchbase::query_options().parent_span(parent_span)).get();
+        expected_statement = std::nullopt;
+      }
+
+      SECTION("positional parameters")
+      {
+        const auto statement = "SELECT $1=$2";
+        auto [err, _] =
+          cluster
+            .query(statement,
+                   couchbase::query_options().positional_parameters(1, 1).parent_span(parent_span))
+            .get();
+        REQUIRE_SUCCESS(err.ec());
+        expected_statement = statement;
+      }
+
+      SECTION("named parameters")
+      {
+        const auto statement = "SELECT $a=$b";
+        expected_statement = statement;
+        auto [err, _] = cluster
+                          .query(statement,
+                                 couchbase::query_options()
+                                   .named_parameters(std::make_pair("a", 1), std::make_pair("b", 1))
+                                   .parent_span(parent_span))
+                          .get();
+        REQUIRE_SUCCESS(err.ec());
+        expected_statement = statement;
+      }
+
+      auto spans = tracer->spans();
+      REQUIRE_FALSE(spans.empty());
+      const auto span = spans.front();
+      if (expected_statement.has_value()) {
+        REQUIRE(span->string_tags()["db.query.text"] == expected_statement.value());
+      } else {
+        REQUIRE(span->string_tags().count("db.query.text") == 0);
+      }
+      assert_http_op_span_ok(integration,
+                             spans.front(),
+                             "query",
+                             "query",
+                             std::nullopt,
+                             std::nullopt,
+                             std::nullopt,
+                             parent_span);
+    }
+  }
+
+  SECTION("analytics query")
+  {
+    if (integration.cluster_version().supports_scoped_queries()) {
+      SECTION("scope-level")
+      {
+        std::optional<std::string> expected_statement{};
+
+        SECTION("no parameters")
+        {
+          auto [err, _] = scope
+                            .analytics_query(
+                              "SELECT 1=1", couchbase::analytics_options().parent_span(parent_span))
+                            .get();
+          REQUIRE(err.ec() == couchbase::errc::analytics::dataverse_not_found);
+          expected_statement = std::nullopt;
+        }
+
+        SECTION("positional parameters")
+        {
+          const auto statement = "SELECT $1=$2";
+          auto [err, _] =
+            scope
+              .analytics_query(
+                statement,
+                couchbase::analytics_options().positional_parameters(1, 1).parent_span(parent_span))
+              .get();
+          REQUIRE(err.ec() == couchbase::errc::analytics::dataverse_not_found);
+          expected_statement = statement;
+        }
+
+        SECTION("named parameters")
+        {
+          const auto statement = "SELECT $a=$b";
+          expected_statement = statement;
+          auto [err, _] =
+            scope
+              .analytics_query(statement,
+                               couchbase::analytics_options()
+                                 .named_parameters(std::make_pair("a", 1), std::make_pair("b", 1))
+                                 .parent_span(parent_span))
+              .get();
+          REQUIRE(err.ec() == couchbase::errc::analytics::dataverse_not_found);
+          expected_statement = statement;
+        }
+
+        auto spans = tracer->spans();
+        REQUIRE_FALSE(spans.empty());
+        const auto span = spans.front();
+        if (expected_statement.has_value()) {
+          REQUIRE(span->string_tags()["db.query.text"] == expected_statement.value());
+        } else {
+          REQUIRE(span->string_tags().count("db.query.text") == 0);
+        }
+        assert_http_op_span_ok(integration,
+                               spans.front(),
+                               "analytics",
+                               "analytics",
+                               integration.ctx.bucket,
+                               "_default",
+                               std::nullopt,
+                               parent_span);
+      }
+    }
+
+    SECTION("cluster-level")
+    {
+      std::optional<std::string> expected_statement{};
+
+      SECTION("no parameters")
+      {
+        auto [err, _] =
+          cluster
+            .analytics_query("SELECT 1=1", couchbase::analytics_options().parent_span(parent_span))
+            .get();
+        expected_statement = std::nullopt;
+      }
+
+      SECTION("positional parameters")
+      {
+        const auto statement = "SELECT $1=$2";
+        auto [err, _] =
+          cluster
+            .analytics_query(
+              statement,
+              couchbase::analytics_options().positional_parameters(1, 1).parent_span(parent_span))
+            .get();
+        REQUIRE_SUCCESS(err.ec());
+        expected_statement = statement;
+      }
+
+      SECTION("named parameters")
+      {
+        const auto statement = "SELECT $a=$b";
+        expected_statement = statement;
+        auto [err, _] =
+          cluster
+            .analytics_query(statement,
+                             couchbase::analytics_options()
+                               .named_parameters(std::make_pair("a", 1), std::make_pair("b", 1))
+                               .parent_span(parent_span))
+            .get();
+        REQUIRE_SUCCESS(err.ec());
+        expected_statement = statement;
+      }
+
+      auto spans = tracer->spans();
+      REQUIRE_FALSE(spans.empty());
+      const auto span = spans.front();
+      if (expected_statement.has_value()) {
+        REQUIRE(span->string_tags()["db.query.text"] == expected_statement.value());
+      } else {
+        REQUIRE(span->string_tags().count("db.query.text") == 0);
+      }
+      assert_http_op_span_ok(integration,
+                             spans.front(),
+                             "analytics",
+                             "analytics",
+                             std::nullopt,
+                             std::nullopt,
+                             std::nullopt,
+                             parent_span);
+    }
+  }
+
+  if (integration.cluster_version().supports_collections()) {
+    SECTION("collections management - get all scopes")
+    {
+      auto mgr = cluster.bucket(integration.ctx.bucket).collections();
+      auto [err, _] =
+        mgr.get_all_scopes(couchbase::get_all_scopes_options().parent_span(parent_span)).get();
+      REQUIRE_SUCCESS(err.ec());
+      auto spans = tracer->spans();
+      REQUIRE_FALSE(spans.empty());
+      assert_http_op_span_ok(integration,
+                             spans.front(),
+                             "manager_collections_get_all_scopes",
+                             "management",
+                             integration.ctx.bucket,
+                             std::nullopt,
+                             std::nullopt,
+                             parent_span);
+    }
+  }
+
+  if (integration.cluster_version().supports_collections()) {
+    SECTION("collection query index management - create, watch and drop index")
+    {
+      const auto mgr = cluster.bucket(integration.ctx.bucket).default_collection().query_indexes();
+      const auto index_name = test::utils::uniq_id("tracer_idx");
+
+      {
+        auto err =
+          mgr
+            .create_index(
+              index_name,
+              { "field" },
+              couchbase::create_query_index_options().build_deferred(true).parent_span(parent_span))
+            .get();
+        REQUIRE_SUCCESS(err.ec());
+
+        REQUIRE_FALSE(tracer->spans().empty());
+        assert_http_op_span_ok(integration,
+                               tracer->spans().front(),
+                               "manager_query_create_index",
+                               "query",
+                               integration.ctx.bucket,
+                               "_default",
+                               "_default",
+                               parent_span);
+        tracer->reset();
+      }
+      {
+        auto err =
+          mgr
+            .build_deferred_indexes(couchbase::build_query_index_options().parent_span(parent_span))
+            .get();
+        REQUIRE_SUCCESS(err.ec());
+
+        REQUIRE_FALSE(tracer->spans().empty());
+        assert_compound_http_op_span_ok(
+          integration,
+          tracer->spans().front(),
+          "manager_query_build_deferred_indexes",
+          { { "manager_query_get_all_deferred_indexes", 1 }, { "manager_query_build_indexes", 1 } },
+          "query",
+          integration.ctx.bucket,
+          "_default",
+          "_default",
+          parent_span);
+        tracer->reset();
+      }
+      {
+        auto err = mgr
+                     .drop_primary_index(couchbase::drop_primary_query_index_options()
+                                           .parent_span(parent_span)
+                                           .ignore_if_not_exists(true))
+                     .get();
+        REQUIRE_SUCCESS(err.ec());
+
+        REQUIRE_FALSE(tracer->spans().empty());
+        assert_http_op_span_ok(integration,
+                               tracer->spans().front(),
+                               "manager_query_drop_primary_index",
+                               "query",
+                               integration.ctx.bucket,
+                               "_default",
+                               "_default",
+                               parent_span);
+        tracer->reset();
+      }
+      {
+        auto err =
+          mgr
+            .watch_indexes({ index_name },
+                           couchbase::watch_query_indexes_options().parent_span(parent_span))
+            .get();
+        REQUIRE_SUCCESS(err.ec());
+
+        REQUIRE_FALSE(tracer->spans().empty());
+        assert_compound_http_op_span_ok(integration,
+                                        tracer->spans().front(),
+                                        "manager_query_watch_indexes",
+                                        { { "manager_query_get_all_indexes", {} } },
+                                        "query",
+                                        integration.ctx.bucket,
+                                        "_default",
+                                        "_default",
+                                        parent_span);
+        tracer->reset();
+      }
+      {
+        auto [err, _] =
+          mgr.get_all_indexes(couchbase::get_all_query_indexes_options().parent_span(parent_span))
+            .get();
+        REQUIRE_SUCCESS(err.ec());
+
+        REQUIRE_FALSE(tracer->spans().empty());
+        assert_http_op_span_ok(integration,
+                               tracer->spans().front(),
+                               "manager_query_get_all_indexes",
+                               "query",
+                               integration.ctx.bucket,
+                               "_default",
+                               "_default",
+                               parent_span);
+        tracer->reset();
+      }
+      {
+        auto err =
+          mgr.drop_index(index_name, couchbase::drop_query_index_options().parent_span(parent_span))
+            .get();
+        REQUIRE_SUCCESS(err.ec());
+
+        REQUIRE_FALSE(tracer->spans().empty());
+        assert_http_op_span_ok(integration,
+                               tracer->spans().front(),
+                               "manager_query_drop_index",
+                               "query",
+                               integration.ctx.bucket,
+                               "_default",
+                               "_default",
+                               parent_span);
+        tracer->reset();
+      }
+    }
+  }
+
+  SECTION("search index management - get all indexes")
+  {
+    SECTION("cluster-level")
+    {
+      auto mgr = cluster.search_indexes();
+      auto [err, _] =
+        mgr.get_all_indexes(couchbase::get_all_search_indexes_options().parent_span(parent_span))
+          .get();
+      REQUIRE_SUCCESS(err.ec());
+
+      auto spans = tracer->spans();
+      REQUIRE_FALSE(spans.empty());
+      assert_http_op_span_ok(integration,
+                             spans.front(),
+                             "manager_search_get_all_indexes",
+                             "search",
+                             std::nullopt,
+                             std::nullopt,
+                             std::nullopt,
+                             parent_span);
+    }
+
+    if (integration.cluster_version().supports_scope_search()) {
+      SECTION("scope-level")
+      {
+        auto mgr = cluster.bucket(integration.ctx.bucket).default_scope().search_indexes();
+        auto [err, _] =
+          mgr.get_all_indexes(couchbase::get_all_search_indexes_options().parent_span(parent_span))
+            .get();
+        REQUIRE_SUCCESS(err.ec());
+
+        auto spans = tracer->spans();
+        REQUIRE_FALSE(spans.empty());
+        assert_http_op_span_ok(integration,
+                               spans.front(),
+                               "manager_search_get_all_indexes",
+                               "search",
+                               integration.ctx.bucket,
+                               "_default",
+                               std::nullopt,
+                               parent_span);
+      }
+    }
+  }
+
+  SECTION("analytics index management - get all indexes")
+  {
+    auto mgr = cluster.analytics_indexes();
+    auto [err, _] =
+      mgr.get_all_indexes(couchbase::get_all_indexes_analytics_options().parent_span(parent_span))
+        .get();
+    REQUIRE_SUCCESS(err.ec());
+
+    auto spans = tracer->spans();
+    REQUIRE_FALSE(spans.empty());
+    assert_http_op_span_ok(integration,
+                           spans.front(),
+                           "manager_analytics_get_all_indexes",
+                           "analytics",
+                           std::nullopt,
+                           std::nullopt,
+                           std::nullopt,
+                           parent_span);
+  }
+
+  SECTION("bucket management - get all buckets")
+  {
+    auto mgr = cluster.buckets();
+    auto [err, _] =
+      mgr.get_all_buckets(couchbase::get_all_buckets_options().parent_span(parent_span)).get();
+    REQUIRE_SUCCESS(err.ec());
+
+    auto spans = tracer->spans();
+    REQUIRE_FALSE(spans.empty());
+    assert_http_op_span_ok(integration,
+                           spans.front(),
+                           "manager_buckets_get_all_buckets",
+                           "management",
+                           std::nullopt,
+                           std::nullopt,
+                           std::nullopt,
+                           parent_span);
+  }
+
+  SECTION("bucket management - get bucket")
+  {
+    auto mgr = cluster.buckets();
+    auto [err, _] = mgr
+                      .get_bucket(integration.ctx.bucket,
+                                  couchbase::get_bucket_options().parent_span(parent_span))
+                      .get();
+    REQUIRE_SUCCESS(err.ec());
+
+    auto spans = tracer->spans();
+    REQUIRE_FALSE(spans.empty());
+    assert_http_op_span_ok(integration,
+                           spans.front(),
+                           "manager_buckets_get_bucket",
+                           "management",
+                           integration.ctx.bucket,
+                           std::nullopt,
+                           std::nullopt,
+                           parent_span);
+  }
+
+  SECTION("bucket management - drop bucket")
+  {
+    auto mgr = cluster.buckets();
+    auto err =
+      mgr.drop_bucket("does_not_exist", couchbase::drop_bucket_options().parent_span(parent_span))
+        .get();
+    REQUIRE(err.ec() == couchbase::errc::common::bucket_not_found);
+
+    auto spans = tracer->spans();
+    REQUIRE_FALSE(spans.empty());
+    assert_http_op_span_ok(integration,
+                           spans.front(),
+                           "manager_buckets_drop_bucket",
+                           "management",
+                           "does_not_exist",
+                           std::nullopt,
+                           std::nullopt,
+                           parent_span);
   }
 
   tracer->reset();

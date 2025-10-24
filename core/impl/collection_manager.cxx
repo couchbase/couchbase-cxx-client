@@ -25,6 +25,8 @@
 #include "core/operations/management/scope_drop.hxx"
 #include "core/operations/management/scope_get_all.hxx"
 #include "core/topology/collections_manifest.hxx"
+#include "core/tracing/constants.hxx"
+#include "core/tracing/tracer_wrapper.hxx"
 
 #include <couchbase/collection_manager.hxx>
 #include <couchbase/create_collection_options.hxx>
@@ -93,16 +95,20 @@ public:
                        const couchbase::drop_collection_options::built& options,
                        couchbase::drop_collection_handler&& handler) const
   {
+    auto span = create_span(core::tracing::operation::mgr_collections_drop_collection,
+                            scope_name,
+                            collection_name,
+                            options.parent_span);
+    core::operations::management::collection_drop_request request{
+      bucket_name_, std::move(scope_name), std::move(collection_name), {}, options.timeout, span,
+    };
     return core_.execute(
-      core::operations::management::collection_drop_request{
-        bucket_name_,
-        std::move(scope_name),
-        std::move(collection_name),
-        {},
-        options.timeout,
-        options.parent_span,
-      },
-      [handler = std::move(handler)](const auto& resp) mutable {
+      std::move(request),
+      [span = std::move(span), handler = std::move(handler)](const auto& resp) mutable {
+        if (const auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
+          span->add_tag(core::tracing::attributes::op::retry_count, retries);
+        }
+        span->end();
         return handler(core::impl::make_error(resp.ctx));
       });
   }
@@ -113,18 +119,27 @@ public:
                          const couchbase::update_collection_options::built& options,
                          couchbase::update_collection_handler&& handler) const
   {
+    auto span = create_span(core::tracing::operation::mgr_collections_update_collection,
+                            scope_name,
+                            collection_name,
+                            options.parent_span);
+    core::operations::management::collection_update_request request{
+      bucket_name_,
+      std::move(scope_name),
+      std::move(collection_name),
+      settings.max_expiry,
+      settings.history,
+      {},
+      options.timeout,
+      span,
+    };
     return core_.execute(
-      core::operations::management::collection_update_request{
-        bucket_name_,
-        std::move(scope_name),
-        std::move(collection_name),
-        settings.max_expiry,
-        settings.history,
-        {},
-        options.timeout,
-        options.parent_span,
-      },
-      [handler = std::move(handler)](const auto& resp) mutable {
+      std::move(request),
+      [span = std::move(span), handler = std::move(handler)](const auto& resp) mutable {
+        if (const auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
+          span->add_tag(core::tracing::attributes::op::retry_count, retries);
+        }
+        span->end();
         return handler(core::impl::make_error(resp.ctx));
       });
   }
@@ -135,18 +150,27 @@ public:
                          const couchbase::create_collection_options::built& options,
                          couchbase::update_collection_handler&& handler) const
   {
+    auto span = create_span(core::tracing::operation::mgr_collections_create_collection,
+                            scope_name,
+                            collection_name,
+                            options.parent_span);
+    core::operations::management::collection_create_request request{
+      bucket_name_,
+      std::move(scope_name),
+      std::move(collection_name),
+      settings.max_expiry,
+      settings.history,
+      {},
+      options.timeout,
+      span,
+    };
     return core_.execute(
-      core::operations::management::collection_create_request{
-        bucket_name_,
-        std::move(scope_name),
-        std::move(collection_name),
-        settings.max_expiry,
-        settings.history,
-        {},
-        options.timeout,
-        options.parent_span,
-      },
-      [handler = std::move(handler)](const auto& resp) mutable {
+      std::move(request),
+      [span = std::move(span), handler = std::move(handler)](const auto& resp) mutable {
+        if (const auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
+          span->add_tag(core::tracing::attributes::op::retry_count, retries);
+        }
+        span->end();
         return handler(core::impl::make_error(resp.ctx));
       });
   }
@@ -154,14 +178,21 @@ public:
   void get_all_scopes(const get_all_scopes_options::built& options,
                       get_all_scopes_handler&& handler) const
   {
+    auto span = create_span(
+      core::tracing::operation::mgr_collections_get_all_scopes, {}, {}, options.parent_span);
+    core::operations::management::scope_get_all_request request{
+      bucket_name_,
+      {},
+      options.timeout,
+      span,
+    };
     return core_.execute(
-      core::operations::management::scope_get_all_request{
-        bucket_name_,
-        {},
-        options.timeout,
-        options.parent_span,
-      },
-      [handler = std::move(handler)](auto resp) mutable {
+      std::move(request),
+      [span = std::move(span), handler = std::move(handler)](auto resp) mutable {
+        if (const auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
+          span->add_tag(core::tracing::attributes::op::retry_count, retries);
+        }
+        span->end();
         return handler(core::impl::make_error(resp.ctx), map_scope_specs(resp.manifest));
       });
   }
@@ -170,15 +201,18 @@ public:
                     const couchbase::create_scope_options::built& options,
                     couchbase::create_scope_handler&& handler) const
   {
+    auto span = create_span(
+      core::tracing::operation::mgr_collections_create_scope, scope_name, {}, options.parent_span);
+    core::operations::management::scope_create_request request{
+      bucket_name_, std::move(scope_name), {}, options.timeout, span,
+    };
     return core_.execute(
-      core::operations::management::scope_create_request{
-        bucket_name_,
-        std::move(scope_name),
-        {},
-        options.timeout,
-        options.parent_span,
-      },
-      [handler = std::move(handler)](const auto& resp) mutable {
+      std::move(request),
+      [span = std::move(span), handler = std::move(handler)](const auto& resp) mutable {
+        if (const auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
+          span->add_tag(core::tracing::attributes::op::retry_count, retries);
+        }
+        span->end();
         return handler(core::impl::make_error(resp.ctx));
       });
   }
@@ -187,20 +221,44 @@ public:
                   const couchbase::drop_scope_options::built& options,
                   couchbase::drop_scope_handler&& handler) const
   {
-    core_.execute(
-      core::operations::management::scope_drop_request{
-        bucket_name_,
-        std::move(scope_name),
-        {},
-        options.timeout,
-        options.parent_span,
-      },
-      [handler = std::move(handler)](const auto& resp) mutable {
+    auto span = create_span(
+      core::tracing::operation::mgr_collections_drop_scope, scope_name, {}, options.parent_span);
+    core::operations::management::scope_drop_request request{
+      bucket_name_, std::move(scope_name), {}, options.timeout, span,
+    };
+    return core_.execute(
+      std::move(request),
+      [span = std::move(span), handler = std::move(handler)](const auto& resp) mutable {
+        if (const auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
+          span->add_tag(core::tracing::attributes::op::retry_count, retries);
+        }
+        span->end();
         return handler(core::impl::make_error(resp.ctx));
       });
   }
 
 private:
+  [[nodiscard]] auto create_span(const std::string& operation_name,
+                                 const std::optional<std::string>& scope_name,
+                                 const std::optional<std::string>& collection_name,
+                                 const std::shared_ptr<tracing::request_span>& parent_span) const
+    -> std::shared_ptr<tracing::request_span>
+  {
+    auto span = core_.tracer()->create_span(operation_name, parent_span);
+    if (span->uses_tags()) {
+      span->add_tag(core::tracing::attributes::op::service, core::tracing::service::management);
+      span->add_tag(core::tracing::attributes::op::bucket_name, bucket_name_);
+      if (scope_name.has_value()) {
+        span->add_tag(core::tracing::attributes::op::scope_name, scope_name.value());
+      }
+      if (collection_name.has_value()) {
+        span->add_tag(core::tracing::attributes::op::collection_name, collection_name.value());
+      }
+      span->add_tag(core::tracing::attributes::op::operation_name, operation_name);
+    }
+    return span;
+  }
+
   core::cluster core_;
   std::string bucket_name_;
 };

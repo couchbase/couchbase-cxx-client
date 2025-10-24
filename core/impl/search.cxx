@@ -132,7 +132,9 @@ build_search_request(std::string index_name,
                      const search_query& query,
                      search_options::built options,
                      std::optional<std::string> bucket_name,
-                     std::optional<std::string> scope_name) -> core::operations::search_request
+                     std::optional<std::string> scope_name,
+                     std::shared_ptr<couchbase::tracing::request_span> op_span)
+  -> core::operations::search_request
 {
   auto encoded = query.encode();
   if (encoded.ec) {
@@ -165,7 +167,7 @@ build_search_request(std::string index_name,
     options.client_context_id,
     options.timeout,
   };
-  request.parent_span = options.parent_span;
+  request.parent_span = std::move(op_span);
   return request;
 }
 
@@ -174,7 +176,9 @@ build_search_request(std::string index_name,
                      couchbase::search_request request,
                      search_options::built options,
                      std::optional<std::string> bucket_name,
-                     std::optional<std::string> scope_name) -> core::operations::search_request
+                     std::optional<std::string> scope_name,
+                     std::shared_ptr<couchbase::tracing::request_span> op_span)
+  -> core::operations::search_request
 {
   if (!request.search_query().has_value()) {
     request.search_query(couchbase::match_none_query{});
@@ -208,7 +212,7 @@ build_search_request(std::string index_name,
     options.client_context_id,
     options.timeout,
   };
-  core_request.parent_span = options.parent_span;
+  core_request.parent_span = std::move(op_span);
 
   if (auto vector_search = request.vector_search(); vector_search.has_value()) {
     core_request.vector_search = core::utils::json::generate_binary(vector_search->query);

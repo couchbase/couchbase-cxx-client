@@ -30,19 +30,21 @@ namespace operation
 constexpr auto step_dispatch = "dispatch_to_server";
 constexpr auto step_request_encoding = "request_encoding";
 
-constexpr auto http_query = "cb.query";
-constexpr auto http_analytics = "cb.analytics";
-constexpr auto http_search = "cb.search";
-constexpr auto http_views = "cb.views";
-constexpr auto http_manager = "cb.manager";
-constexpr auto http_eventing = "cb.eventing";
-constexpr auto http_manager_analytics = "cb.manager_analytics";
-constexpr auto http_manager_query = "cb.manager_query";
-constexpr auto http_manager_buckets = "cb.manager_buckets";
-constexpr auto http_manager_collections = "cb.manager_collections";
-constexpr auto http_manager_search = "cb.manager_search";
-constexpr auto http_manager_users = "cb.manager_users";
-constexpr auto http_manager_views = "cb.manager_views";
+constexpr auto query = "query";
+constexpr auto analytics = "analytics";
+constexpr auto search = "search";
+constexpr auto views = "views";
+constexpr auto manager = "manager";
+constexpr auto eventing = "eventing";
+
+// TODO(DC): Remove these
+constexpr auto manager_analytics = "manager_analytics";
+constexpr auto manager_query = "manager_query";
+constexpr auto manager_buckets = "manager_buckets";
+constexpr auto manager_collections = "manager_collections";
+constexpr auto manager_search = "manager_search";
+constexpr auto manager_users = "manager_users";
+constexpr auto manager_views = "manager_views";
 
 // KV operations
 constexpr auto mcbp_get = "get";
@@ -74,9 +76,67 @@ constexpr auto mcbp_get_any_replica = "get_any_replica";
 constexpr auto mcbp_lookup_in_all_replicas = "lookup_in_all_replicas";
 constexpr auto mcbp_lookup_in_any_replica = "lookup_in_any_replica";
 constexpr auto mcbp_scan = "scan";
-constexpr auto mcbp_ping = "ping";
-constexpr auto mcbp_diagnostics = "diagnostics";
+constexpr auto ping = "ping";
+constexpr auto diagnostics = "diagnostics";
 
+// Collection management operations
+constexpr auto mgr_collections_create_collection = "manager_collections_create_collection";
+constexpr auto mgr_collections_drop_collection = "manager_collections_drop_collection";
+constexpr auto mgr_collections_update_collection = "manager_collections_update_collection";
+constexpr auto mgr_collections_create_scope = "manager_collections_create_scope";
+constexpr auto mgr_collections_drop_scope = "manager_collections_drop_scope";
+constexpr auto mgr_collections_get_all_scopes = "manager_collections_get_all_scopes";
+
+// Bucket management operations
+constexpr auto mgr_buckets_get_bucket = "manager_buckets_get_bucket";
+constexpr auto mgr_buckets_get_all_buckets = "manager_buckets_get_all_buckets";
+constexpr auto mgr_buckets_create_bucket = "manager_buckets_create_bucket";
+constexpr auto mgr_buckets_update_bucket = "manager_buckets_update_bucket";
+constexpr auto mgr_buckets_drop_bucket = "manager_buckets_drop_bucket";
+constexpr auto mgr_buckets_flush_bucket = "manager_buckets_flush_bucket";
+
+// Query index management operations
+constexpr auto mgr_query_build_deferred_indexes = "manager_query_build_deferred_indexes";
+constexpr auto mgr_query_create_index = "manager_query_create_index";
+constexpr auto mgr_query_create_primary_index = "manager_query_create_primary_index";
+constexpr auto mgr_query_drop_index = "manager_query_drop_index";
+constexpr auto mgr_query_drop_primary_index = "manager_query_drop_primary_index";
+constexpr auto mgr_query_get_all_indexes = "manager_query_get_all_indexes";
+constexpr auto mgr_query_watch_indexes = "manager_query_watch_indexes";
+constexpr auto mgr_query_get_all_deferred_indexes = "manager_query_get_all_deferred_indexes";
+constexpr auto mgr_query_build_indexes = "manager_query_build_indexes";
+
+// Search index management operations
+constexpr auto mgr_search_get_index = "manager_search_get_index";
+constexpr auto mgr_search_get_all_indexes = "manager_search_get_all_indexes";
+constexpr auto mgr_search_upsert_index = "manager_search_upsert_index";
+constexpr auto mgr_search_drop_index = "manager_search_drop_index";
+constexpr auto mgr_search_get_indexed_documents_count =
+  "manager_search_get_indexed_documents_count";
+constexpr auto mgr_search_pause_ingest = "manager_search_pause_ingest";
+constexpr auto mgr_search_resume_ingest = "manager_search_resume_ingest";
+constexpr auto mgr_search_allow_querying = "manager_search_allow_querying";
+constexpr auto mgr_search_disallow_querying = "manager_search_disallow_querying";
+constexpr auto mgr_search_freeze_plan = "manager_search_freeze_plan";
+constexpr auto mgr_search_unfreeze_plan = "manager_search_unfreeze_plan";
+constexpr auto mgr_search_analyze_document = "manager_search_analyze_document";
+
+// Analytics index management operations
+constexpr auto mgr_analytics_create_dataverse = "manager_analytics_create_dataverse";
+constexpr auto mgr_analytics_drop_dataverse = "manager_analytics_drop_dataverse";
+constexpr auto mgr_analytics_create_dataset = "manager_analytics_create_dataset";
+constexpr auto mgr_analytics_drop_dataset = "manager_analytics_drop_dataset";
+constexpr auto mgr_analytics_get_all_datasets = "manager_analytics_get_all_datasets";
+constexpr auto mgr_analytics_create_index = "manager_analytics_create_index";
+constexpr auto mgr_analytics_drop_index = "manager_analytics_drop_index";
+constexpr auto mgr_analytics_get_all_indexes = "manager_analytics_get_all_indexes";
+constexpr auto mgr_analytics_connect_link = "manager_analytics_connect_link";
+constexpr auto mgr_analytics_disconnect_link = "manager_analytics_disconnect_link";
+constexpr auto mgr_analytics_get_pending_mutations = "manager_analytics_get_pending_mutations";
+constexpr auto mgr_analytics_create_link = "manager_analytics_create_link";
+constexpr auto mgr_analytics_replace_link = "manager_analytics_replace_link";
+constexpr auto mgr_analytics_drop_link = "manager_analytics_drop_link";
+constexpr auto mgr_analytics_get_links = "manager_analytics_get_links";
 } // namespace operation
 
 namespace attributes
@@ -133,22 +193,22 @@ span_name_for_http_service(service_type type)
 {
   switch (type) {
     case service_type::query:
-      return operation::http_query;
+      return operation::query;
 
     case service_type::analytics:
-      return operation::http_analytics;
+      return operation::analytics;
 
     case service_type::search:
-      return operation::http_search;
+      return operation::search;
 
     case service_type::view:
-      return operation::http_views;
+      return operation::views;
 
     case service_type::management:
-      return operation::http_manager;
+      return operation::manager;
 
     case service_type::eventing:
-      return operation::http_eventing;
+      return operation::eventing;
 
     case service_type::key_value:
       return "unexpected_http_service";

@@ -835,7 +835,11 @@ public:
         self->session_manager_->set_configuration(config, self->origin_.options());
         self->session_->on_configuration_update(self->session_manager_);
         self->session_->on_configuration_update(self->app_telemetry_reporter_);
+        self->session_->on_configuration_update(self->tracer_);
+        self->session_->on_configuration_update(self->meter_);
         self->app_telemetry_reporter_->update_config(config);
+        self->tracer_->update_config(config);
+        self->meter_->update_config(config);
         self->session_->on_stop([self]() {
           if (self->session_) {
             self->session_.reset();

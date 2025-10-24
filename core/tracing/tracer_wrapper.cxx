@@ -18,6 +18,7 @@
 #include "tracer_wrapper.hxx"
 
 #include "constants.hxx"
+#include "core/logger/logger.hxx"
 
 #include <mutex>
 

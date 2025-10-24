@@ -18,6 +18,8 @@
 #include <couchbase/bucket.hxx>
 
 #include "core/cluster.hxx"
+#include "core/tracing/constants.hxx"
+#include "core/tracing/tracer_wrapper.hxx"
 #include "diagnostics.hxx"
 
 #include <couchbase/collection.hxx>
@@ -63,16 +65,41 @@ public:
 
   void ping(const ping_options::built& options, ping_handler&& handler) const
   {
-    return core_.ping(options.report_id,
-                      name_,
-                      core::impl::to_core_service_types(options.service_types),
-                      options.timeout,
-                      [handler = std::move(handler)](const auto& resp) mutable {
-                        return handler({}, core::impl::build_result(resp));
-                      });
+    auto span = create_span(core::tracing::operation::ping, std::nullopt, options.parent_span);
+    return core_.ping(
+      options.report_id,
+      name_,
+      core::impl::to_core_service_types(options.service_types),
+      options.timeout,
+      [span = std::move(span), handler = std::move(handler)](const auto& resp) mutable {
+        span->end();
+        return handler({}, core::impl::build_result(resp));
+      });
   }
 
 private:
+  [[nodiscard]] auto tracer() const -> const std::shared_ptr<core::tracing::tracer_wrapper>&
+  {
+    return core_.tracer();
+  }
+
+  [[nodiscard]] auto create_span(const std::string& operation_name,
+                                 const std::optional<core::service_type> service,
+                                 const std::shared_ptr<tracing::request_span>& parent_span) const
+    -> std::shared_ptr<tracing::request_span>
+  {
+    auto span = tracer()->create_span(operation_name, parent_span);
+    if (span->uses_tags()) {
+      if (service.has_value()) {
+        span->add_tag(core::tracing::attributes::op::service,
+                      core::tracing::service_name_for_http_service(service.value()));
+      }
+      span->add_tag(core::tracing::attributes::op::bucket_name, name_);
+      span->add_tag(core::tracing::attributes::op::operation_name, operation_name);
+    }
+    return span;
+  }
+
   core::cluster core_;
   std::string name_;
   std::shared_ptr<crypto::manager> crypto_manager_;
