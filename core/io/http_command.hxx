@@ -253,13 +253,14 @@ private:
     encoded.headers["client-context-id"] = client_context_id_;
 
     CB_LOG_TRACE(
-      R"({} HTTP request: {}, method={}, path="{}", client_context_id="{}", timeout={}ms)",
+      R"({} HTTP request: {}, method={}, path="{}", client_context_id="{}", timeout={}ms username={})",
       session_->log_prefix(),
       encoded.type,
       encoded.method,
       encoded.path,
       client_context_id_,
-      timeout_.count());
+      timeout_.count(),
+      session_->credentials().username);
 
     auto dispatch_span = create_dispatch_span();
 
@@ -292,13 +293,15 @@ private:
         }
 
         self->deadline.cancel();
-        CB_LOG_TRACE(R"({} HTTP response: {}, client_context_id="{}", ec={}, status={}, body={})",
-                     self->session_->log_prefix(),
-                     self->request.type,
-                     self->client_context_id_,
-                     ec.message(),
-                     msg.status_code,
-                     msg.status_code == 200 ? "[hidden]" : msg.body.data());
+        CB_LOG_TRACE(
+          R"({} HTTP response: {}, client_context_id="{}", ec={}, status={}, body={} username={})",
+          self->session_->log_prefix(),
+          self->request.type,
+          self->client_context_id_,
+          ec.message(),
+          msg.status_code,
+          msg.status_code == 200 ? "[hidden]" : msg.body.data(),
+          self->session_->credentials().username);
         if (auto parser_ec = msg.body.ec(); !ec && parser_ec) {
           ec = parser_ec;
         }

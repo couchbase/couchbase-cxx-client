@@ -169,6 +169,26 @@ public:
 #endif
   }
 
+  struct session_counts {
+    size_t busy, idle, pending;
+  };
+
+  std::size_t sum_sizes(
+    const std::map<service_type, std::list<std::shared_ptr<http_session>>>& sessions)
+  {
+    std::size_t total = 0;
+    for (const auto& [type, list] : sessions) {
+      total += list.size();
+    }
+    return total;
+  }
+
+  auto counts() -> session_counts
+  {
+    std::scoped_lock lock(sessions_mutex_);
+    return { sum_sizes(busy_sessions_), sum_sizes(idle_sessions_), sum_sizes(pending_sessions_) };
+  }
+
   void export_diag_info(diag::diagnostics_result& res)
   {
     std::scoped_lock lock(sessions_mutex_);
@@ -417,7 +437,9 @@ public:
     }
     if (!session->is_stopped()) {
       session->set_idle(options_.idle_http_connection_timeout);
-      CB_LOG_DEBUG("{} put HTTP session back to idle connections", session->log_prefix());
+      CB_LOG_DEBUG("{} put HTTP session back to idle connections",
+                   session->log_prefix(),
+                   session->credentials().username);
       std::scoped_lock lock(sessions_mutex_);
       idle_sessions_[type].push_back(session);
       busy_sessions_[type].remove_if([id = session->id()](const auto& s) -> bool {
@@ -437,6 +459,7 @@ public:
     std::map<service_type, std::list<std::shared_ptr<http_session>>> busy_sessions, idle_sessions,
       pending_sessions;
     {
+      CB_LOG_CRITICAL("Start closing http sessions");
       const std::scoped_lock lock(sessions_mutex_);
       busy_sessions = std::move(busy_sessions_);
       idle_sessions = std::move(idle_sessions_);
@@ -464,6 +487,7 @@ public:
         }
       }
     }
+    CB_LOG_CRITICAL("Finish closing HTTP sessions");
   }
 
   template<typename Request, typename Handler>

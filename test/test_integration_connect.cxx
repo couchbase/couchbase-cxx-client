@@ -15,6 +15,8 @@
  *   limitations under the License.
  */
 
+#include "core/io/http_session_manager.hxx"
+
 #include "test_helper_integration.hxx"
 
 #include "test/utils/logger.hxx"
@@ -220,4 +222,53 @@ TEST_CASE("integration: connecting with a custom transactions metadata collectio
   auto [err, cluster] = couchbase::cluster::connect(ctx.connection_string, opts).get();
 
   REQUIRE(err.ec() == couchbase::errc::common::bucket_not_found);
+}
+
+TEST_CASE("integration: reopen bucket after changing to incorrect credentials", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+  {
+    auto err = integration.cluster.update_credentials(
+      couchbase::core::cluster_credentials{ "invalid-username", "invalid-password" });
+    REQUIRE_SUCCESS(err.ec);
+  }
+
+  test::utils::close_bucket(integration.cluster, integration.ctx.bucket);
+
+  auto barrier = std::make_shared<std::promise<std::error_code>>();
+  auto f = barrier->get_future();
+  integration.cluster.open_bucket(integration.ctx.bucket, [barrier](std::error_code ec) {
+    barrier->set_value(ec);
+  });
+  auto rc = f.get();
+
+  REQUIRE(rc == couchbase::errc::common::authentication_failure);
+}
+
+TEST_CASE("integration: query after changing to incorrect credentials", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+  couchbase::core::operations::query_request req{ R"(SELECT 1=1)" };
+  {
+    auto resp = test::utils::execute(integration.cluster, req);
+    REQUIRE_SUCCESS(resp.ctx.ec);
+  }
+  {
+    auto err = integration.cluster.update_credentials(
+      couchbase::core::cluster_credentials{ "invalid-username", "invalid-password" });
+    REQUIRE_SUCCESS(err.ec);
+  }
+  auto [mgr_ec, session_mgr] = integration.cluster.http_session_manager();
+  REQUIRE_SUCCESS(mgr_ec);
+  session_mgr->close();
+  std::this_thread::sleep_for(std::chrono::seconds(5));
+  {
+    auto counts = session_mgr->counts();
+    CB_LOG_CRITICAL(
+      "Session count - Busy: {} Idle: {} Pending: {}", counts.busy, counts.idle, counts.pending);
+    auto resp = test::utils::execute(integration.cluster, req);
+    REQUIRE(resp.ctx.ec == couchbase::errc::common::internal_server_failure);
+  }
 }

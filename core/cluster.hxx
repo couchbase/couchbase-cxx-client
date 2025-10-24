@@ -18,6 +18,7 @@
 #pragma once
 
 #include "diagnostics.hxx"
+#include "error.hxx"
 #include "operations_fwd.hxx"
 #include "origin.hxx"
 #include "topology/configuration.hxx"
@@ -84,6 +85,8 @@ public:
     const std::string& bucket_name,
     utils::movable_function<void(std::error_code, std::shared_ptr<topology::configuration>)>&&
       handler) const;
+
+  [[nodiscard]] auto update_credentials(core::cluster_credentials auth) -> core::error;
 
   void execute(o::analytics_request request, mf<void(o::analytics_response)>&& handler) const;
   void execute(o::append_request request, mf<void(o::append_response)>&& handler) const;

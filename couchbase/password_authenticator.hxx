@@ -43,5 +43,6 @@ private:
   bool ldap_compatible_{ false };
 
   friend class cluster_options;
+  friend class cluster;
 };
 } // namespace couchbase

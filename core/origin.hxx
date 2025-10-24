@@ -71,6 +71,8 @@ struct origin {
   void set_nodes(node_list nodes);
   void set_nodes_from_config(const topology::configuration& config);
 
+  void update_credentials(cluster_credentials auth);
+
   [[nodiscard]] auto next_address() -> std::pair<std::string, std::string>;
 
   [[nodiscard]] auto exhausted() const -> bool;
