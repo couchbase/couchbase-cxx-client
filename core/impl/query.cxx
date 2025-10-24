@@ -167,7 +167,9 @@ build_result(operations::query_response& resp) -> query_result
 auto
 build_query_request(std::string statement,
                     std::optional<std::string> query_context,
-                    query_options::built options) -> core::operations::query_request
+                    query_options::built options,
+                    std::shared_ptr<couchbase::tracing::request_span> op_span)
+  -> core::operations::query_request
 {
   operations::query_request request{
     std::move(statement),     options.adhoc,
@@ -180,7 +182,7 @@ build_query_request(std::string statement,
     std::move(query_context), std::move(options.client_context_id),
     options.timeout,          options.profile,
   };
-  request.parent_span = options.parent_span;
+  request.parent_span = std::move(op_span);
   if (!options.raw.empty()) {
     for (auto& [name, value] : options.raw) {
       request.raw[name] = std::move(value);
@@ -232,6 +234,7 @@ build_transaction_query_result(operations::query_response resp,
 auto
 build_transaction_query_request(query_options::built opts) -> core::operations::query_request
 {
-  return core::impl::build_query_request("", {}, std::move(opts));
+  auto parent_span_from_caller = opts.parent_span;
+  return core::impl::build_query_request("", {}, std::move(opts), parent_span_from_caller);
 }
 } // namespace couchbase::core::impl

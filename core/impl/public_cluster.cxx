@@ -25,6 +25,8 @@
 #include "core/io/ip_protocol.hxx"
 #include "core/origin.hxx"
 #include "core/tls_verify_mode.hxx"
+#include "core/tracing/constants.hxx"
+#include "core/tracing/tracer_wrapper.hxx"
 #include "core/transactions.hxx"
 #include "core/utils/connection_string.hxx"
 #include "core/utils/movable_function.hxx"
@@ -320,9 +322,23 @@ public:
 
   void query(std::string statement, query_options::built options, query_handler&& handler) const
   {
+    auto span =
+      create_span(core::tracing::operation::query, core::service_type::query, options.parent_span);
+    if (span->uses_tags() &&
+        !(options.positional_parameters.empty() && options.named_parameters.empty())) {
+      span->add_tag(core::tracing::attributes::op::query_statement, statement);
+    }
+
+    auto request =
+      core::impl::build_query_request(std::move(statement), {}, std::move(options), span);
+
     return core_.execute(
-      core::impl::build_query_request(std::move(statement), {}, std::move(options)),
-      [handler = std::move(handler)](auto resp) {
+      std::move(request), [span = std::move(span), handler = std::move(handler)](auto resp) {
+        if (auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
+          span->add_tag(core::tracing::attributes::op::retry_count, retries);
+        }
+        span->end();
+
         return handler(core::impl::make_error(resp.ctx), core::impl::build_result(resp));
       });
   }
@@ -331,30 +347,51 @@ public:
                        analytics_options::built options,
                        analytics_handler&& handler) const
   {
+    auto span = create_span(
+      core::tracing::operation::analytics, core::service_type::analytics, options.parent_span);
+    if (span->uses_tags() &&
+        !(options.positional_parameters.empty() && options.named_parameters.empty())) {
+      span->add_tag(core::tracing::attributes::op::query_statement, statement);
+    }
+
+    auto request =
+      core::impl::build_analytics_request(std::move(statement), std::move(options), {}, {}, span);
+
     return core_.execute(
-      core::impl::build_analytics_request(std::move(statement), std::move(options), {}, {}),
-      [handler = std::move(handler)](auto resp) {
+      std::move(request), [span = std::move(span), handler = std::move(handler)](auto resp) {
+        if (auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
+          span->add_tag(core::tracing::attributes::op::retry_count, retries);
+        }
+        span->end();
+
         return handler(core::impl::make_error(resp.ctx), core::impl::build_result(resp));
       });
   }
 
   void ping(const ping_options::built& options, ping_handler&& handler) const
   {
-    return core_.ping(options.report_id,
-                      {},
-                      core::impl::to_core_service_types(options.service_types),
-                      options.timeout,
-                      [handler = std::move(handler)](const auto& resp) mutable {
-                        return handler({}, core::impl::build_result(resp));
-                      });
+    auto span = create_span(core::tracing::operation::ping, std::nullopt, options.parent_span);
+    return core_.ping(
+      options.report_id,
+      {},
+      core::impl::to_core_service_types(options.service_types),
+      options.timeout,
+      [span = std::move(span), handler = std::move(handler)](const auto& resp) mutable {
+        span->end();
+        return handler({}, core::impl::build_result(resp));
+      });
   };
 
   void diagnostics(const diagnostics_options::built& options, diagnostics_handler&& handler) const
   {
-    return core_.diagnostics(options.report_id,
-                             [handler = std::move(handler)](const auto& resp) mutable {
-                               return handler({}, core::impl::build_result(resp));
-                             });
+    auto span =
+      create_span(core::tracing::operation::diagnostics, std::nullopt, options.parent_span);
+    return core_.diagnostics(
+      options.report_id,
+      [span = std::move(span), handler = std::move(handler)](const auto& resp) mutable {
+        span->end();
+        return handler({}, core::impl::build_result(resp));
+      });
   }
 
   void search(std::string index_name,
@@ -362,9 +399,18 @@ public:
               const search_options::built& options,
               search_handler&& handler) const
   {
+    auto span = create_span(
+      core::tracing::operation::search, core::service_type::search, options.parent_span);
+
+    auto core_req = core::impl::build_search_request(
+      std::move(index_name), std::move(request), options, {}, {}, span);
     return core_.execute(
-      core::impl::build_search_request(std::move(index_name), std::move(request), options, {}, {}),
-      [handler = std::move(handler)](const auto& resp) mutable {
+      std::move(core_req),
+      [span = std::move(span), handler = std::move(handler)](const auto& resp) mutable {
+        if (auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
+          span->add_tag(core::tracing::attributes::op::retry_count, retries);
+        }
+        span->end();
         return handler(core::impl::make_error(resp.ctx),
                        search_result{ internal_search_result{ resp } });
       });
@@ -425,6 +471,27 @@ private:
     if (io_thread_.joinable()) {
       io_thread_.join();
     }
+  }
+
+  [[nodiscard]] auto tracer() const -> const std::shared_ptr<core::tracing::tracer_wrapper>&
+  {
+    return core_.tracer();
+  }
+
+  [[nodiscard]] auto create_span(const std::string& operation_name,
+                                 const std::optional<core::service_type> service,
+                                 const std::shared_ptr<tracing::request_span>& parent_span) const
+    -> std::shared_ptr<tracing::request_span>
+  {
+    auto span = tracer()->create_span(operation_name, parent_span);
+    if (span->uses_tags()) {
+      if (service.has_value()) {
+        span->add_tag(core::tracing::attributes::op::service,
+                      core::tracing::service_name_for_http_service(service.value()));
+      }
+      span->add_tag(core::tracing::attributes::op::operation_name, operation_name);
+    }
+    return span;
   }
 
   std::string connection_string_;

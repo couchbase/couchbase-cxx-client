@@ -47,7 +47,9 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
   Request request;
   encoded_request_type encoded;
   std::shared_ptr<tracing::tracer_wrapper> tracer_;
+#ifdef COUCHBASE_CXX_CLIENT_CREATE_OPERATION_SPAN_IN_CORE
   std::shared_ptr<couchbase::tracing::request_span> span_{ nullptr };
+#endif
   std::shared_ptr<metrics::meter_wrapper> meter_{};
   std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter_{ nullptr };
   std::shared_ptr<io::http_session> session_{};
@@ -99,11 +101,13 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
 
   void start(handler_type&& handler)
   {
+#ifdef COUCHBASE_CXX_CLIENT_CREATE_OPERATION_SPAN_IN_CORE
     span_ = tracer_->create_span(tracing::span_name_for_http_service(request.type), parent_span_);
     if (span_->uses_tags()) {
       span_->add_tag(tracing::attributes::op::service,
                      tracing::service_name_for_http_service(request.type));
     }
+#endif
 
     handler_ = std::move(handler);
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
@@ -200,8 +204,10 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
       // Can raise priv::retry_http_request when a retry is required
       auto resp = request.make_response(std::move(ctx), std::move(encoded_resp));
 
+#ifdef COUCHBASE_CXX_CLIENT_CREATE_OPERATION_SPAN_IN_CORE
       span_->end();
       span_ = nullptr;
+#endif
 
       handler(std::move(resp));
     }
@@ -313,8 +319,13 @@ private:
   [[nodiscard]] auto create_dispatch_span() const
     -> std::shared_ptr<couchbase::tracing::request_span>
   {
+#ifdef COUCHBASE_CXX_CLIENT_CREATE_OPERATION_SPAN_IN_CORE
     std::shared_ptr<couchbase::tracing::request_span> dispatch_span =
       tracer_->create_span(tracing::operation::step_dispatch, span_);
+#else
+    std::shared_ptr<couchbase::tracing::request_span> dispatch_span =
+      tracer_->create_span(tracing::operation::step_dispatch, parent_span_);
+#endif
     if (dispatch_span->uses_tags()) {
       dispatch_span->add_tag(tracing::attributes::dispatch::network_transport, "tcp");
       dispatch_span->add_tag(tracing::attributes::dispatch::operation_id, client_context_id_);

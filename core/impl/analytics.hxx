@@ -33,6 +33,7 @@ auto
 build_analytics_request(std::string statement,
                         analytics_options::built options,
                         std::optional<std::string> bucket_name,
-                        std::optional<std::string> scope_name)
+                        std::optional<std::string> scope_name,
+                        std::shared_ptr<couchbase::tracing::request_span> op_span)
   -> core::operations::analytics_request;
 } // namespace couchbase::core::impl

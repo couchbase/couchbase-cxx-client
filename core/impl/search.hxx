@@ -33,13 +33,17 @@ build_search_request(std::string index_name,
                      const search_query& query,
                      search_options::built options,
                      std::optional<std::string> bucket_name,
-                     std::optional<std::string> scope_name) -> core::operations::search_request;
+                     std::optional<std::string> scope_name,
+                     std::shared_ptr<couchbase::tracing::request_span> op_span)
+  -> core::operations::search_request;
 
 auto
 build_search_request(std::string index_name,
                      search_request request,
                      search_options::built options,
                      std::optional<std::string> bucket_name,
-                     std::optional<std::string> scope_name) -> core::operations::search_request;
+                     std::optional<std::string> scope_name,
+                     std::shared_ptr<couchbase::tracing::request_span> op_span)
+  -> core::operations::search_request;
 
 } // namespace couchbase::core::impl

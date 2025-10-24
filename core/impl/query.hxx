@@ -26,7 +26,9 @@ namespace couchbase::core::impl
 auto
 build_query_request(std::string statement,
                     std::optional<std::string> query_context,
-                    query_options::built options) -> core::operations::query_request;
+                    query_options::built options,
+                    std::shared_ptr<couchbase::tracing::request_span> op_span)
+  -> core::operations::query_request;
 
 auto
 build_result(operations::query_response& resp) -> query_result;
