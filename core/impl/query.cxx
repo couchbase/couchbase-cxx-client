@@ -234,6 +234,7 @@ build_transaction_query_result(operations::query_response resp,
 auto
 build_transaction_query_request(query_options::built opts) -> core::operations::query_request
 {
-  return core::impl::build_query_request("", {}, std::move(opts), opts.parent_span);
+  auto parent_span_from_caller = opts.parent_span;
+  return core::impl::build_query_request("", {}, std::move(opts), parent_span_from_caller);
 }
 } // namespace couchbase::core::impl
