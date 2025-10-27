@@ -310,6 +310,11 @@ struct server_version {
     return (major == 7 && minor == 1) || (major == 7 && minor > 1) || major > 7;
   }
 
+  [[nodiscard]] auto is_7_6() const -> bool
+  {
+    return (major > 7 || (major == 7 && minor >= 6));
+  }
+
   [[nodiscard]] auto supports_eventing_mb_67773_errors() const -> bool
   {
     // See MB-67773. A few errors have changed in eventing, most notably, many specific errors were

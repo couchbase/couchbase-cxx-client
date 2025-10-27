@@ -31,6 +31,7 @@ struct cluster_credentials {
   std::optional<std::vector<std::string>> allowed_sasl_mechanisms{};
 
   [[nodiscard]] auto uses_certificate() const -> bool;
+  [[nodiscard]] auto requires_tls() const -> bool;
 };
 
 } // namespace couchbase::core

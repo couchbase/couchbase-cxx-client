@@ -24,6 +24,7 @@
 #include "core/app_telemetry_meter.hxx"
 #include "core/app_telemetry_reporter.hxx"
 #include "core/diagnostics.hxx"
+#include "core/error.hxx"
 #include "core/impl/get_replica.hxx"
 #include "core/impl/lookup_in_replica.hxx"
 #include "core/impl/observe_seqno.hxx"
@@ -519,6 +520,21 @@ public:
       b->close();
     }
     return handler({});
+  }
+
+  auto update_credentials(cluster_credentials auth) -> core::error
+  {
+    if (stopped_) {
+      return { errc::network::cluster_closed, {} };
+    }
+
+    if (auth.requires_tls() && !origin_.options().enable_tls) {
+      return { errc::common::invalid_argument,
+               "TLS not enabled but the provided authenticator requires TLS" };
+    }
+
+    origin_.update_credentials(std::move(auth));
+    return {};
   }
 
   auto origin() const -> std::pair<std::error_code, couchbase::core::origin>
@@ -1433,6 +1449,15 @@ cluster::origin() const -> std::pair<std::error_code, couchbase::core::origin>
 {
   if (impl_) {
     return impl_->origin();
+  }
+  return { errc::network::cluster_closed, {} };
+}
+
+auto
+cluster::update_credentials(core::cluster_credentials auth) -> core::error
+{
+  if (impl_) {
+    return impl_->update_credentials(std::move(auth));
   }
   return { errc::network::cluster_closed, {} };
 }
