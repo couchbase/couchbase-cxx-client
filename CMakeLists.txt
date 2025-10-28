@@ -75,15 +75,20 @@ set(couchbase_cxx_client_FILES
     core/agent_group.cxx
     core/agent_group_config.cxx
     core/analytics_query_options.cxx
+    core/app_telemetry_address.cxx
+    core/app_telemetry_meter.cxx
+    core/app_telemetry_reporter.cxx
     core/bucket.cxx
+    core/chrono_utils.cxx
     core/cluster.cxx
     core/cluster_agent.cxx
     core/cluster_agent_config.cxx
+    core/cluster_credentials.cxx
     core/cluster_options.cxx
     core/collections_component.cxx
+    core/columnar/backoff_calculator.cxx
     core/columnar/columnar_agent.cxx
     core/columnar/columnar_agent_config.cxx
-    core/columnar/backoff_calculator.cxx
     core/columnar/columnar_error.cxx
     core/columnar/error_codes.cxx
     core/columnar/management_component.cxx
@@ -96,6 +101,7 @@ set(couchbase_cxx_client_FILES
     core/dispatcher.cxx
     core/document_id.cxx
     core/error_context/key_value.cxx
+    core/file_signal_sink.cxx
     core/free_form_http_request.cxx
     core/http_component.cxx
     core/impl/analytics.cxx
@@ -105,14 +111,13 @@ set(couchbase_cxx_client_FILES
     core/impl/binary_collection.cxx
     core/impl/boolean_field_query.cxx
     core/impl/boolean_query.cxx
-    core/impl/public_bucket.cxx
     core/impl/bucket_manager.cxx
-    core/impl/public_cluster.cxx
     core/impl/collection.cxx
     core/impl/collection_manager.cxx
     core/impl/common_error_category.cxx
     core/impl/configuration_profiles_registry.cxx
     core/impl/conjunction_query.cxx
+    core/impl/crypto.cxx
     core/impl/date_range.cxx
     core/impl/date_range_facet.cxx
     core/impl/date_range_facet_result.cxx
@@ -141,7 +146,6 @@ set(couchbase_cxx_client_FILES
     core/impl/internal_term_facet_result.cxx
     core/impl/key_value_error_category.cxx
     core/impl/key_value_error_context.cxx
-    core/impl/public_logger.cxx
     core/impl/lookup_in_replica.cxx
     core/impl/management_error_category.cxx
     core/impl/match_all_query.cxx
@@ -157,6 +161,11 @@ set(couchbase_cxx_client_FILES
     core/impl/observe_seqno.cxx
     core/impl/phrase_query.cxx
     core/impl/prefix_query.cxx
+    core/impl/public_bucket.cxx
+    core/impl/public_cluster.cxx
+    core/impl/public_logger.cxx
+    core/impl/public_scan_result.cxx
+    core/impl/public_transaction_get_result.cxx
     core/impl/query.cxx
     core/impl/query_error_category.cxx
     core/impl/query_error_context.cxx
@@ -166,7 +175,6 @@ set(couchbase_cxx_client_FILES
     core/impl/replica_utils.cxx
     core/impl/retry_action.cxx
     core/impl/retry_reason.cxx
-    core/impl/public_scan_result.cxx
     core/impl/scope.cxx
     core/impl/search.cxx
     core/impl/search_error_category.cxx
@@ -206,13 +214,11 @@ set(couchbase_cxx_client_FILES
     core/impl/transaction_error_category.cxx
     core/impl/transaction_get_multi_replicas_from_preferred_server_group_spec.cxx
     core/impl/transaction_get_multi_spec.cxx
-    core/impl/public_transaction_get_result.cxx
     core/impl/transaction_op_error_category.cxx
     core/impl/vector_query.cxx
     core/impl/vector_search.cxx
     core/impl/view_error_category.cxx
     core/impl/wildcard_query.cxx
-    core/impl/crypto.cxx
     core/io/config_tracker.cxx
     core/io/dns_client.cxx
     core/io/dns_config.cxx
@@ -225,6 +231,7 @@ set(couchbase_cxx_client_FILES
     core/io/mcbp_session.cxx
     core/io/streams.cxx
     core/key_value_config.cxx
+    core/log_entry.cxx
     core/logger/custom_rotating_file_sink.cxx
     core/logger/logger.cxx
     core/management/analytics_link_azure_blob_external.cxx
@@ -241,6 +248,7 @@ set(couchbase_cxx_client_FILES
     core/mcbp/queue_request.cxx
     core/mcbp/server_duration.cxx
     core/meta/version.cxx
+    core/metric_measurement.cxx
     core/metrics/logging_meter.cxx
     core/metrics/meter_wrapper.cxx
     core/n1ql_query_options.cxx
@@ -339,6 +347,7 @@ set(couchbase_cxx_client_FILES
     core/operations/management/view_index_get_all.cxx
     core/operations/management/view_index_upsert.cxx
     core/origin.cxx
+    core/orphan_reporter.cxx
     core/platform/base64.cc
     core/platform/dirutils.cc
     core/platform/random.cc
@@ -395,10 +404,9 @@ set(couchbase_cxx_client_FILES
     core/seed_config.cxx
     core/signal_bridge.cxx
     core/signal_data.cxx
-    core/metric_measurement.cxx
-    core/chrono_utils.cxx
     core/topology/capabilities.cxx
     core/topology/configuration.cxx
+    core/trace_span.cxx
     core/tracing/threshold_logging_tracer.cxx
     core/tracing/tracer_wrapper.cxx
     core/transactions/active_transaction_record.cxx
@@ -436,11 +444,6 @@ set(couchbase_cxx_client_FILES
     core/utils/url_codec.cxx
     core/view_query_options.cxx
     core/websocket_codec.cxx
-    core/app_telemetry_address.cxx
-    core/app_telemetry_meter.cxx
-    core/app_telemetry_reporter.cxx
-    core/cluster_credentials.cxx
-    core/orphan_reporter.cxx
 )
 
 set(couchbase_cxx_client_LIBRARIES)

@@ -37,6 +37,9 @@ struct log_entry {
   std::vector<signal_attribute> attributes{};
 };
 
+auto
+to_string(const log_entry& data) -> std::string;
+
 inline auto
 operator==(const log_entry& lhs, const log_entry& rhs) -> bool
 {

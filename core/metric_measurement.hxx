@@ -17,11 +17,14 @@
 
 #pragma once
 
+#include "signal_attribute.hxx"
+
 #include <cstdint>
 #include <optional>
 #include <string>
 #include <utility>
 #include <variant>
+#include <vector>
 
 namespace couchbase::core
 {
@@ -29,9 +32,10 @@ class metric_measurement
 {
 public:
   template<typename Float, std::enable_if_t<std::is_floating_point_v<Float>, int> = 0>
-  metric_measurement(std::string name, Float value)
+  metric_measurement(std::string name, Float value, std::vector<signal_attribute> attributes = {})
     : name_{ std::move(name) }
     , value_{ value }
+    , attributes_{ std::move(attributes) }
   {
   }
 
@@ -40,9 +44,10 @@ public:
     std::enable_if_t<std::is_integral_v<Integer> && std::is_signed_v<Integer> &&
                        !std::is_same_v<Integer, bool> && sizeof(Integer) <= sizeof(std::int64_t),
                      int> = 0>
-  metric_measurement(std::string name, Integer value)
+  metric_measurement(std::string name, Integer value, std::vector<signal_attribute> attributes = {})
     : name_{ std::move(name) }
     , value_{ value }
+    , attributes_{ std::move(attributes) }
   {
   }
 
@@ -51,6 +56,9 @@ public:
   ~metric_measurement() = default;
   auto operator=(const metric_measurement&) -> metric_measurement& = default;
   auto operator=(metric_measurement&&) -> metric_measurement& = default;
+
+  [[nodiscard]] auto name() const noexcept -> const std::string&;
+  [[nodiscard]] auto attributes() const noexcept -> const std::vector<signal_attribute>&;
 
   [[nodiscard]] auto is_double() const noexcept -> bool;
   [[nodiscard]] auto as_double() const -> double;
@@ -73,13 +81,18 @@ public:
 private:
   std::string name_;
   std::variant<double, std::int64_t> value_;
+  std::vector<signal_attribute> attributes_;
 };
+
+auto
+to_string(const metric_measurement& data) -> std::string;
 
 inline auto
 operator==(const metric_measurement& lhs, const metric_measurement& rhs) -> bool
 {
-  return lhs.name_ == rhs.name_ && //
-         lhs.value_ == rhs.value_;
+  return lhs.name_ == rhs.name_ &&   //
+         lhs.value_ == rhs.value_ && //
+         lhs.attributes_ == rhs.attributes_;
 }
 
 inline auto

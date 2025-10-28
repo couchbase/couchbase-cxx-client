@@ -88,10 +88,14 @@ public:
   }
 
   friend auto operator==(const signal_data& lhs, const signal_data& rhs) -> bool;
+  friend auto to_string(const signal_data& data) -> std::string;
 
 private:
   std::variant<std::monostate, trace_span, metric_measurement, log_entry> record_{};
 };
+
+auto
+to_string(const signal_data& data) -> std::string;
 
 inline auto
 operator==(const signal_data& lhs, const signal_data& rhs) -> bool

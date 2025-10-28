@@ -17,8 +17,55 @@
 
 #include "metric_measurement.hxx"
 
+#include <tao/json.hpp>
+#include <tao/json/contrib/traits.hpp>
+
+namespace tao::json
+{
+template<>
+struct traits<couchbase::core::signal_attribute> {
+  template<template<typename...> class Traits>
+  static void assign(basic_value<Traits>& v, const couchbase::core::signal_attribute& attr)
+  {
+    v = {
+      { "name", attr.name },
+      { "value", attr.value },
+    };
+  }
+};
+
+template<>
+struct traits<couchbase::core::metric_measurement> {
+  template<template<typename...> class Traits>
+  static void assign(basic_value<Traits>& v, const couchbase::core::metric_measurement& measurement)
+  {
+    v = basic_value<Traits>::object({});
+    v["name"] = measurement.name();
+
+    if (measurement.is_int64()) {
+      v["value"] = measurement.as_int64();
+    } else if (measurement.is_double()) {
+      v["value"] = measurement.as_double();
+    }
+
+    v["attributes"] = measurement.attributes();
+  }
+};
+} // namespace tao::json
+
 namespace couchbase::core
 {
+[[nodiscard]] auto
+metric_measurement::name() const noexcept -> const std::string&
+{
+  return name_;
+}
+
+[[nodiscard]] auto
+metric_measurement::attributes() const noexcept -> const std::vector<signal_attribute>&
+{
+  return attributes_;
+}
 
 [[nodiscard]] auto
 metric_measurement::is_double() const noexcept -> bool
@@ -62,4 +109,10 @@ metric_measurement::try_as_int64() && -> std::optional<std::int64_t>
   return std::nullopt;
 }
 
+auto
+to_string(const metric_measurement& data) -> std::string
+{
+  tao::json::value json = data;
+  return tao::json::to_string(json);
+}
 } // namespace couchbase::core

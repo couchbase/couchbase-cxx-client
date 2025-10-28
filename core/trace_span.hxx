@@ -42,6 +42,9 @@ struct trace_span {
   std::vector<trace_event> events{};
 };
 
+auto
+to_string(const trace_span& data) -> std::string;
+
 inline auto
 operator==(const trace_span& lhs, const trace_span& rhs) -> bool
 {

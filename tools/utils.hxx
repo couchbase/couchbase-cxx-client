@@ -219,6 +219,7 @@ struct behavior_options {
   bool disable_mutation_tokens{};
   bool disable_unordered_execution{};
   bool dump_configuration{};
+  std::optional<std::string> write_telemetry_to_file{};
 };
 
 struct common_options {

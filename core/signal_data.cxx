@@ -154,4 +154,18 @@ signal_data::try_as_log_entry() && -> std::optional<log_entry>
   }
   return std::nullopt;
 }
+
+auto
+to_string(const signal_data& data) -> std::string
+{
+  return std::visit(
+    [](const auto& value) -> std::string {
+      if constexpr (std::is_same_v<std::decay_t<decltype(value)>, std::monostate>) {
+        return "{}";
+      } else {
+        return to_string(value);
+      }
+    },
+    data.record_);
+};
 } // namespace couchbase::core
