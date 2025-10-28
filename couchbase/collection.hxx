@@ -463,8 +463,10 @@ public:
               const upsert_options& options,
               upsert_handler&& handler) const
   {
-    return upsert(
-      std::move(document_id), encode_document<Transcoder>(document), options, std::move(handler));
+    return upsert(std::move(document_id),
+                  create_encode_fn<Transcoder, Document>(std::move(document)),
+                  options,
+                  std::move(handler));
   }
 
   /**
@@ -510,7 +512,8 @@ public:
                             const upsert_options& options = {}) const
     -> std::future<std::pair<error, mutation_result>>
   {
-    return upsert(std::move(document_id), encode_document<Transcoder>(document), options);
+    return upsert(
+      std::move(document_id), create_encode_fn<Transcoder, Document>(std::move(document)), options);
   }
 
   /**
@@ -559,8 +562,10 @@ public:
               const insert_options& options,
               insert_handler&& handler) const
   {
-    return insert(
-      std::move(document_id), encode_document<Transcoder>(document), options, std::move(handler));
+    return insert(std::move(document_id),
+                  create_encode_fn<Transcoder, Document>(std::move(document)),
+                  options,
+                  std::move(handler));
   }
 
   /**
@@ -609,7 +614,8 @@ public:
                             const insert_options& options = {}) const
     -> std::future<std::pair<error, mutation_result>>
   {
-    return insert(std::move(document_id), encode_document<Transcoder>(document), options);
+    return insert(
+      std::move(document_id), create_encode_fn<Transcoder, Document>(std::move(document)), options);
   }
 
   /**
@@ -660,8 +666,10 @@ public:
                const replace_options& options,
                replace_handler&& handler) const
   {
-    return replace(
-      std::move(document_id), encode_document<Transcoder>(document), options, std::move(handler));
+    return replace(std::move(document_id),
+                   create_encode_fn<Transcoder, Document>(std::move(document)),
+                   options,
+                   std::move(handler));
   }
 
   /**
@@ -712,7 +720,8 @@ public:
                              const replace_options& options = {}) const
     -> std::future<std::pair<error, mutation_result>>
   {
-    return replace(std::move(document_id), encode_document<Transcoder>(document), options);
+    return replace(
+      std::move(document_id), create_encode_fn<Transcoder, Document>(std::move(document)), options);
   }
 
   /**
@@ -1090,14 +1099,50 @@ private:
   [[nodiscard]] auto crypto_manager() const -> const std::shared_ptr<crypto::manager>&;
 
   template<typename Transcoder, typename Document>
-  [[nodiscard]] auto encode_document(const Document& document) const -> codec::encoded_value
+  [[nodiscard]] auto create_encode_fn(Document document) const
+    -> std::function<codec::encoded_value()>
   {
     if constexpr (codec::is_crypto_transcoder_v<Transcoder>) {
-      return Transcoder::encode(document, crypto_manager());
+      return [crypto_manager = crypto_manager(),
+              document = std::move(document)]() -> codec::encoded_value {
+        return Transcoder::encode(document, crypto_manager);
+      };
     } else {
-      return Transcoder::encode(document);
+      return [document = std::move(document)]() -> codec::encoded_value {
+        return Transcoder::encode(document);
+      };
     }
   }
+
+  void replace(std::string document_id,
+               std::function<codec::encoded_value()> document_fn,
+               const replace_options& options,
+               replace_handler&& handler) const;
+
+  auto replace(std::string document_id,
+               std::function<codec::encoded_value()> document_fn,
+               const replace_options& options) const
+    -> std::future<std::pair<error, mutation_result>>;
+
+  void upsert(std::string document_id,
+              std::function<codec::encoded_value()> document_fn,
+              const upsert_options& options,
+              upsert_handler&& handler) const;
+
+  auto upsert(std::string document_id,
+              std::function<codec::encoded_value()> document_fn,
+              const upsert_options& options) const
+    -> std::future<std::pair<error, mutation_result>>;
+
+  void insert(std::string document_id,
+              std::function<codec::encoded_value()> document_fn,
+              const insert_options& options,
+              insert_handler&& handler) const;
+
+  auto insert(std::string document_id,
+              std::function<codec::encoded_value()> document_fn,
+              const insert_options& options) const
+    -> std::future<std::pair<error, mutation_result>>;
 
   collection(core::cluster core,
              std::string_view bucket_name,
