@@ -26,6 +26,7 @@
 
 #include <tao/json.hpp>
 
+#include <mutex>
 #include <random>
 #include <utility>
 
@@ -318,7 +319,7 @@ origin::to_json() const -> std::string
 couchbase::core::origin::origin(origin&& other) noexcept
   : options_(std::move(other.options_))
   , nodes_(std::move(other.nodes_))
-  , next_node_(std::move(other.next_node_))
+  , next_node_(other.next_node_)
   , exhausted_(other.exhausted_)
   , connection_string_(std::move(other.connection_string_))
 {
@@ -326,12 +327,12 @@ couchbase::core::origin::origin(origin&& other) noexcept
 }
 
 auto
-couchbase::core::origin::operator=(origin&& other) -> origin&
+couchbase::core::origin::operator=(origin&& other) noexcept -> origin&
 {
   if (this != &other) {
     options_ = std::move(other.options_);
     nodes_ = std::move(other.nodes_);
-    next_node_ = std::move(other.next_node_);
+    next_node_ = other.next_node_;
     exhausted_ = other.exhausted_;
     connection_string_ = std::move(other.connection_string_);
     update_credentials(other.credentials());
@@ -344,8 +345,7 @@ couchbase::core::origin::origin(const couchbase::core::origin& other)
   , nodes_(other.nodes_)
   , next_node_(nodes_.begin())
 {
-  std::shared_lock lock(other.credentials_mutex_);
-  credentials_ = other.credentials_;
+  update_credentials(other.credentials());
 }
 
 couchbase::core::origin::origin(origin other, const topology::configuration& config)
@@ -362,8 +362,7 @@ couchbase::core::origin::origin(couchbase::core::cluster_credentials auth,
   , nodes_{ { hostname, std::to_string(port) } }
   , next_node_(nodes_.begin())
 {
-  std::shared_lock lock(credentials_mutex_);
-  credentials_ = std::move(auth);
+  update_credentials(std::move(auth));
 }
 couchbase::core::origin::origin(couchbase::core::cluster_credentials auth,
                                 const std::string& hostname,
@@ -373,8 +372,7 @@ couchbase::core::origin::origin(couchbase::core::cluster_credentials auth,
   , nodes_{ { hostname, port } }
   , next_node_(nodes_.begin())
 {
-  std::shared_lock lock(credentials_mutex_);
-  credentials_ = std::move(auth);
+  update_credentials(std::move(auth));
 }
 couchbase::core::origin::origin(couchbase::core::cluster_credentials auth,
                                 const couchbase::core::utils::connection_string& connstr)
@@ -392,8 +390,7 @@ couchbase::core::origin::origin(couchbase::core::cluster_credentials auth,
   }
   next_node_ = nodes_.begin();
 
-  std::unique_lock lock(credentials_mutex_);
-  credentials_ = std::move(auth);
+  update_credentials(std::move(auth));
 }
 auto
 couchbase::core::origin::operator=(const couchbase::core::origin& other) -> couchbase::core::origin&

@@ -56,7 +56,7 @@ struct origin {
          const std::string& port,
          cluster_options options);
   origin(cluster_credentials auth, const utils::connection_string& connstr);
-  auto operator=(origin&& other) -> origin&;
+  auto operator=(origin&& other) noexcept -> origin&;
   auto operator=(const origin& other) -> origin&;
 
   [[nodiscard]] auto connection_string() const -> const std::string&;
