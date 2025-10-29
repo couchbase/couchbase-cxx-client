@@ -322,8 +322,8 @@ couchbase::core::origin::origin(origin&& other) noexcept
   , next_node_(other.next_node_)
   , exhausted_(other.exhausted_)
   , connection_string_(std::move(other.connection_string_))
+  , credentials_(std::move(other.credentials_))
 {
-  update_credentials(other.credentials());
 }
 
 auto
@@ -335,7 +335,7 @@ couchbase::core::origin::operator=(origin&& other) noexcept -> origin&
     next_node_ = other.next_node_;
     exhausted_ = other.exhausted_;
     connection_string_ = std::move(other.connection_string_);
-    update_credentials(other.credentials());
+    credentials_ = std::move(other.credentials_);
   }
   return *this;
 }
@@ -361,8 +361,8 @@ couchbase::core::origin::origin(couchbase::core::cluster_credentials auth,
   : options_(std::move(options))
   , nodes_{ { hostname, std::to_string(port) } }
   , next_node_(nodes_.begin())
+  , credentials_(std::move(auth))
 {
-  update_credentials(std::move(auth));
 }
 couchbase::core::origin::origin(couchbase::core::cluster_credentials auth,
                                 const std::string& hostname,
@@ -371,13 +371,14 @@ couchbase::core::origin::origin(couchbase::core::cluster_credentials auth,
   : options_(std::move(options))
   , nodes_{ { hostname, port } }
   , next_node_(nodes_.begin())
+  , credentials_(std::move(auth))
 {
-  update_credentials(std::move(auth));
 }
 couchbase::core::origin::origin(couchbase::core::cluster_credentials auth,
                                 const couchbase::core::utils::connection_string& connstr)
   : options_(connstr.options)
   , connection_string_(connstr.input)
+  , credentials_(std::move(auth))
 {
   nodes_.reserve(connstr.bootstrap_nodes.size());
   for (const auto& node : connstr.bootstrap_nodes) {
@@ -389,8 +390,6 @@ couchbase::core::origin::origin(couchbase::core::cluster_credentials auth,
     shuffle_nodes();
   }
   next_node_ = nodes_.begin();
-
-  update_credentials(std::move(auth));
 }
 auto
 couchbase::core::origin::operator=(const couchbase::core::origin& other) -> couchbase::core::origin&
