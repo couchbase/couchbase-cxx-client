@@ -1297,8 +1297,8 @@ private:
 
     app_telemetry_meter_->update_agent(origin_.options().user_agent_extra);
     session_manager_->set_app_telemetry_meter(app_telemetry_meter_);
-    app_telemetry_reporter_ = std::make_shared<app_telemetry_reporter>(
-      app_telemetry_meter_, origin_.options(), origin_.credentials(), ctx_, tls_);
+    app_telemetry_reporter_ =
+      std::make_shared<app_telemetry_reporter>(app_telemetry_meter_, origin_, ctx_, tls_);
 
     if (origin_.options().enable_orphan_reporting) {
       orphan_reporter_ = std::make_shared<orphan_reporter>(ctx_, origin_.options().orphan_options);

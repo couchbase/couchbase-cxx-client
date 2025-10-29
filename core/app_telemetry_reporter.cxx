@@ -671,30 +671,29 @@ class app_telemetry_reporter_impl
 {
 public:
   app_telemetry_reporter_impl(std::shared_ptr<app_telemetry_meter> meter,
-                              cluster_options options,
-                              cluster_credentials credentials,
+                              origin& origin,
                               asio::io_context& ctx,
                               asio::ssl::context& tls)
     : meter_{ std::move(meter) }
-    , options_{ std::move(options) }
-    , credentials_{ std::move(credentials) }
+    , origin_{ origin }
     , ctx_{ ctx }
     , tls_{ tls }
     , backoff_{ ctx }
     , exponential_backoff_calculator_{
       std::chrono::milliseconds{ 100 },
-      options_.app_telemetry_backoff_interval,
+      origin_.options().app_telemetry_backoff_interval,
       2 /* backoff factor */,
       0.5 /* jitter factor */,
     }
   {
-    if (options_.enable_app_telemetry) {
-      if (!options_.app_telemetry_endpoint.empty()) {
-        auto url = couchbase::core::utils::string_codec::url_parse(options_.app_telemetry_endpoint);
+    if (origin_.options().enable_app_telemetry) {
+      if (!origin_.options().app_telemetry_endpoint.empty()) {
+        auto url =
+          couchbase::core::utils::string_codec::url_parse(origin_.options().app_telemetry_endpoint);
         if (url.host.empty() || url.scheme != "ws") {
           CB_LOG_WARNING(
             "unable to use \"{}\" as a app telemetry endpoint (expected ws:// and hostname)",
-            options_.app_telemetry_endpoint);
+            origin_.options().app_telemetry_endpoint);
           return;
         }
         addresses_.push_back({
@@ -750,12 +749,12 @@ public:
                  }));
     websocket_session_ = websocket_session::start(ctx_,
                                                   address,
-                                                  credentials_,
+                                                  origin_.credentials(),
                                                   std::move(stream),
                                                   meter_,
                                                   shared_from_this(),
-                                                  options_.app_telemetry_ping_interval,
-                                                  options_.app_telemetry_ping_timeout);
+                                                  origin_.options().app_telemetry_ping_interval,
+                                                  origin_.options().app_telemetry_ping_timeout);
     retry_backoff_calculator_ = &no_backoff_calculator_;
     ++next_address_index_;
   }
@@ -813,25 +812,27 @@ public:
           return;
         }
         if (self->websocket_state_ == connection_state::disconnected) {
-          self->dialer_ =
-            telemetry_dialer::dial(next_address, self->options_, self->ctx_, self->tls_, self);
+          self->dialer_ = telemetry_dialer::dial(
+            next_address, self->origin_.options(), self->ctx_, self->tls_, self);
         }
       });
       return;
     }
-    dialer_ = telemetry_dialer::dial(next_address, options_, ctx_, tls_, shared_from_this());
+    dialer_ =
+      telemetry_dialer::dial(next_address, origin_.options(), ctx_, tls_, shared_from_this());
   }
 
   void update_config(topology::configuration&& config)
   {
-    if (!options_.enable_app_telemetry) {
+    if (!origin_.options().enable_app_telemetry) {
       meter_->disable();
       return;
     }
     meter_->update_config(config);
 
-    if (options_.app_telemetry_endpoint.empty()) {
-      addresses_ = get_app_telemetry_addresses(config, options_.enable_tls, options_.network);
+    if (origin_.options().app_telemetry_endpoint.empty()) {
+      addresses_ = get_app_telemetry_addresses(
+        config, origin_.options().enable_tls, origin_.options().network);
       next_address_index_ = 0;
     }
 
@@ -841,15 +842,14 @@ public:
       meter_->enable();
       if (websocket_state_ == connection_state::disconnected) {
         dialer_ = telemetry_dialer::dial(
-          addresses_[next_address_index_], options_, ctx_, tls_, shared_from_this());
+          addresses_[next_address_index_], origin_.options(), ctx_, tls_, shared_from_this());
       }
     }
   }
 
 private:
   std::shared_ptr<app_telemetry_meter> meter_;
-  cluster_options options_;
-  cluster_credentials credentials_;
+  origin& origin_;
   asio::io_context& ctx_;
   asio::ssl::context& tls_;
   asio::steady_timer backoff_;
@@ -868,13 +868,10 @@ private:
 };
 
 app_telemetry_reporter::app_telemetry_reporter(std::shared_ptr<app_telemetry_meter> meter,
-                                               const cluster_options& options,
-                                               const cluster_credentials& credentials,
+                                               origin& origin,
                                                asio::io_context& ctx,
                                                asio::ssl::context& tls)
-  : impl_{
-    std::make_shared<app_telemetry_reporter_impl>(std::move(meter), options, credentials, ctx, tls)
-  }
+  : impl_{ std::make_shared<app_telemetry_reporter_impl>(std::move(meter), origin, ctx, tls) }
 {
 }
 
