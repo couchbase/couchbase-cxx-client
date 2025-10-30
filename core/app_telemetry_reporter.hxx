@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include "cluster.hxx"
 #include "config_listener.hxx"
 
 #include <memory>
@@ -45,8 +46,7 @@ public:
   auto operator=(const app_telemetry_reporter&) -> app_telemetry_reporter& = delete;
 
   app_telemetry_reporter(std::shared_ptr<app_telemetry_meter> meter,
-                         const cluster_options& options,
-                         const cluster_credentials& credentials,
+                         origin& origin,
                          asio::io_context& ctx,
                          asio::ssl::context& tls);
   ~app_telemetry_reporter() override;

@@ -20,6 +20,7 @@
 #include "cluster_credentials.hxx"
 #include "cluster_options.hxx"
 
+#include <shared_mutex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -43,7 +44,7 @@ struct origin {
   origin() = default;
   ~origin() = default;
 
-  origin(origin&& other) = default;
+  origin(origin&& other) noexcept;
   origin(const origin& other);
   origin(origin other, const topology::configuration& config);
   origin(cluster_credentials auth,
@@ -55,14 +56,14 @@ struct origin {
          const std::string& port,
          cluster_options options);
   origin(cluster_credentials auth, const utils::connection_string& connstr);
-  auto operator=(origin&& other) -> origin& = default;
+  auto operator=(origin&& other) noexcept -> origin&;
   auto operator=(const origin& other) -> origin&;
 
   [[nodiscard]] auto connection_string() const -> const std::string&;
-  [[nodiscard]] auto username() const -> const std::string&;
-  [[nodiscard]] auto password() const -> const std::string&;
-  [[nodiscard]] auto certificate_path() const -> const std::string&;
-  [[nodiscard]] auto key_path() const -> const std::string&;
+  [[nodiscard]] auto username() const -> std::string;
+  [[nodiscard]] auto password() const -> std::string;
+  [[nodiscard]] auto certificate_path() const -> std::string;
+  [[nodiscard]] auto key_path() const -> std::string;
 
   [[nodiscard]] auto get_hostnames() const -> std::vector<std::string>;
   [[nodiscard]] auto get_nodes() const -> std::vector<std::string>;
@@ -70,6 +71,8 @@ struct origin {
   void shuffle_nodes();
   void set_nodes(node_list nodes);
   void set_nodes_from_config(const topology::configuration& config);
+
+  void update_credentials(cluster_credentials auth);
 
   [[nodiscard]] auto next_address() -> std::pair<std::string, std::string>;
 
@@ -79,16 +82,17 @@ struct origin {
 
   [[nodiscard]] auto options() const -> const couchbase::core::cluster_options&;
   [[nodiscard]] auto options() -> couchbase::core::cluster_options&;
-  [[nodiscard]] auto credentials() const -> const couchbase::core::cluster_credentials&;
+  [[nodiscard]] auto credentials() const -> couchbase::core::cluster_credentials;
   [[nodiscard]] auto to_json() const -> std::string;
 
 private:
   couchbase::core::cluster_options options_{};
-  cluster_credentials credentials_{};
   node_list nodes_{};
   node_list::iterator next_node_{};
   bool exhausted_{ false };
   std::string connection_string_{};
+  cluster_credentials credentials_{};
+  mutable std::shared_mutex credentials_mutex_{};
 };
 
 } // namespace couchbase::core

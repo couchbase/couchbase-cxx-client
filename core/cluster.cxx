@@ -24,6 +24,7 @@
 #include "core/app_telemetry_meter.hxx"
 #include "core/app_telemetry_reporter.hxx"
 #include "core/diagnostics.hxx"
+#include "core/error.hxx"
 #include "core/impl/get_replica.hxx"
 #include "core/impl/lookup_in_replica.hxx"
 #include "core/impl/observe_seqno.hxx"
@@ -519,6 +520,21 @@ public:
       b->close();
     }
     return handler({});
+  }
+
+  auto update_credentials(cluster_credentials auth) -> core::error
+  {
+    if (stopped_) {
+      return { errc::network::cluster_closed, {} };
+    }
+
+    if (auth.requires_tls() && !origin_.options().enable_tls) {
+      return { errc::common::invalid_argument,
+               "TLS not enabled but the provided authenticator requires TLS" };
+    }
+
+    origin_.update_credentials(std::move(auth));
+    return {};
   }
 
   auto origin() const -> std::pair<std::error_code, couchbase::core::origin>
@@ -1281,8 +1297,8 @@ private:
 
     app_telemetry_meter_->update_agent(origin_.options().user_agent_extra);
     session_manager_->set_app_telemetry_meter(app_telemetry_meter_);
-    app_telemetry_reporter_ = std::make_shared<app_telemetry_reporter>(
-      app_telemetry_meter_, origin_.options(), origin_.credentials(), ctx_, tls_);
+    app_telemetry_reporter_ =
+      std::make_shared<app_telemetry_reporter>(app_telemetry_meter_, origin_, ctx_, tls_);
 
     if (origin_.options().enable_orphan_reporting) {
       orphan_reporter_ = std::make_shared<orphan_reporter>(ctx_, origin_.options().orphan_options);
@@ -1433,6 +1449,15 @@ cluster::origin() const -> std::pair<std::error_code, couchbase::core::origin>
 {
   if (impl_) {
     return impl_->origin();
+  }
+  return { errc::network::cluster_closed, {} };
+}
+
+auto
+cluster::update_credentials(core::cluster_credentials auth) -> core::error
+{
+  if (impl_) {
+    return impl_->update_credentials(std::move(auth));
   }
   return { errc::network::cluster_closed, {} };
 }

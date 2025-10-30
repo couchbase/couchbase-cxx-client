@@ -103,6 +103,38 @@ public:
   [[nodiscard]] auto close() -> std::future<void>;
 
   /**
+   * Replaces the current authenticator used by this cluster.
+   *
+   * NOTE: Setting a new authenticator does not change the authentication status of existing
+   * connections.
+   *
+   * @param authenticator the authenticator to replace
+   *
+   * @return error
+   *
+   * @since 1.3.0
+   * @committed
+   */
+  auto set_authenticator(const password_authenticator& authenticator) -> error;
+
+  /**
+   * Replaces the current authenticator used by this cluster.
+   *
+   * NOTE: Setting a new authenticator does not change the authentication status of existing
+   connections.
+   *
+   * @param authenticator the authenticator to replace
+
+   * @exception errc::common::invalid_argument if TLS is not enabled.
+   *
+   * @return error
+   *
+   * @since 1.3.0
+   * @committed
+   */
+  auto set_authenticator(const certificate_authenticator& authenticator) -> error;
+
+  /**
    * Opens a {@link bucket} with the given name.
    *
    * @param bucket_name the name of the bucket to open.
