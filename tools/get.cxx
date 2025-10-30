@@ -22,6 +22,10 @@
 #include <couchbase/cluster.hxx>
 #include <couchbase/codec/raw_binary_transcoder.hxx>
 #include <couchbase/codec/tao_json_serializer.hxx>
+#include <couchbase/get_all_replicas_options.hxx>
+#include <couchbase/get_any_replica_options.hxx>
+#include <couchbase/get_replica_result.hxx>
+#include <couchbase/read_preference.hxx>
 
 #include <spdlog/fmt/bin_to_hex.h>
 #include <spdlog/fmt/bundled/chrono.h>
@@ -61,6 +65,28 @@ public:
                fmt::format("Return only part of the document, that corresponds given JSON-pointer "
                            "(could be used multiple times)."))
       ->allow_extra_args(false);
+
+    std::vector<std::string> allowed_replica_modes{
+      "none",
+      "all",
+      "any",
+    };
+    add_option("--use-replica", use_replica_, "Use replica nodes to retrieve the document.")
+      ->transform(CLI::IsMember(allowed_replica_modes))
+      ->default_val(use_replica_);
+    std::vector<std::string> allowed_replica_read_modes{
+      "no_preference",
+      "selected_server_group",
+      "selected_server_group_or_all_available",
+    };
+    add_option("--replica-read-mode", replica_read_mode_, "A hint for replica selection mechanism.")
+      ->transform(CLI::IsMember(allowed_replica_read_modes))
+      ->default_val(replica_read_mode_);
+    add_option("--replica-server-group",
+               replica_server_group_,
+               "Server group name for --replica-read-mode=selected_server_group*.")
+      ->transform(CLI::IsMember(allowed_replica_read_modes));
+
     add_flag("--hexdump",
              hexdump_,
              "Print value using hexdump encoding (safe for binary data on STDOUT).");
@@ -81,12 +107,8 @@ public:
 
     auto cluster_options = build_cluster_options(common_options_);
 
-    couchbase::get_options get_options{};
-    if (with_expiry_) {
-      get_options.with_expiry(true);
-    }
-    if (!projections_.empty()) {
-      get_options.project(projections_);
+    if (auto server_group = replica_server_group_; server_group) {
+      cluster_options.network().preferred_server_group(server_group.value());
     }
 
     const auto connection_string = common_options_.connection.connection_string;
@@ -116,11 +138,60 @@ public:
 
       auto collection = cluster.bucket(bucket_name).scope(scope_name).collection(collection_name);
 
-      auto [err, resp] = collection.get(document_id, get_options).get();
-      if (json_lines_) {
-        print_result_json_line(bucket_name, scope_name, collection_name, document_id, err, resp);
-      } else {
-        print_result(bucket_name, scope_name, collection_name, document_id, err, resp);
+      if (use_replica_.empty() || use_replica_ == "none") {
+        couchbase::get_options get_options{};
+        if (with_expiry_) {
+          get_options.with_expiry(true);
+        }
+        if (!projections_.empty()) {
+          get_options.project(projections_);
+        }
+
+        auto [err, resp] = collection.get(document_id, get_options).get();
+        if (json_lines_) {
+          print_result_json_line(bucket_name, scope_name, collection_name, document_id, err, resp);
+        } else {
+          print_result(bucket_name, scope_name, collection_name, document_id, err, resp);
+        }
+      } else if (use_replica_ == "any") {
+        couchbase::get_any_replica_options get_options{};
+
+        if (replica_read_mode_.empty() || replica_read_mode_ == "no_preference") {
+          get_options.read_preference(couchbase::read_preference::no_preference);
+        } else if (replica_read_mode_ == "selected_server_group") {
+          get_options.read_preference(couchbase::read_preference::selected_server_group);
+        } else if (replica_read_mode_ == "selected_server_group_or_all_available") {
+          get_options.read_preference(
+            couchbase::read_preference::selected_server_group_or_all_available);
+        }
+
+        auto [err, resp] = collection.get_any_replica(document_id, get_options).get();
+        if (json_lines_) {
+          print_result_json_line(bucket_name, scope_name, collection_name, document_id, err, resp);
+        } else {
+          print_result(bucket_name, scope_name, collection_name, document_id, err, resp);
+        }
+      } else if (use_replica_ == "all") {
+        couchbase::get_all_replicas_options get_options{};
+
+        if (replica_read_mode_.empty() || replica_read_mode_ == "no_preference") {
+          get_options.read_preference(couchbase::read_preference::no_preference);
+        } else if (replica_read_mode_ == "selected_server_group") {
+          get_options.read_preference(couchbase::read_preference::selected_server_group);
+        } else if (replica_read_mode_ == "selected_server_group_or_all_available") {
+          get_options.read_preference(
+            couchbase::read_preference::selected_server_group_or_all_available);
+        }
+
+        auto [err, responses] = collection.get_all_replicas(document_id, get_options).get();
+        for (const auto& resp : responses) {
+          if (json_lines_) {
+            print_result_json_line(
+              bucket_name, scope_name, collection_name, document_id, err, resp);
+          } else {
+            print_result(bucket_name, scope_name, collection_name, document_id, err, resp);
+          }
+        }
       }
     }
 
@@ -187,22 +258,104 @@ private:
       std::string verbose_cas = fmt::format(" ({})", cas_to_time_point(resp.cas()));
       if (const auto& exptime = resp.expiry_time(); exptime.has_value()) {
         fmt::print(stderr,
-                   "{}, size: {}, CAS: 0x{}{}, flags: 0x{:08x}, expiry: {}\n",
+                   "{}, size: {}, flags: 0x{:08x}, CAS: 0x{}{}, expiry: {}\n",
                    prefix,
                    value.size(),
+                   flags,
                    resp.cas(),
                    verbose_ ? verbose_cas : "",
-                   flags,
                    exptime.value());
       } else {
         fmt::print(stderr,
-                   "{}, size: {}, CAS: 0x{}{}, flags: 0x{:08x}\n",
+                   "{}, size: {}, flags: 0x{:08x}, CAS: 0x{}{}\n",
                    prefix,
                    value.size(),
+                   flags,
                    resp.cas(),
-                   verbose_ ? verbose_cas : "",
-                   flags);
+                   verbose_ ? verbose_cas : "");
       }
+      (void)fflush(stderr);
+      (void)fflush(stdout);
+      if (hexdump_) {
+        auto hex = fmt::format("{:a}", spdlog::to_hex(value));
+        fmt::print(stdout, "{}\n", std::string_view(hex.data() + 1, hex.size() - 1));
+      } else if (pretty_json_) {
+        try {
+          auto json = couchbase::core::utils::json::parse_binary(value);
+          fmt::print(stdout, "{}\n", tao::json::to_string(json, 2));
+        } catch (const tao::pegtl::parse_error&) {
+          fmt::print(stdout,
+                     "{}\n",
+                     std::string_view(reinterpret_cast<const char*>(value.data()), value.size()));
+        }
+      } else {
+        fmt::print(stdout,
+                   "{}\n",
+                   std::string_view(reinterpret_cast<const char*>(value.data()), value.size()));
+      }
+      (void)fflush(stdout);
+    }
+  }
+
+  void print_result_json_line(const std::string& bucket_name,
+                              const std::string& scope_name,
+                              const std::string& collection_name,
+                              const std::string& document_id,
+                              const couchbase::error& err,
+                              const couchbase::get_replica_result& resp) const
+  {
+    tao::json::value line = tao::json::empty_object;
+    tao::json::value meta = {
+      { "bucket_name", bucket_name },         { "scope_name", scope_name },
+      { "collection_name", collection_name }, { "document_id", document_id },
+      { "is_replica", resp.is_replica() },
+    };
+    if (err.ec()) {
+      line["error"] = fmt::format("{}", err);
+    } else {
+      auto [value, flags] = resp.content_as<passthrough_transcoder>();
+      meta["cas"] = fmt::format("0x{}", resp.cas());
+      meta["flags"] = flags;
+      try {
+        line["json"] = couchbase::core::utils::json::parse_binary(value);
+      } catch (const tao::pegtl::parse_error&) {
+        line["base64"] = value;
+      }
+    }
+    line["meta"] = meta;
+    fmt::print(stdout, "{}\n", tao::json::to_string<tao::json::events::binary_to_base64>(line));
+    (void)fflush(stdout);
+  }
+
+  void print_result(const std::string& bucket_name,
+                    const std::string& scope_name,
+                    const std::string& collection_name,
+                    const std::string& document_id,
+                    const couchbase::error& err,
+                    const couchbase::get_replica_result& resp) const
+  {
+    const std::string prefix = fmt::format("bucket: {}, collection: {}.{}, id: {}",
+                                           bucket_name,
+                                           scope_name,
+                                           collection_name,
+                                           document_id);
+    (void)fflush(stderr);
+    if (err.ec()) {
+      fmt::print(stderr, "{}, error: {}\n", prefix, err.ec().message());
+      if (verbose_) {
+        fmt::print(stderr, "{}\n", err.ctx().to_json());
+      }
+    } else {
+      auto [value, flags] = resp.content_as<passthrough_transcoder>();
+      std::string verbose_cas = fmt::format(" ({})", cas_to_time_point(resp.cas()));
+      fmt::print(stderr,
+                 "{}, size: {}, flags: 0x{:08x}, CAS: 0x{}{}, is_replica: {}\n",
+                 prefix,
+                 value.size(),
+                 flags,
+                 resp.cas(),
+                 verbose_ ? verbose_cas : "",
+                 resp.is_replica());
       (void)fflush(stderr);
       (void)fflush(stdout);
       if (hexdump_) {
@@ -238,6 +391,10 @@ private:
   bool pretty_json_{ false };
   bool json_lines_{ false };
   bool verbose_{ false };
+
+  std::string use_replica_{ "none" };
+  std::string replica_read_mode_{ "no_preference" };
+  std::optional<std::string> replica_server_group_{};
 
   std::vector<std::string> ids_{};
 };
