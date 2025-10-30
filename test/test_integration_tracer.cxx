@@ -154,7 +154,7 @@ void
 assert_span_ok(test::utils::integration_test_guard& guard,
                const std::shared_ptr<test_span>& span,
                bool is_top_level_op_span,
-               std::shared_ptr<test_span> expected_parent = nullptr)
+               const std::shared_ptr<test_span>& expected_parent = nullptr)
 {
   fmt::println("TEST SPAN `{}`,\n  Parent: `{}`,\n  Tags: `[string] {}, [int] {}`",
                span->name(),
@@ -168,6 +168,9 @@ assert_span_ok(test::utils::integration_test_guard& guard,
     // the parent span that was given to the operation's options should not be closed yet
     REQUIRE(parent_test_span->duration().count() == 0);
   }
+
+  // Span should be closed
+  REQUIRE(span->duration().count() > 0);
 
   const auto& tags = span->string_tags();
 
@@ -241,6 +244,20 @@ assert_kv_op_span_ok(test::utils::integration_test_guard& guard,
   for (const auto& dispatch_span : dispatch_spans->second) {
     assert_kv_dispatch_span_ok(guard, dispatch_span.lock(), span);
   }
+}
+
+void
+assert_kv_op_span_has_request_encoding(test::utils::integration_test_guard& guard,
+                                       const std::shared_ptr<test_span>& op_span)
+{
+  std::shared_ptr<test_span> request_encoding_span;
+  {
+    const auto request_encoding_spans = op_span->child_spans().find("request_encoding");
+    REQUIRE(request_encoding_spans != op_span->child_spans().end());
+    REQUIRE(request_encoding_spans->second.size() == 1);
+    request_encoding_span = request_encoding_spans->second.at(0).lock();
+  }
+  assert_span_ok(guard, request_encoding_span, false, op_span);
 }
 
 void
@@ -404,6 +421,7 @@ TEST_CASE("integration: enable external tracer - KV operations", "[integration]"
     auto spans = tracer->spans();
     REQUIRE_FALSE(spans.empty());
     assert_kv_op_span_ok(integration, spans.front(), "upsert", parent_span);
+    assert_kv_op_span_has_request_encoding(integration, spans.front());
   }
 
   SECTION("insert")
@@ -417,6 +435,7 @@ TEST_CASE("integration: enable external tracer - KV operations", "[integration]"
     auto spans = tracer->spans();
     REQUIRE_FALSE(spans.empty());
     assert_kv_op_span_ok(integration, spans.front(), "insert", parent_span);
+    assert_kv_op_span_has_request_encoding(integration, spans.front());
   }
 
   SECTION("get")
@@ -440,6 +459,7 @@ TEST_CASE("integration: enable external tracer - KV operations", "[integration]"
     auto spans = tracer->spans();
     REQUIRE_FALSE(spans.empty());
     assert_kv_op_span_ok(integration, spans.front(), "replace", parent_span);
+    assert_kv_op_span_has_request_encoding(integration, spans.front());
   }
 
   SECTION("lookup_in")

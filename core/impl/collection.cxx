@@ -803,14 +803,14 @@ public:
   }
 
   void upsert(std::string document_key,
-              codec::encoded_value encoded,
+              std::variant<codec::encoded_value, std::function<codec::encoded_value()>> value,
               upsert_options::built options,
               upsert_handler&& handler) const
   {
     auto span = create_kv_span(
       core::tracing::operation::mcbp_upsert, options.parent_span, options.durability_level);
 
-    auto value = std::move(encoded);
+    auto [data, flags] = get_encoded_value(std::move(value), span);
     auto id = core::document_id{
       bucket_name_,
       scope_name_,
@@ -820,10 +820,10 @@ public:
     if (options.persist_to == persist_to::none && options.replicate_to == replicate_to::none) {
       core::operations::upsert_request request{
         std::move(id),
-        std::move(value.data),
+        std::move(data),
         {},
         {},
-        value.flags,
+        flags,
         options.expiry,
         options.durability_level,
         options.timeout,
@@ -845,10 +845,10 @@ public:
 
     core::operations::upsert_request request{
       id,
-      std::move(value.data),
+      std::move(data),
       {},
       {},
-      value.flags,
+      flags,
       options.expiry,
       durability_level::none,
       options.timeout,
@@ -893,14 +893,14 @@ public:
   }
 
   void insert(std::string document_key,
-              codec::encoded_value encoded,
+              std::variant<codec::encoded_value, std::function<codec::encoded_value()>> value,
               insert_options::built options,
               insert_handler&& handler) const
   {
     auto span = create_kv_span(
       core::tracing::operation::mcbp_insert, options.parent_span, options.durability_level);
 
-    auto value = std::move(encoded);
+    auto [data, flags] = get_encoded_value(std::move(value), span);
     auto id = core::document_id{
       bucket_name_,
       scope_name_,
@@ -910,10 +910,10 @@ public:
     if (options.persist_to == persist_to::none && options.replicate_to == replicate_to::none) {
       core::operations::insert_request request{
         std::move(id),
-        std::move(value.data),
+        std::move(data),
         {},
         {},
-        value.flags,
+        flags,
         options.expiry,
         options.durability_level,
         options.timeout,
@@ -937,10 +937,10 @@ public:
 
     core::operations::insert_request request{
       id,
-      std::move(value.data),
+      std::move(data),
       {},
       {},
-      value.flags,
+      flags,
       options.expiry,
       durability_level::none,
       options.timeout,
@@ -982,15 +982,17 @@ public:
           });
       });
   }
+
   void replace(std::string document_key,
-               codec::encoded_value encoded,
+               std::variant<codec::encoded_value, std::function<codec::encoded_value()>> value,
                replace_options::built options,
                replace_handler&& handler) const
   {
     auto span = create_kv_span(
       core::tracing::operation::mcbp_replace, options.parent_span, options.durability_level);
 
-    auto value = std::move(encoded);
+    auto [data, flags] = get_encoded_value(std::move(value), span);
+
     auto id = core::document_id{
       bucket_name_,
       scope_name_,
@@ -1000,10 +1002,10 @@ public:
     if (options.persist_to == persist_to::none && options.replicate_to == replicate_to::none) {
       core::operations::replace_request request{
         std::move(id),
-        std::move(value.data),
+        std::move(data),
         {},
         {},
-        value.flags,
+        flags,
         options.expiry,
         options.cas,
         options.durability_level,
@@ -1029,10 +1031,10 @@ public:
 
     core::operations::replace_request request{
       id,
-      std::move(value.data),
+      std::move(data),
       {},
       {},
-      value.flags,
+      flags,
       options.expiry,
       options.cas,
       durability_level::none,
@@ -1216,6 +1218,20 @@ public:
   }
 
 private:
+  auto get_encoded_value(
+    std::variant<codec::encoded_value, std::function<codec::encoded_value()>> value,
+    const std::shared_ptr<tracing::request_span>& operation_span) const -> codec::encoded_value
+  {
+    if (std::holds_alternative<codec::encoded_value>(value)) {
+      return std::get<codec::encoded_value>(value);
+    }
+    const auto request_encoding_span =
+      tracer()->create_span(core::tracing::operation::step_request_encoding, operation_span);
+    auto encoded = std::get<std::function<codec::encoded_value()>>(value)();
+    request_encoding_span->end();
+    return encoded;
+  }
+
   auto create_kv_span(const std::string& operation_name,
                       const std::shared_ptr<tracing::request_span>& parent_span,
                       const std::optional<durability_level> durability = {}) const
@@ -1656,6 +1672,30 @@ collection::upsert(std::string document_id,
   return future;
 }
 
+auto
+collection::upsert(std::string document_id,
+                   std::function<codec::encoded_value()> document_fn,
+                   const upsert_options& options,
+                   upsert_handler&& handler) const -> void
+{
+  impl_->upsert(
+    std::move(document_id), std::move(document_fn), options.build(), std::move(handler));
+}
+
+auto
+collection::upsert(std::string document_id,
+                   std::function<codec::encoded_value()> document_fn,
+                   const upsert_options& options) const
+  -> std::future<std::pair<error, mutation_result>>
+{
+  auto barrier = std::make_shared<std::promise<std::pair<error, mutation_result>>>();
+  auto future = barrier->get_future();
+  upsert(std::move(document_id), std::move(document_fn), options, [barrier](auto err, auto result) {
+    barrier->set_value({ std::move(err), std::move(result) });
+  });
+  return future;
+}
+
 void
 collection::insert(std::string document_id,
                    codec::encoded_value document,
@@ -1675,6 +1715,30 @@ collection::insert(std::string document_id,
   auto barrier = std::make_shared<std::promise<std::pair<error, mutation_result>>>();
   auto future = barrier->get_future();
   insert(std::move(document_id), std::move(document), options, [barrier](auto err, auto result) {
+    barrier->set_value({ std::move(err), std::move(result) });
+  });
+  return future;
+}
+
+auto
+collection::insert(std::string document_id,
+                   std::function<codec::encoded_value()> document_fn,
+                   const insert_options& options,
+                   insert_handler&& handler) const -> void
+{
+  impl_->insert(
+    std::move(document_id), std::move(document_fn), options.build(), std::move(handler));
+}
+
+auto
+collection::insert(std::string document_id,
+                   std::function<codec::encoded_value()> document_fn,
+                   const insert_options& options) const
+  -> std::future<std::pair<error, mutation_result>>
+{
+  auto barrier = std::make_shared<std::promise<std::pair<error, mutation_result>>>();
+  auto future = barrier->get_future();
+  insert(std::move(document_id), std::move(document_fn), options, [barrier](auto err, auto result) {
     barrier->set_value({ std::move(err), std::move(result) });
   });
   return future;
@@ -1701,6 +1765,31 @@ collection::replace(std::string document_id,
   replace(std::move(document_id), std::move(document), options, [barrier](auto err, auto result) {
     barrier->set_value({ std::move(err), std::move(result) });
   });
+  return future;
+}
+
+void
+collection::replace(std::string document_id,
+                    std::function<codec::encoded_value()> document_fn,
+                    const replace_options& options,
+                    replace_handler&& handler) const
+{
+  impl_->replace(
+    std::move(document_id), std::move(document_fn), options.build(), std::move(handler));
+}
+
+auto
+collection::replace(std::string document_id,
+                    std::function<codec::encoded_value()> document_fn,
+                    const replace_options& options) const
+  -> std::future<std::pair<error, mutation_result>>
+{
+  auto barrier = std::make_shared<std::promise<std::pair<error, mutation_result>>>();
+  auto future = barrier->get_future();
+  replace(
+    std::move(document_id), std::move(document_fn), options, [barrier](auto err, auto result) {
+      barrier->set_value({ std::move(err), std::move(result) });
+    });
   return future;
 }
 
