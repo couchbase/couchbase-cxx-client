@@ -140,7 +140,9 @@ TEST_CASE("to_iso8601_utc with system_clock::time_point", "[unit][chrono_utils]"
   {
     // Nanoseconds will be truncated to microseconds
     auto duration = std::chrono::seconds(1000000000) + std::chrono::nanoseconds(123456789);
-    auto time_point = std::chrono::system_clock::time_point{ duration };
+    auto time_point = std::chrono::system_clock::time_point{
+      std::chrono::duration_cast<std::chrono::system_clock::duration>(duration)
+    };
     auto result = to_iso8601_utc(time_point);
     REQUIRE(result == "2001-09-09T01:46:40.123456Z");
   }
@@ -380,9 +382,13 @@ TEST_CASE("to_iso8601_utc with chrono time_point edge cases", "[unit][chrono_uti
 {
   SECTION("time_point with only nanosecond precision below microsecond threshold")
   {
+
     auto duration =
       std::chrono::seconds(1000000000) + std::chrono::nanoseconds(999); // Less than 1 microsecond
-    auto time_point = std::chrono::system_clock::time_point{ duration };
+    auto time_point = std::chrono::system_clock::time_point{
+      std::chrono::duration_cast<std::chrono::system_clock::duration>(duration)
+    };
+
     auto result = to_iso8601_utc(time_point);
     // Should truncate to 0 microseconds
     REQUIRE(result == "2001-09-09T01:46:40.000000Z");
