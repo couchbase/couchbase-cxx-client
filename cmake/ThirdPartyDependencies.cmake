@@ -290,3 +290,7 @@ declare_system_library(Microsoft.GSL::GSL)
 declare_system_library(spdlog::spdlog)
 declare_system_library(asio)
 declare_system_library(taocpp::json)
+declare_system_library(snappy)
+
+declare_system_library(opentelemetry_exporter_otlp_http)
+declare_system_library(opentelemetry_exporter_otlp_http_metric)
