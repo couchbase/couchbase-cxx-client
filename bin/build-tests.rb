@@ -88,6 +88,11 @@ when /msan|memory/
   CB_CMAKE_EXTRAS << "-DENABLE_SANITIZER_MEMORY=ON"
 end
 
+# No OpenSSLASM exists for Window ARM64
+if ENV["CB_OPENSSL_NO_ASM"] == "1"
+  CB_CMAKE_EXTRAS << "-DOPENSSL_NO_ASM=1"
+end
+
 BUILD_DIR = if CB_SANITIZER.empty?
               File.join(PROJECT_ROOT, "cmake-build-tests")
             else
