@@ -19,6 +19,7 @@
 
 #include "signal_attribute.hxx"
 
+#include <chrono>
 #include <string>
 #include <vector>
 
@@ -26,7 +27,7 @@ namespace couchbase::core
 {
 struct trace_event {
   std::string name;
-  std::string timestamp{};
+  std::chrono::system_clock::time_point timestamp{};
 
   std::vector<signal_attribute> attributes{};
 };

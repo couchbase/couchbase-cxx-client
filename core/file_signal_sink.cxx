@@ -17,7 +17,6 @@
 
 #include "file_signal_sink.hxx"
 
-#include "chrono_utils.hxx"
 #include "core/metric_measurement.hxx"
 #include "core/platform/uuid.h"
 #include "signal_attribute.hxx"
@@ -87,7 +86,7 @@ public:
     } else {
       span_.context.trace_id = generate_trace_id();
     }
-    span_.start_time = to_iso8601_utc(std::chrono::system_clock::now());
+    span_.start_time = std::chrono::system_clock::now();
   }
 
   void add_tag(const std::string& name, std::uint64_t value) override
@@ -318,7 +317,7 @@ void
 file_tracer_span::end()
 {
   if (auto sink = std::move(sink_); sink) {
-    span_.end_time = to_iso8601_utc(std::chrono::system_clock::now());
+    span_.end_time = std::chrono::system_clock::now();
     sink->commit(std::move(span_));
   }
 }

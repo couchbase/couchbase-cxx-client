@@ -17,6 +17,8 @@
 
 #include "trace_span.hxx"
 
+#include "chrono_utils.hxx"
+
 #include <tao/json.hpp>
 #include <tao/json/contrib/traits.hpp>
 
@@ -41,7 +43,7 @@ struct traits<couchbase::core::trace_event> {
   {
     v = {
       { "name", event.name },
-      { "timestamp", event.timestamp },
+      { "timestamp", couchbase::core::to_iso8601_utc(event.timestamp) },
       { "attributes", event.attributes },
     };
   }
@@ -62,8 +64,8 @@ struct traits<couchbase::core::trace_span> {
         },
       },
       { "parent_id", span.parent_id },
-      { "start_time", span.start_time },
-      { "end_time", span.end_time },
+      { "start_time", couchbase::core::to_iso8601_utc(span.start_time) },
+      { "end_time", couchbase::core::to_iso8601_utc(span.end_time) },
       { "attributes", span.attributes },
       { "events", span.events },
     };

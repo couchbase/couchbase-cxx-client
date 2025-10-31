@@ -20,6 +20,7 @@
 #include "signal_attribute.hxx"
 #include "trace_event.hxx"
 
+#include <chrono>
 #include <string>
 #include <vector>
 
@@ -35,8 +36,8 @@ struct trace_span {
 
   std::string parent_id{};
 
-  std::string start_time{};
-  std::string end_time{};
+  std::chrono::system_clock::time_point start_time{};
+  std::chrono::system_clock::time_point end_time{};
 
   std::vector<signal_attribute> attributes{};
   std::vector<trace_event> events{};
