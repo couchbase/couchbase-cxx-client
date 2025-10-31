@@ -45,7 +45,7 @@ if(NOT TARGET opentelemetry)
     NAME
     opentelemetry
     VERSION
-    1.20.0
+    1.23.0
     GITHUB_REPOSITORY
     "open-telemetry/opentelemetry-cpp"
     EXCLUDE_FROM_ALL ON
@@ -53,11 +53,13 @@ if(NOT TARGET opentelemetry)
     "OPENTELEMETRY_INSTALL OFF"
     "WITH_ABI_VERSION_1 OFF"
     "WITH_ABI_VERSION_2 ON"
-    "WITH_STL ON"
     "WITH_ABSEIL OFF"
-    "WITH_OTLP_HTTP ON"
-    "WITH_OTLP_GRPC OFF"
     "WITH_BENCHMARK OFF"
+    "WITH_EXAMPLES OFF"
+    "WITH_FUNC_TESTS OFF"
+    "WITH_OTLP_GRPC OFF"
+    "WITH_OTLP_HTTP ON"
+    "WITH_STL CXX17"
     "BUILD_TESTING OFF"
     "BUILD_SHARED_LIBS OFF"
     "CMAKE_C_VISIBILITY_PRESET hidden"
