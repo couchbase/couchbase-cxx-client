@@ -42,6 +42,7 @@ unit_test(orphan_reporter)
 target_link_libraries(test_unit_jsonsl PRIVATE jsonsl)
 
 integration_benchmark(get)
+integration_benchmark(replace)
 
 transaction_test(context)
 transaction_test(simple)
