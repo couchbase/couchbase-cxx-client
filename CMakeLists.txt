@@ -397,6 +397,7 @@ set(couchbase_cxx_client_FILES
     core/topology/configuration.cxx
     core/tracing/threshold_logging_tracer.cxx
     core/tracing/tracer_wrapper.cxx
+    core/tracing/wrapper_sdk_tracer.cxx
     core/transactions/active_transaction_record.cxx
     core/transactions/async_attempt_context.cxx
     core/transactions/atr_cleanup_entry.cxx
