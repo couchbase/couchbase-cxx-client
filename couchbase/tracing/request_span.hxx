@@ -51,7 +51,7 @@ public:
     return name_;
   }
 
-  [[nodiscard]] auto parent() const -> std::shared_ptr<request_span>
+  [[nodiscard]] virtual auto parent() const -> std::shared_ptr<request_span>
   {
     return parent_;
   }
