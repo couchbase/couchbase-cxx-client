@@ -176,11 +176,11 @@ assert_span_ok(test::utils::integration_test_guard& guard,
 
   REQUIRE(tags.at("db.system.name") == "couchbase");
   if (guard.cluster_version().supports_cluster_labels()) {
-    REQUIRE_FALSE(tags.at("db.couchbase.cluster_uuid").empty());
-    REQUIRE_FALSE(tags.at("db.couchbase.cluster_name").empty());
+    REQUIRE_FALSE(tags.at("couchbase.cluster.uuid").empty());
+    REQUIRE_FALSE(tags.at("couchbase.cluster.name").empty());
   } else {
-    REQUIRE(tags.find("db.couchbase.cluster_uuid") == tags.end());
-    REQUIRE(tags.find("db.couchbase.cluster_name") == tags.end());
+    REQUIRE(tags.find("couchbase.cluster.uuid") == tags.end());
+    REQUIRE(tags.find("couchbase.cluster.name") == tags.end());
   }
 }
 
@@ -193,13 +193,13 @@ assert_dispatch_span_ok(test::utils::integration_test_guard& guard,
 
   REQUIRE("dispatch_to_server" == span->name());
 
-  REQUIRE_FALSE(span->string_tags()["db.couchbase.local_id"].empty());
+  REQUIRE_FALSE(span->string_tags()["couchbase.local_id"].empty());
   REQUIRE_FALSE(span->string_tags()["server.address"].empty());
   REQUIRE(span->int_tags()["server.port"] != 0);
   REQUIRE_FALSE(span->string_tags()["network.peer.address"].empty());
   REQUIRE(span->int_tags()["network.peer.port"] != 0);
   REQUIRE(span->string_tags()["network.transport"] == "tcp");
-  REQUIRE_FALSE(span->string_tags()["db.couchbase.operation_id"].empty());
+  REQUIRE_FALSE(span->string_tags()["couchbase.operation_id"].empty());
 }
 
 void
@@ -214,7 +214,7 @@ assert_kv_dispatch_span_ok(test::utils::integration_test_guard& guard,
   REQUIRE(span->string_tags().size() + span->int_tags().size() == expected_tag_count);
 
   REQUIRE(static_cast<uint64_t>(span->duration().count()) >=
-          span->int_tags()["db.couchbase.server_duration"]);
+          span->int_tags()["couchbase.server_duration"]);
 }
 
 void
@@ -230,10 +230,10 @@ assert_kv_op_span_ok(test::utils::integration_test_guard& guard,
   REQUIRE(span->string_tags().size() + span->int_tags().size() == expected_tag_count);
 
   REQUIRE(op == span->name());
-  REQUIRE(span->string_tags()["db.couchbase.service"] == "kv");
+  REQUIRE(span->string_tags()["couchbase.service"] == "kv");
   REQUIRE(span->string_tags()["db.namespace"] == guard.ctx.bucket);
-  REQUIRE(span->string_tags()["db.couchbase.scope"] == "_default");
-  REQUIRE(span->string_tags()["db.couchbase.collection"] == "_default");
+  REQUIRE(span->string_tags()["couchbase.scope.name"] == "_default");
+  REQUIRE(span->string_tags()["couchbase.collection.name"] == "_default");
   REQUIRE(span->string_tags()["db.operation.name"] == op);
 
   // There must be at least one dispatch span
@@ -272,7 +272,7 @@ assert_http_dispatch_span_ok(test::utils::integration_test_guard& guard,
   REQUIRE(span->string_tags().size() + span->int_tags().size() == expected_tag_count);
 
   // server_duration is only available for KV operations
-  REQUIRE_FALSE(span->int_tags().count("db.couchbase.server_duration"));
+  REQUIRE_FALSE(span->int_tags().count("couchbase.server_duration"));
 }
 
 void
@@ -292,9 +292,9 @@ assert_http_op_span_ok(test::utils::integration_test_guard& guard,
   REQUIRE(span->string_tags()["db.operation.name"] == op);
   REQUIRE(span->duration().count() > 0);
   if (expected_service.has_value()) {
-    REQUIRE(span->string_tags()["db.couchbase.service"] == expected_service.value());
+    REQUIRE(span->string_tags()["couchbase.service"] == expected_service.value());
   } else {
-    REQUIRE(span->string_tags().count("db.couchbase.service") == 0);
+    REQUIRE(span->string_tags().count("couchbase.service") == 0);
   }
   if (expected_bucket_name.has_value()) {
     REQUIRE(span->string_tags()["db.namespace"] == expected_bucket_name.value());
@@ -302,14 +302,14 @@ assert_http_op_span_ok(test::utils::integration_test_guard& guard,
     REQUIRE(span->string_tags().count("db.namespace") == 0);
   }
   if (expected_scope_name.has_value()) {
-    REQUIRE(span->string_tags()["db.couchbase.scope"] == expected_scope_name.value());
+    REQUIRE(span->string_tags()["couchbase.scope.name"] == expected_scope_name.value());
   } else {
-    REQUIRE(span->string_tags().count("db.couchbase.scope") == 0);
+    REQUIRE(span->string_tags().count("couchbase.scope.name") == 0);
   }
   if (expected_collection_name.has_value()) {
-    REQUIRE(span->string_tags()["db.couchbase.collection"] == expected_collection_name.value());
+    REQUIRE(span->string_tags()["couchbase.collection.name"] == expected_collection_name.value());
   } else {
-    REQUIRE(span->string_tags().count("db.couchbase.collection") == 0);
+    REQUIRE(span->string_tags().count("couchbase.collection.name") == 0);
   }
 
   // There must be at least one dispatch span
@@ -340,9 +340,9 @@ assert_compound_http_op_span_ok(
   REQUIRE(span->string_tags()["db.operation.name"] == op);
   REQUIRE(span->duration().count() > 0);
   if (expected_service.has_value()) {
-    REQUIRE(span->string_tags()["db.couchbase.service"] == expected_service.value());
+    REQUIRE(span->string_tags()["couchbase.service"] == expected_service.value());
   } else {
-    REQUIRE(span->string_tags().count("db.couchbase.service") == 0);
+    REQUIRE(span->string_tags().count("couchbase.service") == 0);
   }
   if (expected_bucket_name.has_value()) {
     REQUIRE(span->string_tags()["db.namespace"] == expected_bucket_name.value());
@@ -350,14 +350,14 @@ assert_compound_http_op_span_ok(
     REQUIRE(span->string_tags().count("db.namespace") == 0);
   }
   if (expected_scope_name.has_value()) {
-    REQUIRE(span->string_tags()["db.couchbase.scope"] == expected_scope_name.value());
+    REQUIRE(span->string_tags()["couchbase.scope.name"] == expected_scope_name.value());
   } else {
-    REQUIRE(span->string_tags().count("db.couchbase.scope") == 0);
+    REQUIRE(span->string_tags().count("couchbase.scope.name") == 0);
   }
   if (expected_collection_name.has_value()) {
-    REQUIRE(span->string_tags()["db.couchbase.collection"] == expected_collection_name.value());
+    REQUIRE(span->string_tags()["couchbase.collection.name"] == expected_collection_name.value());
   } else {
-    REQUIRE(span->string_tags().count("db.couchbase.collection") == 0);
+    REQUIRE(span->string_tags().count("couchbase.collection.name") == 0);
   }
 
   auto sub_op_spans = span->child_spans();

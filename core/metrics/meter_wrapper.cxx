@@ -19,6 +19,8 @@
 
 #include <couchbase/error_codes.hxx>
 
+#include "core/tracing/constants.hxx"
+
 #include <mutex>
 #include <system_error>
 
@@ -102,25 +104,26 @@ get_standardized_outcome(std::error_code ec) -> std::string
 auto
 metric_attributes::encode() const -> std::map<std::string, std::string>
 {
-  std::map<std::string, std::string> tags = { { "db.couchbase.service",
-                                                service_to_string(service) },
-                                              { "db.operation", operation },
-                                              { "outcome", get_standardized_outcome(ec) } };
+  std::map<std::string, std::string> tags = {
+    { tracing::attributes::op::service, service_to_string(service) },
+    { tracing::attributes::op::operation_name, operation },
+    { "outcome", get_standardized_outcome(ec) }
+  };
 
   if (internal.cluster_name.has_value()) {
-    tags.emplace("db.couchbase.cluster_name", internal.cluster_name.value());
+    tags.emplace(tracing::attributes::common::cluster_name, internal.cluster_name.value());
   }
   if (internal.cluster_uuid.has_value()) {
-    tags.emplace("db.couchbase.cluster_uuid", internal.cluster_uuid.value());
+    tags.emplace(tracing::attributes::common::cluster_uuid, internal.cluster_uuid.value());
   }
   if (bucket_name) {
-    tags.emplace("db.name", bucket_name.value());
+    tags.emplace(tracing::attributes::op::bucket_name, bucket_name.value());
   }
   if (scope_name) {
-    tags.emplace("db.couchbase.scope", scope_name.value());
+    tags.emplace(tracing::attributes::op::scope_name, scope_name.value());
   }
   if (collection_name) {
-    tags.emplace("db.couchbase.collection", collection_name.value());
+    tags.emplace(tracing::attributes::op::collection_name, collection_name.value());
   }
 
   return tags;
