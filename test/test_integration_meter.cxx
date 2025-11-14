@@ -129,19 +129,19 @@ assert_kv_recorder_tags(test::utils::integration_test_guard& guard,
 
   const auto& tags = recorders.front()->tags();
 
-  REQUIRE(tags.at("db.couchbase.service") == "kv");
-  REQUIRE(tags.at("db.operation") == op);
+  REQUIRE(tags.at("couchbase.service") == "kv");
+  REQUIRE(tags.at("db.operation.name") == op);
   REQUIRE(tags.at("outcome") == expected_outcome);
-  REQUIRE(tags.at("db.name") == id.bucket());
-  REQUIRE(tags.at("db.couchbase.scope") == id.scope());
-  REQUIRE(tags.at("db.couchbase.collection") == id.collection());
+  REQUIRE(tags.at("db.namespace") == id.bucket());
+  REQUIRE(tags.at("couchbase.scope.name") == id.scope());
+  REQUIRE(tags.at("couchbase.collection.name") == id.collection());
 
   if (guard.cluster_version().supports_cluster_labels()) {
-    REQUIRE_FALSE(tags.at("db.couchbase.cluster_name").empty());
-    REQUIRE_FALSE(tags.at("db.couchbase.cluster_uuid").empty());
+    REQUIRE_FALSE(tags.at("couchbase.cluster.name").empty());
+    REQUIRE_FALSE(tags.at("couchbase.cluster.uuid").empty());
   } else {
-    REQUIRE(tags.find("db.couchbase.cluster_name") == tags.end());
-    REQUIRE(tags.find("db.couchbase.cluster_uuid") == tags.end());
+    REQUIRE(tags.find("couchbase.cluster.name") == tags.end());
+    REQUIRE(tags.find("couchbase.cluster.uuid") == tags.end());
   }
 }
 
@@ -156,17 +156,17 @@ assert_http_recorder_tags(test::utils::integration_test_guard& guard,
 
   const auto& tags = recorders.front()->tags();
 
-  REQUIRE(tags.at("db.couchbase.service") == service);
-  REQUIRE(tags.at("db.operation") == op);
+  REQUIRE(tags.at("couchbase.service") == service);
+  REQUIRE(tags.at("db.operation.name") == op);
   // TODO(CXXCBC-630): Enable assertion once bug recording all HTTP operations as 'Success' is
   // resolved. REQUIRE(tags.at("outcome") == expected_outcome);
 
   if (guard.cluster_version().supports_cluster_labels()) {
-    REQUIRE_FALSE(tags.at("db.couchbase.cluster_name").empty());
-    REQUIRE_FALSE(tags.at("db.couchbase.cluster_uuid").empty());
+    REQUIRE_FALSE(tags.at("couchbase.cluster.name").empty());
+    REQUIRE_FALSE(tags.at("couchbase.cluster.uuid").empty());
   } else {
-    REQUIRE(tags.find("db.couchbase.cluster_name") == tags.end());
-    REQUIRE(tags.find("db.couchbase.cluster_uuid") == tags.end());
+    REQUIRE(tags.find("couchbase.cluster.name") == tags.end());
+    REQUIRE(tags.find("couchbase.cluster.uuid") == tags.end());
   }
 }
 

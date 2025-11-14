@@ -20,6 +20,7 @@
 #include "couchbase/build_info.hxx"
 
 #include "core/logger/logger.hxx"
+#include "core/tracing/constants.hxx"
 #include "core/utils/json.hxx"
 #include "noop_meter.hxx"
 
@@ -213,14 +214,12 @@ logging_meter::get_value_recorder(const std::string& name,
     return noop_recorder;
   }
 
-  static const std::string service_tag = "db.couchbase.service";
-  const auto service = tags.find(service_tag);
+  const auto service = tags.find(tracing::attributes::op::service);
   if (service == tags.end()) {
     return noop_recorder;
   }
 
-  static const std::string operation_tag = "db.operation";
-  const auto operation = tags.find(operation_tag);
+  const auto operation = tags.find(tracing::attributes::op::operation_name);
   if (operation == tags.end()) {
     return noop_recorder;
   }

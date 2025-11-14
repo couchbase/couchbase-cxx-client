@@ -145,19 +145,19 @@ namespace attributes
 namespace common
 {
 constexpr auto system = "db.system.name";
-constexpr auto cluster_name = "db.couchbase.cluster_name";
-constexpr auto cluster_uuid = "db.couchbase.cluster_uuid";
+constexpr auto cluster_name = "couchbase.cluster.name";
+constexpr auto cluster_uuid = "couchbase.cluster.uuid";
 } // namespace common
 
 // Operation-level attributes
 namespace op
 {
-constexpr auto service = "db.couchbase.service";
-constexpr auto retry_count = "db.couchbase.retries";
-constexpr auto durability_level = "db.couchbase.durability";
+constexpr auto service = "couchbase.service";
+constexpr auto retry_count = "couchbase.retries";
+constexpr auto durability_level = "couchbase.durability";
 constexpr auto bucket_name = "db.namespace";
-constexpr auto scope_name = "db.couchbase.scope";
-constexpr auto collection_name = "db.couchbase.collection";
+constexpr auto scope_name = "couchbase.scope.name";
+constexpr auto collection_name = "couchbase.collection.name";
 constexpr auto query_statement = "db.query.text";
 constexpr auto operation_name = "db.operation.name";
 } // namespace op
@@ -165,14 +165,14 @@ constexpr auto operation_name = "db.operation.name";
 // Dispatch-level attributes
 namespace dispatch
 {
-constexpr auto server_duration = "db.couchbase.server_duration";
-constexpr auto local_id = "db.couchbase.local_id";
+constexpr auto server_duration = "couchbase.server_duration";
+constexpr auto local_id = "couchbase.local_id";
 constexpr auto server_address = "server.address";
 constexpr auto server_port = "server.port";
 constexpr auto peer_address = "network.peer.address";
 constexpr auto peer_port = "network.peer.port";
 constexpr auto network_transport = "network.transport";
-constexpr auto operation_id = "db.couchbase.operation_id";
+constexpr auto operation_id = "couchbase.operation_id";
 } // namespace dispatch
 } // namespace attributes
 

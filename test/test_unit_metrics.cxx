@@ -38,14 +38,14 @@ TEST_CASE("unit: metric attributes encoding", "[unit]")
     auto tags = attrs.encode();
 
     REQUIRE(tags.size() == 8);
-    REQUIRE(tags.at("db.couchbase.service") == "kv");
-    REQUIRE(tags.at("db.operation") == "get");
-    REQUIRE(tags.at("db.name") == "test-bucket");
-    REQUIRE(tags.at("db.couchbase.scope") == "test-scope");
-    REQUIRE(tags.at("db.couchbase.collection") == "test-collection");
+    REQUIRE(tags.at("couchbase.service") == "kv");
+    REQUIRE(tags.at("db.operation.name") == "get");
+    REQUIRE(tags.at("db.namespace") == "test-bucket");
+    REQUIRE(tags.at("couchbase.scope.name") == "test-scope");
+    REQUIRE(tags.at("couchbase.collection.name") == "test-collection");
     REQUIRE(tags.at("outcome") == "DocumentNotFound");
-    REQUIRE(tags.at("db.couchbase.cluster_name") == "test-cluster");
-    REQUIRE(tags.at("db.couchbase.cluster_uuid") == "d476fe9c-1f66-4bf4-9c2b-9ee866fc5251");
+    REQUIRE(tags.at("couchbase.cluster.name") == "test-cluster");
+    REQUIRE(tags.at("couchbase.cluster.uuid") == "d476fe9c-1f66-4bf4-9c2b-9ee866fc5251");
   }
 
   SECTION("successful operation")
@@ -79,8 +79,8 @@ TEST_CASE("unit: metric attributes encoding", "[unit]")
     auto tags = attrs.encode();
 
     REQUIRE(tags.size() == 6);
-    REQUIRE(tags.find("db.couchbase.cluster_uuid") == tags.end());
-    REQUIRE(tags.find("db.couchbase.cluster_name") == tags.end());
+    REQUIRE(tags.find("couchbase.cluster.uuid") == tags.end());
+    REQUIRE(tags.find("couchbase.cluster.name") == tags.end());
   }
 
   SECTION("bucket/scope/collection names missing")
@@ -98,8 +98,8 @@ TEST_CASE("unit: metric attributes encoding", "[unit]")
     auto tags = attrs.encode();
 
     REQUIRE(tags.size() == 5);
-    REQUIRE(tags.find("db.name") == tags.end());
-    REQUIRE(tags.find("db.couchbase.scope") == tags.end());
-    REQUIRE(tags.find("db.couchbase.collection") == tags.end());
+    REQUIRE(tags.find("db.namespace") == tags.end());
+    REQUIRE(tags.find("couchbase.scope.name") == tags.end());
+    REQUIRE(tags.find("couchbase.collection.name") == tags.end());
   }
 }
