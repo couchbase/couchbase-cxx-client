@@ -31,7 +31,8 @@ add_executable(
   query.cxx
   remove.cxx
   upsert.cxx
-  version.cxx)
+  version.cxx
+  config.cxx)
 target_include_directories(cbc PRIVATE ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/private)
 
 set_project_warnings(cbc)

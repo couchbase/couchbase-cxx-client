@@ -17,6 +17,7 @@
 
 #include "analytics.hxx"
 #include "beam.hxx"
+#include "config.hxx"
 #include "get.hxx"
 #include "keygen.hxx"
 #include "pillowfight.hxx"
@@ -29,8 +30,8 @@
 
 #include <spdlog/fmt/bundled/core.h>
 
-int
-main(int argc, const char** argv)
+auto
+main(int argc, const char** argv) -> int
 {
   CLI::App app{ "Talk to Couchbase Server.", "cbc" };
   app.set_version_flag("--version", fmt::format("cbc {}", couchbase::core::meta::sdk_semver()));
@@ -46,6 +47,7 @@ main(int argc, const char** argv)
   app.add_subcommand(cbc::make_beam_command());
   app.add_subcommand(cbc::make_query_command());
   app.add_subcommand(cbc::make_keygen_command());
+  app.add_subcommand(cbc::make_config_command());
 
   try {
     app.parse(argc, argv);
@@ -81,6 +83,9 @@ main(int argc, const char** argv)
       }
       if (item->get_name() == "keygen") {
         return cbc::execute_keygen_command(item);
+      }
+      if (item->get_name() == "config") {
+        return cbc::execute_config_command(item);
       }
     }
   } catch (const std::exception& e) {
