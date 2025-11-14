@@ -23,6 +23,7 @@
 #include "core/impl/subdoc/command.hxx"
 #include "core/operations/document_lookup_in.hxx"
 #include "core/operations/operation_traits.hxx"
+#include "core/tracing/constants.hxx"
 #include "core/utils/movable_function.hxx"
 
 #include <couchbase/codec/encoded_value.hxx>
@@ -147,14 +148,39 @@ struct lookup_in_any_replica_request {
             auto ctx = std::make_shared<replica_context>(std::move(h), nodes.size());
 
             for (const auto& node : nodes) {
+              auto subop_span = core->tracer()->create_span(
+                node.is_replica ? tracing::operation::mcbp_lookup_in_replica
+                                : tracing::operation::mcbp_lookup_in,
+                parent_span);
+
+              if (subop_span->uses_tags()) {
+                subop_span->add_tag(tracing::attributes::op::service, tracing::service::key_value);
+                subop_span->add_tag(tracing::attributes::op::operation_name,
+                                    node.is_replica ? tracing::operation::mcbp_lookup_in_replica
+                                                    : tracing::operation::mcbp_lookup_in);
+                subop_span->add_tag(tracing::attributes::op::bucket_name, id.bucket());
+                subop_span->add_tag(tracing::attributes::op::scope_name, id.scope());
+                subop_span->add_tag(tracing::attributes::op::collection_name, id.collection());
+              }
+
               if (node.is_replica) {
                 document_id replica_id{ id };
                 replica_id.node_index(node.index);
                 auto replica_req = impl::lookup_in_replica_request{
-                  std::move(replica_id), specs, timeout, parent_span
+                  std::move(replica_id),
+                  specs,
+                  timeout,
+                  subop_span,
                 };
                 replica_req.access_deleted = access_deleted;
-                core->execute(replica_req, [ctx](auto&& resp) {
+                core->execute(replica_req, [ctx, subop_span](auto&& resp) {
+                  {
+                    if (subop_span->uses_tags() && resp.ctx.retry_attempts() > 0) {
+                      subop_span->add_tag(tracing::attributes::op::retry_count,
+                                          resp.ctx.retry_attempts());
+                    }
+                    subop_span->end();
+                  }
                   handler_type local_handler;
                   {
                     std::scoped_lock lock(ctx->mutex_);
@@ -194,46 +220,63 @@ struct lookup_in_any_replica_request {
                   }
                 });
               } else {
-                core->execute(lookup_in_request{ id, {}, {}, false, specs, timeout },
-                              [ctx](auto&& resp) {
-                                handler_type local_handler{};
-                                {
-                                  std::scoped_lock lock(ctx->mutex_);
-                                  if (ctx->done_) {
-                                    return;
-                                  }
-                                  --ctx->expected_responses_;
-                                  if (resp.ctx.ec()) {
-                                    if (ctx->expected_responses_ > 0) {
-                                      // just ignore the response
-                                      return;
-                                    }
-                                    // consider document irretrievable and give up
-                                    resp.ctx.override_ec(errc::key_value::document_irretrievable);
-                                  }
-                                  ctx->done_ = true;
-                                  std::swap(local_handler, ctx->handler_);
-                                }
-                                if (local_handler) {
-                                  auto res = response_type{};
-                                  res.ctx = resp.ctx;
-                                  res.cas = resp.cas;
-                                  res.deleted = resp.deleted;
-                                  res.is_replica = false;
-                                  for (auto& field : resp.fields) {
-                                    auto lookup_in_entry = lookup_in_any_replica_response::entry{};
-                                    lookup_in_entry.path = field.path;
-                                    lookup_in_entry.value = field.value;
-                                    lookup_in_entry.status = field.status;
-                                    lookup_in_entry.ec = field.ec;
-                                    lookup_in_entry.exists = field.exists;
-                                    lookup_in_entry.original_index = field.original_index;
-                                    lookup_in_entry.opcode = field.opcode;
-                                    res.fields.emplace_back(lookup_in_entry);
-                                  }
-                                  return local_handler(res);
-                                }
-                              });
+                core->execute(
+                  lookup_in_request{
+                    id,
+                    {},
+                    {},
+                    false,
+                    specs,
+                    timeout,
+                    {},
+                    subop_span,
+                  },
+                  [ctx, subop_span](auto&& resp) {
+                    {
+                      if (subop_span->uses_tags() && resp.ctx.retry_attempts() > 0) {
+                        subop_span->add_tag(tracing::attributes::op::retry_count,
+                                            resp.ctx.retry_attempts());
+                      }
+                      subop_span->end();
+                    }
+                    handler_type local_handler{};
+                    {
+                      std::scoped_lock lock(ctx->mutex_);
+                      if (ctx->done_) {
+                        return;
+                      }
+                      --ctx->expected_responses_;
+                      if (resp.ctx.ec()) {
+                        if (ctx->expected_responses_ > 0) {
+                          // just ignore the response
+                          return;
+                        }
+                        // consider document irretrievable and give up
+                        resp.ctx.override_ec(errc::key_value::document_irretrievable);
+                      }
+                      ctx->done_ = true;
+                      std::swap(local_handler, ctx->handler_);
+                    }
+                    if (local_handler) {
+                      auto res = response_type{};
+                      res.ctx = resp.ctx;
+                      res.cas = resp.cas;
+                      res.deleted = resp.deleted;
+                      res.is_replica = false;
+                      for (auto& field : resp.fields) {
+                        auto lookup_in_entry = lookup_in_any_replica_response::entry{};
+                        lookup_in_entry.path = field.path;
+                        lookup_in_entry.value = field.value;
+                        lookup_in_entry.status = field.status;
+                        lookup_in_entry.ec = field.ec;
+                        lookup_in_entry.exists = field.exists;
+                        lookup_in_entry.original_index = field.original_index;
+                        lookup_in_entry.opcode = field.opcode;
+                        res.fields.emplace_back(lookup_in_entry);
+                      }
+                      return local_handler(res);
+                    }
+                  });
               }
             }
           });
