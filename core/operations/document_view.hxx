@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "core/deprecation_utils.hxx"
 #include "core/design_document_namespace.hxx"
 #include "core/error_context/view.hxx"
 #include "core/io/http_context.hxx"
@@ -54,7 +55,10 @@ struct document_view_response {
   std::optional<problem> error{};
 };
 
-struct document_view_request {
+struct COUCHBASE_DEPRECATED(
+  "1.3.0",
+  "Views are deprecated in Couchbase Server 7.0+. Instead of views, use the Query "
+  "Service (SQL++).") document_view_request {
   using response_type = document_view_response;
   using encoded_request_type = io::http_request;
   using encoded_response_type = io::http_response;
@@ -97,11 +101,12 @@ struct document_view_request {
   std::optional<std::chrono::milliseconds> timeout{};
   std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
-  [[nodiscard]] auto encode_to(encoded_request_type& encoded,
-                               http_context& context) -> std::error_code;
+  [[nodiscard]] auto encode_to(encoded_request_type& encoded, http_context& context)
+    -> std::error_code;
 
-  [[nodiscard]] auto make_response(error_context::view&& ctx, const encoded_response_type& encoded)
-    const -> document_view_response;
+  [[nodiscard]] auto make_response(error_context::view&& ctx,
+                                   const encoded_response_type& encoded) const
+    -> document_view_response;
 };
 
 } // namespace couchbase::core::operations
