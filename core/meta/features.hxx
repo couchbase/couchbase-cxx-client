@@ -253,3 +253,8 @@
  * couchbase::vector_query has a prefilter option.
  */
 #define COUCHBASE_CXX_CLIENT_HAS_VECTOR_SEARCH_PREFILTER 1
+
+/**
+ * couchbase::cluster has set_authenticator() method.
+ */
+#define COUCHBASE_CXX_CLIENT_HAS_SET_AUTHENTICATOR 1
