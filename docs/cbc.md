@@ -59,6 +59,11 @@ Run simple workload generator. See [cbc-pillowfight](#cbc-pillowfight) for more 
 Generate batches of keys with specific properties. See [cbc-keygen](#cbc-keygen) for more information.
 </dd>
 
+<dt>config</dt>
+<dd>
+Retrieve cluster configuration. See [cbc-config](#cbc-config) for more information.
+</dd>
+
 ### OPTIONS
 
 <dl>

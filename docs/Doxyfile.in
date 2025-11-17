@@ -961,6 +961,7 @@ INPUT                  = ${DOXYGEN_INPUT_DIR} \
                          ${PROJECT_SOURCE_DIR}/docs/cbc-upsert.md \
                          ${PROJECT_SOURCE_DIR}/docs/cbc-remove.md \
                          ${PROJECT_SOURCE_DIR}/docs/cbc-keygen.md \
+                         ${PROJECT_SOURCE_DIR}/docs/cbc-config.md \
                          ${PROJECT_SOURCE_DIR}/docs/cbc-pillowfight.md \
                          ${PROJECT_SOURCE_DIR}/docs/cbc-analytics.md \
                          ${PROJECT_SOURCE_DIR}/docs/cbc-query.md
