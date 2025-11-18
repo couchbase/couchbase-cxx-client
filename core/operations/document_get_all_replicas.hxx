@@ -26,6 +26,7 @@
 #include "core/operations/document_get.hxx"
 #include "core/operations/operation_traits.hxx"
 #include "core/public_fwd.hxx"
+#include "core/tracing/constants.hxx"
 #include "core/utils/movable_function.hxx"
 
 #include <memory>
@@ -67,6 +68,7 @@ struct get_all_replicas_request {
        id = id,
        timeout = timeout,
        read_preference = read_preference,
+       parent_span = std::move(parent_span),
        h = std::forward<Handler>(handler)](
         std::error_code ec, std::shared_ptr<topology::configuration> config) mutable {
         if (ec) {
@@ -107,11 +109,40 @@ struct get_all_replicas_request {
         auto ctx = std::make_shared<replica_context>(std::move(h), nodes.size());
 
         for (const auto& node : nodes) {
+          auto subop_span = core->tracer()->create_span(
+            node.is_replica ? tracing::operation::mcbp_get_replica : tracing::operation::mcbp_get,
+            parent_span);
+
+          if (subop_span->uses_tags()) {
+            subop_span->add_tag(tracing::attributes::op::service, tracing::service::key_value);
+            subop_span->add_tag(tracing::attributes::op::operation_name,
+                                node.is_replica ? tracing::operation::mcbp_get_replica
+                                                : tracing::operation::mcbp_get);
+            subop_span->add_tag(tracing::attributes::op::bucket_name, id.bucket());
+            subop_span->add_tag(tracing::attributes::op::scope_name, id.scope());
+            subop_span->add_tag(tracing::attributes::op::collection_name, id.collection());
+          }
+
           if (node.is_replica) {
             document_id replica_id{ id };
             replica_id.node_index(node.index);
             core->execute(
-              impl::get_replica_request{ std::move(replica_id), timeout }, [ctx](auto&& resp) {
+              impl::get_replica_request{
+                std::move(replica_id),
+                timeout,
+                {},
+                {},
+                {},
+                subop_span,
+              },
+              [ctx, subop_span](auto&& resp) {
+                {
+                  if (subop_span->uses_tags() && resp.ctx.retry_attempts() > 0) {
+                    subop_span->add_tag(tracing::attributes::op::retry_count,
+                                        resp.ctx.retry_attempts());
+                  }
+                  subop_span->end();
+                }
                 handler_type local_handler{};
                 {
                   std::scoped_lock lock(ctx->mutex_);
@@ -142,36 +173,52 @@ struct get_all_replicas_request {
                 }
               });
           } else {
-            core->execute(get_request{ document_id{ id }, {}, {}, timeout }, [ctx](auto&& resp) {
-              handler_type local_handler{};
-              {
-                std::scoped_lock lock(ctx->mutex_);
-                if (ctx->done_) {
-                  return;
+            core->execute(
+              get_request{
+                document_id{ id },
+                {},
+                {},
+                timeout,
+                {},
+                subop_span,
+              },
+              [ctx, subop_span](auto&& resp) {
+                {
+                  if (subop_span->uses_tags() && resp.ctx.retry_attempts() > 0) {
+                    subop_span->add_tag(tracing::attributes::op::retry_count,
+                                        resp.ctx.retry_attempts());
+                  }
+                  subop_span->end();
                 }
-                --ctx->expected_responses_;
-                if (resp.ctx.ec()) {
-                  if (ctx->expected_responses_ > 0) {
-                    // just ignore the response
+                handler_type local_handler{};
+                {
+                  std::scoped_lock lock(ctx->mutex_);
+                  if (ctx->done_) {
                     return;
                   }
-                } else {
-                  ctx->result_.emplace_back(get_all_replicas_response::entry{
-                    std::move(resp.value), resp.cas, resp.flags, false /* active */ });
+                  --ctx->expected_responses_;
+                  if (resp.ctx.ec()) {
+                    if (ctx->expected_responses_ > 0) {
+                      // just ignore the response
+                      return;
+                    }
+                  } else {
+                    ctx->result_.emplace_back(get_all_replicas_response::entry{
+                      std::move(resp.value), resp.cas, resp.flags, false /* active */ });
+                  }
+                  if (ctx->expected_responses_ == 0) {
+                    ctx->done_ = true;
+                    std::swap(local_handler, ctx->handler_);
+                  }
                 }
-                if (ctx->expected_responses_ == 0) {
-                  ctx->done_ = true;
-                  std::swap(local_handler, ctx->handler_);
+                if (local_handler) {
+                  if (ctx->result_.empty()) {
+                    // Return an error only when we have no results from any replica.
+                    return local_handler({ std::move(resp.ctx), {} });
+                  }
+                  return local_handler({ {}, std::move(ctx->result_) });
                 }
-              }
-              if (local_handler) {
-                if (ctx->result_.empty()) {
-                  // Return an error only when we have no results from any replica.
-                  return local_handler({ std::move(resp.ctx), {} });
-                }
-                return local_handler({ {}, std::move(ctx->result_) });
-              }
-            });
+              });
           }
         }
       });

@@ -24,6 +24,7 @@
 #include "core/impl/with_cancellation.hxx"
 #include "core/operations/document_lookup_in.hxx"
 #include "core/operations/operation_traits.hxx"
+#include "core/tracing/constants.hxx"
 #include "core/utils/movable_function.hxx"
 
 #include <couchbase/codec/encoded_value.hxx>
@@ -167,6 +168,21 @@ struct lookup_in_any_replica_request {
             auto ctx = std::make_shared<replica_context>(std::move(h), nodes.size());
 
             for (const auto& node : nodes) {
+              auto subop_span = core->tracer()->create_span(
+                node.is_replica ? tracing::operation::mcbp_lookup_in_replica
+                                : tracing::operation::mcbp_lookup_in,
+                parent_span);
+
+              if (subop_span->uses_tags()) {
+                subop_span->add_tag(tracing::attributes::op::service, tracing::service::key_value);
+                subop_span->add_tag(tracing::attributes::op::operation_name,
+                                    node.is_replica ? tracing::operation::mcbp_lookup_in_replica
+                                                    : tracing::operation::mcbp_lookup_in);
+                subop_span->add_tag(tracing::attributes::op::bucket_name, id.bucket());
+                subop_span->add_tag(tracing::attributes::op::scope_name, id.scope());
+                subop_span->add_tag(tracing::attributes::op::collection_name, id.collection());
+              }
+
               if (node.is_replica) {
                 document_id replica_id{ id };
                 replica_id.node_index(node.index);
@@ -175,12 +191,19 @@ struct lookup_in_any_replica_request {
                     std::move(replica_id),
                     specs,
                     timeout,
-                    parent_span,
+                    subop_span,
                   },
                 };
                 ctx->add_cancellation_token(replica_req.cancel_token);
                 replica_req.access_deleted = access_deleted;
-                core->execute(replica_req, [ctx](auto&& resp) {
+                core->execute(replica_req, [ctx, subop_span](auto&& resp) {
+                  {
+                    if (subop_span->uses_tags() && resp.ctx.retry_attempts() > 0) {
+                      subop_span->add_tag(tracing::attributes::op::retry_count,
+                                          resp.ctx.retry_attempts());
+                    }
+                    subop_span->end();
+                  }
                   handler_type local_handler;
                   std::vector<std::shared_ptr<impl::cancellation_token>> cancel_tokens;
                   {
@@ -233,10 +256,19 @@ struct lookup_in_any_replica_request {
                     false,
                     specs,
                     timeout,
+                    {},
+                    subop_span,
                   },
                 };
                 ctx->add_cancellation_token(req.cancel_token);
-                core->execute(std::move(req), [ctx](auto&& resp) {
+                core->execute(std::move(req), [subop_span, ctx](auto&& resp) {
+                  {
+                    if (subop_span->uses_tags() && resp.ctx.retry_attempts() > 0) {
+                      subop_span->add_tag(tracing::attributes::op::retry_count,
+                                          resp.ctx.retry_attempts());
+                    }
+                    subop_span->end();
+                  }
                   handler_type local_handler{};
                   std::vector<std::shared_ptr<impl::cancellation_token>> cancel_tokens;
                   {

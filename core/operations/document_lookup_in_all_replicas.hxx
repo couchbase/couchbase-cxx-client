@@ -23,6 +23,7 @@
 #include "core/impl/subdoc/command.hxx"
 #include "core/operations/document_lookup_in.hxx"
 #include "core/operations/operation_traits.hxx"
+#include "core/tracing/constants.hxx"
 #include "core/utils/movable_function.hxx"
 
 #include <couchbase/codec/encoded_value.hxx>
@@ -152,14 +153,39 @@ struct lookup_in_all_replicas_request {
             auto ctx = std::make_shared<replica_context>(std::move(h), nodes.size());
 
             for (const auto& node : nodes) {
+              auto subop_span = core->tracer()->create_span(
+                node.is_replica ? tracing::operation::mcbp_lookup_in_replica
+                                : tracing::operation::mcbp_lookup_in,
+                parent_span);
+
+              if (subop_span->uses_tags()) {
+                subop_span->add_tag(tracing::attributes::op::service, tracing::service::key_value);
+                subop_span->add_tag(tracing::attributes::op::operation_name,
+                                    node.is_replica ? tracing::operation::mcbp_lookup_in_replica
+                                                    : tracing::operation::mcbp_lookup_in);
+                subop_span->add_tag(tracing::attributes::op::bucket_name, id.bucket());
+                subop_span->add_tag(tracing::attributes::op::scope_name, id.scope());
+                subop_span->add_tag(tracing::attributes::op::collection_name, id.collection());
+              }
+
               if (node.is_replica) {
                 document_id replica_id{ id };
                 replica_id.node_index(node.index);
                 auto replica_req = impl::lookup_in_replica_request{
-                  std::move(replica_id), specs, timeout, parent_span
+                  std::move(replica_id),
+                  specs,
+                  timeout,
+                  subop_span,
                 };
                 replica_req.access_deleted = access_deleted;
-                core->execute(replica_req, [ctx](auto&& resp) {
+                core->execute(replica_req, [ctx, subop_span](auto&& resp) {
+                  {
+                    if (subop_span->uses_tags() && resp.ctx.retry_attempts() > 0) {
+                      subop_span->add_tag(tracing::attributes::op::retry_count,
+                                          resp.ctx.retry_attempts());
+                    }
+                    subop_span->end();
+                  }
                   handler_type local_handler{};
                   {
                     std::scoped_lock lock(ctx->mutex_);
@@ -206,8 +232,24 @@ struct lookup_in_all_replicas_request {
                 });
               } else {
                 core->execute(
-                  lookup_in_request{ document_id{ id }, {}, {}, false, specs, timeout },
-                  [ctx](auto&& resp) {
+                  lookup_in_request{
+                    document_id{ id },
+                    {},
+                    {},
+                    false,
+                    specs,
+                    timeout,
+                    {},
+                    subop_span,
+                  },
+                  [ctx, subop_span](auto&& resp) {
+                    {
+                      if (subop_span->uses_tags() && resp.ctx.retry_attempts() > 0) {
+                        subop_span->add_tag(tracing::attributes::op::retry_count,
+                                            resp.ctx.retry_attempts());
+                      }
+                      subop_span->end();
+                    }
                     handler_type local_handler{};
                     {
                       std::scoped_lock lock(ctx->mutex_);
