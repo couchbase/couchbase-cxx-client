@@ -36,6 +36,8 @@ struct observe_seqno_request;
 struct observe_seqno_response;
 template<typename mutation_request>
 struct with_legacy_durability;
+template<typename kv_request>
+struct with_cancellation;
 } // namespace impl
 
 namespace operations
@@ -102,6 +104,12 @@ using prepend_request_with_legacy_durability = impl::with_legacy_durability<prep
 using remove_request_with_legacy_durability = impl::with_legacy_durability<remove_request>;
 using replace_request_with_legacy_durability = impl::with_legacy_durability<replace_request>;
 using upsert_request_with_legacy_durability = impl::with_legacy_durability<upsert_request>;
+
+using get_request_with_cancellation = impl::with_cancellation<get_request>;
+using get_replica_request_with_cancellation = impl::with_cancellation<impl::get_replica_request>;
+using lookup_in_request_with_cancellation = impl::with_cancellation<lookup_in_request>;
+using lookup_in_replica_request_with_cancellation =
+  impl::with_cancellation<impl::lookup_in_replica_request>;
 
 namespace management
 {

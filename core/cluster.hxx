@@ -283,6 +283,14 @@ public:
   void execute(impl::observe_seqno_request request,
                mf<void(impl::observe_seqno_response)>&& handler) const;
 
+  void execute(o::get_replica_request_with_cancellation request,
+               mf<void(impl::get_replica_response)>&& handler) const;
+  void execute(o::get_request_with_cancellation request, mf<void(o::get_response)>&& handler) const;
+  void execute(o::lookup_in_request_with_cancellation request,
+               mf<void(o::lookup_in_response)>&& handler) const;
+  void execute(o::lookup_in_replica_request_with_cancellation request,
+               mf<void(impl::lookup_in_replica_response)>&& handler) const;
+
   void execute(
     om::analytics_link_replace_request<management::analytics::azure_blob_external_link> request,
     mf<void(om::analytics_link_replace_response)>&& handler) const;

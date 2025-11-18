@@ -28,4 +28,10 @@ struct is_compound_operation : public std::false_type {
 template<typename T>
 inline constexpr bool is_compound_operation_v = is_compound_operation<T>::value;
 
+template<typename T>
+struct is_cancellable_operation : public std::false_type {
+};
+
+template<typename T>
+inline constexpr bool is_cancellable_operation_v = is_cancellable_operation<T>::value;
 } // namespace couchbase::core::operations

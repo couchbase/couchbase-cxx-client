@@ -18,6 +18,7 @@
 #pragma once
 
 #include "core/error_context/key_value.hxx"
+#include "core/error_context/subdocument_error_context.hxx"
 #include "core/impl/subdoc/command.hxx"
 #include "core/io/mcbp_context.hxx"
 #include "core/io/retry_context.hxx"
@@ -26,7 +27,6 @@
 #include "core/public_fwd.hxx"
 #include "core/timeout_defaults.hxx"
 
-#include "core/error_context/subdocument_error_context.hxx"
 #include <couchbase/lookup_in_result.hxx>
 
 namespace couchbase::core::impl
