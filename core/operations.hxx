@@ -41,5 +41,4 @@
 #include "core/operations/document_touch.hxx"
 #include "core/operations/document_unlock.hxx"
 #include "core/operations/document_upsert.hxx"
-#include "core/operations/document_view.hxx"
 #include "core/operations/http_noop.hxx"

@@ -19,6 +19,10 @@
 
 #include "cluster.hxx"
 
+#define COUCHBASE_CXX_CLIENT_IGNORE_CORE_DEPRECATIONS
+#include "core/operations/document_view.hxx"
+#undef COUCHBASE_CXX_CLIENT_IGNORE_CORE_DEPRECATIONS
+
 #include "bucket.hxx"
 #include "capella_ca.hxx"
 #include "core/app_telemetry_meter.hxx"
@@ -68,7 +72,6 @@
 #include "core/operations/document_touch.hxx"
 #include "core/operations/document_unlock.hxx"
 #include "core/operations/document_upsert.hxx"
-#include "core/operations/document_view.hxx"
 #include "core/operations/http_noop.hxx"
 #include "core/operations/management/analytics_dataset_create.hxx"
 #include "core/operations/management/analytics_dataset_drop.hxx"

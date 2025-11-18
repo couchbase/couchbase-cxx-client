@@ -15,7 +15,9 @@
  *   limitations under the License.
  */
 
+#define COUCHBASE_CXX_CLIENT_IGNORE_CORE_DEPRECATIONS
 #include "document_view.hxx"
+#undef COUCHBASE_CXX_CLIENT_IGNORE_CORE_DEPRECATIONS
 
 #include "core/utils/join_strings.hxx"
 #include "core/utils/json.hxx"
