@@ -1,0 +1,16 @@
+asan_opts=(
+    "print_cmdline=1"
+    "print_stats=1"
+    "use_odr_indicator=1"
+    "dump_instruction_bytes=1"
+    "check_initialization_order=1"
+    "alloc_dealloc_mismatch=1"
+    "detect_odr_violation=1"
+    "detect_stack_use_after_return=1"
+)
+tsan_opts=(
+    "print_cmdline=1"
+    "detect_deadlocks=1"
+    "second_deadlock_stack=1"
+    "halt_on_error=1"
+)

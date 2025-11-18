@@ -19,6 +19,7 @@
 
 #include <functional>
 #include <memory>
+#include <mutex>
 
 /* replace with standard version once http://wg21.link/P0288 will be accepted and implemented */
 namespace couchbase::core::utils
@@ -43,7 +44,6 @@ class movable_function : public std::function<Signature>
   template<typename Functor>
   struct copy_wrapper {
     Functor fn;
-
     explicit copy_wrapper(Functor&& f)
       : fn(std::move(f))
     {
@@ -54,30 +54,58 @@ class movable_function : public std::function<Signature>
   struct wrapper<Functor,
                  std::enable_if_t<!std::is_copy_constructible_v<Functor> &&
                                   std::is_move_constructible_v<Functor>>> {
-    std::shared_ptr<copy_wrapper<Functor>> fnPtr;
+    std::shared_ptr<copy_wrapper<Functor>> fn_ptr_;
+    mutable std::mutex mtx_;
 
     explicit wrapper(Functor&& f)
-      : fnPtr(new copy_wrapper<Functor>(std::move(f)))
+      : fn_ptr_(std::make_shared<copy_wrapper<Functor>>(std::move(f)))
     {
     }
 
-    wrapper(wrapper&& /* other */) noexcept = default;
-    auto operator=(wrapper&& /* other */) noexcept -> wrapper& = default;
+    wrapper(const wrapper& other)
+    {
+      std::scoped_lock lock(other.mtx_);
+      fn_ptr_ = other.fn_ptr_;
+    }
 
-    wrapper(const wrapper& other) = default;
-    auto operator=(const wrapper& /* other */) -> wrapper& = default;
+    auto operator=(const wrapper& other) -> wrapper&
+    {
+      if (this != &other) {
+        std::scoped_lock lock(mtx_, other.mtx_);
+        fn_ptr_ = other.fn_ptr_;
+      }
+      return *this;
+    }
+
+    wrapper(wrapper&& other) noexcept
+    {
+      std::scoped_lock lock(other.mtx_);
+      fn_ptr_ = std::move(other.fn_ptr_);
+    }
+
+    auto operator=(wrapper&& other) noexcept -> wrapper&
+    {
+      if (this != &other) {
+        std::scoped_lock lock(mtx_, other.mtx_);
+        fn_ptr_ = std::move(other.fn_ptr_);
+      }
+      return *this;
+    }
 
     template<typename... Args>
     auto operator()(Args&&... args)
     {
-      return std::move(fnPtr->fn)(std::forward<Args>(args)...);
+      return std::move(fn_ptr_->fn)(std::forward<Args>(args)...);
     }
+
+    ~wrapper() noexcept = default;
   };
 
   using base = std::function<Signature>;
 
 public:
   movable_function() noexcept = default;
+  movable_function(const movable_function&) = delete;
   movable_function(std::nullptr_t) noexcept
     : base(nullptr)
   {
@@ -94,6 +122,8 @@ public:
   {
     other = nullptr;
   }
+
+  auto operator=(const movable_function&) -> movable_function& = delete;
 
   auto operator=(movable_function&& other) noexcept -> movable_function&
   {
