@@ -36,11 +36,14 @@
 #include "core/operations/document_touch.hxx"
 #include "core/operations/document_unlock.hxx"
 #include "core/operations/document_upsert.hxx"
+#include "core/operations_fwd.hxx"
 
 #include <couchbase/cluster.hxx>
 #include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/lookup_in_specs.hxx>
 #include <couchbase/mutate_in_specs.hxx>
+
+#include "core/impl/with_cancellation.hxx"
 
 static const tao::json::value basic_doc = {
   { "a", 1.0 },
@@ -1072,5 +1075,37 @@ TEST_CASE("integration: get with expiry with public API", "[integration]")
       REQUIRE(resp.expiry_time().has_value());
       REQUIRE(resp.expiry_time().value() == the_expiry);
     }
+  }
+}
+
+TEST_CASE("integration: get with cancellation in the core API", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+
+  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::core::document_id id{
+    integration.ctx.bucket,
+    "_default",
+    "_default",
+    test::utils::uniq_id("foo"),
+  };
+
+  // Insert a document
+  {
+    couchbase::core::operations::insert_request req{ id, basic_doc_json };
+    auto resp = test::utils::execute(integration.cluster, req);
+    REQUIRE_SUCCESS(resp.ctx.ec());
+    REQUIRE(!resp.cas.empty());
+    REQUIRE(resp.token.sequence_number() != 0);
+  }
+
+  // Do a get but cancel it immediately
+  {
+    couchbase::core::impl::with_cancellation<couchbase::core::operations::get_request> req{
+      { id },
+    };
+    req.cancel_token->cancel();
+    auto resp = test::utils::execute(integration.cluster, req);
+    REQUIRE(resp.ctx.ec() == couchbase::errc::common::request_canceled);
   }
 }

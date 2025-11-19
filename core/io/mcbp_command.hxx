@@ -21,6 +21,7 @@
 #include "core/document_id_fmt.hxx"
 #include "core/error_context/key_value_error_map_info.hxx"
 #include "core/metrics/meter_wrapper.hxx"
+#include "core/operations/operation_traits.hxx"
 #include "core/platform/uuid.h"
 #include "core/protocol/client_request.hxx"
 #include "core/protocol/client_response.hxx"
@@ -120,20 +121,32 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
       }
       self->cancel(retry_reason::do_not_retry);
     });
+
+    if constexpr (is_cancellable_operation_v<Request>) {
+      request.cancel_token->setup([weak_self = this->weak_from_this()] {
+        if (auto self = weak_self.lock()) {
+          self->cancel(retry_reason::do_not_retry, false);
+        }
+      });
+    }
   }
 
-  void cancel(retry_reason reason)
+  void cancel(retry_reason reason, bool is_timeout = true)
   {
     if (opaque_ && session_) {
       if (session_->cancel(opaque_.value(), asio::error::operation_aborted, reason)) {
         handler_ = nullptr;
       }
     }
-    invoke_handler(
-      request.retries.idempotent() || !opaque_.has_value()
-        ? errc::common::unambiguous_timeout // safe to retry or has not been sent to the server
-        : errc::common::ambiguous_timeout   // non-idempotent and has been sent to the server
-    );
+    if (is_timeout) {
+      invoke_handler(
+        request.retries.idempotent() || !opaque_.has_value()
+          ? errc::common::unambiguous_timeout // safe to retry or has not been sent to the server
+          : errc::common::ambiguous_timeout   // non-idempotent and has been sent to the server
+      );
+    } else {
+      invoke_handler(errc::common::request_canceled);
+    }
   }
 
   void invoke_handler(std::error_code ec, std::optional<io::mcbp_message>&& msg = {})

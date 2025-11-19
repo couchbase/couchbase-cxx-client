@@ -2424,6 +2424,34 @@ cluster::execute(impl::lookup_in_replica_request request,
   return impl_->execute(std::move(request), std::move(handler));
 }
 
+void
+cluster::execute(operations::lookup_in_replica_request_with_cancellation request,
+                 utils::movable_function<void(impl::lookup_in_replica_response)>&& handler) const
+{
+  return impl_->execute(std::move(request), std::move(handler));
+}
+
+void
+cluster::execute(operations::lookup_in_request_with_cancellation request,
+                 utils::movable_function<void(operations::lookup_in_response)>&& handler) const
+{
+  return impl_->execute(std::move(request), std::move(handler));
+}
+
+void
+cluster::execute(operations::get_replica_request_with_cancellation request,
+                 utils::movable_function<void(impl::get_replica_response)>&& handler) const
+{
+  return impl_->execute(std::move(request), std::move(handler));
+}
+
+void
+cluster::execute(operations::get_request_with_cancellation request,
+                 utils::movable_function<void(operations::get_response)>&& handler) const
+{
+  return impl_->execute(std::move(request), std::move(handler));
+}
+
 auto
 cluster::http_session_manager() const
   -> std::pair<std::error_code, std::shared_ptr<io::http_session_manager>>
