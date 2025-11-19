@@ -42,7 +42,9 @@ function(set_project_options target_name)
   endif()
 
   if(HAVE_BACKTRACE OR HAVE_DLADDR)
-    if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
+       AND NOT APPLE
+       AND (CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo"))
       target_compile_options(${target_name} PRIVATE -ggdb3)
     endif()
     target_compile_definitions(${target_name} PRIVATE -D_GNU_SOURCE=1)

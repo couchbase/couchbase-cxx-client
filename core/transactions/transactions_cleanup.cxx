@@ -77,8 +77,7 @@ parse_mutation_cas(const std::string& cas) -> std::uint64_t
   if (cas.empty()) {
     return 0;
   }
-  return core::utils::byte_swap(static_cast<std::uint64_t>(std::stoull(cas, nullptr, 16))) /
-         1000000;
+  return core::utils::byte_swap(std::stoull(cas, nullptr, 16)) / 1000000;
 }
 
 // TODO(CXXCBC-549)
