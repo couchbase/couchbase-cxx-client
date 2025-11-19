@@ -18,6 +18,7 @@
 #pragma once
 
 #include <cstdint>
+#include <type_traits>
 
 namespace couchbase::core::utils
 {
@@ -46,4 +47,15 @@ byte_swap(std::uint64_t value) -> std::uint64_t
   std::uint32_t lo = byte_swap(static_cast<std::uint32_t>(value >> 32));
   return (hi << 32) | lo;
 }
+
+// when 'unsigned long long' is not the same as 'std::uint64_t'
+template<typename Dummy = void>
+static constexpr auto
+byte_swap(unsigned long long value,
+          std::enable_if_t<!std::is_same_v<unsigned long long, std::uint64_t>, Dummy>* /* dummy */ =
+            nullptr) -> std::uint64_t
+{
+  return byte_swap(static_cast<std::uint64_t>(value));
+}
+
 } // namespace couchbase::core::utils
