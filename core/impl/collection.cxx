@@ -308,6 +308,7 @@ public:
       },
       options.timeout,
       options.read_preference,
+      span,
     };
     return core_.execute(
       std::move(request),
@@ -340,6 +341,7 @@ public:
       },
       options.timeout,
       options.read_preference,
+      span,
     };
     return core_.execute(
       std::move(request),
@@ -380,7 +382,7 @@ public:
         options.durability_level,
         options.timeout,
         { options.retry_strategy },
-        options.parent_span,
+        span,
       };
       return core_.execute(
         std::move(request),
@@ -405,7 +407,7 @@ public:
       durability_level::none,
       options.timeout,
       { options.retry_strategy },
-      options.parent_span,
+      span,
     };
     return core_.execute(
       std::move(request),
@@ -464,7 +466,7 @@ public:
       static_cast<uint32_t>(lock_duration.count()),
       options.timeout,
       { options.retry_strategy },
-      options.parent_span,
+      span,
     };
     core_.execute(
       std::move(request),
@@ -500,7 +502,7 @@ public:
       cas,
       options.timeout,
       { options.retry_strategy },
-      options.parent_span,
+      span,
     };
     core_.execute(std::move(request),
                   [span = std::move(span), handler = std::move(handler)](auto&& resp) mutable {
@@ -530,7 +532,7 @@ public:
       {},
       options.timeout,
       { options.retry_strategy },
-      options.parent_span,
+      span,
     };
     core_.execute(
       std::move(request),

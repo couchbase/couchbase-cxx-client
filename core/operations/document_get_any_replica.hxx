@@ -52,6 +52,7 @@ struct get_any_replica_request {
   core::document_id id;
   std::optional<std::chrono::milliseconds> timeout{};
   couchbase::read_preference read_preference{ couchbase::read_preference::no_preference };
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
   template<typename Core, typename Handler>
   void execute(Core core, Handler handler)
@@ -62,6 +63,7 @@ struct get_any_replica_request {
        id = id,
        timeout = timeout,
        read_preference = read_preference,
+       parent_span = std::move(parent_span),
        h = std::forward<Handler>(handler)](
         std::error_code ec, std::shared_ptr<topology::configuration> config) mutable {
         const auto [e, origin] = core->origin();
@@ -118,6 +120,20 @@ struct get_any_replica_request {
         auto ctx = std::make_shared<replica_context>(std::move(h), nodes.size());
 
         for (const auto& node : nodes) {
+          auto subop_span = core->tracer()->create_span(
+            node.is_replica ? tracing::operation::mcbp_get_replica : tracing::operation::mcbp_get,
+            parent_span);
+
+          if (subop_span->uses_tags()) {
+            subop_span->add_tag(tracing::attributes::op::service, tracing::service::key_value);
+            subop_span->add_tag(tracing::attributes::op::operation_name,
+                                node.is_replica ? tracing::operation::mcbp_get_replica
+                                                : tracing::operation::mcbp_get);
+            subop_span->add_tag(tracing::attributes::op::bucket_name, id.bucket());
+            subop_span->add_tag(tracing::attributes::op::scope_name, id.scope());
+            subop_span->add_tag(tracing::attributes::op::collection_name, id.collection());
+          }
+
           if (node.is_replica) {
             document_id replica_id{ id };
             replica_id.node_index(node.index);
@@ -125,11 +141,22 @@ struct get_any_replica_request {
               {
                 std::move(replica_id),
                 timeout,
+                {},
+                {},
+                {},
+                subop_span,
               },
             };
             ctx->add_cancellation_token(req.cancel_token);
             core->execute(
-              std::move(req), [ctx](auto&& resp) {
+              std::move(req), [ctx, subop_span](auto&& resp) {
+                {
+                  if (subop_span->uses_tags() && resp.ctx.retry_attempts() > 0) {
+                    subop_span->add_tag(tracing::attributes::op::retry_count,
+                                        resp.ctx.retry_attempts());
+                  }
+                  subop_span->end();
+                }
                 handler_type local_handler;
                 std::vector<std::shared_ptr<impl::cancellation_token>> cancel_tokens;
                 {
@@ -165,10 +192,19 @@ struct get_any_replica_request {
                 {},
                 {},
                 timeout,
+                {},
+                subop_span,
               },
             };
             ctx->add_cancellation_token(req.cancel_token);
-            core->execute(std::move(req), [ctx](auto&& resp) {
+            core->execute(std::move(req), [ctx, subop_span](auto&& resp) {
+              {
+                if (subop_span->uses_tags() && resp.ctx.retry_attempts() > 0) {
+                  subop_span->add_tag(tracing::attributes::op::retry_count,
+                                      resp.ctx.retry_attempts());
+                }
+                subop_span->end();
+              }
               handler_type local_handler{};
               std::vector<std::shared_ptr<impl::cancellation_token>> cancel_tokens;
               {

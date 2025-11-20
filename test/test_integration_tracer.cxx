@@ -35,7 +35,8 @@ public:
   {
   }
 
-  test_span(const std::string& name, std::shared_ptr<couchbase::tracing::request_span> parent)
+  test_span(const std::string& name,
+            const std::shared_ptr<couchbase::tracing::request_span>& parent)
     : request_span(name, parent)
   {
     start_ = std::chrono::steady_clock::now();
@@ -60,6 +61,8 @@ public:
 
   void add_child_span(const std::shared_ptr<test_span>& child)
   {
+    const std::scoped_lock lock(child_spans_lock_);
+
     const auto child_span_name = child->name();
     if (child_spans_.count(child_span_name) == 0) {
       child_spans_.insert({ child_span_name, {} });
@@ -67,9 +70,19 @@ public:
     child_spans_[child_span_name].emplace_back(child);
   }
 
-  auto child_spans() -> const std::map<std::string, std::vector<std::weak_ptr<test_span>>>&
+  auto child_spans() -> std::map<std::string, std::vector<std::weak_ptr<test_span>>>
   {
+    const std::shared_lock lock(child_spans_lock_);
     return child_spans_;
+  }
+
+  auto child_spans(const std::string& name) -> std::vector<std::weak_ptr<test_span>>
+  {
+    const std::shared_lock lock(child_spans_lock_);
+    if (child_spans_.count(name) == 0) {
+      return {};
+    }
+    return child_spans_.at(name);
   }
 
   auto string_tags() -> std::map<std::string, std::string>
@@ -82,12 +95,12 @@ public:
     return int_tags_;
   }
 
-  auto duration() -> std::chrono::nanoseconds
+  auto duration() const -> std::chrono::nanoseconds
   {
     return duration_;
   }
 
-  auto start() -> std::chrono::time_point<std::chrono::steady_clock>
+  auto start() const -> std::chrono::time_point<std::chrono::steady_clock>
   {
     return start_;
   }
@@ -104,13 +117,14 @@ private:
   std::map<std::string, std::string> string_tags_;
   std::map<std::string, std::uint64_t> int_tags_;
   std::map<std::string, std::vector<std::weak_ptr<test_span>>> child_spans_{};
+  std::shared_mutex child_spans_lock_{};
 };
 
 class test_tracer : public couchbase::tracing::request_tracer
 {
 public:
   auto start_span(std::string name, std::shared_ptr<couchbase::tracing::request_span> parent = {})
-    -> std::shared_ptr<couchbase::tracing::request_span>
+    -> std::shared_ptr<couchbase::tracing::request_span> override
   {
     fmt::println("Creating span {} with parent {}", name, parent ? parent->name() : "<none>");
 
@@ -127,6 +141,7 @@ public:
 
   auto spans() -> std::vector<std::shared_ptr<test_span>>
   {
+    const std::lock_guard<std::mutex> lock(mutex_);
     return spans_;
   }
 
@@ -205,7 +220,7 @@ assert_dispatch_span_ok(test::utils::integration_test_guard& guard,
 void
 assert_kv_dispatch_span_ok(test::utils::integration_test_guard& guard,
                            const std::shared_ptr<test_span>& span,
-                           std::shared_ptr<test_span> parent)
+                           const std::shared_ptr<test_span>& parent)
 {
   assert_dispatch_span_ok(guard, span, parent);
 
@@ -221,7 +236,41 @@ void
 assert_kv_op_span_ok(test::utils::integration_test_guard& guard,
                      const std::shared_ptr<test_span>& span,
                      const std::string& op,
-                     std::shared_ptr<test_span> parent = nullptr)
+                     std::shared_ptr<test_span> parent = nullptr,
+                     bool is_top_level_span = true,
+                     bool must_have_dispatch_spans = true)
+{
+  assert_span_ok(guard, span, is_top_level_span, parent);
+
+  const std::size_t expected_tag_count =
+    (guard.cluster_version().supports_cluster_labels()) ? 8 : 6;
+  REQUIRE(span->string_tags().size() + span->int_tags().size() == expected_tag_count);
+
+  REQUIRE(op == span->name());
+  REQUIRE(span->string_tags()["couchbase.service"] == "kv");
+  REQUIRE(span->string_tags()["db.namespace"] == guard.ctx.bucket);
+  REQUIRE(span->string_tags()["couchbase.scope.name"] == "_default");
+  REQUIRE(span->string_tags()["couchbase.collection.name"] == "_default");
+  REQUIRE(span->string_tags()["db.operation.name"] == op);
+
+  // There must be at least one dispatch span
+  auto dispatch_spans = span->child_spans("dispatch_to_server");
+  if (must_have_dispatch_spans) {
+    REQUIRE_FALSE(dispatch_spans.empty());
+  }
+
+  for (const auto& dispatch_span : dispatch_spans) {
+    assert_kv_dispatch_span_ok(guard, dispatch_span.lock(), span);
+  }
+}
+
+void
+assert_compound_kv_op_span_ok(test::utils::integration_test_guard& guard,
+                              const std::shared_ptr<test_span>& span,
+                              const std::string& op,
+                              const std::map<std::string, std::size_t>& child_ops,
+                              std::shared_ptr<test_span> parent = nullptr,
+                              bool is_any_replica = false)
 {
   assert_span_ok(guard, span, true, parent);
 
@@ -236,15 +285,15 @@ assert_kv_op_span_ok(test::utils::integration_test_guard& guard,
   REQUIRE(span->string_tags()["couchbase.collection.name"] == "_default");
   REQUIRE(span->string_tags()["db.operation.name"] == op);
 
-  // There must be at least one dispatch span
-  auto dispatch_spans = span->child_spans().find("dispatch_to_server");
-  REQUIRE(dispatch_spans != span->child_spans().end());
-  REQUIRE_FALSE(dispatch_spans->second.empty());
-
-  for (const auto& dispatch_span : dispatch_spans->second) {
-    assert_kv_dispatch_span_ok(guard, dispatch_span.lock(), span);
+  for (const auto& [child_op_name, child_op_count] : child_ops) {
+    const auto child_op_spans = span->child_spans(child_op_name);
+    REQUIRE_FALSE(child_op_spans.empty());
+    for (const auto& s : child_op_spans) {
+      // Get any replica sub-operations can be cancelled early, so dispatch spans may be missing
+      assert_kv_op_span_ok(guard, s.lock(), child_op_name, span, false, !is_any_replica);
+    }
   }
-}
+};
 
 void
 assert_kv_op_span_has_request_encoding(test::utils::integration_test_guard& guard,
@@ -252,10 +301,9 @@ assert_kv_op_span_has_request_encoding(test::utils::integration_test_guard& guar
 {
   std::shared_ptr<test_span> request_encoding_span;
   {
-    const auto request_encoding_spans = op_span->child_spans().find("request_encoding");
-    REQUIRE(request_encoding_spans != op_span->child_spans().end());
-    REQUIRE(request_encoding_spans->second.size() == 1);
-    request_encoding_span = request_encoding_spans->second.at(0).lock();
+    const auto request_encoding_spans = op_span->child_spans("request_encoding");
+    REQUIRE(request_encoding_spans.size() == 1);
+    request_encoding_span = request_encoding_spans.at(0).lock();
   }
   assert_span_ok(guard, request_encoding_span, false, op_span);
 }
@@ -263,7 +311,7 @@ assert_kv_op_span_has_request_encoding(test::utils::integration_test_guard& guar
 void
 assert_http_dispatch_span_ok(test::utils::integration_test_guard& guard,
                              const std::shared_ptr<test_span>& span,
-                             std::shared_ptr<test_span> parent)
+                             const std::shared_ptr<test_span>& parent)
 {
   assert_dispatch_span_ok(guard, span, parent);
 
@@ -313,11 +361,10 @@ assert_http_op_span_ok(test::utils::integration_test_guard& guard,
   }
 
   // There must be at least one dispatch span
-  auto dispatch_spans = span->child_spans().find("dispatch_to_server");
-  REQUIRE(dispatch_spans != span->child_spans().end());
-  REQUIRE_FALSE(dispatch_spans->second.empty());
+  auto dispatch_spans = span->child_spans("dispatch_to_server");
+  REQUIRE_FALSE(dispatch_spans.empty());
 
-  for (const auto& dispatch_span : dispatch_spans->second) {
+  for (const auto& dispatch_span : dispatch_spans) {
     assert_http_dispatch_span_ok(guard, dispatch_span.lock(), span);
   }
 }
@@ -360,20 +407,17 @@ assert_compound_http_op_span_ok(
     REQUIRE(span->string_tags().count("couchbase.collection.name") == 0);
   }
 
-  auto sub_op_spans = span->child_spans();
   for (const auto& [expected_sub_op, expected_sub_op_count] : expected_sub_ops) {
-    auto it = sub_op_spans.find(expected_sub_op);
-    REQUIRE(it != sub_op_spans.end());
+    auto sub_op_spans = span->child_spans(expected_sub_op);
+    REQUIRE_FALSE(sub_op_spans.empty());
 
     if (expected_sub_op_count > 0) {
-      REQUIRE(it->second.size() == expected_sub_op_count);
-    } else {
-      // We don't expect a specific number of sub-operations. For example, in watch_indexes there
-      // can be any number of get_all_indexes calls.
-      REQUIRE(it->second.size() > 0);
+      // In some cases, we don't expect a specific number of sub-operations. For example, in
+      // watch_indexes there can be any number of get_all_indexes calls.
+      REQUIRE(sub_op_spans.size() == expected_sub_op_count);
     }
 
-    for (const auto& sub_op_span : it->second) {
+    for (const auto& sub_op_span : sub_op_spans) {
       assert_http_op_span_ok(guard,
                              sub_op_span.lock(),
                              expected_sub_op,
@@ -462,6 +506,16 @@ TEST_CASE("integration: enable external tracer - KV operations", "[integration]"
     assert_kv_op_span_has_request_encoding(integration, spans.front());
   }
 
+  SECTION("remove")
+  {
+    auto [err, res] =
+      collection.remove(existing_key, couchbase::remove_options().parent_span(parent_span)).get();
+    REQUIRE_SUCCESS(err.ec());
+    auto spans = tracer->spans();
+    REQUIRE_FALSE(spans.empty());
+    assert_kv_op_span_ok(integration, spans.front(), "remove", parent_span);
+  }
+
   SECTION("lookup_in")
   {
     auto [err, res] =
@@ -488,6 +542,92 @@ TEST_CASE("integration: enable external tracer - KV operations", "[integration]"
     auto spans = tracer->spans();
     REQUIRE_FALSE(spans.empty());
     assert_kv_op_span_ok(integration, spans.front(), "mutate_in", parent_span);
+  }
+
+  SECTION("get all replicas")
+  {
+    auto [err, res] =
+      collection
+        .get_all_replicas(existing_key,
+                          couchbase::get_all_replicas_options().parent_span(parent_span))
+        .get();
+    REQUIRE_SUCCESS(err.ec());
+    auto spans = tracer->spans();
+    REQUIRE_FALSE(spans.empty());
+    assert_compound_kv_op_span_ok(integration,
+                                  spans.front(),
+                                  "get_all_replicas",
+                                  {
+                                    { "get", 1 },
+                                    { "get_replica", integration.number_of_replicas() },
+                                  },
+                                  parent_span);
+  }
+
+  SECTION("get any replica")
+  {
+    auto [err, res] =
+      collection
+        .get_any_replica(existing_key,
+                         couchbase::get_any_replica_options().parent_span(parent_span))
+        .get();
+    REQUIRE_SUCCESS(err.ec());
+    auto spans = tracer->spans();
+    REQUIRE_FALSE(spans.empty());
+    assert_compound_kv_op_span_ok(integration,
+                                  spans.front(),
+                                  "get_any_replica",
+                                  {
+                                    { "get", 1 },
+                                    { "get_replica", integration.number_of_replicas() },
+                                  },
+                                  parent_span,
+                                  true);
+  }
+
+  if (integration.has_bucket_capability("subdoc.ReplicaRead")) {
+    SECTION("lookup in all replicas")
+    {
+      auto [err, res] = collection
+                          .lookup_in_all_replicas(
+                            existing_key,
+                            couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("some") },
+                            couchbase::lookup_in_all_replicas_options().parent_span(parent_span))
+                          .get();
+      REQUIRE_SUCCESS(err.ec());
+      auto spans = tracer->spans();
+      REQUIRE_FALSE(spans.empty());
+      assert_compound_kv_op_span_ok(integration,
+                                    spans.front(),
+                                    "lookup_in_all_replicas",
+                                    {
+                                      { "lookup_in", 1 },
+                                      { "lookup_in_replica", integration.number_of_replicas() },
+                                    },
+                                    parent_span);
+    }
+
+    SECTION("lookup in any replica")
+    {
+      auto [err, res] = collection
+                          .lookup_in_any_replica(
+                            existing_key,
+                            couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("some") },
+                            couchbase::lookup_in_any_replica_options().parent_span(parent_span))
+                          .get();
+      REQUIRE_SUCCESS(err.ec());
+      auto spans = tracer->spans();
+      REQUIRE_FALSE(spans.empty());
+      assert_compound_kv_op_span_ok(integration,
+                                    spans.front(),
+                                    "lookup_in_any_replica",
+                                    {
+                                      { "lookup_in", 1 },
+                                      { "lookup_in_replica", integration.number_of_replicas() },
+                                    },
+                                    parent_span,
+                                    true);
+    }
   }
 
   tracer->reset();
