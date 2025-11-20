@@ -43,7 +43,7 @@ wrapper_sdk_span::wrapper_sdk_span(std::string name)
 }
 
 wrapper_sdk_span::wrapper_sdk_span(std::string name,
-                                   std::shared_ptr<couchbase::tracing::request_span> parent)
+                                   const std::shared_ptr<couchbase::tracing::request_span>& parent)
   : couchbase::tracing::request_span{ std::move(name) }
   , parent_{ parent }
 {

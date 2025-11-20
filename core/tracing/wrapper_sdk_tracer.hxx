@@ -49,7 +49,8 @@ class wrapper_sdk_span : public couchbase::tracing::request_span
 public:
   wrapper_sdk_span() = default;
   explicit wrapper_sdk_span(std::string name);
-  wrapper_sdk_span(std::string name, std::shared_ptr<couchbase::tracing::request_span> parent);
+  wrapper_sdk_span(std::string name,
+                   const std::shared_ptr<couchbase::tracing::request_span>& parent);
 
   void add_child(const std::shared_ptr<wrapper_sdk_span>& child);
 
