@@ -315,12 +315,21 @@ struct server_version {
     return (major > 7 || (major == 7 && minor >= 6));
   }
 
-  [[nodiscard]] auto supports_eventing_mb_67773_errors() const -> bool
+  [[nodiscard]] auto supports_eventing_invalid_request_error() const -> bool
   {
     // See MB-67773. A few errors have changed in eventing, most notably, many specific errors were
-    // replaced with ERR_INVALID_REQUEST. Some operations now also result in success instead of an
-    // error. e.g. when an already undeployed function is undeployed.
+    // replaced with ERR_INVALID_REQUEST.
     return major >= 8;
+  }
+
+  [[nodiscard]] auto does_not_return_error_when_eventing_function_is_already_in_desired_state()
+    const -> bool
+  {
+    // Some of the changes made in MB-67773 were reverted in 8.0.1 (see MB-68692). When trying to
+    // execute a function state transition to a state the function is already in (e.g. undeploying
+    // an already undeployed function), an error will be returned again, as it was prior to
+    // MB-67773.
+    return major == 8 && minor == 0 && micro == 0;
   }
 };
 
