@@ -243,7 +243,7 @@ assert_kv_op_span_ok(test::utils::integration_test_guard& guard,
   assert_span_ok(guard, span, is_top_level_span, parent);
 
   const std::size_t expected_tag_count =
-    (guard.cluster_version().supports_cluster_labels()) ? 8 : 6;
+    (guard.cluster_version().supports_cluster_labels()) ? 9 : 7;
   REQUIRE(span->string_tags().size() + span->int_tags().size() == expected_tag_count);
 
   REQUIRE(op == span->name());
@@ -252,6 +252,7 @@ assert_kv_op_span_ok(test::utils::integration_test_guard& guard,
   REQUIRE(span->string_tags()["couchbase.scope.name"] == "_default");
   REQUIRE(span->string_tags()["couchbase.collection.name"] == "_default");
   REQUIRE(span->string_tags()["db.operation.name"] == op);
+  REQUIRE(span->int_tags().find("couchbase.retries") != span->int_tags().end());
 
   // There must be at least one dispatch span
   auto dispatch_spans = span->child_spans("dispatch_to_server");
@@ -338,6 +339,7 @@ assert_http_op_span_ok(test::utils::integration_test_guard& guard,
 
   REQUIRE(span->name().find(op) != std::string::npos);
   REQUIRE(span->string_tags()["db.operation.name"] == op);
+  REQUIRE(span->int_tags().find("couchbase.retries") != span->int_tags().end());
   REQUIRE(span->duration().count() > 0);
   if (expected_service.has_value()) {
     REQUIRE(span->string_tags()["couchbase.service"] == expected_service.value());

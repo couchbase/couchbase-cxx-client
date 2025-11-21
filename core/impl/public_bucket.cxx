@@ -21,6 +21,7 @@
 #include "core/tracing/constants.hxx"
 #include "core/tracing/tracer_wrapper.hxx"
 #include "diagnostics.hxx"
+#include "observability_recorder.hxx"
 
 #include <couchbase/collection.hxx>
 #include <couchbase/collection_manager.hxx>
@@ -65,39 +66,35 @@ public:
 
   void ping(const ping_options::built& options, ping_handler&& handler) const
   {
-    auto span = create_span(core::tracing::operation::ping, std::nullopt, options.parent_span);
+    auto obs_rec = create_observability_recorder(
+      core::tracing::operation::ping, std::nullopt, options.parent_span);
     return core_.ping(
       options.report_id,
       name_,
       core::impl::to_core_service_types(options.service_types),
       options.timeout,
-      [span = std::move(span), handler = std::move(handler)](const auto& resp) mutable {
-        span->end();
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) mutable {
+        obs_rec->finish({});
         return handler({}, core::impl::build_result(resp));
       });
   }
 
 private:
-  [[nodiscard]] auto tracer() const -> const std::shared_ptr<core::tracing::tracer_wrapper>&
+  [[nodiscard]] auto create_observability_recorder(
+    const std::string& operation_name,
+    const std::optional<core::service_type> service,
+    const std::shared_ptr<tracing::request_span>& parent_span) const
+    -> std::unique_ptr<core::impl::observability_recorder>
   {
-    return core_.tracer();
-  }
+    auto rec = core::impl::observability_recorder::create(
+      operation_name, parent_span, core_.tracer(), core_.meter());
 
-  [[nodiscard]] auto create_span(const std::string& operation_name,
-                                 const std::optional<core::service_type> service,
-                                 const std::shared_ptr<tracing::request_span>& parent_span) const
-    -> std::shared_ptr<tracing::request_span>
-  {
-    auto span = tracer()->create_span(operation_name, parent_span);
-    if (span->uses_tags()) {
-      if (service.has_value()) {
-        span->add_tag(core::tracing::attributes::op::service,
-                      core::tracing::service_name_for_http_service(service.value()));
-      }
-      span->add_tag(core::tracing::attributes::op::bucket_name, name_);
-      span->add_tag(core::tracing::attributes::op::operation_name, operation_name);
+    rec->with_bucket_name(name_);
+    if (service.has_value()) {
+      rec->with_service(core::tracing::service_name_for_http_service(service.value()));
     }
-    return span;
+
+    return rec;
   }
 
   core::cluster core_;

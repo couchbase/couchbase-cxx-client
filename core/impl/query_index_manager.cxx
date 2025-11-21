@@ -18,6 +18,7 @@
 #include "core/cluster.hxx"
 
 #include "core/impl/error.hxx"
+#include "core/impl/observability_recorder.hxx"
 #include "core/logger/logger.hxx"
 #include "core/operations/management/query_index_build_deferred.hxx"
 #include "core/operations/management/query_index_create.hxx"
@@ -58,7 +59,9 @@ public:
     , scope_name_(std::move(scope_name))
     , collection_name_(std::move(collection_name))
     , handler_(std::move(handler))
-    , span_(create_span(core::tracing::operation::mgr_query_watch_indexes, options_.parent_span))
+    , observability_recorder_(
+        create_observability_recorder(core::tracing::operation::mgr_query_watch_indexes,
+                                      options_.parent_span))
   {
   }
 
@@ -70,7 +73,7 @@ public:
     , scope_name_(std::move(other.scope_name_))
     , collection_name_(std::move(other.collection_name_))
     , handler_(std::move(other.handler_))
-    , span_(std::move(other.span_))
+    , observability_recorder_(std::move(other.observability_recorder_))
     , timer_(std::move(other.timer_))
     , start_time_(other.start_time_)
     , timeout_(other.timeout_)
@@ -85,17 +88,21 @@ public:
 
   void execute()
   {
-    auto get_all_span = create_span(core::tracing::operation::mgr_query_get_all_indexes, span_);
+    auto get_all_obs_rec = create_suboperation_observability_recorder(
+      core::tracing::operation::mgr_query_get_all_indexes, observability_recorder_);
     core::operations::management::query_index_get_all_request get_all_request{
-      bucket_name_, scope_name_, collection_name_, {}, {}, remaining(), get_all_span,
+      bucket_name_,
+      scope_name_,
+      collection_name_,
+      {},
+      {},
+      remaining(),
+      get_all_obs_rec->operation_span(),
     };
     return core_.execute(
       std::move(get_all_request),
-      [ctx = shared_from_this(), get_all_span = std::move(get_all_span)](auto resp) {
-        if (auto retries = resp.ctx.retry_attempts; get_all_span->uses_tags() && retries > 0) {
-          get_all_span->add_tag(core::tracing::attributes::op::retry_count, retries);
-        }
-        get_all_span->end();
+      [ctx = shared_from_this(), get_all_obs_rec = std::move(get_all_obs_rec)](auto resp) {
+        get_all_obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
         if (ctx->check(resp)) {
           ctx->finish(resp, {});
         } else if (ctx->remaining().count() <= 0) {
@@ -116,7 +123,7 @@ private:
       if (ec.has_value()) {
         resp.ctx.ec = ec.value();
       }
-      span_->end();
+      observability_recorder_->finish(resp.ctx.ec);
       handler(core::impl::make_error(resp.ctx));
       timer_.cancel();
     }
@@ -166,21 +173,35 @@ private:
     });
   }
 
-  [[nodiscard]] auto create_span(const std::string& operation_name,
-                                 const std::shared_ptr<tracing::request_span>& parent_span) const
-    -> std::shared_ptr<tracing::request_span>
+  [[nodiscard]] auto create_observability_recorder(
+    const std::string& operation_name,
+    const std::shared_ptr<tracing::request_span>& parent_span) const
+    -> std::unique_ptr<core::impl::observability_recorder>
   {
-    auto span = core_.tracer()->create_span(operation_name, parent_span);
-    if (span->uses_tags()) {
-      span->add_tag(core::tracing::attributes::op::service, core::tracing::service::query);
-      span->add_tag(core::tracing::attributes::op::bucket_name, bucket_name_);
-      if (!collection_name_.empty()) {
-        span->add_tag(core::tracing::attributes::op::scope_name, scope_name_);
-        span->add_tag(core::tracing::attributes::op::collection_name, collection_name_);
-      }
-      span->add_tag(core::tracing::attributes::op::operation_name, operation_name);
+    auto rec = core::impl::observability_recorder::create(
+      operation_name, parent_span, core_.tracer(), core_.meter());
+    rec->with_service(core::tracing::service::query);
+    rec->with_bucket_name(bucket_name_);
+    if (!collection_name_.empty()) {
+      rec->with_scope_name(scope_name_);
+      rec->with_collection_name(collection_name_);
     }
-    return span;
+    return rec;
+  }
+
+  [[nodiscard]] auto create_suboperation_observability_recorder(
+    const std::string& subop_name,
+    const std::unique_ptr<core::impl::observability_recorder>& parent_recorder) const
+    -> std::unique_ptr<core::impl::observability_recorder>
+  {
+    auto rec = parent_recorder->record_suboperation(subop_name);
+    rec->with_service(core::tracing::service::query);
+    rec->with_bucket_name(bucket_name_);
+    if (!collection_name_.empty()) {
+      rec->with_scope_name(scope_name_);
+      rec->with_collection_name(collection_name_);
+    }
+    return rec;
   }
 
   couchbase::core::cluster core_;
@@ -190,7 +211,7 @@ private:
   std::string scope_name_;
   std::string collection_name_;
   watch_query_indexes_handler handler_;
-  std::shared_ptr<tracing::request_span> span_;
+  std::unique_ptr<core::impl::observability_recorder> observability_recorder_;
   asio::steady_timer timer_{ core_.io_context() };
   std::chrono::steady_clock::time_point start_time_{ std::chrono::steady_clock::now() };
   std::chrono::milliseconds timeout_{ options_.timeout.value_or(
@@ -214,23 +235,20 @@ public:
                        const get_all_query_indexes_options::built& options,
                        get_all_query_indexes_handler&& handler) const
   {
-    auto span = create_span(core::tracing::operation::mgr_query_get_all_indexes,
-                            bucket_name,
-                            scope_name,
-                            collection_name,
-                            options.parent_span);
+    auto obs_rec =
+      create_observability_recorder(core::tracing::operation::mgr_query_get_all_indexes,
+                                    bucket_name,
+                                    scope_name,
+                                    collection_name,
+                                    options.parent_span);
 
     core::operations::management::query_index_get_all_request request{
-      bucket_name, scope_name, collection_name, {}, {}, options.timeout, span,
+      bucket_name, scope_name, collection_name, {}, {}, options.timeout, obs_rec->operation_span(),
     };
     return core_.execute(std::move(request),
-                         [span = std::move(span), handler = std::move(handler)](
+                         [obs_rec = std::move(obs_rec), handler = std::move(handler)](
                            const core::operations::management::query_index_get_all_response& resp) {
-                           if (const auto retries = resp.ctx.retry_attempts;
-                               span->uses_tags() && retries > 0) {
-                             span->add_tag(core::tracing::attributes::op::retry_count, retries);
-                           }
-                           span->end();
+                           obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
                            if (resp.ctx.ec) {
                              return handler(core::impl::make_error(resp.ctx), {});
                            }
@@ -246,11 +264,11 @@ public:
                     const create_query_index_options::built& options,
                     create_query_index_handler&& handler) const
   {
-    auto span = create_span(core::tracing::operation::mgr_query_create_index,
-                            bucket_name,
-                            scope_name,
-                            collection_name,
-                            options.parent_span);
+    auto obs_rec = create_observability_recorder(core::tracing::operation::mgr_query_create_index,
+                                                 bucket_name,
+                                                 scope_name,
+                                                 collection_name,
+                                                 options.parent_span);
 
     core::operations::management::query_index_create_request request{
       bucket_name,
@@ -266,14 +284,12 @@ public:
       options.num_replicas,
       {},
       options.timeout,
-      span,
+      obs_rec->operation_span(),
     };
     return core_.execute(
-      std::move(request), [span = std::move(span), handler = std::move(handler)](const auto& resp) {
-        if (const auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-          span->add_tag(core::tracing::attributes::op::retry_count, retries);
-        }
-        span->end();
+      std::move(request),
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) {
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
         handler(core::impl::make_error(resp.ctx));
       });
   }
@@ -284,11 +300,12 @@ public:
                             const create_primary_query_index_options::built& options,
                             create_primary_query_index_handler&& handler) const
   {
-    auto span = create_span(core::tracing::operation::mgr_query_create_primary_index,
-                            bucket_name,
-                            scope_name,
-                            collection_name,
-                            options.parent_span);
+    auto obs_rec =
+      create_observability_recorder(core::tracing::operation::mgr_query_create_primary_index,
+                                    bucket_name,
+                                    scope_name,
+                                    collection_name,
+                                    options.parent_span);
 
     core::operations::management::query_index_create_request request{
       bucket_name,
@@ -304,14 +321,12 @@ public:
       options.num_replicas,
       {},
       options.timeout,
-      span,
+      obs_rec->operation_span(),
     };
     return core_.execute(
-      std::move(request), [span = std::move(span), handler = std::move(handler)](const auto& resp) {
-        if (const auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-          span->add_tag(core::tracing::attributes::op::retry_count, retries);
-        }
-        span->end();
+      std::move(request),
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) {
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
         handler(core::impl::make_error(resp.ctx));
       });
   }
@@ -323,11 +338,11 @@ public:
                   const drop_query_index_options::built& options,
                   drop_query_index_handler&& handler) const
   {
-    auto span = create_span(core::tracing::operation::mgr_query_drop_index,
-                            bucket_name,
-                            scope_name,
-                            collection_name,
-                            options.parent_span);
+    auto obs_rec = create_observability_recorder(core::tracing::operation::mgr_query_drop_index,
+                                                 bucket_name,
+                                                 scope_name,
+                                                 collection_name,
+                                                 options.parent_span);
 
     core::operations::management::query_index_drop_request request{
       bucket_name,
@@ -339,14 +354,12 @@ public:
       options.ignore_if_not_exists,
       {},
       options.timeout,
-      span,
+      obs_rec->operation_span(),
     };
     return core_.execute(
-      std::move(request), [span = std::move(span), handler = std::move(handler)](const auto& resp) {
-        if (const auto retries = resp.ctx.retry_attempts; resp.ctx.ec && retries > 0) {
-          span->add_tag(core::tracing::attributes::op::retry_count, retries);
-        }
-        span->end();
+      std::move(request),
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) {
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
         handler(core::impl::make_error(resp.ctx));
       });
   }
@@ -357,11 +370,12 @@ public:
                           const drop_primary_query_index_options::built& options,
                           drop_primary_query_index_handler&& handler) const
   {
-    auto span = create_span(core::tracing::operation::mgr_query_drop_primary_index,
-                            bucket_name,
-                            scope_name,
-                            collection_name,
-                            options.parent_span);
+    auto obs_rec =
+      create_observability_recorder(core::tracing::operation::mgr_query_drop_primary_index,
+                                    bucket_name,
+                                    scope_name,
+                                    collection_name,
+                                    options.parent_span);
 
     core::operations::management::query_index_drop_request request{
       bucket_name,
@@ -373,16 +387,12 @@ public:
       options.ignore_if_not_exists,
       {},
       options.timeout,
-      span,
+      obs_rec->operation_span(),
     };
     return core_.execute(std::move(request),
-                         [span = std::move(span), handler = std::move(handler)](
+                         [obs_rec = std::move(obs_rec), handler = std::move(handler)](
                            const core::operations::management::query_index_drop_response& resp) {
-                           if (const auto retries = resp.ctx.retry_attempts;
-                               resp.ctx.ec && retries > 0) {
-                             span->add_tag(core::tracing::attributes::op::retry_count, retries);
-                           }
-                           span->end();
+                           obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
                            handler(core::impl::make_error(resp.ctx));
                          });
   }
@@ -395,21 +405,28 @@ public:
   {
     auto timeout = options.timeout;
 
-    auto top_span = create_span(core::tracing::operation::mgr_query_build_deferred_indexes,
-                                bucket_name,
-                                scope_name,
-                                collection_name,
-                                options.parent_span);
+    auto top_obs_rec =
+      create_observability_recorder(core::tracing::operation::mgr_query_build_deferred_indexes,
+                                    bucket_name,
+                                    scope_name,
+                                    collection_name,
+                                    options.parent_span);
 
-    auto get_all_deferred_span =
-      create_span(core::tracing::operation::mgr_query_get_all_deferred_indexes,
-                  bucket_name,
-                  scope_name,
-                  collection_name,
-                  top_span);
+    auto get_all_deferred_obs_rec = create_suboperation_observability_recorder(
+      core::tracing::operation::mgr_query_get_all_deferred_indexes,
+      bucket_name,
+      scope_name,
+      collection_name,
+      top_obs_rec);
 
     core::operations::management::query_index_get_all_deferred_request get_all_deferred_request{
-      bucket_name, scope_name, collection_name, {}, {}, options.timeout, get_all_deferred_span,
+      bucket_name,
+      scope_name,
+      collection_name,
+      {},
+      {},
+      options.timeout,
+      get_all_deferred_obs_rec->operation_span(),
     };
 
     return core_.execute(
@@ -419,39 +436,41 @@ public:
        scope = scope_name,
        collection = collection_name,
        timeout,
-       get_all_deferred_span = std::move(get_all_deferred_span),
-       top_span = std::move(top_span),
+       get_all_deferred_obs_rec = std::move(get_all_deferred_obs_rec),
+       top_obs_rec = std::move(top_obs_rec),
        handler = std::move(handler)](auto list_resp) mutable {
-        if (const auto retries = list_resp.ctx.retry_attempts;
-            get_all_deferred_span->uses_tags() && retries > 0) {
-          get_all_deferred_span->add_tag(core::tracing::attributes::op::retry_count, retries);
-        }
-        get_all_deferred_span->end();
+        get_all_deferred_obs_rec->finish(list_resp.ctx.retry_attempts, list_resp.ctx.ec);
         if (list_resp.ctx.ec) {
-          top_span->end();
+          top_obs_rec->finish(list_resp.ctx.ec);
           return handler(core::impl::make_error(list_resp.ctx));
         }
         if (list_resp.index_names.empty()) {
-          top_span->end();
+          top_obs_rec->finish(list_resp.ctx.ec);
           return handler(core::impl::make_error(list_resp.ctx));
         }
-        auto build_span = self->create_span(
-          core::tracing::operation::mgr_query_build_indexes, bucket, scope, collection, top_span);
+        auto build_obs_rec = self->create_suboperation_observability_recorder(
+          core::tracing::operation::mgr_query_build_indexes,
+          bucket,
+          scope,
+          collection,
+          top_obs_rec);
         core::operations::management::query_index_build_request build_request{
-          std::move(bucket), scope,      collection, {}, std::move(list_resp.index_names), {},
-          timeout,           build_span,
+          std::move(bucket),
+          scope,
+          collection,
+          {},
+          std::move(list_resp.index_names),
+          {},
+          timeout,
+          build_obs_rec->operation_span(),
         };
         self->core_.execute(std::move(build_request),
-                            [top_span = std::move(top_span),
-                             build_span = std::move(build_span),
+                            [top_obs_rec = std::move(top_obs_rec),
+                             build_obs_rec = std::move(build_obs_rec),
                              handler = std::move(handler)](const auto& build_resp) {
-                              if (const auto retries = build_resp.ctx.retry_attempts;
-                                  build_span->uses_tags() && retries > 0) {
-                                build_span->add_tag(core::tracing::attributes::op::retry_count,
-                                                    retries);
-                              }
-                              build_span->end();
-                              top_span->end();
+                              build_obs_rec->finish(build_resp.ctx.retry_attempts,
+                                                    build_resp.ctx.ec);
+                              top_obs_rec->finish(build_resp.ctx.ec);
                               return handler(core::impl::make_error(build_resp.ctx));
                             });
       });
@@ -475,24 +494,41 @@ public:
   }
 
 private:
-  [[nodiscard]] auto create_span(const std::string& operation_name,
-                                 const std::string& bucket_name,
-                                 const std::string& scope_name,
-                                 const std::string& collection_name,
-                                 const std::shared_ptr<tracing::request_span>& parent_span) const
-    -> std::shared_ptr<tracing::request_span>
+  [[nodiscard]] auto create_observability_recorder(
+    const std::string& operation_name,
+    const std::string& bucket_name,
+    const std::string& scope_name,
+    const std::string& collection_name,
+    const std::shared_ptr<tracing::request_span>& parent_span) const
+    -> std::unique_ptr<core::impl::observability_recorder>
   {
-    auto span = core_.tracer()->create_span(operation_name, parent_span);
-    if (span->uses_tags()) {
-      span->add_tag(core::tracing::attributes::op::service, core::tracing::service::query);
-      span->add_tag(core::tracing::attributes::op::bucket_name, bucket_name);
-      if (!collection_name.empty()) {
-        span->add_tag(core::tracing::attributes::op::scope_name, scope_name);
-        span->add_tag(core::tracing::attributes::op::collection_name, collection_name);
-      }
-      span->add_tag(core::tracing::attributes::op::operation_name, operation_name);
+    auto rec = core::impl::observability_recorder::create(
+      operation_name, parent_span, core_.tracer(), core_.meter());
+    rec->with_service(core::tracing::service::query);
+    rec->with_bucket_name(bucket_name);
+    if (!collection_name.empty()) {
+      rec->with_scope_name(scope_name);
+      rec->with_collection_name(collection_name);
     }
-    return span;
+    return rec;
+  }
+
+  [[nodiscard]] auto create_suboperation_observability_recorder(
+    const std::string& subop_name,
+    const std::string& bucket_name,
+    const std::string& scope_name,
+    const std::string& collection_name,
+    const std::unique_ptr<core::impl::observability_recorder>& parent_recorder) const
+    -> std::unique_ptr<core::impl::observability_recorder>
+  {
+    auto rec = parent_recorder->record_suboperation(subop_name);
+    rec->with_service(core::tracing::service::query);
+    rec->with_bucket_name(bucket_name);
+    if (!collection_name.empty()) {
+      rec->with_scope_name(scope_name);
+      rec->with_collection_name(collection_name);
+    }
+    return rec;
   }
 
   core::cluster core_;

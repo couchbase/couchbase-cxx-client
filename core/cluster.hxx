@@ -44,6 +44,11 @@ namespace tracing
 class tracer_wrapper;
 } // namespace tracing
 
+namespace metrics
+{
+class meter_wrapper;
+} // namespace metrics
+
 namespace mcbp
 {
 class queue_request;
@@ -331,6 +336,7 @@ public:
   [[nodiscard]] auto to_string() const -> std::string;
 
   [[nodiscard]] auto tracer() const -> const std::shared_ptr<tracing::tracer_wrapper>&;
+  [[nodiscard]] auto meter() const -> const std::shared_ptr<metrics::meter_wrapper>&;
 
 private:
   std::shared_ptr<cluster_impl> impl_;

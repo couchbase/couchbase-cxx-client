@@ -19,6 +19,7 @@
 
 #include <couchbase/error_codes.hxx>
 
+#include "core/metrics/constants.hxx"
 #include "core/tracing/constants.hxx"
 
 #include <mutex>
@@ -59,32 +60,10 @@ extract_error_name(std::error_code ec) -> std::string
 }
 
 auto
-service_to_string(service_type s) -> std::string
-{
-  switch (s) {
-    case service_type::analytics:
-      return "analytics";
-    case service_type::search:
-      return "search";
-    case service_type::key_value:
-      return "kv";
-    case service_type::management:
-      return "management";
-    case service_type::eventing:
-      return "eventing";
-    case service_type::query:
-      return "query";
-    case service_type::view:
-      return "views";
-  }
-  return {};
-}
-
-auto
-get_standardized_outcome(std::error_code ec) -> std::string
+get_standardized_error_type(std::error_code ec) -> std::string
 {
   if (!ec) {
-    return "Success";
+    return {};
   }
 
   // SDK-specific errors
@@ -97,7 +76,23 @@ get_standardized_outcome(std::error_code ec) -> std::string
     return "CryptoError";
   }
 
-  return snake_case_to_camel_case(extract_error_name(ec));
+  static const std::array<const std::error_category*, 12> cb_categories = {
+    &impl::common_category(),      &impl::key_value_category(),
+    &impl::query_category(),       &impl::analytics_category(),
+    &impl::search_category(),      &impl::view_category(),
+    &impl::management_category(),  &impl::field_level_encryption_category(),
+    &impl::network_category(),     &impl::streaming_json_lexer_category(),
+    &impl::transaction_category(), &impl::transaction_op_category(),
+  };
+
+  if (std::any_of(
+        cb_categories.begin(), cb_categories.end(), [&ec](const std::error_category* cat) {
+          return &ec.category() == cat;
+        })) {
+    return snake_case_to_camel_case(extract_error_name(ec));
+  }
+
+  return "_OTHER";
 }
 } // namespace
 
@@ -105,9 +100,9 @@ auto
 metric_attributes::encode() const -> std::map<std::string, std::string>
 {
   std::map<std::string, std::string> tags = {
-    { tracing::attributes::op::service, service_to_string(service) },
+    { tracing::attributes::common::system, "couchbase" },
+    { tracing::attributes::op::service, service },
     { tracing::attributes::op::operation_name, operation },
-    { "outcome", get_standardized_outcome(ec) }
   };
 
   if (internal.cluster_name.has_value()) {
@@ -124,6 +119,9 @@ metric_attributes::encode() const -> std::map<std::string, std::string>
   }
   if (collection_name) {
     tags.emplace(tracing::attributes::op::collection_name, collection_name.value());
+  }
+  if (ec) {
+    tags.emplace(tracing::attributes::op::error_type, get_standardized_error_type(ec));
   }
 
   return tags;
@@ -150,8 +148,6 @@ void
 meter_wrapper::record_value(metric_attributes attrs,
                             std::chrono::steady_clock::time_point start_time)
 {
-  static const std::string meter_name{ "db.couchbase.operations" };
-
   {
     const std::shared_lock lock{ cluster_labels_mutex_ };
 
@@ -163,8 +159,7 @@ meter_wrapper::record_value(metric_attributes attrs,
     }
   }
 
-  auto tags = attrs.encode();
-  meter_->get_value_recorder(meter_name, tags)
+  meter_->get_value_recorder(operation_meter_name, attrs.encode())
     ->record_value(std::chrono::duration_cast<std::chrono::microseconds>(
                      std::chrono::steady_clock::now() - start_time)
                      .count());

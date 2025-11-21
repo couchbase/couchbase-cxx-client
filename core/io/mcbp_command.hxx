@@ -325,6 +325,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
           telemetry_recorder->record_latency(category, latency);
         }
 
+#ifdef COUCHBASE_CXX_CLIENT_CREATE_OPERATION_SPAN_IN_CORE
         {
           metrics::metric_attributes attrs{
             service_type::key_value,
@@ -336,6 +337,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
           };
           self->manager_->meter()->record_value(std::move(attrs), start);
         }
+#endif
 
         self->retry_backoff.cancel();
         if (ec == asio::error::operation_aborted) {
