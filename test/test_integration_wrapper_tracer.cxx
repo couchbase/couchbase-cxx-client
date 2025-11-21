@@ -37,4 +37,4 @@ TEST_CASE("integration: wrappers can get dispatch spans using a parent wrapper s
   REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_found);
   REQUIRE(root_span->children().size() == 1);
   REQUIRE(root_span->children().front()->name() == "dispatch_to_server");
-};
+}

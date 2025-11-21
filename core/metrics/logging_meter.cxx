@@ -19,6 +19,7 @@
 
 #include "couchbase/build_info.hxx"
 
+#include "constants.hxx"
 #include "core/logger/logger.hxx"
 #include "core/tracing/constants.hxx"
 #include "core/utils/json.hxx"
@@ -210,7 +211,7 @@ logging_meter::get_value_recorder(const std::string& name,
     std::make_shared<noop_value_recorder>()
   };
 
-  if (static const std::string meter_name = "db.couchbase.operations"; name != meter_name) {
+  if (name != operation_meter_name) {
     return noop_recorder;
   }
 

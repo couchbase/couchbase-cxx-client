@@ -288,6 +288,7 @@ private:
             ->record_latency(latency_for_service_type(self->request.type), latency);
         }
 
+#ifdef COUCHBASE_CXX_CLIENT_CREATE_OPERATION_SPAN_IN_CORE
         if (self->meter_) {
           metrics::metric_attributes attrs{
             self->request.type,
@@ -296,6 +297,7 @@ private:
           };
           self->meter_->record_value(std::move(attrs), start);
         }
+#endif
 
         self->deadline.cancel();
         CB_LOG_TRACE(R"({} HTTP response: {}, client_context_id="{}", ec={}, status={}, body={})",
