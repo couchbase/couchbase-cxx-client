@@ -37,15 +37,6 @@ constexpr auto views = "views";
 constexpr auto manager = "manager";
 constexpr auto eventing = "eventing";
 
-// TODO(DC): Remove these
-constexpr auto manager_analytics = "manager_analytics";
-constexpr auto manager_query = "manager_query";
-constexpr auto manager_buckets = "manager_buckets";
-constexpr auto manager_collections = "manager_collections";
-constexpr auto manager_search = "manager_search";
-constexpr auto manager_users = "manager_users";
-constexpr auto manager_views = "manager_views";
-
 // KV operations
 constexpr auto mcbp_get = "get";
 constexpr auto mcbp_get_replica = "get_replica";
@@ -160,6 +151,7 @@ constexpr auto scope_name = "couchbase.scope.name";
 constexpr auto collection_name = "couchbase.collection.name";
 constexpr auto query_statement = "db.query.text";
 constexpr auto operation_name = "db.operation.name";
+constexpr auto error_type = "error.type";
 } // namespace op
 
 // Dispatch-level attributes
