@@ -590,6 +590,8 @@ extract_options(connection_string& connstr)
       parse_option(connstr.options.preserve_bootstrap_nodes_order, name, value, connstr.warnings);
     } else if (name == "allow_enterprise_analytics") {
       parse_option(connstr.options.allow_enterprise_analytics, name, value, connstr.warnings);
+    } else if (name == "enable_lazy_connections") {
+      parse_option(connstr.options.enable_lazy_connections, name, value, connstr.warnings);
     } else {
       connstr.warnings.push_back(
         fmt::format(R"(unknown parameter "{}" in connection string (value "{}"))", name, value));

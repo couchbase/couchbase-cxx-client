@@ -19,6 +19,7 @@
 
 #include "collection_id_cache_entry.hxx"
 #include "core/app_telemetry_meter.hxx"
+#include "core/cluster_options.hxx"
 #include "core/config_listener.hxx"
 #include "core/document_id.hxx"
 #include "core/error_context/key_value_error_map_info.hxx"
@@ -319,11 +320,11 @@ public:
   {
     if (req->key_.empty()) {
       if (auto server = server_by_vbucket(req->vbucket_, req->replica_index_); server) {
-        return find_session_by_index(server.value());
+        return find_or_connect_session_by_index(server.value());
       }
     } else if (auto [partition, server] = map_id(req->key_, req->replica_index_); server) {
       req->vbucket_ = partition;
-      return find_session_by_index(server.value());
+      return find_or_connect_session_by_index(server.value());
     }
     return std::nullopt;
   }
@@ -365,6 +366,53 @@ public:
       return config_->map_key(key, node_index);
     }
     return { 0, std::nullopt };
+  }
+
+  void connect_session(std::size_t index)
+  {
+    const std::scoped_lock lock(config_mutex_, sessions_mutex_);
+    if (!config_) {
+      return;
+    }
+
+    const auto& node = config_->nodes[index];
+
+    const auto& hostname = node.hostname_for(origin_.options().network);
+    auto port = node.port_or(
+      origin_.options().network, service_type::key_value, origin_.options().enable_tls, 0);
+    if (port == 0) {
+      return;
+    }
+
+    const couchbase::core::origin origin(origin_.credentials(), hostname, port, origin_.options());
+    io::mcbp_session session =
+      origin_.options().enable_tls
+        ? io::mcbp_session(
+            client_id_, node.node_uuid, ctx_, tls_, origin, state_listener_, name_, known_features_)
+        : io::mcbp_session(
+            client_id_, node.node_uuid, ctx_, origin, state_listener_, name_, known_features_);
+    CB_LOG_DEBUG(R"({} rev={}, connect idx={}, session="{}", address="{}:{}")",
+                 log_prefix_,
+                 config_->rev_str(),
+                 node.index,
+                 session.id(),
+                 hostname,
+                 port);
+    session.bootstrap(
+      [self = shared_from_this(), session](std::error_code err,
+                                           topology::configuration cfg) mutable -> void {
+        if (err) {
+          return self->remove_session(session.id());
+        }
+        self->update_config(std::move(cfg));
+        session.on_configuration_update(self);
+        session.on_stop([id = session.id(), self]() -> void {
+          self->remove_session(id);
+        });
+        self->drain_deferred_queue({});
+      },
+      true);
+    sessions_.insert_or_assign(index, std::move(session));
   }
 
   void restart_sessions()
@@ -812,6 +860,10 @@ public:
           continue;
         }
 
+        if (origin_.options().enable_lazy_connections) {
+          ++next_index;
+          continue;
+        }
         const couchbase::core::origin origin(
           origin_.credentials(), hostname, port, origin_.options());
         io::mcbp_session session =
@@ -882,6 +934,16 @@ public:
     if (auto ptr = sessions_.find(index); ptr != sessions_.end()) {
       return ptr->second;
     }
+    return {};
+  }
+
+  [[nodiscard]] auto find_or_connect_session_by_index(std::size_t index)
+    -> std::optional<io::mcbp_session>
+  {
+    if (auto session = find_session_by_index(index); session) {
+      return session;
+    }
+    connect_session(index);
     return {};
   }
 
@@ -1205,5 +1267,11 @@ bucket::direct_re_queue(const std::shared_ptr<mcbp::queue_request>& req, bool is
   -> std::error_code
 {
   return impl_->direct_re_queue(req, is_retry);
+}
+
+void
+bucket::connect_session(std::size_t index)
+{
+  return impl_->connect_session(index);
 }
 } // namespace couchbase::core
