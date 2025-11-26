@@ -17,22 +17,24 @@
 
 #pragma once
 
+#include "core/utils/duration_parser.hxx"
+
 #include <couchbase/cas.hxx>
 #include <couchbase/cluster_options.hxx>
 #include <couchbase/codec/encoded_value.hxx>
 #include <couchbase/codec/transcoder_traits.hxx>
 
-#include <core/utils/duration_parser.hxx>
-
 #include <CLI/CLI.hpp>
 
+#include <cstdint>
 #include <spdlog/fmt/bundled/chrono.h>
 #include <spdlog/fmt/bundled/core.h>
 
+#include <chrono>
 #include <string>
 #include <vector>
 
-namespace std::chrono
+namespace std::chrono // NOLINT(cert-dcl58-cpp)
 {
 inline auto
 lexical_cast(const std::string& input, std::chrono::milliseconds& value) -> bool
@@ -148,9 +150,46 @@ struct transactions_options {
   std::chrono::milliseconds cleanup_window{};
 };
 
+struct opentelemetry_metrics_options {
+  bool use_opentelemetry{ false };
+  std::optional<std::string> endpoint{};
+
+  std::chrono::milliseconds reader_export_interval{ std::chrono::seconds(5) };
+  std::chrono::milliseconds reader_export_timeout{ std::chrono::milliseconds(500) };
+
+  std::string exporter_aggregation_temporality{ "cumulative" };
+  std::chrono::milliseconds exporter_timeout{ std::chrono::milliseconds(30000) };
+
+  bool use_ssl_credentials{ false };
+  std::optional<std::string> ssl_credentials_cacert{};
+  std::map<std::string, std::string> headers{};
+  std::optional<std::string> compression{};
+};
+
 struct metrics_options {
   bool disable{ false };
   std::chrono::milliseconds emit_interval{};
+
+  opentelemetry_metrics_options opentelemetry{};
+};
+
+struct opentelemetry_tracing_options {
+  bool use_opentelemetry{ false };
+  std::optional<std::string> endpoint{};
+
+  std::optional<std::string> sampler{};
+  double sampling_ratio{ 1.0 };
+
+  bool use_batch_processor{ true };
+  std::chrono::milliseconds batch_schedule_delay{ std::chrono::milliseconds(5000) };
+  std::size_t batch_max_queue_size{ 2048 };
+  std::size_t batch_max_export_batch_size{ 512 };
+
+  std::chrono::milliseconds exporter_timeout{ std::chrono::milliseconds(30000) };
+  bool use_ssl_credentials{ false };
+  std::optional<std::string> ssl_credentials_cacert{};
+  std::map<std::string, std::string> headers{};
+  std::optional<std::string> compression{};
 };
 
 struct tracing_options {
@@ -168,6 +207,8 @@ struct tracing_options {
   std::chrono::milliseconds threshold_management{};
   std::chrono::milliseconds threshold_eventing{};
   std::chrono::milliseconds threshold_view{};
+
+  opentelemetry_tracing_options opentelemetry{};
 };
 
 struct behavior_options {
@@ -178,6 +219,7 @@ struct behavior_options {
   bool disable_mutation_tokens{};
   bool disable_unordered_execution{};
   bool dump_configuration{};
+  std::optional<std::string> write_telemetry_to_file{};
 };
 
 struct common_options {
