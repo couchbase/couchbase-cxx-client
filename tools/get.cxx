@@ -19,6 +19,7 @@
 #include "utils.hxx"
 
 #include <core/logger/logger.hxx>
+
 #include <couchbase/cluster.hxx>
 #include <couchbase/codec/raw_binary_transcoder.hxx>
 #include <couchbase/codec/tao_json_serializer.hxx>
