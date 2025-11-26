@@ -118,6 +118,7 @@ set(couchbase_cxx_client_FILES
     core/impl/configuration_profiles_registry.cxx
     core/impl/conjunction_query.cxx
     core/impl/crypto.cxx
+    core/impl/crypto.cxx
     core/impl/date_range.cxx
     core/impl/date_range_facet.cxx
     core/impl/date_range_facet_result.cxx
@@ -157,6 +158,7 @@ set(couchbase_cxx_client_FILES
     core/impl/numeric_range_facet.cxx
     core/impl/numeric_range_facet_result.cxx
     core/impl/numeric_range_query.cxx
+    core/impl/observability_recorder.cxx
     core/impl/observe_poll.cxx
     core/impl/observe_seqno.cxx
     core/impl/phrase_query.cxx
@@ -219,8 +221,6 @@ set(couchbase_cxx_client_FILES
     core/impl/vector_search.cxx
     core/impl/view_error_category.cxx
     core/impl/wildcard_query.cxx
-    core/impl/crypto.cxx
-    core/impl/observability_recorder.cxx
     core/io/config_tracker.cxx
     core/io/dns_client.cxx
     core/io/dns_config.cxx
