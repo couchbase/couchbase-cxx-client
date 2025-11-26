@@ -47,7 +47,10 @@ target_link_libraries(
           $<BUILD_INTERFACE:taocpp::json>
           $<BUILD_INTERFACE:spdlog::spdlog>
           $<BUILD_INTERFACE:hdr_histogram_static>
-          $<BUILD_INTERFACE:asio>)
+          $<BUILD_INTERFACE:asio>
+          $<BUILD_INTERFACE:opentelemetry_exporter_otlp_http>
+          $<BUILD_INTERFACE:opentelemetry_exporter_otlp_http_metric>
+      )
 propagate_public_compile_definitions(cbc spdlog::spdlog asio)
 
 if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND WIN32)

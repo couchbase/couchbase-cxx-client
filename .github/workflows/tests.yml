@@ -26,7 +26,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y libssl-dev cmake gcc g++ curl gdb
+          sudo apt-get install -y libssl-dev cmake gcc g++ curl libcurl4-openssl-dev libprotobuf-dev libgrpc-dev libgrpc++-dev gdb protobuf-compiler protobuf-compiler-grpc
       - uses: actions/checkout@v4
         with:
           submodules: recursive

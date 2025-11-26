@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <string>
@@ -33,7 +34,7 @@ public:
   auto operator=(value_recorder&& other) -> value_recorder& = default;
   virtual ~value_recorder() = default;
 
-  virtual void record_value(int64_t value) = 0;
+  virtual void record_value(std::int64_t value) = 0;
 };
 
 class meter
