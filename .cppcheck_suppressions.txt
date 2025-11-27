@@ -35,4 +35,5 @@ variableScope:*/test/test_*
 
 # do not scan third-party code
 *:*/_deps/*
+*:*/generated/third_party/*
 

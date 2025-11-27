@@ -23,7 +23,7 @@ jobs:
       - name: Install build environment
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y libssl-dev cmake gcc g++ curl gdb libcurl4-openssl-dev libprotobuf-dev libgrpc-dev gdb
+          sudo apt-get install -y libssl-dev cmake curl wget gnupg2 libcurl4-openssl-dev libprotobuf-dev libgrpc-dev libgrpc++-dev protobuf-compiler-grpc gdb
       - uses: actions/checkout@v4
         with:
           submodules: recursive
