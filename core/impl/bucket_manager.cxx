@@ -19,6 +19,7 @@
 
 #include "core/cluster.hxx"
 #include "core/impl/error.hxx"
+#include "core/impl/observability_recorder.hxx"
 #include "core/management/bucket_settings.hxx"
 #include "core/operations/management/bucket_create.hxx"
 #include "core/operations/management/bucket_drop.hxx"
@@ -267,151 +268,138 @@ public:
                   const get_bucket_options::built& options,
                   get_bucket_handler&& handler) const
   {
-    auto span = create_span(
+    auto obs_rec = create_observability_recorder(
       core::tracing::operation::mgr_buckets_get_bucket, bucket_name, options.parent_span);
     core::operations::management::bucket_get_request request{
       std::move(bucket_name),
       {},
       options.timeout,
-      span,
+      obs_rec->operation_span(),
     };
-    core_.execute(std::move(request),
-                  [span = std::move(span), handler = std::move(handler)](const auto& resp) mutable {
-                    if (auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-                      span->add_tag(core::tracing::attributes::op::retry_count, retries);
-                    }
-                    span->end();
-                    return handler(core::impl::make_error(resp.ctx),
-                                   map_bucket_settings(resp.bucket));
-                  });
+    core_.execute(
+      std::move(request),
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) mutable {
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+        return handler(core::impl::make_error(resp.ctx), map_bucket_settings(resp.bucket));
+      });
   }
 
   void get_all_buckets(const get_all_buckets_options::built& options,
                        get_all_buckets_handler&& handler) const
   {
-    auto span = create_span(
+    auto obs_rec = create_observability_recorder(
       core::tracing::operation::mgr_buckets_get_all_buckets, std::nullopt, options.parent_span);
     core::operations::management::bucket_get_all_request request{
       {},
       options.timeout,
-      span,
+      obs_rec->operation_span(),
     };
-    core_.execute(std::move(request),
-                  [span = std::move(span), handler = std::move(handler)](const auto& resp) mutable {
-                    if (auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-                      span->add_tag(core::tracing::attributes::op::retry_count, retries);
-                    }
-                    span->end();
-                    return handler(core::impl::make_error(resp.ctx),
-                                   map_all_bucket_settings(resp.buckets));
-                  });
+    core_.execute(
+      std::move(request),
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) mutable {
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+        return handler(core::impl::make_error(resp.ctx), map_all_bucket_settings(resp.buckets));
+      });
   }
 
   void create_bucket(const management::cluster::bucket_settings& bucket_settings,
                      const create_bucket_options::built& options,
                      create_bucket_handler&& handler) const
   {
-    auto span = create_span(core::tracing::operation::mgr_buckets_create_bucket,
-                            bucket_settings.name,
-                            options.parent_span);
+    auto obs_rec =
+      create_observability_recorder(core::tracing::operation::mgr_buckets_create_bucket,
+                                    bucket_settings.name,
+                                    options.parent_span);
     core::operations::management::bucket_create_request request{
       map_bucket_settings(bucket_settings),
       {},
       options.timeout,
-      span,
+      obs_rec->operation_span(),
     };
-    core_.execute(std::move(request),
-                  [span = std::move(span), handler = std::move(handler)](const auto& resp) mutable {
-                    if (auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-                      span->add_tag(core::tracing::attributes::op::retry_count, retries);
-                    }
-                    span->end();
-                    return handler(core::impl::make_error(resp.ctx));
-                  });
+    core_.execute(
+      std::move(request),
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) mutable {
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+        return handler(core::impl::make_error(resp.ctx));
+      });
   }
 
   void update_bucket(const management::cluster::bucket_settings& bucket_settings,
                      const update_bucket_options::built& options,
                      update_bucket_handler&& handler) const
   {
-    auto span = create_span(core::tracing::operation::mgr_buckets_update_bucket,
-                            bucket_settings.name,
-                            options.parent_span);
+    auto obs_rec =
+      create_observability_recorder(core::tracing::operation::mgr_buckets_update_bucket,
+                                    bucket_settings.name,
+                                    options.parent_span);
     core::operations::management::bucket_update_request request{
       map_bucket_settings(bucket_settings),
       {},
       options.timeout,
-      span,
+      obs_rec->operation_span(),
     };
-    core_.execute(std::move(request),
-                  [span = std::move(span), handler = std::move(handler)](const auto& resp) mutable {
-                    if (auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-                      span->add_tag(core::tracing::attributes::op::retry_count, retries);
-                    }
-                    span->end();
-                    return handler(core::impl::make_error(resp.ctx));
-                  });
+    core_.execute(
+      std::move(request),
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) mutable {
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+        return handler(core::impl::make_error(resp.ctx));
+      });
   }
 
   void drop_bucket(std::string bucket_name,
                    const drop_bucket_options::built& options,
                    drop_bucket_handler&& handler) const
   {
-    auto span = create_span(
+    auto obs_rec = create_observability_recorder(
       core::tracing::operation::mgr_buckets_drop_bucket, bucket_name, options.parent_span);
     core::operations::management::bucket_drop_request request{
       std::move(bucket_name),
       {},
       options.timeout,
-      span,
+      obs_rec->operation_span(),
     };
-    core_.execute(std::move(request),
-                  [span = std::move(span), handler = std::move(handler)](const auto& resp) mutable {
-                    if (auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-                      span->add_tag(core::tracing::attributes::op::retry_count, retries);
-                    }
-                    span->end();
-                    return handler(core::impl::make_error(resp.ctx));
-                  });
+    core_.execute(
+      std::move(request),
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) mutable {
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+        return handler(core::impl::make_error(resp.ctx));
+      });
   }
 
   void flush_bucket(std::string bucket_name,
                     const flush_bucket_options::built& options,
                     flush_bucket_handler&& handler) const
   {
-    auto span = create_span(
+    auto obs_rec = create_observability_recorder(
       core::tracing::operation::mgr_buckets_flush_bucket, bucket_name, options.parent_span);
     core::operations::management::bucket_flush_request request{
       std::move(bucket_name),
       {},
       options.timeout,
-      span,
+      obs_rec->operation_span(),
     };
-    core_.execute(std::move(request),
-                  [span = std::move(span), handler = std::move(handler)](const auto& resp) mutable {
-                    if (auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-                      span->add_tag(core::tracing::attributes::op::retry_count, retries);
-                    }
-                    span->end();
-                    return handler(core::impl::make_error(resp.ctx));
-                  });
+    core_.execute(
+      std::move(request),
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) mutable {
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+        return handler(core::impl::make_error(resp.ctx));
+      });
   }
 
 private:
-  [[nodiscard]] auto create_span(const std::string& operation_name,
-                                 const std::optional<std::string>& bucket_name,
-                                 const std::shared_ptr<tracing::request_span>& parent_span) const
-    -> std::shared_ptr<tracing::request_span>
+  [[nodiscard]] auto create_observability_recorder(
+    const std::string& operation_name,
+    const std::optional<std::string>& bucket_name,
+    const std::shared_ptr<tracing::request_span>& parent_span) const
+    -> std::unique_ptr<core::impl::observability_recorder>
   {
-    auto span = core_.tracer()->create_span(operation_name, parent_span);
-    if (span->uses_tags()) {
-      span->add_tag(core::tracing::attributes::op::service, core::tracing::service::management);
-      if (bucket_name.has_value()) {
-        span->add_tag(core::tracing::attributes::op::bucket_name, bucket_name.value());
-      }
-      span->add_tag(core::tracing::attributes::op::operation_name, operation_name);
+    auto rec = core::impl::observability_recorder::create(
+      operation_name, parent_span, core_.tracer(), core_.meter());
+    rec->with_service(core::tracing::service::management);
+    if (bucket_name.has_value()) {
+      rec->with_bucket_name(bucket_name.value());
     }
-    return span;
+    return rec;
   }
 
   core::cluster core_;

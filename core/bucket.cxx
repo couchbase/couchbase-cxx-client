@@ -120,11 +120,13 @@ public:
                         std::optional<key_value_error_map_info> error_info)
   {
     // TODO(SA): copy from mcbp_command, subject to refactor later
+#ifdef COUCHBASE_CXX_CLIENT_CREATE_OPERATION_SPAN_IN_CORE
     metrics::metric_attributes attrs{
       service_type::key_value, fmt::format("{}", req->command_), ec, name_, req->scope_name_,
       req->collection_name_,
     };
     meter_->record_value(std::move(attrs), req->dispatched_time_);
+#endif
 
     if (ec == asio::error::operation_aborted) {
       // TODO(SA): fix tracing

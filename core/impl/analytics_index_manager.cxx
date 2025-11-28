@@ -17,6 +17,7 @@
 
 #include "core/cluster.hxx"
 #include "core/impl/error.hxx"
+#include "core/impl/observability_recorder.hxx"
 #include "core/logger/logger.hxx"
 #include "core/management/analytics_link_azure_blob_external.hxx"
 #include "core/management/analytics_link_couchbase_remote.hxx"
@@ -153,39 +154,35 @@ public:
                         const create_dataverse_analytics_options::built& options,
                         create_dataverse_analytics_handler&& handler) const
   {
-    auto span =
-      create_span(core::tracing::operation::mgr_analytics_create_dataverse, options.parent_span);
+    auto obs_rec = create_observability_recorder(
+      core::tracing::operation::mgr_analytics_create_dataverse, options.parent_span);
 
     core::operations::management::analytics_dataverse_create_request request{
-      dataverse_name, options.ignore_if_exists, {}, options.timeout, span,
+      dataverse_name, options.ignore_if_exists, {}, options.timeout, obs_rec->operation_span(),
     };
-    return core_.execute(
-      std::move(request),
-      [dataverse_name, span = std::move(span), handler = std::move(handler)](const auto& resp) {
-        if (const auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-          span->add_tag(core::tracing::attributes::op::retry_count, retries);
-        }
-        span->end();
-        handler(core::impl::make_error(resp.ctx));
-      });
+    return core_.execute(std::move(request),
+                         [dataverse_name,
+                          obs_rec = std::move(obs_rec),
+                          handler = std::move(handler)](const auto& resp) {
+                           obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+                           handler(core::impl::make_error(resp.ctx));
+                         });
   }
 
   void drop_dataverse(const std::string& dataverse_name,
                       const drop_dataverse_analytics_options::built& options,
                       drop_dataverse_analytics_handler&& handler) const
   {
-    auto span =
-      create_span(core::tracing::operation::mgr_analytics_drop_dataverse, options.parent_span);
+    auto obs_rec = create_observability_recorder(
+      core::tracing::operation::mgr_analytics_drop_dataverse, options.parent_span);
 
     core::operations::management::analytics_dataverse_drop_request request{
-      dataverse_name, options.ignore_if_not_exists, {}, options.timeout, span,
+      dataverse_name, options.ignore_if_not_exists, {}, options.timeout, obs_rec->operation_span(),
     };
     return core_.execute(
-      std::move(request), [span = std::move(span), handler = std::move(handler)](const auto& resp) {
-        if (const auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-          span->add_tag(core::tracing::attributes::op::retry_count, retries);
-        }
-        span->end();
+      std::move(request),
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) {
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
         handler(core::impl::make_error(resp.ctx));
       });
   }
@@ -195,8 +192,8 @@ public:
                       const create_dataset_analytics_options::built& options,
                       create_dataset_analytics_handler&& handler) const
   {
-    auto span =
-      create_span(core::tracing::operation::mgr_analytics_create_dataset, options.parent_span);
+    auto obs_rec = create_observability_recorder(
+      core::tracing::operation::mgr_analytics_create_dataset, options.parent_span);
 
     core::operations::management::analytics_dataset_create_request request{
       options.dataverse_name.value_or(DEFAULT_DATAVERSE_NAME),
@@ -206,14 +203,12 @@ public:
       {},
       options.timeout,
       options.ignore_if_exists,
-      span,
+      obs_rec->operation_span(),
     };
     return core_.execute(
-      std::move(request), [span = std::move(span), handler = std::move(handler)](const auto& resp) {
-        if (const auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-          span->add_tag(core::tracing::attributes::op::retry_count, retries);
-        }
-        span->end();
+      std::move(request),
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) {
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
         handler(core::impl::make_error(resp.ctx));
       });
   }
@@ -222,8 +217,8 @@ public:
                     const drop_dataset_analytics_options::built& options,
                     drop_dataset_analytics_handler&& handler) const
   {
-    auto span =
-      create_span(core::tracing::operation::mgr_analytics_drop_dataset, options.parent_span);
+    auto obs_rec = create_observability_recorder(
+      core::tracing::operation::mgr_analytics_drop_dataset, options.parent_span);
 
     core::operations::management::analytics_dataset_drop_request request{
       options.dataverse_name.value_or(DEFAULT_DATAVERSE_NAME),
@@ -231,14 +226,12 @@ public:
       options.ignore_if_not_exists,
       {},
       options.timeout,
-      span,
+      obs_rec->operation_span(),
     };
     return core_.execute(
-      std::move(request), [span = std::move(span), handler = std::move(handler)](const auto& resp) {
-        if (const auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-          span->add_tag(core::tracing::attributes::op::retry_count, retries);
-        }
-        span->end();
+      std::move(request),
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) {
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
         handler(core::impl::make_error(resp.ctx));
       });
   }
@@ -246,23 +239,20 @@ public:
   void get_all_datasets(const get_all_datasets_analytics_options::built& options,
                         get_all_datasets_analytics_handler&& handler) const
   {
-    auto span =
-      create_span(core::tracing::operation::mgr_analytics_get_all_datasets, options.parent_span);
+    auto obs_rec = create_observability_recorder(
+      core::tracing::operation::mgr_analytics_get_all_datasets, options.parent_span);
 
     core::operations::management::analytics_dataset_get_all_request request{
       {},
       options.timeout,
-      span,
+      obs_rec->operation_span(),
     };
     return core_.execute(
       std::move(request),
-      [span = std::move(span), handler = std::move(handler)](
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](
         const core::operations::management::analytics_dataset_get_all_response& resp) {
-        if (const auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-          span->add_tag(core::tracing::attributes::op::retry_count, retries);
-        }
         if (resp.ctx.ec) {
-          span->end();
+          obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
           return handler(core::impl::make_error(resp.ctx), {});
         }
         std::vector<management::analytics_dataset> datasets{};
@@ -275,7 +265,7 @@ public:
             d.bucket_name,
           });
         }
-        span->end();
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
         handler(core::impl::make_error(resp.ctx), datasets);
       });
   }
@@ -286,8 +276,8 @@ public:
                     const create_index_analytics_options::built& options,
                     create_index_analytics_handler&& handler) const
   {
-    auto span =
-      create_span(core::tracing::operation::mgr_analytics_create_index, options.parent_span);
+    auto obs_rec = create_observability_recorder(
+      core::tracing::operation::mgr_analytics_create_index, options.parent_span);
 
     core::operations::management::analytics_index_create_request request{
       options.dataverse_name.value_or(DEFAULT_DATAVERSE_NAME),
@@ -297,14 +287,12 @@ public:
       options.ignore_if_exists,
       {},
       options.timeout,
-      span,
+      obs_rec->operation_span(),
     };
     return core_.execute(
-      std::move(request), [span = std::move(span), handler = std::move(handler)](const auto& resp) {
-        if (const auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-          span->add_tag(core::tracing::attributes::op::retry_count, retries);
-        }
-        span->end();
+      std::move(request),
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) {
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
         handler(core::impl::make_error(resp.ctx));
       });
   }
@@ -314,8 +302,8 @@ public:
                   const drop_index_analytics_options::built& options,
                   drop_index_analytics_handler&& handler) const
   {
-    auto span =
-      create_span(core::tracing::operation::mgr_analytics_drop_index, options.parent_span);
+    auto obs_rec = create_observability_recorder(core::tracing::operation::mgr_analytics_drop_index,
+                                                 options.parent_span);
 
     core::operations::management::analytics_index_drop_request request{
       options.dataverse_name.value_or(DEFAULT_DATAVERSE_NAME),
@@ -324,14 +312,12 @@ public:
       options.ignore_if_not_exists,
       {},
       options.timeout,
-      span,
+      obs_rec->operation_span(),
     };
     return core_.execute(
-      std::move(request), [span = std::move(span), handler = std::move(handler)](const auto& resp) {
-        if (const auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-          span->add_tag(core::tracing::attributes::op::retry_count, retries);
-        }
-        span->end();
+      std::move(request),
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) {
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
         handler(core::impl::make_error(resp.ctx));
       });
   }
@@ -339,23 +325,20 @@ public:
   void get_all_indexes(const get_all_indexes_analytics_options::built& options,
                        get_all_indexes_analytics_handler&& handler) const
   {
-    auto span =
-      create_span(core::tracing::operation::mgr_analytics_get_all_indexes, options.parent_span);
+    auto obs_rec = create_observability_recorder(
+      core::tracing::operation::mgr_analytics_get_all_indexes, options.parent_span);
 
     core::operations::management::analytics_index_get_all_request request{
       {},
       options.timeout,
-      span,
+      obs_rec->operation_span(),
     };
     return core_.execute(
       std::move(request),
-      [span = std::move(span), handler = std::move(handler)](
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](
         const core::operations::management::analytics_index_get_all_response& resp) {
-        if (const auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-          span->add_tag(core::tracing::attributes::op::retry_count, retries);
-        }
         if (resp.ctx.ec) {
-          span->end();
+          obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
           return handler(core::impl::make_error(resp.ctx), {});
         }
         std::vector<management::analytics_index> indexes{};
@@ -368,7 +351,7 @@ public:
             idx.is_primary,
           });
         }
-        span->end();
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
         handler(core::impl::make_error(resp.ctx), indexes);
       });
   }
@@ -376,8 +359,8 @@ public:
   void connect_link(const connect_link_analytics_options::built& options,
                     connect_link_analytics_handler&& handler) const
   {
-    auto span =
-      create_span(core::tracing::operation::mgr_analytics_connect_link, options.parent_span);
+    auto obs_rec = create_observability_recorder(
+      core::tracing::operation::mgr_analytics_connect_link, options.parent_span);
 
     core::operations::management::analytics_link_connect_request request{
       options.dataverse_name.value_or(DEFAULT_DATAVERSE_NAME),
@@ -385,14 +368,12 @@ public:
       options.force,
       {},
       options.timeout,
-      span,
+      obs_rec->operation_span(),
     };
     return core_.execute(
-      std::move(request), [span = std::move(span), handler = std::move(handler)](const auto& resp) {
-        if (const auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-          span->add_tag(core::tracing::attributes::op::retry_count, retries);
-        }
-        span->end();
+      std::move(request),
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) {
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
         handler(core::impl::make_error(resp.ctx));
       });
   }
@@ -400,22 +381,20 @@ public:
   void disconnect_link(const disconnect_link_analytics_options::built& options,
                        disconnect_link_analytics_handler&& handler) const
   {
-    auto span =
-      create_span(core::tracing::operation::mgr_analytics_disconnect_link, options.parent_span);
+    auto obs_rec = create_observability_recorder(
+      core::tracing::operation::mgr_analytics_disconnect_link, options.parent_span);
 
     core::operations::management::analytics_link_disconnect_request request{
       options.dataverse_name.value_or(DEFAULT_DATAVERSE_NAME),
       options.link_name.value_or(DEFAULT_LINK_NAME),
       {},
       options.timeout,
-      span,
+      obs_rec->operation_span(),
     };
     return core_.execute(
-      std::move(request), [span = std::move(span), handler = std::move(handler)](const auto& resp) {
-        if (const auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-          span->add_tag(core::tracing::attributes::op::retry_count, retries);
-        }
-        span->end();
+      std::move(request),
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) {
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
         handler(core::impl::make_error(resp.ctx));
       });
   }
@@ -423,23 +402,20 @@ public:
   void get_pending_mutations(const get_pending_mutations_analytics_options::built& options,
                              get_pending_mutations_analytics_handler&& handler) const
   {
-    auto span = create_span(core::tracing::operation::mgr_analytics_get_pending_mutations,
-                            options.parent_span);
+    auto obs_rec = create_observability_recorder(
+      core::tracing::operation::mgr_analytics_get_pending_mutations, options.parent_span);
 
     core::operations::management::analytics_get_pending_mutations_request request{
       {},
       options.timeout,
-      span,
+      obs_rec->operation_span(),
     };
     return core_.execute(
       std::move(request),
-      [span = std::move(span), handler = std::move(handler)](
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](
         const core::operations::management::analytics_get_pending_mutations_response& resp) {
-        if (const auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-          span->add_tag(core::tracing::attributes::op::retry_count, retries);
-        }
         if (resp.ctx.ec) {
-          span->end();
+          obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
           return handler(core::impl::make_error(resp.ctx), {});
         }
         std::map<std::string, std::map<std::string, std::int64_t>> pending_mutations{};
@@ -454,7 +430,7 @@ public:
           }
           pending_mutations.at(dataverse_name).insert({ dataset_name, mutation_count });
         }
-        span->end();
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
         handler(core::impl::make_error(resp.ctx), pending_mutations);
       });
   }
@@ -463,8 +439,8 @@ public:
                    const create_link_analytics_options::built& options,
                    create_link_analytics_handler&& handler) const
   {
-    auto span =
-      create_span(core::tracing::operation::mgr_analytics_create_link, options.parent_span);
+    auto obs_rec = create_observability_recorder(
+      core::tracing::operation::mgr_analytics_create_link, options.parent_span);
 
     switch (link.link_type()) {
       case management::s3_external: {
@@ -474,15 +450,12 @@ public:
             to_core_s3_external_link(link),
             {},
             options.timeout,
-            span,
+            obs_rec->operation_span(),
           };
         return core_.execute(
           std::move(request),
-          [span = std::move(span), handler = std::move(handler)](const auto& resp) {
-            if (const auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-              span->add_tag(core::tracing::attributes::op::retry_count, retries);
-            }
-            span->end();
+          [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) {
+            obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
             handler(core::impl::make_error(resp.ctx));
           });
       }
@@ -493,15 +466,12 @@ public:
             to_core_azure_blob_external_link(link),
             {},
             options.timeout,
-            span,
+            obs_rec->operation_span(),
           };
         return core_.execute(
           std::move(request),
-          [span = std::move(span), handler = std::move(handler)](const auto& resp) {
-            if (const auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-              span->add_tag(core::tracing::attributes::op::retry_count, retries);
-            }
-            span->end();
+          [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) {
+            obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
             handler(core::impl::make_error(resp.ctx));
           });
       }
@@ -512,15 +482,12 @@ public:
             to_core_couchbase_remote_link(link),
             {},
             options.timeout,
-            span,
+            obs_rec->operation_span(),
           };
         return core_.execute(
           std::move(request),
-          [span = std::move(span), handler = std::move(handler)](const auto& resp) {
-            if (const auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-              span->add_tag(core::tracing::attributes::op::retry_count, retries);
-            }
-            span->end();
+          [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) {
+            obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
             handler(core::impl::make_error(resp.ctx));
           });
       }
@@ -531,8 +498,8 @@ public:
                     const replace_link_analytics_options::built& options,
                     replace_link_analytics_handler&& handler) const
   {
-    auto span =
-      create_span(core::tracing::operation::mgr_analytics_replace_link, options.parent_span);
+    auto obs_rec = create_observability_recorder(
+      core::tracing::operation::mgr_analytics_replace_link, options.parent_span);
 
     switch (link.link_type()) {
       case management::s3_external: {
@@ -542,15 +509,12 @@ public:
             to_core_s3_external_link(link),
             {},
             options.timeout,
-            span,
+            obs_rec->operation_span(),
           };
         return core_.execute(
           std::move(request),
-          [span = std::move(span), handler = std::move(handler)](const auto& resp) {
-            if (const auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-              span->add_tag(core::tracing::attributes::op::retry_count, retries);
-            }
-            span->end();
+          [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) {
+            obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
             handler(core::impl::make_error(resp.ctx));
           });
       }
@@ -561,15 +525,12 @@ public:
             to_core_azure_blob_external_link(link),
             {},
             options.timeout,
-            span,
+            obs_rec->operation_span(),
           };
         return core_.execute(
           std::move(request),
-          [span = std::move(span), handler = std::move(handler)](const auto& resp) {
-            if (const auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-              span->add_tag(core::tracing::attributes::op::retry_count, retries);
-            }
-            span->end();
+          [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) {
+            obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
             handler(core::impl::make_error(resp.ctx));
           });
       }
@@ -580,15 +541,12 @@ public:
             to_core_couchbase_remote_link(link),
             {},
             options.timeout,
-            span,
+            obs_rec->operation_span(),
           };
         return core_.execute(
           std::move(request),
-          [span = std::move(span), handler = std::move(handler)](const auto& resp) {
-            if (const auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-              span->add_tag(core::tracing::attributes::op::retry_count, retries);
-            }
-            span->end();
+          [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) {
+            obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
             handler(core::impl::make_error(resp.ctx));
           });
       }
@@ -600,17 +558,16 @@ public:
                  const drop_link_analytics_options::built& options,
                  drop_link_analytics_handler&& handler) const
   {
-    auto span = create_span(core::tracing::operation::mgr_analytics_drop_link, options.parent_span);
+    auto obs_rec = create_observability_recorder(core::tracing::operation::mgr_analytics_drop_link,
+                                                 options.parent_span);
 
     core::operations::management::analytics_link_drop_request request{
-      link_name, dataverse_name, {}, options.timeout, span,
+      link_name, dataverse_name, {}, options.timeout, obs_rec->operation_span(),
     };
     return core_.execute(
-      std::move(request), [span = std::move(span), handler = std::move(handler)](const auto& resp) {
-        if (const auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-          span->add_tag(core::tracing::attributes::op::retry_count, retries);
-        }
-        span->end();
+      std::move(request),
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) {
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
         handler(core::impl::make_error(resp.ctx));
       });
   }
@@ -618,10 +575,11 @@ public:
   void get_links(const get_links_analytics_options::built& options,
                  get_links_analytics_handler&& handler) const
   {
-    auto span = create_span(core::tracing::operation::mgr_analytics_get_links, options.parent_span);
+    auto obs_rec = create_observability_recorder(core::tracing::operation::mgr_analytics_get_links,
+                                                 options.parent_span);
 
     core::operations::management::analytics_link_get_all_request req{
-      {}, {}, {}, {}, options.timeout, span,
+      {}, {}, {}, {}, options.timeout, obs_rec->operation_span(),
     };
     if (options.name.has_value()) {
       req.link_name = options.name.value();
@@ -644,13 +602,10 @@ public:
     }
     return core_.execute(
       std::move(req),
-      [span = std::move(span), handler = std::move(handler)](
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](
         const core::operations::management::analytics_link_get_all_response& resp) {
-        if (const auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-          span->add_tag(core::tracing::attributes::op::retry_count, retries);
-        }
         if (resp.ctx.ec) {
-          span->end();
+          obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
           return handler(core::impl::make_error(resp.ctx), {});
         }
         std::vector<std::unique_ptr<management::analytics_link>> links{};
@@ -697,22 +652,21 @@ public:
           links.push_back(std::move(azure_link));
         }
 
-        span->end();
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
         handler(core::impl::make_error(resp.ctx), std::move(links));
       });
   }
 
 private:
-  [[nodiscard]] auto create_span(const std::string& operation_name,
-                                 const std::shared_ptr<tracing::request_span>& parent_span) const
-    -> std::shared_ptr<tracing::request_span>
+  [[nodiscard]] auto create_observability_recorder(
+    const std::string& operation_name,
+    const std::shared_ptr<tracing::request_span>& parent_span) const
+    -> std::unique_ptr<core::impl::observability_recorder>
   {
-    auto span = core_.tracer()->create_span(operation_name, parent_span);
-    if (span->uses_tags()) {
-      span->add_tag(core::tracing::attributes::op::service, core::tracing::service::analytics);
-      span->add_tag(core::tracing::attributes::op::operation_name, operation_name);
-    }
-    return span;
+    auto rec = core::impl::observability_recorder::create(
+      operation_name, parent_span, core_.tracer(), core_.meter());
+    rec->with_service(core::tracing::service::analytics);
+    return rec;
   }
 
   core::cluster core_;

@@ -19,6 +19,7 @@
 
 #include "core/cluster.hxx"
 #include "core/impl/error.hxx"
+#include "core/impl/observability_recorder.hxx"
 #include "core/operations/document_append.hxx"
 #include "core/operations/document_decrement.hxx"
 #include "core/operations/document_increment.hxx"
@@ -86,7 +87,7 @@ public:
               append_options::built options,
               append_handler&& handler) const
   {
-    auto span = create_kv_span(
+    auto obs_rec = create_observability_recorder(
       core::tracing::operation::mcbp_append, options.parent_span, options.durability_level);
 
     auto id = core::document_id{
@@ -105,15 +106,12 @@ public:
         options.durability_level,
         options.timeout,
         { options.retry_strategy },
-        span,
+        obs_rec->operation_span(),
       };
       return core_.execute(
         std::move(request),
-        [span = std::move(span), handler = std::move(handler)](auto&& resp) mutable {
-          if (auto retries = resp.ctx.retry_attempts(); span->uses_tags() && retries > 0) {
-            span->add_tag(core::tracing::attributes::op::retry_count, retries);
-          }
-          span->end();
+        [obs_rec = std::move(obs_rec), handler = std::move(handler)](auto&& resp) mutable {
+          obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
           if (resp.ctx.ec()) {
             return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{});
           }
@@ -131,20 +129,16 @@ public:
       durability_level::none,
       options.timeout,
       { options.retry_strategy },
-      span,
+      obs_rec->operation_span(),
     };
     return core_.execute(std::move(request),
                          [core = core_,
                           id = std::move(id),
                           options,
-                          span = std::move(span),
+                          obs_rec = std::move(obs_rec),
                           handler = std::move(handler)](auto&& resp) mutable {
-                           if (auto retries = resp.ctx.retry_attempts();
-                               span->uses_tags() && retries > 0) {
-                             span->add_tag(core::tracing::attributes::op::retry_count, retries);
-                           }
                            if (resp.ctx.ec()) {
-                             span->end();
+                             obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
                              return handler(core::impl::make_error(std::move(resp.ctx)),
                                             mutation_result{ resp.cas, std::move(resp.token) });
                            }
@@ -157,10 +151,10 @@ public:
                              options.timeout,
                              options.persist_to,
                              options.replicate_to,
-                             [span = std::move(span),
+                             [obs_rec = std::move(obs_rec),
                               resp = std::forward<decltype(resp)>(resp),
                               handler = std::move(handler)](std::error_code ec) mutable {
-                               span->end();
+                               obs_rec->finish(resp.ctx.retry_attempts(), ec);
                                if (ec) {
                                  resp.ctx.override_ec(ec);
                                  return handler(core::impl::make_error(std::move(resp.ctx)),
@@ -177,7 +171,7 @@ public:
                prepend_options::built options,
                prepend_handler&& handler) const
   {
-    auto span = create_kv_span(
+    auto obs_rec = create_observability_recorder(
       core::tracing::operation::mcbp_prepend, options.parent_span, options.durability_level);
 
     auto id = core::document_id{
@@ -196,15 +190,12 @@ public:
         options.durability_level,
         options.timeout,
         { options.retry_strategy },
-        span,
+        obs_rec->operation_span(),
       };
       return core_.execute(
         std::move(request),
-        [span = std::move(span), handler = std::move(handler)](auto&& resp) mutable {
-          if (auto retries = resp.ctx.retry_attempts(); span->uses_tags() && retries > 0) {
-            span->add_tag(core::tracing::attributes::op::retry_count, retries);
-          }
-          span->end();
+        [obs_rec = std::move(obs_rec), handler = std::move(handler)](auto&& resp) mutable {
+          obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
           if (resp.ctx.ec()) {
             return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{});
           }
@@ -222,20 +213,16 @@ public:
       durability_level::none,
       options.timeout,
       { options.retry_strategy },
-      span,
+      obs_rec->operation_span(),
     };
     return core_.execute(std::move(request),
-                         [span = std::move(span),
+                         [obs_rec = std::move(obs_rec),
                           core = core_,
                           id = std::move(id),
                           options,
                           handler = std::move(handler)](auto&& resp) mutable {
-                           if (auto retries = resp.ctx.retry_attempts();
-                               span->uses_tags() && retries > 0) {
-                             span->add_tag(core::tracing::attributes::op::retry_count, retries);
-                           }
                            if (resp.ctx.ec()) {
-                             span->end();
+                             obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
                              return handler(core::impl::make_error(std::move(resp.ctx)),
                                             mutation_result{ resp.cas, std::move(resp.token) });
                            }
@@ -248,10 +235,10 @@ public:
                              options.timeout,
                              options.persist_to,
                              options.replicate_to,
-                             [span = std::move(span),
+                             [obs_rec = std::move(obs_rec),
                               resp = std::forward<decltype(resp)>(resp),
                               handler = std::move(handler)](std::error_code ec) mutable {
-                               span->end();
+                               obs_rec->finish(resp.ctx.retry_attempts(), ec);
                                if (ec) {
                                  resp.ctx.override_ec(ec);
                                  return handler(core::impl::make_error(std::move(resp.ctx)),
@@ -267,7 +254,7 @@ public:
                  decrement_options::built options,
                  decrement_handler&& handler) const
   {
-    auto span = create_kv_span(
+    auto obs_rec = create_observability_recorder(
       core::tracing::operation::mcbp_decrement, options.parent_span, options.durability_level);
 
     auto id = core::document_id{
@@ -287,15 +274,12 @@ public:
         options.durability_level,
         options.timeout,
         { options.retry_strategy },
-        span,
+        obs_rec->operation_span(),
       };
       return core_.execute(
         std::move(request),
-        [span = std::move(span), handler = std::move(handler)](auto&& resp) mutable {
-          if (auto retries = resp.ctx.retry_attempts(); span->uses_tags() && retries > 0) {
-            span->add_tag(core::tracing::attributes::op::retry_count, retries);
-          }
-          span->end();
+        [obs_rec = std::move(obs_rec), handler = std::move(handler)](auto&& resp) mutable {
+          obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
 
           if (resp.ctx.ec()) {
             return handler(core::impl::make_error(std::move(resp.ctx)), counter_result{});
@@ -315,20 +299,17 @@ public:
       durability_level::none,
       options.timeout,
       { options.retry_strategy },
-      span,
+      obs_rec->operation_span(),
     };
     return core_.execute(
       std::move(request),
-      [span = std::move(span),
+      [obs_rec = std::move(obs_rec),
        core = core_,
        id = std::move(id),
        options,
        handler = std::move(handler)](auto&& resp) mutable {
-        if (auto retries = resp.ctx.retry_attempts(); span->uses_tags() && retries > 0) {
-          span->add_tag(core::tracing::attributes::op::retry_count, retries);
-        }
         if (resp.ctx.ec()) {
-          span->end();
+          obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
           return handler(core::impl::make_error(std::move(resp.ctx)),
                          counter_result{ resp.cas, std::move(resp.token), resp.content });
         }
@@ -341,10 +322,10 @@ public:
           options.timeout,
           options.persist_to,
           options.replicate_to,
-          [span = std::move(span),
+          [obs_rec = std::move(obs_rec),
            resp = std::forward<decltype(resp)>(resp),
            handler = std::move(handler)](std::error_code ec) mutable {
-            span->end();
+            obs_rec->finish(resp.ctx.retry_attempts(), ec);
             if (ec) {
               resp.ctx.override_ec(ec);
               return handler(core::impl::make_error(std::move(resp.ctx)), counter_result{});
@@ -359,7 +340,7 @@ public:
                  increment_options::built options,
                  increment_handler&& handler) const
   {
-    auto span = create_kv_span(
+    auto obs_rec = create_observability_recorder(
       core::tracing::operation::mcbp_increment, options.parent_span, options.durability_level);
 
     auto id = core::document_id{
@@ -379,15 +360,12 @@ public:
         options.durability_level,
         options.timeout,
         { options.retry_strategy },
-        span,
+        obs_rec->operation_span(),
       };
       return core_.execute(
         std::move(request),
-        [span = std::move(span), handler = std::move(handler)](auto&& resp) mutable {
-          if (auto retries = resp.ctx.retry_attempts(); span->uses_tags() && retries > 0) {
-            span->add_tag(core::tracing::attributes::op::retry_count, retries);
-          }
-          span->end();
+        [obs_rec = std::move(obs_rec), handler = std::move(handler)](auto&& resp) mutable {
+          obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
           if (resp.ctx.ec()) {
             return handler(core::impl::make_error(std::move(resp.ctx)), counter_result{});
           }
@@ -406,20 +384,17 @@ public:
       durability_level::none,
       options.timeout,
       { options.retry_strategy },
-      span,
+      obs_rec->operation_span(),
     };
     return core_.execute(
       std::move(request),
-      [span = std::move(span),
+      [obs_rec = std::move(obs_rec),
        core = core_,
        id = std::move(id),
        options,
        handler = std::move(handler)](auto&& resp) mutable {
-        if (auto retries = resp.ctx.retry_attempts(); span->uses_tags() && retries > 0) {
-          span->add_tag(core::tracing::attributes::op::retry_count, retries);
-        }
         if (resp.ctx.ec()) {
-          span->end();
+          obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
           return handler(core::impl::make_error(std::move(resp.ctx)),
                          counter_result{ resp.cas, std::move(resp.token), resp.content });
         }
@@ -432,10 +407,10 @@ public:
           options.timeout,
           options.persist_to,
           options.replicate_to,
-          [span = std::move(span),
+          [obs_rec = std::move(obs_rec),
            resp = std::forward<decltype(resp)>(resp),
            handler = std::move(handler)](std::error_code ec) mutable {
-            span->end();
+            obs_rec->finish(resp.ctx.retry_attempts(), ec);
             if (ec) {
               resp.ctx.override_ec(ec);
               return handler(core::impl::make_error(std::move(resp.ctx)), counter_result{});
@@ -447,28 +422,23 @@ public:
   }
 
 private:
-  auto tracer() const -> const std::shared_ptr<core::tracing::tracer_wrapper>&
+  auto create_observability_recorder(const std::string& operation_name,
+                                     const std::shared_ptr<tracing::request_span>& parent_span,
+                                     const std::optional<durability_level> durability = {}) const
+    -> std::unique_ptr<core::impl::observability_recorder>
   {
-    return core_.tracer();
-  }
+    auto rec = core::impl::observability_recorder::create(
+      operation_name, parent_span, core_.tracer(), core_.meter());
 
-  auto create_kv_span(const std::string& operation_name,
-                      const std::shared_ptr<tracing::request_span>& parent_span,
-                      const std::optional<durability_level> durability = {}) const
-    -> std::shared_ptr<tracing::request_span>
-  {
-    auto span = tracer()->create_span(operation_name, parent_span);
-    if (span->uses_tags()) {
-      span->add_tag(core::tracing::attributes::op::service, core::tracing::service::key_value);
-      span->add_tag(core::tracing::attributes::op::bucket_name, bucket_name_);
-      span->add_tag(core::tracing::attributes::op::scope_name, scope_name_);
-      span->add_tag(core::tracing::attributes::op::collection_name, name_);
-      span->add_tag(core::tracing::attributes::op::operation_name, operation_name);
-      if (durability.has_value()) {
-        core::tracing::set_durability_level_attribute(span, durability.value());
-      }
+    rec->with_service(core::tracing::service::key_value);
+    rec->with_bucket_name(bucket_name_);
+    rec->with_scope_name(scope_name_);
+    rec->with_collection_name(name_);
+    if (durability.has_value()) {
+      rec->with_durability(durability.value());
     }
-    return span;
+
+    return rec;
   }
 
   core::cluster core_;

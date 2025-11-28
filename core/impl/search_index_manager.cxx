@@ -18,6 +18,7 @@
 #include "core/cluster.hxx"
 
 #include "core/impl/error.hxx"
+#include "core/impl/observability_recorder.hxx"
 #include "core/operations/management/search_index_analyze_document.hxx"
 #include "core/operations/management/search_index_control_ingest.hxx"
 #include "core/operations/management/search_index_control_plan_freeze.hxx"
@@ -149,205 +150,197 @@ public:
                  const couchbase::get_search_index_options::built& options,
                  get_search_index_handler&& handler) const
   {
-    auto span = create_span(core::tracing::operation::mgr_search_get_index, options.parent_span);
+    auto obs_rec = create_observability_recorder(core::tracing::operation::mgr_search_get_index,
+                                                 options.parent_span);
 
     core::operations::management::search_index_get_request request{
-      std::move(index_name), bucket_name_, scope_name_, {}, options.timeout, span,
+      std::move(index_name),     bucket_name_, scope_name_, {}, options.timeout,
+      obs_rec->operation_span(),
     };
-    core_.execute(std::move(request),
-                  [span = std::move(span), handler = std::move(handler)](const auto& resp) mutable {
-                    if (auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-                      span->add_tag(core::tracing::attributes::op::retry_count, retries);
-                    }
-                    span->end();
-                    return handler(core::impl::make_error(resp.ctx), map_search_index(resp.index));
-                  });
+    core_.execute(
+      std::move(request),
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) mutable {
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+        return handler(core::impl::make_error(resp.ctx), map_search_index(resp.index));
+      });
   }
 
   void get_all_indexes(const get_all_search_indexes_options::built& options,
                        get_all_search_indexes_handler&& handler) const
   {
-    auto span =
-      create_span(core::tracing::operation::mgr_search_get_all_indexes, options.parent_span);
+    auto obs_rec = create_observability_recorder(
+      core::tracing::operation::mgr_search_get_all_indexes, options.parent_span);
     core::operations::management::search_index_get_all_request request{
-      bucket_name_, scope_name_, {}, options.timeout, span,
+      bucket_name_, scope_name_, {}, options.timeout, obs_rec->operation_span(),
     };
-    core_.execute(std::move(request),
-                  [span = std::move(span), handler = std::move(handler)](const auto& resp) mutable {
-                    if (auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-                      span->add_tag(core::tracing::attributes::op::retry_count, retries);
-                    }
-                    span->end();
-                    return handler(core::impl::make_error(resp.ctx),
-                                   map_all_search_indexes(resp.indexes));
-                  });
+    core_.execute(
+      std::move(request),
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) mutable {
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+        return handler(core::impl::make_error(resp.ctx), map_all_search_indexes(resp.indexes));
+      });
   }
 
   void upsert_index(const management::search::index& search_index,
                     const upsert_search_index_options::built& options,
                     upsert_search_index_handler&& handler) const
   {
-    auto span = create_span(core::tracing::operation::mgr_search_upsert_index, options.parent_span);
+    auto obs_rec = create_observability_recorder(core::tracing::operation::mgr_search_upsert_index,
+                                                 options.parent_span);
     core::operations::management::search_index_upsert_request request{
-      map_search_index(search_index), bucket_name_, scope_name_, {}, options.timeout, span,
+      map_search_index(search_index), bucket_name_, scope_name_, {}, options.timeout,
+      obs_rec->operation_span(),
     };
-    core_.execute(std::move(request),
-                  [span = std::move(span), handler = std::move(handler)](const auto& resp) mutable {
-                    if (auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-                      span->add_tag(core::tracing::attributes::op::retry_count, retries);
-                    }
-                    span->end();
-                    return handler(core::impl::make_error(resp.ctx));
-                  });
+    core_.execute(
+      std::move(request),
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) mutable {
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+        return handler(core::impl::make_error(resp.ctx));
+      });
   }
 
   void drop_index(std::string index_name,
                   const drop_search_index_options::built& options,
                   drop_search_index_handler&& handler) const
   {
-    auto span = create_span(core::tracing::operation::mgr_search_drop_index, options.parent_span);
+    auto obs_rec = create_observability_recorder(core::tracing::operation::mgr_search_drop_index,
+                                                 options.parent_span);
     core::operations::management::search_index_drop_request request{
-      std::move(index_name), bucket_name_, scope_name_, {}, options.timeout, span,
+      std::move(index_name),     bucket_name_, scope_name_, {}, options.timeout,
+      obs_rec->operation_span(),
     };
-    core_.execute(std::move(request),
-                  [span = std::move(span), handler = std::move(handler)](const auto& resp) mutable {
-                    if (auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-                      span->add_tag(core::tracing::attributes::op::retry_count, retries);
-                    }
-                    span->end();
-                    return handler(core::impl::make_error(resp.ctx));
-                  });
+    core_.execute(
+      std::move(request),
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) mutable {
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+        return handler(core::impl::make_error(resp.ctx));
+      });
   }
 
   void get_indexed_documents_count(std::string index_name,
                                    const get_indexed_search_index_options::built& options,
                                    get_indexed_search_index_handler&& handler) const
   {
-    auto span = create_span(core::tracing::operation::mgr_search_get_indexed_documents_count,
-                            options.parent_span);
+    auto obs_rec = create_observability_recorder(
+      core::tracing::operation::mgr_search_get_indexed_documents_count, options.parent_span);
     core::operations::management::search_index_get_documents_count_request request{
-      std::move(index_name), bucket_name_, scope_name_, {}, options.timeout, span,
+      std::move(index_name),     bucket_name_, scope_name_, {}, options.timeout,
+      obs_rec->operation_span(),
     };
-    core_.execute(std::move(request),
-                  [span = std::move(span), handler = std::move(handler)](const auto& resp) mutable {
-                    if (auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-                      span->add_tag(core::tracing::attributes::op::retry_count, retries);
-                    }
-                    span->end();
-                    return handler(core::impl::make_error(resp.ctx), resp.count);
-                  });
+    core_.execute(
+      std::move(request),
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) mutable {
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+        return handler(core::impl::make_error(resp.ctx), resp.count);
+      });
   }
 
   void pause_ingest(std::string index_name,
                     const pause_ingest_search_index_options::built& options,
                     pause_ingest_search_index_handler&& handler) const
   {
-    auto span = create_span(core::tracing::operation::mgr_search_pause_ingest, options.parent_span);
+    auto obs_rec = create_observability_recorder(core::tracing::operation::mgr_search_pause_ingest,
+                                                 options.parent_span);
     core::operations::management::search_index_control_ingest_request request{
-      std::move(index_name), true, bucket_name_, scope_name_, {}, options.timeout, span,
+      std::move(index_name),     true, bucket_name_, scope_name_, {}, options.timeout,
+      obs_rec->operation_span(),
     };
-    core_.execute(std::move(request),
-                  [span = std::move(span), handler = std::move(handler)](const auto& resp) mutable {
-                    if (auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-                      span->add_tag(core::tracing::attributes::op::retry_count, retries);
-                    }
-                    span->end();
-                    return handler(core::impl::make_error(resp.ctx));
-                  });
+    core_.execute(
+      std::move(request),
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) mutable {
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+        return handler(core::impl::make_error(resp.ctx));
+      });
   }
 
   void resume_ingest(std::string index_name,
                      const resume_ingest_search_index_options::built& options,
                      resume_ingest_search_index_handler&& handler) const
   {
-    auto span =
-      create_span(core::tracing::operation::mgr_search_resume_ingest, options.parent_span);
+    auto obs_rec = create_observability_recorder(core::tracing::operation::mgr_search_resume_ingest,
+                                                 options.parent_span);
     core::operations::management::search_index_control_ingest_request request{
-      std::move(index_name), false, bucket_name_, scope_name_, {}, options.timeout, span,
+      std::move(index_name),     false, bucket_name_, scope_name_, {}, options.timeout,
+      obs_rec->operation_span(),
     };
-    core_.execute(std::move(request),
-                  [span = std::move(span), handler = std::move(handler)](const auto& resp) mutable {
-                    if (auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-                      span->add_tag(core::tracing::attributes::op::retry_count, retries);
-                    }
-                    span->end();
-                    return handler(core::impl::make_error(resp.ctx));
-                  });
+    core_.execute(
+      std::move(request),
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) mutable {
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+        return handler(core::impl::make_error(resp.ctx));
+      });
   }
 
   void allow_querying(std::string index_name,
                       const allow_querying_search_index_options::built& options,
                       allow_querying_search_index_handler&& handler) const
   {
-    auto span =
-      create_span(core::tracing::operation::mgr_search_allow_querying, options.parent_span);
+    auto obs_rec = create_observability_recorder(
+      core::tracing::operation::mgr_search_allow_querying, options.parent_span);
     core::operations::management::search_index_control_query_request request{
-      std::move(index_name), true, bucket_name_, scope_name_, {}, options.timeout, span,
+      std::move(index_name),     true, bucket_name_, scope_name_, {}, options.timeout,
+      obs_rec->operation_span(),
     };
-    core_.execute(std::move(request),
-                  [span = std::move(span), handler = std::move(handler)](const auto& resp) mutable {
-                    if (auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-                      span->add_tag(core::tracing::attributes::op::retry_count, retries);
-                    }
-                    span->end();
-                    return handler(core::impl::make_error(resp.ctx));
-                  });
+    core_.execute(
+      std::move(request),
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) mutable {
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+        return handler(core::impl::make_error(resp.ctx));
+      });
   }
 
   void disallow_querying(std::string index_name,
                          const disallow_querying_search_index_options::built& options,
                          disallow_querying_search_index_handler&& handler) const
   {
-    auto span =
-      create_span(core::tracing::operation::mgr_search_disallow_querying, options.parent_span);
+    auto obs_rec = create_observability_recorder(
+      core::tracing::operation::mgr_search_disallow_querying, options.parent_span);
     core::operations::management::search_index_control_query_request request{
-      std::move(index_name), false, bucket_name_, scope_name_, {}, options.timeout, span,
+      std::move(index_name),     false, bucket_name_, scope_name_, {}, options.timeout,
+      obs_rec->operation_span(),
     };
-    core_.execute(std::move(request),
-                  [span = std::move(span), handler = std::move(handler)](const auto& resp) mutable {
-                    if (auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-                      span->add_tag(core::tracing::attributes::op::retry_count, retries);
-                    }
-                    span->end();
-                    return handler(core::impl::make_error(resp.ctx));
-                  });
+    core_.execute(
+      std::move(request),
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) mutable {
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+        return handler(core::impl::make_error(resp.ctx));
+      });
   }
 
   void freeze_plan(std::string index_name,
                    const freeze_plan_search_index_options::built& options,
                    freeze_plan_search_index_handler&& handler) const
   {
-    auto span = create_span(core::tracing::operation::mgr_search_freeze_plan, options.parent_span);
+    auto obs_rec = create_observability_recorder(core::tracing::operation::mgr_search_freeze_plan,
+                                                 options.parent_span);
     core::operations::management::search_index_control_plan_freeze_request request{
-      std::move(index_name), true, bucket_name_, scope_name_, {}, options.timeout, span,
+      std::move(index_name),     true, bucket_name_, scope_name_, {}, options.timeout,
+      obs_rec->operation_span(),
     };
-    core_.execute(std::move(request),
-                  [span = std::move(span), handler = std::move(handler)](const auto& resp) mutable {
-                    if (auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-                      span->add_tag(core::tracing::attributes::op::retry_count, retries);
-                    }
-                    span->end();
-                    return handler(core::impl::make_error(resp.ctx));
-                  });
+    core_.execute(
+      std::move(request),
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) mutable {
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+        return handler(core::impl::make_error(resp.ctx));
+      });
   }
 
   void unfreeze_plan(std::string index_name,
                      const unfreeze_plan_search_index_options::built& options,
                      unfreeze_plan_search_index_handler&& handler) const
   {
-    auto span =
-      create_span(core::tracing::operation::mgr_search_unfreeze_plan, options.parent_span);
+    auto obs_rec = create_observability_recorder(core::tracing::operation::mgr_search_unfreeze_plan,
+                                                 options.parent_span);
     core::operations::management::search_index_control_plan_freeze_request request{
-      std::move(index_name), false, bucket_name_, scope_name_, {}, options.timeout, span,
+      std::move(index_name),     false, bucket_name_, scope_name_, {}, options.timeout,
+      obs_rec->operation_span(),
     };
-    core_.execute(std::move(request),
-                  [span = std::move(span), handler = std::move(handler)](const auto& resp) mutable {
-                    if (auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-                      span->add_tag(core::tracing::attributes::op::retry_count, retries);
-                    }
-                    span->end();
-                    return handler(core::impl::make_error(resp.ctx));
-                  });
+    core_.execute(
+      std::move(request),
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) mutable {
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+        return handler(core::impl::make_error(resp.ctx));
+      });
   }
 
   void analyze_document(std::string index_name,
@@ -355,45 +348,38 @@ public:
                         const analyze_document_options::built& options,
                         analyze_document_handler&& handler) const
   {
-    auto span =
-      create_span(core::tracing::operation::mgr_search_analyze_document, options.parent_span);
+    auto obs_rec = create_observability_recorder(
+      core::tracing::operation::mgr_search_analyze_document, options.parent_span);
     core::operations::management::search_index_analyze_document_request request{
-      std::move(index_name),
-      std::move(document),
-      bucket_name_,
-      scope_name_,
-      {},
-      options.timeout,
-      span,
+      std::move(index_name), std::move(document),       bucket_name_, scope_name_, {},
+      options.timeout,       obs_rec->operation_span(),
     };
-    core_.execute(std::move(request),
-                  [span = std::move(span), handler = std::move(handler)](const auto& resp) mutable {
-                    if (auto retries = resp.ctx.retry_attempts; span->uses_tags() && retries > 0) {
-                      span->add_tag(core::tracing::attributes::op::retry_count, retries);
-                    }
-                    auto analysis = convert_analysis(resp.analysis);
-                    span->end();
-                    return handler(core::impl::make_error(resp.ctx), std::move(analysis));
-                  });
+    core_.execute(
+      std::move(request),
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) mutable {
+        auto analysis = convert_analysis(resp.analysis);
+        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+        return handler(core::impl::make_error(resp.ctx), std::move(analysis));
+      });
   }
 
 private:
-  [[nodiscard]] auto create_span(const std::string& operation_name,
-                                 const std::shared_ptr<tracing::request_span>& parent_span) const
-    -> std::shared_ptr<tracing::request_span>
+  [[nodiscard]] auto create_observability_recorder(
+    const std::string& operation_name,
+    const std::shared_ptr<tracing::request_span>& parent_span) const
+    -> std::unique_ptr<core::impl::observability_recorder>
   {
-    auto span = core_.tracer()->create_span(operation_name, parent_span);
-    if (span->uses_tags()) {
-      span->add_tag(core::tracing::attributes::op::service, core::tracing::service::search);
-      span->add_tag(core::tracing::attributes::op::operation_name, operation_name);
-      if (bucket_name_.has_value()) {
-        span->add_tag(core::tracing::attributes::op::bucket_name, bucket_name_.value());
-      }
-      if (scope_name_.has_value()) {
-        span->add_tag(core::tracing::attributes::op::scope_name, scope_name_.value());
-      }
+    auto rec = core::impl::observability_recorder::create(
+      operation_name, parent_span, core_.tracer(), core_.meter());
+
+    rec->with_service(core::tracing::service::search);
+    if (bucket_name_.has_value()) {
+      rec->with_bucket_name(bucket_name_.value());
     }
-    return span;
+    if (scope_name_.has_value()) {
+      rec->with_scope_name(scope_name_.value());
+    }
+    return rec;
   }
 
   core::cluster core_;
