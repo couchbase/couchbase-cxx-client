@@ -50,6 +50,7 @@ if(NOT TARGET opentelemetry)
     "open-telemetry/opentelemetry-cpp"
     EXCLUDE_FROM_ALL ON
     OPTIONS
+    "protobuf_MSVC_STATIC_RUNTIME OFF"
     "OPENTELEMETRY_INSTALL OFF"
     "WITH_ABI_VERSION_1 OFF"
     "WITH_ABI_VERSION_2 ON"
@@ -57,7 +58,7 @@ if(NOT TARGET opentelemetry)
     "WITH_BENCHMARK OFF"
     "WITH_EXAMPLES OFF"
     "WITH_FUNC_TESTS OFF"
-    "WITH_OTLP_GRPC ON"
+    "WITH_OTLP_GRPC OFF"
     "WITH_OTLP_HTTP ON"
     "WITH_STL CXX17"
     "BUILD_TESTING OFF"
