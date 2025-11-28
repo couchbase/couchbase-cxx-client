@@ -65,13 +65,13 @@ public:
   auto start_span(std::string name, std::shared_ptr<couchbase::tracing::request_span> parent = {})
     -> std::shared_ptr<couchbase::tracing::request_span> override
   {
-    auto wrapped_parent = std::dynamic_pointer_cast<otel_request_span>(parent);
+    const auto wrapped_parent = std::dynamic_pointer_cast<otel_request_span>(parent);
+    opentelemetry::trace::StartSpanOptions opts;
+    opts.kind = opentelemetry::trace::SpanKind::kClient;
     if (wrapped_parent) {
-      opentelemetry::trace::StartSpanOptions opts;
       opts.parent = wrapped_parent->wrapped_span()->GetContext();
-      return std::make_shared<otel_request_span>(tracer_->StartSpan(name, opts));
     }
-    return std::make_shared<otel_request_span>(tracer_->StartSpan(name));
+    return std::make_shared<otel_request_span>(tracer_->StartSpan(name, opts));
   }
 
   auto wrap_span(nostd::shared_ptr<opentelemetry::trace::Span> span)
