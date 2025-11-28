@@ -113,6 +113,7 @@ public:
   };
   bool preserve_bootstrap_nodes_order{ false };
   bool allow_enterprise_analytics{ false };
+  bool enable_lazy_connections{ false };
 };
 
 } // namespace couchbase::core

@@ -213,7 +213,8 @@ function OnDelete(meta, options) {
                                                                                      bucket_name,
                                                                                      scope_name };
     auto resp = test::utils::execute(integration.cluster, req);
-    if (integration.cluster_version().supports_eventing_mb_67773_errors()) {
+    if (integration.cluster_version()
+          .does_not_return_error_when_eventing_function_is_already_in_desired_state()) {
       REQUIRE_SUCCESS(resp.ctx.ec);
     } else {
       REQUIRE(resp.ctx.ec == couchbase::errc::management::eventing_function_not_deployed);
@@ -248,7 +249,8 @@ function OnDelete(meta, options) {
                                                                                    bucket_name,
                                                                                    scope_name };
     auto resp = test::utils::execute(integration.cluster, req);
-    if (integration.cluster_version().supports_eventing_mb_67773_errors()) {
+    if (integration.cluster_version()
+          .does_not_return_error_when_eventing_function_is_already_in_desired_state()) {
       REQUIRE_SUCCESS(resp.ctx.ec);
     } else {
       REQUIRE(resp.ctx.ec == couchbase::errc::management::eventing_function_deployed);
@@ -275,7 +277,8 @@ function OnDelete(meta, options) {
                                                                                   bucket_name,
                                                                                   scope_name };
     auto resp = test::utils::execute(integration.cluster, req);
-    if (integration.cluster_version().supports_eventing_mb_67773_errors()) {
+    if (integration.cluster_version()
+          .does_not_return_error_when_eventing_function_is_already_in_desired_state()) {
       REQUIRE_SUCCESS(resp.ctx.ec);
     } else {
       REQUIRE(resp.ctx.ec == couchbase::errc::management::eventing_function_paused);

@@ -105,6 +105,8 @@ public:
     });
   }
 
+  void connect_session(std::size_t index);
+
   template<typename Request>
   void map_and_send(std::shared_ptr<operations::mcbp_command<bucket, Request>> cmd)
   {
@@ -142,6 +144,9 @@ public:
         session.has_value() ? session->bootstrap_address() : "",
         session.has_value() && session->has_config(),
         config_rev());
+      if (!session) {
+        connect_session(index);
+      }
       return defer_command([self = shared_from_this(), cmd](std::error_code ec) {
         if (ec == errc::common::request_canceled) {
           return cmd->cancel(retry_reason::do_not_retry);
