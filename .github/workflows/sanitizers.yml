@@ -31,7 +31,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y libssl-dev cmake curl wget gnupg2 gdb clang clang-tools valgrind
+          sudo apt-get install -y libssl-dev cmake curl wget gnupg2 libcurl4-openssl-dev libprotobuf-dev libgrpc-dev libgrpc++-dev protobuf-compiler-grpc gdb clang clang-tools valgrind
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -69,7 +69,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y libssl-dev cmake curl wget gnupg2 gdb clang clang-tools valgrind
+          sudo apt-get install -y libssl-dev cmake curl wget gnupg2 libcurl4-openssl-dev libprotobuf-dev libgrpc-dev libgrpc++-dev protobuf-compiler-grpc gdb clang clang-tools valgrind
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -114,7 +114,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y libssl-dev cmake curl wget gnupg2 gdb clang clang-tools valgrind
+          sudo apt-get install -y libssl-dev cmake curl wget gnupg2 libcurl4-openssl-dev libprotobuf-dev libgrpc-dev libgrpc++-dev protobuf-compiler-grpc gdb clang clang-tools valgrind
       - uses: actions/checkout@v4
         with:
           submodules: recursive
