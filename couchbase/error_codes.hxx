@@ -24,41 +24,41 @@ namespace couchbase
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
 namespace core::impl
 {
-const std::error_category&
-common_category() noexcept;
+auto
+common_category() noexcept -> const std::error_category&;
 
-const std::error_category&
-key_value_category() noexcept;
+auto
+key_value_category() noexcept -> const std::error_category&;
 
-const std::error_category&
-query_category() noexcept;
+auto
+query_category() noexcept -> const std::error_category&;
 
-const std::error_category&
-analytics_category() noexcept;
+auto
+analytics_category() noexcept -> const std::error_category&;
 
-const std::error_category&
-search_category() noexcept;
+auto
+search_category() noexcept -> const std::error_category&;
 
-const std::error_category&
-view_category() noexcept;
+auto
+view_category() noexcept -> const std::error_category&;
 
-const std::error_category&
-management_category() noexcept;
+auto
+management_category() noexcept -> const std::error_category&;
 
-const std::error_category&
-field_level_encryption_category() noexcept;
+auto
+field_level_encryption_category() noexcept -> const std::error_category&;
 
-const std::error_category&
-network_category() noexcept;
+auto
+network_category() noexcept -> const std::error_category&;
 
-const std::error_category&
-streaming_json_lexer_category() noexcept;
+auto
+streaming_json_lexer_category() noexcept -> const std::error_category&;
 
-const std::error_category&
-transaction_category() noexcept;
+auto
+transaction_category() noexcept -> const std::error_category&;
 
-const std::error_category&
-transaction_op_category() noexcept;
+auto
+transaction_op_category() noexcept -> const std::error_category&;
 
 } // namespace core::impl
 #endif
@@ -1151,74 +1151,74 @@ enum class transaction_op {
 };
 
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-inline std::error_code
-make_error_code(common e) noexcept
+inline auto
+make_error_code(common e) noexcept -> std::error_code
 {
   return { static_cast<int>(e), core::impl::common_category() };
 }
 
-inline std::error_code
-make_error_code(key_value e)
+inline auto
+make_error_code(key_value e) -> std::error_code
 {
   return { static_cast<int>(e), core::impl::key_value_category() };
 }
 
-inline std::error_code
-make_error_code(query e)
+inline auto
+make_error_code(query e) -> std::error_code
 {
   return { static_cast<int>(e), core::impl::query_category() };
 }
 
-inline std::error_code
-make_error_code(search e)
+inline auto
+make_error_code(search e) -> std::error_code
 {
   return { static_cast<int>(e), core::impl::search_category() };
 }
 
-inline std::error_code
-make_error_code(view e)
+inline auto
+make_error_code(view e) -> std::error_code
 {
   return { static_cast<int>(e), core::impl::view_category() };
 }
 
-inline std::error_code
-make_error_code(analytics e)
+inline auto
+make_error_code(analytics e) -> std::error_code
 {
   return { static_cast<int>(e), core::impl::analytics_category() };
 }
 
-inline std::error_code
-make_error_code(management e)
+inline auto
+make_error_code(management e) -> std::error_code
 {
   return { static_cast<int>(e), core::impl::management_category() };
 }
 
-inline std::error_code
-make_error_code(network e)
+inline auto
+make_error_code(network e) -> std::error_code
 {
   return { static_cast<int>(e), core::impl::network_category() };
 }
 
-inline std::error_code
-make_error_code(field_level_encryption e)
+inline auto
+make_error_code(field_level_encryption e) -> std::error_code
 {
   return { static_cast<int>(e), core::impl::field_level_encryption_category() };
 }
 
-inline std::error_code
-make_error_code(streaming_json_lexer e)
+inline auto
+make_error_code(streaming_json_lexer e) -> std::error_code
 {
   return { static_cast<int>(e), core::impl::streaming_json_lexer_category() };
 }
 
-inline std::error_code
-make_error_code(transaction e)
+inline auto
+make_error_code(transaction e) -> std::error_code
 {
   return { static_cast<int>(e), core::impl::transaction_category() };
 }
 
-inline std::error_code
-make_error_code(transaction_op e)
+inline auto
+make_error_code(transaction_op e) -> std::error_code
 {
   return { static_cast<int>(e), core::impl::transaction_op_category() };
 }

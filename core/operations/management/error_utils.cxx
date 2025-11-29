@@ -46,6 +46,9 @@ extract_common_query_error_code(std::uint64_t code, const std::string& message)
   -> std::optional<std::error_code>
 {
   switch (code) {
+    case 3000: /* ICode: E_PARSE_SYNTAX, IKey: "parse.syntax_error" */
+      return errc::common::parsing_failure;
+
     case 1191: /* ICode: E_SERVICE_USER_REQUEST_EXCEEDED, IKey: "service.requests.exceeded" */
     case 1192: /* ICode: E_SERVICE_USER_REQUEST_RATE_EXCEEDED, IKey: "service.request.rate.exceeded"
                 */
@@ -55,7 +58,7 @@ extract_common_query_error_code(std::uint64_t code, const std::string& message)
                 */
       return errc::common::rate_limited;
 
-    case 13014: /*ICode: E_DATASTORE_INSUFFICIENT_CREDENTIALS, IKey:
+    case 13014: /* ICode: E_DATASTORE_INSUFFICIENT_CREDENTIALS, IKey:
                    "datastore.couchbase.insufficient_credentials" */
       return errc::common::authentication_failure;
 
