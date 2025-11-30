@@ -1266,6 +1266,11 @@ public:
     return tracer_;
   }
 
+  auto meter() const -> const std::shared_ptr<metrics::meter_wrapper>&
+  {
+    return meter_;
+  }
+
 private:
   void setup_observability()
   {
@@ -2472,6 +2477,12 @@ auto
 cluster::tracer() const -> const std::shared_ptr<tracing::tracer_wrapper>&
 {
   return impl_->tracer();
+}
+
+auto
+cluster::meter() const -> const std::shared_ptr<metrics::meter_wrapper>&
+{
+  return impl_->meter();
 }
 
 } // namespace couchbase::core

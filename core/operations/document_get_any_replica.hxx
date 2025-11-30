@@ -151,7 +151,7 @@ struct get_any_replica_request {
             core->execute(
               std::move(req), [ctx, subop_span](auto&& resp) {
                 {
-                  if (subop_span->uses_tags() && resp.ctx.retry_attempts() > 0) {
+                  if (subop_span->uses_tags()) {
                     subop_span->add_tag(tracing::attributes::op::retry_count,
                                         resp.ctx.retry_attempts());
                   }
@@ -199,7 +199,7 @@ struct get_any_replica_request {
             ctx->add_cancellation_token(req.cancel_token);
             core->execute(std::move(req), [ctx, subop_span](auto&& resp) {
               {
-                if (subop_span->uses_tags() && resp.ctx.retry_attempts() > 0) {
+                if (subop_span->uses_tags()) {
                   subop_span->add_tag(tracing::attributes::op::retry_count,
                                       resp.ctx.retry_attempts());
                 }
