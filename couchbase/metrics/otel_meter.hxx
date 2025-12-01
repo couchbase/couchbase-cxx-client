@@ -17,20 +17,15 @@
 
 #pragma once
 
-#include "opentelemetry/sdk/metrics/meter.h"
 #include <couchbase/metrics/meter.hxx>
 
+#include <opentelemetry/context/context.h>
+#include <opentelemetry/metrics/meter.h>
+#include <opentelemetry/metrics/sync_instruments.h>
+
 #include <algorithm>
-#include <iostream>
-#include <thread>
+#include <mutex>
 #include <utility>
-
-using couchbase::metrics::meter;
-using couchbase::metrics::value_recorder;
-
-namespace nostd = opentelemetry::nostd;
-namespace metrics_api = opentelemetry::metrics;
-namespace metrics_sdk = opentelemetry::sdk::metrics;
 
 namespace couchbase::metrics
 {
@@ -38,8 +33,10 @@ namespace couchbase::metrics
 class otel_sync_histogram
 {
 public:
-  otel_sync_histogram(nostd::shared_ptr<metrics_api::Histogram<std::uint64_t>> histogram_counter)
-    : histogram_counter_(histogram_counter)
+  explicit otel_sync_histogram(
+    opentelemetry::nostd::shared_ptr<opentelemetry::metrics::Histogram<std::uint64_t>>
+      histogram_counter)
+    : histogram_counter_{ std::move(histogram_counter) }
   {
   }
 
@@ -51,7 +48,8 @@ public:
   }
 
 private:
-  nostd::shared_ptr<metrics_api::Histogram<std::uint64_t>> histogram_counter_;
+  opentelemetry::nostd::shared_ptr<opentelemetry::metrics::Histogram<std::uint64_t>>
+    histogram_counter_;
   std::mutex mutex_;
 };
 
@@ -59,9 +57,10 @@ class otel_value_recorder : public couchbase::metrics::value_recorder
 {
 public:
   explicit otel_value_recorder(
-    nostd::shared_ptr<metrics_api::Histogram<std::uint64_t>> histogram_counter,
+    opentelemetry::nostd::shared_ptr<opentelemetry::metrics::Histogram<std::uint64_t>>
+      histogram_counter,
     const std::map<std::string, std::string>& tags)
-    : histogram_counter_(histogram_counter)
+    : histogram_counter_{ std::move(histogram_counter) }
     , tags_(tags)
   {
   }
@@ -73,18 +72,20 @@ public:
       uvalue, opentelemetry::common::KeyValueIterableView<decltype(tags_)>{ tags_ }, context_);
   }
 
-  const std::map<std::string, std::string> tags()
+  [[nodiscard]] auto tags() const -> const std::map<std::string, std::string>&
   {
     return tags_;
   }
 
-  nostd::shared_ptr<metrics_api::Histogram<std::uint64_t>> histogram_counter()
+  auto histogram_counter()
+    -> opentelemetry::nostd::shared_ptr<opentelemetry::metrics::Histogram<std::uint64_t>>
   {
     return histogram_counter_;
   }
 
 private:
-  nostd::shared_ptr<metrics_api::Histogram<std::uint64_t>> histogram_counter_;
+  opentelemetry::nostd::shared_ptr<opentelemetry::metrics::Histogram<std::uint64_t>>
+    histogram_counter_;
   const std::map<std::string, std::string> tags_;
   opentelemetry::context::Context context_{};
   std::mutex mutex_;
@@ -93,8 +94,8 @@ private:
 class otel_meter : public couchbase::metrics::meter
 {
 public:
-  explicit otel_meter(nostd::shared_ptr<metrics_api::Meter> meter)
-    : meter_(meter)
+  explicit otel_meter(opentelemetry::nostd::shared_ptr<opentelemetry::metrics::Meter> meter)
+    : meter_{ std::move(meter) }
   {
   }
 
@@ -132,7 +133,7 @@ public:
   }
 
 private:
-  nostd::shared_ptr<metrics_api::Meter> meter_;
+  opentelemetry::nostd::shared_ptr<opentelemetry::metrics::Meter> meter_;
   std::mutex mutex_;
   std::multimap<std::string, std::shared_ptr<otel_value_recorder>> recorders_;
 };

@@ -16,11 +16,11 @@
  */
 
 #include "utils.hxx"
+#include "CLI/CLI.hpp"
 #include "core/logger/configuration.hxx"
 #include "core/logger/logger.hxx"
 #include "core/meta/version.hxx"
 #include "core/utils/binary.hxx"
-#include "core/utils/duration_parser.hxx"
 #include "core/utils/json.hxx"
 
 #include <couchbase/cluster_options.hxx>
@@ -29,27 +29,129 @@
 #include <couchbase/fmt/durability_level.hxx>
 #include <couchbase/fmt/query_scan_consistency.hxx>
 #include <couchbase/scope.hxx>
+#include <cstdlib>
+
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wsign-conversion"
+#pragma GCC diagnostic ignored "-Wuseless-cast"
+#elif defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-builtins"
+#endif
+#include <opentelemetry/sdk/common/global_log_handler.h>
+
+#include <opentelemetry/metrics/provider.h>
+#include <opentelemetry/trace/provider.h>
+#include <opentelemetry/trace/span_startoptions.h>
+#include <opentelemetry/trace/tracer_provider.h>
+
+#include <opentelemetry/sdk/trace/batch_span_processor.h>
+#include <opentelemetry/sdk/trace/batch_span_processor_factory.h>
+#include <opentelemetry/sdk/trace/samplers/always_off.h>
+#include <opentelemetry/sdk/trace/samplers/always_on.h>
+#include <opentelemetry/sdk/trace/samplers/parent.h>
+#include <opentelemetry/sdk/trace/samplers/trace_id_ratio.h>
+#include <opentelemetry/sdk/trace/simple_processor.h>
+#include <opentelemetry/sdk/trace/simple_processor_factory.h>
+#include <opentelemetry/sdk/trace/tracer_provider.h>
+#include <opentelemetry/sdk/trace/tracer_provider_factory.h>
+
+#include <opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader.h>
+#include <opentelemetry/sdk/metrics/instruments.h>
+#include <opentelemetry/sdk/metrics/meter.h>
+#include <opentelemetry/sdk/metrics/meter_context_factory.h>
+#include <opentelemetry/sdk/metrics/meter_provider_factory.h>
+#include <opentelemetry/sdk/metrics/view/view_registry_factory.h>
+#include <opentelemetry/sdk/resource/resource.h>
+
+#include <opentelemetry/exporters/otlp/otlp_http.h>
+#include <opentelemetry/exporters/otlp/otlp_http_exporter_factory.h>
+#include <opentelemetry/exporters/otlp/otlp_http_exporter_options.h>
+#include <opentelemetry/exporters/otlp/otlp_http_metric_exporter_factory.h>
+
+#include <couchbase/metrics/otel_meter.hxx>
+#include <couchbase/tracing/otel_tracer.hxx>
+
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#elif defined(__clang__)
+#pragma clang diagnostic pop
+#endif
 
 #include <spdlog/details/os.h>
 #include <spdlog/fmt/bundled/chrono.h>
 #include <spdlog/spdlog.h>
-#include <stdexcept>
 #include <tao/json/value.hpp>
 
 #include <chrono>
+#include <memory>
 #include <regex>
+#include <stdexcept>
+
+#ifdef _WIN32
+#include <io.h>
+#define ACCESS _access
+#define W_OK 2
+#else
+#include <unistd.h>
+#define ACCESS access
+#endif
 
 namespace cbc
 {
 namespace
 {
-auto
-getenv_or_default(std::string_view var_name, const std::string& default_value) -> std::string
+
+class null_opentelemetry_logger : public opentelemetry::sdk::common::internal_log::LogHandler
 {
-  if (auto val = spdlog::details::os::getenv(var_name.data()); !val.empty()) {
-    return val;
+public:
+  void Handle(
+    [[maybe_unused]] opentelemetry::sdk::common::internal_log::LogLevel level,
+    [[maybe_unused]] const char* file,
+    [[maybe_unused]] int line,
+    [[maybe_unused]] const char* msg,
+    [[maybe_unused]] const opentelemetry::sdk::common::AttributeMap& attributes) noexcept override
+  {
+    // CB_LOG_TRACE(
+    //   "OpenTelemetry({}): {}", opentelemetry::sdk::common::internal_log::LevelToString(level),
+    //   msg);
   }
-  return default_value;
+};
+
+auto
+safe_getenv(const std::string& name) noexcept -> std::optional<std::string>
+{
+  if (name.empty()) {
+    return std::nullopt;
+  }
+
+#if defined(_WIN32)
+  char* buf = nullptr;
+  size_t len = 0;
+  if (_dupenv_s(&buf, &len, name.c_str()) == 0 && buf != nullptr) {
+    std::string value(buf);
+    free(buf);
+    if (!value.empty()) {
+      return value;
+    }
+  }
+  return std::nullopt;
+
+#else
+  if (const char* val = std::getenv(name.c_str())) { // NOLINT(concurrency-mt-unsafe)
+    if (val[0] != '\0') {
+      return std::string(val);
+    }
+  }
+  return std::nullopt;
+#endif
+}
+
+auto
+getenv_or_default(const std::string& var_name, const std::string& default_value) -> std::string
+{
+  return safe_getenv(var_name).value_or(default_value);
 }
 
 auto
@@ -320,6 +422,62 @@ add_options(CLI::App* app, metrics_options& options)
                  "Interval to emit metrics report on INFO log level.")
     ->default_val(defaults.metrics.emit_interval)
     ->type_name("DURATION");
+
+  group->add_flag("--metrics-use-opentelemetry",
+                  options.opentelemetry.use_opentelemetry,
+                  "Use OpenTelemetry and export metrics with HTTP transport.");
+
+  group->add_option("--metrics-opentelemetry-endpoint",
+                    options.opentelemetry.endpoint,
+                    "The OTLP HTTP endpoint for OpenTelemetry to export to.");
+
+  group
+    ->add_option("--metrics-opentelemetry-reader-export-interval",
+                 options.opentelemetry.reader_export_interval,
+                 "Interval between metric exports in milliseconds.")
+    ->default_val(std::chrono::milliseconds(1000));
+
+  group
+    ->add_option("--metrics-opentelemetry-reader-export-timeout",
+                 options.opentelemetry.reader_export_timeout,
+                 "Timeout for metric export operations in milliseconds.")
+    ->type_name("DURATION")
+    ->default_val(options.opentelemetry.reader_export_timeout);
+
+  std::vector<std::string> allowed_temporalities{
+    "unspecified", "delta", "cumulative", "low_memory"
+  };
+  group
+    ->add_option("--metrics-opentelemetry-exporter-aggregation-temporality",
+                 options.opentelemetry.exporter_aggregation_temporality,
+                 "Aggregation temporality.")
+    ->default_val("delta")
+    ->check(CLI::IsMember(allowed_temporalities));
+
+  group
+    ->add_option("--metrics-opentelemetry-exporter-timeout",
+                 options.opentelemetry.exporter_timeout,
+                 "Overall exporter timeout in milliseconds.")
+    ->type_name("DURATION")
+    ->default_val(options.opentelemetry.exporter_timeout);
+
+  group->add_flag("--metrics-opentelemetry-use-ssl-credentials",
+                  options.opentelemetry.use_ssl_credentials,
+                  "Use SSL/TLS credentials for the OTLP HTTP connection.");
+
+  group->add_option("--metrics-opentelemetry-ssl-credentials-cacert",
+                    options.opentelemetry.ssl_credentials_cacert,
+                    "Path to CA certificate file for SSL/TLS verification.");
+
+  group
+    ->add_option("--metrics-opentelemetry-headers",
+                 options.opentelemetry.headers,
+                 "Custom HTTP headers as key=value pairs (can be specified multiple times).")
+    ->type_name("KEY=VALUE");
+
+  group->add_option("--metrics-opentelemetry-compression",
+                    options.opentelemetry.compression,
+                    "Compression algorithm to use (e.g., gzip).");
 }
 
 void
@@ -388,6 +546,84 @@ add_options(CLI::App* app, tracing_options& options)
     ->add_option("--tracing-threshold-view", options.threshold_view, "Threshold for Query service.")
     ->default_val(defaults.tracing.view_threshold)
     ->type_name("DURATION");
+
+  group->add_flag("--tracing-use-opentelemetry",
+                  options.opentelemetry.use_opentelemetry,
+                  "Use OpenTelemetry and export tracing spans with HTTP transport.");
+
+  group->add_option("--tracing-opentelemetry-endpoint",
+                    options.opentelemetry.endpoint,
+                    "The OTLP HTTP endpoint for OpenTelemetry to export to.");
+
+  std::vector<std::string> allowed_samplers{
+    "always_on",
+    "always_off",
+    "trace_id_ratio_based",
+    "parent_based",
+  };
+  group
+    ->add_option("--tracing-opentelemetry-sampler",
+                 options.opentelemetry.sampler,
+                 "Sampler type for OpenTelemetry tracing.")
+    ->transform(CLI::IsMember(allowed_samplers))
+    ->default_str("parent_based");
+
+  group
+    ->add_option("--tracing-opentelemetry-sampling-ratio",
+                 options.opentelemetry.sampling_ratio,
+                 "Sampling ratio for trace_id_ratio_based sampler (0.0 to 1.0).")
+    ->check(CLI::Range(0.0, 1.0))
+    ->default_str("1.0");
+
+  group->add_flag("--tracing-opentelemetry-use-batch-processor{true},!--tracing-opentelemetry-use-"
+                  "simple-processor{false}",
+                  options.opentelemetry.use_batch_processor,
+                  "Use batch span processor (default) or simple span processor.");
+
+  group
+    ->add_option("--tracing-opentelemetry-batch-schedule-delay",
+                 options.opentelemetry.batch_schedule_delay,
+                 "Batch processor schedule delay in milliseconds.")
+    ->default_val(options.opentelemetry.batch_schedule_delay)
+    ->type_name("DURATION");
+
+  group
+    ->add_option("--tracing-opentelemetry-batch-max-queue-size",
+                 options.opentelemetry.batch_max_queue_size,
+                 "Maximum queue size for batch processor.")
+    ->default_val(options.opentelemetry.batch_max_queue_size);
+
+  group
+    ->add_option("--tracing-opentelemetry-batch-max-export-batch-size",
+                 options.opentelemetry.batch_max_export_batch_size,
+                 "Maximum export batch size for batch processor.")
+    ->default_val(options.opentelemetry.batch_max_export_batch_size);
+
+  group
+    ->add_option("--tracing-opentelemetry-exporter-timeout",
+                 options.opentelemetry.exporter_timeout,
+                 "Exporter timeout in milliseconds.")
+    ->default_val(options.opentelemetry.exporter_timeout)
+    ->type_name("DURATION");
+
+  group->add_flag("--tracing-opentelemetry-use-ssl-credentials",
+                  options.opentelemetry.use_ssl_credentials,
+                  "Use SSL/TLS credentials for secure connection.");
+
+  group->add_option("--tracing-opentelemetry-ssl-credentials-cacert",
+                    options.opentelemetry.ssl_credentials_cacert,
+                    "Path to CA certificate file for SSL/TLS verification.");
+
+  group
+    ->add_option("--tracing-opentelemetry-headers",
+                 options.opentelemetry.headers,
+                 "HTTP headers (e.g. for authentication) (format: key=value).")
+    ->type_name("KEY=VALUE")
+    ->take_all();
+
+  group->add_option("--tracing-opentelemetry-compression",
+                    options.opentelemetry.compression,
+                    "Compression algorithm for exporter (e.g., 'gzip').");
 }
 
 auto
@@ -553,15 +789,155 @@ apply_options(couchbase::cluster_options& options, const transactions_options& t
 }
 
 void
+apply_opentelemetry_meter_options(couchbase::cluster_options& options,
+                                  const opentelemetry_metrics_options& metrics)
+{
+  opentelemetry::sdk::common::internal_log::GlobalLogHandler::SetLogHandler(
+    std::make_shared<null_opentelemetry_logger>());
+
+  auto resource = opentelemetry::sdk::resource::Resource::Create({
+    { "service.name", "cbc" },
+    { "service.version", couchbase::core::meta::sdk_semver() },
+  });
+
+  opentelemetry::exporter::otlp::OtlpHttpMetricExporterOptions exporter_options{};
+  if (auto endpoint = metrics.endpoint; endpoint) {
+    exporter_options.url = endpoint.value();
+  }
+  exporter_options.content_type = opentelemetry::exporter::otlp::HttpRequestContentType::kJson;
+  if (auto temporality = metrics.exporter_aggregation_temporality;
+      temporality.empty() || temporality == "unspecified") {
+    exporter_options.aggregation_temporality =
+      opentelemetry::exporter::otlp::PreferredAggregationTemporality::kUnspecified;
+  } else if (temporality == "delta") {
+    exporter_options.aggregation_temporality =
+      opentelemetry::exporter::otlp::PreferredAggregationTemporality::kDelta;
+  } else if (temporality == "cumulative") {
+    exporter_options.aggregation_temporality =
+      opentelemetry::exporter::otlp::PreferredAggregationTemporality::kCumulative;
+  } else if (temporality == "low_memory") {
+    exporter_options.aggregation_temporality =
+      opentelemetry::exporter::otlp::PreferredAggregationTemporality::kLowMemory;
+  }
+
+  exporter_options.timeout = metrics.exporter_timeout;
+  if (!metrics.headers.empty()) {
+    for (const auto& [key, value] : metrics.headers) {
+      exporter_options.http_headers.insert({ key, value });
+    }
+  }
+  if (auto compression = metrics.compression; compression) {
+    exporter_options.compression = compression.value();
+  }
+
+  auto exporter =
+    opentelemetry::exporter::otlp::OtlpHttpMetricExporterFactory::Create(exporter_options);
+
+  opentelemetry::sdk::metrics::PeriodicExportingMetricReaderOptions reader_options{};
+  reader_options.export_interval_millis = metrics.reader_export_interval;
+  reader_options.export_timeout_millis = metrics.reader_export_timeout;
+
+  std::unique_ptr<opentelemetry::sdk::metrics::MetricReader> reader{
+    new opentelemetry::sdk::metrics::PeriodicExportingMetricReader(std::move(exporter),
+                                                                   reader_options)
+  };
+
+  auto context = opentelemetry::sdk::metrics::MeterContextFactory::Create(
+    opentelemetry::sdk::metrics::ViewRegistryFactory::Create(), resource);
+  context->AddMetricReader(std::move(reader));
+
+  auto provider = opentelemetry::sdk::metrics::MeterProviderFactory::Create(std::move(context));
+  opentelemetry::metrics::Provider::SetMeterProvider(
+    std::shared_ptr<opentelemetry::metrics::MeterProvider>(std::move(provider)));
+
+  options.metrics().meter(std::make_shared<couchbase::metrics::otel_meter>(
+    opentelemetry::metrics::Provider::GetMeterProvider()->GetMeter(
+      "cbc", couchbase::core::meta::sdk_semver())));
+}
+
+void
 apply_options(couchbase::cluster_options& options, const metrics_options& metrics)
 {
+  if (metrics.opentelemetry.use_opentelemetry) {
+    apply_opentelemetry_meter_options(options, metrics.opentelemetry);
+  }
+
   options.metrics().enable(!metrics.disable);
   options.metrics().emit_interval(metrics.emit_interval);
 }
 
 void
+apply_opentelemetry_tracer_options(couchbase::cluster_options& options,
+                                   const opentelemetry_tracing_options& tracing)
+{
+  opentelemetry::sdk::common::internal_log::GlobalLogHandler::SetLogHandler(
+    std::make_shared<null_opentelemetry_logger>());
+
+  opentelemetry::exporter::otlp::OtlpHttpExporterOptions exporter_options{};
+  if (auto endpoint = tracing.endpoint; endpoint) {
+    exporter_options.url = endpoint.value();
+  }
+  exporter_options.timeout = tracing.exporter_timeout;
+  exporter_options.content_type = opentelemetry::exporter::otlp::HttpRequestContentType::kJson;
+  if (!tracing.headers.empty()) {
+    for (const auto& [key, value] : tracing.headers) {
+      exporter_options.http_headers.insert({ key, value });
+    }
+  }
+  if (auto compression = tracing.compression; compression) {
+    exporter_options.compression = compression.value();
+  }
+
+  auto exporter = opentelemetry::exporter::otlp::OtlpHttpExporterFactory::Create(exporter_options);
+
+  std::unique_ptr<opentelemetry::sdk::trace::SpanProcessor> processor;
+  if (tracing.use_batch_processor) {
+    opentelemetry::sdk::trace::BatchSpanProcessorOptions batch_options{};
+    batch_options.schedule_delay_millis = tracing.batch_schedule_delay;
+    batch_options.max_queue_size = tracing.batch_max_queue_size;
+    batch_options.max_export_batch_size = tracing.batch_max_export_batch_size;
+    processor = opentelemetry::sdk::trace::BatchSpanProcessorFactory::Create(std::move(exporter),
+                                                                             batch_options);
+  } else {
+    processor = opentelemetry::sdk::trace::SimpleSpanProcessorFactory::Create(std::move(exporter));
+  }
+
+  std::unique_ptr<opentelemetry::sdk::trace::Sampler> sampler;
+  if (!tracing.sampler || tracing.sampler == "parent_based") {
+    sampler = std::make_unique<opentelemetry::sdk::trace::ParentBasedSampler>(
+      std::make_shared<opentelemetry::sdk::trace::AlwaysOnSampler>());
+  } else if (tracing.sampler == "always_on") {
+    sampler = std::make_unique<opentelemetry::sdk::trace::AlwaysOnSampler>();
+  } else if (tracing.sampler == "always_off") {
+    sampler = std::make_unique<opentelemetry::sdk::trace::AlwaysOffSampler>();
+  } else if (tracing.sampler == "trace_id_ratio_based") {
+    sampler =
+      std::make_unique<opentelemetry::sdk::trace::TraceIdRatioBasedSampler>(tracing.sampling_ratio);
+  }
+
+  auto resource = opentelemetry::sdk::resource::Resource::Create({
+    { "service.name", "cbc" },
+    { "service.version", couchbase::core::meta::sdk_semver() },
+  });
+
+  auto provider = opentelemetry::sdk::trace::TracerProviderFactory::Create(
+    std::move(processor), resource, std::move(sampler));
+
+  opentelemetry::trace::Provider::SetTracerProvider(
+    std::shared_ptr<opentelemetry::trace::TracerProvider>{ std::move(provider) });
+
+  options.tracing().tracer(std::make_shared<couchbase::tracing::otel_request_tracer>(
+    opentelemetry::trace::Provider::GetTracerProvider()->GetTracer(
+      "cbc", couchbase::core::meta::sdk_semver())));
+}
+
+void
 apply_options(couchbase::cluster_options& options, const tracing_options& tracing)
 {
+  if (tracing.opentelemetry.use_opentelemetry) {
+    apply_opentelemetry_tracer_options(options, tracing.opentelemetry);
+  }
+
   options.tracing().enable(!tracing.disable);
   options.tracing().orphaned_emit_interval(tracing.orphaned_emit_interval);
   options.tracing().orphaned_sample_size(tracing.orphaned_sample_size);
@@ -741,7 +1117,8 @@ available_analytics_scan_consistency_modes() -> std::vector<std::string>
 fail(std::string_view message)
 {
   fmt::print(stderr, "ERROR: {}\n", message);
-  exit(EXIT_FAILURE);
+
+  std::quick_exit(EXIT_FAILURE);
 }
 
 auto
