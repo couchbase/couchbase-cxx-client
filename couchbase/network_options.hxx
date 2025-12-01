@@ -114,6 +114,22 @@ public:
     return *this;
   }
 
+  /**
+   * Enables or disables lazy connection of data endpoints.
+   *
+   * When enabled, connections are established only when the first operation for a given endpoint is
+   * scheduled, rather than at cluster object construction time.
+   *
+   * @volatile This option is considered unstable and may change in future releases.
+   *
+   * @since 1.3.0
+   */
+  auto enable_lazy_connections(bool enable) -> network_options&
+  {
+    enable_lazy_connections_ = enable;
+    return *this;
+  }
+
   struct built {
     std::string network;
     std::string server_group;
@@ -123,6 +139,7 @@ public:
     std::chrono::milliseconds config_poll_interval;
     std::chrono::milliseconds idle_http_connection_timeout;
     std::optional<std::size_t> max_http_connections;
+    bool enable_lazy_connections;
   };
 
   [[nodiscard]] auto build() const -> built
@@ -136,6 +153,7 @@ public:
       config_poll_interval_,
       idle_http_connection_timeout_,
       max_http_connections_,
+      enable_lazy_connections_,
     };
   }
 
@@ -149,5 +167,6 @@ private:
   std::chrono::milliseconds config_poll_floor_{ default_config_poll_floor };
   std::chrono::milliseconds idle_http_connection_timeout_{ default_idle_http_connection_timeout };
   std::optional<std::size_t> max_http_connections_{};
+  bool enable_lazy_connections_{ false };
 };
 } // namespace couchbase
