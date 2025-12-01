@@ -44,15 +44,14 @@ TEST_CASE("integration: random node selection with analytics service", "[integra
   auto [origin_ec, origin] = integration.cluster.origin();
   REQUIRE_SUCCESS(origin_ec);
 
-  auto [session_ec, session] =
-    session_mgr->check_out(couchbase::core::service_type::analytics, origin.credentials(), "");
+  auto [session_ec, session] = session_mgr->check_out(couchbase::core::service_type::analytics, "");
   REQUIRE_SUCCESS(session_ec);
 
   auto last_addr = fmt::format("{}:{}", session->hostname(), session->port());
 
   session_mgr->check_in(couchbase::core::service_type::analytics, session);
-  auto [session2_ec, session2] = session_mgr->check_out(
-    couchbase::core::service_type::analytics, origin.credentials(), "", last_addr);
+  auto [session2_ec, session2] =
+    session_mgr->check_out(couchbase::core::service_type::analytics, "", last_addr);
   REQUIRE_SUCCESS(session2_ec);
 
   auto new_addr = fmt::format("{}:{}", session2->hostname(), session2->port());

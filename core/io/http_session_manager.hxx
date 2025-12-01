@@ -58,10 +58,14 @@ class http_session_manager
 {
 #endif
 public:
-  http_session_manager(std::string client_id, asio::io_context& ctx, asio::ssl::context& tls)
+  http_session_manager(std::string client_id,
+                       asio::io_context& ctx,
+                       asio::ssl::context& tls,
+                       origin& origin)
     : client_id_(std::move(client_id))
     , ctx_(ctx)
     , tls_(tls)
+    , origin_(origin)
   {
   }
 
@@ -192,8 +196,7 @@ public:
   template<typename Collector>
   void ping(std::set<service_type> services,
             std::optional<std::chrono::milliseconds> timeout,
-            std::shared_ptr<Collector> collector,
-            const couchbase::core::cluster_credentials& credentials)
+            std::shared_ptr<Collector> collector)
   {
     std::array known_types{
       service_type::query, service_type::analytics, service_type::search,
@@ -215,7 +218,6 @@ public:
           const auto& canonical_hostname = node.hostname;
           std::uint16_t canonical_port = node.port_or(type, options_.enable_tls, 0);
           auto session = create_session(type,
-                                        credentials,
                                         node_details{
                                           hostname,
                                           port,
@@ -308,7 +310,6 @@ public:
   };
 
   auto check_out(service_type type,
-                 const couchbase::core::cluster_credentials& credentials,
                  std::string preferred_node_address,
                  const std::string& undesired_node_address = {})
     -> std::pair<std::error_code, std::shared_ptr<http_session>>
@@ -367,7 +368,7 @@ public:
             break;
           }
         } else {
-          session = create_session(type, credentials, preferred_node);
+          session = create_session(type, preferred_node);
           break;
         }
       }
@@ -384,7 +385,7 @@ public:
       if (node.port == 0) {
         return { errc::common::service_not_available, nullptr };
       }
-      session = create_session(type, credentials, node);
+      session = create_session(type, node);
     }
     if (session->is_connected()) {
       busy_sessions_[type].push_back(session);
@@ -467,13 +468,11 @@ public:
   }
 
   template<typename Request, typename Handler>
-  void execute(Request request,
-               Handler&& handler,
-               const couchbase::core::cluster_credentials& credentials)
+  void execute(Request request, Handler&& handler)
   {
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
     if (!configured_) {
-      return defer_command(request, std::move(handler), credentials);
+      return defer_command(request, std::move(handler));
     }
 #endif
     std::string preferred_node;
@@ -482,7 +481,7 @@ public:
         preferred_node = *request.send_to_node;
       }
     }
-    auto [error, session] = check_out(request.type, credentials, preferred_node);
+    auto [error, session] = check_out(request.type, preferred_node);
     if (error) {
       typename Request::error_context_type ctx{};
       ctx.ec = error;
@@ -576,7 +575,7 @@ public:
           cb(errc::common::service_not_available, {});
           return;
         }
-        auto new_session = self->create_session(session->type(), session->credentials(), node);
+        auto new_session = self->create_session(session->type(), node);
         if (new_session->is_connected()) {
           {
             const std::scoped_lock inner_lock(self->sessions_mutex_);
@@ -683,7 +682,7 @@ private:
           cmd->invoke_handler(errc::common::service_not_available, {});
           return;
         }
-        auto new_session = self->create_session(session->type(), session->credentials(), node);
+        auto new_session = self->create_session(session->type(), node);
         cmd->set_command_session(new_session);
         if (new_session->is_connected()) {
           std::scoped_lock inner_lock(self->sessions_mutex_);
@@ -700,9 +699,7 @@ private:
     });
   }
 
-  auto create_session(service_type type,
-                      const couchbase::core::cluster_credentials& credentials,
-                      const node_details& node) -> std::shared_ptr<http_session>
+  auto create_session(service_type type, const node_details& node) -> std::shared_ptr<http_session>
   {
     std::shared_ptr<http_session> session;
     if (options_.enable_tls) {
@@ -711,7 +708,7 @@ private:
                                                node.node_uuid,
                                                ctx_,
                                                tls_,
-                                               credentials,
+                                               origin_,
                                                node.hostname,
                                                std::to_string(node.port),
                                                http_context{
@@ -728,7 +725,7 @@ private:
                                                client_id_,
                                                node.node_uuid,
                                                ctx_,
-                                               credentials,
+                                               origin_,
                                                node.hostname,
                                                std::to_string(node.port),
                                                http_context{
@@ -756,9 +753,7 @@ private:
 
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
   template<typename Request, typename Handler>
-  void defer_command(Request request,
-                     Handler&& handler,
-                     const couchbase::core::cluster_credentials& credentials)
+  void defer_command(Request request, Handler&& handler)
   {
     {
       std::scoped_lock bootstrap_error_lock(last_bootstrap_error_mutex_);
@@ -786,36 +781,35 @@ private:
     CB_LOG_DEBUG(R"(Adding HTTP request to deferred queue: {}, client_context_id="{}")",
                  cmd->request.type,
                  cmd->client_context_id_);
-    add_to_deferred_queue(
-      [self = shared_from_this(), cmd, request, credentials](error_union err) mutable {
-        if (!std::holds_alternative<std::monostate>(err)) {
-          using response_type = typename Request::encoded_response_type;
-          return cmd->invoke_handler(err, response_type{});
-        }
+    add_to_deferred_queue([self = shared_from_this(), cmd, request](error_union err) mutable {
+      if (!std::holds_alternative<std::monostate>(err)) {
+        using response_type = typename Request::encoded_response_type;
+        return cmd->invoke_handler(err, response_type{});
+      }
 
-        // don't do anything if the command wasn't dispatched or has already timed out
-        auto now = std::chrono::steady_clock::now();
-        if (cmd->dispatch_deadline_expiry() < now || cmd->deadline_expiry() < now) {
-          return;
+      // don't do anything if the command wasn't dispatched or has already timed out
+      auto now = std::chrono::steady_clock::now();
+      if (cmd->dispatch_deadline_expiry() < now || cmd->deadline_expiry() < now) {
+        return;
+      }
+      std::string preferred_node;
+      if constexpr (http_traits::supports_sticky_node_v<Request>) {
+        if (request.send_to_node) {
+          preferred_node = *request.send_to_node;
         }
-        std::string preferred_node;
-        if constexpr (http_traits::supports_sticky_node_v<Request>) {
-          if (request.send_to_node) {
-            preferred_node = *request.send_to_node;
-          }
-        }
-        auto [error, session] = self->check_out(request.type, credentials, preferred_node);
-        if (error) {
-          using response_type = typename Request::encoded_response_type;
-          return cmd->invoke_handler(error, response_type{});
-        }
-        cmd->set_command_session(session);
-        if (!session->is_connected()) {
-          self->connect_then_send(session, cmd, preferred_node);
-        } else {
-          cmd->send_to();
-        }
-      });
+      }
+      auto [error, session] = self->check_out(request.type, preferred_node);
+      if (error) {
+        using response_type = typename Request::encoded_response_type;
+        return cmd->invoke_handler(error, response_type{});
+      }
+      cmd->set_command_session(session);
+      if (!session->is_connected()) {
+        self->connect_then_send(session, cmd, preferred_node);
+      } else {
+        cmd->send_to();
+      }
+    });
   }
 
   void drain_deferred_queue(error_union err)
@@ -919,6 +913,7 @@ private:
   std::string client_id_;
   asio::io_context& ctx_;
   asio::ssl::context& tls_;
+  origin& origin_;
   std::shared_ptr<tracing::tracer_wrapper> tracer_{ nullptr };
   std::shared_ptr<metrics::meter_wrapper> meter_{ nullptr };
   std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter_{ nullptr };

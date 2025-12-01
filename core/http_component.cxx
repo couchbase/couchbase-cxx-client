@@ -445,22 +445,17 @@ public:
       session_manager = std::move(sm);
     }
 
-    cluster_credentials credentials;
     if (request.username.empty() && request.password.empty()) {
       auto [ec, origin] = shim_.cluster.origin();
       if (ec) {
         return tl::unexpected(ec);
       }
-      credentials = origin.credentials();
-    } else {
-      credentials = cluster_credentials{ request.username, request.password };
     }
-
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
     auto op =
       std::make_shared<pending_http_operation>(io_, request, session_manager->dispatch_timeout());
     if (!session_manager->is_configured()) {
-      auto err = defer_command(op, session_manager, credentials, std::move(callback));
+      auto err = defer_command(op, session_manager, std::move(callback));
       if (!std::holds_alternative<std::monostate>(err)) {
         return tl::unexpected{ err };
       }
@@ -470,7 +465,7 @@ public:
     auto op = std::make_shared<pending_http_operation>(io_, request);
 #endif
 
-    send_http_operation(op, session_manager, credentials, std::move(callback));
+    send_http_operation(op, session_manager, std::move(callback));
     return op;
   }
 
@@ -487,22 +482,18 @@ public:
       session_manager = std::move(sm);
     }
 
-    cluster_credentials credentials;
     if (request.username.empty() && request.password.empty()) {
       auto [ec, origin] = shim_.cluster.origin();
       if (ec) {
         return tl::unexpected(ec);
       }
-      credentials = origin.credentials();
-    } else {
-      credentials = cluster_credentials{ request.username, request.password };
     }
 
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
     auto op = std::make_shared<pending_buffered_http_operation>(
       io_, request, session_manager->dispatch_timeout());
     if (!session_manager->is_configured()) {
-      auto err = defer_command(op, session_manager, credentials, std::move(callback));
+      auto err = defer_command(op, session_manager, std::move(callback));
       if (!std::holds_alternative<std::monostate>(err)) {
         auto ec = std::holds_alternative<impl::bootstrap_error>(err)
                     ? std::get<impl::bootstrap_error>(err).ec
@@ -515,14 +506,13 @@ public:
     auto op = std::make_shared<pending_buffered_http_operation>(io_, request);
 #endif
 
-    send_http_operation(op, session_manager, credentials, std::move(callback));
+    send_http_operation(op, session_manager, std::move(callback));
     return op;
   }
 
 private:
   void send_http_operation(const std::shared_ptr<pending_http_operation>& op,
                            const std::shared_ptr<io::http_session_manager>& session_manager,
-                           const couchbase::core::cluster_credentials& credentials,
                            free_form_http_request_callback&& callback)
   {
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
@@ -541,11 +531,8 @@ private:
 #endif
     std::shared_ptr<io::http_session> session;
     {
-      auto [check_out_ec, s] =
-        session_manager->check_out(op->request().service,
-                                   credentials,
-                                   op->request().endpoint,
-                                   op->request().internal.undesired_endpoint);
+      auto [check_out_ec, s] = session_manager->check_out(
+        op->request().service, op->request().endpoint, op->request().internal.undesired_endpoint);
       if (check_out_ec) {
         return op->invoke_response_handler(check_out_ec, {});
       }
@@ -576,16 +563,12 @@ private:
 
   void send_http_operation(const std::shared_ptr<pending_buffered_http_operation>& op,
                            const std::shared_ptr<io::http_session_manager>& session_manager,
-                           const couchbase::core::cluster_credentials& credentials,
                            buffered_free_form_http_request_callback&& callback)
   {
     std::shared_ptr<io::http_session> session;
     {
-      auto [check_out_ec, s] =
-        session_manager->check_out(op->request().service,
-                                   credentials,
-                                   op->request().endpoint,
-                                   op->request().internal.undesired_endpoint);
+      auto [check_out_ec, s] = session_manager->check_out(
+        op->request().service, op->request().endpoint, op->request().internal.undesired_endpoint);
       if (check_out_ec) {
         return op->invoke_response_handler(check_out_ec, {});
       }
@@ -621,7 +604,6 @@ private:
   template<typename Callback, typename PendingHttpOp>
   auto defer_command(std::shared_ptr<PendingHttpOp> pending_op,
                      const std::shared_ptr<io::http_session_manager>& session_manager,
-                     const couchbase::core::cluster_credentials& credentials,
                      Callback&& callback) -> error_union
   {
     if (auto last_error = session_manager->last_bootstrap_error(); last_error.has_value()) {
@@ -634,23 +616,20 @@ private:
     session_manager->add_to_deferred_queue([this,
                                             callback = std::forward<Callback>(callback),
                                             op = std::move(pending_op),
-                                            session_manager,
-                                            credentials](error_union err) mutable {
+                                            session_manager](error_union err) mutable {
       if (!std::holds_alternative<std::monostate>(err)) {
         // The deferred operation was cancelled - currently this can happen due to closing the
         // cluster
         return callback({}, err);
       }
 
-      return send_http_operation(
-        op, session_manager, credentials, std::forward<Callback>(callback));
+      return send_http_operation(op, session_manager, std::forward<Callback>(callback));
     });
     return std::monostate{};
   }
 
   auto defer_command(std::shared_ptr<pending_buffered_http_operation> pending_op,
                      const std::shared_ptr<io::http_session_manager>& session_manager,
-                     const couchbase::core::cluster_credentials& credentials,
                      buffered_free_form_http_request_callback&& callback) -> error_union
   {
     if (auto last_error = session_manager->last_bootstrap_error(); last_error.has_value()) {
@@ -663,8 +642,7 @@ private:
     session_manager->add_to_deferred_queue([this,
                                             callback = std::move(callback),
                                             op = std::move(pending_op),
-                                            session_manager,
-                                            credentials](error_union err) mutable {
+                                            session_manager](error_union err) mutable {
       if (!std::holds_alternative<std::monostate>(err)) {
         auto ec = std::holds_alternative<impl::bootstrap_error>(err)
                     ? std::get<impl::bootstrap_error>(err).ec
@@ -674,7 +652,7 @@ private:
         return callback({}, ec);
       }
 
-      return send_http_operation(op, session_manager, credentials, std::move(callback));
+      return send_http_operation(op, session_manager, std::move(callback));
     });
     return std::monostate{};
   }

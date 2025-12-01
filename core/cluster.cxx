@@ -299,7 +299,7 @@ public:
   explicit cluster_impl(asio::io_context& ctx)
     : ctx_(ctx)
     , work_(asio::make_work_guard(ctx_))
-    , session_manager_(std::make_shared<io::http_session_manager>(id_, ctx_, tls_))
+    , session_manager_(std::make_shared<io::http_session_manager>(id_, ctx_, tls_, origin_))
     , retry_backoff_(ctx_)
   {
   }
@@ -307,7 +307,7 @@ public:
   explicit cluster_impl(asio::io_context& ctx)
     : ctx_(ctx)
     , work_(asio::make_work_guard(ctx_))
-    , session_manager_(std::make_shared<io::http_session_manager>(id_, ctx_, tls_))
+    , session_manager_(std::make_shared<io::http_session_manager>(id_, ctx_, tls_, origin_))
   {
   }
 #endif
@@ -599,8 +599,7 @@ public:
     if constexpr (operations::is_compound_operation_v<Request>) {
       return request.execute(shared_from_this(), std::forward<Handler>(handler));
     } else {
-      return session_manager_->execute(
-        std::move(request), std::forward<Handler>(handler), origin_.credentials());
+      return session_manager_->execute(std::move(request), std::forward<Handler>(handler));
     }
   }
 
@@ -1123,8 +1122,7 @@ public:
               bucket->ping(collector, timeout);
             });
           }
-          cluster->session_manager_->ping(
-            services, timeout, collector, cluster->origin_.credentials());
+          cluster->session_manager_->ping(services, timeout, collector);
         }
       }));
   }
