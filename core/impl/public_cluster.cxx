@@ -149,6 +149,7 @@ options_to_origin(const std::string& connection_string, cluster_options::built o
   user_options.tcp_keep_alive_interval = opts.network.tcp_keep_alive_interval;
   user_options.config_poll_interval = opts.network.config_poll_interval;
   user_options.idle_http_connection_timeout = opts.network.idle_http_connection_timeout;
+  user_options.enable_lazy_connections = opts.network.enable_lazy_connections;
   if (opts.network.max_http_connections) {
     user_options.max_http_connections = opts.network.max_http_connections.value();
   }
