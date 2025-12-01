@@ -103,7 +103,7 @@ http_session::http_session(couchbase::core::service_type type,
                            std::string client_id,
                            std::string node_uuid,
                            asio::io_context& ctx,
-                           couchbase::core::cluster_credentials credentials,
+                           origin& origin,
                            std::string hostname,
                            std::string service,
                            couchbase::core::http_context http_ctx)
@@ -117,7 +117,7 @@ http_session::http_session(couchbase::core::service_type type,
   , connect_deadline_timer_(stream_->get_executor())
   , idle_timer_(stream_->get_executor())
   , retry_backoff_(stream_->get_executor())
-  , credentials_(std::move(credentials))
+  , origin_(origin)
   , hostname_(std::move(hostname))
   , service_(std::move(service))
   , user_agent_(meta::user_agent_for_http(client_id_, id_, http_ctx.options.user_agent_extra))
@@ -131,7 +131,7 @@ http_session::http_session(couchbase::core::service_type type,
                            std::string node_uuid,
                            asio::io_context& ctx,
                            asio::ssl::context& tls,
-                           couchbase::core::cluster_credentials credentials,
+                           origin& origin,
                            std::string hostname,
                            std::string service,
                            couchbase::core::http_context http_ctx)
@@ -145,7 +145,7 @@ http_session::http_session(couchbase::core::service_type type,
   , connect_deadline_timer_(ctx_)
   , idle_timer_(ctx_)
   , retry_backoff_(ctx_)
-  , credentials_(std::move(credentials))
+  , origin_(origin)
   , hostname_(std::move(hostname))
   , service_(std::move(service))
   , user_agent_(meta::user_agent_for_http(client_id_, id_, http_ctx.options.user_agent_extra))
@@ -226,9 +226,9 @@ http_session::node_uuid() const -> const std::string&
 }
 
 auto
-http_session::credentials() const -> const cluster_credentials&
+http_session::credentials() const -> cluster_credentials
 {
-  return credentials_;
+  return origin_.credentials();
 }
 
 auto
@@ -440,7 +440,8 @@ http_session::write_and_stream(
     keep_alive_ = true;
   }
   request.headers["user-agent"] = user_agent_;
-  auto credentials = fmt::format("{}:{}", credentials_.username, credentials_.password);
+  auto creds = credentials();
+  auto credentials = fmt::format("{}:{}", creds.username, creds.password);
   request.headers["authorization"] = fmt::format(
     "Basic {}", base64::encode(gsl::as_bytes(gsl::span{ credentials.data(), credentials.size() })));
   write(fmt::format(

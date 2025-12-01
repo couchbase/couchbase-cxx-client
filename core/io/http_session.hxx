@@ -73,7 +73,7 @@ public:
                std::string client_id,
                std::string node_uuid,
                asio::io_context& ctx,
-               cluster_credentials credentials,
+               origin& origin,
                std::string hostname,
                std::string service,
                http_context http_ctx);
@@ -83,7 +83,7 @@ public:
                std::string node_uuid,
                asio::io_context& ctx,
                asio::ssl::context& tls,
-               cluster_credentials credentials,
+               origin& origin,
                std::string hostname,
                std::string service,
                http_context http_ctx);
@@ -99,7 +99,7 @@ public:
   [[nodiscard]] auto log_prefix() -> std::string;
   [[nodiscard]] auto id() const -> const std::string&;
   [[nodiscard]] auto node_uuid() const -> const std::string&;
-  [[nodiscard]] auto credentials() const -> const cluster_credentials&;
+  [[nodiscard]] auto credentials() const -> cluster_credentials;
   [[nodiscard]] auto is_connected() const -> bool;
   [[nodiscard]] auto type() const -> service_type;
   [[nodiscard]] auto hostname() const -> const std::string&;
@@ -132,7 +132,8 @@ public:
       keep_alive_ = true;
     }
     request.headers["user-agent"] = user_agent_;
-    auto credentials = fmt::format("{}:{}", credentials_.username, credentials_.password);
+    auto creds = origin_.credentials();
+    auto credentials = fmt::format("{}:{}", creds.username, creds.password);
     request.headers["authorization"] = fmt::format(
       "Basic {}",
       base64::encode(gsl::as_bytes(gsl::span{ credentials.data(), credentials.size() })));
@@ -209,7 +210,7 @@ private:
   asio::steady_timer idle_timer_;
   asio::steady_timer retry_backoff_;
 
-  cluster_credentials credentials_;
+  core::origin& origin_;
   std::string hostname_;
   std::string service_;
   std::string user_agent_;
