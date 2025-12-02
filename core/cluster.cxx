@@ -17,9 +17,9 @@
 
 #include <couchbase/build_config.hxx>
 
+#define COUCHBASE_CXX_CLIENT_IGNORE_CORE_DEPRECATIONS
 #include "cluster.hxx"
 
-#define COUCHBASE_CXX_CLIENT_IGNORE_CORE_DEPRECATIONS
 #include "core/operations/document_view.hxx"
 #undef COUCHBASE_CXX_CLIENT_IGNORE_CORE_DEPRECATIONS
 
