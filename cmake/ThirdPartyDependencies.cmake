@@ -39,33 +39,38 @@ if(NOT TARGET spdlog::spdlog)
     "SPDLOG_FMT_EXTERNAL OFF")
 endif()
 
-if(NOT TARGET opentelemetry)
-  # https://github.com/open-telemetry/opentelemetry-cpp/releases
-  cpmaddpackage(
-    NAME
-    opentelemetry
-    VERSION
-    1.23.0
-    GITHUB_REPOSITORY
-    "open-telemetry/opentelemetry-cpp"
-    EXCLUDE_FROM_ALL ON
-    OPTIONS
-    "protobuf_MSVC_STATIC_RUNTIME OFF"
-    "OPENTELEMETRY_INSTALL OFF"
-    "WITH_ABI_VERSION_1 OFF"
-    "WITH_ABI_VERSION_2 ON"
-    "WITH_ABSEIL OFF"
-    "WITH_BENCHMARK OFF"
-    "WITH_EXAMPLES OFF"
-    "WITH_FUNC_TESTS OFF"
-    "WITH_OTLP_GRPC OFF"
-    "WITH_OTLP_HTTP ON"
-    "WITH_STL CXX17"
-    "BUILD_TESTING OFF"
-    "BUILD_SHARED_LIBS OFF"
-    "CMAKE_C_VISIBILITY_PRESET hidden"
-    "CMAKE_CXX_VISIBILITY_PRESET hidden"
-    "CMAKE_POSITION_INDEPENDENT_CODE ON")
+if(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
+  if(NOT TARGET opentelemetry)
+    # https://github.com/open-telemetry/opentelemetry-cpp/releases
+    cpmaddpackage(
+      NAME
+      opentelemetry
+      VERSION
+      1.23.0
+      GITHUB_REPOSITORY
+      "open-telemetry/opentelemetry-cpp"
+      EXCLUDE_FROM_ALL ON
+      OPTIONS
+      "protobuf_MSVC_STATIC_RUNTIME OFF"
+      "OPENTELEMETRY_INSTALL OFF"
+      "WITH_ABI_VERSION_1 OFF"
+      "WITH_ABI_VERSION_2 ON"
+      "WITH_ABSEIL OFF"
+      "WITH_BENCHMARK OFF"
+      "WITH_EXAMPLES OFF"
+      "WITH_FUNC_TESTS OFF"
+      "WITH_OTLP_GRPC OFF"
+      "WITH_OTLP_HTTP ON"
+      "WITH_STL CXX17"
+      "BUILD_TESTING OFF"
+      "BUILD_SHARED_LIBS OFF"
+      "CMAKE_C_VISIBILITY_PRESET hidden"
+      "CMAKE_CXX_VISIBILITY_PRESET hidden"
+      "CMAKE_POSITION_INDEPENDENT_CODE ON")
+  endif()
+
+  declare_system_library(opentelemetry_exporter_otlp_http)
+  declare_system_library(opentelemetry_exporter_otlp_http_metric)
 endif()
 
 if(NOT TARGET Microsoft.GSL::GSL)
@@ -294,6 +299,3 @@ declare_system_library(spdlog::spdlog)
 declare_system_library(asio)
 declare_system_library(taocpp::json)
 declare_system_library(snappy)
-
-declare_system_library(opentelemetry_exporter_otlp_http)
-declare_system_library(opentelemetry_exporter_otlp_http_metric)
