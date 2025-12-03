@@ -81,7 +81,7 @@ TEST_CASE("integration: columnar http component simple request", "[integration]"
   tao::json::value body{ { "statement", "FROM RANGE(0, 100) AS i SELECT *" } };
 
   auto req = couchbase::core::http_request{
-    couchbase::core::service_type::analytics,     "POST", {}, "/analytics/service", {}, {},
+    couchbase::core::service_type::analytics,     "POST", {}, "/analytics/service",
     couchbase::core::utils::json::generate(body),
   };
 
@@ -150,7 +150,7 @@ TEST_CASE("integration: columnar http component simple request buffered", "[inte
   tao::json::value body{ { "statement", "FROM RANGE(0, 100) AS i SELECT *" } };
 
   auto req = couchbase::core::http_request{
-    couchbase::core::service_type::analytics,     "POST", {}, "/analytics/service", {}, {},
+    couchbase::core::service_type::analytics,     "POST", {}, "/analytics/service",
     couchbase::core::utils::json::generate(body),
   };
 

@@ -48,8 +48,6 @@ public:
   std::string method{};
   std::string endpoint{};
   std::string path{};
-  std::string username{};
-  std::string password{};
   std::string body{};
   std::map<std::string, std::string> headers{};
   std::string content_type{};

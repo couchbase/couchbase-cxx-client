@@ -444,13 +444,6 @@ public:
       }
       session_manager = std::move(sm);
     }
-
-    if (request.username.empty() && request.password.empty()) {
-      auto [ec, origin] = shim_.cluster.origin();
-      if (ec) {
-        return tl::unexpected(ec);
-      }
-    }
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
     auto op =
       std::make_shared<pending_http_operation>(io_, request, session_manager->dispatch_timeout());
@@ -480,13 +473,6 @@ public:
         return tl::unexpected(ec);
       }
       session_manager = std::move(sm);
-    }
-
-    if (request.username.empty() && request.password.empty()) {
-      auto [ec, origin] = shim_.cluster.origin();
-      if (ec) {
-        return tl::unexpected(ec);
-      }
     }
 
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
