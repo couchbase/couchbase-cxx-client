@@ -28,6 +28,7 @@
 #include "core/metrics/meter_wrapper.hxx"
 #include "core/operations/http_noop.hxx"
 #include "core/service_type.hxx"
+#include "core/tls_context_provider.hxx"
 #include "core/tracing/noop_tracer.hxx"
 #include "core/tracing/tracer_wrapper.hxx"
 #include "http_command.hxx"
@@ -60,7 +61,7 @@ class http_session_manager
 public:
   http_session_manager(std::string client_id,
                        asio::io_context& ctx,
-                       asio::ssl::context& tls,
+                       tls_context_provider& tls,
                        origin& origin)
     : client_id_(std::move(client_id))
     , ctx_(ctx)
@@ -912,7 +913,7 @@ private:
 
   std::string client_id_;
   asio::io_context& ctx_;
-  asio::ssl::context& tls_;
+  tls_context_provider& tls_;
   origin& origin_;
   std::shared_ptr<tracing::tracer_wrapper> tracer_{ nullptr };
   std::shared_ptr<metrics::meter_wrapper> meter_{ nullptr };

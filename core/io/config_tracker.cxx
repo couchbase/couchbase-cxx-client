@@ -50,7 +50,7 @@ public:
   cluster_config_tracker_impl(std::string client_id,
                               couchbase::core::origin origin,
                               asio::io_context& ctx,
-                              asio::ssl::context& tls,
+                              tls_context_provider& tls,
                               std::shared_ptr<impl::bootstrap_state_listener> state_listener,
                               std::vector<protocol::hello_feature> supported_features = {})
     : client_id_{ std::move(client_id) }
@@ -559,7 +559,7 @@ private:
   couchbase::core::origin origin_{};
   std::string log_prefix_{};
   asio::io_context& ctx_;
-  asio::ssl::context& tls_;
+  tls_context_provider& tls_;
 
   asio::steady_timer heartbeat_timer_;
   std::chrono::milliseconds heartbeat_interval_;
@@ -591,7 +591,7 @@ cluster_config_tracker::cluster_config_tracker(
   std::string client_id,
   couchbase::core::origin origin,
   asio::io_context& ctx,
-  asio::ssl::context& tls,
+  tls_context_provider& tls,
   std::shared_ptr<impl::bootstrap_state_listener> state_listener)
   : impl_{ std::make_shared<cluster_config_tracker_impl>(std::move(client_id),
                                                          std::move(origin),
