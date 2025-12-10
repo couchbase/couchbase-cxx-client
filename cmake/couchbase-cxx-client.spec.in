@@ -12,6 +12,19 @@ BuildRequires: gcc13, gcc13-c++
 BuildRequires: gcc, gcc-c++
 %endif
 BuildRequires: cmake >= 3.19
+%if 0%{?suse_version} > 0
+BuildRequires: libcurl-devel
+BuildRequires: protobuf-devel
+BuildRequires: nlohmann_json-devel
+%else
+%if 0%{?amzn} == 0 && (0%{?rhel} >= 9 || 0%{?fedora} > 0)
+BuildRequires: curl-devel
+BuildRequires: protobuf-devel
+BuildRequires: json-devel
+%else
+# CentOS 8 / Rocky 8 - skip these packages (no OpenTelemetry)
+%endif
+%endif
 Source0: @COUCHBASE_CXX_CLIENT_TARBALL_NAME@.tar.gz
 
 %if 0%{?amzn}
@@ -50,6 +63,11 @@ Development files for the Couchbase C++ SDK.
     -DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON \
     -DCOUCHBASE_CXX_CLIENT_BUILD_EXAMPLES=OFF \
     -DCOUCHBASE_CXX_CLIENT_BUILD_TESTS=OFF \
+%if 0%{?amzn} == 0 && (0%{?rhel} >= 9 || 0%{?fedora} > 0 || 0%{?suse_version} > 0)
+    -DCOUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY=ON \
+%else
+    -DCOUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY=OFF \
+%endif
     -DCOUCHBASE_CXX_CLIENT_BUILD_TOOLS=ON \
     -DCOUCHBASE_CXX_CLIENT_BUILD_STATIC=ON \
     -DCOUCHBASE_CXX_CLIENT_BUILD_SHARED=ON

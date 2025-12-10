@@ -74,22 +74,22 @@ set(couchbase_cxx_client_FILES
     ${CMAKE_CURRENT_BINARY_DIR}/generated/mozilla_ca_bundle.cxx
     core/agent.cxx
     core/agent_config.cxx
-    core/agent_group.cxx
     core/agent_group_config.cxx
+    core/agent_group.cxx
     core/analytics_query_options.cxx
     core/app_telemetry_address.cxx
     core/app_telemetry_meter.cxx
     core/app_telemetry_reporter.cxx
     core/bucket.cxx
-    core/cluster.cxx
-    core/cluster_agent.cxx
     core/cluster_agent_config.cxx
+    core/cluster_agent.cxx
     core/cluster_credentials.cxx
+    core/cluster.cxx
     core/cluster_options.cxx
     core/collections_component.cxx
     core/columnar/backoff_calculator.cxx
-    core/columnar/columnar_agent.cxx
     core/columnar/columnar_agent_config.cxx
+    core/columnar/columnar_agent.cxx
     core/columnar/columnar_error.cxx
     core/columnar/error_codes.cxx
     core/columnar/management_component.cxx
@@ -126,8 +126,8 @@ set(couchbase_cxx_client_FILES
     core/impl/disjunction_query.cxx
     core/impl/dns_srv_tracker.cxx
     core/impl/doc_id_query.cxx
-    core/impl/error.cxx
     core/impl/error_context.cxx
+    core/impl/error.cxx
     core/impl/expiry.cxx
     core/impl/fail_fast_retry_strategy.cxx
     core/impl/field_level_encryption_error_category.cxx
@@ -157,6 +157,7 @@ set(couchbase_cxx_client_FILES
     core/impl/numeric_range_facet.cxx
     core/impl/numeric_range_facet_result.cxx
     core/impl/numeric_range_query.cxx
+    core/impl/observability_recorder.cxx
     core/impl/observe_poll.cxx
     core/impl/observe_seqno.cxx
     core/impl/phrase_query.cxx
@@ -219,8 +220,6 @@ set(couchbase_cxx_client_FILES
     core/impl/vector_search.cxx
     core/impl/view_error_category.cxx
     core/impl/wildcard_query.cxx
-    core/impl/crypto.cxx
-    core/impl/observability_recorder.cxx
     core/io/config_tracker.cxx
     core/io/dns_client.cxx
     core/io/dns_config.cxx
@@ -256,9 +255,9 @@ set(couchbase_cxx_client_FILES
     core/operations/document_append.cxx
     core/operations/document_decrement.cxx
     core/operations/document_exists.cxx
-    core/operations/document_get.cxx
     core/operations/document_get_and_lock.cxx
     core/operations/document_get_and_touch.cxx
+    core/operations/document_get.cxx
     core/operations/document_get_projected.cxx
     core/operations/document_increment.cxx
     core/operations/document_insert.cxx
@@ -293,16 +292,16 @@ set(couchbase_cxx_client_FILES
     core/operations/management/bucket_describe.cxx
     core/operations/management/bucket_drop.cxx
     core/operations/management/bucket_flush.cxx
-    core/operations/management/bucket_get.cxx
     core/operations/management/bucket_get_all.cxx
+    core/operations/management/bucket_get.cxx
     core/operations/management/bucket_update.cxx
     core/operations/management/change_password.cxx
     core/operations/management/cluster_describe.cxx
     core/operations/management/cluster_developer_preview_enable.cxx
     core/operations/management/collection_create.cxx
     core/operations/management/collection_drop.cxx
-    core/operations/management/collection_update.cxx
     core/operations/management/collections_manifest_get.cxx
+    core/operations/management/collection_update.cxx
     core/operations/management/error_utils.cxx
     core/operations/management/eventing_deploy_function.cxx
     core/operations/management/eventing_drop_function.cxx
@@ -315,8 +314,8 @@ set(couchbase_cxx_client_FILES
     core/operations/management/eventing_upsert_function.cxx
     core/operations/management/freeform.cxx
     core/operations/management/group_drop.cxx
-    core/operations/management/group_get.cxx
     core/operations/management/group_get_all.cxx
+    core/operations/management/group_get.cxx
     core/operations/management/group_upsert.cxx
     core/operations/management/query_index_build.cxx
     core/operations/management/query_index_create.cxx
@@ -333,18 +332,18 @@ set(couchbase_cxx_client_FILES
     core/operations/management/search_index_control_plan_freeze.cxx
     core/operations/management/search_index_control_query.cxx
     core/operations/management/search_index_drop.cxx
-    core/operations/management/search_index_get.cxx
     core/operations/management/search_index_get_all.cxx
+    core/operations/management/search_index_get.cxx
     core/operations/management/search_index_get_documents_count.cxx
     core/operations/management/search_index_get_stats.cxx
     core/operations/management/search_index_upsert.cxx
     core/operations/management/user_drop.cxx
-    core/operations/management/user_get.cxx
     core/operations/management/user_get_all.cxx
+    core/operations/management/user_get.cxx
     core/operations/management/user_upsert.cxx
     core/operations/management/view_index_drop.cxx
-    core/operations/management/view_index_get.cxx
     core/operations/management/view_index_get_all.cxx
+    core/operations/management/view_index_get.cxx
     core/operations/management/view_index_upsert.cxx
     core/origin.cxx
     core/orphan_reporter.cxx
@@ -359,12 +358,12 @@ set(couchbase_cxx_client_FILES
     core/protocol/cmd_append.cxx
     core/protocol/cmd_cluster_map_change_notification.cxx
     core/protocol/cmd_decrement.cxx
-    core/protocol/cmd_get.cxx
     core/protocol/cmd_get_and_lock.cxx
     core/protocol/cmd_get_and_touch.cxx
     core/protocol/cmd_get_cluster_config.cxx
     core/protocol/cmd_get_collection_id.cxx
     core/protocol/cmd_get_collections_manifest.cxx
+    core/protocol/cmd_get.cxx
     core/protocol/cmd_get_error_map.cxx
     core/protocol/cmd_get_meta.cxx
     core/protocol/cmd_get_replica.cxx
@@ -428,9 +427,9 @@ set(couchbase_cxx_client_FILES
     core/transactions/transaction_keyspace.cxx
     core/transactions/transaction_links.cxx
     core/transactions/transaction_options.cxx
-    core/transactions/transactions.cxx
     core/transactions/transactions_cleanup.cxx
     core/transactions/transactions_config.cxx
+    core/transactions/transactions.cxx
     core/transactions/uid_generator.cxx
     core/transactions/utils.cxx
     core/utils/binary.cxx
@@ -442,8 +441,7 @@ set(couchbase_cxx_client_FILES
     core/utils/split_string.cxx
     core/utils/url_codec.cxx
     core/view_query_options.cxx
-    core/websocket_codec.cxx
-)
+    core/websocket_codec.cxx)
 
 set(couchbase_cxx_client_LIBRARIES)
 set(couchbase_cxx_client_DEFAULT_LIBRARY)
@@ -528,6 +526,9 @@ foreach(TARGET ${couchbase_cxx_client_LIBRARIES})
             $<BUILD_INTERFACE:asio>
             $<BUILD_INTERFACE:couchbase_backtrace>
             $<BUILD_INTERFACE:jsonsl>)
+  if(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
+    target_link_libraries(${TARGET} PRIVATE $<BUILD_INTERFACE:opentelemetry_api>)
+  endif()
 
   if(HAVE_BACKTRACE)
     target_link_libraries(${TARGET} PRIVATE ${PLATFORM_LIBRARIES})
@@ -595,10 +596,6 @@ endif()
 
 option(COUCHBASE_CXX_CLIENT_BUILD_TOOLS "Build tools" ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT})
 if(COUCHBASE_CXX_CLIENT_BUILD_TOOLS)
-  if(NOT COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
-    message(FATAL_ERROR "Tools depend on OpenTelemetry library. Reconfigure with -DCOUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY=ON")
-  endif()
-
   add_subdirectory(tools)
 endif()
 

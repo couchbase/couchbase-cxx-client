@@ -88,10 +88,18 @@ function(bundle_static_library tgt_name bundled_tgt_name)
       set(ar_tool ${CMAKE_CXX_COMPILER_AR})
     endif()
 
+    if(APPLE)
+      find_program(SED gsed)
+    else()
+      find_program(SED sed)
+    endif()
+
     add_custom_command(
-      COMMAND ${ar_tool} -M < ${CMAKE_BINARY_DIR}/${bundled_tgt_name}.ar
+      COMMAND ${SED} -i "s|${CMAKE_BINARY_DIR}/||g" ${bundled_tgt_name}.ar
+      COMMAND ${ar_tool} -M < ${bundled_tgt_name}.ar
       OUTPUT ${bundled_tgt_full_name}
       DEPENDS ${tgt_name} ${static_libs}
+      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
       COMMENT "Bundling ${bundled_tgt_name}"
       VERBATIM)
   elseif(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
