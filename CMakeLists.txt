@@ -61,6 +61,8 @@ endif()
 
 find_package(Threads REQUIRED)
 
+option(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY "Build with OpenTelemetry" ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT})
+
 include(cmake/ThirdPartyDependencies.cmake)
 
 include(cmake/VersionInfo.cmake)
@@ -593,6 +595,10 @@ endif()
 
 option(COUCHBASE_CXX_CLIENT_BUILD_TOOLS "Build tools" ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT})
 if(COUCHBASE_CXX_CLIENT_BUILD_TOOLS)
+  if(NOT COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
+    message(FATAL_ERROR "Tools depend on OpenTelemetry library. Reconfigure with -DCOUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY=ON")
+  endif()
+
   add_subdirectory(tools)
 endif()
 
