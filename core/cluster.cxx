@@ -318,7 +318,7 @@ public:
     return ctx_;
   }
 
-  void configure_tls_options(bool has_capella_host, std::shared_ptr<asio::ssl::context> ctx)
+  void configure_tls_options(bool has_capella_host, const std::shared_ptr<asio::ssl::context>& ctx)
   {
     asio::ssl::context::options tls_options =
       asio::ssl::context::default_workarounds | // various bug workarounds that should be rather
@@ -357,7 +357,7 @@ public:
 #endif
   }
 
-  std::error_code configure_tls_context(std::shared_ptr<asio::ssl::context> ctx)
+  auto configure_tls_context(const std::shared_ptr<asio::ssl::context>& ctx) -> std::error_code
   {
     configure_tls_options(has_capella_host(), ctx);
 
@@ -621,7 +621,7 @@ public:
     return handler({});
   }
 
-  auto update_credentials(cluster_credentials auth) -> core::error
+  auto update_credentials(const cluster_credentials& auth) -> core::error
   {
     if (stopped_) {
       return { errc::network::cluster_closed, {} };
@@ -1315,7 +1315,7 @@ private:
     }
   }
 
-  bool has_capella_host() const
+  auto has_capella_host() const -> bool
   {
     bool has_capella_host = false;
     static const std::string suffix = "cloud.couchbase.com";
@@ -1476,10 +1476,10 @@ cluster::origin() const -> std::pair<std::error_code, couchbase::core::origin>
 }
 
 auto
-cluster::update_credentials(core::cluster_credentials auth) -> core::error
+cluster::update_credentials(const core::cluster_credentials& auth) const -> core::error
 {
   if (impl_) {
-    return impl_->update_credentials(std::move(auth));
+    return impl_->update_credentials(auth);
   }
   return { errc::network::cluster_closed, {} };
 }

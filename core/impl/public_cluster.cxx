@@ -402,9 +402,9 @@ public:
       });
   }
 
-  auto set_authenticator(core::cluster_credentials auth) -> error
+  auto set_authenticator(const core::cluster_credentials& auth) const -> error
   {
-    auto e = core_.update_credentials(std::move(auth));
+    auto e = core_.update_credentials(auth);
     if (e.ec) {
       return core::impl::make_error(e);
     }
@@ -698,7 +698,7 @@ cluster::set_authenticator(const password_authenticator& authenticator) -> couch
     auth.allowed_sasl_mechanisms = { { "PLAIN" } };
   }
 
-  return impl_->set_authenticator(std::move(auth));
+  return impl_->set_authenticator(auth);
 }
 
 auto
@@ -708,7 +708,7 @@ cluster::set_authenticator(const certificate_authenticator& authenticator) -> co
   auth.certificate_path = authenticator.certificate_path_;
   auth.key_path = authenticator.key_path_;
 
-  return impl_->set_authenticator(std::move(auth));
+  return impl_->set_authenticator(auth);
 }
 
 auto
