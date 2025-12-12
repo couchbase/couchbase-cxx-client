@@ -21,6 +21,7 @@
 
 #include "core/protocol/hello_feature.hxx"
 #include "core/response_handler.hxx"
+#include "core/tls_context_provider.hxx"
 #include "core/utils/movable_function.hxx"
 #include "mcbp_context.hxx"
 #include "mcbp_message.hxx"
@@ -100,7 +101,7 @@ public:
   mcbp_session(const std::string& client_id,
                const std::string& node_uuid,
                asio::io_context& ctx,
-               asio::ssl::context& tls,
+               tls_context_provider& tls,
                couchbase::core::origin origin,
                std::shared_ptr<impl::bootstrap_state_listener> state_listener,
                std::optional<std::string> bucket_name = {},

@@ -17,6 +17,7 @@
 
 #include "cluster.hxx"
 #include "config_listener.hxx"
+#include "tls_context_provider.hxx"
 
 #include <memory>
 
@@ -48,7 +49,7 @@ public:
   app_telemetry_reporter(std::shared_ptr<app_telemetry_meter> meter,
                          origin& origin,
                          asio::io_context& ctx,
-                         asio::ssl::context& tls);
+                         tls_context_provider& tls);
   ~app_telemetry_reporter() override;
   void update_config(topology::configuration config) override;
   void stop();

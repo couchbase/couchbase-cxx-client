@@ -162,6 +162,7 @@
 #include "mozilla_ca_bundle.hxx"
 #include "ping_collector.hxx"
 #include "ping_reporter.hxx"
+#include "tls_context_provider.hxx"
 
 #include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/error_codes.hxx>
@@ -317,7 +318,7 @@ public:
     return ctx_;
   }
 
-  void configure_tls_options(bool has_capella_host)
+  void configure_tls_options(bool has_capella_host, const std::shared_ptr<asio::ssl::context>& ctx)
   {
     asio::ssl::context::options tls_options =
       asio::ssl::context::default_workarounds | // various bug workarounds that should be rather
@@ -331,19 +332,19 @@ public:
     if (origin_.options().tls_disable_v1_2 || has_capella_host) {
       tls_options |= asio::ssl::context::no_tlsv1_2; // published: 2008, still in use
     }
-    tls_.set_options(tls_options);
+    ctx->set_options(tls_options);
     switch (origin_.options().tls_verify) {
       case tls_verify_mode::none:
-        tls_.set_verify_mode(asio::ssl::verify_none);
+        ctx->set_verify_mode(asio::ssl::verify_none);
         break;
 
       case tls_verify_mode::peer:
-        tls_.set_verify_mode(asio::ssl::verify_peer);
+        ctx->set_verify_mode(asio::ssl::verify_peer);
         break;
     }
 
 #ifdef COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE
-    SSL_CTX_set_keylog_callback(tls_.native_handle(), [](const SSL* /* ssl */, const char* line) {
+    SSL_CTX_set_keylog_callback(ctx->native_handle(), [](const SSL* /* ssl */, const char* line) {
       std::ofstream keylog(COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE,
                            std::ios::out | std::ios::app | std::ios::binary);
       keylog << std::string_view(line) << std::endl;
@@ -354,6 +355,101 @@ public:
                     "(https://wiki.wireshark.org/TLS). DO NOT USE THIS BUILD IN PRODUCTION",
                     COUCHBASE_CXX_CLIENT_TLS_KEY_LOG_FILE);
 #endif
+  }
+
+  auto configure_tls_context(const std::shared_ptr<asio::ssl::context>& ctx) -> std::error_code
+  {
+    configure_tls_options(has_capella_host(), ctx);
+
+    if (origin_.options().trust_certificate.empty() &&
+        origin_.options().trust_certificate_value.empty()) {
+      // trust certificate is not explicitly specified
+      CB_LOG_DEBUG(R"([{}]: use default CA for TLS verify)", id_);
+      std::error_code ec{};
+
+      ctx->set_default_verify_paths(ec);
+      if (ec) {
+        CB_LOG_WARNING(R"([{}]: failed to load system CAs: {})", id_, ec.message());
+      }
+
+      ctx->add_certificate_authority(
+        asio::const_buffer(couchbase::core::default_ca::capellaCaCert,
+                           strlen(couchbase::core::default_ca::capellaCaCert)),
+        ec);
+
+      if (ec) {
+        CB_LOG_WARNING("[{}]: unable to load default CAs: {}", id_, ec.message());
+        // we don't consider this fatal and try to continue without it
+      }
+
+      if (const auto certificates = default_ca::mozilla_ca_certs();
+          !origin_.options().disable_mozilla_ca_certificates && !certificates.empty()) {
+        CB_LOG_DEBUG("[{}]: loading {} CA certificates from Mozilla bundle. Update date: \"{}\", "
+                     "SHA256: \"{}\"",
+                     id_,
+                     certificates.size(),
+                     default_ca::mozilla_ca_certs_date(),
+                     default_ca::mozilla_ca_certs_sha256());
+        for (const auto& cert : certificates) {
+          ctx->add_certificate_authority(asio::const_buffer(cert.body.data(), cert.body.size()),
+                                         ec);
+          if (ec) {
+            CB_LOG_WARNING("[{}]: unable to load CA \"{}\" from Mozilla bundle: {}",
+                           id_,
+                           cert.authority,
+                           ec.message());
+          }
+        }
+      }
+    } else { // trust certificate is explicitly specified
+      std::error_code ec{};
+      // load only the explicit certificate
+      // system and default capella certificates are not loaded
+      if (!origin_.options().trust_certificate_value.empty()) {
+        CB_LOG_DEBUG(R"([{}]: use TLS certificate passed through via options object)", id_);
+        ctx->add_certificate_authority(
+          asio::const_buffer(origin_.options().trust_certificate_value.data(),
+                             origin_.options().trust_certificate_value.size()),
+          ec);
+        if (ec) {
+          CB_LOG_WARNING(
+            "[{}]: unable to load CA passed via options object: {}", id_, ec.message());
+        }
+      }
+      if (!origin_.options().trust_certificate.empty()) {
+        CB_LOG_DEBUG(
+          R"([{}]: use TLS verify file: "{}")", id_, origin_.options().trust_certificate);
+        ctx->load_verify_file(origin_.options().trust_certificate, ec);
+        if (ec) {
+          CB_LOG_ERROR("[{}]: unable to load verify file \"{}\": {}",
+                       id_,
+                       origin_.options().trust_certificate,
+                       ec.message());
+          return ec;
+        }
+      }
+    }
+    if (origin_.credentials().uses_certificate()) {
+      std::error_code ec{};
+      CB_LOG_DEBUG(R"([{}]: use TLS certificate chain: "{}")", id_, origin_.certificate_path());
+      ctx->use_certificate_chain_file(origin_.certificate_path(), ec);
+      if (ec) {
+        CB_LOG_ERROR("[{}]: unable to load certificate chain \"{}\": {}",
+                     id_,
+                     origin_.certificate_path(),
+                     ec.message());
+        return ec;
+      }
+      CB_LOG_DEBUG(R"([{}]: use TLS private key: "{}")", id_, origin_.key_path());
+      ctx->use_private_key_file(origin_.key_path(), asio::ssl::context::file_format::pem, ec);
+      if (ec) {
+        CB_LOG_ERROR(
+          "[{}]: unable to load private key \"{}\": {}", id_, origin_.key_path(), ec.message());
+
+        return ec;
+      }
+    }
+    return {};
   }
 
   void open(couchbase::core::origin origin,
@@ -525,7 +621,7 @@ public:
     return handler({});
   }
 
-  auto update_credentials(cluster_credentials auth) -> core::error
+  auto update_credentials(const cluster_credentials& auth) -> core::error
   {
     if (stopped_) {
       return { errc::network::cluster_closed, {} };
@@ -536,7 +632,21 @@ public:
                "TLS not enabled but the provided authenticator requires TLS" };
     }
 
-    origin_.update_credentials(std::move(auth));
+    auto old_credentials = origin_.credentials();
+    origin_.update_credentials(auth);
+
+    if (auth.requires_tls()) {
+      // Recreate and atomically swap the TLS context, existing sessions should continue to use the
+      // old one.
+      const auto new_ctx = std::make_shared<asio::ssl::context>(asio::ssl::context::tls_client);
+      auto ec = configure_tls_context(new_ctx);
+      if (ec) {
+        // Revert origin's credentials as these will not be synced to the active TLS context
+        origin_.update_credentials(old_credentials);
+        return { ec, {} };
+      }
+      tls_.set_ctx(new_ctx);
+    }
     return {};
   }
 
@@ -678,19 +788,8 @@ public:
     }
 
     // Warn users if they attempt to use Capella without TLS being enabled.
-    bool has_capella_host = false;
     {
-      bool has_non_capella_host = false;
-      static const std::string suffix = "cloud.couchbase.com";
-      for (const auto& node : origin_.get_hostnames()) {
-        if (auto pos = node.find(suffix);
-            pos != std::string::npos && pos + suffix.size() == node.size()) {
-          has_capella_host = true;
-        } else {
-          has_non_capella_host = true;
-        }
-      }
-
+      auto has_capella_host = this->has_capella_host();
       if (has_capella_host && !origin_.options().enable_tls) {
         CB_LOG_WARNING("[{}]: TLS is required when connecting to Couchbase Capella. Please enable "
                        "TLS by prefixing "
@@ -704,7 +803,7 @@ public:
           && origin_.options().trust_certificate_value.empty()     /* and certificate value has not been specified */
           && origin_.options().tls_verify != tls_verify_mode::none /* The user did not disable all TLS verification */
           &&
-          has_non_capella_host /* The connection string has a hostname that does NOT end in ".cloud.couchbase.com" */) {
+          !has_capella_host /* The connection string has a hostname that does NOT end in ".cloud.couchbase.com" */) {
         CB_LOG_WARNING("[{}] When TLS is enabled, the cluster options must specify certificate(s) "
                        "to trust or ensure that they are "
                        "available in system CA store. (Unless connecting to cloud.couchbase.com.)",
@@ -713,113 +812,16 @@ public:
     }
 
     if (origin_.options().enable_tls) {
-      configure_tls_options(has_capella_host);
-
-      if (origin_.options().trust_certificate.empty() &&
-          origin_.options()
-            .trust_certificate_value.empty()) { // trust certificate is not explicitly specified
-        CB_LOG_DEBUG(R"([{}]: use default CA for TLS verify)", id_);
-        std::error_code ec{};
-
-        // load system certificates
-        tls_.set_default_verify_paths(ec);
-        if (ec) {
-          CB_LOG_WARNING(R"([{}]: failed to load system CAs: {})", id_, ec.message());
-        }
-
-        // add the Capella Root CA in addition to system CAs
-        tls_.add_certificate_authority(
-          asio::const_buffer(couchbase::core::default_ca::capellaCaCert,
-                             strlen(couchbase::core::default_ca::capellaCaCert)),
-          ec);
-        if (ec) {
-          CB_LOG_WARNING("[{}]: unable to load default CAs: {}", id_, ec.message());
-          // we don't consider this fatal and try to continue without it
-        }
-
-        if (const auto certificates = default_ca::mozilla_ca_certs();
-            !origin_.options().disable_mozilla_ca_certificates && !certificates.empty()) {
-          CB_LOG_DEBUG("[{}]: loading {} CA certificates from Mozilla bundle. Update date: \"{}\", "
-                       "SHA256: \"{}\"",
-                       id_,
-                       certificates.size(),
-                       default_ca::mozilla_ca_certs_date(),
-                       default_ca::mozilla_ca_certs_sha256());
-          for (const auto& cert : certificates) {
-            tls_.add_certificate_authority(asio::const_buffer(cert.body.data(), cert.body.size()),
-                                           ec);
-            if (ec) {
-              CB_LOG_WARNING("[{}]: unable to load CA \"{}\" from Mozilla bundle: {}",
-                             id_,
-                             cert.authority,
-                             ec.message());
-            }
-          }
-        }
-      } else { // trust certificate is explicitly specified
-        std::error_code ec{};
-        // load only the explicit certificate
-        // system and default capella certificates are not loaded
-        if (!origin_.options().trust_certificate_value.empty()) {
-          CB_LOG_DEBUG(R"([{}]: use TLS certificate passed through via options object)", id_);
-          tls_.add_certificate_authority(
-            asio::const_buffer(origin_.options().trust_certificate_value.data(),
-                               origin_.options().trust_certificate_value.size()),
-            ec);
-          if (ec) {
-            CB_LOG_WARNING(
-              "[{}]: unable to load CA passed via options object: {}", id_, ec.message());
-          }
-        }
-        if (!origin_.options().trust_certificate.empty()) {
-          CB_LOG_DEBUG(
-            R"([{}]: use TLS verify file: "{}")", id_, origin_.options().trust_certificate);
-          tls_.load_verify_file(origin_.options().trust_certificate, ec);
-          if (ec) {
-            CB_LOG_ERROR("[{}]: unable to load verify file \"{}\": {}",
-                         id_,
-                         origin_.options().trust_certificate,
-                         ec.message());
+      const auto ctx = tls_.get_ctx();
+      auto ec = configure_tls_context(ctx);
+      if (ec) {
 #ifdef __clang_analyzer__
-            // TODO(CXXCBC-549): clang-tidy-19 reports potential memory leak here
-            [[clang::suppress]]
+        // TODO(CXXCBC-549): clang-tidy-19 reports potential memory leak here
+        [[clang::suppress]]
 #endif
-            return close([ec, handler = std::move(handler)]() mutable {
-              return handler(ec);
-            });
-          }
-        }
-      }
-      if (origin_.credentials().uses_certificate()) {
-        std::error_code ec{};
-        CB_LOG_DEBUG(R"([{}]: use TLS certificate chain: "{}")", id_, origin_.certificate_path());
-        tls_.use_certificate_chain_file(origin_.certificate_path(), ec);
-        if (ec) {
-          CB_LOG_ERROR("[{}]: unable to load certificate chain \"{}\": {}",
-                       id_,
-                       origin_.certificate_path(),
-                       ec.message());
-#ifdef __clang_analyzer__
-          // TODO(CXXCBC-549): clang-tidy-19 reports potential memory leak here
-          [[clang::suppress]]
-#endif
-          return close([ec, handler = std::move(handler)]() mutable {
-            return handler(ec);
-          });
-        }
-        CB_LOG_DEBUG(R"([{}]: use TLS private key: "{}")", id_, origin_.key_path());
-        tls_.use_private_key_file(origin_.key_path(), asio::ssl::context::file_format::pem, ec);
-        if (ec) {
-          CB_LOG_ERROR(
-            "[{}]: unable to load private key \"{}\": {}", id_, origin_.key_path(), ec.message());
-#ifdef __clang_analyzer__
-          // TODO(CXXCBC-549): clang-tidy-19 reports potential memory leak here
-          [[clang::suppress]]
-#endif
-          return close([ec, handler = std::move(handler)]() mutable {
-            return handler(ec);
-          });
-        }
+        return close([ec, handler = std::move(handler)]() mutable {
+          return handler(ec);
+        });
       }
       session_ = io::mcbp_session(id_, {}, ctx_, tls_, origin_, dns_srv_tracker_);
     } else {
@@ -883,11 +885,12 @@ public:
     // TODO(JC): retries on more failures?  Right now only retry if load_verify_file() fails...
 
     // Disables TLS v1.2 which should be okay cloud/columnar default.
-    configure_tls_options(true);
+    auto ctx = tls_.get_ctx();
+    configure_tls_options(true, ctx);
     if (origin_.options().security_options.trust_only_capella) {
       std::error_code ec{};
       CB_LOG_DEBUG(R"([{}]: use Capella CA for TLS verify)", id_);
-      tls_.add_certificate_authority(
+      ctx->add_certificate_authority(
         asio::const_buffer(couchbase::core::default_ca::capellaCaCert,
                            strlen(couchbase::core::default_ca::capellaCaCert)),
         ec);
@@ -913,7 +916,7 @@ public:
       // system and default capella certificates are not loaded
       if (!origin_.options().trust_certificate_value.empty()) {
         CB_LOG_DEBUG(R"([{}]: use TLS certificate passed through via options object)", id_);
-        tls_.add_certificate_authority(
+        ctx->add_certificate_authority(
           asio::const_buffer(origin_.options().trust_certificate_value.data(),
                              origin_.options().trust_certificate_value.size()),
           ec);
@@ -925,7 +928,7 @@ public:
       if (!origin_.options().trust_certificate.empty()) {
         CB_LOG_DEBUG(
           R"([{}]: use TLS verify file: "{}")", id_, origin_.options().trust_certificate);
-        tls_.load_verify_file(origin_.options().trust_certificate, ec);
+        ctx->load_verify_file(origin_.options().trust_certificate, ec);
         if (ec) {
           CB_LOG_ERROR("[{}]: unable to load verify file \"{}\": {}",
                        id_,
@@ -944,7 +947,7 @@ public:
       CB_LOG_DEBUG(R"([{}]: use default CA for TLS verify)", id_);
       std::error_code ec{};
       // load system certificates
-      tls_.set_default_verify_paths(ec);
+      ctx->set_default_verify_paths(ec);
       if (ec) {
         CB_LOG_WARNING(R"([{}]: failed to load system CAs: {})", id_, ec.message());
       }
@@ -954,7 +957,7 @@ public:
                    id_,
                    origin_.options().security_options.trust_only_certificates.size());
       for (const auto& cert : origin_.options().security_options.trust_only_certificates) {
-        tls_.add_certificate_authority(asio::const_buffer(cert.data(), cert.size()), ec);
+        ctx->add_certificate_authority(asio::const_buffer(cert.data(), cert.size()), ec);
         if (ec) {
           CB_LOG_WARNING("[{}]: unable to load CA: {}", id_, ec.message());
         }
@@ -1312,10 +1315,23 @@ private:
     }
   }
 
+  auto has_capella_host() const -> bool
+  {
+    bool has_capella_host = false;
+    static const std::string suffix = "cloud.couchbase.com";
+    for (const auto& node : origin_.get_hostnames()) {
+      if (auto pos = node.find(suffix);
+          pos != std::string::npos && pos + suffix.size() == node.size()) {
+        has_capella_host = true;
+      }
+    }
+    return has_capella_host;
+  }
+
   std::string id_{ uuid::to_string(uuid::random()) };
   asio::io_context& ctx_;
   asio::executor_work_guard<asio::io_context::executor_type> work_;
-  asio::ssl::context tls_{ asio::ssl::context::tls_client };
+  tls_context_provider tls_{};
   std::shared_ptr<io::http_session_manager> session_manager_;
   std::shared_ptr<app_telemetry_reporter> app_telemetry_reporter_{};
   std::optional<io::mcbp_session> session_{};
@@ -1460,10 +1476,10 @@ cluster::origin() const -> std::pair<std::error_code, couchbase::core::origin>
 }
 
 auto
-cluster::update_credentials(core::cluster_credentials auth) -> core::error
+cluster::update_credentials(const core::cluster_credentials& auth) const -> core::error
 {
   if (impl_) {
-    return impl_->update_credentials(std::move(auth));
+    return impl_->update_credentials(auth);
   }
   return { errc::network::cluster_closed, {} };
 }

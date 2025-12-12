@@ -20,6 +20,7 @@
 #include "config_listener.hxx"
 #include "io/mcbp_command.hxx"
 #include "operations.hxx"
+#include "tls_context_provider.hxx"
 
 #include <asio/bind_executor.hpp>
 #include <asio/io_context.hpp>
@@ -67,7 +68,7 @@ class bucket
 public:
   bucket(std::string client_id,
          asio::io_context& ctx,
-         asio::ssl::context& tls,
+         tls_context_provider& tls,
          std::shared_ptr<tracing::tracer_wrapper> tracer,
          std::shared_ptr<metrics::meter_wrapper> meter,
          std::shared_ptr<orphan_reporter> orphan_reporter,

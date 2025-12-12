@@ -33,6 +33,8 @@
 #include "core/impl/bootstrap_error.hxx"
 #endif
 
+#include "core/tls_context_provider.hxx"
+
 #include <asio.hpp>
 #include <spdlog/fmt/bundled/chrono.h>
 
@@ -82,7 +84,7 @@ public:
                std::string client_id,
                std::string node_uuid,
                asio::io_context& ctx,
-               asio::ssl::context& tls,
+               tls_context_provider& tls,
                origin& origin,
                std::string hostname,
                std::string service,

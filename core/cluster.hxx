@@ -92,7 +92,7 @@ public:
     utils::movable_function<void(std::error_code, std::shared_ptr<topology::configuration>)>&&
       handler) const;
 
-  [[nodiscard]] auto update_credentials(core::cluster_credentials auth) -> core::error;
+  [[nodiscard]] auto update_credentials(const core::cluster_credentials& auth) const -> core::error;
 
   void execute(o::analytics_request request, mf<void(o::analytics_response)>&& handler) const;
   void execute(o::append_request request, mf<void(o::append_response)>&& handler) const;

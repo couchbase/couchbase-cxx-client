@@ -23,6 +23,7 @@
 #endif
 #include "core/config_listener.hxx"
 #include "core/protocol/hello_feature.hxx"
+#include "core/tls_context_provider.hxx"
 #include "core/utils/movable_function.hxx"
 
 #include <mutex>
@@ -90,7 +91,7 @@ public:
   cluster_config_tracker(std::string client_id,
                          couchbase::core::origin origin,
                          asio::io_context& ctx,
-                         asio::ssl::context& tls,
+                         tls_context_provider& tls,
                          std::shared_ptr<impl::bootstrap_state_listener> state_listener);
   ~cluster_config_tracker() override;
 

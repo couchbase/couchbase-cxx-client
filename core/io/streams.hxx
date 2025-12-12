@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "core/tls_context_provider.hxx"
 #include "core/utils/movable_function.hxx"
 #include "ip_protocol.hxx"
 
@@ -129,11 +130,11 @@ public:
 class tls_stream_impl : public stream_impl
 {
 private:
-  asio::ssl::context& tls_;
+  tls_context_provider& tls_;
   std::shared_ptr<asio::ssl::stream<asio::ip::tcp::socket>> stream_;
 
 public:
-  tls_stream_impl(asio::io_context& ctx, asio::ssl::context& tls);
+  tls_stream_impl(asio::io_context& ctx, tls_context_provider& tls);
 
   [[nodiscard]] auto local_endpoint() const -> asio::ip::tcp::endpoint override;
 

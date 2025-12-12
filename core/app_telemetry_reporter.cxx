@@ -83,7 +83,7 @@ public:
   static auto dial(app_telemetry_address address,
                    cluster_options options,
                    asio::io_context& ctx,
-                   asio::ssl::context& tls,
+                   tls_context_provider& tls,
                    std::shared_ptr<connection_state_listener>&& handler)
     -> std::shared_ptr<telemetry_dialer>
   {
@@ -96,7 +96,7 @@ public:
   telemetry_dialer(app_telemetry_address address,
                    cluster_options options,
                    asio::io_context& ctx,
-                   asio::ssl::context& tls,
+                   tls_context_provider& tls,
                    std::shared_ptr<connection_state_listener>&& handler)
     : address_{ std::move(address) }
     , options_{ std::move(options) }
@@ -223,7 +223,7 @@ private:
   app_telemetry_address address_;
   cluster_options options_;
   asio::io_context& ctx_;
-  asio::ssl::context& tls_;
+  tls_context_provider& tls_;
   asio::steady_timer resolve_deadline_;
   asio::steady_timer connect_deadline_;
   asio::ip::tcp::resolver resolver_;
@@ -673,7 +673,7 @@ public:
   app_telemetry_reporter_impl(std::shared_ptr<app_telemetry_meter> meter,
                               origin& origin,
                               asio::io_context& ctx,
-                              asio::ssl::context& tls)
+                              tls_context_provider& tls)
     : meter_{ std::move(meter) }
     , origin_{ origin }
     , ctx_{ ctx }
@@ -851,7 +851,7 @@ private:
   std::shared_ptr<app_telemetry_meter> meter_;
   origin& origin_;
   asio::io_context& ctx_;
-  asio::ssl::context& tls_;
+  tls_context_provider& tls_;
   asio::steady_timer backoff_;
   const exponential_backoff_with_jitter exponential_backoff_calculator_;
 
@@ -870,7 +870,7 @@ private:
 app_telemetry_reporter::app_telemetry_reporter(std::shared_ptr<app_telemetry_meter> meter,
                                                origin& origin,
                                                asio::io_context& ctx,
-                                               asio::ssl::context& tls)
+                                               tls_context_provider& tls)
   : impl_{ std::make_shared<app_telemetry_reporter_impl>(std::move(meter), origin, ctx, tls) }
 {
 }
