@@ -402,6 +402,7 @@ set(couchbase_cxx_client_FILES
     core/scan_result.cxx
     core/search_query_options.cxx
     core/seed_config.cxx
+    core/tls_context_provider.cxx
     core/topology/capabilities.cxx
     core/topology/configuration.cxx
     core/tracing/threshold_logging_tracer.cxx

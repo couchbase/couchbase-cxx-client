@@ -91,7 +91,7 @@ public:
               std::vector<protocol::hello_feature> known_features,
               std::shared_ptr<impl::bootstrap_state_listener> state_listener,
               asio::io_context& ctx,
-              asio::ssl::context& tls)
+              tls_context_provider& tls)
     : client_id_{ std::move(client_id) }
     , name_{ std::move(name) }
     , log_prefix_{ fmt::format("[{}/{}]", client_id_, name_) }
@@ -1062,7 +1062,7 @@ private:
   mcbp::codec codec_;
 
   asio::io_context& ctx_;
-  asio::ssl::context& tls_;
+  tls_context_provider& tls_;
 
   asio::steady_timer heartbeat_timer_;
   std::chrono::milliseconds heartbeat_interval_;
@@ -1087,7 +1087,7 @@ private:
 
 bucket::bucket(std::string client_id,
                asio::io_context& ctx,
-               asio::ssl::context& tls,
+               tls_context_provider& tls,
                std::shared_ptr<tracing::tracer_wrapper> tracer,
                std::shared_ptr<metrics::meter_wrapper> meter,
                std::shared_ptr<core::orphan_reporter> orphan_reporter,

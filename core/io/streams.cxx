@@ -140,12 +140,12 @@ plain_stream_impl::async_read_some(
   return stream_->async_read_some(buffer, std::move(handler));
 }
 
-tls_stream_impl::tls_stream_impl(asio::io_context& ctx, asio::ssl::context& tls)
+tls_stream_impl::tls_stream_impl(asio::io_context& ctx, tls_context_provider& tls)
   : stream_impl(ctx, true)
   , tls_(tls)
   , stream_(
       std::make_shared<asio::ssl::stream<asio::ip::tcp::socket>>(asio::ip::tcp::socket(strand_),
-                                                                 tls_))
+                                                                 *tls_.get_ctx()))
 {
 }
 
@@ -204,7 +204,7 @@ tls_stream_impl::async_connect(const asio::ip::tcp::resolver::results_type::endp
   if (!stream_) {
     id_ = uuid::to_string(uuid::random());
     stream_ = std::make_shared<asio::ssl::stream<asio::ip::tcp::socket>>(
-      asio::ip::tcp::socket(strand_), tls_);
+      asio::ip::tcp::socket(strand_), *tls_.get_ctx());
   }
   return stream_->lowest_layer().async_connect(
     endpoint, [stream = stream_, handler = std::move(handler)](std::error_code ec_connect) mutable {
