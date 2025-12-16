@@ -30,7 +30,8 @@ select_mechanism(const std::vector<std::string>& available_mechanisms) -> Mechan
     { std::string{ "SCRAM-SHA512" }, Mechanism::SCRAM_SHA512 },
     { std::string{ "SCRAM-SHA256" }, Mechanism::SCRAM_SHA256 },
     { std::string{ "SCRAM-SHA1" }, Mechanism::SCRAM_SHA1 },
-    { std::string{ "PLAIN" }, Mechanism::PLAIN }
+    { std::string{ "PLAIN" }, Mechanism::PLAIN },
+    { std::string{ "OAUTHBEARER" }, Mechanism::OAUTHBEARER },
   };
 
   for (const auto& [name, code] : mechs) {

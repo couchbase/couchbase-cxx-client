@@ -3,9 +3,10 @@ add_library(
   client.cc
   context.cc
   mechanism.cc
+  oauthbearer/oauthbearer.cc
   plain/plain.cc
   scram-sha/scram-sha.cc
-  scram-sha/stringutils.cc)
+  stringutils.cc)
 set_target_properties(couchbase_sasl PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(couchbase_sasl PRIVATE ../..)
 set_project_warnings(couchbase_sasl)

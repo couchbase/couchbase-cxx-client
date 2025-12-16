@@ -243,9 +243,13 @@ class mcbp_session_impl
     static auto sasl_mechanisms(const std::shared_ptr<mcbp_session_impl>& session)
       -> std::vector<std::string>
     {
-      if (const auto user_mechanisms = session->origin_.credentials().allowed_sasl_mechanisms;
+      auto credentials = session->origin_.credentials();
+      if (const auto user_mechanisms = credentials.allowed_sasl_mechanisms;
           user_mechanisms.has_value()) {
         return user_mechanisms.value();
+      }
+      if (credentials.uses_jwt()) {
+        return { "OAUTHBEARER" };
       }
       if (session->is_tls_) {
         return { "PLAIN" };
@@ -270,7 +274,11 @@ class mcbp_session_impl
             return origin.username();
           },
           [origin = session_->origin_]() {
-            return origin.password();
+            auto credentials = origin.credentials();
+            if (credentials.uses_jwt()) {
+              return credentials.jwt_token;
+            }
+            return credentials.password;
           },
           sasl_mechanisms(session_))
     {

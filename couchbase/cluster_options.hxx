@@ -24,6 +24,7 @@
 #include <couchbase/configuration_profiles_registry.hxx>
 #include <couchbase/dns_options.hxx>
 #include <couchbase/error.hxx>
+#include <couchbase/jwt_authenticator.hxx>
 #include <couchbase/metrics_options.hxx>
 #include <couchbase/network_options.hxx>
 #include <couchbase/password_authenticator.hxx>
@@ -90,6 +91,18 @@ public:
   explicit cluster_options(certificate_authenticator authenticator)
     : certificate_path_{ std::move(authenticator.certificate_path_) }
     , key_path_{ std::move(authenticator.key_path_) }
+  {
+  }
+
+  /**
+   *
+   * @param authenticator
+   *
+   * @since 1.3.0
+   * @committed
+   */
+  explicit cluster_options(jwt_authenticator authenticator)
+    : jwt_token_{ std::move(authenticator.token_) }
   {
   }
 
@@ -272,6 +285,7 @@ public:
     std::string password;
     std::string certificate_path;
     std::string key_path;
+    std::string jwt_token;
     std::optional<std::vector<std::string>> allowed_sasl_mechanisms;
     compression_options::built compression;
     timeout_options::built timeouts;
@@ -294,6 +308,7 @@ public:
       password_,
       certificate_path_,
       key_path_,
+      jwt_token_,
       sasl_mechanisms_,
       compression_.build(),
       timeouts_.build(),
@@ -315,6 +330,7 @@ private:
   std::string password_{};
   std::string certificate_path_{};
   std::string key_path_{};
+  std::string jwt_token_{};
   std::optional<std::vector<std::string>> sasl_mechanisms_{};
 
   compression_options compression_{};

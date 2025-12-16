@@ -433,6 +433,12 @@ couchbase::core::origin::key_path() const -> std::string
   return credentials_.key_path;
 }
 auto
+couchbase::core::origin::jwt_token() const -> std::string
+{
+  const std::shared_lock lock(credentials_mutex_);
+  return credentials_.jwt_token;
+}
+auto
 couchbase::core::origin::get_hostnames() const -> std::vector<std::string>
 {
   std::vector<std::string> res;

@@ -64,6 +64,7 @@ struct origin {
   [[nodiscard]] auto password() const -> std::string;
   [[nodiscard]] auto certificate_path() const -> std::string;
   [[nodiscard]] auto key_path() const -> std::string;
+  [[nodiscard]] auto jwt_token() const -> std::string;
 
   [[nodiscard]] auto get_hostnames() const -> std::vector<std::string>;
   [[nodiscard]] auto get_nodes() const -> std::vector<std::string>;

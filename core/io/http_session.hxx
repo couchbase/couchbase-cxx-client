@@ -135,10 +135,14 @@ public:
     }
     request.headers["user-agent"] = user_agent_;
     auto creds = origin_.credentials();
-    auto credentials = fmt::format("{}:{}", creds.username, creds.password);
-    request.headers["authorization"] = fmt::format(
-      "Basic {}",
-      base64::encode(gsl::as_bytes(gsl::span{ credentials.data(), credentials.size() })));
+    if (creds.uses_jwt()) {
+      request.headers["authorization"] = fmt::format("Bearer {}", creds.jwt_token);
+    } else {
+      const auto credentials = fmt::format("{}:{}", creds.username, creds.password);
+      request.headers["authorization"] = fmt::format(
+        "Basic {}",
+        base64::encode(gsl::as_bytes(gsl::span{ credentials.data(), credentials.size() })));
+    }
     write(fmt::format(
       "{} {} HTTP/1.1\r\nhost: {}:{}\r\n", request.method, request.path, hostname_, service_));
     if (!request.body.empty()) {

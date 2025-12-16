@@ -90,6 +90,7 @@ options_to_origin(const std::string& connection_string, cluster_options::built o
   auth.password = std::move(opts.password);
   auth.certificate_path = std::move(opts.certificate_path);
   auth.key_path = std::move(opts.key_path);
+  auth.jwt_token = std::move(opts.jwt_token);
   auth.allowed_sasl_mechanisms = std::move(opts.allowed_sasl_mechanisms);
 
   core::cluster_options user_options;
@@ -707,6 +708,15 @@ cluster::set_authenticator(const certificate_authenticator& authenticator) -> co
   core::cluster_credentials auth;
   auth.certificate_path = authenticator.certificate_path_;
   auth.key_path = authenticator.key_path_;
+
+  return impl_->set_authenticator(auth);
+}
+
+auto
+cluster::set_authenticator(const jwt_authenticator& authenticator) -> error
+{
+  core::cluster_credentials auth;
+  auth.jwt_token = authenticator.token_;
 
   return impl_->set_authenticator(auth);
 }
