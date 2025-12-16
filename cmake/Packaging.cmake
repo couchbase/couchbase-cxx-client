@@ -84,6 +84,12 @@ add_custom_command(
 set(COUCHBASE_CXX_TARBALL_THIRD_PARTY_GLOB_FILE ${PROJECT_SOURCE_DIR}/cmake/tarball_glob.txt)
 
 if(COUCHBASE_CXX_RECORD_BUILD_INFO_FOR_TARBALL)
+  if(CPM_USE_NAMED_CACHE_DIRECTORIES)
+    get_filename_component(opentelemetry_SOURCE_DIR_PARENT "${opentelemetry_SOURCE_DIR}" DIRECTORY)
+    get_filename_component(opentelemetry_CPM_HASH "${opentelemetry_SOURCE_DIR_PARENT}" NAME)
+  else()
+    get_filename_component(opentelemetry_CPM_HASH "${opentelemetry_SOURCE_DIR}" NAME)
+  endif()
   file(
     WRITE "${CMAKE_SOURCE_DIR}/cmake/TarballRelease.cmake"
     "
@@ -91,6 +97,7 @@ set(CPM_DOWNLOAD_ALL OFF CACHE BOOL \"\" FORCE)
 set(CPM_USE_NAMED_CACHE_DIRECTORIES ON CACHE BOOL \"\" FORCE)
 set(CPM_USE_LOCAL_PACKAGES OFF CACHE BOOL \"\" FORCE)
 set(CPM_SOURCE_CACHE \"\${PROJECT_SOURCE_DIR}/third_party_cache\" CACHE STRING \"\" FORCE)
+set(OTELCPP_PROTO_PATH \"\${PROJECT_SOURCE_DIR}/third_party_cache/opentelemetry/${opentelemetry_CPM_HASH}/opentelemetry/third_party/opentelemetry-proto\" CACHE STRING \"\" FORCE)
 set(COUCHBASE_CXX_CLIENT_GIT_REVISION \"${COUCHBASE_CXX_CLIENT_GIT_REVISION}\")
 set(COUCHBASE_CXX_CLIENT_GIT_DESCRIBE \"${COUCHBASE_CXX_CLIENT_GIT_DESCRIBE}\")
 set(COUCHBASE_CXX_CLIENT_BUILD_TIMESTAMP \"${COUCHBASE_CXX_CLIENT_BUILD_TIMESTAMP}\")
@@ -117,8 +124,26 @@ add_custom_command(
     -DCOUCHBASE_CXX_CLIENT_INSTALL=ON -DCOUCHBASE_CXX_RECORD_BUILD_INFO_FOR_TARBALL=ON
   COMMAND
     ${XARGS} --arg-file=${COUCHBASE_CXX_TARBALL_THIRD_PARTY_GLOB_FILE} -I {} find
-    "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/cache" -wholename "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/cache/{}"
-    -type f | grep -v "crypto_test_data\\|googletest" | uniq >
+    "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/cache" -wholename "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/cache/{}" -type f
+    | grep -v
+        -e "/benchmark"
+        -e "/opentelemetry.*/functional"
+        -e "/opentelemetry.*/install"
+        -e "/opentelemetry.*/test"
+        -e "/opentelemetry/examples"
+        -e "/opentelemetry/docker"
+        -e "/opentelemetry/exporters/elasticsearch"
+        -e "/opentelemetry/exporters/etw"
+        -e "/opentelemetry/exporters/prometheus"
+        -e "/opentelemetry/exporters/zipkin"
+        -e "/opentelemetry/opentracing-.*"
+        -e "/opentelemetry/third_party/ms-gsl"
+        -e "/opentelemetry/third_party/nlohmann-json"
+        -e "/opentelemetry/third_party/prometheus-cpp"
+        -e "/opentelemetry/tools"
+        -e "crypto_test_data"
+        -e "googletest"
+    | uniq >
     "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/third_party_manifest.txt"
   COMMAND ${CMAKE_COMMAND} -E make_directory "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/filtered_cache"
   COMMAND ${XARGS} --arg-file="${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/third_party_manifest.txt" -I {} ${CP} --parents
@@ -263,7 +288,7 @@ if(COUCHBASE_CXX_CLIENT_RPM_TARGETS)
   set(COUCHBASE_CXX_CLIENT_SPEC "${PROJECT_BINARY_DIR}/packaging/couchbase-cxx-client.spec")
   configure_file(${PROJECT_SOURCE_DIR}/cmake/couchbase-cxx-client.spec.in "${COUCHBASE_CXX_CLIENT_SPEC}" @ONLY)
 
-  set(COUCHBASE_CXX_CLIENT_DEFAULT_ROOT "rocky-9-${CMAKE_SYSTEM_PROCESSOR}")
+  set(COUCHBASE_CXX_CLIENT_DEFAULT_ROOT "rocky+epel-9-${CMAKE_SYSTEM_PROCESSOR}")
   set(COUCHBASE_CXX_CLIENT_RPM_NAME
       "couchbase-cxx-client-${COUCHBASE_CXX_CLIENT_PACKAGE_VERSION}-${COUCHBASE_CXX_CLIENT_PACKAGE_RELEASE}")
   set(COUCHBASE_CXX_CLIENT_SRPM "${PROJECT_BINARY_DIR}/packaging/srpm/${COUCHBASE_CXX_CLIENT_RPM_NAME}.el9.src.rpm")
@@ -282,13 +307,14 @@ if(COUCHBASE_CXX_CLIENT_RPM_TARGETS)
     APPEND
     COUCHBASE_CXX_CLIENT_SUPPORTED_ROOTS
     "opensuse-leap-15.6-${CMAKE_SYSTEM_PROCESSOR}"
-    "rocky-10-${CMAKE_SYSTEM_PROCESSOR}"
-    "rocky-9-${CMAKE_SYSTEM_PROCESSOR}"
+    "rocky+epel-10-${CMAKE_SYSTEM_PROCESSOR}"
+    "rocky+epel-9-${CMAKE_SYSTEM_PROCESSOR}"
     "rocky-8-${CMAKE_SYSTEM_PROCESSOR}"
     "amazonlinux-2023-${CMAKE_SYSTEM_PROCESSOR}"
     "fedora-43-${CMAKE_SYSTEM_PROCESSOR}"
     "fedora-42-${CMAKE_SYSTEM_PROCESSOR}"
-    "fedora-41-${CMAKE_SYSTEM_PROCESSOR}")
+    "fedora-41-${CMAKE_SYSTEM_PROCESSOR}"
+)
 
   message(STATUS "Supported build roots for RPM packages: ${COUCHBASE_CXX_CLIENT_SUPPORTED_ROOTS}")
 
