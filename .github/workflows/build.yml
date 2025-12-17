@@ -1,4 +1,4 @@
-name: windows
+name: build
 permissions: {}
 
 on:
@@ -16,7 +16,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-26, macos-15, macos-14]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ github.job }}-${{ matrix.os }}
+      - name: Build tests
+        timeout-minutes: 40
+        env:
+          CB_NUMBER_OF_JOBS: 8
+        run: ./bin/build-tests
+  windows:
     strategy:
       fail-fast: false
       matrix:
