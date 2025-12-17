@@ -444,6 +444,7 @@ set(couchbase_cxx_client_FILES
     core/utils/url_codec.cxx
     core/view_query_options.cxx
     core/websocket_codec.cxx
+    core/cluster_label_listener.cxx
 )
 
 set(couchbase_cxx_client_LIBRARIES)
