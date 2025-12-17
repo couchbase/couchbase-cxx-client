@@ -1118,7 +1118,11 @@ fail(std::string_view message)
 {
   fmt::print(stderr, "ERROR: {}\n", message);
 
+#if defined(__APPLE__) && (__MAC_OS_X_VERSION_MAX_ALLOWED < 150000)
+  std::_Exit(EXIT_FAILURE);
+#else
   std::quick_exit(EXIT_FAILURE);
+#endif
 }
 
 auto
