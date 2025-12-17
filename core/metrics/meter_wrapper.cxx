@@ -22,8 +22,11 @@
 #include "core/metrics/constants.hxx"
 #include "core/tracing/constants.hxx"
 
-#include <mutex>
+#include <map>
+#include <memory>
+#include <string>
 #include <system_error>
+#include <utility>
 
 namespace couchbase::core::metrics
 {
@@ -86,7 +89,7 @@ get_standardized_error_type(std::error_code ec) -> std::string
   };
 
   if (std::any_of(
-        cb_categories.begin(), cb_categories.end(), [&ec](const std::error_category* cat) {
+        cb_categories.begin(), cb_categories.end(), [&ec](const std::error_category* cat) -> bool {
           return &ec.category() == cat;
         })) {
     return snake_case_to_camel_case(extract_error_name(ec));

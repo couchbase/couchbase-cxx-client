@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "deprecation_utils.hxx"
 #include "diagnostics.hxx"
 #include "error.hxx"
 #include "operations_fwd.hxx"
@@ -143,8 +144,10 @@ public:
   void execute(o::replace_request_with_legacy_durability request,
                mf<void(o::replace_response)>&& handler) const;
 
-  [[deprecated("Views are deprecated in Couchbase Server 7.0+. Instead of views, use the Query "
-               "Service (SQL++).")]]
+  COUCHBASE_DEPRECATED(
+    "1.3.0",
+    "Views are deprecated in Couchbase Server 7.0+. Instead of views, use the Query "
+    "Service (SQL++).")
   void execute(o::document_view_request request,
                mf<void(o::document_view_response)>&& handler) const;
   void execute(o::http_noop_request request, mf<void(o::http_noop_response)>&& handler) const;
