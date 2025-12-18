@@ -55,10 +55,10 @@ tracer_wrapper::create_span(std::string span_name,
 
   auto [cluster_name, cluster_uuid] = cluster_label_listener_->cluster_labels();
   if (cluster_name) {
-    span->add_tag(attributes::common::cluster_name, std::move(cluster_name.value()));
+    span->add_tag(attributes::common::cluster_name, cluster_name.value());
   }
   if (cluster_uuid) {
-    span->add_tag(attributes::common::cluster_uuid, std::move(cluster_uuid.value()));
+    span->add_tag(attributes::common::cluster_uuid, cluster_uuid.value());
   }
 
   return span;
