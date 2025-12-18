@@ -33,4 +33,11 @@ ClientBackend::start() -> std::pair<error, std::string_view>
   client_message = header;
   return { error::OK, client_message };
 }
+
+auto
+ClientBackend::step(std::string_view /*input*/) -> std::pair<error, std::string_view>
+{
+  throw std::logic_error("ClientBackend::step(): OAUTHBEARER auth should not call step");
+}
+
 } // namespace couchbase::core::sasl::mechanism::oauthbearer
