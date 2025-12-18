@@ -39,7 +39,7 @@ public:
 
   auto start() -> std::pair<error, std::string_view> override;
 
-  auto start() -> std::pair<error, std::string_view> override;
+  auto step(std::string_view) -> std::pair<error, std::string_view> override;
 
 private:
   std::string client_message;

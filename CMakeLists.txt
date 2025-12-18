@@ -399,7 +399,7 @@ set(couchbase_cxx_client_FILES
     core/sasl/oauthbearer/oauthbearer.cc
     core/sasl/plain/plain.cc
     core/sasl/scram-sha/scram-sha.cc
-    core/sasl/stringutils.cc
+    core/sasl/scram-sha/stringutils.cc
     core/scan_result.cxx
     core/search_query_options.cxx
     core/seed_config.cxx

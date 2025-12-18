@@ -22,7 +22,7 @@
 #include "core/platform/base64.h"
 #include "core/platform/random.h"
 #include "core/platform/string_hex.h"
-#include "core/sasl/stringutils.h"
+#include "stringutils.h"
 
 #include <cstring>
 #include <iostream>
