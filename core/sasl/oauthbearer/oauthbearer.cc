@@ -16,8 +16,6 @@
 
 #include "oauthbearer.h"
 
-#include "core/sasl/stringutils.h"
-
 #include <spdlog/fmt/bundled/core.h>
 
 namespace couchbase::core::sasl::mechanism::oauthbearer
