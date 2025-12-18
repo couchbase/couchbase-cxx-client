@@ -39,10 +39,7 @@ public:
 
   auto start() -> std::pair<error, std::string_view> override;
 
-  std::pair<error, std::string_view> step(std::string_view) override
-  {
-    throw std::logic_error("ClientBackend::step(): OAUTHBEARER auth should not call step");
-  }
+  auto start() -> std::pair<error, std::string_view> override;
 
 private:
   std::string client_message;
