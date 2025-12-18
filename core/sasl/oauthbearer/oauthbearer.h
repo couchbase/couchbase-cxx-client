@@ -32,7 +32,7 @@ public:
   {
   }
 
-  [[nodiscard]] std::string_view get_name() const override
+  [[nodiscard]] auto get_name() const -> std::string_view override
   {
     return "OAUTHBEARER";
   }
