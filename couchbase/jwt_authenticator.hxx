@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2020-2021 Couchbase, Inc.
+ *   Copyright 2020-Present Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -15,31 +15,24 @@
  *   limitations under the License.
  */
 
-#include "cluster_credentials.hxx"
+#pragma once
 
-namespace couchbase::core
-{
-auto
-cluster_credentials::uses_certificate() const -> bool
-{
-  return !certificate_path.empty();
-}
+#include <string>
 
-auto
-cluster_credentials::requires_tls() const -> bool
+namespace couchbase
 {
-  return uses_certificate() || uses_jwt();
-}
+class jwt_authenticator
+{
+public:
+  explicit jwt_authenticator(std::string token)
+    : token_{ std::move(token) }
+  {
+  }
 
-auto
-cluster_credentials::uses_jwt() const -> bool
-{
-  return !jwt_token.empty();
-}
+private:
+  std::string token_;
 
-auto
-cluster_credentials::uses_password() const -> bool
-{
-  return !username.empty() && !password.empty();
-}
-} // namespace couchbase::core
+  friend class cluster_options;
+  friend class cluster;
+};
+} // namespace couchbase

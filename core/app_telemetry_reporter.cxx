@@ -426,9 +426,17 @@ public:
 private:
   auto build_handshake_message() -> std::vector<std::byte>
   {
-    auto credentials = fmt::format("{}:{}", credentials_.username, credentials_.password);
+    std::string auth{};
+    if (credentials_.uses_jwt()) {
+      auth = fmt::format("Bearer {}", credentials_.jwt_token);
+    } else {
+      auto credentials = fmt::format("{}:{}", credentials_.username, credentials_.password);
+      auth = fmt::format(
+        "Basic {}",
+        base64::encode(gsl::as_bytes(gsl::span{ credentials.data(), credentials.size() })));
+    }
     auto message = fmt::format("GET {} HTTP/1.1\r\n"
-                               "Authorization: Basic {}\r\n"
+                               "Authorization: {}\r\n"
                                "Upgrade: websocket\r\n"
                                "Connection: Upgrade\r\n"
                                "Host: {}:{}\r\n"
@@ -436,10 +444,7 @@ private:
                                "Sec-WebSocket-Key: {}\r\n"
                                "\r\n",
                                address_.path,
-                               base64::encode(gsl::as_bytes(gsl::span{
-                                 credentials.data(),
-                                 credentials.size(),
-                               })),
+                               auth,
                                address_.hostname,
                                address_.service,
                                codec_.session_key());

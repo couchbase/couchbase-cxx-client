@@ -396,6 +396,7 @@ set(couchbase_cxx_client_FILES
     core/sasl/client.cc
     core/sasl/context.cc
     core/sasl/mechanism.cc
+    core/sasl/oauthbearer/oauthbearer.cc
     core/sasl/plain/plain.cc
     core/sasl/scram-sha/scram-sha.cc
     core/sasl/scram-sha/stringutils.cc

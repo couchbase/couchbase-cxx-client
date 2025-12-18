@@ -30,7 +30,8 @@ enum class Mechanism {
   SCRAM_SHA512,
   SCRAM_SHA256,
   SCRAM_SHA1,
-  PLAIN
+  PLAIN,
+  OAUTHBEARER,
 };
 
 class unknown_mechanism : public std::invalid_argument

@@ -3,6 +3,7 @@ add_library(
   client.cc
   context.cc
   mechanism.cc
+  oauthbearer/oauthbearer.cc
   plain/plain.cc
   scram-sha/scram-sha.cc
   scram-sha/stringutils.cc)

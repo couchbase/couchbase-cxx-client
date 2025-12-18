@@ -17,6 +17,7 @@
 
 #include "client.h"
 
+#include "core/sasl/oauthbearer/oauthbearer.h"
 #include "core/sasl/plain/plain.h"
 #include "core/sasl/scram-sha/scram-sha.h"
 
@@ -43,6 +44,11 @@ ClientContext::ClientContext(GetUsernameCallback user_cb,
       break;
     case Mechanism::PLAIN:
       backend = std::make_unique<mechanism::plain::ClientBackend>(user_cb, password_cb, *this);
+      break;
+    case Mechanism::OAUTHBEARER:
+      backend =
+        std::make_unique<mechanism::oauthbearer::ClientBackend>(user_cb, password_cb, *this);
+      break;
   }
 
   if (!backend) {

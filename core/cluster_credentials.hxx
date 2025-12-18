@@ -28,10 +28,13 @@ struct cluster_credentials {
   std::string password{};
   std::string certificate_path{};
   std::string key_path{};
+  std::string jwt_token{};
   std::optional<std::vector<std::string>> allowed_sasl_mechanisms{};
 
   [[nodiscard]] auto uses_certificate() const -> bool;
   [[nodiscard]] auto requires_tls() const -> bool;
+  [[nodiscard]] auto uses_jwt() const -> bool;
+  [[nodiscard]] auto uses_password() const -> bool;
 };
 
 } // namespace couchbase::core
