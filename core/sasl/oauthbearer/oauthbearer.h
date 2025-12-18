@@ -17,7 +17,6 @@
 #pragma once
 
 #include "core/sasl/client.h"
-#include "core/sasl/mechanism.h"
 
 /// Extremely simple prototype of an OAUTHBEARER mechanism as
 /// desceribed in https://datatracker.ietf.org/doc/html/rfc7628 and
