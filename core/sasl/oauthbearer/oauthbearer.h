@@ -37,7 +37,7 @@ public:
     return "OAUTHBEARER";
   }
 
-  std::pair<error, std::string_view> start() override;
+  auto start() -> std::pair<error, std::string_view> override;
 
   std::pair<error, std::string_view> step(std::string_view) override
   {
