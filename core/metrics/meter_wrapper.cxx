@@ -22,8 +22,11 @@
 #include "core/metrics/constants.hxx"
 #include "core/tracing/constants.hxx"
 
-#include <mutex>
+#include <map>
+#include <memory>
+#include <string>
 #include <system_error>
+#include <utility>
 
 namespace couchbase::core::metrics
 {
@@ -86,7 +89,7 @@ get_standardized_error_type(std::error_code ec) -> std::string
   };
 
   if (std::any_of(
-        cb_categories.begin(), cb_categories.end(), [&ec](const std::error_category* cat) {
+        cb_categories.begin(), cb_categories.end(), [&ec](const std::error_category* cat) -> bool {
           return &ec.category() == cat;
         })) {
     return snake_case_to_camel_case(extract_error_name(ec));
@@ -127,8 +130,10 @@ metric_attributes::encode() const -> std::map<std::string, std::string>
   return tags;
 }
 
-meter_wrapper::meter_wrapper(std::shared_ptr<couchbase::metrics::meter> meter)
+meter_wrapper::meter_wrapper(std::shared_ptr<couchbase::metrics::meter> meter,
+                             std::shared_ptr<cluster_label_listener> label_listener)
   : meter_{ std::move(meter) }
+  , cluster_label_listener_{ std::move(label_listener) }
 {
 }
 
@@ -148,15 +153,12 @@ void
 meter_wrapper::record_value(metric_attributes attrs,
                             std::chrono::steady_clock::time_point start_time)
 {
-  {
-    const std::shared_lock lock{ cluster_labels_mutex_ };
-
-    if (cluster_name_) {
-      attrs.internal.cluster_name = cluster_name_;
-    }
-    if (cluster_uuid_) {
-      attrs.internal.cluster_uuid = cluster_uuid_;
-    }
+  auto [cluster_name, cluster_uuid] = cluster_label_listener_->cluster_labels();
+  if (cluster_name) {
+    attrs.internal.cluster_name = cluster_name;
+  }
+  if (cluster_uuid) {
+    attrs.internal.cluster_uuid = cluster_uuid;
   }
 
   meter_->get_value_recorder(operation_meter_name, attrs.encode())
@@ -165,22 +167,11 @@ meter_wrapper::record_value(metric_attributes attrs,
                      .count());
 }
 
-void
-meter_wrapper::update_config(topology::configuration config)
-{
-  const std::scoped_lock<std::shared_mutex> lock{ cluster_labels_mutex_ };
-  if (config.cluster_uuid.has_value()) {
-    cluster_uuid_ = config.cluster_uuid;
-  }
-  if (config.cluster_name.has_value()) {
-    cluster_name_ = config.cluster_name;
-  }
-}
-
 auto
-meter_wrapper::create(std::shared_ptr<couchbase::metrics::meter> meter)
+meter_wrapper::create(std::shared_ptr<couchbase::metrics::meter> meter,
+                      std::shared_ptr<cluster_label_listener> label_listener)
   -> std::shared_ptr<meter_wrapper>
 {
-  return std::make_shared<meter_wrapper>(std::move(meter));
+  return std::make_shared<meter_wrapper>(std::move(meter), std::move(label_listener));
 }
 } // namespace couchbase::core::metrics

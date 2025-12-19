@@ -26,9 +26,10 @@
 #include <chrono>
 #include <map>
 #include <optional>
-#include <shared_mutex>
 #include <string>
 #include <system_error>
+
+#include "core/cluster_label_listener.hxx"
 
 namespace couchbase::core::metrics
 {
@@ -48,26 +49,23 @@ struct metric_attributes {
   [[nodiscard]] auto encode() const -> std::map<std::string, std::string>;
 };
 
-class meter_wrapper : public config_listener
+class meter_wrapper
 {
 public:
-  explicit meter_wrapper(std::shared_ptr<couchbase::metrics::meter> meter);
+  explicit meter_wrapper(std::shared_ptr<couchbase::metrics::meter> meter,
+                         std::shared_ptr<cluster_label_listener> label_listener);
 
   void start();
   void stop();
 
   void record_value(metric_attributes attrs, std::chrono::steady_clock::time_point start_time);
 
-  void update_config(topology::configuration config) override;
-
-  [[nodiscard]] static auto create(std::shared_ptr<couchbase::metrics::meter> meter)
+  [[nodiscard]] static auto create(std::shared_ptr<couchbase::metrics::meter> meter,
+                                   std::shared_ptr<cluster_label_listener> label_listener)
     -> std::shared_ptr<meter_wrapper>;
 
 private:
   std::shared_ptr<couchbase::metrics::meter> meter_;
-
-  std::optional<std::string> cluster_name_{};
-  std::optional<std::string> cluster_uuid_{};
-  std::shared_mutex cluster_labels_mutex_{};
+  std::shared_ptr<cluster_label_listener> cluster_label_listener_;
 };
 } // namespace couchbase::core::metrics

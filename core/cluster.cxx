@@ -39,6 +39,7 @@
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
 #include "core/io/config_tracker.hxx"
 #endif
+#include "cluster_label_listener.hxx"
 #include "core/logger/logger.hxx"
 #include "core/management/analytics_link_azure_blob_external.hxx"
 #include "core/management/analytics_link_couchbase_remote.hxx"
@@ -578,8 +579,7 @@ public:
         buckets_.try_emplace(bucket_name, b);
 
         // Register the tracer & the meter for config updates to track Cluster name & UUID
-        b->on_configuration_update(tracer_);
-        b->on_configuration_update(meter_);
+        b->on_configuration_update(cluster_label_listener_);
         b->on_configuration_update(app_telemetry_reporter_);
       }
     }
@@ -855,11 +855,9 @@ public:
         self->session_manager_->set_configuration(config, self->origin_.options());
         self->session_->on_configuration_update(self->session_manager_);
         self->session_->on_configuration_update(self->app_telemetry_reporter_);
-        self->session_->on_configuration_update(self->tracer_);
-        self->session_->on_configuration_update(self->meter_);
+        self->session_->on_configuration_update(self->cluster_label_listener_);
         self->app_telemetry_reporter_->update_config(config);
-        self->tracer_->update_config(config);
-        self->meter_->update_config(config);
+        self->cluster_label_listener_->update_config(config);
         self->session_->on_stop([self]() {
           if (self->session_) {
             self->session_.reset();
@@ -1272,31 +1270,40 @@ public:
     return meter_;
   }
 
+  auto cluster_label_listener() -> const std::shared_ptr<cluster_label_listener>&
+  {
+    return cluster_label_listener_;
+  }
+
 private:
   void setup_observability()
   {
     // ignore the enable_tracing flag if a tracer was passed in
     if (nullptr != origin_.options().tracer) {
-      tracer_ = tracing::tracer_wrapper::create(origin_.options().tracer);
+      tracer_ = tracing::tracer_wrapper::create(origin_.options().tracer, cluster_label_listener_);
     } else {
       if (origin_.options().enable_tracing) {
         tracer_ =
           tracing::tracer_wrapper::create(std::make_shared<tracing::threshold_logging_tracer>(
-            ctx_, origin_.options().tracing_options));
+                                            ctx_, origin_.options().tracing_options),
+                                          cluster_label_listener_);
       } else {
-        tracer_ = tracing::tracer_wrapper::create(std::make_shared<tracing::noop_tracer>());
+        tracer_ = tracing::tracer_wrapper::create(std::make_shared<tracing::noop_tracer>(),
+                                                  cluster_label_listener_);
       }
     }
     tracer_->start();
     // ignore the metrics options if a meter was passed in.
     if (nullptr != origin_.options().meter) {
-      meter_ = metrics::meter_wrapper::create(origin_.options().meter);
+      meter_ = metrics::meter_wrapper::create(origin_.options().meter, cluster_label_listener_);
     } else {
       if (origin_.options().enable_metrics) {
         meter_ = metrics::meter_wrapper::create(
-          std::make_shared<metrics::logging_meter>(ctx_, origin_.options().metrics_options));
+          std::make_shared<metrics::logging_meter>(ctx_, origin_.options().metrics_options),
+          cluster_label_listener_);
       } else {
-        meter_ = metrics::meter_wrapper::create(std::make_shared<metrics::noop_meter>());
+        meter_ = metrics::meter_wrapper::create(std::make_shared<metrics::noop_meter>(),
+                                                cluster_label_listener_);
       }
     }
     meter_->start();
@@ -1339,6 +1346,9 @@ private:
   std::mutex buckets_mutex_{};
   std::map<std::string, std::shared_ptr<bucket>> buckets_{};
   couchbase::core::origin origin_{};
+  std::shared_ptr<class cluster_label_listener> cluster_label_listener_{
+    std::make_shared<class cluster_label_listener>()
+  };
   std::shared_ptr<tracing::tracer_wrapper> tracer_{ nullptr };
   std::shared_ptr<metrics::meter_wrapper> meter_{ nullptr };
   std::shared_ptr<orphan_reporter> orphan_reporter_{ nullptr };
@@ -2497,6 +2507,12 @@ auto
 cluster::meter() const -> const std::shared_ptr<metrics::meter_wrapper>&
 {
   return impl_->meter();
+}
+
+auto
+cluster::cluster_label_listener() const -> const std::shared_ptr<core::cluster_label_listener>&
+{
+  return impl_->cluster_label_listener();
 }
 
 } // namespace couchbase::core

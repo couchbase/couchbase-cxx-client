@@ -236,27 +236,23 @@ void
 assert_kv_op_span_ok(test::utils::integration_test_guard& guard,
                      const std::shared_ptr<test_span>& span,
                      const std::string& op,
-                     std::shared_ptr<test_span> parent = nullptr,
+                     const std::shared_ptr<test_span>& parent = nullptr,
                      bool is_top_level_span = true,
                      bool must_have_dispatch_spans = true)
 {
   assert_span_ok(guard, span, is_top_level_span, parent);
 
-  auto string_tags = span->string_tags();
-  auto int_tags = span->int_tags();
-
   const std::size_t expected_tag_count =
     (guard.cluster_version().supports_cluster_labels()) ? 9 : 7;
-
-  REQUIRE(string_tags.size() + int_tags.size() == expected_tag_count);
+  REQUIRE(span->string_tags().size() + span->int_tags().size() == expected_tag_count);
 
   REQUIRE(op == span->name());
-  REQUIRE(string_tags["couchbase.service"] == "kv");
-  REQUIRE(string_tags["db.namespace"] == guard.ctx.bucket);
-  REQUIRE(string_tags["couchbase.scope.name"] == "_default");
-  REQUIRE(string_tags["couchbase.collection.name"] == "_default");
-  REQUIRE(string_tags["db.operation.name"] == op);
-  REQUIRE(int_tags.find("couchbase.retries") != int_tags.end());
+  REQUIRE(span->string_tags()["couchbase.service"] == "kv");
+  REQUIRE(span->string_tags()["db.namespace"] == guard.ctx.bucket);
+  REQUIRE(span->string_tags()["couchbase.scope.name"] == "_default");
+  REQUIRE(span->string_tags()["couchbase.collection.name"] == "_default");
+  REQUIRE(span->string_tags()["db.operation.name"] == op);
+  REQUIRE(span->int_tags().count("couchbase.retries") != 0);
 
   // There must be at least one dispatch span
   auto dispatch_spans = span->child_spans("dispatch_to_server");
@@ -274,7 +270,7 @@ assert_compound_kv_op_span_ok(test::utils::integration_test_guard& guard,
                               const std::shared_ptr<test_span>& span,
                               const std::string& op,
                               const std::map<std::string, std::size_t>& child_ops,
-                              std::shared_ptr<test_span> parent = nullptr,
+                              const std::shared_ptr<test_span>& parent = nullptr,
                               bool is_any_replica = false)
 {
   assert_span_ok(guard, span, true, parent);
@@ -336,37 +332,34 @@ assert_http_op_span_ok(test::utils::integration_test_guard& guard,
                        const std::optional<std::string>& expected_bucket_name,
                        const std::optional<std::string>& expected_scope_name,
                        const std::optional<std::string>& expected_collection_name,
-                       std::shared_ptr<test_span> parent = nullptr,
+                       const std::shared_ptr<test_span>& parent = nullptr,
                        bool is_top_level_op_span = true)
 {
-  assert_span_ok(guard, span, is_top_level_op_span, std::move(parent));
-
-  auto string_tags = span->string_tags();
-  auto int_tags = span->int_tags();
+  assert_span_ok(guard, span, is_top_level_op_span, parent);
 
   REQUIRE(span->name().find(op) != std::string::npos);
-  REQUIRE(string_tags["db.operation.name"] == op);
-  REQUIRE(int_tags.find("couchbase.retries") != int_tags.end());
+  REQUIRE(span->string_tags()["db.operation.name"] == op);
+  REQUIRE(span->int_tags().count("couchbase.retries") != 0);
   REQUIRE(span->duration().count() > 0);
   if (expected_service.has_value()) {
-    REQUIRE(string_tags["couchbase.service"] == expected_service.value());
+    REQUIRE(span->string_tags()["couchbase.service"] == expected_service.value());
   } else {
-    REQUIRE(string_tags.count("couchbase.service") == 0);
+    REQUIRE(span->string_tags().count("couchbase.service") == 0);
   }
   if (expected_bucket_name.has_value()) {
-    REQUIRE(string_tags["db.namespace"] == expected_bucket_name.value());
+    REQUIRE(span->string_tags()["db.namespace"] == expected_bucket_name.value());
   } else {
-    REQUIRE(string_tags.count("db.namespace") == 0);
+    REQUIRE(span->string_tags().count("db.namespace") == 0);
   }
   if (expected_scope_name.has_value()) {
-    REQUIRE(string_tags["couchbase.scope.name"] == expected_scope_name.value());
+    REQUIRE(span->string_tags()["couchbase.scope.name"] == expected_scope_name.value());
   } else {
-    REQUIRE(string_tags.count("couchbase.scope.name") == 0);
+    REQUIRE(span->string_tags().count("couchbase.scope.name") == 0);
   }
   if (expected_collection_name.has_value()) {
-    REQUIRE(string_tags["couchbase.collection.name"] == expected_collection_name.value());
+    REQUIRE(span->string_tags()["couchbase.collection.name"] == expected_collection_name.value());
   } else {
-    REQUIRE(string_tags.count("couchbase.collection.name") == 0);
+    REQUIRE(span->string_tags().count("couchbase.collection.name") == 0);
   }
 
   // There must be at least one dispatch span

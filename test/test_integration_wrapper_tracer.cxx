@@ -17,7 +17,9 @@
 
 #include "test_helper_integration.hxx"
 
+#include "core/cluster_label_listener.hxx"
 #include "core/operations/document_get.hxx"
+#include "core/operations/management/freeform.hxx"
 #include "core/tracing/wrapper_sdk_tracer.hxx"
 
 TEST_CASE("integration: wrappers can get dispatch spans using a parent wrapper span",
@@ -37,4 +39,34 @@ TEST_CASE("integration: wrappers can get dispatch spans using a parent wrapper s
   REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_found);
   REQUIRE(root_span->children().size() == 1);
   REQUIRE(root_span->children().front()->name() == "dispatch_to_server");
+}
+
+TEST_CASE("integration: cluster label listener can be used to get cluster labels", "[integration]")
+{
+  test::utils::integration_test_guard integration{};
+
+  const auto [cluster_name, cluster_uuid] =
+    integration.cluster.cluster_label_listener()->cluster_labels();
+
+  if (integration.ctx.version.supports_cluster_labels()) {
+    REQUIRE(cluster_name.has_value());
+    REQUIRE(cluster_uuid.has_value());
+
+    couchbase::core::operations::management::freeform_request bucket_cfg_req{
+      couchbase::core::service_type::management,
+      "GET",
+      "/pools/default/b/" + integration.ctx.bucket,
+    };
+    const auto bucket_cfg_resp = test::utils::execute(integration.cluster, bucket_cfg_req);
+
+    REQUIRE_SUCCESS(bucket_cfg_resp.ctx.ec);
+
+    const auto bucket_cfg = couchbase::core::utils::json::parse(bucket_cfg_resp.body);
+
+    REQUIRE(bucket_cfg.at("clusterName").get_string() == cluster_name.value());
+    REQUIRE(bucket_cfg.at("clusterUUID").get_string() == cluster_uuid.value());
+  } else {
+    REQUIRE_FALSE(cluster_name.has_value());
+    REQUIRE_FALSE(cluster_uuid.has_value());
+  }
 }

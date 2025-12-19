@@ -17,8 +17,7 @@
 
 #pragma once
 
-#include "core/config_listener.hxx"
-#include "core/topology/configuration.hxx"
+#include "core/cluster_label_listener.hxx"
 
 #include <couchbase/tracing/request_span.hxx>
 #include <couchbase/tracing/request_tracer.hxx>
@@ -30,10 +29,11 @@
 
 namespace couchbase::core::tracing
 {
-class tracer_wrapper : public config_listener
+class tracer_wrapper
 {
 public:
-  explicit tracer_wrapper(std::shared_ptr<couchbase::tracing::request_tracer> tracer);
+  explicit tracer_wrapper(std::shared_ptr<couchbase::tracing::request_tracer> tracer,
+                          std::shared_ptr<cluster_label_listener> label_listener);
 
   void start();
   void stop();
@@ -42,16 +42,12 @@ public:
                    std::shared_ptr<couchbase::tracing::request_span> parent_span)
     -> std::shared_ptr<couchbase::tracing::request_span>;
 
-  void update_config(topology::configuration config) override;
-
-  [[nodiscard]] static auto create(std::shared_ptr<couchbase::tracing::request_tracer> tracer)
+  [[nodiscard]] static auto create(std::shared_ptr<couchbase::tracing::request_tracer> tracer,
+                                   std::shared_ptr<cluster_label_listener> label_listener)
     -> std::shared_ptr<tracer_wrapper>;
 
 private:
   std::shared_ptr<couchbase::tracing::request_tracer> tracer_;
-
-  std::optional<std::string> cluster_name_{};
-  std::optional<std::string> cluster_uuid_{};
-  std::shared_mutex cluster_labels_mutex_{};
+  std::shared_ptr<couchbase::core::cluster_label_listener> cluster_label_listener_;
 };
 } // namespace couchbase::core::tracing

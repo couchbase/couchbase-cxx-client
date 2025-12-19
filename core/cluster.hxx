@@ -39,6 +39,7 @@ namespace couchbase::core
 {
 class crud_component;
 class cluster_impl;
+class cluster_label_listener;
 
 namespace tracing
 {
@@ -142,6 +143,7 @@ public:
                mf<void(o::remove_response)>&& handler) const;
   void execute(o::replace_request_with_legacy_durability request,
                mf<void(o::replace_response)>&& handler) const;
+
   COUCHBASE_DEPRECATED(
     "1.3.0",
     "Views are deprecated in Couchbase Server 7.0+. Instead of views, use the Query "
@@ -339,6 +341,8 @@ public:
 
   [[nodiscard]] auto tracer() const -> const std::shared_ptr<tracing::tracer_wrapper>&;
   [[nodiscard]] auto meter() const -> const std::shared_ptr<metrics::meter_wrapper>&;
+  [[nodiscard]] auto cluster_label_listener() const
+    -> const std::shared_ptr<cluster_label_listener>&;
 
 private:
   std::shared_ptr<cluster_impl> impl_;
