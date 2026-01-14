@@ -185,8 +185,9 @@ if(asio_ADDED)
   target_link_libraries(asio PRIVATE Threads::Threads)
   if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
     target_link_libraries(asio PUBLIC $<TARGET_OBJECTS:ssl> $<TARGET_OBJECTS:crypto>)
+    # Add BoringSSL include directories before asio's own include directories.
     target_include_directories(
-      asio SYSTEM PRIVATE $<BUILD_INTERFACE:$<TARGET_PROPERTY:ssl,INTERFACE_INCLUDE_DIRECTORIES>>
+      asio BEFORE PRIVATE $<BUILD_INTERFACE:$<TARGET_PROPERTY:ssl,INTERFACE_INCLUDE_DIRECTORIES>>
                           $<BUILD_INTERFACE:$<TARGET_PROPERTY:crypto,INTERFACE_INCLUDE_DIRECTORIES>>)
   elseif(NOT COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL)
     target_link_libraries(asio PRIVATE OpenSSL::SSL OpenSSL::Crypto)
