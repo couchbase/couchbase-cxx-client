@@ -240,23 +240,6 @@ class mcbp_session_impl
       stopped_.compare_exchange_strong(expected_state, true);
     }
 
-    static auto sasl_mechanisms(const std::shared_ptr<mcbp_session_impl>& session)
-      -> std::vector<std::string>
-    {
-      auto credentials = session->origin_.credentials();
-      if (const auto user_mechanisms = credentials.allowed_sasl_mechanisms;
-          user_mechanisms.has_value()) {
-        return user_mechanisms.value();
-      }
-      if (credentials.uses_jwt()) {
-        return { "OAUTHBEARER" };
-      }
-      if (session->is_tls_) {
-        return { "PLAIN" };
-      }
-      return { "SCRAM-SHA512", "SCRAM-SHA256", "SCRAM-SHA1" };
-    }
-
     auto last_bootstrap_error() && -> impl::bootstrap_error
     {
       return std::move(last_bootstrap_error_);
@@ -269,18 +252,7 @@ class mcbp_session_impl
 
     explicit bootstrap_handler(std::shared_ptr<mcbp_session_impl> session)
       : session_(std::move(session))
-      , sasl_(
-          [origin = session_->origin_]() {
-            return origin.username();
-          },
-          [origin = session_->origin_]() {
-            auto credentials = origin.credentials();
-            if (credentials.uses_jwt()) {
-              return credentials.jwt_token;
-            }
-            return credentials.password;
-          },
-          sasl_mechanisms(session_))
+      , sasl_(session_->new_sasl_context())
     {
       protocol::client_request<protocol::hello_request_body> hello_req;
       if (session_->origin_.options().enable_unordered_execution) {
@@ -787,10 +759,18 @@ class mcbp_session_impl
             case protocol::client_opcode::range_scan_cancel:
             case protocol::client_opcode::decrement:
             case protocol::client_opcode::subdoc_multi_lookup:
-            case protocol::client_opcode::subdoc_multi_mutation: {
+            case protocol::client_opcode::subdoc_multi_mutation:
+            case protocol::client_opcode::sasl_auth: {
               const std::uint16_t status = utils::byte_swap(msg.header.specific);
               if (status == static_cast<std::uint16_t>(key_value_status_code::not_my_vbucket)) {
                 session_->handle_not_my_vbucket(msg);
+              }
+              if (status == static_cast<std::uint16_t>(key_value_status_code::auth_stale)) {
+                CB_LOG_WARNING("{} received auth stale status for {}, opaque={}",
+                               session_->log_prefix_,
+                               protocol::client_opcode(msg.header.opcode),
+                               utils::byte_swap(msg.header.opaque));
+                session_->stop(retry_reason::do_not_retry);
               }
 
               std::uint32_t opaque = utils::byte_swap(msg.header.opaque);
@@ -888,6 +868,7 @@ public:
     , bootstrap_deadline_(ctx_)
     , resolve_deadline_(ctx_)
     , connection_deadline_(ctx_)
+    , reauth_deadline_(ctx_)
     , retry_backoff_(ctx_)
     , ping_timeout_(ctx_)
     , origin_{ std::move(origin) }
@@ -917,6 +898,7 @@ public:
     , bootstrap_deadline_(ctx_)
     , resolve_deadline_(ctx_)
     , connection_deadline_(ctx_)
+    , reauth_deadline_(ctx_)
     , retry_backoff_(ctx_)
     , ping_timeout_(ctx_)
     , origin_(std::move(origin))
@@ -978,6 +960,38 @@ public:
              local_address(),
              state_,
              bucket_name_ };
+  }
+
+  auto sasl_mechanisms() -> std::vector<std::string>
+  {
+    auto credentials = origin_.credentials();
+    if (const auto user_mechanisms = credentials.allowed_sasl_mechanisms;
+        user_mechanisms.has_value()) {
+      return user_mechanisms.value();
+    }
+    if (credentials.uses_jwt()) {
+      return { "OAUTHBEARER" };
+    }
+    if (is_tls_) {
+      return { "PLAIN" };
+    }
+    return { "SCRAM-SHA512", "SCRAM-SHA256", "SCRAM-SHA1" };
+  }
+
+  auto new_sasl_context() -> sasl::ClientContext
+  {
+    return sasl::ClientContext(
+      [this] {
+        return origin_.username();
+      },
+      [this] {
+        auto credentials = origin_.credentials();
+        if (credentials.uses_jwt()) {
+          return credentials.jwt_token;
+        }
+        return credentials.password;
+      },
+      sasl_mechanisms());
   }
 
   void ping(const std::shared_ptr<diag::ping_reporter>& handler,
@@ -1044,6 +1058,130 @@ public:
   [[nodiscard]] auto context() const -> mcbp_context
   {
     return { config_, supported_features_ };
+  }
+
+  void reauthenticate()
+  {
+    if (!bootstrapped_ || stopped_) {
+      CB_LOG_DEBUG("{} Cannot reauthenticate as trying to reauthenticate on non-bootstrapped or "
+                   "stopped session",
+                   log_prefix_);
+      return;
+    }
+
+    if (reauth_in_progress_) {
+      CB_LOG_DEBUG("{} Attempted to reauthenticate but reauthentication already in progress",
+                   log_prefix_);
+      return;
+    }
+
+    reauth_in_progress_ = true;
+
+    auto sasl = new_sasl_context();
+    protocol::client_request<protocol::sasl_auth_request_body> req;
+    auto [sasl_code, sasl_payload] = sasl.start();
+    req.opaque(next_opaque());
+    req.body().mechanism(sasl.get_name());
+    req.body().sasl_data(sasl_payload);
+
+    CB_LOG_TRACE("{} starting reauthentication (opaque={}).", log_prefix_, req.opaque());
+
+    reauth_deadline_.expires_after(origin_.options().key_value_timeout);
+    reauth_deadline_.async_wait(
+      [self = shared_from_this(), opaque = req.opaque()](std::error_code ec) {
+        if (ec == asio::error::operation_aborted || self->stopped_) {
+          return;
+        }
+        CB_LOG_DEBUG("{} Reauthentication timed out (opaque={}).", self->log_prefix_, opaque);
+        static_cast<void>(
+          self->cancel(opaque, errc::common::ambiguous_timeout, retry_reason::do_not_retry));
+      });
+    initiate_reauthenticate(std::move(req));
+  }
+
+  void initiate_reauthenticate(protocol::client_request<protocol::sasl_auth_request_body> req)
+  {
+    write_and_subscribe(
+      req.opaque(),
+      req.data(),
+      [self = shared_from_this(),
+       req = std::move(req)](std::error_code ec,
+                             retry_reason reason,
+                             io::mcbp_message&& msg,
+                             const std::optional<key_value_error_map_info>& /* error_info */) {
+        if (ec == asio::error::operation_aborted || ec == errc::common::request_canceled) {
+          self->reauth_in_progress_ = false;
+          return;
+        }
+
+        key_value_status_code status = key_value_status_code::invalid;
+        std::optional<key_value_error_map_info> error_code;
+        if (protocol::is_valid_status(msg.header.status())) {
+          status = static_cast<key_value_status_code>(msg.header.status());
+        } else {
+          error_code = self->decode_error_code(msg.header.status());
+        }
+
+        if (status == key_value_status_code::success) {
+          self->reauth_deadline_.cancel();
+          self->reauth_in_progress_ = false;
+          CB_LOG_DEBUG(
+            "{} reauthentication succeeded (opaque={})", self->log_prefix_, req.opaque());
+          return;
+        }
+
+        if (status == key_value_status_code::auth_continue) {
+          self->reauth_deadline_.cancel();
+          self->reauth_in_progress_ = false;
+          CB_LOG_DEBUG("{} reauthentication received unexpected auth_continue (opaque={})",
+                       self->log_prefix_,
+                       req.opaque());
+          return;
+        }
+
+        if (error_code && error_code.value().has_retry_attribute()) {
+          reason = retry_reason::key_value_error_map_retry_indicated;
+        } else {
+          switch (status) {
+            case key_value_status_code::temporary_failure:
+              reason = retry_reason::key_value_temporary_failure;
+            default:
+              break;
+          }
+        }
+
+        if (reason == retry_reason::do_not_retry || reason == retry_reason::unknown) {
+          CB_LOG_WARNING("{} reauthentication failed (code={}, message={}, reason={}, opaque={})",
+                         self->log_prefix_,
+                         ec.value(),
+                         ec.message(),
+                         reason,
+                         req.opaque());
+          self->reauth_deadline_.cancel();
+          self->reauth_in_progress_ = false;
+          return;
+        }
+
+        CB_LOG_DEBUG("{} reauthentication failed (code={}, reason={}, opaque={}), scheduling retry",
+                     self->log_prefix_,
+                     ec.value(),
+                     reason,
+                     req.opaque());
+
+        auto backoff = std::chrono::milliseconds(300);
+        self->retry_backoff_.expires_after(backoff);
+        self->retry_backoff_.async_wait([self, req = req](std::error_code ec) -> void {
+          if (ec == asio::error::operation_aborted || !self->reauth_in_progress_) {
+            return;
+          }
+          self->initiate_reauthenticate(req);
+        });
+      });
+  }
+
+  void update_credentials(cluster_credentials credentials)
+  {
+    origin_.update_credentials(std::move(credentials));
   }
 
   void bootstrap(utils::movable_function<void(std::error_code, topology::configuration)>&& callback,
@@ -1243,6 +1381,7 @@ public:
     bootstrap_deadline_.cancel();
     resolve_deadline_.cancel();
     connection_deadline_.cancel();
+    reauth_deadline_.cancel();
     retry_backoff_.cancel();
     ping_timeout_.cancel();
     resolver_.cancel();
@@ -2104,6 +2243,7 @@ private:
   asio::steady_timer bootstrap_deadline_;
   asio::steady_timer resolve_deadline_;
   asio::steady_timer connection_deadline_;
+  asio::steady_timer reauth_deadline_;
   asio::steady_timer retry_backoff_;
   asio::steady_timer ping_timeout_;
   couchbase::core::origin origin_;
@@ -2121,6 +2261,7 @@ private:
 
   std::atomic_bool bootstrapped_{ false };
   std::atomic_bool stopped_{ false };
+  std::atomic_bool reauth_in_progress_{ false };
   bool authenticated_{ false };
   bool bucket_selected_{ false };
   bool supports_gcccp_{ true };
@@ -2355,6 +2496,18 @@ mcbp_session::bootstrap(
   bool retry_on_bucket_not_found)
 {
   return impl_->bootstrap(std::move(handler), retry_on_bucket_not_found);
+}
+
+void
+mcbp_session::reauthenticate()
+{
+  return impl_->reauthenticate();
+}
+
+void
+mcbp_session::update_credentials(cluster_credentials credentials)
+{
+  return impl_->update_credentials(std::move(credentials));
 }
 
 void

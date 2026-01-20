@@ -635,6 +635,14 @@ public:
     auto old_credentials = origin_.credentials();
     origin_.update_credentials(auth);
 
+    // Separately update bucket and mcbp sessions as they have their own copies of the origin
+    for_each_bucket([&auth](std::shared_ptr<bucket> bucket) {
+      bucket->update_credentials(auth);
+    });
+    for_each_mcbp_session([&auth](auto& session) {
+      session.update_credentials(auth);
+    });
+
     if (auth.requires_tls()) {
       // Recreate and atomically swap the TLS context, existing sessions should continue to use the
       // old one.
@@ -646,6 +654,12 @@ public:
         return { ec, {} };
       }
       tls_.set_ctx(new_ctx);
+    }
+
+    if (auth.uses_jwt()) {
+      for_each_mcbp_session([](auto& session) {
+        session.reauthenticate();
+      });
     }
     return {};
   }
@@ -760,6 +774,19 @@ public:
       return {};
     }
     return bucket->second;
+  }
+
+  void for_each_mcbp_session(utils::movable_function<void(io::mcbp_session&)> handler)
+  {
+    if (session_) {
+      handler(session_.value());
+    }
+
+    for_each_bucket([&handler](std::shared_ptr<bucket> bucket) {
+      bucket->for_each_session([&handler](io::mcbp_session& session) {
+        handler(session);
+      });
+    });
   }
 
   void for_each_bucket(utils::movable_function<void(std::shared_ptr<bucket>)> handler)
