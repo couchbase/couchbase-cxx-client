@@ -636,7 +636,7 @@ public:
     origin_.update_credentials(auth);
 
     // Separately update bucket and mcbp sessions as they have their own copies of the origin
-    for_each_bucket([&auth](std::shared_ptr<bucket> bucket) {
+    for_each_bucket([&auth](const std::shared_ptr<bucket>& bucket) {
       bucket->update_credentials(auth);
     });
     for_each_mcbp_session([&auth](auto& session) {
@@ -782,7 +782,7 @@ public:
       handler(session_.value());
     }
 
-    for_each_bucket([&handler](std::shared_ptr<bucket> bucket) {
+    for_each_bucket([&handler](const std::shared_ptr<bucket>& bucket) {
       bucket->for_each_session([&handler](io::mcbp_session& session) {
         handler(session);
       });

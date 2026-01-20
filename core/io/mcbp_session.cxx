@@ -980,18 +980,17 @@ public:
 
   auto new_sasl_context() -> sasl::ClientContext
   {
-    return sasl::ClientContext(
-      [this] {
-        return origin_.username();
-      },
-      [this] {
-        auto credentials = origin_.credentials();
-        if (credentials.uses_jwt()) {
-          return credentials.jwt_token;
-        }
-        return credentials.password;
-      },
-      sasl_mechanisms());
+    return { [this] {
+              return origin_.username();
+            },
+             [this] {
+               auto credentials = origin_.credentials();
+               if (credentials.uses_jwt()) {
+                 return credentials.jwt_token;
+               }
+               return credentials.password;
+             },
+             sasl_mechanisms() };
   }
 
   void ping(const std::shared_ptr<diag::ping_reporter>& handler,
@@ -1101,14 +1100,16 @@ public:
 
   void initiate_reauthenticate(protocol::client_request<protocol::sasl_auth_request_body> req)
   {
+    auto opaque = req.opaque();
+    auto data = req.data();
     write_and_subscribe(
-      req.opaque(),
-      req.data(),
-      [self = shared_from_this(),
-       req = std::move(req)](std::error_code ec,
-                             retry_reason reason,
-                             io::mcbp_message&& msg,
-                             const std::optional<key_value_error_map_info>& /* error_info */) {
+      opaque,
+      std::move(data),
+      [self = shared_from_this(), req = std::move(req)](
+        std::error_code ec,
+        retry_reason reason,
+        io::mcbp_message&& msg,
+        const std::optional<key_value_error_map_info>& /* error_info */) -> void {
         if (ec == asio::error::operation_aborted || ec == errc::common::request_canceled) {
           self->reauth_in_progress_ = false;
           return;
