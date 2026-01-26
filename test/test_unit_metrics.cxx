@@ -39,7 +39,7 @@ TEST_CASE("unit: metric attributes encoding", "[unit]")
 
     auto tags = attrs.encode();
 
-    REQUIRE(tags.size() == 9);
+    REQUIRE(tags.size() == 10);
     REQUIRE(tags.at("couchbase.service") == "kv");
     REQUIRE(tags.at("db.operation.name") == "get");
     REQUIRE(tags.at("db.namespace") == "test-bucket");
@@ -49,6 +49,7 @@ TEST_CASE("unit: metric attributes encoding", "[unit]")
     REQUIRE(tags.at("couchbase.cluster.name") == "test-cluster");
     REQUIRE(tags.at("couchbase.cluster.uuid") == "d476fe9c-1f66-4bf4-9c2b-9ee866fc5251");
     REQUIRE(tags.at("db.system.name") == "couchbase");
+    REQUIRE(tags.at("__unit") == "s");
   }
 
   SECTION("successful operation")
@@ -64,7 +65,7 @@ TEST_CASE("unit: metric attributes encoding", "[unit]")
 
     auto tags = attrs.encode();
 
-    REQUIRE(tags.size() == 8);
+    REQUIRE(tags.size() == 9);
     REQUIRE(tags.find("error.type") == tags.end());
   }
 
@@ -81,7 +82,7 @@ TEST_CASE("unit: metric attributes encoding", "[unit]")
 
     auto tags = attrs.encode();
 
-    REQUIRE(tags.size() == 6);
+    REQUIRE(tags.size() == 7);
     REQUIRE(tags.find("couchbase.cluster.uuid") == tags.end());
     REQUIRE(tags.find("couchbase.cluster.name") == tags.end());
   }
@@ -100,7 +101,7 @@ TEST_CASE("unit: metric attributes encoding", "[unit]")
 
     auto tags = attrs.encode();
 
-    REQUIRE(tags.size() == 6);
+    REQUIRE(tags.size() == 7);
     REQUIRE(tags.find("db.namespace") == tags.end());
     REQUIRE(tags.find("couchbase.scope.name") == tags.end());
     REQUIRE(tags.find("couchbase.collection.name") == tags.end());
