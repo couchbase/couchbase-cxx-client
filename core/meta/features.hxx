@@ -263,3 +263,8 @@
  * Support for the jwt_authenticator
  */
 #define COUCHBASE_CXX_CLIENT_HAS_JWT_AUTHENTICATOR 1
+
+/**
+ * Support for the stable OpenTelemetry conventions (Observability RFC revisions 26 & 27)
+ */
+#define COUCHBASE_CXX_CLIENT_STABLE_OTEL_CONVENTIONS 1
