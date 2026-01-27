@@ -95,13 +95,13 @@ public:
     : client_id_{ std::move(client_id) }
     , name_{ std::move(name) }
     , log_prefix_{ fmt::format("[{}/{}]", client_id_, name_) }
-    , origin_{ std::move(origin) }
     , tracer_{ std::move(tracer) }
     , meter_{ std::move(meter) }
     , orphan_reporter_{ std::move(orphan_reporter) }
     , app_telemetry_meter_{ std::move(app_telemetry) }
     , known_features_{ std::move(known_features) }
     , state_listener_{ std::move(state_listener) }
+    , origin_{ std::move(origin) }
     , codec_{ { known_features_.begin(), known_features_.end() } }
     , ctx_{ ctx }
     , tls_{ tls }
@@ -750,6 +750,11 @@ public:
     }
   }
 
+  void update_credentials(cluster_credentials credentials)
+  {
+    origin_.update_credentials(std::move(credentials));
+  }
+
   void update_config(topology::configuration config) override
   {
     std::vector<topology::configuration::node> added{};
@@ -1048,17 +1053,29 @@ public:
     return {};
   }
 
+  void for_each_session(utils::movable_function<void(io::mcbp_session&)> handler)
+  {
+    std::map<size_t, io::mcbp_session> sessions;
+    {
+      const std::scoped_lock lock(sessions_mutex_);
+      sessions = sessions_;
+    }
+    for (auto& [index, session] : sessions) {
+      handler(session);
+    }
+  }
+
 private:
   const std::string client_id_;
   const std::string name_;
   const std::string log_prefix_;
-  const origin origin_;
   const std::shared_ptr<tracing::tracer_wrapper> tracer_;
   const std::shared_ptr<metrics::meter_wrapper> meter_;
   const std::shared_ptr<core::orphan_reporter> orphan_reporter_;
   const std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter_;
   const std::vector<protocol::hello_feature> known_features_;
   const std::shared_ptr<impl::bootstrap_state_listener> state_listener_;
+  origin origin_;
   mcbp::codec codec_;
 
   asio::io_context& ctx_;
@@ -1140,6 +1157,12 @@ void
 bucket::update_config(topology::configuration config)
 {
   return impl_->update_config(std::move(config));
+}
+
+void
+bucket::update_credentials(cluster_credentials credentials)
+{
+  return impl_->update_credentials(std::move(credentials));
 }
 
 auto
@@ -1226,6 +1249,12 @@ void
 bucket::defer_command(utils::movable_function<void(std::error_code)> command)
 {
   impl_->defer_command(std::move(command));
+}
+
+void
+bucket::for_each_session(utils::movable_function<void(io::mcbp_session&)> handler)
+{
+  impl_->for_each_session(std::move(handler));
 }
 
 auto

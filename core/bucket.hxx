@@ -201,6 +201,7 @@ public:
 
   void fetch_config();
   void update_config(topology::configuration config) override;
+  void update_credentials(cluster_credentials credentials);
   void bootstrap(utils::movable_function<void(std::error_code, topology::configuration)>&& handler);
   void with_configuration(
     utils::movable_function<void(std::error_code, std::shared_ptr<topology::configuration>)>&&
@@ -212,6 +213,7 @@ public:
   void ping(const std::shared_ptr<diag::ping_collector>& collector,
             std::optional<std::chrono::milliseconds> timeout);
   void defer_command(utils::movable_function<void(std::error_code)> command);
+  void for_each_session(utils::movable_function<void(io::mcbp_session&)> handler);
 
   [[nodiscard]] auto name() const -> const std::string&;
   [[nodiscard]] auto log_prefix() const -> const std::string&;

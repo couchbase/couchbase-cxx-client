@@ -19,6 +19,7 @@
 
 #include <couchbase/build_config.hxx>
 
+#include "core/cluster_credentials.hxx"
 #include "core/protocol/hello_feature.hxx"
 #include "core/response_handler.hxx"
 #include "core/tls_context_provider.hxx"
@@ -139,6 +140,8 @@ public:
                            command_handler&& handler);
   void bootstrap(utils::movable_function<void(std::error_code, topology::configuration)>&& handler,
                  bool retry_on_bucket_not_found = false);
+  void reauthenticate();
+  void update_credentials(cluster_credentials credentials);
   void on_stop(utils::movable_function<void()> handler);
   void stop(retry_reason reason);
   [[nodiscard]] auto index() const -> std::size_t;
