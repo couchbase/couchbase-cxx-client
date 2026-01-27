@@ -114,6 +114,8 @@ assert_kv_recorder_tags(test::utils::integration_test_guard& guard,
 
   const auto& tags = recorders.front()->tags();
 
+  REQUIRE(tags.at("__unit") == "s");
+  REQUIRE(tags.at("db.system.name") == "couchbase");
   REQUIRE(tags.at("couchbase.service") == "kv");
   REQUIRE(tags.at("db.operation.name") == op);
   if (expected_outcome.has_value()) {
@@ -148,6 +150,8 @@ assert_http_recorder_tags(test::utils::integration_test_guard& guard,
 
   const auto& tags = recorders.front()->tags();
 
+  REQUIRE(tags.at("__unit") == "s");
+  REQUIRE(tags.at("db.system.name") == "couchbase");
   REQUIRE(tags.at("couchbase.service") == service);
   REQUIRE(tags.at("db.operation.name") == op);
   if (expected_outcome.has_value()) {

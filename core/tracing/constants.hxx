@@ -166,6 +166,12 @@ constexpr auto peer_port = "network.peer.port";
 constexpr auto network_transport = "network.transport";
 constexpr auto operation_id = "couchbase.operation_id";
 } // namespace dispatch
+
+// Reserved attributes for internal use
+namespace reserved
+{
+constexpr auto target_unit = "__unit";
+} // namespace reserved
 } // namespace attributes
 
 namespace service

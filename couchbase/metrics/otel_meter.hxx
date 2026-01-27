@@ -24,69 +24,43 @@
 #include <opentelemetry/metrics/sync_instruments.h>
 
 #include <algorithm>
+#include <memory>
 #include <mutex>
+#include <shared_mutex>
 #include <utility>
+#include <variant>
 
 namespace couchbase::metrics
 {
-
-class otel_sync_histogram
-{
-public:
-  explicit otel_sync_histogram(
-    opentelemetry::nostd::shared_ptr<opentelemetry::metrics::Histogram<std::uint64_t>>
-      histogram_counter)
-    : histogram_counter_{ std::move(histogram_counter) }
-  {
-  }
-
-  void record(std::uint64_t value,
-              const opentelemetry::common::KeyValueIterable& tags,
-              opentelemetry::context::Context& ctx)
-  {
-    histogram_counter_->Record(value, tags, ctx);
-  }
-
-private:
-  opentelemetry::nostd::shared_ptr<opentelemetry::metrics::Histogram<std::uint64_t>>
-    histogram_counter_;
-  std::mutex mutex_;
-};
-
+template<typename T>
 class otel_value_recorder : public couchbase::metrics::value_recorder
 {
 public:
   explicit otel_value_recorder(
-    opentelemetry::nostd::shared_ptr<opentelemetry::metrics::Histogram<std::uint64_t>>
-      histogram_counter,
+    opentelemetry::nostd::shared_ptr<opentelemetry::metrics::Histogram<T>> histogram,
     const std::map<std::string, std::string>& tags)
-    : histogram_counter_{ std::move(histogram_counter) }
-    , tags_(tags)
+    : histogram_{ std::move(histogram) }
+    , tags_{ tags }
   {
+    tags_.erase("__unit");
   }
+
   void record_value(std::int64_t value) override
   {
-    value = std::max<int64_t>(value, 0);
-    auto uvalue = static_cast<std::uint64_t>(value);
-    histogram_counter_->Record(
-      uvalue, opentelemetry::common::KeyValueIterableView<decltype(tags_)>{ tags_ }, context_);
-  }
-
-  [[nodiscard]] auto tags() const -> const std::map<std::string, std::string>&
-  {
-    return tags_;
-  }
-
-  auto histogram_counter()
-    -> opentelemetry::nostd::shared_ptr<opentelemetry::metrics::Histogram<std::uint64_t>>
-  {
-    return histogram_counter_;
+    if constexpr (std::is_same_v<T, double>) {
+      auto value_in_seconds = static_cast<double>(value) / 1'000'000.0;
+      histogram_->Record(
+        value_in_seconds, opentelemetry::common::KeyValueIterableView{ tags_ }, context_);
+    } else {
+      value = std::max<int64_t>(value, 0);
+      auto uvalue = static_cast<std::uint64_t>(value);
+      histogram_->Record(uvalue, opentelemetry::common::KeyValueIterableView{ tags_ }, context_);
+    }
   }
 
 private:
-  opentelemetry::nostd::shared_ptr<opentelemetry::metrics::Histogram<std::uint64_t>>
-    histogram_counter_;
-  const std::map<std::string, std::string> tags_;
+  opentelemetry::nostd::shared_ptr<opentelemetry::metrics::Histogram<T>> histogram_;
+  std::map<std::string, std::string> tags_{};
   opentelemetry::context::Context context_{};
   std::mutex mutex_;
 };
@@ -102,39 +76,59 @@ public:
   auto get_value_recorder(const std::string& name, const std::map<std::string, std::string>& tags)
     -> std::shared_ptr<value_recorder> override
   {
-    // first look up the histogram, in case we already have it...
-    std::scoped_lock<std::mutex> lock(mutex_);
-    auto it = recorders_.equal_range(name);
-    if (it.first == it.second) {
-      // this name isn't associated with any histogram, so make one and return it.
-      // Note we'd like to make one with more buckets than default, given the range of
-      // response times we'd like to display (queries vs kv for instance), but otel
-      // api doesn't seem to allow this.
-      return recorders_
-        .insert({ name,
-                  std::make_shared<otel_value_recorder>(
-                    meter_->CreateUInt64Histogram(name, "", "us"), tags) })
-        ->second;
-    }
-    // so it is already, lets see if we already have one with those tags, or need
-    // to make a new one (using the histogram we already have).
-    for (auto itr = it.first; itr != it.second; itr++) {
-      if (tags == itr->second->tags()) {
-        return itr->second;
+    bool in_seconds{ false };
+    if (tags.count("__unit") > 0) {
+      if (tags.at("__unit") == "s") {
+        in_seconds = true;
       }
     }
-    // if you are here, we need to add one with these tags and the histogram associated with the
-    // name.
-    return recorders_
-      .insert(
-        { name,
-          std::make_shared<otel_value_recorder>(it.first->second->histogram_counter(), tags) })
-      ->second;
+
+    {
+      // Check if we already have the histogram
+      std::shared_lock lock(mutex_);
+      if (in_seconds) {
+        if (const auto it = double_histograms_.find(name); it != double_histograms_.end()) {
+          return std::make_shared<otel_value_recorder<double>>(it->second, tags);
+        }
+      } else {
+        if (const auto it = uint_histograms_.find(name); it != uint_histograms_.end()) {
+          return std::make_shared<otel_value_recorder<std::uint64_t>>(it->second, tags);
+        }
+      }
+    }
+
+    {
+      // We have to check if we already have the histogram again, before creating it, in case
+      // another thread created it while we were waiting for  the exclusive lock
+      std::scoped_lock lock(mutex_);
+      if (in_seconds) {
+        if (const auto it = double_histograms_.find(name); it != double_histograms_.end()) {
+          return std::make_shared<otel_value_recorder<double>>(it->second, tags);
+        }
+        // Not found, we have to create it
+        auto histogram = meter_->CreateDoubleHistogram(name, "", "s");
+        double_histograms_.emplace(name, std::move(histogram));
+        return std::make_shared<otel_value_recorder<double>>(double_histograms_.at(name), tags);
+      } else {
+        if (const auto it = uint_histograms_.find(name); it != uint_histograms_.end()) {
+          return std::make_shared<otel_value_recorder<std::uint64_t>>(it->second, tags);
+        }
+        // Not found, we have to create it
+        auto histogram = meter_->CreateUInt64Histogram(name);
+        uint_histograms_.emplace(name, std::move(histogram));
+        return std::make_shared<otel_value_recorder<std::uint64_t>>(uint_histograms_.at(name),
+                                                                    tags);
+      }
+    }
   }
 
 private:
   opentelemetry::nostd::shared_ptr<opentelemetry::metrics::Meter> meter_;
-  std::mutex mutex_;
-  std::multimap<std::string, std::shared_ptr<otel_value_recorder>> recorders_;
+  std::shared_mutex mutex_;
+  std::map<std::string, opentelemetry::nostd::shared_ptr<opentelemetry::metrics::Histogram<double>>>
+    double_histograms_;
+  std::map<std::string,
+           opentelemetry::nostd::shared_ptr<opentelemetry::metrics::Histogram<std::uint64_t>>>
+    uint_histograms_;
 };
 } // namespace couchbase::metrics

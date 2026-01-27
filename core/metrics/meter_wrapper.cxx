@@ -103,6 +103,7 @@ auto
 metric_attributes::encode() const -> std::map<std::string, std::string>
 {
   std::map<std::string, std::string> tags = {
+    { tracing::attributes::reserved::target_unit, "s" },
     { tracing::attributes::common::system, "couchbase" },
     { tracing::attributes::op::service, service },
     { tracing::attributes::op::operation_name, operation },
