@@ -729,6 +729,12 @@ class mcbp_session_impl
                 if (session_) {
                   session_->update_configuration(resp.body().config());
                 }
+              } else if (resp.status() == key_value_status_code::auth_stale) {
+                CB_LOG_WARNING("{} received auth stale status for {}, opaque={}",
+                               session_->log_prefix_,
+                               protocol::client_opcode(msg.header.opcode),
+                               utils::byte_swap(msg.header.opaque));
+                session_->stop(retry_reason::do_not_retry);
               } else {
                 CB_LOG_WARNING("{} unexpected message status: {} (opaque={})",
                                session_->log_prefix_,
@@ -771,6 +777,7 @@ class mcbp_session_impl
                                protocol::client_opcode(msg.header.opcode),
                                utils::byte_swap(msg.header.opaque));
                 session_->stop(retry_reason::do_not_retry);
+                return;
               }
 
               std::uint32_t opaque = utils::byte_swap(msg.header.opaque);
