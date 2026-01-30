@@ -42,4 +42,11 @@ cluster_credentials::uses_password() const -> bool
 {
   return !username.empty() && !password.empty();
 }
+
+auto
+cluster_credentials::is_same_type(const cluster_credentials& other) const -> bool
+{
+  return uses_certificate() == other.uses_certificate() && uses_jwt() == other.uses_jwt() &&
+         uses_password() == other.uses_password();
+}
 } // namespace couchbase::core

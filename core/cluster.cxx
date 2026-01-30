@@ -627,12 +627,13 @@ public:
       return { errc::network::cluster_closed, {} };
     }
 
-    if (auth.requires_tls() && !origin_.options().enable_tls) {
+    auto old_credentials = origin_.credentials();
+
+    if (!old_credentials.is_same_type(auth)) {
       return { errc::common::invalid_argument,
-               "TLS not enabled but the provided authenticator requires TLS" };
+               "Cannot change authenticator type when updating credentials" };
     }
 
-    auto old_credentials = origin_.credentials();
     origin_.update_credentials(auth);
 
     // Separately update bucket and mcbp sessions as they have their own copies of the origin
