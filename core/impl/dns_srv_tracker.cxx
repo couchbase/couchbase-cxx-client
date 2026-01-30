@@ -136,7 +136,7 @@ dns_srv_tracker::report_bootstrap_error(const std::string& endpoint, std::error_
 {
   bool trigger_dns_srv_refresh = false;
 
-  if (ec && ec != errc::common::request_canceled) {
+  if (ec && ec != errc::common::request_canceled && ec != errc::common::bucket_not_found) {
     const std::scoped_lock lock(known_endpoints_mutex_);
     known_endpoints_.erase(endpoint);
     if (known_endpoints_.empty()) {
