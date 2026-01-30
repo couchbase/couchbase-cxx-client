@@ -99,7 +99,7 @@ public:
    * @param authenticator
    *
    * @since 1.3.0
-   * @committed
+   * @uncommitted
    */
   explicit cluster_options(jwt_authenticator authenticator)
     : jwt_token_{ std::move(authenticator.token_) }

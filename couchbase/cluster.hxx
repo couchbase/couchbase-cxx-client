@@ -145,7 +145,7 @@ public:
    * @return error
    *
    * @since 1.3.0
-   * @committed
+   * @uncommitted
    */
   auto set_authenticator(const jwt_authenticator& authenticator) -> error;
 

@@ -21,9 +21,23 @@
 
 namespace couchbase
 {
+/**
+ * A JWT authenticator which uses a JSON Web Token (JWT) to authenticate with the cluster.
+ *
+ * @since 1.3.0
+ * @uncommitted
+ */
 class jwt_authenticator
 {
 public:
+  /**
+   * Creates a JWT authenticator with the provided token.
+   *
+   * @param token the JWT
+   *
+   * @since 1.3.0
+   * @uncommitted
+   */
   explicit jwt_authenticator(std::string token)
     : token_{ std::move(token) }
   {
