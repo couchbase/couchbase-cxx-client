@@ -35,6 +35,7 @@ struct cluster_credentials {
   [[nodiscard]] auto requires_tls() const -> bool;
   [[nodiscard]] auto uses_jwt() const -> bool;
   [[nodiscard]] auto uses_password() const -> bool;
+  [[nodiscard]] auto is_same_type(const cluster_credentials& other) const -> bool;
 };
 
 } // namespace couchbase::core
