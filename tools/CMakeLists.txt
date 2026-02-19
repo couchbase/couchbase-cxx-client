@@ -32,6 +32,7 @@ add_executable(
   remove.cxx
   upsert.cxx
   version.cxx
+  sysinfo.cxx
   config.cxx)
 target_include_directories(cbc PRIVATE ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/private
                                        ${PROJECT_BINARY_DIR}/generated)
@@ -61,3 +62,9 @@ if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND WIN32)
   # from the BoringSSL build
   set_target_properties(cbc PROPERTIES LINK_FLAGS "/ignore:4099")
 endif()
+
+add_subdirectory(system_metrics)
+
+target_link_libraries(
+  cbc
+  PRIVATE system_metrics_cxx)

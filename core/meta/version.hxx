@@ -64,4 +64,7 @@ user_agent_for_mcbp(const std::string& client_id,
                     const std::string& session_id,
                     const std::string& extra = "",
                     std::size_t max_length = 0) -> std::string;
+
+auto
+is_debug() -> bool;
 } // namespace couchbase::core::meta
