@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2023-Present Couchbase, Inc.
+ *   Copyright 2020-Present Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -17,15 +17,26 @@
 
 #pragma once
 
-#include <CLI/App.hpp>
+#include "system_metrics.hxx"
 
 #include <memory>
 
-namespace cbc
+namespace system_metrics
 {
-auto
-make_remove_command() -> std::shared_ptr<CLI::App>;
 
-auto
-execute_remove_command(const CLI::App* app) -> int;
-} // namespace cbc
+class system_metrics_reporter
+{
+
+public:
+  /**
+   * Create a new instance of system_metrics
+   *
+   * @param os The OperatingSystem to use (default Native should be appropriate in most cases)
+   * @return A newly created instance
+   * @throws a subclass of std::exception if an error occurs
+   */
+  static auto create(OperatingSystem os = OperatingSystem::Native)
+    -> std::unique_ptr<system_metrics>;
+};
+
+} // namespace system_metrics

@@ -24,8 +24,8 @@
 namespace cbc
 {
 auto
-make_remove_command() -> std::shared_ptr<CLI::App>;
+make_sysinfo_command() -> std::shared_ptr<CLI::App>;
 
 auto
-execute_remove_command(const CLI::App* app) -> int;
+execute_sysinfo_command(const CLI::App* app) -> int;
 } // namespace cbc
