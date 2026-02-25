@@ -1,6 +1,8 @@
 add_subdirectory(utils)
 
 integration_test(connect)
+integration_test(crud_component)
+integration_test(collection_manager_component)
 integration_test(crud)
 integration_test(query)
 integration_test(diagnostics)

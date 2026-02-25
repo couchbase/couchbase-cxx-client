@@ -31,6 +31,7 @@ unmatchedSuppression:*
 # suppressions in tests
 comparisonOfFuncReturningBoolError:*/test/test_*
 unknownMacro:*/test/test_*
+unknownMacro:*/test/benchmark_*
 variableScope:*/test/test_*
 
 # do not scan third-party code

@@ -317,7 +317,7 @@ public:
   auto io_context() -> asio::io_context&
   {
     return ctx_;
-  }
+  } // namespace couchbase::core
 
   void configure_tls_options(bool has_capella_host, const std::shared_ptr<asio::ssl::context>& ctx)
   {
@@ -575,7 +575,8 @@ public:
                                      bucket_name,
                                      origin,
                                      known_features,
-                                     dns_srv_tracker_);
+                                     dns_srv_tracker_,
+                                     dispatcher(bucket_name, { cluster(shared_from_this()) }));
         buckets_.try_emplace(bucket_name, b);
 
         // Register the tracer & the meter for config updates to track Cluster name & UUID
@@ -673,12 +674,8 @@ public:
     return { {}, origin_ };
   }
 
-  template<class Request,
-           class Handler,
-           typename std::enable_if_t<
-             !std::is_same_v<typename Request::encoded_request_type, io::http_request>,
-             int> = 0>
-  void execute(Request request, Handler&& handler)
+  template<typename Request, typename Handler>
+  void execute_kv(Request request, Handler&& handler)
   {
     using response_type = typename Request::encoded_response_type;
     if (stopped_) {
@@ -703,6 +700,138 @@ public:
                          }
                          return self->execute(std::move(request), std::forward<Handler>(handler));
                        });
+  }
+
+  void execute(o::get_request request, mf<void(o::get_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::upsert_request request, mf<void(o::upsert_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::insert_request request, mf<void(o::insert_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::replace_request request, mf<void(o::replace_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::remove_request request, mf<void(o::remove_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::exists_request request, mf<void(o::exists_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::touch_request request, mf<void(o::touch_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::get_and_touch_request request, mf<void(o::get_and_touch_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::get_and_lock_request request, mf<void(o::get_and_lock_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::unlock_request request, mf<void(o::unlock_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::increment_request request, mf<void(o::increment_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::decrement_request request, mf<void(o::decrement_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::append_request request, mf<void(o::append_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::prepend_request request, mf<void(o::prepend_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::lookup_in_request request, mf<void(o::lookup_in_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::mutate_in_request request, mf<void(o::mutate_in_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::get_projected_request request, mf<void(o::get_projected_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(impl::get_replica_request request, mf<void(impl::get_replica_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(impl::lookup_in_replica_request request,
+               mf<void(impl::lookup_in_replica_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(impl::observe_seqno_request request,
+               mf<void(impl::observe_seqno_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(om::collections_manifest_get_request request,
+               mf<void(om::collections_manifest_get_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::get_request_with_cancellation request, mf<void(o::get_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+
+  void execute(o::get_replica_request_with_cancellation request,
+               mf<void(impl::get_replica_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::lookup_in_request_with_cancellation request,
+               mf<void(o::lookup_in_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+
+  void execute(o::lookup_in_replica_request_with_cancellation request,
+               mf<void(impl::lookup_in_replica_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+
+  void execute(o::get_any_replica_request request, mf<void(o::get_any_replica_response)>&& handler)
+  {
+    return request.execute(shared_from_this(), std::move(handler));
+  }
+
+  void execute(o::get_all_replicas_request request,
+               mf<void(o::get_all_replicas_response)>&& handler)
+  {
+    return request.execute(shared_from_this(), std::move(handler));
+  }
+
+  void execute(o::lookup_in_any_replica_request request,
+               mf<void(o::lookup_in_any_replica_response)>&& handler)
+  {
+    return request.execute(shared_from_this(), std::move(handler));
+  }
+
+  void execute(o::lookup_in_all_replicas_request request,
+               mf<void(o::lookup_in_all_replicas_response)>&& handler)
+  {
+    return request.execute(shared_from_this(), std::move(handler));
   }
 
   template<class Request,
@@ -1394,6 +1523,11 @@ private:
 
 cluster::cluster(asio::io_context& ctx)
   : impl_{ std::make_shared<cluster_impl>(ctx) }
+{
+}
+
+cluster::cluster(std::shared_ptr<cluster_impl> impl)
+  : impl_{ std::move(impl) }
 {
 }
 
@@ -2543,4 +2677,9 @@ cluster::cluster_label_listener() const -> const std::shared_ptr<core::cluster_l
   return impl_->cluster_label_listener();
 }
 
+auto
+cluster::find_bucket_by_name(const std::string& name) const -> std::shared_ptr<bucket>
+{
+  return impl_->find_bucket_by_name(name);
+}
 } // namespace couchbase::core

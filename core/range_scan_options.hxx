@@ -18,6 +18,7 @@
 #include "couchbase/cas.hxx"
 #include "couchbase/retry_strategy.hxx"
 #include "utils/movable_function.hxx"
+#include <couchbase/tracing/request_span.hxx>
 
 #include <cinttypes>
 #include <memory>
@@ -64,6 +65,7 @@ struct range_scan_create_options {
   std::optional<range_snapshot_requirements> snapshot_requirements{};
   bool ids_only{ false };
   std::shared_ptr<couchbase::retry_strategy> retry_strategy{ nullptr };
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
   struct {
     std::string user{};
@@ -88,6 +90,7 @@ struct range_scan_continue_options {
   std::chrono::milliseconds timeout{};
   std::chrono::milliseconds batch_time_limit{ default_batch_time_limit };
   std::shared_ptr<couchbase::retry_strategy> retry_strategy{ nullptr };
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
   struct {
     std::string user{};
@@ -106,6 +109,7 @@ using range_scan_continue_callback =
 struct range_scan_cancel_options {
   std::chrono::milliseconds timeout;
   std::shared_ptr<couchbase::retry_strategy> retry_strategy{ nullptr };
+  std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
   struct {
     std::string user{};

@@ -64,8 +64,8 @@ operation_queue::close()
 }
 
 auto
-operation_queue::push(std::shared_ptr<queue_request> request,
-                      std::size_t max_items) -> std::error_code
+operation_queue::push(std::shared_ptr<queue_request> request, std::size_t max_items)
+  -> std::error_code
 {
   const std::scoped_lock lock(mutex_);
 
@@ -77,7 +77,7 @@ operation_queue::push(std::shared_ptr<queue_request> request,
     return errc::network::operation_queue_full;
   }
 
-  if (operation_queue * no_queue{ nullptr };
+  if (operation_queue* no_queue{ nullptr };
       !request->queued_with_.compare_exchange_strong(no_queue, this)) {
     return errc::network::request_already_queued;
   }
@@ -102,7 +102,7 @@ operation_queue::remove(const std::shared_ptr<queue_request>& request) -> bool
     return false;
   }
 
-  if (operation_queue * this_queue{ nullptr };
+  if (operation_queue* this_queue{ this };
       !request->queued_with_.compare_exchange_strong(this_queue, nullptr)) {
     return false;
   }

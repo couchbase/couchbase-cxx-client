@@ -171,17 +171,17 @@ public:
         { options.retry_strategy },
         obs_rec->operation_span(),
       };
-      return core_.execute(
-        std::move(request),
-        [obs_rec = std::move(obs_rec),
-         crypto_manager = crypto_manager_,
-         handler = std::move(handler)](auto resp) mutable {
-          obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
-          return handler(
-            core::impl::make_error(std::move(resp.ctx)),
-            get_result{
-              resp.cas, { std::move(resp.value), resp.flags }, {}, std::move(crypto_manager) });
-        });
+      return core_.execute(std::move(request),
+                           [obs_rec = std::move(obs_rec),
+                            crypto_manager = crypto_manager_,
+                            handler = std::move(handler)](auto resp) mutable {
+                             obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
+                             return handler(core::impl::make_error(std::move(resp.ctx)),
+                                            get_result{ resp.cas,
+                                                        { std::move(resp.value), resp.flags },
+                                                        {},
+                                                        std::move(crypto_manager) });
+                           });
     }
     core::operations::get_projected_request request{
       core::document_id{
@@ -200,22 +200,21 @@ public:
       { options.retry_strategy },
       obs_rec->operation_span(),
     };
-    return core_.execute(
-      std::move(request),
-      [obs_rec = std::move(obs_rec),
-       crypto_manager = crypto_manager_,
-       handler = std::move(handler)](auto resp) mutable {
-        std::optional<std::chrono::system_clock::time_point> expiry_time{};
-        if (resp.expiry && resp.expiry.value() > 0) {
-          expiry_time.emplace(std::chrono::seconds{ resp.expiry.value() });
-        }
-        obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
-        return handler(core::impl::make_error(std::move(resp.ctx)),
-                       get_result{ resp.cas,
-                                   { std::move(resp.value), resp.flags },
-                                   expiry_time,
-                                   std::move(crypto_manager) });
-      });
+    return core_.execute(std::move(request),
+                         [obs_rec = std::move(obs_rec),
+                          crypto_manager = crypto_manager_,
+                          handler = std::move(handler)](auto resp) mutable {
+                           std::optional<std::chrono::system_clock::time_point> expiry_time{};
+                           if (resp.expiry && resp.expiry.value() > 0) {
+                             expiry_time.emplace(std::chrono::seconds{ resp.expiry.value() });
+                           }
+                           obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
+                           return handler(core::impl::make_error(std::move(resp.ctx)),
+                                          get_result{ resp.cas,
+                                                      { std::move(resp.value), resp.flags },
+                                                      expiry_time,
+                                                      std::move(crypto_manager) });
+                         });
   }
 
   void get_and_touch(std::string document_key,
@@ -241,17 +240,17 @@ public:
       obs_rec->operation_span(),
     };
 
-    return core_.execute(
-      std::move(request),
-      [obs_rec = std::move(obs_rec),
-       crypto_manager = crypto_manager_,
-       handler = std::move(handler)](auto resp) mutable {
-        obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
-        return handler(
-          core::impl::make_error(std::move(resp.ctx)),
-          get_result{
-            resp.cas, { std::move(resp.value), resp.flags }, {}, std::move(crypto_manager) });
-      });
+    return core_.execute(std::move(request),
+                         [obs_rec = std::move(obs_rec),
+                          crypto_manager = crypto_manager_,
+                          handler = std::move(handler)](auto resp) mutable {
+                           obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
+                           return handler(core::impl::make_error(std::move(resp.ctx)),
+                                          get_result{ resp.cas,
+                                                      { std::move(resp.value), resp.flags },
+                                                      {},
+                                                      std::move(crypto_manager) });
+                         });
   }
 
   void touch(std::string document_key,
@@ -302,20 +301,19 @@ public:
       options.read_preference,
       obs_rec->operation_span(),
     };
-    return core_.execute(
-      std::move(request),
-      [obs_rec = std::move(obs_rec),
-       crypto_manager = crypto_manager_,
-       handler = std::move(handler)](auto resp) mutable {
-        obs_rec->finish(resp.ctx.ec());
-        return handler(core::impl::make_error(std::move(resp.ctx)),
-                       get_replica_result{
-                         resp.cas,
-                         resp.replica,
-                         { std::move(resp.value), resp.flags },
-                         std::move(crypto_manager),
-                       });
-      });
+    return core_.execute(std::move(request),
+                         [obs_rec = std::move(obs_rec),
+                          crypto_manager = crypto_manager_,
+                          handler = std::move(handler)](auto resp) mutable {
+                           obs_rec->finish(resp.ctx.ec());
+                           return handler(core::impl::make_error(std::move(resp.ctx)),
+                                          get_replica_result{
+                                            resp.cas,
+                                            resp.replica,
+                                            { std::move(resp.value), resp.flags },
+                                            std::move(crypto_manager),
+                                          });
+                         });
   }
 
   void get_all_replicas(std::string document_key,
@@ -336,23 +334,23 @@ public:
       options.read_preference,
       obs_rec->operation_span(),
     };
-    return core_.execute(
-      std::move(request),
-      [obs_rec = std::move(obs_rec),
-       crypto_manager = crypto_manager_,
-       handler = std::move(handler)](auto resp) mutable {
-        get_all_replicas_result result{};
-        for (auto& entry : resp.entries) {
-          result.emplace_back(get_replica_result{
-            entry.cas,
-            entry.replica,
-            { std::move(entry.value), entry.flags },
-            crypto_manager,
-          });
-        }
-        obs_rec->finish(resp.ctx.ec());
-        return handler(core::impl::make_error(std::move(resp.ctx)), std::move(result));
-      });
+    return core_.execute(std::move(request),
+                         [obs_rec = std::move(obs_rec),
+                          crypto_manager = crypto_manager_,
+                          handler = std::move(handler)](auto resp) mutable {
+                           get_all_replicas_result result{};
+                           for (auto& entry : resp.entries) {
+                             result.emplace_back(get_replica_result{
+                               entry.cas,
+                               entry.replica,
+                               { std::move(entry.value), entry.flags },
+                               crypto_manager,
+                             });
+                           }
+                           obs_rec->finish(resp.ctx.ec());
+                           return handler(core::impl::make_error(std::move(resp.ctx)),
+                                          std::move(result));
+                         });
   }
 
   void remove(std::string document_key,
@@ -401,37 +399,37 @@ public:
       { options.retry_strategy },
       obs_rec->operation_span(),
     };
-    return core_.execute(
-      std::move(request),
-      [obs_rec = std::move(obs_rec),
-       core = core_,
-       id = std::move(id),
-       options,
-       handler = std::move(handler)](auto&& resp) mutable {
-        if (resp.ctx.ec()) {
-          obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
-          return handler(core::impl::make_error(std::move(resp.ctx)),
-                         mutation_result{ resp.cas, std::move(resp.token) });
-        }
-        auto token = resp.token;
-        core::impl::initiate_observe_poll(
-          core,
-          std::move(id),
-          token,
-          options.timeout,
-          options.persist_to,
-          options.replicate_to,
-          [obs_rec = std::move(obs_rec), resp, handler = std::move(handler)](
-            std::error_code ec) mutable {
-            obs_rec->finish(resp.ctx.retry_attempts(), ec);
-            if (ec) {
-              resp.ctx.override_ec(ec);
-              return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{});
-            }
-            return handler(core::impl::make_error(std::move(resp.ctx)),
-                           mutation_result{ resp.cas, std::move(resp.token) });
-          });
-      });
+    return core_.execute(std::move(request),
+                         [obs_rec = std::move(obs_rec),
+                          core = core_,
+                          id = std::move(id),
+                          options,
+                          handler = std::move(handler)](auto&& resp) mutable {
+                           if (resp.ctx.ec()) {
+                             obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
+                             return handler(core::impl::make_error(std::move(resp.ctx)),
+                                            mutation_result{ resp.cas, std::move(resp.token) });
+                           }
+                           auto token = resp.token;
+                           core::impl::initiate_observe_poll(
+                             core,
+                             std::move(id),
+                             token,
+                             options.timeout,
+                             options.persist_to,
+                             options.replicate_to,
+                             [obs_rec = std::move(obs_rec), resp, handler = std::move(handler)](
+                               std::error_code ec) mutable {
+                               obs_rec->finish(resp.ctx.retry_attempts(), ec);
+                               if (ec) {
+                                 resp.ctx.override_ec(ec);
+                                 return handler(core::impl::make_error(std::move(resp.ctx)),
+                                                mutation_result{});
+                               }
+                               return handler(core::impl::make_error(std::move(resp.ctx)),
+                                              mutation_result{ resp.cas, std::move(resp.token) });
+                             });
+                         });
   }
 
   void get_and_lock(std::string document_key,
@@ -456,17 +454,17 @@ public:
       { options.retry_strategy },
       obs_rec->operation_span(),
     };
-    core_.execute(
-      std::move(request),
-      [obs_rec = std::move(obs_rec),
-       crypto_manager = crypto_manager_,
-       handler = std::move(handler)](auto&& resp) mutable {
-        obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
-        return handler(
-          core::impl::make_error(std::move(resp.ctx)),
-          get_result{
-            resp.cas, { std::move(resp.value), resp.flags }, {}, std::move(crypto_manager) });
-      });
+    core_.execute(std::move(request),
+                  [obs_rec = std::move(obs_rec),
+                   crypto_manager = crypto_manager_,
+                   handler = std::move(handler)](auto&& resp) mutable {
+                    obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
+                    return handler(core::impl::make_error(std::move(resp.ctx)),
+                                   get_result{ resp.cas,
+                                               { std::move(resp.value), resp.flags },
+                                               {},
+                                               std::move(crypto_manager) });
+                  });
   }
 
   void unlock(std::string document_key,
@@ -830,38 +828,38 @@ public:
       options.preserve_expiry,
       obs_rec->operation_span(),
     };
-    return core_.execute(
-      std::move(request),
-      [obs_rec = std::move(obs_rec),
-       core = core_,
-       id = std::move(id),
-       options,
-       handler = std::move(handler)](auto resp) mutable {
-        if (resp.ctx.ec()) {
-          obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
-          return handler(core::impl::make_error(std::move(resp.ctx)),
-                         mutation_result{ resp.cas, std::move(resp.token) });
-        }
+    return core_.execute(std::move(request),
+                         [obs_rec = std::move(obs_rec),
+                          core = core_,
+                          id = std::move(id),
+                          options,
+                          handler = std::move(handler)](auto resp) mutable {
+                           if (resp.ctx.ec()) {
+                             obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
+                             return handler(core::impl::make_error(std::move(resp.ctx)),
+                                            mutation_result{ resp.cas, std::move(resp.token) });
+                           }
 
-        auto token = resp.token;
-        core::impl::initiate_observe_poll(
-          core,
-          std::move(id),
-          token,
-          options.timeout,
-          options.persist_to,
-          options.replicate_to,
-          [obs_rec = std::move(obs_rec), resp, handler = std::move(handler)](
-            std::error_code ec) mutable {
-            obs_rec->finish(resp.ctx.retry_attempts(), ec);
-            if (ec) {
-              resp.ctx.override_ec(ec);
-              return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{});
-            }
-            return handler(core::impl::make_error(std::move(resp.ctx)),
-                           mutation_result{ resp.cas, std::move(resp.token) });
-          });
-      });
+                           auto token = resp.token;
+                           core::impl::initiate_observe_poll(
+                             core,
+                             std::move(id),
+                             token,
+                             options.timeout,
+                             options.persist_to,
+                             options.replicate_to,
+                             [obs_rec = std::move(obs_rec), resp, handler = std::move(handler)](
+                               std::error_code ec) mutable {
+                               obs_rec->finish(resp.ctx.retry_attempts(), ec);
+                               if (ec) {
+                                 resp.ctx.override_ec(ec);
+                                 return handler(core::impl::make_error(std::move(resp.ctx)),
+                                                mutation_result{});
+                               }
+                               return handler(core::impl::make_error(std::move(resp.ctx)),
+                                              mutation_result{ resp.cas, std::move(resp.token) });
+                             });
+                         });
   }
 
   void insert(std::string document_key,
@@ -916,38 +914,38 @@ public:
       { options.retry_strategy },
       obs_rec->operation_span(),
     };
-    return core_.execute(
-      std::move(request),
-      [obs_rec = std::move(obs_rec),
-       core = core_,
-       id = std::move(id),
-       options,
-       handler = std::move(handler)](auto resp) mutable {
-        if (resp.ctx.ec()) {
-          obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
-          return handler(core::impl::make_error(std::move(resp.ctx)),
-                         mutation_result{ resp.cas, std::move(resp.token) });
-        }
+    return core_.execute(std::move(request),
+                         [obs_rec = std::move(obs_rec),
+                          core = core_,
+                          id = std::move(id),
+                          options,
+                          handler = std::move(handler)](auto resp) mutable {
+                           if (resp.ctx.ec()) {
+                             obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
+                             return handler(core::impl::make_error(std::move(resp.ctx)),
+                                            mutation_result{ resp.cas, std::move(resp.token) });
+                           }
 
-        auto token = resp.token;
-        core::impl::initiate_observe_poll(
-          core,
-          std::move(id),
-          token,
-          options.timeout,
-          options.persist_to,
-          options.replicate_to,
-          [obs_rec = std::move(obs_rec), resp, handler = std::move(handler)](
-            std::error_code ec) mutable {
-            obs_rec->finish(resp.ctx.retry_attempts(), ec);
-            if (ec) {
-              resp.ctx.override_ec(ec);
-              return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{});
-            }
-            return handler(core::impl::make_error(std::move(resp.ctx)),
-                           mutation_result{ resp.cas, std::move(resp.token) });
-          });
-      });
+                           auto token = resp.token;
+                           core::impl::initiate_observe_poll(
+                             core,
+                             std::move(id),
+                             token,
+                             options.timeout,
+                             options.persist_to,
+                             options.replicate_to,
+                             [obs_rec = std::move(obs_rec), resp, handler = std::move(handler)](
+                               std::error_code ec) mutable {
+                               obs_rec->finish(resp.ctx.retry_attempts(), ec);
+                               if (ec) {
+                                 resp.ctx.override_ec(ec);
+                                 return handler(core::impl::make_error(std::move(resp.ctx)),
+                                                mutation_result{});
+                               }
+                               return handler(core::impl::make_error(std::move(resp.ctx)),
+                                              mutation_result{ resp.cas, std::move(resp.token) });
+                             });
+                         });
   }
 
   void replace(std::string document_key,

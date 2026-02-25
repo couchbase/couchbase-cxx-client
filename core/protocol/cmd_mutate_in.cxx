@@ -126,7 +126,7 @@ mutate_in_request_body::fill_extras()
     std::uint32_t field = utils::byte_swap(user_flags_.value());
     memcpy(extras_.data() + offset, &field, sizeof(field));
   }
-  if (flags_ != std::byte{ 0U }) {
+  if (flags_ != std::uint8_t{ 0U }) {
     const std::size_t offset = extras_.size();
     extras_.resize(offset + sizeof(flags_));
     extras_[offset] = std::byte{ flags_ };

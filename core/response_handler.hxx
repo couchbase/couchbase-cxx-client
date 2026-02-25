@@ -24,22 +24,30 @@
 #include <optional>
 #include <system_error>
 
+namespace couchbase::core::mcbp
+{
+class queue_request;
+} // namespace couchbase::core::mcbp
+
 namespace couchbase::core
 {
 namespace io
 {
 struct mcbp_message;
+class mcbp_session;
 } // namespace io
-namespace mcbp
-{
-class queue_request;
-} // namespace mcbp
 
 class response_handler
 {
 public:
   virtual ~response_handler() = default;
+
+  // NOTE: Adding or reordering parameters here is a breaking change for any out-of-tree
+  // implementors of this interface. The `session` parameter was added to carry connection
+  // metadata (address, port) required to populate dispatch spans and error contexts.
+  // All in-tree implementors (bucket_impl, agent_impl) have been updated accordingly.
   virtual void handle_response(std::shared_ptr<mcbp::queue_request> request,
+                               std::optional<io::mcbp_session> session,
                                std::error_code error,
                                retry_reason reason,
                                io::mcbp_message msg,

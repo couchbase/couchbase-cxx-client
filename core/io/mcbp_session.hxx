@@ -45,6 +45,11 @@ class context;
 } // namespace ssl
 } // namespace asio
 
+namespace couchbase::core::mcbp
+{
+class queue_request;
+} // namespace couchbase::core::mcbp
+
 namespace couchbase::core
 {
 struct origin;
@@ -107,6 +112,11 @@ public:
                std::shared_ptr<impl::bootstrap_state_listener> state_listener,
                std::optional<std::string> bucket_name = {},
                std::vector<protocol::hello_feature> known_features = {});
+
+  explicit mcbp_session(std::shared_ptr<mcbp_session_impl> impl)
+    : impl_(std::move(impl))
+  {
+  }
 
   [[nodiscard]] auto log_prefix() const -> const std::string&;
   [[nodiscard]] auto cancel(std::uint32_t opaque, std::error_code ec, retry_reason reason) -> bool;

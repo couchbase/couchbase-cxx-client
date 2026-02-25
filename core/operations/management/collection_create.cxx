@@ -29,8 +29,8 @@
 namespace couchbase::core::operations::management
 {
 auto
-collection_create_request::encode_to(encoded_request_type& encoded,
-                                     http_context& /*context*/) const -> std::error_code
+collection_create_request::encode_to(encoded_request_type& encoded, http_context& /*context*/) const
+  -> std::error_code
 {
   encoded.method = "POST";
   encoded.path = fmt::format("/pools/default/buckets/{}/scopes/{}/collections",
@@ -61,8 +61,11 @@ collection_create_request::make_response(error_context::http&& ctx,
     switch (encoded.status_code) {
       case 400: {
         const std::regex collection_exists("Collection with name .+ already exists");
+        const std::regex not_allowed_on_bucket_type("Not allowed on this type of bucket");
         if (std::regex_search(encoded.body.data(), collection_exists)) {
           response.ctx.ec = errc::management::collection_exists;
+        } else if (std::regex_search(encoded.body.data(), not_allowed_on_bucket_type)) {
+          response.ctx.ec = errc::common::feature_not_available;
         } else {
           response.ctx.ec = errc::common::invalid_argument;
         }

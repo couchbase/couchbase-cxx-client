@@ -65,6 +65,7 @@ map_status_code(protocol::client_opcode opcode, std::uint16_t status) -> std::er
     case key_value_status_code::invalid:
     case key_value_status_code::xattr_invalid:
     case key_value_status_code::subdoc_invalid_combo:
+    case key_value_status_code::subdoc_invalid_xattr_order:
     case key_value_status_code::subdoc_deleted_document_cannot_have_value:
       return errc::common::invalid_argument;
 
@@ -181,7 +182,6 @@ map_status_code(protocol::client_opcode opcode, std::uint16_t status) -> std::er
     case key_value_status_code::scope_size_limit_exceeded:
       return errc::common::quota_limited;
 
-    case key_value_status_code::subdoc_invalid_xattr_order:
     case key_value_status_code::not_my_vbucket:
     case key_value_status_code::auth_continue:
     case key_value_status_code::range_error:

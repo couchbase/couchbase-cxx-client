@@ -76,8 +76,7 @@ codec::encode_packet(const couchbase::core::mcbp::packet& packet) const
       // It also doesn't expect the collection ID to be leb encoded.
       extras.resize(sizeof(std::uint32_t));
       big_endian::put_uint32(extras, packet.collection_id_);
-    }
-    if (packet.collection_id_ > 0) {
+    } else if (packet.collection_id_ > 0) {
       CB_LOG_DEBUG("cannot encode collection id with a non-collection command");
       return tl::unexpected(errc::common::invalid_argument);
     }

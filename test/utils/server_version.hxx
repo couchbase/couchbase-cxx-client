@@ -185,6 +185,11 @@ struct server_version {
     return (major == 7 && minor >= 2) || major > 7;
   }
 
+  [[nodiscard]] auto supports_collection_history() const -> bool
+  {
+    return (major == 7 && minor >= 6) || major > 7;
+  }
+
   [[nodiscard]] auto supports_search_analyze() const -> bool
   {
     return supports_search() && (is_cheshire_cat() || is_neo());
