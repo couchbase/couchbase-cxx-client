@@ -23,6 +23,7 @@
 #include "core/operations/operation_traits.hxx"
 #include "core/public_fwd.hxx"
 #include "core/query_context.hxx"
+#include "core/tracing/constants.hxx"
 #include "couchbase/management/query_index.hxx"
 
 namespace couchbase::core::operations
@@ -87,36 +88,71 @@ struct query_index_build_deferred_request {
   template<typename Core, typename Handler>
   void execute(Core core, Handler handler)
   {
-    core->execute(query_index_get_all_deferred_request{ bucket_name,
-                                                        scope_name.value_or(""),
-                                                        collection_name.value_or(""),
-                                                        query_ctx,
-                                                        client_context_id,
-                                                        timeout },
-                  [core,
-                   handler = std::move(handler),
-                   bucket_name = bucket_name,
-                   scope_name = scope_name.value_or(""),
-                   collection_name = collection_name.value_or(""),
-                   query_ctx = query_ctx,
-                   client_context_id = client_context_id,
-                   timeout = timeout](query_index_get_all_deferred_response resp1) mutable {
-                    auto list_resp = std::move(resp1);
-                    if (list_resp.ctx.ec || list_resp.index_names.empty()) {
-                      return handler(convert_response(std::move(list_resp)));
-                    }
-                    core->execute(query_index_build_request{ std::move(bucket_name),
-                                                             scope_name,
-                                                             collection_name,
-                                                             query_ctx,
-                                                             std::move(list_resp.index_names),
-                                                             client_context_id,
-                                                             timeout },
-                                  [handler = std::move(handler)](
-                                    query_index_build_response build_resp) mutable {
-                                    return handler(convert_response(std::move(build_resp)));
-                                  });
-                  });
+    auto get_deferred_indexes_span = core->tracer()->create_span(
+      tracing::operation::mgr_query_get_all_deferred_indexes, parent_span);
+    if (get_deferred_indexes_span->uses_tags()) {
+      get_deferred_indexes_span->add_tag(tracing::attributes::op::service, tracing::service::query);
+      get_deferred_indexes_span->add_tag(tracing::attributes::op::bucket_name, bucket_name);
+      if (scope_name.has_value()) {
+        get_deferred_indexes_span->add_tag(tracing::attributes::op::scope_name, scope_name.value());
+      }
+      if (collection_name.has_value()) {
+        get_deferred_indexes_span->add_tag(tracing::attributes::op::collection_name,
+                                           collection_name.value());
+      }
+    }
+    core->execute(
+      query_index_get_all_deferred_request{ bucket_name,
+                                            scope_name.value_or(""),
+                                            collection_name.value_or(""),
+                                            query_ctx,
+                                            client_context_id,
+                                            timeout,
+                                            get_deferred_indexes_span },
+      [core,
+       handler = std::move(handler),
+       bucket_name = bucket_name,
+       scope_name = scope_name.value_or(""),
+       collection_name = collection_name.value_or(""),
+       query_ctx = query_ctx,
+       client_context_id = client_context_id,
+       timeout = timeout,
+       get_deferred_indexes_span = std::move(get_deferred_indexes_span)](
+        query_index_get_all_deferred_response resp1) mutable {
+        get_deferred_indexes_span->end();
+        auto list_resp = std::move(resp1);
+        if (list_resp.ctx.ec || list_resp.index_names.empty()) {
+          return handler(convert_response(std::move(list_resp)));
+        }
+
+        auto build_indexes_span = core->tracer()->create_span(
+          tracing::operation::mgr_query_build_indexes, get_deferred_indexes_span);
+        if (build_indexes_span->uses_tags()) {
+          build_indexes_span->add_tag(tracing::attributes::op::service, tracing::service::query);
+          build_indexes_span->add_tag(tracing::attributes::op::bucket_name, bucket_name);
+          if (!scope_name.empty()) {
+            build_indexes_span->add_tag(tracing::attributes::op::scope_name, scope_name);
+          }
+          if (!collection_name.empty()) {
+            build_indexes_span->add_tag(tracing::attributes::op::collection_name, collection_name);
+          }
+        }
+
+        core->execute(
+          query_index_build_request{ std::move(bucket_name),
+                                     scope_name,
+                                     collection_name,
+                                     query_ctx,
+                                     std::move(list_resp.index_names),
+                                     client_context_id,
+                                     timeout,
+                                     build_indexes_span },
+          [handler = std::move(handler), build_indexes_span = std::move(build_indexes_span)](
+            query_index_build_response build_resp) mutable {
+            build_indexes_span->end();
+            return handler(convert_response(std::move(build_resp)));
+          });
+      });
   }
 };
 } // namespace management
