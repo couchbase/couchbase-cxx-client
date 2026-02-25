@@ -36,7 +36,7 @@ class observability_recorder
 {
 public:
   static auto create(std::string op_name,
-                     std::shared_ptr<couchbase::tracing::request_span> parent_span,
+                     const std::shared_ptr<couchbase::tracing::request_span>& parent_span,
                      std::weak_ptr<tracing::tracer_wrapper> tracer,
                      std::weak_ptr<metrics::meter_wrapper> meter)
     -> std::unique_ptr<observability_recorder>;
@@ -62,7 +62,7 @@ public:
   void finish(std::size_t retry_attempts, std::error_code ec);
 
   observability_recorder(std::string op_name,
-                         std::shared_ptr<couchbase::tracing::request_span> parent_span,
+                         const std::shared_ptr<couchbase::tracing::request_span>& parent_span,
                          std::weak_ptr<tracing::tracer_wrapper> tracer,
                          std::weak_ptr<metrics::meter_wrapper> meter);
 

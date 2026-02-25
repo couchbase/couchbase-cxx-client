@@ -65,6 +65,7 @@
 #include <asio/execution_context.hpp>
 #include <asio/post.hpp>
 
+#include <chrono>
 #include <functional>
 #include <future>
 #include <memory>
@@ -72,6 +73,14 @@
 #include <string_view>
 #include <system_error>
 #include <utility>
+
+#if defined(_WIN32)
+#include <process.h>
+#define GETPID _getpid
+#else
+#include <unistd.h>
+#define GETPID getpid
+#endif
 
 namespace couchbase
 {
@@ -415,14 +424,25 @@ public:
   void notify_fork(fork_event event)
   {
     if (event == fork_event::prepare) {
-      io_.stop();
-      io_thread_.join();
-    } else {
-      // TODO(SA): close all sockets in fork_event::child
+      if (io_thread_.joinable()) {
+        io_.stop();
+        io_thread_.join();
+      }
+    } else if (event == fork_event::parent) {
       io_.restart();
       io_thread_ = std::thread{ [&io = io_] {
         io.run();
       } };
+    } else if (event == fork_event::child) {
+      // In child process, we cannot join parent threads.
+      // We also need to stop the old IO context and restart it.
+      io_.stop();
+      io_.notify_fork(fork_event_to_asio(event));
+      io_.restart();
+      io_thread_ = std::thread{ [&io = io_] {
+        io.run();
+      } };
+      return;
     }
     io_.notify_fork(fork_event_to_asio(event));
 
@@ -661,11 +681,22 @@ cluster::notify_fork(fork_event event) -> void
         CB_LOG_ERROR("Unable to reconnect instance after fork: {}", err.ec().message());
         return;
       }
+      CB_LOG_DEBUG("reconnect successful after fork PID={}", GETPID());
       impl_ = new_impl;
       barrier->set_value();
     });
 
-    future.get();
+    // In the child, if we wait here and the IO thread doesn't start properly, we can deadlock.
+    // Use a bounded wait to avoid hanging the child process indefinitely.
+    constexpr auto reconnect_timeout = std::chrono::seconds(5);
+    auto status = future.wait_for(reconnect_timeout);
+    if (status != std::future_status::ready) {
+      CB_LOG_ERROR(
+        "Timeout ({:lld} seconds) waiting for reconnect after fork PID={}, proceeding without "
+        "confirmed reconnect",
+        static_cast<long long>(reconnect_timeout.count()),
+        GETPID());
+    }
   }
 }
 

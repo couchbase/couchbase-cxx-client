@@ -48,7 +48,7 @@ TEST_CASE("integration: cluster label listener can be used to get cluster labels
   const auto [cluster_name, cluster_uuid] =
     integration.cluster.cluster_label_listener()->cluster_labels();
 
-  if (integration.ctx.version.supports_cluster_labels()) {
+  if (integration.cluster_version().supports_cluster_labels()) {
     REQUIRE(cluster_name.has_value());
     REQUIRE(cluster_uuid.has_value());
 

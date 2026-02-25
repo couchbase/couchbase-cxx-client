@@ -36,6 +36,11 @@ namespace couchbase::core
 class operation_map;
 } // namespace couchbase::core
 
+namespace couchbase::tracing
+{
+class request_span;
+} // namespace couchbase::tracing
+
 namespace couchbase::core::mcbp
 {
 class operation_queue;
@@ -85,6 +90,9 @@ public:
   // This is used to determine what, if any, retry strategy to use when deciding whether to retry
   // the request and calculating any back-off time period.
   std::shared_ptr<couchbase::retry_strategy> retry_strategy_{};
+
+  std::shared_ptr<couchbase::tracing::request_span> parent_span_{ nullptr };
+  std::shared_ptr<couchbase::tracing::request_span> dispatch_span_{ nullptr };
 
 private:
   // Static routing properties

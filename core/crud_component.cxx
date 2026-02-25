@@ -18,16 +18,22 @@
 #include "crud_component.hxx"
 
 #include "collections_component.hxx"
+#include "core/crud_options.hxx"
 #include "core/error_context/key_value_status_code.hxx"
+#include "core/logger/logger.hxx"
 #include "core/mcbp/buffer_writer.hxx"
 #include "core/pending_operation.hxx"
 #include "core/protocol/client_opcode.hxx"
 #include "core/protocol/datatype.hxx"
 #include "core/protocol/magic.hxx"
+#include "core/protocol/status.hxx"
 #include "core/range_scan_options.hxx"
 #include "core/utils/binary.hxx"
 #include "core/utils/unsigned_leb128.hxx"
 #include "mcbp/big_endian.hxx"
+#include "mcbp/durability_level_frame.hxx"
+#include "mcbp/durability_timeout_frame.hxx"
+#include "mcbp/preserve_expiry_frame.hxx"
 #include "mcbp/queue_request.hxx"
 #include "mcbp/queue_response.hxx"
 #include "platform/base64.h"
@@ -230,19 +236,1016 @@ parse_range_scan_data(gsl::span<std::byte> payload,
   }
   return parse_range_scan_documents(payload, request, std::move(items));
 }
+
+auto
+extract_mutation_token(const std::shared_ptr<mcbp::queue_response>& response,
+                       std::uint16_t vbucket,
+                       const std::string& bucket_name) -> mutation_token
+{
+  if (response && response->extras_.size() >= 16) {
+    return mutation_token{ mcbp::big_endian::read_uint64(response->extras_, 0),
+                           mcbp::big_endian::read_uint64(response->extras_, 8),
+                           vbucket,
+                           bucket_name };
+  }
+  return mutation_token{ 0, 0, vbucket, bucket_name };
+}
 } // namespace
 
 class crud_component_impl
 {
 public:
   crud_component_impl(asio::io_context& io,
+                      std::string bucket_name,
                       collections_component collections,
                       std::shared_ptr<retry_strategy> default_retry_strategy)
     : io_{ io }
+    , bucket_name_{ std::move(bucket_name) }
     , collections_{ std::move(collections) }
     , default_retry_strategy_{ std::move(default_retry_strategy) }
   {
     (void)io_;
+  }
+
+private:
+  template<typename Options>
+  auto dispatch_and_set_timeout(std::shared_ptr<mcbp::queue_request> req, const Options& options)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    req->retry_strategy_ =
+      options.retry_strategy ? options.retry_strategy : default_retry_strategy_;
+    req->parent_span_ = options.parent_span;
+
+    auto op = collections_.dispatch(req);
+    if (!op) {
+      return op;
+    }
+
+    if (options.timeout != std::chrono::milliseconds::zero()) {
+      auto timer = std::make_shared<asio::steady_timer>(io_);
+      timer->expires_after(options.timeout);
+      timer->async_wait([req](auto error) {
+        if (error == asio::error::operation_aborted) {
+          return;
+        }
+        req->cancel(req->idempotent() ? couchbase::errc::common::unambiguous_timeout
+                                      : couchbase::errc::common::ambiguous_timeout);
+      });
+      req->set_deadline(timer);
+    }
+    return op;
+  }
+
+  template<typename Result, typename Options, typename Callback>
+  auto store(std::string scope_name,
+             std::string collection_name,
+             std::vector<std::byte> key,
+             std::vector<std::byte> value,
+             const Options& options,
+             protocol::client_opcode opcode,
+             std::optional<couchbase::cas> cas,
+             bool preserve_expiry,
+             Callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    auto handler = [cb = std::move(callback),
+                    bucket_name = bucket_name_](std::shared_ptr<mcbp::queue_response> response,
+                                                std::shared_ptr<mcbp::queue_request> request,
+                                                std::error_code error) {
+      if (error) {
+        Result res{};
+        if (request) {
+          res.internal.retry_attempts = request->retry_attempts();
+          res.internal.retry_reasons = request->retry_reasons();
+        }
+        return cb(std::move(res), error);
+      }
+      if (!response || !request) {
+        return cb({}, errc::network::protocol_error);
+      }
+      Result res{};
+      res.cas = couchbase::cas{ response->cas_ };
+      res.token = extract_mutation_token(response, request->vbucket_, bucket_name);
+      res.internal.retry_attempts = request->retry_attempts();
+      res.internal.retry_reasons = request->retry_reasons();
+      return cb(std::move(res), {});
+    };
+
+    auto req = std::make_shared<mcbp::queue_request>(
+      protocol::magic::client_request, opcode, std::move(handler));
+
+    req->scope_name_ = std::move(scope_name);
+    req->collection_name_ = std::move(collection_name);
+    req->key_ = std::move(key);
+    req->value_ = std::move(value);
+    req->datatype_ = static_cast<std::byte>(options.data_type);
+
+    mcbp::buffer_writer extra_buf(8);
+    extra_buf.write_uint32(options.flags);
+    extra_buf.write_uint32(options.expiry);
+    req->extras_ = std::move(extra_buf.store_);
+
+    if (cas.has_value()) {
+      req->cas_ = cas.value().value();
+    }
+
+    if (options.durability_level != couchbase::durability_level::none) {
+      req->durability_level_frame_ = mcbp::durability_level_frame{
+        static_cast<mcbp::durability_level>(options.durability_level)
+      };
+      if (options.durability_level_timeout.count() > 0) {
+        req->durability_timeout_frame_ =
+          mcbp::durability_timeout_frame{ options.durability_level_timeout };
+      }
+    }
+
+    if (preserve_expiry) {
+      req->preserve_expiry_frame_ = mcbp::preserve_expiry_frame{};
+    }
+
+    return dispatch_and_set_timeout(req, options);
+  }
+
+  template<typename Result, typename Options, typename Callback>
+  auto adjoin(std::string scope_name,
+              std::string collection_name,
+              std::vector<std::byte> key,
+              std::vector<std::byte> value,
+              const Options& options,
+              protocol::client_opcode opcode,
+              Callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    auto handler = [cb = std::move(callback),
+                    bucket_name = bucket_name_](std::shared_ptr<mcbp::queue_response> response,
+                                                std::shared_ptr<mcbp::queue_request> request,
+                                                std::error_code error) {
+      if (error) {
+        Result res{};
+        if (request) {
+          res.internal.retry_attempts = request->retry_attempts();
+          res.internal.retry_reasons = request->retry_reasons();
+        }
+        return cb(std::move(res), error);
+      }
+      if (!response || !request) {
+        return cb({}, errc::network::protocol_error);
+      }
+      Result res{};
+      res.cas = couchbase::cas{ response->cas_ };
+      res.token = extract_mutation_token(response, request->vbucket_, bucket_name);
+      res.internal.retry_attempts = request->retry_attempts();
+      res.internal.retry_reasons = request->retry_reasons();
+      return cb(std::move(res), {});
+    };
+
+    auto req = std::make_shared<mcbp::queue_request>(
+      protocol::magic::client_request, opcode, std::move(handler));
+
+    req->scope_name_ = std::move(scope_name);
+    req->collection_name_ = std::move(collection_name);
+    req->key_ = std::move(key);
+    req->value_ = std::move(value);
+    req->cas_ = options.cas.value();
+
+    if (options.durability_level != couchbase::durability_level::none) {
+      req->durability_level_frame_ = mcbp::durability_level_frame{
+        static_cast<mcbp::durability_level>(options.durability_level)
+      };
+      if (options.durability_level_timeout.count() > 0) {
+        req->durability_timeout_frame_ =
+          mcbp::durability_timeout_frame{ options.durability_level_timeout };
+      }
+    }
+
+    return dispatch_and_set_timeout(req, options);
+  }
+
+  template<typename Result, typename Options, typename Callback>
+  auto counter(std::string scope_name,
+               std::string collection_name,
+               std::vector<std::byte> key,
+               const Options& options,
+               protocol::client_opcode opcode,
+               Callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    auto handler = [cb = std::move(callback),
+                    bucket_name = bucket_name_](std::shared_ptr<mcbp::queue_response> response,
+                                                std::shared_ptr<mcbp::queue_request> request,
+                                                std::error_code error) {
+      if (error) {
+        Result res{};
+        if (request) {
+          res.internal.retry_attempts = request->retry_attempts();
+          res.internal.retry_reasons = request->retry_reasons();
+        }
+        return cb(std::move(res), error);
+      }
+      if (!response || !request) {
+        return cb({}, errc::network::protocol_error);
+      }
+      Result res{};
+      res.cas = couchbase::cas{ response->cas_ };
+      res.token = extract_mutation_token(response, request->vbucket_, bucket_name);
+      if (response->value_.size() == 8) {
+        res.value = mcbp::big_endian::read_uint64(response->value_, 0);
+      }
+      res.internal.retry_attempts = request->retry_attempts();
+      res.internal.retry_reasons = request->retry_reasons();
+      return cb(std::move(res), {});
+    };
+
+    auto req = std::make_shared<mcbp::queue_request>(
+      protocol::magic::client_request, opcode, std::move(handler));
+
+    req->scope_name_ = std::move(scope_name);
+    req->collection_name_ = std::move(collection_name);
+    req->key_ = std::move(key);
+
+    mcbp::buffer_writer extra_buf(20);
+    extra_buf.write_uint64(options.delta);
+    extra_buf.write_uint64(options.initial_value);
+    extra_buf.write_uint32(options.expiry);
+    req->extras_ = std::move(extra_buf.store_);
+
+    if (options.durability_level != couchbase::durability_level::none) {
+      req->durability_level_frame_ = mcbp::durability_level_frame{
+        static_cast<mcbp::durability_level>(options.durability_level)
+      };
+      if (options.durability_level_timeout.count() > 0) {
+        req->durability_timeout_frame_ =
+          mcbp::durability_timeout_frame{ options.durability_level_timeout };
+      }
+    }
+
+    return dispatch_and_set_timeout(req, options);
+  }
+
+public:
+  auto get(std::string scope_name,
+           std::string collection_name,
+           std::vector<std::byte> key,
+           const get_options& options,
+           get_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    auto handler = [cb = std::move(callback)](std::shared_ptr<mcbp::queue_response> response,
+                                              std::shared_ptr<mcbp::queue_request> request,
+                                              std::error_code error) mutable {
+      if (error) {
+        get_result res{};
+        if (request) {
+          res.internal.retry_attempts = request->retry_attempts();
+          res.internal.retry_reasons = request->retry_reasons();
+        }
+        return cb(std::move(res), error);
+      }
+      if (!response || !request) {
+        return cb({}, errc::network::protocol_error);
+      }
+      if (response->extras_.size() != 4) {
+        return cb({}, errc::network::protocol_error);
+      }
+      get_result res{};
+      res.value = response->value_;
+      res.flags = mcbp::big_endian::read_uint32(response->extras_, 0);
+      res.cas = couchbase::cas{ response->cas_ };
+      res.data_type = static_cast<std::uint8_t>(response->datatype_);
+      res.internal.retry_attempts = request->retry_attempts();
+      res.internal.retry_reasons = request->retry_reasons();
+      return cb(std::move(res), {});
+    };
+
+    auto req = std::make_shared<mcbp::queue_request>(
+      protocol::magic::client_request, protocol::client_opcode::get, std::move(handler));
+
+    req->scope_name_ = std::move(scope_name);
+    req->collection_name_ = std::move(collection_name);
+    req->key_ = std::move(key);
+
+    return dispatch_and_set_timeout(req, options);
+  }
+
+  auto insert(std::string scope_name,
+              std::string collection_name,
+              std::vector<std::byte> key,
+              std::vector<std::byte> value,
+              const insert_options& options,
+              insert_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    return store<insert_result>(std::move(scope_name),
+                                std::move(collection_name),
+                                std::move(key),
+                                std::move(value),
+                                options,
+                                protocol::client_opcode::insert,
+                                {},
+                                false,
+                                std::move(callback));
+  }
+
+  auto upsert(std::string scope_name,
+              std::string collection_name,
+              std::vector<std::byte> key,
+              std::vector<std::byte> value,
+              const upsert_options& options,
+              upsert_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    return store<upsert_result>(std::move(scope_name),
+                                std::move(collection_name),
+                                std::move(key),
+                                std::move(value),
+                                options,
+                                protocol::client_opcode::upsert,
+                                {},
+                                options.preserve_expiry,
+                                std::move(callback));
+  }
+
+  auto replace(std::string scope_name,
+               std::string collection_name,
+               std::vector<std::byte> key,
+               std::vector<std::byte> value,
+               const replace_options& options,
+               replace_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    return store<replace_result>(std::move(scope_name),
+                                 std::move(collection_name),
+                                 std::move(key),
+                                 std::move(value),
+                                 options,
+                                 protocol::client_opcode::replace,
+                                 options.cas,
+                                 options.preserve_expiry,
+                                 std::move(callback));
+  }
+
+  auto remove(std::string scope_name,
+              std::string collection_name,
+              std::vector<std::byte> key,
+              const remove_options& options,
+              remove_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    auto handler = [cb = std::move(callback),
+                    bucket_name = bucket_name_](std::shared_ptr<mcbp::queue_response> response,
+                                                std::shared_ptr<mcbp::queue_request> request,
+                                                std::error_code error) {
+      if (error) {
+        remove_result res{};
+        if (request) {
+          res.internal.retry_attempts = request->retry_attempts();
+          res.internal.retry_reasons = request->retry_reasons();
+        }
+        return cb(std::move(res), error);
+      }
+      if (!response || !request) {
+        return cb({}, errc::network::protocol_error);
+      }
+      remove_result res{};
+      res.cas = couchbase::cas{ response->cas_ };
+      res.token = extract_mutation_token(response, request->vbucket_, bucket_name);
+      res.internal.retry_attempts = request->retry_attempts();
+      res.internal.retry_reasons = request->retry_reasons();
+      return cb(std::move(res), {});
+    };
+
+    auto req = std::make_shared<mcbp::queue_request>(
+      protocol::magic::client_request, protocol::client_opcode::remove, std::move(handler));
+
+    req->scope_name_ = std::move(scope_name);
+    req->collection_name_ = std::move(collection_name);
+    req->key_ = std::move(key);
+    req->cas_ = options.cas.value();
+
+    if (options.durability_level != couchbase::durability_level::none) {
+      req->durability_level_frame_ = mcbp::durability_level_frame{
+        static_cast<mcbp::durability_level>(options.durability_level)
+      };
+      if (options.durability_level_timeout.count() > 0) {
+        req->durability_timeout_frame_ =
+          mcbp::durability_timeout_frame{ options.durability_level_timeout };
+      }
+    }
+
+    return dispatch_and_set_timeout(req, options);
+  }
+
+  auto touch(std::string scope_name,
+             std::string collection_name,
+             std::vector<std::byte> key,
+             const touch_options& options,
+             touch_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    auto handler = [cb = std::move(callback),
+                    bucket_name = bucket_name_](std::shared_ptr<mcbp::queue_response> response,
+                                                std::shared_ptr<mcbp::queue_request> request,
+                                                std::error_code error) {
+      if (error) {
+        touch_result res{};
+        if (request) {
+          res.internal.retry_attempts = request->retry_attempts();
+          res.internal.retry_reasons = request->retry_reasons();
+        }
+        return cb(std::move(res), error);
+      }
+      if (!response || !request) {
+        return cb({}, errc::network::protocol_error);
+      }
+      touch_result res{};
+      res.cas = couchbase::cas{ response->cas_ };
+      res.token = extract_mutation_token(response, request->vbucket_, bucket_name);
+      res.internal.retry_attempts = request->retry_attempts();
+      res.internal.retry_reasons = request->retry_reasons();
+      return cb(std::move(res), {});
+    };
+
+    auto req = std::make_shared<mcbp::queue_request>(
+      protocol::magic::client_request, protocol::client_opcode::touch, std::move(handler));
+
+    req->scope_name_ = std::move(scope_name);
+    req->collection_name_ = std::move(collection_name);
+    req->key_ = std::move(key);
+
+    mcbp::buffer_writer extra_buf(4);
+    extra_buf.write_uint32(options.expiry);
+    req->extras_ = std::move(extra_buf.store_);
+
+    return dispatch_and_set_timeout(req, options);
+  }
+
+  auto get_and_touch(std::string scope_name,
+                     std::string collection_name,
+                     std::vector<std::byte> key,
+                     const get_and_touch_options& options,
+                     get_and_touch_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    auto handler = [cb = std::move(callback)](std::shared_ptr<mcbp::queue_response> response,
+                                              std::shared_ptr<mcbp::queue_request> request,
+                                              std::error_code error) {
+      get_and_touch_result res{};
+      if (request) {
+        res.internal.retry_attempts = request->retry_attempts();
+        res.internal.retry_reasons = request->retry_reasons();
+      }
+      if (error) {
+        return cb(std::move(res), error);
+      }
+      if (!response || !request) {
+        return cb(std::move(res), errc::network::protocol_error);
+      }
+      res.value = response->value_;
+      res.flags = mcbp::big_endian::read_uint32(response->extras_, 0);
+      res.cas = couchbase::cas{ response->cas_ };
+      res.data_type = static_cast<std::uint8_t>(response->datatype_);
+      return cb(std::move(res), {});
+    };
+
+    auto req = std::make_shared<mcbp::queue_request>(
+      protocol::magic::client_request, protocol::client_opcode::get_and_touch, std::move(handler));
+
+    req->scope_name_ = std::move(scope_name);
+    req->collection_name_ = std::move(collection_name);
+    req->key_ = std::move(key);
+
+    mcbp::buffer_writer extra_buf(4);
+    extra_buf.write_uint32(options.expiry);
+    req->extras_ = std::move(extra_buf.store_);
+
+    return dispatch_and_set_timeout(req, options);
+  }
+
+  auto get_and_lock(std::string scope_name,
+                    std::string collection_name,
+                    std::vector<std::byte> key,
+                    const get_and_lock_options& options,
+                    get_and_lock_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    auto handler = [cb = std::move(callback)](std::shared_ptr<mcbp::queue_response> response,
+                                              std::shared_ptr<mcbp::queue_request> request,
+                                              std::error_code error) {
+      if (error) {
+        get_and_lock_result res{};
+        if (request) {
+          res.internal.retry_attempts = request->retry_attempts();
+          res.internal.retry_reasons = request->retry_reasons();
+        }
+        return cb(std::move(res), error);
+      }
+      if (!response || !request) {
+        return cb({}, errc::network::protocol_error);
+      }
+      get_and_lock_result res{};
+      res.value = response->value_;
+      res.flags = mcbp::big_endian::read_uint32(response->extras_, 0);
+      res.cas = couchbase::cas{ response->cas_ };
+      res.data_type = static_cast<std::uint8_t>(response->datatype_);
+      res.internal.retry_attempts = request->retry_attempts();
+      res.internal.retry_reasons = request->retry_reasons();
+      return cb(std::move(res), {});
+    };
+
+    auto req = std::make_shared<mcbp::queue_request>(
+      protocol::magic::client_request, protocol::client_opcode::get_and_lock, std::move(handler));
+
+    req->retry_strategy_ =
+      options.retry_strategy ? options.retry_strategy : default_retry_strategy_;
+    req->parent_span_ = options.parent_span;
+    req->scope_name_ = std::move(scope_name);
+    req->collection_name_ = std::move(collection_name);
+    req->key_ = std::move(key);
+
+    mcbp::buffer_writer extra_buf(4);
+    extra_buf.write_uint32(options.lock_time);
+    req->extras_ = std::move(extra_buf.store_);
+
+    auto op = collections_.dispatch(req);
+    if (!op) {
+      return op;
+    }
+
+    if (options.timeout != std::chrono::milliseconds::zero()) {
+      auto timer = std::make_shared<asio::steady_timer>(io_);
+      timer->expires_after(options.timeout);
+      timer->async_wait([req](auto error) {
+        if (error == asio::error::operation_aborted) {
+          return;
+        }
+        req->cancel(req->idempotent() ? couchbase::errc::common::unambiguous_timeout
+                                      : couchbase::errc::common::ambiguous_timeout);
+      });
+      req->set_deadline(timer);
+    }
+    return op;
+  }
+
+  auto unlock(std::string scope_name,
+              std::string collection_name,
+              std::vector<std::byte> key,
+              const unlock_options& options,
+              unlock_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    auto handler = [cb = std::move(callback),
+                    bucket_name = bucket_name_](std::shared_ptr<mcbp::queue_response> response,
+                                                std::shared_ptr<mcbp::queue_request> request,
+                                                std::error_code error) {
+      if (error) {
+        unlock_result res{};
+        if (request) {
+          res.internal.retry_attempts = request->retry_attempts();
+          res.internal.retry_reasons = request->retry_reasons();
+        }
+        return cb(std::move(res), error);
+      }
+      if (!response || !request) {
+        return cb({}, errc::network::protocol_error);
+      }
+      unlock_result res{};
+      res.cas = couchbase::cas{ response->cas_ };
+      res.token = extract_mutation_token(response, request->vbucket_, bucket_name);
+      res.internal.retry_attempts = request->retry_attempts();
+      res.internal.retry_reasons = request->retry_reasons();
+      return cb(std::move(res), {});
+    };
+
+    auto req = std::make_shared<mcbp::queue_request>(
+      protocol::magic::client_request, protocol::client_opcode::unlock, std::move(handler));
+
+    req->retry_strategy_ =
+      options.retry_strategy ? options.retry_strategy : default_retry_strategy_;
+    req->parent_span_ = options.parent_span;
+    req->scope_name_ = std::move(scope_name);
+    req->collection_name_ = std::move(collection_name);
+    req->key_ = std::move(key);
+    req->cas_ = options.cas.value();
+
+    auto op = collections_.dispatch(req);
+    if (!op) {
+      return op;
+    }
+
+    if (options.timeout != std::chrono::milliseconds::zero()) {
+      auto timer = std::make_shared<asio::steady_timer>(io_);
+      timer->expires_after(options.timeout);
+      timer->async_wait([req](auto error) {
+        if (error == asio::error::operation_aborted) {
+          return;
+        }
+        req->cancel(req->idempotent() ? couchbase::errc::common::unambiguous_timeout
+                                      : couchbase::errc::common::ambiguous_timeout);
+      });
+      req->set_deadline(timer);
+    }
+    return op;
+  }
+
+  auto get_with_meta(std::string scope_name,
+                     std::string collection_name,
+                     std::vector<std::byte> key,
+                     const get_with_meta_options& options,
+                     get_with_meta_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    auto handler = [cb = std::move(callback)](std::shared_ptr<mcbp::queue_response> response,
+                                              std::shared_ptr<mcbp::queue_request> request,
+                                              std::error_code error) {
+      if (error) {
+        get_with_meta_result res{};
+        if (request) {
+          res.internal.retry_attempts = request->retry_attempts();
+          res.internal.retry_reasons = request->retry_reasons();
+        }
+        return cb(std::move(res), error);
+      }
+      if (!response || !request) {
+        return cb({}, errc::network::protocol_error);
+      }
+      get_with_meta_result res{};
+      res.cas = couchbase::cas{ response->cas_ };
+      if (response->extras_.size() >= 12) {
+        res.deleted = mcbp::big_endian::read_uint32(response->extras_, 0);
+        res.flags = mcbp::big_endian::read_uint32(response->extras_, 4);
+        res.expiry = mcbp::big_endian::read_uint32(response->extras_, 8);
+      }
+      if (response->extras_.size() >= 20) {
+        res.sequence_number = mcbp::big_endian::read_uint64(response->extras_, 12);
+      }
+      res.internal.retry_attempts = request->retry_attempts();
+      res.internal.retry_reasons = request->retry_reasons();
+      return cb(std::move(res), {});
+    };
+
+    auto req = std::make_shared<mcbp::queue_request>(
+      protocol::magic::client_request, protocol::client_opcode::get_meta, std::move(handler));
+
+    req->retry_strategy_ =
+      options.retry_strategy ? options.retry_strategy : default_retry_strategy_;
+    req->parent_span_ = options.parent_span;
+    req->scope_name_ = std::move(scope_name);
+    req->collection_name_ = std::move(collection_name);
+    req->key_ = std::move(key);
+
+    auto op = collections_.dispatch(req);
+    if (!op) {
+      return op;
+    }
+
+    if (options.timeout != std::chrono::milliseconds::zero()) {
+      auto timer = std::make_shared<asio::steady_timer>(io_);
+      timer->expires_after(options.timeout);
+      timer->async_wait([req](auto error) {
+        if (error == asio::error::operation_aborted) {
+          return;
+        }
+        req->cancel(req->idempotent() ? couchbase::errc::common::unambiguous_timeout
+                                      : couchbase::errc::common::ambiguous_timeout);
+      });
+      req->set_deadline(timer);
+    }
+    return op;
+  }
+
+  auto append(std::string scope_name,
+              std::string collection_name,
+              std::vector<std::byte> key,
+              std::vector<std::byte> value,
+              const adjoin_options& options,
+              adjoin_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    return adjoin<adjoin_result>(std::move(scope_name),
+                                 std::move(collection_name),
+                                 std::move(key),
+                                 std::move(value),
+                                 options,
+                                 protocol::client_opcode::append,
+                                 std::move(callback));
+  }
+
+  auto prepend(std::string scope_name,
+               std::string collection_name,
+               std::vector<std::byte> key,
+               std::vector<std::byte> value,
+               const adjoin_options& options,
+               adjoin_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    return adjoin<adjoin_result>(std::move(scope_name),
+                                 std::move(collection_name),
+                                 std::move(key),
+                                 std::move(value),
+                                 options,
+                                 protocol::client_opcode::prepend,
+                                 std::move(callback));
+  }
+
+  auto increment(std::string scope_name,
+                 std::string collection_name,
+                 std::vector<std::byte> key,
+                 const counter_options& options,
+                 counter_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    return counter<counter_result>(std::move(scope_name),
+                                   std::move(collection_name),
+                                   std::move(key),
+                                   options,
+                                   protocol::client_opcode::increment,
+                                   std::move(callback));
+  }
+
+  auto decrement(std::string scope_name,
+                 std::string collection_name,
+                 std::vector<std::byte> key,
+                 const counter_options& options,
+                 counter_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    return counter<counter_result>(std::move(scope_name),
+                                   std::move(collection_name),
+                                   std::move(key),
+                                   options,
+                                   protocol::client_opcode::decrement,
+                                   std::move(callback));
+  }
+
+  auto lookup_in(std::string scope_name,
+                 std::string collection_name,
+                 std::vector<std::byte> key,
+                 const lookup_in_options& options,
+                 lookup_in_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    auto handler = [cb = std::move(callback)](std::shared_ptr<mcbp::queue_response> response,
+                                              std::shared_ptr<mcbp::queue_request> request,
+                                              std::error_code error) {
+      if (error &&
+          static_cast<key_value_status_code>(response ? response->status_ : 0) !=
+            key_value_status_code::subdoc_multi_path_failure &&
+          static_cast<key_value_status_code>(response ? response->status_ : 0) !=
+            key_value_status_code::subdoc_multi_path_failure_deleted) {
+        lookup_in_result res{};
+        if (request) {
+          res.internal.retry_attempts = request->retry_attempts();
+          res.internal.retry_reasons = request->retry_reasons();
+        }
+        return cb(std::move(res), error);
+      }
+      std::error_code ec = error;
+      if (static_cast<key_value_status_code>(response ? response->status_ : 0) ==
+            key_value_status_code::subdoc_multi_path_failure ||
+          static_cast<key_value_status_code>(response ? response->status_ : 0) ==
+            key_value_status_code::subdoc_multi_path_failure_deleted) {
+        ec = {};
+      }
+      if (!response || !request) {
+        return cb({}, errc::network::protocol_error);
+      }
+      lookup_in_result res{};
+      res.cas = couchbase::cas{ response->cas_ };
+      res.internal.retry_attempts = request->retry_attempts();
+      res.internal.retry_reasons = request->retry_reasons();
+      res.internal.is_deleted = (static_cast<key_value_status_code>(response->status_) ==
+                                   key_value_status_code::subdoc_success_deleted ||
+                                 static_cast<key_value_status_code>(response->status_) ==
+                                   key_value_status_code::subdoc_multi_path_failure_deleted);
+
+      if (!response->value_.empty()) {
+        std::size_t offset = 0;
+        std::size_t res_idx = 0;
+        while (offset + 6 <= response->value_.size()) {
+          subdoc_result sub_res{};
+          sub_res.index = res_idx++;
+          std::uint16_t entry_status = mcbp::big_endian::read_uint16(response->value_, offset);
+          offset += 2;
+          sub_res.status = static_cast<key_value_status_code>(entry_status);
+          sub_res.error = protocol::map_status_code(request->command_, entry_status);
+
+          std::uint32_t entry_size = mcbp::big_endian::read_uint32(response->value_, offset);
+          offset += 4;
+
+          if (offset + entry_size <= response->value_.size()) {
+            sub_res.value.resize(entry_size);
+            std::memcpy(sub_res.value.data(), response->value_.data() + offset, entry_size);
+            offset += entry_size;
+          }
+
+          res.results.emplace_back(std::move(sub_res));
+        }
+      }
+      return cb(std::move(res), ec);
+    };
+
+    auto req = std::make_shared<mcbp::queue_request>(protocol::magic::client_request,
+                                                     protocol::client_opcode::subdoc_multi_lookup,
+                                                     std::move(handler));
+
+    CB_LOG_TRACE("dispatching lookup_in request: opcode={}, ops={}",
+                 static_cast<std::uint8_t>(protocol::client_opcode::subdoc_multi_lookup),
+                 options.operations.size());
+
+    req->retry_strategy_ =
+      options.retry_strategy ? options.retry_strategy : default_retry_strategy_;
+    req->parent_span_ = options.parent_span;
+    req->scope_name_ = std::move(scope_name);
+    req->collection_name_ = std::move(collection_name);
+    req->key_ = std::move(key);
+
+    if (options.flags != 0) {
+      req->extras_ = { static_cast<std::byte>(options.flags) };
+    }
+
+    std::size_t value_size = 0;
+    for (const auto& op : options.operations) {
+      value_size += 4 + op.path.size();
+    }
+    mcbp::buffer_writer writer(value_size);
+    for (const auto& op : options.operations) {
+      writer.write_byte(static_cast<std::byte>(op.opcode));
+      writer.write_byte(static_cast<std::byte>(op.flags));
+      writer.write_uint16(static_cast<std::uint16_t>(op.path.size()));
+      writer.write(utils::to_binary(op.path));
+    }
+    req->value_ = std::move(writer.store_);
+
+    auto op = collections_.dispatch(req);
+    if (!op) {
+      return op;
+    }
+
+    if (options.timeout != std::chrono::milliseconds::zero()) {
+      auto timer = std::make_shared<asio::steady_timer>(io_);
+      timer->expires_after(options.timeout);
+      timer->async_wait([req](auto error) {
+        if (error == asio::error::operation_aborted) {
+          return;
+        }
+        req->cancel(req->idempotent() ? couchbase::errc::common::unambiguous_timeout
+                                      : couchbase::errc::common::ambiguous_timeout);
+      });
+      req->set_deadline(timer);
+    }
+    return op;
+  }
+
+  auto mutate_in(std::string scope_name,
+                 std::string collection_name,
+                 std::vector<std::byte> key,
+                 const mutate_in_options& options,
+                 mutate_in_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  {
+    auto handler = [cb = std::move(callback),
+                    bucket_name = bucket_name_](std::shared_ptr<mcbp::queue_response> response,
+                                                std::shared_ptr<mcbp::queue_request> request,
+                                                std::error_code error) {
+      CB_LOG_TRACE("mutate_in response: error={}, status={}",
+                   error.message(),
+                   static_cast<std::uint16_t>(response ? response->status_ : 0));
+      if (error &&
+          static_cast<key_value_status_code>(response ? response->status_ : 0) !=
+            key_value_status_code::subdoc_multi_path_failure &&
+          static_cast<key_value_status_code>(response ? response->status_ : 0) !=
+            key_value_status_code::subdoc_multi_path_failure_deleted) {
+        mutate_in_result res{};
+        if (request) {
+          res.internal.retry_attempts = request->retry_attempts();
+          res.internal.retry_reasons = request->retry_reasons();
+        }
+        return cb(std::move(res), error);
+      }
+      std::error_code ec = error;
+      if (static_cast<key_value_status_code>(response ? response->status_ : 0) ==
+            key_value_status_code::subdoc_multi_path_failure ||
+          static_cast<key_value_status_code>(response ? response->status_ : 0) ==
+            key_value_status_code::subdoc_multi_path_failure_deleted) {
+        ec = {};
+      }
+      if (!response || !request) {
+        return cb({}, errc::network::protocol_error);
+      }
+      mutate_in_result res{};
+      res.cas = couchbase::cas{ response->cas_ };
+      if (static_cast<key_value_status_code>(response->status_) == key_value_status_code::success ||
+          static_cast<key_value_status_code>(response->status_) ==
+            key_value_status_code::subdoc_success_deleted) {
+        res.token = extract_mutation_token(response, request->vbucket_, bucket_name);
+      }
+      res.internal.retry_attempts = request->retry_attempts();
+      res.internal.retry_reasons = request->retry_reasons();
+      res.internal.is_deleted = (static_cast<key_value_status_code>(response->status_) ==
+                                   key_value_status_code::subdoc_success_deleted ||
+                                 static_cast<key_value_status_code>(response->status_) ==
+                                   key_value_status_code::subdoc_multi_path_failure_deleted);
+
+      std::size_t offset = 0;
+      while (offset + 3 <= response->value_.size()) {
+        subdoc_result sub_res{};
+        sub_res.index = std::to_integer<std::uint8_t>(response->value_[offset]);
+        offset += 1;
+
+        std::uint16_t entry_status = mcbp::big_endian::read_uint16(response->value_, offset);
+        offset += 2;
+        sub_res.status = static_cast<key_value_status_code>(entry_status);
+        sub_res.error = protocol::map_status_code(request->command_, entry_status);
+
+        if (sub_res.error == std::error_code{}) {
+          if (offset + 4 <= response->value_.size()) {
+            std::uint32_t entry_size = mcbp::big_endian::read_uint32(response->value_, offset);
+            offset += 4;
+
+            if (offset + entry_size <= response->value_.size()) {
+              sub_res.value.resize(entry_size);
+              std::memcpy(sub_res.value.data(), response->value_.data() + offset, entry_size);
+              offset += entry_size;
+            }
+          }
+        }
+
+        res.results.emplace_back(std::move(sub_res));
+      }
+      return cb(std::move(res), ec);
+    };
+
+    auto req = std::make_shared<mcbp::queue_request>(protocol::magic::client_request,
+                                                     protocol::client_opcode::subdoc_multi_mutation,
+                                                     std::move(handler));
+
+    req->retry_strategy_ =
+      options.retry_strategy ? options.retry_strategy : default_retry_strategy_;
+    req->parent_span_ = options.parent_span;
+    req->scope_name_ = std::move(scope_name);
+    req->collection_name_ = std::move(collection_name);
+    req->key_ = std::move(key);
+    req->cas_ = options.cas.value();
+
+    std::size_t extra_size = 0;
+    if (options.expiry != 0) {
+      extra_size += 4;
+    }
+    if (options.flags != 0) {
+      extra_size += 1;
+    }
+    mcbp::buffer_writer extra_writer(extra_size);
+    if (options.expiry != 0) {
+      extra_writer.write_uint32(options.expiry);
+    }
+    if (options.flags != 0) {
+      extra_writer.write_byte(static_cast<std::byte>(options.flags));
+    }
+    req->extras_ = std::move(extra_writer.store_);
+
+    if (options.durability_level != couchbase::durability_level::none) {
+      req->durability_level_frame_ = mcbp::durability_level_frame{
+        static_cast<mcbp::durability_level>(options.durability_level)
+      };
+      if (options.durability_level_timeout.count() > 0) {
+        req->durability_timeout_frame_ =
+          mcbp::durability_timeout_frame{ options.durability_level_timeout };
+      }
+    }
+
+    std::size_t value_size = 0;
+    for (const auto& op : options.operations) {
+      value_size += 8 + op.path.size() + op.value.size();
+    }
+    mcbp::buffer_writer writer(value_size);
+    for (const auto& op : options.operations) {
+      writer.write_byte(static_cast<std::byte>(op.opcode));
+      writer.write_byte(static_cast<std::byte>(op.flags));
+      writer.write_uint16(static_cast<std::uint16_t>(op.path.size()));
+      writer.write_uint32(static_cast<std::uint32_t>(op.value.size()));
+      writer.write(utils::to_binary(op.path));
+      writer.write(op.value);
+    }
+    req->value_ = std::move(writer.store_);
+
+    auto op = collections_.dispatch(req);
+    if (!op) {
+      return op;
+    }
+
+    if (options.timeout != std::chrono::milliseconds::zero()) {
+      auto timer = std::make_shared<asio::steady_timer>(io_);
+      timer->expires_after(options.timeout);
+      timer->async_wait([req](auto error) {
+        if (error == asio::error::operation_aborted) {
+          return;
+        }
+        req->cancel(req->idempotent() ? couchbase::errc::common::unambiguous_timeout
+                                      : couchbase::errc::common::ambiguous_timeout);
+      });
+      req->set_deadline(timer);
+    }
+    return op;
   }
 
   auto range_scan_create(std::uint16_t vbucket_id,
@@ -251,8 +1254,8 @@ public:
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     auto handler = [cb = std::move(callback),
-                    options](const std::shared_ptr<mcbp::queue_response>& response,
-                             const std::shared_ptr<mcbp::queue_request>& /* request */,
+                    options](std::shared_ptr<mcbp::queue_response> response,
+                             std::shared_ptr<mcbp::queue_request> /* request */,
                              std::error_code error) {
       if (error) {
         return cb({}, error);
@@ -266,6 +1269,7 @@ public:
 
     req->retry_strategy_ =
       options.retry_strategy ? options.retry_strategy : default_retry_strategy_;
+    req->parent_span_ = options.parent_span;
     req->datatype_ = static_cast<std::byte>(protocol::datatype::json);
     req->vbucket_ = vbucket_id;
     req->scope_name_ = options.scope_name;
@@ -288,7 +1292,8 @@ public:
         if (error == asio::error::operation_aborted) {
           return;
         }
-        req->cancel(couchbase::errc::common::unambiguous_timeout);
+        req->cancel(req->idempotent() ? couchbase::errc::common::unambiguous_timeout
+                                      : couchbase::errc::common::ambiguous_timeout);
       });
       req->set_deadline(timer);
     }
@@ -355,7 +1360,8 @@ public:
         if (error == asio::error::operation_aborted) {
           return;
         }
-        req->cancel(couchbase::errc::common::unambiguous_timeout);
+        req->cancel(req->idempotent() ? couchbase::errc::common::unambiguous_timeout
+                                      : couchbase::errc::common::ambiguous_timeout);
       });
       req->set_deadline(timer);
     }
@@ -405,7 +1411,8 @@ public:
         if (error == asio::error::operation_aborted) {
           return;
         }
-        req->cancel(couchbase::errc::common::unambiguous_timeout);
+        req->cancel(req->idempotent() ? couchbase::errc::common::unambiguous_timeout
+                                      : couchbase::errc::common::ambiguous_timeout);
       });
       req->set_deadline(timer);
     }
@@ -415,14 +1422,17 @@ public:
 
 private:
   asio::io_context& io_;
+  std::string bucket_name_;
   collections_component collections_;
   std::shared_ptr<retry_strategy> default_retry_strategy_;
 };
 
 crud_component::crud_component(asio::io_context& io,
+                               std::string bucket_name,
                                collections_component collections,
                                std::shared_ptr<retry_strategy> default_retry_strategy)
   : impl_{ std::make_shared<crud_component_impl>(io,
+                                                 std::move(bucket_name),
                                                  std::move(collections),
                                                  std::move(default_retry_strategy)) }
 {
@@ -458,4 +1468,254 @@ crud_component::range_scan_cancel(std::vector<std::byte> scan_uuid,
 {
   return impl_->range_scan_cancel(std::move(scan_uuid), vbucket_id, options, std::move(callback));
 }
+
+auto
+crud_component::get(std::string scope_name,
+                    std::string collection_name,
+                    std::vector<std::byte> key,
+                    const get_options& options,
+                    get_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->get(std::move(scope_name),
+                    std::move(collection_name),
+                    std::move(key),
+                    options,
+                    std::move(callback));
+}
+auto
+crud_component::insert(std::string scope_name,
+                       std::string collection_name,
+                       std::vector<std::byte> key,
+                       std::vector<std::byte> value,
+                       const insert_options& options,
+                       insert_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->insert(std::move(scope_name),
+                       std::move(collection_name),
+                       std::move(key),
+                       std::move(value),
+                       options,
+                       std::move(callback));
+}
+
+auto
+crud_component::upsert(std::string scope_name,
+                       std::string collection_name,
+                       std::vector<std::byte> key,
+                       std::vector<std::byte> value,
+                       const upsert_options& options,
+                       upsert_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->upsert(std::move(scope_name),
+                       std::move(collection_name),
+                       std::move(key),
+                       std::move(value),
+                       options,
+                       std::move(callback));
+}
+
+auto
+crud_component::replace(std::string scope_name,
+                        std::string collection_name,
+                        std::vector<std::byte> key,
+                        std::vector<std::byte> value,
+                        const replace_options& options,
+                        replace_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->replace(std::move(scope_name),
+                        std::move(collection_name),
+                        std::move(key),
+                        std::move(value),
+                        options,
+                        std::move(callback));
+}
+
+auto
+crud_component::remove(std::string scope_name,
+                       std::string collection_name,
+                       std::vector<std::byte> key,
+                       const remove_options& options,
+                       remove_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->remove(std::move(scope_name),
+                       std::move(collection_name),
+                       std::move(key),
+                       options,
+                       std::move(callback));
+}
+
+auto
+crud_component::touch(std::string scope_name,
+                      std::string collection_name,
+                      std::vector<std::byte> key,
+                      const touch_options& options,
+                      touch_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->touch(std::move(scope_name),
+                      std::move(collection_name),
+                      std::move(key),
+                      options,
+                      std::move(callback));
+}
+
+auto
+crud_component::get_and_touch(std::string scope_name,
+                              std::string collection_name,
+                              std::vector<std::byte> key,
+                              const get_and_touch_options& options,
+                              get_and_touch_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->get_and_touch(std::move(scope_name),
+                              std::move(collection_name),
+                              std::move(key),
+                              options,
+                              std::move(callback));
+}
+
+auto
+crud_component::get_and_lock(std::string scope_name,
+                             std::string collection_name,
+                             std::vector<std::byte> key,
+                             const get_and_lock_options& options,
+                             get_and_lock_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->get_and_lock(std::move(scope_name),
+                             std::move(collection_name),
+                             std::move(key),
+                             options,
+                             std::move(callback));
+}
+
+auto
+crud_component::unlock(std::string scope_name,
+                       std::string collection_name,
+                       std::vector<std::byte> key,
+                       const unlock_options& options,
+                       unlock_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->unlock(std::move(scope_name),
+                       std::move(collection_name),
+                       std::move(key),
+                       options,
+                       std::move(callback));
+}
+
+auto
+crud_component::get_with_meta(std::string scope_name,
+                              std::string collection_name,
+                              std::vector<std::byte> key,
+                              const get_with_meta_options& options,
+                              get_with_meta_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->get_with_meta(std::move(scope_name),
+                              std::move(collection_name),
+                              std::move(key),
+                              options,
+                              std::move(callback));
+}
+
+auto
+crud_component::append(std::string scope_name,
+                       std::string collection_name,
+                       std::vector<std::byte> key,
+                       std::vector<std::byte> value,
+                       const adjoin_options& options,
+                       adjoin_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->append(std::move(scope_name),
+                       std::move(collection_name),
+                       std::move(key),
+                       std::move(value),
+                       options,
+                       std::move(callback));
+}
+
+auto
+crud_component::prepend(std::string scope_name,
+                        std::string collection_name,
+                        std::vector<std::byte> key,
+                        std::vector<std::byte> value,
+                        const adjoin_options& options,
+                        adjoin_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->prepend(std::move(scope_name),
+                        std::move(collection_name),
+                        std::move(key),
+                        std::move(value),
+                        options,
+                        std::move(callback));
+}
+
+auto
+crud_component::increment(std::string scope_name,
+                          std::string collection_name,
+                          std::vector<std::byte> key,
+                          const counter_options& options,
+                          counter_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->increment(std::move(scope_name),
+                          std::move(collection_name),
+                          std::move(key),
+                          options,
+                          std::move(callback));
+}
+
+auto
+crud_component::decrement(std::string scope_name,
+                          std::string collection_name,
+                          std::vector<std::byte> key,
+                          const counter_options& options,
+                          counter_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->decrement(std::move(scope_name),
+                          std::move(collection_name),
+                          std::move(key),
+                          options,
+                          std::move(callback));
+}
+
+auto
+crud_component::lookup_in(std::string scope_name,
+                          std::string collection_name,
+                          std::vector<std::byte> key,
+                          const lookup_in_options& options,
+                          lookup_in_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->lookup_in(std::move(scope_name),
+                          std::move(collection_name),
+                          std::move(key),
+                          options,
+                          std::move(callback));
+}
+
+auto
+crud_component::mutate_in(std::string scope_name,
+                          std::string collection_name,
+                          std::vector<std::byte> key,
+                          const mutate_in_options& options,
+                          mutate_in_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->mutate_in(std::move(scope_name),
+                          std::move(collection_name),
+                          std::move(key),
+                          options,
+                          std::move(callback));
+}
+
 } // namespace couchbase::core

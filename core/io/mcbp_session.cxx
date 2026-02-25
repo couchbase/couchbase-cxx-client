@@ -1371,16 +1371,22 @@ public:
     }
 
     if (reason == retry_reason::socket_closed_while_in_flight && !bootstrapped_) {
-      return stream_->close([self = shared_from_this(), old_id = stream_->id()](std::error_code) {
-        CB_LOG_DEBUG(
-          R"({} reopened socket connection due to IO error, "{}" -> "{}", host="{}", port={})",
-          self->log_prefix_,
-          old_id,
-          self->stream_->id(),
-          self->bootstrap_hostname_,
-          self->bootstrap_port_);
-        return self->initiate_bootstrap();
-      });
+      // Dispatch close through the stream's strand to serialize with any in-flight on_connect
+      // that may be reading plain_stream_impl::stream_ concurrently.
+      return asio::dispatch(
+        stream_->get_executor(),
+        [self = shared_from_this(), old_id = stream_->id()]() mutable -> void {
+          self->stream_->close([self, old_id = std::move(old_id)](std::error_code) mutable -> void {
+            CB_LOG_DEBUG(
+              R"({} reopened socket connection due to IO error, "{}" -> "{}", host="{}", port={})",
+              self->log_prefix_,
+              old_id,
+              self->stream_->id(),
+              self->bootstrap_hostname_,
+              self->bootstrap_port_);
+            return self->initiate_bootstrap();
+          });
+        });
     }
 
     state_ = diag::endpoint_state::disconnecting;
@@ -1393,7 +1399,11 @@ public:
     retry_backoff_.cancel();
     ping_timeout_.cancel();
     resolver_.cancel();
-    stream_->close([](std::error_code) {
+    // Dispatch close through the stream's strand to serialize with any in-flight on_connect
+    // that may be reading plain_stream_impl::stream_ concurrently from the stream's strand.
+    asio::dispatch(stream_->get_executor(), [self = shared_from_this()]() -> void {
+      self->stream_->close([](std::error_code) -> void {
+      });
     });
     if (auto h = std::move(bootstrap_handler_); h) {
       h->stop();
@@ -1431,7 +1441,8 @@ public:
                        log_prefix_,
                        opaque,
                        ec.message());
-          handler->handle_response(std::move(request), {}, reason, {}, {});
+          handler->handle_response(
+            std::move(request), io::mcbp_session(shared_from_this()), ec, reason, {}, {});
         }
       }
       operations_.clear();
@@ -1536,6 +1547,7 @@ public:
     }
     if (request) {
       handler->handle_response(std::move(request),
+                               io::mcbp_session(shared_from_this()),
                                protocol::map_status_code(opcode, status),
                                reason,
                                std::move(msg),
@@ -1560,6 +1572,7 @@ public:
       CB_LOG_WARNING("cancel operation while trying to write to closed mcbp session, opaque={}",
                      opaque);
       handler->handle_response(request,
+                               io::mcbp_session(shared_from_this()),
                                errc::common::request_canceled,
                                retry_reason::socket_closed_while_in_flight,
                                {},

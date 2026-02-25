@@ -40,6 +40,7 @@ namespace couchbase::core
 class crud_component;
 class cluster_impl;
 class cluster_label_listener;
+class bucket;
 
 namespace tracing
 {
@@ -70,6 +71,7 @@ class cluster
 {
 public:
   explicit cluster(asio::io_context& ctx);
+  explicit cluster(std::shared_ptr<cluster_impl> impl);
 
   [[nodiscard]] auto io_context() const -> asio::io_context&;
 
@@ -343,6 +345,7 @@ public:
   [[nodiscard]] auto meter() const -> const std::shared_ptr<metrics::meter_wrapper>&;
   [[nodiscard]] auto cluster_label_listener() const
     -> const std::shared_ptr<cluster_label_listener>&;
+  [[nodiscard]] auto find_bucket_by_name(const std::string& name) const -> std::shared_ptr<bucket>;
 
 private:
   std::shared_ptr<cluster_impl> impl_;

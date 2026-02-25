@@ -17,18 +17,36 @@
 
 #include "observability_recorder.hxx"
 #include "core/tracing/attribute_helpers.hxx"
+#include "core/tracing/noop_tracer.hxx"
 
 namespace couchbase::core::impl
 {
+namespace
+{
+auto
+make_span(const std::weak_ptr<tracing::tracer_wrapper>& tracer,
+          const std::string& op_name,
+          const std::shared_ptr<couchbase::tracing::request_span>& parent_span)
+  -> std::shared_ptr<couchbase::tracing::request_span>
+{
+  if (auto locked = tracer.lock(); locked) {
+    return locked->create_span(op_name, parent_span);
+  }
+  // Tracer has been destroyed (e.g. cluster closed) — return a no-op span.
+  static tracing::noop_tracer fallback_tracer{};
+  return fallback_tracer.start_span(op_name, parent_span);
+}
+} // namespace
+
 auto
 observability_recorder::create(std::string op_name,
-                               std::shared_ptr<couchbase::tracing::request_span> parent_span,
+                               const std::shared_ptr<couchbase::tracing::request_span>& parent_span,
                                std::weak_ptr<tracing::tracer_wrapper> tracer,
                                std::weak_ptr<metrics::meter_wrapper> meter)
   -> std::unique_ptr<observability_recorder>
 {
   auto rec = std::make_unique<observability_recorder>(
-    std::move(op_name), std::move(parent_span), std::move(tracer), std::move(meter));
+    std::move(op_name), parent_span, std::move(tracer), std::move(meter));
   if (rec->span_->uses_tags()) {
     rec->span_->add_tag(tracing::attributes::op::operation_name, rec->op_name_);
   }
@@ -46,7 +64,9 @@ void
 observability_recorder::finish(const std::error_code ec)
 {
   metric_attributes_.ec = ec;
-  meter_.lock()->record_value(std::move(metric_attributes_), start_time_);
+  if (auto locked = meter_.lock(); locked) {
+    locked->record_value(std::move(metric_attributes_), start_time_);
+  }
   span_->end();
 }
 
@@ -63,7 +83,7 @@ auto
 observability_recorder::create_request_encoding_span() const
   -> std::shared_ptr<couchbase::tracing::request_span>
 {
-  return tracer_.lock()->create_span(tracing::operation::step_request_encoding, span_);
+  return make_span(tracer_, tracing::operation::step_request_encoding, span_);
 }
 
 auto
@@ -148,13 +168,13 @@ observability_recorder::with_query_statement(const std::string& statement,
 
 observability_recorder::observability_recorder(
   std::string op_name,
-  std::shared_ptr<couchbase::tracing::request_span> parent_span,
+  const std::shared_ptr<couchbase::tracing::request_span>& parent_span,
   std::weak_ptr<tracing::tracer_wrapper> tracer,
   std::weak_ptr<metrics::meter_wrapper> meter)
   : op_name_{ std::move(op_name) }
   , tracer_{ std::move(tracer) }
   , meter_{ std::move(meter) }
-  , span_{ tracer_.lock()->create_span(op_name_, std::move(parent_span)) }
+  , span_{ make_span(tracer_, op_name_, parent_span) }
   , start_time_{ std::chrono::steady_clock::now() }
 {
 }

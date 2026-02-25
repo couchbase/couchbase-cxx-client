@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include "error_context/key_value_status_code.hxx"
 #include "protocol/client_opcode.hxx"
 #include "resource_units.hxx"
 #include "utils/movable_function.hxx"
@@ -25,6 +26,7 @@
 
 #include <chrono>
 #include <optional>
+#include <set>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -32,6 +34,7 @@
 namespace couchbase
 {
 class retry_strategy;
+enum class retry_reason;
 namespace tracing
 {
 class request_span;
@@ -40,6 +43,8 @@ class request_span;
 
 namespace couchbase::core
 {
+using couchbase::retry_reason;
+
 struct subdoc_operation {
   protocol::subdoc_opcode opcode{};
   std::uint8_t flags{};
@@ -48,7 +53,9 @@ struct subdoc_operation {
 };
 
 struct subdoc_result {
+  std::size_t index{};
   std::error_code error{};
+  key_value_status_code status{};
   std::vector<std::byte> value{};
 };
 
@@ -80,6 +87,8 @@ public:
   struct {
     bool is_deleted{};
     std::optional<resource_unit_result> resource_units{};
+    std::size_t retry_attempts{ 0 };
+    std::set<retry_reason> retry_reasons{};
   } internal{};
 };
 
@@ -117,7 +126,10 @@ public:
   mutation_token token{};
 
   struct {
+    bool is_deleted{};
     std::optional<resource_unit_result> resource_units{};
+    std::size_t retry_attempts{ 0 };
+    std::set<retry_reason> retry_reasons{};
   } internal{};
 };
 

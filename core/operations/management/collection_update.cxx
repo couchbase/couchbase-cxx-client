@@ -29,8 +29,8 @@
 namespace couchbase::core::operations::management
 {
 auto
-collection_update_request::encode_to(encoded_request_type& encoded,
-                                     http_context& /*context*/) const -> std::error_code
+collection_update_request::encode_to(encoded_request_type& encoded, http_context& /*context*/) const
+  -> std::error_code
 {
   encoded.method = "PATCH";
   encoded.path = fmt::format("/pools/default/buckets/{}/scopes/{}/collections/{}",
@@ -62,7 +62,12 @@ collection_update_request::make_response(error_context::http&& ctx,
   if (!response.ctx.ec) {
     switch (encoded.status_code) {
       case 400: {
-        response.ctx.ec = errc::common::invalid_argument;
+        const std::regex not_allowed_on_bucket_type("Not allowed on this type of bucket");
+        if (std::regex_search(encoded.body.data(), not_allowed_on_bucket_type)) {
+          response.ctx.ec = errc::common::feature_not_available;
+        } else {
+          response.ctx.ec = errc::common::invalid_argument;
+        }
       } break;
       case 404: {
         const std::regex scope_not_found("Scope with name .+ is not found");

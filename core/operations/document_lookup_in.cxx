@@ -92,10 +92,10 @@ lookup_in_request::make_response(key_value_error_context&& ctx,
           fields[i].ec == errc::key_value::path_not_found) {
         fields[i].ec.clear();
       }
-      if (!fields[i].ec && !ctx.ec()) {
+      if (fields[i].ec && !ec) {
         ec = fields[i].ec;
       }
-      if (!first_error_index && !fields[i].ec) {
+      if (!first_error_index && fields[i].ec) {
         first_error_index = i;
         first_error_path = fields[i].path;
       }
