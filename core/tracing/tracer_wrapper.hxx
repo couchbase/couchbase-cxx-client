@@ -42,6 +42,8 @@ public:
                    std::shared_ptr<couchbase::tracing::request_span> parent_span)
     -> std::shared_ptr<couchbase::tracing::request_span>;
 
+  [[nodiscard]] auto wrapped() -> std::shared_ptr<couchbase::tracing::request_tracer>;
+
   [[nodiscard]] static auto create(std::shared_ptr<couchbase::tracing::request_tracer> tracer,
                                    std::shared_ptr<cluster_label_listener> label_listener)
     -> std::shared_ptr<tracer_wrapper>;

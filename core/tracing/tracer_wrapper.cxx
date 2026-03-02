@@ -65,6 +65,12 @@ tracer_wrapper::create_span(std::string span_name,
 }
 
 auto
+tracer_wrapper::wrapped() -> std::shared_ptr<couchbase::tracing::request_tracer>
+{
+  return tracer_;
+}
+
+auto
 tracer_wrapper::create(std::shared_ptr<couchbase::tracing::request_tracer> tracer,
                        std::shared_ptr<cluster_label_listener> label_listener)
   -> std::shared_ptr<tracer_wrapper>
