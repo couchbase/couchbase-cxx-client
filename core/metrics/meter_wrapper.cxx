@@ -151,6 +151,13 @@ meter_wrapper::stop()
 }
 
 void
+meter_wrapper::record_value(const std::map<std::string, std::string>& raw_attrs,
+                            std::chrono::microseconds duration)
+{
+  meter_->get_value_recorder(operation_meter_name, raw_attrs)->record_value(duration.count());
+}
+
+void
 meter_wrapper::record_value(metric_attributes attrs,
                             std::chrono::steady_clock::time_point start_time)
 {
@@ -162,10 +169,15 @@ meter_wrapper::record_value(metric_attributes attrs,
     attrs.internal.cluster_uuid = cluster_uuid;
   }
 
-  meter_->get_value_recorder(operation_meter_name, attrs.encode())
-    ->record_value(std::chrono::duration_cast<std::chrono::microseconds>(
-                     std::chrono::steady_clock::now() - start_time)
-                     .count());
+  record_value(attrs.encode(),
+               std::chrono::duration_cast<std::chrono::microseconds>(
+                 std::chrono::steady_clock::now() - start_time));
+}
+
+auto
+meter_wrapper::wrapped() -> std::shared_ptr<couchbase::metrics::meter>
+{
+  return meter_;
 }
 
 auto
