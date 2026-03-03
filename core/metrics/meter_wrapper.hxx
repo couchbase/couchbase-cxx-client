@@ -59,7 +59,7 @@ public:
   void stop();
 
   void record_value(metric_attributes attrs, std::chrono::steady_clock::time_point start_time);
-  void record_value(std::map<std::string, std::string> raw_attrs,
+  void record_value(const std::map<std::string, std::string>& raw_attrs,
                     std::chrono::microseconds duration);
 
   [[nodiscard]] auto wrapped() -> std::shared_ptr<couchbase::metrics::meter>;

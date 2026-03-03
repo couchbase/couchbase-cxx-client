@@ -151,7 +151,7 @@ meter_wrapper::stop()
 }
 
 void
-meter_wrapper::record_value(std::map<std::string, std::string> raw_attrs,
+meter_wrapper::record_value(const std::map<std::string, std::string>& raw_attrs,
                             std::chrono::microseconds duration)
 {
   meter_->get_value_recorder(operation_meter_name, raw_attrs)->record_value(duration.count());
