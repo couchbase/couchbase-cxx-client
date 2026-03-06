@@ -41,6 +41,10 @@ endif()
 
 if(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
   if(NOT TARGET opentelemetry)
+    # Disable curl HTTP client to avoid curl downloading and linking to BoringSSL
+    # OpenTelemetry will fall back to using its own HTTP client implementation
+    # This avoids CMake export errors when curl tries to reference ssl/crypto targets
+    
     # https://github.com/open-telemetry/opentelemetry-cpp/releases
     cpmaddpackage(
       NAME
@@ -55,12 +59,14 @@ if(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
       "OPENTELEMETRY_INSTALL OFF"
       "WITH_ABI_VERSION_1 OFF"
       "WITH_ABI_VERSION_2 ON"
-      "WITH_ABSEIL OFF"
       "WITH_BENCHMARK OFF"
       "WITH_EXAMPLES OFF"
       "WITH_FUNC_TESTS OFF"
       "WITH_OTLP_GRPC OFF"
       "WITH_OTLP_HTTP ON"
+      "WITH_HTTP_CLIENT_CURL OFF"
+      "WITH_PROMETHEUS OFF"
+      "WITH_OPENTRACING OFF"
       "WITH_STL CXX17"
       "BUILD_TESTING OFF"
       "BUILD_SHARED_LIBS OFF"
