@@ -5,8 +5,19 @@ pkgname=couchbase-cxx-client
 pkgver=@COUCHBASE_CXX_CLIENT_PACKAGE_VERSION@
 pkgrel=1
 _number_of_commits=@COUCHBASE_CXX_CLIENT_NUMBER_OF_COMMITS@
+_git_revision_short=@COUCHBASE_CXX_CLIENT_GIT_REVISION_SHORT@
 if [ "${_number_of_commits}" -gt 0 ]; then
-	pkgver="${pkgver}_p${_number_of_commits}"
+	# Encode commit count and git hash into _p version for uniqueness
+	# Extract first 3 hex bytes from git hash, convert to decimal
+	# Map each byte mod 100 to create 6-digit suffix
+	# Formula: p = commits × 10_000_000 + (byte1%100)*10000 + (byte2%100)*100 + (byte3%100)
+	# Example: 1.2.0-75-gfeb729b2 → 1.2.0_p750548341
+	_b1=$((0x${_git_revision_short:0:2}))
+	_b2=$((0x${_git_revision_short:2:2}))
+	_b3=$((0x${_git_revision_short:4:2}))
+	_sha_pack=$(( (_b1 % 100) * 10000 + (_b2 % 100) * 100 + (_b3 % 100) ))
+	_p_version=$(( _number_of_commits * 10000000 + _sha_pack ))
+	pkgver="${pkgver}_p${_p_version}"
 fi
 source="${pkgname}-${pkgver}.tar.gz"
 pkgdesc="Couchbase C++ SDK"
@@ -18,6 +29,10 @@ makedepends="
 	linux-headers
 	cmake
 	ninja
+	curl-dev
+	protobuf-dev
+	grpc-dev
+	nlohmann-json
 "
 subpackages="${pkgname}-dev ${pkgname}-tools"
 options="!check"
@@ -36,6 +51,7 @@ build() {
 		-DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON \
 		-DCOUCHBASE_CXX_CLIENT_BUILD_EXAMPLES=OFF \
 		-DCOUCHBASE_CXX_CLIENT_BUILD_TESTS=OFF \
+		-DCOUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY=ON \
 		-DCOUCHBASE_CXX_CLIENT_BUILD_TOOLS=ON \
 		-DCOUCHBASE_CXX_CLIENT_BUILD_STATIC=ON \
 		-DCOUCHBASE_CXX_CLIENT_BUILD_SHARED=ON

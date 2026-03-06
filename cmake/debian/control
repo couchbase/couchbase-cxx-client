@@ -2,7 +2,11 @@ Source: couchbase-cxx-client
 Section: libs
 Priority: optional
 Maintainer: Couchbase SDK Team <support@couchbase.com>
-Build-Depends: debhelper (>= 9), cmake, pkg-config
+Build-Depends: debhelper (>= 9), cmake, pkg-config,
+	libcurl4-openssl-dev,
+	libprotobuf-dev,
+	libgrpc-dev,
+	nlohmann-json3-dev
 Standards-Version: 4.5.0
 Vcs-Browser: https://github.com/couchbase/couchbase-cxx-client
 Vcs-Git: https://github.com/couchbase/couchbase-cxx-client.git

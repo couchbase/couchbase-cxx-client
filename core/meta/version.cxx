@@ -34,6 +34,9 @@
 #include <snappy-stubs-public.h>
 #include <spdlog/fmt/bundled/core.h>
 #include <spdlog/version.h>
+#ifdef COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY
+#include <opentelemetry/version.h>
+#endif
 
 #include <regex>
 
@@ -167,6 +170,10 @@ sdk_build_info() -> std::map<std::string, std::string>
 #endif
 #if defined(__GLIBC__)
   info["libc"] = fmt::format("glibc {}.{}", __GLIBC__, __GLIBC_MINOR__);
+#endif
+#ifdef COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY
+  info["opentelemetry"] = OPENTELEMETRY_VERSION;
+  info["opentelemetry_abi"] = OPENTELEMETRY_ABI_VERSION;
 #endif
 
   return info;

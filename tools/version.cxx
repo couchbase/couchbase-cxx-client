@@ -63,6 +63,9 @@ public:
     fmt::print(stdout, "CMake: {}\n", info["cmake_version"]);
     fmt::print(stdout, "ASIO: {}\n", info["asio"]);
     fmt::print(stdout, "Snappy: {}\n", info["snappy"]);
+#ifdef COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY
+    fmt::print(stdout, "OpenTelemetry: {}\n", info["opentelemetry"]);
+#endif
     fmt::print(stdout, "OpenSSL:\n");
     fmt::print(stdout, "  headers: {}\n", info["openssl_headers"]);
     fmt::print(stdout, "  runtime: {}\n", info["openssl_runtime"]);
