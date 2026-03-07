@@ -530,6 +530,9 @@ foreach(TARGET ${couchbase_cxx_client_LIBRARIES})
             $<BUILD_INTERFACE:asio>
             $<BUILD_INTERFACE:couchbase_backtrace>
             $<BUILD_INTERFACE:jsonsl>)
+  if(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
+    target_link_libraries(${TARGET} PRIVATE $<BUILD_INTERFACE:opentelemetry_api>)
+  endif()
 
   if(HAVE_BACKTRACE)
     target_link_libraries(${TARGET} PRIVATE ${PLATFORM_LIBRARIES})
@@ -597,10 +600,6 @@ endif()
 
 option(COUCHBASE_CXX_CLIENT_BUILD_TOOLS "Build tools" ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT})
 if(COUCHBASE_CXX_CLIENT_BUILD_TOOLS)
-  if(NOT COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
-    message(FATAL_ERROR "Tools depend on OpenTelemetry library. Reconfigure with -DCOUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY=ON")
-  endif()
-
   add_subdirectory(tools)
 endif()
 

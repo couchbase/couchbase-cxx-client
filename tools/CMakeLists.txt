@@ -33,7 +33,8 @@ add_executable(
   upsert.cxx
   version.cxx
   config.cxx)
-target_include_directories(cbc PRIVATE ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/private)
+target_include_directories(cbc PRIVATE ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/private
+                                       ${PROJECT_BINARY_DIR}/generated)
 
 set_project_warnings(cbc)
 set_project_options(cbc)
@@ -47,10 +48,12 @@ target_link_libraries(
           $<BUILD_INTERFACE:taocpp::json>
           $<BUILD_INTERFACE:spdlog::spdlog>
           $<BUILD_INTERFACE:hdr_histogram_static>
-          $<BUILD_INTERFACE:asio>
-          $<BUILD_INTERFACE:opentelemetry_exporter_otlp_http>
-          $<BUILD_INTERFACE:opentelemetry_exporter_otlp_http_metric>
-      )
+          $<BUILD_INTERFACE:asio>)
+if(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
+  target_link_libraries(cbc PRIVATE $<BUILD_INTERFACE:opentelemetry_exporter_otlp_http>
+                                    $<BUILD_INTERFACE:opentelemetry_exporter_otlp_http_metric>)
+endif()
+
 propagate_public_compile_definitions(cbc spdlog::spdlog asio)
 
 if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND WIN32)
