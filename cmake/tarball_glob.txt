@@ -90,3 +90,13 @@ spdlog/*/spdlog/include/*
 spdlog/*/spdlog/include/**/*
 spdlog/*/spdlog/src/*
 spdlog/*/spdlog/src/**/*
+opentelemetry/*/opentelemetry/CMakeLists.txt
+opentelemetry/*/opentelemetry/CMakeSettings.json
+opentelemetry/*/opentelemetry/LICENSE
+opentelemetry/*/opentelemetry/*/CMakeLists.txt
+opentelemetry/*/opentelemetry/cmake/*
+opentelemetry/*/opentelemetry/**/CMakeLists.txt
+opentelemetry/*/opentelemetry/**/LICENSE
+opentelemetry/*/opentelemetry/**/*.h
+opentelemetry/*/opentelemetry/**/*.cc
+opentelemetry/*/opentelemetry/third_party/opentelemetry-proto/opentelemetry/proto/**/*.proto
