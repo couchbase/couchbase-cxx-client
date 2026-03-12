@@ -140,6 +140,13 @@ if(NOT TARGET llhttp::llhttp)
     "BUILD_STATIC_LIBS ON")
 endif()
 
+if(NOT TARGET snappy AND DEFINED Snappy_DIR)
+  find_package(Snappy QUIET)
+  if(TARGET Snappy::snappy)
+    add_library(snappy ALIAS Snappy::snappy)
+  endif()
+endif()
+
 if(NOT TARGET snappy)
   # https://github.com/google/snappy/releases
   cpmaddpackage(
