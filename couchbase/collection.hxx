@@ -508,7 +508,7 @@ public:
    */
   template<typename Transcoder = codec::default_json_transcoder, typename Document>
   [[nodiscard]] auto upsert(std::string document_id,
-                            const Document& document,
+                            Document document,
                             const upsert_options& options = {}) const
     -> std::future<std::pair<error, mutation_result>>
   {
@@ -610,7 +610,7 @@ public:
            typename Document,
            std::enable_if_t<!std::is_same_v<codec::encoded_value, Document>, bool> = true>
   [[nodiscard]] auto insert(std::string document_id,
-                            const Document& document,
+                            Document document,
                             const insert_options& options = {}) const
     -> std::future<std::pair<error, mutation_result>>
   {
@@ -716,7 +716,7 @@ public:
            typename Document,
            std::enable_if_t<!std::is_same_v<codec::encoded_value, Document>, bool> = true>
   [[nodiscard]] auto replace(std::string document_id,
-                             const Document& document,
+                             Document document,
                              const replace_options& options = {}) const
     -> std::future<std::pair<error, mutation_result>>
   {
