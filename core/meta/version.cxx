@@ -180,6 +180,12 @@ sdk_build_info() -> std::map<std::string, std::string>
 }
 
 auto
+is_debug() -> bool
+{
+  return COUCHBASE_CXX_CLIENT_DEBUG_BUILD;
+}
+
+auto
 sdk_build_info_json() -> std::string
 {
   tao::json::value info;
