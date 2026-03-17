@@ -40,6 +40,7 @@
 
 #include <csignal>
 #include <deque>
+#include <memory>
 #include <numeric>
 #include <random>
 #include <thread>

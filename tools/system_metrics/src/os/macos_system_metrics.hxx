@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2023-Present Couchbase, Inc.
+ *   Copyright 2020-Present Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -17,15 +17,19 @@
 
 #pragma once
 
-#include <CLI/App.hpp>
+#include "system_metrics.hxx"
 
-#include <memory>
-
-namespace cbc
+namespace system_metrics
 {
-auto
-make_remove_command() -> std::shared_ptr<CLI::App>;
 
-auto
-execute_remove_command(const CLI::App* app) -> int;
-} // namespace cbc
+class macos_system_metrics : public system_metrics
+{
+public:
+  [[nodiscard]] auto get_system_boot_time() const -> std::uint64_t override;
+  [[nodiscard]] auto get_logical_cpu_count() const -> std::uint32_t override;
+  [[nodiscard]] auto get_proc_cpu(sm_pid_t pid) const -> proc_cpu_t override;
+  [[nodiscard]] auto get_proc_memory(sm_pid_t pid) const -> proc_mem_t override;
+  void iterate_proc_threads(sm_pid_t pid, IterateThreadCallback callback) override;
+};
+
+} // namespace system_metrics

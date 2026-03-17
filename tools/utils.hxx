@@ -26,11 +26,11 @@
 
 #include <CLI/CLI.hpp>
 
-#include <cstdint>
 #include <spdlog/fmt/bundled/chrono.h>
 #include <spdlog/fmt/bundled/core.h>
 
 #include <chrono>
+#include <cstdint>
 #include <string>
 #include <vector>
 

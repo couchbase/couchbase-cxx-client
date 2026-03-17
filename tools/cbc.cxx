@@ -23,6 +23,7 @@
 #include "pillowfight.hxx"
 #include "query.hxx"
 #include "remove.hxx"
+#include "sysinfo.hxx"
 #include "upsert.hxx"
 #include "version.hxx"
 
@@ -48,6 +49,7 @@ main(int argc, const char** argv) -> int
   app.add_subcommand(cbc::make_query_command());
   app.add_subcommand(cbc::make_keygen_command());
   app.add_subcommand(cbc::make_config_command());
+  app.add_subcommand(cbc::make_sysinfo_command());
 
   try {
     app.parse(argc, argv);
@@ -55,7 +57,7 @@ main(int argc, const char** argv) -> int
     return app.exit(e);
   }
 
-  try {
+  auto dispatch = [&]() -> int {
     for (const auto& item : app.get_subcommands()) {
       if (item->get_name() == "version") {
         return cbc::execute_version_command(item);
@@ -87,11 +89,24 @@ main(int argc, const char** argv) -> int
       if (item->get_name() == "config") {
         return cbc::execute_config_command(item);
       }
+      if (item->get_name() == "sysinfo") {
+        return cbc::execute_sysinfo_command(item);
+      }
     }
+    return 0;
+  };
+
+  if (couchbase::core::meta::is_debug()) {
+    // In debug mode avoid catching here so the original exception site and
+    // stack trace aren't lost by a local catch/rethrow. Let exceptions
+    // propagate naturally.
+    return dispatch();
+  }
+
+  try {
+    return dispatch();
   } catch (const std::exception& e) {
     fmt::println(stderr, "Runtime error: {}", e.what());
     return EXIT_FAILURE;
   }
-
-  return 0;
 }

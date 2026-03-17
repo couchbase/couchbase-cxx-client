@@ -15,7 +15,11 @@
  *   limitations under the License.
  */
 
+#pragma once
+
 #include <CLI/App.hpp>
+
+#include <memory>
 
 namespace cbc
 {
