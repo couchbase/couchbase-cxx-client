@@ -209,10 +209,10 @@ if(COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE)
   file(READ "${COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE_ROOT}/mozilla-ca-bundle.crt" CA_BUNDLE_CONTENT)
   string(
     REGEX MATCH
-          "Certificate data from Mozilla as of: ([^\n]*)"
+          "Certificate data from Mozilla (as of|last updated on): ([^\n]*)"
           CA_BUNDLE_DATE_LINE
           ${CA_BUNDLE_CONTENT})
-  set(COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_DATE "${CMAKE_MATCH_1}")
+  set(COUCHBASE_CXX_CLIENT_MOZILLA_CA_BUNDLE_DATE "${CMAKE_MATCH_2}")
 else()
   set(CA_BUNDLE_CONTENT "")
 endif()
