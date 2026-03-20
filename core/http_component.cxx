@@ -323,6 +323,11 @@ public:
     });
   }
 
+  void set_completion_callback(utils::movable_function<void()>&& completion_callback)
+  {
+    completion_callback_ = std::move(completion_callback);
+  }
+
   void cancel() override
   {
     if (session_) {
@@ -338,12 +343,17 @@ public:
     dispatch_deadline_.cancel();
 #endif
     buffered_free_form_http_request_callback callback{};
+    utils::movable_function<void()> completion_callback{};
     {
       const std::scoped_lock lock(callback_mutex_);
       std::swap(callback, callback_);
+      std::swap(completion_callback, completion_callback_);
     }
     if (callback) {
       callback(buffered_http_response{ std::move(resp) }, ec);
+    }
+    if (completion_callback) {
+      completion_callback();
     }
   }
 
@@ -455,6 +465,7 @@ private:
   http_request request_;
   io::http_request encoded_;
   buffered_free_form_http_request_callback callback_;
+  utils::movable_function<void()> completion_callback_;
   std::shared_ptr<io::http_session> session_;
   std::mutex callback_mutex_;
 #ifndef COUCHBASE_CXX_CLIENT_COLUMNAR
@@ -598,6 +609,10 @@ private:
                            const std::shared_ptr<io::http_session_manager>& session_manager,
                            buffered_free_form_http_request_callback&& callback)
   {
+    op->start([callback = std::move(callback)](auto resp, auto ec) mutable {
+      callback(std::move(resp), ec);
+    });
+
     std::shared_ptr<io::http_session> session;
     {
       auto [check_out_ec, s] = session_manager->check_out(
@@ -607,10 +622,8 @@ private:
       }
       session = std::move(s);
     }
-    op->start(
-      [callback = std::move(callback), session_manager, session, service = op->request().service](
-        auto resp, auto ec) mutable {
-        callback(std::move(resp), ec);
+    op->set_completion_callback(
+      [session_manager, session, service = op->request().service]() mutable {
         session_manager->check_in(service, session);
       });
 
