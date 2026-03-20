@@ -408,19 +408,23 @@ collection_id_cache_entry_impl::refresh_collection_id(
     req->scope_name_,
     req->collection_name_,
     get_collection_id_options{},
-    [self = shared_from_this(), req](get_collection_id_result res, std::error_code ec) -> void {
-      self->pending_refresh_.reset();
+    [self = weak_from_this(), req](get_collection_id_result res, std::error_code ec) -> void {
+      auto entry = self.lock();
+      if (!entry) {
+        return;
+      }
+      entry->pending_refresh_.reset();
       if (ec) {
         if (ec == errc::common::collection_not_found) {
-          self->set_id(unknown_collection_id);
-          if (self->queue_->remove(req)) {
-            if (self->manager_.lock()->handle_collection_unknown(req)) {
+          entry->set_id(unknown_collection_id);
+          if (entry->queue_->remove(req)) {
+            if (entry->manager_.lock()->handle_collection_unknown(req)) {
               return;
             }
           }
         }
-        self->manager_.lock()->remove(req->scope_name_, req->collection_name_);
-        auto queue = self->swap_queue();
+        entry->manager_.lock()->remove(req->scope_name_, req->collection_name_);
+        auto queue = entry->swap_queue();
         queue->close();
         return queue->drain([ec](const auto& r) -> auto {
           r->try_callback({}, ec);
@@ -433,16 +437,16 @@ collection_id_cache_entry_impl::refresh_collection_id(
                    req->scope_name_,
                    req->collection_name_,
                    res.collection_id);
-      self->set_id(res.collection_id);
-      auto queue = self->swap_queue();
+      entry->set_id(res.collection_id);
+      auto queue = entry->swap_queue();
       queue->close();
-      queue->drain([self](const auto& r) -> auto {
-        auto manager = self->manager_.lock();
+      queue->drain([entry](const auto& r) -> auto {
+        auto manager = entry->manager_.lock();
         if (!manager) {
           r->try_callback({}, errc::common::request_canceled);
           return;
         }
-        if (auto ec = self->assign_collection_id(r); ec) {
+        if (auto ec = entry->assign_collection_id(r); ec) {
           r->try_callback({}, ec);
           return;
         }
