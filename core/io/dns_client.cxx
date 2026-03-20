@@ -144,7 +144,9 @@ public:
             resp.targets.reserve(message.answers.size());
             for (const auto& answer : message.answers) {
               resp.targets.emplace_back(dns_srv_response::address{
-                utils::join_strings(answer.target.labels, "."), answer.port });
+                utils::join_strings(answer.target.labels, "."),
+                answer.port,
+              });
             }
             CB_LOG_DEBUG("DNS UDP returned {} records", resp.targets.size());
             return self->handler_(std::move(resp));
@@ -298,7 +300,9 @@ private:
                   resp.targets.reserve(message.answers.size());
                   for (const auto& answer : message.answers) {
                     resp.targets.emplace_back(dns_srv_response::address{
-                      utils::join_strings(answer.target.labels, "."), answer.port });
+                      utils::join_strings(answer.target.labels, "."),
+                      answer.port,
+                    });
                   }
                   CB_LOG_DEBUG("DNS TCP returned {} records", resp.targets.size());
                   return self->handler_(std::move(resp));

@@ -41,6 +41,7 @@ namespace couchbase
 {
 namespace
 {
+// NOLINTNEXTLINE(modernize-use-string-view)
 auto
 service_type_as_string(service_type service_type) -> std::string
 {
@@ -63,6 +64,7 @@ service_type_as_string(service_type service_type) -> std::string
   return "";
 }
 
+// NOLINTNEXTLINE(modernize-use-string-view)
 auto
 ping_state_as_string(ping_state state) -> std::string
 {
@@ -77,6 +79,7 @@ ping_state_as_string(ping_state state) -> std::string
   return "";
 }
 
+// NOLINTNEXTLINE(modernize-use-string-view)
 auto
 endpoint_state_as_string(endpoint_state state) -> std::string
 {

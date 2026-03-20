@@ -106,7 +106,7 @@ struct scan_type {
     enum type {
       prefix_scan,
       range_scan,
-      sampling_scan
+      sampling_scan,
     };
     type type;
 

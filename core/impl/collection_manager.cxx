@@ -73,7 +73,7 @@ map_collection(std::string scope_name,
 }
 
 auto
-map_scope_specs(core::topology::collections_manifest& manifest)
+map_scope_specs(const core::topology::collections_manifest& manifest)
   -> std::vector<couchbase::management::bucket::scope_spec>
 {
   std::vector<couchbase::management::bucket::scope_spec> scope_specs{};
@@ -250,8 +250,8 @@ private:
   {
     // Build io::http_request by calling encode_to. All management request types used here ignore
     // the http_context parameter, so we supply dummy objects.
-    core::topology::configuration dummy_config{};
-    core::cluster_options dummy_options{};
+    const core::topology::configuration dummy_config{};
+    const core::cluster_options dummy_options{};
     core::query_cache dummy_cache{};
     core::http_context dummy_ctx{ dummy_config, dummy_options, dummy_cache, {}, 0, {}, 0 };
 
@@ -345,6 +345,7 @@ collection_manager::drop_collection(std::string scope_name,
                                     const couchbase::drop_collection_options& options) const
   -> std::future<error>
 {
+  // NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks)
   auto barrier = std::make_shared<std::promise<error>>();
   drop_collection(std::move(scope_name),
                   std::move(collection_name),
@@ -353,6 +354,7 @@ collection_manager::drop_collection(std::string scope_name,
                     barrier->set_value(std::move(err));
                   });
   return barrier->get_future();
+  // NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
 }
 
 void
@@ -376,6 +378,7 @@ collection_manager::update_collection(std::string scope_name,
                                       const couchbase::update_collection_options& options) const
   -> std::future<error>
 {
+  // NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks)
   auto barrier = std::make_shared<std::promise<error>>();
   update_collection(std::move(scope_name),
                     std::move(collection_name),
@@ -385,6 +388,7 @@ collection_manager::update_collection(std::string scope_name,
                       barrier->set_value(std::move(err));
                     });
   return barrier->get_future();
+  // NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
 }
 
 void
@@ -408,6 +412,7 @@ collection_manager::create_collection(std::string scope_name,
                                       const couchbase::create_collection_options& options) const
   -> std::future<error>
 {
+  // NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks)
   auto barrier = std::make_shared<std::promise<error>>();
   create_collection(std::move(scope_name),
                     std::move(collection_name),
@@ -417,6 +422,7 @@ collection_manager::create_collection(std::string scope_name,
                       barrier->set_value(std::move(err));
                     });
   return barrier->get_future();
+  // NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
 }
 
 void
@@ -430,12 +436,14 @@ auto
 collection_manager::get_all_scopes(const couchbase::get_all_scopes_options& options) const
   -> std::future<std::pair<error, std::vector<management::bucket::scope_spec>>>
 {
+  // NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks)
   auto barrier =
     std::make_shared<std::promise<std::pair<error, std::vector<management::bucket::scope_spec>>>>();
   get_all_scopes(options, [barrier](auto err, auto result) mutable -> void {
     barrier->set_value(std::make_pair(std::move(err), std::move(result)));
   });
   return barrier->get_future();
+  // NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
 }
 
 void
@@ -451,11 +459,13 @@ collection_manager::create_scope(std::string scope_name,
                                  const couchbase::create_scope_options& options) const
   -> std::future<error>
 {
+  // NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks)
   auto barrier = std::make_shared<std::promise<error>>();
   create_scope(std::move(scope_name), options, [barrier](auto err) mutable -> void {
     barrier->set_value(std::move(err));
   });
   return barrier->get_future();
+  // NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
 }
 
 void
@@ -471,10 +481,12 @@ collection_manager::drop_scope(std::string scope_name,
                                const couchbase::drop_scope_options& options) const
   -> std::future<error>
 {
+  // NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks)
   auto barrier = std::make_shared<std::promise<error>>();
   drop_scope(std::move(scope_name), options, [barrier](auto err) mutable -> void {
     barrier->set_value(std::move(err));
   });
   return barrier->get_future();
+  // NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
 }
 } // namespace couchbase

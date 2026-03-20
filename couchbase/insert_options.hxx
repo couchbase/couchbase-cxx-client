@@ -46,7 +46,7 @@ struct insert_options : public common_durability_options<insert_options> {
    * @internal
    */
   struct built : public common_durability_options<insert_options>::built {
-    const std::uint32_t expiry;
+    const std::uint32_t expiry{};
   };
 
   /**

@@ -23,7 +23,7 @@ enum class level {
   warn,
   err,
   critical,
-  off
+  off,
 };
 
 } // namespace couchbase::core::logger

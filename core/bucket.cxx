@@ -123,8 +123,10 @@ public:
                              : origin_.options().config_poll_interval }
     , collections_{ ctx_,
                     std::move(dispatcher),
-                    { key_value_config::default_max_queue_size,
-                      origin_.options().default_retry_strategy_ } }
+                    {
+                      key_value_config::default_max_queue_size,
+                      origin_.options().default_retry_strategy_,
+                    } }
     , crud_{ ctx_, name_, collections_, origin_.options().default_retry_strategy_ }
   {
   }
@@ -1207,18 +1209,20 @@ bucket::bucket(std::string client_id,
                dispatcher dispatcher)
 
   : ctx_(ctx)
-  , impl_{ std::make_shared<bucket_impl>(std::move(client_id),
-                                         std::move(name),
-                                         std::move(origin),
-                                         std::move(tracer),
-                                         std::move(meter),
-                                         std::move(orphan_reporter),
-                                         std::move(app_telemetry_meter),
-                                         std::move(known_features),
-                                         std::move(state_listener),
-                                         ctx,
-                                         tls,
-                                         std::move(dispatcher)) }
+  , impl_{
+    std::make_shared<bucket_impl>(std::move(client_id),
+                                  std::move(name),
+                                  std::move(origin),
+                                  std::move(tracer),
+                                  std::move(meter),
+                                  std::move(orphan_reporter),
+                                  std::move(app_telemetry_meter),
+                                  std::move(known_features),
+                                  std::move(state_listener),
+                                  ctx,
+                                  tls,
+                                  std::move(dispatcher)),
+  }
 {
 }
 
@@ -2140,10 +2144,12 @@ bucket::direct_execute(operations::lookup_in_request request,
              !impl::subdoc::has_xattr_path_flag(rhs.flags_);
     });
   for (const auto& spec : request.specs) {
-    options.operations.push_back({ static_cast<protocol::subdoc_opcode>(spec.opcode_),
-                                   static_cast<std::uint8_t>(spec.flags_),
-                                   spec.path_,
-                                   spec.value_ });
+    options.operations.push_back({
+      static_cast<protocol::subdoc_opcode>(spec.opcode_),
+      static_cast<std::uint8_t>(spec.flags_),
+      spec.path_,
+      spec.value_,
+    });
   }
 
   auto scope = request.id.scope();
@@ -2225,12 +2231,14 @@ bucket::direct_execute(operations::mutate_in_request request,
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
   if (request.store_semantics == couchbase::store_semantics::upsert && !request.cas.empty()) {
-    handler(operations::mutate_in_response{ make_subdocument_error_context(
-      make_key_value_error_context(errc::common::invalid_argument, request.id),
-      errc::common::invalid_argument,
-      {},
-      {},
-      false) });
+    handler(operations::mutate_in_response{
+      make_subdocument_error_context(
+        make_key_value_error_context(errc::common::invalid_argument, request.id),
+        errc::common::invalid_argument,
+        {},
+        {},
+        false),
+    });
     return tl::unexpected(errc::common::invalid_argument);
   }
   mutate_in_options options;
@@ -2272,10 +2280,12 @@ bucket::direct_execute(operations::mutate_in_request request,
              !impl::subdoc::has_xattr_path_flag(rhs.flags_);
     });
   for (const auto& spec : request.specs) {
-    options.operations.push_back({ static_cast<protocol::subdoc_opcode>(spec.opcode_),
-                                   static_cast<std::uint8_t>(spec.flags_),
-                                   spec.path_,
-                                   spec.value_ });
+    options.operations.push_back({
+      static_cast<protocol::subdoc_opcode>(spec.opcode_),
+      static_cast<std::uint8_t>(spec.flags_),
+      spec.path_,
+      spec.value_,
+    });
   }
 
   auto scope = request.id.scope();
@@ -2390,10 +2400,12 @@ bucket::direct_execute(impl::with_cancellation<operations::lookup_in_request> re
     request.specs[i].original_index_ = i;
   }
   for (const auto& spec : request.specs) {
-    options.operations.push_back({ static_cast<protocol::subdoc_opcode>(spec.opcode_),
-                                   static_cast<std::uint8_t>(spec.flags_),
-                                   spec.path_,
-                                   spec.value_ });
+    options.operations.push_back({
+      static_cast<protocol::subdoc_opcode>(spec.opcode_),
+      static_cast<std::uint8_t>(spec.flags_),
+      spec.path_,
+      spec.value_,
+    });
   }
 
   auto scope = request.id.scope();

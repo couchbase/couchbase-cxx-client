@@ -214,7 +214,7 @@ struct evanescent_config {
 } // namespace
 
 auto
-configuration::select_network(const std::string& bootstrap_hostname) const -> std::string
+configuration::select_network(std::string_view bootstrap_hostname) const -> std::string_view
 {
   evanescent_config alt_conf;
 

@@ -30,7 +30,7 @@ namespace couchbase
 namespace codec
 {
 class tao_json_serializer;
-}
+} // namespace codec
 
 /**
  * Represents result of @ref cluster#query() and @ref scope#query() calls.

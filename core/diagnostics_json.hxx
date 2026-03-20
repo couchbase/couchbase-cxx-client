@@ -56,10 +56,22 @@ struct traits<couchbase::core::diag::diagnostics_result> {
     }
 
     v = {
-      { "version", r.version },
-      { "id", r.id },
-      { "sdk", r.sdk },
-      { "services", services },
+      {
+        "version",
+        r.version,
+      },
+      {
+        "id",
+        r.id,
+      },
+      {
+        "sdk",
+        r.sdk,
+      },
+      {
+        "services",
+        services,
+      },
     };
   }
 };
@@ -91,10 +103,22 @@ struct traits<couchbase::core::diag::ping_result> {
     }
 
     v = {
-      { "version", r.version },
-      { "id", r.id },
-      { "sdk", r.sdk },
-      { "services", services },
+      {
+        "version",
+        r.version,
+      },
+      {
+        "id",
+        r.id,
+      },
+      {
+        "sdk",
+        r.sdk,
+      },
+      {
+        "services",
+        services,
+      },
     };
   }
 };

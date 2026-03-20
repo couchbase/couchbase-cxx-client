@@ -36,7 +36,7 @@ namespace couchbase
 namespace codec
 {
 class tao_json_serializer;
-}
+} // namespace codec
 
 /**
  * Options for @ref cluster#search() and @ref scope#search().

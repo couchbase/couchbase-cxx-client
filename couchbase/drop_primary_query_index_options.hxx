@@ -37,7 +37,7 @@ public:
    */
   auto index_name(std::string index_name) -> drop_primary_query_index_options&
   {
-    index_name_.emplace(index_name);
+    index_name_.emplace(std::move(index_name));
     return self();
   }
   /**

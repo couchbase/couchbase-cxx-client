@@ -49,7 +49,7 @@ protected:
   {
   }
 
-  search_facet(std::string field)
+  explicit search_facet(std::string field)
     : field_{ std::move(field) }
   {
   }

@@ -213,7 +213,7 @@ void
 parse_option(std::string& receiver,
              const std::string& /* name */,
              const std::string& value,
-             std::vector<std::string>& /* warnings */)
+             const std::vector<std::string>& /* warnings */)
 {
   receiver = string_codec::url_decode(value);
 }

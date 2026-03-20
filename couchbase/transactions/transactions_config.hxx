@@ -52,6 +52,8 @@ public:
 
   auto operator=(const transactions_config& c) -> transactions_config&;
 
+  auto operator=(transactions_config&& c) noexcept -> transactions_config&;
+
   /**
    * @brief Get the default durability level for all transaction operations
    *
@@ -192,8 +194,8 @@ public:
                       std::shared_ptr<core::transactions::cleanup_testing_hooks> cleanup_hooks)
     -> transactions_config&
   {
-    attempt_context_hooks_ = hooks;
-    cleanup_hooks_ = cleanup_hooks;
+    attempt_context_hooks_ = std::move(hooks);
+    cleanup_hooks_ = std::move(cleanup_hooks);
     return *this;
   }
 

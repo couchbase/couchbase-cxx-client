@@ -69,7 +69,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
                std::chrono::milliseconds default_timeout,
                std::chrono::milliseconds dispatch_timeout)
     : deadline(ctx)
-    , request(req)
+    , request(std::move(req))
     , tracer_(std::move(tracer))
     , meter_(std::move(meter))
     , app_telemetry_meter_(std::move(app_telemetry_meter))
@@ -88,7 +88,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
                std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter,
                std::chrono::milliseconds default_timeout)
     : deadline(ctx)
-    , request(req)
+    , request(std::move(req))
     , tracer_(std::move(tracer))
     , meter_(std::move(meter))
     , app_telemetry_meter_(std::move(app_telemetry_meter))
@@ -154,7 +154,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
   void invoke_handler(std::error_code ec, io::http_response&& msg)
 #endif
   {
-    if (handler_type handler = std::move(handler_); handler) {
+    if (const handler_type handler = std::move(handler_); handler) {
       const auto& node_uuid = session_ ? session_->node_uuid() : "";
       auto telemetry_recorder = app_telemetry_meter_->value_recorder(node_uuid, {});
       telemetry_recorder->update_counter(total_counter_for_service_type(request.type));
@@ -171,7 +171,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
       } else if (ec == errc::common::request_canceled) {
         telemetry_recorder->update_counter(canceled_counter_for_service_type(request.type));
       }
-      encoded_response_type encoded_resp{ std::move(msg) };
+      const encoded_response_type encoded_resp{ std::move(msg) };
       error_context_type ctx{};
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
       if (!std::holds_alternative<std::monostate>(error)) {

@@ -25,6 +25,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace couchbase::core::topology
@@ -85,9 +86,9 @@ struct configuration {
       -> std::optional<std::string>;
   };
 
-  [[nodiscard]] auto select_network(const std::string& bootstrap_hostname) const -> std::string;
+  [[nodiscard]] auto select_network(std::string_view bootstrap_hostname) const -> std::string_view;
 
-  using vbucket_map = typename std::vector<std::vector<std::int16_t>>;
+  using vbucket_map = std::vector<std::vector<std::int16_t>>;
 
   std::optional<std::int64_t> epoch{};
   std::optional<std::int64_t> rev{};
@@ -129,12 +130,12 @@ struct configuration {
                               const std::string& hostname,
                               const std::string& port) const -> bool;
 
-  auto map_key(const std::string& key, std::size_t index) const
+  [[nodiscard]] auto map_key(const std::string& key, std::size_t index) const
     -> std::pair<std::uint16_t, std::optional<std::size_t>>;
-  auto map_key(const std::vector<std::byte>& key, std::size_t index) const
+  [[nodiscard]] auto map_key(const std::vector<std::byte>& key, std::size_t index) const
     -> std::pair<std::uint16_t, std::optional<std::size_t>>;
 
-  auto server_by_vbucket(std::uint16_t vbucket, std::size_t index) const
+  [[nodiscard]] auto server_by_vbucket(std::uint16_t vbucket, std::size_t index) const
     -> std::optional<std::size_t>;
 };
 

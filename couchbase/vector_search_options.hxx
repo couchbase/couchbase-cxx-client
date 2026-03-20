@@ -21,7 +21,7 @@ namespace couchbase
 {
 enum class vector_query_combination {
   combination_and,
-  combination_or
+  combination_or,
 };
 
 /**

@@ -214,8 +214,9 @@ private:
   std::unique_ptr<core::impl::observability_recorder> observability_recorder_;
   asio::steady_timer timer_{ core_.io_context() };
   std::chrono::steady_clock::time_point start_time_{ std::chrono::steady_clock::now() };
-  std::chrono::milliseconds timeout_{ options_.timeout.value_or(
-    core_.origin().second.options().query_timeout) };
+  std::chrono::milliseconds timeout_{
+    options_.timeout.value_or(core_.origin().second.options().query_timeout),
+  };
   std::atomic<size_t> attempts_{ 0 };
 };
 

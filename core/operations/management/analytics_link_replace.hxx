@@ -63,7 +63,7 @@ struct analytics_link_replace_request {
   [[nodiscard]] std::error_code encode_to(encoded_request_type& encoded,
                                           http_context& /* context */) const
   {
-    if (std::error_code ec = link.validate()) {
+    if (const std::error_code ec = link.validate(); ec) {
       return ec;
     }
     encoded.headers["content-type"] = "application/x-www-form-urlencoded";

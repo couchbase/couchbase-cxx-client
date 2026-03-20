@@ -48,8 +48,8 @@ date_range_query::start(std::tm value) -> date_range_query&
 }
 
 auto
-date_range_query::start(std::chrono::system_clock::time_point value,
-                        bool inclusive) -> date_range_query&
+date_range_query::start(std::chrono::system_clock::time_point value, bool inclusive)
+  -> date_range_query&
 {
   start_ = fmt::format(iso_8601_format, value);
   inclusive_start_ = inclusive;
@@ -80,8 +80,8 @@ date_range_query::end(std::tm value) -> date_range_query&
 }
 
 auto
-date_range_query::end(std::chrono::system_clock::time_point value,
-                      bool inclusive) -> date_range_query&
+date_range_query::end(std::chrono::system_clock::time_point value, bool inclusive)
+  -> date_range_query&
 {
   end_ = fmt::format(iso_8601_format, value);
   inclusive_end_ = inclusive;

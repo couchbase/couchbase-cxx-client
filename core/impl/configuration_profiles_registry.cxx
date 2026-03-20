@@ -34,7 +34,7 @@ namespace couchbase
 
 struct registry {
   std::map<std::string, std::shared_ptr<configuration_profile>, std::less<>> store{
-    { "wan_development", std::make_shared<wan_development_configuration_profile>() }
+    { "wan_development", std::make_shared<wan_development_configuration_profile>() },
   };
   std::mutex store_mutex{};
 };

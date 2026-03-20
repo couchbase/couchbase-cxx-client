@@ -343,7 +343,7 @@ public:
     if (is_closed()) {
       return cmd->cancel(retry_reason::do_not_retry);
     }
-    std::size_t index;
+    std::size_t index{ 0 };
     if (cmd->request.id.use_any_session()) {
       index = next_session_index();
     } else {

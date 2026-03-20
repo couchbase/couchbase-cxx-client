@@ -33,8 +33,8 @@ namespace priv
 {
 template<class Command>
 auto
-cap_duration(std::chrono::milliseconds uncapped,
-             std::shared_ptr<Command> command) -> std::chrono::milliseconds
+cap_duration(std::chrono::milliseconds uncapped, std::shared_ptr<Command> command)
+  -> std::chrono::milliseconds
 {
   auto theoretical_deadline = std::chrono::steady_clock::now() + uncapped;
   auto absolute_deadline = command->deadline.expiry();
@@ -89,7 +89,7 @@ maybe_retry(std::shared_ptr<Manager> manager,
   if (retry_strategy == nullptr) {
     retry_strategy = manager->default_retry_strategy();
   }
-  if (retry_action action = retry_strategy->retry_after(command->request.retries, reason);
+  if (const retry_action action = retry_strategy->retry_after(command->request.retries, reason);
       action.need_to_retry()) {
     return priv::retry_with_duration(
       manager, command, reason, priv::cap_duration(action.duration(), command));

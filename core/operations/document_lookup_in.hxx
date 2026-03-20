@@ -37,10 +37,10 @@ struct lookup_in_response {
   struct entry {
     std::string path;
     codec::binary value;
-    std::size_t original_index;
-    bool exists;
-    protocol::subdoc_opcode opcode;
-    key_value_status_code status;
+    std::size_t original_index{ 0 };
+    bool exists{ false };
+    protocol::subdoc_opcode opcode{};
+    key_value_status_code status{};
     std::error_code ec{};
   };
   subdocument_error_context ctx;
@@ -65,8 +65,8 @@ struct lookup_in_request {
   io::retry_context<false> retries{};
   std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
 
-  [[nodiscard]] auto encode_to(encoded_request_type& encoded,
-                               mcbp_context&& context) -> std::error_code;
+  [[nodiscard]] auto encode_to(encoded_request_type& encoded, mcbp_context&& context)
+    -> std::error_code;
 
   [[nodiscard]] auto make_response(key_value_error_context&& ctx,
                                    const encoded_response_type& encoded) const

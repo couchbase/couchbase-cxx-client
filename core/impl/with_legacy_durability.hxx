@@ -42,22 +42,25 @@ struct with_legacy_durability : public mutation_request {
                   replicate_to_ = replicate_to,
                   handler = std::forward<Handler>(handler)](auto&& resp) mutable {
                    if (resp.ctx.ec()) {
-                     return handler(std::move(resp));
+                     return handler(std::forward<decltype(resp)>(resp));
                    }
 
-                   initiate_observe_poll(core,
-                                         id,
-                                         resp.token,
-                                         timeout,
-                                         persist_to_,
-                                         replicate_to_,
-                                         [resp = std::move(resp), handler = std::move(handler)](
-                                           std::error_code ec) mutable {
-                                           if (ec) {
-                                             resp.ctx.override_ec(ec);
-                                           }
-                                           return handler(std::move(resp));
-                                         });
+                   initiate_observe_poll(
+                     core,
+                     id,
+                     // NOLINTNEXTLINE(bugprone-use-after-move, hicpp-invalid-access-moved)
+                     resp.token,
+                     timeout,
+                     persist_to_,
+                     replicate_to_,
+                     // NOLINTNEXTLINE(bugprone-use-after-move, hicpp-invalid-access-moved)
+                     [resp = std::forward<decltype(resp)>(resp),
+                      handler = std::move(handler)](std::error_code ec) mutable {
+                       if (ec) {
+                         resp.ctx.override_ec(ec);
+                       }
+                       return handler(std::move(resp));
+                     });
                  });
   }
 };

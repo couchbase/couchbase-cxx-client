@@ -45,6 +45,7 @@ public:
     return {};
   }
 
+  // NOLINTNEXTLINE(modernize-use-string-view)
   auto endpoint() -> std::string
   {
     return {};

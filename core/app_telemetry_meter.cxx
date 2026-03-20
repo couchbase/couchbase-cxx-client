@@ -239,8 +239,9 @@ struct http_histogram {
   }
 };
 
-constexpr auto max_number_of_counters{ static_cast<std::size_t>(
-  app_telemetry_counter::number_of_elements) };
+constexpr auto max_number_of_counters{
+  static_cast<std::size_t>(app_telemetry_counter::number_of_elements),
+};
 
 constexpr auto
 is_valid_app_telemetry_counter(std::size_t name) -> bool
@@ -322,7 +323,7 @@ class null_app_telemetry_meter_impl : public app_telemetry_meter_impl
 {
 private:
   std::shared_ptr<null_app_telemetry_value_recorder> instance_{
-    std::make_shared<null_app_telemetry_value_recorder>()
+    std::make_shared<null_app_telemetry_value_recorder>(),
   };
 
 public:
@@ -375,7 +376,6 @@ public:
 
   void record_latency(app_telemetry_latency name, std::chrono::milliseconds interval) override
   {
-    // NOLINTBEGIN(cppcoreguidelines-pro-bounds-constant-array-index)
     switch (name) {
       case app_telemetry_latency::unknown:
       case app_telemetry_latency::number_of_elements:
@@ -558,7 +558,6 @@ public:
 
         break;
     }
-    // NOLINTEND(cppcoreguidelines-pro-bounds-constant-array-index)
   }
 
   void update_counter(app_telemetry_counter name) override
@@ -568,7 +567,6 @@ public:
       case app_telemetry_counter::number_of_elements:
         return;
       default:
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index)
         ++counters_[static_cast<std::size_t>(name)];
         break;
     }
@@ -583,7 +581,7 @@ private:
 
   kv_non_durable_histogram kv_retrieval_{ "sdk_kv_retrieval_duration_milliseconds" };
   kv_non_durable_histogram kv_mutation_nondurable_{
-    "sdk_kv_mutation_nondurable_duration_milliseconds"
+    "sdk_kv_mutation_nondurable_duration_milliseconds",
   };
   kv_durable_histogram kv_mutation_durable_{ "sdk_kv_mutation_durable_duration_milliseconds" };
   http_histogram query_{ "sdk_query_duration_milliseconds" };
@@ -599,7 +597,7 @@ public:
   auto value_recorder(const std::string& node_uuid, const std::string& bucket_name)
     -> std::shared_ptr<app_telemetry_value_recorder> override
   {
-    const std::lock_guard<std::mutex> lock(mutex_);
+    const std::scoped_lock lock(mutex_);
 
     if (auto node = recorders_.find(node_uuid); node != recorders_.end()) {
       if (auto bucket = node->second.find(bucket_name); bucket != node->second.end()) {
@@ -636,7 +634,7 @@ public:
 
   auto nothing_to_report() -> bool override
   {
-    const std::lock_guard<std::mutex> lock(mutex_);
+    const std::scoped_lock lock(mutex_);
     return recorders_.empty();
   }
 
@@ -669,7 +667,6 @@ public:
 
         for (std::size_t i = 0; i < recorder->counters_.size(); ++i) {
           if (is_valid_app_telemetry_counter(i)) {
-            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index)
             std::uint64_t value = recorder->counters_[i];
             if (value == 0) {
               continue;
@@ -738,7 +735,10 @@ app_telemetry_meter::disable()
   }
   CB_LOG_DEBUG("Disable app telemetry meter.  {}",
                tao::json::to_string(tao::json::value{
-                 { "nothing_to_report", impl_->nothing_to_report() },
+                 {
+                   "nothing_to_report",
+                   impl_->nothing_to_report(),
+                 },
                }));
   impl_ = std::make_unique<null_app_telemetry_meter_impl>();
 }

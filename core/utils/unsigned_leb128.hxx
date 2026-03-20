@@ -53,9 +53,13 @@ auto
 decode_unsigned_leb128(gsl::span<std::byte> buf, struct leb_128_no_throw /* unused */) ->
   typename std::enable_if_t<std::is_unsigned_v<T>, std::pair<T, gsl::span<std::byte>>>
 {
-  T rv = std::to_integer<T>(buf[0] & std::byte{ 0b0111'1111 });
+  T rv = std::to_integer<T>(buf[0] & std::byte{
+                                       0b0111'1111,
+                                     });
   std::size_t end = 0;
-  if ((buf[0] & std::byte{ 0b1000'0000 }) == std::byte{ 0b1000'0000 }) {
+  if ((buf[0] & std::byte{ 0b1000'0000 }) == std::byte{
+                                               0b1000'0000,
+                                             }) {
     T shift = 7;
     // shift in the remaining data
     for (end = 1; end < buf.size(); end++) {

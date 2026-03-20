@@ -142,11 +142,11 @@ public:
    */
   static void create(
     core::cluster cluster,
-    const couchbase::transactions::transactions_config::built&,
+    const couchbase::transactions::transactions_config::built& /*config*/,
     utils::movable_function<void(std::error_code, std::shared_ptr<transactions>)>&& cb);
   static void create(
     core::cluster cluster,
-    const couchbase::transactions::transactions_config&,
+    const couchbase::transactions::transactions_config& /*config*/,
     utils::movable_function<void(std::error_code, std::shared_ptr<transactions>)>&& cb);
 
   /**
@@ -179,8 +179,8 @@ public:
    */
   auto run(logic&& code) -> couchbase::transactions::transaction_result;
 
-  auto run(const couchbase::transactions::transaction_options& config,
-           logic&& code) -> couchbase::transactions::transaction_result;
+  auto run(const couchbase::transactions::transaction_options& config, logic&& code)
+    -> couchbase::transactions::transaction_result;
 
   auto run(::couchbase::transactions::txn_logic&& code,
            const couchbase::transactions::transaction_options& config)

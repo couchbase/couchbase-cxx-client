@@ -33,11 +33,13 @@ analytics_dataset_drop_request::encode_to(encoded_request_type& encoded,
   std::string if_exists_clause = ignore_if_does_not_exist ? "IF EXISTS" : "";
 
   const tao::json::value body{
-    { "statement",
+    {
+      "statement",
       fmt::format("DROP DATASET {}.`{}` {}",
                   utils::analytics::uncompound_name(dataverse_name),
                   dataset_name,
-                  if_exists_clause) },
+                  if_exists_clause),
+    },
   };
   encoded.headers["content-type"] = "application/json";
   encoded.method = "POST";

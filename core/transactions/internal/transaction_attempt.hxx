@@ -24,7 +24,7 @@ namespace couchbase::core::transactions
 {
 struct transaction_attempt {
   std::string id;
-  attempt_state state;
+  attempt_state state{ attempt_state::NOT_STARTED };
   transaction_attempt();
 };
 } // namespace couchbase::core::transactions

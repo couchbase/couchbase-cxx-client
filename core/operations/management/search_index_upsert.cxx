@@ -46,9 +46,18 @@ search_index_upsert_request::encode_to(encoded_request_type& encoded,
     encoded.path = fmt::format("/api/index/{}", index.name);
   }
   tao::json::value body{
-    { "name", index.name },
-    { "type", index.type },
-    { "sourceType", index.source_type },
+    {
+      "name",
+      index.name,
+    },
+    {
+      "type",
+      index.type,
+    },
+    {
+      "sourceType",
+      index.source_type,
+    },
   };
   if (!index.uuid.empty()) {
     body["uuid"] = index.uuid;

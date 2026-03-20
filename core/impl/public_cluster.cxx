@@ -299,7 +299,7 @@ public:
             });
             future.get();
           }
-          handler(ec, {});
+          handler(couchbase::error{ ec }, {});
         }).detach();
       }));
   }
@@ -327,7 +327,7 @@ public:
               return do_close_on_open(std::move(impl), std::move(handler), ec);
             }
             impl->transactions_ = std::move(txns);
-            handler(ec, couchbase::cluster(std::move(impl)));
+            handler(couchbase::error{ ec }, couchbase::cluster(std::move(impl)));
           });
       });
   }

@@ -85,14 +85,12 @@ struct lookup_in_all_replicas_request {
        access_deleted = access_deleted,
        h = std::forward<Handler>(handler)](std::error_code ec) mutable {
         if (ec) {
-          std::optional<std::string> first_error_path{};
-          std::optional<std::size_t> first_error_index{};
-          return h(
-            response_type{ make_subdocument_error_context(make_key_value_error_context(ec, id),
-                                                          ec,
-                                                          first_error_path,
-                                                          first_error_index,
-                                                          false) });
+          const std::optional<std::string> first_error_path{};
+          const std::optional<std::size_t> first_error_index{};
+          return h(response_type{
+            make_subdocument_error_context(
+              make_key_value_error_context(ec, id), ec, first_error_path, first_error_index, false),
+          });
         }
         core->with_bucket_configuration(
           id.bucket(),
@@ -130,8 +128,10 @@ struct lookup_in_all_replicas_request {
             }
 
             if (ec) {
-              return h(response_type{ make_subdocument_error_context(
-                make_key_value_error_context(ec, id), ec, {}, {}, false) });
+              return h(response_type{
+                make_subdocument_error_context(
+                  make_key_value_error_context(ec, id), ec, {}, {}, false),
+              });
             }
 
             using handler_type = utils::movable_function<void(response_type)>;
@@ -189,7 +189,7 @@ struct lookup_in_all_replicas_request {
                     }
                     handler_type local_handler{};
                     {
-                      std::scoped_lock lock(ctx->mutex_);
+                      const std::scoped_lock lock(ctx->mutex_);
                       if (ctx->done_) {
                         return;
                       }
@@ -245,7 +245,7 @@ struct lookup_in_all_replicas_request {
                     false,
                     specs,
                     timeout,
-                    {},
+                    io::retry_context<false>{},
                     subop_span,
                   },
                   [ctx, subop_span, subdoc_path = specs[0].path_](auto&& resp) {
@@ -258,7 +258,7 @@ struct lookup_in_all_replicas_request {
                     }
                     handler_type local_handler{};
                     {
-                      std::scoped_lock lock(ctx->mutex_);
+                      const std::scoped_lock lock(ctx->mutex_);
                       if (ctx->done_) {
                         return;
                       }

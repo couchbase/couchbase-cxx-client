@@ -143,7 +143,7 @@ public:
   [[nodiscard]] auto canonical_hostname() const -> const std::string&;
   [[nodiscard]] auto canonical_port_number() const -> std::uint16_t;
   void write_and_flush(std::vector<std::byte>&& buffer);
-  void write_and_subscribe(const std::shared_ptr<mcbp::queue_request>&,
+  void write_and_subscribe(const std::shared_ptr<mcbp::queue_request>& request,
                            const std::shared_ptr<response_handler>& handler);
   void write_and_subscribe(std::uint32_t opaque,
                            std::vector<std::byte>&& data,
@@ -160,7 +160,7 @@ public:
   [[nodiscard]] auto diag_info() const -> diag::endpoint_diag_info;
   void on_configuration_update(std::shared_ptr<config_listener> handler);
   void ping(const std::shared_ptr<diag::ping_reporter>& handler,
-            std::optional<std::chrono::milliseconds> = {}) const;
+            std::optional<std::chrono::milliseconds> timeout = {}) const;
   [[nodiscard]] auto supports_gcccp() const -> bool;
   [[nodiscard]] auto decode_error_code(std::uint16_t code)
     -> std::optional<key_value_error_map_info>;

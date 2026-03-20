@@ -67,6 +67,7 @@ operator<<(OStream& os, const core::document_id& id)
 
 template<typename T>
 T&
+// NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward) -- req is intentionally used as lvalue
 wrap_durable_request(T&& req, const couchbase::transactions::transactions_config::built& config)
 {
   req.durability_level = config.level;
@@ -75,6 +76,7 @@ wrap_durable_request(T&& req, const couchbase::transactions::transactions_config
 
 template<typename T>
 T&
+// NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward) -- req is intentionally used as lvalue
 wrap_durable_request(T&& req, durability_level level)
 {
   req.durability_level = level;
@@ -107,7 +109,7 @@ is_error(const core::operations::mutate_in_response& resp);
 
 template<typename Resp>
 std::optional<error_class>
-error_class_from_response_extras(const Resp&)
+error_class_from_response_extras(const Resp& /*resp*/)
 {
   return {};
 }
@@ -175,7 +177,7 @@ jitter()
   static std::mt19937 gen(rd());
   static std::uniform_real_distribution<> dist(1 - RETRY_OP_JITTER, 1 + RETRY_OP_JITTER);
 
-  std::lock_guard<std::mutex> lock(mtx);
+  const std::scoped_lock lock(mtx);
   return dist(gen);
 }
 
@@ -308,8 +310,8 @@ struct constant_delay {
   std::size_t max_retries;
   std::size_t retries{ 0 };
 
-  constant_delay(std::chrono::duration<R, P> d = DEFAULT_RETRY_OP_DELAY,
-                 std::size_t max = DEFAULT_RETRY_OP_MAX_RETRIES)
+  explicit constant_delay(std::chrono::duration<R, P> d = DEFAULT_RETRY_OP_DELAY,
+                          std::size_t max = DEFAULT_RETRY_OP_MAX_RETRIES)
     : delay(d)
     , max_retries(max)
   {
@@ -343,7 +345,7 @@ struct async_exp_delay {
   {
   }
 
-  async_exp_delay(std::shared_ptr<asio::steady_timer> timer)
+  explicit async_exp_delay(std::shared_ptr<asio::steady_timer> timer)
     : async_exp_delay(std::move(timer),
                       DEFAULT_RETRY_OP_EXP_DELAY,
                       DEFAULT_RETRY_OP_MAX_EXP_DELAY,
