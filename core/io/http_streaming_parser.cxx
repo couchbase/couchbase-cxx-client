@@ -27,6 +27,7 @@
 namespace
 {
 inline auto
+// NOLINTNEXTLINE(misc-const-correctness)
 static_on_status(llhttp_t* parser, const char* at, std::size_t length) -> int
 {
   auto* wrapper = static_cast<couchbase::core::io::http_streaming_parser*>(parser->data);
@@ -36,6 +37,7 @@ static_on_status(llhttp_t* parser, const char* at, std::size_t length) -> int
 }
 
 inline auto
+// NOLINTNEXTLINE(misc-const-correctness)
 static_on_header_field(llhttp_t* parser, const char* at, std::size_t length) -> int
 {
   auto* wrapper = static_cast<couchbase::core::io::http_streaming_parser*>(parser->data);
@@ -50,6 +52,7 @@ static_on_header_field(llhttp_t* parser, const char* at, std::size_t length) -> 
 }
 
 inline auto
+// NOLINTNEXTLINE(misc-const-correctness)
 static_on_header_value(llhttp_t* parser, const char* at, std::size_t length) -> int
 {
   auto* wrapper = static_cast<couchbase::core::io::http_streaming_parser*>(parser->data);
@@ -58,6 +61,7 @@ static_on_header_value(llhttp_t* parser, const char* at, std::size_t length) -> 
 }
 
 inline auto
+// NOLINTNEXTLINE(misc-const-correctness)
 static_on_headers_complete(llhttp_t* parser) -> int
 {
   auto* wrapper = static_cast<couchbase::core::io::http_streaming_parser*>(parser->data);
@@ -66,6 +70,7 @@ static_on_headers_complete(llhttp_t* parser) -> int
 }
 
 inline auto
+// NOLINTNEXTLINE(misc-const-correctness)
 static_on_body(llhttp_t* parser, const char* at, std::size_t length) -> int
 {
   auto* wrapper = static_cast<couchbase::core::io::http_streaming_parser*>(parser->data);
@@ -74,6 +79,7 @@ static_on_body(llhttp_t* parser, const char* at, std::size_t length) -> int
 }
 
 inline auto
+// NOLINTNEXTLINE(misc-const-correctness)
 static_on_message_complete(llhttp_t* parser) -> int
 {
   auto* wrapper = static_cast<couchbase::core::io::http_streaming_parser*>(parser->data);
@@ -154,8 +160,8 @@ http_streaming_parser::error_message() const -> const char*
 }
 
 auto
-http_streaming_parser::feed(const char* data,
-                            std::size_t data_len) const -> http_streaming_parser::feeding_result
+http_streaming_parser::feed(const char* data, std::size_t data_len) const
+  -> http_streaming_parser::feeding_result
 {
   auto error = llhttp_execute(&state_->parser, data, data_len);
   if (error != HPE_OK) {

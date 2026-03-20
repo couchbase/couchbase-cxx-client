@@ -34,6 +34,9 @@ if(ENABLE_CLANG_TIDY)
   endif()
 
   set(CLANGTIDY_CANDIDATES
+      clang-tidy-23
+      clang-tidy-22
+      clang-tidy-21
       clang-tidy-20
       clang-tidy-19
       clang-tidy-18
@@ -44,7 +47,12 @@ if(ENABLE_CLANG_TIDY)
     find_program(CLANGTIDY ${CLANGTIDY_CANDIDATES})
   endif()
   if(CLANGTIDY)
-    set(COUCHBASE_CXX_CLIENT_CLANG_TIDY "${CLANGTIDY};-extra-arg=-Wno-unknown-warning-option")
+    # -Wno-unknown-warning-option: suppresses errors when clang-tidy passes flags not known to older
+    #   compiler versions (e.g. when mixing clang-tidy-23 with clang-22 headers).
+    # -Wno-c2y-extensions: __COUNTER__ is used by Catch2's TEST_CASE macro; clang-23 warns it is a
+    #   C2y extension. We cannot modify Catch2, and the warning is irrelevant in a C++17 codebase.
+    set(COUCHBASE_CXX_CLIENT_CLANG_TIDY
+        "${CLANGTIDY};-extra-arg=-Wno-unknown-warning-option;-extra-arg=-Wno-c2y-extensions")
     if(ENABLE_CLANG_TIDY_FIX)
       set(COUCHBASE_CXX_CLIENT_CLANG_TIDY
           "${COUCHBASE_CXX_CLIENT_CLANG_TIDY};-fix;-export-fixes=${PROJECT_BINARY_DIR}/clang-tidy-fixes.yaml")

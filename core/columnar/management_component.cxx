@@ -52,15 +52,18 @@ public:
   {
   }
 
-  auto parse_management_error(const std::uint32_t& http_status,
-                              const tao::json::value& body) -> error
+  auto parse_management_error(const std::uint32_t& http_status, const tao::json::value& body)
+    -> error
   {
     const auto* errors_json = body.find("errors");
     if (errors_json == nullptr) {
       return {};
     }
     if (!errors_json->is_array()) {
-      return { errc::generic, "Could not parse errors from server response - expected JSON array" };
+      return {
+        errc::generic,
+        "Could not parse errors from server response - expected JSON array",
+      };
     }
     if (errors_json->get_array().empty()) {
       return {};
@@ -82,22 +85,30 @@ public:
     for (auto error_json : errors_json->get_array()) {
       auto* msg = error_json.find("msg");
       if (msg == nullptr) {
-        return { errc::generic,
-                 "Could not parse error from server response - could not find 'msg' field" };
+        return {
+          errc::generic,
+          "Could not parse error from server response - could not find 'msg' field",
+        };
       }
       if (!msg->is_string()) {
-        return { errc::generic,
-                 "Could not parse error from server response - 'msg' field was not string" };
+        return {
+          errc::generic,
+          "Could not parse error from server response - 'msg' field was not string",
+        };
       }
 
       auto* c = error_json.find("code");
       if (c == nullptr) {
-        return { errc::generic,
-                 "Could not parse error from server response - could not find 'code' field" };
+        return {
+          errc::generic,
+          "Could not parse error from server response - could not find 'code' field",
+        };
       }
       if (!(c->is_unsigned() || c->is_signed())) {
-        return { errc::generic,
-                 "Could not parse error from server response - 'code' field was not an integer" };
+        return {
+          errc::generic,
+          "Could not parse error from server response - 'code' field was not an integer",
+        };
       }
 
       std::int32_t code = c->is_signed() ? gsl::narrow_cast<std::int32_t>(c->get_signed())
@@ -145,8 +156,10 @@ public:
         }
         if (!results_json->is_array()) {
           return cb({},
-                    { errc::generic,
-                      "Could not parse results from server response - expected JSON array" });
+                    {
+                      errc::generic,
+                      "Could not parse results from server response - expected JSON array",
+                    });
         }
         cb(results_json->get_array(), {});
       });
@@ -155,8 +168,10 @@ public:
       http_op_ = std::move(op.value());
       return {};
     }
-    return error{ maybe_convert_error_code(op.error()),
-                  "Failed do dispatch management HTTP operation" };
+    return error{
+      maybe_convert_error_code(op.error()),
+      "Failed do dispatch management HTTP operation",
+    };
   }
 
   void cancel() override

@@ -32,8 +32,14 @@ search_request::encode_to(search_request::encoded_request_type& encoded,
                           http_context& context) -> std::error_code
 {
   auto body = tao::json::value{
-    { "query", utils::json::parse(query) },
-    { "ctl", { { "timeout", encoded.timeout.count() } } },
+    {
+      "query",
+      utils::json::parse(query),
+    },
+    {
+      "ctl",
+      { { "timeout", encoded.timeout.count() } },
+    },
   };
 
   if (show_request.has_value()) {
@@ -112,8 +118,14 @@ search_request::encode_to(search_request::encoded_request_type& encoded,
       }
     }
     body["ctl"]["consistency"] = tao::json::value{
-      { "level", "at_plus" },
-      { "vectors", { { index_name, scan_vectors } } },
+      {
+        "level",
+        "at_plus",
+      },
+      {
+        "vectors",
+        { { index_name, scan_vectors } },
+      },
     };
   }
   if (!collections.empty()) {

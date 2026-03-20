@@ -38,6 +38,7 @@ public:
   {
   }
 
+  // NOLINTNEXTLINE(modernize-use-string-view)
   [[nodiscard]] auto endpoint() const -> std::string
   {
     return {};
@@ -78,6 +79,7 @@ public:
   {
   }
 
+  // NOLINTNEXTLINE(modernize-use-string-view)
   [[nodiscard]] auto endpoint() const -> std::string
   {
     return {};

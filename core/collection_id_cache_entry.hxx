@@ -30,6 +30,11 @@ class queue_request;
 class collection_id_cache_entry
 {
 public:
+  collection_id_cache_entry() = default;
+  collection_id_cache_entry(const collection_id_cache_entry&) = default;
+  collection_id_cache_entry(collection_id_cache_entry&&) = default;
+  auto operator=(const collection_id_cache_entry&) -> collection_id_cache_entry& = default;
+  auto operator=(collection_id_cache_entry&&) -> collection_id_cache_entry& = default;
   virtual ~collection_id_cache_entry() = default;
   [[nodiscard]] virtual auto dispatch(std::shared_ptr<mcbp::queue_request> req)
     -> std::error_code = 0;

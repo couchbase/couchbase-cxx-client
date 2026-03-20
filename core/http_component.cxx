@@ -712,7 +712,7 @@ http_component::http_component(asio::io_context& io,
                                core_sdk_shim shim,
                                std::shared_ptr<retry_strategy> default_retry_strategy)
   : impl_{
-    std::make_shared<http_component_impl>(io, std::move(shim), std::move(default_retry_strategy))
+    std::make_shared<http_component_impl>(io, std::move(shim), std::move(default_retry_strategy)),
   }
 {
 }

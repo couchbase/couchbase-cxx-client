@@ -1,5 +1,11 @@
 UseColor: true
 WarningsAsErrors: '*'
+# HeaderFilterRegex: restrict clang-tidy header analysis to project sources only.
+# Excludes:
+#   - third_party/*: vendored C libraries (jsonsl, etc.) that violate C++ checks and cannot be modified.
+#   - .cache/CPM/*: CPM-fetched packages (Catch2, asio, etc.) that we do not own.
+# TODO(SA): Replace jsonsl with a C++ streaming JSON library to allow removing the third_party exclusion.
+HeaderFilterRegex: '^(?!.*(third_party|\.cache/CPM)).*$'
 Checks: |-
   *,
   bugprone-*,
@@ -16,42 +22,186 @@ Checks: |-
   -abseil-*,
   -altera-*,
   -boost-*,
+  # bugprone-easily-swappable-parameters: too many false positives on constructors and functions
+  # with multiple same-type parameters; the pattern is intentional in protocol / request structs.
   -bugprone-easily-swappable-parameters,
+  # bugprone-exception-escape: many async callbacks intentionally rethrow or propagate exceptions
+  # across thread/coroutine boundaries; marking them all noexcept would require large-scale changes.
   -bugprone-exception-escape,
+  # bugprone-unused-return-value: several Asio and third-party calls intentionally discard return
+  # values; enforcing this globally would require widespread [[nodiscard]] annotations or casts.
   -bugprone-unused-return-value,
+  # cert-err09-cpp / cert-err61-cpp: alias for bugprone-throw-keyword-missing; not relevant to
+  # this codebase's exception handling patterns.
   -cert-err09-cpp,
+  # cert-err33-c: C-style functions (fwrite, fread etc.) return values not always checked;
+  # these are in low-level platform utilities where partial writes are handled structurally.
   -cert-err33-c,
+  # cert-err58-cpp: fires on static variables with non-trivial constructors; many constexpr-like
+  # statics in operation structs trigger this. Evaluate eliminating the pattern in a future pass.
   -cert-err58-cpp,
+  # cert-err61-cpp: alias for bugprone-throw-keyword-missing; same rationale as cert-err09-cpp.
   -cert-err61-cpp,
+  # cppcoreguidelines-avoid-const-or-ref-data-members: const/ref data members are used
+  # intentionally in some immutable value types and RAII wrappers.
   -cppcoreguidelines-avoid-const-or-ref-data-members,
+  # cppcoreguidelines-avoid-do-while: do-while is used in a few macro-expansion helpers; refactoring
+  # would require macro redesign.
   -cppcoreguidelines-avoid-do-while,
+  # cppcoreguidelines-avoid-magic-numbers / readability-magic-numbers: protocol constants (port
+  # numbers, buffer sizes, wire-format offsets) appear inline for clarity; extracting every literal
+  # to a named constant would create noise without improving readability.
   -cppcoreguidelines-avoid-magic-numbers,
+  # cppcoreguidelines-avoid-non-const-global-variables: some singletons and logger registries
+  # require non-const globals; refactoring to dependency injection is tracked separately.
   -cppcoreguidelines-avoid-non-const-global-variables,
+  # cppcoreguidelines-pro-bounds-array-to-pointer-decay: C arrays decay to pointers in many
+  # low-level platform and SASL helpers; fixing requires converting C arrays to std::array/span.
   -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+  # cppcoreguidelines-pro-bounds-pointer-arithmetic: raw pointer arithmetic in MCBP codec and
+  # serialization paths is intentional for performance; use std::span in a future refactor.
   -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  # cppcoreguidelines-pro-type-cstyle-cast: C-style casts exist in platform headers and third-party
+  # integration code; eliminate progressively in future cleanup passes.
   -cppcoreguidelines-pro-type-cstyle-cast,
+  # cppcoreguidelines-pro-type-reinterpret-cast: reinterpret_cast is required for binary
+  # serialization (MCBP wire format, OpenSSL buffers, etc.); no safe alternative exists.
   -cppcoreguidelines-pro-type-reinterpret-cast,
+  # cppcoreguidelines-pro-type-union-access: unions are used in MCBP header layout for wire
+  # compatibility; replacing with std::variant would change the ABI.
   -cppcoreguidelines-pro-type-union-access,
+  # cppcoreguidelines-pro-type-vararg: variadic C functions are used in logging macros (fmt/spdlog)
+  # and some platform wrappers; switching to variadic templates requires macro redesign.
   -cppcoreguidelines-pro-type-vararg,
+  # cppcoreguidelines-rvalue-reference-param-not-moved: some rvalue-ref parameters are forwarded
+  # conditionally; the lint is a false positive in those cases.
   -cppcoreguidelines-rvalue-reference-param-not-moved,
+  # fuchsia-*: Fuchsia OS specific checks; this project does not target Fuchsia.
   -fuchsia-*,
+  # google-build-using-namespace: 'using namespace' directives appear in .cxx translation units
+  # for readability; they are not in headers so there is no risk of namespace pollution for users.
   -google-build-using-namespace,
+  # google-runtime-int: int/unsigned/long are used for OS API interop (POSIX, Windows) and for
+  # established protocol constants; switching to fixed-width types everywhere is a large refactor.
   -google-runtime-int,
+  # google-runtime-references: non-const reference parameters are idiomatic in this codebase for
+  # output parameters and callback registration; this is a Google-specific style preference.
   -google-runtime-references,
+  # hicpp-no-array-decay: same root cause as cppcoreguidelines-pro-bounds-array-to-pointer-decay.
   -hicpp-no-array-decay,
+  # hicpp-signed-bitwise: signed bitwise operations appear in flag/bitmask helpers; these are
+  # correct but would require casting to unsigned types, adding noise.
   -hicpp-signed-bitwise,
+  # hicpp-vararg: same root cause as cppcoreguidelines-pro-type-vararg.
   -hicpp-vararg,
+  # performance-no-int-to-ptr: int-to-pointer conversions appear in OS handle wrappers; these are
+  # platform-specific patterns that cannot be avoided.
   -performance-no-int-to-ptr,
+  # llvm-header-guard: we use #pragma once instead of include guards; LLVM house style preference.
   -llvm-header-guard,
+  # llvmlibc-*: LLVM libc implementation-specific checks; not applicable to this project.
   -llvmlibc-*,
+  # misc-include-cleaner: would require adding/removing many #include directives; evaluate in a
+  # dedicated include-cleanup pass to avoid unintended regressions.
   -misc-include-cleaner,
+  # misc-no-recursion: some recursive algorithms (JSON traversal, ATR chain walking) are
+  # intentionally recursive; banning recursion entirely is too strict.
   -misc-no-recursion,
+  # misc-non-private-member-variables-in-classes: many structs use public data members by design;
+  # same root cause as cppcoreguidelines-non-private-member-variables-in-classes.
   -misc-non-private-member-variables-in-classes,
+  # misc-throw-by-value-catch-by-reference: some legacy catch sites catch by value; fix
+  # progressively.
   -misc-throw-by-value-catch-by-reference,
+  # misc-use-internal-linkage: some free functions in .cxx files are not yet in anonymous
+  # namespaces; migrate incrementally.
   -misc-use-internal-linkage,
+  # readability-avoid-return-with-void-value: 'return expr;' in void functions is used
+  # intentionally for early-return clarity in callbacks.
   -readability-avoid-return-with-void-value,
+  # readability-convert-member-functions-to-static: some member functions reference 'this'
+  # conditionally via macros (logging); making them static breaks the macro expansion.
   -readability-convert-member-functions-to-static,
+  # readability-function-cognitive-complexity: several orchestration functions (attempt_context_impl,
+  # config parsing) exceed the threshold; refactoring them is a significant effort tracked separately.
   -readability-function-cognitive-complexity,
+  # readability-identifier-length: short names (ec, cb, id, op) are idiomatic in callback-heavy
+  # async code; enforcing minimum length would harm readability.
   -readability-identifier-length,
+  # readability-magic-numbers: same rationale as cppcoreguidelines-avoid-magic-numbers.
   -readability-magic-numbers,
-  -readability-redundant-member-init
+  # readability-redundant-member-init: some explicit default initializations serve as
+  # self-documentation; removing them is a style preference, not a correctness issue.
+  -readability-redundant-member-init,
+  # portability-avoid-pragma-once: we use #pragma once throughout; it is supported on all
+  # targeted compilers (GCC, Clang, MSVC).
+  -portability-avoid-pragma-once,
+  # performance-enum-size: changing enum base types in public headers is an ABI break; revisit when
+  # planning a major version bump.
+  -performance-enum-size,
+  # modernize-use-trailing-return-type: pure style preference; the codebase uses traditional syntax
+  # consistently and switching would be a large, low-value churn.
+  -modernize-use-trailing-return-type,
+  # clang-analyzer-optin.performance.Padding: reordering struct fields for padding is invasive and
+  # can silently break serialization / wire-format assumptions.
+  -clang-analyzer-optin.performance.Padding,
+  # cppcoreguidelines-macro-usage / modernize-macro-to-enum / cppcoreguidelines-macro-to-enum:
+  # logging macros, feature-flag macros, and deprecation macros are legitimate uses that cannot
+  # be replaced by constexpr/enum without losing conditional-compilation semantics.
+  -cppcoreguidelines-macro-usage,
+  -cppcoreguidelines-macro-to-enum,
+  -modernize-macro-to-enum,
+  # google-default-arguments: virtual methods with default arguments exist in the public API;
+  # removing them would be a breaking change.
+  -google-default-arguments,
+  # llvm-prefer-static-over-anonymous-namespace: LLVM house style; anonymous namespaces are
+  # idiomatic standard C++ and preferred in this codebase.
+  -llvm-prefer-static-over-anonymous-namespace,
+  # llvm-use-ranges: C++20 ranges are not yet adopted in the codebase; enable when we move to C++20.
+  -llvm-use-ranges,
+  # bugprone-throwing-static-initialization: the static default_timeout values in operation structs
+  # do not actually throw; fixing them all would require widespread boilerplate with no safety gain.
+  -bugprone-throwing-static-initialization,
+  # cppcoreguidelines-special-member-functions / hicpp-special-member-functions: many interfaces
+  # intentionally declare only a virtual destructor; enforcing rule-of-5 everywhere is impractical.
+  -cppcoreguidelines-special-member-functions,
+  -hicpp-special-member-functions,
+  # misc-multiple-inheritance: legitimate pattern for mixin-style interfaces in this codebase.
+  -misc-multiple-inheritance,
+  # cppcoreguidelines-non-private-member-variables-in-classes: many structs in the codebase use
+  # public data members by design (plain data types, operation request/response structs, etc.).
+  -cppcoreguidelines-non-private-member-variables-in-classes,
+  # cppcoreguidelines-use-enum-class: some enums must remain unscoped for C interop or bitfield use.
+  -cppcoreguidelines-use-enum-class,
+  # readability-redundant-inline-specifier: minor style; suppressed to reduce noise.
+  -readability-redundant-inline-specifier,
+  # performance-unnecessary-value-param: many execute() overloads and other sink functions take
+  # request types by value and immediately std::move them; the pattern is intentional.
+  -performance-unnecessary-value-param,
+  # clang-analyzer-security.ArrayBound: fires as false positives inside tao/json third-party
+  # headers (itoa.hpp, ryu.hpp) triggered by any translation unit that calls tao::json::to_string().
+  # These are not real out-of-bounds accesses; suppressing globally to avoid noise.
+  -clang-analyzer-security.ArrayBound,
+  # readability-use-concise-preprocessor-directives: fires on #if defined(X) patterns in
+  # auto-generated headers under build/generated/include_ssl/ that we cannot edit.
+  -readability-use-concise-preprocessor-directives,
+  # google-readability-todo: fires on TODO comments in third-party headers (opentelemetry) that
+  # lack a username/bug reference; we cannot edit third-party code.
+  -google-readability-todo,
+  # cppcoreguidelines-pro-bounds-avoid-unchecked-container-access: the codebase intentionally uses
+  # operator[] for performance in hot paths (JSON processing, MCBP codec, DNS codec, etc.) where
+  # bounds are guaranteed by protocol structure. Enabling this would generate ~230 suppressions
+  # with no safety benefit.
+  -cppcoreguidelines-pro-bounds-avoid-unchecked-container-access,
+  # cppcoreguidelines-pro-bounds-constant-array-index: fires on any operator[] with a
+  # non-compile-time-constant index. The codebase has 130+ such sites across protocol codecs,
+  # JSON parsing, and collection iteration where indices are loop variables or runtime values.
+  # Using .at() everywhere would add significant overhead and noise. Evaluate in a future pass
+  # whether the highest-risk sites (raw C arrays) should be converted to .at() individually.
+  -cppcoreguidelines-pro-bounds-constant-array-index,
+  # readability-trailing-comma: fires on the last element of initializer lists, enum definitions,
+  # and function-call argument lists that lack a trailing comma. The codebase has ~48 sites where
+  # this fires as false positives (empty-brace arguments, single-element CTAD arrays, codec
+  # structs). Suppressing globally; re-enable when Clang fixes the false-positive cases.
+  # TODO(SA): Re-evaluate after upgrading past clang-23 to see if false positives are resolved.
+  -readability-trailing-comma

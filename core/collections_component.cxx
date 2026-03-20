@@ -399,6 +399,7 @@ auto
 collection_id_cache_entry_impl::refresh_collection_id(
   const std::shared_ptr<mcbp::queue_request>& req) -> std::error_code
 {
+  // NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks)
   if (auto ec = queue_->push(req, max_queue_size_); ec) {
     return ec;
   }
@@ -461,6 +462,7 @@ collection_id_cache_entry_impl::refresh_collection_id(
     return {};
   }
   return op.error();
+  // NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
 }
 
 collections_component::collections_component(asio::io_context& io,

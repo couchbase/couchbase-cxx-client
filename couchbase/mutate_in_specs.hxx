@@ -38,7 +38,7 @@
 namespace couchbase
 {
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
-namespace
+namespace detail
 {
 template<typename Value>
 auto
@@ -49,8 +49,8 @@ encode_array(const Value& value) -> std::vector<std::vector<std::byte>>
 
 template<typename Value>
 auto
-encode_array(std::vector<std::vector<std::byte>>&& output,
-             const Value& value) -> std::vector<std::vector<std::byte>>
+encode_array(std::vector<std::vector<std::byte>>&& output, const Value& value)
+  -> std::vector<std::vector<std::byte>>
 {
   output.emplace_back(std::move(codec::default_json_transcoder::encode(value).data));
   return std::move(output);
@@ -58,9 +58,8 @@ encode_array(std::vector<std::vector<std::byte>>&& output,
 
 template<typename Value, typename... Rest>
 auto
-encode_array(std::vector<std::vector<std::byte>>&& output,
-             const Value& value,
-             Rest... args) -> std::vector<std::vector<std::byte>>
+encode_array(std::vector<std::vector<std::byte>>&& output, const Value& value, Rest... args)
+  -> std::vector<std::vector<std::byte>>
 {
   output.emplace_back(std::move(codec::default_json_transcoder::encode(value).data));
   return encode_array(std::move(output), args...);
@@ -73,7 +72,7 @@ encode_array(const Value& value, Rest... args) -> std::vector<std::vector<std::b
   return encode_array(encode_array(value), args...);
 }
 
-} // namespace
+} // namespace detail
 #endif
 
 class mutate_in_specs
@@ -139,9 +138,8 @@ public:
    * @since 1.0.0
    * @internal
    */
-  static auto replace_raw(std::string path,
-                          std::vector<std::byte> value,
-                          bool expand_macro = false) -> subdoc::replace
+  static auto replace_raw(std::string path, std::vector<std::byte> value, bool expand_macro = false)
+    -> subdoc::replace
   {
     return { std::move(path), std::move(value), expand_macro };
   }
@@ -197,9 +195,8 @@ public:
    * @since 1.0.0
    * @internal
    */
-  static auto insert_raw(std::string path,
-                         std::vector<std::byte> value,
-                         bool expand_macro = false) -> subdoc::insert
+  static auto insert_raw(std::string path, std::vector<std::byte> value, bool expand_macro = false)
+    -> subdoc::insert
   {
     return { std::move(path), std::move(value), expand_macro };
   }
@@ -271,9 +268,8 @@ public:
    * @since 1.0.0
    * @internal
    */
-  static auto upsert_raw(std::string path,
-                         std::vector<std::byte> value,
-                         bool expand_macro = false) -> subdoc::upsert
+  static auto upsert_raw(std::string path, std::vector<std::byte> value, bool expand_macro = false)
+    -> subdoc::upsert
   {
     return { std::move(path), std::move(value), expand_macro };
   }
@@ -335,7 +331,7 @@ public:
   template<typename... Values>
   static auto array_append(std::string path, Values... values) -> subdoc::array_append
   {
-    return { std::move(path), encode_array(values...) };
+    return { std::move(path), detail::encode_array(values...) };
   }
 
   /**
@@ -352,8 +348,8 @@ public:
    * @since 1.0.0
    * @internal
    */
-  static auto array_append_raw(std::string path,
-                               std::vector<std::byte> values) -> subdoc::array_append
+  static auto array_append_raw(std::string path, std::vector<std::byte> values)
+    -> subdoc::array_append
   {
     return { std::move(path), { std::move(values) } };
   }
@@ -373,7 +369,7 @@ public:
   template<typename... Values>
   static auto array_prepend(std::string path, Values... values) -> subdoc::array_prepend
   {
-    return { std::move(path), encode_array(values...) };
+    return { std::move(path), detail::encode_array(values...) };
   }
 
   /**
@@ -390,8 +386,8 @@ public:
    * @since 1.0.0
    * @internal
    */
-  static auto array_prepend_raw(std::string path,
-                                std::vector<std::byte> values) -> subdoc::array_prepend
+  static auto array_prepend_raw(std::string path, std::vector<std::byte> values)
+    -> subdoc::array_prepend
   {
     return { std::move(path), { std::move(values) } };
   }
@@ -412,7 +408,7 @@ public:
   template<typename... Values>
   static auto array_insert(std::string path, Values... values) -> subdoc::array_insert
   {
-    return { std::move(path), encode_array(values...) };
+    return { std::move(path), detail::encode_array(values...) };
   }
 
   /**
@@ -430,8 +426,8 @@ public:
    * @since 1.0.0
    * @internal
    */
-  static auto array_insert_raw(std::string path,
-                               std::vector<std::byte> values) -> subdoc::array_insert
+  static auto array_insert_raw(std::string path, std::vector<std::byte> values)
+    -> subdoc::array_insert
   {
     return { std::move(path), { std::move(values) } };
   }
@@ -471,8 +467,8 @@ public:
    * @since 1.0.0
    * @committed
    */
-  static auto array_add_unique(std::string path,
-                               subdoc::mutate_in_macro value) -> subdoc::array_add_unique
+  static auto array_add_unique(std::string path, subdoc::mutate_in_macro value)
+    -> subdoc::array_add_unique
   {
     return { std::move(path), value };
   }

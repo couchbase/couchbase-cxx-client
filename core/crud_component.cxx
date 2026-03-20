@@ -114,8 +114,14 @@ serialize_range_scan_create_options(const range_scan_create_options& options)
     }
 
     body["sampling"] = {
-      { "samples", sampling.limit },
-      { "seed", seed },
+      {
+        "samples",
+        sampling.limit,
+      },
+      {
+        "seed",
+        seed,
+      },
     };
   } else {
     return { {}, errc::common::invalid_argument };
@@ -124,12 +130,20 @@ serialize_range_scan_create_options(const range_scan_create_options& options)
   if (options.snapshot_requirements) {
     const auto& snapshot = options.snapshot_requirements.value();
     tao::json::value requirements = {
-      { "vb_uuid", std::to_string(snapshot.vbucket_uuid) },
-      { "seqno", snapshot.sequence_number },
-      { "timeout_ms",
+      {
+        "vb_uuid",
+        std::to_string(snapshot.vbucket_uuid),
+      },
+      {
+        "seqno",
+        snapshot.sequence_number,
+      },
+      {
+        "timeout_ms",
         (options.timeout == std::chrono::milliseconds::zero())
           ? timeout_defaults::key_value_scan_timeout.count()
-          : options.timeout.count() },
+          : options.timeout.count(),
+      },
     };
     if (snapshot.sequence_number_exists) {
       requirements["seqno_exists"] = true;
@@ -308,7 +322,7 @@ private:
              Callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
-    auto handler = [cb = std::move(callback),
+    auto handler = [cb = std::forward<Callback>(callback),
                     bucket_name = bucket_name_](std::shared_ptr<mcbp::queue_response> response,
                                                 std::shared_ptr<mcbp::queue_request> request,
                                                 std::error_code error) {
@@ -351,11 +365,12 @@ private:
 
     if (options.durability_level != couchbase::durability_level::none) {
       req->durability_level_frame_ = mcbp::durability_level_frame{
-        static_cast<mcbp::durability_level>(options.durability_level)
+        static_cast<mcbp::durability_level>(options.durability_level),
       };
       if (options.durability_level_timeout.count() > 0) {
-        req->durability_timeout_frame_ =
-          mcbp::durability_timeout_frame{ options.durability_level_timeout };
+        req->durability_timeout_frame_ = mcbp::durability_timeout_frame{
+          options.durability_level_timeout,
+        };
       }
     }
 
@@ -376,7 +391,7 @@ private:
               Callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
-    auto handler = [cb = std::move(callback),
+    auto handler = [cb = std::forward<Callback>(callback),
                     bucket_name = bucket_name_](std::shared_ptr<mcbp::queue_response> response,
                                                 std::shared_ptr<mcbp::queue_request> request,
                                                 std::error_code error) {
@@ -410,11 +425,12 @@ private:
 
     if (options.durability_level != couchbase::durability_level::none) {
       req->durability_level_frame_ = mcbp::durability_level_frame{
-        static_cast<mcbp::durability_level>(options.durability_level)
+        static_cast<mcbp::durability_level>(options.durability_level),
       };
       if (options.durability_level_timeout.count() > 0) {
-        req->durability_timeout_frame_ =
-          mcbp::durability_timeout_frame{ options.durability_level_timeout };
+        req->durability_timeout_frame_ = mcbp::durability_timeout_frame{
+          options.durability_level_timeout,
+        };
       }
     }
 
@@ -430,7 +446,7 @@ private:
                Callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
-    auto handler = [cb = std::move(callback),
+    auto handler = [cb = std::forward<Callback>(callback),
                     bucket_name = bucket_name_](std::shared_ptr<mcbp::queue_response> response,
                                                 std::shared_ptr<mcbp::queue_request> request,
                                                 std::error_code error) {
@@ -471,11 +487,12 @@ private:
 
     if (options.durability_level != couchbase::durability_level::none) {
       req->durability_level_frame_ = mcbp::durability_level_frame{
-        static_cast<mcbp::durability_level>(options.durability_level)
+        static_cast<mcbp::durability_level>(options.durability_level),
       };
       if (options.durability_level_timeout.count() > 0) {
-        req->durability_timeout_frame_ =
-          mcbp::durability_timeout_frame{ options.durability_level_timeout };
+        req->durability_timeout_frame_ = mcbp::durability_timeout_frame{
+          options.durability_level_timeout,
+        };
       }
     }
 
@@ -624,11 +641,12 @@ public:
 
     if (options.durability_level != couchbase::durability_level::none) {
       req->durability_level_frame_ = mcbp::durability_level_frame{
-        static_cast<mcbp::durability_level>(options.durability_level)
+        static_cast<mcbp::durability_level>(options.durability_level),
       };
       if (options.durability_level_timeout.count() > 0) {
-        req->durability_timeout_frame_ =
-          mcbp::durability_timeout_frame{ options.durability_level_timeout };
+        req->durability_timeout_frame_ = mcbp::durability_timeout_frame{
+          options.durability_level_timeout,
+        };
       }
     }
 
@@ -1205,11 +1223,12 @@ public:
 
     if (options.durability_level != couchbase::durability_level::none) {
       req->durability_level_frame_ = mcbp::durability_level_frame{
-        static_cast<mcbp::durability_level>(options.durability_level)
+        static_cast<mcbp::durability_level>(options.durability_level),
       };
       if (options.durability_level_timeout.count() > 0) {
-        req->durability_timeout_frame_ =
-          mcbp::durability_timeout_frame{ options.durability_level_timeout };
+        req->durability_timeout_frame_ = mcbp::durability_timeout_frame{
+          options.durability_level_timeout,
+        };
       }
     }
 
@@ -1431,10 +1450,12 @@ crud_component::crud_component(asio::io_context& io,
                                std::string bucket_name,
                                collections_component collections,
                                std::shared_ptr<retry_strategy> default_retry_strategy)
-  : impl_{ std::make_shared<crud_component_impl>(io,
-                                                 std::move(bucket_name),
-                                                 std::move(collections),
-                                                 std::move(default_retry_strategy)) }
+  : impl_{
+    std::make_shared<crud_component_impl>(io,
+                                          std::move(bucket_name),
+                                          std::move(collections),
+                                          std::move(default_retry_strategy)),
+  }
 {
 }
 

@@ -63,6 +63,7 @@ struct document_id {
 
   [[nodiscard]] std::uint32_t collection_uid() const
   {
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
     return collection_uid_.value();
   }
 

@@ -87,15 +87,15 @@ struct traits<couchbase::core::management::eventing::function> {
             binding.auth = couchbase::core::management::eventing::function_url_no_auth{};
           } else if (auth_type == "basic") {
             binding.auth = couchbase::core::management::eventing::function_url_auth_basic{
-              url.at("username").get_string()
+              url.at("username").get_string(),
             };
           } else if (auth_type == "digest") {
             binding.auth = couchbase::core::management::eventing::function_url_auth_digest{
-              url.at("username").get_string()
+              url.at("username").get_string(),
             };
           } else if (auth_type == "bearer") {
             binding.auth = couchbase::core::management::eventing::function_url_auth_bearer{
-              url.at("bearer_key").get_string()
+              url.at("bearer_key").get_string(),
             };
           }
           result.url_bindings.emplace_back(binding);

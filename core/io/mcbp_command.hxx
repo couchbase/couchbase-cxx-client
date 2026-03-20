@@ -64,9 +64,11 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
   mcbp_command_handler handler_{};
   std::shared_ptr<Manager> manager_{};
   std::chrono::milliseconds timeout_{};
-  std::string id_{ fmt::format("{:02x}/{}",
-                               static_cast<std::uint8_t>(encoded_request_type::body_type::opcode),
-                               uuid::to_string(uuid::random())) };
+  std::string id_{
+    fmt::format("{:02x}/{}",
+                static_cast<std::uint8_t>(encoded_request_type::body_type::opcode),
+                uuid::to_string(uuid::random())),
+  };
 #ifdef COUCHBASE_CXX_CLIENT_CREATE_OPERATION_SPAN_IN_CORE
   std::shared_ptr<couchbase::tracing::request_span> span_{ nullptr };
 #endif
@@ -82,8 +84,8 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                std::chrono::milliseconds default_timeout)
     : deadline(ctx)
     , retry_backoff(ctx)
-    , request(req)
-    , manager_(manager)
+    , request(std::move(req))
+    , manager_(std::move(manager))
     , timeout_(request.timeout.value_or(default_timeout))
     , parent_span_(request.parent_span)
   {
@@ -133,11 +135,13 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
 
   void cancel(retry_reason reason, bool is_timeout = true)
   {
+    // NOLINTBEGIN(bugprone-unchecked-optional-access)
     if (opaque_ && session_) {
       if (session_->cancel(opaque_.value(), asio::error::operation_aborted, reason)) {
         handler_ = nullptr;
       }
     }
+    // NOLINTEND(bugprone-unchecked-optional-access)
     if (is_timeout) {
       invoke_handler(
         request.retries.idempotent() || !opaque_.has_value()
@@ -185,6 +189,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
 
   void request_collection_id()
   {
+    // NOLINTBEGIN(bugprone-unchecked-optional-access)
     if (session_->is_stopped()) {
       return manager_->map_and_send(this->shared_from_this());
     }
@@ -198,7 +203,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
         std::error_code ec,
         retry_reason /* reason */,
         io::mcbp_message&& msg,
-        std::optional<key_value_error_map_info> /* error_info */) mutable {
+        const std::optional<key_value_error_map_info>& /* error_info */) mutable {
         if (ec == asio::error::operation_aborted) {
           return self->invoke_handler(errc::common::ambiguous_timeout);
         }
@@ -217,10 +222,12 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
         self->request.id.collection_uid(resp.body().collection_uid());
         return self->send();
       });
+    // NOLINTEND(bugprone-unchecked-optional-access)
   }
 
   void handle_unknown_collection()
   {
+    // NOLINTBEGIN(bugprone-unchecked-optional-access)
     auto backoff = std::chrono::milliseconds(500);
     auto time_left = deadline.expiry() - std::chrono::steady_clock::now();
     CB_LOG_DEBUG(R"({} unknown collection response for "{}", time_left={}ms, id="{}")",
@@ -241,10 +248,12 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
       }
       self->request_collection_id();
     });
+    // NOLINTEND(bugprone-unchecked-optional-access)
   }
 
   void send()
   {
+    // NOLINTBEGIN(bugprone-unchecked-optional-access)
     opaque_ = session_->next_opaque();
     request.opaque = *opaque_;
     if (request.id.use_collections() && !request.id.is_collection_resolved()) {
@@ -289,7 +298,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
         std::error_code ec,
         retry_reason reason,
         io::mcbp_message&& msg,
-        std::optional<key_value_error_map_info> /* error_info */) mutable {
+        const std::optional<key_value_error_map_info>& /* error_info */) mutable {
         {
           const auto server_duration_us =
             static_cast<std::uint64_t>(protocol::parse_server_duration_us(msg));
@@ -412,6 +421,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
           io::retry_orchestrator::maybe_retry(self->manager_, self, reason, ec);
         }
       });
+    // NOLINTEND(bugprone-unchecked-optional-access)
   }
 
   void send_to(io::mcbp_session session)
@@ -431,6 +441,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
   }
 
 private:
+  // NOLINTBEGIN(bugprone-unchecked-optional-access)
   [[nodiscard]] auto create_orphan_attributes() -> orphan_attributes
   {
     orphan_attributes attrs;
@@ -486,6 +497,7 @@ private:
     }
     dispatch_span->end();
   }
+  // NOLINTEND(bugprone-unchecked-optional-access)
 };
 
 } // namespace couchbase::core::operations

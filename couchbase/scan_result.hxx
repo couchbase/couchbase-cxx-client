@@ -79,7 +79,7 @@ public:
    * @since 1.0.0
    * @volatile
    */
-  auto next() const -> std::future<std::pair<error, std::optional<scan_result_item>>>;
+  [[nodiscard]] auto next() const -> std::future<std::pair<error, std::optional<scan_result_item>>>;
 
   /**
    * Cancels the scan.
@@ -127,7 +127,7 @@ public:
    * @since 1.0.0
    * @volatile
    */
-  auto begin() -> iterator;
+  [[nodiscard]] auto begin() -> iterator;
 
   /**
    * Returns an iterator to the end.
@@ -137,7 +137,7 @@ public:
    * @since 1.0.0
    * @volatile
    */
-  auto end() -> iterator;
+  [[nodiscard]] auto end() -> iterator;
 
 private:
   std::shared_ptr<internal_scan_result> internal_{};

@@ -39,8 +39,10 @@ generate_initialization_vector() -> std::pair<error, std::vector<std::byte>>
   auto iv_size = static_cast<int>(iv.size());
 #endif
   if (RAND_bytes(reinterpret_cast<unsigned char*>(iv.data()), iv_size) != 1) {
-    return { error{ errc::field_level_encryption::encryption_failure,
-                    "Failed to generate random initialization vector" },
+    return { error{
+               errc::field_level_encryption::encryption_failure,
+               "Failed to generate random initialization vector",
+             },
              {} };
   }
   return { {}, iv };
@@ -54,9 +56,11 @@ aead_aes_256_cbc_hmac_sha512::encrypt(std::vector<std::byte> key,
   -> std::pair<error, std::vector<std::byte>>
 {
   if (key.size() != 64) {
-    return {
-      error{ errc::field_level_encryption::invalid_crypto_key, "Key must be 64 bytes long." }, {}
-    };
+    return { error{
+               errc::field_level_encryption::invalid_crypto_key,
+               "Key must be 64 bytes long.",
+             },
+             {} };
   }
 
   std::vector<std::byte> ciphertext;
@@ -68,8 +72,10 @@ aead_aes_256_cbc_hmac_sha512::encrypt(std::vector<std::byte> key,
                             { reinterpret_cast<char*>(iv.data()), iv.size() },
                             { reinterpret_cast<char*>(plaintext.data()), plaintext.size() }));
   } catch (const std::exception& e) {
-    return { error{ errc::field_level_encryption::encryption_failure,
-                    fmt::format("Encryption failed: {}", e.what()) },
+    return { error{
+               errc::field_level_encryption::encryption_failure,
+               fmt::format("Encryption failed: {}", e.what()),
+             },
              {} };
   }
 
@@ -93,15 +99,19 @@ aead_aes_256_cbc_hmac_sha512::encrypt(std::vector<std::byte> key,
                              { reinterpret_cast<char*>(hmac_key.data()), hmac_key.size() },
                              { reinterpret_cast<char*>(digest_data.data()), digest_data.size() }));
   } catch (const std::exception& e) {
-    return { error{ errc::field_level_encryption::encryption_failure,
-                    fmt::format("Generating the HMAC SHA-512 auth tag failed: {}", e.what()) },
+    return { error{
+               errc::field_level_encryption::encryption_failure,
+               fmt::format("Generating the HMAC SHA-512 auth tag failed: {}", e.what()),
+             },
              {} };
   }
 
   if (auth_tag.size() != 64) {
-    return { { errc::field_level_encryption::encryption_failure,
+    return { error{
+               errc::field_level_encryption::encryption_failure,
                fmt::format("Unexpected HMAC-SHA512 auth tag size: expected 64 bytes, got {}.",
-                           auth_tag.size()) },
+                           auth_tag.size()),
+             },
              {} };
   }
 
@@ -119,14 +129,18 @@ aead_aes_256_cbc_hmac_sha512::decrypt(std::vector<std::byte> key,
   -> std::pair<error, std::vector<std::byte>>
 {
   if (ciphertext.size() < 48) {
-    return { error{ errc::field_level_encryption::invalid_ciphertext,
-                    "ciphertext is not long enough to include auth tag and IV." },
+    return { error{
+               errc::field_level_encryption::invalid_ciphertext,
+               "ciphertext is not long enough to include auth tag and IV.",
+             },
              {} };
   }
   if (key.size() != 64) {
-    return {
-      error{ errc::field_level_encryption::invalid_crypto_key, "key must be 64 bytes long." }, {}
-    };
+    return { error{
+               errc::field_level_encryption::invalid_crypto_key,
+               "key must be 64 bytes long.",
+             },
+             {} };
   }
 
   std::vector<std::byte> associated_data_length{ sizeof(std::uint64_t) };
@@ -150,15 +164,19 @@ aead_aes_256_cbc_hmac_sha512::decrypt(std::vector<std::byte> key,
                              { reinterpret_cast<char*>(hmac_key.data()), hmac_key.size() },
                              { reinterpret_cast<char*>(digest_data.data()), digest_data.size() }));
   } catch (const std::exception& e) {
-    return { error{ errc::field_level_encryption::decryption_failure,
-                    fmt::format("Generating the HMAC SHA-512 auth tag failed: {}.", e.what()) },
+    return { error{
+               errc::field_level_encryption::decryption_failure,
+               fmt::format("Generating the HMAC SHA-512 auth tag failed: {}.", e.what()),
+             },
              {} };
   }
 
   if (auth_tag.size() != 64) {
-    return { { errc::field_level_encryption::decryption_failure,
+    return { error{
+               errc::field_level_encryption::decryption_failure,
                fmt::format("Unexpected HMAC-SHA512 auth tag size: expected 64 bytes, got {}.",
-                           auth_tag.size()) },
+                           auth_tag.size()),
+             },
              {} };
   }
 
@@ -168,8 +186,10 @@ aead_aes_256_cbc_hmac_sha512::decrypt(std::vector<std::byte> key,
     auth_tag_matches &= auth_tag.at(i) == expected_auth_tag.at(i);
   }
   if (!auth_tag_matches) {
-    return { error{ errc::field_level_encryption::invalid_ciphertext,
-                    "Invalid HMAC SHA-512 auth tag." },
+    return { error{
+               errc::field_level_encryption::invalid_ciphertext,
+               "Invalid HMAC SHA-512 auth tag.",
+             },
              {} };
   }
 
@@ -185,8 +205,10 @@ aead_aes_256_cbc_hmac_sha512::decrypt(std::vector<std::byte> key,
                             { reinterpret_cast<char*>(iv.data()), iv.size() },
                             { reinterpret_cast<char*>(ciphertext.data()), ciphertext.size() }));
   } catch (const std::exception& e) {
-    return { error{ errc::field_level_encryption::decryption_failure,
-                    fmt::format("Decryption failed: {}", e.what()) },
+    return { error{
+               errc::field_level_encryption::decryption_failure,
+               fmt::format("Decryption failed: {}", e.what()),
+             },
              {} };
   }
   return { {}, plaintext };

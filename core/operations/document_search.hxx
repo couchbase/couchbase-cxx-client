@@ -93,9 +93,9 @@ struct search_response {
 
     std::string name;
     std::string field;
-    std::uint64_t total;
-    std::uint64_t missing;
-    std::uint64_t other;
+    std::uint64_t total{};
+    std::uint64_t missing{};
+    std::uint64_t other{};
     std::vector<term_facet> terms{};
     std::vector<date_range_facet> date_ranges{};
     std::vector<numeric_range_facet> numeric_ranges{};
@@ -164,8 +164,8 @@ struct search_request {
   std::optional<bool> log_request{ false };
   std::optional<bool> log_response{ false };
 
-  [[nodiscard]] auto encode_to(encoded_request_type& encoded,
-                               http_context& context) -> std::error_code;
+  [[nodiscard]] auto encode_to(encoded_request_type& encoded, http_context& context)
+    -> std::error_code;
 
   [[nodiscard]] auto make_response(error_context::search&& ctx,
                                    const encoded_response_type& encoded) const -> search_response;

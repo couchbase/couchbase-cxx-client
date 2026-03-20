@@ -17,13 +17,10 @@
 
 #include <memory>
 
-namespace asio
-{
-namespace ssl
+namespace asio::ssl
 {
 class context;
-} // namespace ssl
-} // namespace asio
+} // namespace asio::ssl
 
 namespace couchbase::core
 {

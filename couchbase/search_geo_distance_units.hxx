@@ -31,6 +31,6 @@ enum class search_geo_distance_units {
   kilometers,
   feet,
   yards,
-  inch
+  inch,
 };
 } // namespace couchbase

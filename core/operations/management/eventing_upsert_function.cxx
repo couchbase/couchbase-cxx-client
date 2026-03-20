@@ -48,8 +48,14 @@ eventing_upsert_function_request::encode_to(encoded_request_type& encoded,
 
   if (bucket_name.has_value() && scope_name.has_value()) {
     tao::json::value function_scope{
-      { "bucket", bucket_name.value() },
-      { "scope", scope_name.value() },
+      {
+        "bucket",
+        bucket_name.value(),
+      },
+      {
+        "scope",
+        scope_name.value(),
+      },
     };
     body["function_scope"] = std::move(function_scope);
   }
@@ -76,8 +82,14 @@ eventing_upsert_function_request::encode_to(encoded_request_type& encoded,
     constants.reserve(function.constant_bindings.size());
     for (const auto& constant : function.constant_bindings) {
       tao::json::value constant_json{
-        { "value", constant.alias },
-        { "literal", constant.literal },
+        {
+          "value",
+          constant.alias,
+        },
+        {
+          "literal",
+          constant.literal,
+        },
       };
       constants.emplace_back(std::move(constant_json));
     }
@@ -88,10 +100,22 @@ eventing_upsert_function_request::encode_to(encoded_request_type& encoded,
     std::vector<tao::json::value> urls{};
     for (const auto& url : function.url_bindings) {
       tao::json::value binding{
-        { "value", url.alias },
-        { "hostname", url.hostname },
-        { "allow_cookies", url.allow_cookies },
-        { "validate_ssl_certificate", url.validate_ssl_certificate },
+        {
+          "value",
+          url.alias,
+        },
+        {
+          "hostname",
+          url.hostname,
+        },
+        {
+          "allow_cookies",
+          url.allow_cookies,
+        },
+        {
+          "validate_ssl_certificate",
+          url.validate_ssl_certificate,
+        },
       };
       if (std::holds_alternative<couchbase::core::management::eventing::function_url_no_auth>(
             url.auth)) {
@@ -126,8 +150,14 @@ eventing_upsert_function_request::encode_to(encoded_request_type& encoded,
     std::vector<tao::json::value> buckets{};
     for (const auto& bucket : function.bucket_bindings) {
       tao::json::value binding{
-        { "alias", bucket.alias },
-        { "bucket_name", bucket.name.bucket },
+        {
+          "alias",
+          bucket.alias,
+        },
+        {
+          "bucket_name",
+          bucket.name.bucket,
+        },
       };
       if (bucket.name.scope) {
         binding["scope_name"] = bucket.name.scope;

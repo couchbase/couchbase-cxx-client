@@ -373,7 +373,7 @@ public:
     , scan_type_{ std::move(scan_type) }
     , options_{ std::move(options) }
     , vbucket_to_snapshot_requirements_{ mutation_state_to_snapshot_requirements(
-        options_.consistent_with) }
+        options_.consistent_with), }
     , concurrency_{ options_.concurrency }
   {
 
@@ -398,9 +398,11 @@ public:
       return cb(errc::common::invalid_argument, {});
     }
 
-    const get_collection_id_options get_cid_options{ options_.retry_strategy,
-                                                     options_.timeout,
-                                                     options_.parent_span };
+    const get_collection_id_options get_cid_options{
+      options_.retry_strategy,
+      options_.timeout,
+      options_.parent_span,
+    };
     agent_.get_collection_id(
       scope_name_,
       collection_name_,
@@ -510,7 +512,7 @@ public:
           } else {
             // Empty signal means that stream has completed
             {
-              const std::lock_guard<std::mutex> lock{ self->stream_map_mutex_ };
+              const std::scoped_lock lock{ self->stream_map_mutex_ };
               self->streams_.erase(signal.vbucket_id);
             }
             return asio::post(asio::bind_executor(
@@ -540,7 +542,7 @@ public:
       auto v = vbucket_id.value();
       std::shared_ptr<range_scan_stream> stream{};
       {
-        const std::lock_guard<std::mutex> lock{ stream_map_mutex_ };
+        const std::scoped_lock lock{ stream_map_mutex_ };
         stream = streams_.at(v);
       }
       CB_LOG_TRACE("scanning vbucket {} at node {}", vbucket_id.value(), stream->node_id());
@@ -640,13 +642,15 @@ range_scan_orchestrator::range_scan_orchestrator(
   std::string collection_name,
   std::variant<std::monostate, range_scan, prefix_scan, sampling_scan> scan_type,
   range_scan_orchestrator_options options)
-  : impl_{ std::make_shared<range_scan_orchestrator_impl>(io,
-                                                          std::move(kv_provider),
-                                                          std::move(vbucket_map),
-                                                          std::move(scope_name),
-                                                          std::move(collection_name),
-                                                          std::move(scan_type),
-                                                          std::move(options)) }
+  : impl_{
+    std::make_shared<range_scan_orchestrator_impl>(io,
+                                                   std::move(kv_provider),
+                                                   std::move(vbucket_map),
+                                                   std::move(scope_name),
+                                                   std::move(collection_name),
+                                                   std::move(scan_type),
+                                                   std::move(options)),
+  }
 {
 }
 

@@ -72,7 +72,7 @@ public:
   [[nodiscard]] bool has_expired(std::uint32_t safety_margin = 0) const
   {
     std::uint64_t cas_ms = cas_ / 1000000;
-    if (timestamp_start_ms_ && cas_ms > *timestamp_start_ms_) {
+    if (timestamp_start_ms_ && expires_after_ms_ && cas_ms > *timestamp_start_ms_) {
       std::uint32_t expires_after_ms = *expires_after_ms_;
       return (cas_ms - *timestamp_start_ms_) > (expires_after_ms + safety_margin);
     }

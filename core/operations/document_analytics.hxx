@@ -41,7 +41,7 @@ struct analytics_response {
   };
 
   struct analytics_problem {
-    std::uint64_t code;
+    std::uint64_t code{};
     std::string message;
   };
 
@@ -101,8 +101,8 @@ struct analytics_request {
   std::optional<std::string> client_context_id{};
   std::optional<std::chrono::milliseconds> timeout{};
 
-  [[nodiscard]] auto encode_to(encoded_request_type& encoded,
-                               http_context& context) -> std::error_code;
+  [[nodiscard]] auto encode_to(encoded_request_type& encoded, http_context& context)
+    -> std::error_code;
   [[nodiscard]] auto make_response(error_context::analytics&& ctx,
                                    const encoded_response_type& encoded) const
     -> analytics_response;

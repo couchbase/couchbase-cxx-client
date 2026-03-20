@@ -105,7 +105,7 @@ public:
         options.cas,
         options.durability_level,
         options.timeout,
-        { options.retry_strategy },
+        core::io::retry_context<false>{ options.retry_strategy },
         obs_rec->operation_span(),
       };
       return core_.execute(
@@ -128,7 +128,7 @@ public:
       options.cas,
       durability_level::none,
       options.timeout,
-      { options.retry_strategy },
+      core::io::retry_context<false>{ options.retry_strategy },
       obs_rec->operation_span(),
     };
     return core_.execute(std::move(request),
@@ -189,7 +189,7 @@ public:
         options.cas,
         options.durability_level,
         options.timeout,
-        { options.retry_strategy },
+        core::io::retry_context<false>{ options.retry_strategy },
         obs_rec->operation_span(),
       };
       return core_.execute(
@@ -212,7 +212,7 @@ public:
       options.cas,
       durability_level::none,
       options.timeout,
-      { options.retry_strategy },
+      core::io::retry_context<false>{ options.retry_strategy },
       obs_rec->operation_span(),
     };
     return core_.execute(std::move(request),
@@ -273,7 +273,7 @@ public:
         options.initial_value,
         options.durability_level,
         options.timeout,
-        { options.retry_strategy },
+        core::io::retry_context<false>{ options.retry_strategy },
         obs_rec->operation_span(),
       };
       return core_.execute(
@@ -298,7 +298,7 @@ public:
       options.initial_value,
       durability_level::none,
       options.timeout,
-      { options.retry_strategy },
+      core::io::retry_context<false>{ options.retry_strategy },
       obs_rec->operation_span(),
     };
     return core_.execute(
@@ -359,7 +359,7 @@ public:
         options.initial_value,
         options.durability_level,
         options.timeout,
-        { options.retry_strategy },
+        core::io::retry_context<false>{ options.retry_strategy },
         obs_rec->operation_span(),
       };
       return core_.execute(
@@ -383,7 +383,7 @@ public:
       options.initial_value,
       durability_level::none,
       options.timeout,
-      { options.retry_strategy },
+      core::io::retry_context<false>{ options.retry_strategy },
       obs_rec->operation_span(),
     };
     return core_.execute(

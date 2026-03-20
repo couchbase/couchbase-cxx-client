@@ -29,7 +29,7 @@ public:
 private:
   friend class collections_component;
 
-  explicit collections_component_unit_test_api(std::shared_ptr<collections_component_impl>);
+  explicit collections_component_unit_test_api(std::shared_ptr<collections_component_impl> impl);
 
   std::shared_ptr<collections_component_impl> impl_;
 };

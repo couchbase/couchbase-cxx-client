@@ -35,8 +35,14 @@ analytics_link_drop_request::encode_to(encoded_request_type& encoded,
   encoded.method = "DELETE";
   if (std::count(dataverse_name.begin(), dataverse_name.end(), '/') == 0) {
     const std::map<std::string, std::string> values{
-      { "dataverse", dataverse_name },
-      { "name", link_name },
+      {
+        "dataverse",
+        dataverse_name,
+      },
+      {
+        "name",
+        link_name,
+      },
     };
     encoded.body = utils::string_codec::v2::form_encode(values);
     encoded.path = "/analytics/link";

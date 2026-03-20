@@ -26,17 +26,17 @@ namespace couchbase::core::transactions
  *  Represents details about client records
  */
 struct client_record_details {
-  std::string client_uuid;
-  std::uint32_t num_active_clients;
-  std::uint32_t index_of_this_client;
-  std::uint32_t num_existing_clients;
-  std::uint32_t num_expired_clients;
-  bool client_is_new;
-  std::vector<std::string> expired_client_ids;
-  bool override_enabled;
-  bool override_active;
-  std::uint64_t override_expires;
-  std::uint64_t cas_now_nanos;
+  std::string client_uuid{};
+  std::uint32_t num_active_clients{};
+  std::uint32_t index_of_this_client{};
+  std::uint32_t num_existing_clients{};
+  std::uint32_t num_expired_clients{};
+  bool client_is_new{};
+  std::vector<std::string> expired_client_ids{};
+  bool override_enabled{};
+  bool override_active{};
+  std::uint64_t override_expires{};
+  std::uint64_t cas_now_nanos{};
 
   template<typename OStream>
   friend auto operator<<(OStream& os, const client_record_details& details) -> OStream&

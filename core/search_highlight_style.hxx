@@ -21,6 +21,6 @@ namespace couchbase::core
 {
 enum class search_highlight_style {
   html = 0,
-  ansi
+  ansi,
 };
 } // namespace couchbase::core

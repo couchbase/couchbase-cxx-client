@@ -126,7 +126,7 @@ public:
       if (request.streaming) {
         ctx.parser.response.body.use_json_streaming(std::move(request.streaming.value()));
       }
-      std::scoped_lock lock(current_response_mutex_);
+      const std::scoped_lock lock(current_response_mutex_);
       streaming_response_ = false;
       std::swap(current_response_, ctx);
     }

@@ -72,15 +72,32 @@ transactions_config::operator=(const transactions_config& c) -> transactions_con
 }
 
 auto
+transactions_config::operator=(transactions_config&& c) noexcept -> transactions_config&
+{
+  if (this != &c) {
+    level_ = c.level_;
+    timeout_ = c.timeout_;
+    attempt_context_hooks_ = std::move(c.attempt_context_hooks_);
+    cleanup_hooks_ = std::move(c.cleanup_hooks_);
+    query_config_ = c.query_config_;
+    metadata_collection_ = std::move(c.metadata_collection_);
+    cleanup_config_ = std::move(c.cleanup_config_);
+  }
+  return *this;
+}
+
+auto
 transactions_config::build() const -> transactions_config::built
 {
-  return { level_,
-           timeout_,
-           attempt_context_hooks_,
-           cleanup_hooks_,
-           metadata_collection_,
-           query_config_.build(),
-           cleanup_config_.build() };
+  return {
+    level_,
+    timeout_,
+    attempt_context_hooks_,
+    cleanup_hooks_,
+    metadata_collection_,
+    query_config_.build(),
+    cleanup_config_.build(),
+  };
 }
 
 } // namespace couchbase::transactions

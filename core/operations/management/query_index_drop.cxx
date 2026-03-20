@@ -29,8 +29,8 @@
 namespace couchbase::core::operations::management
 {
 auto
-query_index_drop_request::encode_to(encoded_request_type& encoded,
-                                    http_context& /*context*/) const -> std::error_code
+query_index_drop_request::encode_to(encoded_request_type& encoded, http_context& /*context*/) const
+  -> std::error_code
 {
   if (!utils::check_query_management_request(*this)) {
     return errc::common::invalid_argument;
@@ -47,8 +47,16 @@ query_index_drop_request::encode_to(encoded_request_type& encoded,
     drop_index_stmt = fmt::format(R"(DROP INDEX `{}`.`{}` USING GSI)", bucket_name, index_name);
   }
 
-  tao::json::value body{ { "statement", drop_index_stmt },
-                         { "client_context_id", encoded.client_context_id } };
+  tao::json::value body{
+    {
+      "statement",
+      drop_index_stmt,
+    },
+    {
+      "client_context_id",
+      encoded.client_context_id,
+    },
+  };
   if (query_ctx.has_value()) {
     body["query_context"] = query_ctx.value();
   }

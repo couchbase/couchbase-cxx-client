@@ -168,7 +168,7 @@ public:
         {},
         {},
         options.timeout,
-        { options.retry_strategy },
+        core::io::retry_context<true>{ options.retry_strategy },
         obs_rec->operation_span(),
       };
       return core_.execute(std::move(request),
@@ -177,10 +177,12 @@ public:
                             handler = std::move(handler)](auto resp) mutable {
                              obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
                              return handler(core::impl::make_error(std::move(resp.ctx)),
-                                            get_result{ resp.cas,
-                                                        { std::move(resp.value), resp.flags },
-                                                        {},
-                                                        std::move(crypto_manager) });
+                                            get_result{
+                                              resp.cas,
+                                              { std::move(resp.value), resp.flags },
+                                              {},
+                                              std::move(crypto_manager),
+                                            });
                            });
     }
     core::operations::get_projected_request request{
@@ -197,7 +199,7 @@ public:
       {},
       false,
       options.timeout,
-      { options.retry_strategy },
+      core::io::retry_context<true>{ options.retry_strategy },
       obs_rec->operation_span(),
     };
     return core_.execute(std::move(request),
@@ -210,10 +212,12 @@ public:
                            }
                            obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
                            return handler(core::impl::make_error(std::move(resp.ctx)),
-                                          get_result{ resp.cas,
-                                                      { std::move(resp.value), resp.flags },
-                                                      expiry_time,
-                                                      std::move(crypto_manager) });
+                                          get_result{
+                                            resp.cas,
+                                            { std::move(resp.value), resp.flags },
+                                            expiry_time,
+                                            std::move(crypto_manager),
+                                          });
                          });
   }
 
@@ -236,7 +240,7 @@ public:
       {},
       expiry,
       options.timeout,
-      { options.retry_strategy },
+      core::io::retry_context<false>{ options.retry_strategy },
       obs_rec->operation_span(),
     };
 
@@ -246,10 +250,12 @@ public:
                           handler = std::move(handler)](auto resp) mutable {
                            obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
                            return handler(core::impl::make_error(std::move(resp.ctx)),
-                                          get_result{ resp.cas,
-                                                      { std::move(resp.value), resp.flags },
-                                                      {},
-                                                      std::move(crypto_manager) });
+                                          get_result{
+                                            resp.cas,
+                                            { std::move(resp.value), resp.flags },
+                                            {},
+                                            std::move(crypto_manager),
+                                          });
                          });
   }
 
@@ -272,7 +278,7 @@ public:
       {},
       expiry,
       options.timeout,
-      { options.retry_strategy },
+      core::io::retry_context<false>{ options.retry_strategy },
       obs_rec->operation_span(),
     };
     return core_.execute(
@@ -374,7 +380,7 @@ public:
         options.cas,
         options.durability_level,
         options.timeout,
-        { options.retry_strategy },
+        core::io::retry_context<false>{ options.retry_strategy },
         obs_rec->operation_span(),
       };
       return core_.execute(
@@ -396,7 +402,7 @@ public:
       options.cas,
       durability_level::none,
       options.timeout,
-      { options.retry_strategy },
+      core::io::retry_context<false>{ options.retry_strategy },
       obs_rec->operation_span(),
     };
     return core_.execute(std::move(request),
@@ -451,7 +457,7 @@ public:
       {},
       static_cast<uint32_t>(lock_duration.count()),
       options.timeout,
-      { options.retry_strategy },
+      core::io::retry_context<false>{ options.retry_strategy },
       obs_rec->operation_span(),
     };
     core_.execute(std::move(request),
@@ -460,10 +466,12 @@ public:
                    handler = std::move(handler)](auto&& resp) mutable {
                     obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
                     return handler(core::impl::make_error(std::move(resp.ctx)),
-                                   get_result{ resp.cas,
-                                               { std::move(resp.value), resp.flags },
-                                               {},
-                                               std::move(crypto_manager) });
+                                   get_result{
+                                     resp.cas,
+                                     { std::move(resp.value), resp.flags },
+                                     {},
+                                     std::move(crypto_manager),
+                                   });
                   });
   }
 
@@ -486,7 +494,7 @@ public:
       {},
       cas,
       options.timeout,
-      { options.retry_strategy },
+      core::io::retry_context<false>{ options.retry_strategy },
       obs_rec->operation_span(),
     };
     core_.execute(
@@ -514,7 +522,7 @@ public:
       {},
       {},
       options.timeout,
-      { options.retry_strategy },
+      core::io::retry_context<false>{ options.retry_strategy },
       obs_rec->operation_span(),
     };
     core_.execute(
@@ -546,7 +554,7 @@ public:
       options.access_deleted,
       specs,
       options.timeout,
-      { options.retry_strategy },
+      core::io::retry_context<false>{ options.retry_strategy },
       obs_rec->operation_span(),
     };
     return core_.execute(
@@ -691,7 +699,7 @@ public:
         specs,
         options.durability_level,
         options.timeout,
-        { options.retry_strategy },
+        core::io::retry_context<false>{ options.retry_strategy },
         options.preserve_expiry,
         obs_rec->operation_span(),
       };
@@ -730,7 +738,7 @@ public:
       specs,
       durability_level::none,
       options.timeout,
-      { options.retry_strategy },
+      core::io::retry_context<false>{ options.retry_strategy },
       options.preserve_expiry,
       obs_rec->operation_span(),
     };
@@ -772,7 +780,11 @@ public:
             }
             return handler(core::impl::make_error(std::move(resp.ctx)),
                            mutate_in_result{
-                             resp.cas, std::move(resp.token), std::move(entries), resp.deleted });
+                             resp.cas,
+                             std::move(resp.token),
+                             std::move(entries),
+                             resp.deleted,
+                           });
           });
       });
   }
@@ -802,7 +814,7 @@ public:
         options.expiry,
         options.durability_level,
         options.timeout,
-        { options.retry_strategy },
+        core::io::retry_context<false>{ options.retry_strategy },
         options.preserve_expiry,
         obs_rec->operation_span(),
       };
@@ -824,7 +836,7 @@ public:
       options.expiry,
       durability_level::none,
       options.timeout,
-      { options.retry_strategy },
+      core::io::retry_context<false>{ options.retry_strategy },
       options.preserve_expiry,
       obs_rec->operation_span(),
     };
@@ -887,7 +899,7 @@ public:
         options.expiry,
         options.durability_level,
         options.timeout,
-        { options.retry_strategy },
+        core::io::retry_context<false>{ options.retry_strategy },
         obs_rec->operation_span(),
       };
       return core_.execute(
@@ -911,7 +923,7 @@ public:
       options.expiry,
       durability_level::none,
       options.timeout,
-      { options.retry_strategy },
+      core::io::retry_context<false>{ options.retry_strategy },
       obs_rec->operation_span(),
     };
     return core_.execute(std::move(request),
@@ -975,7 +987,7 @@ public:
         options.cas,
         options.durability_level,
         options.timeout,
-        { options.retry_strategy },
+        core::io::retry_context<false>{ options.retry_strategy },
         options.preserve_expiry,
         obs_rec->operation_span(),
       };
@@ -1001,7 +1013,7 @@ public:
       options.cas,
       durability_level::none,
       options.timeout,
-      { options.retry_strategy },
+      core::io::retry_context<false>{ options.retry_strategy },
       options.preserve_expiry,
       obs_rec->operation_span(),
     };
@@ -1062,7 +1074,7 @@ public:
     } else {
       auto [ec, origin] = core_.origin();
       if (ec) {
-        handler({ ec }, {});
+        handler(error{ ec }, {});
         return;
       }
       orchestrator_opts.timeout = origin.options().key_value_scan_timeout;

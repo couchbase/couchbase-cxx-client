@@ -20,9 +20,7 @@
 #include <couchbase/codec/json_transcoder.hxx>
 #include <couchbase/codec/transcoder_traits.hxx>
 
-namespace couchbase
-{
-namespace codec
+namespace couchbase::codec
 {
 class tao_json_serializer;
 using default_json_transcoder = json_transcoder<tao_json_serializer>;
@@ -32,5 +30,4 @@ template<>
 struct is_transcoder<default_json_transcoder> : public std::true_type {
 };
 #endif
-} // namespace codec
-} // namespace couchbase
+} // namespace couchbase::codec

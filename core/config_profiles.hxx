@@ -42,8 +42,8 @@ public:
   void register_profile(const std::string& name, Args... args)
   {
     // This will just add it, doesn't look to see if it is overwriting an existing profile.
-    // TODO: perhaps add a template Args param?
-    // TODO: should we make this thread-safe?   Easy enough here, but we'd need to make the
+    // TODO(SA): perhaps add a template Args param?
+    // TODO(SA): should we make this thread-safe?   Easy enough here, but we'd need to make the
     //   singleton thread-safe too.
     const std::scoped_lock lock(mut_);
     profiles_.emplace(std::make_pair(name, std::make_shared<T>(args...)));

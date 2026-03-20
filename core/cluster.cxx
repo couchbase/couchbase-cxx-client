@@ -473,9 +473,7 @@ public:
                  origin_.to_json());
     setup_observability();
     if (origin_.options().enable_dns_srv) {
-      std::string hostname;
-      std::string port;
-      std::tie(hostname, port) = origin_.next_address();
+      auto [hostname, port] = origin_.next_address();
       dns_srv_tracker_ = std::make_shared<impl::dns_srv_tracker>(
         ctx_, hostname, origin_.options().dns_config, origin_.options().enable_tls);
       return asio::post(asio::bind_executor(
@@ -631,8 +629,10 @@ public:
     auto old_credentials = origin_.credentials();
 
     if (!old_credentials.is_same_type(auth)) {
-      return { errc::common::invalid_argument,
-               "Cannot change authenticator type when updating credentials" };
+      return {
+        errc::common::invalid_argument,
+        "Cannot change authenticator type when updating credentials",
+      };
     }
 
     origin_.update_credentials(auth);
@@ -1504,14 +1504,14 @@ private:
   std::map<std::string, std::shared_ptr<bucket>> buckets_{};
   couchbase::core::origin origin_{};
   std::shared_ptr<class cluster_label_listener> cluster_label_listener_{
-    std::make_shared<class cluster_label_listener>()
+    std::make_shared<class cluster_label_listener>(),
   };
   std::shared_ptr<tracing::tracer_wrapper> tracer_{ nullptr };
   std::shared_ptr<metrics::meter_wrapper> meter_{ nullptr };
   std::shared_ptr<orphan_reporter> orphan_reporter_{ nullptr };
   std::atomic_bool stopped_{ false };
   std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter_{
-    std::make_shared<core::app_telemetry_meter>()
+    std::make_shared<core::app_telemetry_meter>(),
   };
 
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR

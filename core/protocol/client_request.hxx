@@ -32,8 +32,8 @@
 namespace couchbase::core::protocol
 {
 auto
-compress_value(const std::vector<std::byte>& value,
-               std::vector<std::byte>::iterator& output) -> std::pair<bool, std::uint32_t>;
+compress_value(const std::vector<std::byte>& value, std::vector<std::byte>::iterator& output)
+  -> std::pair<bool, std::uint32_t>;
 
 template<typename Body>
 class client_request
@@ -130,7 +130,7 @@ private:
 #endif
     const auto& framing_extras = body_.framing_extras();
 
-    std::uint16_t key_size = gsl::narrow_cast<std::uint16_t>(body_.key().size());
+    auto key_size = gsl::narrow_cast<std::uint16_t>(body_.key().size());
     if (framing_extras.size() == 0) {
       key_size = utils::byte_swap(key_size);
       memcpy(payload.data() + 2, &key_size, sizeof(key_size));
@@ -141,15 +141,15 @@ private:
       payload[3] = gsl::narrow_cast<std::byte>(key_size);
     }
 
-    std::uint8_t ext_size = gsl::narrow_cast<std::uint8_t>(body_.extras().size());
+    auto ext_size = gsl::narrow_cast<std::uint8_t>(body_.extras().size());
     memcpy(payload.data() + 4, &ext_size, sizeof(ext_size));
 
     payload[5] = static_cast<std::byte>(datatype_);
 
-    std::uint16_t vbucket = utils::byte_swap(gsl::narrow_cast<std::uint16_t>(partition_));
+    auto vbucket = utils::byte_swap(gsl::narrow_cast<std::uint16_t>(partition_));
     memcpy(payload.data() + 6, &vbucket, sizeof(vbucket));
 
-    std::uint32_t body_size = utils::byte_swap(gsl::narrow_cast<std::uint32_t>(body_.size()));
+    auto body_size = utils::byte_swap(gsl::narrow_cast<std::uint32_t>(body_.size()));
     memcpy(payload.data() + 8, &body_size, sizeof(body_size));
 
     memcpy(payload.data() + 12, &opaque_, sizeof(opaque_));

@@ -149,14 +149,15 @@ url_decode(Ti first, Ti last, To out, std::size_t& nout) -> bool
   for (; first != last && *first != '\0'; ++first) {
     if (*first == '%') {
       // TODO(CXXCBC-549)
-      // NOLINTNEXTLINE(cppcoreguidelines-avoid-c-arrays,hicpp-avoid-c-arrays,modernize-avoid-c-arrays)
+      // NOLINTNEXTLINE(cppcoreguidelines-avoid-c-arrays, hicpp-avoid-c-arrays,
+      // modernize-avoid-c-arrays)
       char nextbuf[3] = { 0 };
       std::size_t jj = 0;
       ++first;
       nextbuf[0] = *first;
       for (; first != last && jj < 2; ++jj) {
         // TODO(CXXCBC-549)
-        nextbuf[jj] = *first; // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
+        nextbuf[jj] = *first;
         if (jj != 1) {
           ++first;
         }
