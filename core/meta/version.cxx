@@ -216,8 +216,10 @@ sdk_build_info_short() -> std::string
 auto
 sdk_id() -> const std::string&
 {
-  static const std::string identifier{ sdk_version() + ";" + COUCHBASE_CXX_CLIENT_SYSTEM_NAME +
-                                       "/" + COUCHBASE_CXX_CLIENT_SYSTEM_PROCESSOR };
+  static const std::string identifier{
+    sdk_version() + ";" + COUCHBASE_CXX_CLIENT_SYSTEM_NAME + "/" +
+      COUCHBASE_CXX_CLIENT_SYSTEM_PROCESSOR,
+  };
   return identifier;
 }
 
@@ -294,8 +296,8 @@ sdk_semver() -> const std::string&
 {
   static const std::string simple_version{
     std::to_string(COUCHBASE_CXX_CLIENT_VERSION_MAJOR) + "." +
-    std::to_string(COUCHBASE_CXX_CLIENT_VERSION_MINOR) + "." +
-    std::to_string(COUCHBASE_CXX_CLIENT_VERSION_PATCH) + revision_with_prefix("+")
+      std::to_string(COUCHBASE_CXX_CLIENT_VERSION_MINOR) + "." +
+      std::to_string(COUCHBASE_CXX_CLIENT_VERSION_PATCH) + revision_with_prefix("+"),
   };
   static const std::string git_describe_output{ COUCHBASE_CXX_CLIENT_GIT_DESCRIBE };
   static const std::string semantic_version = parse_git_describe_output(git_describe_output);
@@ -315,10 +317,11 @@ sdk_version() -> const std::string&
 auto
 sdk_version_short() -> const std::string&
 {
-  static const std::string version{ std::string("cxx/") +
-                                    std::to_string(COUCHBASE_CXX_CLIENT_VERSION_MAJOR) + "." +
-                                    std::to_string(COUCHBASE_CXX_CLIENT_VERSION_MINOR) + "." +
-                                    std::to_string(COUCHBASE_CXX_CLIENT_VERSION_PATCH) };
+  static const std::string version{
+    std::string("cxx/") + std::to_string(COUCHBASE_CXX_CLIENT_VERSION_MAJOR) + "." +
+      std::to_string(COUCHBASE_CXX_CLIENT_VERSION_MINOR) + "." +
+      std::to_string(COUCHBASE_CXX_CLIENT_VERSION_PATCH),
+  };
   return version;
 }
 

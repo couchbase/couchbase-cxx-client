@@ -21,9 +21,9 @@
 #include "operation_queue.hxx"
 #include "queue_response.hxx"
 
-#include <couchbase/error_codes.hxx>
-
 #include <atomic>
+#include <couchbase/error_codes.hxx>
+#include <couchbase/fmt/retry_reason.hxx>
 
 namespace couchbase::core::mcbp
 {

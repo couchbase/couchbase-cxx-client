@@ -317,7 +317,7 @@ public:
   auto io_context() -> asio::io_context&
   {
     return ctx_;
-  }
+  } // namespace couchbase::core
 
   void configure_tls_options(bool has_capella_host, const std::shared_ptr<asio::ssl::context>& ctx)
   {
@@ -473,9 +473,7 @@ public:
                  origin_.to_json());
     setup_observability();
     if (origin_.options().enable_dns_srv) {
-      std::string hostname;
-      std::string port;
-      std::tie(hostname, port) = origin_.next_address();
+      auto [hostname, port] = origin_.next_address();
       dns_srv_tracker_ = std::make_shared<impl::dns_srv_tracker>(
         ctx_, hostname, origin_.options().dns_config, origin_.options().enable_tls);
       return asio::post(asio::bind_executor(
@@ -575,7 +573,8 @@ public:
                                      bucket_name,
                                      origin,
                                      known_features,
-                                     dns_srv_tracker_);
+                                     dns_srv_tracker_,
+                                     dispatcher(bucket_name, { cluster(shared_from_this()) }));
         buckets_.try_emplace(bucket_name, b);
 
         // Register the tracer & the meter for config updates to track Cluster name & UUID
@@ -630,8 +629,10 @@ public:
     auto old_credentials = origin_.credentials();
 
     if (!old_credentials.is_same_type(auth)) {
-      return { errc::common::invalid_argument,
-               "Cannot change authenticator type when updating credentials" };
+      return {
+        errc::common::invalid_argument,
+        "Cannot change authenticator type when updating credentials",
+      };
     }
 
     origin_.update_credentials(auth);
@@ -673,12 +674,8 @@ public:
     return { {}, origin_ };
   }
 
-  template<class Request,
-           class Handler,
-           typename std::enable_if_t<
-             !std::is_same_v<typename Request::encoded_request_type, io::http_request>,
-             int> = 0>
-  void execute(Request request, Handler&& handler)
+  template<typename Request, typename Handler>
+  void execute_kv(Request request, Handler&& handler)
   {
     using response_type = typename Request::encoded_response_type;
     if (stopped_) {
@@ -703,6 +700,138 @@ public:
                          }
                          return self->execute(std::move(request), std::forward<Handler>(handler));
                        });
+  }
+
+  void execute(o::get_request request, mf<void(o::get_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::upsert_request request, mf<void(o::upsert_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::insert_request request, mf<void(o::insert_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::replace_request request, mf<void(o::replace_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::remove_request request, mf<void(o::remove_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::exists_request request, mf<void(o::exists_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::touch_request request, mf<void(o::touch_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::get_and_touch_request request, mf<void(o::get_and_touch_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::get_and_lock_request request, mf<void(o::get_and_lock_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::unlock_request request, mf<void(o::unlock_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::increment_request request, mf<void(o::increment_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::decrement_request request, mf<void(o::decrement_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::append_request request, mf<void(o::append_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::prepend_request request, mf<void(o::prepend_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::lookup_in_request request, mf<void(o::lookup_in_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::mutate_in_request request, mf<void(o::mutate_in_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::get_projected_request request, mf<void(o::get_projected_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(impl::get_replica_request request, mf<void(impl::get_replica_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(impl::lookup_in_replica_request request,
+               mf<void(impl::lookup_in_replica_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(impl::observe_seqno_request request,
+               mf<void(impl::observe_seqno_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(om::collections_manifest_get_request request,
+               mf<void(om::collections_manifest_get_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::get_request_with_cancellation request, mf<void(o::get_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+
+  void execute(o::get_replica_request_with_cancellation request,
+               mf<void(impl::get_replica_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+  void execute(o::lookup_in_request_with_cancellation request,
+               mf<void(o::lookup_in_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+
+  void execute(o::lookup_in_replica_request_with_cancellation request,
+               mf<void(impl::lookup_in_replica_response)>&& handler)
+  {
+    return execute_kv(std::move(request), std::move(handler));
+  }
+
+  void execute(o::get_any_replica_request request, mf<void(o::get_any_replica_response)>&& handler)
+  {
+    return request.execute(shared_from_this(), std::move(handler));
+  }
+
+  void execute(o::get_all_replicas_request request,
+               mf<void(o::get_all_replicas_response)>&& handler)
+  {
+    return request.execute(shared_from_this(), std::move(handler));
+  }
+
+  void execute(o::lookup_in_any_replica_request request,
+               mf<void(o::lookup_in_any_replica_response)>&& handler)
+  {
+    return request.execute(shared_from_this(), std::move(handler));
+  }
+
+  void execute(o::lookup_in_all_replicas_request request,
+               mf<void(o::lookup_in_all_replicas_response)>&& handler)
+  {
+    return request.execute(shared_from_this(), std::move(handler));
   }
 
   template<class Request,
@@ -1375,14 +1504,14 @@ private:
   std::map<std::string, std::shared_ptr<bucket>> buckets_{};
   couchbase::core::origin origin_{};
   std::shared_ptr<class cluster_label_listener> cluster_label_listener_{
-    std::make_shared<class cluster_label_listener>()
+    std::make_shared<class cluster_label_listener>(),
   };
   std::shared_ptr<tracing::tracer_wrapper> tracer_{ nullptr };
   std::shared_ptr<metrics::meter_wrapper> meter_{ nullptr };
   std::shared_ptr<orphan_reporter> orphan_reporter_{ nullptr };
   std::atomic_bool stopped_{ false };
   std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter_{
-    std::make_shared<core::app_telemetry_meter>()
+    std::make_shared<core::app_telemetry_meter>(),
   };
 
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
@@ -1394,6 +1523,11 @@ private:
 
 cluster::cluster(asio::io_context& ctx)
   : impl_{ std::make_shared<cluster_impl>(ctx) }
+{
+}
+
+cluster::cluster(std::shared_ptr<cluster_impl> impl)
+  : impl_{ std::move(impl) }
 {
 }
 
@@ -2543,4 +2677,9 @@ cluster::cluster_label_listener() const -> const std::shared_ptr<core::cluster_l
   return impl_->cluster_label_listener();
 }
 
+auto
+cluster::find_bucket_by_name(const std::string& name) const -> std::shared_ptr<bucket>
+{
+  return impl_->find_bucket_by_name(name);
+}
 } // namespace couchbase::core

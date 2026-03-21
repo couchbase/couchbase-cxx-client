@@ -57,7 +57,7 @@ public:
    * @since 1.0.0
    * @committed
    */
-  explicit phrase_query(std::initializer_list<std::string> terms)
+  phrase_query(std::initializer_list<std::string> terms)
     : terms_{ terms }
   {
     if (terms_.empty()) {

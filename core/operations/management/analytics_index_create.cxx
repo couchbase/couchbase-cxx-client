@@ -38,13 +38,15 @@ analytics_index_create_request::encode_to(encoded_request_type& encoded,
   }
 
   const tao::json::value body{
-    { "statement",
+    {
+      "statement",
       fmt::format("CREATE INDEX `{}` {} ON {}.`{}` ({})",
                   index_name,
                   if_not_exists_clause,
                   utils::analytics::uncompound_name(dataverse_name),
                   dataset_name,
-                  utils::join_strings(field_specs, ",")) },
+                  utils::join_strings(field_specs, ",")),
+    },
   };
   encoded.headers["content-type"] = "application/json";
   encoded.method = "POST";

@@ -150,7 +150,7 @@ struct traits<couchbase::core::topology::configuration> {
                 const auto& h = o.at("hostname").get_string();
                 n.services_plain.management =
                   static_cast<std::uint16_t>(std::stoul(h.substr(h.rfind(':') + 1)));
-                std::string capi = o.at("couchApiBase").get_string();
+                const std::string capi = o.at("couchApiBase").get_string();
                 auto slash = capi.rfind('/');
                 auto colon = capi.rfind(':', slash);
                 n.services_plain.views =
@@ -193,7 +193,7 @@ struct traits<couchbase::core::topology::configuration> {
           n.hostname = h.substr(0, colon);
           n.services_plain.management = static_cast<std::uint16_t>(std::stoul(h.substr(colon + 1)));
 
-          std::string capi = o.at("couchApiBase").get_string();
+          const std::string capi = o.at("couchApiBase").get_string();
           auto slash = capi.rfind('/');
           colon = capi.rfind(':', slash);
           n.services_plain.views =

@@ -126,7 +126,7 @@ public:
         if (std::holds_alternative<row_stream_end_signal>(row)) {
           auto signal = std::get<row_stream_end_signal>(row);
           if (!signal.metadata.empty()) {
-            std::lock_guard<std::mutex> const lock{ self->metadata_mutex_ };
+            const std::scoped_lock lock{ self->metadata_mutex_ };
             self->metadata_ = std::move(signal.metadata);
           }
           return handler({}, signal.ec);
@@ -149,7 +149,7 @@ public:
 
   auto metadata() -> std::optional<std::string>
   {
-    std::lock_guard<std::mutex> const lock{ metadata_mutex_ };
+    const std::scoped_lock lock{ metadata_mutex_ };
     return metadata_;
   }
 
@@ -181,7 +181,7 @@ private:
         return;
       }
       {
-        const std::lock_guard<std::mutex> lock{ self->data_feed_mutex_ };
+        const std::scoped_lock lock{ self->data_feed_mutex_ };
         self->lexer_.feed(data);
       }
 

@@ -51,6 +51,7 @@ public:
   [[nodiscard]] auto value() const -> std::string
   {
     if (has_value()) {
+      // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
       return fmt::format("{}:`{}`.`{}`", namespace_id_, bucket_name_.value(), scope_name_.value());
     }
     return {};
@@ -59,6 +60,7 @@ public:
   [[nodiscard]] auto bucket_name() const -> std::string
   {
     if (has_value()) {
+      // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
       return bucket_name_.value();
     }
     return "";
@@ -67,6 +69,7 @@ public:
   [[nodiscard]] auto scope_name() const -> std::string
   {
     if (has_value()) {
+      // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
       return scope_name_.value();
     }
     return "";

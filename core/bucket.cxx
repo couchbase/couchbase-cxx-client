@@ -18,13 +18,17 @@
 #include "bucket.hxx"
 
 #include "collection_id_cache_entry.hxx"
+#include "collections_component.hxx"
 #include "core/app_telemetry_meter.hxx"
 #include "core/cluster_options.hxx"
 #include "core/config_listener.hxx"
+#include "core/crud_options.hxx"
 #include "core/document_id.hxx"
 #include "core/error_context/key_value_error_map_info.hxx"
 #include "core/error_context/key_value_status_code.hxx"
+#include "core/impl/subdoc/path_flags.hxx"
 #include "core/io/mcbp_message.hxx"
+#include "core/key_value_config.hxx"
 #include "core/logger/logger.hxx"
 #include "core/mcbp/codec.hxx"
 #include "core/metrics/meter_wrapper.hxx"
@@ -33,8 +37,10 @@
 #include "core/protocol/hello_feature.hxx"
 #include "core/response_handler.hxx"
 #include "core/service_type.hxx"
+#include "core/subdoc_options.hxx"
 #include "core/tracing/tracer_wrapper.hxx"
 #include "core/utils/movable_function.hxx"
+#include "crud_component.hxx"
 #include "dispatcher.hxx"
 #include "impl/bootstrap_state_listener.hxx"
 #include "mcbp/operation_queue.hxx"
@@ -44,10 +50,13 @@
 #include "ping_collector.hxx"
 #include "protocol/cmd_get_cluster_config.hxx"
 #include "retry_orchestrator.hxx"
+#include "utils/binary.hxx"
 
+#include "core/tracing/constants.hxx"
 #include <couchbase/error_codes.hxx>
 #include <couchbase/retry_reason.hxx>
 #include <couchbase/retry_strategy.hxx>
+#include <couchbase/tracing/request_span.hxx>
 
 #include <asio/bind_executor.hpp>
 #include <asio/error.hpp>
@@ -61,7 +70,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-
 #include <iterator>
 #include <map>
 #include <memory>
@@ -75,6 +83,8 @@
 
 namespace couchbase::core
 {
+using impl::with_cancellation;
+
 class bucket_impl
   : public std::enable_shared_from_this<bucket_impl>
   , public config_listener
@@ -86,12 +96,13 @@ public:
               couchbase::core::origin origin,
               std::shared_ptr<tracing::tracer_wrapper> tracer,
               std::shared_ptr<metrics::meter_wrapper> meter,
-              std::shared_ptr<orphan_reporter> orphan_reporter,
+              std::shared_ptr<couchbase::core::orphan_reporter> orphan_reporter,
               std::shared_ptr<core::app_telemetry_meter> app_telemetry,
               std::vector<protocol::hello_feature> known_features,
               std::shared_ptr<impl::bootstrap_state_listener> state_listener,
               asio::io_context& ctx,
-              tls_context_provider& tls)
+              tls_context_provider& tls,
+              dispatcher dispatcher)
     : client_id_{ std::move(client_id) }
     , name_{ std::move(name) }
     , log_prefix_{ fmt::format("[{}/{}]", client_id_, name_) }
@@ -110,6 +121,13 @@ public:
                                origin_.options().config_poll_interval
                              ? origin_.options().config_poll_floor
                              : origin_.options().config_poll_interval }
+    , collections_{ ctx_,
+                    std::move(dispatcher),
+                    {
+                      key_value_config::default_max_queue_size,
+                      origin_.options().default_retry_strategy_,
+                    } }
+    , crud_{ ctx_, name_, collections_, origin_.options().default_retry_strategy_ }
   {
   }
 
@@ -152,6 +170,14 @@ public:
     if (status == key_value_status_code::not_my_vbucket) {
       reason = retry_reason::key_value_not_my_vbucket;
     }
+    if (status == key_value_status_code::unknown_collection &&
+        req->command_ != protocol::client_opcode::get_collection_id &&
+        req->command_ != protocol::client_opcode::get_scope_id) {
+      if (collections_.handle_collection_unknown(req)) {
+        return;
+      }
+      reason = retry_reason::key_value_collection_outdated;
+    }
     if (status == key_value_status_code::unknown && error_info &&
         error_info.value().has_retry_attribute()) {
       reason = retry_reason::key_value_error_map_retry_indicated;
@@ -185,11 +211,17 @@ public:
   }
 
   void handle_response(std::shared_ptr<mcbp::queue_request> req,
+                       std::optional<io::mcbp_session> session,
                        std::error_code error,
                        retry_reason reason,
                        io::mcbp_message msg,
                        std::optional<key_value_error_map_info> error_info) override
   {
+    {
+      const auto server_duration_us =
+        static_cast<std::uint64_t>(protocol::parse_server_duration_us(msg));
+      close_dispatch_span(req->dispatch_span_, session, server_duration_us);
+    }
     std::shared_ptr<mcbp::queue_response> resp{};
     auto header = msg.header_data();
     auto [packet, size, err] =
@@ -202,14 +234,60 @@ public:
     resolve_response(req, resp, error, reason, std::move(error_info));
   }
 
+  [[nodiscard]] auto create_dispatch_span(const std::shared_ptr<mcbp::queue_request>& req,
+                                          const std::optional<io::mcbp_session>& session) const
+    -> std::shared_ptr<couchbase::tracing::request_span>
+  {
+    if (tracer_ == nullptr || !session) {
+      return nullptr;
+    }
+    std::shared_ptr<couchbase::tracing::request_span> dispatch_span =
+      tracer_->create_span(tracing::operation::step_dispatch, req->parent_span_);
+    if (dispatch_span->uses_tags()) {
+      dispatch_span->add_tag(tracing::attributes::dispatch::network_transport, "tcp");
+      dispatch_span->add_tag(tracing::attributes::dispatch::operation_id,
+                             fmt::format("0x{:x}", req->opaque_));
+      dispatch_span->add_tag(tracing::attributes::dispatch::local_id, session->id());
+    }
+    return dispatch_span;
+  }
+
+  void close_dispatch_span(const std::shared_ptr<couchbase::tracing::request_span>& dispatch_span,
+                           const std::optional<io::mcbp_session>& session,
+                           const std::uint64_t server_duration_us) const
+  {
+    if (dispatch_span) {
+      if (dispatch_span->uses_tags()) {
+        if (server_duration_us > 0) {
+          dispatch_span->add_tag(tracing::attributes::dispatch::server_duration,
+                                 server_duration_us);
+        }
+        if (session) {
+          dispatch_span->add_tag(tracing::attributes::dispatch::server_address,
+                                 session->canonical_hostname());
+          dispatch_span->add_tag(tracing::attributes::dispatch::server_port,
+                                 session->canonical_port_number());
+          dispatch_span->add_tag(tracing::attributes::dispatch::peer_address,
+                                 session->remote_hostname());
+          dispatch_span->add_tag(tracing::attributes::dispatch::peer_port, session->remote_port());
+        }
+      }
+      dispatch_span->end();
+    }
+  }
+
   auto direct_dispatch(std::shared_ptr<mcbp::queue_request> req) -> std::error_code
   {
     if (closed_) {
       req->cancel(errc::network::bucket_closed);
-      return errc::network::bucket_closed;
+      // Return {} (not the error) so callers that check the return value do not
+      // also call the handler — req->cancel() already fired it above, and
+      // is_completed_ in queue_request prevents any subsequent cancel() /
+      // try_callback() from firing it a second time.
+      return {};
     }
     if (!configured_) {
-      return defer_command([self = shared_from_this(), req](std::error_code ec) {
+      return defer_command([self = shared_from_this(), req](std::error_code ec) -> void {
         if (ec == errc::common::request_canceled) {
           return req->cancel(ec);
         }
@@ -221,7 +299,7 @@ public:
 
     auto session = route_request(req);
     if (!session || !session->has_config()) {
-      return defer_command([self = shared_from_this(), req](std::error_code ec) mutable {
+      return defer_command([self = shared_from_this(), req](std::error_code ec) mutable -> void {
         if (ec == errc::common::request_canceled) {
           return req->cancel(ec);
         }
@@ -235,6 +313,7 @@ public:
       return errc::common::service_not_available;
     }
     req->opaque_ = session->next_opaque();
+    req->dispatch_span_ = create_dispatch_span(req, session);
     session->write_and_subscribe(req, shared_from_this());
     return {};
   }
@@ -242,7 +321,7 @@ public:
   auto direct_re_queue(const std::shared_ptr<mcbp::queue_request>& req, bool is_retry)
     -> std::error_code
   {
-    auto handle_error = [is_retry, req](std::error_code ec) {
+    auto handle_error = [is_retry, req](std::error_code ec) -> void {
       // We only want to log an error on retries if the error isn't cancelled.
       if (!is_retry || (is_retry && ec != errc::common::request_canceled)) {
         CB_LOG_ERROR("reschedule failed, failing request ({})", ec.message());
@@ -255,7 +334,7 @@ public:
 
     auto session = route_request(req);
     if (!session || !session->has_config()) {
-      return defer_command([self = shared_from_this(), req](std::error_code ec) {
+      return defer_command([self = shared_from_this(), req](std::error_code ec) -> void {
         if (ec == errc::common::request_canceled) {
           return req->cancel(ec);
         }
@@ -270,6 +349,7 @@ public:
       return errc::common::service_not_available;
     }
     req->opaque_ = session->next_opaque();
+    req->dispatch_span_ = create_dispatch_span(req, session);
     auto data = codec_.encode_packet(*req);
     if (!data) {
       CB_LOG_DEBUG("unable to encode packet. ec={}", data.error().message());
@@ -283,7 +363,12 @@ public:
         std::error_code error,
         retry_reason reason,
         io::mcbp_message msg,
-        std::optional<key_value_error_map_info> error_info) {
+        std::optional<key_value_error_map_info> error_info) -> void {
+        {
+          const auto server_duration_us =
+            static_cast<std::uint64_t>(protocol::parse_server_duration_us(msg));
+          self->close_dispatch_span(req->dispatch_span_, session, server_duration_us);
+        }
         std::shared_ptr<mcbp::queue_response> resp{};
         auto header = msg.header_data();
         auto [packet, size, err] =
@@ -306,7 +391,7 @@ public:
     if (retried) {
       auto timer = std::make_shared<asio::steady_timer>(ctx_);
       timer->expires_after(action.duration());
-      timer->async_wait([self = shared_from_this(), request](auto error) {
+      timer->async_wait([self = shared_from_this(), request](auto error) -> auto {
         if (error == asio::error::operation_aborted) {
           return;
         }
@@ -435,8 +520,8 @@ public:
         continue;
       }
 
-      auto ptr =
-        std::find_if(sessions_.begin(), sessions_.end(), [&hostname, &port](const auto& session) {
+      auto ptr = std::find_if(
+        sessions_.begin(), sessions_.end(), [&hostname, &port](const auto& session) -> auto {
           return session.second.bootstrap_hostname() == hostname &&
                  session.second.bootstrap_port_number() == port;
         });
@@ -500,13 +585,13 @@ public:
                    port);
       session.bootstrap(
         [self = shared_from_this(), session](std::error_code err,
-                                             topology::configuration cfg) mutable {
+                                             topology::configuration cfg) mutable -> void {
           if (err) {
             return self->remove_session(session.id());
           }
           self->update_config(std::move(cfg));
           session.on_configuration_update(self);
-          session.on_stop([id = session.id(), self]() {
+          session.on_stop([id = session.id(), self]() -> void {
             self->remove_session(id);
           });
           self->drain_deferred_queue({});
@@ -537,7 +622,7 @@ public:
     }
 
     if (found) {
-      asio::post(asio::bind_executor(ctx_, [self = shared_from_this()]() {
+      asio::post(asio::bind_executor(ctx_, [self = shared_from_this()]() -> void {
         return self->restart_sessions();
       }));
     }
@@ -554,7 +639,7 @@ public:
             client_id_, {}, ctx_, tls_, origin_, state_listener_, name_, known_features_)
         : io::mcbp_session(client_id_, {}, ctx_, origin_, state_listener_, name_, known_features_);
     new_session.bootstrap([self = shared_from_this(), new_session, h = std::move(handler)](
-                            std::error_code ec, topology::configuration cfg) mutable {
+                            std::error_code ec, topology::configuration cfg) mutable -> void {
       if (ec) {
         CB_LOG_WARNING(R"({} failed to bootstrap session ec={}, bucket="{}")",
                        new_session.log_prefix(),
@@ -564,7 +649,7 @@ public:
       } else {
         const std::size_t this_index = new_session.index();
         new_session.on_configuration_update(self);
-        new_session.on_stop([id = new_session.id(), self]() {
+        new_session.on_stop([id = new_session.id(), self]() -> void {
           self->remove_session(id);
         });
 
@@ -576,8 +661,8 @@ public:
         self->drain_deferred_queue({});
         self->poll_config({});
       }
-      asio::post(
-        asio::bind_executor(self->ctx_, [h = std::move(h), ec, cfg = std::move(cfg)]() mutable {
+      asio::post(asio::bind_executor(
+        self->ctx_, [h = std::move(h), ec, cfg = std::move(cfg)]() mutable -> void {
           h(ec, cfg);
         }));
     });
@@ -602,22 +687,22 @@ public:
       return handler(errc::network::configuration_not_available, nullptr);
     }
     const std::scoped_lock lock(deferred_commands_mutex_);
-    deferred_commands_.emplace(
-      [self = shared_from_this(), handler = std::move(handler)](std::error_code ec) mutable {
-        if (ec == errc::common::request_canceled || self->closed_ || !self->configured_) {
-          return handler(errc::network::configuration_not_available, nullptr);
-        }
-
-        std::shared_ptr<topology::configuration> config{};
-        {
-          const std::scoped_lock config_lock(self->config_mutex_);
-          config = self->config_;
-        }
-        if (config) {
-          return handler({}, config);
-        }
+    deferred_commands_.emplace([self = shared_from_this(),
+                                handler = std::move(handler)](std::error_code ec) mutable -> void {
+      if (ec == errc::common::request_canceled || self->closed_ || !self->configured_) {
         return handler(errc::network::configuration_not_available, nullptr);
-      });
+      }
+
+      std::shared_ptr<topology::configuration> config{};
+      {
+        const std::scoped_lock config_lock(self->config_mutex_);
+        config = self->config_;
+      }
+      if (config) {
+        return handler({}, config);
+      }
+      return handler(errc::network::configuration_not_available, nullptr);
+    });
   }
 
   void drain_deferred_queue(std::error_code ec)
@@ -686,7 +771,7 @@ public:
     fetch_config();
 
     heartbeat_timer_.expires_after(heartbeat_interval_);
-    return heartbeat_timer_.async_wait([self = shared_from_this()](std::error_code e) {
+    return heartbeat_timer_.async_wait([self = shared_from_this()](std::error_code e) -> void {
       if (e == asio::error::operation_aborted) {
         return;
       }
@@ -894,7 +979,7 @@ public:
                      node.index);
         session.bootstrap(
           [self = shared_from_this(), session, idx = next_index](
-            std::error_code err, topology::configuration cfg) mutable {
+            std::error_code err, topology::configuration cfg) mutable -> void {
             if (err) {
               CB_LOG_WARNING(
                 R"({} failed to bootstrap session="{}", address="{}:{}", index={}, ec={})",
@@ -908,7 +993,7 @@ public:
             }
             self->update_config(std::move(cfg));
             session.on_configuration_update(self);
-            session.on_stop([id = session.id(), self]() {
+            session.on_stop([id = session.id(), self]() -> void {
               self->remove_session(id);
             });
             self->drain_deferred_queue({});
@@ -927,7 +1012,7 @@ public:
                      it->second.bootstrap_hostname(),
                      it->second.bootstrap_port(),
                      it->first);
-        asio::post(asio::bind_executor(ctx_, [session = std::move(it->second)]() mutable {
+        asio::post(asio::bind_executor(ctx_, [session = std::move(it->second)]() mutable -> void {
           return session.stop(retry_reason::do_not_retry);
         }));
       }
@@ -1000,7 +1085,7 @@ public:
     return meter_;
   }
 
-  [[nodiscard]] auto orphan_reporter() const -> std::shared_ptr<core::orphan_reporter>
+  [[nodiscard]] auto orphan_reporter() const -> std::shared_ptr<couchbase::core::orphan_reporter>
   {
     return orphan_reporter_;
   }
@@ -1046,6 +1131,11 @@ public:
     config_listeners_.emplace_back(std::move(handler));
   }
 
+  auto crud() -> crud_component&
+  {
+    return crud_;
+  }
+
   auto defer_command(utils::movable_function<void(std::error_code)> command) -> std::error_code
   {
     const std::scoped_lock lock_for_deferred_commands(deferred_commands_mutex_);
@@ -1071,7 +1161,7 @@ private:
   const std::string log_prefix_;
   const std::shared_ptr<tracing::tracer_wrapper> tracer_;
   const std::shared_ptr<metrics::meter_wrapper> meter_;
-  const std::shared_ptr<core::orphan_reporter> orphan_reporter_;
+  const std::shared_ptr<couchbase::core::orphan_reporter> orphan_reporter_;
   const std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter_;
   const std::vector<protocol::hello_feature> known_features_;
   const std::shared_ptr<impl::bootstrap_state_listener> state_listener_;
@@ -1100,6 +1190,9 @@ private:
   std::map<size_t, io::mcbp_session> sessions_{};
   mutable std::mutex sessions_mutex_{};
   std::atomic_size_t round_robin_next_{ 0 };
+
+  collections_component collections_;
+  crud_component crud_;
 };
 
 bucket::bucket(std::string client_id,
@@ -1107,25 +1200,29 @@ bucket::bucket(std::string client_id,
                tls_context_provider& tls,
                std::shared_ptr<tracing::tracer_wrapper> tracer,
                std::shared_ptr<metrics::meter_wrapper> meter,
-               std::shared_ptr<core::orphan_reporter> orphan_reporter,
-               std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter,
+               std::shared_ptr<couchbase::core::orphan_reporter> orphan_reporter,
+               std::shared_ptr<couchbase::core::app_telemetry_meter> app_telemetry_meter,
                std::string name,
                couchbase::core::origin origin,
                std::vector<protocol::hello_feature> known_features,
-               std::shared_ptr<impl::bootstrap_state_listener> state_listener)
+               std::shared_ptr<impl::bootstrap_state_listener> state_listener,
+               dispatcher dispatcher)
 
   : ctx_(ctx)
-  , impl_{ std::make_shared<bucket_impl>(std::move(client_id),
-                                         std::move(name),
-                                         std::move(origin),
-                                         std::move(tracer),
-                                         std::move(meter),
-                                         std::move(orphan_reporter),
-                                         std::move(app_telemetry_meter),
-                                         std::move(known_features),
-                                         std::move(state_listener),
-                                         ctx,
-                                         tls) }
+  , impl_{
+    std::make_shared<bucket_impl>(std::move(client_id),
+                                  std::move(name),
+                                  std::move(origin),
+                                  std::move(tracer),
+                                  std::move(meter),
+                                  std::move(orphan_reporter),
+                                  std::move(app_telemetry_meter),
+                                  std::move(known_features),
+                                  std::move(state_listener),
+                                  ctx,
+                                  tls,
+                                  std::move(dispatcher)),
+  }
 {
 }
 
@@ -1196,7 +1293,7 @@ bucket::meter() const -> std::shared_ptr<metrics::meter_wrapper>
 }
 
 auto
-bucket::orphan_reporter() const -> std::shared_ptr<core::orphan_reporter>
+bucket::orphan_reporter() const -> std::shared_ptr<couchbase::core::orphan_reporter>
 {
   return impl_->orphan_reporter();
 }
@@ -1304,5 +1401,1091 @@ void
 bucket::connect_session(std::size_t index)
 {
   return impl_->connect_session(index);
+}
+
+auto
+bucket::get(std::string scope_name,
+            std::string collection_name,
+            std::vector<std::byte> key,
+            const get_options& options,
+            get_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->crud().get(std::move(scope_name),
+                           std::move(collection_name),
+                           std::move(key),
+                           options,
+                           std::move(callback));
+}
+
+auto
+bucket::insert(std::string scope_name,
+               std::string collection_name,
+               std::vector<std::byte> key,
+               std::vector<std::byte> value,
+               const insert_options& options,
+               insert_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->crud().insert(std::move(scope_name),
+                              std::move(collection_name),
+                              std::move(key),
+                              std::move(value),
+                              options,
+                              std::move(callback));
+}
+
+auto
+bucket::upsert(std::string scope_name,
+               std::string collection_name,
+               std::vector<std::byte> key,
+               std::vector<std::byte> value,
+               const upsert_options& options,
+               upsert_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->crud().upsert(std::move(scope_name),
+                              std::move(collection_name),
+                              std::move(key),
+                              std::move(value),
+                              options,
+                              std::move(callback));
+}
+
+auto
+bucket::replace(std::string scope_name,
+                std::string collection_name,
+                std::vector<std::byte> key,
+                std::vector<std::byte> value,
+                const replace_options& options,
+                replace_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->crud().replace(std::move(scope_name),
+                               std::move(collection_name),
+                               std::move(key),
+                               std::move(value),
+                               options,
+                               std::move(callback));
+}
+
+auto
+bucket::remove(std::string scope_name,
+               std::string collection_name,
+               std::vector<std::byte> key,
+               const remove_options& options,
+               remove_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->crud().remove(std::move(scope_name),
+                              std::move(collection_name),
+                              std::move(key),
+                              options,
+                              std::move(callback));
+}
+
+auto
+bucket::touch(std::string scope_name,
+              std::string collection_name,
+              std::vector<std::byte> key,
+              const touch_options& options,
+              touch_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->crud().touch(std::move(scope_name),
+                             std::move(collection_name),
+                             std::move(key),
+                             options,
+                             std::move(callback));
+}
+
+auto
+bucket::get_and_touch(std::string scope_name,
+                      std::string collection_name,
+                      std::vector<std::byte> key,
+                      const get_and_touch_options& options,
+                      get_and_touch_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->crud().get_and_touch(std::move(scope_name),
+                                     std::move(collection_name),
+                                     std::move(key),
+                                     options,
+                                     std::move(callback));
+}
+
+auto
+bucket::get_and_lock(std::string scope_name,
+                     std::string collection_name,
+                     std::vector<std::byte> key,
+                     const get_and_lock_options& options,
+                     get_and_lock_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->crud().get_and_lock(std::move(scope_name),
+                                    std::move(collection_name),
+                                    std::move(key),
+                                    options,
+                                    std::move(callback));
+}
+
+auto
+bucket::unlock(std::string scope_name,
+               std::string collection_name,
+               std::vector<std::byte> key,
+               const unlock_options& options,
+               unlock_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->crud().unlock(std::move(scope_name),
+                              std::move(collection_name),
+                              std::move(key),
+                              options,
+                              std::move(callback));
+}
+
+auto
+bucket::get_with_meta(std::string scope_name,
+                      std::string collection_name,
+                      std::vector<std::byte> key,
+                      const get_with_meta_options& options,
+                      get_with_meta_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->crud().get_with_meta(std::move(scope_name),
+                                     std::move(collection_name),
+                                     std::move(key),
+                                     options,
+                                     std::move(callback));
+}
+
+auto
+bucket::append(std::string scope_name,
+               std::string collection_name,
+               std::vector<std::byte> key,
+               std::vector<std::byte> value,
+               const adjoin_options& options,
+               adjoin_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->crud().append(std::move(scope_name),
+                              std::move(collection_name),
+                              std::move(key),
+                              std::move(value),
+                              options,
+                              std::move(callback));
+}
+
+auto
+bucket::prepend(std::string scope_name,
+                std::string collection_name,
+                std::vector<std::byte> key,
+                std::vector<std::byte> value,
+                const adjoin_options& options,
+                adjoin_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->crud().prepend(std::move(scope_name),
+                               std::move(collection_name),
+                               std::move(key),
+                               std::move(value),
+                               options,
+                               std::move(callback));
+}
+
+auto
+bucket::increment(std::string scope_name,
+                  std::string collection_name,
+                  std::vector<std::byte> key,
+                  const counter_options& options,
+                  counter_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->crud().increment(std::move(scope_name),
+                                 std::move(collection_name),
+                                 std::move(key),
+                                 options,
+                                 std::move(callback));
+}
+
+auto
+bucket::decrement(std::string scope_name,
+                  std::string collection_name,
+                  std::vector<std::byte> key,
+                  const counter_options& options,
+                  counter_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->crud().decrement(std::move(scope_name),
+                                 std::move(collection_name),
+                                 std::move(key),
+                                 options,
+                                 std::move(callback));
+}
+
+auto
+bucket::lookup_in(std::string scope_name,
+                  std::string collection_name,
+                  std::vector<std::byte> key,
+                  const lookup_in_options& options,
+                  lookup_in_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->crud().lookup_in(std::move(scope_name),
+                                 std::move(collection_name),
+                                 std::move(key),
+                                 options,
+                                 std::move(callback));
+}
+
+auto
+bucket::mutate_in(std::string scope_name,
+                  std::string collection_name,
+                  std::vector<std::byte> key,
+                  const mutate_in_options& options,
+                  mutate_in_callback&& callback)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  return impl_->crud().mutate_in(std::move(scope_name),
+                                 std::move(collection_name),
+                                 std::move(key),
+                                 options,
+                                 std::move(callback));
+}
+
+auto
+bucket::direct_execute(operations::get_request request,
+                       utils::movable_function<void(operations::get_response)>&& handler)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  get_options options;
+  options.timeout = request.timeout.value_or(default_timeout());
+  options.parent_span = request.parent_span;
+
+  auto scope = request.id.scope();
+  auto collection = request.id.collection();
+  auto key = utils::to_binary(request.id.key());
+
+  return get(std::move(scope),
+             std::move(collection),
+             std::move(key),
+             options,
+             [request = std::move(request),
+              handler = std::move(handler)](get_result result, std::error_code ec) mutable -> void {
+               operations::get_response resp;
+               resp.ctx = make_key_value_error_context(
+                 ec, request.id, result.internal.retry_attempts, result.internal.retry_reasons);
+               resp.value = std::move(result.value);
+               resp.cas = result.cas;
+               resp.flags = result.flags;
+               handler(std::move(resp));
+             });
+}
+
+auto
+bucket::direct_execute(operations::upsert_request request,
+                       utils::movable_function<void(operations::upsert_response)>&& handler)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  upsert_options options;
+  options.timeout = request.timeout.value_or(default_timeout());
+  options.parent_span = request.parent_span;
+  options.flags = request.flags;
+  options.expiry = request.expiry;
+  options.preserve_expiry = request.preserve_expiry;
+  options.durability_level = request.durability_level;
+
+  auto scope = request.id.scope();
+  auto collection = request.id.collection();
+  auto key = utils::to_binary(request.id.key());
+  auto value = request.value;
+
+  return upsert(std::move(scope),
+                std::move(collection),
+                std::move(key),
+                std::move(value),
+                options,
+                [request = std::move(request), handler = std::move(handler)](
+                  const upsert_result& result, std::error_code ec) mutable -> void {
+                  operations::upsert_response resp;
+                  resp.ctx = make_key_value_error_context(
+                    ec, request.id, result.internal.retry_attempts, result.internal.retry_reasons);
+                  resp.cas = result.cas;
+                  resp.token = result.token;
+                  handler(std::move(resp));
+                });
+}
+
+auto
+bucket::direct_execute(operations::insert_request request,
+                       utils::movable_function<void(operations::insert_response)>&& handler)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  CB_LOG_TRACE(R"([{}] direct_execute(insert) key="{}")", log_prefix(), request.id.key());
+  insert_options options;
+  options.timeout = request.timeout.value_or(default_timeout());
+  options.parent_span = request.parent_span;
+  options.flags = request.flags;
+  options.expiry = request.expiry;
+  options.durability_level = request.durability_level;
+
+  auto scope = request.id.scope();
+  auto collection = request.id.collection();
+  auto key = utils::to_binary(request.id.key());
+  auto value = request.value;
+
+  return insert(std::move(scope),
+                std::move(collection),
+                std::move(key),
+                std::move(value),
+                options,
+                [request = std::move(request), handler = std::move(handler)](
+                  const insert_result& result, std::error_code ec) mutable -> void {
+                  CB_LOG_TRACE(R"([{}] direct_execute(insert) callback key="{}", ec={})",
+                               request.id.bucket(),
+                               request.id.key(),
+                               ec.message());
+                  operations::insert_response resp;
+                  resp.ctx = make_key_value_error_context(
+                    ec, request.id, result.internal.retry_attempts, result.internal.retry_reasons);
+                  resp.cas = result.cas;
+                  resp.token = result.token;
+                  handler(std::move(resp));
+                });
+}
+
+auto
+bucket::direct_execute(operations::replace_request request,
+                       utils::movable_function<void(operations::replace_response)>&& handler)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  CB_LOG_TRACE(R"([{}] direct_execute(replace) key="{}")", log_prefix(), request.id.key());
+  replace_options options;
+  options.timeout = request.timeout.value_or(default_timeout());
+  options.parent_span = request.parent_span;
+  options.flags = request.flags;
+  options.expiry = request.expiry;
+  options.cas = request.cas;
+  options.preserve_expiry = request.preserve_expiry;
+  options.durability_level = request.durability_level;
+
+  auto scope = request.id.scope();
+  auto collection = request.id.collection();
+  auto key = utils::to_binary(request.id.key());
+  auto value = request.value;
+
+  return replace(std::move(scope),
+                 std::move(collection),
+                 std::move(key),
+                 std::move(value),
+                 options,
+                 [request = std::move(request), handler = std::move(handler)](
+                   const replace_result& result, std::error_code ec) mutable -> void {
+                   CB_LOG_TRACE(R"([{}] direct_execute(replace) callback key="{}", ec={})",
+                                request.id.bucket(),
+                                request.id.key(),
+                                ec.message());
+                   operations::replace_response resp;
+                   resp.ctx = make_key_value_error_context(
+                     ec, request.id, result.internal.retry_attempts, result.internal.retry_reasons);
+                   resp.cas = result.cas;
+                   resp.token = result.token;
+                   handler(std::move(resp));
+                 });
+}
+
+auto
+bucket::direct_execute(operations::remove_request request,
+                       utils::movable_function<void(operations::remove_response)>&& handler)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  CB_LOG_TRACE(R"([{}] direct_execute(remove) key="{}")", log_prefix(), request.id.key());
+  remove_options options;
+  options.timeout = request.timeout.value_or(default_timeout());
+  options.parent_span = request.parent_span;
+  options.cas = request.cas;
+  options.durability_level = request.durability_level;
+
+  auto scope = request.id.scope();
+  auto collection = request.id.collection();
+  auto key = utils::to_binary(request.id.key());
+
+  return remove(std::move(scope),
+                std::move(collection),
+                std::move(key),
+                options,
+                [request = std::move(request), handler = std::move(handler)](
+                  const remove_result& result, std::error_code ec) mutable -> void {
+                  CB_LOG_TRACE(R"([{}] direct_execute(remove) callback key="{}", ec={})",
+                               request.id.bucket(),
+                               request.id.key(),
+                               ec.message());
+                  operations::remove_response resp;
+                  resp.ctx = make_key_value_error_context(
+                    ec, request.id, result.internal.retry_attempts, result.internal.retry_reasons);
+                  resp.cas = result.cas;
+                  resp.token = result.token;
+                  handler(std::move(resp));
+                });
+}
+
+auto
+bucket::direct_execute(operations::exists_request request,
+                       utils::movable_function<void(operations::exists_response)>&& handler)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  get_with_meta_options options;
+  options.timeout = request.timeout.value_or(default_timeout());
+  options.parent_span = request.parent_span;
+
+  auto scope = request.id.scope();
+  auto collection = request.id.collection();
+  auto key = utils::to_binary(request.id.key());
+
+  return impl_->crud().get_with_meta(
+    std::move(scope),
+    std::move(collection),
+    std::move(key),
+    options,
+    [request = std::move(request), handler = std::move(handler)](
+      const get_with_meta_result& result, std::error_code ec) mutable -> void {
+      operations::exists_response resp;
+      resp.ctx = make_key_value_error_context(
+        ec, request.id, result.internal.retry_attempts, result.internal.retry_reasons);
+      // Treat both standard document_not_found and KV not_found as "not found" for exists.
+      const auto status = resp.ctx.status_code();
+      const bool is_not_found_for_exists =
+        (ec == couchbase::errc::key_value::document_not_found) ||
+        (status && *status == couchbase::core::key_value_status_code::not_found);
+      if (is_not_found_for_exists) {
+        resp.ctx.override_ec({});
+      }
+      resp.cas = result.cas;
+      resp.deleted = (result.deleted != 0);
+      resp.expiry = result.expiry;
+      resp.flags = result.flags;
+      resp.sequence_number = result.sequence_number;
+      resp.document_exists = (ec == std::error_code{} && !resp.deleted);
+      handler(std::move(resp));
+    });
+}
+
+auto
+bucket::direct_execute(operations::touch_request request,
+                       utils::movable_function<void(operations::touch_response)>&& handler)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  touch_options options;
+  options.timeout = request.timeout.value_or(default_timeout());
+  options.parent_span = request.parent_span;
+  options.expiry = request.expiry;
+
+  auto scope = request.id.scope();
+  auto collection = request.id.collection();
+  auto key = utils::to_binary(request.id.key());
+
+  return impl_->crud().touch(
+    std::move(scope),
+    std::move(collection),
+    std::move(key),
+    options,
+    [request = std::move(request),
+     handler = std::move(handler)](const touch_result& result, std::error_code ec) mutable -> void {
+      operations::touch_response resp;
+      resp.ctx = make_key_value_error_context(
+        ec, request.id, result.internal.retry_attempts, result.internal.retry_reasons);
+      resp.cas = result.cas;
+      handler(std::move(resp));
+    });
+}
+
+auto
+bucket::direct_execute(operations::get_and_touch_request request,
+                       utils::movable_function<void(operations::get_and_touch_response)>&& handler)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  get_and_touch_options options;
+  options.timeout = request.timeout.value_or(default_timeout());
+  options.parent_span = request.parent_span;
+  options.expiry = request.expiry;
+
+  auto scope = request.id.scope();
+  auto collection = request.id.collection();
+  auto key = utils::to_binary(request.id.key());
+
+  return impl_->crud().get_and_touch(
+    std::move(scope),
+    std::move(collection),
+    std::move(key),
+    options,
+    [request = std::move(request), handler = std::move(handler)](
+      get_and_touch_result result, std::error_code ec) mutable -> void {
+      operations::get_and_touch_response resp;
+      resp.ctx = make_key_value_error_context(
+        ec, request.id, result.internal.retry_attempts, result.internal.retry_reasons);
+      resp.cas = result.cas;
+      resp.value = std::move(result.value);
+      resp.flags = result.flags;
+      handler(std::move(resp));
+    });
+}
+
+auto
+bucket::direct_execute(operations::get_and_lock_request request,
+                       utils::movable_function<void(operations::get_and_lock_response)>&& handler)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  get_and_lock_options options;
+  options.timeout = request.timeout.value_or(default_timeout());
+  options.parent_span = request.parent_span;
+  options.lock_time = request.lock_time;
+
+  auto scope = request.id.scope();
+  auto collection = request.id.collection();
+  auto key = utils::to_binary(request.id.key());
+
+  return impl_->crud().get_and_lock(
+    std::move(scope),
+    std::move(collection),
+    std::move(key),
+    options,
+    [request = std::move(request),
+     handler = std::move(handler)](get_and_lock_result result, std::error_code ec) mutable -> void {
+      operations::get_and_lock_response resp;
+      resp.ctx = make_key_value_error_context(
+        ec, request.id, result.internal.retry_attempts, result.internal.retry_reasons);
+      resp.cas = result.cas;
+      resp.value = std::move(result.value);
+      resp.flags = result.flags;
+      handler(std::move(resp));
+    });
+}
+
+auto
+bucket::direct_execute(operations::unlock_request request,
+                       utils::movable_function<void(operations::unlock_response)>&& handler)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  unlock_options options;
+  options.timeout = request.timeout.value_or(default_timeout());
+  options.parent_span = request.parent_span;
+  options.cas = request.cas;
+
+  auto scope = request.id.scope();
+  auto collection = request.id.collection();
+  auto key = utils::to_binary(request.id.key());
+
+  return unlock(std::move(scope),
+                std::move(collection),
+                std::move(key),
+                options,
+                [request = std::move(request), handler = std::move(handler)](
+                  const unlock_result& result, std::error_code ec) mutable -> void {
+                  operations::unlock_response resp;
+                  resp.ctx = make_key_value_error_context(
+                    ec, request.id, result.internal.retry_attempts, result.internal.retry_reasons);
+                  handler(std::move(resp));
+                });
+}
+
+auto
+bucket::direct_execute(operations::increment_request request,
+                       utils::movable_function<void(operations::increment_response)>&& handler)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  counter_options options;
+  options.timeout = request.timeout.value_or(default_timeout());
+  options.parent_span = request.parent_span;
+  options.delta = request.delta;
+  options.initial_value = request.initial_value.value_or(0);
+  options.expiry = request.expiry;
+  options.durability_level = request.durability_level;
+
+  auto scope = request.id.scope();
+  auto collection = request.id.collection();
+  auto key = utils::to_binary(request.id.key());
+
+  return increment(std::move(scope),
+                   std::move(collection),
+                   std::move(key),
+                   options,
+                   [request = std::move(request), handler = std::move(handler)](
+                     const counter_result& result, std::error_code ec) mutable -> void {
+                     operations::increment_response resp;
+                     resp.ctx = make_key_value_error_context(ec,
+                                                             request.id,
+                                                             result.internal.retry_attempts,
+                                                             result.internal.retry_reasons);
+                     resp.cas = result.cas;
+                     resp.token = result.token;
+                     resp.content = result.value;
+                     handler(std::move(resp));
+                   });
+}
+
+auto
+bucket::direct_execute(operations::decrement_request request,
+                       utils::movable_function<void(operations::decrement_response)>&& handler)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  counter_options options;
+  options.timeout = request.timeout.value_or(default_timeout());
+  options.parent_span = request.parent_span;
+  options.delta = request.delta;
+  options.initial_value = request.initial_value.value_or(0);
+  options.expiry = request.expiry;
+  options.durability_level = request.durability_level;
+
+  auto scope = request.id.scope();
+  auto collection = request.id.collection();
+  auto key = utils::to_binary(request.id.key());
+
+  return decrement(std::move(scope),
+                   std::move(collection),
+                   std::move(key),
+                   options,
+                   [request = std::move(request), handler = std::move(handler)](
+                     const counter_result& result, std::error_code ec) mutable -> void {
+                     operations::decrement_response resp;
+                     resp.ctx = make_key_value_error_context(ec,
+                                                             request.id,
+                                                             result.internal.retry_attempts,
+                                                             result.internal.retry_reasons);
+                     resp.cas = result.cas;
+                     resp.token = result.token;
+                     resp.content = result.value;
+                     handler(std::move(resp));
+                   });
+}
+
+auto
+bucket::direct_execute(operations::append_request request,
+                       utils::movable_function<void(operations::append_response)>&& handler)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  adjoin_options options;
+  options.timeout = request.timeout.value_or(default_timeout());
+  options.parent_span = request.parent_span;
+  options.cas = request.cas;
+  options.durability_level = request.durability_level;
+
+  auto scope = request.id.scope();
+  auto collection = request.id.collection();
+  auto key = utils::to_binary(request.id.key());
+  auto value = request.value;
+
+  return append(std::move(scope),
+                std::move(collection),
+                std::move(key),
+                std::move(value),
+                options,
+                [request = std::move(request), handler = std::move(handler)](
+                  const adjoin_result& result, std::error_code ec) mutable -> void {
+                  operations::append_response resp;
+                  resp.ctx = make_key_value_error_context(
+                    ec, request.id, result.internal.retry_attempts, result.internal.retry_reasons);
+                  resp.cas = result.cas;
+                  resp.token = result.token;
+                  handler(std::move(resp));
+                });
+}
+
+auto
+bucket::direct_execute(operations::prepend_request request,
+                       utils::movable_function<void(operations::prepend_response)>&& handler)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  adjoin_options options;
+  options.timeout = request.timeout.value_or(default_timeout());
+  options.parent_span = request.parent_span;
+  options.cas = request.cas;
+  options.durability_level = request.durability_level;
+
+  auto scope = request.id.scope();
+  auto collection = request.id.collection();
+  auto key = utils::to_binary(request.id.key());
+  auto value = request.value;
+
+  return prepend(std::move(scope),
+                 std::move(collection),
+                 std::move(key),
+                 std::move(value),
+                 options,
+                 [request = std::move(request), handler = std::move(handler)](
+                   const adjoin_result& result, std::error_code ec) mutable -> void {
+                   operations::prepend_response resp;
+                   resp.ctx = make_key_value_error_context(
+                     ec, request.id, result.internal.retry_attempts, result.internal.retry_reasons);
+                   resp.cas = result.cas;
+                   resp.token = result.token;
+                   handler(std::move(resp));
+                 });
+}
+
+auto
+bucket::direct_execute(operations::lookup_in_request request,
+                       utils::movable_function<void(operations::lookup_in_response)>&& handler)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  lookup_in_options options;
+  options.timeout = request.timeout.value_or(default_timeout());
+  options.parent_span = request.parent_span;
+  if (request.access_deleted) {
+    options.flags |= protocol::lookup_in_request_body::doc_flag_access_deleted;
+  }
+
+  for (std::size_t i = 0; i < request.specs.size(); ++i) {
+    request.specs[i].original_index_ = i;
+  }
+  // XATTR operations must precede non-XATTR operations (server requirement)
+  std::stable_sort(
+    request.specs.begin(), request.specs.end(), [](const auto& lhs, const auto& rhs) -> bool {
+      return impl::subdoc::has_xattr_path_flag(lhs.flags_) &&
+             !impl::subdoc::has_xattr_path_flag(rhs.flags_);
+    });
+  for (const auto& spec : request.specs) {
+    options.operations.push_back({
+      static_cast<protocol::subdoc_opcode>(spec.opcode_),
+      static_cast<std::uint8_t>(spec.flags_),
+      spec.path_,
+      spec.value_,
+    });
+  }
+
+  auto scope = request.id.scope();
+  auto collection = request.id.collection();
+  auto key = utils::to_binary(request.id.key());
+
+  return lookup_in(
+    std::move(scope),
+    std::move(collection),
+    std::move(key),
+    options,
+    [request = std::move(request), handler = std::move(handler)](
+      const lookup_in_result& result, std::error_code ec) mutable -> void {
+      std::optional<std::size_t> first_error_index{};
+      std::optional<std::string> first_error_path{};
+
+      operations::lookup_in_response resp;
+      if (!ec) {
+        resp.fields.resize(request.specs.size());
+        for (std::size_t i = 0; i < request.specs.size(); ++i) {
+          const auto& spec = request.specs[i];
+          auto& entry = resp.fields[i];
+          entry.path = spec.path_;
+          entry.original_index = spec.original_index_;
+          entry.opcode = static_cast<protocol::subdoc_opcode>(spec.opcode_);
+          entry.status = key_value_status_code::success;
+        }
+
+        for (const auto& res : result.results) {
+          CB_LOG_DEBUG("lookup_in result: index={}, status={}, error={}, value_len={}",
+                       res.index,
+                       static_cast<std::uint16_t>(res.status),
+                       res.error.message(),
+                       res.value.size());
+          if (res.index < resp.fields.size()) {
+            auto& entry = resp.fields[res.index];
+            entry.status = res.status;
+            entry.ec = res.error;
+            entry.exists = (res.error == std::error_code{});
+            CB_LOG_DEBUG("lookup_in entry: path={}, exists={}, ec={}, status={}",
+                         entry.path,
+                         entry.exists,
+                         entry.ec.message(),
+                         static_cast<std::uint16_t>(entry.status));
+            if (entry.opcode == protocol::subdoc_opcode::exists &&
+                res.status == key_value_status_code::subdoc_path_not_found) {
+              entry.ec = {};
+            }
+            if (entry.opcode == protocol::subdoc_opcode::exists && !entry.ec) {
+              entry.value = utils::to_binary(entry.exists ? "true" : "false");
+            } else {
+              entry.value = res.value;
+            }
+
+            if (res.error && !first_error_index) {
+              first_error_index = res.index;
+              first_error_path = entry.path;
+            }
+          }
+        }
+      }
+
+      resp.ctx = make_subdocument_error_context(
+        make_key_value_error_context(
+          ec, request.id, result.internal.retry_attempts, result.internal.retry_reasons),
+        ec,
+        std::move(first_error_path),
+        first_error_index,
+        result.internal.is_deleted);
+      resp.cas = result.cas;
+      resp.deleted = result.internal.is_deleted;
+      handler(std::move(resp));
+    });
+}
+
+auto
+bucket::direct_execute(operations::mutate_in_request request,
+                       utils::movable_function<void(operations::mutate_in_response)>&& handler)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  if (request.store_semantics == couchbase::store_semantics::upsert && !request.cas.empty()) {
+    handler(operations::mutate_in_response{
+      make_subdocument_error_context(
+        make_key_value_error_context(errc::common::invalid_argument, request.id),
+        errc::common::invalid_argument,
+        {},
+        {},
+        false),
+    });
+    return tl::unexpected(errc::common::invalid_argument);
+  }
+  mutate_in_options options;
+  options.timeout = request.timeout.value_or(default_timeout());
+  options.parent_span = request.parent_span;
+  options.cas = request.cas;
+  options.expiry = request.expiry.value_or(0);
+  options.durability_level = request.durability_level;
+  if (request.access_deleted) {
+    options.flags |= protocol::mutate_in_request_body::doc_flag_access_deleted;
+  }
+  if (request.create_as_deleted) {
+    options.flags |= protocol::mutate_in_request_body::doc_flag_create_as_deleted;
+  }
+  if (request.revive_document) {
+    options.flags |= protocol::mutate_in_request_body::doc_flag_revive_document;
+  }
+  switch (request.store_semantics) {
+    case couchbase::store_semantics::replace:
+      break;
+    case couchbase::store_semantics::upsert:
+      options.flags |= protocol::mutate_in_request_body::doc_flag_mkdoc;
+      break;
+    case couchbase::store_semantics::insert:
+      options.flags |= protocol::mutate_in_request_body::doc_flag_add;
+      break;
+    case store_semantics::revive:
+      options.flags |= protocol::mutate_in_request_body::doc_flag_revive_document;
+      break;
+  }
+
+  for (std::size_t i = 0; i < request.specs.size(); ++i) {
+    request.specs[i].original_index_ = i;
+  }
+  // XATTR operations must precede non-XATTR operations (server requirement)
+  std::stable_sort(
+    request.specs.begin(), request.specs.end(), [](const auto& lhs, const auto& rhs) -> bool {
+      return impl::subdoc::has_xattr_path_flag(lhs.flags_) &&
+             !impl::subdoc::has_xattr_path_flag(rhs.flags_);
+    });
+  for (const auto& spec : request.specs) {
+    options.operations.push_back({
+      static_cast<protocol::subdoc_opcode>(spec.opcode_),
+      static_cast<std::uint8_t>(spec.flags_),
+      spec.path_,
+      spec.value_,
+    });
+  }
+
+  auto scope = request.id.scope();
+  auto collection = request.id.collection();
+  auto key = utils::to_binary(request.id.key());
+
+  return mutate_in(
+    std::move(scope),
+    std::move(collection),
+    std::move(key),
+    options,
+    [request = std::move(request), handler = std::move(handler)](
+      const mutate_in_result& result, std::error_code ec) mutable -> void {
+      std::optional<std::size_t> first_error_index{};
+      std::optional<std::string> first_error_path{};
+
+      operations::mutate_in_response resp;
+      if (!ec) {
+        resp.fields.resize(request.specs.size());
+        for (std::size_t i = 0; i < request.specs.size(); ++i) {
+          const auto& req_entry = request.specs[i];
+          auto& entry = resp.fields[i];
+          entry.path = req_entry.path_;
+          entry.original_index = req_entry.original_index_;
+          entry.opcode = static_cast<protocol::subdoc_opcode>(req_entry.opcode_);
+          entry.status = key_value_status_code::success;
+        }
+
+        for (const auto& res : result.results) {
+          if (res.index < resp.fields.size()) {
+            auto& entry = resp.fields[res.index];
+            entry.status = res.status;
+            entry.ec = res.error;
+            entry.value = res.value;
+
+            if (res.error && !first_error_index) {
+              ec = res.error;
+              first_error_index = res.index;
+              first_error_path = entry.path;
+            }
+          }
+        }
+      } else if (request.store_semantics == couchbase::store_semantics::insert &&
+                 (ec == errc::common::cas_mismatch ||
+                  ec == couchbase::errc::key_value::document_exists ||
+                  ec == couchbase::errc::key_value::document_not_found)) {
+        ec = errc::key_value::document_exists;
+      }
+
+      resp.ctx = make_subdocument_error_context(
+        make_key_value_error_context(
+          ec, request.id, result.internal.retry_attempts, result.internal.retry_reasons),
+        ec,
+        std::move(first_error_path),
+        first_error_index,
+        false);
+      resp.cas = result.cas;
+      resp.token = result.token;
+      handler(std::move(resp));
+    });
+}
+auto
+bucket::direct_execute(with_cancellation<operations::get_request> request,
+                       utils::movable_function<void(operations::get_response)>&& handler)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  get_options options;
+  options.timeout = request.timeout.value_or(default_timeout());
+  options.parent_span = request.parent_span;
+
+  auto scope = request.id.scope();
+  auto collection = request.id.collection();
+  auto key = utils::to_binary(request.id.key());
+  auto cancel_token = request.cancel_token;
+
+  auto res = get(std::move(scope),
+                 std::move(collection),
+                 std::move(key),
+                 options,
+                 [request = std::move(request), handler = std::move(handler)](
+                   get_result result, std::error_code ec) mutable -> void {
+                   operations::get_response resp;
+                   resp.ctx = make_key_value_error_context(
+                     ec, request.id, result.internal.retry_attempts, result.internal.retry_reasons);
+                   resp.value = std::move(result.value);
+                   resp.cas = result.cas;
+                   resp.flags = result.flags;
+                   handler(std::move(resp));
+                 });
+
+  if (res) {
+    cancel_token->setup([op = res.value()]() -> void {
+      op->cancel();
+    });
+  }
+  return res;
+}
+
+auto
+bucket::direct_execute(impl::with_cancellation<operations::lookup_in_request> request,
+                       utils::movable_function<void(operations::lookup_in_response)>&& handler)
+  -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+{
+  lookup_in_options options;
+  options.timeout = request.timeout.value_or(default_timeout());
+  options.parent_span = request.parent_span;
+  if (request.access_deleted) {
+    options.flags |= 0x04; // doc_flag_access_deleted
+  }
+
+  for (std::size_t i = 0; i < request.specs.size(); ++i) {
+    request.specs[i].original_index_ = i;
+  }
+  for (const auto& spec : request.specs) {
+    options.operations.push_back({
+      static_cast<protocol::subdoc_opcode>(spec.opcode_),
+      static_cast<std::uint8_t>(spec.flags_),
+      spec.path_,
+      spec.value_,
+    });
+  }
+
+  auto scope = request.id.scope();
+  auto collection = request.id.collection();
+  auto key = utils::to_binary(request.id.key());
+  auto cancel_token = request.cancel_token;
+
+  auto res =
+    lookup_in(std::move(scope),
+              std::move(collection),
+              std::move(key),
+              options,
+              [request = std::move(request), handler = std::move(handler)](
+                const lookup_in_result& result, std::error_code ec) mutable -> void {
+                std::optional<std::size_t> first_error_index{};
+                std::optional<std::string> first_error_path{};
+
+                operations::lookup_in_response resp;
+                if (!ec) {
+                  resp.fields.resize(request.specs.size());
+                  for (std::size_t i = 0; i < request.specs.size(); ++i) {
+                    const auto& req_entry = request.specs[i];
+                    auto& entry = resp.fields[i];
+                    entry.path = req_entry.path_;
+                    entry.original_index = req_entry.original_index_;
+                    entry.opcode = static_cast<protocol::subdoc_opcode>(req_entry.opcode_);
+                    entry.status = key_value_status_code::success;
+                  }
+
+                  for (const auto& res : result.results) {
+                    CB_LOG_TRACE("lookup_in result: index={}, status={}, error={}, value_len={}",
+                                 res.index,
+                                 static_cast<std::uint16_t>(res.status),
+                                 res.error.message(),
+                                 res.value.size());
+                    if (res.index < resp.fields.size()) {
+                      auto& entry = resp.fields[res.index];
+                      entry.status = res.status;
+                      entry.ec = res.error;
+                      entry.exists = (res.error == std::error_code{});
+                      CB_LOG_TRACE("lookup_in entry: path={}, exists={}, ec={}, status={}",
+                                   entry.path,
+                                   entry.exists,
+                                   entry.ec.message(),
+                                   static_cast<std::uint16_t>(entry.status));
+                      if (entry.opcode == protocol::subdoc_opcode::exists &&
+                          res.status == key_value_status_code::subdoc_path_not_found) {
+                        entry.ec = {};
+                      }
+                      if (entry.opcode == protocol::subdoc_opcode::exists && !entry.ec) {
+                        entry.value = utils::to_binary(entry.exists ? "true" : "false");
+                      } else {
+                        entry.value = res.value;
+                      }
+
+                      if (res.error && !first_error_index) {
+                        first_error_index = res.index;
+                        first_error_path = entry.path;
+                      }
+                    }
+                  }
+                }
+
+                resp.ctx = make_subdocument_error_context(
+                  make_key_value_error_context(
+                    ec, request.id, result.internal.retry_attempts, result.internal.retry_reasons),
+                  ec,
+                  std::move(first_error_path),
+                  first_error_index,
+                  result.internal.is_deleted);
+                resp.cas = result.cas;
+                resp.deleted = result.internal.is_deleted;
+                handler(std::move(resp));
+              });
+
+  if (res) {
+    cancel_token->setup([op = res.value()]() -> void {
+      op->cancel();
+    });
+  }
+  return res;
 }
 } // namespace couchbase::core

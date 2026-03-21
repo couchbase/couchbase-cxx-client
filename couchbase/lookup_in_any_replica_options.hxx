@@ -45,7 +45,7 @@ struct lookup_in_any_replica_options : common_options<lookup_in_any_replica_opti
    * @internal
    */
   struct built : public common_options<lookup_in_any_replica_options>::built {
-    couchbase::read_preference read_preference;
+    couchbase::read_preference read_preference{};
   };
 
   /**

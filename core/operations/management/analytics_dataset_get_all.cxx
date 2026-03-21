@@ -29,8 +29,10 @@ analytics_dataset_get_all_request::encode_to(encoded_request_type& encoded,
                                              http_context& /* context */) const -> std::error_code
 {
   const tao::json::value body{
-    { "statement",
-      R"(SELECT d.* FROM Metadata.`Dataset` d WHERE d.DataverseName <> "Metadata" AND d.DatasetType = "INTERNAL")" },
+    {
+      "statement",
+      R"(SELECT d.* FROM Metadata.`Dataset` d WHERE d.DataverseName <> "Metadata" AND d.DatasetType = "INTERNAL")",
+    },
   };
   encoded.headers["content-type"] = "application/json";
   encoded.method = "POST";

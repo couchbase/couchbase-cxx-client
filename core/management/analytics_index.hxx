@@ -25,6 +25,6 @@ struct index {
   std::string name;
   std::string dataverse_name;
   std::string dataset_name;
-  bool is_primary;
+  bool is_primary{};
 };
 } // namespace couchbase::core::management::analytics

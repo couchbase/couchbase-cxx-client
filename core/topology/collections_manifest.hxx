@@ -38,7 +38,7 @@ struct collections_manifest {
     std::vector<collection> collections;
   };
 
-  uuid::uuid_t id;
+  uuid::uuid_t id{};
   std::uint64_t uid{};
   std::vector<scope> scopes;
 };

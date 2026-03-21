@@ -30,13 +30,13 @@ enum class bucket_type {
   unknown,
   couchbase,
   memcached,
-  ephemeral
+  ephemeral,
 };
 enum class bucket_compression {
   unknown,
   off,
   active,
-  passive
+  passive,
 };
 enum class bucket_eviction_policy {
   unknown,
@@ -107,7 +107,7 @@ enum class bucket_conflict_resolution {
 enum class bucket_storage_backend {
   unknown,
   couchstore,
-  magma
+  magma,
 };
 
 struct bucket_settings {
@@ -122,7 +122,7 @@ struct bucket_settings {
   std::string name;
   std::string uuid;
   std::uint64_t ram_quota_mb{
-    0
+    0,
   }; // If not explicitly set, defaults to 100 on create_bucket, unset on update_bucket
   cluster::bucket_type bucket_type{ cluster::bucket_type::unknown };
   std::optional<std::uint32_t> max_expiry{};

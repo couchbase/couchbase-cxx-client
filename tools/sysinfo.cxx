@@ -57,7 +57,6 @@ human_readable_bytes(std::uint64_t bytes) -> auto
     exact_size = fmt::format(" ({}B)", bytes);
   }
 
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index)
   return fmt::format("{:.2f}{}{}", value, units[unit_index], exact_size);
 }
 

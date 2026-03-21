@@ -186,7 +186,7 @@ public:
    */
   auto query(const std::string& statement) -> core::operations::query_response
   {
-    couchbase::transactions::transaction_query_options opts;
+    const couchbase::transactions::transaction_query_options opts;
     return query(statement, opts);
   }
 

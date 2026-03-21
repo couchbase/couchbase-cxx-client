@@ -195,15 +195,17 @@ http_session::remote_endpoint() -> const asio::ip::tcp::endpoint&
 auto
 http_session::diag_info() -> diag::endpoint_diag_info
 {
-  return { type_,
-           id_,
-           last_active_.time_since_epoch().count() == 0
-             ? std::nullopt
-             : std::make_optional(std::chrono::duration_cast<std::chrono::microseconds>(
-                 std::chrono::steady_clock::now() - last_active_)),
-           remote_address(),
-           local_address(),
-           state_ };
+  return {
+    type_,
+    id_,
+    last_active_.time_since_epoch().count() == 0
+      ? std::nullopt
+      : std::make_optional(std::chrono::duration_cast<std::chrono::microseconds>(
+          std::chrono::steady_clock::now() - last_active_)),
+    remote_address(),
+    local_address(),
+    state_,
+  };
 }
 
 auto

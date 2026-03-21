@@ -55,8 +55,16 @@ query_index_build_request::encode_to(encoded_request_type& encoded,
   std::string statement =
     fmt::format(R"(BUILD INDEX ON {} ({}))", keyspace, quote_and_join_strings(index_names, ","));
   encoded.headers["content-type"] = "application/json";
-  tao::json::value body{ { "statement", statement },
-                         { "client_context_id", encoded.client_context_id } };
+  tao::json::value body{
+    {
+      "statement",
+      statement,
+    },
+    {
+      "client_context_id",
+      encoded.client_context_id,
+    },
+  };
   if (query_ctx.has_value()) {
     body["query_context"] = query_ctx.value();
   }

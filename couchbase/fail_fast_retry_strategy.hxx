@@ -27,7 +27,7 @@ class fail_fast_retry_strategy : public retry_strategy
 {
 public:
   auto retry_after(const retry_request& request, retry_reason reason) -> retry_action override;
-  [[nodiscard]] virtual auto to_string() const -> std::string override;
+  [[nodiscard]] auto to_string() const -> std::string override;
 
   ~fail_fast_retry_strategy() override = default;
 };

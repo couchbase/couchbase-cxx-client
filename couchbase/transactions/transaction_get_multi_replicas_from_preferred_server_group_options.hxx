@@ -40,7 +40,7 @@ private:
   friend class core::transactions::attempt_context_impl;
 
   transaction_get_multi_replicas_from_preferred_server_group_mode mode_{
-    transaction_get_multi_replicas_from_preferred_server_group_mode::prioritise_latency
+    transaction_get_multi_replicas_from_preferred_server_group_mode::prioritise_latency,
   };
 };
 

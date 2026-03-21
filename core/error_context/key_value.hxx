@@ -32,6 +32,12 @@ namespace couchbase::core
 auto
 make_key_value_error_context(std::error_code ec, const document_id& id) -> key_value_error_context;
 
+auto
+make_key_value_error_context(std::error_code ec,
+                             const document_id& id,
+                             std::size_t retry_attempts,
+                             std::set<retry_reason> retry_reasons) -> key_value_error_context;
+
 template<typename Command, typename Response>
 auto
 make_key_value_error_context(std::error_code ec,
@@ -57,21 +63,23 @@ make_key_value_error_context(std::error_code ec,
   auto retry_attempts = command->request.retries.retry_attempts();
   auto retry_reasons = command->request.retries.retry_reasons();
 
-  return { command->id_,
-           ec,
-           command->last_dispatched_to_,
-           command->last_dispatched_from_,
-           retry_attempts,
-           std::move(retry_reasons),
-           key,
-           bucket,
-           scope,
-           collection,
-           opaque,
-           status,
-           response.cas(),
-           std::move(error_map_info),
-           response.error_info() };
+  return {
+    command->id_,
+    ec,
+    command->last_dispatched_to_,
+    command->last_dispatched_from_,
+    retry_attempts,
+    std::move(retry_reasons),
+    key,
+    bucket,
+    scope,
+    collection,
+    opaque,
+    status,
+    response.cas(),
+    std::move(error_map_info),
+    response.error_info(),
+  };
 }
 
 auto

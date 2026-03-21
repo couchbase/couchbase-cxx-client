@@ -93,9 +93,18 @@ struct traits<couchbase::core::io::dns::dns_config> {
                      const couchbase::core::io::dns::dns_config& o)
   {
     v = {
-      { "port", o.port() },
-      { "nameserver", o.nameserver() },
-      { "timeout", o.timeout() },
+      {
+        "port",
+        o.port(),
+      },
+      {
+        "nameserver",
+        o.nameserver(),
+      },
+      {
+        "timeout",
+        o.timeout(),
+      },
     };
   }
 };
@@ -107,8 +116,14 @@ struct traits<couchbase::core::orphan_reporter_options> {
                      const couchbase::core::orphan_reporter_options& o)
   {
     v = {
-      { "emit_interval", o.emit_interval },
-      { "sample_size", o.sample_size },
+      {
+        "emit_interval",
+        o.emit_interval,
+      },
+      {
+        "sample_size",
+        o.sample_size,
+      },
     };
   }
 };
@@ -120,14 +135,38 @@ struct traits<couchbase::core::tracing::threshold_logging_options> {
                      const couchbase::core::tracing::threshold_logging_options& o)
   {
     v = {
-      { "threshold_emit_interval", o.threshold_emit_interval },
-      { "threshold_sample_size", o.threshold_sample_size },
-      { "key_value_threshold", o.key_value_threshold },
-      { "query_threshold", o.query_threshold },
-      { "view_threshold", o.view_threshold },
-      { "search_threshold", o.search_threshold },
-      { "analytics_threshold", o.analytics_threshold },
-      { "management_threshold", o.management_threshold },
+      {
+        "threshold_emit_interval",
+        o.threshold_emit_interval,
+      },
+      {
+        "threshold_sample_size",
+        o.threshold_sample_size,
+      },
+      {
+        "key_value_threshold",
+        o.key_value_threshold,
+      },
+      {
+        "query_threshold",
+        o.query_threshold,
+      },
+      {
+        "view_threshold",
+        o.view_threshold,
+      },
+      {
+        "search_threshold",
+        o.search_threshold,
+      },
+      {
+        "analytics_threshold",
+        o.analytics_threshold,
+      },
+      {
+        "management_threshold",
+        o.management_threshold,
+      },
     };
   }
 };
@@ -139,7 +178,10 @@ struct traits<couchbase::core::metrics::logging_meter_options> {
                      const couchbase::core::metrics::logging_meter_options& o)
   {
     v = {
-      { "emit_interval", o.emit_interval },
+      {
+        "emit_interval",
+        o.emit_interval,
+      },
     };
   }
 };
@@ -189,36 +231,75 @@ struct traits<couchbase::transactions::transactions_config::built> {
                      const couchbase::transactions::transactions_config::built& o)
   {
     v = {
-      { "timeout", o.timeout },
-      { "durability_level", o.level },
+      {
+        "timeout",
+        o.timeout,
+      },
+      {
+        "durability_level",
+        o.level,
+      },
       {
         "query_config",
         {
-          { "scan_consistency", o.query_config.scan_consistency },
+          {
+            "scan_consistency",
+            o.query_config.scan_consistency,
+          },
         },
       },
       {
         "cleanup_config",
         {
-          { "cleanup_lost_attempts", o.cleanup_config.cleanup_lost_attempts },
-          { "cleanup_client_attempts", o.cleanup_config.cleanup_client_attempts },
-          { "cleanup_window", o.cleanup_config.cleanup_window },
-          { "collections", tao::json::empty_array },
+          {
+            "cleanup_lost_attempts",
+            o.cleanup_config.cleanup_lost_attempts,
+          },
+          {
+            "cleanup_client_attempts",
+            o.cleanup_config.cleanup_client_attempts,
+          },
+          {
+            "cleanup_window",
+            o.cleanup_config.cleanup_window,
+          },
+          {
+            "collections",
+            tao::json::empty_array,
+          },
         },
       },
     };
     if (const auto& p = o.metadata_collection; p.has_value()) {
       v["metadata_collection"] = {
-        { "bucket", p.value().bucket },
-        { "scope", p.value().scope },
-        { "collection", p.value().collection },
+        {
+          "bucket",
+          p.value().bucket,
+        },
+        {
+          "scope",
+          p.value().scope,
+        },
+        {
+          "collection",
+          p.value().collection,
+        },
       };
     }
     for (const auto& c : o.cleanup_config.collections) {
       v["cleanup_config"]["collections"].emplace_back(tao::json::value{
-        { "bucket", c.bucket },
-        { "scope", c.scope },
-        { "collection", c.collection },
+        {
+          "bucket",
+          c.bucket,
+        },
+        {
+          "scope",
+          c.scope,
+        },
+        {
+          "collection",
+          c.collection,
+        },
       });
     }
   }
@@ -231,11 +312,26 @@ struct traits<couchbase::core::columnar::security_options> {
                      const couchbase::core::columnar::security_options& o)
   {
     v = {
-      { "trust_only_capella", o.trust_only_capella },
-      { "trust_only_pem_file", o.trust_only_pem_file },
-      { "trust_only_pem_string", o.trust_only_pem_string },
-      { "trust_only_platform", o.trust_only_platform },
-      { "trust_only_certificates", o.trust_only_certificates.size() },
+      {
+        "trust_only_capella",
+        o.trust_only_capella,
+      },
+      {
+        "trust_only_pem_file",
+        o.trust_only_pem_file,
+      },
+      {
+        "trust_only_pem_string",
+        o.trust_only_pem_string,
+      },
+      {
+        "trust_only_platform",
+        o.trust_only_platform,
+      },
+      {
+        "trust_only_certificates",
+        o.trust_only_certificates.size(),
+      },
       // TODO(JC): add if/when we support the cipher_suites option
       // { "cipher_suites", utils::join_strings(o.cipher_suites, ":") },
     };
@@ -253,50 +349,176 @@ origin::to_json() const -> std::string
     {
       "options",
       {
-        { "bootstrap_timeout", options_.bootstrap_timeout },
-        { "resolve_timeout", options_.resolve_timeout },
-        { "connect_timeout", options_.connect_timeout },
-        { "query_timeout", options_.query_timeout },
-        { "management_timeout", options_.management_timeout },
-        { "trust_certificate", options_.trust_certificate },
-        { "use_ip_protocol", options_.use_ip_protocol },
-        { "enable_dns_srv", options_.enable_dns_srv },
-        { "dns_config", options_.dns_config },
-        { "enable_clustermap_notification", options_.enable_clustermap_notification },
-        { "config_poll_interval", options_.config_poll_interval },
-        { "config_poll_floor", options_.config_poll_floor },
-        { "user_agent_extra", options_.user_agent_extra },
-        { "dump_configuration", options_.dump_configuration },
-        { "disable_mozilla_ca_certificates", options_.disable_mozilla_ca_certificates },
-        { "network", options_.network },
-        { "tls_verify", options_.tls_verify },
+        {
+          "bootstrap_timeout",
+          options_.bootstrap_timeout,
+        },
+        {
+          "resolve_timeout",
+          options_.resolve_timeout,
+        },
+        {
+          "connect_timeout",
+          options_.connect_timeout,
+        },
+        {
+          "query_timeout",
+          options_.query_timeout,
+        },
+        {
+          "management_timeout",
+          options_.management_timeout,
+        },
+        {
+          "trust_certificate",
+          options_.trust_certificate,
+        },
+        {
+          "use_ip_protocol",
+          options_.use_ip_protocol,
+        },
+        {
+          "enable_dns_srv",
+          options_.enable_dns_srv,
+        },
+        {
+          "dns_config",
+          options_.dns_config,
+        },
+        {
+          "enable_clustermap_notification",
+          options_.enable_clustermap_notification,
+        },
+        {
+          "config_poll_interval",
+          options_.config_poll_interval,
+        },
+        {
+          "config_poll_floor",
+          options_.config_poll_floor,
+        },
+        {
+          "user_agent_extra",
+          options_.user_agent_extra,
+        },
+        {
+          "dump_configuration",
+          options_.dump_configuration,
+        },
+        {
+          "disable_mozilla_ca_certificates",
+          options_.disable_mozilla_ca_certificates,
+        },
+        {
+          "network",
+          options_.network,
+        },
+        {
+          "tls_verify",
+          options_.tls_verify,
+        },
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-        { "dispatch_timeout", options_.dispatch_timeout },
-        { "security_options", options_.security_options },
+        {
+          "dispatch_timeout",
+          options_.dispatch_timeout,
+        },
+        {
+          "security_options",
+          options_.security_options,
+        },
 #else
-        { "key_value_timeout", options_.key_value_timeout },
-        { "key_value_durable_timeout", options_.key_value_durable_timeout },
-        { "view_timeout", options_.view_timeout },
-        { "analytics_timeout", options_.analytics_timeout },
-        { "search_timeout", options_.search_timeout },
-        { "enable_tls", options_.enable_tls },
-        { "enable_mutation_tokens", options_.enable_mutation_tokens },
-        { "enable_tcp_keep_alive", options_.enable_tcp_keep_alive },
-        { "show_queries", options_.show_queries },
-        { "enable_unordered_execution", options_.enable_unordered_execution },
-        { "enable_compression", options_.enable_compression },
-        { "enable_tracing", options_.enable_tracing },
-        { "enable_metrics", options_.enable_metrics },
-        { "enable_orphan_reporting", options_.enable_orphan_reporting },
-        { "tcp_keep_alive_interval", options_.tcp_keep_alive_interval },
-        { "config_idle_redial_timeout", options_.config_idle_redial_timeout },
-        { "max_http_connections", options_.max_http_connections },
-        { "idle_http_connection_timeout", options_.idle_http_connection_timeout },
-        { "metrics_options", options_.metrics_options },
-        { "tracing_options", options_.tracing_options },
-        { "orphan_reporter_options", options_.orphan_options },
-        { "transactions_options", options_.transactions },
-        { "server_group", options_.server_group },
+        {
+          "key_value_timeout",
+          options_.key_value_timeout,
+        },
+        {
+          "key_value_durable_timeout",
+          options_.key_value_durable_timeout,
+        },
+        {
+          "view_timeout",
+          options_.view_timeout,
+        },
+        {
+          "analytics_timeout",
+          options_.analytics_timeout,
+        },
+        {
+          "search_timeout",
+          options_.search_timeout,
+        },
+        {
+          "enable_tls",
+          options_.enable_tls,
+        },
+        {
+          "enable_mutation_tokens",
+          options_.enable_mutation_tokens,
+        },
+        {
+          "enable_tcp_keep_alive",
+          options_.enable_tcp_keep_alive,
+        },
+        {
+          "show_queries",
+          options_.show_queries,
+        },
+        {
+          "enable_unordered_execution",
+          options_.enable_unordered_execution,
+        },
+        {
+          "enable_compression",
+          options_.enable_compression,
+        },
+        {
+          "enable_tracing",
+          options_.enable_tracing,
+        },
+        {
+          "enable_metrics",
+          options_.enable_metrics,
+        },
+        {
+          "enable_orphan_reporting",
+          options_.enable_orphan_reporting,
+        },
+        {
+          "tcp_keep_alive_interval",
+          options_.tcp_keep_alive_interval,
+        },
+        {
+          "config_idle_redial_timeout",
+          options_.config_idle_redial_timeout,
+        },
+        {
+          "max_http_connections",
+          options_.max_http_connections,
+        },
+        {
+          "idle_http_connection_timeout",
+          options_.idle_http_connection_timeout,
+        },
+        {
+          "metrics_options",
+          options_.metrics_options,
+        },
+        {
+          "tracing_options",
+          options_.tracing_options,
+        },
+        {
+          "orphan_reporter_options",
+          options_.orphan_options,
+        },
+        {
+          "transactions_options",
+          options_.transactions,
+        },
+        {
+          "server_group",
+          options_.server_group,
+        },
 #endif
       },
     },
@@ -305,8 +527,14 @@ origin::to_json() const -> std::string
     tao::json::value nodes = tao::json::empty_array;
     for (const auto& [hostname, port] : nodes_) {
       nodes.emplace_back(tao::json::value{
-        { "hostname", hostname },
-        { "port", port },
+        {
+          "hostname",
+          hostname,
+        },
+        {
+          "port",
+          port,
+        },
       });
     }
     json["bootstrap_nodes"] = nodes;

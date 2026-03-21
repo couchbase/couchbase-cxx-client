@@ -151,6 +151,7 @@ private:
   std::uint32_t id_;
   mutable std::recursive_mutex mutex_{};
   std::unique_ptr<mcbp::operation_queue> queue_{ std::make_unique<mcbp::operation_queue>() };
+  std::shared_ptr<pending_operation> pending_refresh_{};
 };
 
 class collections_component_impl : public std::enable_shared_from_this<collections_component_impl>
@@ -213,6 +214,9 @@ public:
      * This also prevents the GetCollectionID requests from being automatically retried.
      */
     if (request->scope_name_.empty() || request->collection_name_.empty()) {
+      CB_LOG_DEBUG("HANDLE_COLLECTION_UNKNOWN: empty scope or collection: '{}'.'{}'",
+                   request->scope_name_,
+                   request->collection_name_);
       return false;
     }
 
@@ -222,7 +226,7 @@ public:
     if (retried) {
       auto timer = std::make_shared<asio::steady_timer>(io_);
       timer->expires_after(action.duration());
-      timer->async_wait([self = shared_from_this(), request](auto error) {
+      timer->async_wait([self = shared_from_this(), request](auto error) -> auto {
         if (error == asio::error::operation_aborted) {
           return;
         }
@@ -254,7 +258,7 @@ public:
     auto handler = [self = shared_from_this(),
                     cb = std::move(callback)](const std::shared_ptr<mcbp::queue_response>& response,
                                               const std::shared_ptr<mcbp::queue_request>& request,
-                                              std::error_code error) {
+                                              std::error_code error) -> void {
       if (error) {
         return cb(get_collection_id_result{}, error);
       }
@@ -285,7 +289,7 @@ public:
     if (options.timeout != std::chrono::milliseconds::zero()) {
       auto timer = std::make_shared<asio::steady_timer>(io_);
       timer->expires_after(options.timeout);
-      timer->async_wait([req](auto error) {
+      timer->async_wait([req](auto error) -> auto {
         if (error == asio::error::operation_aborted) {
           return;
         }
@@ -317,6 +321,11 @@ public:
             request->scope_name_ == scope::default_name) // default collection
     ) {
       if (auto ec = dispatcher_.direct_dispatch(request); ec) {
+        // TODO(SA): Temporary shim for the old cluster.execute() model. Once direct_execute()
+        // callers no longer inspect the error return for handler purposes (i.e. all callers
+        // propagate the pending_operation and let queue_request own the lifecycle), remove this
+        // try_callback call and just return tl::unexpected(ec) directly.
+        request->try_callback({}, ec);
         return tl::unexpected(ec);
       }
       return request;
@@ -325,6 +334,9 @@ public:
     auto cache_entry =
       get_and_maybe_insert(request->scope_name_, request->collection_name_, unknown_collection_id);
     if (auto ec = cache_entry->dispatch(request); ec) {
+      // TODO(SA): Same as above — temporary shim for old cluster.execute() model.
+      // Remove try_callback once direct_execute() callers propagate the pending_operation.
+      request->try_callback({}, ec);
       return tl::unexpected(ec);
     }
     return request;
@@ -387,6 +399,7 @@ auto
 collection_id_cache_entry_impl::refresh_collection_id(
   const std::shared_ptr<mcbp::queue_request>& req) -> std::error_code
 {
+  // NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks)
   if (auto ec = queue_->push(req, max_queue_size_); ec) {
     return ec;
   }
@@ -396,40 +409,25 @@ collection_id_cache_entry_impl::refresh_collection_id(
     req->scope_name_,
     req->collection_name_,
     get_collection_id_options{},
-    [self = shared_from_this(), req](get_collection_id_result res, std::error_code ec) {
+    [self = weak_from_this(), req](get_collection_id_result res, std::error_code ec) -> void {
+      auto entry = self.lock();
+      if (!entry) {
+        return;
+      }
+      entry->pending_refresh_.reset();
       if (ec) {
         if (ec == errc::common::collection_not_found) {
-          // The collection is unknown, so we need to mark the cid unknown and attempt to retry the
-          // request. Retrying the request will requeue it in the cid manager so either it will pick
-          // up the unknown cid and cause a refresh or another request will and this one will get
-          // queued within the cache. Either the collection will eventually come online or this
-          // request will time out.
-          CB_LOG_DEBUG("collection \"{}.{}\" not found, attempting retry",
-                       req->scope_name_,
-                       req->collection_name_);
-          self->set_id(unknown_collection_id);
-          if (self->queue_->remove(req)) {
-            if (self->manager_.lock()->handle_collection_unknown(req)) {
+          entry->set_id(unknown_collection_id);
+          if (entry->queue_->remove(req)) {
+            if (entry->manager_.lock()->handle_collection_unknown(req)) {
               return;
             }
-          } else {
-            CB_LOG_DEBUG("request no longer existed in op queue, possibly cancelled?, opaque={}, "
-                         "collection_name=\"{}\"",
-                         req->opaque_,
-                         req->collection_name_);
           }
-        } else {
-          CB_LOG_DEBUG("collection id refresh failed: {}, opaque={}, collection_name=\"{}\"",
-                       ec.message(),
-                       req->opaque_,
-                       req->collection_name_);
         }
-        // There was an error getting this collection ID so lets remove the cache from the manager
-        // and try to callback on all the queued requests.
-        self->manager_.lock()->remove(req->scope_name_, req->collection_name_);
-        auto queue = self->swap_queue();
+        entry->manager_.lock()->remove(req->scope_name_, req->collection_name_);
+        auto queue = entry->swap_queue();
         queue->close();
-        return queue->drain([ec](const auto& r) {
+        return queue->drain([ec](const auto& r) -> auto {
           r->try_callback({}, ec);
         });
       }
@@ -440,28 +438,31 @@ collection_id_cache_entry_impl::refresh_collection_id(
                    req->scope_name_,
                    req->collection_name_,
                    res.collection_id);
-      auto queue = self->swap_queue();
+      entry->set_id(res.collection_id);
+      auto queue = entry->swap_queue();
       queue->close();
-      return queue->drain([self](const auto& r) {
-        if (auto ec = self->assign_collection_id(r); ec) {
-          CB_LOG_DEBUG("failed to set collection ID \"{}.{}\" on request (OP={}): {}",
-                       r->scope_name_,
-                       r->collection_name_,
-                       r->command_,
-                       ec.message());
+      queue->drain([entry](const auto& r) -> auto {
+        auto manager = entry->manager_.lock();
+        if (!manager) {
+          r->try_callback({}, errc::common::request_canceled);
           return;
         }
-        self->manager_.lock()->direct_re_queue(r, false);
+        if (auto ec = entry->assign_collection_id(r); ec) {
+          r->try_callback({}, ec);
+          return;
+        }
+        if (auto ec = manager->direct_dispatch(r); ec) {
+          r->try_callback({}, ec);
+        }
       });
     });
-#if defined(__clang__) && defined(__clang_analyzer__)
-  // TODO(CXXCBC-549)
-  [[clang::suppress]]
-#endif
+
   if (op) {
+    pending_refresh_ = op.value();
     return {};
   }
   return op.error();
+  // NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
 }
 
 collections_component::collections_component(asio::io_context& io,
@@ -487,6 +488,13 @@ collections_component::dispatch(std::shared_ptr<mcbp::queue_request> request)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
   return impl_->dispatch(std::move(request));
+}
+
+auto
+collections_component::handle_collection_unknown(
+  const std::shared_ptr<mcbp::queue_request>& request) -> bool
+{
+  return impl_->handle_collection_unknown(request);
 }
 
 collections_component_unit_test_api::collections_component_unit_test_api(

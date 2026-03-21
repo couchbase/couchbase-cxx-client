@@ -66,7 +66,7 @@ public:
     , collections_{ io_,
                     { bucket_name_, config_.shim },
                     { config_.key_value.max_queue_size, config_.default_retry_strategy } }
-    , crud_{ io_, collections_, config_.default_retry_strategy }
+    , crud_{ io_, bucket_name_, collections_, config_.default_retry_strategy }
   {
     CB_LOG_DEBUG("SDK version: {}", meta::sdk_id());
     CB_LOG_DEBUG("creating new agent: {}", config_.to_string());
@@ -77,24 +77,25 @@ public:
     return bucket_name_;
   }
 
-  auto get(const get_options& /* options */, get_callback&& /* callback */)
+  auto get(const get_options& options, get_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
-    return tl::unexpected(errc::common::unsupported_operation);
+    return crud_.get(
+      options.scope_name, options.collection_name, options.key, options, std::move(callback));
   }
 
-  auto get_and_touch(const get_and_touch_options& /* options */,
-                     get_and_touch_callback&& /* callback */)
+  auto get_and_touch(const get_and_touch_options& options, get_and_touch_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
-    return tl::unexpected(errc::common::unsupported_operation);
+    return crud_.get_and_touch(
+      options.scope_name, options.collection_name, options.key, options, std::move(callback));
   }
 
-  auto get_and_lock(const get_and_lock_options& /* options */,
-                    get_and_touch_callback&& /* callback */)
+  auto get_and_lock(const get_and_lock_options& options, get_and_lock_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
-    return tl::unexpected(errc::common::unsupported_operation);
+    return crud_.get_and_lock(
+      options.scope_name, options.collection_name, options.key, options, std::move(callback));
   }
 
   auto get_one_replica(const get_one_replica_options& /* options */,
@@ -104,76 +105,108 @@ public:
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto touch(const touch_options& /* options */, touch_callback&& /* callback */)
+  auto touch(const touch_options& options, touch_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
-    return tl::unexpected(errc::common::unsupported_operation);
+    return crud_.touch(
+      options.scope_name, options.collection_name, options.key, options, std::move(callback));
   }
 
-  auto unlock(const unlock_options& /* options */, unlock_callback&& /* callback */)
+  auto unlock(const unlock_options& options, unlock_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
-    return tl::unexpected(errc::common::unsupported_operation);
+    return crud_.unlock(
+      options.scope_name, options.collection_name, options.key, options, std::move(callback));
   }
 
-  auto remove(const remove_options& /* options */, remove_callback&& /* callback */)
+  auto remove(const remove_options& options, remove_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
-    return tl::unexpected(errc::common::unsupported_operation);
+    return crud_.remove(
+      options.scope_name, options.collection_name, options.key, options, std::move(callback));
   }
 
-  auto insert(const insert_options& /* options */, insert_callback&& /* callback */)
+  auto insert(const insert_options& options, insert_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
-    return tl::unexpected(errc::common::unsupported_operation);
+    return crud_.insert(options.scope_name,
+                        options.collection_name,
+                        options.key,
+                        options.value,
+                        options,
+                        std::move(callback));
   }
 
-  auto upsert(const upsert_options& /* options */, upsert_callback&& /* callback */)
+  auto upsert(const upsert_options& options, upsert_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
-    return tl::unexpected(errc::common::unsupported_operation);
+    return crud_.upsert(options.scope_name,
+                        options.collection_name,
+                        options.key,
+                        options.value,
+                        options,
+                        std::move(callback));
   }
 
-  auto replace(const replace_options& /* options */, replace_callback&& /* callback */)
+  auto replace(const replace_options& options, replace_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
-    return tl::unexpected(errc::common::unsupported_operation);
+    return crud_.replace(options.scope_name,
+                         options.collection_name,
+                         options.key,
+                         options.value,
+                         options,
+                         std::move(callback));
   }
 
-  auto append(const adjoin_options& /* options */, adjoin_callback&& /* callback */)
+  auto append(const adjoin_options& options, adjoin_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
-    return tl::unexpected(errc::common::unsupported_operation);
+    return crud_.append(options.scope_name,
+                        options.collection_name,
+                        options.key,
+                        options.value,
+                        options,
+                        std::move(callback));
   }
 
-  auto prepend(const adjoin_options& /* options */, adjoin_callback&& /* callback */)
+  auto prepend(const adjoin_options& options, adjoin_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
-    return tl::unexpected(errc::common::unsupported_operation);
+    return crud_.prepend(options.scope_name,
+                         options.collection_name,
+                         options.key,
+                         options.value,
+                         options,
+                         std::move(callback));
   }
 
-  auto increment(const counter_options& /* options */, counter_callback&& /* callback */)
+  auto increment(const counter_options& options, counter_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
-    return tl::unexpected(errc::common::unsupported_operation);
+    return crud_.increment(
+      options.scope_name, options.collection_name, options.key, options, std::move(callback));
   }
 
-  auto decrement(const counter_options& /* options */, counter_callback&& /* callback */)
+  auto decrement(const counter_options& options, counter_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
-    return tl::unexpected(errc::common::unsupported_operation);
+    return crud_.decrement(
+      options.scope_name, options.collection_name, options.key, options, std::move(callback));
   }
 
-  auto lookup_in(const lookup_in_options& /* options */, lookup_in_callback&& /* callback */)
+  auto lookup_in(const lookup_in_options& options, lookup_in_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
-    return tl::unexpected(errc::common::unsupported_operation);
+    return crud_.lookup_in(
+      options.scope_name, options.collection_name, options.key, options, std::move(callback));
   }
 
-  auto mutate_in(const mutate_in_options& /* options */, mutate_in_callback&& /* callback */)
+  auto mutate_in(const mutate_in_options& options, mutate_in_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
-    return tl::unexpected(errc::common::unsupported_operation);
+    return crud_.mutate_in(
+      options.scope_name, options.collection_name, options.key, options, std::move(callback));
   }
 
   auto get_random(const get_random_options& /* options */, get_random_callback&& /* callback */)
@@ -182,11 +215,11 @@ public:
     return tl::unexpected(errc::common::unsupported_operation);
   }
 
-  auto get_with_meta(const get_with_meta_options& /* options */,
-                     get_with_meta_callback&& /* callback */)
+  auto get_with_meta(const get_with_meta_options& options, get_with_meta_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
-    return tl::unexpected(errc::common::unsupported_operation);
+    return crud_.get_with_meta(
+      options.scope_name, options.collection_name, options.key, options, std::move(callback));
   }
 
   auto upsert_with_meta(const upsert_with_meta_options& /* options */,
@@ -253,11 +286,11 @@ public:
       std::move(scope_name), std::move(collection_name), options, std::move(callback));
   }
 
-  auto wait_until_ready(
-    std::chrono::milliseconds /* timeout */,
-    const wait_until_ready_options& /* options */,
-    wait_until_ready_callback&&
-    /* callback */) -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
+  auto wait_until_ready(std::chrono::milliseconds /* timeout */,
+                        const wait_until_ready_options& /* options */,
+                        wait_until_ready_callback&&
+                        /* callback */)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
     return tl::unexpected(errc::common::unsupported_operation);
   }
@@ -357,7 +390,7 @@ agent::get_and_touch(const get_and_touch_options& options, get_and_touch_callbac
 }
 
 auto
-agent::get_and_lock(const get_and_lock_options& options, get_and_touch_callback&& callback)
+agent::get_and_lock(const get_and_lock_options& options, get_and_lock_callback&& callback)
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
 {
   return impl_->get_and_lock(options, std::move(callback));

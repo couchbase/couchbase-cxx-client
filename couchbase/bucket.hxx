@@ -121,7 +121,7 @@ public:
 private:
   friend cluster;
 
-  bucket(core::cluster core, std::string_view name, std::shared_ptr<crypto::manager>);
+  bucket(core::cluster core, std::string_view name, std::shared_ptr<crypto::manager> crypto_mgr);
 
   std::shared_ptr<bucket_impl> impl_;
 };

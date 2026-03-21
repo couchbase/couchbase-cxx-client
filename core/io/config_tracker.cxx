@@ -593,11 +593,13 @@ cluster_config_tracker::cluster_config_tracker(
   asio::io_context& ctx,
   tls_context_provider& tls,
   std::shared_ptr<impl::bootstrap_state_listener> state_listener)
-  : impl_{ std::make_shared<cluster_config_tracker_impl>(std::move(client_id),
-                                                         std::move(origin),
-                                                         ctx,
-                                                         tls,
-                                                         std::move(state_listener)) }
+  : impl_{
+    std::make_shared<cluster_config_tracker_impl>(std::move(client_id),
+                                                  std::move(origin),
+                                                  ctx,
+                                                  tls,
+                                                  std::move(state_listener)),
+  }
 {
 }
 

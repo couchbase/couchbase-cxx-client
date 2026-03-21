@@ -74,7 +74,6 @@ couchbase::core::uuid::from_string(std::string_view str) -> couchbase::core::uui
         [[fallthrough]];
       default:
         // TODO(CXXCBC-549): clang-tidy-19 reports issue with subscript
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index)
         ret[jj++] = static_cast<std::uint8_t>(from_hex({ str.data() + ii, 2 }));
     }
   }

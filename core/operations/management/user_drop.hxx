@@ -42,7 +42,7 @@ struct user_drop_request {
 
   std::string username{};
   couchbase::core::management::rbac::auth_domain domain{
-    couchbase::core::management::rbac::auth_domain::local
+    couchbase::core::management::rbac::auth_domain::local,
   };
 
   std::optional<std::string> client_context_id{};

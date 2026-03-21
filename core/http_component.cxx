@@ -21,6 +21,8 @@
 #include "io/http_session_manager.hxx"
 #include "pending_operation.hxx"
 #include "pending_operation_connection_info.hxx"
+#include "tracing/constants.hxx"
+#include "tracing/tracer_wrapper.hxx"
 
 #include <couchbase/build_config.hxx>
 
@@ -261,10 +263,13 @@ public:
   {
   }
 #else
-  pending_buffered_http_operation(asio::io_context& io, http_request request)
+  pending_buffered_http_operation(asio::io_context& io,
+                                  http_request request,
+                                  std::shared_ptr<tracing::tracer_wrapper> tracer)
     : deadline_{ io }
     , request_{ std::move(request) }
     , encoded_{ encode_http_request(request_) }
+    , tracer_{ std::move(tracer) }
   {
   }
 #endif
@@ -318,6 +323,11 @@ public:
     });
   }
 
+  void set_completion_callback(utils::movable_function<void()>&& completion_callback)
+  {
+    completion_callback_ = std::move(completion_callback);
+  }
+
   void cancel() override
   {
     if (session_) {
@@ -333,12 +343,17 @@ public:
     dispatch_deadline_.cancel();
 #endif
     buffered_free_form_http_request_callback callback{};
+    utils::movable_function<void()> completion_callback{};
     {
       const std::scoped_lock lock(callback_mutex_);
       std::swap(callback, callback_);
+      std::swap(completion_callback, completion_callback_);
     }
     if (callback) {
       callback(buffered_http_response{ std::move(resp) }, ec);
+    }
+    if (completion_callback) {
+      completion_callback();
     }
   }
 
@@ -352,6 +367,19 @@ public:
 #endif
     session_ = std::move(session);
 
+#ifndef COUCHBASE_CXX_CLIENT_COLUMNAR
+    auto dispatch_span = create_dispatch_span();
+    session_->write_and_subscribe(
+      encoded_,
+      [self = shared_from_this(), dispatch_span = std::move(dispatch_span)](
+        std::error_code ec, io::http_response resp) mutable {
+        dispatch_span->end();
+        if (ec == asio::error::operation_aborted) {
+          return;
+        }
+        self->invoke_response_handler(ec, std::move(resp));
+      });
+#else
     session_->write_and_subscribe(
       encoded_, [self = shared_from_this()](std::error_code ec, io::http_response resp) {
         if (ec == asio::error::operation_aborted) {
@@ -359,6 +387,7 @@ public:
         }
         self->invoke_response_handler(ec, std::move(resp));
       });
+#endif
   }
 
   [[nodiscard]] auto deadline_expiry() const -> std::chrono::time_point<std::chrono::steady_clock>
@@ -404,6 +433,30 @@ private:
     invoke_response_handler(ec, {});
   }
 
+#ifndef COUCHBASE_CXX_CLIENT_COLUMNAR
+  [[nodiscard]] auto create_dispatch_span() const
+    -> std::shared_ptr<couchbase::tracing::request_span>
+  {
+    auto dispatch_span =
+      tracer_->create_span(tracing::operation::step_dispatch, request_.parent_span);
+    if (dispatch_span->uses_tags()) {
+      dispatch_span->add_tag(tracing::attributes::dispatch::network_transport, "tcp");
+      dispatch_span->add_tag(tracing::attributes::dispatch::operation_id,
+                             request_.client_context_id);
+      dispatch_span->add_tag(tracing::attributes::dispatch::local_id, session_->id());
+      dispatch_span->add_tag(tracing::attributes::dispatch::server_address,
+                             session_->http_context().canonical_hostname);
+      dispatch_span->add_tag(tracing::attributes::dispatch::server_port,
+                             session_->http_context().canonical_port);
+      const auto& peer_endpoint = session_->remote_endpoint();
+      dispatch_span->add_tag(tracing::attributes::dispatch::peer_address,
+                             peer_endpoint.address().to_string());
+      dispatch_span->add_tag(tracing::attributes::dispatch::peer_port, peer_endpoint.port());
+    }
+    return dispatch_span;
+  }
+#endif
+
   asio::steady_timer deadline_;
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
   asio::steady_timer dispatch_deadline_;
@@ -412,8 +465,12 @@ private:
   http_request request_;
   io::http_request encoded_;
   buffered_free_form_http_request_callback callback_;
+  utils::movable_function<void()> completion_callback_;
   std::shared_ptr<io::http_session> session_;
   std::mutex callback_mutex_;
+#ifndef COUCHBASE_CXX_CLIENT_COLUMNAR
+  std::shared_ptr<tracing::tracer_wrapper> tracer_;
+#endif
 };
 
 class http_component_impl
@@ -489,7 +546,8 @@ public:
       return op;
     }
 #else
-    auto op = std::make_shared<pending_buffered_http_operation>(io_, request);
+    auto op =
+      std::make_shared<pending_buffered_http_operation>(io_, request, shim_.cluster.tracer());
 #endif
 
     send_http_operation(op, session_manager, std::move(callback));
@@ -551,6 +609,10 @@ private:
                            const std::shared_ptr<io::http_session_manager>& session_manager,
                            buffered_free_form_http_request_callback&& callback)
   {
+    op->start([callback = std::move(callback)](auto resp, auto ec) mutable {
+      callback(std::move(resp), ec);
+    });
+
     std::shared_ptr<io::http_session> session;
     {
       auto [check_out_ec, s] = session_manager->check_out(
@@ -560,10 +622,8 @@ private:
       }
       session = std::move(s);
     }
-    op->start(
-      [callback = std::move(callback), session_manager, session, service = op->request().service](
-        auto resp, auto ec) mutable {
-        callback(std::move(resp), ec);
+    op->set_completion_callback(
+      [session_manager, session, service = op->request().service]() mutable {
         session_manager->check_in(service, session);
       });
 
@@ -625,21 +685,20 @@ private:
       R"(Adding pending HTTP operation to deferred queue: service={}, client_context_id={})",
       pending_op->request().service,
       pending_op->request().client_context_id);
-    session_manager->add_to_deferred_queue([this,
-                                            callback = std::move(callback),
-                                            op = std::move(pending_op),
-                                            session_manager](error_union err) mutable {
-      if (!std::holds_alternative<std::monostate>(err)) {
-        auto ec = std::holds_alternative<impl::bootstrap_error>(err)
-                    ? std::get<impl::bootstrap_error>(err).ec
-                    : std::get<std::error_code>(err);
-        // The deferred operation was cancelled - currently this can happen due to closing the
-        // cluster
-        return callback({}, ec);
-      }
+    session_manager->add_to_deferred_queue(
+      [this, callback = std::move(callback), op = std::move(pending_op), session_manager](
+        error_union err) mutable {
+        if (!std::holds_alternative<std::monostate>(err)) {
+          auto ec = std::holds_alternative<impl::bootstrap_error>(err)
+                      ? std::get<impl::bootstrap_error>(err).ec
+                      : std::get<std::error_code>(err);
+          // The deferred operation was cancelled - currently this can happen due to closing the
+          // cluster
+          return callback({}, ec);
+        }
 
-      return send_http_operation(op, session_manager, std::move(callback));
-    });
+        return send_http_operation(op, session_manager, std::move(callback));
+      });
     return std::monostate{};
   }
 #endif
@@ -653,7 +712,7 @@ http_component::http_component(asio::io_context& io,
                                core_sdk_shim shim,
                                std::shared_ptr<retry_strategy> default_retry_strategy)
   : impl_{
-    std::make_shared<http_component_impl>(io, std::move(shim), std::move(default_retry_strategy))
+    std::make_shared<http_component_impl>(io, std::move(shim), std::move(default_retry_strategy)),
   }
 {
 }

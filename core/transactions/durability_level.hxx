@@ -15,12 +15,13 @@
  */
 #pragma once
 
-#include "durability_level.hxx"
+#include <couchbase/durability_level.hxx>
 
 #include <string_view>
 
 namespace couchbase::core::transactions
 {
+using couchbase::durability_level;
 constexpr auto
 durability_level_to_string(durability_level level) -> std::string_view
 {

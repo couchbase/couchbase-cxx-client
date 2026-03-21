@@ -59,7 +59,7 @@ public:
   auto get_and_touch(const get_and_touch_options& options, get_and_touch_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
-  auto get_and_lock(const get_and_lock_options& options, get_and_touch_callback&& callback)
+  auto get_and_lock(const get_and_lock_options& options, get_and_lock_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
   auto get_one_replica(const get_one_replica_options& options, get_one_replica_callback&& callback)

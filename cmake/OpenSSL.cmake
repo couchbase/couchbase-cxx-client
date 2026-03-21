@@ -257,7 +257,7 @@ foreach(CERTIFICATE ${CERTIFICATES})
           ${CERTIFICATE})
   file(APPEND ${CA_BUNDLE_CPP_FILE}
 "  certificate{ R\"(${CMAKE_MATCH_1})\",
-               R\"(${CMAKE_MATCH_2})\" },
+               R\"(${CMAKE_MATCH_2})\", },
 
 ")
 endforeach()

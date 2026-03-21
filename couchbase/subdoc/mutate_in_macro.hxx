@@ -29,7 +29,7 @@ namespace couchbase::subdoc
 enum class mutate_in_macro {
   cas,
   sequence_number,
-  value_crc32c
+  value_crc32c,
 };
 
 /**

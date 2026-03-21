@@ -100,12 +100,12 @@ map_facets(const std::map<std::string, std::shared_ptr<search_facet>, std::less<
 }
 
 auto
-map_raw(std::map<std::string, codec::binary, std::less<>>& raw)
+map_raw(const std::map<std::string, codec::binary, std::less<>>& raw)
   -> std::map<std::string, couchbase::core::json_string>
 {
   std::map<std::string, couchbase::core::json_string> core_raw{};
   for (const auto& [name, value] : raw) {
-    core_raw[name] = value;
+    core_raw[name] = json_string{ value };
   }
   return core_raw;
 }
@@ -143,7 +143,7 @@ build_search_request(std::string index_name,
   }
   core::operations::search_request request{
     std::move(index_name),
-    core::utils::json::generate_binary(encoded.query),
+    json_string{ core::utils::json::generate_binary(encoded.query) },
     std::move(bucket_name),
     std::move(scope_name),
     {},
@@ -188,7 +188,7 @@ build_search_request(std::string index_name,
     std::move(index_name),
     // TODO(CXXCBC-549) Already assigned to match_none_query above
     // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
-    core::utils::json::generate_binary(request.search_query()->query),
+    json_string{ core::utils::json::generate_binary(request.search_query()->query) },
     std::move(bucket_name),
     std::move(scope_name),
     false,

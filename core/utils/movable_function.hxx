@@ -19,6 +19,7 @@
 
 #include <functional>
 #include <memory>
+#include <type_traits>
 
 /* replace with standard version once http://wg21.link/P0288 will be accepted and implemented */
 namespace couchbase::core::utils
@@ -32,6 +33,13 @@ class movable_function : public std::function<Signature>
   template<typename Functor>
   struct wrapper<Functor, std::enable_if_t<std::is_copy_constructible_v<Functor>>> {
     Functor fn;
+
+    wrapper() = default;
+    wrapper(const wrapper&) = default;
+    wrapper(wrapper&&) noexcept = default;
+    auto operator=(const wrapper&) -> wrapper& = default;
+    auto operator=(wrapper&&) noexcept -> wrapper& = default;
+    ~wrapper() = default;
 
     template<typename... Args>
     auto operator()(Args&&... args)
@@ -66,6 +74,7 @@ class movable_function : public std::function<Signature>
 
     wrapper(const wrapper& other) = default;
     auto operator=(const wrapper& /* other */) -> wrapper& = default;
+    ~wrapper() = default;
 
     template<typename... Args>
     auto operator()(Args&&... args)
@@ -78,14 +87,19 @@ class movable_function : public std::function<Signature>
 
 public:
   movable_function() noexcept = default;
-  movable_function(std::nullptr_t) noexcept
+  ~movable_function() = default;
+  movable_function(const movable_function&) = delete;
+  auto operator=(const movable_function&) -> movable_function& = delete;
+
+  explicit movable_function(std::nullptr_t) noexcept
     : base(nullptr)
   {
   }
 
-  template<typename Functor>
-  movable_function(Functor&& f)
-    : base(wrapper<Functor>{ std::forward<Functor>(f) })
+  template<typename Functor,
+           typename = std::enable_if_t<!std::is_same_v<std::decay_t<Functor>, movable_function>>>
+  movable_function(Functor&& f) // NOLINT(google-explicit-constructor, hicpp-explicit-conversions)
+    : base(wrapper<std::decay_t<Functor>>{ std::forward<Functor>(f) })
   {
   }
 
@@ -109,9 +123,11 @@ public:
   }
 
   template<typename Functor>
+  // NOLINTNEXTLINE(misc-unconventional-assign-operator,
+  // cppcoreguidelines-c-copy-assignment-signature)
   auto operator=(Functor&& f) -> movable_function&
   {
-    base::operator=(wrapper<Functor>{ std::forward<Functor>(f) });
+    base::operator=(wrapper<std::decay_t<Functor>>{ std::forward<Functor>(f) });
     return *this;
   }
 

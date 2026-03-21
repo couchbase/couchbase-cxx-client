@@ -16,16 +16,24 @@
  */
 
 #include "core/cluster.hxx"
-
+#include "core/cluster_options.hxx"
+#include "core/core_sdk_shim.hxx"
+#include "core/http_component.hxx"
 #include "core/impl/error.hxx"
 #include "core/impl/observability_recorder.hxx"
+#include "core/io/http_context.hxx"
+#include "core/io/http_message.hxx"
+#include "core/io/query_cache.hxx"
 #include "core/operations/management/collection_create.hxx"
 #include "core/operations/management/collection_drop.hxx"
 #include "core/operations/management/collection_update.hxx"
 #include "core/operations/management/scope_create.hxx"
 #include "core/operations/management/scope_drop.hxx"
 #include "core/operations/management/scope_get_all.hxx"
+#include "core/platform/uuid.h"
+#include "core/timeout_defaults.hxx"
 #include "core/topology/collections_manifest.hxx"
+#include "core/topology/configuration.hxx"
 #include "core/tracing/constants.hxx"
 #include "core/tracing/tracer_wrapper.hxx"
 
@@ -65,7 +73,7 @@ map_collection(std::string scope_name,
 }
 
 auto
-map_scope_specs(core::topology::collections_manifest& manifest)
+map_scope_specs(const core::topology::collections_manifest& manifest)
   -> std::vector<couchbase::management::bucket::scope_spec>
 {
   std::vector<couchbase::management::bucket::scope_spec> scope_specs{};
@@ -85,8 +93,10 @@ map_scope_specs(core::topology::collections_manifest& manifest)
 class collection_manager_impl
 {
 public:
-  collection_manager_impl(core::cluster core, std::string_view bucket_name)
-    : core_{ std::move(core) }
+  collection_manager_impl(const core::cluster& core, std::string_view bucket_name)
+    : http_{ core.io_context(), core::core_sdk_shim{ core } }
+    , tracer_{ core.tracer() }
+    , meter_{ core.meter() }
     , bucket_name_{ bucket_name }
   {
   }
@@ -105,12 +115,12 @@ public:
       bucket_name_, std::move(scope_name), std::move(collection_name),
       {},           options.timeout,       obs_rec->operation_span(),
     };
-    return core_.execute(
-      std::move(request),
-      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) mutable {
-        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
-        return handler(core::impl::make_error(resp.ctx));
-      });
+    execute_http(std::move(request),
+                 [obs_rec = std::move(obs_rec),
+                  handler = std::move(handler)](const auto& resp) mutable -> void {
+                   obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+                   handler(core::impl::make_error(resp.ctx));
+                 });
   }
 
   void update_collection(std::string scope_name,
@@ -129,12 +139,12 @@ public:
       settings.max_expiry, settings.history,          {},
       options.timeout,     obs_rec->operation_span(),
     };
-    return core_.execute(
-      std::move(request),
-      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) mutable {
-        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
-        return handler(core::impl::make_error(resp.ctx));
-      });
+    execute_http(std::move(request),
+                 [obs_rec = std::move(obs_rec),
+                  handler = std::move(handler)](const auto& resp) mutable -> void {
+                   obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+                   handler(core::impl::make_error(resp.ctx));
+                 });
   }
 
   void create_collection(std::string scope_name,
@@ -153,12 +163,12 @@ public:
       settings.max_expiry, settings.history,          {},
       options.timeout,     obs_rec->operation_span(),
     };
-    return core_.execute(
-      std::move(request),
-      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) mutable {
-        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
-        return handler(core::impl::make_error(resp.ctx));
-      });
+    execute_http(std::move(request),
+                 [obs_rec = std::move(obs_rec),
+                  handler = std::move(handler)](const auto& resp) mutable -> void {
+                   obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+                   handler(core::impl::make_error(resp.ctx));
+                 });
   }
 
   void get_all_scopes(const get_all_scopes_options::built& options,
@@ -172,11 +182,11 @@ public:
       options.timeout,
       obs_rec->operation_span(),
     };
-    return core_.execute(
+    execute_http(
       std::move(request),
-      [obs_rec = std::move(obs_rec), handler = std::move(handler)](auto resp) mutable {
+      [obs_rec = std::move(obs_rec), handler = std::move(handler)](auto resp) mutable -> void {
         obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
-        return handler(core::impl::make_error(resp.ctx), map_scope_specs(resp.manifest));
+        handler(core::impl::make_error(resp.ctx), map_scope_specs(resp.manifest));
       });
   }
 
@@ -189,12 +199,12 @@ public:
     core::operations::management::scope_create_request request{
       bucket_name_, std::move(scope_name), {}, options.timeout, obs_rec->operation_span(),
     };
-    return core_.execute(
-      std::move(request),
-      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) mutable {
-        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
-        return handler(core::impl::make_error(resp.ctx));
-      });
+    execute_http(std::move(request),
+                 [obs_rec = std::move(obs_rec),
+                  handler = std::move(handler)](const auto& resp) mutable -> void {
+                   obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+                   handler(core::impl::make_error(resp.ctx));
+                 });
   }
 
   void drop_scope(std::string scope_name,
@@ -206,12 +216,12 @@ public:
     core::operations::management::scope_drop_request request{
       bucket_name_, std::move(scope_name), {}, options.timeout, obs_rec->operation_span(),
     };
-    return core_.execute(
-      std::move(request),
-      [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) mutable {
-        obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
-        return handler(core::impl::make_error(resp.ctx));
-      });
+    execute_http(std::move(request),
+                 [obs_rec = std::move(obs_rec),
+                  handler = std::move(handler)](const auto& resp) mutable -> void {
+                   obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+                   handler(core::impl::make_error(resp.ctx));
+                 });
   }
 
 private:
@@ -222,8 +232,8 @@ private:
     const std::shared_ptr<tracing::request_span>& parent_span) const
     -> std::unique_ptr<core::impl::observability_recorder>
   {
-    auto obs_rec = core::impl::observability_recorder::create(
-      operation_name, parent_span, core_.tracer(), core_.meter());
+    auto obs_rec =
+      core::impl::observability_recorder::create(operation_name, parent_span, tracer_, meter_);
     obs_rec->with_service(core::tracing::service::management);
     obs_rec->with_bucket_name(bucket_name_);
     if (scope_name.has_value()) {
@@ -235,7 +245,82 @@ private:
     return obs_rec;
   }
 
-  core::cluster core_;
+  template<typename Request, typename Handler>
+  void execute_http(Request request, Handler handler) const
+  {
+    // Build io::http_request by calling encode_to. All management request types used here ignore
+    // the http_context parameter, so we supply dummy objects.
+    const core::topology::configuration dummy_config{};
+    const core::cluster_options dummy_options{};
+    core::query_cache dummy_cache{};
+    core::http_context dummy_ctx{ dummy_config, dummy_options, dummy_cache, {}, 0, {}, 0 };
+
+    core::io::http_request io_req{};
+    if (auto ec = request.encode_to(io_req, dummy_ctx); ec) {
+      // Encoding failed (e.g. invalid argument). Invoke the handler synchronously, exactly once.
+      typename Request::response_type resp{};
+      resp.ctx.ec = ec;
+      handler(std::move(resp));
+      return;
+    }
+
+    auto client_context_id =
+      request.client_context_id.value_or(core::uuid::to_string(core::uuid::random()));
+    auto timeout = request.timeout.value_or(core::timeout_defaults::management_timeout);
+
+    core::http_request http_req{};
+    http_req.service = core::service_type::management;
+    http_req.method = io_req.method;
+    http_req.path = io_req.path;
+    http_req.headers = io_req.headers;
+    http_req.body = io_req.body;
+    http_req.client_context_id = client_context_id;
+    http_req.timeout = timeout;
+    http_req.parent_span = request.parent_span;
+
+    // Capture the typed Request so we can call make_response in the callback.
+    auto shared_request = std::make_shared<Request>(std::move(request));
+    auto shared_handler = std::make_shared<Handler>(std::move(handler));
+
+    auto result = http_.do_http_request_buffered(
+      http_req,
+      [shared_request,
+       shared_handler,
+       captured_method = io_req.method,
+       captured_path = io_req.path,
+       captured_client_context_id = std::move(client_context_id)](
+        core::buffered_http_response resp, std::error_code ec) mutable -> void {
+        core::io::http_response io_resp{};
+        io_resp.status_code = resp.status_code();
+        io_resp.body.append(resp.body());
+
+        core::error_context::http ctx{};
+        ctx.ec = ec;
+        ctx.client_context_id = captured_client_context_id;
+        ctx.method = captured_method;
+        ctx.path = captured_path;
+        ctx.http_status = io_resp.status_code;
+        ctx.http_body = io_resp.body.data();
+
+        auto typed_resp = shared_request->make_response(std::move(ctx), io_resp);
+        (*shared_handler)(std::move(typed_resp));
+      });
+
+    if (!result) {
+      // do_http_request_buffered returned an error without consuming the callback.
+      // Invoke the handler here, exactly once.
+      typename Request::response_type error_resp{};
+      error_resp.ctx.ec = result.error();
+      error_resp.ctx.client_context_id = http_req.client_context_id;
+      error_resp.ctx.method = http_req.method;
+      error_resp.ctx.path = http_req.path;
+      (*shared_handler)(std::move(error_resp));
+    }
+  }
+
+  mutable core::http_component http_;
+  std::weak_ptr<core::tracing::tracer_wrapper> tracer_;
+  std::weak_ptr<core::metrics::meter_wrapper> meter_;
   std::string bucket_name_;
 };
 
@@ -260,12 +345,16 @@ collection_manager::drop_collection(std::string scope_name,
                                     const couchbase::drop_collection_options& options) const
   -> std::future<error>
 {
+  // NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks)
   auto barrier = std::make_shared<std::promise<error>>();
-  drop_collection(
-    std::move(scope_name), std::move(collection_name), options, [barrier](auto err) mutable {
-      barrier->set_value(std::move(err));
-    });
+  drop_collection(std::move(scope_name),
+                  std::move(collection_name),
+                  options,
+                  [barrier](auto err) mutable -> void {
+                    barrier->set_value(std::move(err));
+                  });
   return barrier->get_future();
+  // NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
 }
 
 void
@@ -289,15 +378,17 @@ collection_manager::update_collection(std::string scope_name,
                                       const couchbase::update_collection_options& options) const
   -> std::future<error>
 {
+  // NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks)
   auto barrier = std::make_shared<std::promise<error>>();
   update_collection(std::move(scope_name),
                     std::move(collection_name),
                     settings,
                     options,
-                    [barrier](auto err) mutable {
+                    [barrier](auto err) mutable -> void {
                       barrier->set_value(std::move(err));
                     });
   return barrier->get_future();
+  // NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
 }
 
 void
@@ -321,15 +412,17 @@ collection_manager::create_collection(std::string scope_name,
                                       const couchbase::create_collection_options& options) const
   -> std::future<error>
 {
+  // NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks)
   auto barrier = std::make_shared<std::promise<error>>();
   create_collection(std::move(scope_name),
                     std::move(collection_name),
                     settings,
                     options,
-                    [barrier](auto err) mutable {
+                    [barrier](auto err) mutable -> void {
                       barrier->set_value(std::move(err));
                     });
   return barrier->get_future();
+  // NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
 }
 
 void
@@ -343,12 +436,14 @@ auto
 collection_manager::get_all_scopes(const couchbase::get_all_scopes_options& options) const
   -> std::future<std::pair<error, std::vector<management::bucket::scope_spec>>>
 {
+  // NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks)
   auto barrier =
     std::make_shared<std::promise<std::pair<error, std::vector<management::bucket::scope_spec>>>>();
-  get_all_scopes(options, [barrier](auto err, auto result) mutable {
+  get_all_scopes(options, [barrier](auto err, auto result) mutable -> void {
     barrier->set_value(std::make_pair(std::move(err), std::move(result)));
   });
   return barrier->get_future();
+  // NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
 }
 
 void
@@ -364,11 +459,13 @@ collection_manager::create_scope(std::string scope_name,
                                  const couchbase::create_scope_options& options) const
   -> std::future<error>
 {
+  // NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks)
   auto barrier = std::make_shared<std::promise<error>>();
-  create_scope(std::move(scope_name), options, [barrier](auto err) mutable {
+  create_scope(std::move(scope_name), options, [barrier](auto err) mutable -> void {
     barrier->set_value(std::move(err));
   });
   return barrier->get_future();
+  // NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
 }
 
 void
@@ -380,13 +477,16 @@ collection_manager::drop_scope(std::string scope_name,
 }
 
 auto
-collection_manager::drop_scope(std::string scope_name, const couchbase::drop_scope_options& options)
-  const -> std::future<error>
+collection_manager::drop_scope(std::string scope_name,
+                               const couchbase::drop_scope_options& options) const
+  -> std::future<error>
 {
+  // NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks)
   auto barrier = std::make_shared<std::promise<error>>();
-  drop_scope(std::move(scope_name), options, [barrier](auto err) mutable {
+  drop_scope(std::move(scope_name), options, [barrier](auto err) mutable -> void {
     barrier->set_value(std::move(err));
   });
   return barrier->get_future();
+  // NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
 }
 } // namespace couchbase

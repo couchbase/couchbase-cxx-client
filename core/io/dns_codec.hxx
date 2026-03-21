@@ -135,7 +135,7 @@ public:
 
     // write header
     {
-      std::uint16_t val;
+      std::uint16_t val = 0;
 
       val = utils::byte_swap(message.header.id);
       std::memcpy(payload.data() + offset, &val, sizeof(std::uint16_t));
@@ -148,7 +148,7 @@ public:
       val = utils::byte_swap(static_cast<std::uint16_t>(message.questions.size()));
       std::memcpy(payload.data() + offset, &val, sizeof(std::uint16_t));
       offset += sizeof(std::uint16_t) +
-                3 * sizeof(std::uint16_t); // answer, authority, additional are all zeros
+                (3 * sizeof(std::uint16_t)); // answer, authority, additional are all zeros
     }
 
     // write body
@@ -162,7 +162,7 @@ public:
       payload[offset] = '\0';
       ++offset;
 
-      std::uint16_t val;
+      std::uint16_t val = 0;
 
       val = utils::byte_swap(static_cast<std::uint16_t>(question.type));
       std::memcpy(payload.data() + offset, &val, sizeof(std::uint16_t));
@@ -176,8 +176,8 @@ public:
   }
 
 private:
-  static auto get_name(const std::vector<std::uint8_t>& payload,
-                       std::size_t& offset) -> resource_name
+  static auto get_name(const std::vector<std::uint8_t>& payload, std::size_t& offset)
+    -> resource_name
   {
     resource_name name{};
     std::optional<std::size_t> save_offset{};

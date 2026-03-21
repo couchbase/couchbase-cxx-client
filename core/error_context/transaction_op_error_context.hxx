@@ -29,7 +29,7 @@ class transaction_op_error_context
 public:
   transaction_op_error_context() = default;
 
-  transaction_op_error_context(std::error_code ec)
+  explicit transaction_op_error_context(std::error_code ec)
     : ec_(ec)
   {
   }

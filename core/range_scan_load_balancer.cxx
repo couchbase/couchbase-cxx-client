@@ -36,7 +36,7 @@ range_scan_node_state::range_scan_node_state(std::queue<std::uint16_t> vbuckets)
 auto
 range_scan_node_state::fetch_vbucket_id() -> std::optional<std::uint16_t>
 {
-  const std::lock_guard<std::mutex> lock{ mutex_ };
+  const std::scoped_lock lock{ mutex_ };
   if (pending_vbuckets_.empty()) {
     return {};
   }
@@ -49,28 +49,28 @@ range_scan_node_state::fetch_vbucket_id() -> std::optional<std::uint16_t>
 void
 range_scan_node_state::notify_stream_ended()
 {
-  const std::lock_guard<std::mutex> lock{ mutex_ };
+  const std::scoped_lock lock{ mutex_ };
   active_stream_count_--;
 }
 
 void
 range_scan_node_state::enqueue_vbucket(std::uint16_t vbucket_id)
 {
-  const std::lock_guard<std::mutex> lock{ mutex_ };
+  const std::scoped_lock lock{ mutex_ };
   pending_vbuckets_.push(vbucket_id);
 }
 
 auto
 range_scan_node_state::active_stream_count() -> std::uint16_t
 {
-  const std::lock_guard<std::mutex> lock{ mutex_ };
+  const std::scoped_lock lock{ mutex_ };
   return active_stream_count_;
 }
 
 auto
 range_scan_node_state::pending_vbucket_count() -> std::size_t
 {
-  const std::lock_guard<std::mutex> lock{ mutex_ };
+  const std::scoped_lock lock{ mutex_ };
   return pending_vbuckets_.size();
 }
 
@@ -98,7 +98,7 @@ range_scan_load_balancer::seed(std::uint64_t seed)
 auto
 range_scan_load_balancer::select_vbucket() -> std::optional<std::uint16_t>
 {
-  const std::lock_guard<std::mutex> lock{ select_vbucket_mutex_ };
+  const std::scoped_lock lock{ select_vbucket_mutex_ };
 
   auto min_stream_count = std::numeric_limits<std::uint16_t>::max();
   std::optional<std::int16_t> selected_node_id{};

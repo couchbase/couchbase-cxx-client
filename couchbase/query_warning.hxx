@@ -52,8 +52,8 @@ public:
                 std::optional<bool> retry)
     : code_{ code }
     , message_{ std::move(message) }
-    , reason_{ std::move(reason) }
-    , retry_{ std::move(retry) }
+    , reason_{ reason }
+    , retry_{ retry }
   {
   }
 

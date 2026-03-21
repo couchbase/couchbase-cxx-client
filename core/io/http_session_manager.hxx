@@ -87,7 +87,7 @@ public:
 
   auto configuration_capabilities() const -> configuration_capabilities
   {
-    std::scoped_lock config_lock(config_mutex_);
+    const std::scoped_lock config_lock(config_mutex_);
     return config_.capabilities;
   }
 
@@ -101,7 +101,7 @@ public:
                  error.error_message,
                  allow_fast_fail_ ? "true" : "false");
     if (allow_fast_fail_) {
-      std::scoped_lock bootstrap_error_lock(last_bootstrap_error_mutex_);
+      const std::scoped_lock bootstrap_error_lock(last_bootstrap_error_mutex_);
       last_bootstrap_error_ = error;
       drain_deferred_queue(last_bootstrap_error_.value());
     }
@@ -110,7 +110,7 @@ public:
   void notify_bootstrap_success(const std::string& session_id) override
   {
     CB_LOG_DEBUG("Received successful bootstrap notification.  Session={}.", session_id);
-    std::scoped_lock bootstrap_error_lock(last_bootstrap_error_mutex_);
+    const std::scoped_lock bootstrap_error_lock(last_bootstrap_error_mutex_);
     allow_fast_fail_ = false;
     last_bootstrap_error_.reset();
   }
@@ -119,7 +119,7 @@ public:
   void update_config(topology::configuration config) override
   {
     {
-      std::scoped_lock config_lock(config_mutex_, sessions_mutex_, next_index_mutex_);
+      const std::scoped_lock config_lock(config_mutex_, sessions_mutex_, next_index_mutex_);
       config_ = std::move(config);
       if (!config_.nodes.empty() && next_index_ >= config_.nodes.size()) {
         next_index_ = 0;
@@ -156,7 +156,7 @@ public:
       next_index = dis(gen);
     }
     {
-      std::scoped_lock lock(config_mutex_, next_index_mutex_);
+      const std::scoped_lock lock(config_mutex_, next_index_mutex_);
       options_ = options;
       next_index_ = next_index;
       config_ = config;
@@ -176,7 +176,7 @@ public:
 
   void export_diag_info(diag::diagnostics_result& res)
   {
-    std::scoped_lock lock(sessions_mutex_);
+    const std::scoped_lock lock(sessions_mutex_);
 
     for (const auto& [type, sessions] : busy_sessions_) {
       for (const auto& session : sessions) {
@@ -199,13 +199,13 @@ public:
             std::optional<std::chrono::milliseconds> timeout,
             std::shared_ptr<Collector> collector)
   {
-    std::array known_types{
+    const std::array known_types{
       service_type::query, service_type::analytics, service_type::search,
       service_type::view,  service_type::eventing,  service_type::management,
     };
     std::vector<topology::configuration::node> nodes{};
     {
-      std::scoped_lock lock(config_mutex_);
+      const std::scoped_lock lock(config_mutex_);
       nodes = config_.nodes;
     }
     for (const auto& node : nodes) {
@@ -227,7 +227,7 @@ public:
                                           canonical_port,
                                         });
           if (session->is_connected()) {
-            std::scoped_lock lock(sessions_mutex_);
+            const std::scoped_lock lock(sessions_mutex_);
             busy_sessions_[type].push_back(session);
           }
           operations::http_noop_request request{};
@@ -251,45 +251,45 @@ public:
             app_telemetry_meter_,
             options_.default_timeout_for(request.type));
 #endif
-          cmd->start([start = std::chrono::steady_clock::now(),
-                      self = shared_from_this(),
-                      type,
-                      cmd,
-                      handler =
-                        collector->build_reporter()](operations::http_noop_response&& resp) {
-            diag::ping_state state = diag::ping_state::ok;
-            std::optional<std::string> error{};
-            if (auto ec = resp.ctx.ec; ec) {
-              if (ec == errc::common::unambiguous_timeout ||
-                  ec == errc::common::ambiguous_timeout) {
-                state = diag::ping_state::timeout;
-              } else {
-                state = diag::ping_state::error;
+          cmd->start(
+            [start = std::chrono::steady_clock::now(),
+             self = shared_from_this(),
+             type,
+             cmd,
+             handler = collector->build_reporter()](operations::http_noop_response&& resp) {
+              diag::ping_state state = diag::ping_state::ok;
+              std::optional<std::string> error{};
+              if (auto ec = resp.ctx.ec; ec) {
+                if (ec == errc::common::unambiguous_timeout ||
+                    ec == errc::common::ambiguous_timeout) {
+                  state = diag::ping_state::timeout;
+                } else {
+                  state = diag::ping_state::error;
+                }
+                error.emplace(fmt::format("code={}, message={}, http_code={}",
+                                          ec.value(),
+                                          ec.message(),
+                                          resp.ctx.http_status));
               }
-              error.emplace(fmt::format("code={}, message={}, http_code={}",
-                                        ec.value(),
-                                        ec.message(),
-                                        resp.ctx.http_status));
-            }
-            auto remote_address = cmd->session_->remote_address();
-            // If not connected, the remote address will be empty.  Better to
-            // give the user some context on the "attempted" remote address.
-            if (remote_address.empty()) {
-              remote_address =
-                fmt::format("{}:{}", cmd->session_->hostname(), cmd->session_->port());
-            }
-            handler->report(
-              diag::endpoint_ping_info{ type,
-                                        cmd->session_->id(),
-                                        std::chrono::duration_cast<std::chrono::microseconds>(
-                                          std::chrono::steady_clock::now() - start),
-                                        remote_address,
-                                        cmd->session_->local_address(),
-                                        state,
-                                        {},
-                                        error });
-            self->check_in(type, cmd->session_);
-          });
+              auto remote_address = cmd->session_->remote_address();
+              // If not connected, the remote address will be empty.  Better to
+              // give the user some context on the "attempted" remote address.
+              if (remote_address.empty()) {
+                remote_address =
+                  fmt::format("{}:{}", cmd->session_->hostname(), cmd->session_->port());
+              }
+              handler->report(
+                diag::endpoint_ping_info{ type,
+                                          cmd->session_->id(),
+                                          std::chrono::duration_cast<std::chrono::microseconds>(
+                                            std::chrono::steady_clock::now() - start),
+                                          remote_address,
+                                          cmd->session_->local_address(),
+                                          state,
+                                          {},
+                                          error });
+              self->check_in(type, cmd->session_);
+            });
 
           cmd->set_command_session(session);
           if (!session->is_connected()) {
@@ -406,7 +406,7 @@ public:
       return session.reset();
     }
     {
-      std::scoped_lock lock(config_mutex_);
+      const std::scoped_lock lock(config_mutex_);
       if (!session->keep_alive() || !config_.has_node(options_.network,
                                                       session->type(),
                                                       options_.enable_tls,
@@ -420,7 +420,7 @@ public:
     if (!session->is_stopped()) {
       session->set_idle(options_.idle_http_connection_timeout);
       CB_LOG_DEBUG("{} put HTTP session back to idle connections", session->log_prefix());
-      std::scoped_lock lock(sessions_mutex_);
+      const std::scoped_lock lock(sessions_mutex_);
       idle_sessions_[type].push_back(session);
       busy_sessions_[type].remove_if([id = session->id()](const auto& s) -> bool {
         return !s || s->id() == id;
@@ -436,8 +436,9 @@ public:
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
     drain_deferred_queue(errc::common::request_canceled);
 #endif
-    std::map<service_type, std::list<std::shared_ptr<http_session>>> busy_sessions, idle_sessions,
-      pending_sessions;
+    std::map<service_type, std::list<std::shared_ptr<http_session>>> busy_sessions;
+    std::map<service_type, std::list<std::shared_ptr<http_session>>> idle_sessions;
+    std::map<service_type, std::list<std::shared_ptr<http_session>>> pending_sessions;
     {
       const std::scoped_lock lock(sessions_mutex_);
       busy_sessions = std::move(busy_sessions_);
@@ -476,6 +477,7 @@ public:
       return defer_command(request, std::move(handler));
     }
 #endif
+    // NOLINTNEXTLINE(misc-const-correctness) -- may be modified in constexpr branch
     std::string preferred_node;
     if constexpr (http_traits::supports_sticky_node_v<Request>) {
       if (request.send_to_node) {
@@ -525,14 +527,14 @@ public:
 
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
   void connect_then_send_pending_op(
-    std::shared_ptr<http_session> session,
+    const std::shared_ptr<http_session>& session,
     const std::string& preferred_node,
     std::chrono::time_point<std::chrono::steady_clock> dispatch_deadline,
     std::chrono::time_point<std::chrono::steady_clock> deadline,
     utils::movable_function<void(std::error_code, std::shared_ptr<http_session>)> callback)
 #else
   void connect_then_send_pending_op(
-    std::shared_ptr<http_session> session,
+    const std::shared_ptr<http_session>& session,
     const std::string& preferred_node,
     std::chrono::time_point<std::chrono::steady_clock> deadline,
     utils::movable_function<void(std::error_code, std::shared_ptr<http_session>)> callback)
@@ -590,9 +592,9 @@ public:
             self->pending_sessions_[new_session->type()].push_back(new_session);
           }
           self->connect_then_send_pending_op(
-            new_session, preferred_node, dispatch_deadline, deadline, cb);
+            new_session, preferred_node, dispatch_deadline, deadline, std::move(cb));
 #else
-          self->connect_then_send_pending_op(new_session, preferred_node, deadline, cb);
+          self->connect_then_send_pending_op(new_session, preferred_node, deadline, std::move(cb));
 #endif
         }
       } else {
@@ -653,51 +655,48 @@ private:
                          const std::string& preferred_node,
                          bool reuse_session = false)
   {
-    session->connect([self = shared_from_this(),
-                      session,
-                      cmd,
-                      preferred_node = std::move(preferred_node),
-                      reuse_session]() mutable {
-      if (!session->is_connected()) {
+    session->connect(
+      [self = shared_from_this(), session, cmd, preferred_node, reuse_session]() mutable {
+        if (!session->is_connected()) {
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-        auto now = std::chrono::steady_clock::now();
-        if (cmd->dispatch_deadline_expiry() < now || cmd->deadline_expiry() < now) {
-          // The http command will stop its session when the deadline expires.
-          return;
-        }
+          auto now = std::chrono::steady_clock::now();
+          if (cmd->dispatch_deadline_expiry() < now || cmd->deadline_expiry() < now) {
+            // The http command will stop its session when the deadline expires.
+            return;
+          }
 #else
-        if (cmd->deadline_expiry() < std::chrono::steady_clock::now()) {
-          // The http command will stop its session when the deadline expires.
-          return;
-        }
+          if (cmd->deadline_expiry() < std::chrono::steady_clock::now()) {
+            // The http command will stop its session when the deadline expires.
+            return;
+          }
 #endif
-        if (reuse_session) {
-          return self->connect_then_send(session, cmd, preferred_node, reuse_session);
-        }
-        // stop this session and create a new one w/ new hostname + port
-        session->stop();
-        const auto node = preferred_node.empty()
-                            ? self->next_node(session->type())
-                            : self->lookup_node(session->type(), preferred_node);
-        if (node.port == 0) {
-          cmd->invoke_handler(errc::common::service_not_available, {});
-          return;
-        }
-        auto new_session = self->create_session(session->type(), node);
-        cmd->set_command_session(new_session);
-        if (new_session->is_connected()) {
-          std::scoped_lock inner_lock(self->sessions_mutex_);
-          self->busy_sessions_[new_session->type()].push_back(new_session);
-          cmd->send_to();
+          if (reuse_session) {
+            return self->connect_then_send(session, cmd, preferred_node, reuse_session);
+          }
+          // stop this session and create a new one w/ new hostname + port
+          session->stop();
+          const auto node = preferred_node.empty()
+                              ? self->next_node(session->type())
+                              : self->lookup_node(session->type(), preferred_node);
+          if (node.port == 0) {
+            cmd->invoke_handler(errc::common::service_not_available, {});
+            return;
+          }
+          auto new_session = self->create_session(session->type(), node);
+          cmd->set_command_session(new_session);
+          if (new_session->is_connected()) {
+            const std::scoped_lock inner_lock(self->sessions_mutex_);
+            self->busy_sessions_[new_session->type()].push_back(new_session);
+            cmd->send_to();
+          } else {
+            self->connect_then_send(new_session, cmd, preferred_node);
+          }
         } else {
-          self->connect_then_send(new_session, cmd, preferred_node);
+          const std::scoped_lock inner_lock(self->sessions_mutex_);
+          self->busy_sessions_[session->type()].push_back(session);
+          cmd->send_to();
         }
-      } else {
-        std::scoped_lock inner_lock(self->sessions_mutex_);
-        self->busy_sessions_[session->type()].push_back(session);
-        cmd->send_to();
-      }
-    });
+      });
   }
 
   auto create_session(service_type type, const node_details& node) -> std::shared_ptr<http_session>
@@ -757,7 +756,7 @@ private:
   void defer_command(Request request, Handler&& handler)
   {
     {
-      std::scoped_lock bootstrap_error_lock(last_bootstrap_error_mutex_);
+      const std::scoped_lock bootstrap_error_lock(last_bootstrap_error_mutex_);
       if (last_bootstrap_error_.has_value()) {
         typename Request::error_context_type ctx{};
         ctx.ec = last_bootstrap_error_.value().ec;
@@ -793,7 +792,7 @@ private:
       if (cmd->dispatch_deadline_expiry() < now || cmd->deadline_expiry() < now) {
         return;
       }
-      std::string preferred_node;
+      std::string preferred_node{};
       if constexpr (http_traits::supports_sticky_node_v<Request>) {
         if (request.send_to_node) {
           preferred_node = *request.send_to_node;
@@ -832,7 +831,7 @@ private:
 
   auto next_node(service_type type) -> node_details
   {
-    std::scoped_lock lock(config_mutex_);
+    const std::scoped_lock lock(config_mutex_);
     auto candidates = config_.nodes.size();
     while (candidates > 0) {
       --candidates;

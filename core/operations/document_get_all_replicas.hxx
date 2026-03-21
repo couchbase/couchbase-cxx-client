@@ -88,7 +88,8 @@ struct get_all_replicas_request {
             origin.options().server_group,
             config->num_replicas.value_or(0));
           return h(response_type{
-            make_key_value_error_context(errc::key_value::document_irretrievable, id) });
+            make_key_value_error_context(errc::key_value::document_irretrievable, id),
+          });
         }
 
         using handler_type = utils::movable_function<void(response_type)>;
@@ -132,7 +133,7 @@ struct get_all_replicas_request {
                 timeout,
                 {},
                 {},
-                {},
+                io::retry_context<true>{},
                 subop_span,
               },
               [ctx, subop_span](auto&& resp) {
@@ -145,7 +146,7 @@ struct get_all_replicas_request {
                 }
                 handler_type local_handler{};
                 {
-                  std::scoped_lock lock(ctx->mutex_);
+                  const std::scoped_lock lock(ctx->mutex_);
                   if (ctx->done_) {
                     return;
                   }
@@ -157,7 +158,11 @@ struct get_all_replicas_request {
                     }
                   } else {
                     ctx->result_.emplace_back(get_all_replicas_response::entry{
-                      std::move(resp.value), resp.cas, resp.flags, true /* replica */ });
+                      std::move(resp.value),
+                      resp.cas,
+                      resp.flags,
+                      true /* replica */,
+                    });
                   }
                   if (ctx->expected_responses_ == 0) {
                     ctx->done_ = true;
@@ -179,7 +184,7 @@ struct get_all_replicas_request {
                 {},
                 {},
                 timeout,
-                {},
+                io::retry_context<true>{},
                 subop_span,
               },
               [ctx, subop_span](auto&& resp) {
@@ -192,7 +197,7 @@ struct get_all_replicas_request {
                 }
                 handler_type local_handler{};
                 {
-                  std::scoped_lock lock(ctx->mutex_);
+                  const std::scoped_lock lock(ctx->mutex_);
                   if (ctx->done_) {
                     return;
                   }
@@ -204,7 +209,11 @@ struct get_all_replicas_request {
                     }
                   } else {
                     ctx->result_.emplace_back(get_all_replicas_response::entry{
-                      std::move(resp.value), resp.cas, resp.flags, false /* active */ });
+                      std::move(resp.value),
+                      resp.cas,
+                      resp.flags,
+                      false /* active */,
+                    });
                   }
                   if (ctx->expected_responses_ == 0) {
                     ctx->done_ = true;

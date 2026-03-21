@@ -18,9 +18,13 @@
 #pragma once
 
 #include "config_listener.hxx"
+#include "core/crud_options.hxx"
+#include "core/subdoc_options.hxx"
 #include "io/mcbp_command.hxx"
 #include "operations.hxx"
+#include "pending_operation.hxx"
 #include "tls_context_provider.hxx"
+#include <tl/expected.hpp>
 
 #include <asio/bind_executor.hpp>
 #include <asio/io_context.hpp>
@@ -34,6 +38,7 @@
 
 namespace couchbase::core
 {
+class dispatcher;
 namespace mcbp
 {
 class queue_request;
@@ -60,6 +65,7 @@ class app_telemetry_meter;
 
 class bucket_impl;
 struct origin;
+class orphan_reporter;
 
 class bucket
   : public std::enable_shared_from_this<bucket>
@@ -71,40 +77,263 @@ public:
          tls_context_provider& tls,
          std::shared_ptr<tracing::tracer_wrapper> tracer,
          std::shared_ptr<metrics::meter_wrapper> meter,
-         std::shared_ptr<orphan_reporter> orphan_reporter,
-         std::shared_ptr<app_telemetry_meter> app_telemetry_meter,
+         std::shared_ptr<couchbase::core::orphan_reporter> orphan_reporter,
+         std::shared_ptr<couchbase::core::app_telemetry_meter> app_telemetry_meter,
          std::string name,
          couchbase::core::origin origin,
          std::vector<protocol::hello_feature> known_features,
-         std::shared_ptr<impl::bootstrap_state_listener> state_listener);
+         std::shared_ptr<impl::bootstrap_state_listener> state_listener,
+         dispatcher dispatcher);
   ~bucket() override;
+
+  // Operations listed here are routed through direct_execute() (the new crud_component path)
+  // instead of the legacy mcbp_command<> template path. Add a matching direct_execute() overload
+  // whenever a new type is added to this list.
+  using direct_executable_types =
+    std::tuple<operations::get_request,
+               operations::upsert_request,
+               operations::insert_request,
+               operations::replace_request,
+               operations::remove_request,
+               operations::exists_request,
+               operations::touch_request,
+               operations::get_and_touch_request,
+               operations::get_and_lock_request,
+               operations::unlock_request,
+               operations::increment_request,
+               operations::decrement_request,
+               operations::append_request,
+               operations::prepend_request,
+               operations::lookup_in_request,
+               operations::mutate_in_request,
+               impl::with_cancellation<operations::get_request>,
+               impl::with_cancellation<operations::lookup_in_request>>;
+
+  template<typename Request, typename Tuple>
+  struct is_in_tuple;
+
+  template<typename Request, typename... Types>
+  struct is_in_tuple<Request, std::tuple<Types...>>
+    : std::disjunction<std::is_same<Request, Types>...> {
+  };
+
+  template<typename Request>
+  static constexpr bool is_direct_executable_v =
+    is_in_tuple<Request, direct_executable_types>::value;
 
   template<typename Request, typename Handler>
   void execute(Request request, Handler&& handler)
   {
+    using encoded_response_type = typename Request::encoded_response_type;
     if (is_closed()) {
-      return;
+      return handler(request.make_response(
+        make_key_value_error_context(errc::network::bucket_closed, request.id),
+        encoded_response_type{}));
     }
-    auto cmd = std::make_shared<operations::mcbp_command<bucket, Request>>(
-      ctx_, shared_from_this(), request, default_timeout());
-    cmd->start([cmd, handler = std::forward<Handler>(handler)](
-                 std::error_code ec, std::optional<io::mcbp_message>&& msg) mutable {
-      using encoded_response_type = typename Request::encoded_response_type;
-      std::uint16_t status_code = msg ? msg->header.status() : 0xffffU;
-      auto resp = msg ? encoded_response_type(std::move(*msg)) : encoded_response_type{};
-      auto ctx = make_key_value_error_context(ec, status_code, cmd, resp);
-      handler(cmd->request.make_response(std::move(ctx), std::move(resp)));
-    });
-    if (is_configured()) {
-      return map_and_send(cmd);
-    }
-    return defer_command([self = shared_from_this(), cmd](std::error_code ec) {
-      if (ec == errc::common::request_canceled) {
-        return cmd->cancel(retry_reason::do_not_retry);
+    if constexpr (is_direct_executable_v<Request>) {
+      // TODO(SA): direct_execute() now returns tl::expected<pending_operation,ec>. The execute()
+      // template is part of the old cluster.execute() model and discards the pending_operation.
+      // Once callers are migrated off execute() and call direct_execute() directly, this wrapper
+      // can be removed.
+      (void)direct_execute(
+        std::move(request),
+        [handler = std::forward<Handler>(handler)](typename Request::response_type resp) mutable {
+          handler(std::move(resp));
+        });
+    } else {
+      auto cmd = std::make_shared<operations::mcbp_command<bucket, Request>>(
+        ctx_, shared_from_this(), request, default_timeout());
+      cmd->start([cmd, handler = std::forward<Handler>(handler)](
+                   std::error_code ec, std::optional<io::mcbp_message>&& msg) mutable {
+        using encoded_response_type = typename Request::encoded_response_type;
+        std::uint16_t status_code = msg ? msg->header.status() : 0xffffU;
+        auto resp = msg ? encoded_response_type(std::move(*msg)) : encoded_response_type{};
+        auto ctx = make_key_value_error_context(ec, status_code, cmd, resp);
+        handler(cmd->request.make_response(std::move(ctx), std::move(resp)));
+      });
+      if (is_configured()) {
+        return map_and_send(cmd);
       }
-      self->map_and_send(cmd);
-    });
+      return defer_command([self = shared_from_this(), cmd](std::error_code ec) {
+        if (ec == errc::common::request_canceled) {
+          return cmd->cancel(retry_reason::do_not_retry);
+        }
+        self->map_and_send(cmd);
+      });
+    }
   }
+
+  auto direct_execute(operations::get_request request,
+                      utils::movable_function<void(operations::get_response)>&& handler)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+  auto direct_execute(operations::upsert_request request,
+                      utils::movable_function<void(operations::upsert_response)>&& handler)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+  auto direct_execute(operations::insert_request request,
+                      utils::movable_function<void(operations::insert_response)>&& handler)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+  auto direct_execute(operations::replace_request request,
+                      utils::movable_function<void(operations::replace_response)>&& handler)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+  auto direct_execute(operations::remove_request request,
+                      utils::movable_function<void(operations::remove_response)>&& handler)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+  auto direct_execute(operations::exists_request request,
+                      utils::movable_function<void(operations::exists_response)>&& handler)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+  auto direct_execute(operations::touch_request request,
+                      utils::movable_function<void(operations::touch_response)>&& handler)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+  auto direct_execute(operations::get_and_touch_request request,
+                      utils::movable_function<void(operations::get_and_touch_response)>&& handler)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+  auto direct_execute(operations::get_and_lock_request request,
+                      utils::movable_function<void(operations::get_and_lock_response)>&& handler)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+  auto direct_execute(operations::unlock_request request,
+                      utils::movable_function<void(operations::unlock_response)>&& handler)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+  auto direct_execute(operations::increment_request request,
+                      utils::movable_function<void(operations::increment_response)>&& handler)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+  auto direct_execute(operations::decrement_request request,
+                      utils::movable_function<void(operations::decrement_response)>&& handler)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+  auto direct_execute(operations::append_request request,
+                      utils::movable_function<void(operations::append_response)>&& handler)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+  auto direct_execute(operations::prepend_request request,
+                      utils::movable_function<void(operations::prepend_response)>&& handler)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+  auto direct_execute(operations::lookup_in_request request,
+                      utils::movable_function<void(operations::lookup_in_response)>&& handler)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+  auto direct_execute(operations::mutate_in_request request,
+                      utils::movable_function<void(operations::mutate_in_response)>&& handler)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+  auto direct_execute(impl::with_cancellation<operations::get_request> request,
+                      utils::movable_function<void(operations::get_response)>&& handler)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+  auto direct_execute(impl::with_cancellation<operations::lookup_in_request> request,
+                      utils::movable_function<void(operations::lookup_in_response)>&& handler)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+
+  auto get(std::string scope_name,
+           std::string collection_name,
+           std::vector<std::byte> key,
+           const get_options& options,
+           get_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+
+  auto insert(std::string scope_name,
+              std::string collection_name,
+              std::vector<std::byte> key,
+              std::vector<std::byte> value,
+              const insert_options& options,
+              insert_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+
+  auto upsert(std::string scope_name,
+              std::string collection_name,
+              std::vector<std::byte> key,
+              std::vector<std::byte> value,
+              const upsert_options& options,
+              upsert_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+
+  auto replace(std::string scope_name,
+               std::string collection_name,
+               std::vector<std::byte> key,
+               std::vector<std::byte> value,
+               const replace_options& options,
+               replace_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+
+  auto remove(std::string scope_name,
+              std::string collection_name,
+              std::vector<std::byte> key,
+              const remove_options& options,
+              remove_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+
+  auto touch(std::string scope_name,
+             std::string collection_name,
+             std::vector<std::byte> key,
+             const touch_options& options,
+             touch_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+
+  auto get_and_touch(std::string scope_name,
+                     std::string collection_name,
+                     std::vector<std::byte> key,
+                     const get_and_touch_options& options,
+                     get_and_touch_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+
+  auto get_and_lock(std::string scope_name,
+                    std::string collection_name,
+                    std::vector<std::byte> key,
+                    const get_and_lock_options& options,
+                    get_and_lock_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+
+  auto unlock(std::string scope_name,
+              std::string collection_name,
+              std::vector<std::byte> key,
+              const unlock_options& options,
+              unlock_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+
+  auto get_with_meta(std::string scope_name,
+                     std::string collection_name,
+                     std::vector<std::byte> key,
+                     const get_with_meta_options& options,
+                     get_with_meta_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+
+  auto append(std::string scope_name,
+              std::string collection_name,
+              std::vector<std::byte> key,
+              std::vector<std::byte> value,
+              const adjoin_options& options,
+              adjoin_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+
+  auto prepend(std::string scope_name,
+               std::string collection_name,
+               std::vector<std::byte> key,
+               std::vector<std::byte> value,
+               const adjoin_options& options,
+               adjoin_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+
+  auto increment(std::string scope_name,
+                 std::string collection_name,
+                 std::vector<std::byte> key,
+                 const counter_options& options,
+                 counter_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+
+  auto decrement(std::string scope_name,
+                 std::string collection_name,
+                 std::vector<std::byte> key,
+                 const counter_options& options,
+                 counter_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+
+  auto lookup_in(std::string scope_name,
+                 std::string collection_name,
+                 std::vector<std::byte> key,
+                 const lookup_in_options& options,
+                 lookup_in_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
+
+  auto mutate_in(std::string scope_name,
+                 std::string collection_name,
+                 std::vector<std::byte> key,
+                 const mutate_in_options& options,
+                 mutate_in_callback&& callback)
+    -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
   void connect_session(std::size_t index);
 
@@ -114,7 +343,7 @@ public:
     if (is_closed()) {
       return cmd->cancel(retry_reason::do_not_retry);
     }
-    std::size_t index;
+    std::size_t index{ 0 };
     if (cmd->request.id.use_any_session()) {
       index = next_session_index();
     } else {
@@ -219,8 +448,8 @@ public:
   [[nodiscard]] auto log_prefix() const -> const std::string&;
   [[nodiscard]] auto tracer() const -> std::shared_ptr<tracing::tracer_wrapper>;
   [[nodiscard]] auto meter() const -> std::shared_ptr<metrics::meter_wrapper>;
-  [[nodiscard]] auto orphan_reporter() const -> std::shared_ptr<orphan_reporter>;
-  [[nodiscard]] auto app_telemetry_meter() const -> std::shared_ptr<app_telemetry_meter>;
+  [[nodiscard]] auto orphan_reporter() const -> std::shared_ptr<couchbase::core::orphan_reporter>;
+  [[nodiscard]] auto app_telemetry_meter() const -> std::shared_ptr<core::app_telemetry_meter>;
   [[nodiscard]] auto default_retry_strategy() const -> std::shared_ptr<couchbase::retry_strategy>;
   [[nodiscard]] auto is_closed() const -> bool;
   [[nodiscard]] auto is_configured() const -> bool;

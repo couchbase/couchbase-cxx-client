@@ -29,7 +29,10 @@ analytics_index_get_all_request::encode_to(encoded_request_type& encoded,
                                            http_context& /* context */) const -> std::error_code
 {
   const tao::json::value body{
-    { "statement", "SELECT d.* FROM Metadata.`Index` d WHERE d.DataverseName <> \"Metadata\"" },
+    {
+      "statement",
+      "SELECT d.* FROM Metadata.`Index` d WHERE d.DataverseName <> \"Metadata\"",
+    },
   };
 
   encoded.headers["content-type"] = "application/json";

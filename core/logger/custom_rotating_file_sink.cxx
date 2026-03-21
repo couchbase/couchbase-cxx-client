@@ -72,8 +72,10 @@ custom_rotating_file_sink<Mutex>::custom_rotating_file_sink(const spdlog::filena
   , file_helper_{ open_file() }
   , current_size_{ file_helper_->size() } // expensive. called only once
   , formatter{ std::make_unique<spdlog::pattern_formatter>(log_pattern,
-                                                           spdlog::pattern_time_type::local) }
-  , next_file_id_{ find_first_logfile_id(base_filename) }
+                                                           spdlog::pattern_time_type::local), }
+  , next_file_id_{
+    find_first_logfile_id(base_filename),
+  }
 {
   add_hook(opening_log_file_);
 }
