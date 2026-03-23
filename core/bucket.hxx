@@ -453,6 +453,7 @@ public:
   [[nodiscard]] auto default_retry_strategy() const -> std::shared_ptr<couchbase::retry_strategy>;
   [[nodiscard]] auto is_closed() const -> bool;
   [[nodiscard]] auto is_configured() const -> bool;
+  [[nodiscard]] auto supports_feature(protocol::hello_feature feature) const -> bool;
 
   auto direct_dispatch(std::shared_ptr<mcbp::queue_request> req) -> std::error_code;
   auto direct_re_queue(const std::shared_ptr<mcbp::queue_request>& req, bool is_retry)

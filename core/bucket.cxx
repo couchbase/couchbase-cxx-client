@@ -1070,6 +1070,21 @@ public:
     return closed_;
   }
 
+  [[nodiscard]] auto supports_feature(protocol::hello_feature feature) const -> bool
+  {
+    std::map<size_t, io::mcbp_session> sessions;
+    {
+      const std::scoped_lock lock(sessions_mutex_);
+      sessions = sessions_;
+    }
+    // All sessions in a homogeneous cluster negotiate the same features; check the first one.
+    for (auto& [index, session] : sessions) {
+      return session.supports_feature(feature);
+    }
+    // No sessions yet — conservatively assume the feature is not available.
+    return false;
+  }
+
   [[nodiscard]] auto is_configured() const -> bool
   {
     return configured_;
@@ -1340,6 +1355,12 @@ auto
 bucket::is_configured() const -> bool
 {
   return impl_->is_configured();
+}
+
+auto
+bucket::supports_feature(protocol::hello_feature feature) const -> bool
+{
+  return impl_->supports_feature(feature);
 }
 
 void
@@ -2143,7 +2164,13 @@ bucket::direct_execute(operations::lookup_in_request request,
       return impl::subdoc::has_xattr_path_flag(lhs.flags_) &&
              !impl::subdoc::has_xattr_path_flag(rhs.flags_);
     });
-  for (const auto& spec : request.specs) {
+  // Strip the binary-XATTR path flag if the server did not negotiate subdoc_binary_xattr, matching
+  // the behaviour of lookup_in_request::encode_to() on the legacy mcbp_command path.
+  const bool supports_binary_xattr = supports_feature(protocol::hello_feature::subdoc_binary_xattr);
+  for (auto& spec : request.specs) {
+    if (!supports_binary_xattr) {
+      impl::subdoc::reset_binary_value_path_flag(spec.flags_);
+    }
     options.operations.push_back({
       static_cast<protocol::subdoc_opcode>(spec.opcode_),
       static_cast<std::uint8_t>(spec.flags_),
@@ -2204,12 +2231,24 @@ bucket::direct_execute(operations::lookup_in_request request,
               entry.value = res.value;
             }
 
-            if (res.error && !first_error_index) {
+            if (entry.ec && !first_error_index) {
               first_error_index = res.index;
               first_error_path = entry.path;
             }
           }
         }
+
+        // Bubble up the first field error to the overall ec, matching the behaviour of
+        // lookup_in_request::make_response() in the legacy mcbp_command path.
+        if (!ec && first_error_index) {
+          ec = resp.fields[*first_error_index].ec;
+        }
+
+        // Re-sort fields by original_index so callers that rely on insertion order
+        // (e.g. transaction_get_result::create_from_subdoc) see the expected layout.
+        std::sort(resp.fields.begin(), resp.fields.end(), [](const auto& lhs, const auto& rhs) {
+          return lhs.original_index < rhs.original_index;
+        });
       }
 
       resp.ctx = make_subdocument_error_context(
@@ -2399,7 +2438,20 @@ bucket::direct_execute(impl::with_cancellation<operations::lookup_in_request> re
   for (std::size_t i = 0; i < request.specs.size(); ++i) {
     request.specs[i].original_index_ = i;
   }
-  for (const auto& spec : request.specs) {
+  // XATTR operations must precede non-XATTR operations (server requirement)
+  std::stable_sort(
+    request.specs.begin(), request.specs.end(), [](const auto& lhs, const auto& rhs) -> bool {
+      return impl::subdoc::has_xattr_path_flag(lhs.flags_) &&
+             !impl::subdoc::has_xattr_path_flag(rhs.flags_);
+    });
+  // Strip the binary-XATTR path flag if the server did not negotiate subdoc_binary_xattr, matching
+  // the behaviour of lookup_in_request::encode_to() on the legacy mcbp_command path.
+  const bool supports_binary_xattr_wcr =
+    supports_feature(protocol::hello_feature::subdoc_binary_xattr);
+  for (auto& spec : request.specs) {
+    if (!supports_binary_xattr_wcr) {
+      impl::subdoc::reset_binary_value_path_flag(spec.flags_);
+    }
     options.operations.push_back({
       static_cast<protocol::subdoc_opcode>(spec.opcode_),
       static_cast<std::uint8_t>(spec.flags_),
@@ -2413,73 +2465,85 @@ bucket::direct_execute(impl::with_cancellation<operations::lookup_in_request> re
   auto key = utils::to_binary(request.id.key());
   auto cancel_token = request.cancel_token;
 
-  auto res =
-    lookup_in(std::move(scope),
-              std::move(collection),
-              std::move(key),
-              options,
-              [request = std::move(request), handler = std::move(handler)](
-                const lookup_in_result& result, std::error_code ec) mutable -> void {
-                std::optional<std::size_t> first_error_index{};
-                std::optional<std::string> first_error_path{};
+  auto res = lookup_in(
+    std::move(scope),
+    std::move(collection),
+    std::move(key),
+    options,
+    [request = std::move(request), handler = std::move(handler)](
+      const lookup_in_result& result, std::error_code ec) mutable -> void {
+      std::optional<std::size_t> first_error_index{};
+      std::optional<std::string> first_error_path{};
 
-                operations::lookup_in_response resp;
-                if (!ec) {
-                  resp.fields.resize(request.specs.size());
-                  for (std::size_t i = 0; i < request.specs.size(); ++i) {
-                    const auto& req_entry = request.specs[i];
-                    auto& entry = resp.fields[i];
-                    entry.path = req_entry.path_;
-                    entry.original_index = req_entry.original_index_;
-                    entry.opcode = static_cast<protocol::subdoc_opcode>(req_entry.opcode_);
-                    entry.status = key_value_status_code::success;
-                  }
+      operations::lookup_in_response resp;
+      if (!ec) {
+        resp.fields.resize(request.specs.size());
+        for (std::size_t i = 0; i < request.specs.size(); ++i) {
+          const auto& req_entry = request.specs[i];
+          auto& entry = resp.fields[i];
+          entry.path = req_entry.path_;
+          entry.original_index = req_entry.original_index_;
+          entry.opcode = static_cast<protocol::subdoc_opcode>(req_entry.opcode_);
+          entry.status = key_value_status_code::success;
+        }
 
-                  for (const auto& res : result.results) {
-                    CB_LOG_TRACE("lookup_in result: index={}, status={}, error={}, value_len={}",
-                                 res.index,
-                                 static_cast<std::uint16_t>(res.status),
-                                 res.error.message(),
-                                 res.value.size());
-                    if (res.index < resp.fields.size()) {
-                      auto& entry = resp.fields[res.index];
-                      entry.status = res.status;
-                      entry.ec = res.error;
-                      entry.exists = (res.error == std::error_code{});
-                      CB_LOG_TRACE("lookup_in entry: path={}, exists={}, ec={}, status={}",
-                                   entry.path,
-                                   entry.exists,
-                                   entry.ec.message(),
-                                   static_cast<std::uint16_t>(entry.status));
-                      if (entry.opcode == protocol::subdoc_opcode::exists &&
-                          res.status == key_value_status_code::subdoc_path_not_found) {
-                        entry.ec = {};
-                      }
-                      if (entry.opcode == protocol::subdoc_opcode::exists && !entry.ec) {
-                        entry.value = utils::to_binary(entry.exists ? "true" : "false");
-                      } else {
-                        entry.value = res.value;
-                      }
+        for (const auto& res : result.results) {
+          CB_LOG_TRACE("lookup_in result: index={}, status={}, error={}, value_len={}",
+                       res.index,
+                       static_cast<std::uint16_t>(res.status),
+                       res.error.message(),
+                       res.value.size());
+          if (res.index < resp.fields.size()) {
+            auto& entry = resp.fields[res.index];
+            entry.status = res.status;
+            entry.ec = res.error;
+            entry.exists = (res.error == std::error_code{});
+            CB_LOG_TRACE("lookup_in entry: path={}, exists={}, ec={}, status={}",
+                         entry.path,
+                         entry.exists,
+                         entry.ec.message(),
+                         static_cast<std::uint16_t>(entry.status));
+            if (entry.opcode == protocol::subdoc_opcode::exists &&
+                res.status == key_value_status_code::subdoc_path_not_found) {
+              entry.ec = {};
+            }
+            if (entry.opcode == protocol::subdoc_opcode::exists && !entry.ec) {
+              entry.value = utils::to_binary(entry.exists ? "true" : "false");
+            } else {
+              entry.value = res.value;
+            }
 
-                      if (res.error && !first_error_index) {
-                        first_error_index = res.index;
-                        first_error_path = entry.path;
-                      }
-                    }
-                  }
-                }
+            if (entry.ec && !first_error_index) {
+              first_error_index = res.index;
+              first_error_path = entry.path;
+            }
+          }
+        }
 
-                resp.ctx = make_subdocument_error_context(
-                  make_key_value_error_context(
-                    ec, request.id, result.internal.retry_attempts, result.internal.retry_reasons),
-                  ec,
-                  std::move(first_error_path),
-                  first_error_index,
-                  result.internal.is_deleted);
-                resp.cas = result.cas;
-                resp.deleted = result.internal.is_deleted;
-                handler(std::move(resp));
-              });
+        // Bubble up the first field error to the overall ec, matching the behaviour of
+        // lookup_in_request::make_response() in the legacy mcbp_command path.
+        if (!ec && first_error_index) {
+          ec = resp.fields[*first_error_index].ec;
+        }
+
+        // Re-sort fields by original_index so callers that rely on insertion order
+        // (e.g. transaction_get_result::create_from_subdoc) see the expected layout.
+        std::sort(resp.fields.begin(), resp.fields.end(), [](const auto& lhs, const auto& rhs) {
+          return lhs.original_index < rhs.original_index;
+        });
+      }
+
+      resp.ctx = make_subdocument_error_context(
+        make_key_value_error_context(
+          ec, request.id, result.internal.retry_attempts, result.internal.retry_reasons),
+        ec,
+        std::move(first_error_path),
+        first_error_index,
+        result.internal.is_deleted);
+      resp.cas = result.cas;
+      resp.deleted = result.internal.is_deleted;
+      handler(std::move(resp));
+    });
 
   if (res) {
     cancel_token->setup([op = res.value()]() -> void {
