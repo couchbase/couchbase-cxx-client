@@ -127,7 +127,10 @@ void
 queue_request::cancel(std::error_code error)
 {
   if (internal_cancel()) {
-    callback_({}, shared_from_this(), error);
+    // Move callback_ before invoking to release any captured state (e.g. shared_ptr cycles)
+    // as soon as the callback returns rather than retaining it for the lifetime of the request.
+    auto cb = std::move(callback_);
+    cb({}, shared_from_this(), error);
   }
 }
 
@@ -152,7 +155,9 @@ queue_request::try_callback(std::shared_ptr<queue_response> response, std::error
   if (persistent_) {
     if (error) {
       if (internal_cancel()) {
-        return callback_(std::move(response), shared_from_this(), error);
+        // Move callback_ before invoking to release any captured state (e.g. shared_ptr cycles).
+        auto cb = std::move(callback_);
+        return cb(std::move(response), shared_from_this(), error);
       }
     } else if (!is_completed_) {
       return callback_(std::move(response), shared_from_this(), error);
@@ -160,7 +165,10 @@ queue_request::try_callback(std::shared_ptr<queue_response> response, std::error
     return;
   }
   if (bool expected_state{ false }; is_completed_.compare_exchange_strong(expected_state, true)) {
-    return callback_(std::move(response), shared_from_this(), error);
+    // Move callback_ before invoking to release any captured state (e.g. shared_ptr cycles)
+    // as soon as the callback returns.
+    auto cb = std::move(callback_);
+    return cb(std::move(response), shared_from_this(), error);
   }
 }
 

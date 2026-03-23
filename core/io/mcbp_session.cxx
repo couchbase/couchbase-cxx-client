@@ -1439,13 +1439,15 @@ public:
     resolver_.cancel();
     // Dispatch close through the stream's strand to serialize with any in-flight on_connect
     // that may be reading plain_stream_impl::stream_ concurrently from the stream's strand.
+    // Also move bootstrap_handler_ cleanup onto the strand to prevent a data race with
+    // on_connect, which writes bootstrap_handler_ from the strand.
     asio::dispatch(stream_->get_executor(), [self = shared_from_this()]() -> void {
+      if (auto h = std::move(self->bootstrap_handler_); h) {
+        h->stop();
+      }
       self->stream_->close([](std::error_code) -> void {
       });
     });
-    if (auto h = std::move(bootstrap_handler_); h) {
-      h->stop();
-    }
     if (auto h = std::move(handler_); h) {
       h->stop();
     }
@@ -2142,6 +2144,9 @@ private:
       {
         const std::scoped_lock lock(output_buffer_mutex_);
         output_buffer_.clear();
+      }
+      if (stopped_) {
+        return;
       }
       bootstrap_handler_ = std::make_shared<bootstrap_handler>(shared_from_this());
 

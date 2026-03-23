@@ -918,6 +918,11 @@ public:
     }
     if (!added.empty() || !removed.empty() || sequence_changed) {
       const std::scoped_lock lock(sessions_mutex_);
+      if (closed_) {
+        // bucket was closed while the config update was in flight; do not create new sessions that
+        // would never be stopped
+        return;
+      }
       std::map<size_t, io::mcbp_session> new_sessions{};
 
       std::size_t next_index{ 0 };
