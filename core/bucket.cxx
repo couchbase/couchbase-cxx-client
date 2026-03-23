@@ -2238,12 +2238,6 @@ bucket::direct_execute(operations::lookup_in_request request,
           }
         }
 
-        // Bubble up the first field error to the overall ec, matching the behaviour of
-        // lookup_in_request::make_response() in the legacy mcbp_command path.
-        if (!ec && first_error_index) {
-          ec = resp.fields[*first_error_index].ec;
-        }
-
         // Re-sort fields by original_index so callers that rely on insertion order
         // (e.g. transaction_get_result::create_from_subdoc) see the expected layout.
         std::sort(resp.fields.begin(), resp.fields.end(), [](const auto& lhs, const auto& rhs) {
@@ -2518,12 +2512,6 @@ bucket::direct_execute(impl::with_cancellation<operations::lookup_in_request> re
               first_error_path = entry.path;
             }
           }
-        }
-
-        // Bubble up the first field error to the overall ec, matching the behaviour of
-        // lookup_in_request::make_response() in the legacy mcbp_command path.
-        if (!ec && first_error_index) {
-          ec = resp.fields[*first_error_index].ec;
         }
 
         // Re-sort fields by original_index so callers that rely on insertion order

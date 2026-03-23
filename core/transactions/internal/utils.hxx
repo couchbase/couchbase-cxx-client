@@ -162,6 +162,58 @@ error_class_from_response(const Resp& resp)
   return {};
 }
 
+// Specialization for lookup_in_response: the overall ctx.ec() is success for
+// subdoc_multi_path_failure (document exists but some specs failed), so we must
+// also inspect per-field errors to detect cases like missing transaction XATTRs
+// on a non-transacted document.
+template<>
+inline std::optional<error_class>
+error_class_from_response(const core::operations::lookup_in_response& resp)
+{
+  // Document-level errors are still reported via ctx.ec()
+  if (resp.ctx.ec()) {
+    if (resp.ctx.ec() == couchbase::errc::key_value::document_not_found) {
+      return FAIL_DOC_NOT_FOUND;
+    }
+    if (resp.ctx.ec() == couchbase::errc::key_value::document_exists) {
+      return FAIL_DOC_ALREADY_EXISTS;
+    }
+    if (resp.ctx.ec() == couchbase::errc::common::cas_mismatch) {
+      return FAIL_CAS_MISMATCH;
+    }
+    if (resp.ctx.ec() == couchbase::errc::common::unambiguous_timeout ||
+        resp.ctx.ec() == couchbase::errc::common::temporary_failure ||
+        resp.ctx.ec() == couchbase::errc::key_value::durable_write_in_progress) {
+      return FAIL_TRANSIENT;
+    }
+    if (resp.ctx.ec() == couchbase::errc::key_value::durability_ambiguous ||
+        resp.ctx.ec() == couchbase::errc::common::ambiguous_timeout ||
+        resp.ctx.ec() == couchbase::errc::common::request_canceled) {
+      return FAIL_AMBIGUOUS;
+    }
+    return FAIL_OTHER;
+  }
+  // No document-level error. Check per-field errors: for subdoc_multi_path_failure
+  // the server returns success at the document level but per-spec errors for each
+  // missing path.  Use first_error_index stored in the context to find the first
+  // failed spec and map its error code to an error class.
+  if (const auto& idx = resp.ctx.first_error_index(); idx.has_value()) {
+    if (*idx < resp.fields.size()) {
+      const auto& field_ec = resp.fields[*idx].ec;
+      if (field_ec == couchbase::errc::key_value::path_not_found) {
+        return FAIL_PATH_NOT_FOUND;
+      }
+      if (field_ec == couchbase::errc::key_value::path_exists) {
+        return FAIL_PATH_ALREADY_EXISTS;
+      }
+      if (field_ec) {
+        return FAIL_OTHER;
+      }
+    }
+  }
+  return {};
+}
+
 static constexpr std::chrono::milliseconds DEFAULT_RETRY_OP_DELAY{ 3 };
 static constexpr std::chrono::milliseconds DEFAULT_RETRY_OP_EXP_DELAY{ 1 };
 static constexpr std::chrono::milliseconds DEFAULT_RETRY_OP_MAX_EXP_DELAY{ 100 };
