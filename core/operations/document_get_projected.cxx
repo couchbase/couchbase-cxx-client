@@ -210,14 +210,13 @@ get_projected_request::make_response(key_value_error_context&& ctx,
           response.ctx.override_ec(errc::common::parsing_failure);
           return response;
         }
-        tao::json::value new_doc;
+        tao::json::value new_doc = tao::json::empty_object;
         for (const auto& projection : projections) {
           if (auto value_to_apply = subdoc_lookup(full_doc, projection)) {
             subdoc_apply_projection(new_doc, projection, *value_to_apply, preserve_array_indexes);
-          } else {
-            response.ctx.override_ec(errc::key_value::path_not_found);
-            return response;
           }
+          // We ignore paths that were not found, similar to how we ignore them in the subdoc
+          // multi-lookup below.
         }
         response.value = utils::json::generate_binary(new_doc);
       }

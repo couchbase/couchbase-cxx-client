@@ -1109,3 +1109,98 @@ TEST_CASE("integration: get with cancellation in the core API", "[integration]")
     REQUIRE(resp.ctx.ec() == couchbase::errc::common::request_canceled);
   }
 }
+
+TEST_CASE("integration: projected get with a path that does not exist", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+
+  auto cluster = integration.public_cluster();
+  auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
+
+  auto id = test::utils::uniq_id("projected_get");
+  auto doc_with_many_paths = tao::json::value{};
+  for (std::uint8_t i = 0; i < 20; ++i) {
+    doc_with_many_paths["field_" + std::to_string(i)] = i;
+  }
+
+  {
+    auto [err, resp] = collection.insert(id, doc_with_many_paths, {}).get();
+    REQUIRE_SUCCESS(err.ec());
+    REQUIRE_FALSE(resp.cas().empty());
+  }
+
+  SECTION("with less than 16 projected paths")
+  {
+    auto [err, resp] = collection
+                         .get(id,
+                              couchbase::get_options{}.project(
+                                std::vector<std::string>{ "field_0", "field_1", "does_not_exist" }))
+                         .get();
+    REQUIRE_SUCCESS(err.ec());
+
+    auto content = resp.content_as<tao::json::value>();
+    INFO(fmt::format("Content: {}", couchbase::core::utils::json::generate(content)));
+    REQUIRE(content.at("field_0").get_unsigned() == 0);
+    REQUIRE(content.at("field_1").get_unsigned() == 1);
+    REQUIRE_THROWS_AS(content.at("does_not_exist"), std::out_of_range);
+  }
+
+  SECTION("with more than 16 projected paths (full doc fetch)")
+  {
+    std::vector<std::string> paths{ "does_not_exist" };
+    for (std::uint8_t i = 0; i < 18; ++i) {
+      paths.push_back("field_" + std::to_string(i));
+    }
+
+    auto [err, resp] = collection.get(id, couchbase::get_options{}.project(paths)).get();
+    REQUIRE_SUCCESS(err.ec());
+
+    auto content = resp.content_as<tao::json::value>();
+    INFO(fmt::format("Content: {}", couchbase::core::utils::json::generate(content)));
+    for (std::uint8_t i = 0; i < 18; ++i) {
+      REQUIRE(content.at("field_" + std::to_string(i)).get_unsigned() == i);
+    }
+    REQUIRE_THROWS_AS(content.at("does_not_exist"), std::out_of_range);
+  }
+}
+
+TEST_CASE(
+  "integration: projected get where none of the paths exist should return empty JSON object",
+  "[integration]")
+{
+  test::utils::integration_test_guard integration;
+
+  auto cluster = integration.public_cluster();
+  auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
+
+  auto id = test::utils::uniq_id("projected_get");
+
+  {
+    auto [err, resp] = collection.insert(id, basic_doc, {}).get();
+    REQUIRE_SUCCESS(err.ec());
+    REQUIRE_FALSE(resp.cas().empty());
+  }
+
+  SECTION("with less than 16 projected paths")
+  {
+    auto [err, resp] = collection
+                         .get(id,
+                              couchbase::get_options{}.project(
+                                std::vector<std::string>{ "does_not_exist_1", "does_not_exist_2" }))
+                         .get();
+    REQUIRE_SUCCESS(err.ec());
+    REQUIRE(tao::json::empty_object == resp.content_as<tao::json::value>());
+  }
+
+  SECTION("with more than 16 projected paths (full doc fetch)")
+  {
+    std::vector<std::string> paths{};
+    for (std::uint8_t i = 0; i < 20; ++i) {
+      paths.push_back("does_not_exist_" + std::to_string(i));
+    }
+
+    auto [err, resp] = collection.get(id, couchbase::get_options{}.project(paths)).get();
+    REQUIRE_SUCCESS(err.ec());
+    REQUIRE(tao::json::empty_object == resp.content_as<tao::json::value>());
+  }
+}
