@@ -284,7 +284,8 @@ attempt_context_impl::get(const core::document_id& id, Callback&& cb)
           } else {
             if (!res) {
               return self->op_completed_with_error(
-                std::move(cb), transaction_operation_failed(*ec, "document not found"));
+                std::move(cb),
+                transaction_operation_failed(FAIL_DOC_NOT_FOUND, "document not found"));
             }
             auto err =
               check_forward_compat(forward_compat_stage::GETS, res->links().forward_compat());
@@ -3352,7 +3353,11 @@ attempt_context_impl::do_get(const core::document_id& id,
               return cb(std::nullopt, std::nullopt, std::nullopt, std::nullopt);
             }
 
-            if (ec) {
+            // FAIL_PATH_NOT_FOUND with a valid doc means some transaction XATTRs
+            // (e.g. txn.id, txn.atr) are absent on this document — the normal
+            // state for a non-transacted document.  Fall through to the
+            // link-inspection logic below instead of treating it as a hard error.
+            if (ec && !(ec == FAIL_PATH_NOT_FOUND && doc.has_value())) {
               return cb(ec, cause, err_message, std::nullopt);
             }
 
@@ -3661,7 +3666,9 @@ attempt_context_impl::create_staged_insert_error_handler(const core::document_id
               std::optional<external_exception> /* cause */,
               std::optional<std::string> err_message,
               std::optional<transaction_get_result> doc) mutable {
-              if (!ec3) {
+              // FAIL_PATH_NOT_FOUND with a valid doc means the document exists but has no
+              // transaction XATTRs — treat it like a successful fetch of a non-transacted doc.
+              if (!ec3 || (ec3 == FAIL_PATH_NOT_FOUND && doc.has_value())) {
                 if (doc) {
                   CB_ATTEMPT_CTX_LOG_DEBUG(
                     self,

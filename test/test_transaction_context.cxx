@@ -266,6 +266,53 @@ TEST_CASE("transactions: can do rollback simple transaction", "[transactions]")
   REQUIRE_NOTHROW(tx->existing_error());
 }
 
+TEST_CASE("transactions: get on non-transacted document returns content", "[transactions]")
+{
+  // Regression test: tx->get() on a document that has never been touched by a
+  // transaction must succeed.  The server returns subdoc_multi_path_failure
+  // (individual XATTR paths absent) rather than key_not_found, so
+  // error_class_from_response() produces FAIL_PATH_NOT_FOUND.  do_get() must
+  // recognise this as the normal non-transacted state and not discard the doc.
+  test::utils::integration_test_guard integration;
+
+  auto txns = integration.transactions();
+  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+  couchbase::core::document_id id{
+    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn_get_nontx")
+  };
+
+  // Write a plain (non-transacted) document.
+  {
+    couchbase::core::operations::upsert_request req{ id, tx_content_json.data };
+    req.flags = tx_content_json.flags;
+    auto resp = test::utils::execute(integration.cluster, req);
+    REQUIRE_SUCCESS(resp.ctx.ec());
+  }
+
+  auto tx = transaction_context::create(*txns);
+  auto barrier = std::make_shared<std::promise<void>>();
+  auto f = barrier->get_future();
+  tx->new_attempt_context();
+  tx->get(id, [tx, &barrier](std::exception_ptr err, std::optional<transaction_get_result> res) {
+    // The get must succeed: no error and the result must be present.
+    CHECK_FALSE(err);
+    REQUIRE(res);
+
+    // The returned content must match what we upserted.
+    CHECK(res->content().data == tx_content_json.data);
+
+    // Clean up: roll back so we leave no ATR entries around.
+    tx->rollback([barrier](std::exception_ptr rollback_err) {
+      CHECK_FALSE(rollback_err);
+      barrier->set_value();
+    });
+  });
+  f.get();
+  // No transaction errors must have been recorded.
+  REQUIRE_NOTHROW(tx->existing_error());
+}
+
 TEST_CASE("transactions: can get insert errors", "[transactions]")
 {
   test::utils::integration_test_guard integration;
