@@ -17,6 +17,8 @@
 
 #include "test_helper_integration.hxx"
 
+#include <atomic>
+
 #include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/lookup_in_specs.hxx>
 #include <couchbase/match_all_query.hxx>
@@ -45,21 +47,22 @@ public:
 
   void add_tag(const std::string& name, std::uint64_t value) override
   {
-    const std::scoped_lock lock(tags_lock_);
     int_tags_[name] = value;
   }
 
   void add_tag(const std::string& name, const std::string& value) override
   {
-    const std::scoped_lock lock(tags_lock_);
     string_tags_[name] = value;
   }
 
   void end() override
   {
-    const std::scoped_lock lock(tags_lock_);
     duration_ = std::chrono::duration_cast<std::chrono::nanoseconds>(
       std::chrono::steady_clock::now() - start_);
+    // Release fence: all writes above are visible to any thread that subsequently
+    // performs an acquire-load on sealed_.  Readers (string_tags, int_tags, duration,
+    // start) must call sealed_.load(acquire) before touching those fields.
+    sealed_.store(true, std::memory_order_release);
   }
 
   void add_child_span(const std::shared_ptr<test_span>& child)
@@ -90,25 +93,30 @@ public:
 
   auto string_tags() -> std::map<std::string, std::string>
   {
-    const std::scoped_lock lock(tags_lock_);
+    // Acquire fence: synchronises-with the release-store in end(), ensuring all
+    // writes made before end() are visible here (TSan sees the happens-before edge).
+    (void)sealed_.load(std::memory_order_acquire);
     return string_tags_;
   }
 
   auto int_tags() -> std::map<std::string, std::uint64_t>
   {
-    const std::scoped_lock lock(tags_lock_);
+    (void)sealed_.load(std::memory_order_acquire);
     return int_tags_;
   }
 
   auto duration() const -> std::chrono::nanoseconds
   {
-    const std::scoped_lock lock(tags_lock_);
+    (void)sealed_.load(std::memory_order_acquire);
     return duration_;
   }
 
   auto start() const -> std::chrono::time_point<std::chrono::steady_clock>
   {
-    const std::scoped_lock lock(tags_lock_);
+    // start_ is written once in the constructor before any thread sees this object,
+    // so no synchronisation is needed here; the acquire load is a no-op but kept
+    // for symmetry.
+    (void)sealed_.load(std::memory_order_acquire);
     return start_;
   }
 
@@ -121,7 +129,11 @@ private:
   std::string id_;
   std::chrono::time_point<std::chrono::steady_clock> start_;
   std::chrono::nanoseconds duration_{ 0 };
-  mutable std::mutex tags_lock_{};
+  // Atomic seal flag used to establish a happens-before edge between the io thread
+  // (writer: add_tag / end) and the main thread (reader: string_tags / int_tags /
+  // duration / start).  end() does a release-store; readers do an acquire-load.
+  // This is lock-free and gives TSan the edge it needs without any mutex overhead.
+  mutable std::atomic<bool> sealed_{ false };
   std::map<std::string, std::string> string_tags_;
   std::map<std::string, std::uint64_t> int_tags_;
   std::map<std::string, std::vector<std::weak_ptr<test_span>>> child_spans_{};
