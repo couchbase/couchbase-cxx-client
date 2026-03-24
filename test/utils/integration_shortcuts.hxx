@@ -19,82 +19,23 @@
 
 #include "core/cluster.hxx"
 
-#include <condition_variable>
-#include <mutex>
-#include <optional>
+#include <future>
+#include <utility>
 
 namespace test::utils
 {
-
-/**
- * TSan-safe synchronization barrier replacing std::promise/std::future.
- *
- * libstdc++'s std::promise/std::future uses pthread_once internally, whose
- * happens-before semantics are not fully tracked by TSan, producing false
- * data-race reports. This barrier uses std::mutex + std::condition_variable
- * which TSan fully understands.
- */
-template<typename T>
-class barrier
-{
-public:
-  void set_value(T v)
-  {
-    std::scoped_lock lock(mutex_);
-    value_ = std::move(v);
-    cv_.notify_one();
-  }
-
-  T get()
-  {
-    std::unique_lock lock(mutex_);
-    cv_.wait(lock, [this] {
-      return value_.has_value();
-    });
-    return std::move(*value_);
-  }
-
-private:
-  std::mutex mutex_{};
-  std::condition_variable cv_{};
-  std::optional<T> value_{};
-};
-
-template<>
-class barrier<void>
-{
-public:
-  void set_value()
-  {
-    std::scoped_lock lock(mutex_);
-    ready_ = true;
-    cv_.notify_one();
-  }
-
-  void get()
-  {
-    std::unique_lock lock(mutex_);
-    cv_.wait(lock, [this] {
-      return ready_;
-    });
-  }
-
-private:
-  std::mutex mutex_{};
-  std::condition_variable cv_{};
-  bool ready_{ false };
-};
 
 template<class Request>
 auto
 execute(const couchbase::core::cluster& cluster, Request request)
 {
   using response_type = typename Request::response_type;
-  auto b = std::make_shared<barrier<response_type>>();
-  cluster.execute(request, [b](response_type resp) {
-    b->set_value(std::move(resp));
+  std::promise<response_type> promise;
+  auto future = promise.get_future();
+  cluster.execute(request, [&promise](response_type resp) {
+    promise.set_value(std::move(resp));
   });
-  return b->get();
+  return future.get();
 }
 
 void

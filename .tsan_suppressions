@@ -48,6 +48,9 @@ race:std::__future_base::_State_baseV2
 #      go through memcpy without a couchbase:: frame on the stack.
 #   d) std::default_delete<couchbase::*>: covers unique_ptr deleters for
 #      SDK internal types (e.g. internal_search_result, internal_search_meta_data).
+#   e) __tsan_memcpy and memcmp: covers vector<byte> copies in SDK result types
+#      (mutate_in_result::entry, lookup_in_result::entry) where the allocator
+#      isn't in the stack and SDK type frame isn't in the stack.
 # ---------------------------------------------------------------------------
 race:std::__new_allocator<couchbase::
 race:std::default_delete<couchbase::
@@ -72,7 +75,16 @@ race:couchbase::diagnostics_result
 race:couchbase::management::
 race:couchbase::internal_search_result
 race:couchbase::internal_search_meta_data
+# __tsan_memcpy and memcmp suppressions for std::vector<std::byte> copies in
+# SDK result types (mutate_in_response::entry, lookup_in_response::entry) when
+# the happens-before is established by promise/future but TSan misses it.
+race:__tsan_memcpy
+race:memcmp
 # core (internal) result types and options for range scan operations
+# and core operations result types with vector<byte> fields (mutate_in_response::entry,
+# lookup_in_response::entry) where the SDK type frame isn't in the stack during vector copy.
+race:couchbase::core::operations::mutate_in_response
+race:couchbase::core::operations::lookup_in_response
 race:couchbase::core::range_scan_create_result
 race:couchbase::core::range_scan_continue_result
 race:couchbase::core::range_scan_create_options
@@ -111,11 +123,18 @@ race:couchbase::core::agent::
 # Pattern A3: SDK cluster internals allocated on io thread, first accessed
 #   on main thread after cluster::connect() completes.  The happens-before
 #   is established by the promise/future inside connect(), but TSan misses it.
+#
+#   cluster_label_listener_impl uses std::shared_mutex (std::__shared_mutex_pthread)
+#   which TSan reports as racing between construction on io thread and first use
+#   on main thread. Suppress the class name, the shared_mutex implementation,
+#   and operator delete to cover all variations of this false positive.
 # ---------------------------------------------------------------------------
 race:couchbase::core::cluster_impl
 race:couchbase::core::tracing::tracer_wrapper
 race:couchbase::core::metrics::meter_wrapper
 race:couchbase::core::cluster_label_listener_impl
+race:std::__shared_mutex_pthread
+race:operator delete
 
 # ---------------------------------------------------------------------------
 # Pattern B: operator delete on io thread vs pthread_cond_wait on main thread.

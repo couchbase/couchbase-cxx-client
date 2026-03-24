@@ -17,27 +17,30 @@
 
 #include "integration_shortcuts.hxx"
 
-#include <couchbase/build_config.hxx>
-
 #include "core/logger/logger.hxx"
 #include "core/utils/join_strings.hxx"
+
+#include <couchbase/build_config.hxx>
+
+#include <future>
 
 namespace test::utils
 {
 void
 open_cluster(const couchbase::core::cluster& cluster, const couchbase::core::origin& origin)
 {
-  auto b = std::make_shared<barrier<std::error_code>>();
+  std::promise<std::error_code> promise;
+  auto future = promise.get_future();
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-  cluster.open_in_background(origin, [b](std::error_code ec) mutable {
-    b->set_value(ec);
+  cluster.open_in_background(origin, [&promise](std::error_code ec) mutable {
+    promise.set_value(ec);
   });
 #else
-  cluster.open(origin, [b](std::error_code ec) mutable {
-    b->set_value(ec);
+  cluster.open(origin, [&promise](std::error_code ec) mutable {
+    promise.set_value(ec);
   });
 #endif
-  auto rc = b->get();
+  auto rc = future.get();
   if (rc) {
     CB_LOG_CRITICAL("unable to connect to the cluster: {}, nodes={}",
                     rc.message(),
@@ -49,21 +52,23 @@ open_cluster(const couchbase::core::cluster& cluster, const couchbase::core::ori
 void
 close_cluster(const couchbase::core::cluster& cluster)
 {
-  auto b = std::make_shared<barrier<void>>();
-  cluster.close([b]() {
-    b->set_value();
+  std::promise<void> promise;
+  auto future = promise.get_future();
+  cluster.close([&promise]() mutable {
+    promise.set_value();
   });
-  b->get();
+  future.get();
 }
 
 void
 open_bucket(const couchbase::core::cluster& cluster, const std::string& bucket_name)
 {
-  auto b = std::make_shared<barrier<std::error_code>>();
-  cluster.open_bucket(bucket_name, [b](std::error_code ec) mutable {
-    b->set_value(ec);
+  std::promise<std::error_code> promise;
+  auto future = promise.get_future();
+  cluster.open_bucket(bucket_name, [&promise](std::error_code ec) mutable {
+    promise.set_value(ec);
   });
-  auto rc = b->get();
+  auto rc = future.get();
   if (rc) {
     CB_LOG_CRITICAL("unable to open bucket: {}, name={}", rc.message(), bucket_name);
     throw std::system_error(rc);
@@ -73,11 +78,12 @@ open_bucket(const couchbase::core::cluster& cluster, const std::string& bucket_n
 void
 close_bucket(const couchbase::core::cluster& cluster, const std::string& bucket_name)
 {
-  auto b = std::make_shared<barrier<std::error_code>>();
-  cluster.close_bucket(bucket_name, [b](std::error_code ec) mutable {
-    b->set_value(ec);
+  std::promise<std::error_code> promise;
+  auto future = promise.get_future();
+  cluster.close_bucket(bucket_name, [&promise](std::error_code ec) mutable {
+    promise.set_value(ec);
   });
-  auto rc = b->get();
+  auto rc = future.get();
   if (rc) {
     CB_LOG_CRITICAL("unable to close bucket: {}, name={}", rc.message(), bucket_name);
     throw std::system_error(rc);

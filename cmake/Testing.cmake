@@ -65,7 +65,7 @@ macro(integration_test name)
   endif()
   set(_catch_extra_args "")
   if(DEFINED COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS AND EXISTS "${COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS}")
-    set(_catch_extra_args ENVIRONMENT "TSAN_OPTIONS=suppressions=${COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS}")
+    set(_catch_extra_args ENVIRONMENT "TSAN_OPTIONS=halt_on_error=0,suppressions=${COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS}")
   endif()
   catch_discover_tests(
     test_integration_${name}
@@ -113,7 +113,7 @@ macro(transaction_test name)
   endif()
   set(_catch_extra_args "")
   if(DEFINED COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS AND EXISTS "${COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS}")
-    set(_catch_extra_args ENVIRONMENT "TSAN_OPTIONS=suppressions=${COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS}")
+    set(_catch_extra_args ENVIRONMENT "TSAN_OPTIONS=halt_on_error=0,suppressions=${COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS}")
   endif()
   catch_discover_tests(
     test_transaction_${name}
@@ -160,7 +160,7 @@ macro(unit_test name)
   endif()
   set(_catch_extra_args "")
   if(DEFINED COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS AND EXISTS "${COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS}")
-    set(_catch_extra_args ENVIRONMENT "TSAN_OPTIONS=suppressions=${COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS}")
+    set(_catch_extra_args ENVIRONMENT "TSAN_OPTIONS=halt_on_error=0,suppressions=${COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS}")
   endif()
   catch_discover_tests(
     test_unit_${name}

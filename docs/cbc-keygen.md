@@ -186,5 +186,3 @@ You can also set the number of vbuckets with the `--number-of-vbuckets` switch.
 ### SEE ALSO
 
 [cbc](#cbc), [cbc-pillowfight](#cbc-pillowfight).
-
-

@@ -105,7 +105,7 @@ jobs:
           - ubsan
           - valgrind
         server:
-          - 7.6.7
+          - 8.0.0
         tls:
           - plain
           - tls

@@ -67,7 +67,8 @@ case "${CB_SANITIZER}" in
 
     tsan | thread)
         CB_CMAKE_EXTRAS="-DENABLE_SANITIZER_THREAD=ON"
-        export TSAN_OPTIONS="second_deadlock_stack=1"
+        # TSan suppressions file to filter known false positives (barrier<T> and std::future)
+        export TSAN_OPTIONS="halt_on_error=0,second_deadlock_stack=1,suppressions=${PROJECT_ROOT}/.tsan_suppressions"
         ;;
 
     msan | memory)
