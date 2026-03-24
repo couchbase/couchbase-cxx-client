@@ -45,16 +45,19 @@ public:
 
   void add_tag(const std::string& name, std::uint64_t value) override
   {
+    const std::scoped_lock lock(tags_lock_);
     int_tags_[name] = value;
   }
 
   void add_tag(const std::string& name, const std::string& value) override
   {
+    const std::scoped_lock lock(tags_lock_);
     string_tags_[name] = value;
   }
 
   void end() override
   {
+    const std::scoped_lock lock(tags_lock_);
     duration_ = std::chrono::duration_cast<std::chrono::nanoseconds>(
       std::chrono::steady_clock::now() - start_);
   }
@@ -87,21 +90,25 @@ public:
 
   auto string_tags() -> std::map<std::string, std::string>
   {
+    const std::scoped_lock lock(tags_lock_);
     return string_tags_;
   }
 
   auto int_tags() -> std::map<std::string, std::uint64_t>
   {
+    const std::scoped_lock lock(tags_lock_);
     return int_tags_;
   }
 
   auto duration() const -> std::chrono::nanoseconds
   {
+    const std::scoped_lock lock(tags_lock_);
     return duration_;
   }
 
   auto start() const -> std::chrono::time_point<std::chrono::steady_clock>
   {
+    const std::scoped_lock lock(tags_lock_);
     return start_;
   }
 
@@ -114,6 +121,7 @@ private:
   std::string id_;
   std::chrono::time_point<std::chrono::steady_clock> start_;
   std::chrono::nanoseconds duration_{ 0 };
+  mutable std::mutex tags_lock_{};
   std::map<std::string, std::string> string_tags_;
   std::map<std::string, std::uint64_t> int_tags_;
   std::map<std::string, std::vector<std::weak_ptr<test_span>>> child_spans_{};

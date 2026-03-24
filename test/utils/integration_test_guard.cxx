@@ -322,7 +322,18 @@ integration_test_guard::public_cluster(
     options_customizer(options);
   }
 
-  auto [err, c] = couchbase::cluster::connect(ctx.connection_string, options).get();
+  // Use the callback overload of cluster::connect() with a TSan-safe barrier instead of
+  // the std::future-returning overload.  libstdc++'s std::future uses pthread_once internally
+  // which TSan does not fully track, causing false data-race reports.  The callback form
+  // (called directly on the spawned thread) combined with our mutex/condvar barrier gives TSan
+  // a fully-visible happens-before edge.
+  using result_type = std::pair<couchbase::error, couchbase::cluster>;
+  auto b = std::make_shared<barrier<result_type>>();
+  couchbase::cluster::connect(
+    ctx.connection_string, options, [b](couchbase::error err, couchbase::cluster c) mutable {
+      b->set_value({ std::move(err), std::move(c) });
+    });
+  auto [err, c] = b->get();
   if (err.ec()) {
     CB_LOG_CRITICAL("unable to connect to cluster (public API): {}", err.message());
     throw std::runtime_error(

@@ -31,6 +31,10 @@ function(enable_sanitizers project_name)
         message(WARNING "Thread sanitizer does not work with Address and Leak sanitizer enabled")
       else()
         list(APPEND SANITIZERS "thread")
+        # Propagate the suppression file path so that test targets can set TSAN_OPTIONS.
+        set(COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS
+            "${PROJECT_SOURCE_DIR}/.tsan_suppressions"
+            CACHE FILEPATH "Path to TSan suppressions file")
       endif()
     endif()
 
