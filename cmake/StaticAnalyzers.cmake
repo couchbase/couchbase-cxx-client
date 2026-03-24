@@ -42,9 +42,9 @@ if(ENABLE_CLANG_TIDY)
       clang-tidy-18
       clang-tidy)
   if(LLVM_ROOT_DIR)
-    find_program(CLANGTIDY ${CLANGTIDY_CANDIDATES} HINTS "${LLVM_ROOT_DIR}/bin")
+    find_program(CLANGTIDY NAMES ${CLANGTIDY_CANDIDATES} HINTS "${LLVM_ROOT_DIR}/bin")
   else()
-    find_program(CLANGTIDY ${CLANGTIDY_CANDIDATES})
+    find_program(CLANGTIDY NAMES ${CLANGTIDY_CANDIDATES})
   endif()
   if(CLANGTIDY)
     # -Wno-unknown-warning-option: suppresses errors when clang-tidy passes flags not known to older
