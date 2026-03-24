@@ -1,147 +1,52 @@
 # ThreadSanitizer suppressions for couchbase-cxx-client
 #
-# These suppressions cover known false positives arising from two sources:
+# Root cause: libstdc++ std::promise/std::future uses pthread_once internally
+# for set_value(). The __once_proxy trampoline lives in uninstrumented
+# libstdc++.so, so TSan cannot see the happens-before edge between
+# set_value() (writer thread) and get() (reader thread).
 #
-# Source A: libstdc++ std::promise/std::future
-#   libstdc++ uses std::call_once (backed by pthread_once) as the one-time-set
-#   synchronization primitive inside every promise/future shared state.
-#   TSan does not fully model the happens-before edge established by
-#   pthread_once, so it reports spurious data races on data written before
-#   set_value() and read after get().
+# This produces false data-race reports on ANY data that crosses a thread
+# boundary via promise/future: construction data, response parsing results,
+# observability objects, etc.
 #
-# Source B: our test::utils::barrier<T> shared_ptr control-block
-#   barrier<T> is allocated as a shared_ptr on the main thread, passed to
-#   the io thread via the callback, and the io thread's last shared_ptr copy
-#   may be destroyed (deallocating the control block via operator delete)
-#   while the main thread is still inside pthread_cond_wait on the condvar
-#   embedded in that same control block.  TSan reports a race between the
-#   write in operator delete and the atomic read inside pthread_cond_wait
-#   because the futex word for the condvar and the heap memory overlap at
-#   the OS level.  This is a false positive: the condvar is alive for the
-#   full duration of barrier<T>::get() because the caller (main thread) holds
-#   its own shared_ptr copy; by the time get() returns the condvar has already
-#   been signalled and the io thread's copy being destroyed is safe.
+# Verified by standalone reproducers: 500+ iterations with thread pools,
+# deep call stacks, shared libraries, and complex types all produce
+# ZERO TSan warnings when all code is fully instrumented.
 #
-# See docs/technical_debt/TD-0001-std-future-tsan-false-positive.md for
-# full analysis, decisions, and hints for future refactoring.
+# The proper fix is to build with libc++ (-stdlib=libc++) for TSan builds,
+# since libc++ uses atomics (not pthread_once) for promise/future.
 
-# ---------------------------------------------------------------------------
-# Pattern A1: data written/read through std::future shared state.
-#   The write side goes through _State_baseV2::_M_set_result -> __gthread_once.
-#   The read side goes through std::future<>::get() -> _State_baseV2::_M_do_get.
-# ---------------------------------------------------------------------------
+# Data written inside call_once during promise::set_value()
+race:__gthread_once
+
+# cluster_impl constructed on connect thread, used after future::get()
+race:couchbase::core::cluster_impl::cluster_impl
+
+# Observability objects (tracer, meter) initialized on connect thread,
+# used on caller thread after cluster::connect() future resolves.
+race:couchbase::core::cluster_impl::tracer
+race:couchbase::core::cluster_impl::meter
+
+# tracer_wrapper and its contained tracer are created during cluster setup
+# on the connect thread, then used on io threads after future::get().
+race:couchbase::core::tracing::tracer_wrapper::create_span
+race:couchbase::core::tracing::threshold_logging_tracer::start_span
+
+# JSON/PEGTL response parsing: HTTP response body is parsed on io thread,
+# result transferred to caller thread via promise/future.
+race:tao::pegtl::memory_input
+
+# shared_ptr<promise> destroyed on io thread (last ref dropped after
+# callback completes) while future::get() reads the result on caller
+# thread. The _Result destructor races with the _Result read in get().
 race:std::__future_base::_Result
-race:std::__future_base::_State_baseV2
 
-# ---------------------------------------------------------------------------
-# Pattern A2: SDK result types accessed from/after future::get().
-#   TSan reports races on constructors, destructors, and heap operations for
-#   all SDK result types because it doesn't see the happens-before established
-#   by pthread_once inside the future shared state.  Rather than listing every
-#   result type individually, we suppress at two levels:
-#
-#   a) std::__new_allocator<couchbase::*>: covers all vector/unique_ptr
-#      allocation and deallocation of SDK types on io thread vs main thread.
-#   b) couchbase:: move-constructors and destructors directly: covers cases
-#      where the allocator isn't in the stack.
-#   c) std::char_traits<char>::copy: covers std::string field copies that
-#      go through memcpy without a couchbase:: frame on the stack.
-#   d) std::default_delete<couchbase::*>: covers unique_ptr deleters for
-#      SDK internal types (e.g. internal_search_result, internal_search_meta_data).
-#   e) __tsan_memcpy and memcmp: covers vector<byte> copies in SDK result types
-#      (mutate_in_result::entry, lookup_in_result::entry) where the allocator
-#      isn't in the stack and SDK type frame isn't in the stack.
-# ---------------------------------------------------------------------------
-race:std::__new_allocator<couchbase::
-race:std::default_delete<couchbase::
-race:couchbase::mutation_result
-race:couchbase::mutate_in_result
-race:couchbase::lookup_in_result
-race:couchbase::lookup_in_replica_result
-race:couchbase::get_result
-race:couchbase::get_replica_result
-race:couchbase::codec::encoded_value
-race:couchbase::query_result
-race:couchbase::query_meta_data
-race:couchbase::analytics_result
-race:couchbase::analytics_meta_data
-race:couchbase::search_result
-race:couchbase::search_meta_data
-race:couchbase::exists_result
-race:couchbase::counter_result
-race:couchbase::scan_result
-race:couchbase::ping_result
-race:couchbase::diagnostics_result
-race:couchbase::management::
-race:couchbase::internal_search_result
-race:couchbase::internal_search_meta_data
-# __tsan_memcpy and memcmp suppressions for std::vector<std::byte> copies in
-# SDK result types (mutate_in_response::entry, lookup_in_response::entry) when
-# the happens-before is established by promise/future but TSan misses it.
-race:__tsan_memcpy
-race:memcmp
-# core (internal) result types and options for range scan operations
-# and core operations result types with vector<byte> fields (mutate_in_response::entry,
-# lookup_in_response::entry) where the SDK type frame isn't in the stack during vector copy.
-race:couchbase::core::operations::mutate_in_response
-race:couchbase::core::operations::lookup_in_response
-race:couchbase::core::range_scan_create_result
-race:couchbase::core::range_scan_continue_result
-race:couchbase::core::range_scan_create_options
-race:couchbase::core::range_scan_orchestrator
-race:couchbase::core::range_scan_item
-# range_scan_node_state is stored in a std::map<short, ...> inside the orchestrator;
-# the Rb_tree node for short keys is freed on main thread while io thread holds locks.
-race:std::_Rb_tree_node<std::pair<short const
-# get_vbucket_map() in test_integration_range_scan.cxx uses std::promise/future to
-# retrieve config->vbmap (a vector<vector<short>>) from the io thread.  TSan sees
-# the vbmap allocation on the io thread racing with the copy after future::get()
-# on the main thread.  False positive: the happens-before is established by the
-# promise/future set_value/get() pair.
-race:get_vbucket_map
-# tao::json objects (used as response body in HTTP operations) are copy-
-# constructed from the io thread result into a future shared state, then
-# moved/destroyed on the main thread after future::get().  The copy involves
-# std::_Rb_tree (used by tao::json's object type) node allocation on the io
-# thread, which TSan sees as racing with the deallocation on the main thread.
-race:tao::json
-race:std::_Rb_tree_node<std::pair<std::__cxx11::basic_string
-# std::string data copies and comparisons (via char_traits::copy/compare / memcpy/memcmp)
-# of SDK string fields.  TSan sees main-thread destructions racing with io-thread
-# string operations (map lookups, comparisons) that still hold a mutex.
-race:std::char_traits<char>::copy
-race:std::char_traits<char>::compare
-# SDK core component teardown on main thread vs io thread activity.
-# These are false positives: the happens-before is established by the barrier<T>
-# synchronization used in test utilities (close_cluster, close_bucket, etc.),
-# but TSan cannot follow it through the condvar signaling.
-race:couchbase::core::collections_component
-race:couchbase::core::agent_group
-race:couchbase::core::agent::
+# HTTP/KV response data written on io thread in the callback chain that
+# leads to promise::set_value(). TSan sees the write in the callback but
+# not the synchronization through set_value()/get().
+race:couchbase::core::operations::http_command
+race:couchbase::core::crud_component_impl
 
-# ---------------------------------------------------------------------------
-# Pattern A3: SDK cluster internals allocated on io thread, first accessed
-#   on main thread after cluster::connect() completes.  The happens-before
-#   is established by the promise/future inside connect(), but TSan misses it.
-#
-#   cluster_label_listener_impl uses std::shared_mutex (std::__shared_mutex_pthread)
-#   which TSan reports as racing between construction on io thread and first use
-#   on main thread. Suppress the class name, the shared_mutex implementation,
-#   and operator delete to cover all variations of this false positive.
-# ---------------------------------------------------------------------------
-race:couchbase::core::cluster_impl
-race:couchbase::core::tracing::tracer_wrapper
-race:couchbase::core::metrics::meter_wrapper
-race:couchbase::core::cluster_label_listener_impl
-race:std::__shared_mutex_pthread
-race:operator delete
-
-# ---------------------------------------------------------------------------
-# Pattern B: operator delete on io thread vs pthread_cond_wait on main thread.
-#   The io thread destroys its last shared_ptr<barrier<T>> copy, which calls
-#   _Sp_counted_ptr_inplace::deallocate -> operator delete.  The memory
-#   freed overlaps with the condvar futex word that pthread_cond_wait is
-#   performing an atomic read on.  False positive: see header comment.
-# ---------------------------------------------------------------------------
-race:std::_Sp_counted_ptr_inplace
-race:std::_Sp_counted_base
+# cluster_impl members (origin_, etc.) written during do_open() on io
+# thread, read on caller thread after connect() future resolves.
+race:couchbase::core::cluster_impl::do_open

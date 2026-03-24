@@ -137,20 +137,25 @@ queue_request::cancel(std::error_code error)
 void
 queue_request::set_deadline(std::shared_ptr<asio::steady_timer> timer)
 {
+  const std::scoped_lock lock(processing_mutex_);
   deadline_ = std::move(timer);
 }
 
 void
 queue_request::set_retry_backoff(std::shared_ptr<asio::steady_timer> timer)
 {
+  const std::scoped_lock lock(processing_mutex_);
   retry_backoff_ = std::move(timer);
 }
 
 void
 queue_request::try_callback(std::shared_ptr<queue_response> response, std::error_code error)
 {
-  cancel_timer(deadline_);
-  cancel_timer(retry_backoff_);
+  {
+    const std::scoped_lock lock(processing_mutex_);
+    cancel_timer(deadline_);
+    cancel_timer(retry_backoff_);
+  }
 
   if (persistent_) {
     if (error) {

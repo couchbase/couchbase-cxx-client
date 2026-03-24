@@ -1340,11 +1340,20 @@ public:
           session_manager->close();
         }
         self->work_.reset();
-        if (const auto tracer = std::move(self->tracer_); tracer) {
-          tracer->stop();
-        }
-        if (const auto meter = std::move(self->meter_); meter) {
-          meter->stop();
+        {
+          std::shared_ptr<tracing::tracer_wrapper> tracer;
+          std::shared_ptr<metrics::meter_wrapper> meter;
+          {
+            const std::scoped_lock lock(self->observability_mutex_);
+            tracer = std::move(self->tracer_);
+            meter = std::move(self->meter_);
+          }
+          if (tracer) {
+            tracer->stop();
+          }
+          if (meter) {
+            meter->stop();
+          }
         }
         if (const auto meter = std::move(self->app_telemetry_meter_); meter) {
           meter->disable();
@@ -1417,13 +1426,15 @@ public:
     return { {}, session_manager_ };
   }
 
-  auto tracer() const -> const std::shared_ptr<tracing::tracer_wrapper>&
+  auto tracer() const -> std::shared_ptr<tracing::tracer_wrapper>
   {
+    const std::scoped_lock lock(observability_mutex_);
     return tracer_;
   }
 
-  auto meter() const -> const std::shared_ptr<metrics::meter_wrapper>&
+  auto meter() const -> std::shared_ptr<metrics::meter_wrapper>
   {
+    const std::scoped_lock lock(observability_mutex_);
     return meter_;
   }
 
@@ -1506,6 +1517,7 @@ private:
   std::shared_ptr<class cluster_label_listener> cluster_label_listener_{
     std::make_shared<class cluster_label_listener>(),
   };
+  mutable std::mutex observability_mutex_{};
   std::shared_ptr<tracing::tracer_wrapper> tracer_{ nullptr };
   std::shared_ptr<metrics::meter_wrapper> meter_{ nullptr };
   std::shared_ptr<orphan_reporter> orphan_reporter_{ nullptr };
@@ -2660,13 +2672,13 @@ cluster::to_string() const -> std::string
 }
 
 auto
-cluster::tracer() const -> const std::shared_ptr<tracing::tracer_wrapper>&
+cluster::tracer() const -> std::shared_ptr<tracing::tracer_wrapper>
 {
   return impl_->tracer();
 }
 
 auto
-cluster::meter() const -> const std::shared_ptr<metrics::meter_wrapper>&
+cluster::meter() const -> std::shared_ptr<metrics::meter_wrapper>
 {
   return impl_->meter();
 }
