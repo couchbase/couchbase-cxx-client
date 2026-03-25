@@ -239,7 +239,6 @@ TSAN_TARGET_INCLUDE="${TOOLCHAIN_DIR}/include/x86_64-unknown-linux-gnu/c++/v1/ts
 exec "${TOOLCHAIN_DIR}/bin/clang++" \
   -fsanitize=thread \
   -stdlib=libc++ \
-  -nostdinc++ \
   -isystem "${TSAN_INCLUDE}" \
   -isystem "${TSAN_TARGET_INCLUDE}" \
   -L"${TSAN_LIB}" \
@@ -260,9 +259,9 @@ set(TSAN_LIBDIR "${PREFIX}/lib/x86_64-unknown-linux-gnu/tsan")
 set(TSAN_INCDIR "${PREFIX}/include/c++/v1/tsan")
 set(TSAN_TARGET_INCDIR "${PREFIX}/include/x86_64-unknown-linux-gnu/c++/v1/tsan")
 
-set(CMAKE_CXX_FLAGS_INIT "-fsanitize=thread -stdlib=libc++ -nostdinc++ -isystem \${TSAN_INCDIR} -isystem \${TSAN_TARGET_INCDIR}")
-set(CMAKE_EXE_LINKER_FLAGS_INIT "-stdlib=libc++ -L\${TSAN_LIBDIR} -Wl,-rpath,\${TSAN_LIBDIR} -lc++abi")
-set(CMAKE_SHARED_LINKER_FLAGS_INIT "-stdlib=libc++ -L\${TSAN_LIBDIR} -Wl,-rpath,\${TSAN_LIBDIR} -lc++abi")
+set(CMAKE_CXX_FLAGS_INIT "-fsanitize=thread -stdlib=libc++ -isystem \${TSAN_INCDIR} -isystem \${TSAN_TARGET_INCDIR}")
+set(CMAKE_EXE_LINKER_FLAGS_INIT "-fsanitize=thread -stdlib=libc++ -L\${TSAN_LIBDIR} -Wl,-rpath,\${TSAN_LIBDIR} -lc++abi")
+set(CMAKE_SHARED_LINKER_FLAGS_INIT "-fsanitize=thread -stdlib=libc++ -L\${TSAN_LIBDIR} -Wl,-rpath,\${TSAN_LIBDIR} -lc++abi")
 TOOLCHAIN
 
 # ---------------------------------------------------------------------------
