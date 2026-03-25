@@ -1,28 +1,10 @@
 # ThreadSanitizer suppressions for couchbase-cxx-client
 #
-# == libstdc++ false positives (only needed when building with -stdlib=libstdc++) ==
+# TSan builds use libc++ (instrumented with -fsanitize=thread), so there are
+# no false positives from uninstrumented standard library code. All race
+# suppressions that were here previously have been removed -- every warning
+# TSan reports should be investigated as a real bug.
 #
-# libstdc++ std::promise/std::future uses pthread_once (__once_proxy) internally.
-# The trampoline lives in uninstrumented libstdc++.so, so TSan cannot track the
-# happens-before edge between set_value() and get(). This produces false
-# data-race reports on ANY data crossing thread boundaries via promise/future.
-#
-# The proper fix: build with libc++ (-stdlib=libc++) for TSan builds.
-# libc++ uses atomics for promise/future, so TSan sees the synchronization.
-# When built with libc++, these suppressions are unnecessary but harmless.
-
-race:__gthread_once
-race:std::__future_base::_Result
-race:couchbase::core::cluster_impl::cluster_impl
-race:couchbase::core::cluster_impl::tracer
-race:couchbase::core::cluster_impl::meter
-race:couchbase::core::cluster_impl::do_open
-race:couchbase::core::tracing::tracer_wrapper::create_span
-race:couchbase::core::tracing::threshold_logging_tracer::start_span
-race:couchbase::core::operations::http_command
-race:couchbase::core::crud_component_impl
-race:tao::pegtl::memory_input
-
 # == Catch2 signal handler ==
 #
 # Catch2's handleFatalErrorCondition calls operator new/delete inside a signal
