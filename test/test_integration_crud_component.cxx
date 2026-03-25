@@ -937,7 +937,7 @@ TEST_CASE("integration: crud component lock - getAndLockTimeoutHasRetryReasonLoc
       b->set_value(ec);
     });
     EXPECT_SUCCESS(op);
-    b->get_future().get(); // ignore result, cleanup
+    (void)b->get_future().get(); // ignore result, cleanup
   }
 }
 
@@ -1091,7 +1091,7 @@ TEST_CASE("integration: crud component lock - unlockCasMismatch", "[integration]
       b->set_value(ec);
     });
     EXPECT_SUCCESS(op);
-    b->get_future().get();
+    (void)b->get_future().get();
   }
 }
 
@@ -1173,7 +1173,7 @@ TEST_CASE("integration: crud component lock - upsertLockedDocumentTimeoutHasRetr
       b->set_value(ec);
     });
     EXPECT_SUCCESS(op);
-    b->get_future().get();
+    (void)b->get_future().get();
   }
 }
 
@@ -1254,7 +1254,7 @@ TEST_CASE("integration: crud component lock - verifyGetAndLockDoubleLock", "[int
       b->set_value(ec);
     });
     EXPECT_SUCCESS(op);
-    b->get_future().get();
+    (void)b->get_future().get();
   }
 }
 

@@ -1,0 +1,357 @@
+#!/usr/bin/env bash
+#
+# Build a self-contained LLVM toolchain with TSan-instrumented libc++ runtimes.
+#
+# The resulting toolchain at $PREFIX contains:
+#   - clang / clang++          (C/C++ compiler)
+#   - lld                      (linker)
+#   - lldb                     (debugger)
+#   - clangd                   (language server)
+#   - clang-tidy, clang-format (static analysis / formatting)
+#   - compiler-rt              (sanitizer runtimes: ASan, TSan, MSan, UBSan)
+#   - libc++ / libc++abi       (standard library, TSan-instrumented)
+#   - libunwind                (stack unwinding, TSan-instrumented)
+#
+# Why: libstdc++ is not compiled with sanitizer instrumentation, so TSan
+# cannot track happens-before through std::promise/std::future internals
+# (the __once_proxy trampoline in libstdc++.so). Building libc++ with
+# -fsanitize=thread makes the entire standard library visible to TSan,
+# eliminating false positives.
+#
+# Usage:
+#   ./bin/build-llvm-toolchain [--prefix DIR] [--version TAG] [--jobs N]
+#                              [--build-type TYPE] [--with-assertions]
+#                              [--tsan-only]
+#
+# Defaults:
+#   --prefix       $HOME/opt/llvm-dev
+#   --version      llvmorg-22.1.2     (latest stable as of 2026-03-24)
+#   --jobs         $(nproc)
+#   --build-type   Release
+#
+# After building, use the toolchain for TSan builds:
+#   export PATH=$PREFIX/bin:$PATH
+#   cmake -S . -B build-tsan \
+#     -DCMAKE_C_COMPILER=$PREFIX/bin/clang \
+#     -DCMAKE_CXX_COMPILER=$PREFIX/bin/clang++ \
+#     -DCMAKE_CXX_FLAGS="-stdlib=libc++ -nostdinc++ -isystem $PREFIX/include/c++/v1 -isystem $PREFIX/include/x86_64-unknown-linux-gnu/c++/v1" \
+#     -DCMAKE_EXE_LINKER_FLAGS="-stdlib=libc++ -L$PREFIX/lib/x86_64-unknown-linux-gnu -Wl,-rpath,$PREFIX/lib/x86_64-unknown-linux-gnu -lc++abi" \
+#     -DCMAKE_SHARED_LINKER_FLAGS="-stdlib=libc++ -L$PREFIX/lib/x86_64-unknown-linux-gnu -Wl,-rpath,$PREFIX/lib/x86_64-unknown-linux-gnu -lc++abi" \
+#     -DENABLE_SANITIZER_THREAD=ON \
+#     -DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON
+#
+# Disk space: ~20-40 GB for build dir, ~2-4 GB installed
+# Build time: ~15-45 min depending on hardware
+#
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Defaults
+# ---------------------------------------------------------------------------
+PREFIX="${HOME}/opt/llvm-dev"
+LLVM_VERSION="llvmorg-22.1.2"
+JOBS="$(nproc)"
+BUILD_TYPE="Release"
+WITH_ASSERTIONS=OFF
+TSAN_ONLY=false
+SRCDIR=""
+BUILDDIR=""
+
+# ---------------------------------------------------------------------------
+# Parse arguments
+# ---------------------------------------------------------------------------
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --prefix)       PREFIX="$2"; shift 2;;
+    --version)      LLVM_VERSION="$2"; shift 2;;
+    --jobs)         JOBS="$2"; shift 2;;
+    --build-type)   BUILD_TYPE="$2"; shift 2;;
+    --with-assertions) WITH_ASSERTIONS=ON; shift;;
+    --tsan-only)    TSAN_ONLY=true; shift;;
+    --source-dir)   SRCDIR="$2"; shift 2;;
+    --build-dir)    BUILDDIR="$2"; shift 2;;
+    --help|-h)
+      sed -n '2,/^set -euo/{ /^set -euo/d; s/^# \?//p }' "$0"
+      exit 0
+      ;;
+    *) echo "Unknown option: $1" >&2; exit 1;;
+  esac
+done
+
+# Derived paths
+SRCDIR="${SRCDIR:-${PREFIX}-src/llvm-project}"
+BUILDDIR="${BUILDDIR:-${PREFIX}-build}"
+STAGE1_BUILD="${BUILDDIR}/stage1"
+RUNTIMES_BUILD="${BUILDDIR}/runtimes-tsan"
+
+echo "============================================================"
+echo "LLVM Toolchain Builder"
+echo "============================================================"
+echo "  Version:      ${LLVM_VERSION}"
+echo "  Prefix:       ${PREFIX}"
+echo "  Source:        ${SRCDIR}"
+echo "  Build dir:    ${BUILDDIR}"
+echo "  Build type:   ${BUILD_TYPE}"
+echo "  Assertions:   ${WITH_ASSERTIONS}"
+echo "  Jobs:         ${JOBS}"
+echo "  TSan-only:    ${TSAN_ONLY}"
+echo "============================================================"
+echo ""
+
+# ---------------------------------------------------------------------------
+# Step 0: Prerequisites check
+# ---------------------------------------------------------------------------
+echo ">>> Checking prerequisites..."
+for cmd in cmake ninja python3 git; do
+  if ! command -v "$cmd" &>/dev/null; then
+    echo "ERROR: '$cmd' is required but not found in PATH" >&2
+    exit 1
+  fi
+done
+echo "    cmake:  $(cmake --version | head -1)"
+echo "    ninja:  $(ninja --version)"
+echo "    python: $(python3 --version)"
+
+# ---------------------------------------------------------------------------
+# Step 1: Fetch LLVM source
+# ---------------------------------------------------------------------------
+if [[ -d "${SRCDIR}/.git" ]]; then
+  echo ""
+  echo ">>> Source directory exists, updating to ${LLVM_VERSION}..."
+  cd "${SRCDIR}"
+  git fetch --depth=1 origin "refs/tags/${LLVM_VERSION}:refs/tags/${LLVM_VERSION}" 2>/dev/null || true
+  git checkout "${LLVM_VERSION}"
+else
+  echo ""
+  echo ">>> Cloning LLVM ${LLVM_VERSION} (shallow)..."
+  mkdir -p "$(dirname "${SRCDIR}")"
+  git clone --depth=1 --branch "${LLVM_VERSION}" \
+    https://github.com/llvm/llvm-project.git "${SRCDIR}"
+fi
+echo "    Source at: ${SRCDIR}"
+
+# ---------------------------------------------------------------------------
+# Step 2: Stage 1 -- Build the compiler + tools
+# ---------------------------------------------------------------------------
+if [[ "${TSAN_ONLY}" == "true" ]] && [[ -x "${PREFIX}/bin/clang" ]]; then
+  echo ""
+  echo ">>> --tsan-only: Skipping stage 1, using existing toolchain at ${PREFIX}"
+else
+  echo ""
+  echo ">>> Stage 1: Configuring LLVM + Clang + tools..."
+  mkdir -p "${STAGE1_BUILD}"
+  cmake -G Ninja -S "${SRCDIR}/llvm" -B "${STAGE1_BUILD}" \
+    -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
+    -DCMAKE_INSTALL_PREFIX="${PREFIX}" \
+    -DLLVM_ENABLE_ASSERTIONS="${WITH_ASSERTIONS}" \
+    -DLLVM_ENABLE_PROJECTS="clang;clang-tools-extra;lld;lldb" \
+    -DLLVM_ENABLE_RUNTIMES="compiler-rt;libcxx;libcxxabi;libunwind" \
+    -DLLVM_TARGETS_TO_BUILD="X86" \
+    -DLLVM_USE_LINKER=lld \
+    -DLLVM_ENABLE_LLD=ON \
+    -DLLVM_PARALLEL_LINK_JOBS=4 \
+    -DLLVM_INCLUDE_BENCHMARKS=OFF \
+    -DLLVM_INCLUDE_EXAMPLES=OFF \
+    -DLLVM_INCLUDE_TESTS=OFF \
+    -DLLVM_BUILD_DOCS=OFF \
+    -DLLVM_ENABLE_SPHINX=OFF \
+    -DLLVM_ENABLE_DOXYGEN=OFF \
+    -DCLANG_INCLUDE_TESTS=OFF \
+    -DCLANG_ENABLE_STATIC_ANALYZER=ON \
+    -DCLANG_ENABLE_ARCMT=ON \
+    -DLLDB_ENABLE_PYTHON=ON \
+    -DLLDB_ENABLE_CURSES=ON \
+    -DLLDB_ENABLE_LIBEDIT=ON \
+    -DCOMPILER_RT_BUILD_SANITIZERS=ON \
+    -DCOMPILER_RT_BUILD_BUILTINS=ON \
+    -DCOMPILER_RT_BUILD_XRAY=ON \
+    -DCOMPILER_RT_BUILD_LIBFUZZER=ON \
+    -DCOMPILER_RT_BUILD_PROFILE=ON \
+    -DCOMPILER_RT_BUILD_MEMPROF=ON
+
+  echo ""
+  echo ">>> Stage 1: Building (this may take 15-45 minutes)..."
+  cmake --build "${STAGE1_BUILD}" -j "${JOBS}"
+
+  echo ""
+  echo ">>> Stage 1: Installing to ${PREFIX}..."
+  cmake --install "${STAGE1_BUILD}"
+fi
+
+echo ""
+echo ">>> Verifying stage 1 toolchain..."
+"${PREFIX}/bin/clang++" --version
+
+# ---------------------------------------------------------------------------
+# Step 3: Build TSan-instrumented libc++ runtimes using the stage 1 compiler
+# ---------------------------------------------------------------------------
+# This is the critical step. LLVM_USE_SANITIZER=Thread causes
+# HandleLLVMOptions.cmake to add -fsanitize=thread to all C/CXX flags,
+# so libc++, libc++abi, and libunwind are all compiled with TSan
+# instrumentation. The resulting .so files contain TSan hooks, making
+# every standard library operation visible to TSan.
+echo ""
+echo ">>> Stage 2: Configuring TSan-instrumented runtimes..."
+echo "    (libc++ / libc++abi / libunwind with -fsanitize=thread)"
+mkdir -p "${RUNTIMES_BUILD}"
+
+# We build runtimes using the just-built clang, targeting the runtimes
+# subdirectory directly. This is the official LLVM approach for building
+# instrumented runtimes (see HandleLLVMOptions.cmake LLVM_USE_SANITIZER).
+cmake -G Ninja -S "${SRCDIR}/runtimes" -B "${RUNTIMES_BUILD}" \
+  -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
+  -DCMAKE_C_COMPILER="${PREFIX}/bin/clang" \
+  -DCMAKE_CXX_COMPILER="${PREFIX}/bin/clang++" \
+  -DCMAKE_INSTALL_PREFIX="${PREFIX}" \
+  -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" \
+  -DLLVM_USE_LINKER=lld \
+  -DLLVM_USE_SANITIZER=Thread \
+  -DLIBCXX_INSTALL_LIBRARY_DIR="lib/x86_64-unknown-linux-gnu/tsan" \
+  -DLIBCXX_INSTALL_INCLUDE_DIR="include/c++/v1/tsan" \
+  -DLIBCXXABI_INSTALL_LIBRARY_DIR="lib/x86_64-unknown-linux-gnu/tsan" \
+  -DLIBUNWIND_INSTALL_LIBRARY_DIR="lib/x86_64-unknown-linux-gnu/tsan" \
+  -DLIBCXX_INSTALL_INCLUDE_TARGET_DIR="include/x86_64-unknown-linux-gnu/c++/v1/tsan"
+
+echo ""
+echo ">>> Stage 2: Building TSan-instrumented runtimes..."
+cmake --build "${RUNTIMES_BUILD}" -j "${JOBS}"
+
+echo ""
+echo ">>> Stage 2: Installing TSan-instrumented runtimes to ${PREFIX}..."
+cmake --install "${RUNTIMES_BUILD}"
+
+# ---------------------------------------------------------------------------
+# Step 4: Create convenience wrapper script
+# ---------------------------------------------------------------------------
+echo ""
+echo ">>> Creating convenience scripts..."
+
+cat > "${PREFIX}/bin/clang++-tsan" << 'WRAPPER'
+#!/usr/bin/env bash
+# Convenience wrapper: compile and link with TSan-instrumented libc++
+TOOLCHAIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+TSAN_LIB="${TOOLCHAIN_DIR}/lib/x86_64-unknown-linux-gnu/tsan"
+TSAN_INCLUDE="${TOOLCHAIN_DIR}/include/c++/v1/tsan"
+TSAN_TARGET_INCLUDE="${TOOLCHAIN_DIR}/include/x86_64-unknown-linux-gnu/c++/v1/tsan"
+exec "${TOOLCHAIN_DIR}/bin/clang++" \
+  -stdlib=libc++ \
+  -nostdinc++ \
+  -isystem "${TSAN_INCLUDE}" \
+  -isystem "${TSAN_TARGET_INCLUDE}" \
+  -L"${TSAN_LIB}" \
+  -Wl,-rpath,"${TSAN_LIB}" \
+  "$@"
+WRAPPER
+chmod +x "${PREFIX}/bin/clang++-tsan"
+
+# CMake toolchain file for TSan builds
+cat > "${PREFIX}/tsan-toolchain.cmake" << TOOLCHAIN
+# CMake toolchain file for TSan builds with instrumented libc++
+# Usage: cmake -DCMAKE_TOOLCHAIN_FILE=${PREFIX}/tsan-toolchain.cmake ...
+
+set(CMAKE_C_COMPILER "${PREFIX}/bin/clang")
+set(CMAKE_CXX_COMPILER "${PREFIX}/bin/clang++")
+
+set(TSAN_LIBDIR "${PREFIX}/lib/x86_64-unknown-linux-gnu/tsan")
+set(TSAN_INCDIR "${PREFIX}/include/c++/v1/tsan")
+set(TSAN_TARGET_INCDIR "${PREFIX}/include/x86_64-unknown-linux-gnu/c++/v1/tsan")
+
+set(CMAKE_CXX_FLAGS_INIT "-stdlib=libc++ -nostdinc++ -isystem \${TSAN_INCDIR} -isystem \${TSAN_TARGET_INCDIR}")
+set(CMAKE_EXE_LINKER_FLAGS_INIT "-stdlib=libc++ -L\${TSAN_LIBDIR} -Wl,-rpath,\${TSAN_LIBDIR} -lc++abi")
+set(CMAKE_SHARED_LINKER_FLAGS_INIT "-stdlib=libc++ -L\${TSAN_LIBDIR} -Wl,-rpath,\${TSAN_LIBDIR} -lc++abi")
+TOOLCHAIN
+
+# ---------------------------------------------------------------------------
+# Step 5: Verify
+# ---------------------------------------------------------------------------
+echo ""
+echo ">>> Verifying TSan-instrumented libc++..."
+TSAN_LIB="${PREFIX}/lib/x86_64-unknown-linux-gnu/tsan"
+if [[ -f "${TSAN_LIB}/libc++.so" ]]; then
+  echo "    TSan libc++:    ${TSAN_LIB}/libc++.so"
+  # Check that libc++ actually contains TSan instrumentation
+  if nm -D "${TSAN_LIB}/libc++.so" 2>/dev/null | grep -q __tsan; then
+    echo "    TSan symbols:   FOUND (libc++ is TSan-instrumented)"
+  else
+    echo "    WARNING: No __tsan symbols found in libc++.so"
+    echo "    The runtime may not be properly instrumented."
+  fi
+else
+  echo "    WARNING: ${TSAN_LIB}/libc++.so not found"
+fi
+
+# Quick smoke test
+echo ""
+echo ">>> Smoke test: compile and run with TSan-instrumented libc++..."
+SMOKE_DIR=$(mktemp -d)
+cat > "${SMOKE_DIR}/test.cpp" << 'SMOKE'
+#include <future>
+#include <string>
+#include <vector>
+#include <thread>
+
+int main() {
+  for (int i = 0; i < 100; ++i) {
+    std::promise<std::vector<std::string>> p;
+    auto f = p.get_future();
+    std::thread t([&p] {
+      std::vector<std::string> data;
+      data.push_back("hello from thread");
+      data.push_back("second string");
+      p.set_value(std::move(data));
+    });
+    auto result = f.get();
+    t.join();
+    if (result[0] != "hello from thread") return 1;
+  }
+  return 0;
+}
+SMOKE
+
+"${PREFIX}/bin/clang++-tsan" -fsanitize=thread -g -O1 \
+  "${SMOKE_DIR}/test.cpp" -o "${SMOKE_DIR}/test" -lc++abi -lpthread
+
+TSAN_OPTIONS="halt_on_error=1" "${SMOKE_DIR}/test"
+SMOKE_EXIT=$?
+rm -rf "${SMOKE_DIR}"
+
+if [[ ${SMOKE_EXIT} -eq 0 ]]; then
+  echo "    PASS: 100 iterations of promise/future with TSan, 0 warnings"
+else
+  echo "    FAIL: smoke test exited with code ${SMOKE_EXIT}"
+  exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Summary
+# ---------------------------------------------------------------------------
+echo ""
+echo "============================================================"
+echo "Toolchain installed successfully to: ${PREFIX}"
+echo "============================================================"
+echo ""
+echo "Contents:"
+echo "  ${PREFIX}/bin/clang              - C compiler"
+echo "  ${PREFIX}/bin/clang++            - C++ compiler"
+echo "  ${PREFIX}/bin/clang++-tsan       - C++ with TSan-instrumented libc++"
+echo "  ${PREFIX}/bin/lld                - linker"
+echo "  ${PREFIX}/bin/lldb               - debugger"
+echo "  ${PREFIX}/bin/clangd             - language server"
+echo "  ${PREFIX}/bin/clang-tidy         - static analyzer"
+echo "  ${PREFIX}/bin/clang-format       - code formatter"
+echo "  ${PREFIX}/tsan-toolchain.cmake   - CMake toolchain file"
+echo ""
+echo "TSan-instrumented runtimes:"
+echo "  ${PREFIX}/lib/x86_64-unknown-linux-gnu/tsan/libc++.so"
+echo "  ${PREFIX}/lib/x86_64-unknown-linux-gnu/tsan/libc++abi.so"
+echo "  ${PREFIX}/lib/x86_64-unknown-linux-gnu/tsan/libunwind.so"
+echo ""
+echo "Usage with couchbase-cxx-client:"
+echo "  cmake -DCMAKE_TOOLCHAIN_FILE=${PREFIX}/tsan-toolchain.cmake \\"
+echo "        -DENABLE_SANITIZER_THREAD=ON \\"
+echo "        -DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON \\"
+echo "        -S . -B build-tsan"
+echo ""
+echo "Or rebuild just the TSan runtimes later:"
+echo "  $0 --tsan-only --prefix ${PREFIX}"
+echo ""

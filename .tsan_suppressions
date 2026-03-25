@@ -1,52 +1,24 @@
 # ThreadSanitizer suppressions for couchbase-cxx-client
 #
-# Root cause: libstdc++ std::promise/std::future uses pthread_once internally
-# for set_value(). The __once_proxy trampoline lives in uninstrumented
-# libstdc++.so, so TSan cannot see the happens-before edge between
-# set_value() (writer thread) and get() (reader thread).
+# == libstdc++ false positives (only needed when building with -stdlib=libstdc++) ==
 #
-# This produces false data-race reports on ANY data that crosses a thread
-# boundary via promise/future: construction data, response parsing results,
-# observability objects, etc.
+# libstdc++ std::promise/std::future uses pthread_once (__once_proxy) internally.
+# The trampoline lives in uninstrumented libstdc++.so, so TSan cannot track the
+# happens-before edge between set_value() and get(). This produces false
+# data-race reports on ANY data crossing thread boundaries via promise/future.
 #
-# Verified by standalone reproducers: 500+ iterations with thread pools,
-# deep call stacks, shared libraries, and complex types all produce
-# ZERO TSan warnings when all code is fully instrumented.
-#
-# The proper fix is to build with libc++ (-stdlib=libc++) for TSan builds,
-# since libc++ uses atomics (not pthread_once) for promise/future.
+# The proper fix: build with libc++ (-stdlib=libc++) for TSan builds.
+# libc++ uses atomics for promise/future, so TSan sees the synchronization.
+# When built with libc++, these suppressions are unnecessary but harmless.
 
-# Data written inside call_once during promise::set_value()
 race:__gthread_once
-
-# cluster_impl constructed on connect thread, used after future::get()
+race:std::__future_base::_Result
 race:couchbase::core::cluster_impl::cluster_impl
-
-# Observability objects (tracer, meter) initialized on connect thread,
-# used on caller thread after cluster::connect() future resolves.
 race:couchbase::core::cluster_impl::tracer
 race:couchbase::core::cluster_impl::meter
-
-# tracer_wrapper and its contained tracer are created during cluster setup
-# on the connect thread, then used on io threads after future::get().
+race:couchbase::core::cluster_impl::do_open
 race:couchbase::core::tracing::tracer_wrapper::create_span
 race:couchbase::core::tracing::threshold_logging_tracer::start_span
-
-# JSON/PEGTL response parsing: HTTP response body is parsed on io thread,
-# result transferred to caller thread via promise/future.
-race:tao::pegtl::memory_input
-
-# shared_ptr<promise> destroyed on io thread (last ref dropped after
-# callback completes) while future::get() reads the result on caller
-# thread. The _Result destructor races with the _Result read in get().
-race:std::__future_base::_Result
-
-# HTTP/KV response data written on io thread in the callback chain that
-# leads to promise::set_value(). TSan sees the write in the callback but
-# not the synchronization through set_value()/get().
 race:couchbase::core::operations::http_command
 race:couchbase::core::crud_component_impl
-
-# cluster_impl members (origin_, etc.) written during do_open() on io
-# thread, read on caller thread after connect() future resolves.
-race:couchbase::core::cluster_impl::do_open
+race:tao::pegtl::memory_input
