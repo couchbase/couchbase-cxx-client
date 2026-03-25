@@ -118,7 +118,7 @@ public:
   {
   }
 
-  [[nodiscard]] auto log_prefix() const -> const std::string&;
+  [[nodiscard]] auto log_prefix() const -> std::string;
   [[nodiscard]] auto cancel(std::uint32_t opaque, std::error_code ec, retry_reason reason) -> bool;
   [[nodiscard]] auto is_stopped() const -> bool;
   [[nodiscard]] auto is_bootstrapped() const -> bool;

@@ -27,7 +27,7 @@
 #   --prefix       $HOME/opt/llvm-dev
 #   --version      llvmorg-22.1.2     (latest stable as of 2026-03-24)
 #   --jobs         $(nproc)
-#   --build-type   Release
+#   --build-type   RelWithDebInfo
 #
 # After building, use the toolchain for TSan builds:
 #   export PATH=$PREFIX/bin:$PATH
@@ -51,7 +51,7 @@ set -euo pipefail
 PREFIX="${HOME}/opt/llvm-dev"
 LLVM_VERSION="llvmorg-22.1.2"
 JOBS="$(nproc)"
-BUILD_TYPE="Release"
+BUILD_TYPE="RelWithDebInfo"
 WITH_ASSERTIONS=OFF
 TSAN_ONLY=false
 SRCDIR=""
@@ -121,6 +121,7 @@ if [[ -d "${SRCDIR}/.git" ]]; then
   cd "${SRCDIR}"
   git fetch --depth=1 origin "refs/tags/${LLVM_VERSION}:refs/tags/${LLVM_VERSION}" 2>/dev/null || true
   git checkout "${LLVM_VERSION}"
+
 else
   echo ""
   echo ">>> Cloning LLVM ${LLVM_VERSION} (shallow)..."
@@ -147,7 +148,6 @@ else
     -DLLVM_ENABLE_PROJECTS="clang;clang-tools-extra;lld;lldb" \
     -DLLVM_ENABLE_RUNTIMES="compiler-rt;libcxx;libcxxabi;libunwind" \
     -DLLVM_TARGETS_TO_BUILD="X86" \
-    -DLLVM_USE_LINKER=lld \
     -DLLVM_ENABLE_LLD=ON \
     -DLLVM_PARALLEL_LINK_JOBS=4 \
     -DLLVM_INCLUDE_BENCHMARKS=OFF \
@@ -203,14 +203,17 @@ cmake -G Ninja -S "${SRCDIR}/runtimes" -B "${RUNTIMES_BUILD}" \
   -DCMAKE_C_COMPILER="${PREFIX}/bin/clang" \
   -DCMAKE_CXX_COMPILER="${PREFIX}/bin/clang++" \
   -DCMAKE_INSTALL_PREFIX="${PREFIX}" \
+  -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=lld" \
+  -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=lld" \
   -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" \
-  -DLLVM_USE_LINKER=lld \
   -DLLVM_USE_SANITIZER=Thread \
+  -DLIBCXX_INSTALL_HEADERS=OFF \
+  -DLIBCXX_USE_COMPILER_RT=ON \
+  -DLIBCXXABI_USE_COMPILER_RT=ON \
+  -DLIBUNWIND_USE_COMPILER_RT=ON \
   -DLIBCXX_INSTALL_LIBRARY_DIR="lib/x86_64-unknown-linux-gnu/tsan" \
-  -DLIBCXX_INSTALL_INCLUDE_DIR="include/c++/v1/tsan" \
   -DLIBCXXABI_INSTALL_LIBRARY_DIR="lib/x86_64-unknown-linux-gnu/tsan" \
-  -DLIBUNWIND_INSTALL_LIBRARY_DIR="lib/x86_64-unknown-linux-gnu/tsan" \
-  -DLIBCXX_INSTALL_INCLUDE_TARGET_DIR="include/x86_64-unknown-linux-gnu/c++/v1/tsan"
+  -DLIBUNWIND_INSTALL_LIBRARY_DIR="lib/x86_64-unknown-linux-gnu/tsan"
 
 echo ""
 echo ">>> Stage 2: Building TSan-instrumented runtimes..."
@@ -234,6 +237,7 @@ TSAN_LIB="${TOOLCHAIN_DIR}/lib/x86_64-unknown-linux-gnu/tsan"
 TSAN_INCLUDE="${TOOLCHAIN_DIR}/include/c++/v1/tsan"
 TSAN_TARGET_INCLUDE="${TOOLCHAIN_DIR}/include/x86_64-unknown-linux-gnu/c++/v1/tsan"
 exec "${TOOLCHAIN_DIR}/bin/clang++" \
+  -fsanitize=thread \
   -stdlib=libc++ \
   -nostdinc++ \
   -isystem "${TSAN_INCLUDE}" \
@@ -256,7 +260,7 @@ set(TSAN_LIBDIR "${PREFIX}/lib/x86_64-unknown-linux-gnu/tsan")
 set(TSAN_INCDIR "${PREFIX}/include/c++/v1/tsan")
 set(TSAN_TARGET_INCDIR "${PREFIX}/include/x86_64-unknown-linux-gnu/c++/v1/tsan")
 
-set(CMAKE_CXX_FLAGS_INIT "-stdlib=libc++ -nostdinc++ -isystem \${TSAN_INCDIR} -isystem \${TSAN_TARGET_INCDIR}")
+set(CMAKE_CXX_FLAGS_INIT "-fsanitize=thread -stdlib=libc++ -nostdinc++ -isystem \${TSAN_INCDIR} -isystem \${TSAN_TARGET_INCDIR}")
 set(CMAKE_EXE_LINKER_FLAGS_INIT "-stdlib=libc++ -L\${TSAN_LIBDIR} -Wl,-rpath,\${TSAN_LIBDIR} -lc++abi")
 set(CMAKE_SHARED_LINKER_FLAGS_INIT "-stdlib=libc++ -L\${TSAN_LIBDIR} -Wl,-rpath,\${TSAN_LIBDIR} -lc++abi")
 TOOLCHAIN

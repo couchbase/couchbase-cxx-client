@@ -22,3 +22,11 @@ race:couchbase::core::tracing::threshold_logging_tracer::start_span
 race:couchbase::core::operations::http_command
 race:couchbase::core::crud_component_impl
 race:tao::pegtl::memory_input
+
+# == Catch2 signal handler ==
+#
+# Catch2's handleFatalErrorCondition calls operator new/delete inside a signal
+# handler, which TSan reports as "signal-unsafe call inside of a signal".
+# This only triggers when a test times out and Catch2 catches the signal.
+signal:operator new
+signal:operator delete

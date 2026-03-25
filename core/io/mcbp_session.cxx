@@ -969,8 +969,9 @@ public:
     stop(retry_reason::do_not_retry);
   }
 
-  [[nodiscard]] auto log_prefix() const -> const std::string&
+  [[nodiscard]] auto log_prefix() const -> std::string
   {
+    const std::scoped_lock lock(session_info_mutex_);
     return log_prefix_;
   }
 
@@ -1869,7 +1870,7 @@ public:
     config_.emplace(std::move(config));
     configured_ = true;
     {
-      const std::scoped_lock lock(session_info_mutex_);
+      const std::scoped_lock listeners_lock(session_info_mutex_);
       for (const auto& listener : config_listeners_) {
         asio::post(asio::bind_executor(ctx_, [listener, c = config_.value()]() mutable {
           return listener->update_config(std::move(c));
@@ -2450,7 +2451,7 @@ mcbp_session::mcbp_session(const std::string& client_id,
 }
 
 auto
-mcbp_session::log_prefix() const -> const std::string&
+mcbp_session::log_prefix() const -> std::string
 {
   return impl_->log_prefix();
 }

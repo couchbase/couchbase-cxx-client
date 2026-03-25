@@ -41,6 +41,7 @@
 #include <spdlog/fmt/bundled/chrono.h>
 
 #include <functional>
+#include <mutex>
 #include <utility>
 
 namespace couchbase::core::operations
@@ -59,6 +60,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
   asio::steady_timer retry_backoff;
   Request request;
   encoded_request_type encoded;
+  std::mutex command_mutex_{};
   std::optional<std::uint32_t> opaque_{};
   std::optional<io::mcbp_session> session_{};
   mcbp_command_handler handler_{};
@@ -135,13 +137,16 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
 
   void cancel(retry_reason reason, bool is_timeout = true)
   {
-    // NOLINTBEGIN(bugprone-unchecked-optional-access)
-    if (opaque_ && session_) {
-      if (session_->cancel(opaque_.value(), asio::error::operation_aborted, reason)) {
-        handler_ = nullptr;
+    {
+      const std::scoped_lock lock(command_mutex_);
+      // NOLINTBEGIN(bugprone-unchecked-optional-access)
+      if (opaque_ && session_) {
+        if (session_->cancel(opaque_.value(), asio::error::operation_aborted, reason)) {
+          handler_ = nullptr;
+        }
       }
+      // NOLINTEND(bugprone-unchecked-optional-access)
     }
-    // NOLINTEND(bugprone-unchecked-optional-access)
     if (is_timeout) {
       invoke_handler(
         request.retries.idempotent() || !opaque_.has_value()
@@ -158,7 +163,10 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     retry_backoff.cancel();
     deadline.cancel();
     mcbp_command_handler handler{};
-    std::swap(handler, handler_);
+    {
+      const std::scoped_lock lock(command_mutex_);
+      std::swap(handler, handler_);
+    }
 #ifdef COUCHBASE_CXX_CLIENT_CREATE_OPERATION_SPAN_IN_CORE
     if (span_ != nullptr) {
       span_->end();
@@ -426,17 +434,20 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
 
   void send_to(io::mcbp_session session)
   {
-    if (!handler_) {
+    {
+      const std::scoped_lock lock(command_mutex_);
+      if (!handler_) {
 #ifdef COUCHBASE_CXX_CLIENT_CREATE_OPERATION_SPAN_IN_CORE
-      if (!span_) {
-        // TODO(DC): Is this necessary? Background:
-        // https://github.com/couchbase/couchbase-cxx-client/pull/160
+        if (!span_) {
+          // TODO(DC): Is this necessary? Background:
+          // https://github.com/couchbase/couchbase-cxx-client/pull/160
+          return;
+        }
+#endif
         return;
       }
-#endif
-      return;
+      session_ = std::move(session);
     }
-    session_ = std::move(session);
     send();
   }
 
