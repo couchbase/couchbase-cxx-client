@@ -398,8 +398,6 @@ public:
       return io::retry_orchestrator::maybe_retry(
         cmd->manager_, cmd, retry_reason::node_not_available, errc::common::request_canceled);
     }
-    cmd->last_dispatched_from_ = session->local_address();
-    cmd->last_dispatched_to_ = session->bootstrap_address();
     CB_LOG_TRACE(
       R"({} send operation id="{}", key="{}", partition={}, index={}, address="{}", rev={})",
       session->log_prefix(),

@@ -1042,12 +1042,13 @@ public:
         while (offset + 6 <= response->value_.size()) {
           subdoc_result sub_res{};
           sub_res.index = res_idx++;
-          std::uint16_t entry_status = mcbp::big_endian::read_uint16(response->value_, offset);
+          const std::uint16_t entry_status =
+            mcbp::big_endian::read_uint16(response->value_, offset);
           offset += 2;
           sub_res.status = static_cast<key_value_status_code>(entry_status);
           sub_res.error = protocol::map_status_code(request->command_, entry_status);
 
-          std::uint32_t entry_size = mcbp::big_endian::read_uint32(response->value_, offset);
+          const std::uint32_t entry_size = mcbp::big_endian::read_uint32(response->value_, offset);
           offset += 4;
 
           if (offset + entry_size <= response->value_.size()) {
@@ -1170,14 +1171,15 @@ public:
         sub_res.index = std::to_integer<std::uint8_t>(response->value_[offset]);
         offset += 1;
 
-        std::uint16_t entry_status = mcbp::big_endian::read_uint16(response->value_, offset);
+        const std::uint16_t entry_status = mcbp::big_endian::read_uint16(response->value_, offset);
         offset += 2;
         sub_res.status = static_cast<key_value_status_code>(entry_status);
         sub_res.error = protocol::map_status_code(request->command_, entry_status);
 
         if (sub_res.error == std::error_code{}) {
           if (offset + 4 <= response->value_.size()) {
-            std::uint32_t entry_size = mcbp::big_endian::read_uint32(response->value_, offset);
+            const std::uint32_t entry_size =
+              mcbp::big_endian::read_uint32(response->value_, offset);
             offset += 4;
 
             if (offset + entry_size <= response->value_.size()) {

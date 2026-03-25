@@ -37,6 +37,7 @@
 #include <couchbase/durability_level.hxx>
 #include <couchbase/error_codes.hxx>
 
+#include <asio/post.hpp>
 #include <asio/steady_timer.hpp>
 #include <spdlog/fmt/bundled/chrono.h>
 
@@ -254,6 +255,8 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
   void send()
   {
     // NOLINTBEGIN(bugprone-unchecked-optional-access)
+    last_dispatched_from_ = session_->local_address();
+    last_dispatched_to_ = session_->bootstrap_address();
     opaque_ = session_->next_opaque();
     request.opaque = *opaque_;
     if (request.id.use_collections() && !request.id.is_collection_resolved()) {
@@ -426,18 +429,19 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
 
   void send_to(io::mcbp_session session)
   {
-    if (!handler_) {
+    asio::post(deadline.get_executor(),
+               [self = this->shared_from_this(), session = std::move(session)]() mutable {
+                 if (!self->handler_) {
 #ifdef COUCHBASE_CXX_CLIENT_CREATE_OPERATION_SPAN_IN_CORE
-      if (!span_) {
-        // TODO(DC): Is this necessary? Background:
-        // https://github.com/couchbase/couchbase-cxx-client/pull/160
-        return;
-      }
+                   if (!self->span_) {
+                     return;
+                   }
 #endif
-      return;
-    }
-    session_ = std::move(session);
-    send();
+                   return;
+                 }
+                 self->session_ = std::move(session);
+                 self->send();
+               });
   }
 
 private:
