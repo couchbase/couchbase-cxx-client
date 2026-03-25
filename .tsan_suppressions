@@ -12,3 +12,7 @@
 # This only triggers when a test times out and Catch2 catches the signal.
 signal:operator new
 signal:operator delete
+
+# Catch2 RunContext is not thread-safe. Some integration tests call REQUIRE
+# macros from IO-thread callbacks, racing with Catch2's internal state.
+race:Catch::RunContext
