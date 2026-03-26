@@ -400,6 +400,8 @@ collection_id_cache_entry_impl::refresh_collection_id(
   const std::shared_ptr<mcbp::queue_request>& req) -> std::error_code
 {
   // NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks)
+  // clang static analyzer cannot track that shared_ptr captures in lambda (self, req, entry)
+  // will execute and properly clean up the objects
   if (auto ec = queue_->push(req, max_queue_size_); ec) {
     return ec;
   }

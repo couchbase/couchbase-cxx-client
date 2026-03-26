@@ -106,6 +106,9 @@ public:
                        const couchbase::drop_collection_options::built& options,
                        couchbase::drop_collection_handler&& handler) const
   {
+    // NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks)
+    // clang static analyzer cannot track that obs_rec (ownership is managed by unique_ptr
+    // from create_observability_recorder) is moved into lambda which will execute and clean it up
     auto obs_rec =
       create_observability_recorder(core::tracing::operation::mgr_collections_drop_collection,
                                     scope_name,
@@ -121,6 +124,7 @@ public:
                    obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
                    handler(core::impl::make_error(resp.ctx));
                  });
+    // NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
   }
 
   void update_collection(std::string scope_name,
@@ -129,6 +133,9 @@ public:
                          const couchbase::update_collection_options::built& options,
                          couchbase::update_collection_handler&& handler) const
   {
+    // NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks)
+    // clang static analyzer cannot track that obs_rec (ownership is managed by unique_ptr
+    // from create_observability_recorder) is moved into lambda which will execute and clean it up
     auto obs_rec =
       create_observability_recorder(core::tracing::operation::mgr_collections_update_collection,
                                     scope_name,
@@ -145,6 +152,7 @@ public:
                    obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
                    handler(core::impl::make_error(resp.ctx));
                  });
+    // NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
   }
 
   void create_collection(std::string scope_name,
@@ -153,6 +161,9 @@ public:
                          const couchbase::create_collection_options::built& options,
                          couchbase::update_collection_handler&& handler) const
   {
+    // NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks)
+    // clang static analyzer cannot track that obs_rec (ownership is managed by unique_ptr
+    // from create_observability_recorder) is moved into lambda which will execute and clean it up
     auto obs_rec =
       create_observability_recorder(core::tracing::operation::mgr_collections_create_collection,
                                     scope_name,
@@ -169,11 +180,15 @@ public:
                    obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
                    handler(core::impl::make_error(resp.ctx));
                  });
+    // NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
   }
 
   void get_all_scopes(const get_all_scopes_options::built& options,
                       get_all_scopes_handler&& handler) const
   {
+    // NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks)
+    // clang static analyzer cannot track that obs_rec (ownership is managed by unique_ptr
+    // from create_observability_recorder) is moved into lambda which will execute and clean it up
     auto obs_rec = create_observability_recorder(
       core::tracing::operation::mgr_collections_get_all_scopes, {}, {}, options.parent_span);
     core::operations::management::scope_get_all_request request{
@@ -188,12 +203,16 @@ public:
         obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
         handler(core::impl::make_error(resp.ctx), map_scope_specs(resp.manifest));
       });
+    // NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
   }
 
   void create_scope(std::string scope_name,
                     const couchbase::create_scope_options::built& options,
                     couchbase::create_scope_handler&& handler) const
   {
+    // NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks)
+    // clang static analyzer cannot track that obs_rec (ownership is managed by unique_ptr
+    // from create_observability_recorder) is moved into lambda which will execute and clean it up
     auto obs_rec = create_observability_recorder(
       core::tracing::operation::mgr_collections_create_scope, scope_name, {}, options.parent_span);
     core::operations::management::scope_create_request request{
@@ -205,12 +224,16 @@ public:
                    obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
                    handler(core::impl::make_error(resp.ctx));
                  });
+    // NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
   }
 
   void drop_scope(std::string scope_name,
                   const couchbase::drop_scope_options::built& options,
                   couchbase::drop_scope_handler&& handler) const
   {
+    // NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks)
+    // clang static analyzer cannot track that obs_rec (ownership is managed by unique_ptr
+    // from create_observability_recorder) is moved into lambda which will execute and clean it up
     auto obs_rec = create_observability_recorder(
       core::tracing::operation::mgr_collections_drop_scope, scope_name, {}, options.parent_span);
     core::operations::management::scope_drop_request request{
@@ -222,6 +245,7 @@ public:
                    obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
                    handler(core::impl::make_error(resp.ctx));
                  });
+    // NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
   }
 
 private:
