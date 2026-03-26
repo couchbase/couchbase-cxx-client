@@ -35,10 +35,10 @@ struct lookup_in_replica_response {
   struct entry {
     std::string path;
     couchbase::codec::binary value;
-    std::size_t original_index;
-    bool exists;
-    protocol::subdoc_opcode opcode;
-    key_value_status_code status;
+    std::size_t original_index{};
+    bool exists{};
+    protocol::subdoc_opcode opcode{};
+    key_value_status_code status{};
     std::error_code ec{};
   };
   subdocument_error_context ctx{};

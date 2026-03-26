@@ -941,6 +941,160 @@ TEST_CASE("integration: subdoc multi lookup", "[integration]")
     REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_found);
     REQUIRE(resp.fields.empty());
   }
+
+  SECTION("cas is populated even when a path fails")
+  {
+    // Verifies CXXCBC-788: CAS must be set whenever the document was retrieved,
+    // regardless of whether individual subdoc paths fail.  Previously the CAS
+    // was guarded by (!ec), so a path_not_found error left it empty.
+    couchbase::core::operations::lookup_in_request req{ id };
+    req.specs =
+      couchbase::lookup_in_specs{
+        couchbase::lookup_in_specs::get("dictkey"),   // [0] succeeds
+        couchbase::lookup_in_specs::get("non-exist"), // [1] fails: path_not_found
+      }
+        .specs();
+    auto resp = test::utils::execute(integration.cluster, req);
+    REQUIRE_FALSE(resp.cas.empty());
+    REQUIRE_SUCCESS(resp.ctx.ec());
+    REQUIRE_SUCCESS(resp.fields[0].ec);
+    REQUIRE(resp.fields[1].ec == couchbase::errc::key_value::path_not_found);
+    REQUIRE(resp.ctx.first_error_index().has_value());
+    REQUIRE(resp.ctx.first_error_index().value() == 1);
+    REQUIRE(resp.ctx.first_error_path().has_value());
+    REQUIRE(resp.ctx.first_error_path().value() == "non-exist");
+  }
+
+  SECTION("get path not found: top-level success, per-field path_not_found")
+  {
+    // A single get on a missing path must NOT fail the whole operation.
+    // ctx.ec() must be empty; the error is only in fields[0].ec.
+    assert_single_lookup_error(integration,
+                               id,
+                               couchbase::lookup_in_specs::get("incorrectPath"),
+                               couchbase::core::key_value_status_code::subdoc_path_not_found,
+                               couchbase::errc::key_value::path_not_found);
+  }
+
+  SECTION("get path invalid: top-level success, per-field path_invalid")
+  {
+    // A syntactically invalid path must NOT fail the whole operation.
+    if (integration.cluster_version().is_mock()) {
+      assert_single_lookup_error(integration,
+                                 id,
+                                 couchbase::lookup_in_specs::get("array..bad"),
+                                 couchbase::core::key_value_status_code::subdoc_path_not_found,
+                                 couchbase::errc::key_value::path_not_found);
+    } else {
+      assert_single_lookup_error(integration,
+                                 id,
+                                 couchbase::lookup_in_specs::get("array..bad"),
+                                 couchbase::core::key_value_status_code::subdoc_path_invalid,
+                                 couchbase::errc::key_value::path_invalid);
+    }
+  }
+
+  SECTION("count path not found: top-level success, per-field path_not_found")
+  {
+    assert_single_lookup_error(integration,
+                               id,
+                               couchbase::lookup_in_specs::count("incorrectPath"),
+                               couchbase::core::key_value_status_code::subdoc_path_not_found,
+                               couchbase::errc::key_value::path_not_found);
+  }
+
+  SECTION("count path mismatch: top-level success, per-field path_mismatch")
+  {
+    // count on a scalar (string) value must yield path_mismatch, not a top-level error.
+    assert_single_lookup_error(integration,
+                               id,
+                               couchbase::lookup_in_specs::count("dictkey"),
+                               couchbase::core::key_value_status_code::subdoc_path_mismatch,
+                               couchbase::errc::key_value::path_mismatch);
+  }
+
+  SECTION("count path invalid: top-level success, per-field path_invalid")
+  {
+    if (integration.cluster_version().is_mock()) {
+      assert_single_lookup_error(integration,
+                                 id,
+                                 couchbase::lookup_in_specs::count("array..bad"),
+                                 couchbase::core::key_value_status_code::subdoc_path_not_found,
+                                 couchbase::errc::key_value::path_not_found);
+    } else {
+      assert_single_lookup_error(integration,
+                                 id,
+                                 couchbase::lookup_in_specs::count("array..bad"),
+                                 couchbase::core::key_value_status_code::subdoc_path_invalid,
+                                 couchbase::errc::key_value::path_invalid);
+    }
+  }
+
+  SECTION("exists path not found: top-level success, exists=false, no per-field ec")
+  {
+    // The exists opcode is special: path_not_found returns success status with value "false"
+    // and no error code (unlike get/count which propagate path_not_found into fields[i].ec).
+    assert_single_lookup_error(integration,
+                               id,
+                               couchbase::lookup_in_specs::exists("incorrectPath"),
+                               couchbase::core::key_value_status_code::subdoc_path_not_found,
+                               std::error_code{},
+                               "false");
+  }
+
+  SECTION("exists path invalid: top-level success, per-field path_invalid")
+  {
+    if (integration.cluster_version().is_mock()) {
+      assert_single_lookup_error(integration,
+                                 id,
+                                 couchbase::lookup_in_specs::exists("array..bad"),
+                                 couchbase::core::key_value_status_code::subdoc_path_not_found,
+                                 couchbase::errc::key_value::path_not_found);
+    } else {
+      assert_single_lookup_error(integration,
+                                 id,
+                                 couchbase::lookup_in_specs::exists("array..bad"),
+                                 couchbase::core::key_value_status_code::subdoc_path_invalid,
+                                 couchbase::errc::key_value::path_invalid);
+    }
+  }
+
+  SECTION("mixed lookup all specs failing: top-level success, per-field errors")
+  {
+    // Three specs all fail with different errors; the overall operation must still succeed
+    // at the document level (ctx.ec() empty).
+    if (integration.cluster_version().is_mock()) {
+      SKIP("GOCAVES does not reliably return per-field errors for all error types");
+    }
+    couchbase::core::operations::lookup_in_request req{ id };
+    req.specs =
+      couchbase::lookup_in_specs{
+        couchbase::lookup_in_specs::exists("array..bad"), // [0] path_invalid
+        couchbase::lookup_in_specs::count("dictkey"),     // [1] path_mismatch (scalar)
+        couchbase::lookup_in_specs::get("incorrectPath"), // [2] path_not_found
+      }
+        .specs();
+    auto resp = test::utils::execute(integration.cluster, req);
+    // Document-level: must succeed
+    REQUIRE_SUCCESS(resp.ctx.ec());
+    REQUIRE_FALSE(resp.cas.empty());
+    REQUIRE(resp.fields.size() == 3);
+    // [0] path_invalid
+    REQUIRE(resp.fields[0].ec == couchbase::errc::key_value::path_invalid);
+    REQUIRE(resp.fields[0].status == couchbase::core::key_value_status_code::subdoc_path_invalid);
+    REQUIRE_FALSE(resp.fields[0].exists);
+    // [1] path_mismatch
+    REQUIRE(resp.fields[1].ec == couchbase::errc::key_value::path_mismatch);
+    REQUIRE(resp.fields[1].status == couchbase::core::key_value_status_code::subdoc_path_mismatch);
+    REQUIRE_FALSE(resp.fields[1].exists);
+    // [2] path_not_found — exists opcode returns no ec, but get returns path_not_found
+    REQUIRE(resp.fields[2].ec == couchbase::errc::key_value::path_not_found);
+    REQUIRE(resp.fields[2].status == couchbase::core::key_value_status_code::subdoc_path_not_found);
+    REQUIRE_FALSE(resp.fields[2].exists);
+    // first_error_index must point to spec [0]
+    REQUIRE(resp.ctx.first_error_index().has_value());
+    REQUIRE(resp.ctx.first_error_index().value() == 0);
+  }
 }
 
 TEST_CASE("integration: subdoc multi mutation", "[integration]")
@@ -1476,6 +1630,60 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
       couchbase::errc::key_value::path_mismatch);
   }
 
+  SECTION("multi-spec mixed success and error")
+  {
+    // Verifies CXXCBC-788: individual field ec values must be populated from
+    // the field's status — success fields have no ec, error fields do.
+    couchbase::core::operations::lookup_in_all_replicas_request req{ id };
+    req.specs =
+      couchbase::lookup_in_specs{
+        couchbase::lookup_in_specs::get("dictkey"),   // [0] succeeds
+        couchbase::lookup_in_specs::get("non-exist"), // [1] fails: path_not_found
+        couchbase::lookup_in_specs::get("array"),     // [2] succeeds
+      }
+        .specs();
+    auto resp = test::utils::execute(integration.cluster, req);
+    REQUIRE_SUCCESS(resp.ctx.ec());
+    REQUIRE(resp.entries.size() == integration.number_of_replicas() + 1);
+    for (const auto& entry : resp.entries) {
+      REQUIRE(entry.fields.size() == 3);
+      // field[0]: dictkey — should succeed with no error
+      REQUIRE_SUCCESS(entry.fields[0].ec);
+      REQUIRE(entry.fields[0].status == couchbase::core::key_value_status_code::success);
+      REQUIRE(entry.fields[0].exists);
+      // field[1]: non-exist path — should carry a path_not_found error
+      REQUIRE(entry.fields[1].ec == couchbase::errc::key_value::path_not_found);
+      REQUIRE(entry.fields[1].status ==
+              couchbase::core::key_value_status_code::subdoc_path_not_found);
+      REQUIRE_FALSE(entry.fields[1].exists);
+      // field[2]: array — should succeed with no error
+      REQUIRE_SUCCESS(entry.fields[2].ec);
+      REQUIRE(entry.fields[2].status == couchbase::core::key_value_status_code::success);
+      REQUIRE(entry.fields[2].exists);
+    }
+  }
+
+  SECTION("cas is populated even when a path fails")
+  {
+    // Verifies CXXCBC-788: CAS must be set for every entry whenever the document
+    // was retrieved, regardless of whether individual subdoc paths fail.
+    // Previously the CAS was guarded by (!ec / !ctx.ec()), so a path_not_found
+    // error left it empty.
+    couchbase::core::operations::lookup_in_all_replicas_request req{ id };
+    req.specs =
+      couchbase::lookup_in_specs{
+        couchbase::lookup_in_specs::get("dictkey"),   // [0] succeeds
+        couchbase::lookup_in_specs::get("non-exist"), // [1] fails: path_not_found
+      }
+        .specs();
+    auto resp = test::utils::execute(integration.cluster, req);
+    REQUIRE_SUCCESS(resp.ctx.ec());
+    REQUIRE(resp.entries.size() == integration.number_of_replicas() + 1);
+    for (const auto& entry : resp.entries) {
+      REQUIRE_FALSE(entry.cas.empty());
+    }
+  }
+
   SECTION("public API")
   {
     auto cluster = integration.public_cluster();
@@ -1739,6 +1947,106 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
       couchbase::lookup_in_specs::get("array.key"),
       couchbase::core::key_value_status_code::subdoc_path_mismatch,
       couchbase::errc::key_value::path_mismatch);
+  }
+
+  SECTION("multi-spec first error tracking")
+  {
+    // Verifies CXXCBC-788: for a multi-spec lookup, the first_error_index and
+    // first_error_path must point to the first *failing* field, while the
+    // top-level ctx.ec() remains success for an otherwise successful operation.
+    couchbase::core::operations::lookup_in_any_replica_request req{ id };
+    req.specs =
+      couchbase::lookup_in_specs{
+        couchbase::lookup_in_specs::get("dictkey"),   // [0] succeeds
+        couchbase::lookup_in_specs::get("non-exist"), // [1] fails: path_not_found
+        couchbase::lookup_in_specs::get("array"),     // [2] succeeds
+      }
+        .specs();
+    auto resp = test::utils::execute(integration.cluster, req);
+    REQUIRE(resp.fields.size() == 3);
+    // field[0]: dictkey — should succeed with no error
+    REQUIRE_SUCCESS(resp.fields[0].ec);
+    REQUIRE(resp.fields[0].status == couchbase::core::key_value_status_code::success);
+    REQUIRE(resp.fields[0].exists);
+    // field[1]: non-exist path — should carry a path_not_found error
+    REQUIRE(resp.fields[1].ec == couchbase::errc::key_value::path_not_found);
+    REQUIRE(resp.fields[1].status == couchbase::core::key_value_status_code::subdoc_path_not_found);
+    REQUIRE_FALSE(resp.fields[1].exists);
+    // field[2]: array — should succeed with no error
+    REQUIRE_SUCCESS(resp.fields[2].ec);
+    REQUIRE(resp.fields[2].status == couchbase::core::key_value_status_code::success);
+    REQUIRE(resp.fields[2].exists);
+    // first_error_index and first_error_path must point to field[1], not field[0].
+    // We can only assert this reliably when is_replica is true; the active-node
+    // lookup_in path uses a separate (non-replica) response decoder.
+    if (resp.is_replica) {
+      REQUIRE_SUCCESS(resp.ctx.ec());
+      REQUIRE(resp.ctx.first_error_index().has_value());
+      REQUIRE(resp.ctx.first_error_index().value() == 1);
+      REQUIRE(resp.ctx.first_error_path().has_value());
+      REQUIRE(resp.ctx.first_error_path().value() == "non-exist");
+    }
+  }
+
+  SECTION("first error index with xattr reordering")
+  {
+    // Verifies the fix for CXXCBC-788: when an XATTR spec follows a normal spec that fails,
+    // encode_to() moves the XATTR to the front (position 0 in the wire request), so the
+    // loop index i no longer matches the caller's original_index after fields are sorted back.
+    // first_error_index must reflect the caller-visible position (original_index), not the
+    // internal wire position.
+    //
+    // Caller order:
+    //   [0] get("non-exist")        — normal spec, fails with path_not_found  (original_index=0)
+    //   [1] get($document).xattr()  — XATTR spec, succeeds                   (original_index=1)
+    //
+    // Wire order after XATTR reordering:
+    //   [0] get($document).xattr()  — moved to front
+    //   [1] get("non-exist")        — stays behind
+    //
+    // After sorting fields back to caller order, first_error_index must be 0 (original_index of
+    // the failing spec), not 1 (the wire position where the failure was recorded).
+    couchbase::core::operations::lookup_in_any_replica_request req{ id };
+    req.specs =
+      couchbase::lookup_in_specs{
+        couchbase::lookup_in_specs::get("non-exist"), // [0] fails: path_not_found
+        couchbase::lookup_in_specs::get(couchbase::subdoc::lookup_in_macro::document)
+          .xattr(), // [1] succeeds (XATTR — will be moved to front during encode)
+      }
+        .specs();
+    auto resp = test::utils::execute(integration.cluster, req);
+    REQUIRE(resp.fields.size() == 2);
+    // field[0]: non-exist — fails (original caller position 0)
+    REQUIRE(resp.fields[0].ec == couchbase::errc::key_value::path_not_found);
+    REQUIRE(resp.fields[0].path == "non-exist");
+    // field[1]: $document xattr — succeeds
+    REQUIRE_SUCCESS(resp.fields[1].ec);
+    if (resp.is_replica) {
+      REQUIRE_SUCCESS(resp.ctx.ec());
+      REQUIRE(resp.ctx.first_error_index().has_value());
+      // Must be 0 (caller's original_index), not 1 (the wire position before sorting)
+      REQUIRE(resp.ctx.first_error_index().value() == 0);
+      REQUIRE(resp.ctx.first_error_path().has_value());
+      REQUIRE(resp.ctx.first_error_path().value() == "non-exist");
+    }
+  }
+
+  SECTION("cas is populated even when a path fails")
+  {
+    // Verifies CXXCBC-788: CAS must be set whenever the document was retrieved,
+    // regardless of whether individual subdoc paths fail.  Previously the CAS
+    // was guarded by (!ec / !ctx.ec()), so a path_not_found error left it empty.
+    couchbase::core::operations::lookup_in_any_replica_request req{ id };
+    req.specs =
+      couchbase::lookup_in_specs{
+        couchbase::lookup_in_specs::get("dictkey"),   // [0] succeeds
+        couchbase::lookup_in_specs::get("non-exist"), // [1] fails: path_not_found
+      }
+        .specs();
+    auto resp = test::utils::execute(integration.cluster, req);
+    REQUIRE_FALSE(resp.cas.empty());
+    REQUIRE_SUCCESS(resp.fields[0].ec);
+    REQUIRE(resp.fields[1].ec == couchbase::errc::key_value::path_not_found);
   }
 
   SECTION("too many specs")

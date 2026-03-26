@@ -556,10 +556,8 @@ public:
       [obs_rec = std::move(obs_rec), handler = std::move(handler)](auto resp) mutable {
         obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
 
-        if (resp.ctx.ec()) {
-          return handler(core::impl::make_error(std::move(resp.ctx)), lookup_in_result{});
-        }
-
+        // Don't short-circuit on ctx.ec(): document-level success with per-path failures is
+        // normal for subdoc; fields is empty on document-level error so the loop is a no-op.
         std::vector<lookup_in_result::entry> entries{};
         entries.reserve(resp.fields.size());
         for (auto& entry : resp.fields) {

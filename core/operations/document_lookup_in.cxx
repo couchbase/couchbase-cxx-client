@@ -66,7 +66,6 @@ lookup_in_request::make_response(key_value_error_context&& ctx,
   bool deleted = false;
   couchbase::cas cas{};
   std::vector<lookup_in_response::entry> fields{};
-  std::error_code ec = ctx.ec();
   std::optional<std::size_t> first_error_index{};
   std::optional<std::string> first_error_path{};
 
@@ -90,13 +89,14 @@ lookup_in_request::make_response(key_value_error_context&& ctx,
                                                static_cast<std::uint16_t>(res_entry.status));
       if (fields[i].opcode == protocol::subdoc_opcode::exists &&
           fields[i].ec == errc::key_value::path_not_found) {
+        // exists treats path_not_found as success ("false"); suppress the error so the
+        // exists flag below carries the result instead.
         fields[i].ec.clear();
       }
-      if (!fields[i].ec && !ctx.ec()) {
-        ec = fields[i].ec;
-      }
-      if (!first_error_index && !fields[i].ec) {
-        first_error_index = i;
+      // Use original_index, not wire-order i: XATTR specs are reordered during encode_to(),
+      // so i != original_index (was the CXXCBC-788 bug).
+      if (!first_error_index && fields[i].ec) {
+        first_error_index = fields[i].original_index;
         first_error_path = fields[i].path;
       }
       fields[i].exists = res_entry.status == key_value_status_code::success ||
@@ -107,16 +107,16 @@ lookup_in_request::make_response(key_value_error_context&& ctx,
         fields[i].value = utils::to_binary(res_entry.value);
       }
     }
-    if (!ec) {
-      cas = encoded.cas();
-    }
+    // Always assign CAS; previously guarded by a local ec that was polluted by per-path
+    // errors, zeroing CAS whenever any path failed (CXXCBC-788).
+    cas = encoded.cas();
     std::sort(fields.begin(), fields.end(), [](const auto& lhs, const auto& rhs) {
       return lhs.original_index < rhs.original_index;
     });
   }
 
   return lookup_in_response{
-    make_subdocument_error_context(ctx, ec, first_error_path, first_error_index, deleted),
+    make_subdocument_error_context(ctx, ctx.ec(), first_error_path, first_error_index, deleted),
     cas,
     std::move(fields),
     deleted,
