@@ -75,9 +75,16 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y libssl-dev cmake curl wget gnupg2 clang clang-tools cppcheck libcurl4-openssl-dev libprotobuf-dev libgrpc-dev libgrpc++-dev gdb protobuf-compiler protobuf-compiler-grpc
+          sudo apt-get install -y libssl-dev cmake curl wget gnupg2 cppcheck libcurl4-openssl-dev libprotobuf-dev libgrpc-dev libgrpc++-dev gdb protobuf-compiler protobuf-compiler-grpc
+          wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor --output /etc/apt/keyrings/llvm-snapshot.gpg
+          sudo bash -c "echo 'deb [signed-by=/etc/apt/keyrings/llvm-snapshot.gpg] https://apt.llvm.org/noble/ llvm-toolchain-noble-${LLVM_VERSION} main' >> /etc/apt/sources.list"
+          sudo apt-get update -y
+          sudo apt-get install -y clang-${LLVM_VERSION}
       - name: Run cppcheck
         run: ./bin/check-cppcheck
+        env:
+          CB_CC: /usr/bin/clang-${{ env.LLVM_VERSION }}
+          CB_CXX: /usr/bin/clang++-${{ env.LLVM_VERSION }}
 
   clang_tidy:
     runs-on: ubuntu-24.04
@@ -88,7 +95,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y libssl-dev cmake curl wget gnupg2 clang clang-tools clang-tidy libcurl4-openssl-dev libprotobuf-dev libgrpc-dev libgrpc++-dev gdb protobuf-compiler protobuf-compiler-grpc
+          sudo apt-get install -y libssl-dev cmake curl wget gnupg2 libcurl4-openssl-dev libprotobuf-dev libgrpc-dev libgrpc++-dev gdb protobuf-compiler protobuf-compiler-grpc
           wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor --output /etc/apt/keyrings/llvm-snapshot.gpg
           sudo bash -c "echo 'deb [signed-by=/etc/apt/keyrings/llvm-snapshot.gpg] https://apt.llvm.org/noble/ llvm-toolchain-noble-${LLVM_VERSION} main' >> /etc/apt/sources.list"
           sudo apt-get update -y
