@@ -1,0 +1,24 @@
+# ThreadSanitizer suppressions for couchbase-cxx-client
+#
+# For accurate TSan results, libc++ must be compiled with -fsanitize=thread.
+# Pre-built libc++ packages (apt.llvm.org, distro packages) are NOT
+# instrumented, which causes false positives (e.g. std::promise/future
+# shared state races that are properly synchronized inside libc++.so but
+# invisible to TSan).
+#
+# Use bin/build-llvm-toolchain to build a TSan-instrumented libc++ toolchain,
+# then pass -DCMAKE_TOOLCHAIN_FILE=~/opt/llvm-dev/tsan-toolchain.cmake
+# to cmake. With an instrumented toolchain, the only remaining suppressions
+# needed are the Catch2 entries below.
+#
+# == Catch2 signal handler ==
+#
+# Catch2's handleFatalErrorCondition calls operator new/delete inside a signal
+# handler, which TSan reports as "signal-unsafe call inside of a signal".
+# This only triggers when a test times out and Catch2 catches the signal.
+signal:operator new
+signal:operator delete
+
+# Catch2 RunContext is not thread-safe. Some integration tests call REQUIRE
+# macros from IO-thread callbacks, racing with Catch2's internal state.
+race:Catch::RunContext

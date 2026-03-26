@@ -11,6 +11,9 @@ on:
       - main
       - release-*
 
+env:
+  LLVM_VERSION: 20
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -31,7 +34,11 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y libssl-dev cmake curl wget gnupg2 libcurl4-openssl-dev libprotobuf-dev libgrpc-dev libgrpc++-dev protobuf-compiler-grpc gdb clang clang-tools valgrind
+          sudo apt-get install -y libssl-dev cmake curl wget gnupg2 libcurl4-openssl-dev libprotobuf-dev libgrpc-dev libgrpc++-dev protobuf-compiler-grpc gdb valgrind
+          wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor --output /etc/apt/keyrings/llvm-snapshot.gpg
+          sudo bash -c "echo 'deb [signed-by=/etc/apt/keyrings/llvm-snapshot.gpg] https://apt.llvm.org/noble/ llvm-toolchain-noble-${LLVM_VERSION} main' >> /etc/apt/sources.list"
+          sudo apt-get update -y
+          sudo apt-get install -y clang-${LLVM_VERSION} clang-tools-${LLVM_VERSION} libc++-${LLVM_VERSION}-dev libc++abi-${LLVM_VERSION}-dev
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -42,6 +49,8 @@ jobs:
       - name: Build tests
         env:
           CB_SANITIZER: ${{ matrix.sanitizer }}
+          CB_CLANG: /usr/bin/clang-${{ env.LLVM_VERSION }}
+          CB_CLANGXX: /usr/bin/clang++-${{ env.LLVM_VERSION }}
           # SA: see CXXCBC-571, Valgrind reports memory leak, because ASIO does
           # not deallocate thread-local state of OpenSSL properly
           CB_BORINGSSL: OFF
@@ -69,7 +78,11 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y libssl-dev cmake curl wget gnupg2 libcurl4-openssl-dev libprotobuf-dev libgrpc-dev libgrpc++-dev protobuf-compiler-grpc gdb clang clang-tools valgrind
+          sudo apt-get install -y libssl-dev cmake curl wget gnupg2 libcurl4-openssl-dev libprotobuf-dev libgrpc-dev libgrpc++-dev protobuf-compiler-grpc gdb valgrind
+          wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor --output /etc/apt/keyrings/llvm-snapshot.gpg
+          sudo bash -c "echo 'deb [signed-by=/etc/apt/keyrings/llvm-snapshot.gpg] https://apt.llvm.org/noble/ llvm-toolchain-noble-${LLVM_VERSION} main' >> /etc/apt/sources.list"
+          sudo apt-get update -y
+          sudo apt-get install -y clang-${LLVM_VERSION} clang-tools-${LLVM_VERSION} libc++-${LLVM_VERSION}-dev libc++abi-${LLVM_VERSION}-dev
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -105,7 +118,7 @@ jobs:
           - ubsan
           - valgrind
         server:
-          - 7.6.7
+          - 8.0.0
         tls:
           - plain
           - tls
@@ -114,7 +127,11 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y libssl-dev cmake curl wget gnupg2 libcurl4-openssl-dev libprotobuf-dev libgrpc-dev libgrpc++-dev protobuf-compiler-grpc gdb clang clang-tools valgrind
+          sudo apt-get install -y libssl-dev cmake curl wget gnupg2 libcurl4-openssl-dev libprotobuf-dev libgrpc-dev libgrpc++-dev protobuf-compiler-grpc gdb valgrind
+          wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor --output /etc/apt/keyrings/llvm-snapshot.gpg
+          sudo bash -c "echo 'deb [signed-by=/etc/apt/keyrings/llvm-snapshot.gpg] https://apt.llvm.org/noble/ llvm-toolchain-noble-${LLVM_VERSION} main' >> /etc/apt/sources.list"
+          sudo apt-get update -y
+          sudo apt-get install -y clang-${LLVM_VERSION} clang-tools-${LLVM_VERSION} libc++-${LLVM_VERSION}-dev libc++abi-${LLVM_VERSION}-dev
       - uses: actions/checkout@v4
         with:
           submodules: recursive

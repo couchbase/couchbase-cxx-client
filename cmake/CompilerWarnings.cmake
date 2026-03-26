@@ -52,7 +52,10 @@ function(set_project_warnings project_name)
       # TODO: make it local to ext/couchbase/couchbase.cxx
       -Wno-unknown-warning-option
       -Wno-gnu-statement-expression
-      -Wno-compound-token-split-by-macro)
+      -Wno-compound-token-split-by-macro
+      # __COUNTER__ is used by Catch2's TEST_CASE macro; clang-23 warns it is a C2y extension.
+      # Suppress globally since we cannot modify Catch2 and the warning is irrelevant in C++17.
+      -Wno-c2y-extensions)
 
   if(WARNINGS_AS_ERRORS)
     set(COMMON_WARNINGS ${COMMON_WARNINGS} -Werror)

@@ -63,8 +63,13 @@ macro(integration_test name)
     # *.PDB from the BoringSSL build
     set_target_properties(test_integration_${name} PROPERTIES LINK_FLAGS "/ignore:4099")
   endif()
+  set(_catch_extra_args "")
+  if(DEFINED COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS AND EXISTS "${COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS}")
+    set(_catch_extra_args ENVIRONMENT "TSAN_OPTIONS=halt_on_error=0,suppressions=${COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS}")
+  endif()
   catch_discover_tests(
     test_integration_${name}
+    ${_catch_extra_args}
     PROPERTIES
     SKIP_REGULAR_EXPRESSION
     "SKIP"
@@ -106,8 +111,13 @@ macro(transaction_test name)
     # *.PDB from the BoringSSL build
     set_target_properties(test_transaction_${name} PROPERTIES LINK_FLAGS "/ignore:4099")
   endif()
+  set(_catch_extra_args "")
+  if(DEFINED COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS AND EXISTS "${COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS}")
+    set(_catch_extra_args ENVIRONMENT "TSAN_OPTIONS=halt_on_error=0,suppressions=${COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS}")
+  endif()
   catch_discover_tests(
     test_transaction_${name}
+    ${_catch_extra_args}
     PROPERTIES
     SKIP_REGULAR_EXPRESSION
     "SKIP"
@@ -148,8 +158,13 @@ macro(unit_test name)
     # *.PDB from the BoringSSL build
     set_target_properties(test_unit_${name} PROPERTIES LINK_FLAGS "/ignore:4099")
   endif()
+  set(_catch_extra_args "")
+  if(DEFINED COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS AND EXISTS "${COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS}")
+    set(_catch_extra_args ENVIRONMENT "TSAN_OPTIONS=halt_on_error=0,suppressions=${COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS}")
+  endif()
   catch_discover_tests(
     test_unit_${name}
+    ${_catch_extra_args}
     PROPERTIES
     SKIP_REGULAR_EXPRESSION
     "SKIP"
