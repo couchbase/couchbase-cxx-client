@@ -30,7 +30,7 @@ public:
 private:
   friend class agent;
 
-  explicit agent_unit_test_api(std::shared_ptr<agent_impl>);
+  explicit agent_unit_test_api(std::shared_ptr<agent_impl> impl);
 
   std::shared_ptr<agent_impl> impl_;
 };

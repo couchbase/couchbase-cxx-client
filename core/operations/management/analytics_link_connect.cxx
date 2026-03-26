@@ -33,11 +33,13 @@ analytics_link_connect_request::encode_to(encoded_request_type& encoded,
   std::string with_clause = force ? "WITH {\"force\": true}" : "";
 
   const tao::json::value body{
-    { "statement",
+    {
+      "statement",
       fmt::format("CONNECT LINK {}.`{}` {}",
                   utils::analytics::uncompound_name(dataverse_name),
                   link_name,
-                  with_clause) },
+                  with_clause),
+    },
   };
   encoded.headers["content-type"] = "application/json";
   encoded.method = "POST";

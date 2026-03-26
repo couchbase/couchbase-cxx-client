@@ -67,7 +67,8 @@ query_index_create_request::encode_to(encoded_request_type& encoded,
   }
   std::string keyspace = utils::build_keyspace(*this);
   tao::json::value body{
-    { "statement",
+    {
+      "statement",
       is_primary ? fmt::format(R"(CREATE PRIMARY INDEX {} ON {} USING GSI {})",
                                index_name.empty() ? "" : fmt::format("`{}`", index_name),
                                keyspace,
@@ -77,8 +78,12 @@ query_index_create_request::encode_to(encoded_request_type& encoded,
                                keyspace,
                                encoded_keys,
                                where_clause,
-                               with_clause) },
-    { "client_context_id", encoded.client_context_id }
+                               with_clause),
+    },
+    {
+      "client_context_id",
+      encoded.client_context_id,
+    },
   };
   if (query_ctx.has_value()) {
     body["query_context"] = query_ctx.value();

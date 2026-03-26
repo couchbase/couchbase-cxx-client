@@ -208,8 +208,10 @@ convert(const std::shared_ptr<threshold_logging_span>& span) -> reported_span
 {
   tao::json::value entry{
     { "operation_name", span->name() },
-    { "total_duration_us",
-      std::chrono::duration_cast<std::chrono::microseconds>(span->total_duration()).count() }
+    {
+      "total_duration_us",
+      std::chrono::duration_cast<std::chrono::microseconds>(span->total_duration()).count(),
+    },
   };
   if (span->is_key_value()) {
     entry["last_server_duration_us"] = span->last_server_duration_us();
@@ -309,10 +311,12 @@ private:
 #if COUCHBASE_CXX_CLIENT_DEBUG_BUILD
         { "emit_interval_ms", options_.threshold_emit_interval.count() },
         { "sample_size", options_.threshold_sample_size },
-        { "threshold_ms",
+        {
+          "threshold_ms",
           std::chrono::duration_cast<std::chrono::microseconds>(
             options_.threshold_for_service(service))
-            .count() },
+            .count(),
+        },
 #endif
       };
       tao::json::value entries = tao::json::empty_array;

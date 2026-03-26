@@ -148,10 +148,16 @@ private:
         CB_LOG_WARNING(
           "unable to close app telemetry socket, but continue reconnecting anyway.  {}",
           tao::json::to_string(tao::json::value{
-            { "message", message },
+            {
+              "message",
+              message,
+            },
             { "reconnect_reason",
               fmt::format("{}, {}", reconnect_reason.value(), reconnect_reason.message()) },
-            { "ec", fmt::format("{}, {}", ec.value(), ec.message()) },
+            {
+              "ec",
+              fmt::format("{}, {}", ec.value(), ec.message()),
+            },
           }));
       }
       self->connect_socket();
@@ -207,8 +213,14 @@ private:
                         if (ec) {
                           CB_LOG_DEBUG("failed to resolve address for app telemetry socket.  {}",
                                        tao::json::to_string(tao::json::value{
-                                         { "message", ec.message() },
-                                         { "hostname", self->address_.hostname },
+                                         {
+                                           "message",
+                                           ec.message(),
+                                         },
+                                         {
+                                           "hostname",
+                                           self->address_.hostname,
+                                         },
                                        }));
                           return self->complete_with_error(
                             ec, "failed to resolve app telemetry socket");
@@ -326,9 +338,18 @@ public:
       }
       CB_LOG_DEBUG("app telemetry websocket did not respond in time for ping request.  {}",
                    tao::json::to_string(tao::json::value{
-                     { "ping_interval", fmt::format("{}", self->ping_interval_) },
-                     { "ping_timeout", fmt::format("{}", self->ping_timeout_) },
-                     { "hostname", self->address_.hostname },
+                     {
+                       "ping_interval",
+                       fmt::format("{}", self->ping_interval_),
+                     },
+                     {
+                       "ping_timeout",
+                       fmt::format("{}", self->ping_timeout_),
+                     },
+                     {
+                       "hostname",
+                       self->address_.hostname,
+                     },
                    }));
       self->stop_and_error(errc::common::unambiguous_timeout, "server did not respond in time");
     });
@@ -352,8 +373,14 @@ public:
   {
     CB_LOG_WARNING("text messages are not supported.  {}",
                    tao::json::to_string(tao::json::value{
-                     { "payload", base64::encode(payload) },
-                     { "hostname", address_.hostname },
+                     {
+                       "payload",
+                       base64::encode(payload),
+                     },
+                     {
+                       "hostname",
+                       address_.hostname,
+                     },
                    }));
     return stop_and_error(errc::network::protocol_error, "unsupported frame: text");
   }
@@ -363,19 +390,32 @@ public:
     if (payload.empty()) {
       CB_LOG_WARNING("binary message have to be at least a byte.  {}",
                      tao::json::to_string(tao::json::value{
-                       { "payload", base64::encode(payload) },
-                       { "hostname", address_.hostname },
+                       {
+                         "payload",
+                         base64::encode(payload),
+                       },
+                       {
+                         "hostname",
+                         address_.hostname,
+                       },
                      }));
       return stop_and_error(errc::network::protocol_error, "the paload is too small");
     }
     if (!is_valid_app_telemetry_opcode(payload[0])) {
       CB_LOG_WARNING("binary message has unknown opcode.  {}",
                      tao::json::to_string(tao::json::value{
-                       { "payload", base64::encode(payload) },
-                       { "hostname", address_.hostname },
+                       {
+                         "payload",
+                         base64::encode(payload),
+                       },
+                       {
+                         "hostname",
+                         address_.hostname,
+                       },
                      }));
+      auto opcode_byte = payload[0];
       return stop_and_error(errc::network::protocol_error,
-                            fmt::format("invalid opcode: {}", payload[0]));
+                            fmt::format("invalid opcode: {}", opcode_byte));
     }
 
     auto opcode = static_cast<app_telemetry_opcode>(payload[0]);
@@ -405,8 +445,14 @@ public:
   {
     CB_LOG_DEBUG("remote peer closed WebSocket.  {}",
                  tao::json::to_string(tao::json::value{
-                   { "payload", base64::encode(payload) },
-                   { "hostname", address_.hostname },
+                   {
+                     "payload",
+                     base64::encode(payload),
+                   },
+                   {
+                     "hostname",
+                     address_.hostname,
+                   },
                  }));
     return stop_and_error({}, "server sent close message");
   }
@@ -415,8 +461,14 @@ public:
   {
     CB_LOG_WARNING("error from WebSocket codec.  {}",
                    tao::json::to_string(tao::json::value{
-                     { "message", message },
-                     { "hostname", address_.hostname },
+                     {
+                       "message",
+                       message,
+                     },
+                     {
+                       "hostname",
+                       address_.hostname,
+                     },
                    }));
 
     return stop_and_error(errc::network::protocol_error,
@@ -520,8 +572,14 @@ private:
       is_writing_ = false;
       CB_LOG_DEBUG("unable to write to app telemetry socket.  {}",
                    tao::json::to_string(tao::json::value{
-                     { "message", ec.message() },
-                     { "hostname", address_.hostname },
+                     {
+                       "message",
+                       ec.message(),
+                     },
+                     {
+                       "hostname",
+                       address_.hostname,
+                     },
                    }));
       return stop_and_error(ec, "failed to write to app telemetry socket");
     }
@@ -565,8 +623,14 @@ private:
       is_reading_ = false;
       CB_LOG_DEBUG("unable to read from app telemetry socket.  {}",
                    tao::json::to_string(tao::json::value{
-                     { "message", ec.message() },
-                     { "hostname", address_.hostname },
+                     {
+                       "message",
+                       ec.message(),
+                     },
+                     {
+                       "hostname",
+                       address_.hostname,
+                     },
                    }));
       return stop_and_error(ec, "unable to read from the app telemetry socket");
     }
@@ -732,7 +796,10 @@ public:
     websocket_state_ = connection_state::connecting;
     CB_LOG_WARNING("connecting app telemetry WebSocket.  {}",
                    tao::json::to_string(tao::json::value{
-                     { "hostname", address.hostname },
+                     {
+                       "hostname",
+                       address.hostname,
+                     },
                    }));
   }
 
@@ -749,8 +816,14 @@ public:
     websocket_state_ = connection_state::connected;
     CB_LOG_DEBUG("connected app telemetry endpoint.  {}",
                  tao::json::to_string(tao::json::value{
-                   { "stream", stream->id() },
-                   { "hostname", address.hostname },
+                   {
+                     "stream",
+                     stream->id(),
+                   },
+                   {
+                     "hostname",
+                     address.hostname,
+                   },
                  }));
     websocket_session_ = websocket_session::start(ctx_,
                                                   address,
@@ -784,9 +857,18 @@ public:
       CB_LOG_WARNING("do not reconnect WebSocket for Application Telemetry, none of the nodes "
                      "exposes the collector endpoint. {}",
                      tao::json::to_string(tao::json::value{
-                       { "message", ec.message() },
-                       { "ec", ec.value() },
-                       { "hostname", address.hostname },
+                       {
+                         "message",
+                         ec.message(),
+                       },
+                       {
+                         "ec",
+                         ec.value(),
+                       },
+                       {
+                         "hostname",
+                         address.hostname,
+                       },
                      }));
       return;
     }
@@ -804,11 +886,26 @@ public:
     CB_LOG_WARNING("error from app telemetry endpoint, reconnecting in {}.  {}",
                    backoff,
                    tao::json::to_string(tao::json::value{
-                     { "message", message },
-                     { "ec", fmt::format("{}, {}", ec.value(), ec.message()) },
-                     { "connection_attempt", connection_attempt_ },
-                     { "hostname", address.hostname },
-                     { "next_hostname", next_address.hostname },
+                     {
+                       "message",
+                       message,
+                     },
+                     {
+                       "ec",
+                       fmt::format("{}, {}", ec.value(), ec.message()),
+                     },
+                     {
+                       "connection_attempt",
+                       connection_attempt_,
+                     },
+                     {
+                       "hostname",
+                       address.hostname,
+                     },
+                     {
+                       "next_hostname",
+                       next_address.hostname,
+                     },
                    }));
     if (backoff > std::chrono::milliseconds::zero()) {
       backoff_.expires_after(backoff);

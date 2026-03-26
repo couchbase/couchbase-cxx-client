@@ -44,7 +44,9 @@ class file_helper;
  * TODO: If updating spdlog from v1.1.0, check if this class also needs
  *       updating.
  */
+// NOLINTNEXTLINE(cppcoreguidelines-virtual-class-destructor)
 template<class Mutex>
+// NOLINTNEXTLINE(cppcoreguidelines-virtual-class-destructor)
 class custom_rotating_file_sink : public spdlog::sinks::base_sink<Mutex>
 {
 public:

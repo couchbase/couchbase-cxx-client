@@ -26,7 +26,7 @@ namespace couchbase::core
 struct json_string {
   json_string() = default;
 
-  json_string(std::string&& value)
+  explicit json_string(std::string&& value)
     : value_(std::move(value))
   {
   }
@@ -37,12 +37,12 @@ struct json_string {
     return *this;
   }
 
-  json_string(const std::vector<std::byte>& value)
+  explicit json_string(const std::vector<std::byte>& value)
     : value_(value)
   {
   }
 
-  json_string(std::vector<std::byte>&& value)
+  explicit json_string(std::vector<std::byte>&& value)
     : value_(std::move(value))
   {
   }
@@ -68,7 +68,7 @@ struct json_string {
     if (is_string()) {
       return std::get<std::string>(value_);
     }
-    static std::string empty_string{};
+    static const std::string empty_string{};
     return empty_string;
   }
 
@@ -77,7 +77,7 @@ struct json_string {
     if (is_binary()) {
       return std::get<std::vector<std::byte>>(value_);
     }
-    static std::vector<std::byte> empty_bytes{};
+    static const std::vector<std::byte> empty_bytes{};
     return empty_bytes;
   }
 

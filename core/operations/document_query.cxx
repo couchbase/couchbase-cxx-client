@@ -33,12 +33,15 @@
 namespace couchbase::core::operations
 {
 auto
-query_request::encode_to(query_request::encoded_request_type& encoded,
-                         http_context& context) -> std::error_code
+query_request::encode_to(query_request::encoded_request_type& encoded, http_context& context)
+  -> std::error_code
 {
   ctx_.emplace(context);
   tao::json::value body{
-    { "client_context_id", encoded.client_context_id },
+    {
+      "client_context_id",
+      encoded.client_context_id,
+    },
   };
   if (adhoc) {
     body["statement"] = statement;
@@ -151,9 +154,10 @@ query_request::encode_to(query_request::encoded_request_type& encoded,
         bucket = scan_vectors.find(token.bucket_name());
       }
       auto& bucket_obj = bucket->get_object();
-      bucket_obj[std::to_string(token.partition_id())] =
-        std::vector<tao::json::value>{ token.sequence_number(),
-                                       std::to_string(token.partition_uuid()) };
+      bucket_obj[std::to_string(token.partition_id())] = std::vector<tao::json::value>{
+        token.sequence_number(),
+        std::to_string(token.partition_uuid()),
+      };
     }
     body["scan_vectors"] = scan_vectors;
   }
@@ -209,8 +213,8 @@ query_request::encode_to(query_request::encoded_request_type& encoded,
 }
 
 auto
-query_request::make_response(error_context::query&& ctx,
-                             const encoded_response_type& encoded) -> query_response
+query_request::make_response(error_context::query&& ctx, const encoded_response_type& encoded)
+  -> query_response
 {
   query_response response{ std::move(ctx) };
   response.ctx.statement = statement;

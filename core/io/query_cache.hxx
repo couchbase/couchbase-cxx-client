@@ -34,7 +34,7 @@ public:
 
   void erase(const std::string& statement)
   {
-    std::scoped_lock lock(store_mutex_);
+    const std::scoped_lock lock(store_mutex_);
     auto it = store_.find(statement);
     if (it == store_.end()) {
       return;
@@ -44,19 +44,19 @@ public:
 
   void put(const std::string& statement, const std::string& prepared)
   {
-    std::scoped_lock lock(store_mutex_);
+    const std::scoped_lock lock(store_mutex_);
     store_.try_emplace(statement, entry{ prepared });
   }
 
   void put(const std::string& statement, const std::string& name, const std::string& encoded_plan)
   {
-    std::scoped_lock lock(store_mutex_);
+    const std::scoped_lock lock(store_mutex_);
     store_.try_emplace(statement, entry{ name, encoded_plan });
   }
 
   auto get(const std::string& statement) -> std::optional<entry>
   {
-    std::scoped_lock lock(store_mutex_);
+    const std::scoped_lock lock(store_mutex_);
     auto it = store_.find(statement);
     if (it == store_.end()) {
       return {};

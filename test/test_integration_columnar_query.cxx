@@ -508,7 +508,7 @@ TEST_CASE("integration: columnar query positional parameters", "[integration]")
   couchbase::core::columnar::agent agent{ integration.io, { { integration.cluster } } };
 
   couchbase::core::columnar::query_options options{ "SELECT $1 AS foo" };
-  options.positional_parameters = { { "\"bar\"" } };
+  options.positional_parameters = { couchbase::core::json_string{ "\"bar\"" } };
 
   auto barrier = std::make_shared<std::promise<
     std::pair<couchbase::core::columnar::query_result, couchbase::core::columnar::error>>>();

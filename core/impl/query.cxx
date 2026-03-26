@@ -66,7 +66,7 @@ map_status(std::string status) -> query_status
 }
 
 auto
-map_rows(operations::query_response& resp) -> std::vector<codec::binary>
+map_rows(const operations::query_response& resp) -> std::vector<codec::binary>
 {
   std::vector<codec::binary> rows;
   rows.reserve(resp.rows.size());

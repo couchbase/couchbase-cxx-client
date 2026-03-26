@@ -59,7 +59,7 @@ struct user {
 enum class auth_domain {
   unknown,
   local,
-  external
+  external,
 };
 
 struct user_and_metadata : public user {

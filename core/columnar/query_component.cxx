@@ -194,8 +194,10 @@ public:
     // This will only call the callback if it has not already been called (e.g. in the case of a
     // timeout).
     invoke_callback({},
-                    { couchbase::core::columnar::client_errc::canceled,
-                      "The query operation was canceled by the caller." });
+                    {
+                      couchbase::core::columnar::client_errc::canceled,
+                      "The query operation was canceled by the caller.",
+                    });
   }
 
 private:
@@ -249,8 +251,10 @@ private:
 
   auto build_query_payload(const query_options& options) -> tao::json::value
   {
-    tao::json::value payload{ { "statement", options.statement },
-                              { "client_context_id", client_context_id_ } };
+    tao::json::value payload{
+      { "statement", options.statement },
+      { "client_context_id", client_context_id_ },
+    };
     if (options.database_name.has_value() && options.scope_name.has_value()) {
       payload["query_context"] =
         fmt::format("default:`{}`.`{}`", options.database_name.value(), options.scope_name.value());
@@ -334,8 +338,8 @@ private:
     }
   }
 
-  auto parse_error(const std::uint32_t& http_status_code,
-                   const tao::json::value& metadata_header) -> error_parse_result
+  auto parse_error(const std::uint32_t& http_status_code, const tao::json::value& metadata_header)
+    -> error_parse_result
   {
     const auto* errors_json = metadata_header.find("errors");
     if (errors_json == nullptr) {
@@ -345,8 +349,9 @@ private:
                  client_context_id_,
                  utils::json::generate(errors_json));
     if (!errors_json->is_array()) {
-      return { { errc::generic,
-                 "Could not parse errors from server response - expected JSON array" } };
+      return {
+        { errc::generic, "Could not parse errors from server response - expected JSON array" },
+      };
     }
     if (errors_json->get_array().empty()) {
       return {};
@@ -377,8 +382,10 @@ private:
         if (r != nullptr) {
           if (!r->is_boolean()) {
             return {
-              { errc::generic,
-                "Could not parse error from server response - 'retriable' was not boolean" }
+              {
+                errc::generic,
+                "Could not parse error from server response - 'retriable' was not boolean",
+              },
             };
           }
           retr = r->get_boolean();
@@ -392,12 +399,20 @@ private:
       {
         auto* m = error_json.find("msg");
         if (m == nullptr) {
-          return { { errc::generic,
-                     "Could not parse error from server response - could not find 'msg' field" } };
+          return {
+            {
+              errc::generic,
+              "Could not parse error from server response - could not find 'msg' field",
+            },
+          };
         }
         if (!m->is_string()) {
-          return { { errc::generic,
-                     "Could not parse error from server response - 'msg' field was not string" } };
+          return {
+            {
+              errc::generic,
+              "Could not parse error from server response - 'msg' field was not string",
+            },
+          };
         }
         msg = m->get_string();
       }
@@ -406,13 +421,19 @@ private:
       {
         auto* c = error_json.find("code");
         if (c == nullptr) {
-          return { { errc::generic,
-                     "Could not parse error from server response - could not find 'code' field" } };
+          return {
+            {
+              errc::generic,
+              "Could not parse error from server response - could not find 'code' field",
+            },
+          };
         }
         if (!(c->is_unsigned() || c->is_signed())) {
           return {
-            { errc::generic,
-              "Could not parse error from server response - 'code' field was not an integer" }
+            {
+              errc::generic,
+              "Could not parse error from server response - 'code' field was not an integer",
+            },
           };
         }
         code = c->is_signed() ? gsl::narrow_cast<std::int32_t>(c->get_signed())

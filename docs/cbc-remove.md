@@ -199,4 +199,3 @@ The following switches implement client-side poll-based durability requirements.
 ### SEE ALSO
 
 [cbc](#cbc), [cbc-get](#cbc-get), [cbc-upsert](#cbc-upsert).
-

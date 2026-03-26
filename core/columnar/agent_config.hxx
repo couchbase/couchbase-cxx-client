@@ -49,7 +49,7 @@ struct timeout_config {
 };
 
 struct agent_config {
-  core_sdk_shim shim; // TODO: remove once refactoring will be finished.
+  core_sdk_shim shim; // TODO(SA): remove once refactoring will be finished.
 
   timeout_config timeouts{};
   std::string user_agent{};

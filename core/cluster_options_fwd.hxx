@@ -17,10 +17,7 @@
 
 #pragma once
 
-namespace couchbase
-{
-namespace core
+namespace couchbase::core
 {
 struct cluster_options;
-} // namespace core
-} // namespace couchbase
+} // namespace couchbase::core

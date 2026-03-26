@@ -20,20 +20,22 @@
 #include "core/cluster.hxx"
 
 #include <future>
+#include <utility>
 
 namespace test::utils
 {
+
 template<class Request>
 auto
 execute(const couchbase::core::cluster& cluster, Request request)
 {
   using response_type = typename Request::response_type;
-  auto barrier = std::make_shared<std::promise<response_type>>();
-  auto f = barrier->get_future();
-  cluster.execute(request, [barrier](response_type resp) {
-    barrier->set_value(std::move(resp));
+  std::promise<response_type> promise;
+  auto future = promise.get_future();
+  cluster.execute(request, [&promise](response_type resp) {
+    promise.set_value(std::move(resp));
   });
-  return f.get();
+  return future.get();
 }
 
 void

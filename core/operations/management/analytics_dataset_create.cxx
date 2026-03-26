@@ -34,13 +34,15 @@ analytics_dataset_create_request::encode_to(encoded_request_type& encoded,
   std::string if_not_exists_clause = ignore_if_exists ? "IF NOT EXISTS" : "";
 
   const tao::json::value body{
-    { "statement",
+    {
+      "statement",
       fmt::format("CREATE DATASET {} {}.`{}` ON `{}` {}",
                   if_not_exists_clause,
                   utils::analytics::uncompound_name(dataverse_name),
                   dataset_name,
                   bucket_name,
-                  where_clause) },
+                  where_clause),
+    },
   };
   encoded.headers["content-type"] = "application/json";
   encoded.method = "POST";

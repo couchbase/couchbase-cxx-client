@@ -27,12 +27,12 @@ class concurrent_fixed_priority_queue
 {
 private:
   std::mutex mutex_;
-  std::priority_queue<T, std::vector<T>, std::greater<T>> data_;
+  std::priority_queue<T, std::vector<T>, std::greater<>> data_;
   std::size_t dropped_count_{ 0 };
   std::size_t capacity_{};
 
 public:
-  using size_type = typename std::priority_queue<T, std::vector<T>, std::greater<T>>::size_type;
+  using size_type = typename std::priority_queue<T, std::vector<T>, std::greater<>>::size_type;
 
   explicit concurrent_fixed_priority_queue(std::size_t capacity)
     : capacity_(capacity)
@@ -82,7 +82,7 @@ public:
    */
   auto steal_data() -> std::pair<std::priority_queue<T>, std::size_t>
   {
-    std::priority_queue<T, std::vector<T>, std::greater<T>> reversed_data;
+    std::priority_queue<T, std::vector<T>, std::greater<>> reversed_data;
     std::size_t dropped_count{};
     {
       const std::unique_lock<std::mutex> lock(mutex_);

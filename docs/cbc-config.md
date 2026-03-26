@@ -158,5 +158,3 @@ This tool retrieves configuration of the cluster in JSON format.
 ### SEE ALSO
 
 [cbc](#cbc), [cbc-keygen](#cbc-keygen).
-
-

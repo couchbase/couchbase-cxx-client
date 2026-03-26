@@ -44,14 +44,38 @@ auto
 orphan_attributes::to_json() const -> tao::json::value
 {
   return tao::json::value{
-    { "total_duration_us", total_duration.count() },
-    { "last_server_duration_us", last_server_duration.count() },
-    { "total_server_duration_us", total_server_duration.count() },
-    { "operation_name", operation_name },
-    { "last_local_id", connection_id },
-    { "operation_id", operation_id },
-    { "last_local_socket", last_local_socket },
-    { "last_remote_socket", last_remote_socket },
+    {
+      "total_duration_us",
+      total_duration.count(),
+    },
+    {
+      "last_server_duration_us",
+      last_server_duration.count(),
+    },
+    {
+      "total_server_duration_us",
+      total_server_duration.count(),
+    },
+    {
+      "operation_name",
+      operation_name,
+    },
+    {
+      "last_local_id",
+      connection_id,
+    },
+    {
+      "operation_id",
+      operation_id,
+    },
+    {
+      "last_local_socket",
+      last_local_socket,
+    },
+    {
+      "last_remote_socket",
+      last_remote_socket,
+    },
   };
 }
 
@@ -94,10 +118,19 @@ public:
     // update this to handle other types of services as well.
     tao::json::value report{
 #if COUCHBASE_CXX_CLIENT_DEBUG_BUILD
-      { "emit_interval_ms", options_.emit_interval.count() },
-      { "sample_size", options_.sample_size },
+      {
+        "emit_interval_ms",
+        options_.emit_interval.count(),
+      },
+      {
+        "sample_size",
+        options_.sample_size,
+      },
 #endif
-      { "kv", tao::json::value{ { "total_count", total_count } } },
+      {
+        "kv",
+        tao::json::value{ { "total_count", total_count } },
+      },
     };
 
     tao::json::value entries = tao::json::empty_array;

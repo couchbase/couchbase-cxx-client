@@ -33,7 +33,7 @@ enum class error {
   NO_USER,
   PASSWORD_ERROR,
   NO_RBAC_PROFILE,
-  AUTH_PROVIDER_DIED
+  AUTH_PROVIDER_DIED,
 };
 
 } // namespace couchbase::core::sasl

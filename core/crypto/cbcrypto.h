@@ -24,7 +24,7 @@ namespace couchbase::core::crypto
 enum class Algorithm {
   ALG_SHA1,
   ALG_SHA256,
-  ALG_SHA512
+  ALG_SHA512,
 };
 
 auto
@@ -64,7 +64,7 @@ auto
 digest(Algorithm algorithm, std::string_view data) -> std::string;
 
 enum class Cipher {
-  AES_256_cbc
+  AES_256_cbc,
 };
 
 auto

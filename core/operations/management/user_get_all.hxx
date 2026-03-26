@@ -42,7 +42,7 @@ struct user_get_all_request {
   static const inline service_type type = service_type::management;
 
   couchbase::core::management::rbac::auth_domain domain{
-    couchbase::core::management::rbac::auth_domain::local
+    couchbase::core::management::rbac::auth_domain::local,
   };
 
   std::optional<std::string> client_context_id{};

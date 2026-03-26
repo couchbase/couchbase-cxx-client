@@ -38,6 +38,7 @@
 
 namespace couchbase::core::mcbp
 {
+// NOLINTBEGIN(cppcoreguidelines-pro-type-member-init, hicpp-member-init)
 class packet
 {
 public:
@@ -68,4 +69,5 @@ public:
   std::optional<write_units_frame> write_units_frame_{};
   std::vector<unsupported_frame> unsupported_frames_{};
 };
+// NOLINTEND(cppcoreguidelines-pro-type-member-init, hicpp-member-init)
 } // namespace couchbase::core::mcbp

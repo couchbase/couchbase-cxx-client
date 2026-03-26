@@ -78,7 +78,7 @@ public:
 
   auto getBytes(void* dest, std::size_t size) -> bool
   {
-    const std::lock_guard<std::mutex> lock(mutex);
+    const std::scoped_lock lock(mutex);
 #ifdef WIN32
     return CryptGenRandom(handle, (DWORD)size, static_cast<BYTE*>(dest));
 #else
@@ -107,7 +107,7 @@ RandomGenerator::RandomGenerator()
 {
   if (!shared_provider) {
     // This might be the first one, lets lock and create
-    const std::lock_guard<std::mutex> guard(shared_provider_lock);
+    const std::scoped_lock guard(shared_provider_lock);
     if (!shared_provider) { // cppcheck-suppress identicalInnerCondition; DCLP
       shared_provider = std::make_unique<RandomGeneratorProvider>();
     }

@@ -322,7 +322,18 @@ integration_test_guard::public_cluster(
     options_customizer(options);
   }
 
-  auto [err, c] = couchbase::cluster::connect(ctx.connection_string, options).get();
+  // Use std::promise/std::future with reference capture.
+  // Category 2 TSan false positive (pthread_once) is a libstdc++ limitation,
+  // documented in TD-0001 and suppressed in .tsan_suppressions.
+  // This simplifies code by using standard library facilities.
+  using result_type = std::pair<couchbase::error, couchbase::cluster>;
+  std::promise<result_type> promise;
+  auto future = promise.get_future();
+  couchbase::cluster::connect(
+    ctx.connection_string, options, [&promise](couchbase::error err, couchbase::cluster c) {
+      promise.set_value({ std::move(err), std::move(c) });
+    });
+  auto [err, c] = future.get();
   if (err.ec()) {
     CB_LOG_CRITICAL("unable to connect to cluster (public API): {}", err.message());
     throw std::runtime_error(
