@@ -1397,6 +1397,11 @@ cluster::cluster(asio::io_context& ctx)
 {
 }
 
+cluster::cluster(std::shared_ptr<cluster_impl> impl)
+  : impl_{ std::move(impl) }
+{
+}
+
 auto
 cluster::direct_dispatch(const std::string& bucket_name,
                          std::shared_ptr<couchbase::core::mcbp::queue_request> req) const
@@ -2526,13 +2531,13 @@ cluster::to_string() const -> std::string
 }
 
 auto
-cluster::tracer() const -> const std::shared_ptr<tracing::tracer_wrapper>&
+cluster::tracer() const -> std::shared_ptr<tracing::tracer_wrapper>
 {
   return impl_->tracer();
 }
 
 auto
-cluster::meter() const -> const std::shared_ptr<metrics::meter_wrapper>&
+cluster::meter() const -> std::shared_ptr<metrics::meter_wrapper>
 {
   return impl_->meter();
 }
@@ -2541,6 +2546,12 @@ auto
 cluster::cluster_label_listener() const -> const std::shared_ptr<core::cluster_label_listener>&
 {
   return impl_->cluster_label_listener();
+}
+
+auto
+cluster::find_bucket_by_name(const std::string& name) const -> std::shared_ptr<bucket>
+{
+  return impl_->find_bucket_by_name(name);
 }
 
 } // namespace couchbase::core
