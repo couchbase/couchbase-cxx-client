@@ -22,7 +22,7 @@ automatically by CMake (Asio, GSL, nlohmann/json, BoringSSL/OpenSSL).
 
 ## Code style and formatting
 
-- File extensions: headers `.hxx`, sources `.cxx`. Never `.h` or `.cpp`.
+- File extensions: for new Couchbase C++ client code, prefer headers `.hxx` and sources `.cxx`. Existing C-style or third_party headers may use `.h`, and should not be renamed just to match this convention. Avoid `.cpp` for new sources.
 - `clang-format` with `IndentWidth: 2`, `ColumnLimit: 100`, `Standard: c++17`.
 - Run `bin/check-clang-format` to verify. Apply with `clang-format -i <file>`.
 - Run `bin/check-clang-tidy` for linting.
@@ -72,8 +72,9 @@ via `collections_component::dispatch` using `mcbp::queue_request`. Do not add
 new operations to the legacy `mcbp_command<>` template path.
 
 **Error handling**: Use `std::error_code` or `tl::expected<T, std::error_code>`.
-No exceptions in production code. `key_value_error_context` must be fully
-populated before invoking callbacks.
+No exceptions in the public API surface (`couchbase/`). Internal `core/` code may use
+exceptions where already accepted. `key_value_error_context` must be fully populated
+before invoking callbacks.
 
 **Tracing**: Every operation dispatched via `direct_dispatch`/`direct_re_queue`
 must create and close a dispatch span via `bucket_impl::create_dispatch_span` /
@@ -116,10 +117,11 @@ Run a single test binary:
 Run all test suites:
 
 ```bash
-(cd build; for i in $(fd test_ --type executable test/); do
-  cmake --build . --target "$i"
-  ./"$i"
-done)
+(cd build; find test -maxdepth 1 -type f -name 'test_*' -executable -print0 | \
+  while IFS= read -r -d '' i; do
+    cmake --build . --target "$i"
+    "$i"
+  done)
 ```
 
 Every new KV operation added to `crud_component` must have a corresponding test

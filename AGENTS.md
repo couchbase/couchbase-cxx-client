@@ -8,7 +8,7 @@ The Couchbase C++ Client is a high-performance, modern C++ library (C++17) for i
 ## Technical Stack
 - **Language**: C++17
 - **Build System**: CMake 3.19+
-- **Key Dependencies**: Asio, GSL, nlohmann/json, OpenSSL/BoringSSL (managed via `ThirdPartyDependencies.cmake`).
+- **Key Dependencies**: Asio, GSL, nlohmann/json, OpenSSL/BoringSSL (managed via `cmake/ThirdPartyDependencies.cmake`).
 
 ## Project Structure
 - `couchbase/`: **Public API**. Contains only header files (`.hxx`). This is what users of the library include.
@@ -20,8 +20,12 @@ The Couchbase C++ Client is a high-performance, modern C++ library (C++17) for i
 
 ## Coding Standards & Style
 - **File Extensions**:
-  - Headers: `.hxx`
-  - Source: `.cxx`
+  - Preferred for new Couchbase C++ client code:
+    - Headers: `.hxx`
+    - Source: `.cxx`
+  - Exceptions:
+    - Existing C components and some internal/platform code may use `.h`/`.c`.
+    - Third-party code retains its original upstream layout and extensions.
 - **Formatting**: Strictly enforced via `.clang-format`.
   - `IndentWidth: 2`
   - `ColumnLimit: 100`
@@ -53,7 +57,7 @@ export TEST_BUCKET=default
 #### Running Tests
 - **Run full test suite**:
   ```bash
-  (cd build; for i in $(fd test_ --type executable test/); do echo "running single test suite: $i"; cmake --build . --target $i; ./$i; done)
+  (cd build; for i in $(find test -type f -name 'test_*' -perm -u+x); do echo "running single test suite: $i"; cmake --build . --target "$i"; ./"$i"; done)
   ```
 - **List all test cases in a suite**:
   ```bash
