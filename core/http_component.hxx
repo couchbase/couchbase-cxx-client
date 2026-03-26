@@ -38,7 +38,6 @@ class retry_strategy;
 
 namespace couchbase::core
 {
-class http_session_manager;
 class http_component_impl;
 
 class http_component
