@@ -47,6 +47,7 @@ public:
   [[nodiscard]] auto content(std::size_t spec_index) const -> const codec::encoded_value&
   {
     Expects(exists(spec_index));
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
     return content_[spec_index].value();
   }
 

@@ -101,7 +101,6 @@ transaction_exception::transaction_exception(const std::runtime_error& cause,
                                              failure_type type)
   : std::runtime_error(cause)
   , result_(context.get_transaction_result())
-  , cause_(UNKNOWN)
   , type_(type)
   , txn_id_(context.transaction_id())
 {

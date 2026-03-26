@@ -33,7 +33,7 @@ class transaction_context;
 class retry_atr_commit : public std::runtime_error
 {
 public:
-  retry_atr_commit(const std::string& what)
+  explicit retry_atr_commit(const std::string& what)
     : std::runtime_error(what)
   {
   }
@@ -42,7 +42,7 @@ public:
 class retry_operation : public std::runtime_error
 {
 public:
-  retry_operation(const std::string& what)
+  explicit retry_operation(const std::string& what)
     : std::runtime_error(what)
   {
   }
@@ -51,7 +51,7 @@ public:
 class retry_operation_timeout : public std::runtime_error
 {
 public:
-  retry_operation_timeout(const std::string& what)
+  explicit retry_operation_timeout(const std::string& what)
     : std::runtime_error(what)
   {
   }
@@ -60,7 +60,7 @@ public:
 class retry_operation_retries_exhausted : public std::runtime_error
 {
 public:
-  retry_operation_retries_exhausted(const std::string& what)
+  explicit retry_operation_retries_exhausted(const std::string& what)
     : std::runtime_error(what)
   {
   }
@@ -73,7 +73,7 @@ enum final_error {
   FAILED,
   EXPIRED,
   FAILED_POST_COMMIT,
-  AMBIGUOUS
+  AMBIGUOUS,
 };
 
 error_class
@@ -114,7 +114,7 @@ public:
 class attempt_expired : public client_error
 {
 public:
-  attempt_expired(const std::string& what)
+  explicit attempt_expired(const std::string& what)
     : client_error(FAIL_EXPIRY, what)
   {
   }
@@ -170,7 +170,7 @@ public:
     // retries (if they all are true), or the first of the rollbacks, if it
     // is false.  Not rolling back takes precedence over retry.  Otherwise, we
     // just retain the first.
-    assert(errors.size() > 0);
+    assert(!errors.empty());
     // start with first error
     auto error_to_throw = errors.front();
     for (auto& ex : errors) {
@@ -290,8 +290,8 @@ public:
 
   [[nodiscard]] transaction_op_error_context get_error_ctx() const
   {
-    std::error_code ec = transaction_op_errc_from_external_exception(cause_);
-    return { ec };
+    const std::error_code ec = transaction_op_errc_from_external_exception(cause_);
+    return transaction_op_error_context{ ec };
   }
 
 private:

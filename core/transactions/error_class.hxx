@@ -30,6 +30,6 @@ enum error_class {
   FAIL_WRITE_WRITE_CONFLICT,
   FAIL_ATR_FULL,
   FAIL_PATH_ALREADY_EXISTS,
-  FAIL_EXPIRY
+  FAIL_EXPIRY,
 };
 } // namespace couchbase::core::transactions
