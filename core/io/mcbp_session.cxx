@@ -1435,7 +1435,8 @@ public:
                        log_prefix_,
                        opaque,
                        ec.message());
-          handler->handle_response(std::move(request), {}, reason, {}, {});
+          handler->handle_response(
+            std::move(request), io::mcbp_session(shared_from_this()), ec, reason, {}, {});
         }
       }
       operations_.clear();
@@ -1540,6 +1541,7 @@ public:
     }
     if (request) {
       handler->handle_response(std::move(request),
+                               io::mcbp_session(shared_from_this()),
                                protocol::map_status_code(opcode, status),
                                reason,
                                std::move(msg),
@@ -1564,6 +1566,7 @@ public:
       CB_LOG_WARNING("cancel operation while trying to write to closed mcbp session, opaque={}",
                      opaque);
       handler->handle_response(request,
+                               io::mcbp_session(shared_from_this()),
                                errc::common::request_canceled,
                                retry_reason::socket_closed_while_in_flight,
                                {},
@@ -2359,6 +2362,11 @@ mcbp_session::mcbp_session(const std::string& client_id,
                                                std::move(state_listener),
                                                std::move(bucket_name),
                                                std::move(known_features)) }
+{
+}
+
+mcbp_session::mcbp_session(std::shared_ptr<mcbp_session_impl> impl)
+  : impl_{ std::move(impl) }
 {
 }
 
