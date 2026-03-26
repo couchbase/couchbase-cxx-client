@@ -1,5 +1,25 @@
+# Valgrind suppression file for couchbase-cxx-client
+#
+# Used automatically by ctest --test-action memcheck via cmake/Testing.cmake
+# (MEMORYCHECK_COMMAND_OPTIONS includes --suppressions pointing here).
+#
+# Each suppression has a descriptive name explaining what it suppresses
+# and why. Only false positives belong here -- real bugs should be fixed.
+#
+# Syntax reference: https://valgrind.org/docs/manual/mc-manual.html#mc-manual.suppfiles
+#
+# --------------------------------------------------------------------------
+# glibc dynamic linker (ld-linux)
+#
+# The dynamic linker allocates internal structures (link maps, dependency
+# lists, TLS descriptors) when loading shared libraries at startup via
+# dlopen. These are intentionally never freed because they must remain
+# valid for the entire process lifetime. Valgrind reports them as
+# reachable leaks because pointers still exist at exit.
+# --------------------------------------------------------------------------
+
 {
-   glibc-libdl-1
+   glibc-dl_open-malloc-reachable
    Memcheck:Leak
    match-leak-kinds: reachable
    fun:malloc
@@ -8,8 +28,9 @@
    fun:_dl_catch_exception
    ...
 }
+
 {
-   glibc-libdl-2
+   glibc-dl_open-calloc-reachable
    Memcheck:Leak
    match-leak-kinds: reachable
    fun:calloc
@@ -19,8 +40,9 @@
    fun:_dl_catch_exception
    ...
 }
+
 {
-   glibc-libdl-3
+   glibc-dl_open-malloc-catch_error-reachable
    Memcheck:Leak
    match-leak-kinds: reachable
    fun:malloc
@@ -30,8 +52,46 @@
    fun:_dl_catch_error
    ...
 }
+
+# --------------------------------------------------------------------------
+# glibc thread-local storage (TLS)
+#
+# When pthread_create allocates a new thread stack, glibc's dynamic linker
+# allocates a Dynamic Thread Vector (DTV) to hold thread-local variables.
+# These are intentionally not freed at thread exit -- glibc caches them
+# for potential thread reuse. Valgrind reports them as "possibly lost"
+# because no direct pointer remains after the thread exits, but the
+# memory is managed by glibc internals.
+#
+# Stack: calloc -> allocate_dtv -> _dl_allocate_tls -> allocate_stack
+#        -> pthread_create (via asio::posix_thread or libstdc++ __gthread)
+# --------------------------------------------------------------------------
+
 {
-   openssl-1
+   glibc-pthread_create-dtv-possibly-lost
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:calloc
+   ...
+   fun:allocate_dtv
+   fun:_dl_allocate_tls
+   fun:allocate_stack
+   fun:pthread_create@@GLIBC_*
+   ...
+}
+
+# --------------------------------------------------------------------------
+# OpenSSL thread-local error state
+#
+# OpenSSL allocates per-thread error queues lazily on first use via
+# ERR_clear_error / ERR_get_state. These are stored in thread-local
+# storage and intentionally not freed by OpenSSL at thread exit (the
+# cleanup is left to OPENSSL_thread_stop or process exit). Valgrind
+# reports them as reachable leaks.
+# --------------------------------------------------------------------------
+
+{
+   openssl-err-thread-local-state
    Memcheck:Leak
    match-leak-kinds: reachable
    fun:malloc
@@ -39,8 +99,17 @@
    fun:ERR_clear_error
    ...
 }
+
+# --------------------------------------------------------------------------
+# OpenSSL PRNG internal buffers
+#
+# OpenSSL's random number generator (RAND_bytes) allocates internal DRBG
+# state and entropy buffers that persist for the process lifetime. These
+# are reachable at exit and intentionally not freed.
+# --------------------------------------------------------------------------
+
 {
-   openssl-2
+   openssl-rand-bytes-internal-state
    Memcheck:Leak
    match-leak-kinds: reachable
    fun:malloc
