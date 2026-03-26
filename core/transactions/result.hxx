@@ -46,12 +46,12 @@ struct result_base {
 
   result_base() = default;
 
-  result_base(const std::vector<std::byte>& res)
+  explicit result_base(const std::vector<std::byte>& res)
     : raw_value(res)
   {
   }
 
-  auto has_value() const -> bool
+  [[nodiscard]] auto has_value() const -> bool
   {
     return !raw_value.empty();
   }
@@ -96,7 +96,7 @@ struct subdoc_result : result_base {
   {
   }
 
-  subdoc_result(std::uint32_t s)
+  explicit subdoc_result(std::uint32_t s)
     : status(static_cast<status_type>(s))
   {
   }
@@ -108,7 +108,7 @@ struct subdoc_result : result_base {
   }
 
   template<typename T>
-  auto content_as() const -> T
+  [[nodiscard]] auto content_as() const -> T
   {
     // this will always be a json string.  To not have extraneous
     // "" when asked to return as a string, we parse it first.
