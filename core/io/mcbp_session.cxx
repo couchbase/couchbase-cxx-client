@@ -1159,7 +1159,8 @@ public:
         }
 
         if (reason == retry_reason::do_not_retry || reason == retry_reason::unknown) {
-          CB_LOG_WARNING("{} reauthentication failed (code={}, message={}, reason={}, opaque={})",
+          CB_LOG_WARNING("{} reauthentication failed (code={}, message={}, reason={}, opaque={}), "
+                         "closing connection",
                          self->log_prefix_,
                          ec.value(),
                          ec.message(),
@@ -1167,6 +1168,7 @@ public:
                          req.opaque());
           self->reauth_deadline_.cancel();
           self->reauth_in_progress_ = false;
+          self->stop(retry_reason::do_not_retry);
           return;
         }
 
