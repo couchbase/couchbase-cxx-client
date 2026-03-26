@@ -29,8 +29,42 @@
 
 namespace couchbase::core
 {
+/**
+ * Convenience overload that constructs a @ref key_value_error_context with zero retry attempts and
+ * an empty retry-reasons set.  Delegates to the four-argument overload.
+ *
+ * @param ec  Error code describing the failure.
+ * @param id  Document identifier carrying bucket/scope/collection/key.
+ * @return A fully initialised @ref key_value_error_context.
+ *
+ * @since 1.0.0
+ * @internal
+ */
 auto
 make_key_value_error_context(std::error_code ec, const document_id& id) -> key_value_error_context;
+
+/**
+ * Constructs a @ref key_value_error_context for a document-not-dispatched error path where the
+ * internal retry bookkeeping fields are available directly (e.g. from @ref queue_request), without
+ * requiring a Command/Response template instantiation.
+ *
+ * Fields that belong to the protocol exchange (opaque, status code, CAS, error-map info, extended
+ * error info, dispatched addresses) are left empty because no server response was received.
+ *
+ * @param ec          Error code describing the failure.
+ * @param id          Document identifier carrying bucket/scope/collection/key.
+ * @param retry_attempts Number of retry attempts already performed for the request.
+ * @param retry_reasons  Set of reasons recorded during those retry attempts.
+ * @return A fully initialised @ref key_value_error_context.
+ *
+ * @since 1.0.0
+ * @internal
+ */
+auto
+make_key_value_error_context(std::error_code ec,
+                             const document_id& id,
+                             std::size_t retry_attempts,
+                             std::set<retry_reason> retry_reasons) -> key_value_error_context;
 
 template<typename Command, typename Response>
 auto
@@ -57,21 +91,23 @@ make_key_value_error_context(std::error_code ec,
   auto retry_attempts = command->request.retries.retry_attempts();
   auto retry_reasons = command->request.retries.retry_reasons();
 
-  return { command->id_,
-           ec,
-           command->last_dispatched_to_,
-           command->last_dispatched_from_,
-           retry_attempts,
-           std::move(retry_reasons),
-           key,
-           bucket,
-           scope,
-           collection,
-           opaque,
-           status,
-           response.cas(),
-           std::move(error_map_info),
-           response.error_info() };
+  return {
+    command->id_,
+    ec,
+    command->last_dispatched_to_,
+    command->last_dispatched_from_,
+    retry_attempts,
+    std::move(retry_reasons),
+    key,
+    bucket,
+    scope,
+    collection,
+    opaque,
+    status,
+    response.cas(),
+    std::move(error_map_info),
+    response.error_info(),
+  };
 }
 
 auto
