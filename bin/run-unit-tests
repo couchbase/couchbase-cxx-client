@@ -34,4 +34,4 @@ fi
 
 cd "${BUILD_DIR}"
 
-${CB_CTEST} --output-on-failure --label-regex 'unit' --output-junit results.xml
+${CB_CTEST} ${CB_CTEST_EXTRAS} --output-on-failure --label-regex 'unit' --output-junit results.xml
