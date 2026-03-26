@@ -63,7 +63,7 @@ constexpr auto KV_REMOVE{ "EXECUTE __delete" };
 //
 // the config may have nullptr for attempt context hooks, so we use the noop
 // here in that case
-attempt_context_testing_hooks noop_hooks = {}; // NOLINT(cert-err58-cpp)
+attempt_context_testing_hooks noop_hooks = {};
 
 void
 wrap_err_callback_for_async_api(const std::exception_ptr& err,
@@ -75,7 +75,7 @@ wrap_err_callback_for_async_api(const std::exception_ptr& err,
     } catch (const transaction_operation_failed& e) {
       return cb(core::impl::make_error(e));
     } catch (...) {
-      return cb({ errc::transaction_op::generic });
+      return cb(couchbase::error{ errc::transaction_op::generic });
     }
   }
   return cb({});
@@ -91,7 +91,7 @@ wrap_void_call_for_public_api(std::function<void()>&& handler) -> couchbase::err
     return core::impl::make_error(e);
   } catch (...) {
     // the handler should catch everything else, but just in case...
-    return { errc::transaction_op::generic };
+    return couchbase::error{ errc::transaction_op::generic };
   }
 }
 
@@ -107,7 +107,7 @@ wrap_call_for_public_api(std::function<transaction_get_result()>&& handler)
     return { core::impl::make_error(ex), {} };
   } catch (...) {
     // the handler should catch everything else, but just in case...
-    return { { errc::transaction_op::generic }, {} };
+    return { couchbase::error{ errc::transaction_op::generic }, {} };
   }
 }
 
@@ -128,10 +128,10 @@ wrap_callback_for_async_public_api(
     } catch (const transaction_operation_failed& e) {
       return cb(core::impl::make_error(e), {});
     } catch (...) {
-      return cb({ errc::transaction_op::generic }, {});
+      return cb(couchbase::error{ errc::transaction_op::generic }, {});
     }
   }
-  return cb({ errc::transaction_op::generic }, {});
+  return cb(couchbase::error{ errc::transaction_op::generic }, {});
 }
 
 } // namespace
@@ -287,7 +287,8 @@ attempt_context_impl::get(const core::document_id& id, Callback&& cb)
           } else {
             if (!res) {
               return self->op_completed_with_error(
-                std::move(cb), transaction_operation_failed(*ec, "document not found"));
+                std::move(cb),
+                transaction_operation_failed(FAIL_DOC_NOT_FOUND, "document not found"));
             }
             auto err =
               check_forward_compat(forward_compat_stage::GETS, res->links().forward_compat());
@@ -524,7 +525,7 @@ attempt_context_impl::get_replica_from_preferred_server_group(const couchbase::c
       return {};
     });
   if (!ctx.ec() && res.cas().empty()) {
-    return { { errc::transaction_op::document_not_found }, res };
+    return { couchbase::error{ errc::transaction_op::document_not_found }, res };
   }
   return { ctx, res };
 }
@@ -540,7 +541,7 @@ attempt_context_impl::get_replica_from_preferred_server_group(
     [handler = std::move(handler)](const std::exception_ptr& err,
                                    std::optional<transaction_get_result> res) mutable {
       if (!res) {
-        return handler({ errc::transaction_op::document_not_found }, {});
+        return handler(couchbase::error{ errc::transaction_op::document_not_found }, {});
       }
       return wrap_callback_for_async_public_api(err, std::move(res), std::move(handler));
     });
@@ -594,9 +595,10 @@ attempt_context_impl::get_multi(
   std::function<void(std::exception_ptr, std::optional<transaction_get_multi_result>)>&& cb)
 {
   if (op_list_.get_mode().is_query()) {
-    return cb(std::make_exception_ptr(op_exception({ errc::transaction_op::feature_not_available },
-                                                   "Get Multi is not supported in Query Mode",
-                                                   FEATURE_NOT_AVAILABLE_EXCEPTION)),
+    return cb(std::make_exception_ptr(op_exception(
+                transaction_op_error_context{ errc::transaction_op::feature_not_available },
+                "Get Multi is not supported in Query Mode",
+                FEATURE_NOT_AVAILABLE_EXCEPTION)),
               {});
   }
   cache_error_async(cb, [self = shared_from_this(), ids, mode, cb]() mutable {
@@ -657,13 +659,13 @@ attempt_context_impl::get_multi(
       } catch (const transaction_operation_failed& e) {
         return cb(core::impl::make_error(e), {});
       } catch (...) {
-        return cb({ errc::transaction_op::generic }, {});
+        return cb(couchbase::error{ errc::transaction_op::generic }, {});
       }
     }
     if (res) {
       return cb({}, couchbase::transactions::transaction_get_multi_result{ res->content() });
     }
-    return cb({ errc::transaction_op::generic }, {});
+    return cb(couchbase::error{ errc::transaction_op::generic }, {});
   });
 }
 
@@ -696,11 +698,11 @@ attempt_context_impl::get_multi_replicas_from_preferred_server_group(
          std::optional<transaction_get_multi_replicas_from_preferred_server_group_result>)>&& cb)
 {
   if (op_list_.get_mode().is_query()) {
-    return cb(
-      std::make_exception_ptr(op_exception({ errc::transaction_op::feature_not_available },
-                                           "Get Multi Replica is not supported in Query Mode",
-                                           FEATURE_NOT_AVAILABLE_EXCEPTION)),
-      {});
+    return cb(std::make_exception_ptr(op_exception(
+                transaction_op_error_context{ errc::transaction_op::feature_not_available },
+                "Get Multi Replica is not supported in Query Mode",
+                FEATURE_NOT_AVAILABLE_EXCEPTION)),
+              {});
   }
 
   cache_error_async(cb, [self = shared_from_this(), ids, mode, cb]() mutable {
@@ -776,7 +778,7 @@ attempt_context_impl::get_multi_replicas_from_preferred_server_group(
         } catch (const transaction_operation_failed& e) {
           return cb(core::impl::make_error(e), {});
         } catch (...) {
-          return cb({ errc::transaction_op::generic }, {});
+          return cb(couchbase::error{ errc::transaction_op::generic }, {});
         }
       }
       if (res) {
@@ -785,7 +787,7 @@ attempt_context_impl::get_multi_replicas_from_preferred_server_group(
           couchbase::transactions::
             transaction_get_multi_replicas_from_preferred_server_group_result{ res->content() });
       }
-      return cb({ errc::transaction_op::generic }, {});
+      return cb(couchbase::error{ errc::transaction_op::generic }, {});
     });
 }
 
@@ -1764,8 +1766,8 @@ attempt_context_impl::query_begin_work(const std::optional<std::string>& query_c
   txdata["state"]["timeLeftMs"] = overall()->remaining().count() / 1000000;
   txdata["config"] = tao::json::empty_object;
   auto [ec, origin] = overall()->cluster_ref().origin();
-  txdata["config"]["kvTimeoutMs"] = (ec) ? core::timeout_defaults::key_value_durable_timeout.count()
-                                         : origin.options().key_value_durable_timeout.count();
+  txdata["config"]["kvTimeoutMs"] = ec ? core::timeout_defaults::key_value_durable_timeout.count()
+                                       : origin.options().key_value_durable_timeout.count();
   txdata["config"]["numAtrs"] = 1024;
   opts.raw("numatrs", jsonify(1024));
   txdata["config"]["durabilityLevel"] = durability_level_to_string(overall()->config().level);
@@ -2179,13 +2181,13 @@ attempt_context_impl::do_public_query(
       std::string msg = "Txns query error occured that should have been handled further upstream, "
                         "which might indicate a bug.";
       if (std::holds_alternative<query_error_context>(ctx.cause())) {
-        return { { ctx.ec(),
-                   std::move(msg),
-                   {},
-                   impl::make_error(std::get<query_error_context>(ctx.cause())) },
+        return { couchbase::error{ ctx.ec(),
+                                   std::move(msg),
+                                   {},
+                                   impl::make_error(std::get<query_error_context>(ctx.cause())) },
                  {} };
       }
-      return { { ctx.ec(), std::move(msg) }, {} };
+      return { couchbase::error{ ctx.ec(), std::move(msg) }, {} };
     }
     return { {}, res };
   } catch (const transaction_operation_failed& e) {
@@ -2194,7 +2196,7 @@ attempt_context_impl::do_public_query(
     return { core::impl::make_error(qe), {} };
   } catch (...) {
     // should not be necessary, but just in case...
-    return { { couchbase::errc::transaction_op::generic }, {} };
+    return { couchbase::error{ couchbase::errc::transaction_op::generic }, {} };
   }
 }
 
@@ -3420,6 +3422,8 @@ attempt_context_impl::do_get(const core::document_id& id,
             if (ec) {
               return cb(ec, cause, err_message, std::nullopt);
             }
+            // A non-transacted document is a successful lookup with the txn XATTR paths simply
+            // absent; whether it is "in a transaction" is decided below by inspecting the links.
 
             if (!doc->links().is_document_in_transaction()) {
               if (doc->links().is_deleted()) {
@@ -3558,20 +3562,14 @@ execute_lookup(attempt_context_impl* ctx, LookupInRequest& req, Callback&& cb)
       auto ec = error_class_from_response(resp);
       if (ec) {
         CB_ATTEMPT_CTX_LOG_TRACE(ctx, "get_doc got error {} : {}", resp.ctx.ec().message(), *ec);
-        switch (*ec) {
-          case FAIL_PATH_NOT_FOUND:
-            return cb(ec,
-                      external_exception_from_response(resp),
-                      resp.ctx.ec().message(),
-                      transaction_get_result::create_from(resp));
-          default:
-            return cb(
-              ec, external_exception_from_response(resp), resp.ctx.ec().message(), std::nullopt);
-        }
-      } else {
         return cb(
-          std::nullopt, std::nullopt, std::nullopt, transaction_get_result::create_from(resp));
+          ec, external_exception_from_response(resp), resp.ctx.ec().message(), std::nullopt);
       }
+      // Success. A lookup_in on a non-transacted document also lands here: the txn XATTR paths are
+      // simply absent (a per-path condition, not a document-level error), and the caller decides
+      // "is this in a transaction?" by inspecting the parsed links.
+      return cb(
+        std::nullopt, std::nullopt, std::nullopt, transaction_get_result::create_from(resp));
     });
 }
 } // namespace
@@ -3722,6 +3720,8 @@ attempt_context_impl::create_staged_insert_error_handler(const core::document_id
               std::optional<external_exception> /* cause */,
               std::optional<std::string> err_message,
               std::optional<transaction_get_result> doc) mutable {
+              // A successful lookup: the document exists. If it carries no transaction XATTRs it is
+              // a non-transacted doc (the txn paths are simply absent), inspected below.
               if (!ec3) {
                 if (doc) {
                   CB_ATTEMPT_CTX_LOG_DEBUG(
@@ -3802,9 +3802,11 @@ attempt_context_impl::create_staged_insert_error_handler(const core::document_id
                         id, content, doc->cas().value(), delay, op_id, std::forward<Handler>(cb));
                     });
                 } else {
-                  // no doc now, just retry entire txn
+                  // no doc now, just retry entire txn.  We only reach this branch on a successful
+                  // lookup (ec3 empty) that nonetheless returned no document, so there is no error
+                  // class to log here.
                   CB_ATTEMPT_CTX_LOG_TRACE(
-                    self, "got {} from get_doc in exists during staged insert", *ec3);
+                    self, "get_doc in exists during staged insert returned no document, retrying");
                   return self->op_completed_with_error(
                     std::move(cb),
                     transaction_operation_failed(FAIL_DOC_NOT_FOUND,
@@ -3813,7 +3815,7 @@ attempt_context_impl::create_staged_insert_error_handler(const core::document_id
                       .retry());
                 }
               } else {
-                return error_handler(*ec3, *err_message, std::forward<Handler>(cb));
+                return error_handler(*ec3, err_message.value_or(""), std::forward<Handler>(cb));
               }
             });
         });
@@ -4092,7 +4094,7 @@ attempt_context_impl::get(const couchbase::collection& coll, const std::string& 
       return {};
     });
   if (!ctx.ec() && res.cas().empty()) {
-    return { { errc::transaction_op::document_not_found }, res };
+    return { couchbase::error{ errc::transaction_op::document_not_found }, res };
   }
   return { ctx, res };
 }
@@ -4105,7 +4107,7 @@ attempt_context_impl::get(const couchbase::collection& coll,
                [handler = std::move(handler)](const std::exception_ptr& err,
                                               std::optional<transaction_get_result> res) mutable {
                  if (!res) {
-                   return handler({ errc::transaction_op::document_not_found }, {});
+                   return handler(couchbase::error{ errc::transaction_op::document_not_found }, {});
                  }
                  return wrap_callback_for_async_public_api(err, std::move(res), std::move(handler));
                });
@@ -4130,7 +4132,7 @@ attempt_context_impl::query(std::string statement,
               return handler(core::impl::make_error(ex), {});
             } catch (...) {
               // just in case...
-              return handler({ couchbase::errc::transaction_op::generic }, {});
+              return handler(couchbase::error{ couchbase::errc::transaction_op::generic }, {});
             }
           }
           auto [ctx, res] = core::impl::build_transaction_query_result(*resp);
@@ -4140,13 +4142,14 @@ attempt_context_impl::query(std::string statement,
             std::string msg = "Txns query error occured that should have been handled further "
                               "upstream, which might indicate a bug.";
             if (std::holds_alternative<query_error_context>(ctx.cause())) {
-              return handler({ ctx.ec(),
-                               std::move(msg),
-                               {},
-                               impl::make_error(std::get<query_error_context>(ctx.cause())) },
-                             {});
+              return handler(
+                couchbase::error{ ctx.ec(),
+                                  std::move(msg),
+                                  {},
+                                  impl::make_error(std::get<query_error_context>(ctx.cause())) },
+                {});
             }
-            return handler({ ctx.ec(), std::move(msg) }, {});
+            return handler(couchbase::error{ ctx.ec(), std::move(msg) }, {});
           }
           return handler({}, res);
         });

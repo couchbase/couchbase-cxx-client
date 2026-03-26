@@ -33,7 +33,7 @@ jobs:
       - name: Build tests (${{ matrix.os }})
         timeout-minutes: 60
         env:
-          CB_NUMBER_OF_JOBS: 8
+          CB_NUMBER_OF_JOBS: 4
         run: ./bin/build-tests
   windows:
     strategy:

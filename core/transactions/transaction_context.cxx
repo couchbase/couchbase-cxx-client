@@ -467,7 +467,8 @@ auto
 transaction_context::get_transaction_result() const -> ::couchbase::transactions::transaction_result
 {
   return couchbase::transactions::transaction_result{
-    transaction_id(), current_attempt().state == attempt_state::COMPLETED
+    transaction_id(),
+    current_attempt().state == attempt_state::COMPLETED,
   };
 }
 
