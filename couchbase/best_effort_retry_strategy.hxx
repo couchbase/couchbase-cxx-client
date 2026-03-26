@@ -50,6 +50,10 @@ class best_effort_retry_strategy : public retry_strategy
 {
 public:
   explicit best_effort_retry_strategy(backoff_calculator calculator);
+  best_effort_retry_strategy(const best_effort_retry_strategy&) = default;
+  best_effort_retry_strategy(best_effort_retry_strategy&&) = default;
+  auto operator=(const best_effort_retry_strategy&) -> best_effort_retry_strategy& = default;
+  auto operator=(best_effort_retry_strategy&&) -> best_effort_retry_strategy& = default;
   ~best_effort_retry_strategy() override = default;
 
   auto retry_after(const retry_request& request, retry_reason reason) -> retry_action override;

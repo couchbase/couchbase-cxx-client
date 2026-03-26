@@ -28,11 +28,13 @@ namespace couchbase
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
 namespace core::utils::json
 {
+// NOLINTBEGIN(readability-redundant-declaration)
 auto
 generate_binary(const tao::json::value& object) -> std::vector<std::byte>;
 
 auto
 parse_binary(const std::vector<std::byte>& input) -> tao::json::value;
+// NOLINTEND(readability-redundant-declaration)
 } // namespace core::utils::json
 #endif
 

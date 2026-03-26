@@ -60,7 +60,7 @@ enum analytics_encryption_level {
    *
    * Requires specifying the certificate to trust.
    */
-  full
+  full,
 };
 
 struct analytics_link {

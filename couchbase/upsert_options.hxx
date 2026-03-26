@@ -46,8 +46,8 @@ struct upsert_options : public common_durability_options<upsert_options> {
    * @internal
    */
   struct built : public common_durability_options<upsert_options>::built {
-    const std::uint32_t expiry;
-    const bool preserve_expiry;
+    const std::uint32_t expiry{};
+    const bool preserve_expiry{};
   };
 
   /**

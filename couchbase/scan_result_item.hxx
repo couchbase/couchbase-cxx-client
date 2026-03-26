@@ -73,7 +73,6 @@ public:
                    std::shared_ptr<crypto::manager> crypto_manager = {})
     : result{ cas }
     , id_{ std::move(id) }
-    , id_only_{ false }
     , value_{ std::move(value) }
     , expiry_time_{ expiry_time }
     , crypto_manager_{ std::move(crypto_manager) }

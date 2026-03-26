@@ -44,7 +44,7 @@ enum class common_flags : std::uint32_t {
   client_specific = 0x01, // called PRIVATE in RFC and other SDKs
   json = 0x02,
   binary = 0x03,
-  string = 0x04
+  string = 0x04,
 };
 
 /**

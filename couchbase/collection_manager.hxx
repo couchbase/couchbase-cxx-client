@@ -138,8 +138,9 @@ public:
                     const create_scope_options& options,
                     create_scope_handler&& handler) const;
 
-  [[nodiscard]] auto create_scope(std::string scope_name, const create_scope_options& options = {})
-    const -> std::future<error>;
+  [[nodiscard]] auto create_scope(std::string scope_name,
+                                  const create_scope_options& options = {}) const
+    -> std::future<error>;
 
   /**
    * Drops a scope on the bucket

@@ -19,6 +19,7 @@
 
 namespace couchbase::transactions
 {
+// NOLINTNEXTLINE(bugprone-forward-declaration-namespace)
 class transaction_context;
 
 /**
@@ -281,7 +282,7 @@ public:
   }
 
   /** @private */
-  auto get_query_options() const -> const query_options&
+  [[nodiscard]] auto get_query_options() const -> const query_options&
   {
     return opts_;
   }

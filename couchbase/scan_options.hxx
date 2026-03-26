@@ -147,8 +147,10 @@ public:
    */
   [[nodiscard]] auto build() const -> built
   {
-    return { build_common_options(), ids_only_,         mutation_state_,
-             batch_byte_limit_,      batch_item_limit_, concurrency_ };
+    return {
+      build_common_options(), ids_only_,         mutation_state_,
+      batch_byte_limit_,      batch_item_limit_, concurrency_,
+    };
   }
 
 private:

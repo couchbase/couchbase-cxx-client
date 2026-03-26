@@ -59,7 +59,7 @@ public:
     , client_context_id_{ std::move(client_context_id) }
     , status_{ status }
     , warnings_{ std::move(warnings) }
-    , metrics_{ std::move(metrics) }
+    , metrics_{ metrics }
     , signature_{ std::move(signature) }
   {
   }
