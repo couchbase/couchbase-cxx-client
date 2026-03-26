@@ -21,9 +21,11 @@
 #include <couchbase/cas.hxx>
 #include <couchbase/durability_level.hxx>
 #include <couchbase/mutation_token.hxx>
+#include <couchbase/retry_reason.hxx>
 
 #include <chrono>
 #include <optional>
+#include <set>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -65,6 +67,8 @@ public:
 
   struct {
     std::optional<resource_unit_result> resource_units{};
+    std::size_t retry_attempts{ 0 };
+    std::set<retry_reason> retry_reasons{};
   } internal{};
 };
 
@@ -97,6 +101,8 @@ public:
 
   struct {
     std::optional<resource_unit_result> resource_units{};
+    std::size_t retry_attempts{ 0 };
+    std::set<retry_reason> retry_reasons{};
   } internal{};
 };
 
@@ -130,6 +136,8 @@ public:
 
   struct {
     std::optional<resource_unit_result> resource_units{};
+    std::size_t retry_attempts{ 0 };
+    std::set<retry_reason> retry_reasons{};
   } internal{};
 };
 
@@ -163,6 +171,8 @@ public:
 
   struct {
     std::optional<resource_unit_result> resource_units{};
+    std::size_t retry_attempts{ 0 };
+    std::set<retry_reason> retry_reasons{};
   } internal{};
 };
 
@@ -194,6 +204,8 @@ public:
 
   struct {
     std::optional<resource_unit_result> resource_units{};
+    std::size_t retry_attempts{ 0 };
+    std::set<retry_reason> retry_reasons{};
   } internal{};
 };
 
@@ -224,6 +236,8 @@ public:
 
   struct {
     std::optional<resource_unit_result> resource_units{};
+    std::size_t retry_attempts{ 0 };
+    std::set<retry_reason> retry_reasons{};
   } internal{};
 };
 
@@ -259,6 +273,8 @@ public:
 
   struct {
     std::optional<resource_unit_result> resource_units{};
+    std::size_t retry_attempts{ 0 };
+    std::set<retry_reason> retry_reasons{};
   } internal{};
 };
 
@@ -295,6 +311,8 @@ public:
 
   struct {
     std::optional<resource_unit_result> resource_units{};
+    std::size_t retry_attempts{ 0 };
+    std::set<retry_reason> retry_reasons{};
   } internal{};
 };
 
@@ -332,6 +350,8 @@ public:
 
   struct {
     std::optional<resource_unit_result> resource_units{};
+    std::size_t retry_attempts{ 0 };
+    std::set<retry_reason> retry_reasons{};
   } internal{};
 };
 
@@ -364,6 +384,8 @@ public:
 
   struct {
     std::optional<resource_unit_result> resource_units{};
+    std::size_t retry_attempts{ 0 };
+    std::set<retry_reason> retry_reasons{};
   } internal{};
 };
 
@@ -397,6 +419,8 @@ public:
 
   struct {
     std::optional<resource_unit_result> resource_units{};
+    std::size_t retry_attempts{ 0 };
+    std::set<retry_reason> retry_reasons{};
   } internal{};
 };
 
@@ -432,6 +456,8 @@ public:
 
   struct {
     std::optional<resource_unit_result> resource_units{};
+    std::size_t retry_attempts{ 0 };
+    std::set<retry_reason> retry_reasons{};
   } internal{};
 };
 
@@ -462,6 +488,8 @@ public:
 
   struct {
     std::optional<resource_unit_result> resource_units{};
+    std::size_t retry_attempts{ 0 };
+    std::set<retry_reason> retry_reasons{};
   } internal{};
 };
 
@@ -497,6 +525,8 @@ public:
 
   struct {
     std::optional<resource_unit_result> resource_units{};
+    std::size_t retry_attempts{ 0 };
+    std::set<retry_reason> retry_reasons{};
   } internal{};
 };
 
@@ -535,6 +565,8 @@ public:
 
   struct {
     std::optional<resource_unit_result> resource_units{};
+    std::size_t retry_attempts{ 0 };
+    std::set<retry_reason> retry_reasons{};
   } internal{};
 };
 
@@ -573,6 +605,8 @@ public:
 
   struct {
     std::optional<resource_unit_result> resource_units{};
+    std::size_t retry_attempts{ 0 };
+    std::set<retry_reason> retry_reasons{};
   } internal{};
 };
 
