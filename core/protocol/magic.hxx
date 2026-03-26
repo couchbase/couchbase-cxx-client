@@ -22,6 +22,8 @@
 namespace couchbase::core::protocol
 {
 enum class magic : std::uint8_t {
+  /// Sentinel value for default-constructed/invalid packets (not a real wire value)
+  invalid = 0x00,
   /// Request packet from client to server
   client_request = 0x80,
   /// The alternative request packet containing frame extras
@@ -47,6 +49,8 @@ is_valid_magic(std::uint8_t code) -> bool
     case magic::server_request:
     case magic::server_response:
       return true;
+    case magic::invalid:
+      break;
   }
   return false;
 }
