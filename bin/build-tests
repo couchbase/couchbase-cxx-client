@@ -59,6 +59,7 @@ case "${CB_SANITIZER}" in
 
     lsan | leak)
         CB_CMAKE_EXTRAS="-DENABLE_SANITIZER_LEAK=ON"
+        export LSAN_OPTIONS="suppressions=${PROJECT_ROOT}/.lsan_suppressions"
         ;;
 
     ubsan | undefined_behaviour)

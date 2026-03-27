@@ -31,6 +31,9 @@ fi
 if [ "x${CB_SANITIZER}" = "xvalgrind" ]; then
     CB_CTEST_EXTRAS="--test-action memcheck"
 fi
+if [ "x${CB_SANITIZER}" = "xlsan" ]; then
+    export LSAN_OPTIONS="suppressions=${PROJECT_ROOT}/.lsan_suppressions"
+fi
 
 cd "${BUILD_DIR}"
 
