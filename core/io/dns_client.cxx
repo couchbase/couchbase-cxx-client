@@ -37,6 +37,29 @@
 
 namespace couchbase::core::io::dns
 {
+namespace
+{
+auto
+rcode_description(response_code rcode) -> const char*
+{
+  switch (rcode) {
+    case response_code::no_error:
+      return "NOERROR";
+    case response_code::format_error:
+      return "FORMERR (server could not interpret the query)";
+    case response_code::server_failure:
+      return "SERVFAIL (server failure — DNS resolver may not support SRV queries)";
+    case response_code::name_error:
+      return "NXDOMAIN (name does not exist — no SRV record registered for this hostname)";
+    case response_code::not_implemented:
+      return "NOTIMP (query type not implemented by the server)";
+    case response_code::refused:
+      return "REFUSED (server refused the query — policy restriction)";
+  }
+  return "UNKNOWN";
+}
+} // namespace
+
 class dns_srv_command : public std::enable_shared_from_this<dns_srv_command>
 {
 public:
@@ -140,6 +163,13 @@ public:
               return self->retry_with_tcp();
             }
             self->deadline_.cancel();
+            if (message.header.flags.rcode != response_code::no_error) {
+              CB_LOG_WARNING("DNS UDP response for \"{}:{}\" returned non-zero RCODE: {} ({})",
+                             self->address_.to_string(),
+                             self->port_,
+                             static_cast<int>(message.header.flags.rcode),
+                             rcode_description(message.header.flags.rcode));
+            }
             dns_srv_response resp{ ec2 };
             resp.targets.reserve(message.answers.size());
             for (const auto& answer : message.answers) {
@@ -294,6 +324,14 @@ private:
                   }
                   self->recv_buf_.resize(bytes_transferred4);
                   const dns_message message = dns_codec::decode(self->recv_buf_);
+                  if (message.header.flags.rcode != response_code::no_error) {
+                    CB_LOG_WARNING(
+                      "DNS TCP response for \"{}:{}\" returned non-zero RCODE: {} ({})",
+                      self->address_.to_string(),
+                      self->port_,
+                      static_cast<int>(message.header.flags.rcode),
+                      rcode_description(message.header.flags.rcode));
+                  }
                   dns_srv_response resp{ ec4 };
                   resp.targets.reserve(message.answers.size());
                   for (const auto& answer : message.answers) {
@@ -332,12 +370,25 @@ dns_client::query_srv(const std::string& name,
                       utils::movable_function<void(dns_srv_response&&)>&& handler)
 {
   if (config.nameserver().empty()) {
+    CB_LOG_WARNING(
+      "DNS-SRV query for \"{}/{}\" skipped: no nameserver configured (DNS-SRV bootstrap is "
+      "disabled). Check that /etc/resolv.conf contains a valid IP address on a \"nameserver\" "
+      "line, or set the nameserver explicitly in the cluster options.",
+      name,
+      service);
     return handler({ {} });
   }
 
   std::error_code ec;
   auto address = asio::ip::make_address(config.nameserver(), ec);
   if (ec) {
+    CB_LOG_WARNING(
+      "DNS-SRV query for \"{}/{}\" skipped: configured nameserver \"{}\" could not be parsed as "
+      "an IP address ({}). Only numeric IP addresses are supported as nameserver values.",
+      name,
+      service,
+      config.nameserver(),
+      ec.message());
     return handler({ ec });
   }
   auto cmd = std::make_shared<dns_srv_command>(
