@@ -43,8 +43,8 @@ class packet
 public:
   [[nodiscard]] auto debug_string() const -> std::string;
 
-  protocol::magic magic_;
-  protocol::client_opcode command_;
+  protocol::magic magic_{ protocol::magic::invalid };
+  protocol::client_opcode command_{ protocol::client_opcode::invalid };
   std::byte datatype_{};
   std::uint16_t status_{ 0x00 };
   key_value_status_code status_code_{ key_value_status_code::success };

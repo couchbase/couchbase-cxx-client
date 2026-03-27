@@ -76,8 +76,7 @@ codec::encode_packet(const couchbase::core::mcbp::packet& packet) const
       // It also doesn't expect the collection ID to be leb encoded.
       extras.resize(sizeof(std::uint32_t));
       big_endian::put_uint32(extras, packet.collection_id_);
-    }
-    if (packet.collection_id_ > 0) {
+    } else if (packet.collection_id_ > 0) {
       CB_LOG_DEBUG("cannot encode collection id with a non-collection command");
       return tl::unexpected(errc::common::invalid_argument);
     }
@@ -432,11 +431,11 @@ codec::decode_packet(gsl::span<std::byte> header, gsl::span<std::byte> body) con
           } else if (frame_type == mcbp::request_sync_durability &&
                      (frame_len == 1 || frame_len == 3)) {
             pkt.durability_level_frame_ = mcbp::durability_level_frame{
-              static_cast<mcbp::durability_level>(body[frame_offset])
+              static_cast<mcbp::durability_level>(body[frame_offset]),
             };
             if (frame_len == 3) {
               pkt.durability_timeout_frame_ = mcbp::durability_timeout_frame{
-                std::chrono::milliseconds{ big_endian::read_uint16(body, frame_offset + 1) }
+                std::chrono::milliseconds{ big_endian::read_uint16(body, frame_offset + 1) },
               };
             } else {
               // We follow the semantic that duplicate frames overwrite previous ones, since the
@@ -445,39 +444,49 @@ codec::decode_packet(gsl::span<std::byte> header, gsl::span<std::byte> body) con
               pkt.durability_timeout_frame_.reset();
             }
           } else if (frame_type == mcbp::request_stream_id && frame_len == 2) {
-            pkt.stream_id_frame_ =
-              mcbp::stream_id_frame{ big_endian::read_uint16(body, frame_offset) };
+            pkt.stream_id_frame_ = mcbp::stream_id_frame{
+              big_endian::read_uint16(body, frame_offset),
+            };
           } else if (frame_type == mcbp::request_open_tracing && frame_len > 0) {
-            pkt.open_tracing_frame_ =
-              mcbp::open_tracing_frame{ big_endian::read(body, frame_offset, frame_len) };
+            pkt.open_tracing_frame_ = mcbp::open_tracing_frame{
+              big_endian::read(body, frame_offset, frame_len),
+            };
           } else if (frame_type == mcbp::request_preserve_expiry && frame_len == 0) {
             pkt.preserve_expiry_frame_ = mcbp::preserve_expiry_frame{};
           } else if (frame_type == mcbp::request_user_impersonation && frame_len > 0) {
-            pkt.user_impersonation_frame_ =
-              mcbp::user_impersonation_frame{ big_endian::read(body, frame_offset, frame_len) };
+            pkt.user_impersonation_frame_ = mcbp::user_impersonation_frame{
+              big_endian::read(body, frame_offset, frame_len),
+            };
           } else {
             // If we don't understand this frame type, we record it as an UnsupportedFrame (as
             // opposed to dropping it blindly)
             pkt.unsupported_frames_.emplace_back(mcbp::unsupported_frame{
-              frame_type, big_endian::read(body, frame_offset, frame_len) });
+              frame_type,
+              big_endian::read(body, frame_offset, frame_len),
+            });
           }
           break;
 
         case protocol::magic::alt_client_response:
           if (frame_type == mcbp::response_server_duration && frame_len == 2) {
-            pkt.server_duration_frame_ = mcbp::server_duration_frame{ mcbp::decode_server_duration(
-              big_endian::read_uint16(body, frame_offset)) };
+            pkt.server_duration_frame_ = mcbp::server_duration_frame{
+              mcbp::decode_server_duration(big_endian::read_uint16(body, frame_offset)),
+            };
           } else if (frame_type == mcbp::response_read_units && frame_len == 2) {
-            pkt.read_units_frame_ =
-              mcbp::read_units_frame{ big_endian::read_uint16(body, frame_offset) };
+            pkt.read_units_frame_ = mcbp::read_units_frame{
+              big_endian::read_uint16(body, frame_offset),
+            };
           } else if (frame_type == mcbp::response_write_units && frame_len == 2) {
-            pkt.write_units_frame_ =
-              mcbp::write_units_frame{ big_endian::read_uint16(body, frame_offset) };
+            pkt.write_units_frame_ = mcbp::write_units_frame{
+              big_endian::read_uint16(body, frame_offset),
+            };
           } else {
             // If we don't understand this frame type, we record it as an UnsupportedFrame (as
             // opposed to dropping it blindly)
             pkt.unsupported_frames_.emplace_back(mcbp::unsupported_frame{
-              frame_type, big_endian::read(body, frame_offset, frame_len) });
+              frame_type,
+              big_endian::read(body, frame_offset, frame_len),
+            });
           }
           break;
 

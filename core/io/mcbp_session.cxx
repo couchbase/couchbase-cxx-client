@@ -656,6 +656,7 @@ class mcbp_session_impl
         case protocol::magic::client_request:
         case protocol::magic::alt_client_request:
         case protocol::magic::server_response:
+        case protocol::magic::invalid:
           CB_LOG_WARNING("{} unexpected magic: {} (opcode={:x}, opaque={}){:a}{:a}",
                          session_->log_prefix_,
                          magic,
@@ -846,6 +847,7 @@ class mcbp_session_impl
         case protocol::magic::client_request:
         case protocol::magic::alt_client_request:
         case protocol::magic::server_response:
+        case protocol::magic::invalid:
           CB_LOG_WARNING("{} unexpected magic: {} (opcode={:x}, opaque={}){:a}{:a}",
                          session_->log_prefix_,
                          magic,

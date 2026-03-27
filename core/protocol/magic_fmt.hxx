@@ -52,6 +52,9 @@ struct fmt::formatter<couchbase::core::protocol::magic> {
       case couchbase::core::protocol::magic::server_response:
         name = "server_response (0x83)";
         break;
+      case couchbase::core::protocol::magic::invalid:
+        name = "invalid (0x00)";
+        break;
     }
     return format_to(ctx.out(), "{}", name);
   }
