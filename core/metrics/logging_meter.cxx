@@ -228,14 +228,8 @@ logging_meter::get_value_recorder(const std::string& name,
   const std::scoped_lock lock(recorders_mutex_);
   auto& service_recorders = recorders_[service->second];
 
-  auto recorder = service_recorders.find(operation->second);
-  if (recorder != service_recorders.end()) {
-    return recorder->second;
-  }
-
-  service_recorders.try_emplace(operation->second,
-                                std::make_shared<logging_value_recorder>(operation->second, tags));
-  recorder = service_recorders.find(operation->second);
-  return recorder->second;
+  auto [it, _] = service_recorders.try_emplace(
+    operation->second, std::make_shared<logging_value_recorder>(operation->second, tags));
+  return it->second;
 }
 } // namespace couchbase::core::metrics
