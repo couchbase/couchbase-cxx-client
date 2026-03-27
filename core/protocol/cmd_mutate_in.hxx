@@ -81,33 +81,33 @@ public:
    * `path_flag_create_parents`. and `upsert` mutation semantics. Not valid with
    * `insert`.
    */
-  static constexpr std::byte doc_flag_mkdoc{ 0b0000'0001U };
+  static constexpr std::uint8_t doc_flag_mkdoc{ 0b0000'0001U };
 
   /**
    * Add the document only if it does not exist. Implies
    * `path_flag_create_parents`. Not valid with `doc_flag_mkdoc`.
    */
-  static constexpr std::byte doc_flag_add{ 0b0000'0010U };
+  static constexpr std::uint8_t doc_flag_add{ 0b0000'0010U };
 
   /**
    * Allow access to XATTRs for deleted documents (instead of returning
    * KEY_ENOENT).
    */
-  static constexpr std::byte doc_flag_access_deleted{ 0b0000'0100U };
+  static constexpr std::uint8_t doc_flag_access_deleted{ 0b0000'0100U };
 
   /**
    * Used with `doc_flag_mkdoc` / `doc_flag_add`; if the document does not exist
    * then create it in the "Deleted" state, instead of the normal "Alive" state.
    * Not valid unless `doc_flag_mkdoc` or `doc_flag_add` specified.
    */
-  static constexpr std::byte doc_flag_create_as_deleted{ 0b0000'1000U };
+  static constexpr std::uint8_t doc_flag_create_as_deleted{ 0b0000'1000U };
 
   /**
    * If the document exists and isn't deleted the operation will fail with .
    * If the input document _is_ deleted the result of the operation will store
    * the document as a "live" document instead of a deleted document.
    */
-  static constexpr std::byte doc_flag_revive_document{ 0b0001'0000U };
+  static constexpr std::uint8_t doc_flag_revive_document{ 0b0001'0000U };
 
 private:
   std::vector<std::byte> key_;
@@ -116,7 +116,7 @@ private:
 
   std::optional<std::uint32_t> user_flags_{};
   std::uint32_t expiry_{ 0 };
-  std::byte flags_{ 0 };
+  std::uint8_t flags_{ 0 };
   std::vector<couchbase::core::impl::subdoc::command> specs_;
   std::vector<std::byte> framing_extras_{};
 
@@ -138,7 +138,7 @@ public:
     if (value) {
       flags_ |= doc_flag_access_deleted;
     } else {
-      flags_ &= ~doc_flag_access_deleted;
+      flags_ &= static_cast<std::uint8_t>(~doc_flag_access_deleted);
     }
   }
 
@@ -147,7 +147,7 @@ public:
     if (value) {
       flags_ |= doc_flag_create_as_deleted;
     } else {
-      flags_ &= ~doc_flag_create_as_deleted;
+      flags_ &= static_cast<std::uint8_t>(~doc_flag_create_as_deleted);
     }
   }
 
@@ -156,13 +156,13 @@ public:
     if (value) {
       flags_ |= doc_flag_revive_document;
     } else {
-      flags_ &= ~doc_flag_revive_document;
+      flags_ &= static_cast<std::uint8_t>(~doc_flag_revive_document);
     }
   }
 
   void store_semantics(couchbase::store_semantics semantics)
   {
-    flags_ &= std::byte{ 0b1111'1100U }; /* reset first two bits */
+    flags_ &= std::uint8_t{ 0b1111'1100U }; /* reset first two bits */
     switch (semantics) {
       case couchbase::store_semantics::replace:
         /* leave bits as zeros */
