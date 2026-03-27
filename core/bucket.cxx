@@ -185,6 +185,7 @@ public:
   }
 
   void handle_response(std::shared_ptr<mcbp::queue_request> req,
+                       std::optional<io::mcbp_session> /* session */,
                        std::error_code error,
                        retry_reason reason,
                        io::mcbp_message msg,

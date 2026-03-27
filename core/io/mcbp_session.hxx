@@ -108,6 +108,17 @@ public:
                std::optional<std::string> bucket_name = {},
                std::vector<protocol::hello_feature> known_features = {});
 
+  /**
+   * Constructs a session handle from an existing implementation pointer.
+   *
+   * Used internally by @ref mcbp_session_impl to create a lightweight snapshot of
+   * the session that can be passed to @ref response_handler::handle_response without
+   * transferring ownership of the live session.  The snapshot shares the same
+   * @ref impl_ and therefore exposes the same connection metadata (remote/local
+   * address and port) at the time the response is delivered.
+   */
+  explicit mcbp_session(std::shared_ptr<mcbp_session_impl> impl);
+
   [[nodiscard]] auto log_prefix() const -> const std::string&;
   [[nodiscard]] auto cancel(std::uint32_t opaque, std::error_code ec, retry_reason reason) -> bool;
   [[nodiscard]] auto is_stopped() const -> bool;
