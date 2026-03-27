@@ -31,6 +31,10 @@ function(enable_sanitizers project_name)
         message(WARNING "Thread sanitizer does not work with Address and Leak sanitizer enabled")
       else()
         list(APPEND SANITIZERS "thread")
+        # Propagate the suppression file path so that test targets can set TSAN_OPTIONS.
+        set(COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS
+            "${PROJECT_SOURCE_DIR}/.tsan_suppressions"
+            CACHE FILEPATH "Path to TSan suppressions file")
       endif()
     endif()
 
@@ -58,10 +62,10 @@ function(enable_sanitizers project_name)
        "${LIST_OF_SANITIZERS}"
        STREQUAL
        "")
-      target_compile_options(${project_name} INTERFACE -fsanitize=${LIST_OF_SANITIZERS})
-      target_link_libraries(${project_name} INTERFACE -fsanitize=${LIST_OF_SANITIZERS})
-      target_compile_definitions(${project_name} INTERFACE COUCHBASE_CXX_CLIENT_BUILD_SANITIZED=1)
-      message(STATUS "Enabled stanitizers: ${LIST_OF_SANITIZERS}")
+      target_compile_options(${project_name} PUBLIC -fsanitize=${LIST_OF_SANITIZERS})
+      target_link_libraries(${project_name} PUBLIC -fsanitize=${LIST_OF_SANITIZERS})
+      target_compile_definitions(${project_name} PUBLIC COUCHBASE_CXX_CLIENT_BUILD_SANITIZED=1)
+      message(STATUS "Enabled sanitizers: ${LIST_OF_SANITIZERS}")
     endif()
   endif()
 

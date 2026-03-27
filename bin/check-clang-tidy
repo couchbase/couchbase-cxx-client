@@ -34,9 +34,9 @@ rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}"
 cd "${BUILD_DIR}"
 
-${CB_CMAKE} -DENABLE_CLANG_TIDY=ON -DCMAKE_C_COMPILER=${CB_CC} -DCMAKE_CXX_COMPILER=${CB_CXX} ${CB_CMAKE_EXTRAS} ..
+${CB_CMAKE} -S "${PROJECT_ROOT}" -B build -DENABLE_CLANG_TIDY=ON -DCMAKE_C_COMPILER=${CB_CC} -DCMAKE_CXX_COMPILER=${CB_CXX} ${CB_CMAKE_EXTRAS}
 set +e
-${CB_CMAKE} --build . --parallel ${CB_NUMBER_OF_JOBS} --verbose
+${CB_CMAKE} --build build --parallel ${CB_NUMBER_OF_JOBS} --verbose
 STATUS=$?
 set -e
 

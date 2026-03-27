@@ -78,19 +78,15 @@ jobs:
       fail-fast: false
       matrix:
         server:
-          - 8.0.1-4642
+          - 8.0.1-4792
           - 8.0.0
-          - 7.6.9-7440
-          - 7.6.8
-          - 7.2.8
+          - 7.6.10
+          - 7.2.9
           - 7.1.6
           - 7.0.5
         suite:
           - integration
           - transaction
-        include:
-          - server: 6.6.6
-            suite: integration
     runs-on: ubuntu-24.04
     steps:
       - name: Install dependencies

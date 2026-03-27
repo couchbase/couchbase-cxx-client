@@ -1,6 +1,8 @@
 /out/
 /CPTCMakeBuild
 /build/
+/build-*/
+/build_*/
 /cmake-build-*/
 /cmake-build-report.tar.gz
 /.idea
