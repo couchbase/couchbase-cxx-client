@@ -212,7 +212,12 @@ struct lookup_in_any_replica_request {
                       return;
                     }
                     --ctx->expected_responses_;
-                    if (resp.ctx.ec()) {
+                    if (resp.fields.empty()) {
+                      // document was not retrieved (e.g. not_found, access error) —
+                      // for lookup_in, fields are only populated when the document
+                      // is successfully fetched; ctx.ec() is used only for
+                      // document-level errors, and per-path failures (such as
+                      // subdoc_multi_path_failure) still produce non-empty fields
                       if (ctx->expected_responses_ > 0) {
                         // just ignore the response
                         return;
@@ -277,7 +282,10 @@ struct lookup_in_any_replica_request {
                       return;
                     }
                     --ctx->expected_responses_;
-                    if (resp.ctx.ec()) {
+                    if (resp.fields.empty()) {
+                      // document was not retrieved (e.g. not_found, access error) —
+                      // use fields.empty() to distinguish this from successful multi-lookups
+                      // (including those with per-path failures), which still return fields
                       if (ctx->expected_responses_ > 0) {
                         // just ignore the response
                         return;

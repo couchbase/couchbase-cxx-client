@@ -193,7 +193,11 @@ struct lookup_in_all_replicas_request {
                       return;
                     }
                     --ctx->expected_responses_;
-                    if (resp.ctx.ec()) {
+                    if (resp.fields.empty()) {
+                      // document was not retrieved (e.g. not_found, access error) —
+                      // fields are only populated when the document itself was fetched;
+                      // ctx.ec() is used only for document-level failures, while per-path
+                      // subdocument failures do not prevent fields from being returned
                       if (ctx->expected_responses_ > 0) {
                         // just ignore the response
                         return;
@@ -257,7 +261,10 @@ struct lookup_in_all_replicas_request {
                         return;
                       }
                       --ctx->expected_responses_;
-                      if (resp.ctx.ec()) {
+                      if (resp.fields.empty()) {
+                        // document was not retrieved for this replica (e.g. not_found, access
+                        // error); for lookup_in, per-path failures are reflected in resp.fields,
+                        // not by setting resp.ctx.ec() on an otherwise successful multi-lookup
                         if (ctx->expected_responses_ > 0) {
                           // just ignore the response
                           return;
