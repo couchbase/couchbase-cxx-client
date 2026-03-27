@@ -61,16 +61,16 @@ void
 dns_srv_tracker::get_srv_nodes(
   utils::movable_function<void(origin::node_list, std::error_code)> callback)
 {
-  CB_LOG_DEBUG("Query DNS-SRV: address=\"{}\", service=\"{}\", nameserver=\"{}:{}\"",
-               address_,
+  CB_LOG_DEBUG("Query DNS-SRV: name=\"{}._tcp.{}\", nameserver=\"{}:{}\"",
                service_,
-               config_.nameserver(),
+               address_,
+               config_.nameserver().empty() ? "(system)" : config_.nameserver(),
                config_.port());
   dns_client_.query_srv(address_,
                         service_,
                         config_,
                         [self = shared_from_this(), callback = std::move(callback)](
-                          couchbase::core::io::dns::dns_srv_response&& resp) mutable {
+                          couchbase::core::io::dns::dns_srv_response&& resp) mutable -> void {
                           origin::node_list nodes;
                           if (resp.ec) {
                             CB_LOG_WARNING("failed to fetch DNS SRV records for \"{}\" ({}), "
@@ -78,9 +78,22 @@ dns_srv_tracker::get_srv_nodes(
                                            self->address_,
                                            resp.ec.message());
                           } else if (resp.targets.empty() && self->address_ != "localhost") {
-                            CB_LOG_DEBUG("DNS SRV query returned 0 records for \"{}\", assuming "
-                                         "that cluster is listening this address",
-                                         self->address_);
+                            if (self->config_.nameserver().empty()) {
+                              CB_LOG_DEBUG("DNS SRV query returned 0 records for \"{}\", assuming "
+                                           "that cluster is listening this address",
+                                           self->address_);
+                            } else {
+                              CB_LOG_WARNING(
+                                "DNS SRV query for \"{}._tcp.{}\" returned 0 records from "
+                                "nameserver \"{}:{}\". The DNS server may not have SRV records "
+                                "for this hostname, or may not support SRV lookups. "
+                                "Falling back to direct connection to \"{}\".",
+                                self->service_,
+                                self->address_,
+                                self->config_.nameserver(),
+                                self->config_.port(),
+                                self->address_);
+                            }
                           } else {
                             nodes.reserve(resp.targets.size());
                             for (const auto& address : resp.targets) {

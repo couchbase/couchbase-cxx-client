@@ -158,6 +158,19 @@ dns_config::system_config() -> const dns_config&
 #else
         auto nameserver = load_resolv_conf(default_resolv_conf_path);
 #endif
+    if (nameserver.empty()) {
+#ifdef _WIN32
+      CB_LOG_WARNING("No DNS nameserver found via GetNetworkParams. DNS-SRV bootstrap is "
+                     "disabled. Set the nameserver explicitly in the cluster options if SRV "
+                     "records are needed.");
+#else
+          CB_LOG_WARNING("No \"nameserver\" line found in \"{}\". DNS-SRV bootstrap is disabled. "
+                         "Set the nameserver explicitly in the cluster options if SRV records are "
+                         "needed.",
+                         default_resolv_conf_path);
+#endif
+      return;
+    }
     std::error_code ec;
     asio::ip::make_address(nameserver, ec);
     if (ec) {
