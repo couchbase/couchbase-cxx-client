@@ -107,10 +107,12 @@ http_streaming_response_body::http_streaming_response_body(asio::io_context& io,
                                                            std::shared_ptr<http_session> session,
                                                            std::string cached_data,
                                                            bool reading_complete)
-  : impl_{ std::make_shared<http_streaming_response_body_impl>(io,
-                                                               std::move(session),
-                                                               std::move(cached_data),
-                                                               reading_complete) }
+  : impl_{
+    std::make_shared<http_streaming_response_body_impl>(io,
+                                                        std::move(session),
+                                                        std::move(cached_data),
+                                                        reading_complete),
+  }
 {
 }
 
@@ -187,11 +189,17 @@ http_streaming_response::http_streaming_response(
   asio::io_context& io,
   const couchbase::core::io::http_streaming_parser& parser,
   std::shared_ptr<http_session> session)
-  : impl_{ std::make_shared<http_streaming_response_impl>(
-      parser.status_code,
-      parser.status_message,
-      parser.headers,
-      http_streaming_response_body{ io, std::move(session), parser.body_chunk, parser.complete }) }
+  : impl_{
+    std::make_shared<http_streaming_response_impl>(parser.status_code,
+                                                   parser.status_message,
+                                                   parser.headers,
+                                                   http_streaming_response_body{
+                                                     io,
+                                                     std::move(session),
+                                                     parser.body_chunk,
+                                                     parser.complete,
+                                                   }),
+  }
 {
 }
 

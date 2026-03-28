@@ -31,9 +31,11 @@ analytics_link_disconnect_request::encode_to(encoded_request_type& encoded,
                                              http_context& /* context */) const -> std::error_code
 {
   const tao::json::value body{
-    { "statement",
+    {
+      "statement",
       fmt::format(
-        "DISCONNECT LINK {}.`{}`", utils::analytics::uncompound_name(dataverse_name), link_name) },
+        "DISCONNECT LINK {}.`{}`", utils::analytics::uncompound_name(dataverse_name), link_name),
+    },
   };
   encoded.headers["content-type"] = "application/json";
   encoded.method = "POST";

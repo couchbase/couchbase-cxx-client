@@ -102,13 +102,15 @@ struct query_index_build_deferred_request {
       }
     }
     core->execute(
-      query_index_get_all_deferred_request{ bucket_name,
-                                            scope_name.value_or(""),
-                                            collection_name.value_or(""),
-                                            query_ctx,
-                                            client_context_id,
-                                            timeout,
-                                            get_deferred_indexes_span },
+      query_index_get_all_deferred_request{
+        bucket_name,
+        scope_name.value_or(""),
+        collection_name.value_or(""),
+        query_ctx,
+        client_context_id,
+        timeout,
+        get_deferred_indexes_span,
+      },
       [core,
        handler = std::move(handler),
        bucket_name = bucket_name,
@@ -139,14 +141,16 @@ struct query_index_build_deferred_request {
         }
 
         core->execute(
-          query_index_build_request{ std::move(bucket_name),
-                                     scope_name,
-                                     collection_name,
-                                     query_ctx,
-                                     std::move(list_resp.index_names),
-                                     client_context_id,
-                                     timeout,
-                                     build_indexes_span },
+          query_index_build_request{
+            std::move(bucket_name),
+            scope_name,
+            collection_name,
+            query_ctx,
+            std::move(list_resp.index_names),
+            client_context_id,
+            timeout,
+            build_indexes_span,
+          },
           [handler = std::move(handler), build_indexes_span = std::move(build_indexes_span)](
             query_index_build_response build_resp) mutable {
             build_indexes_span->end();

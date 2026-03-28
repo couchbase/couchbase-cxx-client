@@ -49,7 +49,7 @@ struct lookup_in_options : public common_durability_options<lookup_in_options> {
    * @internal
    */
   struct built : public common_durability_options<lookup_in_options>::built {
-    const bool access_deleted;
+    const bool access_deleted{};
   };
 
   /**

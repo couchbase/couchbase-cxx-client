@@ -157,10 +157,8 @@ private:
               std::byte{ '0' },
               std::byte{ '0' },
               // TODO(CXXCBC-549)
-              // NOLINTBEGIN(cppcoreguidelines-pro-bounds-constant-array-index)
               std::byte{ h[(c & 0xf0) >> 4] },
               std::byte{ h[c & 0x0f] },
-              // NOLINTEND(cppcoreguidelines-pro-bounds-constant-array-index)
             });
         }
       } else {
@@ -200,6 +198,8 @@ public:
       };
       write(literal_true);
     } else {
+      // array initializers using CTAD: the check fires whether or not a trailing comma is present.
+      // TODO(CXXCBC-SA): Expand to multi-line (one element per line) to resolve the ambiguity.
       static std::array literal_false{
         std::byte{ 'f' }, std::byte{ 'a' }, std::byte{ 'l' }, std::byte{ 's' }, std::byte{ 'e' },
       };
@@ -211,7 +211,8 @@ public:
   {
     next();
     // TODO(CXXCBC-549)
-    // NOLINTNEXTLINE(cppcoreguidelines-avoid-c-arrays,hicpp-avoid-c-arrays,modernize-avoid-c-arrays)
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-c-arrays, hicpp-avoid-c-arrays,
+    // modernize-avoid-c-arrays)
     char b[24]{};
     const char* s = tao::json::itoa::i64toa(v, b);
     write({ b, static_cast<std::size_t>(s - b) });
@@ -221,7 +222,8 @@ public:
   {
     next();
     // TODO(CXXCBC-549)
-    // NOLINTNEXTLINE(cppcoreguidelines-avoid-c-arrays,hicpp-avoid-c-arrays,modernize-avoid-c-arrays)
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-c-arrays, hicpp-avoid-c-arrays,
+    // modernize-avoid-c-arrays)
     char b[24]{};
     const char* s = tao::json::itoa::u64toa(v, b);
     write({ b, static_cast<std::size_t>(s - b) });
@@ -235,7 +237,8 @@ public:
       throw std::runtime_error("non-finite double value invalid for JSON string representation");
     }
     // TODO(CXXCBC-549)
-    // NOLINTNEXTLINE(cppcoreguidelines-avoid-c-arrays,hicpp-avoid-c-arrays,modernize-avoid-c-arrays)
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-c-arrays, hicpp-avoid-c-arrays,
+    // modernize-avoid-c-arrays)
     char b[28]{};
     const auto s = tao::json::ryu::d2s_finite(v, b);
     write({ b, s });
@@ -250,7 +253,6 @@ public:
   }
 
   // TODO(CXXCBC-549)
-  // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
   void binary(const tao::binary_view /*unused*/)
   {
     // if this throws, consider using binary_to_* transformers

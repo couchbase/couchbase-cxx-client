@@ -99,16 +99,23 @@ protected:
    */
   [[nodiscard]] auto build_common_durability_options() const -> built
   {
-    return { common_options<derived_class>::build_common_options(),
-             durability_level_,
-             persist_to_,
-             replicate_to_ };
+    return {
+      common_options<derived_class>::build_common_options(),
+      durability_level_,
+      persist_to_,
+      replicate_to_,
+    };
   }
 
 private:
   durability_level durability_level_{ durability_level::none };
   persist_to persist_to_{ persist_to::none };
   replicate_to replicate_to_{ replicate_to::none };
+
+  // Private constructor + friend derived_class ensures the CRTP base cannot be instantiated
+  // directly, only through the derived type (bugprone-crtp-constructor-accessibility).
+  common_durability_options() = default;
+  friend derived_class;
 };
 
 } // namespace couchbase

@@ -41,10 +41,10 @@ struct lookup_in_any_replica_response {
   struct entry {
     std::string path;
     codec::binary value;
-    std::size_t original_index;
-    bool exists;
-    protocol::subdoc_opcode opcode;
-    key_value_status_code status;
+    std::size_t original_index{ 0 };
+    bool exists{ false };
+    protocol::subdoc_opcode opcode{};
+    key_value_status_code status{};
     std::error_code ec{};
   };
   subdocument_error_context ctx{};
@@ -84,13 +84,12 @@ struct lookup_in_any_replica_request {
        access_deleted = access_deleted,
        h = std::forward<Handler>(handler)](std::error_code ec) mutable {
         if (ec) {
-          std::optional<std::string> first_error_path{};
-          std::optional<std::size_t> first_error_index{};
-          h(response_type{ make_subdocument_error_context(make_key_value_error_context(ec, id),
-                                                          ec,
-                                                          first_error_path,
-                                                          first_error_index,
-                                                          false) });
+          const std::optional<std::string> first_error_path{};
+          const std::optional<std::size_t> first_error_index{};
+          h(response_type{
+            make_subdocument_error_context(
+              make_key_value_error_context(ec, id), ec, first_error_path, first_error_index, false),
+          });
           return;
         }
         return core->with_bucket_configuration(
@@ -128,8 +127,10 @@ struct lookup_in_any_replica_request {
             }
 
             if (ec) {
-              return h(response_type{ make_subdocument_error_context(
-                make_key_value_error_context(ec, id), ec, {}, {}, false) });
+              return h(response_type{
+                make_subdocument_error_context(
+                  make_key_value_error_context(ec, id), ec, {}, {}, false),
+              });
             }
 
             using handler_type = utils::movable_function<void(response_type)>;
@@ -143,7 +144,7 @@ struct lookup_in_any_replica_request {
 
               void add_cancellation_token(std::shared_ptr<impl::cancellation_token> token)
               {
-                std::scoped_lock<std::mutex> lock(cancel_tokens_mutex_);
+                const std::scoped_lock<std::mutex> lock(cancel_tokens_mutex_);
                 cancel_tokens_.emplace_back(std::move(token));
               }
 
@@ -152,7 +153,7 @@ struct lookup_in_any_replica_request {
               {
                 std::vector<std::shared_ptr<impl::cancellation_token>> tokens{};
                 {
-                  std::scoped_lock<std::mutex> lock(cancel_tokens_mutex_);
+                  const std::scoped_lock<std::mutex> lock(cancel_tokens_mutex_);
                   std::swap(tokens, cancel_tokens_);
                 }
                 return tokens;
@@ -207,7 +208,7 @@ struct lookup_in_any_replica_request {
                   handler_type local_handler;
                   std::vector<std::shared_ptr<impl::cancellation_token>> cancel_tokens;
                   {
-                    std::scoped_lock lock(ctx->mutex_);
+                    const std::scoped_lock lock(ctx->mutex_);
                     if (ctx->done_) {
                       return;
                     }
@@ -261,7 +262,7 @@ struct lookup_in_any_replica_request {
                     false,
                     specs,
                     timeout,
-                    {},
+                    io::retry_context<false>{},
                     subop_span,
                   },
                 };
@@ -277,7 +278,7 @@ struct lookup_in_any_replica_request {
                   handler_type local_handler{};
                   std::vector<std::shared_ptr<impl::cancellation_token>> cancel_tokens;
                   {
-                    std::scoped_lock lock(ctx->mutex_);
+                    const std::scoped_lock lock(ctx->mutex_);
                     if (ctx->done_) {
                       return;
                     }

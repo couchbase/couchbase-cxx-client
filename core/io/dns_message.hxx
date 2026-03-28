@@ -318,7 +318,7 @@ struct dns_header {
 
     [[nodiscard]] auto encode() const -> std::uint16_t
     {
-      return std::uint16_t(
+      return static_cast<std::uint16_t>(
         (static_cast<std::uint32_t>(qr) & 1U) << 15U |
         (static_cast<std::uint32_t>(opcode) & 15U) << 11U |
         (static_cast<std::uint32_t>(aa) & 1U) << 10U | (static_cast<std::uint32_t>(tc) & 1U) << 9U |
@@ -427,6 +427,7 @@ struct question_record {
    * codes valid for a TYPE field, together with some more general codes which can match more than
    * one type of RR.
    */
+  // NOLINTNEXTLINE(bugprone-invalid-enum-default-initialization)
   resource_type type{};
 
   /**
@@ -435,6 +436,7 @@ struct question_record {
    * a two octet code that specifies the class of the query. For example, the QCLASS field is IN for
    * the Internet.
    */
+  // NOLINTNEXTLINE(bugprone-invalid-enum-default-initialization)
   resource_class klass{};
 
   [[nodiscard]] auto size() const -> std::size_t
@@ -501,6 +503,7 @@ struct resource_record {
    * two octets containing one of the RR type codes. This field specifies the meaning of the data in
    * the RDATA field.
    */
+  // NOLINTNEXTLINE(bugprone-invalid-enum-default-initialization)
   resource_type type{};
 
   /**
@@ -508,6 +511,7 @@ struct resource_record {
    *
    * two octets which specify the class of the data in the RDATA field.
    */
+  // NOLINTNEXTLINE(bugprone-invalid-enum-default-initialization)
   resource_class klass{};
 
   /**

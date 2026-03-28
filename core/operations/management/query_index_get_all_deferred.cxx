@@ -59,11 +59,26 @@ query_index_get_all_deferred_request::encode_to(encoded_request_type& encoded,
 
   encoded.headers["content-type"] = "application/json";
   tao::json::value body{
-    { "statement", statement },
-    { "client_context_id", encoded.client_context_id },
-    { "$bucket_name", query_ctx.has_value() ? query_ctx.bucket_name() : bucket_name },
-    { "$scope_name", query_ctx.has_value() ? query_ctx.scope_name() : scope_name },
-    { "$collection_name", collection_name }
+    {
+      "statement",
+      statement,
+    },
+    {
+      "client_context_id",
+      encoded.client_context_id,
+    },
+    {
+      "$bucket_name",
+      query_ctx.has_value() ? query_ctx.bucket_name() : bucket_name,
+    },
+    {
+      "$scope_name",
+      query_ctx.has_value() ? query_ctx.scope_name() : scope_name,
+    },
+    {
+      "$collection_name",
+      collection_name,
+    },
   };
   if (query_ctx.has_value()) {
     body["query_context"] = query_ctx.value();

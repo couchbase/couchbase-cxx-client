@@ -29,7 +29,7 @@ namespace couchbase::core::operations::management
 {
 struct query_index_build_response {
   struct query_problem {
-    std::uint64_t code;
+    std::uint64_t code{};
     std::string message;
   };
   error_context::http ctx;

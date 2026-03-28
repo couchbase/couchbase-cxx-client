@@ -24,9 +24,7 @@
 #include "core/public_fwd.hxx"
 #include "core/timeout_defaults.hxx"
 
-namespace couchbase::core::operations
-{
-namespace management
+namespace couchbase::core::operations::management
 {
 struct search_index_control_plan_freeze_response {
   error_context::http ctx;
@@ -60,6 +58,4 @@ struct search_index_control_plan_freeze_request {
     error_context::http&& ctx,
     const encoded_response_type& encoded) const;
 };
-} // namespace management
-
-} // namespace couchbase::core::operations
+} // namespace couchbase::core::operations::management

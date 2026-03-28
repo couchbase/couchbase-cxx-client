@@ -1771,6 +1771,9 @@ TEST_CASE("integration: collection management history retention not supported in
   if (!integration.cluster_version().supports_collections()) {
     SKIP("cluster does not support collections");
   }
+  if (!integration.cluster_version().supports_collection_history()) {
+    SKIP("cluster does not support collection history retention");
+  }
   if (integration.has_bucket_capability("nonDedupedHistory")) {
     SKIP("bucket supports non deduped history");
   }

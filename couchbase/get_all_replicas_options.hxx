@@ -41,7 +41,7 @@ struct get_all_replicas_options : public common_options<get_all_replicas_options
    * @internal
    */
   struct built : public common_options<get_all_replicas_options>::built {
-    couchbase::read_preference read_preference;
+    couchbase::read_preference read_preference{};
   };
 
   /**

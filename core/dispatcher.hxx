@@ -32,9 +32,10 @@ class dispatcher
 public:
   dispatcher(std::string bucket_name, core_sdk_shim shim);
 
-  auto direct_dispatch(std::shared_ptr<mcbp::queue_request> req) const -> std::error_code;
-  auto direct_re_queue(std::shared_ptr<mcbp::queue_request> req,
-                       bool is_retry) const -> std::error_code;
+  [[nodiscard]] auto direct_dispatch(std::shared_ptr<mcbp::queue_request> req) const
+    -> std::error_code;
+  [[nodiscard]] auto direct_re_queue(std::shared_ptr<mcbp::queue_request> req, bool is_retry) const
+    -> std::error_code;
 
 private:
   std::string bucket_name_;

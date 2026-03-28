@@ -96,7 +96,7 @@ struct get_any_replica_request {
 
           void add_cancellation_token(std::shared_ptr<impl::cancellation_token> token)
           {
-            std::scoped_lock<std::mutex> lock(cancel_tokens_mutex_);
+            const std::scoped_lock<std::mutex> lock(cancel_tokens_mutex_);
             cancel_tokens_.emplace_back(std::move(token));
           }
 
@@ -104,7 +104,7 @@ struct get_any_replica_request {
           {
             std::vector<std::shared_ptr<impl::cancellation_token>> tokens{};
             {
-              std::scoped_lock<std::mutex> lock(cancel_tokens_mutex_);
+              const std::scoped_lock<std::mutex> lock(cancel_tokens_mutex_);
               std::swap(tokens, cancel_tokens_);
             }
             return tokens;
@@ -143,56 +143,7 @@ struct get_any_replica_request {
                 timeout,
                 {},
                 {},
-                {},
-                subop_span,
-              },
-            };
-            ctx->add_cancellation_token(req.cancel_token);
-            core->execute(
-              std::move(req), [ctx, subop_span](auto&& resp) {
-                {
-                  if (subop_span->uses_tags()) {
-                    subop_span->add_tag(tracing::attributes::op::retry_count,
-                                        resp.ctx.retry_attempts());
-                  }
-                  subop_span->end();
-                }
-                handler_type local_handler;
-                std::vector<std::shared_ptr<impl::cancellation_token>> cancel_tokens;
-                {
-                  std::scoped_lock lock(ctx->mutex_);
-                  if (ctx->done_) {
-                    return;
-                  }
-                  --ctx->expected_responses_;
-                  if (resp.ctx.ec()) {
-                    if (ctx->expected_responses_ > 0) {
-                      // just ignore the response
-                      return;
-                    }
-                    // consider document irretrievable and give up
-                    resp.ctx.override_ec(errc::key_value::document_irretrievable);
-                  }
-                  ctx->done_ = true;
-                  std::swap(local_handler, ctx->handler_);
-                  cancel_tokens = ctx->get_cancellation_tokens();
-                }
-                for (const auto& token : cancel_tokens) {
-                  token->cancel();
-                }
-                if (local_handler) {
-                  return local_handler(response_type{
-                    std::move(resp.ctx), std::move(resp.value), resp.cas, resp.flags, true });
-                }
-              });
-          } else {
-            impl::with_cancellation<get_request> req{
-              {
-                id,
-                {},
-                {},
-                timeout,
-                {},
+                io::retry_context<true>{},
                 subop_span,
               },
             };
@@ -205,10 +156,10 @@ struct get_any_replica_request {
                 }
                 subop_span->end();
               }
-              handler_type local_handler{};
+              handler_type local_handler;
               std::vector<std::shared_ptr<impl::cancellation_token>> cancel_tokens;
               {
-                std::scoped_lock lock(ctx->mutex_);
+                const std::scoped_lock lock(ctx->mutex_);
                 if (ctx->done_) {
                   return;
                 }
@@ -230,7 +181,65 @@ struct get_any_replica_request {
               }
               if (local_handler) {
                 return local_handler(response_type{
-                  std::move(resp.ctx), std::move(resp.value), resp.cas, resp.flags, false });
+                  std::move(resp.ctx),
+                  std::move(resp.value),
+                  resp.cas,
+                  resp.flags,
+                  true,
+                });
+              }
+            });
+          } else {
+            impl::with_cancellation<get_request> req{
+              {
+                id,
+                {},
+                {},
+                timeout,
+                io::retry_context<true>{},
+                subop_span,
+              },
+            };
+            ctx->add_cancellation_token(req.cancel_token);
+            core->execute(std::move(req), [ctx, subop_span](auto&& resp) {
+              {
+                if (subop_span->uses_tags()) {
+                  subop_span->add_tag(tracing::attributes::op::retry_count,
+                                      resp.ctx.retry_attempts());
+                }
+                subop_span->end();
+              }
+              handler_type local_handler{};
+              std::vector<std::shared_ptr<impl::cancellation_token>> cancel_tokens;
+              {
+                const std::scoped_lock lock(ctx->mutex_);
+                if (ctx->done_) {
+                  return;
+                }
+                --ctx->expected_responses_;
+                if (resp.ctx.ec()) {
+                  if (ctx->expected_responses_ > 0) {
+                    // just ignore the response
+                    return;
+                  }
+                  // consider document irretrievable and give up
+                  resp.ctx.override_ec(errc::key_value::document_irretrievable);
+                }
+                ctx->done_ = true;
+                std::swap(local_handler, ctx->handler_);
+                cancel_tokens = ctx->get_cancellation_tokens();
+              }
+              for (const auto& token : cancel_tokens) {
+                token->cancel();
+              }
+              if (local_handler) {
+                return local_handler(response_type{
+                  std::move(resp.ctx),
+                  std::move(resp.value),
+                  resp.cas,
+                  resp.flags,
+                  false,
+                });
               }
             });
           }

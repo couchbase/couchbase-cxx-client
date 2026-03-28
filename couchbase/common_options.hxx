@@ -37,6 +37,12 @@ template<typename derived_class>
 class common_options
 {
 public:
+  // Default constructor is public so that derived option types work with `= {}` default function
+  // arguments (e.g. `void foo(const get_options& opts = {})`). The CRTP pattern is safe here:
+  // `self()` always casts to the concrete derived type and the base is never used standalone.
+  // NOLINTNEXTLINE(bugprone-crtp-constructor-accessibility)
+  common_options() = default;
+
   /**
    * Specifies a custom per-operation timeout.
    *
@@ -64,7 +70,7 @@ public:
    * @since 1.0.0
    * @committed
    */
-  auto retry_strategy(const std::shared_ptr<retry_strategy> strategy) -> derived_class&
+  auto retry_strategy(const std::shared_ptr<retry_strategy>& strategy) -> derived_class&
   {
     retry_strategy_ = strategy;
     return self();

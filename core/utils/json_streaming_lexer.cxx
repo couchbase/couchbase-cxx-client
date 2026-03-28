@@ -90,8 +90,8 @@ struct streaming_lexer_impl {
     state->data = STATE_MARKER_ROOT;
   }
 
-  [[nodiscard]] auto get_buffer_region(std::size_t pos,
-                                       std::size_t desired = 0) const -> std::string_view
+  [[nodiscard]] auto get_buffer_region(std::size_t pos, std::size_t desired = 0) const
+    -> std::string_view
   {
     if (min_pos_ > pos) {
       /* swallowed */
@@ -245,6 +245,9 @@ convert_status(jsonsl_error_t error) -> std::error_code
   return errc::streaming_json_lexer::generic;
 }
 
+// NOLINTBEGIN(misc-const-correctness) -- Callback signatures must match jsonsl C typedef exactly;
+// 'state' and 'at' pointers cannot be made const without breaking the function pointer type.
+// TODO(SA): Revisit if jsonsl is ever replaced with a C++ alternative.
 auto
 error_callback(jsonsl_t lexer,
                jsonsl_error_t error,
@@ -399,6 +402,7 @@ initial_action_push_callback(jsonsl_t lexer,
     state->data = STATE_MARKER_ROWSET;
   }
 }
+// NOLINTEND(misc-const-correctness)
 } // namespace
 
 json::streaming_lexer::streaming_lexer(const std::string& pointer_expression, std::uint32_t depth)

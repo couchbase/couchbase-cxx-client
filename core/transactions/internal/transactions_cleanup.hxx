@@ -39,11 +39,11 @@ private:
   const core::document_id atr_id_;
   const std::string attempt_id_;
   const std::string atr_bucket_name_;
-  bool success_;
-  attempt_state state_;
+  bool success_{ false };
+  attempt_state state_{ attempt_state::NOT_STARTED };
 
 public:
-  explicit transactions_cleanup_attempt(const atr_cleanup_entry&);
+  explicit transactions_cleanup_attempt(const atr_cleanup_entry& /*entry*/);
 
   [[nodiscard]] auto success() const -> bool
   {
@@ -118,7 +118,7 @@ public:
   void add_collection(const couchbase::transactions::transaction_keyspace& keyspace);
   auto collections() -> std::list<couchbase::transactions::transaction_keyspace>
   {
-    std::lock_guard<std::mutex> lock(mutex_);
+    const std::scoped_lock lock(mutex_);
     return collections_;
   }
 
@@ -154,7 +154,7 @@ private:
 
   auto is_running() -> bool
   {
-    std::unique_lock<std::mutex> lock(mutex_);
+    const std::scoped_lock lock(mutex_);
     return running_;
   }
 

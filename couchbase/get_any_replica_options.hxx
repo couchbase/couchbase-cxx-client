@@ -40,7 +40,7 @@ struct get_any_replica_options : public common_options<get_any_replica_options> 
    * @internal
    */
   struct built : public common_options<get_any_replica_options>::built {
-    couchbase::read_preference read_preference;
+    couchbase::read_preference read_preference{};
   };
 
   /**

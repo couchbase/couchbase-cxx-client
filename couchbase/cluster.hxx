@@ -44,8 +44,9 @@ class cluster;
 
 namespace transactions
 {
+// NOLINTNEXTLINE(bugprone-forward-declaration-namespace)
 class transactions;
-}
+} // namespace transactions
 } // namespace core
 class cluster_impl;
 #endif
@@ -265,8 +266,9 @@ public:
    * @since 1.0.0
    * @committed
    */
-  [[nodiscard]] auto analytics_query(std::string statement, const analytics_options& options = {})
-    const -> std::future<std::pair<error, analytics_result>>;
+  [[nodiscard]] auto analytics_query(std::string statement,
+                                     const analytics_options& options = {}) const
+    -> std::future<std::pair<error, analytics_result>>;
 
   /**
    * Performs application-level ping requests against services in the Couchbase cluster.

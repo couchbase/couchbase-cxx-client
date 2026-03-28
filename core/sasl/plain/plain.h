@@ -38,6 +38,7 @@ public:
 
   std::pair<error, std::string_view> start() override;
 
+  // NOLINTNEXTLINE(hicpp-named-parameter,readability-named-parameter) -- override of interface
   std::pair<error, std::string_view> step(std::string_view) override
   {
     throw std::logic_error(

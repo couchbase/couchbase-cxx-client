@@ -172,14 +172,15 @@ public:
   void parse_body()
   {
     parse_framing_extras();
-    bool parsed =
+    const bool parsed =
       body_.parse(status_, header_, framing_extras_size_, key_size_, extras_size_, data_, info_);
     if (status_ != key_value_status_code::success && !parsed && has_json_datatype(data_type_)) {
       key_value_extended_error_info err;
-      std::vector<std::uint8_t>::difference_type offset =
+      const std::vector<std::uint8_t>::difference_type offset =
         framing_extras_size_ + extras_size_ + key_size_;
-      std::string_view enhanced_error_text{ reinterpret_cast<const char*>(data_.data()) + offset,
-                                            data_.size() - static_cast<std::size_t>(offset) };
+      const std::string_view enhanced_error_text{ reinterpret_cast<const char*>(data_.data()) +
+                                                    offset,
+                                                  data_.size() - static_cast<std::size_t>(offset) };
       if (parse_enhanced_error(enhanced_error_text, err)) {
         error_.emplace(err);
       }

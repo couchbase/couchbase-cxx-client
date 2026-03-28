@@ -57,7 +57,7 @@ struct bucket_describe_response {
     std::map<std::string, server_group> server_groups{};
 
     couchbase::core::management::cluster::bucket_storage_backend storage_backend{
-      couchbase::core::management::cluster::bucket_storage_backend::unknown
+      couchbase::core::management::cluster::bucket_storage_backend::unknown,
     };
     std::string config_json{};
 

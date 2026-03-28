@@ -35,7 +35,7 @@ enum class magic : std::uint8_t {
   /// Request packet from server to client
   server_request = 0x82,
   /// Response packet from client to server
-  server_response = 0x83
+  server_response = 0x83,
 };
 
 constexpr auto

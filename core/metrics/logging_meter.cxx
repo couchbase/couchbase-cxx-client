@@ -127,14 +127,16 @@ public:
 
     return {
       { "total_count", total_count },
-      { "percentiles_us",
+      {
+        "percentiles_us",
         {
           { "50.0", val_50_0 },
           { "90.0", val_90_0 },
           { "99.0", val_99_0 },
           { "99.9", val_99_9 },
           { "100.0", val_100_0 },
-        } },
+        },
+      },
     };
   }
 };
@@ -147,8 +149,10 @@ logging_meter::log_report() const
       "meta",
       {
 
-        { "emit_interval_s",
-          std::chrono::duration_cast<std::chrono::seconds>(options_.emit_interval).count() },
+        {
+          "emit_interval_s",
+          std::chrono::duration_cast<std::chrono::seconds>(options_.emit_interval).count(),
+        },
 #if COUCHBASE_CXX_CLIENT_DEBUG_BUILD
         { "emit_interval_ms", options_.emit_interval.count() },
 #endif
@@ -208,7 +212,7 @@ logging_meter::get_value_recorder(const std::string& name,
   -> std::shared_ptr<couchbase::metrics::value_recorder>
 {
   static const std::shared_ptr<noop_value_recorder> noop_recorder{
-    std::make_shared<noop_value_recorder>()
+    std::make_shared<noop_value_recorder>(),
   };
 
   if (name != operation_meter_name) {

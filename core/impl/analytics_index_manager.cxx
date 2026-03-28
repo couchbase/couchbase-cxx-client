@@ -90,7 +90,7 @@ to_core_couchbase_remote_link(const management::analytics_link& link)
       cb_link.encryption.certificate,
       cb_link.encryption.client_certificate,
       cb_link.encryption.client_key,
-    }
+    },
   };
   switch (cb_link.encryption.encryption_level) {
     case management::analytics_encryption_level::none:

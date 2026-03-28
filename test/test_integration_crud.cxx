@@ -814,7 +814,8 @@ TEST_CASE("integration: upsert returns valid mutation token", "[integration]")
     REQUIRE(resp.token.bucket_name().empty());
     REQUIRE(resp.token.partition_id() == 0);
     REQUIRE(resp.token.partition_uuid() == 0);
-    REQUIRE(resp.token.sequence_number() == 0);
+    auto seq = resp.token.sequence_number();
+    REQUIRE(seq == 0);
   }
   {
     couchbase::core::operations::mutate_in_request req{ id };
@@ -827,7 +828,8 @@ TEST_CASE("integration: upsert returns valid mutation token", "[integration]")
     REQUIRE(resp.token.bucket_name().empty());
     REQUIRE(resp.token.partition_id() == 0);
     REQUIRE(resp.token.partition_uuid() == 0);
-    REQUIRE(resp.token.sequence_number() == 0);
+    auto seq = resp.token.sequence_number();
+    REQUIRE(seq == 0);
   }
   {
     couchbase::core::operations::mutate_in_request req{ id };

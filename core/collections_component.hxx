@@ -75,6 +75,8 @@ public:
   auto dispatch(std::shared_ptr<mcbp::queue_request> request)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>;
 
+  auto handle_collection_unknown(const std::shared_ptr<mcbp::queue_request>& request) -> bool;
+
   /// Integration point for unit testing. Not for public usage.
   [[nodiscard]] auto unit_test_api() -> collections_component_unit_test_api;
 

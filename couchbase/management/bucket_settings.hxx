@@ -30,13 +30,13 @@ enum class bucket_type {
   unknown,
   couchbase,
   memcached,
-  ephemeral
+  ephemeral,
 };
 enum class bucket_compression {
   unknown,
   off,
   active,
-  passive
+  passive,
 };
 enum class bucket_eviction_policy {
   unknown,
@@ -107,7 +107,7 @@ enum class bucket_conflict_resolution {
 enum class bucket_storage_backend {
   unknown,
   couchstore,
-  magma
+  magma,
 };
 
 struct bucket_settings {

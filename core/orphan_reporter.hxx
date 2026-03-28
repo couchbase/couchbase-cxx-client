@@ -37,14 +37,14 @@ struct orphan_attributes {
   std::string operation_id;
   std::string last_remote_socket;
   std::string last_local_socket;
-  std::chrono::microseconds total_duration;
+  std::chrono::microseconds total_duration{};
   std::chrono::microseconds last_server_duration{ 0 };
   std::chrono::microseconds total_server_duration{ 0 };
   std::string operation_name;
 
   auto operator<(const orphan_attributes& other) const -> bool;
   auto operator>(const orphan_attributes& other) const -> bool;
-  auto to_json() const -> tao::json::value;
+  [[nodiscard]] auto to_json() const -> tao::json::value;
 };
 
 class orphan_reporter_impl;
@@ -57,7 +57,7 @@ public:
   void add_orphan(orphan_attributes&& orphan);
   void start();
   void stop();
-  auto flush_and_create_output() -> std::optional<std::string>;
+  [[nodiscard]] auto flush_and_create_output() -> std::optional<std::string>;
 
 private:
   std::shared_ptr<orphan_reporter_impl> impl_;

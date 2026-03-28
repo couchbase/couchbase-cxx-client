@@ -27,7 +27,7 @@ struct mcbp_parser {
   enum class result {
     ok,
     need_data,
-    failure
+    failure,
   };
 
   template<typename Iterator>

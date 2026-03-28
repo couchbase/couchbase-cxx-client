@@ -23,6 +23,7 @@ extern "C" {
 #include <stdbool.h>
 #endif
 
+// NOLINTNEXTLINE(modernize-use-using) -- C header, must use typedef for C compatibility
 typedef void (*write_cb_t)(void* ctx, const char* frame);
 
 /**

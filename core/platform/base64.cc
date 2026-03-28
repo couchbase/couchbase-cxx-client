@@ -39,11 +39,12 @@ namespace
 /**
  * An array of the legal characters used for direct lookup
  */
-const std::array codemap{ 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
-                          'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
-                          'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
-                          'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
-                          '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '/' };
+const std::array codemap{
+  'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
+  'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f',
+  'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v',
+  'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '/',
+};
 
 /**
  * A method to map the code back to the value
@@ -73,7 +74,6 @@ code2val(const char code) -> std::uint32_t
 }
 
 // TODO(CXXCBC-549): clang-tidy-19 reports subscript with non-const index
-// NOLINTBEGIN(cppcoreguidelines-pro-bounds-constant-array-index)
 /**
  * Encode up to 3 characters to 4 output character.
  *
@@ -124,7 +124,6 @@ encode_triplet(const std::byte* s, std::string& str)
   str.push_back(codemap[(val >> 6U) & 63]);
   str.push_back(codemap[val & 63]);
 }
-// NOLINTEND(cppcoreguidelines-pro-bounds-constant-array-index)
 
 /**
  * decode 4 input characters to up to two output bytes

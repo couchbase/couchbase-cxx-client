@@ -33,10 +33,12 @@ analytics_dataverse_create_request::encode_to(encoded_request_type& encoded,
   std::string if_not_exists_clause = ignore_if_exists ? "IF NOT EXISTS" : "";
 
   const tao::json::value body{
-    { "statement",
+    {
+      "statement",
       fmt::format("CREATE DATAVERSE {} {}",
                   utils::analytics::uncompound_name(dataverse_name),
-                  if_not_exists_clause) },
+                  if_not_exists_clause),
+    },
   };
   encoded.headers["content-type"] = "application/json";
   encoded.method = "POST";
