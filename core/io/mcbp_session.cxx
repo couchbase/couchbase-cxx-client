@@ -370,7 +370,10 @@ class mcbp_session_impl
             case protocol::client_opcode::hello: {
               protocol::client_response<protocol::hello_response_body> resp(std::move(msg));
               if (resp.status() == key_value_status_code::success) {
-                session_->supported_features_ = resp.body().supported_features();
+                {
+                  const std::scoped_lock lock(session_->session_info_mutex_);
+                  session_->supported_features_ = resp.body().supported_features();
+                }
                 CB_LOG_DEBUG("{} supported_features=[{}]",
                              session_->log_prefix_,
                              utils::join_strings_fmt(session_->supported_features_, ", "));
@@ -932,8 +935,9 @@ public:
     stop(retry_reason::do_not_retry);
   }
 
-  [[nodiscard]] auto log_prefix() const -> const std::string&
+  [[nodiscard]] auto log_prefix() const -> std::string
   {
+    const std::scoped_lock lock(session_info_mutex_);
     return log_prefix_;
   }
 
@@ -1065,6 +1069,7 @@ public:
 
   [[nodiscard]] auto context() const -> mcbp_context
   {
+    const std::scoped_lock lock(session_info_mutex_);
     return { config_, supported_features_ };
   }
 
@@ -1319,12 +1324,15 @@ public:
     bootstrap_port_number_ =
       gsl::narrow_cast<std::uint16_t>(std::stoul(bootstrap_port_, nullptr, 10));
     bootstrap_address_ = fmt::format("{}:{}", bootstrap_hostname_, bootstrap_port_);
-    log_prefix_ = fmt::format("[{}/{}/{}/{}] <{}>",
-                              client_id_,
-                              id_,
-                              stream_->log_prefix(),
-                              bucket_name_.value_or("-"),
-                              bootstrap_address_);
+    {
+      const std::scoped_lock lock(session_info_mutex_);
+      log_prefix_ = fmt::format("[{}/{}/{}/{}] <{}>",
+                                client_id_,
+                                id_,
+                                stream_->log_prefix(),
+                                bucket_name_.value_or("-"),
+                                bootstrap_address_);
+    }
     CB_LOG_DEBUG("{} attempt to establish MCBP connection", log_prefix_);
 
     resolve_deadline_.expires_after(origin_.options().resolve_timeout);
@@ -1375,33 +1383,48 @@ public:
     }
 
     if (reason == retry_reason::socket_closed_while_in_flight && !bootstrapped_) {
-      return stream_->close([self = shared_from_this(), old_id = stream_->id()](std::error_code) {
-        CB_LOG_DEBUG(
-          R"({} reopened socket connection due to IO error, "{}" -> "{}", host="{}", port={})",
-          self->log_prefix_,
-          old_id,
-          self->stream_->id(),
-          self->bootstrap_hostname_,
-          self->bootstrap_port_);
-        return self->initiate_bootstrap();
-      });
+      // Dispatch close through the stream's strand to serialize with any in-flight on_connect
+      // that may be reading plain_stream_impl::stream_ concurrently.
+      return asio::dispatch(
+        stream_->get_executor(),
+        [self = shared_from_this(), old_id = stream_->id()]() mutable -> void {
+          self->stream_->close([self, old_id = std::move(old_id)](std::error_code) mutable -> void {
+            CB_LOG_DEBUG(
+              R"({} reopened socket connection due to IO error, "{}" -> "{}", host="{}", port={})",
+              self->log_prefix_,
+              old_id,
+              self->stream_->id(),
+              self->bootstrap_hostname_,
+              self->bootstrap_port_);
+            return self->initiate_bootstrap();
+          });
+        });
     }
 
     state_ = diag::endpoint_state::disconnecting;
-    CB_LOG_DEBUG("{} stop MCBP connection, reason={}", log_prefix_, reason);
-    stopped_ = true;
-    bootstrap_deadline_.cancel();
-    resolve_deadline_.cancel();
-    connection_deadline_.cancel();
-    reauth_deadline_.cancel();
-    retry_backoff_.cancel();
-    ping_timeout_.cancel();
-    resolver_.cancel();
-    stream_->close([](std::error_code) {
-    });
-    if (auto h = std::move(bootstrap_handler_); h) {
-      h->stop();
+    std::string stop_log_prefix;
+    {
+      const std::scoped_lock lock(session_info_mutex_);
+      stop_log_prefix = log_prefix_;
     }
+    CB_LOG_DEBUG("{} stop MCBP connection, reason={}", stop_log_prefix, reason);
+    stopped_ = true;
+    // Dispatch timer cancellation and stream close through the strand to avoid
+    // racing with on_connect() and bootstrap_handler which run on the IO thread.
+    asio::dispatch(stream_->get_executor(), [self = shared_from_this()]() -> void {
+      self->bootstrap_deadline_.cancel();
+      self->resolve_deadline_.cancel();
+      self->connection_deadline_.cancel();
+      self->reauth_deadline_.cancel();
+      self->retry_backoff_.cancel();
+      self->ping_timeout_.cancel();
+      self->resolver_.cancel();
+      if (auto h = std::move(self->bootstrap_handler_); h) {
+        h->stop();
+      }
+      self->stream_->close([](std::error_code) -> void {
+      });
+    });
     if (auto h = std::move(handler_); h) {
       h->stop();
     }
@@ -1416,7 +1439,7 @@ public:
       for (auto& [opaque, handler] : command_handlers_) {
         if (handler) {
           CB_LOG_DEBUG("{} MCBP cancel operation during session close, opaque={}, ec={}",
-                       log_prefix_,
+                       stop_log_prefix,
                        opaque,
                        ec.message());
           auto fun = std::move(handler);
@@ -1432,7 +1455,7 @@ public:
         auto& [request, handler] = operation;
         if (handler) {
           CB_LOG_DEBUG("{} MCBP cancel operation during session close, opaque={}, ec={}",
-                       log_prefix_,
+                       stop_log_prefix,
                        opaque,
                        ec.message());
           handler->handle_response(
@@ -1441,7 +1464,10 @@ public:
       }
       operations_.clear();
     }
-    config_listeners_.clear();
+    {
+      const std::scoped_lock lock(session_info_mutex_);
+      config_listeners_.clear();
+    }
     state_ = diag::endpoint_state::disconnected;
     if (auto on_stop = std::move(on_stop_handler_); on_stop) {
       on_stop();
@@ -1645,12 +1671,14 @@ public:
 
   [[nodiscard]] auto supports_feature(protocol::hello_feature feature) -> bool
   {
+    const std::scoped_lock lock(session_info_mutex_);
     return std::find(supported_features_.begin(), supported_features_.end(), feature) !=
            supported_features_.end();
   }
 
   [[nodiscard]] auto supported_features() const -> std::vector<protocol::hello_feature>
   {
+    const std::scoped_lock lock(session_info_mutex_);
     return supported_features_;
   }
 
@@ -1743,6 +1771,7 @@ public:
 
   void on_configuration_update(std::shared_ptr<config_listener> handler)
   {
+    const std::scoped_lock lock(session_info_mutex_);
     config_listeners_.emplace_back(std::move(handler));
   }
 
@@ -1806,10 +1835,13 @@ public:
     config_.reset();
     config_.emplace(std::move(config));
     configured_ = true;
-    for (const auto& listener : config_listeners_) {
-      asio::post(asio::bind_executor(ctx_, [listener, c = config_.value()]() mutable {
-        return listener->update_config(std::move(c));
-      }));
+    {
+      const std::scoped_lock listeners_lock(session_info_mutex_);
+      for (const auto& listener : config_listeners_) {
+        asio::post(asio::bind_executor(ctx_, [listener, c = config_.value()]() mutable {
+          return listener->update_config(std::move(c));
+        }));
+      }
     }
   }
 
@@ -2077,19 +2109,25 @@ private:
                    connection_endpoints_.local.port(),
                    connection_endpoints_.remote_address,
                    connection_endpoints_.remote.port());
-      log_prefix_ = fmt::format("[{}/{}/{}/{}] <{}:{}/{}:{}>",
-                                client_id_,
-                                id_,
-                                stream_->log_prefix(),
-                                bucket_name_.value_or("-"),
-                                connection_endpoints_.local.port(),
-                                bootstrap_hostname_,
-                                connection_endpoints_.remote_address,
-                                connection_endpoints_.remote.port());
+      {
+        const std::scoped_lock lock(session_info_mutex_);
+        log_prefix_ = fmt::format("[{}/{}/{}/{}] <{}:{}/{}:{}>",
+                                  client_id_,
+                                  id_,
+                                  stream_->log_prefix(),
+                                  bucket_name_.value_or("-"),
+                                  connection_endpoints_.local.port(),
+                                  bootstrap_hostname_,
+                                  connection_endpoints_.remote_address,
+                                  connection_endpoints_.remote.port());
+      }
       parser_.reset();
       {
         const std::scoped_lock lock(output_buffer_mutex_);
         output_buffer_.clear();
+      }
+      if (stopped_) {
+        return;
       }
       bootstrap_handler_ = std::make_shared<bootstrap_handler>(shared_from_this());
 
@@ -2297,6 +2335,7 @@ private:
   std::uint16_t bootstrap_port_number_{};
   connection_endpoints connection_endpoints_{ {}, {} };
   asio::ip::tcp::resolver::results_type endpoints_;
+  mutable std::mutex session_info_mutex_{};
   std::vector<protocol::hello_feature> supported_features_;
   std::optional<topology::configuration> config_;
   mutable std::mutex config_mutex_{};
@@ -2371,7 +2410,7 @@ mcbp_session::mcbp_session(std::shared_ptr<mcbp_session_impl> impl)
 }
 
 auto
-mcbp_session::log_prefix() const -> const std::string&
+mcbp_session::log_prefix() const -> std::string
 {
   return impl_->log_prefix();
 }

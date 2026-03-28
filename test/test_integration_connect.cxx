@@ -24,6 +24,7 @@
 
 #include "couchbase/cluster.hxx"
 
+#include "core/metrics/meter_wrapper.hxx"
 #include "core/operations/document_append.hxx"
 #include "core/operations/document_decrement.hxx"
 #include "core/operations/document_increment.hxx"
@@ -34,6 +35,7 @@
 #include "core/operations/document_remove.hxx"
 #include "core/operations/document_replace.hxx"
 #include "core/operations/document_upsert.hxx"
+#include "core/tracing/tracer_wrapper.hxx"
 #include "core/utils/connection_string.hxx"
 
 TEST_CASE("integration: connecting with empty bootstrap nodes list", "[integration]")
@@ -274,4 +276,41 @@ TEST_CASE("integration: query after changing to incorrect credentials", "[integr
   auto resp = test::utils::execute(integration.cluster, req);
 
   REQUIRE(resp.ctx.ec == couchbase::errc::common::internal_server_failure);
+}
+
+TEST_CASE("integration: cluster::find_bucket_by_name returns nullptr for unknown bucket",
+          "[integration]")
+{
+  test::utils::integration_test_guard integration;
+
+  // No bucket has been opened — the bucket map must be empty.
+  auto bucket = integration.cluster.find_bucket_by_name("no_such_bucket");
+  CHECK(bucket == nullptr);
+}
+
+TEST_CASE("integration: cluster::find_bucket_by_name returns non-null after open_bucket",
+          "[integration]")
+{
+  test::utils::integration_test_guard integration;
+  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+  auto bucket = integration.cluster.find_bucket_by_name(integration.ctx.bucket);
+  CHECK(bucket != nullptr);
+
+  // A bucket that was never opened must still return nullptr.
+  auto missing = integration.cluster.find_bucket_by_name("no_such_bucket");
+  CHECK(missing == nullptr);
+}
+
+TEST_CASE("integration: cluster::tracer and meter return non-null shared_ptr by value",
+          "[integration]")
+{
+  test::utils::integration_test_guard integration;
+
+  // tracer() and meter() return by value (std::shared_ptr) since CXXCBC-794;
+  // verify they are non-null and that receiving them by value compiles.
+  std::shared_ptr<couchbase::core::tracing::tracer_wrapper> tracer = integration.cluster.tracer();
+  std::shared_ptr<couchbase::core::metrics::meter_wrapper> meter = integration.cluster.meter();
+  CHECK(tracer != nullptr);
+  CHECK(meter != nullptr);
 }
