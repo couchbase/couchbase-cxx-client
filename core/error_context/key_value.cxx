@@ -32,8 +32,31 @@ namespace couchbase::core
 auto
 make_key_value_error_context(std::error_code ec, const document_id& id) -> key_value_error_context
 {
-  return {
-    {}, ec, {}, {}, 0, {}, id.key(), id.bucket(), id.scope(), id.collection(), 0, {}, {}, {}, {},
+  return make_key_value_error_context(ec, id, 0, {});
+}
+
+auto
+make_key_value_error_context(std::error_code ec,
+                             const document_id& id,
+                             std::size_t retry_attempts,
+                             std::set<retry_reason> retry_reasons) -> key_value_error_context
+{
+  return key_value_error_context{
+    {},
+    ec,
+    {},
+    {},
+    retry_attempts,
+    std::move(retry_reasons),
+    id.key(),
+    id.bucket(),
+    id.scope(),
+    id.collection(),
+    0,
+    {},
+    {},
+    {},
+    {},
   };
 }
 

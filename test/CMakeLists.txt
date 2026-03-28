@@ -46,6 +46,7 @@ unit_test(orphan_reporter)
 unit_test(mutate_in_doc_flags)
 unit_test(mcbp_codec)
 unit_test(mcbp_queue_request)
+unit_test(key_value_error_context)
 target_link_libraries(test_unit_jsonsl PRIVATE jsonsl)
 
 integration_benchmark(get)
