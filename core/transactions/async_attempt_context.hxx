@@ -186,7 +186,7 @@ public:
    */
   void query(const std::string& statement, QueryCallback&& cb)
   {
-    couchbase::transactions::transaction_query_options opts;
+    const couchbase::transactions::transaction_query_options opts;
     return query(statement, opts, {}, std::move(cb));
   }
 

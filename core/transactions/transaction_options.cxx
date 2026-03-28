@@ -31,13 +31,15 @@ transaction_options::apply(const transactions_config::built& conf) const
   if (scan_consistency_) {
     query_config.scan_consistency = *scan_consistency_;
   }
-  return { durability_.value_or(conf.level),
-           timeout_.value_or(conf.timeout),
-           attempt_context_hooks_ ? attempt_context_hooks_ : conf.attempt_context_hooks,
-           cleanup_hooks_ ? cleanup_hooks_ : conf.cleanup_hooks,
-           metadata_collection_ ? metadata_collection_ : conf.metadata_collection,
-           query_config,
-           conf.cleanup_config };
+  return {
+    durability_.value_or(conf.level),
+    timeout_.value_or(conf.timeout),
+    attempt_context_hooks_ ? attempt_context_hooks_ : conf.attempt_context_hooks,
+    cleanup_hooks_ ? cleanup_hooks_ : conf.cleanup_hooks,
+    metadata_collection_ ? metadata_collection_ : conf.metadata_collection,
+    query_config,
+    conf.cleanup_config,
+  };
 }
 
 auto

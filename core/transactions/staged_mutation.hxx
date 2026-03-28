@@ -32,7 +32,7 @@ namespace couchbase::core::transactions
 enum class staged_mutation_type {
   INSERT,
   REMOVE,
-  REPLACE
+  REPLACE,
 };
 
 class staged_mutation
@@ -62,7 +62,14 @@ public:
   [[nodiscard]] auto current_user_flags() const -> std::uint32_t;
   [[nodiscard]] auto doc_metadata() const -> const std::optional<document_metadata>&;
   [[nodiscard]] auto operation_id() const -> const std::string&;
-  [[nodiscard]] auto type_as_string() const -> std::string;
+  /**
+   * @brief Returns the human-readable name of the mutation type as a string literal view.
+   *
+   * Returns one of @c "INSERT", @c "REPLACE", or @c "REMOVE" without any heap allocation.
+   * The returned view is backed by a string literal and remains valid for the lifetime of the
+   * program.
+   */
+  [[nodiscard]] auto type_as_string() const -> std::string_view;
 
   void cas(couchbase::cas cas);
 
@@ -166,8 +173,8 @@ public:
   void extract_to(const std::string& prefix, core::operations::mutate_in_request& req);
   void commit(const std::shared_ptr<attempt_context_impl>& ctx);
   void rollback(const std::shared_ptr<attempt_context_impl>& ctx);
-  void iterate(const std::function<void(staged_mutation&)>&);
-  void remove_any(const core::document_id&);
+  void iterate(const std::function<void(staged_mutation& /*mutation*/)>&);
+  void remove_any(const core::document_id& /*id*/);
 
   auto find_any(const core::document_id& id) -> staged_mutation*;
   auto find_replace(const core::document_id& id) -> staged_mutation*;
