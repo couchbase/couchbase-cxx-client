@@ -1,0 +1,12 @@
+# LeakSanitizer suppressions for couchbase-cxx-client
+#
+# OpenSSL allocates per-thread PRNG state (EVP_RAND_CTX) lazily on first use
+# inside SSL_CTX_new_ex and does not free it at process exit.  This is a
+# known OpenSSL behaviour (the same allocations are suppressed in Valgrind
+# via .valgrind_suppressions.txt, see CXXCBC-571).
+#
+# The leak originates in the RAND_get0_public / RAND_get0_private paths
+# triggered by SSL_CTX_new_ex when the first asio::ssl::context is created.
+leak:EVP_RAND_CTX_new
+leak:RAND_get0_public
+leak:RAND_get0_private
