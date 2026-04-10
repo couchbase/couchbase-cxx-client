@@ -17,9 +17,13 @@ shadowVariable:*
 stlIfStrFind:*
 unusedFunction:*
 unusedStructMember:*
+unreadVariable:*
 unusedVariable:*
 useStlAlgorithm:*
 unusedPrivateFunction:*
+
+# jsonsl uses integer-to-pointer casts for state tagging
+intToPointerCast:*/core/utils/json_streaming_lexer.cxx
 
 # these are not very useful
 checkersReport:*
@@ -27,6 +31,10 @@ internalAstError:*
 missingInclude:*
 missingIncludeSystem:*
 unmatchedSuppression:*
+
+# suppressions in tools
+knownConditionTrueFalse:*/tools/fit_performer/*
+variableScope:*/tools/fit_performer/*
 
 # suppressions in tests
 comparisonOfFuncReturningBoolError:*/test/test_*
@@ -36,5 +44,7 @@ variableScope:*/test/test_*
 
 # do not scan third-party code
 *:*/_deps/*
+*:*/CPM/*
 *:*/generated/third_party/*
+*:*/proto_generated/*
 

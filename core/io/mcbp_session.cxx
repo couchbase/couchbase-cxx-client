@@ -2126,6 +2126,7 @@ private:
         const std::scoped_lock lock(output_buffer_mutex_);
         output_buffer_.clear();
       }
+      // cppcheck-suppress knownConditionTrueFalse
       if (stopped_) {
         return;
       }

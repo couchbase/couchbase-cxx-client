@@ -32,7 +32,8 @@ jobs:
         with:
           key: ${{ github.job }}
       - name: Build
-        timeout-minutes: 40
+        timeout-minutes: 90
         env:
           CB_COLUMNAR: ON
+          CB_NUMBER_OF_JOBS: 4
         run: ./bin/build-tests

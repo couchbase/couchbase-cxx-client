@@ -19,6 +19,12 @@ require "fileutils"
 require "rbconfig"
 require "English"
 
+class Object
+  def to_b
+    ![nil, false, 0, "", "0", "f", "F", "false", "FALSE", "off", "OFF", "no", "NO"].include?(self)
+  end
+end
+
 def which(name, extra_location = [])
   ENV.fetch("PATH", "")
      .split(File::PATH_SEPARATOR)
@@ -94,7 +100,7 @@ BUILD_DIR = if CB_SANITIZER.empty?
               File.join(PROJECT_ROOT, "cmake-build-tests-#{CB_SANITIZER}")
             end
 
-FileUtils.rm_rf(BUILD_DIR, verbose: true)
+FileUtils.rm_rf(BUILD_DIR, verbose: true) unless ENV["CB_PRESERVE_BUILD_DIR"].to_b
 FileUtils.mkdir_p(BUILD_DIR, verbose: true)
 
 Dir.chdir(BUILD_DIR) do
