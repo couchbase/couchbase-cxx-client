@@ -31,6 +31,11 @@ missingInclude:*
 missingIncludeSystem:*
 unmatchedSuppression:*
 
+# suppressions in tools
+knownConditionTrueFalse:*/tools/fit_performer/*
+variableScope:*/tools/fit_performer/*
+unreadVariable:*/tools/fit_performer/*
+
 # suppressions in tests
 comparisonOfFuncReturningBoolError:*/test/test_*
 unknownMacro:*/test/test_*
@@ -41,4 +46,5 @@ variableScope:*/test/test_*
 *:*/_deps/*
 *:*/CPM/*
 *:*/generated/third_party/*
+*:*/proto_generated/*
 
