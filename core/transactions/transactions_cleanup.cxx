@@ -41,8 +41,6 @@ namespace couchbase::core::transactions
 transactions_cleanup_attempt::transactions_cleanup_attempt(const atr_cleanup_entry& entry)
   : atr_id_(entry.atr_id_)
   , attempt_id_(entry.attempt_id_)
-  , success_(false)
-  , state_(attempt_state::NOT_STARTED)
 {
 }
 
@@ -81,7 +79,7 @@ parse_mutation_cas(const std::string& cas) -> std::uint64_t
 }
 
 // TODO(CXXCBC-549)
-const std::string CLIENT_RECORD_DOC_ID = "_txn:client-record"; // NOLINT(cert-err58-cpp)
+const std::string CLIENT_RECORD_DOC_ID = "_txn:client-record";
 } // namespace
 
 constexpr auto SAFETY_MARGIN_EXPIRY_MS = 2000;
@@ -108,7 +106,7 @@ transactions_cleanup::clean_collection(
   // first make sure the collection is in the list
   while (is_running()) {
     {
-      const std::lock_guard<std::mutex> lock(mutex_);
+      const std::scoped_lock lock(mutex_);
       if (collections_.end() == std::find(collections_.begin(), collections_.end(), keyspace)) {
         CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG(
           "cleanup for {} ending, no longer in collection cleanup list", keyspace);

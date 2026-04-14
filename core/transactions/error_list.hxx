@@ -39,7 +39,7 @@ public:
   }
   void push_back(const transaction_operation_failed& ex)
   {
-    std::lock_guard<std::mutex> lock(mutex_);
+    const std::scoped_lock lock(mutex_);
     list_.push_back(ex);
     size_ = list_.size();
   }
@@ -47,7 +47,7 @@ public:
   {
     assert(size_.load() > 0);
     // merge the errors, throw a composite
-    std::lock_guard<std::mutex> lock(mutex_);
+    const std::scoped_lock lock(mutex_);
     transaction_operation_failed::merge_errors(list_, cause);
   }
 };

@@ -60,7 +60,7 @@ enum class attempt_state {
   /**
    * A state this client doesn't recognise.
    */
-  UNKNOWN
+  UNKNOWN,
 };
 
 inline auto

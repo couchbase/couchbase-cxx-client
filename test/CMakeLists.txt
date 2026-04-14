@@ -60,6 +60,7 @@ transaction_test(public_async_api)
 
 unit_test(transaction_logging)
 unit_test(transaction_utils)
+unit_test(transaction_error_class)
 unit_test(waitable_op_list)
 
 integration_test(examples)

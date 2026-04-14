@@ -69,10 +69,27 @@ public:
   {
   }
 
+  /**
+   * @brief Determines whether this ATR entry's transaction has exceeded its configured timeout.
+   *
+   * Uses the ATR document's CAS as a server-side clock (CAS encodes a server timestamp in
+   * nanoseconds).  The elapsed time is computed as:
+   *   @code elapsed_ms = (cas / 1_000_000) - timestamp_start_ms @endcode
+   *
+   * Returns @c false conservatively if either @c timestamp_start_ms or @c expires_after_ms are
+   * absent — this avoids spurious expiry decisions when the ATR entry has not yet been fully
+   * initialised or when the CAS has not advanced past the recorded start time.
+   *
+   * @param safety_margin Additional milliseconds added to the configured TTL before declaring
+   *                       the entry expired.  Useful to declare expiry slightly early in order
+   *                       to avoid races with the owning client.
+   * @return @c true if the transaction has exceeded @c (expires_after_ms + safety_margin) of
+   *         elapsed CAS-time since @c timestamp_start_ms.
+   */
   [[nodiscard]] bool has_expired(std::uint32_t safety_margin = 0) const
   {
     std::uint64_t cas_ms = cas_ / 1000000;
-    if (timestamp_start_ms_ && cas_ms > *timestamp_start_ms_) {
+    if (timestamp_start_ms_ && expires_after_ms_ && cas_ms > *timestamp_start_ms_) {
       std::uint32_t expires_after_ms = *expires_after_ms_;
       return (cas_ms - *timestamp_start_ms_) > (expires_after_ms + safety_margin);
     }

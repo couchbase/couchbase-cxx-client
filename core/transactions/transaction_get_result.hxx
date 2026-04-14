@@ -30,6 +30,7 @@
 
 namespace couchbase::core::transactions
 {
+// NOLINTNEXTLINE(bugprone-forward-declaration-namespace)
 struct result;
 /**
  * @brief Encapsulates results of an individual transaction operation
@@ -109,14 +110,16 @@ public:
       cas_ = couchbase::cas(stoull(cas->as<std::string>()));
     }
     if (const auto* doc = json.find("doc"); doc != nullptr) {
-      content_ = { core::utils::json::generate_binary(doc->get_object()),
-                   codec::codec_flags::json_common_flags };
+      content_ = {
+        core::utils::json::generate_binary(doc->get_object()),
+        codec::codec_flags::json_common_flags,
+      };
     }
   }
 
   /** @internal */
-  static auto create_from(const transaction_get_result& document,
-                          codec::encoded_value content) -> transaction_get_result;
+  static auto create_from(const transaction_get_result& document, codec::encoded_value content)
+    -> transaction_get_result;
 
   /** @internal */
   static auto create_from(const core::operations::lookup_in_response& resp)

@@ -110,7 +110,7 @@ staged_mutation::operation_id() const -> const std::string&
 }
 
 auto
-staged_mutation::type_as_string() const -> std::string
+staged_mutation::type_as_string() const -> std::string_view
 {
   switch (type_) {
     case staged_mutation_type::INSERT:
@@ -149,7 +149,7 @@ unstaging_state::wait_until_unstage_possible() -> bool
 void
 unstaging_state::notify_unstage_complete()
 {
-  const std::lock_guard lock(mutex_);
+  const std::scoped_lock lock(mutex_);
   in_flight_count_--;
   cv_.notify_one();
 }
@@ -157,7 +157,7 @@ unstaging_state::notify_unstage_complete()
 void
 unstaging_state::notify_unstage_error()
 {
-  const std::lock_guard lock(mutex_);
+  const std::scoped_lock lock(mutex_);
   abort_ = true;
   in_flight_count_--;
   cv_.notify_all();
@@ -166,14 +166,14 @@ unstaging_state::notify_unstage_error()
 auto
 staged_mutation_queue::empty() -> bool
 {
-  const std::lock_guard<std::mutex> lock(mutex_);
+  const std::scoped_lock<std::mutex> lock(mutex_);
   return queue_.empty();
 }
 
 void
 staged_mutation_queue::add(staged_mutation&& mutation)
 {
-  const std::lock_guard<std::mutex> lock(mutex_);
+  const std::scoped_lock<std::mutex> lock(mutex_);
   // Can only have one staged mutation per document.
   queue_.erase(std::remove_if(queue_.begin(),
                               queue_.end(),
@@ -188,16 +188,21 @@ void
 staged_mutation_queue::extract_to(const std::string& prefix,
                                   core::operations::mutate_in_request& req)
 {
-  const std::lock_guard<std::mutex> lock(mutex_);
+  const std::scoped_lock<std::mutex> lock(mutex_);
   tao::json::value inserts = tao::json::empty_array;
   tao::json::value replaces = tao::json::empty_array;
   tao::json::value removes = tao::json::empty_array;
 
   for (const auto& mutation : queue_) {
-    const tao::json::value doc{ { ATR_FIELD_PER_DOC_ID, mutation.id().key() },
-                                { ATR_FIELD_PER_DOC_BUCKET, mutation.id().bucket() },
-                                { ATR_FIELD_PER_DOC_SCOPE, mutation.id().scope() },
-                                { ATR_FIELD_PER_DOC_COLLECTION, mutation.id().collection() } };
+    const tao::json::value doc{
+      { ATR_FIELD_PER_DOC_ID, mutation.id().key() },
+      { ATR_FIELD_PER_DOC_BUCKET, mutation.id().bucket() },
+      { ATR_FIELD_PER_DOC_SCOPE, mutation.id().scope() },
+      {
+        ATR_FIELD_PER_DOC_COLLECTION,
+        mutation.id().collection(),
+      },
+    };
     switch (mutation.type()) {
       case staged_mutation_type::INSERT:
         inserts.push_back(doc);
@@ -232,7 +237,7 @@ staged_mutation_queue::extract_to(const std::string& prefix,
 void
 staged_mutation_queue::remove_any(const core::document_id& id)
 {
-  const std::lock_guard<std::mutex> lock(mutex_);
+  const std::scoped_lock<std::mutex> lock(mutex_);
   auto new_end = std::remove_if(queue_.begin(), queue_.end(), [&id](const staged_mutation& item) {
     return document_ids_equal(item.id(), id);
   });
@@ -242,7 +247,7 @@ staged_mutation_queue::remove_any(const core::document_id& id)
 auto
 staged_mutation_queue::find_any(const core::document_id& id) -> staged_mutation*
 {
-  const std::lock_guard<std::mutex> lock(mutex_);
+  const std::scoped_lock<std::mutex> lock(mutex_);
   for (auto& item : queue_) {
     if (document_ids_equal(item.id(), id)) {
       return &item;
@@ -254,7 +259,7 @@ staged_mutation_queue::find_any(const core::document_id& id) -> staged_mutation*
 auto
 staged_mutation_queue::find_replace(const core::document_id& id) -> staged_mutation*
 {
-  const std::lock_guard<std::mutex> lock(mutex_);
+  const std::scoped_lock<std::mutex> lock(mutex_);
   for (auto& item : queue_) {
     if (item.type() == staged_mutation_type::REPLACE && document_ids_equal(item.id(), id)) {
       return &item;
@@ -266,7 +271,7 @@ staged_mutation_queue::find_replace(const core::document_id& id) -> staged_mutat
 auto
 staged_mutation_queue::find_insert(const core::document_id& id) -> staged_mutation*
 {
-  const std::lock_guard<std::mutex> lock(mutex_);
+  const std::scoped_lock<std::mutex> lock(mutex_);
   for (auto& item : queue_) {
     if (item.type() == staged_mutation_type::INSERT && document_ids_equal(item.id(), id)) {
       return &item;
@@ -278,7 +283,7 @@ staged_mutation_queue::find_insert(const core::document_id& id) -> staged_mutati
 auto
 staged_mutation_queue::find_remove(const core::document_id& id) -> staged_mutation*
 {
-  const std::lock_guard<std::mutex> lock(mutex_);
+  const std::scoped_lock<std::mutex> lock(mutex_);
   for (auto& item : queue_) {
     if (item.type() == staged_mutation_type::REMOVE && document_ids_equal(item.id(), id)) {
       return &item;
@@ -289,7 +294,7 @@ staged_mutation_queue::find_remove(const core::document_id& id) -> staged_mutati
 void
 staged_mutation_queue::iterate(const std::function<void(staged_mutation&)>& op)
 {
-  const std::lock_guard<std::mutex> lock(mutex_);
+  const std::scoped_lock<std::mutex> lock(mutex_);
   for (auto& item : queue_) {
     op(item);
   }
@@ -299,7 +304,7 @@ void
 staged_mutation_queue::commit(const std::shared_ptr<attempt_context_impl>& ctx)
 {
   CB_ATTEMPT_CTX_LOG_TRACE(ctx, "committing staged mutations...");
-  const std::lock_guard<std::mutex> lock(mutex_);
+  const std::scoped_lock<std::mutex> lock(mutex_);
 
   unstaging_state state{ ctx };
   std::vector<std::future<void>> futures{};
@@ -390,7 +395,7 @@ void
 staged_mutation_queue::rollback(const std::shared_ptr<attempt_context_impl>& ctx)
 {
   CB_ATTEMPT_CTX_LOG_TRACE(ctx, "rolling back staged mutations...");
-  const std::lock_guard<std::mutex> lock(mutex_);
+  const std::scoped_lock<std::mutex> lock(mutex_);
 
   unstaging_state state{ ctx };
   std::vector<std::future<void>> futures{};

@@ -67,6 +67,7 @@ operator<<(OStream& os, const core::document_id& id)
 
 template<typename T>
 T&
+// NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward) -- req is intentionally used as lvalue
 wrap_durable_request(T&& req, const couchbase::transactions::transactions_config::built& config)
 {
   req.durability_level = config.level;
@@ -75,6 +76,7 @@ wrap_durable_request(T&& req, const couchbase::transactions::transactions_config
 
 template<typename T>
 T&
+// NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward) -- req is intentionally used as lvalue
 wrap_durable_request(T&& req, durability_level level)
 {
   req.durability_level = level;
@@ -107,7 +109,7 @@ is_error(const core::operations::mutate_in_response& resp);
 
 template<typename Resp>
 std::optional<error_class>
-error_class_from_response_extras(const Resp&)
+error_class_from_response_extras(const Resp& /*resp*/)
 {
   return {};
 }
@@ -160,6 +162,71 @@ error_class_from_response(const Resp& resp)
   return {};
 }
 
+/**
+ * @brief Specialization of error_class_from_response for subdocument lookup responses.
+ *
+ * Unlike most KV operations, a @c lookup_in response may carry a success error code at the
+ * document level while still reporting individual spec failures.  Specifically, the server
+ * returns @c subdoc_multi_path_failure when the document exists but one or more of the requested
+ * paths are absent.  This happens for every non-transacted document fetched during a transaction,
+ * because the transaction XATTRs (@c txn.id, @c txn.atr, etc.) do not exist on those documents.
+ *
+ * The generic @c error_class_from_response template only inspects @c ctx.ec() and therefore
+ * misses these per-field failures.  This specialization additionally checks
+ * @c ctx.first_error_index() and maps the corresponding @c fields[i].ec to the appropriate
+ * @c error_class value (@c FAIL_PATH_NOT_FOUND, @c FAIL_PATH_ALREADY_EXISTS, or @c FAIL_OTHER).
+ *
+ * @param resp The @c lookup_in_response to classify.
+ * @return The @c error_class that best represents the failure, or @c std::nullopt on success.
+ */
+template<>
+inline std::optional<error_class>
+error_class_from_response(const core::operations::lookup_in_response& resp)
+{
+  // Document-level errors are still reported via ctx.ec()
+  if (resp.ctx.ec()) {
+    if (resp.ctx.ec() == couchbase::errc::key_value::document_not_found) {
+      return FAIL_DOC_NOT_FOUND;
+    }
+    if (resp.ctx.ec() == couchbase::errc::key_value::document_exists) {
+      return FAIL_DOC_ALREADY_EXISTS;
+    }
+    if (resp.ctx.ec() == couchbase::errc::common::cas_mismatch) {
+      return FAIL_CAS_MISMATCH;
+    }
+    if (resp.ctx.ec() == couchbase::errc::common::unambiguous_timeout ||
+        resp.ctx.ec() == couchbase::errc::common::temporary_failure ||
+        resp.ctx.ec() == couchbase::errc::key_value::durable_write_in_progress) {
+      return FAIL_TRANSIENT;
+    }
+    if (resp.ctx.ec() == couchbase::errc::key_value::durability_ambiguous ||
+        resp.ctx.ec() == couchbase::errc::common::ambiguous_timeout ||
+        resp.ctx.ec() == couchbase::errc::common::request_canceled) {
+      return FAIL_AMBIGUOUS;
+    }
+    return FAIL_OTHER;
+  }
+  // No document-level error. Check per-field errors: for subdoc_multi_path_failure
+  // the server returns success at the document level but per-spec errors for each
+  // missing path.  Use first_error_index stored in the context to find the first
+  // failed spec and map its error code to an error class.
+  if (const auto& idx = resp.ctx.first_error_index(); idx.has_value()) {
+    if (*idx < resp.fields.size()) {
+      const auto& field_ec = resp.fields[*idx].ec;
+      if (field_ec == couchbase::errc::key_value::path_not_found) {
+        return FAIL_PATH_NOT_FOUND;
+      }
+      if (field_ec == couchbase::errc::key_value::path_exists) {
+        return FAIL_PATH_ALREADY_EXISTS;
+      }
+      if (field_ec) {
+        return FAIL_OTHER;
+      }
+    }
+  }
+  return {};
+}
+
 static constexpr std::chrono::milliseconds DEFAULT_RETRY_OP_DELAY{ 3 };
 static constexpr std::chrono::milliseconds DEFAULT_RETRY_OP_EXP_DELAY{ 1 };
 static constexpr std::chrono::milliseconds DEFAULT_RETRY_OP_MAX_EXP_DELAY{ 100 };
@@ -175,7 +242,7 @@ jitter()
   static std::mt19937 gen(rd());
   static std::uniform_real_distribution<> dist(1 - RETRY_OP_JITTER, 1 + RETRY_OP_JITTER);
 
-  std::lock_guard<std::mutex> lock(mtx);
+  const std::scoped_lock lock(mtx);
   return dist(gen);
 }
 
@@ -308,8 +375,8 @@ struct constant_delay {
   std::size_t max_retries;
   std::size_t retries{ 0 };
 
-  constant_delay(std::chrono::duration<R, P> d = DEFAULT_RETRY_OP_DELAY,
-                 std::size_t max = DEFAULT_RETRY_OP_MAX_RETRIES)
+  explicit constant_delay(std::chrono::duration<R, P> d = DEFAULT_RETRY_OP_DELAY,
+                          std::size_t max = DEFAULT_RETRY_OP_MAX_RETRIES)
     : delay(d)
     , max_retries(max)
   {
@@ -343,7 +410,7 @@ struct async_exp_delay {
   {
   }
 
-  async_exp_delay(std::shared_ptr<asio::steady_timer> timer)
+  explicit async_exp_delay(std::shared_ptr<asio::steady_timer> timer)
     : async_exp_delay(std::move(timer),
                       DEFAULT_RETRY_OP_EXP_DELAY,
                       DEFAULT_RETRY_OP_MAX_EXP_DELAY,

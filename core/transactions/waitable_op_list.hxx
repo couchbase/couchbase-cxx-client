@@ -18,6 +18,7 @@
 
 #include "internal/logging.hxx"
 
+#include <cassert>
 #include <condition_variable>
 #include <mutex>
 
@@ -27,7 +28,7 @@ namespace couchbase::core::transactions
 class async_operation_conflict : public std::runtime_error
 {
 public:
-  async_operation_conflict(const std::string& msg)
+  explicit async_operation_conflict(const std::string& msg)
     : std::runtime_error(msg)
   {
   }
@@ -35,17 +36,14 @@ public:
 struct attempt_mode {
   enum class modes {
     KV,
-    QUERY
+    QUERY,
   };
-  modes mode;
+  modes mode{ modes::KV };
   std::string query_node;
 
-  attempt_mode()
-    : mode(modes::KV)
-  {
-  }
+  attempt_mode() = default;
 
-  auto is_query() -> bool
+  [[nodiscard]] auto is_query() const -> bool
   {
     return mode == modes::QUERY;
   }
@@ -54,13 +52,7 @@ struct attempt_mode {
 class waitable_op_list
 {
 public:
-  waitable_op_list()
-    : count_(0)
-    , allow_ops_(true)
-    , mode_()
-    , in_flight_(0)
-  {
-  }
+  waitable_op_list() = default;
 
   void increment_ops()
   {
@@ -81,6 +73,7 @@ public:
   }
   auto get_mode() -> attempt_mode
   {
+    // NOLINTNEXTLINE(misc-const-correctness) -- lock is mutated via wait()
     std::unique_lock<std::mutex> lock(mutex_);
     if (mode_.mode == attempt_mode::modes::KV) {
       return {};
@@ -99,6 +92,7 @@ public:
   template<typename BeginWorkHandler, typename DoQueryHandler>
   void set_query_mode(BeginWorkHandler&& begin_work_cb, DoQueryHandler&& cb)
   {
+    // NOLINTNEXTLINE(misc-const-correctness) -- lock is mutated via wait() and unlock()
     std::unique_lock<std::mutex> lock(mutex_);
     // called within an op, so decrement in_flight from that op, wait for
     // other in_flight to complete.
@@ -121,7 +115,7 @@ public:
         lock.unlock();
         // now (outside the lock), call the callback, which does the begin_work
         // when initially setting query mode.
-        begin_work_cb();
+        std::forward<BeginWorkHandler>(begin_work_cb)();
         return;
       }
     }
@@ -137,12 +131,13 @@ public:
     in_flight_++;
     CB_TXN_LOG_TRACE("set_query_mode: node set, continuing...");
     lock.unlock();
-    cb();
+    std::forward<DoQueryHandler>(cb)();
   }
   void reset_query_mode()
   {
     // when begin work errors out, it is fatal, so reset to kv mode here, allowing
     // rollback to function properly.
+    // NOLINTNEXTLINE(misc-const-correctness) -- intentionally not locking: fatal error path reset
     std::unique_lock<std::mutex> lock;
     mode_.mode = attempt_mode::modes::KV;
     cv_query_.notify_all();
@@ -150,7 +145,7 @@ public:
 
   void set_query_node(const std::string& node)
   {
-    std::unique_lock<std::mutex> lock(mutex_);
+    const std::scoped_lock lock(mutex_);
     assert(mode_.mode == attempt_mode::modes::QUERY);
     mode_.query_node = node;
     // now notify everyone waiting in get_mode()
@@ -158,7 +153,7 @@ public:
   }
   void decrement_in_flight()
   {
-    std::lock_guard<std::mutex> lock(mutex_);
+    const std::scoped_lock lock(mutex_);
     in_flight_--;
     CB_TXN_LOG_TRACE("in_flight decremented to {}", in_flight_);
     assert(in_flight_ >= 0);
@@ -170,7 +165,7 @@ public:
 private:
   void change_count(int32_t val)
   {
-    std::lock_guard<std::mutex> lock(mutex_);
+    const std::scoped_lock lock(mutex_);
     if (allow_ops_) {
       count_ += val;
       if (val > 0) {
@@ -191,11 +186,10 @@ private:
     }
   }
 
-private:
-  int32_t count_;
-  bool allow_ops_;
-  attempt_mode mode_;
-  int32_t in_flight_;
+  int32_t count_{ 0 };
+  bool allow_ops_{ true };
+  attempt_mode mode_{};
+  int32_t in_flight_{ 0 };
   std::condition_variable cv_ops_;
   std::condition_variable cv_query_;
   std::condition_variable cv_in_flight_;

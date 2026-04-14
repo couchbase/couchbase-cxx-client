@@ -50,7 +50,11 @@
 namespace couchbase::core
 {
 class cluster;
+// NOLINTBEGIN(bugprone-forward-declaration-namespace) -- transaction_context is in
+// couchbase::core::transactions; forward-declaring it here in couchbase::core avoids a circular
+// include. This mismatch is intentional.
 class transaction_context;
+// NOLINTEND(bugprone-forward-declaration-namespace)
 
 namespace impl
 {
@@ -101,6 +105,9 @@ private:
   // transaction_context needs access to the two functions below
   friend class transaction_context;
 
+  // NOLINTBEGIN(misc-override-with-different-visibility) -- NVI pattern: private overrides of
+  // public virtual base-class methods are intentional to prevent direct calls from outside the
+  // class while still satisfying the interface contract.
   void insert(const core::document_id& id,
               codec::encoded_value content,
               core::transactions::async_attempt_context::Callback&& cb) override;
@@ -250,6 +257,7 @@ private:
   {
     try {
       cb(err, std::optional<Ret>());
+      // NOLINTNEXTLINE(bugprone-empty-catch) -- intentionally swallow any exception from callback
     } catch (...) {
       // eat it.
     }
@@ -259,6 +267,7 @@ private:
   {
     try {
       cb(std::move(err));
+      // NOLINTNEXTLINE(bugprone-empty-catch) -- intentionally swallow any exception from callback
     } catch (...) {
       // just eat it.
     }
@@ -307,6 +316,7 @@ private:
   }
 
   explicit attempt_context_impl(const std::shared_ptr<transaction_context>& transaction_ctx);
+  // NOLINTEND(misc-override-with-different-visibility)
 
 public:
   [[nodiscard]] auto cluster_ref() const -> const core::cluster&;
@@ -406,6 +416,9 @@ public:
   void remove(couchbase::transactions::transaction_get_result doc,
               couchbase::transactions::async_err_handler&& handler) override;
 
+  // NOLINTBEGIN(misc-override-with-different-visibility) -- do_core_query and do_public_query are
+  // protected in the base class but intentionally exposed as public here so that tests and internal
+  // helpers can call them directly without going through the template dispatch layer.
   auto do_core_query(const std::string& statement,
                      const couchbase::transactions::transaction_query_options& options,
                      std::optional<std::string> query_context)
@@ -425,6 +438,7 @@ public:
              couchbase::transactions::transaction_query_options opts,
              std::optional<std::string> query_context,
              couchbase::transactions::async_query_handler&& handler) override;
+  // NOLINTEND(misc-override-with-different-visibility)
 
   void commit() override;
   void commit(VoidCallback&& cb) override;
