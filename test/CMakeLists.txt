@@ -40,6 +40,7 @@ unit_test(range_scan)
 unit_test(logger)
 unit_test(crypto)
 unit_test(orphan_reporter)
+unit_test(node_id)
 target_link_libraries(test_unit_jsonsl PRIVATE jsonsl)
 
 integration_benchmark(get)
