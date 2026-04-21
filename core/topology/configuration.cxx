@@ -17,6 +17,7 @@
 
 #include "configuration.hxx"
 
+#include "core/impl/node_id.hxx"
 #include "core/logger/logger.hxx"
 #include "core/service_type_fmt.hxx"
 #include "core/utils/crc32.hxx"
@@ -169,6 +170,12 @@ configuration::node::endpoint(const std::string& network, service_type type, boo
     return {};
   }
   return fmt::format("{}:{}", hostname_for(network), p);
+}
+
+auto
+configuration::node::effective_node_id(bool is_tls) const -> couchbase::node_id
+{
+  return internal_node_id::build(node_uuid, hostname, port_or(service_type::key_value, is_tls, 0));
 }
 
 auto

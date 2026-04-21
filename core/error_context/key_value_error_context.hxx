@@ -101,6 +101,41 @@ public:
   {
   }
 
+  key_value_error_context(std::string operation_id,
+                          std::error_code ec,
+                          std::optional<std::string> last_dispatched_to,
+                          std::optional<std::string> last_dispatched_from,
+                          std::size_t retry_attempts,
+                          std::set<retry_reason> retry_reasons,
+                          couchbase::node_id dispatched_to_node_id,
+                          std::string id,
+                          std::string bucket,
+                          std::string scope,
+                          std::string collection,
+                          std::uint32_t opaque,
+                          std::optional<key_value_status_code> status_code,
+                          couchbase::cas cas,
+                          std::optional<key_value_error_map_info> error_map_info,
+                          std::optional<key_value_extended_error_info> extended_error_info)
+    : base_error_context{ std::move(operation_id),
+                          ec,
+                          std::move(last_dispatched_to),
+                          std::move(last_dispatched_from),
+                          retry_attempts,
+                          std::move(retry_reasons),
+                          std::move(dispatched_to_node_id) }
+    , id_{ std::move(id) }
+    , bucket_{ std::move(bucket) }
+    , scope_{ std::move(scope) }
+    , collection_{ std::move(collection) }
+    , opaque_{ opaque }
+    , status_code_{ status_code }
+    , cas_{ cas }
+    , error_map_info_{ std::move(error_map_info) }
+    , extended_error_info_{ std::move(extended_error_info) }
+  {
+  }
+
   /**
    * Returns identifier (key) of the document referenced in the operation.
    *

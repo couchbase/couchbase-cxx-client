@@ -102,6 +102,47 @@ public:
   {
   }
 
+  subdocument_error_context(std::string operation_id,
+                            std::error_code ec,
+                            std::optional<std::string> last_dispatched_to,
+                            std::optional<std::string> last_dispatched_from,
+                            std::size_t retry_attempts,
+                            std::set<retry_reason> retry_reasons,
+                            couchbase::node_id dispatched_to_node_id,
+                            std::string id,
+                            std::string bucket,
+                            std::string scope,
+                            std::string collection,
+                            std::uint32_t opaque,
+                            std::optional<key_value_status_code> status_code,
+                            couchbase::cas cas,
+                            std::optional<key_value_error_map_info> error_map_info,
+                            std::optional<key_value_extended_error_info> extended_error_info,
+                            std::optional<std::string> first_error_path,
+                            std::optional<std::uint64_t> first_error_index,
+                            bool deleted)
+    : key_value_error_context{ std::move(operation_id),
+                               ec,
+                               std::move(last_dispatched_to),
+                               std::move(last_dispatched_from),
+                               retry_attempts,
+                               std::move(retry_reasons),
+                               std::move(dispatched_to_node_id),
+                               std::move(id),
+                               std::move(bucket),
+                               std::move(scope),
+                               std::move(collection),
+                               opaque,
+                               status_code,
+                               cas,
+                               std::move(error_map_info),
+                               std::move(extended_error_info) }
+    , first_error_path_{ std::move(first_error_path) }
+    , first_error_index_{ first_error_index }
+    , deleted_{ deleted }
+  {
+  }
+
   /**
    * Returns path of the operation that generated first error
    *

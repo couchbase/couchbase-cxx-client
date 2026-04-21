@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <couchbase/node_id.hxx>
 #include <couchbase/retry_reason.hxx>
 
 #include <cstdint>
@@ -71,6 +72,23 @@ public:
     , last_dispatched_from_{ std::move(last_dispatched_from) }
     , retry_attempts_{ retry_attempts }
     , retry_reasons_{ std::move(retry_reasons) }
+  {
+  }
+
+  base_error_context(std::string operation_id,
+                     std::error_code ec,
+                     std::optional<std::string> last_dispatched_to,
+                     std::optional<std::string> last_dispatched_from,
+                     std::size_t retry_attempts,
+                     std::set<retry_reason> retry_reasons,
+                     couchbase::node_id last_dispatched_to_node_id)
+    : operation_id_{ std::move(operation_id) }
+    , ec_{ ec }
+    , last_dispatched_to_{ std::move(last_dispatched_to) }
+    , last_dispatched_from_{ std::move(last_dispatched_from) }
+    , retry_attempts_{ retry_attempts }
+    , retry_reasons_{ std::move(retry_reasons) }
+    , last_dispatched_to_node_id_{ std::move(last_dispatched_to_node_id) }
   {
   }
 
@@ -173,6 +191,19 @@ public:
     return retry_reasons_.count(reason) > 0;
   }
 
+  /**
+   * Identity of the cluster node that last handled this request.
+   *
+   * @return node_id (default-constructed / falsy when unknown)
+   *
+   * @since 1.3.2
+   * @uncommitted
+   */
+  [[nodiscard]] virtual auto last_dispatched_to_node_id() const -> const couchbase::node_id&
+  {
+    return last_dispatched_to_node_id_;
+  }
+
 private:
   std::string operation_id_{};
   std::error_code ec_{};
@@ -180,5 +211,6 @@ private:
   std::optional<std::string> last_dispatched_from_{};
   std::size_t retry_attempts_{ 0 };
   std::set<retry_reason> retry_reasons_{};
+  couchbase::node_id last_dispatched_to_node_id_{};
 };
 } // namespace couchbase::core

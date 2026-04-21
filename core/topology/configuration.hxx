@@ -21,6 +21,8 @@
 #include "core/platform/uuid.h"
 #include "core/service_type.hxx"
 
+#include <couchbase/node_id.hxx>
+
 #include <map>
 #include <optional>
 #include <set>
@@ -83,6 +85,18 @@ struct configuration {
 
     [[nodiscard]] auto endpoint(const std::string& network, service_type type, bool is_tls) const
       -> std::optional<std::string>;
+
+    /**
+     * Returns a node_id built from this node's UUID (when available on
+     * Server 8.0.1+) with fallback to a deterministic hash of hostname +
+     * KV port for older servers.
+     *
+     * The KV port selected mirrors what mcbp_session uses for the same node
+     * (TLS port when @p is_tls, plain port otherwise), ensuring that the
+     * node_id surfaced on the request side via collection::node_id_for
+     * matches the node_id attached to results and errors.
+     */
+    [[nodiscard]] auto effective_node_id(bool is_tls) const -> couchbase::node_id;
   };
 
   [[nodiscard]] auto select_network(const std::string& bootstrap_hostname) const -> std::string;

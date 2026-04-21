@@ -28,6 +28,7 @@
 
 #include <couchbase/codec/encoded_value.hxx>
 #include <couchbase/error_codes.hxx>
+#include <couchbase/node_id.hxx>
 
 #include <functional>
 #include <memory>
@@ -50,6 +51,7 @@ struct lookup_in_all_replicas_response {
     couchbase::cas cas{};
     bool deleted{ false };
     bool is_replica{ true };
+    couchbase::node_id dispatched_to_node_id{};
   };
   subdocument_error_context ctx{};
   std::vector<entry> entries{};
@@ -203,6 +205,7 @@ struct lookup_in_all_replicas_request {
                       top_entry.cas = resp.cas;
                       top_entry.deleted = resp.deleted;
                       top_entry.is_replica = true;
+                      top_entry.dispatched_to_node_id = resp.ctx.last_dispatched_to_node_id();
                       for (auto& field : resp.fields) {
                         lookup_in_all_replicas_response::entry::lookup_in_entry lookup_in_entry{};
                         lookup_in_entry.path = field.path;
@@ -267,6 +270,7 @@ struct lookup_in_all_replicas_request {
                         top_entry.cas = resp.cas;
                         top_entry.deleted = resp.deleted;
                         top_entry.is_replica = false;
+                        top_entry.dispatched_to_node_id = resp.ctx.last_dispatched_to_node_id();
                         for (auto& field : resp.fields) {
                           lookup_in_all_replicas_response::entry::lookup_in_entry lookup_in_entry{};
                           lookup_in_entry.path = field.path;

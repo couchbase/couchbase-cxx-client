@@ -18,6 +18,7 @@
 #pragma once
 
 #include <couchbase/error_context.hxx>
+#include <couchbase/node_id.hxx>
 
 #include <memory>
 #include <optional>
@@ -32,11 +33,25 @@ public:
   error() = default;
   error(std::error_code ec, std::string message = {}, error_context ctx = {});
   error(std::error_code ec, std::string message, error_context ctx, error cause);
+  error(std::error_code ec, std::string message, error_context ctx, couchbase::node_id node_id);
 
   [[nodiscard]] auto ec() const -> std::error_code;
   [[nodiscard]] auto message() const -> const std::string&;
   [[nodiscard]] auto ctx() const -> const error_context&;
   [[nodiscard]] auto cause() const -> std::optional<error>;
+
+  /**
+   * Returns the identity of the cluster node where the error occurred.
+   *
+   * The returned node_id is default-constructed (falsy) when the node
+   * could not be determined (e.g. for non-KV errors).
+   *
+   * @return identity of the node that returned the error
+   *
+   * @since 1.3.2
+   * @uncommitted
+   */
+  [[nodiscard]] auto node_id() const -> const couchbase::node_id&;
 
   explicit operator bool() const;
   auto operator==(const error& other) const -> bool;
@@ -46,6 +61,7 @@ private:
   std::string message_{};
   error_context ctx_{};
   std::shared_ptr<error> cause_{};
+  couchbase::node_id node_id_{};
 };
 
 } // namespace couchbase

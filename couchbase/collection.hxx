@@ -35,6 +35,7 @@
 #include <couchbase/lookup_in_specs.hxx>
 #include <couchbase/mutate_in_options.hxx>
 #include <couchbase/mutate_in_specs.hxx>
+#include <couchbase/node_id_for_options.hxx>
 #include <couchbase/query_options.hxx>
 #include <couchbase/remove_options.hxx>
 #include <couchbase/replace_options.hxx>
@@ -1089,6 +1090,36 @@ public:
    */
   [[nodiscard]] auto scan(const scan_type& scan_type, const scan_options& options = {}) const
     -> std::future<std::pair<error, scan_result>>;
+
+  /**
+   * Resolves a document key to the identity of the cluster node that currently
+   * owns it, using the client-side vBucket map (no network round-trip).
+   *
+   * @param document_id the document id to resolve
+   * @param options options to customize the request
+   * @param handler the handler that receives the result
+   *
+   * @since 1.3.2
+   * @uncommitted
+   */
+  void node_id_for(std::string document_id,
+                   const node_id_for_options& options,
+                   node_id_for_handler&& handler) const;
+
+  /**
+   * Resolves a document key to the identity of the cluster node that currently
+   * owns it, using the client-side vBucket map (no network round-trip).
+   *
+   * @param document_id the document id to resolve
+   * @param options options to customize the request
+   * @return future carrying the error (if any) and node_id
+   *
+   * @since 1.3.2
+   * @uncommitted
+   */
+  [[nodiscard]] auto node_id_for(std::string document_id,
+                                 const node_id_for_options& options = {}) const
+    -> std::future<std::pair<error, node_id>>;
 
   [[nodiscard]] auto query_indexes() const -> collection_query_index_manager;
 
