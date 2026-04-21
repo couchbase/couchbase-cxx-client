@@ -251,45 +251,45 @@ public:
             app_telemetry_meter_,
             options_.default_timeout_for(request.type));
 #endif
-          cmd->start([start = std::chrono::steady_clock::now(),
-                      self = shared_from_this(),
-                      type,
-                      cmd,
-                      handler =
-                        collector->build_reporter()](operations::http_noop_response&& resp) {
-            diag::ping_state state = diag::ping_state::ok;
-            std::optional<std::string> error{};
-            if (auto ec = resp.ctx.ec; ec) {
-              if (ec == errc::common::unambiguous_timeout ||
-                  ec == errc::common::ambiguous_timeout) {
-                state = diag::ping_state::timeout;
-              } else {
-                state = diag::ping_state::error;
+          cmd->start(
+            [start = std::chrono::steady_clock::now(),
+             self = shared_from_this(),
+             type,
+             cmd,
+             handler = collector->build_reporter()](operations::http_noop_response&& resp) {
+              diag::ping_state state = diag::ping_state::ok;
+              std::optional<std::string> error{};
+              if (auto ec = resp.ctx.ec; ec) {
+                if (ec == errc::common::unambiguous_timeout ||
+                    ec == errc::common::ambiguous_timeout) {
+                  state = diag::ping_state::timeout;
+                } else {
+                  state = diag::ping_state::error;
+                }
+                error.emplace(fmt::format("code={}, message={}, http_code={}",
+                                          ec.value(),
+                                          ec.message(),
+                                          resp.ctx.http_status));
               }
-              error.emplace(fmt::format("code={}, message={}, http_code={}",
-                                        ec.value(),
-                                        ec.message(),
-                                        resp.ctx.http_status));
-            }
-            auto remote_address = cmd->session_->remote_address();
-            // If not connected, the remote address will be empty.  Better to
-            // give the user some context on the "attempted" remote address.
-            if (remote_address.empty()) {
-              remote_address =
-                fmt::format("{}:{}", cmd->session_->hostname(), cmd->session_->port());
-            }
-            handler->report(
-              diag::endpoint_ping_info{ type,
-                                        cmd->session_->id(),
-                                        std::chrono::duration_cast<std::chrono::microseconds>(
-                                          std::chrono::steady_clock::now() - start),
-                                        remote_address,
-                                        cmd->session_->local_address(),
-                                        state,
-                                        {},
-                                        error });
-            self->check_in(type, cmd->session_);
-          });
+              auto remote_address = cmd->session_->remote_address();
+              // If not connected, the remote address will be empty.  Better to
+              // give the user some context on the "attempted" remote address.
+              if (remote_address.empty()) {
+                remote_address =
+                  fmt::format("{}:{}", cmd->session_->hostname(), cmd->session_->port());
+              }
+              handler->report(
+                diag::endpoint_ping_info{ type,
+                                          cmd->session_->id(),
+                                          std::chrono::duration_cast<std::chrono::microseconds>(
+                                            std::chrono::steady_clock::now() - start),
+                                          remote_address,
+                                          cmd->session_->local_address(),
+                                          state,
+                                          {},
+                                          error });
+              self->check_in(type, cmd->session_);
+            });
 
           cmd->set_command_session(session);
           if (!session->is_connected()) {
@@ -402,9 +402,24 @@ public:
       return;
     }
     if (!session->is_connected()) {
-      CB_LOG_DEBUG("{} HTTP session never connected.  Skipping check-in", session->log_prefix());
-      return session.reset();
+      std::shared_ptr<http_session> dropped;
+      {
+        std::scoped_lock lock(sessions_mutex_);
+        auto& pend = pending_sessions_[type];
+        auto it = std::find_if(pend.begin(), pend.end(), [id = session->id()](const auto& s) {
+          return s && s->id() == id;
+        });
+        if (it != pend.end()) {
+          dropped = std::move(*it);
+          pend.erase(it);
+        }
+      }
+      CB_LOG_DEBUG("{} HTTP session never connected.  Removed session from pending.",
+                   session->log_prefix());
+      return;
     }
+    bool should_stop = false;
+    std::chrono::milliseconds idle_timeout{};
     {
       std::scoped_lock lock(config_mutex_);
       if (!session->keep_alive() || !config_.has_node(options_.network,
@@ -412,13 +427,18 @@ public:
                                                       options_.enable_tls,
                                                       session->hostname(),
                                                       session->port())) {
-        return asio::post(session->get_executor(), [session]() {
-          session->stop();
-        });
+        should_stop = true;
+      } else {
+        idle_timeout = options_.idle_http_connection_timeout;
       }
     }
+    if (should_stop) {
+      return asio::post(session->get_executor(), [session]() {
+        session->stop();
+      });
+    }
     if (!session->is_stopped()) {
-      session->set_idle(options_.idle_http_connection_timeout);
+      session->set_idle(idle_timeout);
       CB_LOG_DEBUG("{} put HTTP session back to idle connections", session->log_prefix());
       std::scoped_lock lock(sessions_mutex_);
       idle_sessions_[type].push_back(session);
@@ -741,13 +761,24 @@ private:
     }
 
     session->on_stop([type, id = session->id(), self = this->shared_from_this()]() {
-      const std::scoped_lock inner_lock(self->sessions_mutex_);
-      self->busy_sessions_[type].remove_if([&id](const auto& s) {
-        return !s || s->id() == id;
-      });
-      self->idle_sessions_[type].remove_if([&id](const auto& s) {
-        return !s || s->id() == id;
-      });
+      std::vector<std::shared_ptr<http_session>> dropped;
+      {
+        const std::scoped_lock inner_lock(self->sessions_mutex_);
+        for (auto* map :
+             { &self->busy_sessions_, &self->idle_sessions_, &self->pending_sessions_ }) {
+          auto& list = (*map)[type];
+          for (auto it = list.begin(); it != list.end();) {
+            if (!*it || (*it)->id() == id) {
+              if (*it) {
+                dropped.push_back(std::move(*it));
+              }
+              it = list.erase(it);
+            } else {
+              ++it;
+            }
+          }
+        }
+      }
     });
     return session;
   }
