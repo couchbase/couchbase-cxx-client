@@ -445,9 +445,9 @@ public:
     return core_;
   }
 
-  [[nodiscard]] auto transactions() const -> std::shared_ptr<core::transactions::transactions>
+  [[nodiscard]] auto transactions() const -> std::shared_ptr<transactions::transactions>
   {
-    return transactions_;
+    return std::make_shared<transactions::transactions>(transactions_);
   }
 
 private:
@@ -487,7 +487,7 @@ private:
   cluster_options::built options_;
   asio::io_context io_{ ASIO_CONCURRENCY_HINT_SAFE };
   core::cluster core_{ io_ };
-  std::shared_ptr<core::transactions::transactions> transactions_{ nullptr };
+  std::shared_ptr<couchbase::core::transactions::transactions> transactions_{ nullptr };
   std::thread io_thread_{ [&io = io_] {
     io.run();
   } };

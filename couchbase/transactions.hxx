@@ -24,6 +24,21 @@
 
 #include <functional>
 
+#ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
+namespace couchbase
+{
+namespace transactions
+{
+class transactions_impl;
+} // namespace transactions
+
+namespace core::transactions
+{
+class transactions;
+} // namespace core::transactions
+} // namespace couchbase
+#endif
+
 namespace couchbase::transactions
 {
 using txn_logic = std::function<error(std::shared_ptr<attempt_context>)>;
@@ -32,14 +47,10 @@ using async_txn_complete_logic = std::function<void(error, transaction_result)>;
 
 /**
  * The transactions object is used to initiate a transaction.
- *
- *
  */
 class transactions
 {
 public:
-  virtual ~transactions() = default;
-
   /**
    * Run a blocking transaction.
    *
@@ -56,13 +67,8 @@ public:
    * @return an {@link error}, and a {@link transaction_result} representing the results of the
    * transaction.
    */
-  virtual auto run(txn_logic&& logic,
-                   const transaction_options& cfg) -> std::pair<error, transaction_result> = 0;
-
-  auto run(txn_logic&& logic) -> std::pair<error, transaction_result>
-  {
-    return run(std::move(logic), {});
-  }
+  auto run(txn_logic&& logic, const transaction_options& cfg = {})
+    -> std::pair<error, transaction_result>;
 
   /**
    * Run an asynchronous transaction.
@@ -83,13 +89,16 @@ public:
    * @param cfg if passed in, these options override the defaults, or those set in the {@link
    * cluster_options}.
    */
-  virtual void run(async_txn_logic&& logic,
-                   async_txn_complete_logic&& complete_callback,
-                   const transaction_options& cfg) = 0;
+  void run(async_txn_logic&& logic,
+           async_txn_complete_logic&& complete_callback,
+           const transaction_options& cfg = {});
 
-  void run(async_txn_logic&& logic, async_txn_complete_logic&& complete_callback)
-  {
-    return run(std::move(logic), std::move(complete_callback), {});
-  }
+  /**
+   * @internal
+   */
+  explicit transactions(std::shared_ptr<core::transactions::transactions> core_txns);
+
+private:
+  std::shared_ptr<transactions_impl> impl_;
 };
 } // namespace couchbase::transactions
