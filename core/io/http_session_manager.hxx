@@ -402,6 +402,8 @@ public:
       return;
     }
     if (!session->is_connected()) {
+      // Declared outside the lock so the destructor runs after sessions_mutex_ is released.
+      // cppcheck-suppress variableScope
       std::shared_ptr<http_session> dropped;
       {
         std::scoped_lock lock(sessions_mutex_);
@@ -761,6 +763,8 @@ private:
     }
 
     session->on_stop([type, id = session->id(), self = this->shared_from_this()]() {
+      // Declared outside the lock so destructors run after sessions_mutex_ is released.
+      // cppcheck-suppress variableScope
       std::vector<std::shared_ptr<http_session>> dropped;
       {
         const std::scoped_lock inner_lock(self->sessions_mutex_);
