@@ -72,6 +72,10 @@ struct traits<couchbase::core::management::eventing::status> {
           function.status = couchbase::core::management::eventing::function_status::paused;
         } else if (composite_status == "pausing") {
           function.status = couchbase::core::management::eventing::function_status::pausing;
+        } else if (composite_status == "resuming") {
+          function.status = couchbase::core::management::eventing::function_status::resuming;
+        } else {
+          function.status = couchbase::core::management::eventing::function_status::unknown;
         }
 
         if (const auto* function_scope = app.find("function_scope");

@@ -54,6 +54,16 @@ enum class function_status {
    * The function is currently being paused.
    */
   pausing,
+
+  /**
+   * The function is currently being resumed, after having been paused.
+   */
+  resuming,
+
+  /**
+   * The server reported an unrecognized function status.
+   */
+  unknown,
 };
 
 enum class function_deployment_status {
