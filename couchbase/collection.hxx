@@ -36,6 +36,7 @@
 #include <couchbase/mutate_in_options.hxx>
 #include <couchbase/mutate_in_specs.hxx>
 #include <couchbase/node_id_for_options.hxx>
+#include <couchbase/node_ids_options.hxx>
 #include <couchbase/query_options.hxx>
 #include <couchbase/remove_options.hxx>
 #include <couchbase/replace_options.hxx>
@@ -1120,6 +1121,47 @@ public:
   [[nodiscard]] auto node_id_for(std::string document_id,
                                  const node_id_for_options& options = {}) const
     -> std::future<std::pair<error, node_id>>;
+
+  /**
+   * Returns the set of cluster nodes that currently serve key-value
+   * traffic for this collection's bucket, drawn from the client-side
+   * topology snapshot (no network round-trip).
+   *
+   * Each entry corresponds to one cluster node and is the same node_id
+   * the SDK reports on KV results and errors that touched that node, so
+   * the returned set is directly comparable to the keys of any
+   * application-side state that is keyed by node_id (e.g. a per-node
+   * circuit breaker registry). A periodic sweep that diffs the
+   * registry's keys against this set is the canonical way to retire
+   * tracker state for a node that has been removed from the cluster
+   * topology.
+   *
+   * Nodes that do not expose a key-value port for the configured
+   * transport (TLS or plain) are excluded from the returned set, since
+   * they do not serve KV operations and therefore have no meaningful
+   * identity from the SDK's point of view.
+   *
+   * @param options options to customize the request
+   * @param handler the handler that receives the result
+   *
+   * @since 1.3.2
+   * @uncommitted
+   */
+  void node_ids(const node_ids_options& options, node_ids_handler&& handler) const;
+
+  /**
+   * Returns the set of cluster nodes that currently serve key-value
+   * traffic for this collection's bucket, drawn from the client-side
+   * topology snapshot (no network round-trip).
+   *
+   * @param options options to customize the request
+   * @return future carrying the error (if any) and the set of node_ids
+   *
+   * @since 1.3.2
+   * @uncommitted
+   */
+  [[nodiscard]] auto node_ids(const node_ids_options& options = {}) const
+    -> std::future<std::pair<error, std::vector<node_id>>>;
 
   [[nodiscard]] auto query_indexes() const -> collection_query_index_manager;
 

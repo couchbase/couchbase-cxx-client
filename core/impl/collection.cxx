@@ -1311,6 +1311,63 @@ public:
       });
   }
 
+  void node_ids(const node_ids_options::built& options, node_ids_handler&& handler) const
+  {
+    auto [origin_ec, origin] = core_.origin();
+    if (origin_ec) {
+      return handler(error{ origin_ec }, {});
+    }
+    const bool is_tls = origin.options().enable_tls;
+    const auto timeout = options.timeout.value_or(origin.options().key_value_timeout);
+
+    // Same shape as node_id_for: with_bucket_configuration() is not
+    // cancellable, so a steady_timer guarded by an atomic done-flag is
+    // the only way to bound the wait when no config arrives.
+    struct state {
+      std::atomic<bool> done{ false };
+      asio::steady_timer timer;
+      node_ids_handler handler;
+
+      state(asio::io_context& ioc, node_ids_handler&& h)
+        : timer{ ioc }
+        , handler{ std::move(h) }
+      {
+      }
+    };
+    auto shared = std::make_shared<state>(core_.io_context(), std::move(handler));
+
+    shared->timer.expires_after(timeout);
+    shared->timer.async_wait([shared](std::error_code timer_ec) -> void {
+      if (timer_ec == asio::error::operation_aborted) {
+        return;
+      }
+      if (shared->done.exchange(true)) {
+        return;
+      }
+      shared->handler(error{ errc::common::unambiguous_timeout }, {});
+    });
+
+    core_.with_bucket_configuration(
+      bucket_name_,
+      [shared, is_tls](std::error_code ec,
+                       const std::shared_ptr<core::topology::configuration>& config) -> void {
+        if (shared->done.exchange(true)) {
+          return;
+        }
+        shared->timer.cancel();
+        if (ec) {
+          return shared->handler(error{ ec }, {});
+        }
+        if (!config) {
+          // No config arrived but no error either — this should not
+          // happen in practice, but surface it the same way node_id_for
+          // does so callers can distinguish from request_canceled.
+          return shared->handler(error{ errc::network::configuration_not_available }, {});
+        }
+        return shared->handler({}, config->effective_node_ids(is_tls));
+      });
+  }
+
 private:
   static auto get_encoded_value(
     std::variant<codec::encoded_value, std::function<codec::encoded_value()>> value,
@@ -1417,6 +1474,24 @@ collection::node_id_for(std::string document_id, const node_id_for_options& opti
   auto future = barrier->get_future();
   node_id_for(std::move(document_id), options, [barrier](auto err, auto nid) {
     barrier->set_value({ std::move(err), std::move(nid) });
+  });
+  return future;
+}
+
+void
+collection::node_ids(const node_ids_options& options, node_ids_handler&& handler) const
+{
+  return impl_->node_ids(options.build(), std::move(handler));
+}
+
+auto
+collection::node_ids(const node_ids_options& options) const
+  -> std::future<std::pair<error, std::vector<node_id>>>
+{
+  auto barrier = std::make_shared<std::promise<std::pair<error, std::vector<node_id>>>>();
+  auto future = barrier->get_future();
+  node_ids(options, [barrier](auto err, auto nids) {
+    barrier->set_value({ std::move(err), std::move(nids) });
   });
   return future;
 }

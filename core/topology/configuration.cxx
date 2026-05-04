@@ -179,6 +179,20 @@ configuration::node::effective_node_id(bool is_tls) const -> couchbase::node_id
 }
 
 auto
+configuration::effective_node_ids(bool is_tls) const -> std::vector<couchbase::node_id>
+{
+  std::vector<couchbase::node_id> result;
+  result.reserve(nodes.size());
+  for (const auto& n : nodes) {
+    if (n.port_or(service_type::key_value, is_tls, 0) == 0) {
+      continue;
+    }
+    result.push_back(n.effective_node_id(is_tls));
+  }
+  return result;
+}
+
+auto
 configuration::has_node(const std::string& network,
                         service_type type,
                         bool is_tls,

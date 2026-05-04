@@ -101,6 +101,20 @@ struct configuration {
 
   [[nodiscard]] auto select_network(const std::string& bootstrap_hostname) const -> std::string;
 
+  /**
+   * Returns one node_id per cluster node that currently serves the
+   * key-value service over the requested transport. Nodes that do not
+   * expose a KV port for @p is_tls are filtered out — without a KV port
+   * the fallback hash would be derived from a meaningless port=0 and
+   * could collide with a sibling node that is also missing its KV port.
+   *
+   * The returned vector preserves topology order; callers that want a
+   * set semantic should hash the entries themselves (couchbase::node_id
+   * is hashable). Topology nodes are unique by construction, so no
+   * dedup is performed here.
+   */
+  [[nodiscard]] auto effective_node_ids(bool is_tls) const -> std::vector<couchbase::node_id>;
+
   using vbucket_map = typename std::vector<std::vector<std::int16_t>>;
 
   std::optional<std::int64_t> epoch{};

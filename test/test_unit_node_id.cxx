@@ -301,6 +301,213 @@ TEST_CASE("unit: node_id ignores alternate addresses with node_uuid", "[unit]")
   REQUIRE(tls.port() == 11207);
 }
 
+TEST_CASE("unit: configuration::effective_node_ids on empty topology", "[unit]")
+{
+  // A configuration with no nodes maps to an empty list — not an error.
+  // The node_ids() public API returns this verbatim; only a missing
+  // configuration (which never reaches this helper) is surfaced as
+  // configuration_not_available at the impl layer.
+  couchbase::core::topology::configuration config;
+  REQUIRE(config.effective_node_ids(false).empty());
+  REQUIRE(config.effective_node_ids(true).empty());
+}
+
+TEST_CASE("unit: configuration::effective_node_ids preserves order", "[unit]")
+{
+  couchbase::core::topology::configuration config;
+  config.nodes.resize(3);
+  config.nodes[0].node_uuid = "uuid-a";
+  config.nodes[0].hostname = "h0";
+  config.nodes[0].services_plain.key_value = 11210;
+  config.nodes[1].node_uuid = "uuid-b";
+  config.nodes[1].hostname = "h1";
+  config.nodes[1].services_plain.key_value = 11210;
+  config.nodes[2].node_uuid = "uuid-c";
+  config.nodes[2].hostname = "h2";
+  config.nodes[2].services_plain.key_value = 11210;
+
+  auto ids = config.effective_node_ids(false);
+  REQUIRE(ids.size() == 3);
+  REQUIRE(ids[0].id() == "uuid-a");
+  REQUIRE(ids[1].id() == "uuid-b");
+  REQUIRE(ids[2].id() == "uuid-c");
+}
+
+TEST_CASE("unit: configuration::effective_node_ids filters non-KV nodes", "[unit]")
+{
+  // Mirrors a heterogeneous deployment where the query and search nodes
+  // do not host the KV service for this bucket. A circuit breaker keyed
+  // on node_id only cares about KV-serving nodes, so dropping them keeps
+  // the registry's keys directly comparable to the SDK's KV result/error
+  // node_ids on every code path.
+  couchbase::core::topology::configuration config;
+  config.nodes.resize(4);
+  config.nodes[0].node_uuid = "kv-1";
+  config.nodes[0].hostname = "h0";
+  config.nodes[0].services_plain.key_value = 11210;
+  // node 1 is a query-only node — no KV port at all
+  config.nodes[1].node_uuid = "query-only";
+  config.nodes[1].hostname = "h1";
+  config.nodes[1].services_plain.query = 8093;
+  // node 2 has KV but only on TLS — must drop on plain transport
+  config.nodes[2].node_uuid = "tls-only-kv";
+  config.nodes[2].hostname = "h2";
+  config.nodes[2].services_tls.key_value = 11207;
+  config.nodes[3].node_uuid = "kv-2";
+  config.nodes[3].hostname = "h3";
+  config.nodes[3].services_plain.key_value = 11210;
+  config.nodes[3].services_tls.key_value = 11207;
+
+  auto plain = config.effective_node_ids(false);
+  REQUIRE(plain.size() == 2);
+  REQUIRE(plain[0].id() == "kv-1");
+  REQUIRE(plain[1].id() == "kv-2");
+
+  auto tls = config.effective_node_ids(true);
+  REQUIRE(tls.size() == 2);
+  REQUIRE(tls[0].id() == "tls-only-kv");
+  REQUIRE(tls[1].id() == "kv-2");
+}
+
+TEST_CASE("unit: configuration::effective_node_ids matches per-node effective_node_id", "[unit]")
+{
+  // For every node that survives the filter, the result must be byte-for-byte
+  // identical to what node::effective_node_id(is_tls) produces on its own —
+  // node_ids() is documented as the same identity the SDK reports on KV
+  // results/errors, and that identity comes through node::effective_node_id.
+  couchbase::core::topology::configuration config;
+  config.nodes.resize(2);
+  config.nodes[0].hostname = "172.18.0.2";
+  config.nodes[0].services_plain.key_value = 11210;
+  config.nodes[0].services_tls.key_value = 11207;
+  config.nodes[1].node_uuid = "node-uuid-7";
+  config.nodes[1].hostname = "172.18.0.3";
+  config.nodes[1].services_plain.key_value = 11210;
+  config.nodes[1].services_tls.key_value = 11207;
+
+  for (bool is_tls : { false, true }) {
+    auto ids = config.effective_node_ids(is_tls);
+    REQUIRE(ids.size() == 2);
+    REQUIRE(ids[0] == config.nodes[0].effective_node_id(is_tls));
+    REQUIRE(ids[1] == config.nodes[1].effective_node_id(is_tls));
+  }
+}
+
+TEST_CASE("unit: configuration::effective_node_ids differs between TLS and plain on pre-8.0 nodes",
+          "[unit]")
+{
+  // Without UUIDs the fallback hash incorporates the actual KV port the
+  // client connects to, so the same node yields a different node_id over
+  // TLS vs plain. node_ids() must reflect that — otherwise a registry
+  // populated from TLS-side results could fail to match keys derived from
+  // plain-side topology data.
+  couchbase::core::topology::configuration config;
+  config.nodes.resize(1);
+  config.nodes[0].hostname = "172.18.0.2";
+  config.nodes[0].services_plain.key_value = 11210;
+  config.nodes[0].services_tls.key_value = 11207;
+
+  auto plain = config.effective_node_ids(false);
+  auto tls = config.effective_node_ids(true);
+  REQUIRE(plain.size() == 1);
+  REQUIRE(tls.size() == 1);
+  REQUIRE(plain[0] != tls[0]);
+}
+
+TEST_CASE("unit: configuration::effective_node_ids agrees on TLS and plain when uuids are present",
+          "[unit]")
+{
+  // The reverse of the previous test: with UUIDs the identity is transport-
+  // independent, so the same node has the same node_id on both transports.
+  // This is the property that makes a circuit breaker registry portable
+  // across a TLS upgrade on a Server 8.0.1+ cluster.
+  couchbase::core::topology::configuration config;
+  config.nodes.resize(2);
+  config.nodes[0].node_uuid = "uuid-a";
+  config.nodes[0].hostname = "172.18.0.2";
+  config.nodes[0].services_plain.key_value = 11210;
+  config.nodes[0].services_tls.key_value = 11207;
+  config.nodes[1].node_uuid = "uuid-b";
+  config.nodes[1].hostname = "172.18.0.3";
+  config.nodes[1].services_plain.key_value = 11210;
+  config.nodes[1].services_tls.key_value = 11207;
+
+  auto plain = config.effective_node_ids(false);
+  auto tls = config.effective_node_ids(true);
+  REQUIRE(plain.size() == 2);
+  REQUIRE(tls.size() == 2);
+  for (std::size_t i = 0; i < plain.size(); ++i) {
+    REQUIRE(plain[i] == tls[i]);
+  }
+}
+
+TEST_CASE("unit: configuration::effective_node_ids ignores alternate addresses", "[unit]")
+{
+  // A consumer using the default-network identity (which the SDK exposes
+  // via node_ids()) must not see entries from the external/alt alias —
+  // otherwise the same physical node could appear twice in the breaker
+  // registry under two different keys.
+  couchbase::core::topology::configuration config;
+  config.nodes.resize(1);
+  config.nodes[0].hostname = "172.18.0.2";
+  config.nodes[0].services_plain.key_value = 11210;
+  config.nodes[0].services_tls.key_value = 11207;
+
+  couchbase::core::topology::configuration::alternate_address ext;
+  ext.name = "external";
+  ext.hostname = "172-18-0-2.my.cloud.com";
+  ext.services_plain.key_value = 31100;
+  ext.services_tls.key_value = 31207;
+  config.nodes[0].alt["external"] = ext;
+
+  for (bool is_tls : { false, true }) {
+    auto ids = config.effective_node_ids(is_tls);
+    REQUIRE(ids.size() == 1);
+    REQUIRE(ids[0].hostname() == "172.18.0.2");
+    REQUIRE(ids[0].hostname() != ext.hostname);
+  }
+}
+
+TEST_CASE("unit: configuration::effective_node_ids feeds into hash-based containers", "[unit]")
+{
+  // The point of node_ids() is to be diffable against application-side
+  // unordered_map<node_id, ...> registries. Lock in that the result type
+  // works as both a key (via std::hash specialization) and as a member of
+  // an unordered_set so callers can express "which keys do I track that
+  // the cluster no longer has?" with a single set_difference-equivalent.
+  couchbase::core::topology::configuration config;
+  config.nodes.resize(3);
+  config.nodes[0].node_uuid = "uuid-a";
+  config.nodes[0].hostname = "h0";
+  config.nodes[0].services_plain.key_value = 11210;
+  config.nodes[1].node_uuid = "uuid-b";
+  config.nodes[1].hostname = "h1";
+  config.nodes[1].services_plain.key_value = 11210;
+  config.nodes[2].node_uuid = "uuid-c";
+  config.nodes[2].hostname = "h2";
+  config.nodes[2].services_plain.key_value = 11210;
+
+  auto ids = config.effective_node_ids(false);
+  std::unordered_set<couchbase::node_id> live{ ids.begin(), ids.end() };
+  REQUIRE(live.size() == 3);
+
+  // Tracker registry that has one stale key (the cluster has dropped uuid-c
+  // and added a node with no entry yet for "stale-x").
+  std::unordered_map<couchbase::node_id, int> tracked;
+  tracked[couchbase::internal_node_id::build("uuid-a", "h0", 11210)] = 1;
+  tracked[couchbase::internal_node_id::build("uuid-b", "h1", 11210)] = 1;
+  tracked[couchbase::internal_node_id::build("stale-x", "h-gone", 11210)] = 1;
+
+  std::vector<couchbase::node_id> retired;
+  for (const auto& [k, _] : tracked) {
+    if (live.find(k) == live.end()) {
+      retired.push_back(k);
+    }
+  }
+  REQUIRE(retired.size() == 1);
+  REQUIRE(retired[0].id() == "stale-x");
+}
+
 TEST_CASE("unit: vbucket map resolves to correct node_id", "[unit]")
 {
   couchbase::core::topology::configuration config;

@@ -25,7 +25,9 @@
 #include <couchbase/node_id.hxx>
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
+#include <unordered_set>
 
 static const tao::json::value basic_doc = {
   { "a", 1.0 },
@@ -159,6 +161,100 @@ TEST_CASE("integration: node_id_for fails cleanly on missing bucket", "[integrat
       .get();
   REQUIRE(err.ec());
   REQUIRE_FALSE(static_cast<bool>(nid));
+}
+
+TEST_CASE("integration: node_ids returns the bucket's KV-serving nodes", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+  auto cluster = integration.public_cluster();
+  auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
+
+  auto [err, nids] = collection.node_ids().get();
+  REQUIRE_FALSE(err.ec());
+  REQUIRE_FALSE(nids.empty());
+  // Cannot exceed the bucket's node count; nodes lacking a KV port for the
+  // selected transport are filtered out, so equality is not guaranteed.
+  REQUIRE(nids.size() <= integration.number_of_nodes());
+
+  // Every entry must be a fully-formed node_id: truthy, with a non-empty
+  // id() and hostname(). Mirrors the per-node assertions used elsewhere
+  // in this file for result.node_id() and error.node_id().
+  for (const auto& nid : nids) {
+    REQUIRE(static_cast<bool>(nid));
+    REQUIRE_FALSE(nid.id().empty());
+    REQUIRE_FALSE(nid.hostname().empty());
+  }
+}
+
+TEST_CASE("integration: node_ids contains the result of node_id_for", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+  auto cluster = integration.public_cluster();
+  auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
+
+  auto id = test::utils::uniq_id("node_ids_contains_for");
+
+  auto [for_err, target] = collection.node_id_for(id).get();
+  REQUIRE_FALSE(for_err.ec());
+
+  auto [ids_err, nids] = collection.node_ids().get();
+  REQUIRE_FALSE(ids_err.ec());
+
+  std::unordered_set<couchbase::node_id> live{ nids.begin(), nids.end() };
+  REQUIRE(live.find(target) != live.end());
+}
+
+TEST_CASE("integration: node_ids contains the result.node_id of a successful KV op",
+          "[integration]")
+{
+  // The end-to-end consistency check: the node_id surfaced on a real KV
+  // result must be one of the entries node_ids() reports as live. This is
+  // what makes a registry keyed on result.node_id() directly diffable
+  // against node_ids() in a sweep.
+  test::utils::integration_test_guard integration;
+  auto cluster = integration.public_cluster();
+  auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
+
+  auto id = test::utils::uniq_id("node_ids_contains_result");
+
+  auto [up_err, up_resp] = collection.upsert(id, basic_doc, {}).get();
+  REQUIRE_SUCCESS(up_err.ec());
+  REQUIRE(static_cast<bool>(up_resp.node_id()));
+
+  auto [ids_err, nids] = collection.node_ids().get();
+  REQUIRE_FALSE(ids_err.ec());
+
+  std::unordered_set<couchbase::node_id> live{ nids.begin(), nids.end() };
+  REQUIRE(live.find(up_resp.node_id()) != live.end());
+}
+
+TEST_CASE("integration: node_ids is deterministic across calls", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+  auto cluster = integration.public_cluster();
+  auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
+
+  auto [err1, nids1] = collection.node_ids().get();
+  REQUIRE_FALSE(err1.ec());
+
+  auto [err2, nids2] = collection.node_ids().get();
+  REQUIRE_FALSE(err2.ec());
+
+  // Topology order is deterministic on a stable cluster, so the vectors
+  // must compare element-wise — not merely have the same set of entries.
+  REQUIRE(nids1 == nids2);
+}
+
+TEST_CASE("integration: node_ids fails cleanly on missing bucket", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+  auto cluster = integration.public_cluster();
+  auto collection = cluster.bucket("bucket-that-does-not-exist").default_collection();
+
+  auto [err, nids] =
+    collection.node_ids(couchbase::node_ids_options{}.timeout(std::chrono::seconds{ 5 })).get();
+  REQUIRE(err.ec());
+  REQUIRE(nids.empty());
 }
 
 TEST_CASE("integration: lookup_in result carries node_id on success", "[integration]")
