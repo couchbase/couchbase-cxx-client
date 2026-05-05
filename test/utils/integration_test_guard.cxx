@@ -119,6 +119,14 @@ integration_test_guard::~integration_test_guard()
   for (auto& thread : io_threads) {
     thread.join();
   }
+
+  // Also close any Public API clusters that were opened during the test
+  if (default_public_cluster_.has_value()) {
+    default_public_cluster_->close().get();
+  }
+  for (auto& c : public_clusters_) {
+    c.close().get();
+  }
 }
 
 auto
@@ -315,18 +323,27 @@ integration_test_guard::transactions() const
 
 auto
 integration_test_guard::public_cluster(
-  std::function<void(couchbase::cluster_options&)> options_customizer) const -> couchbase::cluster
+  std::function<void(couchbase::cluster_options&)> options_customizer) -> couchbase::cluster
 {
+  if (options_customizer == nullptr && default_public_cluster_.has_value()) {
+    return default_public_cluster_.value();
+  }
+
   auto options = ctx.build_options();
   if (options_customizer) {
     options_customizer(options);
   }
 
   auto [err, c] = couchbase::cluster::connect(ctx.connection_string, options).get();
-  if (err.ec()) {
-    CB_LOG_CRITICAL("unable to connect to cluster (public API): {}", err.message());
+  if (err) {
+    CB_LOG_CRITICAL("unable to connect to cluster (public API): {}", err);
     throw std::runtime_error(
-      fmt::format("unable to connect to cluster (public API): {}", err.message()));
+      fmt::format("unable to connect to cluster (public API): {}", err));
+  }
+  if (options_customizer == nullptr) {
+    default_public_cluster_ = std::move(c);
+  } else {
+    public_clusters_.push_back(std::move(c));
   }
   return c;
 }
