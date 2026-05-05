@@ -26,6 +26,9 @@
 
 #include <couchbase/cluster.hxx>
 
+#include <spdlog/fmt/bundled/format.h>
+#include <couchbase/fmt/error.hxx>
+
 #include <optional>
 #include <string>
 #include <vector>
@@ -129,7 +132,7 @@ public:
     -> std::shared_ptr<couchbase::core::transactions::transactions>;
 
   [[nodiscard]] auto public_cluster(
-    std::function<void(couchbase::cluster_options&)> options_customizer = nullptr) const
+    std::function<void(couchbase::cluster_options&)> options_customizer = nullptr)
     -> couchbase::cluster;
 
   auto cluster_version() -> server_version;
@@ -147,5 +150,9 @@ public:
   std::optional<couchbase::core::operations::management::cluster_describe_response::cluster_info>
     cluster_info{};
   std::optional<pools_response> pools_info{};
+
+private:
+  std::optional<couchbase::cluster> default_public_cluster_{};
+  std::vector<couchbase::cluster> public_clusters_{};
 };
 } // namespace test::utils
