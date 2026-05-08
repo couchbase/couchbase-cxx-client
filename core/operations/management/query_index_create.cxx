@@ -118,13 +118,15 @@ query_index_create_request::make_response(error_context::http&& ctx,
         error.message = entry.at("msg").get_string();
         switch (error.code) {
           case 5000: /* IKey: "Internal Error" */
-            if (std::regex_search(error.message, std::regex{ ".*[iI]ndex .*already exist.*" })) {
+          {
+            static const std::regex index_already_exists_re{ ".*[iI]ndex .*already exist.*" };
+            if (std::regex_search(error.message, index_already_exists_re)) {
               index_already_exists = true;
             }
             if (error.message.find("Bucket Not Found") != std::string::npos) {
               bucket_not_found = true;
             }
-            break;
+          } break;
 
           case 12003: /* IKey: "datastore.couchbase.keyspace_not_found" */
             if (error.message.find("missing_collection") != std::string::npos) {

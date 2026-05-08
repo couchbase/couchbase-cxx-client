@@ -24,13 +24,11 @@
 #include <spdlog/fmt/bundled/core.h>
 #include <tao/json/value.hpp>
 
-#include <regex>
-
 namespace couchbase::core::operations::management
 {
 auto
-scope_create_request::encode_to(encoded_request_type& encoded,
-                                http_context& /* context */) const -> std::error_code
+scope_create_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+  -> std::error_code
 {
   encoded.method = "POST";
   encoded.path = fmt::format("/pools/default/buckets/{}/scopes",
@@ -41,18 +39,19 @@ scope_create_request::encode_to(encoded_request_type& encoded,
 }
 
 auto
-scope_create_request::make_response(error_context::http&& ctx, const encoded_response_type& encoded)
-  const -> scope_create_response
+scope_create_request::make_response(error_context::http&& ctx,
+                                    const encoded_response_type& encoded) const
+  -> scope_create_response
 {
   scope_create_response response{ std::move(ctx) };
   if (!response.ctx.ec) {
-    switch (encoded.status_code) {
+    switch (const auto& body = encoded.body.data(); encoded.status_code) {
       case 400: {
-        const std::regex scope_exists("Scope with name .+ already exists");
-        if (std::regex_search(encoded.body.data(), scope_exists)) {
+        const auto prefix_pos = body.find("Scope with name ");
+        if (prefix_pos != std::string_view::npos &&
+            body.find(" already exists", prefix_pos) != std::string_view::npos) {
           response.ctx.ec = errc::management::scope_exists;
-        } else if (encoded.body.data().find("Not allowed on this version of cluster") !=
-                   std::string::npos) {
+        } else if (body.find("Not allowed on this version of cluster") != std::string::npos) {
           response.ctx.ec = errc::common::feature_not_available;
         } else {
           response.ctx.ec = errc::common::invalid_argument;
@@ -64,7 +63,7 @@ scope_create_request::make_response(error_context::http&& ctx, const encoded_res
       case 200: {
         tao::json::value payload{};
         try {
-          payload = utils::json::parse(encoded.body.data());
+          payload = utils::json::parse(body);
         } catch (const tao::pegtl::parse_error&) {
           response.ctx.ec = errc::common::parsing_failure;
           return response;
@@ -72,7 +71,7 @@ scope_create_request::make_response(error_context::http&& ctx, const encoded_res
         response.uid = std::stoull(payload.at("uid").get_string(), nullptr, 16);
       } break;
       default:
-        response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
+        response.ctx.ec = extract_common_error_code(encoded.status_code, body);
         break;
     }
   }

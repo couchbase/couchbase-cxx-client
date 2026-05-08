@@ -143,15 +143,18 @@ translate_query_error_code(std::uint64_t error, const std::string& message, std:
 {
   switch (error) {
     case 5000: /* IKey: "Internal Error" */
-      if (std::regex_search(message, std::regex{ ".*[iI]ndex .*already exist.*" })) {
+    {
+      static const std::regex index_already_exists_re{ ".*[iI]ndex .*already exist.*" };
+      static const std::regex index_not_found_re{ ".*[iI]ndex .*[nN]ot [fF]ound.*" };
+      if (std::regex_search(message, index_already_exists_re)) {
         return errc::common::index_exists;
       } else if (message.find("Index does not exist") != std::string::npos ||
-                 std::regex_search(message, std::regex{ ".*[iI]ndex .*[nN]ot [fF]ound.*" })) {
+                 std::regex_search(message, index_not_found_re)) {
         return errc::common::index_not_found;
       } else if (message.find("Bucket Not Found") != std::string::npos) {
         return errc::common::bucket_not_found;
       }
-      break;
+    } break;
 
     case 12003: /* IKey: "datastore.couchbase.keyspace_not_found" */
       return errc::common::bucket_not_found;
