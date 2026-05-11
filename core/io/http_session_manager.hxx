@@ -402,21 +402,15 @@ public:
       return;
     }
     if (!session->is_connected()) {
-      // Declared outside the lock so the destructor runs after sessions_mutex_ is released.
-      // cppcheck-suppress variableScope
-      std::shared_ptr<http_session> dropped;
       {
         std::scoped_lock lock(sessions_mutex_);
-        auto& pend = pending_sessions_[type];
-        auto it = std::find_if(pend.begin(), pend.end(), [id = session->id()](const auto& s) {
-          return s && s->id() == id;
-        });
-        if (it != pend.end()) {
-          dropped = std::move(*it);
-          pend.erase(it);
+        if (auto pend_it = pending_sessions_.find(type); pend_it != pending_sessions_.end()) {
+          pend_it->second.remove_if([id = session->id()](const auto& s) {
+            return !s || s->id() == id;
+          });
         }
       }
-      CB_LOG_DEBUG("{} HTTP session never connected.  Removed session from pending.",
+      CB_LOG_DEBUG("{} HTTP session never connected.  Ensured session is not in pending.",
                    session->log_prefix());
       return;
     }
@@ -440,16 +434,23 @@ public:
       });
     }
     if (!session->is_stopped()) {
+      // set_idle() arms the idle timer via async_wait — it never calls stop() inline,
+      // so on_stop cannot re-enter sessions_mutex_ here. It must precede publication to
+      // idle_sessions_ so a concurrent check_out's reset_idle() finds a pending timer.
       session->set_idle(idle_timeout);
       CB_LOG_DEBUG("{} put HTTP session back to idle connections", session->log_prefix());
       std::scoped_lock lock(sessions_mutex_);
       idle_sessions_[type].push_back(session);
-      busy_sessions_[type].remove_if([id = session->id()](const auto& s) -> bool {
-        return !s || s->id() == id;
-      });
-      pending_sessions_[type].remove_if([id = session->id()](const auto& s) -> bool {
-        return !s || s->id() == id;
-      });
+      if (auto busy_it = busy_sessions_.find(type); busy_it != busy_sessions_.end()) {
+        busy_it->second.remove_if([id = session->id()](const auto& s) -> bool {
+          return !s || s->id() == id;
+        });
+      }
+      if (auto pend_it = pending_sessions_.find(type); pend_it != pending_sessions_.end()) {
+        pend_it->second.remove_if([id = session->id()](const auto& s) -> bool {
+          return !s || s->id() == id;
+        });
+      }
     }
   }
 
@@ -770,7 +771,11 @@ private:
         const std::scoped_lock inner_lock(self->sessions_mutex_);
         for (auto* map :
              { &self->busy_sessions_, &self->idle_sessions_, &self->pending_sessions_ }) {
-          auto& list = (*map)[type];
+          auto map_it = map->find(type);
+          if (map_it == map->end()) {
+            continue;
+          }
+          auto& list = map_it->second;
           for (auto it = list.begin(); it != list.end();) {
             if (!*it || (*it)->id() == id) {
               if (*it) {
