@@ -29,8 +29,8 @@
 namespace couchbase::core::operations::management
 {
 auto
-query_index_drop_request::encode_to(encoded_request_type& encoded,
-                                    http_context& /*context*/) const -> std::error_code
+query_index_drop_request::encode_to(encoded_request_type& encoded, http_context& /*context*/) const
+  -> std::error_code
 {
   if (!utils::check_query_management_request(*this)) {
     return errc::common::invalid_argument;
@@ -87,10 +87,12 @@ query_index_drop_request::make_response(error_context::http&& ctx,
         error.message = entry.at("msg").get_string();
         switch (error.code) {
           case 5000: /* IKey: "Internal Error" */
-            if (std::regex_search(error.message, std::regex{ ".*[iI]ndex .*[nN]ot [fF]ound.*" })) {
+          {
+            static const std::regex index_not_found_re{ ".*[iI]ndex .*[nN]ot [fF]ound.*" };
+            if (std::regex_search(error.message, index_not_found_re)) {
               index_not_found = true;
             }
-            break;
+          } break;
 
           case 12003: /* IKey: "datastore.couchbase.keyspace_not_found" */
             if (error.message.find("missing_collection") != std::string::npos) {
