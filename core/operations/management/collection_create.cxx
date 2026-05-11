@@ -24,13 +24,11 @@
 #include <spdlog/fmt/bundled/core.h>
 #include <tao/json/value.hpp>
 
-#include <regex>
-
 namespace couchbase::core::operations::management
 {
 auto
-collection_create_request::encode_to(encoded_request_type& encoded,
-                                     http_context& /*context*/) const -> std::error_code
+collection_create_request::encode_to(encoded_request_type& encoded, http_context& /*context*/) const
+  -> std::error_code
 {
   encoded.method = "POST";
   encoded.path = fmt::format("/pools/default/buckets/{}/scopes/{}/collections",
@@ -58,18 +56,20 @@ collection_create_request::make_response(error_context::http&& ctx,
 {
   collection_create_response response{ std::move(ctx) };
   if (!response.ctx.ec) {
-    switch (encoded.status_code) {
+    switch (const auto& body = encoded.body.data(); encoded.status_code) {
       case 400: {
-        const std::regex collection_exists("Collection with name .+ already exists");
-        if (std::regex_search(encoded.body.data(), collection_exists)) {
+        const auto prefix_pos = body.find("Collection with name ");
+        if (prefix_pos != std::string_view::npos &&
+            body.find(" already exists", prefix_pos) != std::string_view::npos) {
           response.ctx.ec = errc::management::collection_exists;
         } else {
           response.ctx.ec = errc::common::invalid_argument;
         }
       } break;
       case 404: {
-        const std::regex scope_not_found("Scope with name .+ is not found");
-        if (std::regex_search(encoded.body.data(), scope_not_found)) {
+        const auto prefix_pos = body.find("Scope with name ");
+        if (prefix_pos != std::string_view::npos &&
+            body.find(" is not found", prefix_pos) != std::string_view::npos) {
           response.ctx.ec = errc::common::scope_not_found;
         } else {
           response.ctx.ec = errc::common::bucket_not_found;
@@ -78,7 +78,7 @@ collection_create_request::make_response(error_context::http&& ctx,
       case 200: {
         tao::json::value payload{};
         try {
-          payload = utils::json::parse(encoded.body.data());
+          payload = utils::json::parse(body);
         } catch (const tao::pegtl::parse_error&) {
           response.ctx.ec = errc::common::parsing_failure;
           return response;
@@ -86,7 +86,7 @@ collection_create_request::make_response(error_context::http&& ctx,
         response.uid = std::stoull(payload.at("uid").get_string(), nullptr, 16);
       } break;
       default:
-        response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
+        response.ctx.ec = extract_common_error_code(encoded.status_code, body);
         break;
     }
   }
