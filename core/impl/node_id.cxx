@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2024-Present Couchbase, Inc.
+ *   Copyright 2026-Present Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -19,10 +19,10 @@
 
 #include "core/utils/crc32.hxx"
 
-#include <spdlog/fmt/bundled/core.h>
-
+#include <array>
 #include <cstdint>
 #include <string>
+#include <utility>
 
 namespace couchbase
 {
@@ -39,9 +39,19 @@ namespace
 auto
 derive_fallback_id(const std::string& hostname, std::uint16_t port) -> std::string
 {
-  auto input = fmt::format("{}:{}", hostname, port);
+  auto input = hostname + ':' + std::to_string(port);
   auto crc = core::utils::hash_crc32(input.data(), input.size());
-  return fmt::format("{:08x}", crc);
+
+  // Format as 8 lowercase hex chars, zero-padded — avoids a heavy fmt include
+  // for what amounts to a two-line hex conversion.
+  static constexpr std::array<char, 16> hex_digits{ '0', '1', '2', '3', '4', '5', '6', '7',
+                                                    '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
+  std::string out;
+  out.reserve(8);
+  for (int shift = 28; shift >= 0; shift -= 4) {
+    out.push_back(hex_digits[(crc >> shift) & 0xFU]);
+  }
+  return out;
 }
 } // namespace
 
@@ -54,56 +64,82 @@ node_id::node_id(std::string node_uuid, std::string hostname, std::uint16_t port
 }
 
 auto
-node_id::id() const -> const std::string&
+node_id::id() const noexcept -> const std::string&
 {
   return id_;
 }
 
 auto
-node_id::node_uuid() const -> const std::string&
+node_id::node_uuid() const noexcept -> const std::string&
 {
   return node_uuid_;
 }
 
 auto
-node_id::hostname() const -> const std::string&
+node_id::hostname() const noexcept -> const std::string&
 {
   return hostname_;
 }
 
 auto
-node_id::port() const -> std::uint16_t
+node_id::port() const noexcept -> std::uint16_t
 {
   return port_;
 }
 
 node_id::
-operator bool() const
+operator bool() const noexcept
 {
   return !id_.empty();
 }
 
 auto
-node_id::operator==(const node_id& other) const -> bool
+node_id::operator==(const node_id& other) const noexcept -> bool
 {
   return id_ == other.id_;
 }
 
 auto
-node_id::operator!=(const node_id& other) const -> bool
+node_id::operator!=(const node_id& other) const noexcept -> bool
 {
   return !(*this == other);
 }
 
 auto
-node_id::operator<(const node_id& other) const -> bool
+node_id::operator<(const node_id& other) const noexcept -> bool
 {
   return id_ < other.id_;
 }
 
 auto
+node_id::operator<=(const node_id& other) const noexcept -> bool
+{
+  return !(other < *this);
+}
+
+auto
+node_id::operator>(const node_id& other) const noexcept -> bool
+{
+  return other < *this;
+}
+
+auto
+node_id::operator>=(const node_id& other) const noexcept -> bool
+{
+  return !(*this < other);
+}
+
+auto
 internal_node_id::build(std::string node_uuid, std::string hostname, std::uint16_t port) -> node_id
 {
+  // Preserve the "falsy = unknown" contract: a node that has neither a
+  // server-assigned UUID nor a usable hostname+port pair cannot be uniquely
+  // identified. Returning a default-constructed node_id keeps such an input
+  // falsy so request- and response-side identity construction agree on the
+  // same "empty" answer for not-yet-bound or KV-less topology entries.
+  if (node_uuid.empty() && (hostname.empty() || port == 0)) {
+    return {};
+  }
   return { std::move(node_uuid), std::move(hostname), port };
 }
 
