@@ -127,7 +127,7 @@ using txn_complete_callback =
 /** @brief Main class for creating a transaction
  *
  */
-class transactions : public couchbase::transactions::transactions
+class transactions
 {
 public:
   /**
@@ -182,10 +182,6 @@ public:
   auto run(const couchbase::transactions::transaction_options& config,
            logic&& code) -> couchbase::transactions::transaction_result;
 
-  auto run(::couchbase::transactions::txn_logic&& code,
-           const couchbase::transactions::transaction_options& config)
-    -> std::pair<couchbase::error, couchbase::transactions::transaction_result> override;
-
   /**
    * @brief Run a transaction
    *
@@ -204,9 +200,6 @@ public:
            async_logic&& code,
            txn_complete_callback&& cb);
 
-  void run(couchbase::transactions::async_txn_logic&& code,
-           couchbase::transactions::async_txn_complete_logic&& complete_cb,
-           const couchbase::transactions::transaction_options& config) override;
   /**
    * @internal
    * called internally - will likely move
@@ -279,7 +272,7 @@ public:
   transactions(core::cluster cluster, couchbase::transactions::transactions_config::built config);
   transactions(core::cluster cluster, const couchbase::transactions::transactions_config& config);
 
-  ~transactions() override;
+  ~transactions();
 
 private:
   core::cluster cluster_;
@@ -288,5 +281,12 @@ private:
   const std::size_t max_attempts_{ 1000 };
   const std::chrono::milliseconds min_retry_delay_{ 1 };
 };
+
+// TODO(DC): Can we replace this with something better?
+// This is needed as the performer needs to access the Core API to set hooks, access cleanup-related
+// metrics, which are not exposed in the Public API.
+auto
+get_core_transactions(const std::shared_ptr<couchbase::transactions::transactions>& transactions)
+  -> std::shared_ptr<couchbase::core::transactions::transactions>;
 } // namespace transactions
 } // namespace couchbase::core

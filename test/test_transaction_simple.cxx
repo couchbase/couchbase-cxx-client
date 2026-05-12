@@ -1215,3 +1215,22 @@ TEST_CASE("transactions: sergey example", "[transactions]")
       CHECK_FALSE(remove_res.has_value());
     }));
 }
+
+TEST_CASE("transactions: extract core transactions from public API transactions", "[transactions]")
+{
+  test::utils::integration_test_guard integration;
+  auto cluster = integration.public_cluster();
+  const auto core_txns =
+    couchbase::core::transactions::get_core_transactions(cluster.transactions());
+
+  REQUIRE(core_txns != nullptr);
+
+  const auto doc_id = couchbase::core::document_id{
+    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+  };
+
+  core_txns->run([doc_id](std::shared_ptr<couchbase::core::transactions::attempt_context> ctx) {
+    const auto res = ctx->get_optional(doc_id);
+    REQUIRE_FALSE(res.has_value());
+  });
+}

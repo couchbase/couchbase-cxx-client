@@ -268,3 +268,10 @@
  * Support for the stable OpenTelemetry conventions (Observability RFC revisions 26 & 27)
  */
 #define COUCHBASE_CXX_CLIENT_STABLE_OTEL_CONVENTIONS 1
+
+/**
+ * The implementations for couchbase::transactions::transactions and
+ * couchbase::core::transactions::transactions are separate, i.e.,
+ * couchbase::core::transactions::transactions does not implement the Public API.
+ */
+#define COUCHBASE_CXX_CLIENT_TRANSACTIONS_PUBLIC_CORE_IMPL_SEPARATION 1
