@@ -279,6 +279,7 @@ is_feature_supported(const operations::analytics_request& /*request*/,
                      const configuration_capabilities& capabilities,
                      const cluster_options& options) -> bool
 {
+  // cppcheck-suppress knownConditionTrueFalse
   if (operations::analytics_request::allow_enterprise_analytics) {
     return true;
   }
@@ -716,6 +717,7 @@ public:
     if (stopped_) {
       return handler(request.make_response({ errc::network::cluster_closed }, response_type{}));
     }
+    // cppcheck-suppress knownConditionTrueFalse
     if (!is_feature_supported(
           request, session_manager_->configuration_capabilities(), origin_.options())) {
       return handler(

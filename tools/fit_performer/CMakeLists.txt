@@ -26,11 +26,102 @@ message("PROTO_FILES: ${PROTO_FILES}, PROTO_SRC_DIR: ${PROTO_SRC_DIR}")
 
 include("${CMAKE_SOURCE_DIR}/cmake/protobuf_Generate.cmake")
 
-include_directories(SYSTEM BEFORE ${PROTO_SRC_DIR})
-protobuf_generate_cpp_optional(PROTO_SOURCES PROTO_HEADERS ${PROTO_SRC_DIR} ${PROTO_FILES})
+protobuf_generate_cpp_optional(
+  PROTO_SOURCES
+  PROTO_HEADERS
+  ${PROTO_SRC_DIR}
+  ${PROTO_FILES})
 message("PROTO_SOURCES: ${PROTO_SOURCES}")
 set(GRPC_GENERATE_CPP_APPEND_PATH ON)
 include("${CMAKE_SOURCE_DIR}/cmake/gRPC_Generate.cmake")
-grpc_generate_cpp(GRPC_SOURCES GRPC_HEADERS ${PROTO_SRC_DIR} ${PROTO_FILES})
+grpc_generate_cpp(
+  GRPC_SOURCES
+  GRPC_HEADERS
+  ${PROTO_SRC_DIR}
+  ${PROTO_FILES})
 
-set_source_files_properties(${PROTO_SOURCES} ${GRPC_SOURCES} PROPERTIES COMPILE_OPTIONS "-w")
+if(MSVC)
+  set_source_files_properties(${PROTO_SOURCES} ${GRPC_SOURCES} PROPERTIES COMPILE_OPTIONS "/W0;/Z7;/FS")
+else()
+  set_source_files_properties(${PROTO_SOURCES} ${GRPC_SOURCES} PROPERTIES COMPILE_OPTIONS "-w")
+endif()
+
+set(FIT_PERFORMER_SOURCES
+    src/batcher.hxx
+    src/bounds.hxx
+    src/commands/bucket_management.cxx
+    src/commands/bucket_management.hxx
+    src/commands/collection_management.cxx
+    src/commands/collection_management.hxx
+    src/commands/common.cxx
+    src/commands/common.hxx
+    src/commands/key_value.cxx
+    src/commands/key_value.hxx
+    src/commands/query.cxx
+    src/commands/query.hxx
+    src/commands/query_index_management.cxx
+    src/commands/query_index_management.hxx
+    src/commands/search.cxx
+    src/commands/search.hxx
+    src/commands/search_index_management.cxx
+    src/commands/search_index_management.hxx
+    src/connection.cxx
+    src/connection.hxx
+    src/counters.hxx
+    src/exceptions.hxx
+    src/fit.cxx
+    src/hooks.cxx
+    src/hooks.hxx
+    src/metrics/metrics_reporter.cxx
+    src/metrics/metrics_reporter.hxx
+    src/observability/otel.cxx
+    src/observability/otel.hxx
+    src/observability/span_owner.cxx
+    src/observability/span_owner.hxx
+    src/service.cxx
+    src/service.hxx
+    src/stream.hxx
+    src/utils.hxx)
+add_executable(fit_performer ${FIT_PERFORMER_SOURCES} ${PROTO_SOURCES} ${GRPC_SOURCES})
+
+set_target_properties(fit_performer PROPERTIES POSITION_INDEPENDENT_CODE ON)
+set_project_options(fit_performer)
+
+# fit_performer interoperates heavily with generated protobuf/gRPC code and third-party headers that trigger many
+# warnings. Suppress all warnings for this target rather than fighting with set_project_warnings overrides.
+set_target_properties(fit_performer PROPERTIES COMPILE_WARNING_AS_ERROR OFF)
+if(MSVC)
+  # /W0 suppresses all warnings. COMPILE_WARNING_AS_ERROR OFF handles TreatWarningAsError. On MSVC, proto_utils.h must
+  # be force-included before gRPC streaming headers to work around non-conformant two-phase lookup that causes
+  # SerializationTraits to be undefined when call_op_set.h is processed before proto_utils.h in generated gRPC source
+  # files.
+  set(_msvc_grpc_fix_header "${CMAKE_CURRENT_BINARY_DIR}/msvc_grpc_proto_utils_fix.h")
+  file(WRITE "${_msvc_grpc_fix_header}" "#pragma once\n#include <grpcpp/impl/proto_utils.h>\n")
+  target_compile_options(fit_performer PRIVATE /W0 /Z7 /FS "/FI${_msvc_grpc_fix_header}")
+else()
+  target_compile_options(fit_performer PRIVATE -w -Wno-c++20-extensions)
+endif()
+
+target_include_directories(
+  fit_performer
+  PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
+  PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+          ${CMAKE_CURRENT_SOURCE_DIR}
+          ${CMAKE_SOURCE_DIR}/couchbase
+          ${CMAKE_SOURCE_DIR}/core)
+target_include_directories(fit_performer SYSTEM PRIVATE ${PROTO_SRC_DIR})
+
+target_link_libraries(
+  fit_performer
+  PRIVATE ${couchbase_cxx_client_DEFAULT_LIBRARY}
+          Microsoft.GSL::GSL
+          system_metrics_cxx
+          spdlog::spdlog
+          gRPC::grpc++
+          taocpp::json
+          protobuf::libprotobuf
+          asio::asio)
+if(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
+  target_compile_definitions(fit_performer PRIVATE COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
+  target_link_libraries(fit_performer PRIVATE opentelemetry_exporter_otlp_http opentelemetry_exporter_otlp_http_metric)
+endif()

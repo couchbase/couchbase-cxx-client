@@ -245,7 +245,7 @@ public:
   {
     auto handle_error = [is_retry, req](std::error_code ec) {
       // We only want to log an error on retries if the error isn't cancelled.
-      if (!is_retry || (is_retry && ec != errc::common::request_canceled)) {
+      if (!is_retry || ec != errc::common::request_canceled) {
         CB_LOG_ERROR("reschedule failed, failing request ({})", ec.message());
       }
 
