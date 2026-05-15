@@ -11,7 +11,18 @@
 
 include(FetchContent)
 
-find_package(gRPC CONFIG QUIET)
+# When building with libc++ (-stdlib=libc++), system gRPC/protobuf packages
+# are typically compiled against libstdc++ and will cause ABI mismatch linker
+# errors.  Skip system package detection in that case.
+set(_skip_system_grpc FALSE)
+if(CMAKE_CXX_FLAGS MATCHES "-stdlib=libc\\+\\+")
+  set(_skip_system_grpc TRUE)
+  message(STATUS "Using libc++; skipping system gRPC to avoid ABI mismatch")
+endif()
+
+if(NOT _skip_system_grpc)
+  find_package(gRPC CONFIG QUIET)
+endif()
 
 if(gRPC_FOUND)
   message(STATUS "Found system gRPC: ${gRPC_VERSION}")
