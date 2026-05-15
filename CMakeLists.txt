@@ -62,6 +62,7 @@ endif()
 find_package(Threads REQUIRED)
 
 option(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY "Build with OpenTelemetry" ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT})
+option(COUCHBASE_CXX_CLIENT_BUILD_TOOLS "Build tools" ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT})
 
 include(cmake/ThirdPartyDependencies.cmake)
 
@@ -599,7 +600,6 @@ if(COUCHBASE_CXX_CLIENT_BUILD_EXAMPLES)
   add_subdirectory(examples)
 endif()
 
-option(COUCHBASE_CXX_CLIENT_BUILD_TOOLS "Build tools" ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT})
 if(COUCHBASE_CXX_CLIENT_BUILD_TOOLS)
   add_subdirectory(tools)
 endif()

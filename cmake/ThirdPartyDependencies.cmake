@@ -39,6 +39,10 @@ if(NOT TARGET spdlog::spdlog)
     "SPDLOG_FMT_EXTERNAL OFF")
 endif()
 
+if(COUCHBASE_CXX_CLIENT_BUILD_TOOLS)
+  include(cmake/GrpcProtobuf.cmake)
+endif()
+
 if(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
   if(NOT TARGET opentelemetry)
     # Disable curl HTTP client to avoid curl downloading and linking to BoringSSL

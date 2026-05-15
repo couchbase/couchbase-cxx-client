@@ -92,6 +92,11 @@ function(set_project_warnings project_name)
           -Wno-error=stringop-overflow
           -Wno-error=maybe-uninitialized)
     endif()
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "16.0.0")
+      # GCC 16 added -Wtemplate-body which fires on third-party headers (e.g. fmt/chrono.h).
+      # Demote to non-fatal until upstream libraries are updated.
+      set(GCC_WARNINGS ${GCC_WARNINGS} -Wno-error=template-body)
+    endif()
     set(PROJECT_WARNINGS ${GCC_WARNINGS})
   else()
     message(AUTHOR_WARNING "No compiler warnings set for '${CMAKE_CXX_COMPILER_ID}' compiler.")
