@@ -33,8 +33,8 @@
 namespace couchbase::core::operations
 {
 auto
-query_request::encode_to(query_request::encoded_request_type& encoded,
-                         http_context& context) -> std::error_code
+query_request::encode_to(query_request::encoded_request_type& encoded, http_context& context)
+  -> std::error_code
 {
   ctx_.emplace(context);
   tao::json::value body{
@@ -209,8 +209,8 @@ query_request::encode_to(query_request::encoded_request_type& encoded,
 }
 
 auto
-query_request::make_response(error_context::query&& ctx,
-                             const encoded_response_type& encoded) -> query_response
+query_request::make_response(error_context::query&& ctx, const encoded_response_type& encoded)
+  -> query_response
 {
   query_response response{ std::move(ctx) };
   response.ctx.statement = statement;
@@ -374,19 +374,20 @@ query_request::make_response(error_context::query&& ctx,
             response.ctx.ec = errc::common::index_exists;
             break;
           case 5000: /* IKey: "Internal Error" */
-            if (std::regex_search(response.ctx.first_error_message,
-                                  std::regex{ ".*[iI]ndex .*already exist.*" })) {
+          {
+            static const std::regex index_already_exists_re{ ".*[iI]ndex .*already exist.*" };
+            static const std::regex index_not_found_re{ ".*[iI]ndex .*[nN]ot [fF]ound.*" };
+            if (std::regex_search(response.ctx.first_error_message, index_already_exists_re)) {
               response.ctx.ec = errc::common::index_exists;
             } else if (response.ctx.first_error_message.find("Index does not exist") !=
                          std::string::npos ||
-                       std::regex_search(response.ctx.first_error_message,
-                                         std::regex{ ".*[iI]ndex .*[nN]ot [fF]ound.*" })) {
+                       std::regex_search(response.ctx.first_error_message, index_not_found_re)) {
               response.ctx.ec = errc::common::index_not_found;
             } else if (response.ctx.first_error_message.find("Bucket Not Found") !=
                        std::string::npos) {
               response.ctx.ec = errc::common::bucket_not_found;
             }
-            break;
+          } break;
           case 12009: /* IKey: "datastore.couchbase.DML_error" */
             if (response.ctx.first_error_message.find("CAS mismatch") != std::string::npos) {
               response.ctx.ec = errc::common::cas_mismatch;
