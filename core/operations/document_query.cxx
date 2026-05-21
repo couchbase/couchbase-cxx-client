@@ -20,6 +20,7 @@
 #include "core/cluster_options.hxx"
 #include "core/logger/logger.hxx"
 #include "core/operations/management/error_utils.hxx"
+#include "core/utils/contains_string.hxx"
 #include "core/utils/duration_parser.hxx"
 #include "core/utils/json.hxx"
 
@@ -28,13 +29,11 @@
 #include <gsl/assert>
 #include <tao/json/value.hpp>
 
-#include <regex>
-
 namespace couchbase::core::operations
 {
 auto
-query_request::encode_to(query_request::encoded_request_type& encoded,
-                         http_context& context) -> std::error_code
+query_request::encode_to(query_request::encoded_request_type& encoded, http_context& context)
+  -> std::error_code
 {
   ctx_.emplace(context);
   tao::json::value body{
@@ -209,8 +208,8 @@ query_request::encode_to(query_request::encoded_request_type& encoded,
 }
 
 auto
-query_request::make_response(error_context::query&& ctx,
-                             const encoded_response_type& encoded) -> query_response
+query_request::make_response(error_context::query&& ctx, const encoded_response_type& encoded)
+  -> query_response
 {
   query_response response{ std::move(ctx) };
   response.ctx.statement = statement;
@@ -374,13 +373,14 @@ query_request::make_response(error_context::query&& ctx,
             response.ctx.ec = errc::common::index_exists;
             break;
           case 5000: /* IKey: "Internal Error" */
-            if (std::regex_search(response.ctx.first_error_message,
-                                  std::regex{ ".*[iI]ndex .*already exist.*" })) {
+            if (utils::contains_string(response.ctx.first_error_message, "index", true) &&
+                utils::contains_string(response.ctx.first_error_message, "already exist", true)) {
               response.ctx.ec = errc::common::index_exists;
-            } else if (response.ctx.first_error_message.find("Index does not exist") !=
-                         std::string::npos ||
-                       std::regex_search(response.ctx.first_error_message,
-                                         std::regex{ ".*[iI]ndex .*[nN]ot [fF]ound.*" })) {
+            } else if (utils::contains_string(response.ctx.first_error_message,
+                                              "Index does not exist") ||
+                       (utils::contains_string(response.ctx.first_error_message, "index", true) &&
+                        utils::contains_string(
+                          response.ctx.first_error_message, "not found", true))) {
               response.ctx.ec = errc::common::index_not_found;
             } else if (response.ctx.first_error_message.find("Bucket Not Found") !=
                        std::string::npos) {
