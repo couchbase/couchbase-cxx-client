@@ -59,5 +59,8 @@ jobs:
           CB_CACHE_OPTION: sccache
           # CB_CMAKE_BUILD_TYPE: Release
           CB_CMAKE_BUILD_TYPE: RelWithDebInfo
-          CB_NUMBER_OF_JOBS: 2
+          # CB_NUMBER_OF_JOBS deliberately unset: build-tests.rb now autodetects
+          # the runner's processor count via Etc.nprocessors (4 on windows-2022/2025).
+          # Combined with /MP added in CMakeLists.txt this enables both axes of
+          # parallelism instead of the previous /m:2 + serial-cl.exe cap.
         run: ruby ./bin/build-tests.rb

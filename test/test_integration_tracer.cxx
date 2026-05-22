@@ -294,7 +294,7 @@ assert_compound_kv_op_span_ok(test::utils::integration_test_guard& guard,
       assert_kv_op_span_ok(guard, s.lock(), child_op_name, span, false, !is_any_replica);
     }
   }
-};
+}
 
 void
 assert_kv_op_span_has_request_encoding(test::utils::integration_test_guard& guard,

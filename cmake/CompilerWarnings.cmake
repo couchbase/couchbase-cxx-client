@@ -49,13 +49,7 @@ function(set_project_warnings project_name)
       -Wnull-dereference # warn if a null dereference is detected
       -Wdouble-promotion # warn if float is implicit promoted to double
       -Wformat=2 # warn on security issues around functions that format output (ie printf)
-      # TODO: make it local to ext/couchbase/couchbase.cxx
-      -Wno-unknown-warning-option
-      -Wno-gnu-statement-expression
-      -Wno-compound-token-split-by-macro
-      # __COUNTER__ is used by Catch2's TEST_CASE macro; clang-23 warns it is a C2y extension.
-      # Suppress globally since we cannot modify Catch2 and the warning is irrelevant in C++17.
-      -Wno-c2y-extensions)
+  )
 
   if(WARNINGS_AS_ERRORS)
     set(COMMON_WARNINGS ${COMMON_WARNINGS} -Werror)
@@ -72,7 +66,17 @@ function(set_project_warnings project_name)
       -Wdeprecated-declarations # warn if [[deprecated]] elements being used
   )
 
-  set(CLANG_WARNINGS ${COMMON_WARNINGS})
+  # Clang-only warning suppressions. These flags do not exist in GCC; with
+  # -Werror, GCC turns "unrecognized command line option" into a hard error,
+  # so they must not appear in GCC_WARNINGS / COMMON_WARNINGS.
+  set(CLANG_WARNINGS
+      ${COMMON_WARNINGS}
+      -Wno-unknown-warning-option
+      -Wno-gnu-statement-expression
+      -Wno-compound-token-split-by-macro
+      # __COUNTER__ is used by Catch2's TEST_CASE macro; clang-23 warns it is a C2y extension.
+      # Suppress globally since we cannot modify Catch2 and the warning is irrelevant in C++17.
+      -Wno-c2y-extensions)
 
   if(MSVC)
     set(PROJECT_WARNINGS ${MSVC_WARNINGS})

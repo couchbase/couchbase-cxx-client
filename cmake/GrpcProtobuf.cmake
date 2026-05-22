@@ -189,4 +189,27 @@ else()
       CXX_CLANG_TIDY ""
       CXX_INCLUDE_WHAT_YOU_USE "")
   endif()
+
+  # gRPC unconditionally defines several library targets we do not link
+  # against (the fit_performer tool only consumes gRPC::grpc++ and
+  # gRPC::grpc_cpp_plugin). Because gRPC's CMakeLists has no per-library
+  # opt-out and FetchContent_MakeAvailable adds the subdirectory without
+  # EXCLUDE_FROM_ALL, every target ends up in the Visual Studio ALL_BUILD
+  # and gets compiled on Windows. grpc_unsecure alone is a ~300-source
+  # near-duplicate of gRPC without TLS; combined with the admin/auth
+  # extras below this is ~15 minutes of pointless compile per Windows
+  # build. Marking each EXCLUDE_FROM_ALL removes them from ALL_BUILD
+  # while leaving the targets defined, so anything that does
+  # transitively need one is still pulled in by CMake on demand.
+  foreach(_unused_grpc_target
+      grpc_unsecure
+      grpc++_unsecure
+      grpc++_alts
+      grpc++_reflection
+      grpcpp_channelz
+      grpc_authorization_provider)
+    if(TARGET ${_unused_grpc_target})
+      set_target_properties(${_unused_grpc_target} PROPERTIES EXCLUDE_FROM_ALL TRUE)
+    endif()
+  endforeach()
 endif()

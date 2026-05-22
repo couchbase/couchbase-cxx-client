@@ -1179,6 +1179,27 @@ public:
       }));
   }
 
+  // IMPORTANT — do not std::move observability members out of *self* below.
+  //
+  // The public-API cluster::notify_fork(fork_event::child) in
+  // core/impl/public_cluster.cxx replaces the outer cluster_impl and drops
+  // the old one; the old impl's destructor calls do_close() which lands
+  // here. But user code that acquired a bucket/collection *before* the
+  // fork holds its own copy of core::cluster — and core::cluster is a
+  // shared_ptr<cluster_impl> wrapper — so the inner cluster_impl's
+  // refcount stays > 0 and this object survives close().
+  //
+  // Anything moved out of `self->X_` becomes silently empty to those
+  // still-live references on the next operation. tracer() and meter()
+  // accessors return the member directly without checking stopped_, so an
+  // empty shared_ptr there gets converted to an empty weak_ptr in
+  // observability_recorder and then dereferenced as `this=nullptr` inside
+  // tracer_wrapper::create_span. Same shape for the rest of the
+  // observability/telemetry/orphan set.
+  //
+  // Members whose accessor already gates on stopped_ (e.g. session_manager_
+  // via http_session_manager()) are safe to move out and intentionally
+  // remain that way — callers there get a clean errc::network::cluster_closed.
   void close(utils::movable_function<void()>&& handler)
   {
     if (stopped_) {
@@ -1211,20 +1232,22 @@ public:
           session_manager->close();
         }
         self->work_.reset();
-        if (const auto tracer = std::move(self->tracer_); tracer) {
-          tracer->stop();
+        // Observability members: stop in place, do NOT std::move. See the
+        // comment above close() for why this matters across fork(child).
+        if (self->tracer_) {
+          self->tracer_->stop();
         }
-        if (const auto meter = std::move(self->meter_); meter) {
-          meter->stop();
+        if (self->meter_) {
+          self->meter_->stop();
         }
-        if (const auto meter = std::move(self->app_telemetry_meter_); meter) {
-          meter->disable();
+        if (self->app_telemetry_meter_) {
+          self->app_telemetry_meter_->disable();
         }
-        if (const auto reporter = std::move(self->app_telemetry_reporter_); reporter) {
-          reporter->stop();
+        if (self->app_telemetry_reporter_) {
+          self->app_telemetry_reporter_->stop();
         }
-        if (const auto orphan_reporter = std::move(self->orphan_reporter_); orphan_reporter) {
-          orphan_reporter->stop();
+        if (self->orphan_reporter_) {
+          self->orphan_reporter_->stop();
         }
         handler();
       }));
