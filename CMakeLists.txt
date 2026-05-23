@@ -32,6 +32,22 @@ if(WIN32)
   message(STATUS "Windows SDK: ${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}")
 endif()
 
+# Multi-process compile for MSVC. With the Visual Studio generator each
+# .vcxproj invokes a single cl.exe that processes its source files
+# serially; /MP turns each invocation into a parallel batch driven by
+# NUMBER_OF_PROCESSORS. Combined with MSBuild's /m:N (project-level
+# parallelism) this lets a Windows agent saturate its cores. Must be
+# applied at directory scope before ThirdPartyDependencies.cmake so
+# the FetchContent-built dependencies (gRPC, protobuf, abseil, curl,
+# boringssl, ...) inherit it — they are the bulk of the Windows build.
+#
+# Scoped to C and CXX via COMPILE_LANGUAGE: NASM (used by BoringSSL's
+# x86 assembly) and other ASM dialects do not understand /MP and would
+# abort with `nasm.exe ... /MP ... exited with code 1`.
+if(MSVC)
+  add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:/MP>)
+endif()
+
 include(cmake/TarballRelease.cmake OPTIONAL)
 
 include(cmake/PreventInSourceBuilds.cmake)

@@ -310,7 +310,7 @@ public:
     std::signal(SIGINT, sigint_handler);
     std::signal(SIGTERM, sigint_handler);
 
-    if (pid_ > std::numeric_limits<system_metrics::sm_pid_t>::max()) {
+    if (pid_ > static_cast<std::uint64_t>(std::numeric_limits<system_metrics::sm_pid_t>::max())) {
       fmt::print(stderr,
                  "PID value {} is out of range (maximum allowed is {}).\n",
                  pid_,

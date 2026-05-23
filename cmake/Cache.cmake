@@ -37,7 +37,13 @@ else()
   find_program(CACHE_BINARY ${CACHE_OPTION})
 endif()
 
-if(CACHE_OPTION STREQUAL "none" OR CACHE_BINARY STREQUAL "")
+if(CACHE_OPTION STREQUAL "none" OR NOT CACHE_BINARY)
+  # NOT CACHE_BINARY catches both the empty-string case (auto-detection
+  # branch above sets it explicitly) and the "<var>-NOTFOUND" sentinel that
+  # find_program writes back to the cache when the requested program is
+  # missing on the host. Using STREQUAL "" alone would let the sentinel
+  # propagate to CMAKE_*_COMPILER_LAUNCHER and produce "Error 127" at build
+  # time.
   message(WARNING "No compiler cache found or enabled; building without compiler cache")
 else()
   if(CMAKE_GENERATOR MATCHES "Visual Studio")

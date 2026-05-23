@@ -182,7 +182,6 @@ TEST_CASE("unit: mcbp_session session_info accessors are safe under concurrent r
     make_session(io, { hello_feature::collections, hello_feature::json, hello_feature::duplex });
 
   constexpr int num_threads = 8;
-  constexpr int iterations = 1000;
 
   std::vector<std::thread> threads;
   threads.reserve(num_threads);
@@ -193,6 +192,7 @@ TEST_CASE("unit: mcbp_session session_info accessors are safe under concurrent r
   for (int t = 0; t < num_threads; ++t) {
     threads.emplace_back([&session, start_future]() -> void {
       start_future.wait();
+      constexpr int iterations = 1000;
       for (int i = 0; i < iterations; ++i) {
         // All three accessors are now mutex-guarded; none should deadlock or
         // return garbled data when called from multiple threads simultaneously.

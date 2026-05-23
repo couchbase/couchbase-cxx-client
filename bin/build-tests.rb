@@ -15,6 +15,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+require "etc"
 require "fileutils"
 require "rbconfig"
 require "English"
@@ -59,7 +60,11 @@ CB_CMAKE = ENV.fetch("CB_CMAKE", which("cmake", cmake_extra_location))
 
 CB_CC = ENV.fetch("CB_CC", which(CB_DEFAULT_CC))
 CB_CXX = ENV.fetch("CB_CXX", which(CB_DEFAULT_CXX))
-CB_NUMBER_OF_JOBS = ENV.fetch("CB_NUMBER_OF_JOBS", "1").to_i
+# Default to the host's processor count. Combined with /MP (added by
+# CMakeLists.txt for MSVC), this lets Windows agents use both axes of
+# parallelism: --parallel N for MSBuild project-level fan-out, and /MP
+# for cl.exe source-level fan-out within each project.
+CB_NUMBER_OF_JOBS = ENV.fetch("CB_NUMBER_OF_JOBS", Etc.nprocessors.to_s).to_i
 CB_CMAKE_BUILD_TYPE = ENV.fetch("CB_CMAKE_BUILD_TYPE", "Debug")
 CB_CACHE_OPTION = ENV.fetch("CB_CACHE_OPTION", "ccache")
 

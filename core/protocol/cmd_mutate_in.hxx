@@ -162,7 +162,7 @@ public:
 
   void store_semantics(couchbase::store_semantics semantics)
   {
-    flags_ &= std::uint8_t{ 0b1111'1100U }; /* reset first two bits */
+    flags_ &= static_cast<std::uint8_t>(0b1111'1100U); /* reset first two bits */
     switch (semantics) {
       case couchbase::store_semantics::replace:
         /* leave bits as zeros */
