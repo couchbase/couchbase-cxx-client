@@ -17,14 +17,13 @@
 
 #include "query_index_drop.hxx"
 
+#include "core/utils/contains_string.hxx"
 #include "core/utils/json.hxx"
 #include "core/utils/keyspace.hxx"
 #include "error_utils.hxx"
 
 #include <spdlog/fmt/bundled/core.h>
 #include <tao/json/value.hpp>
-
-#include <regex>
 
 namespace couchbase::core::operations::management
 {
@@ -88,8 +87,8 @@ query_index_drop_request::make_response(error_context::http&& ctx,
         switch (error.code) {
           case 5000: /* IKey: "Internal Error" */
           {
-            static const std::regex index_not_found_re{ ".*[iI]ndex .*[nN]ot [fF]ound.*" };
-            if (std::regex_search(error.message, index_not_found_re)) {
+            if (utils::contains_string(error.message, "index", true) &&
+                utils::contains_string(error.message, "not found", true)) {
               index_not_found = true;
             }
           } break;
