@@ -76,6 +76,29 @@ if(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
     # openssl.c and removes the BoringSSL/OpenSSL header mismatch.
     set(CURL_DISABLE_SRP ON CACHE BOOL "" FORCE)
 
+    if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
+      # Third symptom of the same curl-vs-BoringSSL clash: curl probes
+      # for OPENSSL_IS_AWSLC and OPENSSL_IS_BORINGSSL via
+      # check_symbol_exists, which lists OpenSSL::SSL in
+      # CMAKE_REQUIRED_LIBRARIES. check_symbol_exists generates a
+      # TryCompile sub-project that does NOT inherit ALIAS targets
+      # from the parent scope; cmake/OpenSSL.cmake aliases
+      # OpenSSL::SSL -> BoringSSL's `ssl` OBJECT library, which works
+      # for the main project but resolves to "target not found" in
+      # TryCompile. On hosts whose system OpenSSL has libcrypto but
+      # not libssl (e.g. alpine3.21 without openssl-dev), curl's
+      # find_package(OpenSSL) returns OpenSSL::Crypto without
+      # OpenSSL::SSL either, so the fallback path doesn't save us
+      # and configure dies at curl's CMakeLists.txt:839
+      # (check_symbol_exists for OPENSSL_IS_AWSLC).
+      #
+      # We are building against BoringSSL, so pre-populate the probe
+      # outputs in the cache. check_symbol_exists skips the check
+      # entirely when the output variable is already cached.
+      set(HAVE_OPENSSL_IS_BORINGSSL 1 CACHE INTERNAL "")
+      set(HAVE_OPENSSL_IS_AWSLC 0 CACHE INTERNAL "")
+    endif()
+
     # https://github.com/open-telemetry/opentelemetry-cpp/releases
     cpmaddpackage(
       NAME
