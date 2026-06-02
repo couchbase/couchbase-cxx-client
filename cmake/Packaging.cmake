@@ -245,6 +245,7 @@ if(COUCHBASE_CXX_CLIENT_DEB_TARGETS)
     COUCHBASE_CXX_CLIENT_SUPPORTED_DISTROS
     "jammy"
     "noble"
+    "resolute"
     "bookworm"
     "trixie")
 
@@ -308,14 +309,13 @@ if(COUCHBASE_CXX_CLIENT_RPM_TARGETS)
   list(
     APPEND
     COUCHBASE_CXX_CLIENT_SUPPORTED_ROOTS
-    "opensuse-leap-15.6-${CMAKE_SYSTEM_PROCESSOR}"
+    "opensuse-leap-16.0-${CMAKE_SYSTEM_PROCESSOR}"
     "rocky+epel-10-${CMAKE_SYSTEM_PROCESSOR}"
     "rocky+epel-9-${CMAKE_SYSTEM_PROCESSOR}"
     "rocky+epel-8-${CMAKE_SYSTEM_PROCESSOR}"
     "amazonlinux-2023-${CMAKE_SYSTEM_PROCESSOR}"
-    "fedora-43-${CMAKE_SYSTEM_PROCESSOR}"
-    "fedora-42-${CMAKE_SYSTEM_PROCESSOR}"
-    "fedora-41-${CMAKE_SYSTEM_PROCESSOR}")
+    "fedora-44-${CMAKE_SYSTEM_PROCESSOR}"
+    "fedora-43-${CMAKE_SYSTEM_PROCESSOR}")
 
   message(STATUS "Supported build roots for RPM packages: ${COUCHBASE_CXX_CLIENT_SUPPORTED_ROOTS}")
 
