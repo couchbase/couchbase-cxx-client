@@ -52,6 +52,23 @@ mcbp_parser::next(mcbp_message& msg) -> mcbp_parser::result
     prefix_size = static_cast<std::uint32_t>(framing_extras_size) +
                   static_cast<std::uint32_t>(msg.header.extlen) + key_size;
   }
+  // The prefix (framing extras + extras + key) must lie within the body that
+  // bodylen advertised. extlen and keylen are separate header fields from
+  // bodylen, so a frame can claim prefix_size > body_size. Only body_size was
+  // checked against the buffer above; without this guard the inserts below read
+  // past the buffer and "body_size - prefix_size" underflows on the snappy path.
+  if (prefix_size > body_size) {
+    CB_LOG_WARNING("rejecting malformed frame: prefix_size ({}) exceeds body_size ({}), "
+                   "magic={:x}, opcode={:x}, extlen={}, keylen={}",
+                   prefix_size,
+                   body_size,
+                   msg.header.magic,
+                   msg.header.opcode,
+                   msg.header.extlen,
+                   key_size);
+    reset();
+    return result::failure;
+  }
   msg.body.insert(
     msg.body.end(), buf.begin() + header_size, buf.begin() + header_size + prefix_size);
 
