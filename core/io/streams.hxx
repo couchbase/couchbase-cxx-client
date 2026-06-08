@@ -59,6 +59,27 @@ async_resolve(ip_protocol protocol,
   return resolver.async_resolve(hostname, service, std::forward<Handler>(handler));
 }
 
+/**
+ * Configure server-identity verification on a client TLS stream prior to the
+ * handshake: install a hostname (SAN/CN) verification callback and set the SNI
+ * server name. When the underlying context is in verify_none mode the callback
+ * has no effect, but SNI is still set.
+ *
+ * Without this, asio::ssl::verify_peer only validates that the certificate
+ * chains to a trusted CA -- it does NOT check that the certificate identifies
+ * the host being contacted (CWE-297).
+ *
+ * @param stream the client TLS stream that has connected but not yet handshaken
+ * @param hostname the canonical hostname the caller intended to reach; must not
+ * be empty (an empty hostname is rejected to avoid silently falling back to
+ * CA-only validation)
+ * @return a non-empty error_code if the hostname is empty, SNI could not be set,
+ * or the hostname-verification callback could not be installed; empty on success
+ */
+[[nodiscard]] auto
+configure_tls_handshake(asio::ssl::stream<asio::ip::tcp::socket>& stream,
+                        const std::string& hostname) -> std::error_code;
+
 class stream_impl
 {
 protected:
@@ -88,7 +109,10 @@ public:
 
   virtual void set_options() = 0;
 
+  // `hostname` is the canonical name the caller intends to reach; TLS streams use
+  // it to verify the server certificate's identity (SAN/CN) and to set SNI.
   virtual void async_connect(const asio::ip::tcp::resolver::results_type::endpoint_type& endpoint,
+                             const std::string& hostname,
                              utils::movable_function<void(std::error_code)>&& handler) = 0;
 
   virtual void async_write(
@@ -117,6 +141,7 @@ public:
   void set_options() override;
 
   void async_connect(const asio::ip::tcp::resolver::results_type::endpoint_type& endpoint,
+                     const std::string& hostname,
                      utils::movable_function<void(std::error_code)>&& handler) override;
 
   void async_write(std::vector<asio::const_buffer>& buffers,
@@ -145,6 +170,7 @@ public:
   void set_options() override;
 
   void async_connect(const asio::ip::tcp::resolver::results_type::endpoint_type& endpoint,
+                     const std::string& hostname,
                      utils::movable_function<void(std::error_code)>&& handler) override;
 
   void async_write(std::vector<asio::const_buffer>& buffers,
