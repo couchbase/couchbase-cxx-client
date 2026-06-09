@@ -181,12 +181,13 @@ private:
     } else {
       stream_ = std::make_unique<io::plain_stream_impl>(ctx_);
     }
-    stream_->async_connect(endpoint->endpoint(), [self = shared_from_this()](auto ec) {
-      if (ec) {
-        return self->reconnect_socket(ec, "connection failure");
-      }
-      self->complete_with_success();
-    });
+    stream_->async_connect(
+      endpoint->endpoint(), address_.hostname, [self = shared_from_this()](auto ec) {
+        if (ec) {
+          return self->reconnect_socket(ec, "connection failure");
+        }
+        self->complete_with_success();
+      });
   }
 
   void resolve_address()

@@ -619,8 +619,8 @@ http_session::do_connect(asio::ip::tcp::resolver::results_type::iterator it)
       });
     });
 
-    stream_->async_connect(it->endpoint(), [capture0 = shared_from_this(), it](auto&& PH1) {
-      capture0->on_connect(std::forward<decltype(PH1)>(PH1), it);
+    stream_->async_connect(it->endpoint(), hostname_, [self = shared_from_this(), it](auto&& ec) {
+      self->on_connect(std::forward<decltype(ec)>(ec), it);
     });
   } else {
     CB_LOG_ERROR("{} no more endpoints left to connect, \"{}:{}\" is not reachable",

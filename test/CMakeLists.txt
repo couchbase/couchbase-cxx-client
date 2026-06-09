@@ -23,6 +23,8 @@ integration_test(management_search_index)
 integration_test(http_session_manager)
 
 unit_test(connection_string)
+unit_test(capella)
+unit_test(tls_hostname_verification)
 unit_test(protocol_status)
 unit_test(utils)
 unit_test(binary_transcoder)

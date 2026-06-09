@@ -2038,9 +2038,10 @@ private:
                        self->bootstrap_port_);
           self->initiate_bootstrap();
         });
-      stream_->async_connect(it->endpoint(), [capture0 = shared_from_this(), it](auto&& PH1) {
-        capture0->on_connect(std::forward<decltype(PH1)>(PH1), it);
-      });
+      stream_->async_connect(
+        it->endpoint(), bootstrap_hostname_, [self = shared_from_this(), it](auto&& ec) {
+          self->on_connect(std::forward<decltype(ec)>(ec), it);
+        });
     } else {
       auto error_msg =
         fmt::format("no more endpoints left to connect to \"{}:{}\", will try another address",

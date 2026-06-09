@@ -24,6 +24,7 @@
 #undef COUCHBASE_CXX_CLIENT_IGNORE_CORE_DEPRECATIONS
 
 #include "bucket.hxx"
+#include "capella.hxx"
 #include "capella_ca.hxx"
 #include "core/app_telemetry_meter.hxx"
 #include "core/app_telemetry_reporter.hxx"
@@ -174,6 +175,7 @@
 #include <asio/post.hpp>
 #include <asio/ssl/verify_mode.hpp>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstring>
@@ -334,7 +336,21 @@ public:
       tls_options |= asio::ssl::context::no_tlsv1_2; // published: 2008, still in use
     }
     ctx->set_options(tls_options);
-    switch (origin_.options().tls_verify) {
+    const auto requested_verify = origin_.options().tls_verify;
+    const auto effective_verify = effective_tls_verify_mode(requested_verify, has_capella_host);
+    if (requested_verify == tls_verify_mode::none && effective_verify == tls_verify_mode::peer) {
+      CB_LOG_WARNING(
+        "[{}]: TLS certificate verification cannot be disabled when connecting to Couchbase "
+        "Capella; enforcing peer verification (ignoring tls_verify=none).",
+        id_);
+    } else if (effective_verify == tls_verify_mode::none) {
+      CB_LOG_WARNING(
+        "[{}]: TLS certificate verification is DISABLED (tls_verify=none). The server's "
+        "identity will NOT be checked and the connection is vulnerable to interception. This "
+        "is insecure and must not be used in production.",
+        id_);
+    }
+    switch (effective_verify) {
       case tls_verify_mode::none:
         ctx->set_verify_mode(asio::ssl::verify_none);
         break;
@@ -1375,15 +1391,10 @@ private:
 
   auto has_capella_host() const -> bool
   {
-    bool has_capella_host = false;
-    static const std::string suffix = "cloud.couchbase.com";
-    for (const auto& node : origin_.get_hostnames()) {
-      if (auto pos = node.find(suffix);
-          pos != std::string::npos && pos + suffix.size() == node.size()) {
-        has_capella_host = true;
-      }
-    }
-    return has_capella_host;
+    auto hostnames = origin_.get_hostnames();
+    return std::any_of(hostnames.begin(), hostnames.end(), [](const std::string& host) {
+      return is_capella_host(host);
+    });
   }
 
   std::string id_{ uuid::to_string(uuid::random()) };
