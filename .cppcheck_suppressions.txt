@@ -21,6 +21,9 @@ unusedVariable:*
 useStlAlgorithm:*
 unusedPrivateFunction:*
 
+# jsonsl uses integer-to-pointer casts for state tagging
+intToPointerCast:*/core/utils/json_streaming_lexer.cxx
+
 # these are not very useful
 checkersReport:*
 internalAstError:*
@@ -36,5 +39,6 @@ variableScope:*/test/test_*
 
 # do not scan third-party code
 *:*/_deps/*
+*:*/CPM/*
 *:*/generated/third_party/*
 

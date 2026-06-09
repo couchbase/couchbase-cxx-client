@@ -128,7 +128,7 @@ public:
   {
     fmt::println("Creating span {} with parent {}", name, parent ? parent->name() : "<none>");
 
-    const std::lock_guard<std::mutex> lock(mutex_);
+    const std::scoped_lock<std::mutex> lock(mutex_);
     spans_.push_back(std::make_shared<test_span>(name, parent));
 
     if (parent != nullptr) {
@@ -141,13 +141,13 @@ public:
 
   auto spans() -> std::vector<std::shared_ptr<test_span>>
   {
-    const std::lock_guard<std::mutex> lock(mutex_);
+    const std::scoped_lock<std::mutex> lock(mutex_);
     return spans_;
   }
 
   void reset()
   {
-    const std::lock_guard<std::mutex> lock(mutex_);
+    const std::scoped_lock<std::mutex> lock(mutex_);
     spans_.clear();
   }
 

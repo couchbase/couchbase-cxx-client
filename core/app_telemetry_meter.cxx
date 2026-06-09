@@ -599,7 +599,7 @@ public:
   auto value_recorder(const std::string& node_uuid, const std::string& bucket_name)
     -> std::shared_ptr<app_telemetry_value_recorder> override
   {
-    const std::lock_guard<std::mutex> lock(mutex_);
+    const std::scoped_lock<std::mutex> lock(mutex_);
 
     if (auto node = recorders_.find(node_uuid); node != recorders_.end()) {
       if (auto bucket = node->second.find(bucket_name); bucket != node->second.end()) {
@@ -636,7 +636,7 @@ public:
 
   auto nothing_to_report() -> bool override
   {
-    const std::lock_guard<std::mutex> lock(mutex_);
+    const std::scoped_lock<std::mutex> lock(mutex_);
     return recorders_.empty();
   }
 

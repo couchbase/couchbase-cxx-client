@@ -35,7 +35,7 @@ class cancellation_token
 public:
   void setup(utils::movable_function<void()> cancel_fn)
   {
-    const std::lock_guard lock(mutex_);
+    const std::scoped_lock lock(mutex_);
     if (cancelled_) {
       cancel_fn();
       return;
@@ -47,7 +47,7 @@ public:
   {
     utils::movable_function<void()> fn{};
     {
-      const std::lock_guard lock(mutex_);
+      const std::scoped_lock lock(mutex_);
       cancelled_ = true;
       fn = std::move(cancel_fn_);
     }

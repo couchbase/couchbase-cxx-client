@@ -108,7 +108,7 @@ transactions_cleanup::clean_collection(
   // first make sure the collection is in the list
   while (is_running()) {
     {
-      const std::lock_guard<std::mutex> lock(mutex_);
+      const std::scoped_lock<std::mutex> lock(mutex_);
       if (collections_.end() == std::find(collections_.begin(), collections_.end(), keyspace)) {
         CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG(
           "cleanup for {} ending, no longer in collection cleanup list", keyspace);

@@ -510,7 +510,7 @@ public:
           } else {
             // Empty signal means that stream has completed
             {
-              const std::lock_guard<std::mutex> lock{ self->stream_map_mutex_ };
+              const std::scoped_lock<std::mutex> lock{ self->stream_map_mutex_ };
               self->streams_.erase(signal.vbucket_id);
             }
             return asio::post(asio::bind_executor(
@@ -540,7 +540,7 @@ public:
       auto v = vbucket_id.value();
       std::shared_ptr<range_scan_stream> stream{};
       {
-        const std::lock_guard<std::mutex> lock{ stream_map_mutex_ };
+        const std::scoped_lock<std::mutex> lock{ stream_map_mutex_ };
         stream = streams_.at(v);
       }
       CB_LOG_TRACE("scanning vbucket {} at node {}", vbucket_id.value(), stream->node_id());

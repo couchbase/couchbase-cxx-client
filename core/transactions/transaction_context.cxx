@@ -77,7 +77,7 @@ void
 transaction_context::add_attempt()
 {
   const transaction_attempt attempt{};
-  const std::lock_guard<std::mutex> lock(mutex_);
+  const std::scoped_lock<std::mutex> lock(mutex_);
   attempts_.push_back(attempt);
 }
 
@@ -408,7 +408,7 @@ transaction_context::finalize(txn_complete_callback&& cb)
 void
 transaction_context::current_attempt_state(attempt_state s)
 {
-  const std::lock_guard<std::mutex> lock(mutex_);
+  const std::scoped_lock<std::mutex> lock(mutex_);
   if (attempts_.empty()) {
     throw std::runtime_error("transaction_context has no attempts yet");
   }
@@ -488,7 +488,7 @@ transaction_context::new_attempt_context()
 auto
 transaction_context::current_attempt() const -> const transaction_attempt&
 {
-  const std::lock_guard<std::mutex> lock(mutex_);
+  const std::scoped_lock<std::mutex> lock(mutex_);
   if (attempts_.empty()) {
     throw std::runtime_error("transaction context has no attempts yet");
   }
@@ -498,7 +498,7 @@ transaction_context::current_attempt() const -> const transaction_attempt&
 auto
 transaction_context::num_attempts() const -> std::size_t
 {
-  const std::lock_guard<std::mutex> lock(mutex_);
+  const std::scoped_lock<std::mutex> lock(mutex_);
   return attempts_.size();
 }
 
