@@ -29,7 +29,7 @@ function(set_project_options target_name)
 
   target_compile_features(${target_name} PRIVATE cxx_std_17)
   if(MSVC)
-    target_compile_options(${target_name} PRIVATE /bigobj)
+    target_compile_options(${target_name} PRIVATE /bigobj /FS)
     target_link_libraries(${target_name} PRIVATE iphlpapi)
   endif()
 

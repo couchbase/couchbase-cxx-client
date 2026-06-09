@@ -175,7 +175,7 @@ jitter()
   static std::mt19937 gen(rd());
   static std::uniform_real_distribution<> dist(1 - RETRY_OP_JITTER, 1 + RETRY_OP_JITTER);
 
-  std::lock_guard<std::mutex> lock(mtx);
+  std::scoped_lock<std::mutex> lock(mtx);
   return dist(gen);
 }
 

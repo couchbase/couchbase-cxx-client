@@ -32,7 +32,7 @@ public:
   }
   void record_value(std::int64_t value) override
   {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::scoped_lock<std::mutex> lock(mutex_);
     values_.emplace_back(value);
   }
   std::map<std::string, std::string> tags() const
@@ -41,12 +41,12 @@ public:
   }
   std::list<std::uint64_t> values()
   {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::scoped_lock<std::mutex> lock(mutex_);
     return values_;
   }
   void reset()
   {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::scoped_lock<std::mutex> lock(mutex_);
     values_.clear();
   }
 
@@ -68,7 +68,7 @@ public:
     const std::string& name,
     const std::map<std::string, std::string>& tags) override
   {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::scoped_lock<std::mutex> lock(mutex_);
     auto it = value_recorders_.equal_range(name);
     if (it.first != it.second) {
 
@@ -83,14 +83,14 @@ public:
 
   void reset()
   {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::scoped_lock<std::mutex> lock(mutex_);
     value_recorders_.clear();
   }
 
   std::list<std::shared_ptr<test_value_recorder>> get_recorders(const std::string& name)
   {
     std::list<std::shared_ptr<test_value_recorder>> retval;
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::scoped_lock<std::mutex> lock(mutex_);
     auto it = value_recorders_.equal_range(name);
     for (auto itr = it.first; itr != it.second; itr++) {
       retval.push_back(itr->second);

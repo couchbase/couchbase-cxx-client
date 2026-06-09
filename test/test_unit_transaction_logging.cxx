@@ -34,7 +34,7 @@ public:
   std::string output()
   {
     // prevent data race if sink_it_ is called
-    std::lock_guard<std::mutex> lock(mut_);
+    std::scoped_lock<std::mutex> lock(mut_);
     return out_.str();
   }
 
@@ -44,7 +44,7 @@ protected:
     spdlog::memory_buf_t formatted;
     base_sink<std::mutex>::formatter_->format(msg, formatted);
     // prevent data race when calling output()
-    std::lock_guard<std::mutex> lock(mut_);
+    std::scoped_lock<std::mutex> lock(mut_);
     out_.write(formatted.data(), static_cast<std::streamsize>(formatted.size()));
   }
   void flush_() override

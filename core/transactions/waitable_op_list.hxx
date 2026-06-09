@@ -158,7 +158,7 @@ public:
   }
   void decrement_in_flight()
   {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::scoped_lock<std::mutex> lock(mutex_);
     in_flight_--;
     CB_TXN_LOG_TRACE("in_flight decremented to {}", in_flight_);
     assert(in_flight_ >= 0);
@@ -170,7 +170,7 @@ public:
 private:
   void change_count(int32_t val)
   {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::scoped_lock<std::mutex> lock(mutex_);
     if (allow_ops_) {
       count_ += val;
       if (val > 0) {

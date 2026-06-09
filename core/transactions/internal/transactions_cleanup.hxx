@@ -118,7 +118,7 @@ public:
   void add_collection(const couchbase::transactions::transaction_keyspace& keyspace);
   auto collections() -> std::list<couchbase::transactions::transaction_keyspace>
   {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::scoped_lock<std::mutex> lock(mutex_);
     return collections_;
   }
 
