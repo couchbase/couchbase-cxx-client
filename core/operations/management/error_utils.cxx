@@ -16,11 +16,10 @@
  */
 
 #include "error_utils.hxx"
+#include "core/utils/contains_string.hxx"
 #include "core/utils/json.hxx"
 
 #include <tao/json/value.hpp>
-
-#include <regex>
 
 namespace couchbase::core::operations::management
 {
@@ -143,20 +142,19 @@ translate_query_error_code(std::uint64_t error, const std::string& message, std:
 {
   switch (error) {
     case 5000: /* IKey: "Internal Error" */
-    {
-      static const std::regex index_already_exists_re{ ".*[iI]ndex .*already exist.*" };
-      static const std::regex index_not_found_re{ ".*[iI]ndex .*[nN]ot [fF]ound.*" };
-      if (std::regex_search(message, index_already_exists_re)) {
+      if (utils::contains_string(message, "index", true) &&
+          utils::contains_string(message, "already exist", true)) {
         return errc::common::index_exists;
       }
-      if (message.find("Index does not exist") != std::string::npos ||
-          std::regex_search(message, index_not_found_re)) {
+      if (utils::contains_string(message, "Index does not exist") ||
+          (utils::contains_string(message, "index", true) &&
+           utils::contains_string(message, "not found", true))) {
         return errc::common::index_not_found;
       }
       if (message.find("Bucket Not Found") != std::string::npos) {
         return errc::common::bucket_not_found;
       }
-    } break;
+      break;
 
     case 12003: /* IKey: "datastore.couchbase.keyspace_not_found" */
       return errc::common::bucket_not_found;

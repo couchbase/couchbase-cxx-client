@@ -454,6 +454,7 @@ set(couchbase_cxx_client_FILES
     core/transactions/utils.cxx
     core/utils/binary.cxx
     core/utils/connection_string.cxx
+    core/utils/contains_string.cxx
     core/utils/duration_parser.cxx
     core/utils/json.cxx
     core/utils/json_streaming_lexer.cxx
