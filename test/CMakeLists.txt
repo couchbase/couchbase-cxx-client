@@ -25,6 +25,7 @@ integration_test(node_id)
 
 unit_test(connection_string)
 unit_test(contains_string)
+unit_test(configuration_belongs_to_session)
 unit_test(utils)
 unit_test(binary_transcoder)
 unit_test(json_transcoder)

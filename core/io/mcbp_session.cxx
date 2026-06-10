@@ -22,6 +22,7 @@
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
 #include "core/columnar/background_bootstrap_listener.hxx"
 #endif
+#include "configuration_belongs_to_session.hxx"
 #include "core/config_listener.hxx"
 #include "core/diagnostics.hxx"
 #include "core/impl/bootstrap_error.hxx"
@@ -634,14 +635,9 @@ class mcbp_session_impl
                 }
               }
               std::optional<topology::configuration> config = req.body().config();
-              if (session_ && config.has_value()) {
-                if ((!config->bucket.has_value() && req.body().bucket().empty()) ||
-                    (session_->bucket_name_.has_value() && !req.body().bucket().empty() &&
-                     // TODO(CXXCBC-549)
-                     // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
-                     session_->bucket_name_.value() == req.body().bucket())) {
-                  session_->update_configuration(std::move(config.value()));
-                }
+              if (session_ && config.has_value() &&
+                  configuration_belongs_to_session(config->bucket, session_->bucket_name_)) {
+                session_->update_configuration(std::move(config.value()));
               }
             } break;
             default:
@@ -824,14 +820,9 @@ class mcbp_session_impl
                 }
               }
               std::optional<topology::configuration> config = req.body().config();
-              if (session_ && config.has_value()) {
-                if ((!config->bucket.has_value() && req.body().bucket().empty()) ||
-                    (session_->bucket_name_.has_value() && !req.body().bucket().empty() &&
-                     // TODO(CXXCBC-549)
-                     // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
-                     session_->bucket_name_.value() == req.body().bucket())) {
-                  session_->update_configuration(std::move(config.value()));
-                }
+              if (session_ && config.has_value() &&
+                  configuration_belongs_to_session(config->bucket, session_->bucket_name_)) {
+                session_->update_configuration(std::move(config.value()));
               }
             } break;
             default:
