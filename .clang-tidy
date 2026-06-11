@@ -19,6 +19,7 @@ Checks: |-
   portability-*,
   readability-*,
   cppcoreguidelines-*,
+  -*temporary-objects,
   -abseil-*,
   -altera-*,
   -boost-*,
@@ -204,4 +205,28 @@ Checks: |-
   # this fires as false positives (empty-brace arguments, single-element CTAD arrays, codec
   # structs). Suppressing globally; re-enable when Clang fixes the false-positive cases.
   # TODO(SA): Re-evaluate after upgrading past clang-23 to see if false positives are resolved.
-  -readability-trailing-comma
+  -readability-trailing-comma,
+  # bugprone-signed-bitwise: alias of hicpp-signed-bitwise (already disabled above). Signed bitwise
+  # operations appear throughout the MCBP/HTTP wire-format and bitmask helpers (big_endian, codec,
+  # buffer_writer, base64, etc.); they are correct but would require casting every operand to an
+  # unsigned type, adding noise without changing behavior. Suppressed for the same reason as the
+  # hicpp alias.
+  -bugprone-signed-bitwise,
+  # modernize-use-string-view: new in clang-tidy-23. Fires on helpers that return std::string but
+  # whose return paths are string literals (service_type_as_string, select_network, impl stubs).
+  # Mechanically switching them to std::string_view is unsafe here: the results feed std::string-only
+  # consumers (tao::json object keys, public *_response endpoint() signatures) where string_view does
+  # not implicitly convert, so the change would either fail to compile or just reintroduce the
+  # allocation at the call site. Evaluate a targeted conversion in a dedicated pass.
+  # TODO(SA): Re-evaluate after upgrading past clang-23.
+  -modernize-use-string-view,
+  # readability-redundant-parentheses: new in clang-tidy-23. The stylistic benefit is marginal, and
+  # its auto-fix is unsafe: it strips the required parentheses around a dereferenced callable, turning
+  # (*callback)(args) into *callback(args) and (*delay_)() into *delay_(), which no longer compile.
+  # Not worth the churn or the risk of a broken fix-it.
+  # TODO(SA): Re-evaluate after upgrading past clang-23 to see if the fix-it is corrected.
+  -readability-redundant-parentheses,
+  # readability-redundant-lambda-parameter-list: new in clang-tidy-23. Rewrites []() {} to [] {}.
+  # This codebase is callback-heavy and writes the empty () consistently; the change is pure churn
+  # across hundreds of lambdas for no functional benefit.
+  -readability-redundant-lambda-parameter-list

@@ -79,7 +79,7 @@ subdoc_lookup(tao::json::value& root, const std::string& path) -> std::optional<
 void
 subdoc_apply_projection(tao::json::value& root,
                         const std::string& path,
-                        tao::json::value& value,
+                        const tao::json::value& value,
                         bool preserve_array_indexes)
 {
   std::string::size_type offset = 0;

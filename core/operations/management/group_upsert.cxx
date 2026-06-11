@@ -53,7 +53,7 @@ group_upsert_request::encode_to(encoded_request_type& encoded,
           spec += fmt::format(":{}", utils::string_codec::v2::path_escape(role.collection.value()));
         }
       }
-      spec += "]";
+      spec += ']';
     }
     encoded_roles.push_back(spec);
   }

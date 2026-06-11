@@ -264,6 +264,10 @@ error_callback(jsonsl_t lexer,
   return 0;
 }
 
+// NOLINTBEGIN(misc-const-correctness): these are jsonsl stack callbacks whose signatures must match
+// jsonsl_stack_callback exactly (void(jsonsl_t, jsonsl_action_t, struct jsonsl_state_st*, const
+// char*)); the state pointer cannot be const or the assignment to action_callback_* would be
+// ill-formed.
 void
 meta_header_complete_callback(jsonsl_t lexer,
                               jsonsl_action_t /* action */,
@@ -399,6 +403,7 @@ initial_action_push_callback(jsonsl_t lexer,
     state->data = STATE_MARKER_ROWSET;
   }
 }
+// NOLINTEND(misc-const-correctness)
 } // namespace
 
 json::streaming_lexer::streaming_lexer(const std::string& pointer_expression, std::uint32_t depth)

@@ -912,7 +912,7 @@ attempt_context_impl::replace(const transaction_get_result& document,
             CB_ATTEMPT_CTX_LOG_TRACE(
               self, "replacing {} with {}", document, utils::to_string(content.data));
             self->check_if_done(cb);
-            staged_mutation* existing_sm = self->staged_mutations_->find_any(document.id());
+            const staged_mutation* existing_sm = self->staged_mutations_->find_any(document.id());
             if (existing_sm != nullptr && existing_sm->type() == staged_mutation_type::REMOVE) {
               CB_ATTEMPT_CTX_LOG_DEBUG(
                 self, "found existing REMOVE of {} while replacing", document);
@@ -1289,7 +1289,7 @@ attempt_context_impl::insert(const core::document_id& id,
           try {
             self->check_if_done(cb);
             auto op_id = uid_generator::next();
-            staged_mutation* existing_sm = self->staged_mutations_->find_any(id);
+            const staged_mutation* existing_sm = self->staged_mutations_->find_any(id);
             if ((existing_sm != nullptr) &&
                 (existing_sm->type() == staged_mutation_type::INSERT ||
                  existing_sm->type() == staged_mutation_type::REPLACE)) {
@@ -1959,11 +1959,11 @@ dump_request(const core::operations::query_request& req) -> std::string
   std::string raw = "{";
   for (const auto& x : req.raw) {
     raw += x.first;
-    raw += ":";
+    raw += ':';
     raw += x.second.str();
-    raw += ",";
+    raw += ',';
   }
-  raw += "}";
+  raw += '}';
   std::string params;
   for (const auto& x : req.positional_parameters) {
     params.append(x.str());

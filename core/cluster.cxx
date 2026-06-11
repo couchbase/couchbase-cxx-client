@@ -490,9 +490,7 @@ public:
                  origin_.to_json());
     setup_observability();
     if (origin_.options().enable_dns_srv) {
-      std::string hostname;
-      std::string port;
-      std::tie(hostname, port) = origin_.next_address();
+      auto [hostname, port] = origin_.next_address();
       dns_srv_tracker_ = std::make_shared<impl::dns_srv_tracker>(
         ctx_, hostname, origin_.options().dns_config, origin_.options().enable_tls);
       return asio::post(asio::bind_executor(

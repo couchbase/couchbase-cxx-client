@@ -40,7 +40,7 @@ leading_int(std::string& s, std::int64_t& v) -> bool
       return false;
     }
 
-    v = v * 10 + static_cast<std::int64_t>(c) - '0';
+    v = (v * 10) + static_cast<std::int64_t>(c) - '0';
 
     if (v < 0) {
       return false;

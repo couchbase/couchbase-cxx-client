@@ -203,12 +203,12 @@ parse_range_scan_documents(gsl::span<std::byte> data,
       }
       body.value = { remaining.begin(),
                      remaining.begin() + static_cast<std::ptrdiff_t>(value_length) };
-      if ((body.datatype & static_cast<std::byte>(protocol::datatype::snappy)) != std::byte{ 0 }) {
+      if (protocol::has_flag(body.datatype, protocol::datatype::snappy)) {
         std::string uncompressed;
         if (snappy::Uncompress(
               reinterpret_cast<const char*>(body.value.data()), body.value.size(), &uncompressed)) {
           body.value = core::utils::to_binary(uncompressed);
-          body.datatype &= ~static_cast<std::byte>(protocol::datatype::snappy);
+          protocol::clear_flag(body.datatype, protocol::datatype::snappy);
         }
       }
       data = gsl::make_span(remaining.data() + value_length, remaining.size() - value_length);

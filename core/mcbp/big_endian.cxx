@@ -75,7 +75,7 @@ void
 put_uint64(gsl::span<std::byte> bytes, std::uint64_t value)
 {
   for (std::size_t i = 0; i < 8; ++i) {
-    bytes[i] = static_cast<std::byte>(value >> (56 - i * 8));
+    bytes[i] = static_cast<std::byte>(value >> (56 - (i * 8)));
   }
 }
 } // namespace couchbase::core::mcbp::big_endian

@@ -73,7 +73,7 @@ mcbp_parser::next(mcbp_message& msg) -> mcbp_parser::result
     msg.body.end(), buf.begin() + header_size, buf.begin() + header_size + prefix_size);
 
   const bool is_compressed =
-    (msg.header.datatype & static_cast<std::uint8_t>(protocol::datatype::snappy)) != 0;
+    protocol::has_flag(static_cast<std::byte>(msg.header.datatype), protocol::datatype::snappy);
   bool use_raw_value = true;
   if (is_compressed) {
     std::string uncompressed;
