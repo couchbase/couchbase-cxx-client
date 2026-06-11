@@ -100,7 +100,7 @@ map_facets(const std::map<std::string, std::shared_ptr<search_facet>, std::less<
 }
 
 auto
-map_raw(std::map<std::string, codec::binary, std::less<>>& raw)
+map_raw(const std::map<std::string, codec::binary, std::less<>>& raw)
   -> std::map<std::string, couchbase::core::json_string>
 {
   std::map<std::string, couchbase::core::json_string> core_raw{};

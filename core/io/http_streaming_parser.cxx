@@ -26,6 +26,9 @@
 
 namespace
 {
+// NOLINTBEGIN(misc-const-correctness): these are llhttp callbacks whose signatures must match
+// llhttp_data_cb / llhttp_cb exactly (int(llhttp_t*, ...)); the parser pointer cannot be const or
+// the assignment to the llhttp_settings_t members below would be ill-formed.
 inline auto
 static_on_status(llhttp_t* parser, const char* at, std::size_t length) -> int
 {
@@ -80,6 +83,7 @@ static_on_message_complete(llhttp_t* parser) -> int
   wrapper->complete = true;
   return 0;
 }
+// NOLINTEND(misc-const-correctness)
 } // namespace
 
 namespace couchbase::core::io

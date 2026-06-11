@@ -65,7 +65,7 @@ map_collection(std::string scope_name,
 }
 
 auto
-map_scope_specs(core::topology::collections_manifest& manifest)
+map_scope_specs(const core::topology::collections_manifest& manifest)
   -> std::vector<couchbase::management::bucket::scope_spec>
 {
   std::vector<couchbase::management::bucket::scope_spec> scope_specs{};

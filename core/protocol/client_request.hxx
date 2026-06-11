@@ -23,6 +23,7 @@
 #include "client_response.hxx"
 #include "core/utils/binary.hxx"
 #include "core/utils/byteswap.hxx"
+#include "datatype.hxx"
 #include "magic.hxx"
 
 #include <algorithm>
@@ -32,8 +33,8 @@
 namespace couchbase::core::protocol
 {
 auto
-compress_value(const std::vector<std::byte>& value,
-               std::vector<std::byte>::iterator& output) -> std::pair<bool, std::uint32_t>;
+compress_value(const std::vector<std::byte>& value, const std::vector<std::byte>::iterator& output)
+  -> std::pair<bool, std::uint32_t>;
 
 template<typename Body>
 class client_request
@@ -166,7 +167,7 @@ private:
         try_to_compress && body_.value().size() > min_size_to_compress) {
       if (auto [compressed, new_value_size] = compress_value(body_.value(), body_itr); compressed) {
         /* the compressed value meets requirements and was copied to the payload */
-        payload[5] |= static_cast<std::byte>(protocol::datatype::snappy);
+        protocol::set_flag(payload[5], protocol::datatype::snappy);
         std::uint32_t new_body_size = utils::byte_swap(body_size) -
                                       gsl::narrow_cast<std::uint32_t>(body_.value().size()) +
                                       new_value_size;
