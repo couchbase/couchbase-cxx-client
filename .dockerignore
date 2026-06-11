@@ -1,0 +1,26 @@
+# Keep the Docker build context small. Note: .git is intentionally NOT ignored
+# so cmake/VersionInfo.cmake can embed accurate build metadata.
+
+# Local CMake build trees
+build/
+build-*/
+cmake-build-*/
+
+# git worktrees (each may carry its own multi-GB build tree)
+.worktrees/
+
+# CPM/FetchContent download cache (re-fetched during the image build)
+third_party_cache/
+
+# Large, unrelated working directories that may exist locally
+fit/
+
+# Editor / tooling state
+.idea/
+.vscode/
+.omc/
+.remember/
+.cache/
+
+# OS noise
+.DS_Store
