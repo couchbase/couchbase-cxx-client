@@ -52,6 +52,7 @@ unit_test(mcbp_parser)
 unit_test(mcbp_queue_request)
 unit_test(key_value_error_context)
 unit_test(management_collection)
+unit_test(node_id)
 target_link_libraries(test_unit_jsonsl PRIVATE jsonsl)
 
 integration_benchmark(get)
