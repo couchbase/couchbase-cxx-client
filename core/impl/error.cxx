@@ -75,6 +75,30 @@ error::error(std::error_code ec,
 {
 }
 
+error::error(std::error_code ec,
+             std::string message,
+             couchbase::error_context ctx,
+             couchbase::node_id node_id)
+  : ec_{ ec }
+  , message_{ std::move(message) }
+  , ctx_{ std::move(ctx) }
+  , node_id_{ std::move(node_id) }
+{
+}
+
+error::error(std::error_code ec,
+             std::string message,
+             couchbase::error_context ctx,
+             couchbase::error cause,
+             couchbase::node_id node_id)
+  : ec_{ ec }
+  , message_{ std::move(message) }
+  , ctx_{ std::move(ctx) }
+  , cause_{ std::make_shared<error>(std::move(cause)) }
+  , node_id_{ std::move(node_id) }
+{
+}
+
 auto
 error::ec() const -> std::error_code
 {
@@ -103,7 +127,14 @@ error::cause() const -> std::optional<error>
   return *cause_;
 }
 
-error::operator bool() const
+auto
+error::node_id() const -> const couchbase::node_id&
+{
+  return node_id_;
+}
+
+error::
+operator bool() const
 {
   return ec_.value() != 0;
 }
@@ -164,19 +195,27 @@ make_error(const core::error_context::http& core_ctx) -> couchbase::error
 auto
 make_error(const couchbase::core::key_value_error_context& core_ctx) -> couchbase::error
 {
+  // Always preserve the node_id so that callers on both success and error
+  // paths can identify which node handled the request.
   if (!core_ctx.ec()) {
-    return {};
+    return { {}, {}, {}, core_ctx.last_dispatched_to_node_id() };
   }
-  return { core_ctx.ec(), {}, internal_error_context::build_error_context(core_ctx) };
+  return { core_ctx.ec(),
+           {},
+           internal_error_context::build_error_context(core_ctx),
+           core_ctx.last_dispatched_to_node_id() };
 }
 
 auto
 make_error(const couchbase::core::subdocument_error_context& core_ctx) -> couchbase::error
 {
   if (!core_ctx.ec()) {
-    return {};
+    return { {}, {}, {}, core_ctx.last_dispatched_to_node_id() };
   }
-  return { core_ctx.ec(), {}, internal_error_context::build_error_context(core_ctx) };
+  return { core_ctx.ec(),
+           {},
+           internal_error_context::build_error_context(core_ctx),
+           core_ctx.last_dispatched_to_node_id() };
 }
 
 auto
@@ -197,11 +236,17 @@ make_error(const core::transactions::op_exception& exc) -> couchbase::error
   }
 
   if (cause.has_value()) {
+    // Propagate node_id from the inner cause to the outer error. Without
+    // this, a transaction-wrapped KV failure would have outer.node_id() ==
+    // {} while cause().value().node_id() carries the real attribution —
+    // surprising for callers reading error.node_id() at the top level.
+    auto node_id = cause->node_id();
     return couchbase::error{
       transaction_op_errc_from_external_exception(exc.cause()),
       exc.what(),
       {},
-      cause.value(),
+      std::move(*cause),
+      std::move(node_id),
     };
   }
 

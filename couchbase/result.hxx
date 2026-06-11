@@ -18,6 +18,9 @@
 #pragma once
 
 #include <couchbase/cas.hxx>
+#include <couchbase/node_id.hxx>
+
+#include <utility>
 
 namespace couchbase
 {
@@ -49,7 +52,20 @@ public:
   }
 
   /**
-   * @return
+   * @param cas
+   * @param node_id identity of the node that served the request
+   *
+   * @since 1.3.2
+   * @internal
+   */
+  result(couchbase::cas cas, couchbase::node_id node_id)
+    : cas_(cas)
+    , node_id_(std::move(node_id))
+  {
+  }
+
+  /**
+   * @return CAS value associated with the operation result.
    *
    * @since 1.0.0
    * @committed
@@ -59,8 +75,45 @@ public:
     return cas_;
   }
 
+  /**
+   * Returns the identity of the cluster node that served this request.
+   *
+   * The returned node_id is default-constructed (falsy) when the node
+   * could not be determined.
+   *
+   * @return identity of the serving node
+   *
+   * @since 1.3.2
+   * @uncommitted
+   */
+  [[nodiscard]] auto node_id() const -> const couchbase::node_id&
+  {
+    return node_id_;
+  }
+
+  /**
+   * Implementation-only setter used by @c core::impl::invoke_with_node_id to
+   * propagate the node identity from a KV error context onto the result.
+   *
+   * Despite living in the public header (it is needed to set the field on
+   * the public-facing result-derived types from a template instantiation in
+   * the impl layer), this is **not** part of the user-facing API. The name
+   * is deliberately noisy — @c @internal alone is documentation-only and
+   * does not stop a user discovering @c result.node_id(...) via
+   * autocomplete; @c set_node_id_internal is harder to mistake for a
+   * documented mutator.
+   *
+   * @since 1.3.2
+   * @internal
+   */
+  void set_node_id_internal(couchbase::node_id id)
+  {
+    node_id_ = std::move(id);
+  }
+
 private:
   couchbase::cas cas_{ 0U };
+  couchbase::node_id node_id_{};
 };
 
 } // namespace couchbase

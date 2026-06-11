@@ -17,14 +17,30 @@
 
 #include "test_helper.hxx"
 
+#include "core/error_context/key_value.hxx"
+#include "core/error_context/key_value_error_context.hxx"
+#include "core/error_context/subdocument_error_context.hxx"
 #include "core/impl/node_id.hxx"
+#include "core/impl/resolve_node_id.hxx"
+#include "core/topology/configuration.hxx"
 
+#include <couchbase/error_codes.hxx>
 #include <couchbase/node_id.hxx>
 
 #include <map>
 #include <set>
 #include <unordered_map>
 #include <unordered_set>
+
+namespace
+{
+constexpr auto
+as_transport(bool is_tls) noexcept -> couchbase::core::topology::transport
+{
+  return is_tls ? couchbase::core::topology::transport::tls
+                : couchbase::core::topology::transport::plain;
+}
+} // namespace
 
 TEST_CASE("unit: default node_id is falsy", "[unit]")
 {
@@ -218,4 +234,397 @@ TEST_CASE("unit: node_id works in unordered containers", "[unit]")
   m[nid1] = 1;
   m[nid2] = 2;
   REQUIRE(m.size() == 2);
+}
+
+TEST_CASE("unit: configuration::node effective_node_id with uuid", "[unit]")
+{
+  couchbase::core::topology::configuration::node n;
+  n.node_uuid = "test-uuid-xyz";
+  n.hostname = "172.18.0.2";
+  n.services_plain.key_value = 11210;
+  n.services_tls.key_value = 11207;
+
+  auto nid = n.effective_node_id(couchbase::core::topology::transport::plain);
+  REQUIRE(static_cast<bool>(nid));
+  REQUIRE(nid.id() == "test-uuid-xyz");
+  REQUIRE(nid.hostname() == "172.18.0.2");
+  REQUIRE(nid.port() == 11210);
+}
+
+TEST_CASE("unit: configuration::node effective_node_id without uuid uses KV port", "[unit]")
+{
+  couchbase::core::topology::configuration::node n;
+  n.hostname = "172.18.0.2";
+  n.services_plain.key_value = 11210;
+  n.services_tls.key_value = 11207;
+  n.services_plain.management = 8091;
+  n.services_tls.management = 18091;
+
+  auto plain = n.effective_node_id(couchbase::core::topology::transport::plain);
+  REQUIRE(static_cast<bool>(plain));
+  REQUIRE(plain.port() == 11210);
+  // The fallback id must be derived from the KV port that the client
+  // actually connects over — not the management port.
+  REQUIRE(plain == couchbase::internal_node_id::build("", "172.18.0.2", 11210));
+  REQUIRE(plain != couchbase::internal_node_id::build("", "172.18.0.2", 8091));
+
+  auto tls = n.effective_node_id(couchbase::core::topology::transport::tls);
+  REQUIRE(static_cast<bool>(tls));
+  REQUIRE(tls.port() == 11207);
+  REQUIRE(tls == couchbase::internal_node_id::build("", "172.18.0.2", 11207));
+  REQUIRE(tls != couchbase::internal_node_id::build("", "172.18.0.2", 18091));
+}
+
+TEST_CASE("unit: configuration::node effective_node_id differs between TLS and plain without uuid",
+          "[unit]")
+{
+  // On pre-8.0 servers (no node_uuid) the plain and TLS variants must produce
+  // different fallback ids — they hash different ports — so that a consumer
+  // using the plain port on the request side cannot accidentally match an
+  // id derived from the TLS port on the response side.
+  couchbase::core::topology::configuration::node n;
+  n.hostname = "172.18.0.2";
+  n.services_plain.key_value = 11210;
+  n.services_tls.key_value = 11207;
+
+  REQUIRE(n.effective_node_id(couchbase::core::topology::transport::plain) !=
+          n.effective_node_id(couchbase::core::topology::transport::tls));
+}
+
+TEST_CASE("unit: configuration::node effective_node_id without KV port is falsy", "[unit]")
+{
+  // A topology node missing a KV port for the active transport cannot be
+  // uniquely identified — internal_node_id::build returns a default (falsy)
+  // node_id so request-side identity agrees with the response-side guard,
+  // and downstream consumers (e.g. circuit-breaker registries keyed on
+  // node_id) never accumulate ghost entries for un-bound nodes.
+  couchbase::core::topology::configuration::node n;
+  n.hostname = "172.18.0.2";
+  // no KV port set
+
+  auto nid = n.effective_node_id(couchbase::core::topology::transport::plain);
+  REQUIRE_FALSE(static_cast<bool>(nid));
+  REQUIRE(nid.id().empty());
+}
+
+TEST_CASE("unit: effective_node_id matches session canonicals (response side)", "[unit]")
+{
+  // mcbp_session populates canonical_hostname_ from node.hostname and
+  // canonical_port_number_ from node.port_or(key_value, is_tls_, 0). The
+  // error context feeds these into internal_node_id::build. This test
+  // locks in that the request-side node_id (via effective_node_id) is
+  // bit-for-bit identical to what the response side would produce for the
+  // same node and TLS setting — even on servers that do not supply a
+  // node_uuid (i.e. when the fallback hash is in play).
+  couchbase::core::topology::configuration::node n;
+  n.hostname = "172.18.0.2";
+  n.services_plain.key_value = 11210;
+  n.services_tls.key_value = 11207;
+  n.services_plain.management = 8091;
+  n.services_tls.management = 18091;
+
+  for (bool is_tls : { false, true }) {
+    auto request_side = n.effective_node_id(as_transport(is_tls));
+    auto response_side = couchbase::internal_node_id::build(
+      n.node_uuid, n.hostname, n.port_or(couchbase::core::service_type::key_value, is_tls, 0));
+    REQUIRE(request_side == response_side);
+    REQUIRE(request_side.id() == response_side.id());
+    REQUIRE(request_side.hostname() == response_side.hostname());
+    REQUIRE(request_side.port() == response_side.port());
+  }
+}
+
+TEST_CASE("unit: effective_node_id matches session canonicals with node_uuid", "[unit]")
+{
+  // When the server provides a node_uuid (Server 8.0.1+), the id() is the
+  // UUID itself — port and hostname differences no longer affect identity,
+  // but the request/response sides should still agree on the exposed port.
+  couchbase::core::topology::configuration::node n;
+  n.node_uuid = "node-uuid-42";
+  n.hostname = "172.18.0.2";
+  n.services_plain.key_value = 11210;
+  n.services_tls.key_value = 11207;
+
+  for (bool is_tls : { false, true }) {
+    auto request_side = n.effective_node_id(as_transport(is_tls));
+    auto response_side = couchbase::internal_node_id::build(
+      n.node_uuid, n.hostname, n.port_or(couchbase::core::service_type::key_value, is_tls, 0));
+    REQUIRE(request_side == response_side);
+    REQUIRE(request_side.port() == response_side.port());
+  }
+}
+
+TEST_CASE("unit: node_id ignores alternate addresses without node_uuid", "[unit]")
+{
+  // Mirrors a cluster where each node has a private (default) address used
+  // inside the VPC and a public (external/alt) alias used from outside.
+  // Regardless of which network the client selects on bootstrap, node_id
+  // must be derived from the default-network hostname + KV port — matching
+  // what mcbp_session stores in canonical_hostname_ / canonical_port_number_
+  // on the response side — so that collection::node_id_for() (request side)
+  // and result::node_id() / error::node_id() (response side) compare equal
+  // regardless of transport. This is what makes external circuit breakers
+  // keyed on node_id work under alt-network deployments.
+  couchbase::core::topology::configuration::node n;
+  n.hostname = "172.18.0.2";
+  n.services_plain.key_value = 11210;
+  n.services_tls.key_value = 11207;
+
+  couchbase::core::topology::configuration::alternate_address ext;
+  ext.name = "external";
+  ext.hostname = "172-18-0-2.my.cloud.com";
+  ext.services_plain.key_value = 31100;
+  ext.services_tls.key_value = 31207;
+  n.alt["external"] = ext;
+
+  for (bool is_tls : { false, true }) {
+    auto request_side = n.effective_node_id(as_transport(is_tls));
+    // The accessors expose the default-network identity, not the alt alias.
+    REQUIRE(request_side.hostname() == "172.18.0.2");
+    REQUIRE(request_side.hostname() != ext.hostname);
+
+    // The response-side formula (mcbp_session feeds canonical_hostname_ and
+    // canonical_port_number_ into internal_node_id::build) must produce the
+    // same id even when the client connected over the external network.
+    auto response_side = couchbase::internal_node_id::build(
+      n.node_uuid, n.hostname, n.port_or(couchbase::core::service_type::key_value, is_tls, 0));
+    REQUIRE(request_side == response_side);
+
+    // And an id built from the alt hostname/port must be different — the
+    // public alias must never influence the node's identity.
+    auto alt_port = is_tls ? ext.services_tls.key_value : ext.services_plain.key_value;
+    auto alt_side =
+      couchbase::internal_node_id::build(n.node_uuid, ext.hostname, alt_port.value_or(0));
+    REQUIRE(request_side != alt_side);
+  }
+}
+
+TEST_CASE("unit: node_id ignores alternate addresses with node_uuid", "[unit]")
+{
+  // With a server-provided node_uuid the identity is trivially transport-
+  // independent (id() is just the uuid), but the hostname() and port()
+  // accessors should still report the default-network values so that any
+  // consumer surfacing them for logging sees a stable pair.
+  couchbase::core::topology::configuration::node n;
+  n.node_uuid = "stable-uuid-7";
+  n.hostname = "172.18.0.2";
+  n.services_plain.key_value = 11210;
+  n.services_tls.key_value = 11207;
+
+  couchbase::core::topology::configuration::alternate_address ext;
+  ext.name = "external";
+  ext.hostname = "172-18-0-2.my.cloud.com";
+  ext.services_plain.key_value = 31100;
+  ext.services_tls.key_value = 31207;
+  n.alt["external"] = ext;
+
+  auto plain = n.effective_node_id(couchbase::core::topology::transport::plain);
+  REQUIRE(plain.id() == "stable-uuid-7");
+  REQUIRE(plain.hostname() == "172.18.0.2");
+  REQUIRE(plain.port() == 11210);
+
+  auto tls = n.effective_node_id(couchbase::core::topology::transport::tls);
+  REQUIRE(tls.id() == "stable-uuid-7");
+  REQUIRE(tls.hostname() == "172.18.0.2");
+  REQUIRE(tls.port() == 11207);
+}
+
+TEST_CASE("unit: vbucket map resolves to correct node_id", "[unit]")
+{
+  couchbase::core::topology::configuration config;
+  config.nodes.resize(3);
+  config.nodes[0].node_uuid = "node-0";
+  config.nodes[0].hostname = "h0";
+  config.nodes[0].services_plain.key_value = 11210;
+  config.nodes[1].node_uuid = "node-1";
+  config.nodes[1].hostname = "h1";
+  config.nodes[1].services_plain.key_value = 11210;
+  config.nodes[2].node_uuid = "node-2";
+  config.nodes[2].hostname = "h2";
+  config.nodes[2].services_plain.key_value = 11210;
+
+  // Create a simple vbucket map: 4 vbuckets, distributed across 3 nodes
+  config.vbmap = couchbase::core::topology::configuration::vbucket_map{
+    { 0, 1 },
+    { 1, 2 },
+    { 2, 0 },
+    { 0, 2 },
+  };
+
+  auto idx0 = config.map_key("some-key", 0).second;
+  REQUIRE(idx0.has_value());
+  auto nid =
+    config.nodes[idx0.value()].effective_node_id(couchbase::core::topology::transport::plain);
+  REQUIRE(static_cast<bool>(nid));
+  // The node_id should be one of our configured nodes
+  REQUIRE((nid.id() == "node-0" || nid.id() == "node-1" || nid.id() == "node-2"));
+}
+
+TEST_CASE("unit: make_subdocument_error_context propagates node_id", "[unit]")
+{
+  // make_subdocument_error_context builds a subdocument_error_context from a
+  // key_value_error_context. Before CXXCBC-821 the node_id carried on the
+  // source ctx was silently dropped, so subdoc results/errors never surfaced
+  // it. This locks in that it is forwarded end-to-end.
+  auto expected = couchbase::internal_node_id::build("node-xyz", "172.18.0.2", 11210);
+
+  couchbase::core::key_value_error_context kv_ctx{ "op-1",
+                                                   {},
+                                                   std::string{ "172.18.0.2:11210" },
+                                                   std::string{ "127.0.0.1:55555" },
+                                                   0,
+                                                   {},
+                                                   expected,
+                                                   "doc-1",
+                                                   "bucket",
+                                                   "_default",
+                                                   "_default",
+                                                   42,
+                                                   {},
+                                                   couchbase::cas{ 1 },
+                                                   {},
+                                                   {} };
+  REQUIRE(kv_ctx.last_dispatched_to_node_id() == expected);
+
+  auto subdoc_ctx = couchbase::core::make_subdocument_error_context(kv_ctx, {}, {}, {}, false);
+  REQUIRE(subdoc_ctx.last_dispatched_to_node_id() == expected);
+  REQUIRE(subdoc_ctx.last_dispatched_to_node_id().id() == "node-xyz");
+}
+
+TEST_CASE("unit: subdocument_error_context constructor accepts node_id", "[unit]")
+{
+  auto expected = couchbase::internal_node_id::build("uuid-abc", "h", 11210);
+  couchbase::core::subdocument_error_context ctx{
+    "op-2",
+    {},
+    {},
+    {},
+    0,
+    {},
+    expected,
+    "doc-2",
+    "bucket",
+    "_default",
+    "_default",
+    7,
+    {},
+    couchbase::cas{ 2 },
+    {},
+    {},
+    std::optional<std::string>{ "some.path" },
+    std::optional<std::uint64_t>{ 0 },
+    false,
+  };
+  REQUIRE(ctx.last_dispatched_to_node_id() == expected);
+  REQUIRE(ctx.first_error_path() == std::optional<std::string>{ "some.path" });
+  REQUIRE(ctx.first_error_index() == std::optional<std::size_t>{ 0 });
+}
+
+TEST_CASE("unit: make_subdocument_error_context with empty source node_id stays empty", "[unit]")
+{
+  // Symmetric case to the propagation test: when the source key_value
+  // context carries a default-constructed (falsy) node_id, the subdoc
+  // wrapper must not invent identity. Guards against future "if node_id is
+  // empty, default to something" regressions.
+  couchbase::core::key_value_error_context kv_ctx{
+    "op-empty",  {},       {},         {},         0, {}, couchbase::node_id{}, // explicitly empty
+    "doc-empty", "bucket", "_default", "_default", 0, {}, couchbase::cas{ 0 },  {}, {}
+  };
+  REQUIRE_FALSE(static_cast<bool>(kv_ctx.last_dispatched_to_node_id()));
+
+  auto subdoc_ctx = couchbase::core::make_subdocument_error_context(kv_ctx, {}, {}, {}, false);
+  REQUIRE_FALSE(static_cast<bool>(subdoc_ctx.last_dispatched_to_node_id()));
+}
+
+TEST_CASE("unit: resolve_node_id_from_config rejects empty key", "[unit]")
+{
+  // Locks in the invalid_argument guard from collection_impl::node_id_for —
+  // an empty key would otherwise map to vbucket 0 unconditionally and emit a
+  // deterministic-but-meaningless node_id.
+  auto config = std::make_shared<couchbase::core::topology::configuration>();
+  config->nodes.resize(1);
+  config->nodes[0].node_uuid = "any-node";
+  config->nodes[0].hostname = "h";
+  config->nodes[0].services_plain.key_value = 11210;
+  config->vbmap = couchbase::core::topology::configuration::vbucket_map{ { 0 } };
+
+  auto [ec, nid] = couchbase::core::impl::resolve_node_id_from_config(
+    config, "", couchbase::core::topology::transport::plain);
+  REQUIRE(ec == couchbase::errc::common::invalid_argument);
+  REQUIRE_FALSE(static_cast<bool>(nid));
+}
+
+TEST_CASE("unit: resolve_node_id_from_config reports no config", "[unit]")
+{
+  // The (origin, ec) preconditions are enforced by node_id_for itself; this
+  // covers the null-config path that with_bucket_configuration may invoke
+  // after a successful origin lookup but before a config snapshot is known.
+  std::shared_ptr<couchbase::core::topology::configuration> null_config;
+  auto [ec, nid] = couchbase::core::impl::resolve_node_id_from_config(
+    null_config, "doc", couchbase::core::topology::transport::plain);
+  REQUIRE(ec == couchbase::errc::network::configuration_not_available);
+  REQUIRE_FALSE(static_cast<bool>(nid));
+}
+
+TEST_CASE("unit: resolve_node_id_from_config reports missing vbmap", "[unit]")
+{
+  auto config = std::make_shared<couchbase::core::topology::configuration>();
+  // nodes populated but no vbmap
+  config->nodes.resize(1);
+  config->nodes[0].hostname = "h";
+
+  auto [ec, nid] = couchbase::core::impl::resolve_node_id_from_config(
+    config, "doc", couchbase::core::topology::transport::plain);
+  REQUIRE(ec == couchbase::errc::network::configuration_not_available);
+  REQUIRE_FALSE(static_cast<bool>(nid));
+}
+
+TEST_CASE("unit: resolve_node_id_from_config reports empty vbmap", "[unit]")
+{
+  auto config = std::make_shared<couchbase::core::topology::configuration>();
+  config->nodes.resize(1);
+  config->nodes[0].hostname = "h";
+  config->vbmap = couchbase::core::topology::configuration::vbucket_map{};
+
+  auto [ec, nid] = couchbase::core::impl::resolve_node_id_from_config(
+    config, "doc", couchbase::core::topology::transport::plain);
+  REQUIRE(ec == couchbase::errc::network::configuration_not_available);
+  REQUIRE_FALSE(static_cast<bool>(nid));
+}
+
+TEST_CASE("unit: resolve_node_id_from_config reports out-of-range server_index", "[unit]")
+{
+  // The vbmap entry points to a server_index that does not exist in
+  // configuration::nodes — surfaces as configuration_not_available, not
+  // request_canceled.
+  auto config = std::make_shared<couchbase::core::topology::configuration>();
+  config->nodes.resize(1);
+  config->nodes[0].hostname = "h";
+  config->nodes[0].services_plain.key_value = 11210;
+  // vbmap references node index 99 which is outside nodes.size() == 1
+  config->vbmap = couchbase::core::topology::configuration::vbucket_map{ { 99 } };
+
+  auto [ec, nid] = couchbase::core::impl::resolve_node_id_from_config(
+    config, "doc", couchbase::core::topology::transport::plain);
+  REQUIRE(ec == couchbase::errc::network::configuration_not_available);
+  REQUIRE_FALSE(static_cast<bool>(nid));
+}
+
+TEST_CASE("unit: resolve_node_id_from_config returns identity on success", "[unit]")
+{
+  auto config = std::make_shared<couchbase::core::topology::configuration>();
+  config->nodes.resize(2);
+  config->nodes[0].node_uuid = "node-0";
+  config->nodes[0].hostname = "h0";
+  config->nodes[0].services_plain.key_value = 11210;
+  config->nodes[1].node_uuid = "node-1";
+  config->nodes[1].hostname = "h1";
+  config->nodes[1].services_plain.key_value = 11210;
+  config->vbmap = couchbase::core::topology::configuration::vbucket_map{ { 0 }, { 1 } };
+
+  auto [ec, nid] = couchbase::core::impl::resolve_node_id_from_config(
+    config, "any-key", couchbase::core::topology::transport::plain);
+  REQUIRE_FALSE(ec);
+  REQUIRE(static_cast<bool>(nid));
+  REQUIRE((nid.id() == "node-0" || nid.id() == "node-1"));
 }
