@@ -45,23 +45,26 @@ public:
 
   void add_tag(const std::string& name, std::uint64_t value) override
   {
+    const std::scoped_lock lock(mutex_);
     int_tags_[name] = value;
   }
 
   void add_tag(const std::string& name, const std::string& value) override
   {
+    const std::scoped_lock lock(mutex_);
     string_tags_[name] = value;
   }
 
   void end() override
   {
+    const std::scoped_lock lock(mutex_);
     duration_ = std::chrono::duration_cast<std::chrono::nanoseconds>(
       std::chrono::steady_clock::now() - start_);
   }
 
   void add_child_span(const std::shared_ptr<test_span>& child)
   {
-    const std::scoped_lock lock(child_spans_lock_);
+    const std::scoped_lock lock(mutex_);
 
     const auto child_span_name = child->name();
     if (child_spans_.count(child_span_name) == 0) {
@@ -70,38 +73,42 @@ public:
     child_spans_[child_span_name].emplace_back(child);
   }
 
-  auto child_spans() -> std::map<std::string, std::vector<std::weak_ptr<test_span>>>
+  [[nodiscard]] auto child_spans() -> std::map<std::string, std::vector<std::weak_ptr<test_span>>>
   {
-    const std::shared_lock lock(child_spans_lock_);
+    const std::scoped_lock lock(mutex_);
     return child_spans_;
   }
 
-  auto child_spans(const std::string& name) -> std::vector<std::weak_ptr<test_span>>
+  [[nodiscard]] auto child_spans(const std::string& name) -> std::vector<std::weak_ptr<test_span>>
   {
-    const std::shared_lock lock(child_spans_lock_);
+    const std::scoped_lock lock(mutex_);
     if (child_spans_.count(name) == 0) {
       return {};
     }
     return child_spans_.at(name);
   }
 
-  auto string_tags() -> std::map<std::string, std::string>
+  [[nodiscard]] auto string_tags() -> std::map<std::string, std::string>
   {
+    const std::scoped_lock lock(mutex_);
     return string_tags_;
   }
 
-  auto int_tags() -> std::map<std::string, std::uint64_t>
+  [[nodiscard]] auto int_tags() -> std::map<std::string, std::uint64_t>
   {
+    const std::scoped_lock lock(mutex_);
     return int_tags_;
   }
 
-  auto duration() const -> std::chrono::nanoseconds
+  [[nodiscard]] auto duration() -> std::chrono::nanoseconds
   {
+    const std::scoped_lock lock(mutex_);
     return duration_;
   }
 
-  auto start() const -> std::chrono::time_point<std::chrono::steady_clock>
+  [[nodiscard]] auto start() -> std::chrono::time_point<std::chrono::steady_clock>
   {
+    const std::scoped_lock lock(mutex_);
     return start_;
   }
 
@@ -117,7 +124,7 @@ private:
   std::map<std::string, std::string> string_tags_;
   std::map<std::string, std::uint64_t> int_tags_;
   std::map<std::string, std::vector<std::weak_ptr<test_span>>> child_spans_{};
-  std::shared_mutex child_spans_lock_{};
+  std::mutex mutex_{};
 };
 
 class test_tracer : public couchbase::tracing::request_tracer
