@@ -25,6 +25,8 @@
 #include <memory>
 #include <string>
 #include <system_error>
+#include <utility>
+#include <vector>
 
 namespace couchbase::core::impl
 {
@@ -78,5 +80,46 @@ resolve_node_id_from_config(const std::shared_ptr<topology::configuration>& conf
   // constructor is selected and `resolved` is genuinely moved (a leading `{}`
   // would bind the const-reference constructor instead, defeating the move).
   return { std::error_code{}, std::move(resolved) };
+}
+
+/**
+ * Pure helper that enumerates the KV-serving nodes of a bucket configuration
+ * snapshot. Extracted out of @c collection_impl::node_ids so the
+ * error-mapping branches (no config, empty KV-serving set, success) can be
+ * unit-tested without an io_context or a live cluster — and so the branch
+ * matches the contract of the sibling resolver above:
+ *
+ * - A missing/null config snapshot is reported as
+ *   @c errc::network::configuration_not_available (it must not be a silent
+ *   empty success: the caller cannot distinguish "the cluster has zero KV
+ *   nodes" from "we don't know the topology yet").
+ * - An empty effective-node-ids set is reported the same way; this is the
+ *   mid-rebalance transient that the original commit silently surfaced as
+ *   a successful empty vector.
+ *
+ * @param config  bucket configuration snapshot (may be null)
+ * @param t       which port pair (plain/TLS) to use when deriving identity
+ * @return pair of (error_code, vector<node_id>). On success the @c
+ *         error_code is default and the vector is non-empty; on failure the
+ *         vector is empty.
+ */
+[[nodiscard]] inline auto
+resolve_node_ids_from_config(const std::shared_ptr<topology::configuration>& config,
+                             topology::transport t)
+  -> std::pair<std::error_code, std::vector<couchbase::node_id>>
+{
+  if (!config) {
+    return { errc::network::configuration_not_available, {} };
+  }
+  auto nids = config->effective_node_ids(t);
+  if (nids.empty()) {
+    // Tighter than the original "return {}" — a momentarily-empty
+    // topology (e.g. mid-rebalance) is reported as unavailable rather
+    // than as a successful empty list, so registry-sweep loops keyed on
+    // node_id don't conclude the cluster has zero KV-serving nodes and
+    // discard every entry.
+    return { errc::network::configuration_not_available, {} };
+  }
+  return { {}, std::move(nids) };
 }
 } // namespace couchbase::core::impl
