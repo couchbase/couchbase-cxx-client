@@ -18,6 +18,7 @@
 #pragma once
 
 #include <couchbase/error_codes.hxx>
+#include <couchbase/node_id.hxx>
 
 #include "core/error_context/key_value.hxx"
 #include "core/impl/get_replica.hxx"
@@ -40,6 +41,7 @@ struct get_all_replicas_response {
     couchbase::cas cas{};
     std::uint32_t flags{};
     bool replica{ true };
+    couchbase::node_id dispatched_to_node_id{};
   };
   key_value_error_context ctx{};
   std::vector<entry> entries{};
@@ -156,8 +158,12 @@ struct get_all_replicas_request {
                       return;
                     }
                   } else {
-                    ctx->result_.emplace_back(get_all_replicas_response::entry{
-                      std::move(resp.value), resp.cas, resp.flags, true /* replica */ });
+                    ctx->result_.emplace_back(
+                      get_all_replicas_response::entry{ std::move(resp.value),
+                                                        resp.cas,
+                                                        resp.flags,
+                                                        true /* replica */,
+                                                        resp.ctx.last_dispatched_to_node_id() });
                   }
                   if (ctx->expected_responses_ == 0) {
                     ctx->done_ = true;
@@ -203,8 +209,12 @@ struct get_all_replicas_request {
                       return;
                     }
                   } else {
-                    ctx->result_.emplace_back(get_all_replicas_response::entry{
-                      std::move(resp.value), resp.cas, resp.flags, false /* active */ });
+                    ctx->result_.emplace_back(
+                      get_all_replicas_response::entry{ std::move(resp.value),
+                                                        resp.cas,
+                                                        resp.flags,
+                                                        false /* active */,
+                                                        resp.ctx.last_dispatched_to_node_id() });
                   }
                   if (ctx->expected_responses_ == 0) {
                     ctx->done_ = true;

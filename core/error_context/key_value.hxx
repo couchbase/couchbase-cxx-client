@@ -20,6 +20,7 @@
 #include "subdocument_error_context.hxx"
 
 #include "core/document_id.hxx"
+#include "core/impl/node_id.hxx"
 #include "key_value_error_context.hxx"
 
 #include <optional>
@@ -91,6 +92,18 @@ make_key_value_error_context(std::error_code ec,
   auto retry_attempts = command->request.retries.retry_attempts();
   auto retry_reasons = command->request.retries.retry_reasons();
 
+  // Build node_id from the session that handled this request. The session
+  // carries the node_uuid (empty on pre-8.0 servers), canonical hostname, and
+  // KV port — we feed these into internal_node_id::build, which preserves the
+  // "falsy = unknown" contract for not-yet-bound sessions by returning a
+  // default node_id when the (uuid, host, port) inputs are all empty/zero.
+  couchbase::node_id dispatched_to_node_id{};
+  if (command->session_) {
+    dispatched_to_node_id = internal_node_id::build(command->session_->node_uuid(),
+                                                    command->session_->canonical_hostname(),
+                                                    command->session_->canonical_port_number());
+  }
+
   return {
     command->id_,
     ec,
@@ -98,6 +111,7 @@ make_key_value_error_context(std::error_code ec,
     command->last_dispatched_from_,
     retry_attempts,
     std::move(retry_reasons),
+    std::move(dispatched_to_node_id),
     key,
     bucket,
     scope,

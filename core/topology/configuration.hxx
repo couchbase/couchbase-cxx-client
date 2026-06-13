@@ -21,6 +21,8 @@
 #include "core/platform/uuid.h"
 #include "core/service_type.hxx"
 
+#include <couchbase/node_id.hxx>
+
 #include <map>
 #include <optional>
 #include <set>
@@ -29,6 +31,21 @@
 
 namespace couchbase::core::topology
 {
+
+/**
+ * Selects which side of the (plain, TLS) port pair to use when deriving a
+ * node identity from a topology snapshot.
+ *
+ * Internal-only strong type: a bare @c bool here is bug-bait because the same
+ * flag flows through 6+ layers from origin() into effective_node_id() and a
+ * silent sign flip would corrupt the pre-8.0 fallback hash without any
+ * compile-time warning.
+ */
+enum class transport {
+  plain,
+  tls,
+};
+
 struct configuration {
   enum class node_locator_type {
     unknown,
@@ -83,6 +100,24 @@ struct configuration {
 
     [[nodiscard]] auto endpoint(const std::string& network, service_type type, bool is_tls) const
       -> std::optional<std::string>;
+
+    /**
+     * Returns a node_id built from this node's UUID (when available on
+     * Server 8.0.1+) with fallback to a deterministic hash of hostname +
+     * KV port for older servers.
+     *
+     * The KV port selected mirrors what mcbp_session uses for the same node
+     * (TLS port when @p t is @c transport::tls, plain port otherwise),
+     * ensuring that the node_id surfaced on the request side via
+     * collection::node_id_for matches the node_id attached to results and
+     * errors.
+     *
+     * Returns a default-constructed (falsy) @c node_id when this node does
+     * not expose a KV port for the requested transport — the contract that
+     * "falsy = unknown / not identifiable" is enforced by
+     * @c internal_node_id::build for the empty case.
+     */
+    [[nodiscard]] auto effective_node_id(transport t) const -> couchbase::node_id;
   };
 
   [[nodiscard]] auto select_network(const std::string& bootstrap_hostname) const -> std::string;

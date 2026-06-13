@@ -19,6 +19,7 @@
 
 #include "core/cluster.hxx"
 #include "core/impl/error.hxx"
+#include "core/impl/invoke_with_node_id.hxx"
 #include "core/impl/observability_recorder.hxx"
 #include "core/operations/document_append.hxx"
 #include "core/operations/document_decrement.hxx"
@@ -53,6 +54,8 @@
 
 namespace couchbase
 {
+using core::impl::invoke_with_node_id;
+
 class binary_collection_impl : public std::enable_shared_from_this<binary_collection_impl>
 {
 public:
@@ -113,10 +116,13 @@ public:
         [obs_rec = std::move(obs_rec), handler = std::move(handler)](auto&& resp) mutable {
           obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
           if (resp.ctx.ec()) {
-            return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{});
+            invoke_with_node_id(
+              std::move(handler), core::impl::make_error(std::move(resp.ctx)), mutation_result{});
+            return;
           }
-          return handler(core::impl::make_error(std::move(resp.ctx)),
-                         mutation_result{ resp.cas, std::move(resp.token) });
+          invoke_with_node_id(std::move(handler),
+                              core::impl::make_error(std::move(resp.ctx)),
+                              mutation_result{ resp.cas, std::move(resp.token) });
         });
     }
 
@@ -131,39 +137,44 @@ public:
       { options.retry_strategy },
       obs_rec->operation_span(),
     };
-    return core_.execute(std::move(request),
-                         [core = core_,
-                          id = std::move(id),
-                          options,
-                          obs_rec = std::move(obs_rec),
-                          handler = std::move(handler)](auto&& resp) mutable {
-                           if (resp.ctx.ec()) {
-                             obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
-                             return handler(core::impl::make_error(std::move(resp.ctx)),
-                                            mutation_result{ resp.cas, std::move(resp.token) });
-                           }
+    return core_.execute(
+      std::move(request),
+      [core = core_,
+       id = std::move(id),
+       options,
+       obs_rec = std::move(obs_rec),
+       handler = std::move(handler)](auto&& resp) mutable {
+        if (resp.ctx.ec()) {
+          obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
+          invoke_with_node_id(std::move(handler),
+                              core::impl::make_error(std::move(resp.ctx)),
+                              mutation_result{ resp.cas, std::move(resp.token) });
+          return;
+        }
 
-                           auto token = resp.token;
-                           core::impl::initiate_observe_poll(
-                             core,
-                             std::move(id),
-                             token,
-                             options.timeout,
-                             options.persist_to,
-                             options.replicate_to,
-                             [obs_rec = std::move(obs_rec),
-                              resp = std::forward<decltype(resp)>(resp),
-                              handler = std::move(handler)](std::error_code ec) mutable {
-                               obs_rec->finish(resp.ctx.retry_attempts(), ec);
-                               if (ec) {
-                                 resp.ctx.override_ec(ec);
-                                 return handler(core::impl::make_error(std::move(resp.ctx)),
-                                                mutation_result{});
-                               }
-                               return handler(core::impl::make_error(std::move(resp.ctx)),
-                                              mutation_result{ resp.cas, std::move(resp.token) });
-                             });
-                         });
+        auto token = resp.token;
+        core::impl::initiate_observe_poll(
+          core,
+          std::move(id),
+          token,
+          options.timeout,
+          options.persist_to,
+          options.replicate_to,
+          [obs_rec = std::move(obs_rec),
+           resp = std::forward<decltype(resp)>(resp),
+           handler = std::move(handler)](std::error_code ec) mutable {
+            obs_rec->finish(resp.ctx.retry_attempts(), ec);
+            if (ec) {
+              resp.ctx.override_ec(ec);
+              invoke_with_node_id(
+                std::move(handler), core::impl::make_error(std::move(resp.ctx)), mutation_result{});
+              return;
+            }
+            invoke_with_node_id(std::move(handler),
+                                core::impl::make_error(std::move(resp.ctx)),
+                                mutation_result{ resp.cas, std::move(resp.token) });
+          });
+      });
   }
 
   void prepend(std::string document_key,
@@ -197,10 +208,13 @@ public:
         [obs_rec = std::move(obs_rec), handler = std::move(handler)](auto&& resp) mutable {
           obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
           if (resp.ctx.ec()) {
-            return handler(core::impl::make_error(std::move(resp.ctx)), mutation_result{});
+            invoke_with_node_id(
+              std::move(handler), core::impl::make_error(std::move(resp.ctx)), mutation_result{});
+            return;
           }
-          return handler(core::impl::make_error(std::move(resp.ctx)),
-                         mutation_result{ resp.cas, std::move(resp.token) });
+          invoke_with_node_id(std::move(handler),
+                              core::impl::make_error(std::move(resp.ctx)),
+                              mutation_result{ resp.cas, std::move(resp.token) });
         });
     }
 
@@ -215,39 +229,44 @@ public:
       { options.retry_strategy },
       obs_rec->operation_span(),
     };
-    return core_.execute(std::move(request),
-                         [obs_rec = std::move(obs_rec),
-                          core = core_,
-                          id = std::move(id),
-                          options,
-                          handler = std::move(handler)](auto&& resp) mutable {
-                           if (resp.ctx.ec()) {
-                             obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
-                             return handler(core::impl::make_error(std::move(resp.ctx)),
-                                            mutation_result{ resp.cas, std::move(resp.token) });
-                           }
+    return core_.execute(
+      std::move(request),
+      [obs_rec = std::move(obs_rec),
+       core = core_,
+       id = std::move(id),
+       options,
+       handler = std::move(handler)](auto&& resp) mutable {
+        if (resp.ctx.ec()) {
+          obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
+          invoke_with_node_id(std::move(handler),
+                              core::impl::make_error(std::move(resp.ctx)),
+                              mutation_result{ resp.cas, std::move(resp.token) });
+          return;
+        }
 
-                           auto token = resp.token;
-                           core::impl::initiate_observe_poll(
-                             core,
-                             std::move(id),
-                             token,
-                             options.timeout,
-                             options.persist_to,
-                             options.replicate_to,
-                             [obs_rec = std::move(obs_rec),
-                              resp = std::forward<decltype(resp)>(resp),
-                              handler = std::move(handler)](std::error_code ec) mutable {
-                               obs_rec->finish(resp.ctx.retry_attempts(), ec);
-                               if (ec) {
-                                 resp.ctx.override_ec(ec);
-                                 return handler(core::impl::make_error(std::move(resp.ctx)),
-                                                mutation_result{});
-                               }
-                               return handler(core::impl::make_error(std::move(resp.ctx)),
-                                              mutation_result{ resp.cas, std::move(resp.token) });
-                             });
-                         });
+        auto token = resp.token;
+        core::impl::initiate_observe_poll(
+          core,
+          std::move(id),
+          token,
+          options.timeout,
+          options.persist_to,
+          options.replicate_to,
+          [obs_rec = std::move(obs_rec),
+           resp = std::forward<decltype(resp)>(resp),
+           handler = std::move(handler)](std::error_code ec) mutable {
+            obs_rec->finish(resp.ctx.retry_attempts(), ec);
+            if (ec) {
+              resp.ctx.override_ec(ec);
+              invoke_with_node_id(
+                std::move(handler), core::impl::make_error(std::move(resp.ctx)), mutation_result{});
+              return;
+            }
+            invoke_with_node_id(std::move(handler),
+                                core::impl::make_error(std::move(resp.ctx)),
+                                mutation_result{ resp.cas, std::move(resp.token) });
+          });
+      });
   }
 
   void decrement(std::string document_key,
@@ -282,10 +301,13 @@ public:
           obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
 
           if (resp.ctx.ec()) {
-            return handler(core::impl::make_error(std::move(resp.ctx)), counter_result{});
+            invoke_with_node_id(
+              std::move(handler), core::impl::make_error(std::move(resp.ctx)), counter_result{});
+            return;
           }
-          return handler(core::impl::make_error(std::move(resp.ctx)),
-                         counter_result{ resp.cas, std::move(resp.token), resp.content });
+          invoke_with_node_id(std::move(handler),
+                              core::impl::make_error(std::move(resp.ctx)),
+                              counter_result{ resp.cas, std::move(resp.token), resp.content });
         });
     }
 
@@ -310,8 +332,10 @@ public:
        handler = std::move(handler)](auto&& resp) mutable {
         if (resp.ctx.ec()) {
           obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
-          return handler(core::impl::make_error(std::move(resp.ctx)),
-                         counter_result{ resp.cas, std::move(resp.token), resp.content });
+          invoke_with_node_id(std::move(handler),
+                              core::impl::make_error(std::move(resp.ctx)),
+                              counter_result{ resp.cas, std::move(resp.token), resp.content });
+          return;
         }
 
         auto token = resp.token;
@@ -328,10 +352,13 @@ public:
             obs_rec->finish(resp.ctx.retry_attempts(), ec);
             if (ec) {
               resp.ctx.override_ec(ec);
-              return handler(core::impl::make_error(std::move(resp.ctx)), counter_result{});
+              invoke_with_node_id(
+                std::move(handler), core::impl::make_error(std::move(resp.ctx)), counter_result{});
+              return;
             }
-            return handler(core::impl::make_error(std::move(resp.ctx)),
-                           counter_result{ resp.cas, std::move(resp.token), resp.content });
+            invoke_with_node_id(std::move(handler),
+                                core::impl::make_error(std::move(resp.ctx)),
+                                counter_result{ resp.cas, std::move(resp.token), resp.content });
           });
       });
   }
@@ -367,10 +394,13 @@ public:
         [obs_rec = std::move(obs_rec), handler = std::move(handler)](auto&& resp) mutable {
           obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
           if (resp.ctx.ec()) {
-            return handler(core::impl::make_error(std::move(resp.ctx)), counter_result{});
+            invoke_with_node_id(
+              std::move(handler), core::impl::make_error(std::move(resp.ctx)), counter_result{});
+            return;
           }
-          return handler(core::impl::make_error(std::move(resp.ctx)),
-                         counter_result{ resp.cas, std::move(resp.token), resp.content });
+          invoke_with_node_id(std::move(handler),
+                              core::impl::make_error(std::move(resp.ctx)),
+                              counter_result{ resp.cas, std::move(resp.token), resp.content });
         });
     }
 
@@ -395,8 +425,10 @@ public:
        handler = std::move(handler)](auto&& resp) mutable {
         if (resp.ctx.ec()) {
           obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
-          return handler(core::impl::make_error(std::move(resp.ctx)),
-                         counter_result{ resp.cas, std::move(resp.token), resp.content });
+          invoke_with_node_id(std::move(handler),
+                              core::impl::make_error(std::move(resp.ctx)),
+                              counter_result{ resp.cas, std::move(resp.token), resp.content });
+          return;
         }
 
         auto token = resp.token;
@@ -413,10 +445,13 @@ public:
             obs_rec->finish(resp.ctx.retry_attempts(), ec);
             if (ec) {
               resp.ctx.override_ec(ec);
-              return handler(core::impl::make_error(std::move(resp.ctx)), counter_result{});
+              invoke_with_node_id(
+                std::move(handler), core::impl::make_error(std::move(resp.ctx)), counter_result{});
+              return;
             }
-            return handler(core::impl::make_error(std::move(resp.ctx)),
-                           counter_result{ resp.cas, std::move(resp.token), resp.content });
+            invoke_with_node_id(std::move(handler),
+                                core::impl::make_error(std::move(resp.ctx)),
+                                counter_result{ resp.cas, std::move(resp.token), resp.content });
           });
       });
   }

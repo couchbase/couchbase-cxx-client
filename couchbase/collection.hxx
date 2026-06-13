@@ -35,6 +35,7 @@
 #include <couchbase/lookup_in_specs.hxx>
 #include <couchbase/mutate_in_options.hxx>
 #include <couchbase/mutate_in_specs.hxx>
+#include <couchbase/node_id_for_options.hxx>
 #include <couchbase/query_options.hxx>
 #include <couchbase/remove_options.hxx>
 #include <couchbase/replace_options.hxx>
@@ -379,6 +380,10 @@ public:
    * @note Individual errors are ignored, so you can think of this API as a best effort
    * approach which explicitly emphasises availability over consistency.
    *
+   * @note Entries appear in response-arrival order, not vBucket map order.
+   * Use @c get_replica_result::is_replica() to distinguish the active node's
+   * entry; do not rely on positional indexing to identify it.
+   *
    * @param document_id the document id which is used to uniquely identify it.
    * @param options the custom options
    * @param handler the handler that implements @ref get_all_replicas_handler
@@ -398,6 +403,10 @@ public:
    *
    * @note Individual errors are ignored, so you can think of this API as a best effort
    * approach which explicitly emphasises availability over consistency.
+   *
+   * @note Entries appear in response-arrival order, not vBucket map order.
+   * Use @c get_replica_result::is_replica() to distinguish the active node's
+   * entry; do not rely on positional indexing to identify it.
    *
    * Select preferred server group in connection options:
    * @snippet{trimleft} test_integration_read_replica.cxx select-preferred_server_group
@@ -861,6 +870,10 @@ public:
    * Performs lookups to document fragments with default options from all replicas and the active
    * node and returns the result as a vector.
    *
+   * @note Entries appear in response-arrival order, not vBucket map order.
+   * Use @c lookup_in_replica_result::is_replica() to distinguish the active
+   * node's entry; do not rely on positional indexing to identify it.
+   *
    * @param document_id the outer document ID
    * @param specs an object that specifies the types of lookups to perform
    * @param options custom options to modify the lookup options
@@ -882,6 +895,10 @@ public:
   /**
    * Performs lookups to document fragments with default options from all replicas and the active
    * node and returns the result as a vector.
+   *
+   * @note Entries appear in response-arrival order, not vBucket map order.
+   * Use @c lookup_in_replica_result::is_replica() to distinguish the active
+   * node's entry; do not rely on positional indexing to identify it.
    *
    * @param document_id the outer document ID
    * @param specs an object that specifies the types of lookups to perform
@@ -1089,6 +1106,58 @@ public:
    */
   [[nodiscard]] auto scan(const scan_type& scan_type, const scan_options& options = {}) const
     -> std::future<std::pair<error, scan_result>>;
+
+  /**
+   * Resolves a document key to the identity of the cluster node that currently
+   * owns it, using the client-side vBucket map (no network round-trip).
+   *
+   * The handler is guaranteed to be invoked exactly once even if no bucket
+   * configuration ever arrives — the request timeout drives a fall-through to
+   * @c errc::common::unambiguous_timeout. On success the @c node_id is
+   * truthy and byte-for-byte equal to the @c node_id surfaced on results and
+   * errors of KV operations against the same key for the current topology.
+   *
+   * @param document_id the document id to resolve
+   * @param options options to customize the request (timeout, parent_span)
+   * @param handler the handler that receives the result
+   *
+   * @exception errc::common::invalid_argument if @p document_id is empty.
+   * @exception errc::common::bucket_not_found if the bucket does not exist.
+   * @exception errc::network::configuration_not_available if the bucket
+   *            configuration is present but the vBucket map does not resolve
+   *            the key to a known node.
+   * @exception errc::common::unambiguous_timeout if the bucket configuration
+   *            did not arrive within the request timeout.
+   *
+   * @since 1.3.2
+   * @uncommitted
+   */
+  void node_id_for(std::string document_id,
+                   const node_id_for_options& options,
+                   node_id_for_handler&& handler) const;
+
+  /**
+   * Resolves a document key to the identity of the cluster node that currently
+   * owns it, using the client-side vBucket map (no network round-trip).
+   *
+   * @param document_id the document id to resolve
+   * @param options options to customize the request
+   * @return future carrying the error (if any) and node_id
+   *
+   * @exception errc::common::invalid_argument if @p document_id is empty.
+   * @exception errc::common::bucket_not_found if the bucket does not exist.
+   * @exception errc::network::configuration_not_available if the bucket
+   *            configuration is present but the vBucket map does not resolve
+   *            the key to a known node.
+   * @exception errc::common::unambiguous_timeout if the bucket configuration
+   *            did not arrive within the request timeout.
+   *
+   * @since 1.3.2
+   * @uncommitted
+   */
+  [[nodiscard]] auto node_id_for(std::string document_id,
+                                 const node_id_for_options& options = {}) const
+    -> std::future<std::pair<error, node_id>>;
 
   [[nodiscard]] auto query_indexes() const -> collection_query_index_manager;
 

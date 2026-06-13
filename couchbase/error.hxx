@@ -18,6 +18,7 @@
 #pragma once
 
 #include <couchbase/error_context.hxx>
+#include <couchbase/node_id.hxx>
 
 #include <memory>
 #include <optional>
@@ -31,12 +32,58 @@ class error
 public:
   error() = default;
   error(std::error_code ec, std::string message = {}, error_context ctx = {});
+
+  /**
+   * Constructs an error that wraps another error as its underlying cause.
+   *
+   * @since 1.0.0
+   * @committed
+   */
   error(std::error_code ec, std::string message, error_context ctx, error cause);
+
+  /**
+   * Constructs an error carrying the identity of the cluster node that
+   * returned it. Used by the KV path to attach the @c node_id from the
+   * session that handled the request.
+   *
+   * @since 1.3.2
+   * @uncommitted
+   */
+  error(std::error_code ec, std::string message, error_context ctx, couchbase::node_id node_id);
+
+  /**
+   * Constructs an error that both wraps an underlying cause and carries the
+   * identity of the cluster node where the failure originated. Used when a
+   * higher-level path (e.g. transactions) wraps a KV failure — without this
+   * overload the outer error would silently lose @c node_id() attribution
+   * even though the inner @c cause()->node_id() is populated.
+   *
+   * @since 1.3.2
+   * @uncommitted
+   */
+  error(std::error_code ec,
+        std::string message,
+        error_context ctx,
+        error cause,
+        couchbase::node_id node_id);
 
   [[nodiscard]] auto ec() const -> std::error_code;
   [[nodiscard]] auto message() const -> const std::string&;
   [[nodiscard]] auto ctx() const -> const error_context&;
   [[nodiscard]] auto cause() const -> std::optional<error>;
+
+  /**
+   * Returns the identity of the cluster node where the error occurred.
+   *
+   * The returned node_id is default-constructed (falsy) when the node
+   * could not be determined (e.g. for non-KV errors).
+   *
+   * @return identity of the node that returned the error
+   *
+   * @since 1.3.2
+   * @uncommitted
+   */
+  [[nodiscard]] auto node_id() const -> const couchbase::node_id&;
 
   explicit operator bool() const;
   auto operator==(const error& other) const -> bool;
@@ -46,6 +93,7 @@ private:
   std::string message_{};
   error_context ctx_{};
   std::shared_ptr<error> cause_{};
+  couchbase::node_id node_id_{};
 };
 
 } // namespace couchbase
