@@ -434,7 +434,10 @@ TxnService::transactionCleanup(grpc::ServerContext* /*context*/,
   try {
     auto txn =
       couchbase::core::transactions::get_core_transactions(conn->cluster()->transactions());
-    txn->cleanup().config().cleanup_hooks = std::move(hook_pair.second);
+    // Serialize the shared-config mutation and the cleanup that reads it (see
+    // cleanup_config_mutex_).
+    const std::scoped_lock<std::mutex> cleanup_lock(cleanup_config_mutex_);
+    txn->cleanup().set_cleanup_hooks(std::move(hook_pair.second));
     auto id = to_couchbase_docid(request->atr());
     couchbase::core::transactions::atr_cleanup_entry entry(
       id, request->attempt_id(), txn->cleanup());
@@ -467,8 +470,11 @@ TxnService::transactionCleanupATR(
   try {
     auto txn =
       couchbase::core::transactions::get_core_transactions(conn->cluster()->transactions());
+    // Serialize the shared-config mutation and the cleanup that reads it (see
+    // cleanup_config_mutex_).
+    const std::scoped_lock<std::mutex> cleanup_lock(cleanup_config_mutex_);
     txn->config().attempt_context_hooks = std::move(hook_pair.first);
-    txn->cleanup().config().cleanup_hooks = std::move(hook_pair.second);
+    txn->cleanup().set_cleanup_hooks(std::move(hook_pair.second));
 
     auto atr_id = to_couchbase_docid(request->atr());
     std::vector<couchbase::core::transactions::transactions_cleanup_attempt> results;
@@ -783,22 +789,21 @@ TxnService::execute_command(ConnectionPtr conn,
   }
   if (cmd.has_get_multi()) {
     if (cmd.get_multi().get_multi_replicas_from_preferred_server_group()) {
-      return execute_op(
-        cmd.get_multi(),
-        ctx,
-        cmd.do_not_propagate_error(),
-        logger_prefix,
-        false,
-        false,
-        [&](std::shared_ptr<couchbase::transactions::attempt_context> c) {
-          auto [err, result] = c->get_multi_replicas_from_preferred_server_group(
-            to_get_multi_replicas_from_preferred_server_group_specs(conn, cmd),
-            to_get_multi_replicas_from_preferred_server_group_options(cmd));
-          spdlog::debug("get_multi_replicas: err.message: {}, err.ec.message: {}",
-                        err.message(),
-                        err.ec().message());
-          return std::pair{ err, result };
-        });
+      return execute_op(cmd.get_multi(),
+                        ctx,
+                        cmd.do_not_propagate_error(),
+                        logger_prefix,
+                        false,
+                        false,
+                        [&](std::shared_ptr<couchbase::transactions::attempt_context> c) {
+                          auto [err, result] = c->get_multi_replicas_from_preferred_server_group(
+                            to_get_multi_replicas_from_preferred_server_group_specs(conn, cmd),
+                            to_get_multi_replicas_from_preferred_server_group_options(cmd));
+                          spdlog::debug("get_multi_replicas: err.message: {}, err.ec.message: {}",
+                                        err.message(),
+                                        err.ec().message());
+                          return std::pair{ err, result };
+                        });
     }
     return execute_op(cmd.get_multi(),
                       ctx,
@@ -1286,8 +1291,11 @@ TxnService::clientRecordProcess(grpc::ServerContext* /*context*/,
 
   auto hook_pair = fit_cxx::TxnSvcHook::convert_hooks(request->hook(), hooks, conn);
   auto txn = couchbase::core::transactions::get_core_transactions(conn->cluster()->transactions());
+  // Serialize the shared-config mutation and the cleanup that reads it (see cleanup_config_mutex_).
+  // The lock is held across run_with_timeout so get_active_clients observes the hooks set here.
+  const std::scoped_lock<std::mutex> cleanup_lock(cleanup_config_mutex_);
   txn->config().attempt_context_hooks = std::move(hook_pair.first);
-  txn->cleanup().config().cleanup_hooks = std::move(hook_pair.second);
+  txn->cleanup().set_cleanup_hooks(std::move(hook_pair.second));
   return conn->run_with_timeout<grpc::Status>(
     CLIENT_RECORD_PROCESS_TIMEOUT,
     [&] {
