@@ -322,7 +322,7 @@ transactions_cleanup::create_client_record(
     auto barrier = std::make_shared<std::promise<result>>();
     auto f = barrier->get_future();
     auto ec = wait_for_hook([this, bucket = keyspace.bucket](auto handler) mutable {
-      return config_.cleanup_hooks->client_record_before_create(bucket, std::move(handler));
+      return cleanup_hooks()->client_record_before_create(bucket, std::move(handler));
     });
     if (ec) {
       throw client_error(*ec, "client_record_before_create hook raised error");
@@ -365,7 +365,7 @@ transactions_cleanup::get_active_clients(
     auto barrier = std::make_shared<std::promise<result>>();
     auto f = barrier->get_future();
     auto ec = wait_for_hook([this, bucket = keyspace.bucket](auto handler) mutable {
-      return config_.cleanup_hooks->client_record_before_get(bucket, std::move(handler));
+      return cleanup_hooks()->client_record_before_get(bucket, std::move(handler));
     });
     if (ec) {
       throw client_error(*ec, "client_record_before_get hook raised error");
@@ -462,7 +462,7 @@ transactions_cleanup::get_active_clients(
     }
     mutate_req.specs = mut_specs.specs();
     ec = wait_for_hook([this, bucket = keyspace.bucket](auto handler) mutable {
-      return config_.cleanup_hooks->client_record_before_update(bucket, std::move(handler));
+      return cleanup_hooks()->client_record_before_update(bucket, std::move(handler));
     });
     if (ec) {
       throw client_error(*ec, "client_record_before_update hook raised error");
@@ -506,8 +506,8 @@ transactions_cleanup::remove_client_record_from_all_buckets(const std::string& u
           try {
             // proceed to remove the client uuid if it exists
             auto ec = wait_for_hook([this, bucket = keyspace.bucket](auto handler) mutable {
-              return config_.cleanup_hooks->client_record_before_remove_client(bucket,
-                                                                               std::move(handler));
+              return cleanup_hooks()->client_record_before_remove_client(bucket,
+                                                                         std::move(handler));
             });
             if (ec) {
               throw client_error(*ec, "client_record_before_remove_client hook raised error");

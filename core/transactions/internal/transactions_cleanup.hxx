@@ -19,6 +19,7 @@
 #include "atr_cleanup_entry.hxx"
 #include "client_record.hxx"
 #include "core/cluster.hxx"
+#include "core/transactions/cleanup_testing_hooks.hxx"
 
 #include <couchbase/transactions/transactions_config.hxx>
 
@@ -110,6 +111,42 @@ public:
     return config_;
   };
 
+  /**
+   * @brief Returns a snapshot of the cleanup testing hooks, guaranteed non-null.
+   *
+   * @c config_.cleanup_hooks is normally a non-null no-op set (installed by the default
+   * transactions_config constructor), but a moved-from or externally-mutated config could leave
+   * it null. Rather than dereferencing it directly, cleanup code routes hook calls through this
+   * accessor, which falls back to a shared no-op instance when the pointer is null. This mirrors
+   * the @c noop_hooks fallback used for attempt_context_testing_hooks and keeps cleanup free of
+   * null-pointer dereferences.
+   *
+   * The FIT performer reassigns the hooks at runtime (see @ref set_cleanup_hooks) from a gRPC
+   * thread while the cleanup loop and its worker threads are reading them. Returning a shared_ptr
+   * snapshot taken under @c cleanup_hooks_mutex_ (rather than a bare reference into the pointee)
+   * makes that safe: the caller keeps the hooks alive for the duration of the call even if the
+   * pointer is reassigned and the previous set is dropped concurrently.
+   */
+  [[nodiscard]] auto cleanup_hooks() const -> std::shared_ptr<const cleanup_testing_hooks>
+  {
+    static const auto noop = std::make_shared<const cleanup_testing_hooks>();
+    const std::scoped_lock<std::mutex> lock(cleanup_hooks_mutex_);
+    if (config_.cleanup_hooks) {
+      return config_.cleanup_hooks;
+    }
+    return noop;
+  }
+
+  /**
+   * Replaces the cleanup testing hooks. Used by the FIT performer to install per-scenario hooks at
+   * runtime; the store is serialized with @ref cleanup_hooks readers via @c cleanup_hooks_mutex_.
+   */
+  void set_cleanup_hooks(std::shared_ptr<cleanup_testing_hooks> hooks)
+  {
+    const std::scoped_lock<std::mutex> lock(cleanup_hooks_mutex_);
+    config_.cleanup_hooks = std::move(hooks);
+  }
+
   // Add an attempt cleanup later.
   void add_attempt(const std::shared_ptr<attempt_context>& ctx);
 
@@ -148,6 +185,9 @@ private:
   atr_cleanup_queue atr_queue_;
   mutable std::condition_variable cv_;
   mutable std::mutex mutex_;
+  // Guards config_.cleanup_hooks against the FIT performer's runtime reassignment racing the
+  // cleanup loop's readers (see cleanup_hooks() / set_cleanup_hooks()).
+  mutable std::mutex cleanup_hooks_mutex_;
   std::list<std::thread> lost_attempt_cleanup_workers_;
 
   // Bounded, shared pool of threads for the blocking per-ATR cleanup checks. These checks block on
