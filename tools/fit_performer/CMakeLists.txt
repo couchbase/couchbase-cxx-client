@@ -8,12 +8,16 @@ if(NOT TARGET protobuf::libprotobuf)
 endif()
 
 # Fetch the FIT protocol files from the official repository
+#
+# WARNING: Do NOT add GIT_SHALLOW TRUE — it will fail with
+# "fatal: unable to read tree" for this commit because shallow clones
+# only work for commits at/near the branch tip. This commit is not
+# reachable with depth=1, so you need a full clone.
 include(FetchContent)
 FetchContent_Declare(
   fit_protocol
   GIT_REPOSITORY https://github.com/couchbaselabs/fit-protocol
-  GIT_TAG 1e05d887dbed4e993f942e20424bb923185c72ab
-  GIT_SHALLOW TRUE)
+  GIT_TAG d7fb6ede7ee0f39cc39294b67d5b180674d61449)
 
 FetchContent_MakeAvailable(fit_protocol)
 
