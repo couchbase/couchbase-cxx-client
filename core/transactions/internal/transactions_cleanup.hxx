@@ -19,6 +19,7 @@
 #include "atr_cleanup_entry.hxx"
 #include "client_record.hxx"
 #include "core/cluster.hxx"
+#include "core/transactions/cleanup_testing_hooks.hxx"
 
 #include <couchbase/transactions/transactions_config.hxx>
 
@@ -106,6 +107,22 @@ public:
   {
     return config_;
   };
+
+  /**
+   * @brief Returns the cleanup testing hooks, guaranteed non-null.
+   *
+   * @c config_.cleanup_hooks is normally a non-null no-op set (installed by the default
+   * transactions_config constructor), but a moved-from or externally-mutated config could leave
+   * it null. Rather than dereferencing it directly, cleanup code routes hook calls through this
+   * accessor, which falls back to a shared no-op instance when the pointer is null. This mirrors
+   * the @c noop_hooks fallback used for attempt_context_testing_hooks and keeps cleanup free of
+   * null-pointer dereferences. The fallback is on a cold path, so this carries no runtime cost.
+   */
+  [[nodiscard]] auto cleanup_hooks() const -> const cleanup_testing_hooks&
+  {
+    static const cleanup_testing_hooks noop{};
+    return config_.cleanup_hooks ? *config_.cleanup_hooks : noop;
+  }
 
   // Add an attempt cleanup later.
   void add_attempt(const std::shared_ptr<attempt_context>& ctx);

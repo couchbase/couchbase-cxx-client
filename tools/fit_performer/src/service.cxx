@@ -371,6 +371,9 @@ TxnService::transactionCleanup(grpc::ServerContext* /*context*/,
   try {
     auto txn =
       couchbase::core::transactions::get_core_transactions(conn->cluster()->transactions());
+    // Serialize the shared-config mutation and the cleanup that reads it (see
+    // cleanup_config_mutex_).
+    const std::scoped_lock<std::mutex> cleanup_lock(cleanup_config_mutex_);
     txn->cleanup().config().cleanup_hooks = std::move(hook_pair.second);
     auto id = to_couchbase_docid(request->atr());
     couchbase::core::transactions::atr_cleanup_entry entry(
@@ -404,6 +407,9 @@ TxnService::transactionCleanupATR(
   try {
     auto txn =
       couchbase::core::transactions::get_core_transactions(conn->cluster()->transactions());
+    // Serialize the shared-config mutation and the cleanup that reads it (see
+    // cleanup_config_mutex_).
+    const std::scoped_lock<std::mutex> cleanup_lock(cleanup_config_mutex_);
     txn->config().attempt_context_hooks = std::move(hook_pair.first);
     txn->cleanup().config().cleanup_hooks = std::move(hook_pair.second);
 
@@ -1226,6 +1232,9 @@ TxnService::clientRecordProcess(grpc::ServerContext* /*context*/,
 
   auto hook_pair = fit_cxx::TxnSvcHook::convert_hooks(request->hook(), hooks, conn);
   auto txn = couchbase::core::transactions::get_core_transactions(conn->cluster()->transactions());
+  // Serialize the shared-config mutation and the cleanup that reads it (see cleanup_config_mutex_).
+  // The lock is held across run_with_timeout so get_active_clients observes the hooks set here.
+  const std::scoped_lock<std::mutex> cleanup_lock(cleanup_config_mutex_);
   txn->config().attempt_context_hooks = std::move(hook_pair.first);
   txn->cleanup().config().cleanup_hooks = std::move(hook_pair.second);
   return conn->run_with_timeout<grpc::Status>(
