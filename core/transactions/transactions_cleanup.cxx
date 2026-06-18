@@ -31,7 +31,11 @@
 
 #include <couchbase/fmt/transaction_keyspace.hxx>
 
+#include <asio/post.hpp>
+
+#include <deque>
 #include <functional>
+#include <future>
 #include <memory>
 #include <utility>
 
@@ -131,53 +135,124 @@ transactions_cleanup::clean_collection(
         all_atrs.size(),
         config_.cleanup_config.cleanup_window.count());
 
+      // Each ATR is checked with a blocking get_atr. If those were run strictly one-at-a-time the
+      // scan rate would be capped by the per-ATR KV latency rather than the cleanup window: on a
+      // slow or loaded KV node a single window could fail to scan all ATRs, leaving lost
+      // transactions (and the documents they block) uncleaned for far longer than configured. So
+      // run the checks with a bounded number in flight: launches are still paced across the window
+      // (to avoid flooding the cluster), but a slow lookup no longer holds up the ones behind it.
+      std::deque<std::future<void>> in_flight;
+      // The pool is created in start() whenever lost-attempts cleanup is enabled, which is the only
+      // configuration that spawns collection workers, so it is always present here. Bind a checked
+      // reference now rather than dereferencing the optional at each launch.
+      if (!atr_cleanup_pool_.has_value()) {
+        // Should be unreachable (see above). If the invariant is ever broken, surface it: a silent
+        // return here disables lost-attempts cleanup for this collection with no other signal.
+        CB_LOST_ATTEMPT_CLEANUP_LOG_ERROR(
+          "atr cleanup pool is not initialized; skipping lost-attempts cleanup for {}", keyspace);
+        return;
+      }
+      auto& atr_cleanup_pool = *atr_cleanup_pool_;
+      const auto reclaim_one = [&in_flight]() {
+        const auto reclaim = [](std::future<void>& f) {
+          // get() only rethrows if the task itself threw, which it is written not to, but guard
+          // anyway so one bad ATR cannot abort the whole scan.
+          try {
+            f.get();
+            // NOLINTNEXTLINE(bugprone-empty-catch) -- task already logged any error
+          } catch (...) {
+            // already handled in the task
+          }
+        };
+        // Reclaim any already-finished check first, so a slow lookup at the front does not hold up
+        // the ready ones queued behind it.
+        for (auto it = in_flight.begin(); it != in_flight.end(); ++it) {
+          if (it->wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            reclaim(*it);
+            in_flight.erase(it);
+            return;
+          }
+        }
+        // None ready yet: block on the oldest, since a slot must be freed before launching more.
+        reclaim(in_flight.front());
+        in_flight.pop_front();
+      };
+
       for (auto it = all_atrs.begin() + details.index_of_this_client; it < all_atrs.end();
            it += details.num_active_clients) {
-        auto atrs_left_for_this_client =
-          std::distance(it, all_atrs.end()) /
-          std::max<decltype(it)::difference_type>(1, details.num_active_clients);
+        if (!is_running()) {
+          break;
+        }
+        // This client visits every num_active_clients-th ATR from `it`, so the number it still has
+        // to launch is ceil(remaining / stride). Floor division would undercount at the tail,
+        // inflating budget_for_this_atr below and over-pacing the scan past the cleanup window.
+        const auto stride = std::max<decltype(it)::difference_type>(1, details.num_active_clients);
+        const auto atrs_left_for_this_client =
+          (std::distance(it, all_atrs.end()) + stride - 1) / stride;
         const auto now = std::chrono::steady_clock::now();
         const auto elapsed_in_cleanup_window =
           std::chrono::duration_cast<std::chrono::microseconds>(now - start);
         const auto remaining_in_cleanup_window = cleanup_window - elapsed_in_cleanup_window;
+        // Divide the time left in the window evenly among the ATRs still to launch, so the scan is
+        // spread across the window rather than issued as a burst.
         const auto budget_for_this_atr = std::chrono::microseconds(
           remaining_in_cleanup_window.count() /
           std::max<decltype(it)::difference_type>(1, atrs_left_for_this_client));
-        // clean the ATR entry
+        // Bound concurrency: reclaim a finished slot before launching the next check.
+        while (in_flight.size() >= max_in_flight_atr_checks_) {
+          reclaim_one();
+        }
+
         const std::string atr_id = *it;
-        if (!is_running()) {
-          CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("cleanup of {} complete", keyspace);
-          return;
-        }
+        // Offload the blocking check to the shared bounded pool (never the IO thread); keep its
+        // future so the loop can bound how many run concurrently and drain them at the end.
+        // packaged_task is wrapped in a shared_ptr because asio::post needs a copyable handler.
+        auto task = std::make_shared<std::packaged_task<void()>>([this, keyspace, atr_id]() {
+          try {
+            handle_atr_cleanup({ keyspace.bucket, keyspace.scope, keyspace.collection, atr_id });
+          } catch (const std::exception& e) {
+            CB_LOST_ATTEMPT_CLEANUP_LOG_ERROR(
+              "cleanup of atr {} failed with {}, moving on", atr_id, e.what());
+          }
+        });
+        auto future = task->get_future();
+        // Post before recording the future. If asio::post() throws (e.g. allocation failure) the
+        // task never runs; recording its future first would leave a future in `in_flight` that
+        // never becomes ready, deadlocking reclaim_one()/the drain. On throw, `future` is discarded
+        // and the exception unwinds to the per-collection retry below.
+        asio::post(atr_cleanup_pool, [task]() {
+          (*task)();
+        });
+        in_flight.emplace_back(std::move(future));
 
-        try {
-          handle_atr_cleanup({ keyspace.bucket, keyspace.scope, keyspace.collection, atr_id });
-        } catch (const std::exception& e) {
-          CB_LOST_ATTEMPT_CLEANUP_LOG_ERROR(
-            "cleanup of atr {} failed with {}, moving on", atr_id, e.what());
-        }
-
-        const auto atr_end = std::chrono::steady_clock::now();
-        const auto atr_used = std::chrono::duration_cast<std::chrono::microseconds>(atr_end - now);
-        const auto atr_left = budget_for_this_atr - atr_used;
-
-        // Too verbose to log, but leaving here commented as it may be useful later for internal
-        // debugging
-        /*CB_LOST_ATTEMPT_CLEANUP_LOG_INFO("{} {} atrs_left_for_this_client={}
-           elapsed_in_cleanup_window={}us " "remaining_in_cleanup_window={}us
-           budget_for_this_atr={}us atr_used={}us atr_left={}us", bucket_name, atr_id,
-           atrs_left_for_this_client, elapsed_in_cleanup_window.count(),
-                                    remaining_in_cleanup_window.count(),
-                                    budget_for_this_atr.count(),
-                                    atr_used.count(),
-                                    atr_left.count());*/
-
-        if (atr_left.count() > 0 &&
-            atr_left.count() < 1000000000) { // safety check protects against bugs
-          if (!interruptable_wait(atr_left)) {
-            return;
+        // Pace the launch cadence so the scan spreads across the window rather than bursting.
+        // Subtract the time already spent this iteration -- reclaiming a slot can block on a slow
+        // lookup, and posting takes time -- from the budget, so a slow iteration does not push the
+        // scan past the cleanup window. If we are already behind, the remainder is <= 0 and we
+        // proceed immediately.
+        const auto work_time = std::chrono::duration_cast<std::chrono::microseconds>(
+          std::chrono::steady_clock::now() - now);
+        const auto sleep_for_this_atr = budget_for_this_atr - work_time;
+        if (sleep_for_this_atr.count() > 0 &&
+            sleep_for_this_atr.count() < 1000000000) { // safety check protects against bugs
+          if (!interruptable_wait(sleep_for_this_atr)) {
+            break;
           }
         }
+      }
+
+      // Wait for any still-running checks before completing the run. On stop() the launch loop
+      // above has already stopped starting new checks (it breaks on !is_running()), so this only
+      // drains the
+      // <= max_in_flight_atr_checks_ already in flight. They are reclaimed rather than abandoned
+      // because each task references this cleanup state; teardown therefore blocks on them, bounded
+      // by the KV read timeout (an in-flight get_atr is not cancelled).
+      while (!in_flight.empty()) {
+        reclaim_one();
+      }
+      if (!is_running()) {
+        CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("cleanup of {} complete", keyspace);
+        return;
       }
     } catch (const std::exception& ex) {
       CB_LOST_ATTEMPT_CLEANUP_LOG_ERROR("cleanup failed with {}, trying again in 3 sec...",
@@ -601,6 +676,10 @@ transactions_cleanup::start()
 {
   running_ =
     config_.cleanup_config.cleanup_client_attempts || config_.cleanup_config.cleanup_lost_attempts;
+  if (config_.cleanup_config.cleanup_lost_attempts) {
+    // Blocking per-ATR checks are offloaded to this bounded pool, never the single IO thread.
+    atr_cleanup_pool_.emplace(max_in_flight_atr_checks_);
+  }
   if (config_.cleanup_config.cleanup_client_attempts) {
     cleanup_thr_ = std::thread([this] {
       attempts_loop();
@@ -633,6 +712,16 @@ transactions_cleanup::stop()
     if (t.joinable()) {
       t.join();
     }
+  }
+  // Workers drain their in-flight checks before returning, so the pool is now idle. stop() before
+  // join(): the pool's threads wait for work, so join() alone would block indefinitely on an idle
+  // pool; stop() requests shutdown so join() returns (there is no pending work left to abandon).
+  // Reset afterwards so stop() is idempotent: close() calls stop() from the destructor and the user
+  // may also call it explicitly, and a joined pool must not be joined again.
+  if (atr_cleanup_pool_) {
+    atr_cleanup_pool_->stop();
+    atr_cleanup_pool_->join();
+    atr_cleanup_pool_.reset();
   }
 }
 
