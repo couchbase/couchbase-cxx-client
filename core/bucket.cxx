@@ -162,6 +162,47 @@ public:
       reason = retry_reason::key_value_error_map_retry_indicated;
     } else {
       switch (status) {
+        case key_value_status_code::unknown_collection:
+          /**
+           * The server does not recognise the collection id we sent. This covers two cases:
+           *
+           *   1. The collection was dropped and recreated, so its id changed. The cached id we sent
+           *      is now stale and re-sending it would loop forever. We must invalidate the cache
+           *      and re-resolve the id via GetCollectionID before retrying.
+           *   2. The node's collection manifest simply lags ns_server's view: the id is still valid
+           *      but has not propagated to this particular KV node yet. Here re-sending the same id
+           *      succeeds once the manifest catches up, bounded by the operation timeout.
+           *
+           * Prefer re-resolution: if the request was dispatched through the collection-id cache the
+           * hook invalidates the cached id and schedules a re-resolution retry (covering case 1,
+           * and case 2 too since GetCollectionID re-fetches). This matches the legacy mcbp_command
+           * path, which handled both via handle_unknown_collection(); when KV ops were migrated to
+           * this path that handling was dropped and the status surfaced directly as
+           * collection_not_found, which consumers such as the range scan orchestrator treat as
+           * fatal.
+           *
+           * If there is no hook (request bypassed the cid cache) or re-resolution gave up, fall
+           * back to a bounded collection-outdated retry with the same id, which still recovers
+           * case 2.
+           */
+          if (req->on_unknown_collection_ && req->on_unknown_collection_()) {
+            return;
+          }
+          reason = retry_reason::key_value_collection_outdated;
+          break;
+        case key_value_status_code::config_only:
+          /**
+           * The node has a configuration but is not serving data operations yet (e.g. during
+           * warmup or rebalance). Mirror the legacy path: fetch a fresh configuration and retry so
+           * the request is routed to a node that can serve it.
+           */
+          CB_LOG_DEBUG(
+            "{} server returned config_only status, meaning that the node does not serve "
+            "data operations, requesting new configuration and retrying",
+            log_prefix_);
+          fetch_config();
+          reason = retry_reason::service_response_code_indicated;
+          break;
         case key_value_status_code::locked:
           if (req->command_ != protocol::client_opcode::unlock) {
             /**

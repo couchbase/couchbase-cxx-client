@@ -27,6 +27,7 @@
 #include <asio/steady_timer.hpp>
 
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <set>
@@ -78,6 +79,13 @@ public:
   std::string collection_name_{};
   std::string scope_name_{};
   std::size_t replica_index_{ 0 };
+
+  // Set by collections_component when a request is dispatched through the collection-id cache.
+  // Invoked by the KV response path on an unknown_collection status to invalidate the cached id,
+  // re-resolve it (GetCollectionID) and retry the request. Returns true if a retry was scheduled.
+  // Left empty for requests that bypass the cache (e.g. the GetCollectionID resolution requests
+  // themselves), which must not recurse.
+  std::function<bool()> on_unknown_collection_{};
   // This tracks when the request was dispatched so that we can properly prioritize older requests
   // to try and meet timeout requirements.
   std::chrono::steady_clock::time_point dispatched_time_{};
