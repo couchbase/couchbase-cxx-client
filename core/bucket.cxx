@@ -157,6 +157,28 @@ public:
       reason = retry_reason::key_value_error_map_retry_indicated;
     } else {
       switch (status) {
+        case key_value_status_code::unknown_collection:
+          /**
+           * The node's collection manifest lags ns_server's view: a collection that already exists
+           * cluster-wide (its id has been resolved) has not yet propagated to this particular KV
+           * node. Retry as collection-outdated; the same (valid) collection id is re-sent and
+           * succeeds once the manifest catches up, bounded by the operation timeout. The legacy
+           * mcbp_command path does this via handle_unknown_collection(); when KV ops were migrated
+           * to this path that handling was dropped, so the status surfaced directly as
+           * collection_not_found. Consumers such as the range scan orchestrator treat that as a
+           * fatal error, turning a transient propagation lag into a hard failure.
+           */
+          reason = retry_reason::key_value_collection_outdated;
+          break;
+        case key_value_status_code::config_only:
+          /**
+           * The node has a configuration but is not serving data operations yet (e.g. during
+           * warmup or rebalance). Mirror the legacy path: fetch a fresh configuration and retry so
+           * the request is routed to a node that can serve it.
+           */
+          fetch_config();
+          reason = retry_reason::service_response_code_indicated;
+          break;
         case key_value_status_code::locked:
           if (req->command_ != protocol::client_opcode::unlock) {
             /**
