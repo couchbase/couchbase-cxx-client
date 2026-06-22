@@ -46,7 +46,7 @@ jobs:
         uses: hendrikmuhs/ccache-action@v1.2
         with:
           key: ${{ github.job }}
-      - name: Build tests
+      - name: Build tests (${{ matrix.sanitizer }})
         env:
           CB_SANITIZER: ${{ matrix.sanitizer }}
           CB_CLANG: /usr/bin/clang-${{ env.LLVM_VERSION }}
@@ -91,7 +91,7 @@ jobs:
         with:
           name: build-${{ matrix.sanitizer }}
           path: ./cmake-build-tests-${{ matrix.sanitizer }}
-      - name: Run tests
+      - name: Run unit tests (${{ matrix.sanitizer }})
         timeout-minutes: 60
         env:
           CB_SANITIZER: ${{ matrix.sanitizer }}
@@ -158,7 +158,7 @@ jobs:
         env:
           HOST: ${{ steps.cbdino.outputs.ip }}
         run: ./bin/check-cluster
-      - name: Run tests
+      - name: Run integration tests (${{ matrix.sanitizer }}, ${{ matrix.tls }})
         timeout-minutes: 120
         env:
           CB_SANITIZER: ${{ matrix.sanitizer }}

@@ -30,7 +30,7 @@ jobs:
         uses: hendrikmuhs/ccache-action@v1.2
         with:
           key: ${{ github.job }}-${{ matrix.os }}
-      - name: Build tests
+      - name: Build tests (${{ matrix.os }})
         timeout-minutes: 60
         env:
           CB_NUMBER_OF_JOBS: 8
@@ -53,7 +53,7 @@ jobs:
         with:
           key: ${{ github.job }}-${{ matrix.os }}
           variant: sccache
-      - name: Build tests
+      - name: Build tests (${{ matrix.os }})
         timeout-minutes: 120
         env:
           CB_CACHE_OPTION: sccache
