@@ -1336,7 +1336,7 @@ TxnService::clientRecordProcess(grpc::ServerContext* /*context*/,
 
 grpc::Status
 TxnService::transactionStream(
-  grpc::ServerContext* /*context*/,
+  grpc::ServerContext* context,
   grpc::ServerReaderWriter<protocol::transactions::TransactionStreamPerformerToDriver,
                            protocol::transactions::TransactionStreamDriverToPerformer>* stream)
 {
@@ -1402,6 +1402,7 @@ TxnService::transactionStream(
         auto worker_request = request;
         auto worker_conn = conn;
         worker = std::thread([this,
+                              context,
                               stream,
                               worker_request,
                               worker_conn,
@@ -1460,6 +1461,18 @@ TxnService::transactionStream(
             stream->Write(final_result);
           }
           spdlog::trace("{} done, wrote final result", worker_request.name());
+
+          // The transaction is finished, but the read loop below is still parked in a blocking
+          // stream->Read() waiting for the next driver message. The driver (RunningTransaction in
+          // the FIT test-driver) only stops blocking when it observes the stream close - receiving
+          // the final result message alone does not release blockOnResult(), and the driver never
+          // half-closes its outbound side. With nothing left to exchange, proactively end the RPC
+          // so the stream closes and the driver unblocks. TryCancel() is the only way to wake a
+          // synchronous gRPC reader from another thread; the final result was already written
+          // above, and gRPC delivers it before the cancellation, so the driver sees the result then
+          // treats the close as completion. This mirrors the reference .NET performer, whose
+          // end-of-stream likewise surfaces as onError(CANCELLED) on the driver.
+          context->TryCancel();
         });
       } else if (d2p.has_start()) {
         spdlog::info("{} got start", request.name());
