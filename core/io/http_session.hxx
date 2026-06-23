@@ -225,6 +225,10 @@ private:
   std::atomic_bool connected_{ false };
   std::atomic_bool keep_alive_{ false };
   std::atomic_bool reading_{ false };
+  // True while the session is parked in the connection pool between requests.  A
+  // read is kept armed in this state so a peer-initiated close is detected
+  // promptly (see set_idle()), rather than the dead socket being reused.
+  std::atomic_bool idle_{ false };
 
   utils::movable_function<void()> connect_callback_{};
   std::mutex connect_callback_mutex_{};

@@ -118,6 +118,9 @@ public:
 
   void update_config(topology::configuration config) override
   {
+    // Idle sessions to nodes that have left the cluster, collected under the lock
+    // and stopped afterwards (stop() re-enters sessions_mutex_ via on_stop).
+    std::vector<std::shared_ptr<http_session>> evicted;
     {
       std::scoped_lock config_lock(config_mutex_, sessions_mutex_, next_index_mutex_);
       config_ = std::move(config);
@@ -125,14 +128,26 @@ public:
         next_index_ = 0;
       }
       for (auto& [type, sessions] : idle_sessions_) {
-        sessions.remove_if([&opts = options_, &cfg = config_](const auto& session) {
-          return session && !cfg.has_node(opts.network,
-                                          session->type(),
-                                          opts.enable_tls,
-                                          session->hostname(),
-                                          session->port());
+        sessions.remove_if([&opts = options_, &cfg = config_, &evicted](const auto& session) {
+          if (session && !cfg.has_node(opts.network,
+                                       session->type(),
+                                       opts.enable_tls,
+                                       session->hostname(),
+                                       session->port())) {
+            evicted.push_back(session);
+            return true;
+          }
+          return false;
         });
       }
+    }
+    // Tear the evicted connections down now instead of leaving them open until
+    // the idle timer fires; the node is gone, so the socket is dead weight (and,
+    // against a proxy that has already dropped the far side, a stale handle).
+    for (const auto& session : evicted) {
+      asio::post(session->get_executor(), [session]() {
+        session->stop();
+      });
     }
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
     drain_deferred_queue({});
@@ -470,8 +485,11 @@ public:
     for (auto& [type, sessions] : idle_sessions) {
       for (auto& s : sessions) {
         if (s) {
-          s->reset_idle();
-          s.reset();
+          // stop() (not just reset_idle()) so the read armed by set_idle() is
+          // torn down: reset_idle() only cancels the idle timer, leaving the
+          // pending async read alive, which keeps a shared_ptr to the session
+          // and prevents the io_context from draining on close.
+          s->stop();
         }
       }
     }
