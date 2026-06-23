@@ -73,6 +73,14 @@ public:
     // we have the lock.  Block all further ops
     allow_ops_ = false;
   }
+  // Non-blocking peek at whether query mode has already been entered.  Unlike
+  // get_mode(), this never waits for the query node to be set.  Used by defensive
+  // invariant checks: a KV mutation must never be staged once query mode is entered.
+  auto query_mode_entered() -> bool
+  {
+    const std::scoped_lock lock(mutex_);
+    return mode_.mode == attempt_mode::modes::QUERY;
+  }
   auto get_mode() -> attempt_mode
   {
     // NOLINTNEXTLINE(misc-const-correctness) -- lock is mutated via wait()
