@@ -318,11 +318,30 @@ transaction_context::handle_error(const std::exception_ptr& err, txn_complete_ca
                                "got rollback-able exception, rolling back");
       try {
         current_attempt_context_->rollback();
+      } catch (const transaction_operation_failed& er_rollback) {
+        cleanup().add_attempt(current_attempt_context_);
+        // A failed auto-rollback re-raises the ORIGINAL error that provoked the rollback, with
+        // retry suppressed: the application cares about what made the rollback happen, not that the
+        // subsequent rollback also failed (including when it ran out of time and expired). This
+        // holds for both KV-mode and query-mode auto-rollback - the reference SDKs leave the
+        // transaction's final error untouched on an auto-rollback failure and surface EXPIRED only
+        // for an application-driven rollback, which this SDK does not expose (see the design doc
+        // "The Core Loop": "propagate the original TransactionOperationFailed ... with retry
+        // changed to false", and the isAppRollback/updateInternalState gate in JVM
+        // CoreTransactionAttemptContext / Go transactionsx).
+        CB_ATTEMPT_CTX_LOG_TRACE(
+          current_attempt_context_,
+          "got error \"{}\" while auto rolling back, throwing original error \"{}\"",
+          er_rollback.what(),
+          er.what());
+        auto final = er.get_final_exception(*this);
+        assert(final);
+        return callback(final, std::nullopt);
       } catch (const std::exception& er_rollback) {
         cleanup().add_attempt(current_attempt_context_);
         CB_ATTEMPT_CTX_LOG_TRACE(
           current_attempt_context_,
-          "got error \"{}\" while auto rolling back, throwing original error",
+          "got error \"{}\" while auto rolling back, throwing original error \"{}\"",
           er_rollback.what(),
           er.what());
         auto final = er.get_final_exception(*this);
