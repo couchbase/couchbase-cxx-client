@@ -100,6 +100,8 @@ private:
   friend class atr_cleanup_entry;
   // transaction_context needs access to the two functions below
   friend class transaction_context;
+  // get_multi fetches raw documents (body + metadata, no MAV/ATR resolution) via get_doc
+  friend class get_multi_operation;
 
   void insert(const core::document_id& id,
               codec::encoded_value content,

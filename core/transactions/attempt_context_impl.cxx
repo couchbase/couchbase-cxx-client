@@ -3536,23 +3536,15 @@ attempt_context_impl::get_doc(const core::document_id& id,
 
   try {
     if (allow_replica) {
-      cluster_ref().with_bucket_configuration(
-        id.bucket(),
-        [this, id, specs, cb = std::move(cb)](
-          std::error_code ec, const std::shared_ptr<topology::configuration>& config) {
-          if (ec) {
-            cb(FAIL_OTHER,
-               std::nullopt,
-               "failed to check whether access_deleted is supported: " + ec.message(),
-               std::nullopt);
-            return;
-          }
-          core::operations::lookup_in_any_replica_request req{ id };
-          req.read_preference = couchbase::read_preference::selected_server_group_or_all_available;
-          req.specs = specs;
-          req.access_deleted = config->capabilities.supports_subdoc_access_deleted();
-          execute_lookup(this, req, cb);
-        });
+      // Per the transactions spec ("Fetching an individual document") and MB-63241, a replica read
+      // must not be combined with the accessDeleted flag; the reference SDKs omit it on the replica
+      // path. We therefore always read replicas without accessDeleted (so tombstones are not
+      // visible there) and need no bucket-config capability probe.
+      core::operations::lookup_in_any_replica_request req{ id };
+      req.read_preference = couchbase::read_preference::selected_server_group_or_all_available;
+      req.specs = specs;
+      req.access_deleted = false;
+      execute_lookup(this, req, cb);
     } else {
       core::operations::lookup_in_request req{ id };
       req.access_deleted = true;
