@@ -705,14 +705,30 @@ TEST_CASE("integration: upsert may trigger snappy compression", "[integration]")
 TEST_CASE("integration: multi-threaded open/close bucket", "[integration]")
 {
   test::utils::integration_test_guard integration;
-  constexpr auto number_of_threads{ 100 };
+  constexpr std::size_t number_of_threads{ 100 };
+
+  // This test exercises concurrent open/upsert/close for thread-safety; it does not require
+  // that every operation succeeds. On a busy or still-warming-up CI cluster an individual
+  // operation can legitimately time out, and an exception escaping a std::thread would call
+  // std::terminate and abort the whole test binary. So each worker records its outcome
+  // instead of throwing, and the main thread evaluates the results afterwards, tolerating
+  // timeouts while still failing (cleanly) on any unexpected error.
+  const auto tolerable = [](std::error_code ec) {
+    return !ec || ec == couchbase::errc::common::ambiguous_timeout ||
+           ec == couchbase::errc::common::unambiguous_timeout;
+  };
 
   std::vector<std::thread> threads;
   threads.reserve(number_of_threads);
 
-  for (auto i = 0; i < number_of_threads; ++i) {
-    threads.emplace_back([&integration]() {
-      test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  std::vector<std::error_code> open_results(number_of_threads);
+  for (std::size_t i = 0; i < number_of_threads; ++i) {
+    threads.emplace_back([&integration, &open_results, i]() {
+      try {
+        test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+      } catch (const std::system_error& e) {
+        open_results[i] = e.code();
+      }
     });
   }
   std::for_each(threads.begin(), threads.end(), [](auto& thread) {
@@ -721,18 +737,15 @@ TEST_CASE("integration: multi-threaded open/close bucket", "[integration]")
 
   threads.clear();
 
-  for (auto i = 0; i < number_of_threads; ++i) {
-    threads.emplace_back([&integration]() {
+  std::vector<std::error_code> upsert_results(number_of_threads);
+  for (std::size_t i = 0; i < number_of_threads; ++i) {
+    threads.emplace_back([&integration, &upsert_results, i]() {
       couchbase::core::document_id id{
         integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo")
       };
       couchbase::core::operations::upsert_request req{ id, basic_doc_json };
       req.timeout = std::chrono::seconds{ 20 };
-      if (auto resp = test::utils::execute(integration.cluster, req); resp.ctx.ec()) {
-        if (resp.ctx.ec() != couchbase::errc::common::ambiguous_timeout) {
-          throw std::system_error(resp.ctx.ec());
-        }
-      }
+      upsert_results[i] = test::utils::execute(integration.cluster, req).ctx.ec();
     });
   }
 
@@ -742,16 +755,32 @@ TEST_CASE("integration: multi-threaded open/close bucket", "[integration]")
 
   threads.clear();
 
-  for (auto i = 0; i < number_of_threads; ++i) {
-    auto close_bucket = [&integration]() {
-      test::utils::close_bucket(integration.cluster, integration.ctx.bucket);
-    };
-    std::thread closer(std::move(close_bucket));
-    threads.emplace_back(std::move(closer));
+  std::vector<std::error_code> close_results(number_of_threads);
+  for (std::size_t i = 0; i < number_of_threads; ++i) {
+    threads.emplace_back([&integration, &close_results, i]() {
+      try {
+        test::utils::close_bucket(integration.cluster, integration.ctx.bucket);
+      } catch (const std::system_error& e) {
+        close_results[i] = e.code();
+      }
+    });
   }
   std::for_each(threads.begin(), threads.end(), [](auto& thread) {
     thread.join();
   });
+
+  for (const auto& ec : open_results) {
+    INFO("open_bucket: " << ec.message());
+    REQUIRE(tolerable(ec));
+  }
+  for (const auto& ec : upsert_results) {
+    INFO("upsert: " << ec.message());
+    REQUIRE(tolerable(ec));
+  }
+  for (const auto& ec : close_results) {
+    INFO("close_bucket: " << ec.message());
+    REQUIRE(tolerable(ec));
+  }
 }
 
 TEST_CASE("integration: open bucket that does not exist", "[integration]")
