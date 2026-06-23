@@ -64,35 +64,31 @@ to_query_options(const protocol::sdk::query::Command& cmd, observability::span_o
   if (cmd.options().has_readonly()) {
     options.readonly(cmd.options().readonly());
   }
-  // Named and positional parameters are mutually exclusive; named takes precedence (matches the
-  // reference Java performer, which uses positional only when there are no named parameters).
-  if (cmd.options().parameters_named_size() == 0 &&
-      cmd.options().parameters_positional_size() > 0) {
+  // Named and positional parameters are independent: a statement may use both at once (named
+  // values become $name body fields, positional values populate the args array). Each block is a
+  // no-op when its parameter set is empty, so both are forwarded unconditionally.
 #ifdef COUCHBASE_CXX_CLIENT_QUERY_OPTIONS_HAVE_ADD_PARAMETER
-    for (const auto& param : cmd.options().parameters_positional()) {
-      options.add_positional_parameter(param);
-    }
-#else
-    std::vector<std::vector<std::byte>> positional_params{};
-    for (const auto& param : cmd.options().parameters_positional()) {
-      positional_params.emplace_back(couchbase::codec::tao_json_serializer::serialize(param));
-    }
-    options.encoded_positional_parameters(positional_params);
-#endif
+  for (const auto& param : cmd.options().parameters_positional()) {
+    options.add_positional_parameter(param);
   }
-  if (cmd.options().parameters_named_size() > 0) {
+#else
+  std::vector<std::vector<std::byte>> positional_params{};
+  for (const auto& param : cmd.options().parameters_positional()) {
+    positional_params.emplace_back(couchbase::codec::tao_json_serializer::serialize(param));
+  }
+  options.encoded_positional_parameters(positional_params);
+#endif
 #ifdef COUCHBASE_CXX_CLIENT_QUERY_OPTIONS_HAVE_ADD_PARAMETER
-    for (const auto& [key, val] : cmd.options().parameters_named()) {
-      options.add_named_parameter(key, val);
-    }
-#else
-    std::map<std::string, std::vector<std::byte>, std::less<>> named_params{};
-    for (const auto& [key, val] : cmd.options().parameters_named()) {
-      named_params.emplace(key, couchbase::codec::tao_json_serializer::serialize(val));
-    }
-    options.encoded_named_parameters(named_params);
-#endif
+  for (const auto& [key, val] : cmd.options().parameters_named()) {
+    options.add_named_parameter(key, val);
   }
+#else
+  std::map<std::string, std::vector<std::byte>, std::less<>> named_params{};
+  for (const auto& [key, val] : cmd.options().parameters_named()) {
+    named_params.emplace(key, couchbase::codec::tao_json_serializer::serialize(val));
+  }
+  options.encoded_named_parameters(named_params);
+#endif
   if (cmd.options().has_flex_index()) {
     options.flex_index(cmd.options().flex_index());
   }
