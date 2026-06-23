@@ -4171,6 +4171,12 @@ attempt_context_impl::is_done() const -> bool
 }
 
 auto
+attempt_context_impl::in_query_mode() -> bool
+{
+  return op_list_.get_mode().is_query();
+}
+
+auto
 attempt_context_impl::overall() const -> std::shared_ptr<transaction_context>
 {
   return overall_.lock();

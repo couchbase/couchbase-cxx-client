@@ -449,6 +449,11 @@ public:
 
   void existing_error(bool prev_op_failed = true);
 
+  // True once the attempt has switched to query mode (a BEGIN WORK has established a query node).
+  // Used to decide how a failed auto-rollback surfaces its error: a query-mode rollback runs as a
+  // ROLLBACK statement, so an expiry it reports is the transaction's terminal state.
+  [[nodiscard]] auto in_query_mode() -> bool;
+
   [[nodiscard]] auto is_done() const -> bool;
 
   [[nodiscard]] auto overall() const -> std::shared_ptr<transaction_context>;

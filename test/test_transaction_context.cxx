@@ -20,8 +20,13 @@
 
 #include "core/operations.hxx"
 #include "core/transactions.hxx"
+#include "core/transactions/attempt_context_testing_hooks.hxx"
+#include "core/transactions/cleanup_testing_hooks.hxx"
+#include "core/transactions/exceptions.hxx"
+#include "core/transactions/internal/exceptions_internal.hxx"
 #include "core/transactions/internal/transaction_context.hxx"
 #include "core/transactions/internal/utils.hxx"
+#include "core/utils/movable_function.hxx"
 
 #include <exception>
 #include <spdlog/spdlog.h>
@@ -597,4 +602,58 @@ TEST_CASE("transactions: can not per transactions config", "[transactions]")
   REQUIRE(tx->config().timeout == txns->config().timeout);
   REQUIRE(tx->config().query_config.scan_consistency ==
           txns->config().query_config.scan_consistency);
+}
+
+// Regression guard for the FIT scenario
+// states.SetATRAbortedTest/SetATRRolledBackTest.failOtherRepeatedly_ShouldExpire (and
+// errorDuringExpiryOvertimeModeShouldBailOut): when an auto-rollback cannot complete because the
+// attempt has entered expiry-overtime, the user-facing error must remain the ORIGINAL failure that
+// provoked the rollback (EXCEPTION_FAILED), not the rollback's own expiry. Surfacing the rollback's
+// expiry here is the regression that previously broke these tests.
+TEST_CASE("transactions: auto-rollback that expires raises the original failure, not expiry",
+          "[transactions]")
+{
+  test::utils::integration_test_guard integration;
+  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+  auto hooks = std::make_shared<attempt_context_testing_hooks>();
+  // Drop into expiry-overtime mode the moment the rollback reaches the ATR-abort stage...
+  hooks->has_expired_client_side = [](std::shared_ptr<attempt_context>,
+                                      const std::string& place,
+                                      std::optional<const std::string>) {
+    return place == STAGE_ATR_ABORT;
+  };
+  // ...and keep the ATR-abort failing so the rollback bails out while in overtime.
+  hooks->before_atr_aborted =
+    [](std::shared_ptr<attempt_context>,
+       couchbase::core::utils::movable_function<void(std::optional<error_class>)>&& cb) {
+      cb(error_class::FAIL_OTHER);
+    };
+
+  couchbase::transactions::transactions_config cfg{};
+  cfg.timeout(std::chrono::seconds(2));
+  cfg.test_factories(hooks, std::make_shared<cleanup_testing_hooks>());
+  auto [ec, txns] =
+    couchbase::core::transactions::transactions::create(integration.cluster, cfg).get();
+  REQUIRE_FALSE(ec);
+
+  couchbase::core::document_id id{
+    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+  };
+
+  std::optional<failure_type> raised{};
+  try {
+    txns->run([&id](const std::shared_ptr<attempt_context>& ctx) {
+      ctx->insert(id, tx_content_json);
+      // The application raises a rollback-able failure. In ExtSDKIntegration there is no
+      // app-rollback, so this is an auto-rollback: the original failure must survive the rollback's
+      // own expiry-overtime bailout.
+      throw transaction_operation_failed(FAIL_OTHER, "force auto-rollback");
+    });
+  } catch (const transaction_exception& e) {
+    raised = e.type();
+  }
+
+  REQUIRE(raised.has_value());
+  REQUIRE(raised.value() == failure_type::FAIL);
 }
