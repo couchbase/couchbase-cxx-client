@@ -144,7 +144,7 @@ transactions_cleanup::clean_collection(
           remaining_in_cleanup_window.count() /
           std::max<decltype(it)::difference_type>(1, atrs_left_for_this_client));
         // clean the ATR entry
-        std::string atr_id = *it;
+        const std::string atr_id = *it;
         if (!is_running()) {
           CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("cleanup of {} complete", keyspace);
           return;

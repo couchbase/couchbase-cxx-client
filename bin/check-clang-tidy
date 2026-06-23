@@ -19,14 +19,20 @@ PROJECT_ROOT="$( cd "$(dirname "$0"/..)" >/dev/null 2>&1 ; pwd -P )"
 CB_CMAKE=${CB_CMAKE:-$(which cmake)}
 CB_CC=${CB_CC:-$(which clang-22)}
 CB_CXX=${CB_CXX:-$(which clang++-22)}
+CB_CLANG_TIDY=${CB_CLANG_TIDY:-$(which clang-tidy-22 || which clang-tidy)}
+CB_RUN_CLANG_TIDY=${CB_RUN_CLANG_TIDY:-$(which run-clang-tidy-22 || which run-clang-tidy)}
 CB_NUMBER_OF_JOBS=${CB_NUMBER_OF_JOBS:-2}
 CB_CMAKE_EXTRAS=${CB_CMAKE_EXTRAS:-}
+# When set to a git ref, only the C++ sources changed relative to that ref are
+# analyzed (pull-request mode); otherwise the whole library is analyzed.
+CB_TIDY_DIFF_BASE=${CB_TIDY_DIFF_BASE:-}
 
 echo "CB_CC=${CB_CC}"
 echo "CB_CXX=${CB_CXX}"
 echo "CB_CMAKE=${CB_CMAKE}"
 
 BUILD_DIR="${PROJECT_ROOT}/cmake-build-clang-tidy"
+FIXES_FILE="${BUILD_DIR}/build/clang-tidy-fixes.yaml"
 
 set -exuo pipefail
 
@@ -34,9 +40,57 @@ rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}"
 cd "${BUILD_DIR}"
 
-${CB_CMAKE} -S "${PROJECT_ROOT}" -B build -DENABLE_CLANG_TIDY=ON -DENABLE_CLANG_TIDY_FIX=ON -DCMAKE_C_COMPILER=${CB_CC} -DCMAKE_CXX_COMPILER=${CB_CXX} ${CB_CMAKE_EXTRAS}
+# Configure with a compilation database but without build-integrated clang-tidy,
+# then build the library once (no tidy) so generated headers exist on disk before
+# analysis. Only the shared library target is built; the static library shares the
+# same source list, so this covers every translation unit once.
+${CB_CMAKE} -S "${PROJECT_ROOT}" -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+  -DCMAKE_C_COMPILER=${CB_CC} -DCMAKE_CXX_COMPILER=${CB_CXX} ${CB_CMAKE_EXTRAS}
+${CB_CMAKE} --build build --parallel "${CB_NUMBER_OF_JOBS}" --target couchbase_cxx_client
+
+if [ -n "${CB_TIDY_DIFF_BASE}" ]; then
+  # Pull-request mode: analyze only the sources changed against the base branch.
+  # A single clang-tidy process handles the (small) changed-file set, so it writes
+  # the exported fixes without contention.
+  mapfile -t changed < <(git -C "${PROJECT_ROOT}" diff --name-only --diff-filter=ACMR \
+    "${CB_TIDY_DIFF_BASE}" -- '*.cxx' '*.cpp' '*.cc')
+  files=()
+  for f in "${changed[@]}"; do
+    # Stay within the same scope as the full run, which only analyzes the
+    # couchbase_cxx_client target: core/ holds the library implementation
+    # (couchbase/ is headers only). Test and tool sources are not part of that
+    # target and are not linted in full mode, so skip them here as well.
+    case "${f}" in
+      core/* | couchbase/*) ;;
+      *) continue ;;
+    esac
+    if grep -qF "\"${PROJECT_ROOT}/${f}\"" build/compile_commands.json; then
+      files+=("${PROJECT_ROOT}/${f}")
+    fi
+  done
+  if [ ${#files[@]} -eq 0 ]; then
+    echo "no changed C++ sources in the compilation database; nothing to analyze"
+    exit 0
+  fi
+  printf 'analyzing changed source: %s\n' "${files[@]}"
+  set +e
+  "${CB_CLANG_TIDY}" -p build -export-fixes="${FIXES_FILE}" \
+    -extra-arg=-Wno-unknown-warning-option -extra-arg=-Wno-c2y-extensions "${files[@]}"
+  STATUS=$?
+  set -e
+  exit ${STATUS}
+fi
+
+# Full mode: analyze every translation unit of the library implementation. Drive
+# clang-tidy through run-clang-tidy rather than CMake's build-integrated clang-tidy:
+# run-clang-tidy analyzes each translation unit in a separate process and merges the
+# per-unit fixes into a single file, whereas CMake's parallel per-unit invocations
+# would all write -- and clobber -- one shared -export-fixes file.
 set +e
-${CB_CMAKE} --build build --parallel ${CB_NUMBER_OF_JOBS} --verbose
+"${CB_RUN_CLANG_TIDY}" -p build -j "${CB_NUMBER_OF_JOBS}" \
+  -clang-tidy-binary "${CB_CLANG_TIDY}" -export-fixes "${FIXES_FILE}" \
+  -extra-arg=-Wno-unknown-warning-option -extra-arg=-Wno-c2y-extensions \
+  "${PROJECT_ROOT}/core/"'.*\.(cxx|cpp|cc)$'
 STATUS=$?
 set -e
 
