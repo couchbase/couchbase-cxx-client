@@ -104,6 +104,8 @@ private:
   friend class atr_cleanup_entry;
   // transaction_context needs access to the two functions below
   friend class transaction_context;
+  // get_multi fetches raw documents (body + metadata, no MAV/ATR resolution) via get_doc
+  friend class get_multi_operation;
 
   // NOLINTBEGIN(misc-override-with-different-visibility) -- NVI pattern: private overrides of
   // public virtual base-class methods are intentional to prevent direct calls from outside the
