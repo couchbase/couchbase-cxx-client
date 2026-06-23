@@ -26,6 +26,7 @@
 
 #include <couchbase/codec/default_json_transcoder.hxx>
 #include <couchbase/codec/json_transcoder.hxx>
+#include <couchbase/codec/lenient_json_transcoder.hxx>
 #include <couchbase/codec/raw_binary_transcoder.hxx>
 #include <couchbase/codec/raw_json_transcoder.hxx>
 #include <couchbase/codec/raw_string_transcoder.hxx>
@@ -171,13 +172,18 @@ result_to_content(const Result& result,
   std::visit(
     overloaded{
       [&](std::monostate) {
+        // No transcoder specified: the reference SDK uses a bare JsonSerializer here, which does
+        // not validate the document's common flags when reading (see ExtBinarySupport spec). Use
+        // the lenient JSON transcoder so e.g. JSON content stored with binary flags still reads.
+        using lenient = couchbase::codec::default_lenient_json_transcoder;
         switch (proto_content_as.as_case()) {
           case protocol::shared::ContentAs::kAsString: {
-            proto_res_content->set_content_as_string(result.template content_as<std::string>());
+            proto_res_content->set_content_as_string(
+              result.template content_as<std::string, lenient>());
             break;
           }
           case protocol::shared::ContentAs::kAsByteArray: {
-            auto value = result.template content_as<std::vector<std::byte>>();
+            auto value = result.template content_as<std::vector<std::byte>, lenient>();
             proto_res_content->set_content_as_bytes(
               std::string{ reinterpret_cast<const char*>(value.data()), value.size() });
             break;
@@ -185,16 +191,17 @@ result_to_content(const Result& result,
           case protocol::shared::ContentAs::kAsJsonObject:
           case protocol::shared::ContentAs::kAsJsonArray:
             proto_res_content->set_content_as_bytes(couchbase::core::utils::json::generate(
-              result.template content_as<tao::json::value>()));
+              result.template content_as<tao::json::value, lenient>()));
             break;
           case protocol::shared::ContentAs::kAsBoolean:
-            proto_res_content->set_content_as_bool(result.template content_as<bool>());
+            proto_res_content->set_content_as_bool(result.template content_as<bool, lenient>());
             break;
           case protocol::shared::ContentAs::kAsInteger:
-            proto_res_content->set_content_as_int64(result.template content_as<std::int64_t>());
+            proto_res_content->set_content_as_int64(
+              result.template content_as<std::int64_t, lenient>());
             break;
           case protocol::shared::ContentAs::kAsFloatingPoint:
-            proto_res_content->set_content_as_double(result.template content_as<double>());
+            proto_res_content->set_content_as_double(result.template content_as<double, lenient>());
             break;
           default:
             throw performer_exception::unimplemented(
