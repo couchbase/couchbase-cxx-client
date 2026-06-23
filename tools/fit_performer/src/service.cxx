@@ -1161,6 +1161,12 @@ TxnService::execute_command(ConnectionPtr conn,
     uint32_t in_flight = 0;
     std::mutex mtx;
     std::condition_variable cv;
+    // A parallel sub-command can return a (non-throwing) operation error just like a serial one.
+    // The serial path propagates it to fail/roll back the transaction (see the run loop); mirror
+    // that here by keeping the first such error and returning it once all workers finish. This
+    // matches the reference Java performer's BatchExecutor, which stores the first thrown error and
+    // rethrows it after the batch completes.
+    couchbase::error batch_error{};
     // since we are fed the _synchronous_ transaction context, lets make N threads, have each of the
     // threads eat commands off the list of commands and perform them synchronously.   That insures
     // if we make the number of threads equal to the parallelism requested, we will always have that
@@ -1182,8 +1188,9 @@ TxnService::execute_command(ConnectionPtr conn,
         in_flight++;
         spdlog::trace("async executing command, {} now in-flight", in_flight);
         lock.unlock();
+        couchbase::error op_err{};
         try {
-          execute_command(conn, ctx, c, logger_prefix, counters, txn_ctx, true);
+          op_err = execute_command(conn, ctx, c, logger_prefix, counters, txn_ctx, true);
         } catch (...) {
           // Release the in-flight slot and wake a waiter even on exception; otherwise the other
           // workers can block forever in cv.wait() and f.get() below would deadlock. The exception
@@ -1196,6 +1203,9 @@ TxnService::execute_command(ConnectionPtr conn,
         }
         lock.lock();
         in_flight--;
+        if (op_err && !batch_error) {
+          batch_error = op_err;
+        }
         lock.unlock();
         cv.notify_one();
         lock.lock();
@@ -1209,6 +1219,7 @@ TxnService::execute_command(ConnectionPtr conn,
     for (auto& f : futures) {
       f.get();
     }
+    return batch_error;
   } else {
     throw performer_exception::unimplemented("Do not understand transaction command " +
                                              cmd.DebugString());
@@ -1277,7 +1288,7 @@ TxnService::clientRecordProcess(grpc::ServerContext* /*context*/,
 
 grpc::Status
 TxnService::transactionStream(
-  grpc::ServerContext* /*context*/,
+  grpc::ServerContext* context,
   grpc::ServerReaderWriter<protocol::transactions::TransactionStreamPerformerToDriver,
                            protocol::transactions::TransactionStreamDriverToPerformer>* stream)
 {
@@ -1343,6 +1354,7 @@ TxnService::transactionStream(
         auto worker_request = request;
         auto worker_conn = conn;
         worker = std::thread([this,
+                              context,
                               stream,
                               worker_request,
                               worker_conn,
@@ -1403,6 +1415,18 @@ TxnService::transactionStream(
             stream->Write(final_result);
           }
           spdlog::trace("{} done, wrote final result", worker_request.name());
+
+          // The transaction is finished, but the read loop below is still parked in a blocking
+          // stream->Read() waiting for the next driver message. The driver (RunningTransaction in
+          // the FIT test-driver) only stops blocking when it observes the stream close - receiving
+          // the final result message alone does not release blockOnResult(), and the driver never
+          // half-closes its outbound side. With nothing left to exchange, proactively end the RPC
+          // so the stream closes and the driver unblocks. TryCancel() is the only way to wake a
+          // synchronous gRPC reader from another thread; the final result was already written
+          // above, and gRPC delivers it before the cancellation, so the driver sees the result then
+          // treats the close as completion. This mirrors the reference .NET performer, whose
+          // end-of-stream likewise surfaces as onError(CANCELLED) on the driver.
+          context->TryCancel();
         });
       } else if (d2p.has_start()) {
         spdlog::info("{} got start", request.name());
