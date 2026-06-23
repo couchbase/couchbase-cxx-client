@@ -149,11 +149,21 @@ assert_single_lookup_all_replica_success(test::utils::integration_test_guard& in
 {
   couchbase::core::operations::lookup_in_all_replicas_request req{ id };
   req.specs = couchbase::lookup_in_specs{ spec }.specs();
-  auto response = test::utils::execute(integration.cluster, req);
   INFO(fmt::format(
     "assert_single_lookup_all_replica_success(\"{}\", \"{}\")", id, req.specs[0].path_));
+  // A freshly written document, even one written durably, may not be readable from every
+  // replica the instant the write returns; an all-replica lookup then comes back with fewer
+  // entries (a replica answers not_found). Poll until every replica reports the document
+  // before asserting full coverage, so replication lag does not flake the test.
+  const auto expected_entries = integration.number_of_replicas() + 1;
+  couchbase::core::operations::lookup_in_all_replicas_response response;
+  auto replicated = test::utils::wait_until([&]() {
+    response = test::utils::execute(integration.cluster, req);
+    return !response.ctx.ec() && response.entries.size() == expected_entries;
+  });
+  REQUIRE(replicated);
   REQUIRE_SUCCESS(response.ctx.ec());
-  REQUIRE(response.entries.size() == integration.number_of_replicas() + 1);
+  REQUIRE(response.entries.size() == expected_entries);
   auto responses_from_active =
     std::count_if(response.entries.begin(), response.entries.end(), [](const auto& r) {
       return !r.is_replica;
