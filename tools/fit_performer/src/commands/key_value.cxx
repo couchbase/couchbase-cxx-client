@@ -2023,6 +2023,11 @@ execute_streaming_command(const protocol::sdk::kv::rangescan::Scan& cmd, const c
     std::optional<protocol::shared::ContentAs> content_as{};
     if (cmd.has_content_as()) {
       content_as = cmd.content_as();
+      // Reject an unsupported transcoder/content-type combination now, while still on the command
+      // setup path: it is a driver-side request error, and throwing here surfaces it as a
+      // non-success gRPC status (via run()). The producer below cannot raise it cleanly once the
+      // stream is running, so it must be caught up front.
+      common::ensure_content_combo_supported(transcoder, content_as.value());
     }
     return [transcoder,
             content_as,
@@ -2040,11 +2045,24 @@ execute_streaming_command(const protocol::sdk::kv::rangescan::Scan& cmd, const c
         spdlog::trace("next_fn has no more scan entries, returning std::nullopt");
         return std::nullopt;
       }
-      from_scan_result_item(stream_id,
-                            item.value(),
-                            transcoder,
-                            content_as,
-                            proto_res.mutable_sdk()->mutable_range_scan_result());
+      try {
+        from_scan_result_item(stream_id,
+                              item.value(),
+                              transcoder,
+                              content_as,
+                              proto_res.mutable_sdk()->mutable_range_scan_result());
+      } catch (const std::exception& e) {
+        // Only a per-item SDK decode error can reach here: the transcoder/content-type combination
+        // was validated during setup, so result_to_content() no longer raises performer_exception
+        // on this path. Report the decode failure as an SDK error result rather than letting it
+        // escape the producer -- an escaping exception unwinds the stream writer task (stream.hxx)
+        // without sending a terminal stream message, leaving the driver blocked until its test
+        // timeout.
+        spdlog::debug("next_fn failed decoding scan item for stream {}: {}", stream_id, e.what());
+        auto err_res = common::create_new_result();
+        err_res.mutable_sdk()->mutable_exception()->mutable_other()->set_name(e.what());
+        return err_res;
+      }
       return proto_res;
     };
   }
