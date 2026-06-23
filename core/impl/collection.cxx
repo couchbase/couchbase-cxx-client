@@ -25,6 +25,7 @@
 #include "observability_recorder.hxx"
 #include "observe_poll.hxx"
 #include "resolve_node_id.hxx"
+#include "with_bucket_config_or_timeout.hxx"
 
 #include "core/agent_group.hxx"
 #include "core/agent_group_config.hxx"
@@ -1259,81 +1260,49 @@ public:
                                                             : core::topology::transport::plain;
     const auto timeout = options.timeout.value_or(origin.options().key_value_timeout);
 
-    // Shared state so that exactly one of {timeout timer, bucket-config
-    // callback} can invoke the user handler. @c with_bucket_configuration is
-    // not cancellable — if a config never arrives, the timer is the only way
-    // to guarantee the handler completes.
-    //
-    // Thread-safety note: the SDK's core io_context is single-threaded for
-    // KV work in the current release. The timer and atomic-done dance are
-    // therefore safe as written. If the io_context is ever multi-threaded,
-    // both the timer.cancel() and the handler invocation must be wrapped in
-    // a strand bound to core_.io_context() because @c asio::steady_timer is
-    // not thread-safe.
-    struct state {
-      std::atomic<bool> done{ false };
-      asio::steady_timer timer;
-      node_id_for_handler handler;
-
-      state(asio::io_context& ioc, node_id_for_handler&& h)
-        : timer{ ioc }
-        , handler{ std::move(h) }
-      {
-      }
-    };
-    auto shared = std::make_shared<state>(core_.io_context(), std::move(handler));
-    // Capture the io_context by pointer value (not by reference to a local
-    // reference variable): core_ and its io_context outlive this operation, so
-    // the pointer stays valid even though the bucket-config callback may run
-    // after node_id_for() has returned.
-    auto* io_context = &core_.io_context();
-
-    shared->timer.expires_after(timeout);
-    shared->timer.async_wait([shared](std::error_code timer_ec) -> void {
-      if (timer_ec == asio::error::operation_aborted) {
-        return;
-      }
-      // acq_rel matches the other writer (config callback): the only thing
-      // we synchronise on is whether we won the race to fire the handler.
-      if (shared->done.exchange(true, std::memory_order_acq_rel)) {
-        return;
-      }
-      shared->handler(error{ errc::common::unambiguous_timeout }, node_id{});
-    });
-
-    core_.with_bucket_configuration(
+    // The state struct + timer + atomic-done + asio::post scaffold lives
+    // in with_bucket_config_or_timeout(). See that header for the
+    // single-threaded-io_context assumption the timer relies on.
+    core::impl::with_bucket_config_or_timeout<couchbase::node_id>(
+      core_,
       bucket_name_,
-      [shared, io_context, document_key = std::move(document_key), transport_kind](
-        std::error_code ec, const std::shared_ptr<core::topology::configuration>& config) -> void {
-        if (shared->done.exchange(true, std::memory_order_acq_rel)) {
-          return;
-        }
+      timeout,
+      std::move(handler),
+      [document_key = std::move(document_key),
+       transport_kind](const std::shared_ptr<core::topology::configuration>& config) {
+        return core::impl::resolve_node_id_from_config(config, document_key, transport_kind);
+      });
+  }
 
-        std::error_code result_ec = ec;
-        couchbase::node_id resolved{};
-        if (!ec) {
-          std::tie(result_ec, resolved) =
-            core::impl::resolve_node_id_from_config(config, document_key, transport_kind);
-        }
+  void node_ids(const node_ids_options::built& options, node_ids_handler&& handler) const
+  {
+    auto [origin_ec, origin] = core_.origin();
+    if (origin_ec) {
+      return handler(error{ origin_ec }, {});
+    }
+    const auto transport_kind = origin.options().enable_tls ? core::topology::transport::tls
+                                                            : core::topology::transport::plain;
+    const auto timeout = options.timeout.value_or(origin.options().key_value_timeout);
 
-        // Hop back onto the io_context before touching the timer or invoking
-        // the user handler. with_bucket_configuration() invokes its callback
-        // synchronously on the caller's thread when the bucket configuration
-        // is already cached (bucket.cxx). Two things must therefore not happen
-        // inline here:
-        //   1. timer.cancel() — asio::steady_timer is not thread-safe and is
-        //      bound to core_.io_context(); cancelling it from an arbitrary
-        //      application thread races with the io_context processing the
-        //      pending async_wait. It must run on the timer's executor.
-        //   2. the user handler — it reasonably expects an async hop and may
-        //      itself re-enter the SDK.
-        // The done flag above is atomic, so the race is already decided; the
-        // deferred cancel() is a harmless no-op if the timer has since fired
-        // (its handler short-circuits on operation_aborted / done).
-        asio::post(*io_context, [shared, result_ec, resolved = std::move(resolved)]() mutable {
-          shared->timer.cancel();
-          shared->handler(error{ result_ec }, std::move(resolved));
-        });
+    // Same async scaffold as node_id_for — see the long comment there for
+    // the single-threaded-io_context assumption the timer relies on, and
+    // for why with_bucket_configuration() needs a steady_timer to bound
+    // the wait when no config ever arrives.
+    //
+    // Note: node_ids deliberately does not need to inspect the vBucket
+    // map (effective_node_ids enumerates topology nodes directly, not via
+    // a key->vbucket->node lookup), so the "vbmap missing" branch from
+    // node_id_for is absent here. A null or empty result is collapsed
+    // onto configuration_not_available below, matching the sibling's
+    // contract that an empty/unusable bucket configuration is a hard
+    // error rather than a silent empty success.
+    core::impl::with_bucket_config_or_timeout<std::vector<couchbase::node_id>>(
+      core_,
+      bucket_name_,
+      timeout,
+      std::move(handler),
+      [transport_kind](const std::shared_ptr<core::topology::configuration>& config) {
+        return core::impl::resolve_node_ids_from_config(config, transport_kind);
       });
   }
 
@@ -1443,6 +1412,24 @@ collection::node_id_for(std::string document_id, const node_id_for_options& opti
   auto future = barrier->get_future();
   node_id_for(std::move(document_id), options, [barrier](auto err, auto nid) {
     barrier->set_value({ std::move(err), std::move(nid) });
+  });
+  return future;
+}
+
+void
+collection::node_ids(const node_ids_options& options, node_ids_handler&& handler) const
+{
+  return impl_->node_ids(options.build(), std::move(handler));
+}
+
+auto
+collection::node_ids(const node_ids_options& options) const
+  -> std::future<std::pair<error, std::vector<node_id>>>
+{
+  auto barrier = std::make_shared<std::promise<std::pair<error, std::vector<node_id>>>>();
+  auto future = barrier->get_future();
+  node_ids(options, [barrier](auto err, auto nids) {
+    barrier->set_value({ std::move(err), std::move(nids) });
   });
   return future;
 }
