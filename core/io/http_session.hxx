@@ -18,6 +18,7 @@
 #pragma once
 
 #include <couchbase/build_config.hxx>
+#include <couchbase/error_codes.hxx>
 
 #include "core/diagnostics.hxx"
 #include "core/origin.hxx"
@@ -119,6 +120,11 @@ public:
   void write_and_subscribe(io::http_request& request, Handler&& handler)
   {
     if (stopped_) {
+      // The session was stopped between checkout and here -- e.g. the read armed while the
+      // connection was idle completed with the peer's FIN/RST after reset_idle() cleared idle_,
+      // driving do_read() -> stop(). Surface a retryable cancellation instead of dropping the
+      // request silently, which would strand the caller until its operation timeout.
+      std::forward<Handler>(handler)(errc::common::request_canceled, {});
       return;
     }
     {
@@ -225,6 +231,10 @@ private:
   std::atomic_bool connected_{ false };
   std::atomic_bool keep_alive_{ false };
   std::atomic_bool reading_{ false };
+  // True while the session is parked in the connection pool between requests.  A
+  // read is kept armed in this state so a peer-initiated close is detected
+  // promptly (see set_idle()), rather than the dead socket being reused.
+  std::atomic_bool idle_{ false };
 
   utils::movable_function<void()> connect_callback_{};
   std::mutex connect_callback_mutex_{};
