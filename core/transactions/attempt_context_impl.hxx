@@ -289,7 +289,11 @@ private:
           err.cause(TRANSACTION_ALREADY_COMMITTED);
           break;
         default:
-          err.cause(UNKNOWN);
+          // Ops are only blocked once commit or rollback has begun (wait_and_block_ops), but the
+          // attempt state is published later -- and the empty-commit fast path never reaches
+          // COMMITTED at all. So a racing op can land here with the state still PENDING: report it
+          // as a concurrent operation rather than an opaque unknown cause.
+          err.cause(CONCURRENT_OPERATIONS_DETECTED_ON_SAME_DOCUMENT);
       }
       op_completed_with_error_no_cache(std::forward<Handler>(cb), std::make_exception_ptr(err));
     } catch (const transaction_operation_failed& e) {
