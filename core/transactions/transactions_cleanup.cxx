@@ -174,7 +174,7 @@ transactions_cleanup::clean_collection(
           reclaim_oldest();
         }
 
-        std::string atr_id = *it;
+        const std::string atr_id = *it;
         in_flight.emplace_back(std::async(std::launch::async, [this, keyspace, atr_id]() {
           try {
             handle_atr_cleanup({ keyspace.bucket, keyspace.scope, keyspace.collection, atr_id });
