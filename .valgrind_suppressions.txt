@@ -48,3 +48,13 @@
    fun:RAND_bytes_with_additional_data
    ...
 }
+{
+   glibc-pthread-create-tls-dtv
+   Memcheck:Leak
+   match-leak-kinds: possible
+   ...
+   fun:_dl_allocate_tls
+   ...
+   fun:pthread_create*
+   ...
+}

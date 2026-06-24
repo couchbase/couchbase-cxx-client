@@ -110,7 +110,11 @@ public:
 
   inline auto has_analytics_service() -> bool
   {
-    return has_service(couchbase::core::service_type::analytics);
+    // Analytics is Enterprise-only and version-gated, and is not modelled by
+    // the gocaves mock. Require both that the deployment supports analytics and
+    // that an analytics node is actually present, so callers need a single gate.
+    return cluster_version().supports_analytics() &&
+           has_service(couchbase::core::service_type::analytics);
   }
 
   auto number_of_nodes_with_service(std::string type) -> std::size_t;

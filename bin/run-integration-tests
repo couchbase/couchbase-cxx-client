@@ -106,7 +106,19 @@ fi
 ulimit -c unlimited
 
 export TEST_CONNECTION_STRING="${TEST_CONNECTION_STRING//cluster.crt/${PROJECT_ROOT}/cluster.crt}"
-${CB_CTEST} ${CB_CTEST_EXTRAS} --output-on-failure --label-regex 'integration' --output-junit results.xml
+
+# Optional test sharding: split the suite across N parallel CI jobs. When
+# CB_TEST_SHARD_INDEX/CB_TEST_SHARD_TOTAL are set, run only tests whose global
+# ctest index falls on this shard's stride (-I start,,stride). The label filter
+# is applied on top, and the union of all shards covers the full set with no
+# overlap. Used by the valgrind leg, which is too slow to fit one job.
+CB_TEST_SHARD_INDEX=${CB_TEST_SHARD_INDEX:-}
+CB_TEST_SHARD_TOTAL=${CB_TEST_SHARD_TOTAL:-}
+CB_CTEST_SHARD=""
+if [ -n "${CB_TEST_SHARD_INDEX}" ] && [ -n "${CB_TEST_SHARD_TOTAL}" ]; then
+    CB_CTEST_SHARD="-I ${CB_TEST_SHARD_INDEX},,${CB_TEST_SHARD_TOTAL}"
+fi
+${CB_CTEST} ${CB_CTEST_EXTRAS} ${CB_CTEST_SHARD} --output-on-failure --label-regex 'integration' --output-junit results.xml
 STATUS=$?
 
 if [ ! -z "${GOCAVES_PID}" ]

@@ -841,7 +841,7 @@ TEST_CASE("integration: orchestrator scan range without content", "[integration]
   auto ids = make_doc_ids(100, "rangescanwithoutcontent-");
   auto value = make_binary_value(1);
   auto mutations =
-    populate_documents_for_range_scan(collection, ids, value, std::chrono::seconds{ 30 });
+    populate_documents_for_range_scan(collection, ids, value, std::chrono::seconds{ 300 });
 
   auto vbucket_map = get_vbucket_map(integration);
 
@@ -905,7 +905,7 @@ TEST_CASE("integration: orchestrator scan range with content", "[integration]")
   auto ids = make_doc_ids(100, "rangescanwithcontent-");
   auto value = make_binary_value(100);
   auto mutations =
-    populate_documents_for_range_scan(collection, ids, value, std::chrono::seconds{ 30 });
+    populate_documents_for_range_scan(collection, ids, value, std::chrono::seconds{ 300 });
 
   auto vbucket_map = get_vbucket_map(integration);
 
@@ -1130,7 +1130,7 @@ TEST_CASE("integration: orchestrator prefix scan without content", "[integration
   auto ids = make_doc_ids(100, "prefixscanwithoutcontent-");
   auto value = make_binary_value(1);
   auto mutations =
-    populate_documents_for_range_scan(collection, ids, value, std::chrono::seconds{ 30 });
+    populate_documents_for_range_scan(collection, ids, value, std::chrono::seconds{ 300 });
 
   auto vbucket_map = get_vbucket_map(integration);
 
@@ -1334,7 +1334,7 @@ TEST_CASE("integration: orchestrator prefix scan without content and up to 5 con
   auto ids = make_doc_ids(100, "prefixscanwithoutcontent-");
   auto value = make_binary_value(1);
   auto mutations =
-    populate_documents_for_range_scan(collection, ids, value, std::chrono::seconds{ 30 });
+    populate_documents_for_range_scan(collection, ids, value, std::chrono::seconds{ 300 });
 
   auto vbucket_map = get_vbucket_map(integration);
 
@@ -1396,7 +1396,7 @@ TEST_CASE("integration: orchestrator prefix scan, get 10 items and cancel", "[in
   auto ids = make_doc_ids(15, "prefixscancancel-");
   auto value = make_binary_value(1);
   auto mutations =
-    populate_documents_for_range_scan(collection, ids, value, std::chrono::seconds{ 30 });
+    populate_documents_for_range_scan(collection, ids, value, std::chrono::seconds{ 300 });
 
   auto vbucket_map = get_vbucket_map(integration);
 
@@ -1466,7 +1466,7 @@ TEST_CASE("integration: orchestrator prefix scan with concurrency 0 (invalid arg
   auto ids = make_doc_ids(100, "prefixscaninvalidconcurrency-");
   auto value = make_binary_value(1);
   auto mutations =
-    populate_documents_for_range_scan(collection, ids, value, std::chrono::seconds{ 30 });
+    populate_documents_for_range_scan(collection, ids, value, std::chrono::seconds{ 300 });
 
   auto vbucket_map = get_vbucket_map(integration);
 
@@ -1588,7 +1588,7 @@ TEST_CASE("integration: range scan public API", "[integration]")
   auto ids = make_doc_ids(100, prefix);
   auto value = make_binary_value(1);
   auto mutations =
-    populate_documents_for_range_scan(collection, ids, value, std::chrono::seconds{ 30 });
+    populate_documents_for_range_scan(collection, ids, value, std::chrono::seconds{ 300 });
 
   SECTION("prefix scan")
   {

@@ -116,12 +116,20 @@ jobs:
           - lsan
           - tsan
           - ubsan
-          - valgrind
         server:
           - 8.0.0
         tls:
           - plain
           - tls
+        # valgrind runs under memcheck and is far slower than the other
+        # sanitizers (~110-130 min for the full suite), leaving no headroom
+        # under the 120 min step budget. Shard it across two jobs (~1h each)
+        # via ctest -I stride; the other sanitizers are fast and run unsharded.
+        include:
+          - { sanitizer: valgrind, server: 8.0.0, tls: plain, shard_index: 1, shard_total: 2 }
+          - { sanitizer: valgrind, server: 8.0.0, tls: plain, shard_index: 2, shard_total: 2 }
+          - { sanitizer: valgrind, server: 8.0.0, tls: tls, shard_index: 1, shard_total: 2 }
+          - { sanitizer: valgrind, server: 8.0.0, tls: tls, shard_index: 2, shard_total: 2 }
     runs-on: ubuntu-24.04
     steps:
       - name: Install dependencies
@@ -157,6 +165,8 @@ jobs:
           TEST_SERVER_VERSION: ${{ matrix.server }}
           TEST_CONNECTION_STRING: ${{ matrix.tls == 'tls' && format('{0}?trust_certificate=cluster.crt', steps.cbdino.outputs.tls-connstr) || steps.cbdino.outputs.connstr }}
           TEST_LOG_LEVEL: trace
+          CB_TEST_SHARD_INDEX: ${{ matrix.shard_index }}
+          CB_TEST_SHARD_TOTAL: ${{ matrix.shard_total }}
         run: |
           chmod -R +x ./cmake-build-tests-${{ matrix.sanitizer }}
           ./bin/run-integration-tests
@@ -168,6 +178,6 @@ jobs:
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
-          name: report-integration-${{ matrix.sanitizer }}-${{ matrix.tls }}-${{ matrix.server }}
+          name: report-integration-${{ matrix.sanitizer }}-${{ matrix.tls }}-${{ matrix.server }}${{ matrix.shard_index && format('-shard{0}', matrix.shard_index) || '' }}
           path: |
             cmake-build-tests-${{ matrix.sanitizer }}/Testing/Temporary/*.log
