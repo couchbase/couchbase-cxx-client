@@ -65,12 +65,13 @@ macro(integration_test name)
   endif()
   set(_catch_extra_args "")
   if(DEFINED COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS AND EXISTS "${COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS}")
-    set(_catch_extra_args ENVIRONMENT "TSAN_OPTIONS=halt_on_error=0,suppressions=${COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS}")
+    set(_catch_extra_args ENVIRONMENT
+                          "TSAN_OPTIONS=halt_on_error=0,second_deadlock_stack=1,ignore_noninstrumented_modules=1,suppressions=${COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS}")
   endif()
   catch_discover_tests(
     test_integration_${name}
-    ${_catch_extra_args}
     PROPERTIES
+    ${_catch_extra_args}
     SKIP_REGULAR_EXPRESSION
     "SKIP"
     LABELS
@@ -113,12 +114,13 @@ macro(transaction_test name)
   endif()
   set(_catch_extra_args "")
   if(DEFINED COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS AND EXISTS "${COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS}")
-    set(_catch_extra_args ENVIRONMENT "TSAN_OPTIONS=halt_on_error=0,suppressions=${COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS}")
+    set(_catch_extra_args ENVIRONMENT
+                          "TSAN_OPTIONS=halt_on_error=0,second_deadlock_stack=1,ignore_noninstrumented_modules=1,suppressions=${COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS}")
   endif()
   catch_discover_tests(
     test_transaction_${name}
-    ${_catch_extra_args}
     PROPERTIES
+    ${_catch_extra_args}
     SKIP_REGULAR_EXPRESSION
     "SKIP"
     LABELS
@@ -160,12 +162,13 @@ macro(unit_test name)
   endif()
   set(_catch_extra_args "")
   if(DEFINED COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS AND EXISTS "${COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS}")
-    set(_catch_extra_args ENVIRONMENT "TSAN_OPTIONS=halt_on_error=0,suppressions=${COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS}")
+    set(_catch_extra_args ENVIRONMENT
+                          "TSAN_OPTIONS=halt_on_error=0,second_deadlock_stack=1,ignore_noninstrumented_modules=1,suppressions=${COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS}")
   endif()
   catch_discover_tests(
     test_unit_${name}
-    ${_catch_extra_args}
     PROPERTIES
+    ${_catch_extra_args}
     SKIP_REGULAR_EXPRESSION
     "SKIP"
     LABELS
