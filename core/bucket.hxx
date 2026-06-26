@@ -23,6 +23,7 @@
 #include "tls_context_provider.hxx"
 
 #include <asio/bind_executor.hpp>
+#include <asio/dispatch.hpp>
 #include <asio/io_context.hpp>
 #include <asio/post.hpp>
 #include <asio/ssl.hpp>
@@ -111,6 +112,17 @@ public:
   template<typename Request>
   void map_and_send(std::shared_ptr<operations::mcbp_command<bucket, Request>> cmd)
   {
+    if constexpr (operations::is_cancellable_operation_v<Request>) {
+      // Confine the dispatch path of cancellable (replica fan-out) commands to
+      // the command strand, so writes to session_/opaque_ here cannot race a
+      // sibling-triggered cancellation arriving on an IO thread. This covers
+      // both the initial dispatch and retry re-entry via schedule_for_retry.
+      if (!cmd->strand_.running_in_this_thread()) {
+        return asio::dispatch(cmd->strand_, [self = shared_from_this(), cmd]() {
+          self->map_and_send(cmd);
+        });
+      }
+    }
     if (is_closed()) {
       return cmd->cancel(retry_reason::do_not_retry);
     }

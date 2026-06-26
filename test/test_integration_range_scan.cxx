@@ -586,11 +586,21 @@ TEST_CASE("integration: range scan cancel during streaming using protocol cancel
     scan_uuid = res.scan_uuid;
   }
 
-  auto execute_protocol_cancel = [agent, scan_uuid, vbid = vbucket_id]() {
-    auto op = agent->range_scan_cancel(scan_uuid, vbid, {}, [](auto /* res */, auto ec) {
-      REQUIRE_SUCCESS(ec);
-    });
-    EXPECT_SUCCESS(op);
+  // The cancellation is triggered from the range_scan_continue item callback, which runs on an
+  // IO thread. Catch2 assertion macros mutate shared state on the main thread's stack and are not
+  // thread-safe, so the cancel outcome is handed back to the main thread through a promise and
+  // asserted there instead of inside the callback.
+  auto cancel_barrier = std::make_shared<std::promise<std::error_code>>();
+  auto cancel_future = cancel_barrier->get_future();
+
+  auto execute_protocol_cancel = [agent, scan_uuid, vbid = vbucket_id, cancel_barrier]() {
+    auto op =
+      agent->range_scan_cancel(scan_uuid, vbid, {}, [cancel_barrier](auto /* res */, auto ec) {
+        cancel_barrier->set_value(ec);
+      });
+    if (!op) {
+      cancel_barrier->set_value(op.error());
+    }
   };
 
   std::vector<couchbase::core::range_scan_item> data;
@@ -633,6 +643,10 @@ TEST_CASE("integration: range scan cancel during streaming using protocol cancel
   } while (true);
 
   REQUIRE(data.size() == 3);
+
+  // Wait for the cancellation issued from the IO thread to complete and assert its outcome on the
+  // main thread.
+  REQUIRE_SUCCESS(cancel_future.get());
 }
 
 TEST_CASE("integration: range scan cancel during streaming using pending_operation cancel",

@@ -37,10 +37,14 @@
 #include <couchbase/durability_level.hxx>
 #include <couchbase/error_codes.hxx>
 
+#include <asio/dispatch.hpp>
+#include <asio/io_context.hpp>
 #include <asio/steady_timer.hpp>
+#include <asio/strand.hpp>
 #include <spdlog/fmt/bundled/chrono.h>
 
 #include <functional>
+#include <type_traits>
 #include <utility>
 
 namespace couchbase::core::operations
@@ -57,6 +61,18 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
   using encoded_response_type = typename Request::encoded_response_type;
   asio::steady_timer deadline;
   asio::steady_timer retry_backoff;
+  // Only cancellable operations (replica fan-out) need a strand: their dispatch
+  // path can run on the caller thread while a sibling's completion cancels them
+  // from an IO thread, so all access to session_/opaque_/handler_ is confined to
+  // it. Non-cancellable operations get an empty placeholder instead, so they pay
+  // neither the strand_impl allocation nor any access on the hot path; the strand
+  // is referenced only inside `if constexpr (is_cancellable_operation_v<...>)`.
+  struct unused_strand {
+  };
+  using command_strand = std::conditional_t<is_cancellable_operation_v<Request>,
+                                            asio::strand<asio::io_context::executor_type>,
+                                            unused_strand>;
+  command_strand strand_;
   Request request;
   encoded_request_type encoded;
   std::optional<std::uint32_t> opaque_{};
@@ -76,12 +92,22 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
   std::chrono::time_point<std::chrono::steady_clock> started_at_{};
   std::vector<std::chrono::microseconds> server_durations_{};
 
+  static auto make_command_strand(asio::io_context& ctx) -> command_strand
+  {
+    if constexpr (is_cancellable_operation_v<Request>) {
+      return command_strand{ ctx.get_executor() };
+    } else {
+      return command_strand{};
+    }
+  }
+
   mcbp_command(asio::io_context& ctx,
                std::shared_ptr<Manager> manager,
                Request req,
                std::chrono::milliseconds default_timeout)
     : deadline(ctx)
     , retry_backoff(ctx)
+    , strand_(make_command_strand(ctx))
     , request(req)
     , manager_(manager)
     , timeout_(request.timeout.value_or(default_timeout))
@@ -133,6 +159,16 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
 
   void cancel(retry_reason reason, bool is_timeout = true)
   {
+    if constexpr (is_cancellable_operation_v<Request>) {
+      // Confine cancellation to the command strand so it cannot race the
+      // dispatch path (map_and_send/send_to/send) of a replica sibling that is
+      // still being set up on another thread.
+      if (!strand_.running_in_this_thread()) {
+        return asio::dispatch(strand_, [self = this->shared_from_this(), reason, is_timeout]() {
+          self->cancel(reason, is_timeout);
+        });
+      }
+    }
     if (opaque_ && session_) {
       if (session_->cancel(opaque_.value(), asio::error::operation_aborted, reason)) {
         handler_ = nullptr;
@@ -146,6 +182,36 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
       );
     } else {
       invoke_handler(errc::common::request_canceled);
+    }
+  }
+
+  // Re-dispatch a session completion handler onto the command strand for
+  // cancellable operations, so the response/timeout path (which mcbp_session
+  // invokes on its own IO thread) cannot run concurrently with a strand-confined
+  // cancel(). A no-op passthrough for non-cancellable operations.
+  template<typename Handler>
+  auto on_strand(Handler&& handler)
+  {
+    if constexpr (is_cancellable_operation_v<Request>) {
+      return [self = this->shared_from_this(), handler = std::forward<Handler>(handler)](
+               std::error_code ec,
+               retry_reason reason,
+               io::mcbp_message&& msg,
+               std::optional<key_value_error_map_info> error_info) mutable {
+        if (self->strand_.running_in_this_thread()) {
+          return handler(ec, reason, std::move(msg), std::move(error_info));
+        }
+        asio::dispatch(self->strand_,
+                       [handler = std::move(handler),
+                        ec,
+                        reason,
+                        msg = std::move(msg),
+                        error_info = std::move(error_info)]() mutable {
+                         handler(ec, reason, std::move(msg), std::move(error_info));
+                       });
+      };
+    } else {
+      return std::forward<Handler>(handler);
     }
   }
 
@@ -185,6 +251,15 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
 
   void request_collection_id()
   {
+    if constexpr (is_cancellable_operation_v<Request>) {
+      // Reached from the unknown-collection retry timer on an arbitrary IO
+      // thread; hop onto the strand before touching session_/opaque_.
+      if (!strand_.running_in_this_thread()) {
+        return asio::dispatch(strand_, [self = this->shared_from_this()]() {
+          self->request_collection_id();
+        });
+      }
+    }
     if (session_->is_stopped()) {
       return manager_->map_and_send(this->shared_from_this());
     }
@@ -194,11 +269,11 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     session_->write_and_subscribe(
       req.opaque(),
       req.data(session_->supports_feature(protocol::hello_feature::snappy)),
-      [self = this->shared_from_this()](
-        std::error_code ec,
-        retry_reason /* reason */,
-        io::mcbp_message&& msg,
-        std::optional<key_value_error_map_info> /* error_info */) mutable {
+      on_strand([self = this->shared_from_this()](
+                  std::error_code ec,
+                  retry_reason /* reason */,
+                  io::mcbp_message&& msg,
+                  std::optional<key_value_error_map_info> /* error_info */) mutable {
         if (ec == asio::error::operation_aborted) {
           return self->invoke_handler(errc::common::ambiguous_timeout);
         }
@@ -216,7 +291,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                                               resp.body().collection_uid());
         self->request.id.collection_uid(resp.body().collection_uid());
         return self->send();
-      });
+      }));
   }
 
   void handle_unknown_collection()
@@ -283,13 +358,13 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     session_->write_and_subscribe(
       request.opaque,
       encoded.data(session_->supports_feature(protocol::hello_feature::snappy)),
-      [self = this->shared_from_this(),
-       start = std::chrono::steady_clock::now(),
-       dispatch_span = std::move(dispatch_span)](
-        std::error_code ec,
-        retry_reason reason,
-        io::mcbp_message&& msg,
-        std::optional<key_value_error_map_info> /* error_info */) mutable {
+      on_strand([self = this->shared_from_this(),
+                 start = std::chrono::steady_clock::now(),
+                 dispatch_span = std::move(dispatch_span)](
+                  std::error_code ec,
+                  retry_reason reason,
+                  io::mcbp_message&& msg,
+                  std::optional<key_value_error_map_info> /* error_info */) mutable {
         {
           const auto server_duration_us =
             static_cast<std::uint64_t>(protocol::parse_server_duration_us(msg));
@@ -411,7 +486,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
         } else {
           io::retry_orchestrator::maybe_retry(self->manager_, self, reason, ec);
         }
-      });
+      }));
   }
 
   void send_to(io::mcbp_session session)

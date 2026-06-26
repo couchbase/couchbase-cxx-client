@@ -74,7 +74,12 @@ case "${CB_SANITIZER}" in
         CB_CMAKE_EXTRAS="${CB_CMAKE_EXTRAS} -DCOUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY=OFF"
         CB_STDLIB_FLAGS="-stdlib=libc++ -Wno-unused-result"
         CB_LINK_FLAGS="-stdlib=libc++ -lc++abi"
-        export TSAN_OPTIONS="second_deadlock_stack=1,suppressions=${PROJECT_ROOT}/.tsan_suppressions"
+        # The distro libc++ is not built with -fsanitize=thread, so TSan cannot see the
+        # happens-before edges inside its shared_ptr/promise/future internals and reports
+        # phantom races. ignore_noninstrumented_modules=1 makes TSan disregard accesses that
+        # occur entirely inside uninstrumented modules (libc++, the libclang_rt runtime),
+        # keeping only races that involve our own instrumented code.
+        export TSAN_OPTIONS="second_deadlock_stack=1,ignore_noninstrumented_modules=1,suppressions=${PROJECT_ROOT}/.tsan_suppressions"
         ;;
 
     msan | memory)
