@@ -45,7 +45,7 @@ to_string(forward_compat_stage value) -> std::string;
 enum class forward_compat_behavior : std::uint8_t {
   CONTINUE,
   RETRY_TXN,
-  FAIL_FAST_TXN
+  FAIL_FAST_TXN,
 };
 
 auto

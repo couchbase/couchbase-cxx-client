@@ -31,6 +31,7 @@
 #include "metrics/metrics_reporter.hxx"
 #include "performer.pb.h"
 #include "transactions.commands.pb.h"
+#include "wait_until_ready.hxx"
 
 #include <core/meta/features.hxx>
 #include <core/meta/version.hxx>
@@ -294,6 +295,66 @@ to_bucket(ConnectionPtr conn, std::string name)
   return conn->cluster()->bucket(name);
 }
 
+auto
+to_wait_until_ready_options(
+  const protocol::sdk::cluster::wait_until_ready::WaitUntilReadyRequest& req)
+  -> fit_cxx::wait_until_ready::options
+{
+  namespace wur = protocol::sdk::cluster::wait_until_ready;
+  namespace wait = fit_cxx::wait_until_ready;
+
+  wait::options opts{};
+  opts.timeout = std::chrono::milliseconds(req.timeoutmillis());
+  if (!req.has_options()) {
+    return opts;
+  }
+  const auto& o = req.options();
+  if (o.has_desiredstate()) {
+    switch (o.desiredstate()) {
+      case wur::ONLINE:
+        opts.desired_state = wait::cluster_state::online;
+        break;
+      case wur::DEGRADED:
+        opts.desired_state = wait::cluster_state::degraded;
+        break;
+      case wur::OFFLINE:
+        opts.desired_state = wait::cluster_state::offline;
+        break;
+      default:
+        break;
+    }
+  }
+  for (int i = 0; i < o.servicetypes_size(); ++i) {
+    switch (o.servicetypes(i)) {
+      case wur::KV:
+        opts.service_types.insert(couchbase::service_type::key_value);
+        break;
+      case wur::QUERY:
+        opts.service_types.insert(couchbase::service_type::query);
+        break;
+      case wur::ANALYTICS:
+        opts.service_types.insert(couchbase::service_type::analytics);
+        break;
+      case wur::SEARCH:
+        opts.service_types.insert(couchbase::service_type::search);
+        break;
+      case wur::VIEWS:
+        opts.service_types.insert(couchbase::service_type::view);
+        break;
+      case wur::MANAGER:
+        opts.service_types.insert(couchbase::service_type::management);
+        break;
+      case wur::EVENTING:
+        opts.service_types.insert(couchbase::service_type::eventing);
+        break;
+      default:
+        // e.g. BACKUP and any future service types have no couchbase::service_type.
+        break;
+    }
+  }
+  return opts;
+}
+
 std::string
 TxnService::to_key(const protocol::shared::DocLocation& loc, Counters& counters)
 {
@@ -371,6 +432,9 @@ TxnService::transactionCleanup(grpc::ServerContext* /*context*/,
   try {
     auto txn =
       couchbase::core::transactions::get_core_transactions(conn->cluster()->transactions());
+    // Serialize the shared-config mutation and the cleanup that reads it (see
+    // cleanup_config_mutex_).
+    const std::scoped_lock<std::mutex> cleanup_lock(cleanup_config_mutex_);
     txn->cleanup().config().cleanup_hooks = std::move(hook_pair.second);
     auto id = to_couchbase_docid(request->atr());
     couchbase::core::transactions::atr_cleanup_entry entry(
@@ -404,6 +468,9 @@ TxnService::transactionCleanupATR(
   try {
     auto txn =
       couchbase::core::transactions::get_core_transactions(conn->cluster()->transactions());
+    // Serialize the shared-config mutation and the cleanup that reads it (see
+    // cleanup_config_mutex_).
+    const std::scoped_lock<std::mutex> cleanup_lock(cleanup_config_mutex_);
     txn->config().attempt_context_hooks = std::move(hook_pair.first);
     txn->cleanup().config().cleanup_hooks = std::move(hook_pair.second);
 
@@ -1155,6 +1222,12 @@ TxnService::execute_command(ConnectionPtr conn,
     uint32_t in_flight = 0;
     std::mutex mtx;
     std::condition_variable cv;
+    // A parallel sub-command can return a (non-throwing) operation error just like a serial one.
+    // The serial path propagates it to fail/roll back the transaction (see the run loop); mirror
+    // that here by keeping the first such error and returning it once all workers finish. This
+    // matches the reference Java performer's BatchExecutor, which stores the first thrown error and
+    // rethrows it after the batch completes.
+    couchbase::error batch_error{};
     // since we are fed the _synchronous_ transaction context, lets make N threads, have each of the
     // threads eat commands off the list of commands and perform them synchronously.   That insures
     // if we make the number of threads equal to the parallelism requested, we will always have that
@@ -1176,8 +1249,9 @@ TxnService::execute_command(ConnectionPtr conn,
         in_flight++;
         spdlog::trace("async executing command, {} now in-flight", in_flight);
         lock.unlock();
+        couchbase::error op_err{};
         try {
-          execute_command(conn, ctx, c, logger_prefix, counters, txn_ctx, true);
+          op_err = execute_command(conn, ctx, c, logger_prefix, counters, txn_ctx, true);
         } catch (...) {
           // Release the in-flight slot and wake a waiter even on exception; otherwise the other
           // workers can block forever in cv.wait() and f.get() below would deadlock. The exception
@@ -1190,6 +1264,9 @@ TxnService::execute_command(ConnectionPtr conn,
         }
         lock.lock();
         in_flight--;
+        if (op_err && !batch_error) {
+          batch_error = op_err;
+        }
         lock.unlock();
         cv.notify_one();
         lock.lock();
@@ -1203,6 +1280,7 @@ TxnService::execute_command(ConnectionPtr conn,
     for (auto& f : futures) {
       f.get();
     }
+    return batch_error;
   } else {
     throw performer_exception::unimplemented("Do not understand transaction command " +
                                              cmd.DebugString());
@@ -1226,6 +1304,9 @@ TxnService::clientRecordProcess(grpc::ServerContext* /*context*/,
 
   auto hook_pair = fit_cxx::TxnSvcHook::convert_hooks(request->hook(), hooks, conn);
   auto txn = couchbase::core::transactions::get_core_transactions(conn->cluster()->transactions());
+  // Serialize the shared-config mutation and the cleanup that reads it (see cleanup_config_mutex_).
+  // The lock is held across run_with_timeout so get_active_clients observes the hooks set here.
+  const std::scoped_lock<std::mutex> cleanup_lock(cleanup_config_mutex_);
   txn->config().attempt_context_hooks = std::move(hook_pair.first);
   txn->cleanup().config().cleanup_hooks = std::move(hook_pair.second);
   return conn->run_with_timeout<grpc::Status>(
@@ -1268,7 +1349,7 @@ TxnService::clientRecordProcess(grpc::ServerContext* /*context*/,
 
 grpc::Status
 TxnService::transactionStream(
-  grpc::ServerContext* /*context*/,
+  grpc::ServerContext* context,
   grpc::ServerReaderWriter<protocol::transactions::TransactionStreamPerformerToDriver,
                            protocol::transactions::TransactionStreamDriverToPerformer>* stream)
 {
@@ -1334,6 +1415,7 @@ TxnService::transactionStream(
         auto worker_request = request;
         auto worker_conn = conn;
         worker = std::thread([this,
+                              context,
                               stream,
                               worker_request,
                               worker_conn,
@@ -1394,6 +1476,18 @@ TxnService::transactionStream(
             stream->Write(final_result);
           }
           spdlog::trace("{} done, wrote final result", worker_request.name());
+
+          // The transaction is finished, but the read loop below is still parked in a blocking
+          // stream->Read() waiting for the next driver message. The driver (RunningTransaction in
+          // the FIT test-driver) only stops blocking when it observes the stream close - receiving
+          // the final result message alone does not release blockOnResult(), and the driver never
+          // half-closes its outbound side. With nothing left to exchange, proactively end the RPC
+          // so the stream closes and the driver unblocks. TryCancel() is the only way to wake a
+          // synchronous gRPC reader from another thread; the final result was already written
+          // above, and gRPC delivers it before the cancellation, so the driver sees the result then
+          // treats the close as completion. This mirrors the reference .NET performer, whose
+          // end-of-stream likewise surfaces as onError(CANCELLED) on the driver.
+          context->TryCancel();
         });
       } else if (d2p.has_start()) {
         spdlog::info("{} got start", request.name());
@@ -1474,6 +1568,7 @@ TxnService::performerCapsFetch(grpc::ServerContext* /*context*/,
   response->add_performer_caps(protocol::performer::Caps::OBSERVABILITY_1);
 #endif
 
+  response->add_sdk_implementation_caps(protocol::sdk::Caps::WAIT_UNTIL_READY);
   response->add_sdk_implementation_caps(protocol::sdk::Caps::SDK_KV);
   response->add_sdk_implementation_caps(protocol::sdk::Caps::SDK_QUERY);
   response->add_sdk_implementation_caps(protocol::sdk::Caps::SDK_LOOKUP_IN);
@@ -2038,6 +2133,16 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
       }
       batcher->send_result(res);
 #endif
+    } else if (cluster_cmd.has_wait_until_ready()) {
+      auto res = fit_cxx::commands::common::create_new_result();
+      const auto opts = to_wait_until_ready_options(cluster_cmd.wait_until_ready());
+      const auto ec = fit_cxx::wait_until_ready::wait_until_ready(*cluster, opts);
+      if (ec) {
+        fit_cxx::commands::common::convert_error_code(ec, res.mutable_sdk()->mutable_exception());
+      } else {
+        res.mutable_sdk()->set_success(true);
+      }
+      batcher->send_result(res);
     } else {
       throw performer_exception::invalid_argument("unrecognized cluster command: " +
                                                   cluster_cmd.ShortDebugString());
@@ -2054,6 +2159,17 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
       };
       auto res = fit_cxx::commands::collection_management::execute_command(
         bucket_cmd.collection_manager(), cmd_args);
+      batcher->send_result(res);
+    } else if (bucket_cmd.has_wait_until_ready()) {
+      auto res = fit_cxx::commands::common::create_new_result();
+      const auto opts = to_wait_until_ready_options(bucket_cmd.wait_until_ready());
+      const auto ec = fit_cxx::wait_until_ready::wait_until_ready(
+        *conn->cluster(), bucket_cmd.bucket_name(), opts);
+      if (ec) {
+        fit_cxx::commands::common::convert_error_code(ec, res.mutable_sdk()->mutable_exception());
+      } else {
+        res.mutable_sdk()->set_success(true);
+      }
       batcher->send_result(res);
     } else {
       throw performer_exception::invalid_argument("unrecognized bucket command: " +

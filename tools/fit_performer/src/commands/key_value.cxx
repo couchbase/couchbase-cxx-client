@@ -2040,11 +2040,24 @@ execute_streaming_command(const protocol::sdk::kv::rangescan::Scan& cmd, const c
         spdlog::trace("next_fn has no more scan entries, returning std::nullopt");
         return std::nullopt;
       }
-      from_scan_result_item(stream_id,
-                            item.value(),
-                            transcoder,
-                            content_as,
-                            proto_res.mutable_sdk()->mutable_range_scan_result());
+      try {
+        from_scan_result_item(stream_id,
+                              item.value(),
+                              transcoder,
+                              content_as,
+                              proto_res.mutable_sdk()->mutable_range_scan_result());
+      } catch (const std::exception& e) {
+        // Converting a scanned item into the protocol result can throw: result_to_content() raises
+        // performer_exception for an unsupported transcoder/content_as combination, and
+        // content_as<T>() can throw a decode error. Report it as an error result rather than
+        // letting the exception escape the producer. An escaping exception unwinds the stream
+        // writer task (stream.hxx) without sending a terminal stream message, leaving the driver
+        // blocked until its preemptive test timeout.
+        spdlog::debug("next_fn failed converting scan item for stream {}: {}", stream_id, e.what());
+        auto err_res = common::create_new_result();
+        err_res.mutable_sdk()->mutable_exception()->mutable_other()->set_name(e.what());
+        return err_res;
+      }
       return proto_res;
     };
   }

@@ -65,7 +65,7 @@ jobs:
         with:
           name: build
           path: ./cmake-build-tests
-      - name: Run tests
+      - name: Run unit tests
         timeout-minutes: 40
         env:
           TEST_LOG_LEVEL: trace
@@ -113,7 +113,7 @@ jobs:
         env:
           HOST: ${{ steps.cbdino.outputs.ip }}
         run: ./bin/check-cluster
-      - name: Run tests
+      - name: Run ${{ matrix.suite }} tests
         timeout-minutes: 40
         env:
           TEST_SERVER_VERSION: ${{ matrix.server }}

@@ -50,7 +50,11 @@
 namespace couchbase::core
 {
 class cluster;
+// NOLINTBEGIN(bugprone-forward-declaration-namespace) -- transaction_context is in
+// couchbase::core::transactions; forward-declaring it here in couchbase::core avoids a circular
+// include. This mismatch is intentional.
 class transaction_context;
+// NOLINTEND(bugprone-forward-declaration-namespace)
 
 namespace impl
 {
@@ -100,7 +104,12 @@ private:
   friend class atr_cleanup_entry;
   // transaction_context needs access to the two functions below
   friend class transaction_context;
+  // get_multi fetches raw documents (body + metadata, no MAV/ATR resolution) via get_doc
+  friend class get_multi_operation;
 
+  // NOLINTBEGIN(misc-override-with-different-visibility) -- NVI pattern: private overrides of
+  // public virtual base-class methods are intentional to prevent direct calls from outside the
+  // class while still satisfying the interface contract.
   void insert(const core::document_id& id,
               codec::encoded_value content,
               core::transactions::async_attempt_context::Callback&& cb) override;
@@ -250,6 +259,7 @@ private:
   {
     try {
       cb(err, std::optional<Ret>());
+      // NOLINTNEXTLINE(bugprone-empty-catch) -- intentionally swallow any exception from callback
     } catch (...) {
       // eat it.
     }
@@ -259,6 +269,7 @@ private:
   {
     try {
       cb(std::move(err));
+      // NOLINTNEXTLINE(bugprone-empty-catch) -- intentionally swallow any exception from callback
     } catch (...) {
       // just eat it.
     }
@@ -289,7 +300,11 @@ private:
           err.cause(TRANSACTION_ALREADY_COMMITTED);
           break;
         default:
-          err.cause(UNKNOWN);
+          // Ops are only blocked once commit or rollback has begun (wait_and_block_ops), but the
+          // attempt state is published later -- and the empty-commit fast path never reaches
+          // COMMITTED at all. So a racing op can land here with the state still PENDING: report it
+          // as a concurrent operation rather than an opaque unknown cause.
+          err.cause(CONCURRENT_OPERATIONS_DETECTED_ON_SAME_DOCUMENT);
       }
       op_completed_with_error_no_cache(std::forward<Handler>(cb), std::make_exception_ptr(err));
     } catch (const transaction_operation_failed& e) {
@@ -307,6 +322,7 @@ private:
   }
 
   explicit attempt_context_impl(const std::shared_ptr<transaction_context>& transaction_ctx);
+  // NOLINTEND(misc-override-with-different-visibility)
 
 public:
   [[nodiscard]] auto cluster_ref() const -> const core::cluster&;
@@ -406,6 +422,9 @@ public:
   void remove(couchbase::transactions::transaction_get_result doc,
               couchbase::transactions::async_err_handler&& handler) override;
 
+  // NOLINTBEGIN(misc-override-with-different-visibility) -- do_core_query and do_public_query are
+  // protected in the base class but intentionally exposed as public here so that tests and internal
+  // helpers can call them directly without going through the template dispatch layer.
   auto do_core_query(const std::string& statement,
                      const couchbase::transactions::transaction_query_options& options,
                      std::optional<std::string> query_context)
@@ -425,6 +444,7 @@ public:
              couchbase::transactions::transaction_query_options opts,
              std::optional<std::string> query_context,
              couchbase::transactions::async_query_handler&& handler) override;
+  // NOLINTEND(misc-override-with-different-visibility)
 
   void commit() override;
   void commit(VoidCallback&& cb) override;
@@ -432,6 +452,11 @@ public:
   void rollback(VoidCallback&& cb) override;
 
   void existing_error(bool prev_op_failed = true);
+
+  // True once the attempt has switched to query mode (a BEGIN WORK has established a query node).
+  // Used to decide how a failed auto-rollback surfaces its error: a query-mode rollback runs as a
+  // ROLLBACK statement, so an expiry it reports is the transaction's terminal state.
+  [[nodiscard]] auto in_query_mode() -> bool;
 
   [[nodiscard]] auto is_done() const -> bool;
 

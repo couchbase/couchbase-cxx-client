@@ -22,7 +22,6 @@ namespace couchbase::core::transactions
 {
 transaction_attempt::transaction_attempt()
   : id(uid_generator::next())
-  , state(attempt_state::NOT_STARTED)
 {
 }
 

@@ -25,7 +25,6 @@
 namespace couchbase::core::transactions
 {
 // TODO(CXXCBC-549)
-// NOLINTNEXTLINE(cert-err58-cpp)
 const std::vector<std::string> ATR_IDS({
   "_txn:atr-0-#14",     "_txn:atr-1-#10b6",    "_txn:atr-2-#cc8",    "_txn:atr-3-#f08",
   "_txn:atr-4-#c7",     "_txn:atr-5-#11a",     "_txn:atr-6-#a",      "_txn:atr-7-#2c4",

@@ -52,6 +52,8 @@ public:
 
   auto operator=(const transactions_config& c) -> transactions_config&;
 
+  auto operator=(transactions_config&& c) noexcept -> transactions_config&;
+
   /**
    * @brief Get the default durability level for all transaction operations
    *

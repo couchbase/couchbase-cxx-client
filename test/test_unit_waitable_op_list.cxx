@@ -145,3 +145,77 @@ TEST_CASE("transactions: get mode waits", "[unit]")
   CHECK(mode.query_node == NODE);
   CHECK(mode.mode == couchbase::core::transactions::attempt_mode::modes::QUERY);
 }
+
+TEST_CASE("transactions: get mode unblocks when begin_work resets to kv", "[unit]")
+{
+  // Regression: if begin_work fails before a query node is set, reset_query_mode() reverts the
+  // mode to KV.  A concurrent get_mode() waiting for the node must wake and return KV rather than
+  // deadlocking, since query_node stays empty on the failure path.
+  couchbase::core::transactions::waitable_op_list op_list;
+  op_list.increment_ops();
+  // first op switches to query mode, but begin_work does not reach a node
+  op_list.set_query_mode([]() { /* begin_work in flight, no node set */ },
+                         []() {
+                         });
+
+  auto f = std::async(std::launch::async, [&op_list] {
+    return op_list.get_mode();
+  });
+  // it must block: mode is QUERY but the node has not been set yet
+  CHECK(std::future_status::timeout == f.wait_for(std::chrono::milliseconds(100)));
+
+  // begin_work failed -> reset to KV
+  op_list.reset_query_mode();
+
+  REQUIRE(std::future_status::ready == f.wait_for(std::chrono::seconds(5)));
+  auto mode = f.get();
+  CHECK(mode.mode == couchbase::core::transactions::attempt_mode::modes::KV);
+  CHECK(mode.query_node.empty());
+}
+
+TEST_CASE("transactions: set query mode retries begin_work after reset to kv", "[unit]")
+{
+  // Regression: a second op waiting in set_query_mode for the node must wake when begin_work
+  // fails and resets the mode to KV, then re-drive begin_work itself instead of deadlocking.
+  couchbase::core::transactions::waitable_op_list op_list;
+  std::atomic<int> first_begin{ 0 };
+  std::atomic<int> second_begin{ 0 };
+  std::atomic<bool> second_do{ false };
+
+  // first op: enters query mode, begin_work leaves the node unset (in flight)
+  op_list.increment_ops();
+  op_list.set_query_mode(
+    [&first_begin]() {
+      first_begin++; /* no node */
+    },
+    []() {
+    });
+
+  // second op: blocks in set_query_mode waiting for the node to be set
+  op_list.increment_ops();
+  auto f = std::async(std::launch::async, [&]() {
+    op_list.set_query_mode(
+      [&op_list, &second_begin]() {
+        second_begin++;
+        op_list.set_query_node(NODE);
+      },
+      [&second_do]() {
+        second_do = true;
+      });
+  });
+  CHECK(std::future_status::timeout == f.wait_for(std::chrono::milliseconds(100)));
+
+  // first begin_work fails: reset to KV, then unwind its in_flight (as op_completed_with_error
+  // does).  The waiting second op then becomes the initiator and retries begin_work.
+  op_list.reset_query_mode();
+  op_list.decrement_in_flight();
+
+  REQUIRE(std::future_status::ready == f.wait_for(std::chrono::seconds(5)));
+  f.get();
+  CHECK(first_begin.load() == 1);
+  CHECK(second_begin.load() == 1);
+  CHECK_FALSE(second_do.load());
+  auto mode = op_list.get_mode();
+  CHECK(mode.query_node == NODE);
+  CHECK(mode.mode == couchbase::core::transactions::attempt_mode::modes::QUERY);
+}

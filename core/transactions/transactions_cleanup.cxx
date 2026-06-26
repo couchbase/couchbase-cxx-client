@@ -31,7 +31,9 @@
 
 #include <couchbase/fmt/transaction_keyspace.hxx>
 
+#include <deque>
 #include <functional>
+#include <future>
 #include <memory>
 #include <utility>
 
@@ -41,8 +43,6 @@ namespace couchbase::core::transactions
 transactions_cleanup_attempt::transactions_cleanup_attempt(const atr_cleanup_entry& entry)
   : atr_id_(entry.atr_id_)
   , attempt_id_(entry.attempt_id_)
-  , success_(false)
-  , state_(attempt_state::NOT_STARTED)
 {
 }
 
@@ -81,7 +81,7 @@ parse_mutation_cas(const std::string& cas) -> std::uint64_t
 }
 
 // TODO(CXXCBC-549)
-const std::string CLIENT_RECORD_DOC_ID = "_txn:client-record"; // NOLINT(cert-err58-cpp)
+const std::string CLIENT_RECORD_DOC_ID = "_txn:client-record";
 } // namespace
 
 constexpr auto SAFETY_MARGIN_EXPIRY_MS = 2000;
@@ -131,53 +131,77 @@ transactions_cleanup::clean_collection(
         all_atrs.size(),
         config_.cleanup_config.cleanup_window.count());
 
+      // Each ATR is checked with a blocking get_atr. If those were run strictly one-at-a-time the
+      // scan rate would be capped by the per-ATR KV latency rather than the cleanup window: on a
+      // slow or loaded KV node a single window could fail to scan all ATRs, leaving lost
+      // transactions (and the documents they block) uncleaned for far longer than configured. So
+      // run the checks with a bounded number in flight: launches are still paced across the window
+      // (to avoid flooding the cluster), but a slow lookup no longer holds up the ones behind it.
+      constexpr std::size_t max_in_flight_atr_checks{ 16 };
+      std::deque<std::future<void>> in_flight;
+      const auto reclaim_oldest = [&in_flight]() {
+        // Errors are logged inside the task; get() only rethrows if the task itself threw, which it
+        // is written not to, but guard anyway so one bad ATR cannot abort the whole scan.
+        try {
+          in_flight.front().get();
+          // NOLINTNEXTLINE(bugprone-empty-catch) -- task already logged any error
+        } catch (...) {
+          // already handled in the task
+        }
+        in_flight.pop_front();
+      };
+
       for (auto it = all_atrs.begin() + details.index_of_this_client; it < all_atrs.end();
            it += details.num_active_clients) {
-        auto atrs_left_for_this_client =
+        if (!is_running()) {
+          break;
+        }
+        const auto atrs_left_for_this_client =
           std::distance(it, all_atrs.end()) /
           std::max<decltype(it)::difference_type>(1, details.num_active_clients);
         const auto now = std::chrono::steady_clock::now();
         const auto elapsed_in_cleanup_window =
           std::chrono::duration_cast<std::chrono::microseconds>(now - start);
         const auto remaining_in_cleanup_window = cleanup_window - elapsed_in_cleanup_window;
+        // Divide the time left in the window evenly among the ATRs still to launch, so the scan is
+        // spread across the window rather than issued as a burst.
         const auto budget_for_this_atr = std::chrono::microseconds(
           remaining_in_cleanup_window.count() /
           std::max<decltype(it)::difference_type>(1, atrs_left_for_this_client));
-        // clean the ATR entry
-        std::string atr_id = *it;
-        if (!is_running()) {
-          CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("cleanup of {} complete", keyspace);
-          return;
+
+        // Bound concurrency: reclaim a finished slot before launching the next check.
+        while (in_flight.size() >= max_in_flight_atr_checks) {
+          reclaim_oldest();
         }
 
-        try {
-          handle_atr_cleanup({ keyspace.bucket, keyspace.scope, keyspace.collection, atr_id });
-        } catch (const std::exception& e) {
-          CB_LOST_ATTEMPT_CLEANUP_LOG_ERROR(
-            "cleanup of atr {} failed with {}, moving on", atr_id, e.what());
-        }
+        const std::string atr_id = *it;
+        in_flight.emplace_back(std::async(std::launch::async, [this, keyspace, atr_id]() {
+          try {
+            handle_atr_cleanup({ keyspace.bucket, keyspace.scope, keyspace.collection, atr_id });
+          } catch (const std::exception& e) {
+            CB_LOST_ATTEMPT_CLEANUP_LOG_ERROR(
+              "cleanup of atr {} failed with {}, moving on", atr_id, e.what());
+          }
+        }));
 
-        const auto atr_end = std::chrono::steady_clock::now();
-        const auto atr_used = std::chrono::duration_cast<std::chrono::microseconds>(atr_end - now);
-        const auto atr_left = budget_for_this_atr - atr_used;
-
-        // Too verbose to log, but leaving here commented as it may be useful later for internal
-        // debugging
-        /*CB_LOST_ATTEMPT_CLEANUP_LOG_INFO("{} {} atrs_left_for_this_client={}
-           elapsed_in_cleanup_window={}us " "remaining_in_cleanup_window={}us
-           budget_for_this_atr={}us atr_used={}us atr_left={}us", bucket_name, atr_id,
-           atrs_left_for_this_client, elapsed_in_cleanup_window.count(),
-                                    remaining_in_cleanup_window.count(),
-                                    budget_for_this_atr.count(),
-                                    atr_used.count(),
-                                    atr_left.count());*/
-
-        if (atr_left.count() > 0 &&
-            atr_left.count() < 1000000000) { // safety check protects against bugs
-          if (!interruptable_wait(atr_left)) {
-            return;
+        // Pace the launch cadence. Launching is now effectively instant (the work runs
+        // asynchronously), so wait the whole budget before the next launch; if we are already
+        // behind schedule the budget shrinks to zero and we proceed immediately.
+        if (budget_for_this_atr.count() > 0 &&
+            budget_for_this_atr.count() < 1000000000) { // safety check protects against bugs
+          if (!interruptable_wait(budget_for_this_atr)) {
+            break;
           }
         }
+      }
+
+      // Wait for any still-running checks before completing the run.
+      while (!in_flight.empty()) {
+        reclaim_oldest();
+      }
+      if (!is_running()) {
+        CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("cleanup of {} complete", keyspace);
+        return;
       }
     } catch (const std::exception& ex) {
       CB_LOST_ATTEMPT_CLEANUP_LOG_ERROR("cleanup failed with {}, trying again in 3 sec...",
@@ -249,7 +273,7 @@ transactions_cleanup::create_client_record(
     auto barrier = std::make_shared<std::promise<result>>();
     auto f = barrier->get_future();
     auto ec = wait_for_hook([this, bucket = keyspace.bucket](auto handler) mutable {
-      return config_.cleanup_hooks->client_record_before_create(bucket, std::move(handler));
+      return cleanup_hooks().client_record_before_create(bucket, std::move(handler));
     });
     if (ec) {
       throw client_error(*ec, "client_record_before_create hook raised error");
@@ -292,7 +316,7 @@ transactions_cleanup::get_active_clients(
     auto barrier = std::make_shared<std::promise<result>>();
     auto f = barrier->get_future();
     auto ec = wait_for_hook([this, bucket = keyspace.bucket](auto handler) mutable {
-      return config_.cleanup_hooks->client_record_before_get(bucket, std::move(handler));
+      return cleanup_hooks().client_record_before_get(bucket, std::move(handler));
     });
     if (ec) {
       throw client_error(*ec, "client_record_before_get hook raised error");
@@ -389,7 +413,7 @@ transactions_cleanup::get_active_clients(
     }
     mutate_req.specs = mut_specs.specs();
     ec = wait_for_hook([this, bucket = keyspace.bucket](auto handler) mutable {
-      return config_.cleanup_hooks->client_record_before_update(bucket, std::move(handler));
+      return cleanup_hooks().client_record_before_update(bucket, std::move(handler));
     });
     if (ec) {
       throw client_error(*ec, "client_record_before_update hook raised error");
@@ -433,8 +457,7 @@ transactions_cleanup::remove_client_record_from_all_buckets(const std::string& u
           try {
             // proceed to remove the client uuid if it exists
             auto ec = wait_for_hook([this, bucket = keyspace.bucket](auto handler) mutable {
-              return config_.cleanup_hooks->client_record_before_remove_client(bucket,
-                                                                               std::move(handler));
+              return cleanup_hooks().client_record_before_remove_client(bucket, std::move(handler));
             });
             if (ec) {
               throw client_error(*ec, "client_record_before_remove_client hook raised error");

@@ -64,10 +64,10 @@ to_query_options(const protocol::sdk::query::Command& cmd, observability::span_o
   if (cmd.options().has_readonly()) {
     options.readonly(cmd.options().readonly());
   }
-  // Named and positional parameters are mutually exclusive; named takes precedence (matches the
-  // reference Java performer, which uses positional only when there are no named parameters).
-  if (cmd.options().parameters_named_size() == 0 &&
-      cmd.options().parameters_positional_size() > 0) {
+  // Named and positional parameters are independent: a statement may use both at once (named
+  // values become $name body fields, positional values populate the args array), so each is
+  // forwarded whenever present.
+  if (cmd.options().parameters_positional_size() > 0) {
 #ifdef COUCHBASE_CXX_CLIENT_QUERY_OPTIONS_HAVE_ADD_PARAMETER
     for (const auto& param : cmd.options().parameters_positional()) {
       options.add_positional_parameter(param);

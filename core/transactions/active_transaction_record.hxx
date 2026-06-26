@@ -34,10 +34,12 @@ public:
     const core::document_id& atr_id,
     std::function<void(std::error_code, std::optional<active_transaction_record>)>&& cb);
 
-  static auto get_atr(const core::cluster& cluster,
-                      const core::document_id& atr_id) -> std::optional<active_transaction_record>;
+  static auto get_atr(const core::cluster& cluster, const core::document_id& atr_id)
+    -> std::optional<active_transaction_record>;
 
-  active_transaction_record(core::document_id id, std::uint64_t, std::vector<atr_entry> entries)
+  active_transaction_record(core::document_id id,
+                            std::uint64_t /*cas*/,
+                            std::vector<atr_entry> entries)
     : id_(std::move(id))
     , entries_(std::move(entries))
   {

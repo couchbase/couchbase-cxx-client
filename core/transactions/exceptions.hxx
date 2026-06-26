@@ -37,7 +37,7 @@ class transaction_context;
 enum class failure_type {
   FAIL,
   EXPIRY,
-  COMMIT_AMBIGUOUS
+  COMMIT_AMBIGUOUS,
 };
 
 enum external_exception {
@@ -88,7 +88,7 @@ class transaction_exception : public std::runtime_error
 {
 private:
   couchbase::transactions::transaction_result result_;
-  external_exception cause_;
+  external_exception cause_{ UNKNOWN };
   failure_type type_;
   std::string txn_id_;
 
@@ -229,7 +229,9 @@ public:
   }
 
   explicit document_exists(const std::string& what)
-    : op_exception({ errc::transaction_op::document_exists }, what, DOCUMENT_EXISTS_EXCEPTION)
+    : op_exception(transaction_op_error_context{ errc::transaction_op::document_exists },
+                   what,
+                   DOCUMENT_EXISTS_EXCEPTION)
   {
   }
 };
@@ -238,7 +240,7 @@ class document_unretrievable : public op_exception
 {
 public:
   explicit document_unretrievable(const std::string& what)
-    : op_exception({ errc::transaction_op::document_unretrievable },
+    : op_exception(transaction_op_error_context{ errc::transaction_op::document_unretrievable },
                    what,
                    DOCUMENT_UNRETRIEVABLE_EXCEPTION)
   {
@@ -248,7 +250,7 @@ public:
 class query_attempt_not_found : public op_exception
 {
 public:
-  query_attempt_not_found(transaction_op_error_context ctx)
+  explicit query_attempt_not_found(transaction_op_error_context ctx)
     : op_exception(std::move(ctx))
   {
   }
@@ -257,7 +259,7 @@ public:
 class query_cas_mismatch : public op_exception
 {
 public:
-  query_cas_mismatch(transaction_op_error_context ctx)
+  explicit query_cas_mismatch(transaction_op_error_context ctx)
     : op_exception(std::move(ctx))
   {
   }
@@ -266,7 +268,7 @@ public:
 class query_attempt_expired : public op_exception
 {
 public:
-  query_attempt_expired(transaction_op_error_context ctx)
+  explicit query_attempt_expired(transaction_op_error_context ctx)
     : op_exception(std::move(ctx))
   {
   }
@@ -275,7 +277,7 @@ public:
 class query_parsing_failure : public op_exception
 {
 public:
-  query_parsing_failure(transaction_op_error_context ctx)
+  explicit query_parsing_failure(transaction_op_error_context ctx)
     : op_exception(std::move(ctx), PARSING_FAILURE)
   {
   }
