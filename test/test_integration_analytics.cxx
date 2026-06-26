@@ -43,8 +43,8 @@ TEST_CASE("integration: analytics query", "[integration]")
     SKIP("elixir deployment does not support analytics");
   }
 
-  if (!integration.cluster_version().supports_analytics()) {
-    SKIP("cluster does not support analytics");
+  if (!integration.has_analytics_service()) {
+    SKIP("cluster does not have analytics service");
   }
 
   test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
@@ -216,8 +216,8 @@ TEST_CASE("integration: analytics scope query", "[integration]")
     SKIP("elixir deployment does not support analytics");
   }
 
-  if (!integration.cluster_version().supports_analytics()) {
-    SKIP("cluster does not support analytics");
+  if (!integration.has_analytics_service()) {
+    SKIP("cluster does not have analytics service");
   }
   if (!integration.cluster_version().supports_collections()) {
     SKIP("cluster does not support collections");
@@ -343,8 +343,8 @@ TEST_CASE("integration: public API analytics query", "[integration]")
     SKIP("elixir deployment does not support analytics");
   }
 
-  if (!integration.cluster_version().supports_analytics()) {
-    SKIP("cluster does not support analytics");
+  if (!integration.has_analytics_service()) {
+    SKIP("cluster does not have analytics service");
   }
 
   auto cluster = integration.public_cluster();
@@ -548,8 +548,8 @@ TEST_CASE("integration: public API analytics scope query", "[integration]")
     SKIP("elixir deployment does not support analytics");
   }
 
-  if (!integration.cluster_version().supports_analytics()) {
-    SKIP("cluster does not support analytics");
+  if (!integration.has_analytics_service()) {
+    SKIP("cluster does not have analytics service");
   }
   if (!integration.cluster_version().supports_collections()) {
     SKIP("cluster does not support collections");
@@ -636,8 +636,8 @@ TEST_CASE("integration: public API analytics query using both named and position
 {
   test::utils::integration_test_guard integration;
 
-  if (!integration.cluster_version().supports_analytics()) {
-    SKIP("cluster does not support analytics");
+  if (!integration.has_analytics_service()) {
+    SKIP("cluster does not have analytics service");
   }
 
   auto cluster = integration.public_cluster();

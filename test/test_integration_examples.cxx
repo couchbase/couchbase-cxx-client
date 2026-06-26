@@ -280,6 +280,7 @@ public:
   {
     options.timeouts()
       .search_timeout(std::chrono::minutes(5))
+      .key_value_timeout(std::chrono::seconds(20))
       .management_timeout(std::chrono::minutes(5));
   }
 };

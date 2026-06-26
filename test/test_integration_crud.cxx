@@ -233,7 +233,11 @@ TEST_CASE("integration: pessimistic locking", "[integration]")
   couchbase::core::document_id id{
     integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("locking")
   };
-  uint32_t lock_time = 10;
+  // Server caps lock duration at 30s; use the max so the lock survives the long
+  // sequence of operations below when running under a sanitizer (valgrind), where
+  // a shorter lock can auto-expire mid-test and turn the expected cas_mismatch
+  // into document_not_locked.
+  uint32_t lock_time = 30;
 
   couchbase::cas cas{};
 
