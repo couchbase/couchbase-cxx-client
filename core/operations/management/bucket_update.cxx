@@ -30,8 +30,8 @@
 namespace couchbase::core::operations::management
 {
 auto
-bucket_update_request::encode_to(encoded_request_type& encoded,
-                                 http_context& /* context */) const -> std::error_code
+bucket_update_request::encode_to(encoded_request_type& encoded, http_context& /* context */) const
+  -> std::error_code
 {
   encoded.method = "POST";
   encoded.path =
@@ -39,65 +39,61 @@ bucket_update_request::encode_to(encoded_request_type& encoded,
 
   encoded.headers["content-type"] = "application/x-www-form-urlencoded";
 
+  std::map<std::string, std::string> values{};
   if (bucket.ram_quota_mb > 0) {
-    encoded.body.append(fmt::format("&ramQuotaMB={}", bucket.ram_quota_mb));
+    values["ramQuotaMB"] = std::to_string(bucket.ram_quota_mb);
   }
   if (bucket.num_replicas.has_value()) {
-    encoded.body.append(fmt::format("&replicaNumber={}", bucket.num_replicas.value()));
+    values["replicaNumber"] = std::to_string(bucket.num_replicas.value());
   }
-
   if (bucket.max_expiry.has_value()) {
-    encoded.body.append(fmt::format("&maxTTL={}", bucket.max_expiry.value()));
+    values["maxTTL"] = std::to_string(bucket.max_expiry.value());
   }
   if (bucket.history_retention_collection_default.has_value()) {
-    encoded.body.append(
-      fmt::format("&historyRetentionCollectionDefault={}",
-                  bucket.history_retention_collection_default.value() ? "true" : "false"));
+    values["historyRetentionCollectionDefault"] =
+      bucket.history_retention_collection_default.value() ? "true" : "false";
   }
   if (bucket.history_retention_bytes.has_value()) {
-    encoded.body.append(
-      fmt::format("&historyRetentionBytes={}", bucket.history_retention_bytes.value()));
+    values["historyRetentionBytes"] = std::to_string(bucket.history_retention_bytes.value());
   }
   if (bucket.history_retention_duration.has_value()) {
-    encoded.body.append(
-      fmt::format("&historyRetentionSeconds={}", bucket.history_retention_duration.value()));
+    values["historyRetentionSeconds"] = std::to_string(bucket.history_retention_duration.value());
   }
   if (bucket.replica_indexes.has_value()) {
-    encoded.body.append(
-      fmt::format("&replicaIndex={}", bucket.replica_indexes.value() ? "1" : "0"));
+    values["replicaIndex"] = bucket.replica_indexes.value() ? "1" : "0";
   }
   if (bucket.flush_enabled.has_value()) {
-    encoded.body.append(fmt::format("&flushEnabled={}", bucket.flush_enabled.value() ? "1" : "0"));
+    values["flushEnabled"] = bucket.flush_enabled.value() ? "1" : "0";
   }
   if (bucket.num_vbuckets.has_value()) {
-    encoded.body.append(fmt::format("&numVBuckets={}", bucket.num_vbuckets.value()));
+    values["numVBuckets"] = std::to_string(bucket.num_vbuckets.value());
   }
 
   switch (bucket.eviction_policy) {
     case couchbase::core::management::cluster::bucket_eviction_policy::full:
-      encoded.body.append("&evictionPolicy=fullEviction");
+      values["evictionPolicy"] = "fullEviction";
       break;
     case couchbase::core::management::cluster::bucket_eviction_policy::value_only:
-      encoded.body.append("&evictionPolicy=valueOnly");
+      values["evictionPolicy"] = "valueOnly";
       break;
     case couchbase::core::management::cluster::bucket_eviction_policy::no_eviction:
-      encoded.body.append("&evictionPolicy=noEviction");
+      values["evictionPolicy"] = "noEviction";
       break;
     case couchbase::core::management::cluster::bucket_eviction_policy::not_recently_used:
-      encoded.body.append("&evictionPolicy=nruEviction");
+      values["evictionPolicy"] = "nruEviction";
       break;
     case couchbase::core::management::cluster::bucket_eviction_policy::unknown:
       break;
   }
   switch (bucket.compression_mode) {
     case couchbase::core::management::cluster::bucket_compression::off:
-      encoded.body.append("&compressionMode=off");
+      values["compressionMode"] = "off";
       break;
     case couchbase::core::management::cluster::bucket_compression::active:
-      encoded.body.append("&compressionMode=active");
+      values["compressionMode"] = "active";
       break;
     case couchbase::core::management::cluster::bucket_compression::passive:
-      encoded.body.append("&compressionMode=passive");
+      values["compressionMode"] = "passive";
       break;
     case couchbase::core::management::cluster::bucket_compression::unknown:
       break;
@@ -105,19 +101,21 @@ bucket_update_request::encode_to(encoded_request_type& encoded,
   if (bucket.minimum_durability_level) {
     switch (bucket.minimum_durability_level.value()) {
       case durability_level::none:
-        encoded.body.append("&durabilityMinLevel=none");
+        values["durabilityMinLevel"] = "none";
         break;
       case durability_level::majority:
-        encoded.body.append("&durabilityMinLevel=majority");
+        values["durabilityMinLevel"] = "majority";
         break;
       case durability_level::majority_and_persist_to_active:
-        encoded.body.append("&durabilityMinLevel=majorityAndPersistActive");
+        values["durabilityMinLevel"] = "majorityAndPersistActive";
         break;
       case durability_level::persist_to_majority:
-        encoded.body.append("&durabilityMinLevel=persistToMajority");
+        values["durabilityMinLevel"] = "persistToMajority";
         break;
     }
   }
+
+  encoded.body = utils::string_codec::v2::form_encode(values);
   return {};
 }
 
