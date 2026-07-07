@@ -324,10 +324,6 @@ class mcbp_session_impl
 
     void handle(mcbp_message&& msg)
     {
-      // A nested stop() (e.g. on reauth failure) can release the session's last
-      // strong ref to this handler, which would otherwise free `this` mid-call.
-      // Holding a local ref keeps this handler alive for the duration (CXXCBC-842).
-      auto self = shared_from_this();
       if (stopped_ || !session_) {
         return;
       }
@@ -704,10 +700,6 @@ class mcbp_session_impl
 
     void handle(mcbp_message&& msg)
     {
-      // A nested stop() (e.g. on reauth failure) can release the session's last
-      // strong ref to this handler, which would otherwise free `this` mid-call.
-      // Holding a local ref keeps this handler alive for the duration (CXXCBC-842).
-      auto self = shared_from_this();
       if (stopped_ || !session_) {
         return;
       }
@@ -2214,11 +2206,9 @@ private:
               CB_LOG_TRACE(
                 "{} MCBP recv {}", self->log_prefix_, mcbp_header_view(msg.header_data()));
               if (self->bootstrapped_) {
-                if (auto h = self->handler_; h) {
-                  h->handle(std::move(msg));
-                }
-              } else if (auto h = self->bootstrap_handler_; h) {
-                h->handle(std::move(msg));
+                self->handler_->handle(std::move(msg));
+              } else if (self->bootstrap_handler_) {
+                self->bootstrap_handler_->handle(std::move(msg));
               }
               if (self->stopped_) {
                 return;
