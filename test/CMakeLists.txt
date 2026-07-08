@@ -45,6 +45,7 @@ unit_test(crypto)
 unit_test(orphan_reporter)
 unit_test(node_id)
 unit_test(management_collection)
+unit_test(management_bucket)
 target_link_libraries(test_unit_jsonsl PRIVATE jsonsl)
 
 integration_benchmark(get)
