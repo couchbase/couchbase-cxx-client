@@ -1,5 +1,9 @@
-macro(define_example name)
-  add_executable(${name} ${name}.cxx)
+function(define_example name)
+  set(_example_sources "${ARGN}")
+  if(NOT _example_sources)
+    set(_example_sources "${name}.cxx")
+  endif()
+  add_executable(${name} ${_example_sources})
   set_project_warnings(${name})
   set_project_options(${name})
   target_include_directories(${name} PUBLIC ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/private)
@@ -9,11 +13,11 @@ macro(define_example name)
   propagate_public_compile_definitions(${name} spdlog::spdlog asio)
   target_link_libraries(${name} PRIVATE ${CMAKE_THREAD_LIBS_INIT} taocpp::json ${couchbase_cxx_client_DEFAULT_LIBRARY})
   if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND WIN32)
-    # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings, as we don't (atm) keep track fo the
+    # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings, as we don't (atm) keep track of the
     # *.PDB from the BoringSSL build
     set_target_properties(${name} PROPERTIES LINK_FLAGS "/ignore:4099")
   endif()
-endmacro()
+endfunction()
 
 define_example(minimal)
 define_example(bulk_base_api)
@@ -23,6 +27,26 @@ define_example(game_server)
 define_example(async_game_server)
 define_example(distributed_mutex)
 
+if(WIN32)
+  set(_external_circuit_breaker_platform_ui external_circuit_breaker/ui_windows.cxx)
+else()
+  set(_external_circuit_breaker_platform_ui external_circuit_breaker/ui_unix.cxx)
+endif()
+define_example(
+  external_circuit_breaker
+  external_circuit_breaker/main.cxx
+  external_circuit_breaker/circuit_breaker.cxx
+  external_circuit_breaker/ui.cxx
+  ${_external_circuit_breaker_platform_ui}
+  external_circuit_breaker/demo_common.cxx
+  external_circuit_breaker/demo_healthy_traffic.cxx
+  external_circuit_breaker/demo_state_transitions.cxx
+  external_circuit_breaker/demo_failed_probe.cxx
+  external_circuit_breaker/demo_admin.cxx
+  external_circuit_breaker/demo_slow_calls.cxx
+  external_circuit_breaker/demo_per_node_isolation.cxx
+  external_circuit_breaker/demo_topology_sweep.cxx)
+
 macro(define_asio_example name)
   add_executable(${name} ${name}.cxx)
   set_project_warnings(${name})
@@ -30,7 +54,7 @@ macro(define_asio_example name)
   target_include_directories(${name} PUBLIC ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/private)
   target_link_libraries(${name} PRIVATE ${CMAKE_THREAD_LIBS_INIT} asio taocpp::json)
   if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND WIN32)
-    # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings, as we don't (atm) keep track fo the
+    # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings, as we don't (atm) keep track of the
     # *.PDB from the BoringSSL build
     set_target_properties(${name} PROPERTIES LINK_FLAGS "/ignore:4099")
   endif()
