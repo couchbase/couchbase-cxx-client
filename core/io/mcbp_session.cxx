@@ -2205,10 +2205,17 @@ private:
               }
               CB_LOG_TRACE(
                 "{} MCBP recv {}", self->log_prefix_, mcbp_header_view(msg.header_data()));
+              // Copy the handler's shared_ptr into a local before dispatching.
+              // handle() can trigger a nested stop() (e.g. reauth failure) that
+              // releases the session's own strong ref to the handler; the local
+              // copy keeps it alive for the duration of the call so it is not
+              // freed mid-dispatch (CXXCBC-842).
               if (self->bootstrapped_) {
-                self->handler_->handle(std::move(msg));
-              } else if (self->bootstrap_handler_) {
-                self->bootstrap_handler_->handle(std::move(msg));
+                if (auto h = self->handler_; h) {
+                  h->handle(std::move(msg));
+                }
+              } else if (auto h = self->bootstrap_handler_; h) {
+                h->handle(std::move(msg));
               }
               if (self->stopped_) {
                 return;
