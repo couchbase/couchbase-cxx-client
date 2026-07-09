@@ -92,7 +92,6 @@ function(set_project_warnings project_name)
       set(GCC_WARNINGS
           ${GCC_WARNINGS}
           -Wno-error=null-dereference
-          -Wno-error=array-bounds
           -Wno-error=stringop-overflow
           -Wno-error=maybe-uninitialized)
     endif()

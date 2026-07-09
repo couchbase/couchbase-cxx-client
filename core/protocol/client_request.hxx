@@ -117,21 +117,36 @@ public:
 private:
   [[nodiscard]] auto generate_payload(bool try_to_compress) -> std::vector<std::byte>
   {
+    // Bind the body's four wire regions once. Note that value()/extras() on some bodies (e.g.
+    // hello, mutate_in) lazily populate their buffers on first access, so this also materialises
+    // them before we measure and copy.
+    const auto& framing_extras = body_.framing_extras();
+    const auto& extras = body_.extras();
+    const auto& key = body_.key();
+    const auto& value = body_.value();
+
+    // Size the buffer from the same regions that get copied into it, rather than from the
+    // independent body_.size(). body_.size() is defined as exactly this sum for every body type,
+    // so the byte layout is unchanged; deriving the length here makes the buffer provably large
+    // enough for the copies below. (Without it GCC folds body_.size() to 0 for zero-length bodies
+    // such as noop, decides body_itr is one-past-the-end, and emits a bogus -Warray-bounds.)
+    const std::size_t body_size_bytes =
+      framing_extras.size() + extras.size() + key.size() + value.size();
+
     // SA: for some reason GCC 8.5.0 on CentOS 8 sees here null-pointer dereference
     // JC: BoringSSL changes, noticed the same when building w/ GCC 11.3.0; TODO:  is 12 okay?
 #if defined(__GNUC__) && __GNUC__ >= 8 && __GNUC__ < 12
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wnull-dereference"
 #endif
-    std::vector<std::byte> payload(header_size + body_.size(), std::byte{});
+    std::vector<std::byte> payload(header_size + body_size_bytes, std::byte{});
     payload[0] = static_cast<std::byte>(magic_);
     payload[1] = static_cast<std::byte>(opcode_);
 #if defined(__GNUC__) && __GNUC__ >= 8 && __GNUC__ < 12
 #pragma GCC diagnostic pop
 #endif
-    const auto& framing_extras = body_.framing_extras();
 
-    std::uint16_t key_size = gsl::narrow_cast<std::uint16_t>(body_.key().size());
+    std::uint16_t key_size = gsl::narrow_cast<std::uint16_t>(key.size());
     if (framing_extras.size() == 0) {
       key_size = utils::byte_swap(key_size);
       memcpy(payload.data() + 2, &key_size, sizeof(key_size));
@@ -142,7 +157,7 @@ private:
       payload[3] = gsl::narrow_cast<std::byte>(key_size);
     }
 
-    std::uint8_t ext_size = gsl::narrow_cast<std::uint8_t>(body_.extras().size());
+    std::uint8_t ext_size = gsl::narrow_cast<std::uint8_t>(extras.size());
     memcpy(payload.data() + 4, &ext_size, sizeof(ext_size));
 
     payload[5] = static_cast<std::byte>(datatype_);
@@ -150,7 +165,7 @@ private:
     std::uint16_t vbucket = utils::byte_swap(gsl::narrow_cast<std::uint16_t>(partition_));
     memcpy(payload.data() + 6, &vbucket, sizeof(vbucket));
 
-    std::uint32_t body_size = utils::byte_swap(gsl::narrow_cast<std::uint32_t>(body_.size()));
+    std::uint32_t body_size = utils::byte_swap(gsl::narrow_cast<std::uint32_t>(body_size_bytes));
     memcpy(payload.data() + 8, &body_size, sizeof(body_size));
 
     memcpy(payload.data() + 12, &opaque_, sizeof(opaque_));
@@ -160,16 +175,16 @@ private:
     if (framing_extras.size() > 0) {
       body_itr = std::copy(framing_extras.begin(), framing_extras.end(), body_itr);
     }
-    body_itr = std::copy(body_.extras().begin(), body_.extras().end(), body_itr);
-    body_itr = utils::to_binary(body_.key(), body_itr);
+    body_itr = std::copy(extras.begin(), extras.end(), body_itr);
+    body_itr = utils::to_binary(key, body_itr);
 
     if (static const std::size_t min_size_to_compress = 32;
-        try_to_compress && body_.value().size() > min_size_to_compress) {
-      if (auto [compressed, new_value_size] = compress_value(body_.value(), body_itr); compressed) {
+        try_to_compress && value.size() > min_size_to_compress) {
+      if (auto [compressed, new_value_size] = compress_value(value, body_itr); compressed) {
         /* the compressed value meets requirements and was copied to the payload */
         protocol::set_flag(payload[5], protocol::datatype::snappy);
         std::uint32_t new_body_size = utils::byte_swap(body_size) -
-                                      gsl::narrow_cast<std::uint32_t>(body_.value().size()) +
+                                      gsl::narrow_cast<std::uint32_t>(value.size()) +
                                       new_value_size;
         payload.resize(header_size + new_body_size);
         new_body_size = utils::byte_swap(new_body_size);
@@ -177,7 +192,7 @@ private:
         return payload;
       }
     }
-    std::copy(body_.value().begin(), body_.value().end(), body_itr);
+    std::copy(value.begin(), value.end(), body_itr);
     return payload;
   }
 };
