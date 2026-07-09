@@ -1147,27 +1147,35 @@ public:
         if (bucket_name) {
           if (services.find(service_type::key_value) != services.end()) {
             if (auto bucket = cluster->find_bucket_by_name(bucket_name.value()); bucket) {
-              return bucket->ping(collector, timeout);
-            }
-            // Capture a weak_ptr, not a strong cluster: open_bucket parks this callback in the
-            // bucket-bootstrap queue, which close() does not drain. A strong self-capture would
-            // form a cluster<->parked-callback cycle that pins the ping collector past cluster
-            // close, so its destructor -- the backstop that reports the ping result -- would never
-            // run and the caller would hang. With a weak capture the callback is released when the
-            // cluster is torn down, the collector is destroyed, and its destructor delivers the
-            // report.
-            cluster->open_bucket(
-              bucket_name.value(),
-              [collector, weak = std::weak_ptr(cluster), bucket_name, timeout](std::error_code ec) {
-                if (!ec) {
-                  if (auto cluster = weak.lock()) {
-                    if (auto bucket = cluster->find_bucket_by_name(bucket_name.value()); bucket) {
-                      return bucket->ping(collector, timeout);
+              bucket->ping(collector, timeout);
+            } else {
+              // Capture a weak_ptr, not a strong cluster: open_bucket parks this callback in the
+              // bucket-bootstrap queue, which close() does not drain. A strong self-capture would
+              // form a cluster<->parked-callback cycle that pins the ping collector past cluster
+              // close, so its destructor -- the backstop that reports the ping result -- would
+              // never run and the caller would hang. With a weak capture the callback is released
+              // when the cluster is torn down, the collector is destroyed, and its destructor
+              // delivers the report.
+              cluster->open_bucket(
+                bucket_name.value(),
+                [collector, weak = std::weak_ptr(cluster), bucket_name, timeout](
+                  std::error_code ec) {
+                  if (!ec) {
+                    if (auto cluster = weak.lock()) {
+                      if (auto bucket = cluster->find_bucket_by_name(bucket_name.value()); bucket) {
+                        return bucket->ping(collector, timeout);
+                      }
                     }
                   }
-                }
-              });
+                });
+            }
           }
+          // Query, search, analytics, management, eventing and views are cluster-level services,
+          // not bucket-scoped. Ping them through the session manager just like the no-bucket path
+          // so a bucket-scoped ping -- and therefore bucket::wait_until_ready() -- reports the
+          // non-KV services too, rather than only key/value. The session manager pings only the
+          // HTTP services it owns and ignores key_value in the requested set.
+          cluster->session_manager_->ping(services, timeout, collector);
         } else {
           if (services.find(service_type::key_value) != services.end()) {
             if (cluster->session_) {

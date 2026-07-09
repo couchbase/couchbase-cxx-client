@@ -292,6 +292,69 @@ to_bucket(ConnectionPtr conn, std::string name)
   return conn->cluster()->bucket(name);
 }
 
+auto
+to_wait_until_ready_options(
+  const protocol::sdk::cluster::wait_until_ready::WaitUntilReadyRequest& req)
+  -> std::pair<std::chrono::milliseconds, couchbase::wait_until_ready_options>
+{
+  namespace wur = protocol::sdk::cluster::wait_until_ready;
+
+  const auto timeout = std::chrono::milliseconds(req.timeoutmillis());
+  couchbase::wait_until_ready_options opts{};
+  if (!req.has_options()) {
+    return { timeout, opts };
+  }
+  const auto& o = req.options();
+  if (o.has_desiredstate()) {
+    switch (o.desiredstate()) {
+      case wur::ONLINE:
+        opts.desired_state(couchbase::cluster_state::online);
+        break;
+      case wur::DEGRADED:
+        opts.desired_state(couchbase::cluster_state::degraded);
+        break;
+      case wur::OFFLINE:
+        opts.desired_state(couchbase::cluster_state::offline);
+        break;
+      default:
+        throw performer_exception::unimplemented(
+          fmt::format("unsupported desired_state: {}", wur::ClusterState_Name(o.desiredstate())));
+    }
+  }
+  std::set<couchbase::service_type> service_types{};
+  for (int i = 0; i < o.servicetypes_size(); ++i) {
+    switch (o.servicetypes(i)) {
+      case wur::KV:
+        service_types.insert(couchbase::service_type::key_value);
+        break;
+      case wur::QUERY:
+        service_types.insert(couchbase::service_type::query);
+        break;
+      case wur::ANALYTICS:
+        service_types.insert(couchbase::service_type::analytics);
+        break;
+      case wur::SEARCH:
+        service_types.insert(couchbase::service_type::search);
+        break;
+      case wur::VIEWS:
+        service_types.insert(couchbase::service_type::view);
+        break;
+      case wur::MANAGER:
+        service_types.insert(couchbase::service_type::management);
+        break;
+      case wur::EVENTING:
+        service_types.insert(couchbase::service_type::eventing);
+        break;
+      default:
+        // e.g. BACKUP and any future service types have no couchbase::service_type equivalent.
+        throw performer_exception::unimplemented(
+          fmt::format("unsupported service_type: {}", wur::ServiceType_Name(o.servicetypes(i))));
+    }
+  }
+  opts.service_types(std::move(service_types));
+  return { timeout, opts };
+}
+
 std::string
 TxnService::to_key(const protocol::shared::DocLocation& loc)
 {
@@ -1469,6 +1532,7 @@ TxnService::performerCapsFetch(grpc::ServerContext* /*context*/,
   response->add_performer_caps(protocol::performer::Caps::OBSERVABILITY_1);
 #endif
 
+  response->add_sdk_implementation_caps(protocol::sdk::Caps::WAIT_UNTIL_READY);
   response->add_sdk_implementation_caps(protocol::sdk::Caps::SDK_KV);
   response->add_sdk_implementation_caps(protocol::sdk::Caps::SDK_QUERY);
   response->add_sdk_implementation_caps(protocol::sdk::Caps::SDK_LOOKUP_IN);
@@ -2011,6 +2075,16 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
       }
       batcher->send_result(res);
 #endif
+    } else if (cluster_cmd.has_wait_until_ready()) {
+      auto res = fit_cxx::commands::common::create_new_result();
+      const auto [timeout, opts] = to_wait_until_ready_options(cluster_cmd.wait_until_ready());
+      const auto ec = cluster->wait_until_ready(timeout, opts).get().ec();
+      if (ec) {
+        fit_cxx::commands::common::convert_error_code(ec, res.mutable_sdk()->mutable_exception());
+      } else {
+        res.mutable_sdk()->set_success(true);
+      }
+      batcher->send_result(res);
     } else {
       throw performer_exception::invalid_argument("unrecognized cluster command: " +
                                                   cluster_cmd.ShortDebugString());
@@ -2027,6 +2101,17 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
       };
       auto res = fit_cxx::commands::collection_management::execute_command(
         bucket_cmd.collection_manager(), cmd_args);
+      batcher->send_result(res);
+    } else if (bucket_cmd.has_wait_until_ready()) {
+      auto res = fit_cxx::commands::common::create_new_result();
+      const auto [timeout, opts] = to_wait_until_ready_options(bucket_cmd.wait_until_ready());
+      auto bucket = conn->cluster()->bucket(bucket_cmd.bucket_name());
+      const auto ec = bucket.wait_until_ready(timeout, opts).get().ec();
+      if (ec) {
+        fit_cxx::commands::common::convert_error_code(ec, res.mutable_sdk()->mutable_exception());
+      } else {
+        res.mutable_sdk()->set_success(true);
+      }
       batcher->send_result(res);
     } else {
       throw performer_exception::invalid_argument("unrecognized bucket command: " +

@@ -210,6 +210,7 @@ set(couchbase_cxx_client_FILES
     core/impl/search_sort_id.cxx
     core/impl/search_sort_score.cxx
     core/impl/streaming_json_lexer_error_category.cxx
+    core/impl/wait_until_ready.cxx
     core/impl/subdoc/array_add_unique.cxx
     core/impl/subdoc/array_append.cxx
     core/impl/subdoc/array_insert.cxx
