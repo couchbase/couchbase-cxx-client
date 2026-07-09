@@ -106,7 +106,6 @@ TxnService::startTxn(ConnectionPtr conn,
                      const protocol::transactions::TransactionCreateRequest* request,
                      protocol::transactions::TransactionResult* response,
                      std::atomic<bool>& timed_out,
-                     Counters& counters,
                      fit_cxx::transaction_context& txn_ctx)
 {
   // Guard against an empty attempts list: the per-attempt index below is computed as
@@ -150,7 +149,7 @@ TxnService::startTxn(ConnectionPtr conn,
       for (const protocol::transactions::TransactionCommand& command : attempt.commands()) {
         spdlog::trace("{} executing command: {}", request->name(), command.DebugString());
         try {
-          auto op_err = execute_command(conn, ctx, command, request->name(), counters, txn_ctx);
+          auto op_err = execute_command(conn, ctx, command, request->name(), txn_ctx);
           if (timed_out) {
             // this means we wrapped this in a call that limited the duration of the transaction,
             // and now we have exceeded that.   The "timeout hack" was done previously when we
@@ -209,7 +208,6 @@ TxnService::transactionCreate(grpc::ServerContext* /*context*/,
              fmt::format("no connection with ID={}", request->cluster_connection_id()) };
   }
   std::atomic<bool> timed_out{ false };
-  Counters counters;
   // Unary transactions have no concurrent peers, so the context has no broadcaster; latches still
   // get registered for parity with the streaming path.
   fit_cxx::transaction_context txn_ctx;
@@ -219,7 +217,7 @@ TxnService::transactionCreate(grpc::ServerContext* /*context*/,
   return conn->run_with_timeout<grpc::Status>(
     std::chrono::seconds(TXN_TIMEOUT),
     [&]() {
-      return startTxn(conn, request, response, timed_out, counters, txn_ctx);
+      return startTxn(conn, request, response, timed_out, txn_ctx);
     },
     [&]() -> grpc::Status {
       timed_out = true;
@@ -295,7 +293,7 @@ to_bucket(ConnectionPtr conn, std::string name)
 }
 
 std::string
-TxnService::to_key(const protocol::shared::DocLocation& loc, Counters& counters)
+TxnService::to_key(const protocol::shared::DocLocation& loc)
 {
   if (loc.has_specific()) {
     return loc.specific().id();
@@ -320,8 +318,10 @@ TxnService::to_key(const protocol::shared::DocLocation& loc, Counters& counters)
       return id_preface + std::to_string(random_number);
     }
     if (loc.pool().has_counter()) {
-      auto counter_id = loc.pool().counter().counter().counter_id();
-      auto counter_value = counters.get_and_increment_counter(counter_id);
+      const auto counter_value =
+        counters_.get_counter(loc.pool().counter().counter())->increment() -
+        1; // Using the pre-increment value, ensuring that the first key always has the initial
+           // value as suffix.
       return id_preface + std::to_string(counter_value % pool_size);
     }
     throw performer_exception::unimplemented(
@@ -571,15 +571,14 @@ check_for_wait(const Cmd& cmd)
 
 auto
 TxnService::to_get_multi_specs(ConnectionPtr conn,
-                               const protocol::transactions::TransactionCommand& cmd,
-                               Counters& counters)
+                               const protocol::transactions::TransactionCommand& cmd)
   -> std::vector<couchbase::transactions::transaction_get_multi_spec>
 {
   std::vector<couchbase::transactions::transaction_get_multi_spec> specs;
   specs.reserve(static_cast<std::size_t>(cmd.get_multi().specs_size()));
 
   for (const auto& spec : cmd.get_multi().specs()) {
-    specs.emplace_back(to_collection(conn, spec.location()), to_key(spec.location(), counters));
+    specs.emplace_back(to_collection(conn, spec.location()), to_key(spec.location()));
   }
 
   return specs;
@@ -614,8 +613,7 @@ TxnService::to_get_multi_options(const protocol::transactions::TransactionComman
 auto
 TxnService::to_get_multi_replicas_from_preferred_server_group_specs(
   ConnectionPtr conn,
-  const protocol::transactions::TransactionCommand& cmd,
-  Counters& counters)
+  const protocol::transactions::TransactionCommand& cmd)
   -> std::vector<
     couchbase::transactions::transaction_get_multi_replicas_from_preferred_server_group_spec>
 {
@@ -625,7 +623,7 @@ TxnService::to_get_multi_replicas_from_preferred_server_group_specs(
   specs.reserve(static_cast<std::size_t>(cmd.get_multi().specs_size()));
 
   for (const auto& spec : cmd.get_multi().specs()) {
-    specs.emplace_back(to_collection(conn, spec.location()), to_key(spec.location(), counters));
+    specs.emplace_back(to_collection(conn, spec.location()), to_key(spec.location()));
   }
   return specs;
 }
@@ -667,7 +665,6 @@ TxnService::execute_command(ConnectionPtr conn,
                             std::shared_ptr<couchbase::transactions::attempt_context> ctx,
                             const protocol::transactions::TransactionCommand& cmd,
                             const std::string& logger_prefix,
-                            Counters& counters,
                             fit_cxx::transaction_context& txn_ctx,
                             bool is_batch)
 {
@@ -732,7 +729,7 @@ TxnService::execute_command(ConnectionPtr conn,
         false,
         [&](std::shared_ptr<couchbase::transactions::attempt_context> c) {
           auto [err, result] = c->get_multi_replicas_from_preferred_server_group(
-            to_get_multi_replicas_from_preferred_server_group_specs(conn, cmd, counters),
+            to_get_multi_replicas_from_preferred_server_group_specs(conn, cmd),
             to_get_multi_replicas_from_preferred_server_group_options(cmd));
           spdlog::debug("get_multi_replicas: err.message: {}, err.ec.message: {}",
                         err.message(),
@@ -747,8 +744,8 @@ TxnService::execute_command(ConnectionPtr conn,
                       false,
                       false,
                       [&](std::shared_ptr<couchbase::transactions::attempt_context> c) {
-                        auto [err, result] = c->get_multi(to_get_multi_specs(conn, cmd, counters),
-                                                          to_get_multi_options(cmd));
+                        auto [err, result] =
+                          c->get_multi(to_get_multi_specs(conn, cmd), to_get_multi_options(cmd));
                         spdlog::debug("get_multi: err.message: {}, err.ec.message: {}",
                                       err.message(),
                                       err.ec().message());
@@ -983,7 +980,7 @@ TxnService::execute_command(ConnectionPtr conn,
   if (cmd.has_get_v2()) {
     auto req = cmd.get_v2();
     auto coll = to_collection(conn, req.location());
-    auto id = to_key(req.location(), counters);
+    auto id = to_key(req.location());
     return execute_op(req,
                       ctx,
                       cmd.do_not_propagate_error(),
@@ -1008,7 +1005,7 @@ TxnService::execute_command(ConnectionPtr conn,
   if (cmd.has_replace_v2()) {
     auto req = cmd.replace_v2();
     auto coll = to_collection(conn, req.location());
-    auto id = to_key(req.location(), counters);
+    auto id = to_key(req.location());
     auto content_str = content_as_string(req.content());
     auto content = couchbase::core::utils::json::parse(std::string_view{ content_str });
     return execute_op(req,
@@ -1035,7 +1032,7 @@ TxnService::execute_command(ConnectionPtr conn,
   if (cmd.has_remove_v2()) {
     auto req = cmd.remove_v2();
     auto coll = to_collection(conn, req.location());
-    auto id = to_key(req.location(), counters);
+    auto id = to_key(req.location());
     return execute_op(
       req,
       ctx,
@@ -1058,7 +1055,7 @@ TxnService::execute_command(ConnectionPtr conn,
   if (cmd.has_insert_v2()) {
     auto req = cmd.insert_v2();
     auto coll = to_collection(conn, req.location());
-    auto id = to_key(req.location(), counters);
+    auto id = to_key(req.location());
     auto insert_content_str = content_as_string(req.content());
     auto content = couchbase::core::utils::json::parse(std::string_view{ insert_content_str });
     return execute_op(req,
@@ -1177,7 +1174,7 @@ TxnService::execute_command(ConnectionPtr conn,
         spdlog::trace("async executing command, {} now in-flight", in_flight);
         lock.unlock();
         try {
-          execute_command(conn, ctx, c, logger_prefix, counters, txn_ctx, true);
+          execute_command(conn, ctx, c, logger_prefix, txn_ctx, true);
         } catch (...) {
           // Release the in-flight slot and wake a waiter even on exception; otherwise the other
           // workers can block forever in cv.wait() and f.get() below would deadlock. The exception
@@ -1343,7 +1340,6 @@ TxnService::transactionStream(
                               &start_cv,
                               &ready_to_start,
                               &aborted]() {
-          Counters counters;
           protocol::transactions::TransactionStreamPerformerToDriver created;
           created.set_allocated_created(
             protocol::transactions::TransactionCreated::default_instance().New());
@@ -1372,8 +1368,7 @@ TxnService::transactionStream(
             worker_conn->run_with_timeout<grpc::Status>(
               std::chrono::seconds(TXN_TIMEOUT),
               [&]() {
-                return startTxn(
-                  worker_conn, &worker_request, result, timed_out, counters, *txn_ctx);
+                return startTxn(worker_conn, &worker_request, result, timed_out, *txn_ctx);
               },
               [&]() -> grpc::Status {
                 timed_out = true;
@@ -1667,7 +1662,6 @@ TxnService::run(grpc::ServerContext* /*context*/,
   spdlog::info("got run with {}", request->DebugString());
   std::string run_id{ couchbase::core::uuid::to_string(couchbase::core::uuid::random()) };
   constexpr auto cmd_timeout = std::chrono::seconds(60);
-  fit_cxx::Bounds workload_bounds;
   auto conn = getConn(request->workloads().cluster_connection_id());
   if (!conn) {
     return { ::grpc::CANCELLED,
@@ -1696,7 +1690,7 @@ TxnService::run(grpc::ServerContext* /*context*/,
   // Declaration order matters because, on the exception path, the catch blocks below return without
   // joining still-running tasks, so the joins happen in the ~future destructors. Locals destruct in
   // reverse declaration order, so:
-  //   * counters and stream_mut are declared FIRST (destruct last): workload/stream tasks capture
+  //   * stream_mut is declared FIRST (destruct last): workload/stream tasks capture
   //     them by reference, so they must outlive every task join.
   //   * stream_futures is declared before workload_futures so that workload_futures destructs
   //   FIRST.
@@ -1705,34 +1699,28 @@ TxnService::run(grpc::ServerContext* /*context*/,
   //     half-destroyed stream_futures.
   // Without this ordering, a sibling task still running when another task throws would read and
   // lock already-destroyed objects (use-after-free / data race).
-  Counters counters;
   std::mutex stream_mut;
   std::list<std::future<void>> stream_futures;
   std::list<std::future<void>> workload_futures;
   try {
-    for (auto& horiz : request->workloads().horizontal_scaling()) {
-      for (auto& work : horiz.workloads()) {
+    for (const auto& horiz : request->workloads().horizontal_scaling()) {
+      for (const auto& work : horiz.workloads()) {
         // Capture `work` by value: it is a per-iteration loop variable, so capturing it by
         // reference would let the async task observe a later iteration's workload (or a destroyed
         // reference). Everything else captured by reference outlives these futures.
         workload_futures.push_back(std::async(std::launch::async, [&, work]() -> void {
           if (work.has_sdk()) {
-            int cmd_count = work.sdk().command_size();
-            std::string bounds_key;
-            if (work.has_transaction()) {
-              bounds_key = configure_bounds(
-                workload_bounds, work.transaction().has_bounds(), work.transaction().bounds());
-            } else {
-              bounds_key =
-                configure_bounds(workload_bounds, work.sdk().has_bounds(), work.sdk().bounds());
+            const auto cmd_count = work.sdk().command_size();
+            if (cmd_count == 0) {
+              throw performer_exception::invalid_argument("The SDK workload has no commands");
             }
-
+            const auto bounds = fit_cxx::bounds::from_sdk_workload(counters_, work.sdk());
             int counter = 0;
-            while (workload_bounds.can_run(bounds_key, counter, cmd_count)) {
-              auto& cmd = work.sdk().command(counter % cmd_count);
-              auto [cmd_fut, stream_fut] = execute_sdk_command(conn, cmd, batcher, counters);
+            while (bounds->can_execute()) {
+              const auto& cmd = work.sdk().command(counter % cmd_count);
+              auto [cmd_fut, stream_fut] = execute_sdk_command(conn, cmd, batcher);
               if (stream_fut) {
-                std::scoped_lock<std::mutex> lock(stream_mut);
+                const std::scoped_lock<std::mutex> lock(stream_mut);
                 stream_futures.push_back(std::move(stream_fut.value()));
               }
               if (cmd_fut.wait_for(cmd_timeout) != std::future_status::ready) {
@@ -1743,13 +1731,17 @@ TxnService::run(grpc::ServerContext* /*context*/,
               counter++;
             }
           } else if (work.has_transaction()) {
-            int cmd_count = work.transaction().command_size();
-            std::string bounds_key = configure_bounds(
-              workload_bounds, work.transaction().has_bounds(), work.transaction().bounds());
+            const auto cmd_count = work.transaction().command_size();
+            if (cmd_count == 0) {
+              throw performer_exception::invalid_argument(
+                "The transaction workload has no commands");
+            }
+            const auto bounds =
+              fit_cxx::bounds::from_transactions_workload(counters_, work.transaction());
 
             int counter = 0;
-            while (workload_bounds.can_run(bounds_key, counter, cmd_count)) {
-              auto& cmd = work.transaction().command(counter % cmd_count);
+            while (bounds->can_execute()) {
+              const auto& cmd = work.transaction().command(counter % cmd_count);
               // Declared in the loop scope so the timeout handler below can set it and startTxn()
               // (which polls it) can observe the timeout and short-circuit cooperatively.
               std::atomic<bool> timed_out{ false };
@@ -1764,8 +1756,7 @@ TxnService::run(grpc::ServerContext* /*context*/,
                   auto start = std::chrono::high_resolution_clock::now();
                   res.mutable_initiated()->CopyFrom(
                     google::protobuf::util::TimeUtil::GetCurrentTime());
-                  auto result =
-                    startTxn(conn, &cmd, res.mutable_transaction(), timed_out, counters, txn_ctx);
+                  auto result = startTxn(conn, &cmd, res.mutable_transaction(), timed_out, txn_ctx);
                   spdlog::debug("transaction finished with result {} {}",
                                 result.error_message(),
                                 res.DebugString());
@@ -1818,28 +1809,10 @@ TxnService::run(grpc::ServerContext* /*context*/,
   }
 }
 
-std::string
-TxnService::configure_bounds(fit_cxx::Bounds& workload_bounds,
-                             bool has_bounds,
-                             const protocol::shared::Bounds& bounds)
-{
-  std::string bounds_key;
-  if (has_bounds) {
-    if (bounds.has_counter()) {
-      bounds_key = bounds.counter().counter_id();
-      workload_bounds.add_counter(bounds_key, bounds.counter().global().count());
-    } else if (bounds.has_for_time()) {
-      workload_bounds.add_timer(bounds.for_time().seconds());
-    }
-  }
-  return bounds_key;
-}
-
 CmdFutures
 TxnService::execute_sdk_command(ConnectionPtr conn,
                                 const protocol::sdk::Command cmd,
-                                std::shared_ptr<fit_cxx::Batcher> batcher,
-                                Counters& counters)
+                                std::shared_ptr<fit_cxx::Batcher> batcher)
 {
   auto barrier = std::make_shared<std::promise<void>>();
   auto cmd_fut = barrier->get_future();
@@ -1855,7 +1828,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
   }
   if (cmd.has_get()) {
     auto coll = to_collection(conn, cmd.get().location());
-    auto key = to_key(cmd.get().location(), counters);
+    auto key = to_key(cmd.get().location());
     auto cmd_args = fit_cxx::commands::key_value::command_args{
       /* .collection = */ coll,
       /* .key = */ key,
@@ -1867,7 +1840,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
   }
   if (cmd.has_replace()) {
     auto coll = to_collection(conn, cmd.replace().location());
-    auto key = to_key(cmd.replace().location(), counters);
+    auto key = to_key(cmd.replace().location());
     auto cmd_args = fit_cxx::commands::key_value::command_args{
       /* .collection = */ coll,
       /* .key = */ key,
@@ -1879,7 +1852,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
   }
   if (cmd.has_insert()) {
     auto coll = to_collection(conn, cmd.insert().location());
-    auto key = to_key(cmd.insert().location(), counters);
+    auto key = to_key(cmd.insert().location());
     auto cmd_args = fit_cxx::commands::key_value::command_args{
       /* .collection = */ coll,
       /* .key = */ key,
@@ -1892,7 +1865,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
 
   if (cmd.has_upsert()) {
     auto coll = to_collection(conn, cmd.upsert().location());
-    auto key = to_key(cmd.upsert().location(), counters);
+    auto key = to_key(cmd.upsert().location());
     auto cmd_args = fit_cxx::commands::key_value::command_args{
       /* .collection = */ coll,
       /* .key = */ key,
@@ -1904,7 +1877,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
   }
   if (cmd.has_remove()) {
     auto coll = to_collection(conn, cmd.remove().location());
-    auto key = to_key(cmd.remove().location(), counters);
+    auto key = to_key(cmd.remove().location());
     auto cmd_args = fit_cxx::commands::key_value::command_args{
       /* .collection = */ coll,
       /* .key = */ key,
@@ -2115,7 +2088,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
     if (collection_cmd.has_lookup_in()) {
       auto cmd_args = fit_cxx::commands::key_value::command_args{
         /* .collection = */ to_collection(conn, collection_cmd.lookup_in().location()),
-        /* .key = */ to_key(collection_cmd.lookup_in().location(), counters),
+        /* .key = */ to_key(collection_cmd.lookup_in().location()),
         /* .spans = */ &spans_,
         /* .return_result = */ return_result,
       };
@@ -2125,7 +2098,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
     } else if (collection_cmd.has_get_and_lock()) {
       auto cmd_args = fit_cxx::commands::key_value::command_args{
         /* .collection = */ to_collection(conn, collection_cmd.get_and_lock().location()),
-        /* .key = */ to_key(collection_cmd.get_and_lock().location(), counters),
+        /* .key = */ to_key(collection_cmd.get_and_lock().location()),
         /* .spans = */ &spans_,
         /* .return_result = */ return_result,
       };
@@ -2135,7 +2108,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
     } else if (collection_cmd.has_unlock()) {
       auto cmd_args = fit_cxx::commands::key_value::command_args{
         /* .collection = */ to_collection(conn, collection_cmd.unlock().location()),
-        /* .key = */ to_key(collection_cmd.unlock().location(), counters),
+        /* .key = */ to_key(collection_cmd.unlock().location()),
         /* .spans = */ &spans_,
       };
       auto res = fit_cxx::commands::key_value::execute_command(collection_cmd.unlock(), cmd_args);
@@ -2143,7 +2116,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
     } else if (collection_cmd.has_get_and_touch()) {
       auto cmd_args = fit_cxx::commands::key_value::command_args{
         /* .collection = */ to_collection(conn, collection_cmd.get_and_touch().location()),
-        /* .key = */ to_key(collection_cmd.get_and_touch().location(), counters),
+        /* .key = */ to_key(collection_cmd.get_and_touch().location()),
         /* .spans = */ &spans_,
         /* .return_result = */ return_result,
       };
@@ -2153,7 +2126,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
     } else if (collection_cmd.has_exists()) {
       auto cmd_args = fit_cxx::commands::key_value::command_args{
         /* .collection = */ to_collection(conn, collection_cmd.exists().location()),
-        /* .key = */ to_key(collection_cmd.exists().location(), counters),
+        /* .key = */ to_key(collection_cmd.exists().location()),
         /* .spans = */ &spans_,
         /* .return_result = */ return_result,
       };
@@ -2162,7 +2135,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
     } else if (collection_cmd.has_touch()) {
       auto cmd_args = fit_cxx::commands::key_value::command_args{
         /* .collection = */ to_collection(conn, collection_cmd.touch().location()),
-        /* .key = */ to_key(collection_cmd.touch().location(), counters),
+        /* .key = */ to_key(collection_cmd.touch().location()),
         /* .spans = */ &spans_,
         /* .return_result = */ return_result,
       };
@@ -2171,7 +2144,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
     } else if (collection_cmd.has_mutate_in()) {
       auto cmd_args = fit_cxx::commands::key_value::command_args{
         /* .collection = */ to_collection(conn, collection_cmd.mutate_in().location()),
-        /* .key = */ to_key(collection_cmd.mutate_in().location(), counters),
+        /* .key = */ to_key(collection_cmd.mutate_in().location()),
         /* .spans = */ &spans_,
         /* .return_result = */ return_result,
       };
@@ -2181,7 +2154,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
     } else if (collection_cmd.has_get_any_replica()) {
       auto cmd_args = fit_cxx::commands::key_value::command_args{
         /* .collection = */ to_collection(conn, collection_cmd.get_any_replica().location()),
-        /* .key = */ to_key(collection_cmd.get_any_replica().location(), counters),
+        /* .key = */ to_key(collection_cmd.get_any_replica().location()),
         /* .spans = */ &spans_,
         /* .return_result = */ return_result,
       };
@@ -2191,7 +2164,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
     } else if (collection_cmd.has_get_all_replicas()) {
       auto cmd_args = fit_cxx::commands::key_value::command_args{
         /* .collection = */ to_collection(conn, collection_cmd.get_all_replicas().location()),
-        /* .key = */ to_key(collection_cmd.get_all_replicas().location(), counters),
+        /* .key = */ to_key(collection_cmd.get_all_replicas().location()),
         /* .spans = */ &spans_,
         /* .return_result = */ return_result,
       };
@@ -2214,7 +2187,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
       if (binary_cmd.has_append()) {
         auto cmd_args = fit_cxx::commands::key_value::command_args{
           /* .collection = */ to_collection(conn, binary_cmd.append().location()),
-          /* .key = */ to_key(binary_cmd.append().location(), counters),
+          /* .key = */ to_key(binary_cmd.append().location()),
           /* .spans = */ &spans_,
           /* .return_result = */ return_result,
         };
@@ -2223,7 +2196,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
       } else if (binary_cmd.has_prepend()) {
         auto cmd_args = fit_cxx::commands::key_value::command_args{
           /* .collection = */ to_collection(conn, binary_cmd.prepend().location()),
-          /* .key = */ to_key(binary_cmd.prepend().location(), counters),
+          /* .key = */ to_key(binary_cmd.prepend().location()),
           /* .spans = */ &spans_,
           /* .return_result = */ return_result,
         };
@@ -2232,7 +2205,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
       } else if (binary_cmd.has_increment()) {
         auto cmd_args = fit_cxx::commands::key_value::command_args{
           /* .collection = */ to_collection(conn, binary_cmd.increment().location()),
-          /* .key = */ to_key(binary_cmd.increment().location(), counters),
+          /* .key = */ to_key(binary_cmd.increment().location()),
           /* .spans = */ &spans_,
           /* .return_result = */ return_result,
         };
@@ -2241,7 +2214,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
       } else if (binary_cmd.has_decrement()) {
         auto cmd_args = fit_cxx::commands::key_value::command_args{
           /* .collection = */ to_collection(conn, binary_cmd.decrement().location()),
-          /* .key = */ to_key(binary_cmd.decrement().location(), counters),
+          /* .key = */ to_key(binary_cmd.decrement().location()),
           /* .spans = */ &spans_,
           /* .return_result = */ return_result,
         };
@@ -2252,7 +2225,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
       auto lookup_in_cmd = collection_cmd.lookup_in_any_replica();
       auto cmd_args = fit_cxx::commands::key_value::command_args{
         /* .collection = */ to_collection(conn, lookup_in_cmd.location()),
-        /* .key = */ to_key(lookup_in_cmd.location(), counters),
+        /* .key = */ to_key(lookup_in_cmd.location()),
         /* .spans = */ &spans_,
         /* .return_result = */ return_result,
       };
@@ -2261,7 +2234,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
     } else if (collection_cmd.has_lookup_in_all_replicas()) {
       auto lookup_in_cmd = collection_cmd.lookup_in_all_replicas();
       collection = to_collection(conn, lookup_in_cmd.location());
-      auto key = to_key(lookup_in_cmd.location(), counters);
+      auto key = to_key(lookup_in_cmd.location());
       auto cmd_args = fit_cxx::commands::key_value::command_args{
         /* .collection = */ collection,
         /* .key = */ key,
@@ -2381,5 +2354,31 @@ TxnService::spanFinish(grpc::ServerContext* /*context*/,
     return { ::grpc::CANCELLED, e.what() };
   }
 
+  return grpc::Status::OK;
+}
+
+grpc::Status
+TxnService::setCounter(grpc::ServerContext* /*context*/,
+                       const protocol::shared::Counter* request,
+                       protocol::shared::SetCounterResponse* /*response*/)
+{
+  spdlog::info("setCounter called with {}", request->DebugString());
+
+  try {
+    counters_.set_counter_value(*request);
+  } catch (const performer_exception& e) {
+    return e.to_grpc_status();
+  }
+  return grpc::Status::OK;
+}
+
+grpc::Status
+TxnService::clearAllCounters(grpc::ServerContext* /*context*/,
+                             const protocol::shared::ClearAllCountersRequest* /*request*/,
+                             protocol::shared::ClearAllCountersResponse* /*response*/)
+{
+  spdlog::info("clearAllCounters called");
+
+  counters_.clear();
   return grpc::Status::OK;
 }

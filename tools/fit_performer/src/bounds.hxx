@@ -17,90 +17,73 @@
 
 #pragma once
 
+#include "counters.hxx"
 #include "exceptions.hxx"
 
-#include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
 #include <chrono>
-#include <map>
-#include <mutex>
-#include <optional>
+
+#include "sdk.workload.pb.h"
+#include "transactions.workload.pb.h"
 
 namespace fit_cxx
 {
-class Bounds
+class bounds
 {
 public:
-  Bounds() = default;
+  virtual ~bounds() = default;
+  [[nodiscard]] virtual auto can_execute() -> bool = 0;
 
-  void add_timer(int seconds)
-  {
-    std::scoped_lock<std::mutex> lock(mut_);
-    if (timer_) {
-      return;
-    }
-    // steady_clock (monotonic) so the bound is unaffected by wall-clock jumps (NTP, manual time
-    // changes), which could otherwise end a bounded run early or let it run too long.
-    timer_ = std::chrono::steady_clock::now() + std::chrono::seconds(seconds);
-  }
-  bool check_timer()
-  {
-    std::scoped_lock<std::mutex> lock(mut_);
-    if (timer_) {
-      return std::chrono::steady_clock::now() <= timer_.value();
-    }
-    // if no timer, it can run forever, so return true.
-    return true;
-  }
-  void add_counter(const std::string& key, int value)
-  {
-    std::scoped_lock<std::mutex> lock(mut_);
-    if (auto it = counters_.find(key); it == counters_.end()) {
-      counters_[key] = value;
-      return;
-    }
-    spdlog::info("add_bound found key {} already present, ignoring...", key);
-  }
-
-  bool decrement(const std::string& key)
-  {
-    if (key.empty()) {
-      // happens when there is no bounds (or at least, not a counter)
-      return true;
-    }
-    std::scoped_lock<std::mutex> lock(mut_);
-    if (auto it = counters_.find(key); it != counters_.end()) {
-      if (it->second > 0) {
-        it->second--;
-        return true;
-      }
-      return false;
-    }
-    throw performer_exception::internal(fmt::format("decrement called for unknown key {}", key));
-  }
-
-  bool can_run(const std::string& counter_key, int executed_cmd_count, int cmd_count)
-  {
-    bool has_timer = false;
-    {
-      std::scoped_lock<std::mutex> lock(mut_);
-      has_timer = timer_.has_value();
-    }
-    if (has_timer) {
-      return check_timer();
-    }
-    if (!counter_key.empty()) {
-      return decrement(counter_key);
-    }
-    // No bounds are set - all commands should be executed exactly once
-    return executed_cmd_count < cmd_count;
-  }
-
-private:
-  std::mutex mut_;
-  std::map<std::string, int> counters_;
-  std::optional<std::chrono::steady_clock::time_point> timer_;
+  static auto from_sdk_workload(counters& global_counters,
+                                const protocol::sdk::Workload& proto_workload)
+    -> std::unique_ptr<bounds>;
+  static auto from_transactions_workload(counters& global_counters,
+                                         const protocol::transactions::Workload& proto_workload)
+    -> std::unique_ptr<bounds>;
 };
 
+class counter_bounds final : public bounds
+{
+public:
+  /**
+   * Creates a counter_bounds instance with a local counter.
+   */
+  explicit counter_bounds(std::int32_t initial_value);
+
+  /**
+   * Creates a counter_bounds instances with the provided global counter, that may be shared by
+   * multiple bounds instances.
+   */
+  explicit counter_bounds(std::shared_ptr<counter> global_counter);
+
+  auto can_execute() -> bool override;
+
+private:
+  std::shared_ptr<counter> counter_;
+};
+
+class timer_bounds final : public bounds
+{
+public:
+  explicit timer_bounds(std::chrono::seconds duration);
+
+  auto can_execute() -> bool override;
+
+private:
+  std::chrono::steady_clock::time_point deadline_;
+};
+
+class counter_equality_bounds final : public bounds
+{
+public:
+  explicit counter_equality_bounds(std::shared_ptr<counter> global_counter,
+                                   std::int32_t target_value);
+
+  auto can_execute() -> bool override;
+
+private:
+  std::shared_ptr<counter> counter_;
+  std::int32_t target_value_;
+};
 } // namespace fit_cxx

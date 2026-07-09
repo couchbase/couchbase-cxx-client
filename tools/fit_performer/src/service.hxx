@@ -60,6 +60,7 @@ private:
   std::optional<couchbase::transactions::transaction_get_result> stashed_result_{};
   std::map<std::uint32_t, couchbase::transactions::transaction_get_result> stashed_result_slots_{};
   fit_cxx::run_result_streams streams_;
+  fit_cxx::counters counters_;
   std::mutex rng_mutex_;
   std::mt19937 generator_;
   fit_cxx::observability::span_owner spans_{};
@@ -107,14 +108,12 @@ private:
 
   CmdFutures execute_sdk_command(ConnectionPtr conn,
                                  protocol::sdk::Command cmd,
-                                 std::shared_ptr<fit_cxx::Batcher> batcher,
-                                 Counters& counters);
+                                 std::shared_ptr<fit_cxx::Batcher> batcher);
 
   couchbase::error execute_command(ConnectionPtr conn,
                                    std::shared_ptr<couchbase::transactions::attempt_context> ctx,
                                    const protocol::transactions::TransactionCommand& cmd,
                                    const std::string& logger_prefix,
-                                   Counters& counters,
                                    fit_cxx::transaction_context& txn_ctx,
                                    bool is_batch = false);
 
@@ -122,25 +121,17 @@ private:
                         const protocol::transactions::TransactionCreateRequest* request,
                         protocol::transactions::TransactionResult* response,
                         std::atomic<bool>& timed_out,
-                        Counters& counters,
                         fit_cxx::transaction_context& txn_ctx);
 
-  std::string configure_bounds(fit_cxx::Bounds& workload_bounds,
-                               bool has_bounds,
-                               const protocol::shared::Bounds& bounds);
+  std::string to_key(const protocol::shared::DocLocation& loc);
 
-  std::string to_key(const protocol::shared::DocLocation& loc, Counters& counters);
-
-  auto to_get_multi_specs(ConnectionPtr conn,
-                          const protocol::transactions::TransactionCommand& cmd,
-                          Counters& counters)
+  auto to_get_multi_specs(ConnectionPtr conn, const protocol::transactions::TransactionCommand& cmd)
     -> std::vector<couchbase::transactions::transaction_get_multi_spec>;
   auto to_get_multi_options(const protocol::transactions::TransactionCommand& cmd)
     -> couchbase::transactions::transaction_get_multi_options;
   auto to_get_multi_replicas_from_preferred_server_group_specs(
     ConnectionPtr conn,
-    const protocol::transactions::TransactionCommand& cmd,
-    Counters& counters)
+    const protocol::transactions::TransactionCommand& cmd)
     -> std::vector<
       couchbase::transactions::transaction_get_multi_replicas_from_preferred_server_group_spec>;
   auto to_get_multi_replicas_from_preferred_server_group_options(
@@ -219,4 +210,12 @@ public:
   grpc::Status spanFinish(grpc::ServerContext* context,
                           const protocol::observability::SpanFinishRequest* request,
                           protocol::observability::SpanFinishResponse* response) override;
+
+  grpc::Status setCounter(grpc::ServerContext* context,
+                          const protocol::shared::Counter* request,
+                          protocol::shared::SetCounterResponse* response) override;
+
+  grpc::Status clearAllCounters(grpc::ServerContext* context,
+                                const protocol::shared::ClearAllCountersRequest* request,
+                                protocol::shared::ClearAllCountersResponse* response) override;
 };
