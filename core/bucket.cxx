@@ -602,8 +602,12 @@ public:
       }
       return handler(errc::network::configuration_not_available, nullptr);
     }
-    const std::scoped_lock lock(deferred_commands_mutex_);
-    deferred_commands_.emplace(
+    // Park the continuation until the bucket is configured. defer_command re-checks closed_ under
+    // deferred_commands_mutex_, so a continuation that races close() is either drained or completed
+    // with request_canceled instead of being stranded. Stranding would leak the whole cluster
+    // graph: the continuation strongly captures the cluster_impl (core), which owns this bucket,
+    // which owns the deferred queue that would hold the orphaned continuation (CXXCBC-846).
+    defer_command(
       [self = shared_from_this(), handler = std::move(handler)](std::error_code ec) mutable {
         if (ec == errc::common::request_canceled || self->closed_ || !self->configured_) {
           return handler(errc::network::configuration_not_available, nullptr);
@@ -1049,9 +1053,18 @@ public:
 
   auto defer_command(utils::movable_function<void(std::error_code)> command) -> std::error_code
   {
-    const std::scoped_lock lock_for_deferred_commands(deferred_commands_mutex_);
-    deferred_commands_.emplace(std::move(command));
-    return {};
+    {
+      const std::scoped_lock lock_for_deferred_commands(deferred_commands_mutex_);
+      if (!closed_) {
+        deferred_commands_.emplace(std::move(command));
+        return {};
+      }
+    }
+    // The bucket was closed (and its deferred queue already drained) before this command could be
+    // parked. Enqueuing now would strand the command forever, leaking whatever its continuation
+    // captures. Complete it with a cancellation instead so its state is released (CXXCBC-846).
+    command(errc::common::request_canceled);
+    return errc::common::request_canceled;
   }
 
   void for_each_session(utils::movable_function<void(io::mcbp_session&)> handler)
