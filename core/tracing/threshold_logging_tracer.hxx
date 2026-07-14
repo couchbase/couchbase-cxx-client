@@ -23,6 +23,7 @@
 
 #include <asio/io_context.hpp>
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -30,6 +31,15 @@ namespace couchbase::core::tracing
 {
 class threshold_logging_span;
 class threshold_logging_tracer_impl;
+
+/**
+ * Format a dispatch operation identifier (the request opaque) into the "0x<hex>" form used in
+ * threshold reports. The built-in span captures the raw opaque on the hot path and formats it here,
+ * lazily, only when a span is actually reported. Declared in the header so the formatting contract
+ * can be unit-tested directly.
+ */
+[[nodiscard]] auto
+format_dispatch_operation_id(std::uint32_t opaque) -> std::string;
 
 class threshold_logging_tracer
   : public couchbase::tracing::request_tracer

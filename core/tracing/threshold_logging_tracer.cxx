@@ -31,11 +31,24 @@
 #include <memory>
 #include <tao/json/value.hpp>
 
+#include <array>
 #include <chrono>
+#include <cstdint>
+#include <optional>
 #include <utility>
 
 namespace couchbase::core::tracing
 {
+auto
+format_dispatch_operation_id(std::uint32_t opaque) -> std::string
+{
+  // A uint32 in "0x<hex>" form is at most "0x" plus 8 hex digits, so a 12-byte buffer never
+  // overflows and the string is built without a heap allocation until the final copy out.
+  std::array<char, 12> buffer{};
+  const auto result = fmt::format_to_n(buffer.data(), buffer.size(), "0x{:x}", opaque);
+  return { buffer.data(), result.out };
+}
+
 struct reported_span {
   std::chrono::microseconds duration;
   tao::json::value payload;
@@ -62,6 +75,7 @@ private:
   std::uint64_t last_server_duration_us_{ 0 };
   std::uint64_t total_server_duration_us_{ 0 };
   std::optional<std::string> operation_id_{};
+  std::optional<std::uint32_t> operation_id_opaque_{};
   std::optional<std::string> last_local_id_{};
   std::optional<std::string> service_{};
   std::optional<std::string> peer_hostname_{};
@@ -105,6 +119,14 @@ public:
     if (tag_name == tracing::attributes::dispatch::peer_address) {
       peer_hostname_ = value;
     }
+  }
+
+  [[nodiscard]] auto try_set_dispatch_operation_id(std::uint32_t opaque) -> bool override
+  {
+    // Capture the raw opaque; it is formatted lazily in operation_id(), and only when this span is
+    // actually reported (i.e. exceeds the threshold), which keeps the formatting off the hot path.
+    operation_id_opaque_ = opaque;
+    return true;
   }
 
   void end() override;
@@ -160,7 +182,14 @@ public:
 
   [[nodiscard]] auto operation_id() const -> std::optional<std::string>
   {
-    return operation_id_;
+    if (operation_id_.has_value()) {
+      return operation_id_;
+    }
+    if (operation_id_opaque_.has_value()) {
+      // Build the string only here — on the reporting path, never on the hot path.
+      return format_dispatch_operation_id(operation_id_opaque_.value());
+    }
+    return {};
   }
 
   [[nodiscard]] auto last_local_id() const -> std::optional<std::string>
@@ -216,8 +245,8 @@ convert(const std::shared_ptr<threshold_logging_span>& span) -> reported_span
     entry["total_server_duration_us"] = span->total_server_duration_us();
   }
 
-  if (span->operation_id().has_value()) {
-    entry["last_operation_id"] = span->operation_id().value();
+  if (const auto operation_id = span->operation_id(); operation_id.has_value()) {
+    entry["last_operation_id"] = operation_id.value();
   }
 
   if (span->last_local_id().has_value()) {
