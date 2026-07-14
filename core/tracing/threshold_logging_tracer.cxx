@@ -129,6 +129,32 @@ public:
     return true;
   }
 
+  [[nodiscard]] auto try_set_dispatch_local_id(const std::string& local_id) -> bool override
+  {
+    // Capture directly, bypassing the tag-name string that add_tag() would materialize on the hot
+    // path (see request_span::try_set_dispatch_local_id).
+    last_local_id_ = local_id;
+    return true;
+  }
+
+  [[nodiscard]] auto try_set_dispatch_result(std::uint64_t server_duration_us,
+                                             const std::string& peer_address,
+                                             std::uint16_t peer_port) -> bool override
+  {
+    // Mirror the add_tag() bookkeeping without materializing any tag-name strings, including the
+    // same rule for the running total: it is accumulated only on non-dispatch spans, so a dispatch
+    // span records last_server_duration_us_ and leaves the total to be rolled up on its parent in
+    // end(). (In current wiring this setter only runs on the dispatch span, but the guard is kept
+    // so the two paths stay behaviourally identical.)
+    last_server_duration_us_ = server_duration_us;
+    if (name() != tracing::operation::step_dispatch) {
+      total_server_duration_us_ += server_duration_us;
+    }
+    peer_hostname_ = peer_address;
+    peer_port_ = peer_port;
+    return true;
+  }
+
   void end() override;
 
   void set_last_local_id(const std::string& id)
@@ -139,6 +165,11 @@ public:
   void set_operation_id(const std::string& id)
   {
     operation_id_ = id;
+  }
+
+  void set_operation_id_opaque(std::uint32_t opaque)
+  {
+    operation_id_opaque_ = opaque;
   }
 
   void set_peer_hostname(const std::string& hostname)
@@ -409,6 +440,10 @@ threshold_logging_span::end()
       }
       if (operation_id_.has_value()) {
         p->set_operation_id(operation_id_.value());
+      } else if (operation_id_opaque_.has_value()) {
+        // Propagate the raw opaque so the parent still reports the operation id, while keeping the
+        // (rarely needed) formatting deferred to the parent's reporting path.
+        p->set_operation_id_opaque(operation_id_opaque_.value());
       }
       if (peer_hostname_.has_value()) {
         p->set_peer_hostname(peer_hostname_.value());

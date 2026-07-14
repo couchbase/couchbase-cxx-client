@@ -77,6 +77,36 @@ public:
     return false;
   }
 
+  /**
+   * Efficiently record the local connection identifier of a dispatch span without materializing a
+   * tag-name string on the hot path.
+   *
+   * Like try_set_dispatch_operation_id(), the default returns false so the SDK records the value as
+   * a regular string tag and external tracer implementations are unaffected.
+   *
+   * @return true if the span captured the identifier; false to request the string-tag fallback.
+   */
+  [[nodiscard]] virtual auto try_set_dispatch_local_id(const std::string& /* local_id */) -> bool
+  {
+    return false;
+  }
+
+  /**
+   * Efficiently record the result metadata of a dispatch span (server processing time and the peer
+   * socket) in a single call, without materializing tag-name strings on the hot path.
+   *
+   * The default returns false so the SDK records the values as regular string tags and external
+   * tracer implementations are unaffected.
+   *
+   * @return true if the span captured the metadata; false to request the string-tag fallback.
+   */
+  [[nodiscard]] virtual auto try_set_dispatch_result(std::uint64_t /* server_duration_us */,
+                                                     const std::string& /* peer_address */,
+                                                     std::uint16_t /* peer_port */) -> bool
+  {
+    return false;
+  }
+
 private:
   std::string name_{};
   std::shared_ptr<request_span> parent_{ nullptr };
