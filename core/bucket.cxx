@@ -33,6 +33,7 @@
 #include "core/protocol/hello_feature.hxx"
 #include "core/response_handler.hxx"
 #include "core/service_type.hxx"
+#include "core/tracing/constants.hxx"
 #include "core/tracing/tracer_wrapper.hxx"
 #include "core/utils/movable_function.hxx"
 #include "dispatcher.hxx"
@@ -122,7 +123,11 @@ public:
     // TODO(SA): copy from mcbp_command, subject to refactor later
 #ifdef COUCHBASE_CXX_CLIENT_CREATE_OPERATION_SPAN_IN_CORE
     metrics::metric_attributes attrs{
-      service_type::key_value, fmt::format("{}", req->command_), ec, name_, req->scope_name_,
+      tracing::service::key_value,
+      fmt::format("{}", req->command_),
+      metrics::standardized_error_type(ec),
+      name_,
+      req->scope_name_,
       req->collection_name_,
     };
     meter_->record_value(std::move(attrs), req->dispatched_time_);

@@ -22,6 +22,9 @@
 #include "core/metrics/constants.hxx"
 #include "core/tracing/constants.hxx"
 
+#include <algorithm>
+#include <array>
+#include <cctype>
 #include <map>
 #include <memory>
 #include <string>
@@ -62,21 +65,13 @@ extract_error_name(std::error_code ec) -> std::string
   return ec.message();
 }
 
+} // namespace
+
 auto
-get_standardized_error_type(std::error_code ec) -> std::string
+standardized_error_type(std::error_code ec) -> std::string
 {
   if (!ec) {
     return {};
-  }
-
-  // SDK-specific errors
-  if (ec.value() >= 1000) {
-    return "CouchbaseError";
-  }
-
-  // Errors where message and RFC-message don't match
-  if (ec == errc::field_level_encryption::generic_cryptography_failure) {
-    return "CryptoError";
   }
 
   static const std::array<const std::error_category*, 12> cb_categories = {
@@ -88,16 +83,30 @@ get_standardized_error_type(std::error_code ec) -> std::string
     &impl::transaction_category(), &impl::transaction_op_category(),
   };
 
-  if (std::any_of(
-        cb_categories.begin(), cb_categories.end(), [&ec](const std::error_category* cat) -> bool {
-          return &ec.category() == cat;
-        })) {
-    return snake_case_to_camel_case(extract_error_name(ec));
+  // Classify only against the Couchbase categories. Numeric error values overlap across the
+  // platform/system/asio categories, so a value-based check alone would misclassify a foreign error
+  // (e.g. a TLS or system error that happens to have value >= 1000) as a Couchbase error.
+  const bool couchbase_error =
+    std::any_of(cb_categories.begin(), cb_categories.end(), [&ec](const std::error_category* cat) {
+      return &ec.category() == cat;
+    });
+  if (!couchbase_error) {
+    return "_OTHER";
   }
 
-  return "_OTHER";
+  // The SDK's network errors (couchbase::errc::network) use values >= 1000 and are reported under a
+  // single generic bucket rather than by individual name.
+  if (ec.value() >= 1000) {
+    return "CouchbaseError";
+  }
+
+  // Errors where message and RFC-message don't match
+  if (ec == errc::field_level_encryption::generic_cryptography_failure) {
+    return "CryptoError";
+  }
+
+  return snake_case_to_camel_case(extract_error_name(ec));
 }
-} // namespace
 
 auto
 metric_attributes::encode() const -> std::map<std::string, std::string>
@@ -124,8 +133,8 @@ metric_attributes::encode() const -> std::map<std::string, std::string>
   if (collection_name) {
     tags.emplace(tracing::attributes::op::collection_name, collection_name.value());
   }
-  if (ec) {
-    tags.emplace(tracing::attributes::op::error_type, get_standardized_error_type(ec));
+  if (!error_type.empty()) {
+    tags.emplace(tracing::attributes::op::error_type, error_type);
   }
 
   return tags;
@@ -150,28 +159,49 @@ meter_wrapper::stop()
   meter_->stop();
 }
 
-void
-meter_wrapper::record_value(const std::map<std::string, std::string>& raw_attrs,
-                            std::chrono::microseconds duration)
+auto
+meter_wrapper::value_recorder_for(const metric_attributes& attrs)
+  -> std::shared_ptr<couchbase::metrics::value_recorder>
 {
-  meter_->get_value_recorder(operation_meter_name, raw_attrs)->record_value(duration.count());
+  {
+    const std::scoped_lock lock(recorder_cache_mutex_);
+    if (auto it = recorder_cache_.find(attrs); it != recorder_cache_.end()) {
+      return it->second;
+    }
+  }
+
+  // Resolve outside the lock: encode() and the pluggable meter's get_value_recorder() are
+  // user-visible code paths, and holding the cache mutex across them would serialize every
+  // first-time resolution and risk deadlock if a custom meter re-entered record_value(). The
+  // meter returns a stable recorder for a given name/tag set, so resolving the same key twice on
+  // a race is harmless.
+  auto recorder = meter_->get_value_recorder(operation_meter_name, attrs.encode());
+
+  const std::scoped_lock lock(recorder_cache_mutex_);
+  // A concurrent caller may have inserted this key while the lock was released; emplace keeps the
+  // first-inserted recorder and returns it, so all callers share one recorder per key.
+  return recorder_cache_.emplace(attrs, std::move(recorder)).first->second;
 }
 
 void
 meter_wrapper::record_value(metric_attributes attrs,
                             std::chrono::steady_clock::time_point start_time)
 {
-  auto [cluster_name, cluster_uuid] = cluster_label_listener_->cluster_labels();
-  if (cluster_name) {
-    attrs.internal.cluster_name = cluster_name;
-  }
-  if (cluster_uuid) {
-    attrs.internal.cluster_uuid = cluster_uuid;
+  // The listener is optional -- the wrapper can be constructed without one -- so only enrich the
+  // attributes with cluster labels when it is present.
+  if (cluster_label_listener_) {
+    auto [cluster_name, cluster_uuid] = cluster_label_listener_->cluster_labels();
+    if (cluster_name) {
+      attrs.internal.cluster_name = cluster_name;
+    }
+    if (cluster_uuid) {
+      attrs.internal.cluster_uuid = cluster_uuid;
+    }
   }
 
-  record_value(attrs.encode(),
-               std::chrono::duration_cast<std::chrono::microseconds>(
-                 std::chrono::steady_clock::now() - start_time));
+  value_recorder_for(attrs)->record_value(std::chrono::duration_cast<std::chrono::microseconds>(
+                                            std::chrono::steady_clock::now() - start_time)
+                                            .count());
 }
 
 auto

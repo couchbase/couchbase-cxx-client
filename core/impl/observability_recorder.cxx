@@ -45,7 +45,9 @@ observability_recorder::operation_span() -> const std::shared_ptr<couchbase::tra
 void
 observability_recorder::finish(const std::error_code ec)
 {
-  metric_attributes_.ec = ec;
+  // Precompute the standardized error type once here, so the recorder-cache lookup keyed on it does
+  // not build a string per comparison.
+  metric_attributes_.error_type = metrics::standardized_error_type(ec);
   meter_.lock()->record_value(std::move(metric_attributes_), start_time_);
   span_->end();
 }
