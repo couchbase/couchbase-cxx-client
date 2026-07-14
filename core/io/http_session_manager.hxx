@@ -613,9 +613,9 @@ public:
             self->pending_sessions_[new_session->type()].push_back(new_session);
           }
           self->connect_then_send_pending_op(
-            new_session, preferred_node, dispatch_deadline, deadline, cb);
+            new_session, preferred_node, dispatch_deadline, deadline, std::move(cb));
 #else
-          self->connect_then_send_pending_op(new_session, preferred_node, deadline, cb);
+          self->connect_then_send_pending_op(new_session, preferred_node, deadline, std::move(cb));
 #endif
         }
       } else {

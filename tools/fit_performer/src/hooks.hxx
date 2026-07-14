@@ -87,28 +87,28 @@ public:
   TxnSvcHook(const TxnSvcHook&) = delete;
   TxnSvcHook& operator=(const TxnSvcHook&) = delete;
 
-  void hook_fn1(
-    std::shared_ptr<couchbase::core::transactions::attempt_context> ctx,
-    std::function<void(std::optional<couchbase::core::transactions::error_class>)>&& handler);
+  void hook_fn1(std::shared_ptr<couchbase::core::transactions::attempt_context> ctx,
+                couchbase::core::utils::movable_function<
+                  void(std::optional<couchbase::core::transactions::error_class>)>&& handler);
 
-  void hook_fn2(
-    std::shared_ptr<couchbase::core::transactions::attempt_context> ctx,
-    const std::string& doc_id,
-    std::function<void(std::optional<couchbase::core::transactions::error_class>)>&& handler);
+  void hook_fn2(std::shared_ptr<couchbase::core::transactions::attempt_context> ctx,
+                const std::string& doc_id,
+                couchbase::core::utils::movable_function<
+                  void(std::optional<couchbase::core::transactions::error_class>)>&& handler);
 
-  void hook_fn5(
-    const std::string& id,
-    std::function<void(std::optional<couchbase::core::transactions::error_class>)>&& handler);
+  void hook_fn5(const std::string& id,
+                couchbase::core::utils::movable_function<
+                  void(std::optional<couchbase::core::transactions::error_class>)>&& handler);
 
-  void hook_fn6(
-    std::function<void(std::optional<couchbase::core::transactions::error_class>)>&& handler);
+  void hook_fn6(couchbase::core::utils::movable_function<
+                void(std::optional<couchbase::core::transactions::error_class>)>&& handler);
 
-  void hook_fn7(
-    const std::string& bucket_name,
-    std::function<void(std::optional<couchbase::core::transactions::error_class>)>&& handler);
+  void hook_fn7(const std::string& bucket_name,
+                couchbase::core::utils::movable_function<
+                  void(std::optional<couchbase::core::transactions::error_class>)>&& handler);
 
-  void fire_action(
-    std::function<void(std::optional<couchbase::core::transactions::error_class>)>&& handler);
+  void fire_action(couchbase::core::utils::movable_function<
+                   void(std::optional<couchbase::core::transactions::error_class>)>&& handler);
 
   std::optional<const std::string> hook_fn3(
     std::shared_ptr<couchbase::core::transactions::attempt_context> ctx);
