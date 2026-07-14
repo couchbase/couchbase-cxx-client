@@ -22,7 +22,6 @@
 #include "core/error_context/key_value_error_map_info.hxx"
 #include "core/metrics/meter_wrapper.hxx"
 #include "core/operations/operation_traits.hxx"
-#include "core/platform/uuid.h"
 #include "core/protocol/client_request.hxx"
 #include "core/protocol/client_response.hxx"
 #include "core/protocol/cmd_get_collection_id.hxx"
@@ -30,6 +29,7 @@
 #include "core/utils/movable_function.hxx"
 #include "couchbase/metrics/meter.hxx"
 #include "couchbase/tracing/request_tracer.hxx"
+#include "mcbp_command_id.hxx"
 #include "mcbp_session.hxx"
 #include "mcbp_traits.hxx"
 #include "retry_orchestrator.hxx"
@@ -80,9 +80,8 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
   mcbp_command_handler handler_{};
   std::shared_ptr<Manager> manager_{};
   std::chrono::milliseconds timeout_{};
-  std::string id_{ fmt::format("{:02x}/{}",
-                               static_cast<std::uint8_t>(encoded_request_type::body_type::opcode),
-                               uuid::to_string(uuid::random())) };
+  // Built lazily by id(); empty until first requested. See id().
+  mutable std::string id_{};
 #ifdef COUCHBASE_CXX_CLIENT_CREATE_OPERATION_SPAN_IN_CORE
   std::shared_ptr<couchbase::tracing::request_span> span_{ nullptr };
 #endif
@@ -121,10 +120,31 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
           request.id,
           timeout_.count(),
           durability_timeout_floor.count(),
-          id_);
+          id());
         timeout_ = durability_timeout_floor;
       }
     }
+  }
+
+  // The diagnostic identifier ("<opcode>/<uuid>") is used only in log lines,
+  // retry traces, and the returned key_value error context — never on the wire.
+  // Build it lazily on first use and cache it, so it is materialized at most once
+  // per command instead of eagerly in every constructor, and repeated readers -- a
+  // retry log line and then the completion's error context -- share the one cached
+  // value. The completion path builds the error context, so a completed operation
+  // still materializes it once; the laziness only avoids the cost for commands that
+  // never reach a point that needs it. The cache is logically const (it does not
+  // change the command's observable value), hence the mutable member and const
+  // accessor. Access while the command is in flight
+  // is serialized -- non-cancellable operations run on their session's single io
+  // thread, and cancellable (replica) operations confine access to the command
+  // strand (see strand_) -- so the one-time memoizing write needs no synchronization.
+  [[nodiscard]] auto id() const -> const std::string&
+  {
+    if (id_.empty()) {
+      id_ = make_command_id(encoded_request_type::body_type::opcode);
+    }
+    return id_;
   }
 
   void start(mcbp_command_handler&& handler)
@@ -237,7 +257,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
         auto time_left = deadline.expiry() - std::chrono::steady_clock::now();
         CB_LOG_TRACE(R"([{}] timeout operation id="{}", {}, key="{}", partition={}, time_left={})",
                      session_ ? session_->log_prefix() : manager_->log_prefix(),
-                     id_,
+                     id(),
                      encoded_request_type::body_type::opcode,
                      request.id,
                      request.partition,
@@ -302,7 +322,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                  session_->log_prefix(),
                  request.id,
                  std::chrono::duration_cast<std::chrono::milliseconds>(time_left).count(),
-                 id_);
+                 id());
     request.retries.add_reason(retry_reason::key_value_collection_outdated);
     if (time_left < backoff) {
       return invoke_handler(make_error_code(request.retries.idempotent()
@@ -333,7 +353,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
             session_->log_prefix(),
             request.id,
             timeout_.count(),
-            id_);
+            id());
           return request_collection_id();
         }
       } else {
