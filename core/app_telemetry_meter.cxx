@@ -740,6 +740,15 @@ app_telemetry_meter::disable()
                tao::json::to_string(tao::json::value{
                  { "nothing_to_report", impl_->nothing_to_report() },
                }));
+  // Bump the generation before swapping impl_: a per-connection cache
+  // (app_telemetry_recorder_cache) reads the generation without this lock, so if the bump followed
+  // the swap there would be a window in which the cache still observes the old generation while the
+  // recorders have already been replaced, and it would keep recording into a now-retired recorder.
+  // Bumping first narrows that window but does not close it -- a lockless reader may still observe
+  // the old generation value for a bounded time after the bump -- so a brief race is tolerated by
+  // design: the cache re-reads the generation and drops any recorder it cached under a generation
+  // that has since moved.
+  generation_.fetch_add(1, std::memory_order_relaxed);
   impl_ = std::make_unique<null_app_telemetry_meter_impl>();
 }
 
@@ -751,6 +760,9 @@ app_telemetry_meter::enable()
     return;
   }
   CB_LOG_DEBUG("Enable app telemetry meter.");
+  // Bump the generation before swapping impl_ (see disable() for the tolerated race): keep the same
+  // bump-before-swap ordering so the cache's generation re-read reliably retires old recorders.
+  generation_.fetch_add(1, std::memory_order_relaxed);
   impl_ = std::make_unique<default_app_telemetry_meter_impl>();
 }
 
@@ -784,9 +796,19 @@ app_telemetry_meter::generate_report(std::vector<std::byte>& output_buffer)
   if (impl_->nothing_to_report()) {
     return;
   }
+  // Bump the generation before replacing impl_ (see disable() for the tolerated race): keep the
+  // same bump-before-swap ordering so the cache's generation re-read reliably retires old
+  // recorders.
+  generation_.fetch_add(1, std::memory_order_relaxed);
   const auto old_impl = std::move(impl_);
   impl_ = std::make_unique<default_app_telemetry_meter_impl>();
   impl_->set_node_labels_cache(old_impl->current_node_labels());
   old_impl->generate_to(output_buffer, agent_);
+}
+
+auto
+app_telemetry_meter::generation() const noexcept -> std::uint64_t
+{
+  return generation_.load(std::memory_order_relaxed);
 }
 } // namespace couchbase::core

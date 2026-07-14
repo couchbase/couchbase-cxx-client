@@ -17,6 +17,7 @@
 
 #include "service_type.hxx"
 
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <memory>
@@ -191,10 +192,86 @@ public:
     -> std::shared_ptr<app_telemetry_value_recorder>;
   void generate_report(std::vector<std::byte>& output_buffer);
 
+  /**
+   * A monotonically increasing counter that changes whenever the underlying recorders are replaced
+   * (enable/disable/generate_report). Callers that cache a recorder must re-resolve it when the
+   * generation changes, otherwise they would keep writing to a recorder that is no longer reported.
+   */
+  [[nodiscard]] auto generation() const noexcept -> std::uint64_t;
+
 private:
   std::string agent_;
   std::unique_ptr<app_telemetry_meter_impl> impl_;
   std::shared_mutex impl_mutex_{};
+  std::atomic<std::uint64_t> generation_{ 0 };
+};
+
+/**
+ * A single-slot, generation-aware cache of an app_telemetry recorder, held per connection. It keeps
+ * the per-operation recorder lookup — two locks and nested string-map traversals inside the meter —
+ * off the hot path by resolving once and re-resolving only when the key or the meter's generation
+ * changes.
+ *
+ * The cache's own fields are non-atomic and unsynchronized: correctness relies on the cache being
+ * accessed from a single executor only (the connection's IO thread). The meter's generation, by
+ * contrast, is atomic and may be bumped from another executor — enable/disable/generate_report can
+ * run on unrelated Asio handlers — so the cache reads it through an atomic load and re-resolves
+ * whenever the observed generation differs from the one it cached; the resolution itself re-checks
+ * the generation and retries, so the cached (recorder, generation) pair is always coherent.
+ *
+ * Because the read and the subsequent record happen without a lock, there remains a narrow, benign
+ * window: if the meter is swapped immediately after value_recorder() returns, that operation's
+ * sample can land in a just-retired recorder and be missed by the in-flight report. This is bounded
+ * to a single operation around an enable/disable/report transition, is not a memory-safety issue
+ * (the recorder is a shared_ptr and stays alive), and self-corrects on the next operation once the
+ * new generation is observed. Eliminating it entirely would require holding a lock across every
+ * operation, defeating the purpose of the cache. It also assumes a stable meter — the same meter
+ * instance is passed for the life of the cache — since the key does not include the meter's
+ * identity.
+ */
+class app_telemetry_recorder_cache
+{
+public:
+  [[nodiscard]] auto is_valid_for(std::uint64_t generation,
+                                  const std::string& node_uuid,
+                                  const std::string& bucket_name) const -> bool
+  {
+    return recorder_ != nullptr && generation_ == generation && node_uuid_ == node_uuid &&
+           bucket_name_ == bucket_name;
+  }
+
+  // Returns by value rather than by const reference: the cached recorder can be replaced on the
+  // next call (a key or generation change), so handing out a reference into the cache would be a
+  // dangling/aliasing hazard. The caller takes a shared_ptr by value anyway, so this only makes the
+  // (cheap) refcount bump explicit here.
+  auto value_recorder(app_telemetry_meter& meter,
+                      const std::string& node_uuid,
+                      const std::string& bucket_name)
+    -> std::shared_ptr<app_telemetry_value_recorder>
+  {
+    auto generation = meter.generation();
+    while (!is_valid_for(generation, node_uuid, bucket_name)) {
+      auto recorder = meter.value_recorder(node_uuid, bucket_name);
+      // Re-read the generation: if the meter was swapped while we resolved, the recorder we just
+      // fetched may already be retired. Retry with the new generation so we never cache a recorder
+      // under a generation that has already moved.
+      if (const auto latest = meter.generation(); latest != generation) {
+        generation = latest;
+        continue;
+      }
+      recorder_ = std::move(recorder);
+      generation_ = generation;
+      node_uuid_ = node_uuid;
+      bucket_name_ = bucket_name;
+    }
+    return recorder_;
+  }
+
+private:
+  std::shared_ptr<app_telemetry_value_recorder> recorder_{};
+  std::uint64_t generation_{ 0 };
+  std::string node_uuid_{};
+  std::string bucket_name_{};
 };
 
 } // namespace couchbase::core

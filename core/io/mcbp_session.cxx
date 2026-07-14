@@ -23,6 +23,7 @@
 #include "core/columnar/background_bootstrap_listener.hxx"
 #endif
 #include "configuration_belongs_to_session.hxx"
+#include "core/app_telemetry_meter.hxx"
 #include "core/config_listener.hxx"
 #include "core/diagnostics.hxx"
 #include "core/impl/bootstrap_error.hxx"
@@ -1352,6 +1353,12 @@ public:
     return node_uuid_;
   }
 
+  auto app_telemetry_recorder(app_telemetry_meter& meter, const std::string& bucket_name)
+    -> std::shared_ptr<app_telemetry_value_recorder>
+  {
+    return app_telemetry_recorder_cache_.value_recorder(meter, node_uuid_, bucket_name);
+  }
+
   [[nodiscard]] auto is_stopped() const -> bool
   {
     return stopped_;
@@ -2289,6 +2296,7 @@ private:
 
   const std::string client_id_;
   std::string node_uuid_;
+  app_telemetry_recorder_cache app_telemetry_recorder_cache_{};
   const std::string id_{ uuid::to_string(uuid::random()) };
   asio::io_context& ctx_;
   asio::ip::tcp::resolver resolver_;
@@ -2467,6 +2475,14 @@ auto
 mcbp_session::node_uuid() const -> const std::string&
 {
   return impl_->node_uuid();
+}
+
+auto
+mcbp_session::app_telemetry_recorder(app_telemetry_meter& meter,
+                                     const std::string& bucket_name) const
+  -> std::shared_ptr<app_telemetry_value_recorder>
+{
+  return impl_->app_telemetry_recorder(meter, bucket_name);
 }
 
 auto
