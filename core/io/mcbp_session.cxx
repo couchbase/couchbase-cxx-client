@@ -56,6 +56,7 @@
 #include "core/topology/configuration_fmt.hxx"
 #include "mcbp_context.hxx"
 #include "mcbp_message.hxx"
+#include "mcbp_output_queue.hxx"
 #include "mcbp_parser.hxx"
 #include "retry_orchestrator.hxx"
 #include "streams.hxx"
@@ -1490,8 +1491,7 @@ public:
       return;
     }
     CB_LOG_TRACE("{} MCBP send {}", log_prefix_, mcbp_header_view(buf));
-    const std::scoped_lock lock(output_buffer_mutex_);
-    output_buffer_.emplace_back(std::move(buf));
+    output_queue_.stage(std::move(buf));
   }
 
   void flush()
@@ -1499,9 +1499,13 @@ public:
     if (stopped_) {
       return;
     }
-    asio::post(asio::bind_executor(ctx_, [self = shared_from_this()]() {
-      self->do_write();
-    }));
+    // Only post when the queue was idle; while a write is scheduled or in flight the completion
+    // handler re-drives do_write, so an extra post would be wasted work on the hot path.
+    if (output_queue_.mark_for_dispatch()) {
+      asio::post(asio::bind_executor(ctx_, [self = shared_from_this()]() {
+        self->do_write();
+      }));
+    }
   }
 
   void write_and_flush(std::vector<std::byte>&& buf)
@@ -1509,8 +1513,13 @@ public:
     if (stopped_) {
       return;
     }
-    write(std::move(buf));
-    flush();
+    CB_LOG_TRACE("{} MCBP send {}", log_prefix_, mcbp_header_view(buf));
+    // Stage the buffer and post do_write only on the idle -> scheduled transition (single lock).
+    if (output_queue_.enqueue(std::move(buf))) {
+      asio::post(asio::bind_executor(ctx_, [self = shared_from_this()]() {
+        self->do_write();
+      }));
+    }
   }
 
   void remove_request(std::shared_ptr<mcbp::queue_request> request) override
@@ -2123,10 +2132,7 @@ private:
                                   connection_endpoints_.remote.port());
       }
       parser_.reset();
-      {
-        const std::scoped_lock lock(output_buffer_mutex_);
-        output_buffer_.clear();
-      }
+      output_queue_.reset();
       // cppcheck-suppress knownConditionTrueFalse
       if (stopped_) {
         return;
@@ -2248,14 +2254,12 @@ private:
     if (stopped_ || !stream_->is_open()) {
       return;
     }
-    const std::scoped_lock lock(writing_buffer_mutex_, output_buffer_mutex_);
-    if (!writing_buffer_.empty() || output_buffer_.empty()) {
+    if (!output_queue_.begin_writing()) {
       return;
     }
-    std::swap(writing_buffer_, output_buffer_);
     std::vector<asio::const_buffer> buffers;
-    buffers.reserve(writing_buffer_.size());
-    for (auto& buf : writing_buffer_) {
+    buffers.reserve(output_queue_.writing().size());
+    for (const auto& buf : output_queue_.writing()) {
       CB_LOG_PROTOCOL("[MCBP, OUT] host=\"{}\", sport={}, dport={}, buffer_size={}{:a}",
                       connection_endpoints_.remote_address,
                       connection_endpoints_.local.port(),
@@ -2285,10 +2289,7 @@ private:
                        ec.message());
           return self->stop(retry_reason::socket_closed_while_in_flight);
         }
-        {
-          const std::scoped_lock inner_lock(self->writing_buffer_mutex_);
-          self->writing_buffer_.clear();
-        }
+        self->output_queue_.finish_writing();
         asio::post(asio::bind_executor(self->ctx_, [self]() {
           self->do_write();
           self->do_read();
@@ -2333,12 +2334,9 @@ private:
   std::atomic<std::uint32_t> opaque_{ 0 };
 
   std::array<std::byte, 16384> input_buffer_{};
-  std::vector<std::vector<std::byte>> output_buffer_{};
+  mcbp_output_queue output_queue_{};
   std::vector<std::vector<std::byte>> pending_buffer_{};
-  std::vector<std::vector<std::byte>> writing_buffer_{};
-  std::mutex output_buffer_mutex_{};
   std::mutex pending_buffer_mutex_{};
-  std::mutex writing_buffer_mutex_{};
   std::string bootstrap_hostname_{};
   std::string bootstrap_port_{};
   std::string bootstrap_address_{};
