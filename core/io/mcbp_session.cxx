@@ -54,6 +54,7 @@
 #include "core/sasl/error_fmt.h"
 #include "core/topology/capabilities_fmt.hxx"
 #include "core/topology/configuration_fmt.hxx"
+#include "mcbp_buffer_pool.hxx"
 #include "mcbp_context.hxx"
 #include "mcbp_message.hxx"
 #include "mcbp_output_queue.hxx"
@@ -2213,6 +2214,10 @@ private:
 
         for (;;) {
           mcbp_message msg{};
+          // Start from a recycled buffer (if any) and tag the message with the pool so the frame
+          // buffer is returned when the decoded response is destroyed on this IO thread.
+          msg.body = tls_response_body_pool().acquire();
+          msg.recycle_body = true;
           switch (self->parser_.next(msg)) {
             case mcbp_parser::result::ok: {
               if (self->stopped_) {
@@ -2237,6 +2242,9 @@ private:
               }
             } break;
             case mcbp_parser::result::need_data:
+              // The frame is incomplete, so next() did not consume the buffer we handed it; return
+              // it to the pool instead of letting this partial-read iteration drain the pool.
+              tls_response_body_pool().release(std::move(msg.body));
               self->reading_ = false;
               if (!self->stopped_ && self->stream_->is_open()) {
                 self->do_read();
