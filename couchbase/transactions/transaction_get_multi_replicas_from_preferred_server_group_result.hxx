@@ -15,12 +15,12 @@
  */
 #pragma once
 
-#include "couchbase/error_codes.hxx"
-#include <couchbase/codec/default_json_transcoder.hxx>
+#include <couchbase/codec/lenient_json_transcoder.hxx>
 
+#include <cstddef>
 #include <optional>
 #include <stdexcept>
-#include <system_error>
+#include <string>
 #include <vector>
 
 namespace couchbase
@@ -48,40 +48,40 @@ public:
   /**
    * Content of the document.
    *
+   * When no transcoder is given, the document is decoded leniently, without validating its
+   * common flags. Pass a transcoder explicitly to enforce its flag handling instead.
+   *
+   * @return content of the document.
+   */
+  template<typename Document, std::enable_if_t<!codec::is_transcoder_v<Document>, bool> = true>
+  [[nodiscard]] auto content_as(std::size_t spec_index) const -> Document
+  {
+    return codec::default_lenient_json_transcoder::decode<Document>(content_at(spec_index));
+  }
+
+  /**
+   * Content of the document, decoded with the given transcoder.
+   *
    * @return content of the document.
    */
   template<typename Document,
-           typename Transcoder = codec::default_json_transcoder,
+           typename Transcoder,
            std::enable_if_t<!codec::is_transcoder_v<Document>, bool> = true,
            std::enable_if_t<codec::is_transcoder_v<Transcoder>, bool> = true>
   [[nodiscard]] auto content_as(std::size_t spec_index) const -> Document
   {
-    if (spec_index >= content_.size()) {
-      throw std::invalid_argument("spec index " + std::to_string(spec_index) + " is not valid");
-    }
-    if (const auto& content = content_[spec_index]; content.has_value()) {
-      return Transcoder::template decode<Document>(content.value());
-    }
-    throw std::system_error(errc::key_value::document_not_found,
-                            "document was not found for index " + std::to_string(spec_index));
+    return Transcoder::template decode<Document>(content_at(spec_index));
   }
 
   /**
-   * Content of the document.
+   * Content of the document, decoded with the given transcoder.
    *
    * @return content of the document.
    */
   template<typename Transcoder, std::enable_if_t<codec::is_transcoder_v<Transcoder>, bool> = true>
   [[nodiscard]] auto content_as(std::size_t spec_index) const -> typename Transcoder::document_type
   {
-    if (spec_index >= content_.size()) {
-      throw std::invalid_argument("spec index " + std::to_string(spec_index) + " is not valid");
-    }
-    if (const auto& content = content_[spec_index]; content.has_value()) {
-      return Transcoder::decode(content.value());
-    }
-    throw std::system_error(errc::key_value::document_not_found,
-                            "document was not found for index " + std::to_string(spec_index));
+    return Transcoder::decode(content_at(spec_index));
   }
 
   /**
@@ -105,6 +105,8 @@ private:
     : content_{ std::move(content) }
   {
   }
+
+  [[nodiscard]] auto content_at(std::size_t spec_index) const -> const codec::encoded_value&;
 
   std::vector<std::optional<codec::encoded_value>> content_;
 };

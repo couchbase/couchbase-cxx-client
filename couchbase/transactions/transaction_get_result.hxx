@@ -18,7 +18,7 @@
 #include <string>
 
 #include <couchbase/cas.hxx>
-#include <couchbase/codec/default_json_transcoder.hxx>
+#include <couchbase/codec/lenient_json_transcoder.hxx>
 #include <couchbase/collection.hxx>
 #include <couchbase/result.hxx>
 
@@ -64,10 +64,24 @@ public:
   /**
    * Content of the document.
    *
+   * When no transcoder is given, the document is decoded leniently, without validating its
+   * common flags. Pass a transcoder explicitly to enforce its flag handling instead.
+   *
+   * @return content of the document.
+   */
+  template<typename Document, std::enable_if_t<!codec::is_transcoder_v<Document>, bool> = true>
+  [[nodiscard]] auto content_as() const -> Document
+  {
+    return codec::default_lenient_json_transcoder::decode<Document>(content());
+  }
+
+  /**
+   * Content of the document, decoded with the given transcoder.
+   *
    * @return content of the document.
    */
   template<typename Document,
-           typename Transcoder = codec::default_json_transcoder,
+           typename Transcoder,
            std::enable_if_t<!codec::is_transcoder_v<Document>, bool> = true,
            std::enable_if_t<codec::is_transcoder_v<Transcoder>, bool> = true>
   [[nodiscard]] auto content_as() const -> Document
@@ -76,7 +90,7 @@ public:
   }
 
   /**
-   * Content of the document.
+   * Content of the document, decoded with the given transcoder.
    *
    * @return content of the document.
    */

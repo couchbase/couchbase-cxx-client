@@ -183,6 +183,8 @@ set(couchbase_cxx_client_FILES
     core/impl/public_cluster.cxx
     core/impl/public_logger.cxx
     core/impl/public_scan_result.cxx
+    core/impl/public_transaction_get_multi_replicas_from_preferred_server_group_result.cxx
+    core/impl/public_transaction_get_multi_result.cxx
     core/impl/public_transaction_get_result.cxx
     core/impl/query.cxx
     core/impl/query_error_category.cxx

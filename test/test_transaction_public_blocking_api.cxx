@@ -104,6 +104,38 @@ TEST_CASE("transactions public blocking API: can get", "[transactions]")
   CHECK_FALSE(tx_err.ec());
 }
 
+TEST_CASE("transactions public blocking API: get reads JSON stored with non-JSON common flags",
+          "[transactions]")
+{
+  test::utils::integration_test_guard integration;
+
+  auto id = test::utils::uniq_id("txn");
+  auto c = integration.public_cluster();
+  auto coll = c.bucket(integration.ctx.bucket).default_collection();
+
+  // Store valid JSON, but tagged with binary common flags, as an application using a raw binary
+  // transcoder would. Before CXXCBC-847 the transactions read path defaulted to the strict JSON
+  // transcoder and threw while decoding such a document; it must now read it leniently.
+  auto [err, upsert_res] = coll
+                             .upsert<couchbase::codec::raw_binary_transcoder>(
+                               id, couchbase::core::utils::json::generate_binary(content), {})
+                             .get();
+  REQUIRE_SUCCESS(err.ec());
+  REQUIRE_FALSE(upsert_res.cas().empty());
+
+  auto [tx_err, result] = c.transactions()->run(
+    [id, &coll](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
+      auto [e, doc] = ctx->get(coll, id);
+      CHECK_FALSE(e.ec());
+      CHECK(doc.id() == id);
+      CHECK(doc.content_as<tao::json::value>() == content);
+      return {};
+    },
+    txn_opts());
+  CHECK_FALSE(result.transaction_id.empty());
+  CHECK_FALSE(tx_err.ec());
+}
+
 TEST_CASE("transactions public blocking API: get returns error if doc doesn't exist",
           "[transactions]")
 {
