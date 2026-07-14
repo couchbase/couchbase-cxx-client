@@ -21,6 +21,31 @@
 
 #include "core/logger/logger.hxx"
 
+#include <spdlog/fmt/bundled/format.h>
+
+#include <atomic>
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace
+{
+// Counts how many times its fmt formatter runs, so a test can assert whether the logging macro
+// evaluated (formatted) its arguments at all.
+std::atomic<int> probe_format_count{ 0 };
+struct format_probe {
+};
+} // namespace
+
+template<>
+struct fmt::formatter<format_probe> : fmt::formatter<std::string_view> {
+  auto format(format_probe /*probe*/, fmt::format_context& ctx) const -> decltype(ctx.out())
+  {
+    probe_format_count.fetch_add(1, std::memory_order_relaxed);
+    return fmt::formatter<std::string_view>::format("probe", ctx);
+  }
+};
+
 TEST_CASE("unit: simple callback", "[unit]")
 {
   std::vector<std::string> captured_logs;
@@ -132,4 +157,35 @@ TEST_CASE("unit: reregister custom log callback", "[unit]")
   assert(captured_logs.size() == 2);
   assert(captured_logs[0].find("Test error message") != std::string::npos);
   assert(captured_logs[1].find("Test error message 3") != std::string::npos);
+}
+
+TEST_CASE("unit: no argument formatting when logging disabled and no callback", "[unit]")
+{
+  couchbase::logger::unregister_log_callback();
+  couchbase::logger::set_level(couchbase::logger::log_level::off);
+  probe_format_count.store(0);
+
+  CB_LOG_TRACE("value={}", format_probe{});
+
+  REQUIRE(probe_format_count.load() == 0);
+}
+
+TEST_CASE("unit: arguments formatted and delivered when a callback is registered", "[unit]")
+{
+  std::vector<std::string> captured;
+  couchbase::logger::register_log_callback(
+    [&captured](std::string_view msg,
+                couchbase::logger::log_level /*level*/,
+                couchbase::logger::log_location /*location*/) {
+      captured.emplace_back(msg);
+    });
+  couchbase::logger::set_level(couchbase::logger::log_level::off);
+  probe_format_count.store(0);
+
+  CB_LOG_TRACE("value={}", format_probe{});
+
+  couchbase::logger::unregister_log_callback();
+  REQUIRE(probe_format_count.load() == 1);
+  REQUIRE_FALSE(captured.empty());
+  REQUIRE(captured.back().find("value=probe") != std::string::npos);
 }

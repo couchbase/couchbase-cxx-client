@@ -62,6 +62,10 @@ std::atomic_int file_logger_version{ 0 };
 std::shared_ptr<couchbase::core::logger::log_callback> log_callback{};
 std::mutex log_callback_mutex;
 std::atomic_int log_callback_version{ 0 };
+// Mirrors "is log_callback set?" so the hot-path predicate can be answered with a single atomic
+// load, without copying the owning shared_ptr. Updated under log_callback_mutex alongside
+// log_callback.
+std::atomic<bool> log_callback_present{ false };
 
 auto
 get_file_logger() -> std::shared_ptr<spdlog::logger>
@@ -94,6 +98,7 @@ update_callback_logger(const std::shared_ptr<couchbase::core::logger::log_callba
 {
   const std::scoped_lock lock(log_callback_mutex);
   log_callback = new_callback;
+  log_callback_present.store(new_callback != nullptr, std::memory_order_relaxed);
   ++log_callback_version;
 }
 
@@ -194,6 +199,14 @@ should_log(level lvl) -> bool
     return get_file_logger()->should_log(translate_level(lvl));
   }
   return false;
+}
+
+auto
+has_custom_callback() -> bool
+{
+  // A log macro asks this on every call; answer it with a single atomic load rather than copying
+  // the owning shared_ptr that get_custom_callback() returns.
+  return log_callback_present.load(std::memory_order_relaxed);
 }
 
 namespace detail
