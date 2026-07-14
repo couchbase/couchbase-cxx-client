@@ -346,14 +346,16 @@ fit_cxx::TxnSvcHook::TxnSvcHook(
 void
 fit_cxx::TxnSvcHook::hook_fn5(
   const std::string& id,
-  std::function<void(std::optional<couchbase::core::transactions::error_class>)>&& handler)
+  couchbase::core::utils::movable_function<
+    void(std::optional<couchbase::core::transactions::error_class>)>&& handler)
 {
   return hook_fn2(nullptr, id, std::move(handler));
 }
 
 void
 fit_cxx::TxnSvcHook::hook_fn6(
-  std::function<void(std::optional<couchbase::core::transactions::error_class>)>&& handler)
+  couchbase::core::utils::movable_function<
+    void(std::optional<couchbase::core::transactions::error_class>)>&& handler)
 {
   return hook_fn1(nullptr, std::move(handler));
 }
@@ -361,7 +363,8 @@ fit_cxx::TxnSvcHook::hook_fn6(
 void
 fit_cxx::TxnSvcHook::hook_fn7(
   const std::string& bucket_name,
-  std::function<void(std::optional<couchbase::core::transactions::error_class>)>&& handler)
+  couchbase::core::utils::movable_function<
+    void(std::optional<couchbase::core::transactions::error_class>)>&& handler)
 {
   {
     // Guard the shared state, but release the lock before calling hook_fn1() (which locks mutex_
@@ -378,7 +381,8 @@ fit_cxx::TxnSvcHook::hook_fn7(
 void
 fit_cxx::TxnSvcHook::hook_fn1(
   std::shared_ptr<couchbase::core::transactions::attempt_context> ctx,
-  std::function<void(std::optional<couchbase::core::transactions::error_class>)>&& handler)
+  couchbase::core::utils::movable_function<
+    void(std::optional<couchbase::core::transactions::error_class>)>&& handler)
 {
   std::scoped_lock lock(mutex_);
   calls_++;
@@ -393,7 +397,8 @@ void
 fit_cxx::TxnSvcHook::hook_fn2(
   std::shared_ptr<couchbase::core::transactions::attempt_context> ctx,
   const std::string& doc_id,
-  std::function<void(std::optional<couchbase::core::transactions::error_class>)>&& handler)
+  couchbase::core::utils::movable_function<
+    void(std::optional<couchbase::core::transactions::error_class>)>&& handler)
 {
   std::scoped_lock lock(mutex_);
   calls_++;
@@ -472,7 +477,8 @@ fit_cxx::TxnSvcHook::fire_action_return_string()
 
 void
 fit_cxx::TxnSvcHook::fire_action(
-  std::function<void(std::optional<couchbase::core::transactions::error_class>)>&& handler)
+  couchbase::core::utils::movable_function<
+    void(std::optional<couchbase::core::transactions::error_class>)>&& handler)
 {
   spdlog::info("Firing hook action {}", HookAction_Name(hook_.hook_action()));
   switch (hook_.hook_action()) {
