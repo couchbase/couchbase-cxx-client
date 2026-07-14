@@ -84,7 +84,27 @@ public:
   watch_context(const watch_context&) = delete;
   auto operator=(const watch_context&) -> watch_context& = delete;
   auto operator=(watch_context&&) -> watch_context& = delete;
-  ~watch_context() = default;
+
+  ~watch_context()
+  {
+    // Fail closed. During the polling-interval backoff the context is kept alive only by its own
+    // timer on the io_context; if the io_context is torn down then, that pending wait is dropped
+    // without running and the context is destroyed here with handler_ still set. Deliver an error
+    // so a std::future caller never observes broken_promise and a callback caller never hangs. (The
+    // GET-ALL request phase already fails closed -- core_.execute delivers request_canceled on
+    // close.) A moved-from context has an empty handler_, so this is a no-op there. Mirror
+    // finish(): move the handler out before invoking it and end the observability span, so the
+    // watch metrics are not left dangling on shutdown.
+    if (handler_) {
+      watch_query_indexes_handler handler{};
+      std::swap(handler, handler_);
+      try {
+        observability_recorder_->finish(errc::network::cluster_closed);
+        handler(couchbase::error{ errc::network::cluster_closed });
+      } catch (...) { // NOLINT(bugprone-empty-catch)
+      }
+    }
+  }
 
   void execute()
   {

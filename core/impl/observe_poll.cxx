@@ -169,20 +169,21 @@ private:
 
 class observe_context;
 void
-observe_poll(const cluster& core, std::shared_ptr<observe_context> ctx);
+observe_poll(const std::shared_ptr<observe_context>& ctx);
 
 class observe_context : public std::enable_shared_from_this<observe_context>
 {
 public:
-  observe_context(asio::io_context& io,
+  observe_context(cluster core,
                   document_id id,
                   mutation_token token,
                   std::optional<std::chrono::milliseconds> timeout,
                   couchbase::persist_to persist_to,
                   couchbase::replicate_to replicate_to,
                   observe_handler&& handler)
-    : poll_deadline_{ io }
-    , poll_backoff_{ io }
+    : poll_deadline_{ core.io_context() }
+    , poll_backoff_{ core.io_context() }
+    , core_{ std::move(core) }
     , id_{ std::move(id) }
     , status_{ std::move(token) }
     , timeout_{ timeout }
@@ -190,6 +191,38 @@ public:
     , replicate_to_{ replicate_to }
     , handler_{ std::move(handler) }
   {
+  }
+
+  observe_context(const observe_context&) = delete;
+  observe_context(observe_context&&) = delete;
+  auto operator=(const observe_context&) -> observe_context& = delete;
+  auto operator=(observe_context&&) -> observe_context& = delete;
+
+  ~observe_context()
+  {
+    // Fail closed. The context is anchored on the io_context by poll_deadline_ for the whole
+    // operation, while the config wait captures a weak_ptr and the seqno requests are cancellable
+    // core operations. If the io_context is torn down mid-poll, every continuation is dropped and
+    // the context is destroyed here with handler_ still set. Deliver an error so a std::future
+    // caller never observes broken_promise and a callback caller never hangs -- this is the
+    // backstop for every legacy-durability mutation (persist_to / replicate_to), which routes its
+    // handler through the observe poll.
+    observe_handler handler{};
+    {
+      const std::scoped_lock lock(handler_mutex_);
+      std::swap(handler_, handler);
+    }
+    if (handler) {
+      try {
+        handler(errc::network::cluster_closed);
+      } catch (...) { // NOLINT(bugprone-empty-catch)
+      }
+    }
+  }
+
+  [[nodiscard]] auto core() const -> const cluster&
+  {
+    return core_;
   }
 
   void start()
@@ -294,27 +327,30 @@ public:
     on_last_response_ = std::move(handler);
   }
 
-  void execute(const cluster& core)
+  void execute()
   {
     auto requests = std::move(requests_);
     status_.reset();
-    on_last_response(requests.size(), [core, ctx = shared_from_this()](std::error_code ec) mutable {
+    on_last_response(requests.size(), [weak = weak_from_this()](std::error_code ec) mutable {
       if (ec == asio::error::operation_aborted) {
         return;
       }
-      observe_poll(core, std::move(ctx));
+      if (auto ctx = weak.lock()) {
+        observe_poll(ctx);
+      }
     });
     for (auto&& request : requests) {
-      core.execute(std::move(request),
-                   [ctx = shared_from_this()](observe_seqno_response&& response) {
-                     ctx->handle_response(std::move(response));
-                   });
+      core_.execute(std::move(request),
+                    [ctx = shared_from_this()](observe_seqno_response&& response) {
+                      ctx->handle_response(std::move(response));
+                    });
     }
   }
 
 private:
   asio::steady_timer poll_deadline_;
   asio::steady_timer poll_backoff_;
+  cluster core_;
   const document_id id_;
   observe_status status_;
   std::optional<std::chrono::milliseconds> timeout_;
@@ -330,13 +366,22 @@ private:
 };
 
 void
-observe_poll(const cluster& core, std::shared_ptr<observe_context> ctx)
+observe_poll(const std::shared_ptr<observe_context>& ctx)
 {
   const std::string bucket_name = ctx->bucket_name();
-  core.with_bucket_configuration(
+  // Capture a weak_ptr, not the context or a core copy: with_bucket_configuration parks this
+  // callback in the core (in the bucket-bootstrap window it is not drained on close). The context
+  // is kept alive meanwhile by poll_deadline_ on the io_context, and it owns the core through its
+  // core_ member -- capturing either strongly here would form a cycle that survives cluster close
+  // and strand the handler.
+  ctx->core().with_bucket_configuration(
     bucket_name,
-    [core, ctx = std::move(ctx)](
+    [weak = std::weak_ptr<observe_context>(ctx)](
       std::error_code ec, const std::shared_ptr<core::topology::configuration>& config) mutable {
+      auto ctx = weak.lock();
+      if (!ctx) {
+        return;
+      }
       if (ec) {
         return ctx->finish(ec);
       }
@@ -360,7 +405,7 @@ observe_poll(const cluster& core, std::shared_ptr<observe_context> ctx)
             observe_seqno_request{ replica_id, false, ctx->partition_uuid(), ctx->timeout() });
         }
       }
-      ctx->execute(core);
+      ctx->execute();
     });
 }
 } // namespace
@@ -374,14 +419,9 @@ initiate_observe_poll(const cluster& core,
                       couchbase::replicate_to replicate_to,
                       observe_handler&& handler)
 {
-  auto ctx = std::make_shared<observe_context>(core.io_context(),
-                                               std::move(id),
-                                               std::move(token),
-                                               timeout,
-                                               persist_to,
-                                               replicate_to,
-                                               std::move(handler));
+  auto ctx = std::make_shared<observe_context>(
+    core, std::move(id), std::move(token), timeout, persist_to, replicate_to, std::move(handler));
   ctx->start();
-  return observe_poll(core, std::move(ctx));
+  return observe_poll(ctx);
 }
 } // namespace couchbase::core::impl

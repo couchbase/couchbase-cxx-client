@@ -1157,86 +1157,91 @@ public:
         break;
     }
 
-    return core_.open_bucket(
+    // Fetch the bucket configuration through the shared async scaffold rather than nesting
+    // open_bucket + with_bucket_configuration directly: the latter parks its continuation in the
+    // core (in the bucket-bootstrap window it is not drained on close), so capturing the moved
+    // scan_handler there would strand it -- a std::future caller would observe broken_promise and a
+    // callback caller would hang -- if the cluster is torn down mid-scan. The scaffold anchors the
+    // wait on an io_context timer and fails closed with errc::network::cluster_closed. Everything
+    // the continuation needs is captured by value (not `this`): the scan handler outlives
+    // collection_impl when the caller drops the collection but keeps the future, so a raw-`this`
+    // capture would be a use-after-free.
+    core::impl::with_bucket_config_or_timeout<std::shared_ptr<core::topology::configuration>>(
+      core_,
       bucket_name_,
-      [this,
-       obs_rec = std::move(obs_rec),
-       handler = std::move(handler),
+      orchestrator_opts.timeout,
+      [core = core_,
+       bucket_name = bucket_name_,
+       scope_name = scope_name_,
+       name = name_,
+       crypto_manager = crypto_manager_,
        orchestrator_opts,
-       core_scan_type](std::error_code ec) mutable {
-        if (ec) {
-          obs_rec->finish(ec);
-          return handler(error(ec), {});
+       core_scan_type,
+       obs_rec = std::move(obs_rec),
+       handler = std::move(handler)](
+        couchbase::error err, std::shared_ptr<core::topology::configuration> config) mutable {
+        if (err.ec()) {
+          obs_rec->finish(err.ec());
+          return handler(
+            error(err.ec(), "An error occurred when attempting to fetch the bucket configuration."),
+            {});
         }
-        return core_.with_bucket_configuration(
-          bucket_name_,
-          [this,
-           obs_rec = std::move(obs_rec),
-           handler = std::move(handler),
-           orchestrator_opts,
-           core_scan_type](std::error_code ec,
-                           const std::shared_ptr<core::topology::configuration>& config) mutable {
-            if (ec) {
-              obs_rec->finish(ec);
-              return handler(
-                error(ec, "An error occurred when attempting to fetch the bucket configuration."),
-                {});
-            }
-            if (!config->capabilities.supports_range_scan()) {
-              obs_rec->finish(ec);
-              return handler(error(errc::common::feature_not_available,
-                                   "This bucket does not support range scan."),
-                             {});
-            }
-            auto agent_group =
-              core::agent_group(core_.io_context(), core::agent_group_config{ { core_ } });
-            ec = agent_group.open_bucket(bucket_name_);
-            if (ec) {
-              obs_rec->finish(ec);
-              return handler(error(ec,
-                                   fmt::format("An error occurred while opening the `{}` bucket.",
-                                               bucket_name_)),
-                             {});
-            }
-            auto agent = agent_group.get_agent(bucket_name_);
-            if (!agent.has_value()) {
-              obs_rec->finish(ec);
-              return handler(
-                error(agent.error(),
-                      fmt::format(
-                        "An error occurred while getting an operation agent for the `{}` bucket",
-                        bucket_name_)),
-                {});
-            }
-            if (!config->vbmap.has_value() || config->vbmap->empty()) {
-              CB_LOG_WARNING("Unable to get vbucket map for `{}` - cannot perform scan operation",
-                             bucket_name_);
-              obs_rec->finish(ec);
-              return handler(error(errc::common::request_canceled,
-                                   "No vbucket map included with the bucket config"),
-                             {});
-            }
+        if (!config->capabilities.supports_range_scan()) {
+          obs_rec->finish(errc::common::feature_not_available);
+          return handler(
+            error(errc::common::feature_not_available, "This bucket does not support range scan."),
+            {});
+        }
+        auto agent_group =
+          core::agent_group(core.io_context(), core::agent_group_config{ { core } });
+        if (auto ec = agent_group.open_bucket(bucket_name); ec) {
+          obs_rec->finish(ec);
+          return handler(
+            error(ec, fmt::format("An error occurred while opening the `{}` bucket.", bucket_name)),
+            {});
+        }
+        auto agent = agent_group.get_agent(bucket_name);
+        if (!agent.has_value()) {
+          obs_rec->finish(agent.error());
+          return handler(
+            error(
+              agent.error(),
+              fmt::format("An error occurred while getting an operation agent for the `{}` bucket.",
+                          bucket_name)),
+            {});
+        }
+        if (!config->vbmap.has_value() || config->vbmap->empty()) {
+          CB_LOG_WARNING("Unable to get vbucket map for `{}` - cannot perform scan operation",
+                         bucket_name);
+          obs_rec->finish(errc::common::request_canceled);
+          return handler(error(errc::common::request_canceled,
+                               "No vbucket map included with the bucket config."),
+                         {});
+        }
 
-            auto orchestrator = core::range_scan_orchestrator(core_.io_context(),
-                                                              agent.value(),
-                                                              config->vbmap.value(),
-                                                              scope_name_,
-                                                              name_,
-                                                              core_scan_type,
-                                                              orchestrator_opts);
-            return orchestrator.scan(
-              [obs_rec = std::move(obs_rec),
-               crypto_manager = crypto_manager_,
-               handler = std::move(handler)](auto ec, auto core_scan_result) mutable {
-                obs_rec->finish(ec);
-                if (ec) {
-                  return handler(error(ec, "Error while starting the range scan"), {});
-                }
-                auto internal_result = std::make_shared<internal_scan_result>(
-                  std::move(core_scan_result), std::move(crypto_manager));
-                return handler({}, scan_result{ internal_result });
-              });
-          });
+        auto orchestrator = core::range_scan_orchestrator(core.io_context(),
+                                                          agent.value(),
+                                                          config->vbmap.value(),
+                                                          scope_name,
+                                                          name,
+                                                          core_scan_type,
+                                                          orchestrator_opts);
+        return orchestrator.scan([obs_rec = std::move(obs_rec),
+                                  crypto_manager = std::move(crypto_manager),
+                                  handler = std::move(handler)](auto ec,
+                                                                auto core_scan_result) mutable {
+          obs_rec->finish(ec);
+          if (ec) {
+            return handler(error(ec, "Error while starting the range scan"), {});
+          }
+          auto internal_result = std::make_shared<internal_scan_result>(std::move(core_scan_result),
+                                                                        std::move(crypto_manager));
+          return handler({}, scan_result{ internal_result });
+        });
+      },
+      [](const std::shared_ptr<core::topology::configuration>& config)
+        -> std::pair<std::error_code, std::shared_ptr<core::topology::configuration>> {
+        return { {}, config };
       });
   }
 
