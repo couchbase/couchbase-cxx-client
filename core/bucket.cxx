@@ -554,6 +554,13 @@ public:
         ? io::mcbp_session(
             client_id_, {}, ctx_, tls_, origin_, state_listener_, name_, known_features_)
         : io::mcbp_session(client_id_, {}, ctx_, origin_, state_listener_, name_, known_features_);
+    {
+      // Publish the in-flight session so close() can stop it if the cluster is torn down before
+      // this bootstrap completes; otherwise the continuation below (which captures new_session)
+      // would keep it alive forever. See bootstrapping_session_.
+      const std::scoped_lock lock(sessions_mutex_);
+      bootstrapping_session_ = new_session;
+    }
     new_session.bootstrap([self = shared_from_this(), new_session, h = std::move(handler)](
                             std::error_code ec, topology::configuration cfg) mutable {
       if (ec) {
@@ -562,20 +569,37 @@ public:
                        ec.message(),
                        self->name_);
         self->remove_session(new_session.id());
+        const std::scoped_lock lock(self->sessions_mutex_);
+        self->bootstrapping_session_.reset();
       } else {
         const std::size_t this_index = new_session.index();
-        new_session.on_configuration_update(self);
-        new_session.on_stop([id = new_session.id(), self]() {
-          self->remove_session(id);
-        });
-
+        bool established{ false };
         {
+          // Establish the session and stop tracking it as bootstrapping in one critical section, so
+          // a concurrent close() finds it in exactly one of the two containers (never neither).
           const std::scoped_lock lock(self->sessions_mutex_);
-          self->sessions_.insert_or_assign(this_index, std::move(new_session));
+          self->bootstrapping_session_.reset();
+          if (self->closed_) {
+            // The bucket was closed while this session was still bootstrapping (close() sets
+            // closed_ before it swaps the session maps). Do not register callbacks or add it to
+            // sessions_: a session established after close() would be stranded, and its on_stop
+            // handler could post restart_sessions() during shutdown. Stop it here instead -- no
+            // on_stop is registered, so stopping under the lock cannot re-enter remove_session().
+            new_session.stop(retry_reason::do_not_retry);
+          } else {
+            new_session.on_configuration_update(self);
+            new_session.on_stop([id = new_session.id(), self]() {
+              self->remove_session(id);
+            });
+            self->sessions_.insert_or_assign(this_index, std::move(new_session));
+            established = true;
+          }
         }
-        self->update_config(cfg);
-        self->drain_deferred_queue({});
-        self->poll_config({});
+        if (established) {
+          self->update_config(cfg);
+          self->drain_deferred_queue({});
+          self->poll_config({});
+        }
       }
       asio::post(
         asio::bind_executor(self->ctx_, [h = std::move(h), ec, cfg = std::move(cfg)]() mutable {
@@ -719,12 +743,19 @@ public:
     }
 
     std::map<size_t, io::mcbp_session> old_sessions;
+    std::optional<io::mcbp_session> bootstrapping_session;
     {
       const std::scoped_lock lock(sessions_mutex_);
       std::swap(old_sessions, sessions_);
+      std::swap(bootstrapping_session, bootstrapping_session_);
     }
     for (auto& [index, session] : old_sessions) {
       session.stop(retry_reason::do_not_retry);
+    }
+    // Stop the session that is still bootstrapping (if any): this completes its bootstrap with an
+    // error, releasing the continuation that would otherwise strand the session and this bucket.
+    if (bootstrapping_session) {
+      bootstrapping_session->stop(retry_reason::do_not_retry);
     }
   }
 
@@ -1112,6 +1143,13 @@ private:
   std::mutex deferred_commands_mutex_{};
 
   std::map<size_t, io::mcbp_session> sessions_{};
+  // The very first session is only moved into sessions_ once it finishes bootstrapping; until then
+  // it lives solely inside its own bootstrap continuation (which captures a copy of the session and
+  // this bucket). If the cluster is closed while that bootstrap is in flight (e.g. a bucket that
+  // never opens), close() would otherwise never see the session, so its self-capture would strand
+  // the session, the bucket, and the whole cluster graph. Track it here so close() can stop it and
+  // let the continuation fire. Guarded by sessions_mutex_.
+  std::optional<io::mcbp_session> bootstrapping_session_{};
   mutable std::mutex sessions_mutex_{};
   std::atomic_size_t round_robin_next_{ 0 };
 };
