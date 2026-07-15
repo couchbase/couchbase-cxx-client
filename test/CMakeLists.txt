@@ -22,6 +22,7 @@ integration_test(management_eventing)
 integration_test(management_search_index)
 integration_test(http_session_manager)
 integration_test(node_id)
+integration_test(bucket_bootstrap)
 
 unit_test(connection_string)
 unit_test(capella)
