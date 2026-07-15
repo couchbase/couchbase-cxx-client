@@ -181,6 +181,14 @@ get_lowest_log_level() -> level;
 auto
 should_log(level lvl) -> bool;
 
+/**
+ * @return true if a custom log callback is currently registered. Used to decide whether log
+ * arguments need to be formatted at all, independently of the severity level (the callback does
+ * its own level filtering).
+ */
+auto
+has_custom_callback() -> bool;
+
 auto
 should_log_protocol() -> bool;
 
@@ -279,10 +287,17 @@ is_initialized() -> bool;
  */
 #define COUCHBASE_LOG(file, line, function, severity, ...)                                         \
   do {                                                                                             \
-    couchbase::core::logger::log_custom_logger(file, line, function, severity, __VA_ARGS__);       \
-                                                                                                   \
-    if (couchbase::core::logger::should_log(severity)) {                                           \
-      couchbase::core::logger::log(file, line, function, severity, __VA_ARGS__);                   \
+    const bool cb_log_to_file_ = couchbase::core::logger::should_log(severity);                    \
+    const bool cb_log_to_custom_ = couchbase::core::logger::has_custom_callback();                 \
+    if (cb_log_to_file_ || cb_log_to_custom_) {                                                    \
+      auto cb_log_message_ = ::fmt::format(__VA_ARGS__);                                           \
+      if (cb_log_to_custom_) {                                                                     \
+        couchbase::core::logger::detail::log_custom_logger(                                        \
+          file, line, function, severity, cb_log_message_);                                        \
+      }                                                                                            \
+      if (cb_log_to_file_) {                                                                       \
+        couchbase::core::logger::detail::log(file, line, function, severity, cb_log_message_);     \
+      }                                                                                            \
     }                                                                                              \
   } while (false)
 
@@ -343,8 +358,10 @@ is_initialized() -> bool;
  */
 #define COUCHBASE_LOG_RAW(file, line, function, severity, msg)                                     \
   do {                                                                                             \
-    couchbase::core::logger::log_custom_logger(file, line, function, severity, msg);               \
-                                                                                                   \
+    /* msg is already a string; deliver it directly (no fmt::format), gated like COUCHBASE_LOG. */ \
+    if (couchbase::core::logger::has_custom_callback()) {                                          \
+      couchbase::core::logger::detail::log_custom_logger(file, line, function, severity, msg);     \
+    }                                                                                              \
     if (couchbase::core::logger::should_log(severity)) {                                           \
       couchbase::core::logger::detail::log(file, line, function, severity, msg);                   \
     }                                                                                              \
