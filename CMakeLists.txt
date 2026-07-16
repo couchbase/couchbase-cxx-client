@@ -530,8 +530,7 @@ foreach(TARGET ${couchbase_cxx_client_LIBRARIES})
 
   target_include_directories(
     ${TARGET} SYSTEM
-    PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/cxx_function>
-            $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/expected/include>
+    PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/expected/include>
             $<BUILD_INTERFACE:$<TARGET_PROPERTY:jsonsl,INTERFACE_SYSTEM_INCLUDE_DIRECTORIES>>
             $<BUILD_INTERFACE:$<TARGET_PROPERTY:asio,INTERFACE_SYSTEM_INCLUDE_DIRECTORIES>>)
 

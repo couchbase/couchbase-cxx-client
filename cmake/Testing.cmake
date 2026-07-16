@@ -43,8 +43,7 @@ macro(integration_test name)
                                                               ${PROJECT_BINARY_DIR}/generated_$<CONFIG>)
   target_include_directories(
     test_integration_${name} SYSTEM BEFORE
-    PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/cxx_function>
-            $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/expected/include>
+    PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/expected/include>
             $<BUILD_INTERFACE:$<TARGET_PROPERTY:spdlog::spdlog,INTERFACE_INCLUDE_DIRECTORIES>>
             $<BUILD_INTERFACE:$<TARGET_PROPERTY:asio,INTERFACE_INCLUDE_DIRECTORIES>>)
   propagate_public_compile_definitions(test_integration_${name} spdlog::spdlog asio)
@@ -92,8 +91,7 @@ macro(transaction_test name)
                                                               ${PROJECT_BINARY_DIR}/generated_$<CONFIG>)
   target_include_directories(
     test_transaction_${name} SYSTEM BEFORE
-    PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/cxx_function>
-            $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/expected/include>
+    PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/expected/include>
             $<BUILD_INTERFACE:$<TARGET_PROPERTY:spdlog::spdlog,INTERFACE_INCLUDE_DIRECTORIES>>
             $<BUILD_INTERFACE:$<TARGET_PROPERTY:asio,INTERFACE_INCLUDE_DIRECTORIES>>)
   propagate_public_compile_definitions(test_transaction_${name} spdlog::spdlog asio)
@@ -140,8 +138,7 @@ macro(unit_test name)
                                                        ${PROJECT_BINARY_DIR}/generated_$<CONFIG>)
   target_include_directories(
     test_unit_${name} SYSTEM BEFORE
-    PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/cxx_function>
-            $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/expected/include>
+    PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/expected/include>
             $<BUILD_INTERFACE:$<TARGET_PROPERTY:spdlog::spdlog,INTERFACE_INCLUDE_DIRECTORIES>>
             $<BUILD_INTERFACE:$<TARGET_PROPERTY:asio,INTERFACE_INCLUDE_DIRECTORIES>>)
   propagate_public_compile_definitions(test_unit_${name} spdlog::spdlog asio)
@@ -189,8 +186,7 @@ macro(integration_benchmark name)
                                           ${PROJECT_BINARY_DIR}/generated_$<CONFIG>)
   target_include_directories(
     benchmark_integration_${name} SYSTEM BEFORE
-    PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/cxx_function>
-            $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/expected/include>
+    PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/expected/include>
             $<BUILD_INTERFACE:$<TARGET_PROPERTY:spdlog::spdlog,INTERFACE_INCLUDE_DIRECTORIES>>
             $<BUILD_INTERFACE:$<TARGET_PROPERTY:asio,INTERFACE_INCLUDE_DIRECTORIES>>)
   propagate_public_compile_definitions(benchmark_integration_${name} spdlog::spdlog asio)
