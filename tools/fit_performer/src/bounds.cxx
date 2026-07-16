@@ -56,6 +56,9 @@ create_bounds(counters& global_counters,
       return std::make_unique<counter_equality_bounds>(
         global_counters.get_counter(proto_bounds->counter_eq()), initial_value);
     }
+    case protocol::shared::Bounds::BOUNDS_NOT_SET:
+      // A present-but-empty bounds message means "no bounds": execute each command exactly once.
+      return std::make_unique<counter_bounds>(static_cast<std::int32_t>(command_count));
 
     default:
       throw performer_exception::invalid_argument(

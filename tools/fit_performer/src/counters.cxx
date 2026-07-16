@@ -78,8 +78,10 @@ counters::get_counter(const std::string& counter_id, std::int32_t initial_value)
   }
   {
     const std::unique_lock lock{ mutex_ };
-    const auto& [it, _] =
-      counters_.try_emplace(counter_id, std::make_shared<counter>(initial_value));
+    auto [it, inserted] = counters_.try_emplace(counter_id, nullptr);
+    if (inserted) {
+      it->second = std::make_shared<counter>(initial_value);
+    }
     return it->second;
   }
 }

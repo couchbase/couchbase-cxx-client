@@ -2368,6 +2368,8 @@ TxnService::setCounter(grpc::ServerContext* /*context*/,
     counters_.set_counter_value(*request);
   } catch (const performer_exception& e) {
     return e.to_grpc_status();
+  } catch (const std::exception& e) {
+    return { ::grpc::CANCELLED, e.what() };
   }
   return grpc::Status::OK;
 }
@@ -2379,6 +2381,10 @@ TxnService::clearAllCounters(grpc::ServerContext* /*context*/,
 {
   spdlog::info("clearAllCounters called");
 
-  counters_.clear();
+  try {
+    counters_.clear();
+  } catch (const std::exception& e) {
+    return { ::grpc::CANCELLED, e.what() };
+  }
   return grpc::Status::OK;
 }

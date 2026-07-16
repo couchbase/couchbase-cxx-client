@@ -50,7 +50,7 @@ public:
   [[nodiscard]] static auto create(std::int32_t initial_value) -> std::shared_ptr<counter>;
 
 private:
-  std::atomic_int32_t value_;
+  std::atomic<std::int32_t> value_;
 };
 
 class counters
