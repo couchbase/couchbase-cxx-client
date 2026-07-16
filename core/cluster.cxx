@@ -1149,11 +1149,21 @@ public:
             if (auto bucket = cluster->find_bucket_by_name(bucket_name.value()); bucket) {
               return bucket->ping(collector, timeout);
             }
+            // Capture a weak_ptr, not a strong cluster: open_bucket parks this callback in the
+            // bucket-bootstrap queue, which close() does not drain. A strong self-capture would
+            // form a cluster<->parked-callback cycle that pins the ping collector past cluster
+            // close, so its destructor -- the backstop that reports the ping result -- would never
+            // run and the caller would hang. With a weak capture the callback is released when the
+            // cluster is torn down, the collector is destroyed, and its destructor delivers the
+            // report.
             cluster->open_bucket(
-              bucket_name.value(), [collector, cluster, bucket_name, timeout](std::error_code ec) {
+              bucket_name.value(),
+              [collector, weak = std::weak_ptr(cluster), bucket_name, timeout](std::error_code ec) {
                 if (!ec) {
-                  if (auto bucket = cluster->find_bucket_by_name(bucket_name.value()); bucket) {
-                    return bucket->ping(collector, timeout);
+                  if (auto cluster = weak.lock()) {
+                    if (auto bucket = cluster->find_bucket_by_name(bucket_name.value()); bucket) {
+                      return bucket->ping(collector, timeout);
+                    }
                   }
                 }
               });
