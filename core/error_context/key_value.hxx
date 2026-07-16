@@ -105,7 +105,7 @@ make_key_value_error_context(std::error_code ec,
   }
 
   return {
-    command->id_,
+    command->id(),
     ec,
     command->last_dispatched_to_,
     command->last_dispatched_from_,

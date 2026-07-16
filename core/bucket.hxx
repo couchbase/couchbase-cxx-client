@@ -135,7 +135,7 @@ public:
         CB_LOG_TRACE(R"([{}] unable to map key="{}" to the node, id={}, partition={}, rev={})",
                      log_prefix(),
                      cmd->request.id,
-                     cmd->id_,
+                     cmd->id(),
                      partition,
                      config_rev());
         return io::retry_orchestrator::maybe_retry(
@@ -149,7 +149,7 @@ public:
       CB_LOG_TRACE(
         R"([{}] defer operation id="{}", key="{}", partition={}, index={}, session={}, address="{}", has_config={}, rev={})",
         log_prefix(),
-        cmd->id_,
+        cmd->id(),
         cmd->request.id,
         cmd->request.partition,
         index,
@@ -172,7 +172,7 @@ public:
         R"([{}] the session has been found for idx={}, but it is stopped, retrying id={}, key="{}", partition={}, session={}, address="{}", rev={})",
         log_prefix(),
         index,
-        cmd->id_,
+        cmd->id(),
         cmd->request.id,
         cmd->request.partition,
         session->id(),
@@ -186,7 +186,7 @@ public:
     CB_LOG_TRACE(
       R"({} send operation id="{}", key="{}", partition={}, index={}, address="{}", rev={})",
       session->log_prefix(),
-      cmd->id_,
+      cmd->id(),
       cmd->request.id,
       cmd->request.partition,
       index,
