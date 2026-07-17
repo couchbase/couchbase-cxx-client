@@ -19,6 +19,7 @@
 
 #include <couchbase/build_config.hxx>
 
+#include "core/impl/wait_until_ready.hxx"
 #include "core/logger/logger.hxx"
 #include "core/utils/join_strings.hxx"
 
@@ -85,5 +86,25 @@ close_bucket(const couchbase::core::cluster& cluster, const std::string& bucket_
     CB_LOG_CRITICAL("unable to close bucket: {}, name={}", rc.message(), bucket_name);
     throw std::system_error(rc);
   }
+}
+
+auto
+wait_until_ready(const couchbase::core::cluster& cluster,
+                 std::optional<std::string> bucket_name,
+                 std::chrono::milliseconds timeout,
+                 couchbase::cluster_state desired_state,
+                 std::set<couchbase::core::service_type> services) -> std::error_code
+{
+  auto barrier = std::make_shared<std::promise<std::error_code>>();
+  auto f = barrier->get_future();
+  couchbase::core::impl::wait_until_ready(cluster,
+                                          std::move(bucket_name),
+                                          timeout,
+                                          desired_state,
+                                          std::move(services),
+                                          [barrier](std::error_code ec) mutable {
+                                            barrier->set_value(ec);
+                                          });
+  return f.get();
 }
 } // namespace test::utils
