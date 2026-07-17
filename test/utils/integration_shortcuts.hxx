@@ -18,8 +18,17 @@
 #pragma once
 
 #include "core/cluster.hxx"
+#include "core/service_type.hxx"
 
+#include <couchbase/cluster_state.hxx>
+
+#include <chrono>
 #include <future>
+#include <memory>
+#include <optional>
+#include <set>
+#include <string>
+#include <system_error>
 
 namespace test::utils
 {
@@ -47,4 +56,14 @@ open_bucket(const couchbase::core::cluster& cluster, const std::string& bucket_n
 
 void
 close_bucket(const couchbase::core::cluster& cluster, const std::string& bucket_name);
+
+// Block until the cluster (or, when bucket_name is set, the bucket) reaches desired_state or
+// timeout elapses, returning the resulting error code. Wraps the core's async wait_until_ready with
+// a promise, mirroring open_cluster/open_bucket above. The bucket variant opens the bucket itself.
+auto
+wait_until_ready(const couchbase::core::cluster& cluster,
+                 std::optional<std::string> bucket_name,
+                 std::chrono::milliseconds timeout,
+                 couchbase::cluster_state desired_state,
+                 std::set<couchbase::core::service_type> services) -> std::error_code;
 } // namespace test::utils

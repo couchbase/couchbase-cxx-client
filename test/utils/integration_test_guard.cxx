@@ -59,6 +59,32 @@ spawn_io_threads(asio::io_context& io, std::size_t number_of_threads) -> std::ve
   return threads;
 }
 
+// Wait once for the default bucket to be fully placed (active + all replica copies assigned) and
+// its KV endpoints online, so replica reads and durable writes issued by tests do not race a
+// freshly provisioned cluster. Best-effort: deployments that do not support it (e.g. the gocaves
+// mock) proceed with a warning rather than aborting the whole test binary.
+static void
+gate_on_readiness(const couchbase::core::cluster& cluster, const std::string& bucket_name)
+{
+#ifndef COUCHBASE_CXX_CLIENT_COLUMNAR
+  if (bucket_name.empty()) {
+    return;
+  }
+  if (auto ec = wait_until_ready(cluster,
+                                 bucket_name,
+                                 std::chrono::seconds{ 30 },
+                                 couchbase::cluster_state::online,
+                                 { couchbase::core::service_type::key_value });
+      ec) {
+    CB_LOG_WARNING(
+      "integration guard: bucket \"{}\" did not reach online state: {}", bucket_name, ec.message());
+  }
+#else
+  (void)cluster;
+  (void)bucket_name;
+#endif
+}
+
 static auto
 build_origin(const test_context& ctx,
              const couchbase::core::cluster_credentials& auth,
@@ -93,6 +119,7 @@ integration_test_guard::integration_test_guard()
   io_threads = spawn_io_threads(io, ctx.number_of_io_threads);
   origin = build_origin(ctx, auth, connstr);
   open_cluster(cluster, origin);
+  gate_on_readiness(cluster, ctx.bucket);
 }
 
 integration_test_guard::integration_test_guard(const couchbase::core::cluster_options& opts)
@@ -110,6 +137,7 @@ integration_test_guard::integration_test_guard(const couchbase::core::cluster_op
   origin = build_origin(ctx, auth, connstr);
   io_threads = spawn_io_threads(io, ctx.number_of_io_threads);
   open_cluster(cluster, origin);
+  gate_on_readiness(cluster, ctx.bucket);
 }
 
 integration_test_guard::~integration_test_guard()
