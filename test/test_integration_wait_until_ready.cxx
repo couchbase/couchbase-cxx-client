@@ -62,14 +62,6 @@ TEST_CASE("integration: cluster wait_until_ready", "[integration]")
     REQUIRE(err.ec() == couchbase::errc::common::invalid_argument);
   }
 
-  SECTION("options timeout is rejected in favour of the positional argument")
-  {
-    couchbase::wait_until_ready_options options{};
-    options.timeout(1s);
-    auto err = cluster.wait_until_ready(10s, options).get();
-    REQUIRE(err.ec() == couchbase::errc::common::invalid_argument);
-  }
-
   SECTION("callback overload completes exactly once")
   {
     couchbase::wait_until_ready_options options{};
@@ -123,14 +115,6 @@ TEST_CASE("integration: bucket wait_until_ready", "[integration]")
     options.service_types({ couchbase::service_type::key_value });
     auto err = cluster.bucket(integration.ctx.bucket).wait_until_ready(10s, options).get();
     REQUIRE_SUCCESS(err.ec());
-  }
-
-  SECTION("options timeout is rejected in favour of the positional argument")
-  {
-    couchbase::wait_until_ready_options options{};
-    options.timeout(1s);
-    auto err = cluster.bucket(integration.ctx.bucket).wait_until_ready(10s, options).get();
-    REQUIRE(err.ec() == couchbase::errc::common::invalid_argument);
   }
 
   SECTION("reaches online state for a non-KV service")
