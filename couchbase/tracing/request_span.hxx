@@ -61,6 +61,22 @@ public:
     return true;
   }
 
+  /**
+   * Efficiently record the dispatch operation identifier (the request opaque) without formatting it
+   * to a string on the hot path.
+   *
+   * The default implementation returns false, which tells the SDK to record the identifier as a
+   * regular string tag via add_tag() instead — so external tracer implementations are unaffected.
+   * Built-in spans may override this to capture the raw value and defer the (rarely needed)
+   * formatting until the span is actually reported.
+   *
+   * @return true if the span captured the identifier; false to request the string-tag fallback.
+   */
+  [[nodiscard]] virtual auto try_set_dispatch_operation_id(std::uint32_t /* opaque */) -> bool
+  {
+    return false;
+  }
+
 private:
   std::string name_{};
   std::shared_ptr<request_span> parent_{ nullptr };

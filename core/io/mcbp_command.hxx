@@ -560,8 +560,12 @@ private:
 #endif
     if (dispatch_span->uses_tags()) {
       dispatch_span->add_tag(tracing::attributes::dispatch::network_transport, "tcp");
-      dispatch_span->add_tag(tracing::attributes::dispatch::operation_id,
-                             fmt::format("0x{:x}", request.opaque));
+      // Prefer the typed capability so the opaque is not formatted to a string on the hot path;
+      // spans that do not support it (external tracers) fall back to the string tag.
+      if (!dispatch_span->try_set_dispatch_operation_id(request.opaque)) {
+        dispatch_span->add_tag(tracing::attributes::dispatch::operation_id,
+                               fmt::format("0x{:x}", request.opaque));
+      }
       dispatch_span->add_tag(tracing::attributes::dispatch::local_id, session_->id());
     }
     return dispatch_span;
