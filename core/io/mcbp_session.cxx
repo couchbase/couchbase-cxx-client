@@ -23,6 +23,8 @@
 #include "core/columnar/background_bootstrap_listener.hxx"
 #endif
 #include "configuration_belongs_to_session.hxx"
+#include "opaque_ring_table.hxx"
+
 #include "core/app_telemetry_meter.hxx"
 #include "core/config_listener.hxx"
 #include "core/diagnostics.hxx"
@@ -1433,8 +1435,14 @@ public:
       }
     }
     {
-      const std::scoped_lock lock(command_handlers_mutex_);
-      for (auto& [opaque, handler] : command_handlers_) {
+      // Drain under the lock, then invoke the handlers after releasing it: a command handler may
+      // re-enter the session (as cancel() documents), so running one while holding
+      // command_handlers_mutex_ could deadlock during shutdown.
+      auto cancelled = [this] {
+        const std::scoped_lock lock(command_handlers_mutex_);
+        return command_handlers_.drain();
+      }();
+      for (auto& [opaque, handler] : cancelled) {
         if (handler) {
           CB_LOG_DEBUG("{} MCBP cancel operation during session close, opaque={}, ec={}",
                        stop_log_prefix,
@@ -1444,7 +1452,6 @@ public:
           fun(ec, reason, {}, {});
         }
       }
-      command_handlers_.clear();
     }
     {
       const std::scoped_lock lock(operations_mutex_);
@@ -1532,11 +1539,7 @@ public:
     command_handler fun{};
     {
       const std::scoped_lock lock(command_handlers_mutex_);
-      if (auto handler = command_handlers_.find(opaque);
-          handler != command_handlers_.end() && handler->second) {
-        fun = std::move(handler->second);
-        command_handlers_.erase(handler);
-      }
+      fun = command_handlers_.take(opaque);
     }
 
     auto reason = status == static_cast<std::uint16_t>(key_value_status_code::not_my_vbucket)
@@ -1626,7 +1629,7 @@ public:
     }
     {
       const std::scoped_lock lock(command_handlers_mutex_);
-      command_handlers_.try_emplace(opaque, std::move(handler));
+      command_handlers_.insert(opaque, std::move(handler));
     }
     if (bootstrapped_ && stream_->is_open()) {
       write_and_flush(std::move(data));
@@ -1648,23 +1651,22 @@ public:
     if (stopped_) {
       return false;
     }
-    command_handlers_mutex_.lock();
-    if (auto handler = command_handlers_.find(opaque); handler != command_handlers_.end()) {
-      CB_LOG_DEBUG("{} MCBP cancel operation, opaque={}, ec={} ({})",
-                   log_prefix_,
-                   opaque,
-                   ec.value(),
-                   ec.message());
-      if (handler->second) {
-        auto fun = std::move(handler->second);
-        command_handlers_.erase(handler);
-        command_handlers_mutex_.unlock();
-        fun(ec, reason, {}, {});
-        return true;
-      }
+    std::unique_lock lock(command_handlers_mutex_);
+    auto fun = command_handlers_.take(opaque);
+    if (!fun) {
+      return false;
     }
-    command_handlers_mutex_.unlock();
-    return false;
+    CB_LOG_DEBUG("{} MCBP cancel operation, opaque={}, ec={} ({})",
+                 log_prefix_,
+                 opaque,
+                 ec.value(),
+                 ec.message());
+    // Release before invoking the handler: it must not run while holding the command-handlers
+    // lock (it may re-enter the session), and the unique_lock guarantees the mutex is freed on
+    // every path -- including an early return or an exception before this point.
+    lock.unlock();
+    fun(ec, reason, {}, {});
+    return true;
   }
 
   [[nodiscard]] auto supports_feature(protocol::hello_feature feature) -> bool
@@ -2316,7 +2318,7 @@ private:
   utils::movable_function<void(std::error_code, const topology::configuration&)>
     bootstrap_callback_{};
   std::mutex command_handlers_mutex_{};
-  std::map<std::uint32_t, command_handler> command_handlers_{};
+  opaque_ring_table<command_handler> command_handlers_{};
   std::vector<std::shared_ptr<config_listener>> config_listeners_{};
   utils::movable_function<void()> on_stop_handler_{};
 
