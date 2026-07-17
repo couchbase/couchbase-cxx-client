@@ -382,6 +382,13 @@ public:
     if (!config_) {
       return;
     }
+    if (closed_) {
+      // Do not connect a session into a bucket that is being torn down: close() has already stopped
+      // sessions_ and will not run again, so a session added here would never be stopped and would
+      // strand the whole bucket/session graph as a pure cycle (see the closed_ guard in bootstrap()
+      // and update_config()).
+      return;
+    }
 
     const auto& node = config_->nodes[index];
 
@@ -427,6 +434,13 @@ public:
   {
     const std::scoped_lock lock(config_mutex_, sessions_mutex_);
     if (!config_) {
+      return;
+    }
+    if (closed_) {
+      // remove_session() posts restart_sessions() whenever a session drops. If that post is
+      // serviced after close() has torn the bucket down, recreating sessions here would strand them
+      // (nothing stops a session added after close()), leaking the whole bucket/session graph as a
+      // pure cycle. close() sets closed_ before it swaps and stops sessions_, so bail out.
       return;
     }
 
@@ -872,8 +886,19 @@ public:
         }
       }
     }
+    std::vector<io::mcbp_session> dropped_sessions{};
     if (!added.empty() || !removed.empty() || sequence_changed) {
       const std::scoped_lock lock(sessions_mutex_);
+      if (closed_) {
+        // The bucket was closed concurrently (close() sets closed_ before it swaps and stops
+        // sessions_ under sessions_mutex_). Do not rebuild the session list: any session created
+        // here would be established after close() has already torn everything down. Because each
+        // new session's bootstrap continuation strongly captures the session and this bucket (via
+        // on_configuration_update()/on_stop()), and nothing stops a session added after close(),
+        // it would strand the whole bucket/session graph as a pure cycle that LeakSanitizer reports
+        // as leaked. bootstrap() guards the initial session the same way (see closed_ there).
+        return;
+      }
       std::map<size_t, io::mcbp_session> new_sessions{};
 
       std::size_t next_index{ 0 };
@@ -968,10 +993,17 @@ public:
                      it->second.bootstrap_hostname(),
                      it->second.bootstrap_port(),
                      it->first);
-        asio::post(asio::bind_executor(ctx_, [session = std::move(it->second)]() mutable {
-          return session.stop(retry_reason::do_not_retry);
-        }));
+        dropped_sessions.push_back(std::move(it->second));
       }
+    }
+    // Stop dropped sessions synchronously, after releasing sessions_mutex_ (stop() fires on_stop ->
+    // remove_session(), which re-acquires the mutex). Stopping synchronously -- rather than via
+    // asio::post -- clears each session's bucket-capturing handlers (config_listeners_,
+    // on_stop_handler_) right now. A posted stop can be abandoned by io_context shutdown before it
+    // runs, leaving those handlers set and stranding the whole bucket/session graph as a pure cycle
+    // (LeakSanitizer reports it as all-indirect leaks).
+    for (auto& session : dropped_sessions) {
+      session.stop(retry_reason::do_not_retry);
     }
   }
 
