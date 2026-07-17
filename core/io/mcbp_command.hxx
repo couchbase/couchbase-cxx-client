@@ -423,9 +423,9 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
 #ifdef COUCHBASE_CXX_CLIENT_CREATE_OPERATION_SPAN_IN_CORE
         {
           metrics::metric_attributes attrs{
-            service_type::key_value,
+            tracing::service::key_value,
             self->request.observability_identifier,
-            ec,
+            metrics::standardized_error_type(ec),
             self->request.id.bucket(),
             self->request.id.scope(),
             self->request.id.collection(),

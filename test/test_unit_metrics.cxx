@@ -35,7 +35,8 @@ TEST_CASE("unit: metric attributes encoding", "[unit]")
     couchbase::core::metrics::metric_attributes attrs{
       couchbase::core::tracing::service::key_value,
       "get",
-      couchbase::errc::key_value::document_not_found,
+      couchbase::core::metrics::standardized_error_type(
+        couchbase::errc::key_value::document_not_found),
       "test-bucket",
       "test-scope",
       "test-collection",
@@ -97,7 +98,8 @@ TEST_CASE("unit: metric attributes encoding", "[unit]")
     couchbase::core::metrics::metric_attributes attrs{
       couchbase::core::tracing::service::key_value,
       "get",
-      couchbase::errc::key_value::document_not_found,
+      couchbase::core::metrics::standardized_error_type(
+        couchbase::errc::key_value::document_not_found),
       {},
       {},
       {},

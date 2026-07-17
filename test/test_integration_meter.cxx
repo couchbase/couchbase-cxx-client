@@ -208,8 +208,19 @@ TEST_CASE("integration: use external meter", "[integration]")
   auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
 
   {
-    auto [err, res] = collection.upsert(existing_key, value, {}).get();
+    // Seed the document through a separate, unmetered connection. The SDK now resolves a value
+    // recorder once per attribute set and caches it per connection (CXXCBC-855), so performing this
+    // warmup upsert on the metered cluster would pre-cache the "upsert" recorder; the upsert
+    // section below would then reuse the cached recorder and never re-register with the meter after
+    // reset(), leaving it empty. Seeding off-connection keeps the metered cluster's recorder cache
+    // clean until the measured operation.
+    auto seed_cluster = integration.public_cluster();
+    auto [err, res] = seed_cluster.bucket(integration.ctx.bucket)
+                        .default_collection()
+                        .upsert(existing_key, value, {})
+                        .get();
     REQUIRE_SUCCESS(err.ec());
+    seed_cluster.close().get();
   }
 
   meter->reset();

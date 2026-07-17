@@ -291,9 +291,9 @@ private:
 #ifdef COUCHBASE_CXX_CLIENT_CREATE_OPERATION_SPAN_IN_CORE
         if (self->meter_) {
           metrics::metric_attributes attrs{
-            self->request.type,
+            tracing::service_name_for_http_service(self->request.type),
             self->request.observability_identifier,
-            ec,
+            metrics::standardized_error_type(ec),
           };
           self->meter_->record_value(std::move(attrs), start);
         }
