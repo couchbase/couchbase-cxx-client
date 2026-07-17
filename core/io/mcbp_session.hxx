@@ -79,6 +79,9 @@ struct bootstrap_error;
 class bootstrap_state_listener;
 } // namespace impl
 
+class app_telemetry_meter;
+class app_telemetry_value_recorder;
+
 namespace io
 {
 class mcbp_session_impl;
@@ -136,6 +139,11 @@ public:
   [[nodiscard]] auto supported_features() const -> std::vector<protocol::hello_feature>;
   [[nodiscard]] auto id() const -> const std::string&;
   [[nodiscard]] auto node_uuid() const -> const std::string&;
+  // Resolve the app_telemetry recorder for this connection, cached per connection and re-resolved
+  // only when the meter's generation changes (see app_telemetry_recorder_cache).
+  [[nodiscard]] auto app_telemetry_recorder(app_telemetry_meter& meter,
+                                            const std::string& bucket_name) const
+    -> std::shared_ptr<app_telemetry_value_recorder>;
   [[nodiscard]] auto remote_address() const -> std::string;
   [[nodiscard]] auto remote_hostname() const -> std::string;
   [[nodiscard]] auto remote_port() const -> std::uint16_t;

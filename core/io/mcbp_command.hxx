@@ -248,9 +248,10 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     }
 #endif
     if (handler) {
-      const auto& node_uuid = session_ ? session_->node_uuid() : "";
       auto telemetry_recorder =
-        manager_->app_telemetry_meter()->value_recorder(node_uuid, manager_->name());
+        session_
+          ? session_->app_telemetry_recorder(*manager_->app_telemetry_meter(), manager_->name())
+          : manager_->app_telemetry_meter()->value_recorder("", manager_->name());
       telemetry_recorder->update_counter(app_telemetry_counter::kv_r_total);
       if (ec == errc::common::unambiguous_timeout || ec == errc::common::ambiguous_timeout) {
         telemetry_recorder->update_counter(app_telemetry_counter::kv_r_timedout);
@@ -415,8 +416,8 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
               break;
           }
 
-          auto telemetry_recorder = self->manager_->app_telemetry_meter()->value_recorder(
-            self->session_->node_uuid(), self->manager_->name());
+          auto telemetry_recorder = self->session_->app_telemetry_recorder(
+            *self->manager_->app_telemetry_meter(), self->manager_->name());
           telemetry_recorder->record_latency(category, latency);
         }
 
