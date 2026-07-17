@@ -1220,6 +1220,12 @@ TxnService::execute_command(ConnectionPtr conn,
     uint32_t in_flight = 0;
     std::mutex mtx;
     std::condition_variable cv;
+    // A parallel sub-command can return a (non-throwing) operation error just like a serial one.
+    // The serial path propagates it to fail/roll back the transaction (see the run loop); mirror
+    // that here by keeping the first such error and returning it once all workers finish. This
+    // matches the reference Java performer's BatchExecutor, which stores the first thrown error and
+    // rethrows it after the batch completes.
+    couchbase::error batch_error{};
     // since we are fed the _synchronous_ transaction context, lets make N threads, have each of the
     // threads eat commands off the list of commands and perform them synchronously.   That insures
     // if we make the number of threads equal to the parallelism requested, we will always have that
@@ -1241,8 +1247,9 @@ TxnService::execute_command(ConnectionPtr conn,
         in_flight++;
         spdlog::trace("async executing command, {} now in-flight", in_flight);
         lock.unlock();
+        couchbase::error op_err{};
         try {
-          execute_command(conn, ctx, c, logger_prefix, txn_ctx, true);
+          op_err = execute_command(conn, ctx, c, logger_prefix, txn_ctx, true);
         } catch (...) {
           // Release the in-flight slot and wake a waiter even on exception; otherwise the other
           // workers can block forever in cv.wait() and f.get() below would deadlock. The exception
@@ -1255,6 +1262,9 @@ TxnService::execute_command(ConnectionPtr conn,
         }
         lock.lock();
         in_flight--;
+        if (op_err && !batch_error) {
+          batch_error = op_err;
+        }
         lock.unlock();
         cv.notify_one();
         lock.lock();
@@ -1268,6 +1278,7 @@ TxnService::execute_command(ConnectionPtr conn,
     for (auto& f : futures) {
       f.get();
     }
+    return batch_error;
   } else {
     throw performer_exception::unimplemented("Do not understand transaction command " +
                                              cmd.DebugString());
