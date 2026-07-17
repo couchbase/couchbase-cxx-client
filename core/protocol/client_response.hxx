@@ -23,6 +23,7 @@
 #include "client_opcode.hxx"
 #include "client_opcode_fmt.hxx"
 #include "cmd_info.hxx"
+#include "core/io/mcbp_buffer_pool.hxx"
 #include "core/io/mcbp_message.hxx"
 #include "core/utils/byteswap.hxx"
 #include "datatype.hxx"
@@ -68,6 +69,9 @@ private:
   std::uint32_t opaque_{};
   std::uint64_t cas_{};
   cmd_info info_{};
+  // When set, data_ (moved out of the mcbp_message body) is returned to the destroying thread's
+  // buffer pool on destruction so its storage can be recycled. See core/io/mcbp_buffer_pool.hxx.
+  bool recycle_body_{ false };
 
 public:
   client_response() = default;
@@ -80,9 +84,26 @@ public:
     : header_(msg.header_data())
     , data_(std::move(msg.body))
     , info_(info)
+    , recycle_body_(msg.recycle_body)
   {
     verify_header();
     parse_body();
+  }
+
+  client_response(const client_response&) = default;
+  auto operator=(const client_response&) -> client_response& = default;
+  client_response(client_response&&) = default;
+  auto operator=(client_response&&) -> client_response& = default;
+
+  ~client_response()
+  {
+    // Recycle the frame buffer to the destroying thread's own pool. The pool is thread-local, so
+    // this is safe on whichever IO thread (read loop or a command strand) destroys the response;
+    // std::vector value semantics mean no two responses ever share data_, so a buffer is never
+    // returned twice.
+    if (recycle_body_) {
+      io::tls_response_body_pool().release(std::move(data_));
+    }
   }
 
   [[nodiscard]] auto opcode() const -> client_opcode

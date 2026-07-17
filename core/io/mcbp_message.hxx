@@ -48,6 +48,11 @@ struct binary_header {
 struct mcbp_message {
   binary_header header{};
   std::vector<std::byte> body{};
+  // Set on every frame read from the socket, so the buffer that ends up holding `body` can be
+  // recycled to the reading thread's pool when the decoded response is destroyed. False only for a
+  // message that never passed through the read loop (e.g. a default-constructed one), whose `body`
+  // is freed normally.
+  bool recycle_body{ false };
 
   mcbp_message() = default;
   mcbp_message(const mcbp_message& other) = delete;
