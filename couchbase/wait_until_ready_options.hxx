@@ -18,7 +18,6 @@
 #pragma once
 
 #include <couchbase/cluster_state.hxx>
-#include <couchbase/common_options.hxx>
 #include <couchbase/error.hxx>
 #include <couchbase/service_type.hxx>
 
@@ -34,7 +33,7 @@ namespace couchbase
  * @since 1.4.0
  * @committed
  */
-struct wait_until_ready_options : public common_options<wait_until_ready_options> {
+struct wait_until_ready_options {
   /**
    * Sets the state the cluster (or bucket) has to reach before the wait completes.
    *
@@ -50,7 +49,7 @@ struct wait_until_ready_options : public common_options<wait_until_ready_options
   auto desired_state(cluster_state desired_state) -> wait_until_ready_options&
   {
     desired_state_ = desired_state;
-    return self();
+    return *this;
   }
 
   /**
@@ -66,7 +65,7 @@ struct wait_until_ready_options : public common_options<wait_until_ready_options
   auto service_types(std::set<service_type> service_types) -> wait_until_ready_options&
   {
     service_types_ = std::move(service_types);
-    return self();
+    return *this;
   }
 
   /**
@@ -75,7 +74,7 @@ struct wait_until_ready_options : public common_options<wait_until_ready_options
    * @since 1.4.0
    * @internal
    */
-  struct built : public common_options<wait_until_ready_options>::built {
+  struct built {
     cluster_state desired_state;
     std::set<service_type> service_types;
   };
@@ -93,7 +92,7 @@ struct wait_until_ready_options : public common_options<wait_until_ready_options
    */
   [[nodiscard]] auto build() const -> built
   {
-    return { build_common_options(), desired_state_, service_types_ };
+    return { desired_state_, service_types_ };
   }
 
 private:

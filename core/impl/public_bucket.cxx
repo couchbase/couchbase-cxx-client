@@ -86,11 +86,6 @@ public:
                         const wait_until_ready_options::built& options,
                         wait_until_ready_handler&& handler) const
   {
-    if (options.timeout.has_value()) {
-      return handler(couchbase::error{ errc::common::invalid_argument,
-                                       "wait_until_ready_options::timeout is ignored; use the "
-                                       "positional timeout argument instead" });
-    }
     return core::impl::wait_until_ready(core_,
                                         name_,
                                         timeout,
