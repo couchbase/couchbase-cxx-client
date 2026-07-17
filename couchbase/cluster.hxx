@@ -32,7 +32,9 @@
 #include <couchbase/search_query.hxx>
 #include <couchbase/search_request.hxx>
 #include <couchbase/transactions.hxx>
+#include <couchbase/wait_until_ready_options.hxx>
 
+#include <chrono>
 #include <memory>
 
 namespace couchbase
@@ -333,6 +335,36 @@ public:
    */
   [[nodiscard]] auto diagnostics(const diagnostics_options& options = {}) const
     -> std::future<std::pair<error, diagnostics_result>>;
+
+  /**
+   * Waits until the desired state of the cluster is reached, actively pinging its services until
+   * they respond or the timeout elapses.
+   *
+   * @param timeout the maximum time to wait for readiness.
+   * @param options custom options to change the default behavior.
+   * @param handler the handler that implements @ref wait_until_ready_handler.
+   *
+   * @since 1.4.0
+   * @committed
+   */
+  void wait_until_ready(std::chrono::milliseconds timeout,
+                        const wait_until_ready_options& options,
+                        wait_until_ready_handler&& handler) const;
+
+  /**
+   * Waits until the desired state of the cluster is reached, actively pinging its services until
+   * they respond or the timeout elapses.
+   *
+   * @param timeout the maximum time to wait for readiness.
+   * @param options custom options to change the default behavior.
+   * @return future object that carries result of the operation.
+   *
+   * @since 1.4.0
+   * @committed
+   */
+  [[nodiscard]] auto wait_until_ready(std::chrono::milliseconds timeout,
+                                      const wait_until_ready_options& options = {}) const
+    -> std::future<error>;
 
   /**
    * Provides access to the N1QL index management services.
