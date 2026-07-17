@@ -566,7 +566,11 @@ private:
         dispatch_span->add_tag(tracing::attributes::dispatch::operation_id,
                                fmt::format("0x{:x}", request.opaque));
       }
-      dispatch_span->add_tag(tracing::attributes::dispatch::local_id, session_->id());
+      // Prefer the typed capability so the local id is not string-tagged on the hot path; external
+      // tracers fall back to the string tag.
+      if (!dispatch_span->try_set_dispatch_local_id(session_->id())) {
+        dispatch_span->add_tag(tracing::attributes::dispatch::local_id, session_->id());
+      }
     }
     return dispatch_span;
   }
@@ -575,14 +579,21 @@ private:
                            const std::uint64_t server_duration_us) const
   {
     if (dispatch_span->uses_tags()) {
-      dispatch_span->add_tag(tracing::attributes::dispatch::server_duration, server_duration_us);
+      // Prefer the typed capability so the server duration and peer socket are not string-tagged on
+      // the hot path; external tracers fall back to the string tags.
+      if (!dispatch_span->try_set_dispatch_result(
+            server_duration_us, session_->remote_hostname(), session_->remote_port())) {
+        dispatch_span->add_tag(tracing::attributes::dispatch::server_duration, server_duration_us);
+        dispatch_span->add_tag(tracing::attributes::dispatch::peer_address,
+                               session_->remote_hostname());
+        dispatch_span->add_tag(tracing::attributes::dispatch::peer_port, session_->remote_port());
+      }
+      // The built-in span does not keep the server (canonical) address; only external tracers
+      // consume these, and their SSO-sized tag names do not allocate.
       dispatch_span->add_tag(tracing::attributes::dispatch::server_address,
                              session_->canonical_hostname());
       dispatch_span->add_tag(tracing::attributes::dispatch::server_port,
                              session_->canonical_port_number());
-      dispatch_span->add_tag(tracing::attributes::dispatch::peer_address,
-                             session_->remote_hostname());
-      dispatch_span->add_tag(tracing::attributes::dispatch::peer_port, session_->remote_port());
     }
     dispatch_span->end();
   }
