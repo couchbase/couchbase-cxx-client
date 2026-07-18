@@ -565,6 +565,17 @@ public:
 
   void bootstrap(utils::movable_function<void(std::error_code, topology::configuration)>&& handler)
   {
+    if (closed_) {
+      // The bucket was closed before this bootstrap even started -- e.g. the cluster was torn down
+      // in the window between cluster_impl::open_bucket() inserting the bucket into buckets_ and
+      // calling bootstrap() (the buckets_ lock is released in between). close() is one-shot and
+      // will not run again, so registering a config listener or starting a session here would never
+      // be undone: the session, its self-capturing bootstrap continuation, and this bucket would be
+      // stranded as a pure cycle that LeakSanitizer/Valgrind report as leaked, and the continuation
+      // (which a scan/ping/etc. may be parked behind) would never fire. Bail before touching any
+      // shared state.
+      return handler(errc::common::request_canceled, {});
+    }
     if (state_listener_) {
       state_listener_->register_config_listener(shared_from_this());
     }
@@ -578,6 +589,13 @@ public:
       // this bootstrap completes; otherwise the continuation below (which captures new_session)
       // would keep it alive forever. See bootstrapping_session_.
       const std::scoped_lock lock(sessions_mutex_);
+      if (closed_) {
+        // close() ran concurrently after the entry check above (it sets closed_ before it swaps and
+        // stops sessions_ under sessions_mutex_). Do not publish a session close() has already
+        // swept past -- nothing would ever stop it. The bootstrap continuation is not registered
+        // yet, so returning here strands nothing.
+        return handler(errc::common::request_canceled, {});
+      }
       bootstrapping_session_ = new_session;
     }
     new_session.bootstrap([self = shared_from_this(), new_session, h = std::move(handler)](
@@ -588,9 +606,18 @@ public:
                        ec.message(),
                        self->name_);
         self->remove_session(new_session.id());
-        const std::scoped_lock lock(self->sessions_mutex_);
-        self->bootstrapping_session_.reset();
-      } else {
+        {
+          const std::scoped_lock lock(self->sessions_mutex_);
+          self->bootstrapping_session_.reset();
+        }
+        // Deliver the failure inline rather than through the asio::post below: on cluster teardown
+        // the io_context is stopped and any queued post is discarded, so a posted completion would
+        // be dropped -- a std::future caller then observes broken_promise and a callback caller
+        // hangs. On the error path the handler only reports the failure to the operation (it does
+        // not re-enter the bucket under a held lock here), so completing it synchronously is safe.
+        return h(ec, cfg);
+      }
+      {
         const std::size_t this_index = new_session.index();
         bool established{ false };
         {

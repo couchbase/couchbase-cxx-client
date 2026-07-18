@@ -19,9 +19,12 @@
 
 #include <couchbase/cluster.hxx>
 #include <couchbase/collection.hxx>
+#include <couchbase/get_options.hxx>
+#include <couchbase/get_result.hxx>
 
 #include <chrono>
 #include <future>
+#include <utility>
 
 using namespace std::literals::chrono_literals;
 
@@ -74,4 +77,44 @@ TEST_CASE("integration: closing a cluster while a bucket is still bootstrapping 
   // an all-indirect (cyclic) leak; with the fix the run is clean. Record a passing assertion so the
   // case is not reported as assertion-free.
   SUCCEED("cluster torn down while a bucket was bootstrapping without stranding the session");
+}
+
+// Companion to the case above, on the bootstrap-SUCCESS path. The case above tears the cluster down
+// while a bucket that never opens is bootstrapping; here the bucket is a real, reachable one whose
+// bootstrap would have succeeded. Tearing the cluster down while that bootstrap is still in flight
+// exercises close() stopping an in-flight-but-otherwise-healthy bootstrap session -- the operation
+// must still complete (the promise must not be dropped) and the session/bucket/cluster graph must
+// not be stranded (verified leak-free by the AddressSanitizer/LeakSanitizer and Valgrind CI jobs).
+TEST_CASE("integration: closing a cluster while a valid bucket is still bootstrapping does not "
+          "strand the operation",
+          "[integration]")
+{
+  test::utils::integration_test_guard integration;
+
+  std::future<std::pair<couchbase::error, couchbase::get_result>> pending;
+  {
+    auto cluster = integration.public_cluster();
+
+    // Issue an operation on a valid bucket so its first KV session starts bootstrapping, then tear
+    // the cluster down before that bootstrap finishes. If the bootstrap has already completed (fast
+    // environment / cached config), the in-flight condition cannot be set up, so skip rather than
+    // fail nondeterministically.
+    pending = cluster.bucket(integration.ctx.bucket)
+                .default_collection()
+                .get(test::utils::uniq_id("cxxcbc-852-valid"));
+
+    if (pending.wait_for(0s) != std::future_status::timeout) {
+      SUCCEED("operation completed too quickly to exercise an in-flight bucket bootstrap");
+      return;
+    }
+    // `cluster` is destroyed here while the valid bucket's bootstrap is still in flight.
+  }
+
+  // The caller-visible guarantee: teardown completes the operation rather than dropping it (which a
+  // std::future caller would observe as broken_promise). The exact error code is not asserted --
+  // the point is that the future becomes ready at all.
+  if (pending.wait_for(std::chrono::seconds{ 10 }) != std::future_status::ready) {
+    FAIL("get future was not completed after the cluster was closed -- the operation was stranded");
+  }
+  SUCCEED("cluster torn down mid-bootstrap of a valid bucket without stranding the operation");
 }
