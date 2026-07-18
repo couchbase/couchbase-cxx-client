@@ -1105,6 +1105,13 @@ public:
       bucket_name,
       [self = shared_from_this(), bucket_name, handler = std::move(handler)](auto ec) mutable {
         if (ec) {
+          // If the cluster was torn down while this open_bucket was parked in the bootstrap window,
+          // the bucket bootstrap is aborted with request_canceled. Surface that to the caller as
+          // cluster_closed so an in-flight operation parked here (e.g. a scan) observes the
+          // cluster-close contract rather than a bare cancellation.
+          if (self->stopped_) {
+            return handler(errc::network::cluster_closed, nullptr);
+          }
           return handler(ec, nullptr);
         }
 

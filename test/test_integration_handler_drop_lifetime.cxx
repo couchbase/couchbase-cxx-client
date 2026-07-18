@@ -20,6 +20,9 @@
 #include <couchbase/cluster.hxx>
 #include <couchbase/collection.hxx>
 #include <couchbase/error_codes.hxx>
+#include <couchbase/get_options.hxx>
+#include <couchbase/get_result.hxx>
+#include <couchbase/node_id.hxx>
 #include <couchbase/scan_options.hxx>
 #include <couchbase/scan_result.hxx>
 #include <couchbase/scan_type.hxx>
@@ -27,6 +30,7 @@
 #include <chrono>
 #include <future>
 #include <utility>
+#include <vector>
 
 using namespace std::literals::chrono_literals;
 
@@ -85,4 +89,69 @@ TEST_CASE("integration: a scan future completes when the cluster is closed mid-b
   }
   auto result = pending.get();
   REQUIRE(result.first.ec() == couchbase::errc::network::cluster_closed);
+}
+
+// node_ids() reaches the bucket configuration through the same with_bucket_config_or_timeout
+// scaffold as scan(), so it exercises the same parked-in-bootstrap-window teardown path through a
+// second public entry point. A bucket that never opens keeps the wait parked; tearing the cluster
+// down must complete the future with errc::network::cluster_closed rather than strand it.
+TEST_CASE("integration: a node_ids future completes when the cluster is closed mid-bootstrap",
+          "[integration]")
+{
+  test::utils::integration_test_guard integration;
+
+  std::future<std::pair<couchbase::error, std::vector<couchbase::node_id>>> pending;
+  {
+    auto cluster = integration.public_cluster();
+
+    pending = cluster.bucket("this_bucket_does_not_exist").default_collection().node_ids();
+
+    if (pending.wait_for(0s) != std::future_status::timeout) {
+      SUCCEED("node_ids completed too quickly to exercise an in-flight bucket bootstrap");
+      return;
+    }
+    // `cluster` is destroyed here while the bucket-config wait is still parked.
+  }
+
+  if (pending.wait_for(std::chrono::seconds{ 10 }) != std::future_status::ready) {
+    FAIL(
+      "node_ids future was not completed after the cluster was closed -- the handler was stranded");
+  }
+  auto result = pending.get();
+  REQUIRE(result.first.ec() == couchbase::errc::network::cluster_closed);
+}
+
+// A key/value get reaches the bucket through direct_dispatch/open_bucket rather than the
+// with_bucket_config_or_timeout scaffold, so it exercises the bucket-bootstrap teardown from a
+// different call path (the one guarded by bucket_impl::bootstrap()'s closed_ check). The
+// caller-visible contract under test is the lifetime guarantee: teardown must complete the future
+// -- a dropped continuation would surface to a std::future caller as broken_promise (or hang a
+// callback caller) -- regardless of the exact error code the KV path reports.
+TEST_CASE("integration: a get future completes when the cluster is closed mid-bootstrap",
+          "[integration]")
+{
+  test::utils::integration_test_guard integration;
+
+  std::future<std::pair<couchbase::error, couchbase::get_result>> pending;
+  {
+    auto cluster = integration.public_cluster();
+
+    pending = cluster.bucket("this_bucket_does_not_exist")
+                .default_collection()
+                .get(test::utils::uniq_id("cxxcbc-853-get"));
+
+    if (pending.wait_for(0s) != std::future_status::timeout) {
+      SUCCEED("get completed too quickly to exercise an in-flight bucket bootstrap");
+      return;
+    }
+    // `cluster` is destroyed here while the KV operation is still parked in the bootstrap window.
+  }
+
+  if (pending.wait_for(std::chrono::seconds{ 10 }) != std::future_status::ready) {
+    FAIL("get future was not completed after the cluster was closed -- the handler was stranded");
+  }
+  auto result = pending.get();
+  // The cluster was torn down mid-bootstrap, so the operation must fail -- the point is that it
+  // completes at all rather than being dropped.
+  REQUIRE(result.first.ec());
 }
