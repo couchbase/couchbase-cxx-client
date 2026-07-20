@@ -5,9 +5,11 @@
 # these packages are not installed, gRPC is fetched from source with its protobuf
 # submodule so both sets of targets are built in-tree.
 #
-# This module MUST be included before OpenTelemetry so that OTel's protobuf.cmake
-# detects the already-available protobuf targets and reuses them instead of fetching
-# its own copy.
+# This module is included only for gRPC-based components (currently the FIT performer); when it is
+# included it MUST come before OpenTelemetry so OTel's protobuf.cmake detects the already-available
+# protobuf targets and reuses them. When it is NOT included (e.g. fit_performer disabled but
+# OpenTelemetry enabled, as on EL9), OpenTelemetry falls back to finding the system protobuf on its
+# own -- which is why every OpenTelemetry-enabled packaging target also installs protobuf-devel.
 
 include(FetchContent)
 

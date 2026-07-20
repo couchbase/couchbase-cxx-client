@@ -69,4 +69,6 @@ target_link_libraries(
   cbc
   PRIVATE system_metrics_cxx)
 
-add_subdirectory(fit_performer)
+if(COUCHBASE_CXX_CLIENT_BUILD_FIT_PERFORMER)
+  add_subdirectory(fit_performer)
+endif()

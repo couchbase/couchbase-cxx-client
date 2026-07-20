@@ -9,6 +9,40 @@
 %global clamp_mtime_to_source_date_epoch 1
 %global _buildhost couchbase-reproducible-build
 
+# gRPC support gate (grpc_supported).
+#
+# Some components link system gRPC + Protobuf. A platform can build ANY gRPC-based component only
+# if it provides BOTH:
+#   1. gRPC:     grpc-devel + grpc-plugins (the grpc_cpp_plugin protoc plugin), and
+#   2. Protobuf: version >= 3.15. Our .proto schemas use proto3 "optional" fields, whose generated
+#      has_*() accessors are only emitted by protobuf >= 3.15; older protobuf fails to compile
+#      (e.g. EL9 ships protobuf 3.14 in CRB -> "has_as_json_object() was not declared").
+#
+# The platforms below are gated by gRPC/Protobuf availability -- NOT by any individual component.
+# fit_performer is currently the only gRPC-based component packaged, but every future gRPC-based
+# feature is expected to gate on grpc_supported and inherit this same matrix.
+#
+# Support matrix (versions are indicative and may drift; the load-bearing fact is protobuf >= 3.15):
+#   - Fedora             grpc + protobuf >= 3.15 in repos     -> gRPC supported
+#   - EL10+ (rocky/rhel) grpc (EPEL) + protobuf >= 3.15 (CRB) -> gRPC supported
+#   - Amazon Linux 2023  grpc + protobuf >= 3.15 in repos     -> gRPC supported (only amzn root)
+#   - EL9   (rocky/rhel) protobuf 3.14 in CRB                 -> no: protobuf too old
+#   - EL8                no grpc packaged                     -> no: grpc unavailable
+#   - openSUSE Leap 16   no grpc_cpp_plugin package; protobuf -> no: cannot generate grpc stubs
+#                        28.x (major jump from 3.x)              from system grpc; protobuf 28
+#                                                                also unvalidated
+#
+# To enable another distribution: confirm it provides grpc-devel, grpc-plugins, and
+# protobuf-devel >= 3.15, then add it to the test below.
+#
+# The gate below matches any Amazon Linux; the only amzn build root is amazonlinux-2023, which meets
+# the requirement. A tighter "amzn >= 2023" test is deliberately avoided: RPM's conditional
+# expression parser treats the leading-zero form (02023) as octal, so that comparison is false on
+# AL2023. If an older Amazon Linux is ever added as a root, verify it ships protobuf >= 3.15 first.
+%if 0%{?fedora} > 0 || 0%{?rhel} >= 10 || 0%{?amzn}
+%global grpc_supported 1
+%endif
+
 Name: couchbase-cxx-client
 Summary: Couchbase C++ SDK
 Version: @COUCHBASE_CXX_CLIENT_PACKAGE_VERSION@
@@ -36,6 +70,14 @@ BuildRequires: json-devel
 # CentOS 8 / Rocky 8 - skip these packages (no OpenTelemetry)
 %endif
 %endif
+%if 0%{?grpc_supported}
+BuildRequires: grpc-devel
+BuildRequires: grpc-plugins
+# protobuf-devel is also pulled by the OpenTelemetry block above on most targets, but Amazon Linux
+# skips that block (no OTel), so require it here to keep the gRPC build self-contained.
+BuildRequires: protobuf-devel
+BuildRequires: protobuf-compiler
+%endif
 Source0: @COUCHBASE_CXX_CLIENT_TARBALL_NAME@.tar.gz
 
 %if 0%{?amzn}
@@ -59,6 +101,16 @@ Requires: %{name}%{?_isa} = %{version}-%{release}
 %description devel
 Development files for the Couchbase C++ SDK.
 
+%if 0%{?grpc_supported}
+%package fit-performer
+Summary: Couchbase C++ SDK, FIT performer
+Requires: %{name}%{?_isa} = %{version}-%{release}
+%description fit-performer
+FIT integration-test performer built against the Couchbase C++ SDK. It is
+packaged separately so that nothing depends on it automatically; install it on
+demand to run integration verification against the production SDK packages.
+%endif
+
 %prep
 %autosetup -p1 -n@COUCHBASE_CXX_CLIENT_TARBALL_NAME@
 %cmake \
@@ -80,6 +132,11 @@ Development files for the Couchbase C++ SDK.
     -DCOUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY=OFF \
 %endif
     -DCOUCHBASE_CXX_CLIENT_BUILD_TOOLS=ON \
+%if 0%{?grpc_supported}
+    -DCOUCHBASE_CXX_CLIENT_BUILD_FIT_PERFORMER=ON \
+%else
+    -DCOUCHBASE_CXX_CLIENT_BUILD_FIT_PERFORMER=OFF \
+%endif
     -DCOUCHBASE_CXX_CLIENT_BUILD_STATIC=ON \
     -DCOUCHBASE_CXX_CLIENT_BUILD_SHARED=ON
 
@@ -120,6 +177,11 @@ DESTDIR="%{buildroot}" /usr/bin/cmake --install "redhat-linux-build"
 %{_libdir}/libcouchbase_cxx_client_static.a
 %{_libdir}/pkgconfig/couchbase_cxx_client.pc
 %{_libdir}/pkgconfig/couchbase_cxx_client_static.pc
+
+%if 0%{?grpc_supported}
+%files fit-performer
+%{_bindir}/fit_performer
+%endif
 
 %changelog
 * @COUCHBASE_CXX_CLIENT_RPM_DATE@ Couchbase SDK Team <support@couchbase.com> - @COUCHBASE_CXX_CLIENT_PACKAGE_VERSION@-@COUCHBASE_CXX_CLIENT_PACKAGE_RELEASE@
