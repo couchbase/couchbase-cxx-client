@@ -39,7 +39,8 @@ if(NOT TARGET spdlog::spdlog)
     "SPDLOG_FMT_EXTERNAL OFF")
 endif()
 
-if(COUCHBASE_CXX_CLIENT_BUILD_TOOLS)
+if(COUCHBASE_CXX_CLIENT_BUILD_TOOLS AND COUCHBASE_CXX_CLIENT_BUILD_FIT_PERFORMER)
+  # gRPC/Protobuf are pulled in only for gRPC-based components (currently the FIT performer).
   include(cmake/GrpcProtobuf.cmake)
 endif()
 

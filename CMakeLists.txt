@@ -90,6 +90,14 @@ find_package(Threads REQUIRED)
 
 option(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY "Build with OpenTelemetry" ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT})
 option(COUCHBASE_CXX_CLIENT_BUILD_TOOLS "Build tools" ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT})
+# fit_performer links gRPC/Protobuf. Any gRPC-based component can only be built where the platform
+# provides gRPC and protobuf >= 3.15 (needed for the proto3 "optional" has_*() accessors our
+# schemas use); turn this OFF where they are missing (e.g. EL8, EL9's protobuf 3.14) so the rest of
+# the tools still build. fit_performer is currently the only gRPC-based component,
+# but future gRPC features are expected to follow the same platform gating.
+option(COUCHBASE_CXX_CLIENT_BUILD_FIT_PERFORMER
+       "Build the FIT performer integration-test tool (requires gRPC + protobuf >= 3.15)"
+       ${COUCHBASE_CXX_CLIENT_BUILD_TOOLS})
 
 include(cmake/ThirdPartyDependencies.cmake)
 
