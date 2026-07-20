@@ -84,6 +84,9 @@ endif()
 add_custom_command(
   OUTPUT ${COUCHBASE_CXX_CLIENT_MANIFEST}
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+  # Fail loudly if this is not a git checkout (e.g. a bare jj workspace with no .git),
+  # instead of silently emitting an empty manifest and a broken empty tarball.
+  COMMAND ${CMAKE_COMMAND} -P ${PROJECT_SOURCE_DIR}/cmake/require-git-checkout.cmake
   COMMAND git ls-files --recurse-submodules | LC_ALL=C sort > ${COUCHBASE_CXX_CLIENT_MANIFEST})
 
 set(COUCHBASE_CXX_TARBALL_THIRD_PARTY_GLOB_FILE ${PROJECT_SOURCE_DIR}/cmake/tarball_glob.txt)
@@ -334,8 +337,48 @@ endif()
 
 option(COUCHBASE_CXX_CLIENT_RPM_TARGETS "Enable targets for building RPMs" FALSE)
 if(COUCHBASE_CXX_CLIENT_RPM_TARGETS)
-  find_program(MOCK mock REQUIRED) # dnf install -y mock
   find_program(SPECTOOL spectool REQUIRED) # dnf install -y rpmdevtools
+
+  option(COUCHBASE_CXX_CLIENT_RPM_ROOTLESS
+         "Build RPMs by running mock inside a rootless podman container (no mock group/sudo on the host)"
+         OFF)
+  option(COUCHBASE_CXX_CLIENT_RPM_ROOTLESS_BOOTSTRAP_IMAGE
+         "Use mock's podman bootstrap image (needed for cross-distro roots; requires nested podman)"
+         OFF)
+  if(COUCHBASE_CXX_CLIENT_RPM_ROOTLESS)
+    find_program(PODMAN podman REQUIRED) # dnf install -y podman
+    # Fail early (like the DEB keyring check) if podman is not usable rootless.
+    execute_process(
+      COMMAND ${PODMAN} info --format "{{.Host.Security.Rootless}}"
+      RESULT_VARIABLE _podman_info_result
+      OUTPUT_VARIABLE _podman_rootless
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      ERROR_VARIABLE _podman_info_error)
+    if(NOT _podman_info_result EQUAL 0 OR NOT "${_podman_rootless}" STREQUAL "true")
+      message(FATAL_ERROR
+        "COUCHBASE_CXX_CLIENT_RPM_ROOTLESS=ON requires a working rootless podman "
+        "('podman info' must report Host.Security.Rootless=true). "
+        "Install podman and configure /etc/subuid and /etc/subgid for your user, or set the toggle OFF.\n"
+        "podman reported: ${_podman_info_error}")
+    endif()
+    set(COUCHBASE_CXX_CLIENT_RPM_BUILDER_BASE "registry.fedoraproject.org/fedora:44"
+        CACHE STRING "Base image for the rootless RPM builder (pin by digest for reproducibility)")
+    set(COUCHBASE_CXX_CLIENT_RPM_BUILDER_IMAGE "localhost/cxxcbc-rpm-builder:fedora-44"
+        CACHE STRING "Tag of the locally built rootless RPM builder image")
+    set(COUCHBASE_CXX_CLIENT_RPM_BUILDER_STAMP "${PROJECT_BINARY_DIR}/packaging/rpm-builder-image.stamp")
+    add_custom_command(
+      OUTPUT ${COUCHBASE_CXX_CLIENT_RPM_BUILDER_STAMP}
+      COMMAND ${PODMAN} build --build-arg "BASE=${COUCHBASE_CXX_CLIENT_RPM_BUILDER_BASE}"
+              -t ${COUCHBASE_CXX_CLIENT_RPM_BUILDER_IMAGE}
+              -f ${PROJECT_SOURCE_DIR}/cmake/rpm/Containerfile ${PROJECT_SOURCE_DIR}/cmake/rpm
+      COMMAND ${CMAKE_COMMAND} -E touch ${COUCHBASE_CXX_CLIENT_RPM_BUILDER_STAMP}
+      DEPENDS ${PROJECT_SOURCE_DIR}/cmake/rpm/Containerfile
+      COMMENT "Building rootless RPM builder image ${COUCHBASE_CXX_CLIENT_RPM_BUILDER_IMAGE}")
+  else()
+    # Only the non-rootless path runs mock on the host; the rootless path runs it inside the
+    # builder container, so a host mock is not required there.
+    find_program(MOCK mock REQUIRED) # dnf install -y mock
+  endif()
 
   string(TIMESTAMP COUCHBASE_CXX_CLIENT_RPM_DATE "%a %b %d %Y" UTC)
 
@@ -347,13 +390,42 @@ if(COUCHBASE_CXX_CLIENT_RPM_TARGETS)
       "couchbase-cxx-client-${COUCHBASE_CXX_CLIENT_PACKAGE_VERSION}-${COUCHBASE_CXX_CLIENT_PACKAGE_RELEASE}")
   set(COUCHBASE_CXX_CLIENT_SRPM "${PROJECT_BINARY_DIR}/packaging/srpm/${COUCHBASE_CXX_CLIENT_RPM_NAME}.el9.src.rpm")
 
+  # mock_launcher(<out_var> <resultdir>): expands to the command prefix used to run mock,
+  # either directly on the host (default) or inside a rootless podman container. The wrapper
+  # forwards all mock arguments unchanged, so the two paths are argument-compatible.
+  if(COUCHBASE_CXX_CLIENT_RPM_ROOTLESS AND COUCHBASE_CXX_CLIENT_RPM_ROOTLESS_BOOTSTRAP_IMAGE)
+    set(_rpm_use_boot 1)
+  else()
+    set(_rpm_use_boot 0)
+  endif()
+  macro(mock_launcher out_var resultdir)
+    if(COUCHBASE_CXX_CLIENT_RPM_ROOTLESS)
+      set(${out_var}
+          ${CMAKE_COMMAND} -E env
+          "RPM_PODMAN=${PODMAN}"
+          "RPM_BUILDER_IMAGE=${COUCHBASE_CXX_CLIENT_RPM_BUILDER_IMAGE}"
+          "RPM_PACKAGING_DIR=${PROJECT_BINARY_DIR}/packaging"
+          "MOCK_RESULTDIR=${resultdir}"
+          "SOURCE_DATE_EPOCH=${COUCHBASE_CXX_CLIENT_SOURCE_DATE_EPOCH}"
+          "MOCK_USE_BOOTSTRAP_IMAGE=${_rpm_use_boot}"
+          bash "${PROJECT_SOURCE_DIR}/cmake/rpm/mock-in-podman.sh")
+    else()
+      set(${out_var} ${MOCK})
+    endif()
+  endmacro()
+
+  mock_launcher(_srpm_mock "${PROJECT_BINARY_DIR}/packaging/srpm")
+  set(_srpm_extra_deps "")
+  if(COUCHBASE_CXX_CLIENT_RPM_ROOTLESS)
+    set(_srpm_extra_deps ${COUCHBASE_CXX_CLIENT_RPM_BUILDER_STAMP})
+  endif()
   add_custom_command(
     OUTPUT ${COUCHBASE_CXX_CLIENT_SRPM}
     WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/packaging"
     COMMAND ${SPECTOOL} --get-files couchbase-cxx-client.spec
-    COMMAND ${MOCK} --buildsrpm --root=${COUCHBASE_CXX_CLIENT_DEFAULT_ROOT}
+    COMMAND ${_srpm_mock} --buildsrpm --root=${COUCHBASE_CXX_CLIENT_DEFAULT_ROOT}
             --resultdir=${PROJECT_BINARY_DIR}/packaging/srpm --spec couchbase-cxx-client.spec --sources .
-    DEPENDS ${COUCHBASE_CXX_CLIENT_TARBALL} ${COUCHBASE_CXX_CLIENT_SPEC})
+    DEPENDS ${COUCHBASE_CXX_CLIENT_TARBALL} ${COUCHBASE_CXX_CLIENT_SPEC} ${_srpm_extra_deps})
 
   add_custom_target(packaging_srpm DEPENDS ${COUCHBASE_CXX_CLIENT_SRPM})
 
@@ -378,12 +450,16 @@ if(COUCHBASE_CXX_CLIENT_RPM_TARGETS)
     if(last_output)
       list(APPEND dependencies ${last_output})
     endif()
+    if(COUCHBASE_CXX_CLIENT_RPM_ROOTLESS)
+      list(APPEND dependencies ${COUCHBASE_CXX_CLIENT_RPM_BUILDER_STAMP})
+    endif()
 
+    mock_launcher(_root_mock "${PROJECT_BINARY_DIR}/packaging/rpm/${root}")
     add_custom_command(
       COMMENT "Building RPM for ${root}"
       OUTPUT ${timestamp}
       WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/packaging"
-      COMMAND ${MOCK} --rebuild --root=${root} --resultdir=${PROJECT_BINARY_DIR}/packaging/rpm/${root}
+      COMMAND ${_root_mock} --rebuild --root=${root} --resultdir=${PROJECT_BINARY_DIR}/packaging/rpm/${root}
               "${COUCHBASE_CXX_CLIENT_SRPM}"
       COMMAND touch ${timestamp}
       DEPENDS ${dependencies})

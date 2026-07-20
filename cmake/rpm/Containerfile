@@ -1,0 +1,7 @@
+# Rootless mock builder image. Runs as root here; the CMake wrapper su's to the
+# unprivileged `builder` user (in the mock group) for the actual mock invocation,
+# because mock refuses to run as uid 0.
+ARG BASE=registry.fedoraproject.org/fedora:44
+FROM ${BASE}
+RUN dnf -y install mock rpm-build rpmdevtools && dnf clean all
+RUN useradd -m -G mock builder
