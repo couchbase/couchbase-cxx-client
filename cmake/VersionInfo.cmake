@@ -47,6 +47,56 @@ if(NOT COUCHBASE_CXX_CLIENT_BUILD_TIMESTAMP)
   endif()
 endif()
 
+# SOURCE_DATE_EPOCH is the single, timezone-free anchor for every embedded date (the source
+# tarball mtime, the Debian changelog / RPM %changelog dates, and the .apk mtimes). It is derived
+# from the most recent tag's commit time (git %ct) -- or HEAD's commit time for an untagged commit
+# -- frozen into TarballRelease.cmake at tarball creation, and reused unchanged when packages are
+# later built from the tarball (which has no .git).
+# Use DEFINED/empty rather than truthiness: the valid epoch 0 (1970-01-01) is CMake-falsey and
+# would otherwise be treated as unset and overwritten, breaking reproducibility.
+if(NOT DEFINED COUCHBASE_CXX_CLIENT_SOURCE_DATE_EPOCH OR COUCHBASE_CXX_CLIENT_SOURCE_DATE_EPOCH STREQUAL "")
+  if(DEFINED ENV{SOURCE_DATE_EPOCH})
+    set(COUCHBASE_CXX_CLIENT_SOURCE_DATE_EPOCH "$ENV{SOURCE_DATE_EPOCH}")
+  elseif(GIT)
+    # Prefer the most recent tag's commit time; if no tag is reachable (untagged commit) fall back
+    # to HEAD's commit time -- still deterministic per commit -- rather than the wall clock.
+    execute_process(
+      COMMAND git describe --tags --abbrev=0 HEAD
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+      RESULT_VARIABLE _sde_tag_result
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      OUTPUT_VARIABLE _sde_last_tag)
+    if(_sde_tag_result EQUAL 0)
+      set(_sde_ref "${_sde_last_tag}")
+    else()
+      set(_sde_ref "HEAD")
+    endif()
+    execute_process(
+      COMMAND git log --max-count=1 --no-patch --format=%ct ${_sde_ref}
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      OUTPUT_VARIABLE COUCHBASE_CXX_CLIENT_SOURCE_DATE_EPOCH)
+  endif()
+  if(NOT DEFINED COUCHBASE_CXX_CLIENT_SOURCE_DATE_EPOCH OR COUCHBASE_CXX_CLIENT_SOURCE_DATE_EPOCH STREQUAL "")
+    string(TIMESTAMP COUCHBASE_CXX_CLIENT_SOURCE_DATE_EPOCH "%s" UTC)
+  endif()
+endif()
+
+# Fail early with an actionable message if the epoch is not a decimal integer: it is threaded
+# into tar (--mtime=@...), rpm/dpkg/abuild, and the rootless mock wrapper, where a bad value
+# would otherwise surface as a cryptic downstream error.
+if(NOT COUCHBASE_CXX_CLIENT_SOURCE_DATE_EPOCH MATCHES "^[0-9]+$")
+  message(FATAL_ERROR
+    "COUCHBASE_CXX_CLIENT_SOURCE_DATE_EPOCH must be a decimal integer (seconds since the Unix "
+    "epoch), but is '${COUCHBASE_CXX_CLIENT_SOURCE_DATE_EPOCH}'. Check the SOURCE_DATE_EPOCH "
+    "environment variable.")
+endif()
+
+# Anchor it in the environment so every string(TIMESTAMP ...) evaluated afterwards (here and in
+# Packaging.cmake) formats this frozen instant instead of the wall clock, and so child build tools
+# (dpkg-buildpackage, rpmbuild, abuild) that honor SOURCE_DATE_EPOCH inherit the same value.
+set(ENV{SOURCE_DATE_EPOCH} "${COUCHBASE_CXX_CLIENT_SOURCE_DATE_EPOCH}")
+
 string(REGEX REPLACE "T.*" "" COUCHBASE_CXX_CLIENT_BUILD_DATE "${COUCHBASE_CXX_CLIENT_BUILD_TIMESTAMP}")
 
 # set(couchbase_cxx_client_BUILD_NUMBER 142)

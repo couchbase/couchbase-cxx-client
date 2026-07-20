@@ -101,6 +101,7 @@ set(OTELCPP_PROTO_PATH \"\${PROJECT_SOURCE_DIR}/third_party_cache/opentelemetry/
 set(COUCHBASE_CXX_CLIENT_GIT_REVISION \"${COUCHBASE_CXX_CLIENT_GIT_REVISION}\")
 set(COUCHBASE_CXX_CLIENT_GIT_DESCRIBE \"${COUCHBASE_CXX_CLIENT_GIT_DESCRIBE}\")
 set(COUCHBASE_CXX_CLIENT_BUILD_TIMESTAMP \"${COUCHBASE_CXX_CLIENT_BUILD_TIMESTAMP}\")
+set(COUCHBASE_CXX_CLIENT_SOURCE_DATE_EPOCH \"${COUCHBASE_CXX_CLIENT_SOURCE_DATE_EPOCH}\")
 set(COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE_ROOT \"\${PROJECT_SOURCE_DIR}/third_party_cache\" CACHE STRING \"\" FORCE)
 message(STATUS \"Building from Tarball: ${COUCHBASE_CXX_CLIENT_TARBALL_NAME}.tar.gz\")
 ")
@@ -123,6 +124,11 @@ add_custom_command(
     -DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON -DCPM_DOWNLOAD_ALL=ON -DCPM_USE_NAMED_CACHE_DIRECTORIES=ON
     -DCPM_USE_LOCAL_PACKAGES=OFF -DCOUCHBASE_CXX_CLIENT_BUILD_STATIC=ON -DCOUCHBASE_CXX_CLIENT_BUILD_SHARED=ON
     -DCOUCHBASE_CXX_CLIENT_INSTALL=ON -DCOUCHBASE_CXX_RECORD_BUILD_INFO_FOR_TARBALL=ON
+    # Pass the frozen instant explicitly: this inner configure runs at build time against a
+    # .git-less extracted copy, so without these it would fall back to wall-clock for an
+    # out-of-source build (build dir outside the worktree, where git cannot walk up to .git).
+    "-DCOUCHBASE_CXX_CLIENT_SOURCE_DATE_EPOCH=${COUCHBASE_CXX_CLIENT_SOURCE_DATE_EPOCH}"
+    "-DCOUCHBASE_CXX_CLIENT_BUILD_TIMESTAMP=${COUCHBASE_CXX_CLIENT_BUILD_TIMESTAMP}"
   COMMAND
     ${XARGS} -a ${COUCHBASE_CXX_TARBALL_THIRD_PARTY_GLOB_FILE} -I {} find
     "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/cache" -wholename "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/cache/{}"
@@ -145,7 +151,7 @@ add_custom_command(
         -e "/opentelemetry/tools"
         -e "crypto_test_data"
         -e "googletest"
-    | uniq >
+    | LC_ALL=C sort -u >
     "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/third_party_manifest.txt"
   COMMAND ${CMAKE_COMMAND} -E make_directory "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/filtered_cache"
   COMMAND ${XARGS} -a "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/third_party_manifest.txt" -I {} ${CP} --parents
@@ -160,7 +166,11 @@ add_custom_command(
           "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/third_party_cache/cpm/CPM_*.cmake"
   COMMAND ${CMAKE_COMMAND} -E rm -rf "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp"
   # https://reproducible-builds.org/docs/archives/
-  COMMAND ${TAR} --sort=name --mtime="${COUCHBASE_CXX_CLIENT_BUILD_TIMESTAMP}Z" --owner=0 --group=0 --numeric-owner -czf
+  # --mtime=@<epoch>: timezone-free fixed mtime from the frozen SOURCE_DATE_EPOCH (not a tz-local
+  #   string mislabelled with "Z"). --mode: normalize permission bits so the builder's umask does
+  #   not leak into directory/file modes. gzip -n: keep the mtime/filename out of the gzip header.
+  COMMAND ${TAR} --sort=name "--mtime=@${COUCHBASE_CXX_CLIENT_SOURCE_DATE_EPOCH}" --owner=0 --group=0
+          --numeric-owner "--mode=go+u,go-w" "--use-compress-program=gzip -n" -cf
           "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}.tar.gz" "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}"
   COMMAND ${CMAKE_COMMAND} -E rm -rf "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}"
   DEPENDS ${COUCHBASE_CXX_CLIENT_MANIFEST})
@@ -399,7 +409,9 @@ if(COUCHBASE_CXX_CLIENT_APK_TARGETS)
   add_custom_command(
     OUTPUT ${cxxcbc_apkbuild_timestamp}
     WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/packaging"
-    COMMAND ${ABUILD} -r
+    # abuild (unlike dpkg/rpm) does not derive SOURCE_DATE_EPOCH from any metadata, so pass the
+    # frozen epoch explicitly to clamp .apk mtimes for reproducibility.
+    COMMAND ${CMAKE_COMMAND} -E env SOURCE_DATE_EPOCH=${COUCHBASE_CXX_CLIENT_SOURCE_DATE_EPOCH} ${ABUILD} -r
     COMMAND touch ${cxxcbc_apkbuild_timestamp}
     DEPENDS ${COUCHBASE_CXX_CLIENT_TARBALL_ALPINE} ${cxxcbc_apkbuild_checksum})
 
