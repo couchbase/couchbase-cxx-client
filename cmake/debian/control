@@ -5,8 +5,10 @@ Maintainer: Couchbase SDK Team <support@couchbase.com>
 Build-Depends: debhelper (>= 9), cmake, pkg-config,
 	libcurl4-openssl-dev,
 	protobuf-compiler,
+	protobuf-compiler-grpc,
 	libprotobuf-dev,
 	libgrpc-dev,
+	libgrpc++-dev,
 	nlohmann-json3-dev
 Standards-Version: 4.5.0
 Vcs-Browser: https://github.com/couchbase/couchbase-cxx-client
@@ -35,6 +37,16 @@ Depends: couchbase-cxx-client (= ${binary:Version}), ${misc:Depends}
 Description: Couchbase C++ SDK, development files.
  This is the development files for the client and protocol library for
  Couchbase project.
+
+Package: couchbase-cxx-client-fit-performer
+Architecture: any
+Multi-Arch: same
+Section: devel
+Depends: couchbase-cxx-client (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Description: Couchbase C++ SDK, FIT performer.
+ FIT integration-test performer built against the Couchbase C++ SDK. It is
+ packaged separately so that nothing depends on it automatically; install it on
+ demand to run integration verification against the production SDK packages.
 
 Package: couchbase-cxx-client-dbg
 Architecture: any
