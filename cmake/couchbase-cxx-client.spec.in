@@ -1,3 +1,14 @@
+# Reproducibility: derive SOURCE_DATE_EPOCH from the (frozen) %changelog date and clamp file
+# mtimes to it, and pin the recorded build host, so RPMs are byte-identical across build machines.
+# These are redhat-rpm-config knobs, effective on Fedora/EL9+ (and on by default there); we set
+# them explicitly so the intent is applied wherever supported. On toolchains that predate them or
+# do not implement them (e.g. EL8, Amazon Linux, openSUSE's own SOURCE_DATE_EPOCH handling) an
+# unrecognized global macro is simply ignored, so mtime/buildhost reproducibility is not guaranteed
+# there.
+%global source_date_epoch_from_changelog 1
+%global clamp_mtime_to_source_date_epoch 1
+%global _buildhost couchbase-reproducible-build
+
 Name: couchbase-cxx-client
 Summary: Couchbase C++ SDK
 Version: @COUCHBASE_CXX_CLIENT_PACKAGE_VERSION@
