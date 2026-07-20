@@ -27,6 +27,7 @@ cli11/*/cli11/single-include/CMakeLists.txt
 cli11/*/cli11/src/*
 cli11/*/cli11/src/**/*
 cpm/*.cmake
+fit_protocol/*/fit_protocol/operational/*.proto
 fmt/*/fmt/CMakeLists.txt
 fmt/*/fmt/ChangeLog.md
 fmt/*/fmt/LICENSE

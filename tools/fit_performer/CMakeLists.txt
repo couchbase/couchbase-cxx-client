@@ -7,19 +7,23 @@ if(NOT TARGET protobuf::libprotobuf)
   message(FATAL_ERROR "protobuf::libprotobuf target not found. Ensure cmake/GrpcProtobuf.cmake was included.")
 endif()
 
-# Fetch the FIT protocol files from the official repository
+# Fetch the FIT protocol files via CPM (DOWNLOAD_ONLY, it ships only .proto files, no
+# CMakeLists) so they land in CPM_SOURCE_CACHE and get embedded in the release tarball.
+# This lets offline package builds (e.g. inside the sbuild chroot, which runs with
+# FETCHCONTENT_FULLY_DISCONNECTED=ON) build fit_performer without network access.
 #
-# WARNING: Do NOT add GIT_SHALLOW TRUE — it will fail with
-# "fatal: unable to read tree" for this commit because shallow clones
-# only work for commits at/near the branch tip. This commit is not
-# reachable with depth=1, so you need a full clone.
-include(FetchContent)
-FetchContent_Declare(
+# WARNING: Do NOT add GIT_SHALLOW TRUE — it fails with "fatal: unable to read tree" for
+# this commit because shallow clones only reach commits at/near the branch tip. CPM does
+# a full clone by default, which is required here.
+cpmaddpackage(
+  NAME
   fit_protocol
-  GIT_REPOSITORY https://github.com/couchbaselabs/fit-protocol
-  GIT_TAG d7fb6ede7ee0f39cc39294b67d5b180674d61449)
-
-FetchContent_MakeAvailable(fit_protocol)
+  GITHUB_REPOSITORY
+  "couchbaselabs/fit-protocol"
+  GIT_TAG
+  d7fb6ede7ee0f39cc39294b67d5b180674d61449
+  DOWNLOAD_ONLY
+  YES)
 
 # generate the protobuf/grpc stuff
 set(PROTO_IN "${fit_protocol_SOURCE_DIR}/operational")

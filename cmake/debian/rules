@@ -20,8 +20,10 @@ override_dh_auto_configure:
 		>> debian/couchbase-cxx-client-dev.install
 	echo "usr/lib/$(DEB_HOST_MULTIARCH)/pkgconfig" \
 		>> debian/couchbase-cxx-client-dev.install
-	echo "usr/bin/*" \
+	echo "usr/bin/cbc" \
 		> debian/couchbase-cxx-client-tools.install
+	echo "usr/bin/fit_performer" \
+		> debian/couchbase-cxx-client-fit-performer.install
 	echo "usr/lib/$(DEB_HOST_MULTIARCH)/libcouchbase_cxx_client.so.*" \
 		> debian/couchbase-cxx-client.install
 	echo "usr/share/doc/tao/json/LICENSE" \

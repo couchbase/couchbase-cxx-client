@@ -17,6 +17,11 @@ install(FILES ${PROJECT_BINARY_DIR}/couchbase_cxx_client-version.cmake
 
 if(COUCHBASE_CXX_CLIENT_BUILD_TOOLS)
   install(TARGETS cbc RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+  # fit_performer is packaged separately (couchbase-cxx-client-fit-performer) so nothing
+  # depends on it automatically; it is built against the shared SDK for integration testing.
+  if(TARGET fit_performer)
+    install(TARGETS fit_performer RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+  endif()
 endif()
 
 if(COUCHBASE_CXX_CLIENT_BUILD_STATIC)
@@ -180,8 +185,21 @@ add_custom_target(packaging_tarball DEPENDS ${COUCHBASE_CXX_CLIENT_TARBALL})
 option(COUCHBASE_CXX_CLIENT_DEB_TARGETS "Enable targets for building DEBs" FALSE)
 if(COUCHBASE_CXX_CLIENT_DEB_TARGETS)
   find_program(DPKG_BUILDPACKAGE dpkg-buildpackage REQUIRED) # apt install -y dpkg-dev
-  find_program(SUDO sudo REQUIRED) # apt install -y sudo
-  find_program(COWBUILDER cowbuilder REQUIRED) # apt install -y cowbuilder
+  find_program(SBUILD sbuild REQUIRED) # apt install -y sbuild
+  find_program(MMDEBSTRAP mmdebstrap REQUIRED) # apt install -y mmdebstrap
+
+  # sbuild builds each distro inside a throwaway chroot that mmdebstrap creates rootlessly
+  # (unshare mode, no sudo required). mmdebstrap and sbuild expect the Debian host
+  # architecture (e.g. amd64, arm64), which differs from CMAKE_SYSTEM_PROCESSOR (x86_64,
+  # aarch64) that is used elsewhere for the human-readable result directory names.
+  execute_process(
+    COMMAND dpkg --print-architecture
+    RESULT_VARIABLE _dpkg_arch_result
+    OUTPUT_VARIABLE COUCHBASE_CXX_CLIENT_DEB_HOST_ARCH
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+  if(NOT _dpkg_arch_result EQUAL 0 OR NOT COUCHBASE_CXX_CLIENT_DEB_HOST_ARCH)
+    message(FATAL_ERROR "Failed to determine the Debian host architecture via 'dpkg --print-architecture'")
+  endif()
 
   string(TIMESTAMP COUCHBASE_CXX_CLIENT_DEB_DATE "%a, %d %b %Y %H:%M:%S %z" UTC)
 
@@ -217,54 +235,70 @@ if(COUCHBASE_CXX_CLIENT_DEB_TARGETS)
   add_custom_command(
     OUTPUT ${COUCHBASE_CXX_CLIENT_DEBIAN_DSC}
     WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/packaging/workspace"
-    COMMAND ${DPKG_BUILDPACKAGE} -us -uc
+    # Build the source package only (-S) and skip the host build-dependency check (-d): the
+    # actual compilation happens inside the sbuild chroot, so the host needs only dpkg-dev.
+    COMMAND ${DPKG_BUILDPACKAGE} -S -us -uc -d
     DEPENDS ${COUCHBASE_CXX_CLIENT_DEBIAN_ORIG_TARBALL} ${COUCHBASE_CXX_CLIENT_DEBIAN_TARBALL_EXTRACTED})
 
-  function(select_mirror_options distro options)
-    if(${distro} STREQUAL "bookworm" OR ${distro} STREQUAL "trixie")
-      set(${options}
-          --components
-          main
-          --mirror
-          https://ftp.debian.org/debian
-          PARENT_SCOPE)
+  # Per-distribution apt source used to bootstrap the build chroot: the mirror, the keyring
+  # that verifies it, the package that installs that keyring inside the chroot (so the
+  # sources.list signed-by reference resolves), and the components to enable.
+  function(select_apt_source distro out_mirror out_keyring out_keyring_pkg out_components)
+    if("${distro}" STREQUAL "kali-rolling")
+      set(${out_mirror} "http://http.kali.org/kali" PARENT_SCOPE)
+      set(${out_keyring} "/usr/share/keyrings/kali-archive-keyring.gpg" PARENT_SCOPE)
+      set(${out_keyring_pkg} "kali-archive-keyring" PARENT_SCOPE)
+      set(${out_components} "main" PARENT_SCOPE)
+    elseif("${distro}" STREQUAL "bookworm" OR "${distro}" STREQUAL "trixie")
+      # http (not https): the --variant=buildd chroot has no ca-certificates, so in-chroot apt over
+      # TLS would fail; apt authenticates packages by GPG signature regardless of transport.
+      set(${out_mirror} "http://deb.debian.org/debian" PARENT_SCOPE)
+      set(${out_keyring} "/usr/share/keyrings/debian-archive-keyring.gpg" PARENT_SCOPE)
+      set(${out_keyring_pkg} "debian-archive-keyring" PARENT_SCOPE)
+      set(${out_components} "main" PARENT_SCOPE)
+    elseif("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "aarch64")
+      set(${out_mirror} "http://ports.ubuntu.com/ubuntu-ports" PARENT_SCOPE)
+      set(${out_keyring} "/usr/share/keyrings/ubuntu-archive-keyring.gpg" PARENT_SCOPE)
+      set(${out_keyring_pkg} "ubuntu-keyring" PARENT_SCOPE)
+      set(${out_components} "main universe" PARENT_SCOPE)
     else()
-      if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "aarch64")
-        set(${options}
-            --components
-            "main universe"
-            --mirror
-            http://ports.ubuntu.com/ubuntu-ports
-            PARENT_SCOPE)
-      else()
-        set(${options}
-            --components
-            "main universe"
-            --mirror
-            http://archive.ubuntu.com/ubuntu
-            PARENT_SCOPE)
-      endif()
+      set(${out_mirror} "http://archive.ubuntu.com/ubuntu" PARENT_SCOPE)
+      set(${out_keyring} "/usr/share/keyrings/ubuntu-archive-keyring.gpg" PARENT_SCOPE)
+      set(${out_keyring_pkg} "ubuntu-keyring" PARENT_SCOPE)
+      set(${out_components} "main universe" PARENT_SCOPE)
     endif()
   endfunction()
 
-  set(cowbuilder_results "${PROJECT_BINARY_DIR}/packaging/results")
-  file(MAKE_DIRECTORY "${cowbuilder_results}")
+  set(COUCHBASE_CXX_CLIENT_SUPPORTED_DISTROS
+      "jammy;noble;resolute;bookworm;trixie;kali-rolling"
+      CACHE STRING "Semicolon-separated list of distributions to build DEB packages for")
 
-  list(
-    APPEND
-    COUCHBASE_CXX_CLIENT_SUPPORTED_DISTROS
-    "jammy"
-    "noble"
-    "resolute"
-    "bookworm"
-    "trixie")
+  message(STATUS "Supported distributions for DEB packages: ${COUCHBASE_CXX_CLIENT_SUPPORTED_DISTROS}")
 
-  set(pbuilder_root "${PROJECT_BINARY_DIR}/packaging/base.cow")
-  set(cowbuilder_root "${PROJECT_BINARY_DIR}/packaging/root.cow")
+  set(sbuild_results "${PROJECT_BINARY_DIR}/packaging/results")
+  set(sbuild_chroots "${PROJECT_BINARY_DIR}/packaging/chroots")
+  file(MAKE_DIRECTORY "${sbuild_results}")
+  file(MAKE_DIRECTORY "${sbuild_chroots}")
+
+  # Build the distros one at a time (chained through last_output) so several full SDK
+  # compilations do not hammer a single machine simultaneously.
   set(last_output "")
   foreach(distro ${COUCHBASE_CXX_CLIENT_SUPPORTED_DISTROS})
-    select_mirror_options(${distro} mirror_options)
+    if(distro STREQUAL "")
+      continue() # tolerate a trailing ';' or empty entry in the overridable distro list
+    endif()
+    select_apt_source("${distro}" mirror keyring keyring_pkg components)
+    # mmdebstrap verifies the bootstrap against this keyring, which must exist on the build host.
+    # Fail early with an actionable message instead of a cryptic mmdebstrap error mid-build.
+    if(NOT EXISTS "${keyring}")
+      message(FATAL_ERROR "Keyring ${keyring} needed to build '${distro}' DEBs is missing; "
+                          "install the '${keyring_pkg}' package on the build host.")
+    endif()
     set(timestamp "${PROJECT_BINARY_DIR}/packaging/${distro}_done.txt")
+    set(chroot_tarball "${sbuild_chroots}/${distro}-${COUCHBASE_CXX_CLIENT_DEB_HOST_ARCH}.tar.zst")
+    set(distro_results
+        "${sbuild_results}/couchbase-cxx-client-${COUCHBASE_CXX_CLIENT_PACKAGE_VERSION}-${COUCHBASE_CXX_CLIENT_PACKAGE_RELEASE}.${distro}.${CMAKE_SYSTEM_PROCESSOR}"
+    )
     set(dependencies ${COUCHBASE_CXX_CLIENT_DEBIAN_DSC})
 
     if(last_output)
@@ -275,13 +309,15 @@ if(COUCHBASE_CXX_CLIENT_DEB_TARGETS)
       COMMENT "Building DEB for ${distro}"
       OUTPUT ${timestamp}
       WORKING_DIRECTORY "${PROJECT_BINARY_DIR}/packaging"
-      COMMAND ${SUDO} ${CMAKE_COMMAND} -E rm -rf "${cowbuilder_root}"
-      COMMAND ${SUDO} ${COWBUILDER} --create --buildplace "${pbuilder_root}" --basepath "${cowbuilder_root}"
-              --distribution ${distro} ${mirror_options}
+      COMMAND ${CMAKE_COMMAND} -E make_directory "${distro_results}" "${sbuild_chroots}"
+      COMMAND ${CMAKE_COMMAND} -E rm -f "${chroot_tarball}"
+      COMMAND ${MMDEBSTRAP} --variant=buildd --arch=${COUCHBASE_CXX_CLIENT_DEB_HOST_ARCH}
+              "--include=${keyring_pkg}" "${distro}" "${chroot_tarball}"
+              "deb [signed-by=${keyring}] ${mirror} ${distro} ${components}"
       COMMAND
-        ${SUDO} ${COWBUILDER} --build --buildplace "${pbuilder_root}" --basepath "${cowbuilder_root}" --buildresult
-        "${cowbuilder_results}/couchbase-cxx-client-${COUCHBASE_CXX_CLIENT_PACKAGE_VERSION}-${COUCHBASE_CXX_CLIENT_PACKAGE_RELEASE}.${distro}.${CMAKE_SYSTEM_PROCESSOR}"
-        --debbuildopts -j8 --debbuildopts "-us -uc" ${COUCHBASE_CXX_CLIENT_DEBIAN_DSC}
+        ${SBUILD} --chroot-mode=unshare --dist=${distro} --arch=${COUCHBASE_CXX_CLIENT_DEB_HOST_ARCH}
+        "--chroot=${chroot_tarball}" "--build-dir=${distro_results}" --no-run-lintian --no-run-piuparts
+        --no-run-autopkgtest -j8 "${COUCHBASE_CXX_CLIENT_DEBIAN_DSC}"
       COMMAND touch ${timestamp}
       DEPENDS ${dependencies})
 
