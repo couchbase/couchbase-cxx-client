@@ -2,7 +2,7 @@
 # mtimes to it, and pin the recorded build host, so RPMs are byte-identical across build machines.
 # These are redhat-rpm-config knobs, effective on Fedora/EL9+ (and on by default there); we set
 # them explicitly so the intent is applied wherever supported. On toolchains that predate them or
-# do not implement them (e.g. EL8, Amazon Linux, openSUSE's own SOURCE_DATE_EPOCH handling) an
+# do not implement them (e.g. EL8, Amazon Linux) an
 # unrecognized global macro is simply ignored, so mtime/buildhost reproducibility is not guaranteed
 # there.
 %global source_date_epoch_from_changelog 1
@@ -28,9 +28,6 @@
 #   - Amazon Linux 2023  grpc + protobuf >= 3.15 in repos     -> gRPC supported (only amzn root)
 #   - EL9   (rocky/rhel) protobuf 3.14 in CRB                 -> no: protobuf too old
 #   - EL8                no grpc packaged                     -> no: grpc unavailable
-#   - openSUSE Leap 16   no grpc_cpp_plugin package; protobuf -> no: cannot generate grpc stubs
-#                        28.x (major jump from 3.x)              from system grpc; protobuf 28
-#                                                                also unvalidated
 #
 # To enable another distribution: confirm it provides grpc-devel, grpc-plugins, and
 # protobuf-devel >= 3.15, then add it to the test below.
@@ -51,24 +48,14 @@ Vendor: Couchbase, Inc.
 Packager: Couchbase SDK Team <support@couchbase.com>
 License: ASL 2.0
 URL: https://docs.couchbase.com/cxx-sdk/current/hello-world/overview.html
-%if 0%{?suse_version} == 1500
-BuildRequires: gcc13, gcc13-c++
-%else
 BuildRequires: gcc, gcc-c++
-%endif
 BuildRequires: cmake >= 3.19
-%if 0%{?suse_version} > 0
-BuildRequires: libcurl-devel
-BuildRequires: protobuf-devel
-BuildRequires: nlohmann_json-devel
-%else
 %if 0%{?amzn} == 0 && (0%{?rhel} >= 9 || 0%{?fedora} > 0)
 BuildRequires: curl-devel
 BuildRequires: protobuf-devel
 BuildRequires: json-devel
 %else
 # CentOS 8 / Rocky 8 - skip these packages (no OpenTelemetry)
-%endif
 %endif
 %if 0%{?grpc_supported}
 BuildRequires: grpc-devel
@@ -117,16 +104,12 @@ demand to run integration verification against the production SDK packages.
 %if 0%{?rhel} == 8 || 0%{?rocky} == 8 || 0%{?ol} == 8
     -S "." -B "redhat-linux-build" \
 %endif
-%if 0%{?suse_version} == 1500
-    -DCMAKE_C_COMPILER=gcc-13 \
-    -DCMAKE_CXX_COMPILER=g++-13 \
-%endif
     -DBUILD_SHARED_LIBS=OFF \
     -DCOUCHBASE_CXX_CLIENT_INSTALL=ON \
     -DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON \
     -DCOUCHBASE_CXX_CLIENT_BUILD_EXAMPLES=OFF \
     -DCOUCHBASE_CXX_CLIENT_BUILD_TESTS=OFF \
-%if 0%{?amzn} == 0 && (0%{?rhel} >= 9 || 0%{?fedora} > 0 || 0%{?suse_version} > 0)
+%if 0%{?amzn} == 0 && (0%{?rhel} >= 9 || 0%{?fedora} > 0)
     -DCOUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY=ON \
 %else
     -DCOUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY=OFF \
@@ -144,9 +127,6 @@ demand to run integration verification against the production SDK packages.
 %if 0%{?rhel} == 8 || 0%{?rocky} == 8 || 0%{?ol} == 8
 /usr/bin/cmake --build "redhat-linux-build" -j${RPM_BUILD_NCPUS} --verbose
 %else
-%if 0%{?suse_version} == 1500
-cd build
-%endif
 %cmake_build
 %endif
 
@@ -155,9 +135,6 @@ cd build
 DESTDIR="%{buildroot}" /usr/bin/cmake --install "redhat-linux-build"
 %else
 %cmake_install
-%endif
-%if 0%{?suse_version} == 1500
-%__mv %{buildroot}%{_docdir}/../tao %{buildroot}%{_docdir}/tao
 %endif
 
 %files

@@ -270,7 +270,12 @@ if(COUCHBASE_CXX_CLIENT_DEB_TARGETS)
   endfunction()
 
   set(COUCHBASE_CXX_CLIENT_SUPPORTED_DISTROS
-      "jammy;noble;resolute;bookworm;trixie;kali-rolling"
+      "jammy"
+      "noble"
+      "resolute"
+      "bookworm"
+      "trixie"
+      "kali-rolling"
       CACHE STRING "Semicolon-separated list of distributions to build DEB packages for")
 
   message(STATUS "Supported distributions for DEB packages: ${COUCHBASE_CXX_CLIENT_SUPPORTED_DISTROS}")
@@ -352,16 +357,14 @@ if(COUCHBASE_CXX_CLIENT_RPM_TARGETS)
 
   add_custom_target(packaging_srpm DEPENDS ${COUCHBASE_CXX_CLIENT_SRPM})
 
-  list(
-    APPEND
-    COUCHBASE_CXX_CLIENT_SUPPORTED_ROOTS
-    "opensuse-leap-16.0-${CMAKE_SYSTEM_PROCESSOR}"
-    "rocky+epel-10-${CMAKE_SYSTEM_PROCESSOR}"
-    "rocky+epel-9-${CMAKE_SYSTEM_PROCESSOR}"
-    "rocky+epel-8-${CMAKE_SYSTEM_PROCESSOR}"
-    "amazonlinux-2023-${CMAKE_SYSTEM_PROCESSOR}"
-    "fedora-44-${CMAKE_SYSTEM_PROCESSOR}"
-    "fedora-43-${CMAKE_SYSTEM_PROCESSOR}")
+  set(COUCHBASE_CXX_CLIENT_SUPPORTED_ROOTS
+      "rocky+epel-10-${CMAKE_SYSTEM_PROCESSOR}"
+      "rocky+epel-9-${CMAKE_SYSTEM_PROCESSOR}"
+      "rocky+epel-8-${CMAKE_SYSTEM_PROCESSOR}"
+      "amazonlinux-2023-${CMAKE_SYSTEM_PROCESSOR}"
+      "fedora-44-${CMAKE_SYSTEM_PROCESSOR}"
+      "fedora-43-${CMAKE_SYSTEM_PROCESSOR}"
+      CACHE STRING "Semicolon-separated list of mock roots to build RPM packages for")
 
   message(STATUS "Supported build roots for RPM packages: ${COUCHBASE_CXX_CLIENT_SUPPORTED_ROOTS}")
 
