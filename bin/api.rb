@@ -156,12 +156,23 @@ def service_address_for_bucket(api, service, bucket, options)
 end
 
 def ensure_search_index_created(index_definition_path, options)
+  # Sanitize to prevent path traversal. File.expand_path collapses any "." / ".."
+  # segments, so an exact-directory comparison is enough: legitimate inputs are
+  # always files directly inside bin/. (A prefix match would also accept sibling
+  # dirs such as bin-evil/.)
+  resolved_path = File.expand_path(index_definition_path)
+  safe_dir = File.expand_path(__dir__)
+
+  unless File.dirname(resolved_path) == safe_dir
+    raise ArgumentError, "Invalid index definition path: outside #{safe_dir}"
+  end
+
   loop do
     catch :retry do
       search_api = API.new(options)
 
-      puts "using index definition: #{File.basename(index_definition_path)}"
-      index_definition = JSON.load(File.read(index_definition_path))
+      puts "using index definition: #{File.basename(resolved_path)}"
+      index_definition = JSON.load(File.read(resolved_path))
       search_api.put_json("/api/index/travel-sample-index", index_definition)
 
       expected_number_of_the_documents = 1000
@@ -231,4 +242,51 @@ def ensure_sample_bucket_loaded(management_api, expected_number_of_the_documents
       return
     end
   end
+end
+
+if __FILE__ == $0
+  def run_test
+    # 1. Test invalid path (outside bin directory)
+    begin
+      ensure_search_index_created("/etc/passwd", {})
+      puts "❌ Test Failed: /etc/passwd was not rejected!"
+      exit 1
+    rescue ArgumentError => e
+      puts "✅ Test Passed: Rejected outside-directory path with ArgumentError"
+    end
+
+    # 2. Test invalid path containing '..'
+    begin
+      ensure_search_index_created("travel-sample-index/../../../etc/passwd", {})
+      puts "❌ Test Failed: Path containing '..' was not rejected!"
+      exit 1
+    rescue ArgumentError => e
+      puts "✅ Test Passed: Rejected path with '..' with ArgumentError"
+    end
+
+    # 3. Test sibling directory sharing the prefix (must not pass a prefix match)
+    begin
+      ensure_search_index_created("#{__dir__}-evil/secret.json", {})
+      puts "❌ Test Failed: sibling directory sharing the prefix was not rejected!"
+      exit 1
+    rescue ArgumentError => e
+      puts "✅ Test Passed: Rejected sibling-directory path with ArgumentError"
+    end
+
+    # 4. Test valid path (should pass path check and proceed to connection attempt)
+    # Since there is no cluster running locally on default ports, it should fail with connection error,
+    # proving it passed the path validation check.
+    begin
+      ensure_search_index_created(File.join(__dir__, "travel-sample-index.json"), {host: "127.0.0.1", port: 12345})
+    rescue Errno::ECONNREFUSED, SocketError, Timeout::Error, SystemCallError
+      puts "✅ Test Passed: Valid path passed traversal validation and proceeded to connect"
+    rescue ArgumentError => e
+      puts "❌ Test Failed: Valid path was incorrectly rejected: #{e.message}"
+      exit 1
+    end
+
+    puts "🎉 All path traversal validation tests passed successfully!"
+  end
+
+  run_test
 end
