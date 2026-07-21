@@ -29,6 +29,8 @@
 
 #include <couchbase/mutation_token.hxx>
 
+#include <tao/json/forward.hpp>
+
 namespace couchbase::tracing
 {
 class request_span;
@@ -36,6 +38,18 @@ class request_span;
 
 namespace couchbase::core::operations
 {
+struct query_request;
+
+/**
+ * Encodes the shared N1QL request-body options (parameters, profile, replica, consistency, raw,
+ * …) common to the buffered and streaming query paths onto @p body. The two paths differ only in
+ * how they set the statement/prepared fields, the timeout, and the capability gate; the option
+ * block is identical and lives here so both paths stay byte-for-byte consistent. `use_replica` is
+ * always encoded when present — the capability gate is the caller's responsibility.
+ */
+void
+encode_query_options(tao::json::value& body, const query_request& request);
+
 struct query_response {
   struct query_metrics {
     std::chrono::nanoseconds elapsed_time{};
@@ -110,11 +124,11 @@ struct query_request {
   std::optional<std::function<utils::json::stream_control(std::string)>> row_callback{};
   std::optional<std::string> send_to_node{};
 
-  [[nodiscard]] auto encode_to(encoded_request_type& encoded,
-                               http_context& context) -> std::error_code;
+  [[nodiscard]] auto encode_to(encoded_request_type& encoded, http_context& context)
+    -> std::error_code;
 
-  [[nodiscard]] auto make_response(error_context::query&& ctx,
-                                   const encoded_response_type& encoded) -> query_response;
+  [[nodiscard]] auto make_response(error_context::query&& ctx, const encoded_response_type& encoded)
+    -> query_response;
 
   std::optional<http_context> ctx_{};
   bool extract_encoded_plan_{ false };
