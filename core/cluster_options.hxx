@@ -22,6 +22,7 @@
 #include "core/io/ip_protocol.hxx"
 #include "core/metrics/logging_meter_options.hxx"
 #include "core/orphan_reporter.hxx"
+#include "core/row_streamer_options.hxx"
 #include "core/tracing/threshold_logging_options.hxx"
 #include "service_type.hxx"
 #include "timeout_defaults.hxx"
@@ -114,6 +115,11 @@ public:
   bool preserve_bootstrap_nodes_order{ false };
   bool allow_enterprise_analytics{ false };
   bool enable_lazy_connections{ false };
+
+  // Tuning for the streaming query/analytics row engine. Internal-only for now (no public API);
+  // sensible static defaults apply unless a core caller overrides them. idle_timeout is derived
+  // per request from the operation timeout, so the value here is not used for it.
+  row_streamer_options streaming{};
 };
 
 } // namespace couchbase::core

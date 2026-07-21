@@ -20,9 +20,24 @@
 #include "core/operations/document_query.hxx"
 
 #include <couchbase/query_options.hxx>
+#include <couchbase/query_status.hxx>
+
+#include <string>
+
+namespace couchbase::core
+{
+class cluster;
+} // namespace couchbase::core
 
 namespace couchbase::core::impl
 {
+/**
+ * Maps the N1QL `status` string from a query response onto the public query_status enum. Shared by
+ * the buffered result builder and the streaming result handle so there is one source of truth.
+ */
+auto
+map_query_status(std::string status) -> query_status;
+
 auto
 build_query_request(std::string statement,
                     std::optional<std::string> query_context,
@@ -32,4 +47,16 @@ build_query_request(std::string statement,
 
 auto
 build_result(operations::query_response& resp) -> query_result;
+
+/**
+ * Dispatches a query as a streaming request and resolves the handler with a query_stream_result.
+ *
+ * Adhoc requests take the lazy streaming path. Prepared statements (request.adhoc == false) are
+ * not streamed; they fall back to the buffered query() path and their rows are replayed through an
+ * in-memory query_stream so callers observe identical semantics.
+ */
+void
+dispatch_query_stream(const core::cluster& core,
+                      core::operations::query_request request,
+                      query_stream_handler&& handler);
 } // namespace couchbase::core::impl
