@@ -113,6 +113,8 @@ set(couchbase_cxx_client_FILES
     core/agent_group.cxx
     core/agent_group_config.cxx
     core/analytics_query_options.cxx
+    core/analytics_stream.cxx
+    core/analytics_stream_component.cxx
     core/app_telemetry_address.cxx
     core/app_telemetry_meter.cxx
     core/app_telemetry_reporter.cxx
@@ -198,9 +200,11 @@ set(couchbase_cxx_client_FILES
     core/impl/observe_seqno.cxx
     core/impl/phrase_query.cxx
     core/impl/prefix_query.cxx
+    core/impl/public_analytics_stream_result.cxx
     core/impl/public_bucket.cxx
     core/impl/public_cluster.cxx
     core/impl/public_logger.cxx
+    core/impl/public_query_stream_result.cxx
     core/impl/public_scan_result.cxx
     core/impl/public_transaction_get_multi_replicas_from_preferred_server_group_result.cxx
     core/impl/public_transaction_get_multi_result.cxx
@@ -431,6 +435,8 @@ set(couchbase_cxx_client_FILES
     core/protocol/cmd_upsert.cxx
     core/protocol/frame_info_utils.cxx
     core/protocol/status.cxx
+    core/query_stream.cxx
+    core/query_stream_component.cxx
     core/range_scan_load_balancer.cxx
     core/range_scan_options.cxx
     core/range_scan_orchestrator.cxx
