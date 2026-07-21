@@ -23,9 +23,11 @@
 #include "transaction_links.hxx"
 
 #include <couchbase/codec/encoded_value.hxx>
+#include <couchbase/error_codes.hxx>
 #include <couchbase/fmt/cas.hxx>
 #include <couchbase/transactions/transaction_get_result.hxx>
 
+#include <system_error>
 #include <utility>
 
 namespace couchbase::core::transactions
@@ -107,6 +109,20 @@ public:
     if (const auto* cas = json.find("scas");
         cas != nullptr && cas->is_string() && cas_.value() == 0U) {
       cas_ = couchbase::cas(stoull(cas->as<std::string>()));
+    }
+    // This ctor parses the JSON row returned by a query-mode KV get/insert/replace,
+    // where the document CAS is carried as the string field "scas" (a numeric
+    // "cas" is also accepted above). Per the transactions query spec, KV
+    // get/insert/replace result handling requires scas to be present and raises a
+    // DecodingFailure when it is absent: without a usable CAS, cas_ stays at its
+    // default 0, which is not a valid document CAS and would corrupt a later COMMIT
+    // that stages against it. The query KV op handlers translate this
+    // DecodingFailure into a FAIL_OTHER (rollback). "doc" is intentionally not
+    // required here, since insert/replace rows and content-less reads legitimately
+    // carry a CAS but no content.
+    if (cas_.value() == 0U) {
+      throw std::system_error(couchbase::errc::common::decoding_failure,
+                              "transaction get result row is missing a usable CAS (scas or cas)");
     }
     if (const auto* doc = json.find("doc"); doc != nullptr) {
       content_ = { core::utils::json::generate_binary(doc->get_object()),
