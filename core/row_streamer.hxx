@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "row_streamer_options.hxx"
 #include "utils/movable_function.hxx"
 
 #include <memory>
@@ -39,7 +40,8 @@ class row_streamer
 public:
   row_streamer(asio::io_context& io,
                http_response_body body,
-               const std::string& pointer_expression);
+               const std::string& pointer_expression,
+               row_streamer_options options = {});
 
   /**
    *  Starts the row stream and returns all the metadata preceding the first row. This typically
@@ -61,6 +63,12 @@ public:
    * If all rows have been streamed, returns the metadata encoded as JSON.
    */
   auto metadata() -> std::optional<std::string>;
+
+  /**
+   * Number of row bytes currently buffered (delivered to the channel but not yet consumed).
+   * Exposed for back-pressure observability in tests and diagnostics.
+   */
+  [[nodiscard]] auto buffered_bytes() const -> std::size_t;
 
 private:
   std::shared_ptr<row_streamer_impl> impl_;
