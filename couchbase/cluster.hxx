@@ -191,6 +191,40 @@ public:
     -> std::future<std::pair<error, query_result>>;
 
   /**
+   * Performs a streaming query against the query (N1QL) services.
+   *
+   * The handler resolves as soon as the response preamble has been parsed; rows are then pulled
+   * lazily from the @ref query_stream_result, so the full result is never buffered in memory.
+   *
+   * @note Prepared statements (@ref query_options#adhoc set to false) are not streamed: such a
+   * request falls back to the buffered @ref query() path and its rows are replayed through the
+   * returned handle.
+   *
+   * @param statement the N1QL query statement.
+   * @param options options to customize the query request.
+   * @param handler the handler that implements @ref query_stream_handler
+   *
+   * @since 1.4.0
+   * @volatile
+   */
+  void query_stream(std::string statement,
+                    const query_options& options,
+                    query_stream_handler&& handler) const;
+
+  /**
+   * Performs a streaming query against the query (N1QL) services.
+   *
+   * @param statement the N1QL query statement.
+   * @param options options to customize the query request.
+   * @return future object that carries the streaming result handle
+   *
+   * @since 1.4.0
+   * @volatile
+   */
+  [[nodiscard]] auto query_stream(std::string statement, const query_options& options = {}) const
+    -> std::future<std::pair<error, query_stream_result>>;
+
+  /**
    * Performs a request against the full text search services.
    *
    * This can be used to perform a traditional FTS query, and/or a vector search.
@@ -267,8 +301,40 @@ public:
    * @since 1.0.0
    * @committed
    */
-  [[nodiscard]] auto analytics_query(std::string statement, const analytics_options& options = {})
-    const -> std::future<std::pair<error, analytics_result>>;
+  [[nodiscard]] auto analytics_query(std::string statement,
+                                     const analytics_options& options = {}) const
+    -> std::future<std::pair<error, analytics_result>>;
+
+  /**
+   * Performs a streaming query against the analytics services.
+   *
+   * The handler resolves as soon as the response preamble has been parsed; rows are then pulled
+   * lazily from the @ref analytics_stream_result, so the full result is never buffered in memory.
+   *
+   * @param statement the analytics query statement.
+   * @param options options to customize the query request.
+   * @param handler the handler that implements @ref analytics_stream_handler
+   *
+   * @since 1.4.0
+   * @volatile
+   */
+  void analytics_query_stream(std::string statement,
+                              const analytics_options& options,
+                              analytics_stream_handler&& handler) const;
+
+  /**
+   * Performs a streaming query against the analytics services.
+   *
+   * @param statement the analytics query statement.
+   * @param options options to customize the query request.
+   * @return future object that carries the streaming result handle
+   *
+   * @since 1.4.0
+   * @volatile
+   */
+  [[nodiscard]] auto analytics_query_stream(std::string statement,
+                                            const analytics_options& options = {}) const
+    -> std::future<std::pair<error, analytics_stream_result>>;
 
   /**
    * Performs application-level ping requests against services in the Couchbase cluster.

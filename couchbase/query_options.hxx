@@ -23,6 +23,7 @@
 #include <couchbase/query_profile.hxx>
 #include <couchbase/query_result.hxx>
 #include <couchbase/query_scan_consistency.hxx>
+#include <couchbase/query_stream_result.hxx>
 
 #include <chrono>
 #include <functional>
@@ -675,4 +676,12 @@ private:
  * @uncommitted
  */
 using query_handler = std::function<void(error, query_result)>;
+
+/**
+ * The signature for the handler of a streaming query operation.
+ *
+ * @since 1.4.0
+ * @volatile
+ */
+using query_stream_handler = std::function<void(error, query_stream_result)>;
 } // namespace couchbase

@@ -19,6 +19,7 @@
 
 #include <couchbase/analytics_result.hxx>
 #include <couchbase/analytics_scan_consistency.hxx>
+#include <couchbase/analytics_stream_result.hxx>
 #include <couchbase/common_options.hxx>
 #include <couchbase/error.hxx>
 #include <couchbase/mutation_state.hxx>
@@ -463,4 +464,13 @@ private:
  * @uncommitted
  */
 using analytics_handler = std::function<void(error, analytics_result)>;
+
+/**
+ * The signature for the handler of the @ref cluster#analytics_query_stream() and @ref
+ * scope#analytics_query_stream() operations
+ *
+ * @since 1.4.0
+ * @volatile
+ */
+using analytics_stream_handler = std::function<void(error, analytics_stream_result)>;
 } // namespace couchbase

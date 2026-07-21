@@ -92,6 +92,15 @@ public:
       });
   }
 
+  void query_stream(std::string statement,
+                    query_options::built options,
+                    query_stream_handler&& handler) const
+  {
+    auto request =
+      core::impl::build_query_request(std::move(statement), query_context_, std::move(options), {});
+    core::impl::dispatch_query_stream(core_, std::move(request), std::move(handler));
+  }
+
   void analytics_query(std::string statement,
                        analytics_options::built options,
                        analytics_handler&& handler) const
@@ -109,6 +118,15 @@ public:
         obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
         return handler(core::impl::make_error(resp.ctx), core::impl::build_result(resp));
       });
+  }
+
+  void analytics_query_stream(std::string statement,
+                              analytics_options::built options,
+                              analytics_stream_handler&& handler) const
+  {
+    auto request = core::impl::build_analytics_request(
+      std::move(statement), std::move(options), bucket_name_, name_, {});
+    core::impl::dispatch_analytics_stream(core_, std::move(request), std::move(handler));
   }
 
   void search(std::string index_name,
@@ -206,6 +224,26 @@ scope::query(std::string statement, const query_options& options) const
 }
 
 void
+scope::query_stream(std::string statement,
+                    const query_options& options,
+                    query_stream_handler&& handler) const
+{
+  return impl_->query_stream(std::move(statement), options.build(), std::move(handler));
+}
+
+auto
+scope::query_stream(std::string statement, const query_options& options) const
+  -> std::future<std::pair<error, query_stream_result>>
+{
+  auto barrier = std::make_shared<std::promise<std::pair<error, query_stream_result>>>();
+  auto future = barrier->get_future();
+  query_stream(std::move(statement), options, [barrier](auto err, auto result) {
+    barrier->set_value({ std::move(err), std::move(result) });
+  });
+  return future;
+}
+
+void
 scope::analytics_query(std::string statement,
                        const analytics_options& options,
                        analytics_handler&& handler) const
@@ -220,6 +258,26 @@ scope::analytics_query(std::string statement, const analytics_options& options) 
   auto barrier = std::make_shared<std::promise<std::pair<error, analytics_result>>>();
   auto future = barrier->get_future();
   analytics_query(std::move(statement), options, [barrier](auto err, auto result) {
+    barrier->set_value({ std::move(err), std::move(result) });
+  });
+  return future;
+}
+
+void
+scope::analytics_query_stream(std::string statement,
+                              const analytics_options& options,
+                              analytics_stream_handler&& handler) const
+{
+  return impl_->analytics_query_stream(std::move(statement), options.build(), std::move(handler));
+}
+
+auto
+scope::analytics_query_stream(std::string statement, const analytics_options& options) const
+  -> std::future<std::pair<error, analytics_stream_result>>
+{
+  auto barrier = std::make_shared<std::promise<std::pair<error, analytics_stream_result>>>();
+  auto future = barrier->get_future();
+  analytics_query_stream(std::move(statement), options, [barrier](auto err, auto result) {
     barrier->set_value({ std::move(err), std::move(result) });
   });
   return future;
