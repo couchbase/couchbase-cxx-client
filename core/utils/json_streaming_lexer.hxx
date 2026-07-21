@@ -23,6 +23,7 @@
 
 #include "movable_function.hxx"
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -50,7 +51,9 @@ public:
    *
    * @throws std::invalid_argument if pointer cannot be created from the expression.
    */
-  streaming_lexer(const std::string& pointer_expression, std::uint32_t depth);
+  streaming_lexer(const std::string& pointer_expression,
+                  std::uint32_t depth,
+                  std::size_t max_buffer = 0);
 
   void feed(std::string_view data);
 

@@ -25,6 +25,7 @@
 #include <future>
 #include <memory>
 #include <string>
+#include <tuple>
 #include <variant>
 
 auto
@@ -113,17 +114,19 @@ TEST_CASE("integration: columnar http component simple request", "[integration]"
   auto resp_body = resp.body();
   std::string buffered_body{};
   while (true) {
-    auto barrier = std::make_shared<std::promise<std::pair<std::string, std::error_code>>>();
+    auto barrier = std::make_shared<std::promise<std::tuple<std::string, bool, std::error_code>>>();
     auto f = barrier->get_future();
-    resp_body.next([barrier](auto s, auto ec) {
-      barrier->set_value({ std::move(s), ec });
+    resp_body.next([barrier](auto s, bool has_more, auto ec) {
+      barrier->set_value({ std::move(s), has_more, ec });
     });
-    auto [s, ec] = f.get();
+    auto [s, has_more, ec] = f.get();
     REQUIRE_SUCCESS(ec);
-    if (s.empty()) {
+    buffered_body.append(s);
+    // End of stream is keyed off has_more, never emptiness: a mid-stream read can be empty (HTTP
+    // chunk framing consumed the whole slice) yet more body follows.
+    if (!has_more) {
       break;
     }
-    buffered_body.append(s);
   }
 
   auto body_json = couchbase::core::utils::json::parse(buffered_body);
