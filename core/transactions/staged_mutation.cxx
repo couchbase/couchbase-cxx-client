@@ -110,7 +110,7 @@ staged_mutation::operation_id() const -> const std::string&
 }
 
 auto
-staged_mutation::type_as_string() const -> std::string
+staged_mutation::type_as_string() const -> std::string_view
 {
   switch (type_) {
     case staged_mutation_type::INSERT:
@@ -194,10 +194,15 @@ staged_mutation_queue::extract_to(const std::string& prefix,
   tao::json::value removes = tao::json::empty_array;
 
   for (const auto& mutation : queue_) {
-    const tao::json::value doc{ { ATR_FIELD_PER_DOC_ID, mutation.id().key() },
-                                { ATR_FIELD_PER_DOC_BUCKET, mutation.id().bucket() },
-                                { ATR_FIELD_PER_DOC_SCOPE, mutation.id().scope() },
-                                { ATR_FIELD_PER_DOC_COLLECTION, mutation.id().collection() } };
+    const tao::json::value doc{
+      { ATR_FIELD_PER_DOC_ID, mutation.id().key() },
+      { ATR_FIELD_PER_DOC_BUCKET, mutation.id().bucket() },
+      { ATR_FIELD_PER_DOC_SCOPE, mutation.id().scope() },
+      {
+        ATR_FIELD_PER_DOC_COLLECTION,
+        mutation.id().collection(),
+      },
+    };
     switch (mutation.type()) {
       case staged_mutation_type::INSERT:
         inserts.push_back(doc);
