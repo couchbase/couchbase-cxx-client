@@ -48,9 +48,11 @@ public:
 
   transactions_config(const transactions_config& c);
 
-  transactions_config(transactions_config&& c) noexcept;
-
   auto operator=(const transactions_config& c) -> transactions_config&;
+
+  // No move operations are declared: they fall back to the copy operations, which is sufficient for
+  // this configuration object (copied once during transaction setup) and keeps a moved-from source
+  // valid -- the hook accessors dereference their pointers, so a nulled-out source would be unsafe.
 
   /**
    * @brief Get the default durability level for all transaction operations
