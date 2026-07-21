@@ -139,20 +139,44 @@ struct lookup_in_all_replicas_request {
             using handler_type = utils::movable_function<void(response_type)>;
 
             struct replica_context {
-              replica_context(handler_type handler, std::size_t expected_responses)
+              replica_context(handler_type handler,
+                              std::size_t expected_responses,
+                              std::vector<couchbase::core::impl::subdoc::command> specs)
                 : handler_(std::move(handler))
                 , expected_responses_(expected_responses)
+                , specs_(std::move(specs))
               {
+              }
+
+              void append_synthetic_error_fields(
+                lookup_in_all_replicas_response::entry& entry,
+                std::error_code ec,
+                std::optional<key_value_status_code> status_code) const
+              {
+                entry.fields.reserve(specs_.size());
+                for (std::size_t i = 0; i < specs_.size(); ++i) {
+                  const auto& spec = specs_[i];
+                  lookup_in_all_replicas_response::entry::lookup_in_entry error_field{};
+                  error_field.path = spec.path_;
+                  error_field.ec = ec;
+                  error_field.status = status_code.value_or(key_value_status_code::invalid);
+                  error_field.original_index = i;
+                  error_field.exists = false;
+                  error_field.opcode = static_cast<protocol::subdoc_opcode>(spec.opcode_);
+                  entry.fields.emplace_back(std::move(error_field));
+                }
               }
 
               handler_type handler_;
               std::size_t expected_responses_;
+              std::size_t successful_responses_{ 0 };
               bool done_{ false };
               std::mutex mutex_{};
               std::vector<lookup_in_all_replicas_response::entry> result_{};
+              std::vector<couchbase::core::impl::subdoc::command> specs_;
             };
 
-            auto ctx = std::make_shared<replica_context>(std::move(h), nodes.size());
+            auto ctx = std::make_shared<replica_context>(std::move(h), nodes.size(), specs);
 
             for (const auto& node : nodes) {
               auto subop_span = core->tracer()->create_span(
@@ -180,6 +204,11 @@ struct lookup_in_all_replicas_request {
                   subop_span,
                 };
                 replica_req.access_deleted = access_deleted;
+                // CXXCBC-797: Store the requested specs inside replica_context and capture only
+                // the ctx shared pointer in the completion handler. This prevents UAF/dangling
+                // references and avoids repeated vector allocations, while allowing us to construct
+                // synthetic error fields for each requested spec if a node returns a document-level
+                // failure.
                 core->execute(replica_req, [ctx, subop_span](auto&& resp) {
                   {
                     if (subop_span->uses_tags()) {
@@ -190,26 +219,25 @@ struct lookup_in_all_replicas_request {
                   }
                   handler_type local_handler{};
                   {
-                    std::scoped_lock lock(ctx->mutex_);
+                    const std::scoped_lock lock(ctx->mutex_);
                     if (ctx->done_) {
                       return;
                     }
                     --ctx->expected_responses_;
-                    if (resp.fields.empty()) {
-                      // document was not retrieved (e.g. not_found, access error) —
-                      // fields are only populated when the document itself was fetched;
-                      // ctx.ec() is used only for document-level failures, while per-path
-                      // subdocument failures do not prevent fields from being returned
-                      if (ctx->expected_responses_ > 0) {
-                        // just ignore the response
-                        return;
-                      }
+                    lookup_in_all_replicas_response::entry top_entry{};
+                    top_entry.cas = resp.cas;
+                    top_entry.deleted = resp.deleted;
+                    top_entry.is_replica = true;
+                    top_entry.dispatched_to_node_id = resp.ctx.last_dispatched_to_node_id();
+
+                    if (resp.ctx.ec() && resp.fields.empty()) {
+                      // Document-level error for this replica, and no specific field errors.
+                      // Create synthetic error fields for all requested specs to preserve indices.
+                      ctx->append_synthetic_error_fields(
+                        top_entry, resp.ctx.ec(), resp.ctx.status_code());
                     } else {
-                      lookup_in_all_replicas_response::entry top_entry{};
-                      top_entry.cas = resp.cas;
-                      top_entry.deleted = resp.deleted;
-                      top_entry.is_replica = true;
-                      top_entry.dispatched_to_node_id = resp.ctx.last_dispatched_to_node_id();
+                      // Successful response, or response with field-level errors
+                      ++ctx->successful_responses_;
                       for (auto& field : resp.fields) {
                         lookup_in_all_replicas_response::entry::lookup_in_entry lookup_in_entry{};
                         lookup_in_entry.path = field.path;
@@ -221,11 +249,13 @@ struct lookup_in_all_replicas_request {
                         lookup_in_entry.opcode = field.opcode;
                         top_entry.fields.emplace_back(lookup_in_entry);
                       }
-                      ctx->result_.emplace_back(
-                        lookup_in_all_replicas_response::entry{ top_entry });
                     }
+                    ctx->result_.emplace_back(std::move(top_entry));
                     if (ctx->expected_responses_ == 0) {
                       ctx->done_ = true;
+                      if (ctx->successful_responses_ == 0) {
+                        ctx->result_.clear();
+                      }
                       std::swap(local_handler, ctx->handler_);
                     }
                   }
@@ -246,7 +276,7 @@ struct lookup_in_all_replicas_request {
                     false,
                     specs,
                     timeout,
-                    {},
+                    io::retry_context<false>{}, // Explicit construction to avoid compiler ambiguity
                     subop_span,
                   },
                   [ctx, subop_span](auto&& resp) {
@@ -259,25 +289,26 @@ struct lookup_in_all_replicas_request {
                     }
                     handler_type local_handler{};
                     {
-                      std::scoped_lock lock(ctx->mutex_);
+                      const std::scoped_lock lock(ctx->mutex_);
                       if (ctx->done_) {
                         return;
                       }
                       --ctx->expected_responses_;
-                      if (resp.fields.empty()) {
-                        // document was not retrieved for this replica (e.g. not_found, access
-                        // error); for lookup_in, per-path failures are reflected in resp.fields,
-                        // not by setting resp.ctx.ec() on an otherwise successful multi-lookup
-                        if (ctx->expected_responses_ > 0) {
-                          // just ignore the response
-                          return;
-                        }
+                      lookup_in_all_replicas_response::entry top_entry{};
+                      top_entry.cas = resp.cas;
+                      top_entry.deleted = resp.deleted;
+                      top_entry.is_replica = false;
+                      top_entry.dispatched_to_node_id = resp.ctx.last_dispatched_to_node_id();
+
+                      if (resp.ctx.ec() && resp.fields.empty()) {
+                        // Document-level error for active copy, and no specific field errors.
+                        // Create synthetic error fields for all requested specs to preserve
+                        // indices.
+                        ctx->append_synthetic_error_fields(
+                          top_entry, resp.ctx.ec(), resp.ctx.status_code());
                       } else {
-                        lookup_in_all_replicas_response::entry top_entry{};
-                        top_entry.cas = resp.cas;
-                        top_entry.deleted = resp.deleted;
-                        top_entry.is_replica = false;
-                        top_entry.dispatched_to_node_id = resp.ctx.last_dispatched_to_node_id();
+                        // Successful response, or response with field-level errors
+                        ++ctx->successful_responses_;
                         for (auto& field : resp.fields) {
                           lookup_in_all_replicas_response::entry::lookup_in_entry lookup_in_entry{};
                           lookup_in_entry.path = field.path;
@@ -289,11 +320,13 @@ struct lookup_in_all_replicas_request {
                           lookup_in_entry.opcode = field.opcode;
                           top_entry.fields.emplace_back(lookup_in_entry);
                         }
-                        ctx->result_.emplace_back(
-                          lookup_in_all_replicas_response::entry{ top_entry });
                       }
+                      ctx->result_.emplace_back(std::move(top_entry));
                       if (ctx->expected_responses_ == 0) {
                         ctx->done_ = true;
+                        if (ctx->successful_responses_ == 0) {
+                          ctx->result_.clear();
+                        }
                         std::swap(local_handler, ctx->handler_);
                       }
                     }
