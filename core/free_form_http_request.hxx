@@ -23,12 +23,18 @@
 
 #include <chrono>
 #include <cinttypes>
+#include <cstddef>
 #include <map>
 #include <memory>
 #include <optional>
 #include <string>
 #include <system_error>
 #include <vector>
+
+namespace asio
+{
+class io_context;
+} // namespace asio
 
 namespace couchbase
 {
@@ -78,7 +84,16 @@ class http_response_body
 public:
   explicit http_response_body(std::shared_ptr<http_response_impl> impl);
 
-  void next(utils::movable_function<void(std::string, std::error_code)> callback);
+  // cached_chunk_size > 0 makes the in-memory body deliver at most that many bytes per next()
+  // call (a test seam simulating a socket that dribbles the response out, so back-pressure can be
+  // exercised); 0 delivers the whole body in one chunk.
+  static auto create_in_memory(asio::io_context& io,
+                               std::string data,
+                               std::size_t cached_chunk_size = 0) -> http_response_body;
+
+  // See io::http_streaming_response_body::next: the bool is `has_more` (false marks end-of-stream).
+  // An empty data string with has_more==true is a valid mid-stream chunk, not the terminal.
+  void next(utils::movable_function<void(std::string, bool, std::error_code)> callback);
   void cancel();
 
 private:

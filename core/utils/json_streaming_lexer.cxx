@@ -52,9 +52,10 @@ noop_on_meta_header_complete(std::error_code /* ec */, std::string&& /* meta_hea
 #define STATE_MARKER_ROWSET (reinterpret_cast<void*>(2))
 
 struct streaming_lexer_impl {
-  streaming_lexer_impl(jsonsl_t lexer, jsonsl_jpr_t pointer)
+  streaming_lexer_impl(jsonsl_t lexer, jsonsl_jpr_t pointer, std::size_t max_buffer)
     : lexer_(lexer)
     , pointer_(pointer)
+    , max_buffer_(max_buffer)
   {
   }
 
@@ -90,8 +91,8 @@ struct streaming_lexer_impl {
     state->data = STATE_MARKER_ROOT;
   }
 
-  [[nodiscard]] auto get_buffer_region(std::size_t pos,
-                                       std::size_t desired = 0) const -> std::string_view
+  [[nodiscard]] auto get_buffer_region(std::size_t pos, std::size_t desired = 0) const
+    -> std::string_view
   {
     if (min_pos_ > pos) {
       /* swallowed */
@@ -149,6 +150,8 @@ struct streaming_lexer_impl {
   std::function<void(std::error_code, std::size_t, std::string&&)> on_complete_{ noop_on_complete };
   std::function<stream_control(std::string&&)> on_row_{ noop_on_row };
   bool root_has_been_validated_{ false };
+  std::size_t max_buffer_{ 0 };
+  bool aborted_{ false };
 };
 } // namespace detail
 
@@ -311,6 +314,9 @@ trailer_pop_callback(jsonsl_t lexer,
   impl->on_meta_header_complete_ = detail::noop_on_meta_header_complete;
 
   impl->on_complete_({}, impl->number_of_rows_, std::move(impl->meta_buffer_));
+  // Reset so trailing bytes after a well-formed document (which would drive error_callback) cannot
+  // fire a second terminal, mirroring the reset applied to on_meta_header_complete_ above.
+  impl->on_complete_ = detail::noop_on_complete;
 }
 
 void
@@ -406,7 +412,9 @@ initial_action_push_callback(jsonsl_t lexer,
 // NOLINTEND(misc-const-correctness)
 } // namespace
 
-json::streaming_lexer::streaming_lexer(const std::string& pointer_expression, std::uint32_t depth)
+json::streaming_lexer::streaming_lexer(const std::string& pointer_expression,
+                                       std::uint32_t depth,
+                                       std::size_t max_buffer)
 {
   jsonsl_error_t error = JSONSL_ERROR_SUCCESS;
   jsonsl_jpr_t ptr = jsonsl_jpr_new(pointer_expression.c_str(), &error);
@@ -418,7 +426,7 @@ json::streaming_lexer::streaming_lexer(const std::string& pointer_expression, st
                                 jsonsl_strerror(error));
   }
 
-  impl_ = std::make_shared<detail::streaming_lexer_impl>(jsonsl_new(512), ptr);
+  impl_ = std::make_shared<detail::streaming_lexer_impl>(jsonsl_new(512), ptr, max_buffer);
   impl_->lexer_->data = impl_.get();
   impl_->lexer_->action_callback_PUSH = initial_action_push_callback;
   impl_->lexer_->action_callback_POP = initial_action_pop_callback;
@@ -431,7 +439,37 @@ json::streaming_lexer::streaming_lexer(const std::string& pointer_expression, st
 void
 streaming_lexer::feed(std::string_view data)
 {
+  if (impl_->aborted_) {
+    return;
+  }
+
+  /* Enforce the single-row / trailer buffer ceiling BEFORE appending, so a huge chunk that has not
+   * yet been parsed cannot grow buffer_ (and OOM the process) before the ceiling is detected. The
+   * un-consumed portion is everything buffered since the last keep_position_ trim — buffer_.size()
+   * minus the bytes already consumed — plus the incoming chunk about to be appended.
+   *
+   * This bounds the trailing metadata too: after the last row, keep_position_
+   * stops advancing, so the accumulating trailer counts as un-consumed and trips
+   * this same ceiling. Rows and trailer are therefore each capped at max_buffer_.
+   */
+  if (impl_->max_buffer_ != 0) {
+    const auto consumed = impl_->keep_position_ - impl_->min_pos_;
+    const auto unconsumed = impl_->buffer_.size() > consumed ? impl_->buffer_.size() - consumed : 0;
+    if (unconsumed + data.size() > impl_->max_buffer_) {
+      impl_->aborted_ = true;
+      impl_->error_ = errc::streaming_json_lexer::generic;
+
+      impl_->on_meta_header_complete_(impl_->error_, {});
+      impl_->on_meta_header_complete_ = detail::noop_on_meta_header_complete;
+
+      impl_->on_complete_(impl_->error_, impl_->number_of_rows_, {});
+      impl_->on_complete_ = detail::noop_on_complete;
+      return;
+    }
+  }
+
   impl_->buffer_.append(data);
+
   jsonsl_feed(impl_->lexer_, data.data(), data.size());
 
   /* Do we need to cut off some bytes? */

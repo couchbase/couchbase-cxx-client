@@ -22,6 +22,7 @@
 
 #include <asio/steady_timer.hpp>
 
+#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -41,10 +42,15 @@ public:
   http_streaming_response_body(asio::io_context& io,
                                std::shared_ptr<http_session> session,
                                std::string cached_data = {},
-                               bool reading_complete = false);
+                               bool reading_complete = false,
+                               std::size_t cached_chunk_size = 0);
 
   void set_deadline(std::chrono::time_point<std::chrono::steady_clock> deadline_tp);
-  void next(utils::movable_function<void(std::string, std::error_code)>&& callback);
+  // Delivers the next body chunk. The bool argument is `has_more`: true while the response is
+  // still in progress (an empty chunk with has_more==true simply carried no body bytes, e.g. a
+  // read consumed by HTTP chunk framing), false once the stream has ended. Consumers must key
+  // end-of-stream off this flag, never off an empty data string.
+  void next(utils::movable_function<void(std::string, bool, std::error_code)>&& callback);
   void close(std::error_code ec = couchbase::errc::common::request_canceled);
 
 private:

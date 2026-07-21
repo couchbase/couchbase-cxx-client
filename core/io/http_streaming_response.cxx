@@ -22,6 +22,7 @@
 
 #include <couchbase/error_codes.hxx>
 
+#include <atomic>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -38,11 +39,13 @@ public:
   http_streaming_response_body_impl(asio::io_context& io,
                                     std::shared_ptr<http_session> session,
                                     std::string cached_data,
-                                    bool reading_complete)
+                                    bool reading_complete,
+                                    std::size_t cached_chunk_size)
     : session_{ std::move(session) }
     , cached_data_{ std::move(cached_data) }
     , deadline_{ io }
     , reading_complete_{ reading_complete }
+    , cached_chunk_size_{ cached_chunk_size }
   {
   }
 
@@ -55,33 +58,50 @@ public:
     final_ec_ = ec;
   }
 
-  void next(utils::movable_function<void(std::string, std::error_code)>&& callback)
+  void next(utils::movable_function<void(std::string, bool, std::error_code)>&& callback)
   {
     if (!cached_data_.empty()) {
-      // Return the cached data & clear the cache
+      // Hand back the data buffered during the initial parse. When a cached chunk size is set (a
+      // test seam that simulates a socket that dribbles the body out), deliver at most that many
+      // bytes per pull; otherwise hand back everything at once. There is more to come while cached
+      // data remains or the response was not already fully read (reading_complete_).
       std::string data;
-      std::swap(data, cached_data_);
-      callback(std::move(data), {});
+      if (cached_chunk_size_ == 0 || cached_data_.size() <= cached_chunk_size_) {
+        std::swap(data, cached_data_);
+      } else {
+        data = cached_data_.substr(0, cached_chunk_size_);
+        cached_data_.erase(0, cached_chunk_size_);
+      }
+      callback(std::move(data), !reading_complete_ || !cached_data_.empty(), {});
       return;
     }
     if (reading_complete_) {
-      callback({}, {});
+      callback({}, false, {});
       return;
     }
     if (session_) {
       session_->read_some([self = shared_from_this(), cb = std::move(callback)](
                             std::string data, bool has_more, std::error_code ec) mutable {
-        if (!has_more || ec) {
-          self->close({});
-          if (!ec) {
-            self->reading_complete_ = true;
-          }
+        if (ec) {
+          // Error or cancellation: the connection is left mid-response and is not reusable, so stop
+          // it. close() also records ec in final_ec_ so a later next() (or an upper layer reading
+          // final_ec_) reports the real failure rather than a clean end-of-stream.
+          self->close(ec);
+        } else if (!has_more) {
+          // Clean end-of-stream. http_session::read_some has already handed the session back to the
+          // keep-alive pool via its stream-end handler (http_session_manager::check_in), which
+          // stops the connection only when it is not reusable (Connection: close, node gone, etc.).
+          // Calling stop() here would evict an otherwise-reusable connection and defeat keep-alive,
+          // adding avoidable connection churn, so just release our reference and mark the body
+          // drained; subsequent next() calls report end-of-stream via reading_complete_.
+          self->reading_complete_ = true;
+          self->session_ = nullptr;
         }
-        cb(std::move(data), ec);
+        cb(std::move(data), has_more, ec);
       });
       return;
     }
-    callback({}, final_ec_);
+    callback({}, false, final_ec_);
   }
 
   void set_deadline(std::chrono::time_point<std::chrono::steady_clock> deadline_tp)
@@ -101,22 +121,25 @@ private:
   std::error_code final_ec_;
   asio::steady_timer deadline_;
   std::atomic_bool reading_complete_{ false };
+  std::size_t cached_chunk_size_{ 0 };
 };
 
 http_streaming_response_body::http_streaming_response_body(asio::io_context& io,
                                                            std::shared_ptr<http_session> session,
                                                            std::string cached_data,
-                                                           bool reading_complete)
+                                                           bool reading_complete,
+                                                           std::size_t cached_chunk_size)
   : impl_{ std::make_shared<http_streaming_response_body_impl>(io,
                                                                std::move(session),
                                                                std::move(cached_data),
-                                                               reading_complete) }
+                                                               reading_complete,
+                                                               cached_chunk_size) }
 {
 }
 
 void
 http_streaming_response_body::next(
-  utils::movable_function<void(std::string, std::error_code)>&& callback)
+  utils::movable_function<void(std::string, bool, std::error_code)>&& callback)
 {
   impl_->next(std::move(callback));
 }
