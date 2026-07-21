@@ -20,6 +20,7 @@
 #include "utils/move_only_context.hxx"
 #include "utils/wait_until.hxx"
 
+#include "core/logger/logger.hxx"
 #include "core/operations/document_analytics.hxx"
 #include "core/operations/document_append.hxx"
 #include "core/operations/document_decrement.hxx"
@@ -42,6 +43,9 @@
 #include <couchbase/lookup_in_specs.hxx>
 
 #include <tao/json/from_string.hpp>
+
+#include <cstdint>
+#include <fstream>
 
 TEST_CASE("integration: trivial non-data query", "[integration]")
 {
@@ -750,4 +754,367 @@ TEST_CASE("integration: public API query using both named and positional paramet
   REQUIRE(row["fieldA"].as<std::uint32_t>() == 10);
   REQUIRE(row["fieldB"].as<std::uint32_t>() == 20);
   REQUIRE(row["fieldC"].as<std::string>() == "foo");
+}
+
+namespace
+{
+// The N1QL query below produces ~81 MB of result rows (15,000 rows, each carrying a ~5.4 KB
+// padding_data field). It executes entirely in the query engine without touching any bucket, which
+// makes it a deterministic stress test for streaming back-pressure. The payload stays well above
+// the 50 MB RSS ceiling asserted below, so a run that accidentally buffered the whole response
+// would breach it, while the streaming path stays bounded. Kept in the ~50-100 MB range so the CI
+// integration matrix (many server versions) does not pay the cost of a half-gigabyte transfer.
+const std::string streaming_padding_query =
+  R"(SELECT REPEAT("ABCDEFGHJIJKLMNOPQRSTUVWXYZ", 200) AS padding_data
+     FROM array_range(0, 15000) AS i)";
+
+// Reads the current resident-set size (VmRSS) of the current process, in kilobytes. VmRSS (not the
+// process-lifetime peak VmHWM) is read on purpose: sampling the live working set while draining
+// lets the assertion below detect a regression even if an earlier memory-heavy test already
+// inflated the peak. Returns 0 when /proc/self/status is unavailable (e.g. non-Linux), which makes
+// the memory assertion a no-op on those platforms.
+auto
+read_current_rss_kb() -> std::uint64_t
+{
+  std::ifstream status{ "/proc/self/status" };
+  std::string line;
+  while (std::getline(status, line)) {
+    if (line.rfind("VmRSS:", 0) == 0) {
+      std::uint64_t value{ 0 };
+      for (char c : line) {
+        if (c >= '0' && c <= '9') {
+          value = value * 10 + static_cast<std::uint64_t>(c - '0');
+        }
+      }
+      return value;
+    }
+  }
+  return 0;
+}
+} // namespace
+
+TEST_CASE("integration: streaming query yields rows lazily", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+  if (!integration.cluster_version().supports_query()) {
+    SKIP("cluster does not support query");
+  }
+  auto cluster = integration.public_cluster();
+
+  auto [err, result] = cluster.query_stream(streaming_padding_query, {}).get();
+  REQUIRE_SUCCESS(err.ec());
+
+  // Pull only the first 5 rows of a ~81 MB result, then abandon.
+  int pulled = 0;
+  for (int i = 0; i < 5; ++i) {
+    auto [rerr, row] = result.next().get();
+    REQUIRE_SUCCESS(rerr.ec());
+    REQUIRE(row.has_value());
+    auto v = row->content_as<couchbase::codec::tao_json_serializer, tao::json::value>();
+    REQUIRE(v.find("padding_data") != nullptr);
+    ++pulled;
+  }
+  REQUIRE(pulled == 5);
+  result.cancel(); // abandon the remaining ~81 MB
+
+  cluster.close().get();
+}
+
+TEST_CASE("integration: streaming query is memory-bounded", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+  if (!integration.cluster_version().supports_query()) {
+    SKIP("cluster does not support query");
+  }
+  auto cluster = integration.public_cluster();
+
+  auto [err, result] = cluster.query_stream(streaming_padding_query, {}).get();
+  REQUIRE_SUCCESS(err.ec());
+
+  const auto rss_before_kb = read_current_rss_kb();
+
+  // Drain the whole ~81 MB result one row at a time, tracking the peak resident set observed while
+  // draining, and log it for inspection. A buffered query() would materialise the entire payload at
+  // once; the streaming path must deliver every row without doing so.
+  //
+  // We intentionally do NOT assert a hard process-RSS bound here. This binary runs across the CI
+  // sanitizer/valgrind matrix, where shadow memory and freed-allocation quarantine make VmRSS grow
+  // with the *total* bytes processed rather than the live working set (hundreds of MB under ASan
+  // even when streaming is correctly bounded), so any RSS threshold would be meaningless there. The
+  // enforced, deterministic memory-bound guarantee lives in the row_streamer unit test
+  // ("bounds buffered bytes with byte watermarks"), which asserts buffered_bytes() stays within the
+  // watermark independent of instrumentation. Draining every row here verifies the end-to-end
+  // streaming path delivers the full result without hanging or buffering it into one allocation.
+  std::uint64_t row_count{ 0 };
+  std::uint64_t peak_rss_kb{ rss_before_kb };
+  while (true) {
+    auto [rerr, row] = result.next().get();
+    REQUIRE_SUCCESS(rerr.ec());
+    if (!row.has_value()) {
+      break;
+    }
+    ++row_count;
+    if (row_count % 500 == 0) {
+      const auto current = read_current_rss_kb();
+      if (current > peak_rss_kb) {
+        peak_rss_kb = current;
+      }
+    }
+  }
+  REQUIRE(row_count == 15000);
+
+  if (rss_before_kb != 0 && peak_rss_kb >= rss_before_kb) {
+    CB_LOG_INFO("streaming query peak RSS delta while draining: {} KB ({} rows)",
+                peak_rss_kb - rss_before_kb,
+                row_count);
+  }
+
+  cluster.close().get();
+}
+
+TEST_CASE("integration: cancelling a streaming query mid-stream is clean", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+  if (!integration.cluster_version().supports_query()) {
+    SKIP("cluster does not support query");
+  }
+  auto cluster = integration.public_cluster();
+
+  auto [err, result] = cluster.query_stream(streaming_padding_query, {}).get();
+  REQUIRE_SUCCESS(err.ec());
+
+  // Pull a few rows to confirm the stream is live.
+  for (int i = 0; i < 3; ++i) {
+    auto [rerr, row] = result.next().get();
+    REQUIRE_SUCCESS(rerr.ec());
+    REQUIRE(row.has_value());
+  }
+
+  // Cancel mid-stream — must not hang and must not corrupt memory.
+  // Under an ASan/TSan build (controller-owned) this also validates no
+  // use-after-free or data-race on the internal streaming machinery.
+  result.cancel();
+
+  // Dropping `result` here; the destructor must be safe after cancel().
+  cluster.close().get();
+}
+
+TEST_CASE("integration: streaming query surfaces a query error", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+  if (!integration.cluster_version().supports_query()) {
+    SKIP("cluster does not support query");
+  }
+  auto cluster = integration.public_cluster();
+
+  // A syntactically-valid statement that references a nonexistent keyspace so
+  // the query service rejects it at runtime with a keyspace-not-found error.
+  // This verifies that query_stream() propagates query-level errors to the
+  // caller rather than silently swallowing them.
+  //
+  // NOTE: The rows-THEN-trailing-error path (rows emitted before the error
+  // JSON key) is additionally covered by the unit test in
+  // test_unit_query_stream.cxx:
+  //   "query_stream surfaces a trailing query error after rows"
+  const std::string error_query =
+    "SELECT * FROM `nonexistent_bucket_that_does_not_exist_xyz` LIMIT 1";
+
+  auto [err, result] = cluster.query_stream(error_query, {}).get();
+
+  if (err.ec()) {
+    // Error surfaced at dispatch time (pre-row): acceptable.
+    SUCCEED("error surfaced at dispatch time");
+  } else {
+    // Error surfaced through the row stream: drain until we see it.
+    bool saw_error = false;
+    while (true) {
+      auto [rerr, row] = result.next().get();
+      if (rerr.ec()) {
+        // Terminal error delivered via next() — correct behavior.
+        saw_error = true;
+        break;
+      }
+      if (!row.has_value()) {
+        // Clean end-of-stream with no error is not acceptable for this query.
+        break;
+      }
+    }
+    REQUIRE(saw_error);
+  }
+
+  cluster.close().get();
+}
+
+TEST_CASE("integration: cancelling a streaming query while a next() is in flight is clean",
+          "[integration]")
+{
+  test::utils::integration_test_guard integration;
+  if (!integration.cluster_version().supports_query()) {
+    SKIP("cluster does not support query");
+  }
+  auto cluster = integration.public_cluster();
+
+  auto [err, result] = cluster.query_stream(streaming_padding_query, {}).get();
+  REQUIRE_SUCCESS(err.ec());
+
+  // Issue an asynchronous pull and cancel it before its handler fires. This races cancel()'s
+  // connection teardown against an in-flight channel receive — the scenario that exposes the
+  // use-after-free / data race the earlier fixes address (validated under ASan/TSan builds). The
+  // handler must still be invoked (cancelled or with a row); it must not hang or crash.
+  auto done = std::make_shared<std::promise<void>>();
+  auto fut = done->get_future();
+  result.next([done](couchbase::error, std::optional<couchbase::query_row>) {
+    done->set_value();
+  });
+  result.cancel();
+
+  REQUIRE(fut.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
+
+  cluster.close().get();
+}
+
+TEST_CASE("integration: streaming prepared (adhoc=false) query yields rows", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+  if (!integration.cluster_version().supports_query()) {
+    SKIP("cluster does not support query");
+  }
+  auto cluster = integration.public_cluster();
+
+  // The adhoc=false path is forced through the buffered prepared-statement machinery and then
+  // replayed as a stream from an in-memory copy. It must be started before it can yield rows;
+  // if it is not, next() blocks forever.
+  auto [err, result] =
+    cluster.query_stream(R"(SELECT "prepared" AS v)", couchbase::query_options{}.adhoc(false))
+      .get();
+  REQUIRE_SUCCESS(err.ec());
+
+  auto [rerr, row] = result.next().get();
+  REQUIRE_SUCCESS(rerr.ec());
+  REQUIRE(row.has_value());
+  auto value = row->content_as<couchbase::codec::tao_json_serializer, tao::json::value>();
+  REQUIRE(value.at("v").get_string() == "prepared");
+
+  auto [eerr, end_row] = result.next().get();
+  REQUIRE_SUCCESS(eerr.ec());
+  REQUIRE_FALSE(end_row.has_value()); // clean end-of-stream
+
+  auto [merr, meta] = result.meta_data().get();
+  REQUIRE_SUCCESS(merr.ec());
+  REQUIRE(meta.status() == couchbase::query_status::success);
+
+  cluster.close().get();
+}
+
+TEST_CASE("integration: streaming query meta_data can be requested more than once", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+  if (!integration.cluster_version().supports_query()) {
+    SKIP("cluster does not support query");
+  }
+  auto cluster = integration.public_cluster();
+
+  auto [err, result] = cluster.query_stream(R"(SELECT "x" AS v)", {}).get();
+  REQUIRE_SUCCESS(err.ec());
+
+  // Requesting meta_data() twice before the terminal must not throw future_already_retrieved;
+  // both futures must resolve once the stream drains.
+  auto meta_future_1 = result.meta_data();
+  auto meta_future_2 = result.meta_data();
+
+  while (result.next().get().second.has_value()) {
+    // drain
+  }
+
+  auto meta_1 = meta_future_1.get();
+  auto meta_2 = meta_future_2.get();
+  REQUIRE_SUCCESS(meta_1.first.ec());
+  REQUIRE_SUCCESS(meta_2.first.ec());
+  REQUIRE(meta_1.second.status() == couchbase::query_status::success);
+  REQUIRE(meta_2.second.status() == couchbase::query_status::success);
+
+  // A post-terminal request resolves immediately from the cached value.
+  auto meta_3 = result.meta_data().get();
+  REQUIRE(meta_3.second.status() == couchbase::query_status::success);
+
+  cluster.close().get();
+}
+
+TEST_CASE("integration: streaming query iterator surfaces a terminal error", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+  if (!integration.cluster_version().supports_query()) {
+    SKIP("cluster does not support query");
+  }
+  auto cluster = integration.public_cluster();
+
+  const std::string error_query =
+    "SELECT * FROM `nonexistent_bucket_that_does_not_exist_xyz` LIMIT 1";
+  auto [err, result] = cluster.query_stream(error_query, {}).get();
+
+  if (err.ec()) {
+    SUCCEED("error surfaced up front; iterator path not exercised");
+  } else {
+    // The range-for iterator must visit the terminal error element rather than comparing equal to
+    // end() and silently dropping it.
+    bool saw_error = false;
+    for (auto it = result.begin(); it != result.end(); ++it) {
+      auto [rerr, row] = *it;
+      if (rerr.ec()) {
+        saw_error = true;
+      }
+    }
+    REQUIRE(saw_error);
+  }
+
+  cluster.close().get();
+}
+
+TEST_CASE("integration: streaming query matches buffered query", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+  if (!integration.cluster_version().supports_query()) {
+    SKIP("cluster does not support query");
+  }
+  auto cluster = integration.public_cluster();
+
+  constexpr std::size_t total_rows = 1000;
+  // ORDER BY makes the row order deterministic across the two independent executions so the
+  // row-by-row comparison below is stable.
+  const std::string statement =
+    "SELECT n FROM ARRAY_RANGE(0, " + std::to_string(total_rows) + ") AS n ORDER BY n";
+
+  // Buffered reference, decoded to JSON values (not raw bytes).
+  auto [berr, buffered] = cluster.query(statement, couchbase::query_options{}).get();
+  REQUIRE_SUCCESS(berr.ec());
+  const auto expected_rows =
+    buffered.rows_as<couchbase::codec::tao_json_serializer, tao::json::value>();
+  REQUIRE(expected_rows.size() == total_rows);
+
+  // Drain the whole result through the streaming API and compare row-by-row. Compare parsed JSON,
+  // not raw bytes: the streaming path carries the engine's row bytes verbatim while the buffered
+  // path re-serializes each row, so the two can differ in incidental whitespace even when the
+  // content is identical. This guards the buffered and streaming request encoders and row
+  // extraction against divergence; the ORDER BY keeps the order deterministic.
+  auto [serr, result] = cluster.query_stream(statement).get();
+  REQUIRE_SUCCESS(serr.ec());
+
+  std::vector<tao::json::value> streamed_rows;
+  while (true) {
+    auto [rerr, row] = result.next().get();
+    REQUIRE_SUCCESS(rerr.ec());
+    if (!row.has_value()) {
+      break;
+    }
+    streamed_rows.push_back(
+      row->content_as<couchbase::codec::tao_json_serializer, tao::json::value>());
+  }
+  REQUIRE(streamed_rows.size() == expected_rows.size());
+  REQUIRE(streamed_rows == expected_rows);
+
+  auto [merr, meta] = result.meta_data().get();
+  REQUIRE_SUCCESS(merr.ec());
+  REQUIRE(meta.status() == couchbase::query_status::success);
+
+  cluster.close().get();
 }

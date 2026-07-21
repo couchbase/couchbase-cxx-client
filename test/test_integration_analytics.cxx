@@ -659,3 +659,198 @@ TEST_CASE("integration: public API analytics query using both named and position
   REQUIRE(row["fieldB"].as<std::uint32_t>() == 20);
   REQUIRE(row["fieldC"].as<std::string>() == "foo");
 }
+
+namespace
+{
+// Generates `count` rows entirely inside the analytics engine without touching any dataset, which
+// makes it a deterministic source for the streaming tests below.
+auto
+streaming_analytics_statement(std::size_t count) -> std::string
+{
+  // ORDER BY makes the row order deterministic: analytics does not otherwise guarantee ordering
+  // across independent executions, and the "matches buffered" test compares the two row-by-row.
+  return fmt::format("SELECT i AS n FROM array_range(0, {}) AS i ORDER BY i", count);
+}
+} // namespace
+
+TEST_CASE("integration: streaming analytics yields rows lazily", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+
+  if (integration.ctx.deployment == test::utils::deployment_type::elixir) {
+    SKIP("elixir deployment does not support analytics");
+  }
+  if (!integration.has_analytics_service()) {
+    SKIP("cluster does not have analytics service");
+  }
+
+  auto cluster = integration.public_cluster();
+
+  constexpr std::size_t total_rows = 2000;
+  auto [err, result] =
+    cluster.analytics_query_stream(streaming_analytics_statement(total_rows)).get();
+  REQUIRE_SUCCESS(err.ec());
+
+  // Pull only the first 5 rows, then abandon the rest.
+  int pulled = 0;
+  for (int i = 0; i < 5; ++i) {
+    auto [rerr, row] = result.next().get();
+    REQUIRE_SUCCESS(rerr.ec());
+    REQUIRE(row.has_value());
+    auto v = row->content_as<couchbase::codec::tao_json_serializer, tao::json::value>();
+    REQUIRE(v.find("n") != nullptr);
+    ++pulled;
+  }
+  REQUIRE(pulled == 5);
+  result.cancel(); // abandon the remaining rows
+
+  cluster.close().get();
+}
+
+TEST_CASE("integration: streaming analytics matches buffered analytics", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+
+  if (integration.ctx.deployment == test::utils::deployment_type::elixir) {
+    SKIP("elixir deployment does not support analytics");
+  }
+  if (!integration.has_analytics_service()) {
+    SKIP("cluster does not have analytics service");
+  }
+
+  auto cluster = integration.public_cluster();
+
+  constexpr std::size_t total_rows = 1000;
+  const auto statement = streaming_analytics_statement(total_rows);
+
+  // Buffered reference, decoded to JSON values (not raw bytes).
+  auto [berr, buffered] = cluster.analytics_query(statement).get();
+  REQUIRE_SUCCESS(berr.ec());
+  const auto expected_rows =
+    buffered.rows_as<couchbase::codec::tao_json_serializer, tao::json::value>();
+  REQUIRE(expected_rows.size() == total_rows);
+
+  // Drain the entire result through the streaming API and compare row-by-row.
+  auto [serr, result] = cluster.analytics_query_stream(statement).get();
+  REQUIRE_SUCCESS(serr.ec());
+
+  std::vector<tao::json::value> streamed_rows;
+  while (true) {
+    auto [rerr, row] = result.next().get();
+    REQUIRE_SUCCESS(rerr.ec());
+    if (!row.has_value()) {
+      break;
+    }
+    streamed_rows.push_back(
+      row->content_as<couchbase::codec::tao_json_serializer, tao::json::value>());
+  }
+  REQUIRE(streamed_rows.size() == expected_rows.size());
+
+  // Compare parsed JSON, not raw bytes: the streaming path carries the engine's row bytes verbatim
+  // while the buffered path re-serializes each row, so on a service that pretty-prints (analytics
+  // on some server versions) the raw bytes differ even though the content is identical. The
+  // statement's ORDER BY fixes the row order across the two independent executions.
+  REQUIRE(streamed_rows == expected_rows);
+
+  // Metadata resolves once the stream has been fully drained.
+  auto [merr, meta] = result.meta_data().get();
+  REQUIRE_SUCCESS(merr.ec());
+  REQUIRE(meta.status() == couchbase::analytics_status::success);
+
+  cluster.close().get();
+}
+
+TEST_CASE("integration: cancelling a streaming analytics query mid-stream is clean",
+          "[integration]")
+{
+  test::utils::integration_test_guard integration;
+  if (integration.ctx.deployment == test::utils::deployment_type::elixir) {
+    SKIP("elixir deployment does not support analytics");
+  }
+  if (!integration.has_analytics_service()) {
+    SKIP("cluster does not have analytics service");
+  }
+  auto cluster = integration.public_cluster();
+
+  auto [err, result] = cluster.analytics_query_stream(streaming_analytics_statement(2000)).get();
+  REQUIRE_SUCCESS(err.ec());
+
+  for (int i = 0; i < 3; ++i) {
+    auto [rerr, row] = result.next().get();
+    REQUIRE_SUCCESS(rerr.ec());
+    REQUIRE(row.has_value());
+  }
+
+  // Cancel mid-stream — must not hang or corrupt memory (validated under ASan/TSan).
+  result.cancel();
+
+  cluster.close().get();
+}
+
+TEST_CASE(
+  "integration: cancelling a streaming analytics query while a next() is in flight is clean",
+  "[integration]")
+{
+  test::utils::integration_test_guard integration;
+  if (integration.ctx.deployment == test::utils::deployment_type::elixir) {
+    SKIP("elixir deployment does not support analytics");
+  }
+  if (!integration.has_analytics_service()) {
+    SKIP("cluster does not have analytics service");
+  }
+  auto cluster = integration.public_cluster();
+
+  auto [err, result] = cluster.analytics_query_stream(streaming_analytics_statement(2000)).get();
+  REQUIRE_SUCCESS(err.ec());
+
+  // Issue an asynchronous pull and cancel it before its handler fires: this races cancel()'s
+  // teardown against an in-flight channel receive. The handler must still be invoked (cancelled or
+  // with a row); it must not hang or crash.
+  auto done = std::make_shared<std::promise<void>>();
+  auto fut = done->get_future();
+  result.next([done](couchbase::error, std::optional<couchbase::analytics_row>) {
+    done->set_value();
+  });
+  result.cancel();
+
+  REQUIRE(fut.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
+
+  cluster.close().get();
+}
+
+TEST_CASE("integration: streaming analytics surfaces a query error", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+  if (integration.ctx.deployment == test::utils::deployment_type::elixir) {
+    SKIP("elixir deployment does not support analytics");
+  }
+  if (!integration.has_analytics_service()) {
+    SKIP("cluster does not have analytics service");
+  }
+  auto cluster = integration.public_cluster();
+
+  // References a dataset that does not exist, so the analytics engine rejects it.
+  const std::string error_statement =
+    "SELECT * FROM nonexistent_dataset_that_does_not_exist_xyz LIMIT 1";
+  auto [err, result] = cluster.analytics_query_stream(error_statement).get();
+
+  if (err.ec()) {
+    // Error surfaced up front (before any row): acceptable.
+    SUCCEED("error surfaced up front");
+  } else {
+    bool saw_error = false;
+    while (true) {
+      auto [rerr, row] = result.next().get();
+      if (rerr.ec()) {
+        saw_error = true;
+        break;
+      }
+      if (!row.has_value()) {
+        break;
+      }
+    }
+    REQUIRE(saw_error);
+  }
+
+  cluster.close().get();
+}
