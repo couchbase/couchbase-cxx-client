@@ -9,5 +9,8 @@ runs:
   steps:
     - name: Remove cbdinocluster cluster
       shell: bash
+      env:
+        # Map input.id to an environment variable to prevent shell injection
+        CLUSTER_ID: ${{ inputs.id }}
       run: |
-        cbdinocluster -v rm ${{ inputs.id }}
+        cbdinocluster -v rm "$CLUSTER_ID"
