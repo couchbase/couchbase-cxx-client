@@ -88,8 +88,21 @@ public:
     }
     auto cmd = std::make_shared<operations::mcbp_command<bucket, Request>>(
       ctx_, shared_from_this(), request, default_timeout());
-    cmd->start([cmd, handler = std::forward<Handler>(handler)](
+    // Capture the command weakly. The completion is stored as cmd->handler_, so a strong capture
+    // forms a cmd -> handler_ -> cmd cycle that is only broken when the handler runs. For
+    // cancellable (replica fan-out) operations the completion is dispatched onto the command strand
+    // and can be discarded by io_context teardown (close() followed by io_context::stop()) before
+    // it runs, which would leak the command and everything it transitively holds (the bucket, its
+    // topology configuration, error map and session buffers). The command's lifetime is anchored
+    // independently by its deadline timer and session registration, so on any real completion the
+    // weak pointer still locks; when it does not, the command has already been torn down and the
+    // caller's response was going to be dropped regardless.
+    cmd->start([weak_cmd = cmd->weak_from_this(), handler = std::forward<Handler>(handler)](
                  std::error_code ec, std::optional<io::mcbp_message>&& msg) mutable {
+      auto cmd = weak_cmd.lock();
+      if (!cmd) {
+        return;
+      }
       using encoded_response_type = typename Request::encoded_response_type;
       std::uint16_t status_code = msg ? msg->header.status() : 0xffffU;
       auto resp = msg ? encoded_response_type(std::move(*msg)) : encoded_response_type{};
