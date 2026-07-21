@@ -41,6 +41,9 @@
 #include "core/io/config_tracker.hxx"
 #endif
 #include "cluster_label_listener.hxx"
+#include "core/analytics_stream_component.hxx"
+#include "core/core_sdk_shim.hxx"
+#include "core/http_component.hxx"
 #include "core/logger/logger.hxx"
 #include "core/management/analytics_link_azure_blob_external.hxx"
 #include "core/management/analytics_link_couchbase_remote.hxx"
@@ -150,6 +153,7 @@
 #include "core/orphan_reporter.hxx"
 #include "core/platform/uuid.h"
 #include "core/protocol/hello_feature.hxx"
+#include "core/query_stream_component.hxx"
 #include "core/service_type.hxx"
 #include "core/tls_verify_mode.hxx"
 #include "core/topology/capabilities.hxx"
@@ -1731,6 +1735,46 @@ cluster::execute(operations::query_request request,
                  utils::movable_function<void(operations::query_response)>&& handler) const
 {
   return impl_->execute(std::move(request), std::move(handler));
+}
+
+void
+cluster::query_stream(
+  operations::query_request request,
+  utils::movable_function<void(couchbase::core::query_stream, std::error_code)>&& handler) const
+{
+  // Mirror operations::query_request::encode_to: use_replica is only honored when the cluster
+  // advertises read-from-replica support, otherwise the request is rejected up front.
+  if (request.use_replica.has_value()) {
+    auto [ec, manager] = impl_->http_session_manager();
+    if (ec) {
+      return handler({}, ec);
+    }
+    if (!manager->configuration_capabilities().supports_read_from_replica()) {
+      return handler({}, errc::common::feature_not_available);
+    }
+  }
+
+  auto cluster_opts = impl_->origin().second.options();
+  auto default_timeout = cluster_opts.default_timeout_for(service_type::query);
+  http_component http{ impl_->io_context(), core_sdk_shim{ *this } };
+  const query_stream_component component{
+    impl_->io_context(), std::move(http), default_timeout, cluster_opts.streaming
+  };
+  component.execute(std::move(request), std::move(handler));
+}
+
+void
+cluster::analytics_query_stream(
+  operations::analytics_request request,
+  utils::movable_function<void(couchbase::core::analytics_stream, std::error_code)>&& handler) const
+{
+  auto cluster_opts = impl_->origin().second.options();
+  auto default_timeout = cluster_opts.default_timeout_for(service_type::analytics);
+  http_component http{ impl_->io_context(), core_sdk_shim{ *this } };
+  const analytics_stream_component component{
+    impl_->io_context(), std::move(http), default_timeout, cluster_opts.streaming
+  };
+  component.execute(std::move(request), std::move(handler));
 }
 
 void

@@ -18,29 +18,34 @@
 #include "analytics.hxx"
 
 #include "core/analytics_scan_consistency.hxx"
+#include "core/analytics_stream.hxx"
+#include "core/cluster.hxx"
 #include "core/operations/document_analytics.hxx"
 #include "core/utils/binary.hxx"
+#include "internal_analytics_stream_result.hxx"
 
 #include <couchbase/analytics_metrics.hxx>
 #include <couchbase/analytics_options.hxx>
 #include <couchbase/analytics_result.hxx>
 #include <couchbase/analytics_scan_consistency.hxx>
 #include <couchbase/analytics_status.hxx>
+#include <couchbase/analytics_stream_result.hxx>
 #include <couchbase/analytics_warning.hxx>
 #include <couchbase/codec/encoded_value.hxx>
+#include <couchbase/error.hxx>
 
 #include <cstddef>
+#include <memory>
 #include <optional>
+#include <system_error>
 #include <utility>
 #include <vector>
 
 namespace couchbase::core::impl
 {
-namespace
-{
-
 auto
-map_status(core::operations::analytics_response::analytics_status status) -> analytics_status
+map_analytics_status(core::operations::analytics_response::analytics_status status)
+  -> analytics_status
 {
   switch (status) {
     case core::operations::analytics_response::running:
@@ -66,6 +71,9 @@ map_status(core::operations::analytics_response::analytics_status status) -> ana
   }
   return analytics_status::unknown;
 }
+
+namespace
+{
 
 auto
 map_scan_consistency(std::optional<couchbase::analytics_scan_consistency> consistency)
@@ -136,13 +144,29 @@ build_result(core::operations::analytics_response& resp) -> analytics_result
     analytics_meta_data{
       std::move(resp.meta.request_id),
       std::move(resp.meta.client_context_id),
-      map_status(resp.meta.status),
+      map_analytics_status(resp.meta.status),
       map_warnings(resp),
       map_metrics(resp),
       map_signature(resp),
     },
     map_rows(resp),
   };
+}
+
+void
+dispatch_analytics_stream(const core::cluster& core,
+                          core::operations::analytics_request request,
+                          analytics_stream_handler&& handler)
+{
+  core.analytics_query_stream(
+    std::move(request),
+    [handler = std::move(handler)](core::analytics_stream stream, std::error_code ec) mutable {
+      if (ec) {
+        return handler(couchbase::error{ ec, "failed to start the streaming analytics query" }, {});
+      }
+      auto internal = std::make_shared<internal_analytics_stream_result>(std::move(stream));
+      handler({}, analytics_stream_result{ std::move(internal) });
+    });
 }
 
 auto

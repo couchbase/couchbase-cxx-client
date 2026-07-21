@@ -18,22 +18,28 @@
 #include <couchbase/error_codes.hxx>
 #include <couchbase/query_options.hxx>
 #include <couchbase/transactions/transaction_query_result.hxx>
+
+#include <algorithm>
+#include <cctype>
 #include <utility>
 
 #include "core/cluster.hxx"
 #include "core/error_context/transaction_op_error_context.hxx"
+#include "core/free_form_http_request.hxx"
 #include "core/operations/document_query.hxx"
+#include "core/query_stream.hxx"
 #include "core/utils/binary.hxx"
+#include "error.hxx"
+#include "internal_query_stream_result.hxx"
+#include "query.hxx"
 
 namespace couchbase::core::impl
 {
-namespace
-{
 auto
-map_status(std::string status) -> query_status
+map_query_status(std::string status) -> query_status
 {
   std::transform(status.cbegin(), status.cend(), status.begin(), [](unsigned char c) {
-    return std::tolower(c);
+    return static_cast<char>(std::tolower(c));
   });
   if (status == "running") {
     return query_status::running;
@@ -65,6 +71,8 @@ map_status(std::string status) -> query_status
   return query_status::unknown;
 }
 
+namespace
+{
 auto
 map_rows(const operations::query_response& resp) -> std::vector<codec::binary>
 {
@@ -154,7 +162,7 @@ build_result(operations::query_response& resp) -> query_result
     query_meta_data{
       std::move(resp.meta.request_id),
       std::move(resp.meta.client_context_id),
-      map_status(resp.meta.status),
+      map_query_status(resp.meta.status),
       map_warnings(resp),
       map_metrics(resp),
       map_signature(resp),
@@ -201,6 +209,47 @@ build_query_request(std::string statement,
   return request;
 }
 
+void
+dispatch_query_stream(const core::cluster& core,
+                      core::operations::query_request request,
+                      query_stream_handler&& handler)
+{
+  if (!request.adhoc) {
+    // Prepared statements rely on buffered retry/replay, so they cannot be streamed live. Run the
+    // buffered path and replay the already-parsed result through a buffered query_stream — no JSON
+    // re-serialization or re-parsing — so callers observe identical semantics to the adhoc path.
+    auto& io = core.io_context();
+    core.execute(
+      std::move(request),
+      [&io, handler = std::move(handler)](operations::query_response resp) mutable {
+        if (resp.ctx.ec) {
+          return handler(make_error(resp.ctx), {});
+        }
+        auto stream =
+          std::make_shared<core::query_stream>(io, std::move(resp.rows), std::move(resp.meta));
+        stream->start([handler = std::move(handler), stream](std::error_code early_error) mutable {
+          if (early_error) {
+            return handler(couchbase::error{ early_error, "failed to start the streaming query" },
+                           {});
+          }
+          auto internal = std::make_shared<internal_query_stream_result>(std::move(*stream));
+          handler({}, query_stream_result{ std::move(internal) });
+        });
+      });
+    return;
+  }
+
+  core.query_stream(
+    std::move(request),
+    [handler = std::move(handler)](core::query_stream stream, std::error_code ec) mutable {
+      if (ec) {
+        return handler(couchbase::error{ ec, "failed to start the streaming query" }, {});
+      }
+      auto internal = std::make_shared<internal_query_stream_result>(std::move(stream));
+      handler({}, query_stream_result{ std::move(internal) });
+    });
+}
+
 auto
 build_transaction_query_result(operations::query_response resp,
                                std::error_code txn_ec /*defaults to 0*/)
@@ -222,7 +271,7 @@ build_transaction_query_result(operations::query_response resp,
     { query_meta_data{
         std::move(resp.meta.request_id),
         std::move(resp.meta.client_context_id),
-        map_status(resp.meta.status),
+        map_query_status(resp.meta.status),
         map_warnings(resp),
         map_metrics(resp),
         map_signature(resp),
