@@ -204,6 +204,48 @@ TEST_CASE("unit: queue_request span fields default to null", "[unit]")
   REQUIRE(req->dispatch_span_ == nullptr);
 }
 
+TEST_CASE("unit: queue_request on_unknown_collection_ seam", "[unit]")
+{
+  // This covers only the seam itself: the KV response path in bucket_impl::resolve_response
+  // consults req->on_unknown_collection_ and, when it is set and returns true, treats the
+  // unknown_collection status as handled (re-resolution scheduled by collections_component).
+  // The wiring of the hook to handle_collection_unknown, and the actual cid invalidation +
+  // re-resolution, require a network-bound dispatcher and are covered by the integration test
+  // "integration: range scan re-resolves recreated collection id" in
+  // test_integration_range_scan.cxx.
+  auto req = make_get_request([](auto /*resp*/, auto /*req*/, auto /*ec*/) {
+  });
+
+  SECTION("defaults to empty so the response path falls back to a bounded retry")
+  {
+    REQUIRE_FALSE(static_cast<bool>(req->on_unknown_collection_));
+  }
+
+  SECTION("once set, it is invoked and its result is observed by the caller")
+  {
+    int invocations = 0;
+    req->on_unknown_collection_ = [&invocations]() -> bool {
+      ++invocations;
+      return true;
+    };
+
+    REQUIRE(static_cast<bool>(req->on_unknown_collection_));
+    // Mirror the guard in resolve_response: only invoke when the hook is present.
+    const bool handled = req->on_unknown_collection_ && req->on_unknown_collection_();
+    REQUIRE(handled);
+    REQUIRE(invocations == 1);
+  }
+
+  SECTION("a hook that declines forces the fallback path")
+  {
+    req->on_unknown_collection_ = []() -> bool {
+      return false;
+    };
+    const bool handled = req->on_unknown_collection_ && req->on_unknown_collection_();
+    REQUIRE_FALSE(handled);
+  }
+}
+
 TEST_CASE("unit: queue_request persistent — callback invoked for each successful response",
           "[unit]")
 {

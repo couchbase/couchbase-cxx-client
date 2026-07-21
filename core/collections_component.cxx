@@ -311,6 +311,20 @@ public:
   auto dispatch(std::shared_ptr<mcbp::queue_request> request)
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
   {
+    // Give the KV response path a way to invalidate the cached collection id and re-resolve it
+    // when the server reports unknown_collection (e.g. after a drop/recreate assigns a new id).
+    // Capture weak pointers to both the manager and the request: storing a shared_ptr to the
+    // request inside a std::function held ON that same request would form a self-referential cycle
+    // and leak it. GetCollectionID resolution requests do not pass through here, so they never get
+    // the hook and cannot recurse.
+    request->on_unknown_collection_ = [weak_mgr = weak_from_this(),
+                                       weak_req =
+                                         std::weak_ptr<mcbp::queue_request>(request)]() -> bool {
+      auto mgr = weak_mgr.lock();
+      auto req = weak_req.lock();
+      return (mgr && req) ? mgr->handle_collection_unknown(req) : false;
+    };
+
     if ((request->collection_id_ > 0) // collection id present
         || (request->collection_name_.empty() && request->scope_name_.empty()) // no collection
         || (request->collection_name_ == collection::default_name &&

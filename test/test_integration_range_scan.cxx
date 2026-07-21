@@ -20,6 +20,7 @@
 #include "core/agent_group.hxx"
 #include "core/agent_unit_test_api.hxx"
 #include "core/collections_component_unit_test_api.hxx"
+#include "core/operations/management/collections.hxx"
 #include "core/range_scan_orchestrator.hxx"
 #include "core/topology/configuration.hxx"
 
@@ -1751,4 +1752,114 @@ TEST_CASE("integration: range scan public API", "[integration]")
     fut.get();
     REQUIRE(item_count == 100);
   }
+}
+
+TEST_CASE("integration: range scan re-resolves recreated collection id", "[integration]")
+{
+  // Exercises the new KV (queue_request / crud_component) path, which range scan dispatches
+  // through collections_component. Dropping and recreating a collection with the same name assigns
+  // it a new collection id, so the id cached by the first scan is stale. The second scan sends the
+  // stale id, the server replies unknown_collection, and the on_unknown_collection_ hook must
+  // invalidate the cache, re-resolve via GetCollectionID and retry — succeeding instead of failing
+  // with collection_not_found. The seam itself is unit-tested in test_unit_mcbp_queue_request.cxx.
+  test::utils::integration_test_guard integration;
+
+  if (!integration.has_bucket_capability("range_scan")) {
+    SKIP("cluster does not support range_scan");
+  }
+  if (integration.cluster_version().is_mock()) {
+    SKIP("GOCAVES does not reassign collection ids when a collection is recreated");
+  }
+
+  const auto scope_name = std::string{ couchbase::scope::default_name };
+  const auto collection_name = test::utils::uniq_id("recreate");
+
+  auto create_collection = [&]() {
+    couchbase::core::operations::management::collection_create_request req{ integration.ctx.bucket,
+                                                                            scope_name,
+                                                                            collection_name };
+    auto resp = test::utils::execute(integration.cluster, req);
+    REQUIRE_SUCCESS(resp.ctx.ec);
+    REQUIRE(test::utils::wait_until_collection_manifest_propagated(
+      integration.cluster, integration.ctx.bucket, resp.uid));
+  };
+  auto drop_collection = [&]() {
+    couchbase::core::operations::management::collection_drop_request req{ integration.ctx.bucket,
+                                                                          scope_name,
+                                                                          collection_name };
+    auto resp = test::utils::execute(integration.cluster, req);
+    REQUIRE_SUCCESS(resp.ctx.ec);
+    REQUIRE(test::utils::wait_until_collection_manifest_propagated(
+      integration.cluster, integration.ctx.bucket, resp.uid));
+  };
+
+  create_collection();
+
+  auto cluster = integration.public_cluster();
+  auto collection =
+    cluster.bucket(integration.ctx.bucket).scope(scope_name).collection(collection_name);
+
+  // These ids are chosen (as in the collection-retry test above) so they all map to vbucket 12,
+  // which do_range_scan scans; recreating the collection does not change key-to-vbucket mapping.
+  const std::vector<std::string> ids{
+    "rangecollectionretry-9695",   "rangecollectionretry-24520",  "rangecollectionretry-90825",
+    "rangecollectionretry-119677", "rangecollectionretry-150939", "rangecollectionretry-170176",
+    "rangecollectionretry-199557", "rangecollectionretry-225568", "rangecollectionretry-231302",
+    "rangecollectionretry-245898",
+  };
+  const auto value = make_binary_value(128);
+
+  auto ag = couchbase::core::agent_group(integration.io, { { integration.cluster } });
+  ag.open_bucket(integration.ctx.bucket);
+  auto agent = ag.get_agent(integration.ctx.bucket);
+  REQUIRE(agent.has_value());
+
+  auto scan = [&]() {
+    auto mutations = populate_documents_for_range_scan(collection, ids, value);
+    auto highest = std::max_element(mutations.begin(), mutations.end(), [](auto a, auto b) {
+      return a.second.sequence_number() < b.second.sequence_number();
+    });
+
+    couchbase::core::range_scan_create_options create_options{
+      scope_name,
+      collection_name,
+      couchbase::core::range_scan{
+        couchbase::core::scan_term{ "rangecollectionretry" },
+        couchbase::core::scan_term{ "rangecollectionretry\xff" },
+      },
+    };
+    create_options.snapshot_requirements = couchbase::core::range_snapshot_requirements{
+      highest->second.partition_uuid(),
+      highest->second.sequence_number(),
+    };
+
+    couchbase::core::range_scan_continue_options continue_options{};
+    continue_options.batch_time_limit = std::chrono::seconds{ 10 };
+
+    return do_range_scan(agent.value(), 12, create_options, continue_options);
+  };
+
+  // First scan resolves and caches the current collection id.
+  {
+    auto data = scan();
+    REQUIRE_FALSE(data.empty());
+  }
+
+  // Drop and recreate: the recreated collection gets a new id, invalidating the cached id.
+  drop_collection();
+  create_collection();
+
+  // Second scan sends the now-stale cached id, receives unknown_collection, and must re-resolve
+  // and retry rather than fail. Success (non-empty, correct data) proves the re-resolution path.
+  {
+    auto data = scan();
+    REQUIRE_FALSE(data.empty());
+    for (const auto& item : data) {
+      REQUIRE(item.body.has_value());
+      REQUIRE(item.body->value == value);
+    }
+  }
+
+  // Drop the collection we created so the test bucket is not left polluted.
+  drop_collection();
 }
