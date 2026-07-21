@@ -204,7 +204,6 @@ assert_single_lookup_all_replica_error(test::utils::integration_test_guard& inte
     });
   REQUIRE(responses_from_active == 1);
   for (auto& resp : response.entries) {
-    REQUIRE_FALSE(resp.cas.empty());
     REQUIRE(resp.fields.size() == 1);
     REQUIRE_FALSE(resp.fields[0].exists);
     REQUIRE(resp.fields[0].path == req.specs[0].path_);
@@ -867,12 +866,14 @@ TEST_CASE("integration: subdoc multi lookup", "[integration]")
     integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("subdoc")
   };
 
+  couchbase::cas inserted_cas{};
   {
     auto value_json = couchbase::core::utils::to_binary(
       R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
     couchbase::core::operations::insert_request req{ id, value_json };
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
+    inserted_cas = resp.cas;
   }
 
   SECTION("simple multi lookup")
@@ -952,11 +953,12 @@ TEST_CASE("integration: subdoc multi lookup", "[integration]")
     REQUIRE(resp.fields.empty());
   }
 
-  SECTION("cas is populated even when a path fails")
+  SECTION("error metadata and path failure handling")
   {
-    // Verifies CXXCBC-788: CAS must be set whenever the document was retrieved,
-    // regardless of whether individual subdoc paths fail.  Previously the CAS
-    // was guarded by (!ec), so a path_not_found error left it empty.
+    // Verifies subdoc multi-lookup error metadata under CXXCBC-788 / CXXCBC-846. Under the
+    // server-side fix MB-58521 (commit 65d4ac6e6791cd9a4e5a2501717f6e6b42071f28), Couchbase
+    // Server 7.6.0+ guarantees that the response CAS is populated on SubdocMultiPathFailure (0xcc)
+    // for active node lookups.
     couchbase::core::operations::lookup_in_request req{ id };
     req.specs =
       couchbase::lookup_in_specs{
@@ -965,7 +967,7 @@ TEST_CASE("integration: subdoc multi lookup", "[integration]")
       }
         .specs();
     auto resp = test::utils::execute(integration.cluster, req);
-    REQUIRE_FALSE(resp.cas.empty());
+    REQUIRE(resp.cas == inserted_cas);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE_SUCCESS(resp.fields[0].ec);
     REQUIRE(resp.fields[1].ec == couchbase::errc::key_value::path_not_found);
@@ -1085,9 +1087,8 @@ TEST_CASE("integration: subdoc multi lookup", "[integration]")
       }
         .specs();
     auto resp = test::utils::execute(integration.cluster, req);
-    // Document-level: must succeed
     REQUIRE_SUCCESS(resp.ctx.ec());
-    REQUIRE_FALSE(resp.cas.empty());
+    REQUIRE(resp.cas == inserted_cas);
     REQUIRE(resp.fields.size() == 3);
     // [0] path_invalid
     REQUIRE(resp.fields[0].ec == couchbase::errc::key_value::path_invalid);
@@ -1453,6 +1454,7 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
   auto key = test::utils::uniq_id("lookup_in_any_replica");
   couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", key };
 
+  couchbase::cas inserted_cas{};
   {
     auto value_json = couchbase::core::utils::to_binary(
       R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
@@ -1460,6 +1462,20 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
     req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
+    inserted_cas = resp.cas;
+  }
+
+  {
+    // Wait until the document has replicated to all replica nodes to prevent eventual-consistency
+    // races in subsequent sections
+    couchbase::core::operations::lookup_in_all_replicas_request req{ id };
+    req.specs = couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("dictkey") }.specs();
+    const auto expected_entries = integration.number_of_replicas() + 1;
+    auto replicated = test::utils::wait_until([&]() {
+      auto response = test::utils::execute(integration.cluster, req);
+      return !response.ctx.ec() && response.entries.size() == expected_entries;
+    });
+    REQUIRE(replicated);
   }
 
   SECTION("dict get")
@@ -1673,12 +1689,12 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
     }
   }
 
-  SECTION("cas is populated even when a path fails")
+  SECTION("verifies entry fanout even when a path fails")
   {
-    // Verifies CXXCBC-788: CAS must be set for every entry whenever the document
-    // was retrieved, regardless of whether individual subdoc paths fail.
-    // Previously the CAS was guarded by (!ec / !ctx.ec()), so a path_not_found
-    // error left it empty.
+    // Verifies CXXCBC-788 / CXXCBC-846. Under MB-58521 (commit
+    // 65d4ac6e6791cd9a4e5a2501717f6e6b42071f28), Couchbase Server 7.6.0+ populates the document CAS
+    // on lookups with path failures only for the active node. Replica node subdoc handlers do not
+    // populate CAS on path failures (returning 0).
     couchbase::core::operations::lookup_in_all_replicas_request req{ id };
     req.specs =
       couchbase::lookup_in_specs{
@@ -1690,7 +1706,9 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.entries.size() == integration.number_of_replicas() + 1);
     for (const auto& entry : resp.entries) {
-      REQUIRE_FALSE(entry.cas.empty());
+      INFO("is_replica=" << entry.is_replica << ", cas=" << entry.cas.value()
+                         << ", inserted_cas=" << inserted_cas.value());
+      REQUIRE(entry.cas == inserted_cas);
     }
   }
 
@@ -1740,9 +1758,9 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
       auto [err, result] = collection.lookup_in_all_replicas(key, specs).get();
       REQUIRE_SUCCESS(err.ec());
       for (auto& res : result) {
-        REQUIRE(!res.cas().empty());
-        REQUIRE(!res.exists(0));
-        REQUIRE(!res.content_as<bool>(0));
+        REQUIRE_FALSE(res.cas().empty());
+        REQUIRE_FALSE(res.exists(0));
+        REQUIRE_FALSE(res.content_as<bool>(0));
       }
     }
   }
@@ -1772,6 +1790,7 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
   auto key = test::utils::uniq_id("lookup_in_any_replica");
   couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", key };
 
+  couchbase::cas inserted_cas{};
   {
     auto value_json = couchbase::core::utils::to_binary(
       R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
@@ -1779,6 +1798,20 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
     req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
+    inserted_cas = resp.cas;
+  }
+
+  {
+    // Wait until the document has replicated to all replica nodes to prevent eventual-consistency
+    // races in subsequent sections
+    couchbase::core::operations::lookup_in_all_replicas_request req{ id };
+    req.specs = couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("dictkey") }.specs();
+    const auto expected_entries = integration.number_of_replicas() + 1;
+    auto replicated = test::utils::wait_until([&]() {
+      auto response = test::utils::execute(integration.cluster, req);
+      return !response.ctx.ec() && response.entries.size() == expected_entries;
+    });
+    REQUIRE(replicated);
   }
 
   SECTION("dict get")
@@ -2041,11 +2074,12 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
     }
   }
 
-  SECTION("cas is populated even when a path fails")
+  SECTION("verifies field errors propagation even when a path fails")
   {
-    // Verifies CXXCBC-788: CAS must be set whenever the document was retrieved,
-    // regardless of whether individual subdoc paths fail.  Previously the CAS
-    // was guarded by (!ec / !ctx.ec()), so a path_not_found error left it empty.
+    // Verifies CXXCBC-788 / CXXCBC-846. Under MB-58521 (commit
+    // 65d4ac6e6791cd9a4e5a2501717f6e6b42071f28), Couchbase Server 7.6.0+ populates the document CAS
+    // on lookups with path failures only for the active node. Replica node subdoc handlers return
+    // an empty CAS.
     couchbase::core::operations::lookup_in_any_replica_request req{ id };
     req.specs =
       couchbase::lookup_in_specs{
@@ -2054,7 +2088,7 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
       }
         .specs();
     auto resp = test::utils::execute(integration.cluster, req);
-    REQUIRE_FALSE(resp.cas.empty());
+    REQUIRE(resp.cas == inserted_cas);
     REQUIRE_SUCCESS(resp.fields[0].ec);
     REQUIRE(resp.fields[1].ec == couchbase::errc::key_value::path_not_found);
   }
@@ -2124,8 +2158,9 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
       };
       auto [err, result] = collection.lookup_in_any_replica(key, specs).get();
       REQUIRE_SUCCESS(err.ec());
-      REQUIRE(!result.exists(0));
-      REQUIRE(!result.content_as<bool>(0));
+      REQUIRE_FALSE(result.cas().empty());
+      REQUIRE_FALSE(result.exists(0));
+      REQUIRE_FALSE(result.content_as<bool>(0));
     }
   }
 }

@@ -176,3 +176,40 @@ TEST_CASE("with_configuration does not strand a continuation while racing close"
     }
   }
 }
+
+TEST_CASE(
+  "with_configuration on an already-closed bucket completes with configuration_not_available "
+  "and breaks reference cycles",
+  "[unit]")
+{
+  asio::io_context ctx;
+  couchbase::core::tls_context_provider tls{};
+
+  std::weak_ptr<couchbase::core::bucket> weak;
+  std::atomic_bool invoked{ false };
+  std::error_code observed{};
+
+  {
+    auto bucket = make_detached_bucket(ctx, tls);
+    weak = bucket;
+    bucket->close();
+
+    // Call with_configuration on the closed bucket. The callback captures a strong reference to the
+    // bucket to model real-world reference cycles (e.g., cluster_impl capturing bucket, etc.).
+    bucket->with_configuration(
+      [&invoked, &observed, self = bucket](
+        std::error_code ec, std::shared_ptr<couchbase::core::topology::configuration> /* cfg */) {
+        observed = ec;
+        invoked.store(true);
+        (void)self;
+      });
+  }
+
+  // Verify that the handler was immediately invoked on the closed bucket
+  REQUIRE(invoked.load());
+  REQUIRE(observed == couchbase::errc::network::configuration_not_available);
+
+  // Since the callback completed immediately, its captured state is freed, meaning the reference
+  // cycle is broken. Verify that the bucket's resource is fully cleaned up.
+  REQUIRE(weak.expired());
+}
