@@ -99,6 +99,13 @@ when /msan|memory/
   CB_CMAKE_EXTRAS << "-DENABLE_SANITIZER_MEMORY=ON"
 end
 
+# BoringSSL ships no hand-written assembly for the Windows ARM64 target, so
+# the crypto sources must be built in the portable C-only mode. The Windows
+# ARM64 CI leg sets CB_OPENSSL_NO_ASM=1 (see .github/workflows/build.yml).
+if ENV["CB_OPENSSL_NO_ASM"] == "1"
+  CB_CMAKE_EXTRAS << "-DOPENSSL_NO_ASM=1"
+end
+
 BUILD_DIR = if CB_SANITIZER.empty?
               File.join(PROJECT_ROOT, "cmake-build-tests")
             else
