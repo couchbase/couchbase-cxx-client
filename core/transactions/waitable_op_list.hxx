@@ -79,6 +79,15 @@ public:
     // we have the lock.  Block all further ops
     allow_ops_ = false;
   }
+  // Peek at whether query mode has already been entered.  Briefly acquires mutex_ but, unlike
+  // get_mode(), never waits on cv_query_ for the query node to be set, so it returns immediately.
+  // Used by defensive invariant checks: a KV mutation must never be staged once query mode is
+  // entered.
+  auto query_mode_entered() const -> bool
+  {
+    const std::scoped_lock lock(mutex_);
+    return mode_.mode == attempt_mode::modes::QUERY;
+  }
   auto get_mode() -> attempt_mode
   {
     std::unique_lock<std::mutex> lock(mutex_);
@@ -143,8 +152,10 @@ public:
   {
     // when begin work errors out, it is fatal, so reset to kv mode here, allowing
     // rollback to function properly.
-    std::unique_lock<std::mutex> lock;
+    const std::scoped_lock lock(mutex_);
     mode_.mode = attempt_mode::modes::KV;
+    // query_node is intentionally left populated: a retry runs with a fresh waitable_op_list, and
+    // get_mode()'s wait predicate keys on query_node, so clearing it here would serve no purpose.
     cv_query_.notify_all();
   }
 
@@ -199,6 +210,6 @@ private:
   std::condition_variable cv_ops_;
   std::condition_variable cv_query_;
   std::condition_variable cv_in_flight_;
-  std::mutex mutex_;
+  mutable std::mutex mutex_;
 };
 } // namespace couchbase::core::transactions

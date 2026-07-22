@@ -42,6 +42,7 @@
 #include "internal/utils.hxx"
 #include "staged_mutation.hxx"
 
+#include <cassert>
 #include <optional>
 
 namespace couchbase::core::transactions
@@ -233,10 +234,12 @@ attempt_context_impl::get(const core::document_id& id) -> transaction_get_result
 void
 attempt_context_impl::get(const core::document_id& id, Callback&& cb)
 {
-  if (op_list_.get_mode().is_query()) {
-    return get_with_query(id, false, std::move(cb));
-  }
   cache_error_async(cb, [self = shared_from_this(), id, cb]() mutable {
+    // Mode is read after cache_error_async incremented the op count, closing the
+    // race with set_query_mode() -- see the comment in insert() for the rationale.
+    if (self->op_list_.get_mode().is_query()) {
+      return self->get_with_query(id, false, std::move(cb));
+    }
     self->check_if_done(cb);
     self->do_get(
       id,
@@ -323,10 +326,12 @@ void
 attempt_context_impl::get_optional(const core::document_id& id, Callback&& cb)
 {
 
-  if (op_list_.get_mode().is_query()) {
-    return get_with_query(id, true, std::move(cb));
-  }
   cache_error_async(cb, [self = shared_from_this(), id, cb]() mutable {
+    // Mode is read after cache_error_async incremented the op count, closing the
+    // race with set_query_mode() -- see the comment in insert() for the rationale.
+    if (self->op_list_.get_mode().is_query()) {
+      return self->get_with_query(id, true, std::move(cb));
+    }
     self->ensure_open_bucket(
       id.bucket(), [self, id, cb = std::move(cb)](std::error_code ec) mutable {
         if (ec) {
@@ -886,11 +891,13 @@ attempt_context_impl::replace(const transaction_get_result& document,
                               Callback&& cb)
 {
 
-  if (op_list_.get_mode().is_query()) {
-    return replace_raw_with_query(document, std::move(content), std::move(cb));
-  }
   return cache_error_async(
     cb, [self = shared_from_this(), cb, document, content = std::move(content)]() mutable {
+      // Mode is read after cache_error_async incremented the op count, closing the
+      // race with set_query_mode() -- see the comment in insert() for the rationale.
+      if (self->op_list_.get_mode().is_query()) {
+        return self->replace_raw_with_query(document, std::move(content), std::move(cb));
+      }
       self->ensure_open_bucket(
         document.bucket(),
         [self, cb = std::move(cb), document, content = std::move(content)](
@@ -1026,6 +1033,13 @@ attempt_context_impl::create_staged_replace(
   const std::optional<document_metadata>& document_metadata,
   Handler&& cb)
 {
+  // ExtThreadSafety invariant -- see create_staged_insert() for the full rationale and
+  // the spec reference (couchbase-transactions-specs/transactions-extensions.md,
+  // "ExtThreadSafety").  replace() reads the mode after this op is counted, so reaching
+  // this staging point in query mode means that ordering has regressed.
+  assert(!op_list_.query_mode_entered() &&
+         "ExtThreadSafety: KV replace staged after query mode entered -- would be missing "
+         "from BEGIN WORK and lost at commit");
   operations::mutate_in_request req{ id };
   const bool binary =
     codec::codec_flags::has_common_flags(content.flags, codec::codec_flags::binary_common_flags);
@@ -1274,11 +1288,20 @@ attempt_context_impl::insert(const core::document_id& id,
                              codec::encoded_value content,
                              Callback&& cb)
 {
-  if (op_list_.get_mode().is_query()) {
-    return insert_raw_with_query(id, std::move(content), std::move(cb));
-  }
   return cache_error_async(
     cb, [self = shared_from_this(), id, cb, content = std::move(content)]() mutable {
+      // The op count was incremented by cache_error_async before this lambda runs.
+      // Reading the mode here -- after the increment -- closes a race with
+      // set_query_mode(): a query switching to query mode first waits for all
+      // in-flight KV ops to drain before issuing BEGIN WORK, so once this op is
+      // counted, either we observe KV mode and our staged mutation is guaranteed to
+      // be part of BEGIN WORK, or we observe query mode and route through query.
+      // Checking the mode before the increment (as the code used to) left a window
+      // where a query could flip the mode in the gap, after which this op would
+      // stage a KV mutation that BEGIN WORK had already missed -- silently losing it.
+      if (self->op_list_.get_mode().is_query()) {
+        return self->insert_raw_with_query(id, std::move(content), std::move(cb));
+      }
       self->ensure_open_bucket(
         id.bucket(),
         [self, id, content = std::move(content), cb = std::move(cb)](std::error_code ec) mutable {
@@ -1452,10 +1475,12 @@ void
 attempt_context_impl::remove(const transaction_get_result& document, VoidCallback&& cb)
 {
 
-  if (op_list_.get_mode().is_query()) {
-    return remove_with_query(document, std::move(cb));
-  }
   return cache_error_async(cb, [self = shared_from_this(), document, cb]() mutable {
+    // Mode is read after cache_error_async incremented the op count, closing the
+    // race with set_query_mode() -- see the comment in insert() for the rationale.
+    if (self->op_list_.get_mode().is_query()) {
+      return self->remove_with_query(document, std::move(cb));
+    }
     self->check_if_done(cb);
     self->ensure_open_bucket(
       document.bucket(), [self, document, cb = std::move(cb)](std::error_code ec) mutable {
@@ -1539,6 +1564,15 @@ attempt_context_impl::remove(const transaction_get_result& document, VoidCallbac
                       return error_handler(
                         *ec, "before_staged_remove hook raised error", std::move(cb));
                     }
+                    // ExtThreadSafety invariant -- see create_staged_insert() for the
+                    // full rationale and spec reference
+                    // (couchbase-transactions-specs/transactions-extensions.md,
+                    // "ExtThreadSafety").  remove() reads the mode after this op is
+                    // counted, so reaching this staging point in query mode means that
+                    // ordering has regressed.
+                    assert(!self->op_list_.query_mode_entered() &&
+                           "ExtThreadSafety: KV remove staged after query mode entered -- "
+                           "would be missing from BEGIN WORK and lost at commit");
                     CB_ATTEMPT_CTX_LOG_TRACE(self,
                                              "about to remove doc {} with cas {}",
                                              document.id(),
@@ -2203,59 +2237,69 @@ make_kv_txdata(std::optional<transaction_get_result> doc = std::nullopt) -> tao:
 void
 attempt_context_impl::get_with_query(const core::document_id& id, bool optional, Callback&& cb)
 {
-  cache_error_async(cb, [self = shared_from_this(), id, optional, cb]() mutable {
-    couchbase::transactions::transaction_query_options opts;
-    opts.readonly(true);
-    return self->wrap_query(
-      KV_GET,
-      opts,
-      make_params(id, {}),
-      make_kv_txdata(),
-      STAGE_QUERY_KV_GET,
-      true,
-      {},
-      [self, id, optional, cb = std::move(cb)](std::exception_ptr err,
-                                               core::operations::query_response resp) mutable {
-        if (resp.ctx.ec == couchbase::errc::key_value::document_not_found) {
+  // Called only from get()/get_optional(), already within their cache_error_async()
+  // (op counted, existing_error() checked); see insert_raw_with_query() for why we do
+  // not re-wrap.
+  auto self = shared_from_this();
+  couchbase::transactions::transaction_query_options opts;
+  opts.readonly(true);
+  return self->wrap_query(
+    KV_GET,
+    opts,
+    make_params(id, {}),
+    make_kv_txdata(),
+    STAGE_QUERY_KV_GET,
+    true,
+    {},
+    [self, id, optional, cb = std::move(cb)](std::exception_ptr err,
+                                             core::operations::query_response resp) mutable {
+      if (resp.ctx.ec == couchbase::errc::key_value::document_not_found) {
+        // A non-optional get() must fail rather than report an empty result: its callback contract
+        // (and the synchronous get() wrapper) dereferences the returned optional, so err==nullptr
+        // with res==nullopt would be a null dereference. Mirror the rows-empty handling below and
+        // the KV get() path.
+        if (optional) {
           return self->op_completed_with_callback(std::move(cb),
                                                   std::optional<transaction_get_result>());
         }
-        if (!err) {
-          // make a transaction_get_result from the row...
-          try {
-            if (resp.rows.empty()) {
-              if (optional) {
-                return self->op_completed_with_callback(std::move(cb),
-                                                        std::optional<transaction_get_result>());
-              }
-              return self->op_completed_with_error(
-                std::move(cb),
-                transaction_operation_failed(FAIL_DOC_NOT_FOUND, "document not found"));
+        return self->op_completed_with_error(
+          std::move(cb), transaction_operation_failed(FAIL_DOC_NOT_FOUND, "document not found"));
+      }
+      if (!err) {
+        // make a transaction_get_result from the row...
+        try {
+          if (resp.rows.empty()) {
+            if (optional) {
+              return self->op_completed_with_callback(std::move(cb),
+                                                      std::optional<transaction_get_result>());
             }
-            CB_ATTEMPT_CTX_LOG_TRACE(self, "get_with_query got: {}", resp.rows.front());
-            transaction_get_result doc(id, core::utils::json::parse(resp.rows.front()));
-            return self->op_completed_with_callback(std::move(cb),
-                                                    std::optional<transaction_get_result>(doc));
-          } catch (const std::exception& e) {
-            // TODO(SA): unsure what to do here, but this is pretty fatal, so
             return self->op_completed_with_error(
-              std::move(cb), transaction_operation_failed(FAIL_OTHER, e.what()));
+              std::move(cb),
+              transaction_operation_failed(FAIL_DOC_NOT_FOUND, "document not found"));
           }
+          CB_ATTEMPT_CTX_LOG_TRACE(self, "get_with_query got: {}", resp.rows.front());
+          transaction_get_result doc(id, core::utils::json::parse(resp.rows.front()));
+          return self->op_completed_with_callback(std::move(cb),
+                                                  std::optional<transaction_get_result>(doc));
+        } catch (const std::exception& e) {
+          // Unexpected error here: fail with FAIL_OTHER so the transaction rolls back.
+          return self->op_completed_with_error(std::move(cb),
+                                               transaction_operation_failed(FAIL_OTHER, e.what()));
         }
-        // for get_optional.   <sigh>
-        if (optional) {
-          try {
-            std::rethrow_exception(err);
-          } catch (const document_not_found&) {
-            return self->op_completed_with_callback(std::move(cb),
-                                                    std::optional<transaction_get_result>());
-          } catch (...) {
-            return self->op_completed_with_error(std::move(cb), std::current_exception());
-          }
+      }
+      // for get_optional.   <sigh>
+      if (optional) {
+        try {
+          std::rethrow_exception(err);
+        } catch (const document_not_found&) {
+          return self->op_completed_with_callback(std::move(cb),
+                                                  std::optional<transaction_get_result>());
+        } catch (...) {
+          return self->op_completed_with_error(std::move(cb), std::current_exception());
         }
-        return self->op_completed_with_error(std::move(cb), std::move(err));
-      });
-  });
+      }
+      return self->op_completed_with_error(std::move(cb), std::move(err));
+    });
 }
 
 void
@@ -2263,46 +2307,55 @@ attempt_context_impl::insert_raw_with_query(const core::document_id& id,
                                             codec::encoded_value content,
                                             Callback&& cb)
 {
-  cache_error_async(
-    cb, [self = shared_from_this(), id, content = std::move(content), cb]() mutable {
-      const couchbase::transactions::transaction_query_options opts;
-      return self->wrap_query(
-        KV_INSERT,
-        opts,
-        make_params(id, std::move(content)),
-        make_kv_txdata(),
-        STAGE_QUERY_KV_INSERT,
-        true,
-        {},
-        [self, id, cb = std::move(cb)](const std::exception_ptr& err,
-                                       core::operations::query_response resp) mutable {
-          if (err) {
-            try {
-              std::rethrow_exception(err);
-            } catch (const transaction_operation_failed& e) {
-              return self->op_completed_with_error(std::move(cb), e);
-            } catch (const op_exception& ex) {
-              return self->op_completed_with_error(std::move(cb), ex);
-            } catch (const std::exception& e) {
-              return self->op_completed_with_error(
-                std::move(cb), transaction_operation_failed(FAIL_OTHER, e.what()));
-            } catch (...) {
-              return self->op_completed_with_error(
-                std::move(cb), transaction_operation_failed(FAIL_OTHER, "unexpected error"));
-            }
-          }
-          // make a transaction_get_result from the row...
-          try {
-            CB_ATTEMPT_CTX_LOG_TRACE(self, "insert_raw_with_query got: {}", resp.rows.front());
-            transaction_get_result doc(id, core::utils::json::parse(resp.rows.front()));
-            return self->op_completed_with_callback(std::move(cb),
-                                                    std::optional<transaction_get_result>(doc));
-          } catch (const std::exception& e) {
-            // TODO(SA): unsure what to do here, but this is pretty fatal, so
-            return self->op_completed_with_error(
-              std::move(cb), transaction_operation_failed(FAIL_OTHER, e.what()));
-          }
-        });
+  // Called only from insert(), already within its cache_error_async(): the op has
+  // been counted in the wait-group and existing_error() has been checked, so we must
+  // not wrap again here -- double-counting would leave the op permanently in-flight
+  // and deadlock the commit/rollback wait.
+  auto self = shared_from_this();
+  const couchbase::transactions::transaction_query_options opts;
+  return self->wrap_query(
+    KV_INSERT,
+    opts,
+    make_params(id, std::move(content)),
+    make_kv_txdata(),
+    STAGE_QUERY_KV_INSERT,
+    true,
+    {},
+    [self, id, cb = std::move(cb)](const std::exception_ptr& err,
+                                   core::operations::query_response resp) mutable {
+      if (err) {
+        try {
+          std::rethrow_exception(err);
+        } catch (const transaction_operation_failed& e) {
+          return self->op_completed_with_error(std::move(cb), e);
+        } catch (const op_exception& ex) {
+          return self->op_completed_with_error(std::move(cb), ex);
+        } catch (const std::exception& e) {
+          return self->op_completed_with_error(std::move(cb),
+                                               transaction_operation_failed(FAIL_OTHER, e.what()));
+        } catch (...) {
+          return self->op_completed_with_error(
+            std::move(cb), transaction_operation_failed(FAIL_OTHER, "unexpected error"));
+        }
+      }
+      // make a transaction_get_result from the row...
+      try {
+        if (resp.rows.empty()) {
+          // A successful insert query must return the staged document row; no rows is an
+          // unexpected protocol condition. front() on an empty vector is UB, so guard explicitly.
+          return self->op_completed_with_error(
+            std::move(cb),
+            transaction_operation_failed(FAIL_OTHER, "insert query returned no rows"));
+        }
+        CB_ATTEMPT_CTX_LOG_TRACE(self, "insert_raw_with_query got: {}", resp.rows.front());
+        transaction_get_result doc(id, core::utils::json::parse(resp.rows.front()));
+        return self->op_completed_with_callback(std::move(cb),
+                                                std::optional<transaction_get_result>(doc));
+      } catch (const std::exception& e) {
+        // Unexpected error here: fail with FAIL_OTHER so the transaction rolls back.
+        return self->op_completed_with_error(std::move(cb),
+                                             transaction_operation_failed(FAIL_OTHER, e.what()));
+      }
     });
 }
 
@@ -2311,91 +2364,103 @@ attempt_context_impl::replace_raw_with_query(const transaction_get_result& docum
                                              codec::encoded_value content,
                                              Callback&& cb)
 {
-  cache_error_async(
-    cb, [self = shared_from_this(), document, content = std::move(content), cb]() mutable {
-      const couchbase::transactions::transaction_query_options opts;
-      return self->wrap_query(
-        KV_REPLACE,
-        opts,
-        make_params(document.id(), std::move(content)),
-        make_kv_txdata(document),
-        STAGE_QUERY_KV_REPLACE,
-        true,
-        {},
-        [self, id = document.id(), cb = std::move(cb)](
-          const std::exception_ptr& err, core::operations::query_response resp) mutable {
-          if (err) {
-            try {
-              std::rethrow_exception(err);
-            } catch (const query_cas_mismatch& e) {
-              return self->op_completed_with_error(
-                std::move(cb), transaction_operation_failed(FAIL_CAS_MISMATCH, e.what()).retry());
-            } catch (const document_not_found& e) {
-              return self->op_completed_with_error(
-                std::move(cb), transaction_operation_failed(FAIL_DOC_NOT_FOUND, e.what()).retry());
-            } catch (const transaction_operation_failed& e) {
-              return self->op_completed_with_error(std::move(cb), e);
-            } catch (std::exception& e) {
-              return self->op_completed_with_error(
-                std::move(cb), transaction_operation_failed(FAIL_OTHER, e.what()));
-            } catch (...) {
-              return self->op_completed_with_error(
-                std::move(cb), transaction_operation_failed(FAIL_OTHER, "unexpected exception"));
-            }
-          }
-          // make a transaction_get_result from the row...
-          try {
-            CB_ATTEMPT_CTX_LOG_TRACE(self, "replace_raw_with_query got: {}", resp.rows.front());
-            transaction_get_result doc(id, core::utils::json::parse(resp.rows.front()));
-            return self->op_completed_with_callback(std::move(cb),
-                                                    std::optional<transaction_get_result>(doc));
-          } catch (const std::exception& e) {
-            // TODO(SA): unsure what to do here, but this is pretty fatal, so
-            return self->op_completed_with_error(
-              std::move(cb), transaction_operation_failed(FAIL_OTHER, e.what()));
-          }
-        });
+  // Called only from replace(), already within its cache_error_async() (op counted,
+  // existing_error() checked); see insert_raw_with_query() for why we do not re-wrap.
+  auto self = shared_from_this();
+  const couchbase::transactions::transaction_query_options opts;
+  return self->wrap_query(
+    KV_REPLACE,
+    opts,
+    make_params(document.id(), std::move(content)),
+    make_kv_txdata(document),
+    STAGE_QUERY_KV_REPLACE,
+    true,
+    {},
+    [self, id = document.id(), cb = std::move(cb)](const std::exception_ptr& err,
+                                                   core::operations::query_response resp) mutable {
+      if (err) {
+        try {
+          std::rethrow_exception(err);
+        } catch (const query_cas_mismatch& e) {
+          return self->op_completed_with_error(
+            std::move(cb), transaction_operation_failed(FAIL_CAS_MISMATCH, e.what()).retry());
+        } catch (const document_not_found& e) {
+          return self->op_completed_with_error(
+            std::move(cb), transaction_operation_failed(FAIL_DOC_NOT_FOUND, e.what()).retry());
+        } catch (const transaction_operation_failed& e) {
+          return self->op_completed_with_error(std::move(cb), e);
+        } catch (const op_exception& ex) {
+          return self->op_completed_with_error(std::move(cb), ex);
+        } catch (std::exception& e) {
+          return self->op_completed_with_error(std::move(cb),
+                                               transaction_operation_failed(FAIL_OTHER, e.what()));
+        } catch (...) {
+          return self->op_completed_with_error(
+            std::move(cb), transaction_operation_failed(FAIL_OTHER, "unexpected exception"));
+        }
+      }
+      // make a transaction_get_result from the row...
+      try {
+        if (resp.rows.empty()) {
+          // A successful replace query must return the staged document row; no rows is an
+          // unexpected protocol condition. front() on an empty vector is UB, so guard explicitly.
+          return self->op_completed_with_error(
+            std::move(cb),
+            transaction_operation_failed(FAIL_OTHER, "replace query returned no rows"));
+        }
+        CB_ATTEMPT_CTX_LOG_TRACE(self, "replace_raw_with_query got: {}", resp.rows.front());
+        transaction_get_result doc(id, core::utils::json::parse(resp.rows.front()));
+        return self->op_completed_with_callback(std::move(cb),
+                                                std::optional<transaction_get_result>(doc));
+      } catch (const std::exception& e) {
+        // Unexpected error here: fail with FAIL_OTHER so the transaction rolls back.
+        return self->op_completed_with_error(std::move(cb),
+                                             transaction_operation_failed(FAIL_OTHER, e.what()));
+      }
     });
 }
 
 void
 attempt_context_impl::remove_with_query(const transaction_get_result& document, VoidCallback&& cb)
 {
-  cache_error_async(cb, [self = shared_from_this(), document, cb]() {
-    const couchbase::transactions::transaction_query_options opts;
-    return self->wrap_query(
-      KV_REMOVE,
-      opts,
-      make_params(document.id(), {}),
-      make_kv_txdata(document),
-      STAGE_QUERY_KV_REMOVE,
-      true,
-      {},
-      [self, id = document.id(), cb](const std::exception_ptr& err,
-                                     const core::operations::query_response& /* resp */) mutable {
-        if (err) {
-          try {
-            std::rethrow_exception(err);
-          } catch (const transaction_operation_failed& e) {
-            return self->op_completed_with_error(std::move(cb), e);
-          } catch (const document_not_found& e) {
-            return self->op_completed_with_error(
-              std::move(cb), transaction_operation_failed(FAIL_DOC_NOT_FOUND, e.what()).retry());
-          } catch (const query_cas_mismatch& e) {
-            return self->op_completed_with_error(
-              std::move(cb), transaction_operation_failed(FAIL_CAS_MISMATCH, e.what()).retry());
-          } catch (const std::exception& e) {
-            return self->op_completed_with_error(
-              std::move(cb), transaction_operation_failed(FAIL_OTHER, e.what()));
-          } catch (...) {
-            return self->op_completed_with_error(
-              std::move(cb), transaction_operation_failed(FAIL_OTHER, "unexpected exception"));
-          }
+  // Called only from remove(), already within its cache_error_async() (op counted,
+  // existing_error() checked); see insert_raw_with_query() for why we do not re-wrap.
+  auto self = shared_from_this();
+  const couchbase::transactions::transaction_query_options opts;
+  return self->wrap_query(
+    KV_REMOVE,
+    opts,
+    make_params(document.id(), {}),
+    make_kv_txdata(document),
+    STAGE_QUERY_KV_REMOVE,
+    true,
+    {},
+    [self, id = document.id(), cb = std::move(cb)](
+      const std::exception_ptr& err, const core::operations::query_response& /* resp */) mutable {
+      if (err) {
+        try {
+          std::rethrow_exception(err);
+        } catch (const transaction_operation_failed& e) {
+          return self->op_completed_with_error(std::move(cb), e);
+        } catch (const document_not_found& e) {
+          return self->op_completed_with_error(
+            std::move(cb), transaction_operation_failed(FAIL_DOC_NOT_FOUND, e.what()).retry());
+        } catch (const query_cas_mismatch& e) {
+          return self->op_completed_with_error(
+            std::move(cb), transaction_operation_failed(FAIL_CAS_MISMATCH, e.what()).retry());
+        } catch (const op_exception& ex) {
+          return self->op_completed_with_error(std::move(cb), ex);
+        } catch (const std::exception& e) {
+          return self->op_completed_with_error(std::move(cb),
+                                               transaction_operation_failed(FAIL_OTHER, e.what()));
+        } catch (...) {
+          return self->op_completed_with_error(
+            std::move(cb), transaction_operation_failed(FAIL_OTHER, "unexpected exception"));
         }
-        // make a transaction_get_result from the row...
-        return self->op_completed_with_callback(std::move(cb));
-      });
-  });
+      }
+      // make a transaction_get_result from the row...
+      return self->op_completed_with_callback(std::move(cb));
+    });
 }
 
 void
@@ -3790,6 +3855,17 @@ attempt_context_impl::create_staged_insert(const core::document_id& id,
                                               UNKNOWN,
                                               "before_staged_insert hook threw error");
   }
+  // ExtThreadSafety invariant (couchbase-transactions-specs/transactions-extensions.md,
+  // "ExtThreadSafety"): "no KV operations are staged but not sent in the BEGIN WORK" and
+  // "no KV operations are performed regularly after queryMode is entered".  insert()
+  // reads the mode only after this op is counted in the wait-group, and set_query_mode()
+  // drains all in-flight KV ops before issuing BEGIN WORK -- so reaching this staging
+  // point with query mode already entered means that ordering has regressed and the
+  // mutation would be silently lost at commit.  Fires loudly in debug/FIT builds;
+  // compiled out in release.
+  assert(!op_list_.query_mode_entered() &&
+         "ExtThreadSafety: KV insert staged after query mode entered -- would be missing "
+         "from BEGIN WORK and lost at commit");
   CB_ATTEMPT_CTX_LOG_DEBUG(this, "about to insert staged doc {} with cas {}", id, cas);
   core::operations::mutate_in_request req{ id };
   const bool binary =
