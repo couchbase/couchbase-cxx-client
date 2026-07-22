@@ -22,8 +22,11 @@
 
 #include <couchbase/transactions/transactions_config.hxx>
 
+#include <asio/thread_pool.hpp>
+
 #include <atomic>
 #include <condition_variable>
+#include <optional>
 #include <thread>
 
 namespace couchbase::core
@@ -146,6 +149,17 @@ private:
   mutable std::condition_variable cv_;
   mutable std::mutex mutex_;
   std::list<std::thread> lost_attempt_cleanup_workers_;
+
+  // Bounded, shared pool of threads for the blocking per-ATR cleanup checks. These checks block on
+  // KV, so they must not run on the single Asio IO thread. The pool is shared across every
+  // collection cleanup worker, so this count bounds the TOTAL number of concurrent get_atr checks
+  // across the whole cleanup subsystem -- deliberately, to cap load on the cluster regardless of
+  // how many keyspaces are registered for cleanup. The same value doubles as each worker's
+  // in-flight cap: with one collection a worker saturates the pool; with many collections the
+  // shared pool multiplexes them (fair FIFO) and per-collection throughput drops accordingly, which
+  // is the intended trade-off (bounded cluster load over guaranteed per-collection pacing).
+  static constexpr std::size_t max_in_flight_atr_checks_{ 16 };
+  std::optional<asio::thread_pool> atr_cleanup_pool_;
 
   const std::string client_uuid_;
   std::list<couchbase::transactions::transaction_keyspace> collections_;
