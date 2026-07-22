@@ -25,7 +25,7 @@
 #include <mutex>
 #include <system_error>
 
-#ifdef WIN32
+#ifdef _WIN32
 // We need to include windows.h _before_ wincrypt.h
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -45,7 +45,7 @@ class RandomGeneratorProvider
 public:
   RandomGeneratorProvider()
   {
-#ifdef WIN32
+#ifdef _WIN32
     if (!CryptAcquireContext(
           &handle, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT | CRYPT_SILENT)) {
       throw std::system_error(int(GetLastError()),
@@ -69,7 +69,7 @@ public:
 
   virtual ~RandomGeneratorProvider()
   {
-#ifdef WIN32
+#ifdef _WIN32
     CryptReleaseContext(handle, 0);
 #else
     close(handle);
@@ -79,7 +79,7 @@ public:
   auto getBytes(void* dest, std::size_t size) -> bool
   {
     const std::scoped_lock<std::mutex> lock(mutex);
-#ifdef WIN32
+#ifdef _WIN32
     return CryptGenRandom(handle, (DWORD)size, static_cast<BYTE*>(dest));
 #else
 #if defined(__clang__) && defined(__clang_analyzer__)
@@ -92,7 +92,7 @@ public:
   }
 
 private:
-#ifdef WIN32
+#ifdef _WIN32
   HCRYPTPROV handle{};
 #else
   int handle = -1;

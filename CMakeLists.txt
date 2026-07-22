@@ -32,6 +32,17 @@ if(WIN32)
   message(STATUS "Windows SDK: ${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}")
 endif()
 
+# On Windows ARM64, MSVC's <winbase.h> defines C++ overloads for the
+# _Interlocked* intrinsics that clash with the intrinsic declarations pulled
+# in transitively (e.g. via asio/BoringSSL), breaking the build. Disabling
+# the C++ overloads restores the plain intrinsic declarations. Match both the
+# native case (CMAKE_SYSTEM_PROCESSOR) and the cross-compile case
+# (-A ARM64 sets CMAKE_GENERATOR_PLATFORM).
+if(MSVC AND (CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64" OR CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64"))
+  message(STATUS "Applying WinBase Interlocked macro for Windows ARM64")
+  add_compile_definitions(MICROSOFT_WINDOWS_WINBASE_H_DEFINE_INTERLOCKED_CPLUSPLUS_OVERLOADS=0)
+endif()
+
 # Multi-process compile for MSVC. With the Visual Studio generator each
 # .vcxproj invokes a single cl.exe that processes its source files
 # serially; /MP turns each invocation into a parallel batch driven by

@@ -39,10 +39,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2025, windows-2022]
+        os: [windows-2025, windows-2022, windows-11-arm]
     runs-on: ${{ matrix.os }}
     steps:
+      # BoringSSL's x86/x64 assembly is assembled with nasm; the ARM64 leg
+      # builds with OPENSSL_NO_ASM and therefore does not need it.
       - name: Install dependencies
+        if: matrix.os != 'windows-11-arm'
         run: |
           choco install --no-progress nasm
       - uses: actions/checkout@v4
@@ -59,6 +62,9 @@ jobs:
           CB_CACHE_OPTION: sccache
           # CB_CMAKE_BUILD_TYPE: Release
           CB_CMAKE_BUILD_TYPE: RelWithDebInfo
+          # No BoringSSL assembly exists for the Windows ARM64 target, so build
+          # the crypto sources in portable C-only mode on that leg.
+          CB_OPENSSL_NO_ASM: ${{ matrix.os == 'windows-11-arm' && '1' || '' }}
           # CB_NUMBER_OF_JOBS deliberately unset: build-tests.rb now autodetects
           # the runner's processor count via Etc.nprocessors (4 on windows-2022/2025).
           # Combined with /MP added in CMakeLists.txt this enables both axes of
