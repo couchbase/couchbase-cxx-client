@@ -34,6 +34,12 @@ jobs:
         timeout-minutes: 60
         env:
           CB_NUMBER_OF_JOBS: 8
+          # Compile the generated Protostellar stubs on Apple clang too. These legs already build
+          # gRPC and protobuf from source for fit_performer -- BUILD_FIT_PERFORMER defaults to
+          # BUILD_TOOLS, so ThirdPartyDependencies.cmake pulls in GrpcProtobuf.cmake regardless --
+          # so the only added cost is generating and compiling the schema. Apple clang is otherwise
+          # never exercised against the generated code.
+          CB_COUCHBASE2: 1
         run: ./bin/build-tests
   windows:
     strategy:
@@ -69,4 +75,11 @@ jobs:
           # the runner's processor count via Etc.nprocessors (4 on windows-2022/2025).
           # Combined with /MP added in CMakeLists.txt this enables both axes of
           # parallelism instead of the previous /m:2 + serial-cl.exe cap.
+          #
+          # Compile the generated Protostellar stubs on MSVC. This leg already builds gRPC and
+          # protobuf from source for fit_performer, so the only added cost is generating and
+          # compiling the 14 services -- and MSVC is the only toolchain where the generated
+          # protobuf/gRPC code needs special handling (see the MSVC branch of
+          # cmake/Protostellar.cmake), which nothing else in CI would exercise.
+          CB_COUCHBASE2: 1
         run: ruby ./bin/build-tests.rb

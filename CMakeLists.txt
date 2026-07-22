@@ -99,7 +99,20 @@ option(COUCHBASE_CXX_CLIENT_BUILD_FIT_PERFORMER
        "Build the FIT performer integration-test tool (requires gRPC + protobuf >= 3.15)"
        ${COUCHBASE_CXX_CLIENT_BUILD_TOOLS})
 
+# couchbase2:// (Protostellar) support. Like the FIT performer it needs gRPC + protobuf >= 3.15.
+# Default OFF: the transport is experimental and opt-in. When enabled it vendors the Protostellar
+# schema and builds the generated stubs; later commits compile the couchbase2 transport into the
+# client library on top of them.
+option(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
+       "Build with couchbase2:// (Protostellar/gRPC) support (requires gRPC + protobuf >= 3.15)"
+       OFF)
+
 include(cmake/ThirdPartyDependencies.cmake)
+
+if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2)
+  # Vendors the Protostellar schema (CPM) and builds the generated gRPC/protobuf stubs library.
+  include(cmake/Protostellar.cmake)
+endif()
 
 include(cmake/VersionInfo.cmake)
 
@@ -638,9 +651,8 @@ if(COUCHBASE_CXX_CLIENT_BUILD_TESTS)
 endif()
 
 # CNG (Protostellar) tests use a hand-rolled framework (NOT Catch2), so they can be built
-# independently of the main (Catch2) test suite. Individual cases opt into linking the client
-# library via the LINK_CLIENT argument to add_cng_test() in test/cng/CMakeLists.txt; the framework
-# itself does not require it.
+# independently of the main (Catch2) test suite. The framework itself links no client code; each
+# test links only what it exercises (see test/cng/CMakeLists.txt).
 option(COUCHBASE_CXX_CLIENT_BUILD_CNG_TESTS "Build CNG (Protostellar) tests"
        ${COUCHBASE_CXX_CLIENT_BUILD_TESTS})
 if(COUCHBASE_CXX_CLIENT_BUILD_CNG_TESTS)

@@ -46,3 +46,10 @@ function(add_cng_test relpath)
 endfunction()
 
 add_cng_test(framework/framework_selftest)
+
+# Protostellar codegen smoke test — only when couchbase2 support (and thus the generated stubs
+# library) is built. See CXXCBC-886.
+if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 AND TARGET couchbase_cxx_protostellar)
+  add_cng_test(protostellar/codegen_smoke)
+  target_link_libraries(cng_codegen_smoke_test PRIVATE couchbase_cxx_protostellar)
+endif()

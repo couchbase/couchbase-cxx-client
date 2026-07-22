@@ -97,6 +97,13 @@ if [ ! -z "$CB_COLUMNAR" ] ; then
 fi
 echo "CB_COLUMNAR=${CB_COLUMNAR}"
 
+# couchbase2:// (Protostellar/gRPC) support is opt-in because it needs gRPC and protobuf >= 3.15.
+CB_COUCHBASE2=${CB_COUCHBASE2:-""}
+if [ ! -z "$CB_COUCHBASE2" ] ; then
+    CB_CMAKE_EXTRAS="${CB_CMAKE_EXTRAS} -DCOUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2=ON"
+fi
+echo "CB_COUCHBASE2=${CB_COUCHBASE2}"
+
 CB_STDLIB_FLAGS=${CB_STDLIB_FLAGS:-""}
 CB_LINK_FLAGS=${CB_LINK_FLAGS:-""}
 
