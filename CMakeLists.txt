@@ -637,6 +637,19 @@ if(COUCHBASE_CXX_CLIENT_BUILD_TESTS)
   include(cmake/Testing.cmake)
 endif()
 
+# CNG (Protostellar) tests use a hand-rolled framework (NOT Catch2), so they can be built
+# independently of the main (Catch2) test suite. Individual cases opt into linking the client
+# library via the LINK_CLIENT argument to add_cng_test() in test/cng/CMakeLists.txt; the framework
+# itself does not require it.
+option(COUCHBASE_CXX_CLIENT_BUILD_CNG_TESTS "Build CNG (Protostellar) tests"
+       ${COUCHBASE_CXX_CLIENT_BUILD_TESTS})
+if(COUCHBASE_CXX_CLIENT_BUILD_CNG_TESTS)
+  # Enable testing at the top level so `ctest` from the build root discovers the CNG tests even
+  # when the main (Catch2) suite is disabled and cmake/Testing.cmake was not included.
+  enable_testing()
+  add_subdirectory(test/cng)
+endif()
+
 option(COUCHBASE_CXX_CLIENT_BUILD_DOCS "Build API documentation" ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT})
 if(COUCHBASE_CXX_CLIENT_BUILD_DOCS)
   include(cmake/Documentation.cmake)

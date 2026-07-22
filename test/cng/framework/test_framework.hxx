@@ -1,0 +1,291 @@
+/* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
+/*
+ *   Copyright 2026. Couchbase, Inc.
+ *
+ *   Licensed under the Apache License, Version 2.0 (the "License");
+ *   you may not use this file except in compliance with the License.
+ *   You may obtain a copy of the License at
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *   Unless required by applicable law or agreed to in writing, software
+ *   distributed under the License is distributed on an "AS IS" BASIS,
+ *   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *   See the License for the specific language governing permissions and
+ *   limitations under the License.
+ */
+
+#pragma once
+
+// A small hand-rolled test framework for the CNG (Protostellar) test tree.
+//
+// This deliberately does NOT use Catch2 (the couchbase-cxx-client default). Its design is
+// ported from the author's stand-alone harness, adapted from C++23 to the C++17 that this
+// library targets: std::print -> fmt, std::move_only_function -> plain function pointers,
+// std::jthread -> std::thread, std::source_location -> the builtin-based shim below.
+//
+// A test file provides `tests()` returning a `test_suite`; the runner (see test_runner.hxx)
+// executes each `test_case` on a worker thread with a per-case timeout and reports the outcome.
+
+#include <chrono>
+#include <cstdint>
+#include <exception>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+// The wrapper (not <spdlog/fmt/bundled/format.h>) is required: it defines FMT_HEADER_ONLY for this
+// standalone test framework, which links spdlog's headers only, not its compiled fmt.
+#include <spdlog/fmt/fmt.h>
+
+namespace couchbase::cng::test
+{
+
+// C++17 stand-in for std::source_location (C++20). Where __builtin_FILE/LINE/FUNCTION exist they
+// evaluate at the call site when used as default arguments, so an assertion helper can capture its
+// caller's location without a macro. On a toolchain that lacks the builtins the shim degrades to an
+// unknown location rather than failing to compile.
+//
+// The probe is deliberately __has_builtin (plus bare __clang__, whose older releases lack the
+// probe). MSVC exposes the builtins from 16.6 but only gained __has_builtin in VS 2022 17.1, so
+// 16.6-17.0 takes the "unknown" branch: correct, just less informative. Not special-cased because
+// no CI leg builds those versions, and an untested #if is worse than a documented limitation.
+#if defined(__has_builtin)
+#define COUCHBASE_CNG_HAS_LOCATION_BUILTINS                                                        \
+  (__has_builtin(__builtin_FILE) && __has_builtin(__builtin_LINE) &&                               \
+   __has_builtin(__builtin_FUNCTION))
+#elif defined(__clang__)
+#define COUCHBASE_CNG_HAS_LOCATION_BUILTINS 1
+#else
+#define COUCHBASE_CNG_HAS_LOCATION_BUILTINS 0
+#endif
+
+class source_location
+{
+public:
+#if COUCHBASE_CNG_HAS_LOCATION_BUILTINS
+  static constexpr auto current(const char* file = __builtin_FILE(),
+                                int line = __builtin_LINE(),
+                                const char* function = __builtin_FUNCTION()) noexcept
+    -> source_location
+#else
+  static constexpr auto current(const char* file = "unknown",
+                                int line = 0,
+                                const char* function = "unknown") noexcept -> source_location
+#endif
+  {
+    source_location loc;
+    loc.file_ = file;
+    loc.line_ = static_cast<std::uint_least32_t>(line);
+    loc.function_ = function;
+    return loc;
+  }
+
+  [[nodiscard]] constexpr auto file_name() const noexcept -> const char*
+  {
+    return file_;
+  }
+  [[nodiscard]] constexpr auto line() const noexcept -> std::uint_least32_t
+  {
+    return line_;
+  }
+  [[nodiscard]] constexpr auto function_name() const noexcept -> const char*
+  {
+    return function_;
+  }
+
+private:
+  const char* file_{ "" };
+  std::uint_least32_t line_{ 0 };
+  const char* function_{ "" };
+};
+
+#undef COUCHBASE_CNG_HAS_LOCATION_BUILTINS
+
+// Timeout presets — use these instead of raw millisecond values so timing expectations are
+// explicit. Mirrors the presets in the source harness.
+namespace timeout
+{
+using namespace std::chrono_literals;
+inline constexpr auto instant = 500ms;   // pure computation, no I/O
+inline constexpr auto fast = 2'000ms;    // minimal I/O
+inline constexpr auto network = 5'000ms; // network operations
+// integration and slow are equal by coincidence, not by definition: they express different
+// intents (waiting on an external system vs. a deliberate in-test delay) and either may be
+// retuned without regard for the other. Pick by what the case is waiting for, not by the value.
+inline constexpr auto integration = 30'000ms; // external processes / real cluster
+inline constexpr auto slow = 30'000ms;        // intentional delays
+} // namespace timeout
+
+inline constexpr auto default_timeout = timeout::network;
+
+// Which server environment a case needs. `real_cluster` encodes exactly one thing -- whether
+// TEST_CONNECTION_STRING is set -- so its false branch means "no cluster configured", NOT "a mock
+// is running": there is no CNG mock gateway, and none is planned. Tests that need a server of
+// their own stand up an in-process gRPC server and are therefore `agnostic`.
+//
+// So today only `agnostic` and `cluster_only` are used. `any_server` and `mock_only` are carried
+// over from the harness this was ported from and are reserved for a mock that does not exist yet.
+// Note `any_server` would run with nothing to talk to if used now -- give it a third state
+// (no server at all) before adopting it.
+//
+//   * no cluster (unset): agnostic + any_server + mock_only; cluster_only is skipped
+//   * real cluster (set): agnostic + any_server + cluster_only; mock_only is skipped
+enum class test_env : std::uint8_t {
+  agnostic,     // no external server needed (pure unit, or brings its own in-process server)
+  any_server,   // reserved: basic ops against whichever server is active
+  mock_only,    // reserved: needs mock-specific behaviour (fault injection)
+  cluster_only, // needs a real Couchbase cluster / gateway.
+};
+
+[[nodiscard]] constexpr auto
+should_run(test_env env, bool real_cluster) noexcept -> bool
+{
+  switch (env) {
+    case test_env::agnostic:
+    case test_env::any_server:
+      return true;
+    case test_env::mock_only:
+      return !real_cluster;
+    case test_env::cluster_only:
+      return real_cluster;
+  }
+  return true;
+}
+
+// Thrown by skip() to mark a case skipped at runtime — for preconditions the coarse env field
+// cannot express. The runner reports it distinctly from a failure.
+class test_skip_exception : public std::exception
+{
+public:
+  explicit test_skip_exception(std::string reason)
+    : reason_{ std::move(reason) }
+  {
+  }
+  [[nodiscard]] auto what() const noexcept -> const char* override
+  {
+    return reason_.c_str();
+  }
+  [[nodiscard]] auto reason() const noexcept -> const std::string&
+  {
+    return reason_;
+  }
+
+private:
+  std::string reason_;
+};
+
+// Thrown by the assert_* helpers on a failed assertion. The runner catches it and marks the
+// case failed (without aborting the process, so a self-test can exercise the failure path).
+class test_assertion_failure : public std::exception
+{
+public:
+  explicit test_assertion_failure(std::string message)
+    : message_{ std::move(message) }
+  {
+  }
+  [[nodiscard]] auto what() const noexcept -> const char* override
+  {
+    return message_.c_str();
+  }
+
+private:
+  std::string message_;
+};
+
+struct test_case {
+  std::string name;
+  void (*func)();
+  std::chrono::milliseconds timeout{ default_timeout };
+  test_env env{ test_env::agnostic };
+};
+
+struct test_suite {
+  std::string name;
+  std::vector<test_case> test_cases;
+  std::vector<test_case> slow_test_cases{};
+};
+
+// Each test file defines this.
+auto
+tests() -> test_suite;
+
+// ── Assertions ────────────────────────────────────────────────────────────────
+
+[[noreturn]] inline void
+skip(std::string reason)
+{
+  throw test_skip_exception(std::move(reason));
+}
+
+inline void
+assert_true(bool value,
+            std::string_view message = "expected true",
+            source_location loc = source_location::current())
+{
+  if (!value) {
+    throw test_assertion_failure(fmt::format("{}:{}: {}", loc.file_name(), loc.line(), message));
+  }
+}
+
+inline void
+assert_false(bool value,
+             std::string_view message = "expected false",
+             source_location loc = source_location::current())
+{
+  assert_true(!value, message, loc);
+}
+
+// Report both operands when they are formattable. Without this the message says only "expected
+// equal", so a failure tells you the values differed but not what they were -- the one place where
+// not using Catch2 (whose expression decomposition prints operands) costs something concrete. The
+// `if constexpr` keeps assert_eq usable with types fmt cannot format.
+template<typename A, typename B>
+inline void
+assert_eq(const A& actual,
+          const B& expected,
+          std::string_view message = "expected equal",
+          source_location loc = source_location::current())
+{
+  if (!(actual == expected)) {
+    if constexpr (fmt::is_formattable<A>::value && fmt::is_formattable<B>::value) {
+      throw test_assertion_failure(fmt::format("{}:{}: {} (actual: {}, expected: {})",
+                                               loc.file_name(),
+                                               loc.line(),
+                                               message,
+                                               actual,
+                                               expected));
+    } else {
+      throw test_assertion_failure(fmt::format("{}:{}: {}", loc.file_name(), loc.line(), message));
+    }
+  }
+}
+
+// Invoke `fn` and require it to throw an exception of type Exc.
+template<typename Exc, typename Fn>
+inline void
+assert_throws(Fn&& fn,
+              std::string_view message = "expected exception",
+              source_location loc = source_location::current())
+{
+  bool threw_expected = false;
+  try {
+    std::forward<Fn>(fn)();
+  } catch (const Exc&) {
+    threw_expected = true;
+  } catch (const test_skip_exception&) {
+    throw; // a skip() inside the callable must reach the runner, not be reported as a wrong type
+  } catch (const test_assertion_failure&) {
+    throw; // ditto for a nested assertion failure, which carries its own location and message
+  } catch (...) {
+    throw test_assertion_failure(fmt::format(
+      "{}:{}: {} (a different exception type was thrown)", loc.file_name(), loc.line(), message));
+  }
+  if (!threw_expected) {
+    throw test_assertion_failure(
+      fmt::format("{}:{}: {} (nothing was thrown)", loc.file_name(), loc.line(), message));
+  }
+}
+
+} // namespace couchbase::cng::test
