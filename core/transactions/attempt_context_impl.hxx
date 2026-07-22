@@ -515,6 +515,7 @@ private:
 
   void get_doc(const core::document_id& id,
                bool allow_replica,
+               std::optional<std::chrono::milliseconds> timeout,
                std::function<void(std::optional<error_class>,
                                   std::optional<external_exception>,
                                   std::optional<std::string>,

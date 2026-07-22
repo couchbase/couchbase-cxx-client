@@ -3403,6 +3403,7 @@ attempt_context_impl::do_get(const core::document_id& id,
         return self->get_doc(
           id,
           allow_replica,
+          std::nullopt,
           [self,
            id,
            allow_replica,
@@ -3578,6 +3579,7 @@ execute_lookup(attempt_context_impl* ctx, LookupInRequest& req, Callback&& cb)
 void
 attempt_context_impl::get_doc(const core::document_id& id,
                               bool allow_replica,
+                              std::optional<std::chrono::milliseconds> timeout,
                               std::function<void(std::optional<error_class>,
                                                  std::optional<external_exception>,
                                                  std::optional<std::string>,
@@ -3609,11 +3611,13 @@ attempt_context_impl::get_doc(const core::document_id& id,
       req.read_preference = couchbase::read_preference::selected_server_group_or_all_available;
       req.specs = specs;
       req.access_deleted = false;
+      req.timeout = timeout;
       execute_lookup(this, req, cb);
     } else {
       core::operations::lookup_in_request req{ id };
       req.access_deleted = true;
       req.specs = specs;
+      req.timeout = timeout;
       execute_lookup(this, req, cb);
     }
   } catch (const std::exception& e) {
@@ -3712,6 +3716,7 @@ attempt_context_impl::create_staged_insert_error_handler(const core::document_id
           return self->get_doc(
             id,
             false,
+            std::nullopt,
             [self, id, content, op_id, cb = std::forward<Handler>(cb), error_handler, delay](
               std::optional<error_class> ec3,
               std::optional<external_exception> /* cause */,

@@ -18,16 +18,22 @@
 
 #include "active_transaction_record.hxx"
 #include "attempt_context_impl.hxx"
+#include "core/cluster.hxx"
 #include "core/document_id.hxx"
 #include "core/transactions/error_class.hxx"
 #include "core/transactions/exceptions.hxx"
 #include "forward_compat.hxx"
+#include "get_multi_fetch.hxx"
 #include "get_multi_transaction_id.hxx"
+#include "internal/utils.hxx"
 
-#include <algorithm>
+#include <asio/steady_timer.hpp>
+
 #include <chrono>
 #include <exception>
+#include <memory>
 #include <queue>
+#include <set>
 #include <vector>
 
 namespace couchbase::core::transactions
@@ -159,18 +165,6 @@ classify_error(const std::exception_ptr& err) -> classified_error
   return classified_error{ error_class::FAIL_OTHER, external_exception::UNKNOWN };
 }
 
-auto
-contains_mutation(const std::optional<std::vector<doc_record>>& mutated_ids,
-                  const core::document_id& id) -> bool
-{
-  if (!mutated_ids) {
-    return false;
-  }
-  return std::any_of(mutated_ids->begin(), mutated_ids->end(), [&id](const auto& mutation) {
-    return mutation == id;
-  });
-}
-
 /**
  * Drives a single transactional get-multi operation: fetch N documents and, where there is
  * evidence of read skew, resolve it to return a consistent snapshot.
@@ -192,6 +186,12 @@ class get_multi_operation : public std::enable_shared_from_this<get_multi_operat
 {
 public:
   static constexpr std::size_t default_number_of_concurrent_requests{ 100 };
+  // Spec "Fetching an individual document": bound each read by min(remaining, the default 2.5s KV
+  // read timeout).
+  static constexpr std::chrono::milliseconds get_multi_key_value_read_timeout{ 2500 };
+  // Backstop on per-document transient retries; the read-skew bound is the primary terminator, so
+  // this only caps a document that keeps failing before the bound elapses.
+  static constexpr std::size_t get_multi_max_transient_retries{ 100 };
 
   ~get_multi_operation() = default;
   get_multi_operation(const get_multi_operation&) = delete;
@@ -245,6 +245,14 @@ public:
   {
     auto index = spec.index;
     results_[index] = { std::move(spec), std::move(res), {} };
+    --responses_left_;
+  }
+
+  // Mark one in-flight fetch complete without touching results_[index]. Used when the read-skew
+  // bound is exceeded: the value already fetched for this spec (if any) must be preserved for the
+  // best-effort snapshot instead of being overwritten with an empty result.
+  void note_fetch_complete_without_result()
+  {
     --responses_left_;
   }
 
@@ -393,18 +401,13 @@ public:
               // ones we have already resolved, not the stale ones).
               std::vector<get_multi_result> were_in_t1;
               for (auto& result : self->results_) {
-                if (!result.doc_exists()) {
-                  continue;
-                }
-                const auto txn_id = result.extract_transaction_id();
-                const bool fetched_as_part_of_t1 =
-                  txn_id.has_value() && txn_id->attempt == other_attempt_id;
-                if (fetched_as_part_of_t1) {
-                  continue;
-                }
-                if (contains_mutation(attempt->inserted_ids(), result.spec.id) ||
-                    contains_mutation(attempt->replaced_ids(), result.spec.id) ||
-                    contains_mutation(attempt->removed_ids(), result.spec.id)) {
+                if (is_read_skew_victim(result.doc_exists(),
+                                        result.extract_transaction_id(),
+                                        other_attempt_id,
+                                        result.spec.id,
+                                        attempt->inserted_ids(),
+                                        attempt->replaced_ids(),
+                                        attempt->removed_ids())) {
                   were_in_t1.emplace_back(result);
                 }
               }
@@ -505,94 +508,193 @@ public:
    * completes it pulls the next queued spec, and once the round is drained it advances the deadline
    * per the mode and hands off to disambiguate_results().
    */
-  void fetch_individual_document(const get_multi_spec& spec)
+  void fetch_individual_document(const get_multi_spec& spec,
+                                 std::shared_ptr<async_exp_delay> backoff = nullptr)
   {
-    auto handler = [spec, self = shared_from_this()](const std::exception_ptr& error,
-                                                     std::optional<transaction_get_result> res) {
-      if (!self->callback_) {
-        // The operation already completed (e.g. a sibling fetch hit a forward-compat failure and
-        // invoked the callback, moving results_ out). Concurrently-dispatched fetches can still
-        // complete afterwards; ignore them so we never index the moved-from results_ vector.
-        return;
-      }
-      if (res) {
-        // The raw fetch does not perform MAV, so the forward-compatibility checks the normal get
-        // path would run must be done here. Per spec, run two checks in order: GET_MULTI_GET
-        // ("GM_G", so newer clients can block getMulti specifically) then GETS ("G", which older
-        // clients use and which anything blocking get likely needs to block getMulti too).
-        for (const auto stage :
-             { forward_compat_stage::GET_MULTI_GET, forward_compat_stage::GETS }) {
-          if (auto forward_compat_err = check_forward_compat(stage, res->links().forward_compat());
-              forward_compat_err) {
-            self->invoke_callback(std::make_exception_ptr(forward_compat_err.value()));
-            return;
-          }
-        }
-        self->handle_individual_document_success(spec, std::move(res));
-      } else {
-        self->handle_individual_document_error(spec, error);
-      }
-      if (auto next_spec = self->pop_next_spec(); next_spec) {
-        return self->fetch_individual_document(next_spec.value());
-      }
-      if (self->responses_left_ == 0) {
-        if (self->phase_ == get_multi_phase::first_doc_fetch) {
-          // Set the read-skew bound exactly once, on the first-doc-fetch -> subsequent transition,
-          // and leave it fixed for the remaining rounds. This matches the reference (JVM sets the
-          // bound only when phase == FIRST_DOC_FETCH; reset() carries it through unchanged):
-          // recomputing it every round in latency mode would push the 100ms bound indefinitely into
-          // the future and defeat the best-effort BoundExceeded return.
-          switch (self->mode_) {
-            case get_multi_mode::disable_read_skew_detection:
-              break;
-            case get_multi_mode::prioritise_latency:
-              self->deadline_ = std::chrono::steady_clock::now() + std::chrono::milliseconds{ 100 };
-              break;
-            case get_multi_mode::prioritise_read_skew_detection:
-              self->deadline_ = self->attempt_->expiry_time();
-              break;
-          }
-          self->phase_ = get_multi_phase::subsequent_to_first_doc_fetch;
-        }
+    // Per spec, a read-skew-resolution fetch is bounded by min(time left before the bound, the KV
+    // read timeout); the first-doc fetch has no bound yet, so it uses the SDK's default read
+    // timeout (a nullopt override).
+    std::optional<std::chrono::milliseconds> timeout{};
+    if (phase_ != get_multi_phase::first_doc_fetch) {
+      timeout = get_multi_fetch_timeout(deadline_ - std::chrono::steady_clock::now(),
+                                        get_multi_key_value_read_timeout);
+    }
 
-        if (self->mode_ == get_multi_mode::disable_read_skew_detection) {
-          return self->invoke_callback();
-        }
-        self->disambiguate_results();
-      }
-    };
     // get_multi must fetch the raw document body and transactional metadata with a plain lookupIn
     // -- explicitly NOT a MAV read, which would perform its own ATR lookup and resolution and rob
-    // the orchestrator of the metadata it needs to detect and resolve read skew itself. Adapt
-    // get_doc's classified-error callback into the (exception, result) form the handler expects,
-    // following the spec's per-document error handling: a not-found/unretrievable document is
-    // reported as absent rather than as a failure.
+    // the orchestrator of the metadata it needs to detect and resolve read skew itself.
     attempt_->get_doc(
       spec.id,
       use_replicas_,
-      [handler = std::move(handler)](std::optional<error_class> ec,
-                                     std::optional<external_exception> cause,
-                                     std::optional<std::string> message,
-                                     std::optional<transaction_get_result> res) mutable {
+      timeout,
+      [spec, backoff, self = shared_from_this()](
+        std::optional<error_class> ec,
+        std::optional<external_exception> cause,
+        std::optional<std::string> message,
+        std::optional<transaction_get_result> res) mutable {
+        if (!self->callback_) {
+          // The operation already completed (e.g. a sibling fetch hit a forward-compat failure and
+          // invoked the callback, moving results_ out). Concurrently-dispatched fetches can still
+          // complete afterwards; ignore them so we never index the moved-from results_ vector.
+          return;
+        }
+
         if (res) {
-          return handler(nullptr, std::move(res));
+          // The raw fetch does not perform MAV, so the forward-compatibility checks the normal get
+          // path would run must be done here. Per spec, run two checks in order: GET_MULTI_GET
+          // ("GM_G", so newer clients can block getMulti specifically) then GETS ("G", which older
+          // clients use and which anything blocking get likely needs to block getMulti too).
+          for (const auto stage :
+               { forward_compat_stage::GET_MULTI_GET, forward_compat_stage::GETS }) {
+            if (auto fc_err = check_forward_compat(stage, res->links().forward_compat()); fc_err) {
+              self->invoke_callback(std::make_exception_ptr(fc_err.value()));
+              return;
+            }
+          }
+          self->handle_individual_document_success(spec, std::move(res));
+          return self->advance_after_fetch();
         }
-        if (!ec || ec == FAIL_DOC_NOT_FOUND || cause == DOCUMENT_NOT_FOUND_EXCEPTION ||
-            cause == DOCUMENT_UNRETRIEVABLE_EXCEPTION) {
-          return handler(nullptr, std::nullopt);
+
+        // No document: classify the failure per the spec's "Fetching an individual document /
+        // Error handling" section (classify_get_multi_fetch_error documents the error-model
+        // adaptation).
+        const auto fetch_outcome =
+          classify_get_multi_fetch_error(ec, cause, self->read_skew_bound_exceeded());
+        switch (fetch_outcome) {
+          case get_multi_fetch_outcome::document_absent:
+            // Not a failure: record the document as absent so the round completes.
+            self->handle_individual_document_error(spec, nullptr);
+            return self->advance_after_fetch();
+          case get_multi_fetch_outcome::bound_exceeded:
+            switch (get_multi_bound_exceeded_action(self->results_[spec.index].doc_exists())) {
+              case bound_exceeded_action::preserve_prior_value:
+                // Best-effort: a value fetched for this spec in an earlier round must stay in the
+                // snapshot, so mark the fetch complete without overwriting results_[index].
+                self->note_fetch_complete_without_result();
+                break;
+              case bound_exceeded_action::fail_retryable: {
+                // No value held for this spec (e.g. reset_and_retry() cleared the slots and the
+                // re-fetch hit a transient at the already-elapsed bound). A transient is never a
+                // document-not-found, so record it as retryable rather than leaving the slot blank
+                // -- a blank would be misreported as an absent document. The retry drives the
+                // enclosing transaction to try again.
+                auto err = transaction_operation_failed(
+                             ec.value(),
+                             message.value_or("get_multi read-skew bound exceeded before the "
+                                              "document could be fetched"))
+                             .retry();
+                if (cause) {
+                  err.cause(cause.value());
+                }
+                self->handle_individual_document_error(spec, std::make_exception_ptr(err));
+                break;
+              }
+            }
+            return self->advance_after_fetch();
+          case get_multi_fetch_outcome::retry_after_backoff:
+            return self->retry_individual_document_after_backoff(
+              spec, std::move(backoff), ec, cause, message);
+          case get_multi_fetch_outcome::fail_expired:
+          case get_multi_fetch_outcome::fail_without_rollback:
+          case get_multi_fetch_outcome::fail_with_rollback: {
+            // Build the failure once; the outcome only selects the modifier applied to it.
+            auto err = transaction_operation_failed(
+              ec.value(), message.value_or("error fetching document in get_multi"));
+            if (cause) {
+              err.cause(cause.value());
+            }
+            if (fetch_outcome == get_multi_fetch_outcome::fail_expired) {
+              err = err.expired();
+            } else if (fetch_outcome == get_multi_fetch_outcome::fail_without_rollback) {
+              err = err.no_rollback();
+            }
+            self->handle_individual_document_error(spec, std::make_exception_ptr(err));
+            return self->advance_after_fetch();
+          }
         }
-        auto err = transaction_operation_failed(
-          ec.value(), message.value_or("error fetching document in get_multi"));
-        if (cause) {
-          err.cause(cause.value());
-        }
-        if (ec == FAIL_EXPIRY) {
-          err = err.expired();
-        } else if (ec == FAIL_HARD) {
-          err = err.no_rollback();
-        }
-        return handler(std::make_exception_ptr(err), std::nullopt);
       });
+  }
+
+  // True once the read-skew resolution bound has elapsed. There is no bound during the first fetch
+  // round (it uses the SDK read timeout), so a transient error there always retries rather than
+  // being treated as bound-exceeded.
+  [[nodiscard]] auto read_skew_bound_exceeded() const -> bool
+  {
+    return phase_ != get_multi_phase::first_doc_fetch &&
+           std::chrono::steady_clock::now() >= deadline_;
+  }
+
+  // Spec "Fetching an individual document / Error handling": a transient failure retries this fetch
+  // after an exponential backoff starting from 1ms. The backoff is threaded through the retries of
+  // one document so the delay grows across them; a fresh document starts a new one. If it is
+  // exhausted the document has stayed transiently unavailable for too long, so retry the whole
+  // transaction.
+  void retry_individual_document_after_backoff(const get_multi_spec& spec,
+                                               std::shared_ptr<async_exp_delay> backoff,
+                                               std::optional<error_class> last_ec,
+                                               std::optional<external_exception> last_cause,
+                                               std::optional<std::string> last_message)
+  {
+    if (!backoff) {
+      backoff = std::make_shared<async_exp_delay>(
+        std::make_shared<asio::steady_timer>(attempt_->cluster_ref().io_context()),
+        std::chrono::milliseconds{ 1 },
+        std::chrono::milliseconds{ 100 },
+        get_multi_max_transient_retries);
+    }
+    (*backoff)([spec, backoff, last_ec, last_cause, last_message, self = shared_from_this()](
+                 std::exception_ptr err) mutable {
+      if (!self->callback_) {
+        return;
+      }
+      if (err) {
+        // Backoff exhausted: the document stayed transiently unavailable for too long. Retry the
+        // whole transaction, preserving the last fetch's error class/cause/message so the failure
+        // keeps its diagnostics (timeout vs ambiguous vs transient) instead of a generic one.
+        auto tof = transaction_operation_failed(
+                     last_ec.value_or(FAIL_TRANSIENT),
+                     last_message.value_or("get_multi document fetch kept failing transiently"))
+                     .retry();
+        if (last_cause) {
+          tof.cause(last_cause.value());
+        }
+        self->handle_individual_document_error(spec, std::make_exception_ptr(tof));
+        return self->advance_after_fetch();
+      }
+      self->fetch_individual_document(spec, std::move(backoff));
+    });
+  }
+
+  // Common tail of a completed individual fetch: start the next queued spec, or, once the round is
+  // drained, set the read-skew bound (once, on leaving the first-doc-fetch phase) and hand off to
+  // disambiguation. The bound is set only on the first-doc-fetch -> subsequent transition and left
+  // fixed for the remaining rounds; recomputing it every round in latency mode would push the 100ms
+  // bound indefinitely into the future and defeat the best-effort BoundExceeded return.
+  void advance_after_fetch()
+  {
+    if (auto next_spec = pop_next_spec(); next_spec) {
+      return fetch_individual_document(next_spec.value());
+    }
+    if (responses_left_ == 0) {
+      if (phase_ == get_multi_phase::first_doc_fetch) {
+        switch (mode_) {
+          case get_multi_mode::disable_read_skew_detection:
+            break;
+          case get_multi_mode::prioritise_latency:
+            deadline_ = std::chrono::steady_clock::now() + std::chrono::milliseconds{ 100 };
+            break;
+          case get_multi_mode::prioritise_read_skew_detection:
+            deadline_ = attempt_->expiry_time();
+            break;
+        }
+        phase_ = get_multi_phase::subsequent_to_first_doc_fetch;
+      }
+
+      if (mode_ == get_multi_mode::disable_read_skew_detection) {
+        return invoke_callback();
+      }
+      disambiguate_results();
+    }
   }
 
   /**

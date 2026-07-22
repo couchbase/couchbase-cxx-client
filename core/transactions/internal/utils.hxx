@@ -353,7 +353,11 @@ struct async_exp_delay {
 
   void operator()(utils::movable_function<void(std::exception_ptr)> callback) const
   {
-    if (retries++ >= max_retries) {
+    // retries must be incremented exactly once per call (see the synchronous exp_delay above):
+    // the guard reads it without mutating, and pow() does the single post-increment. Incrementing
+    // in both places double-counts -- halving the effective max_retries and doubling the exponent
+    // growth per attempt.
+    if (retries >= max_retries) {
       callback(std::make_exception_ptr(retry_operation_retries_exhausted("retries exhausted")));
       return;
     }
