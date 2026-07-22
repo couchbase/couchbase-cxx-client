@@ -1740,12 +1740,14 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
       }
     }
 
-    SECTION("missing document")
+    SECTION("CXXCBC-797: missing document / document-level failure with multiple specs")
     {
       auto specs = couchbase::lookup_in_specs{
-        couchbase::lookup_in_specs::get("non-exists"),
+        couchbase::lookup_in_specs::get("non-exists-1"),
+        couchbase::lookup_in_specs::exists("non-exists-2"),
+        couchbase::lookup_in_specs::count("non-exists-3"),
       };
-      auto [err, result] = collection.lookup_in_all_replicas("missing-key", specs).get();
+      auto [err, result] = collection.lookup_in_all_replicas("missing-key-797", specs).get();
       REQUIRE(err.ec() == couchbase::errc::key_value::document_not_found);
       REQUIRE(result.empty());
     }
