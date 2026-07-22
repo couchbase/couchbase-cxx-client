@@ -16,9 +16,9 @@
  */
 
 #include "document_analytics.hxx"
+#include "analytics_response_parsing.hxx"
 #include "core/cluster_options.hxx"
 #include "core/logger/logger.hxx"
-#include "core/utils/duration_parser.hxx"
 #include "core/utils/json.hxx"
 
 #include <couchbase/error_codes.hxx>
@@ -28,15 +28,10 @@
 
 namespace couchbase::core::operations
 {
-auto
-analytics_request::encode_to(analytics_request::encoded_request_type& encoded,
-                             http_context& context) -> std::error_code
+void
+encode_analytics_options(tao::json::value& body, const analytics_request& request)
 {
-  tao::json::value body{ { "statement", statement },
-                         { "client_context_id", encoded.client_context_id },
-                         { "timeout", fmt::format("{}ms", encoded.timeout.count()) } };
-
-  for (const auto& [name, value] : named_parameters) {
+  for (const auto& [name, value] : request.named_parameters) {
     Expects(name.empty() == false);
     std::string key = name;
     if (key[0] != '$') {
@@ -44,19 +39,19 @@ analytics_request::encode_to(analytics_request::encoded_request_type& encoded,
     }
     body[key] = utils::json::parse(value);
   }
-  if (!positional_parameters.empty()) {
+  if (!request.positional_parameters.empty()) {
     std::vector<tao::json::value> parameters;
-    parameters.reserve(positional_parameters.size());
-    for (const auto& value : positional_parameters) {
+    parameters.reserve(request.positional_parameters.size());
+    for (const auto& value : request.positional_parameters) {
       parameters.emplace_back(utils::json::parse(value));
     }
     body["args"] = std::move(parameters);
   }
-  if (readonly) {
+  if (request.readonly) {
     body["readonly"] = true;
   }
-  if (scan_consistency) {
-    switch (scan_consistency.value()) {
+  if (request.scan_consistency) {
+    switch (request.scan_consistency.value()) {
       case couchbase::core::analytics_scan_consistency::not_bounded:
         body["scan_consistency"] = "not_bounded";
         break;
@@ -65,14 +60,27 @@ analytics_request::encode_to(analytics_request::encoded_request_type& encoded,
         break;
     }
   }
-  if (scope_qualifier) {
-    body["query_context"] = scope_qualifier;
-  } else if (scope_name && bucket_name) {
-    body["query_context"] = fmt::format("default:`{}`.`{}`", *bucket_name, *scope_name);
+  if (request.scope_qualifier) {
+    body["query_context"] = request.scope_qualifier.value();
+  } else if (request.scope_name && request.bucket_name) {
+    body["query_context"] =
+      fmt::format("default:`{}`.`{}`", *request.bucket_name, *request.scope_name);
   }
-  for (const auto& [name, value] : raw) {
+  for (const auto& [name, value] : request.raw) {
     body[name] = utils::json::parse(value);
   }
+}
+
+auto
+analytics_request::encode_to(analytics_request::encoded_request_type& encoded,
+                             http_context& context) -> std::error_code
+{
+  tao::json::value body{ { "statement", statement },
+                         { "client_context_id", encoded.client_context_id },
+                         { "timeout", fmt::format("{}ms", encoded.timeout.count()) } };
+
+  encode_analytics_options(body, *this);
+
   encoded.type = type;
   encoded.headers["content-type"] = "application/json";
   if (priority) {
@@ -116,78 +124,12 @@ analytics_request::make_response(error_context::analytics&& ctx,
       response.ctx.ec = errc::common::parsing_failure;
       return response;
     }
-    if (const auto* i = payload.find("requestID"); i != nullptr) {
-      response.meta.request_id = i->get_string();
-    }
-    if (const auto* i = payload.find("clientContextID"); i != nullptr) {
-      response.meta.client_context_id = i->get_string();
-      if (response.ctx.client_context_id != response.meta.client_context_id) {
-        CB_LOG_WARNING(R"(unexpected clientContextID returned by service: "{}", expected "{}")",
-                       response.meta.client_context_id,
-                       response.ctx.client_context_id);
-      }
-    }
-    if (auto& status_prop = payload.at("status"); status_prop.is_string()) {
-      const auto& status = status_prop.get_string();
-      if (status == "running") {
-        response.meta.status = analytics_response::analytics_status::running;
-      } else if (status == "success") {
-        response.meta.status = analytics_response::analytics_status::success;
-      } else if (status == "errors") {
-        response.meta.status = analytics_response::analytics_status::errors;
-      } else if (status == "completed") {
-        response.meta.status = analytics_response::analytics_status::completed;
-      } else if (status == "stopped") {
-        response.meta.status = analytics_response::analytics_status::stopped;
-      } else if (status == "timedout") {
-        response.meta.status = analytics_response::analytics_status::timedout;
-      } else if (status == "closed") {
-        response.meta.status = analytics_response::analytics_status::closed;
-      } else if (status == "fatal") {
-        response.meta.status = analytics_response::analytics_status::fatal;
-      } else if (status == "aborted") {
-        response.meta.status = analytics_response::analytics_status::aborted;
-      } else {
-        response.meta.status = analytics_response::analytics_status::unknown;
-      }
-    } else {
-      response.meta.status = analytics_response::analytics_status::unknown;
-    }
-
-    if (const auto* s = payload.find("signature"); s != nullptr) {
-      response.meta.signature = couchbase::core::utils::json::generate(*s);
-    }
-
-    if (const auto* metrics = payload.find("metrics"); metrics != nullptr) {
-      response.meta.metrics.result_count = metrics->at("resultCount").get_unsigned();
-      response.meta.metrics.result_size = metrics->at("resultSize").get_unsigned();
-      response.meta.metrics.elapsed_time =
-        utils::parse_duration(metrics->at("elapsedTime").get_string());
-      response.meta.metrics.execution_time =
-        utils::parse_duration(metrics->at("executionTime").get_string());
-      response.meta.metrics.processed_objects = metrics->at("processedObjects").get_unsigned();
-      response.meta.metrics.error_count =
-        metrics->optional<std::uint64_t>("errorCount").value_or(0);
-      response.meta.metrics.warning_count =
-        metrics->optional<std::uint64_t>("warningCount").value_or(0);
-    }
-
-    if (const auto* e = payload.find("errors"); e != nullptr) {
-      for (const auto& err : e->get_array()) {
-        couchbase::core::operations::analytics_response::analytics_problem problem;
-        problem.code = err.at("code").get_unsigned();
-        problem.message = err.at("msg").get_string();
-        response.meta.errors.emplace_back(problem);
-      }
-    }
-
-    if (const auto* w = payload.find("warnings"); w != nullptr) {
-      for (const auto& warn : w->get_array()) {
-        couchbase::core::operations::analytics_response::analytics_problem problem;
-        problem.code = warn.at("code").get_unsigned();
-        problem.message = warn.at("msg").get_string();
-        response.meta.warnings.emplace_back(problem);
-      }
+    response.meta = parse_analytics_meta(payload);
+    if (response.ctx.client_context_id != response.meta.client_context_id &&
+        !response.meta.client_context_id.empty()) {
+      CB_LOG_WARNING(R"(unexpected clientContextID returned by service: "{}", expected "{}")",
+                     response.meta.client_context_id,
+                     response.ctx.client_context_id);
     }
 
     if (const auto* r = payload.find("results"); r != nullptr) {
@@ -198,42 +140,11 @@ analytics_request::make_response(error_context::analytics&& ctx,
     }
 
     if (response.meta.status != analytics_response::analytics_status::success) {
-      response.ctx.first_error_code = response.meta.errors.front().code;
-      response.ctx.first_error_message = response.meta.errors.front().message;
-      switch (response.ctx.first_error_code) {
-        case 21002: /* Request timed out and will be cancelled */
-          response.ctx.ec = errc::common::unambiguous_timeout;
-          break;
-        case 23007: /* Job queue is full with [string] jobs */
-          response.ctx.ec = errc::analytics::job_queue_full;
-          break;
-        case 24044: /* Cannot find dataset [string] because there is no dataverse declared, nor an
-                       alias with name [string]! */
-        case 24045: /* Cannot find dataset [string] in dataverse [string] nor an alias with name
-                       [string]! */
-        case 24025: /* Cannot find dataset with name [string] in dataverse [string] */
-          response.ctx.ec = errc::analytics::dataset_not_found;
-          break;
-        case 24034: /* Cannot find dataverse with name [string] */
-          response.ctx.ec = errc::analytics::dataverse_not_found;
-          break;
-        case 24040: /* A dataset with name [string] already exists in dataverse [string] */
-          response.ctx.ec = errc::analytics::dataset_exists;
-          break;
-        case 24039: /* A dataverse with this name [string] already exists. */
-          response.ctx.ec = errc::analytics::dataverse_exists;
-          break;
-        case 24006: /* Link [string] does not exist | Link [string] does not exist */
-          response.ctx.ec = errc::analytics::link_not_found;
-          break;
-        default:
-          if (response.ctx.first_error_code >= 24000 && response.ctx.first_error_code < 25000) {
-            response.ctx.ec = errc::analytics::compilation_failure;
-          }
+      if (!response.meta.errors.empty()) {
+        response.ctx.first_error_code = response.meta.errors.front().code;
+        response.ctx.first_error_message = response.meta.errors.front().message;
       }
-      if (!response.ctx.ec) {
-        response.ctx.ec = errc::common::internal_server_failure;
-      }
+      response.ctx.ec = map_analytics_error(response.meta);
     }
   }
   return response;

@@ -274,6 +274,7 @@ set(couchbase_cxx_client_FILES
     core/metrics/logging_meter.cxx
     core/metrics/meter_wrapper.cxx
     core/n1ql_query_options.cxx
+    core/operations/analytics_response_parsing.cxx
     core/operations/document_analytics.cxx
     core/operations/document_append.cxx
     core/operations/document_decrement.cxx
@@ -288,6 +289,7 @@ set(couchbase_cxx_client_FILES
     core/operations/document_mutate_in.cxx
     core/operations/document_prepend.cxx
     core/operations/document_query.cxx
+    core/operations/query_response_parsing.cxx
     core/operations/document_remove.cxx
     core/operations/document_replace.cxx
     core/operations/document_search.cxx

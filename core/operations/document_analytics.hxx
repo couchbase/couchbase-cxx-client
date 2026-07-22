@@ -27,8 +27,20 @@
 #include "core/public_fwd.hxx"
 #include "core/timeout_defaults.hxx"
 
+#include <tao/json/forward.hpp>
+
 namespace couchbase::core::operations
 {
+struct analytics_request;
+
+/**
+ * Encodes the shared analytics request-body options (parameters, readonly, consistency,
+ * query_context, raw) common to the buffered and streaming analytics paths onto @p body, so both
+ * paths stay byte-for-byte consistent.
+ */
+void
+encode_analytics_options(tao::json::value& body, const analytics_request& request);
+
 struct analytics_response {
   struct analytics_metrics {
     std::chrono::nanoseconds elapsed_time{};
@@ -101,8 +113,8 @@ struct analytics_request {
   std::optional<std::string> client_context_id{};
   std::optional<std::chrono::milliseconds> timeout{};
 
-  [[nodiscard]] auto encode_to(encoded_request_type& encoded,
-                               http_context& context) -> std::error_code;
+  [[nodiscard]] auto encode_to(encoded_request_type& encoded, http_context& context)
+    -> std::error_code;
   [[nodiscard]] auto make_response(error_context::analytics&& ctx,
                                    const encoded_response_type& encoded) const
     -> analytics_response;
