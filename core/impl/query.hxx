@@ -22,6 +22,7 @@
 #include <couchbase/query_options.hxx>
 #include <couchbase/query_status.hxx>
 
+#include <memory>
 #include <string>
 
 namespace couchbase::core
@@ -31,6 +32,8 @@ class cluster;
 
 namespace couchbase::core::impl
 {
+class observability_recorder;
+
 /**
  * Maps the N1QL `status` string from a query response onto the public query_status enum. Shared by
  * the buffered result builder and the streaming result handle so there is one source of truth.
@@ -54,9 +57,15 @@ build_result(operations::query_response& resp) -> query_result;
  * Adhoc requests take the lazy streaming path. Prepared statements (request.adhoc == false) are
  * not streamed; they fall back to the buffered query() path and their rows are replayed through an
  * in-memory query_stream so callers observe identical semantics.
+ *
+ * @param obs_rec the operation's observability recorder. Its operation span is already threaded
+ * into request.parent_span by the caller; ownership is transferred to the resulting stream handle,
+ * which calls finish() once when the stream reaches its terminal (drained, errored, or cancelled),
+ * so the streaming path emits the same operation span + latency metric as the buffered query().
  */
 void
 dispatch_query_stream(const core::cluster& core,
                       core::operations::query_request request,
+                      std::unique_ptr<observability_recorder> obs_rec,
                       query_stream_handler&& handler);
 } // namespace couchbase::core::impl

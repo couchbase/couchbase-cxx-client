@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2024. Couchbase, Inc.
+ *   Copyright 2026. Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -136,10 +136,11 @@ public:
     using dispatch_error = std::error_code;
 #endif
 
+    const bool read_only = request.readonly;
     auto op = http_.do_http_request(
       http_req,
-      [self = shared_from_this(), callback_state, timeout](http_response resp,
-                                                           dispatch_error err) mutable {
+      [self = shared_from_this(), callback_state, timeout, read_only](http_response resp,
+                                                                      dispatch_error err) mutable {
         if (auto ec = to_error_code(err)) {
           self->invoke(callback_state, {}, ec);
           return;
@@ -149,6 +150,7 @@ public:
         // forever (the request timeout is otherwise released once headers arrive).
         auto options = self->streaming_options_;
         options.idle_timeout = timeout;
+        options.is_read_only = read_only;
         auto stream = std::make_shared<query_stream>(self->io_, resp.body(), options);
         stream->start([self, callback_state, stream](std::error_code early_error) mutable {
           if (early_error) {

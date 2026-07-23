@@ -48,7 +48,15 @@ observability_recorder::finish(const std::error_code ec)
   // Precompute the standardized error type once here, so the recorder-cache lookup keyed on it does
   // not build a string per comparison.
   metric_attributes_.error_type = metrics::standardized_error_type(ec);
-  meter_.lock()->record_value(std::move(metric_attributes_), start_time_);
+  // meter_ is a weak_ptr. On the buffered path finish() always runs inside the io-thread execute
+  // completion, so the meter (owned by the cluster) is alive. The streaming path defers finish() to
+  // a user-controlled terminal — a stream handle dropped via its destructor/cancel() — which may
+  // run after the owning cluster, and its meter, is gone. Guard the lock so a late finish records
+  // nothing instead of dereferencing an expired weak_ptr. span_ holds a strong ref, so ending it is
+  // always safe.
+  if (const auto meter = meter_.lock()) {
+    meter->record_value(std::move(metric_attributes_), start_time_);
+  }
   span_->end();
 }
 

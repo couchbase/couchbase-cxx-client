@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2024. Couchbase, Inc.
+ *   Copyright 2026. Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -41,7 +41,13 @@ struct row_streamer_options {
   std::size_t row_buffer_size{ 100 };
   // Maximum time to wait for the server between socket reads while a read is in flight (an idle
   // timer armed only while pulling, so a legitimately slow consumer is never timed out). Zero
-  // disables the timer. Fires as unambiguous_timeout on the terminal.
+  // disables the timer.
   std::chrono::milliseconds idle_timeout{ 0 };
+  // Whether the request being streamed is read-only (idempotent). Mirrors the buffered path's
+  // http_command branch: an idle-timeout terminal is reported as unambiguous_timeout for a
+  // read-only request (definitely not applied, safe to retry) and as ambiguous_timeout otherwise
+  // (a mutating query such as UPDATE ... RETURNING may have partially executed, so a retry layer
+  // must not treat it as safe to replay).
+  bool is_read_only{ false };
 };
 } // namespace couchbase::core

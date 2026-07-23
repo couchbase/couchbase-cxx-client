@@ -91,6 +91,18 @@ public:
                                std::string data,
                                std::size_t cached_chunk_size = 0) -> http_response_body;
 
+  // Test-only fault-injection seam extending create_in_memory. The body first hands out `data` (in
+  // cached_chunk_size-byte slices, 0 = all at once), then once that is drained:
+  //   * if `stall` is true, the next pull never completes until cancel() is called, at which point
+  //     it delivers request_canceled — this is how the row_streamer idle timer (and its
+  //     read-only-aware timeout classification) is exercised deterministically; otherwise
+  //   * the next pull's terminal carries `terminal_ec` (a simulated mid-stream transport error).
+  static auto create_in_memory_faulty(asio::io_context& io,
+                                      std::string data,
+                                      std::size_t cached_chunk_size,
+                                      std::error_code terminal_ec,
+                                      bool stall) -> http_response_body;
+
   // See io::http_streaming_response_body::next: the bool is `has_more` (false marks end-of-stream).
   // An empty data string with has_more==true is a valid mid-stream chunk, not the terminal.
   void next(utils::movable_function<void(std::string, bool, std::error_code)> callback);

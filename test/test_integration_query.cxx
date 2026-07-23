@@ -760,10 +760,11 @@ namespace
 {
 // The N1QL query below produces ~81 MB of result rows (15,000 rows, each carrying a ~5.4 KB
 // padding_data field). It executes entirely in the query engine without touching any bucket, which
-// makes it a deterministic stress test for streaming back-pressure. The payload stays well above
-// the 50 MB RSS ceiling asserted below, so a run that accidentally buffered the whole response
-// would breach it, while the streaming path stays bounded. Kept in the ~50-100 MB range so the CI
-// integration matrix (many server versions) does not pay the cost of a half-gigabyte transfer.
+// makes it a deterministic large-result stress for the streaming path. Kept in the ~50-100 MB range
+// so the CI integration matrix (many server versions) does not pay the cost of a half-gigabyte
+// transfer. The enforced, numeric memory bound is asserted deterministically by the row_streamer
+// "bounds buffered bytes with byte watermarks" unit test; this integration query exercises the same
+// streaming path end-to-end against a real server (draining the full payload one row at a time).
 const std::string streaming_padding_query =
   R"(SELECT REPEAT("ABCDEFGHJIJKLMNOPQRSTUVWXYZ", 200) AS padding_data
      FROM array_range(0, 15000) AS i)";
@@ -820,7 +821,7 @@ TEST_CASE("integration: streaming query yields rows lazily", "[integration]")
   cluster.close().get();
 }
 
-TEST_CASE("integration: streaming query is memory-bounded", "[integration]")
+TEST_CASE("integration: streaming query drains a large result end-to-end", "[integration]")
 {
   test::utils::integration_test_guard integration;
   if (!integration.cluster_version().supports_query()) {
@@ -921,12 +922,13 @@ TEST_CASE("integration: streaming query surfaces a query error", "[integration]"
 
   auto [err, result] = cluster.query_stream(error_query, {}).get();
 
-  if (err.ec()) {
-    // Error surfaced at dispatch time (pre-row): acceptable.
-    SUCCEED("error surfaced at dispatch time");
-  } else {
-    // Error surfaced through the row stream: drain until we see it.
-    bool saw_error = false;
+  // The error must surface one way or the other: at dispatch, or (the common case for a
+  // keyspace-not-found) as the stream's terminal after an empty result set. Fold both channels into
+  // one unconditional assertion instead of SUCCEED()-ing on the dispatch path — otherwise a run
+  // where the query unexpectedly succeeds (or ends cleanly with no error) would pass having
+  // exercised none of the trailing-error machinery, hiding a regression.
+  bool saw_error = static_cast<bool>(err.ec());
+  if (!saw_error) {
     while (true) {
       auto [rerr, row] = result.next().get();
       if (rerr.ec()) {
@@ -939,8 +941,8 @@ TEST_CASE("integration: streaming query surfaces a query error", "[integration]"
         break;
       }
     }
-    REQUIRE(saw_error);
   }
+  REQUIRE(saw_error);
 
   cluster.close().get();
 }
@@ -1052,20 +1054,20 @@ TEST_CASE("integration: streaming query iterator surfaces a terminal error", "[i
     "SELECT * FROM `nonexistent_bucket_that_does_not_exist_xyz` LIMIT 1";
   auto [err, result] = cluster.query_stream(error_query, {}).get();
 
-  if (err.ec()) {
-    SUCCEED("error surfaced up front; iterator path not exercised");
-  } else {
-    // The range-for iterator must visit the terminal error element rather than comparing equal to
-    // end() and silently dropping it.
-    bool saw_error = false;
+  // The error must surface. When it arrives through the stream (the common case), the range-for
+  // iterator must visit the terminal error element rather than comparing equal to end() and
+  // silently dropping it. Assert unconditionally so a clean run that exercised none of the iterator
+  // terminal path is a visible failure rather than a SUCCEED().
+  bool saw_error = static_cast<bool>(err.ec());
+  if (!saw_error) {
     for (auto it = result.begin(); it != result.end(); ++it) {
       auto [rerr, row] = *it;
       if (rerr.ec()) {
         saw_error = true;
       }
     }
-    REQUIRE(saw_error);
   }
+  REQUIRE(saw_error);
 
   cluster.close().get();
 }

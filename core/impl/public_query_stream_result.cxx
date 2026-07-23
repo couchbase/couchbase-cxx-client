@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2024. Couchbase, Inc.
+ *   Copyright 2026. Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@
 #include "core/utils/binary.hxx"
 
 #include "internal_query_stream_result.hxx"
+#include "observability_recorder.hxx"
 #include "query.hxx"
 
 #include <future>
@@ -93,8 +94,11 @@ build_query_meta_data(core::operations::query_response::query_meta_data meta) ->
 // internal_query_stream_result implementation
 // ---------------------------------------------------------------------------
 
-internal_query_stream_result::internal_query_stream_result(core::query_stream stream)
+internal_query_stream_result::internal_query_stream_result(
+  core::query_stream stream,
+  std::unique_ptr<core::impl::observability_recorder> obs_rec)
   : stream_{ std::move(stream) }
+  , obs_rec_{ std::move(obs_rec) }
 {
 }
 
@@ -148,6 +152,12 @@ internal_query_stream_result::resolve_meta_data(std::error_code ec)
   }
   for (auto& promise : to_satisfy) {
     promise.set_value(value);
+  }
+  // Reached exactly once (the terminal_reached_ guard above returns on every later call), so the
+  // operation is finished here: record the latency metric and end the operation span. ec is the
+  // terminal error (falsy on a clean drain, request_canceled on teardown before a natural end).
+  if (obs_rec_) {
+    obs_rec_->finish(ec);
   }
 }
 
