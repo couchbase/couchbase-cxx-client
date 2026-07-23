@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2024. Couchbase, Inc.
+ *   Copyright 2026. Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -137,6 +137,11 @@ public:
 
   /**
    * Cancels the stream and closes the underlying HTTP connection.
+   *
+   * Simply dropping the last handle before the stream is fully drained also tears the stream down,
+   * but if a pull is in flight the underlying connection is not released until that pull settles
+   * (up to the inter-read idle timeout). Call cancel() explicitly for prompt, deterministic
+   * teardown of the connection and its timers.
    *
    * @since 1.4.0
    * @volatile

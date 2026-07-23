@@ -179,6 +179,14 @@ public:
     // that may be mid-read and corrupts non-thread-safe session state. The channel is
     // thread-safe, so cancel/close it synchronously to unblock a waiting consumer immediately.
     asio::post(io_, [self = shared_from_this()]() {
+      // An explicit cancel must win over a racing inter-read idle timer. Cancel the timer,
+      // supersede its generation so a completion that is already queued is ignored, and clear
+      // timed_out_ so the read abort below is reported as request_canceled rather than being
+      // misclassified as an (un)ambiguous timeout by the read-completion path. Done here, on the io
+      // thread, because the timer is not thread-safe.
+      self->idle_timer_.cancel();
+      self->idle_generation_.fetch_add(1, std::memory_order_relaxed);
+      self->timed_out_ = false;
       self->body_.cancel();
     });
     rows_.cancel();
@@ -290,8 +298,16 @@ private:
       if (ec) {
         self->received_all_data_ = true;
         // If the idle timer aborted the read, report a timeout rather than the raw cancel error.
-        auto terminal_ec =
-          self->timed_out_ ? std::error_code{ errc::common::unambiguous_timeout } : ec;
+        // Classify it the way the buffered path (http_command) does: a read-only request is
+        // idempotent, so its timeout is unambiguous (definitely not applied); a mutating request
+        // must be ambiguous, because a retry layer that reads unambiguous would consider it safe to
+        // replay and could double-apply the mutation.
+        auto terminal_ec = ec;
+        if (self->timed_out_) {
+          terminal_ec = self->options_.is_read_only
+                          ? std::error_code{ errc::common::unambiguous_timeout }
+                          : std::error_code{ errc::common::ambiguous_timeout };
+        }
         // A read error before any metadata header (e.g. the connection is reset right after the
         // response headers) must still resolve start()'s handler rather than hang the caller.
         self->deliver_metadata_header(terminal_ec, {});

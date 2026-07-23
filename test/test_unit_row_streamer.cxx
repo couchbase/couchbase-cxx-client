@@ -295,3 +295,127 @@ TEST_CASE("unit: row_streamer preserves embedded brackets and unicode in a row",
   REQUIRE(rows.size() == 1);
   REQUIRE(rows[0] == "{\"s\":\"a]b}c\xC3\xA9\"}");
 }
+
+namespace
+{
+// Runs a stalling body (one that never completes a read until cancelled) through a row_streamer
+// with a short idle timeout and the given read-only flag, and returns the terminal error the idle
+// timer produces.
+auto
+idle_timeout_terminal(bool is_read_only) -> std::error_code
+{
+  asio::io_context io;
+  // Empty data + stall == a server that accepted the request but then stops sending: the
+  // row_streamer arms its idle timer around the (never-completing) read, and the timer fires.
+  auto body = couchbase::core::http_response_body::create_in_memory_faulty(
+    io, /*data*/ {}, /*cached_chunk_size*/ 0, /*terminal_ec*/ {}, /*stall*/ true);
+  couchbase::core::row_streamer_options opts{};
+  opts.idle_timeout = std::chrono::milliseconds{ 20 };
+  opts.is_read_only = is_read_only;
+  couchbase::core::row_streamer streamer{ io, std::move(body), "/results/^", opts };
+
+  std::error_code end_ec{ make_error_code(std::errc::operation_in_progress) };
+  bool ended = false;
+  std::function<void()> pump = [&]() {
+    streamer.next_row([&](std::string row, std::error_code ec) {
+      if (ec || row.empty()) {
+        end_ec = ec;
+        ended = true;
+        return;
+      }
+      pump();
+    });
+  };
+  streamer.start([&](std::string, std::error_code) {
+    pump();
+  });
+  io.run();
+  REQUIRE(ended); // the idle timer must produce a terminal, not hang
+  return end_ec;
+}
+} // namespace
+
+TEST_CASE("unit: row_streamer idle timeout on a mutating request is ambiguous", "[unit]")
+{
+  // A mid-stream idle timeout on a non-read-only (mutating) query must be reported as
+  // ambiguous_timeout: the mutation may have partially applied, so a retry layer must not treat it
+  // as safe to replay. This is the buffered path's http_command behavior, now mirrored by the
+  // streaming path via row_streamer_options::is_read_only.
+  REQUIRE(idle_timeout_terminal(/*is_read_only*/ false) ==
+          couchbase::errc::common::ambiguous_timeout);
+}
+
+TEST_CASE("unit: row_streamer idle timeout on a read-only request is unambiguous", "[unit]")
+{
+  // A read-only request is idempotent, so its idle timeout is unambiguous (definitely not applied).
+  REQUIRE(idle_timeout_terminal(/*is_read_only*/ true) ==
+          couchbase::errc::common::unambiguous_timeout);
+}
+
+TEST_CASE("unit: row_streamer surfaces a mid-stream transport error verbatim", "[unit]")
+{
+  asio::io_context io;
+  // Deliver a valid preamble and one row, then inject a transport-level failure (as a reset socket
+  // would). Unlike a JSON parse failure — which the streaming query/analytics layer normalizes to
+  // parsing_failure — a transport error must surface as-is so the caller can tell a network failure
+  // apart from a malformed body.
+  const std::string data = R"({"results":[{"a":1})";
+  const auto injected = make_error_code(std::errc::connection_reset);
+  auto body = couchbase::core::http_response_body::create_in_memory_faulty(
+    io, data, /*cached_chunk_size*/ 0, injected, /*stall*/ false);
+  couchbase::core::row_streamer streamer{
+    io, std::move(body), "/results/^", couchbase::core::row_streamer_options{}
+  };
+
+  int rows = 0;
+  std::error_code end_ec{};
+  bool ended = false;
+  std::function<void()> pump = [&]() {
+    streamer.next_row([&](std::string row, std::error_code ec) {
+      if (ec || row.empty()) {
+        end_ec = ec;
+        ended = true;
+        return;
+      }
+      ++rows;
+      pump();
+    });
+  };
+  streamer.start([&](std::string, std::error_code) {
+    pump();
+  });
+  io.run();
+
+  REQUIRE(ended);
+  REQUIRE(rows == 1);          // the row delivered before the failure is still seen
+  REQUIRE(end_ec == injected); // transport error passed through unchanged (not parsing_failure)
+}
+
+TEST_CASE("unit: row_streamer cancel wins over an armed idle timer", "[unit]")
+{
+  asio::io_context io;
+  // A stalling body with a generous idle timeout: the inter-read idle timer is armed while the
+  // (never-completing) read is outstanding, but cancel() is called long before it could fire.
+  // cancel() must produce request_canceled — not an (un)ambiguous timeout — even though the timer
+  // is armed; otherwise a user cancellation that raced the timer would be misreported as a timeout.
+  auto body = couchbase::core::http_response_body::create_in_memory_faulty(
+    io, /*data*/ {}, /*cached_chunk_size*/ 0, /*terminal_ec*/ {}, /*stall*/ true);
+  couchbase::core::row_streamer_options opts{};
+  opts.idle_timeout = std::chrono::seconds{ 30 }; // far longer than the test; must never fire
+  opts.is_read_only = false; // would classify as ambiguous_timeout if misreported
+  couchbase::core::row_streamer streamer{ io, std::move(body), "/results/^", opts };
+
+  std::error_code end_ec{ make_error_code(std::errc::operation_in_progress) };
+  bool ended = false;
+  streamer.start([&](std::string, std::error_code) {
+    streamer.next_row([&](std::string /* row */, std::error_code ec) {
+      end_ec = ec;
+      ended = true;
+    });
+  });
+  streamer.cancel();
+  io.run();
+
+  REQUIRE(ended);
+  REQUIRE(end_ec == couchbase::errc::common::request_canceled);
+}

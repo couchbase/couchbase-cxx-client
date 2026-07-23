@@ -19,6 +19,8 @@
 #include "io/http_streaming_response.hxx"
 #include "utils/movable_function.hxx"
 
+#include <couchbase/error_codes.hxx>
+
 #include <asio/io_context.hpp>
 
 #include <cstddef>
@@ -50,6 +52,19 @@ public:
   {
   }
 
+  // Fault-injecting in-memory body (test seam): see http_response_body::create_in_memory_faulty.
+  http_response_impl(std::string fault_data,
+                     std::size_t fault_chunk_size,
+                     std::error_code fault_terminal_ec,
+                     bool fault_stall)
+    : fault_enabled_{ true }
+    , fault_data_{ std::move(fault_data) }
+    , fault_chunk_size_{ fault_chunk_size }
+    , fault_terminal_ec_{ fault_terminal_ec }
+    , fault_stall_{ fault_stall }
+  {
+  }
+
   [[nodiscard]] auto endpoint() const -> std::string
   {
     return {};
@@ -76,6 +91,30 @@ public:
 
   void next_body(utils::movable_function<void(std::string, bool, std::error_code)> callback)
   {
+    if (fault_enabled_) {
+      if (fault_cancelled_) {
+        return callback({}, false, errc::common::request_canceled);
+      }
+      if (!fault_data_.empty()) {
+        std::string chunk;
+        if (fault_chunk_size_ == 0 || fault_data_.size() <= fault_chunk_size_) {
+          std::swap(chunk, fault_data_);
+        } else {
+          chunk = fault_data_.substr(0, fault_chunk_size_);
+          fault_data_.erase(0, fault_chunk_size_);
+        }
+        // has_more is always true here: whatever comes after the data (a stall, an injected
+        // terminal error, or a clean end) is delivered on a subsequent pull.
+        return callback(std::move(chunk), true, {});
+      }
+      if (fault_stall_) {
+        // Simulate a server that stopped sending mid-body: park the pull and never complete it
+        // until cancel() (close_body) fires it. The row_streamer idle timer is what cancels it.
+        fault_parked_ = std::move(callback);
+        return;
+      }
+      return callback({}, false, fault_terminal_ec_);
+    }
     if (cached_body_) {
       return cached_body_->next(std::move(callback));
     }
@@ -84,6 +123,14 @@ public:
 
   void close_body()
   {
+    if (fault_enabled_) {
+      fault_cancelled_ = true;
+      if (fault_parked_) {
+        auto cb = std::move(fault_parked_);
+        cb({}, false, errc::common::request_canceled);
+      }
+      return;
+    }
     if (cached_body_) {
       return cached_body_->close();
     }
@@ -93,6 +140,14 @@ public:
 private:
   io::http_streaming_response streaming_resp_;
   std::optional<io::http_streaming_response_body> cached_body_{};
+  // Fault-injection test seam (see the four-arg ctor and create_in_memory_faulty).
+  bool fault_enabled_{ false };
+  std::string fault_data_{};
+  std::size_t fault_chunk_size_{ 0 };
+  std::error_code fault_terminal_ec_{};
+  bool fault_stall_{ false };
+  bool fault_cancelled_{ false };
+  utils::movable_function<void(std::string, bool, std::error_code)> fault_parked_{};
 };
 
 class buffered_http_response_impl
@@ -175,6 +230,17 @@ http_response_body::create_in_memory(asio::io_context& io,
 {
   return http_response_body{ std::make_shared<http_response_impl>(
     io, std::move(data), cached_chunk_size) };
+}
+
+auto
+http_response_body::create_in_memory_faulty(asio::io_context& /* io */,
+                                            std::string data,
+                                            std::size_t cached_chunk_size,
+                                            std::error_code terminal_ec,
+                                            bool stall) -> http_response_body
+{
+  return http_response_body{ std::make_shared<http_response_impl>(
+    std::move(data), cached_chunk_size, terminal_ec, stall) };
 }
 
 void

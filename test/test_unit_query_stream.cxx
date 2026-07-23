@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2024. Couchbase, Inc.
+ *   Copyright 2026. Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -228,6 +228,102 @@ TEST_CASE("unit: query_stream surfaces a trailing error with zero rows", "[unit]
 
   REQUIRE(row_count == 0);
   REQUIRE(end_ec); // error trailer surfaced even though no rows were produced
+}
+
+TEST_CASE("unit: query_stream normalizes a malformed body to parsing_failure", "[unit]")
+{
+  asio::io_context io;
+  // A valid preamble and one row, then a bare unquoted token where a value is expected: the
+  // streaming lexer aborts with a streaming_json_lexer::* code. query_stream must normalize that to
+  // errc::common::parsing_failure so it matches the buffered query() contract (which reports
+  // parsing_failure for any body-parse failure) instead of leaking the internal lexer code.
+  std::string doc = R"({"requestID":"r","results":[{"a":1},xxx],"status":"success"})";
+  auto body = test::utils::make_cached_response_body(io, doc);
+  couchbase::core::query_stream stream{ io, std::move(body) };
+
+  std::error_code end_ec{};
+  bool ended = false;
+  std::function<void()> pump = [&]() {
+    stream.next_row([&](std::optional<std::string> row, std::error_code ec) {
+      if (!row.has_value()) {
+        end_ec = ec;
+        ended = true;
+        return;
+      }
+      pump();
+    });
+  };
+  stream.start([&](std::error_code) {
+    pump();
+  });
+  io.run();
+
+  REQUIRE(ended);
+  REQUIRE(end_ec == couchbase::errc::common::parsing_failure);
+}
+
+TEST_CASE("unit: query_stream normalizes an oversized row to parsing_failure", "[unit]")
+{
+  asio::io_context io;
+  // A single row larger than the max_row_bytes ceiling trips the lexer's max_buffer abort (the new
+  // safety cap). That abort must also be normalized to parsing_failure rather than surfacing the
+  // raw streaming_json_lexer code.
+  std::string big(std::size_t{ 64 } * 1024, 'X');
+  std::string doc = R"({"results":[{"p":")" + big + R"("}],"status":"success"})";
+  auto body = test::utils::make_cached_response_body(io, doc);
+  couchbase::core::row_streamer_options opts{};
+  opts.max_row_bytes = std::size_t{ 4 } * 1024; // tiny ceiling so the row overflows it
+  couchbase::core::query_stream stream{ io, std::move(body), opts };
+
+  std::error_code end_ec{};
+  bool ended = false;
+  std::function<void()> pump = [&]() {
+    stream.next_row([&](std::optional<std::string> row, std::error_code ec) {
+      if (!row.has_value()) {
+        end_ec = ec;
+        ended = true;
+        return;
+      }
+      pump();
+    });
+  };
+  stream.start([&](std::error_code) {
+    pump();
+  });
+  io.run();
+
+  REQUIRE(ended);
+  REQUIRE(end_ec == couchbase::errc::common::parsing_failure);
+}
+
+TEST_CASE("unit: query_stream re-delivers the terminal on pulls after the end", "[unit]")
+{
+  // Terminal-sticky contract: once the stream has ended, every later next_row must re-deliver the
+  // same terminal instead of parking forever on the drained channel.
+  asio::io_context io;
+  std::string doc = R"({"requestID":"r","results":[{"a":1}],"status":"success"})";
+  auto body = test::utils::make_cached_response_body(io, doc);
+  couchbase::core::query_stream stream{ io, std::move(body) };
+
+  int terminals = 0;
+  std::function<void()> pump = [&]() {
+    stream.next_row([&](std::optional<std::string> row, std::error_code) {
+      if (!row.has_value()) {
+        // Pull three more times after the terminal; each must resolve (not hang).
+        if (++terminals < 4) {
+          pump();
+        }
+        return;
+      }
+      pump();
+    });
+  };
+  stream.start([&](std::error_code) {
+    pump();
+  });
+  io.run();
+
+  REQUIRE(terminals == 4); // the terminal is re-delivered on every post-end pull
 }
 
 TEST_CASE("unit: query_stream reports no signature when absent", "[unit]")

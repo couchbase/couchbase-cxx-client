@@ -22,6 +22,7 @@
 #include <couchbase/analytics_options.hxx>
 #include <couchbase/analytics_status.hxx>
 
+#include <memory>
 #include <optional>
 #include <string>
 
@@ -32,6 +33,8 @@ class cluster;
 
 namespace couchbase::core::impl
 {
+class observability_recorder;
+
 /**
  * Maps the core analytics status enum onto the public analytics_status enum. Shared by the buffered
  * result builder and the streaming result handle so there is one source of truth.
@@ -47,10 +50,17 @@ build_result(core::operations::analytics_response& resp) -> analytics_result;
  * Dispatches an analytics query as a streaming request and resolves the handler with an
  * analytics_stream_result. Unlike query there is no prepared-statement fallback; every request
  * takes the lazy streaming path.
+ *
+ * @param obs_rec the operation's observability recorder. Its operation span is already threaded
+ * into request.parent_span by the caller; ownership is transferred to the resulting stream handle,
+ * which calls finish() once when the stream reaches its terminal (drained, errored, or cancelled),
+ * so the streaming path emits the same operation span + latency metric as buffered
+ * analytics_query().
  */
 void
 dispatch_analytics_stream(const core::cluster& core,
                           core::operations::analytics_request request,
+                          std::unique_ptr<observability_recorder> obs_rec,
                           analytics_stream_handler&& handler);
 
 auto

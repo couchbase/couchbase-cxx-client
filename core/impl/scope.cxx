@@ -96,9 +96,16 @@ public:
                     query_options::built options,
                     query_stream_handler&& handler) const
   {
-    auto request =
-      core::impl::build_query_request(std::move(statement), query_context_, std::move(options), {});
-    core::impl::dispatch_query_stream(core_, std::move(request), std::move(handler));
+    // Instrument the streaming operation exactly like the buffered scope query() above: build the
+    // recorder, thread its operation span into the request, and hand the recorder to the stream so
+    // it finishes at the terminal.
+    auto obs_rec = create_observability_recorder(
+      core::tracing::operation::query, core::service_type::query, options.parent_span);
+    obs_rec->with_query_statement(statement, options);
+    auto request = core::impl::build_query_request(
+      std::move(statement), query_context_, std::move(options), obs_rec->operation_span());
+    core::impl::dispatch_query_stream(
+      core_, std::move(request), std::move(obs_rec), std::move(handler));
   }
 
   void analytics_query(std::string statement,
@@ -124,9 +131,14 @@ public:
                               analytics_options::built options,
                               analytics_stream_handler&& handler) const
   {
+    // Instrument the streaming operation exactly like the buffered scope analytics_query() above.
+    auto obs_rec = create_observability_recorder(
+      core::tracing::operation::analytics, core::service_type::analytics, options.parent_span);
+    obs_rec->with_query_statement(statement, options);
     auto request = core::impl::build_analytics_request(
-      std::move(statement), std::move(options), bucket_name_, name_, {});
-    core::impl::dispatch_analytics_stream(core_, std::move(request), std::move(handler));
+      std::move(statement), std::move(options), bucket_name_, name_, obs_rec->operation_span());
+    core::impl::dispatch_analytics_stream(
+      core_, std::move(request), std::move(obs_rec), std::move(handler));
   }
 
   void search(std::string index_name,

@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2024. Couchbase, Inc.
+ *   Copyright 2026. Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -40,6 +40,18 @@ namespace couchbase::core
 namespace
 {
 constexpr auto ANALYTICS_RESULTS_POINTER = "/results/^";
+
+// Normalize a bounded-lexer failure (malformed / oversized JSON) to errc::common::parsing_failure,
+// matching the buffered analytics_query() path and row_streamer's own truncated-body terminal, so
+// the public streaming error contract is consistent.
+auto
+normalize_stream_error(std::error_code ec) -> std::error_code
+{
+  if (ec.category() == couchbase::core::impl::streaming_json_lexer_category()) {
+    return errc::common::parsing_failure;
+  }
+  return ec;
+}
 } // namespace
 
 class analytics_stream_impl : public std::enable_shared_from_this<analytics_stream_impl>
@@ -55,7 +67,7 @@ public:
     streamer_.start([self = shared_from_this(), on_ready = std::move(on_ready)](
                       std::string preamble, std::error_code ec) mutable {
       if (ec) {
-        return on_ready(ec);
+        return on_ready(normalize_stream_error(ec));
       }
       operations::analytics_response::analytics_meta_data meta{};
       try {
@@ -81,30 +93,52 @@ public:
   void next_row(
     utils::movable_function<void(std::optional<std::string>, std::error_code)>&& handler)
   {
+    // Terminal-sticky: once the stream has ended, re-deliver the stored terminal on every
+    // subsequent pull instead of issuing another receive that would park forever on the
+    // drained-but-open row channel. The public handle guards this too, but a core::-direct consumer
+    // (e.g. a wrapper) relies on this being safe.
+    std::optional<std::error_code> sticky_terminal;
+    {
+      const std::scoped_lock lock{ mutex_ };
+      if (terminal_reached_) {
+        sticky_terminal = terminal_ec_;
+      }
+    }
+    if (sticky_terminal) {
+      // Deliver outside the lock: the handler typically issues the next pull, which re-enters
+      // next_row and would re-lock the non-recursive mutex_ and deadlock if invoked while held.
+      return handler(std::nullopt, *sticky_terminal);
+    }
     streamer_.next_row([self = shared_from_this(),
                         handler = std::move(handler)](std::string row, std::error_code ec) mutable {
       if (!row.empty()) {
         return handler(std::move(row), {});
       }
-      // Empty row marks the end of the stream.
+      // Empty row marks the end of the stream. Classify the terminal, remember it (so later pulls
+      // are served the sticky terminal above), then deliver.
+      std::error_code terminal_ec{};
       if (ec) {
-        return handler(std::nullopt, ec);
-      }
-      auto raw_meta = self->streamer_.metadata();
-      if (!raw_meta.has_value()) {
+        // Normalize a mid-document lexer failure to parsing_failure, matching the buffered path.
+        terminal_ec = normalize_stream_error(ec);
+      } else if (auto raw_meta = self->streamer_.metadata(); !raw_meta.has_value()) {
         // A clean end without reconstructed metadata violates the row_streamer invariant; surface
         // it rather than silently reporting success with no metadata.
         CB_LOG_WARNING("analytics_stream: end reached but row_streamer returned no metadata");
-        return handler(std::nullopt, errc::common::internal_server_failure);
+        terminal_ec = errc::common::internal_server_failure;
+      } else {
+        try {
+          auto meta = operations::parse_analytics_meta(utils::json::parse(raw_meta.value()));
+          terminal_ec = operations::map_analytics_error(meta);
+          const std::scoped_lock lock{ self->mutex_ };
+          self->meta_data_ = std::move(meta);
+        } catch (const std::exception&) {
+          terminal_ec = errc::common::parsing_failure;
+        }
       }
-      std::error_code terminal_ec{};
-      try {
-        auto meta = operations::parse_analytics_meta(utils::json::parse(raw_meta.value()));
-        terminal_ec = operations::map_analytics_error(meta);
+      {
         const std::scoped_lock lock{ self->mutex_ };
-        self->meta_data_ = std::move(meta);
-      } catch (const std::exception&) {
-        terminal_ec = errc::common::parsing_failure;
+        self->terminal_reached_ = true;
+        self->terminal_ec_ = terminal_ec;
       }
       handler(std::nullopt, terminal_ec);
     });
@@ -133,6 +167,10 @@ private:
   mutable std::mutex mutex_{};
   std::optional<std::string> signature_{};
   std::optional<operations::analytics_response::analytics_meta_data> meta_data_{};
+  // Terminal-sticky state (guarded by mutex_): once next_row reports the terminal, it is remembered
+  // so every later pull re-delivers it instead of parking on the drained channel.
+  bool terminal_reached_{ false };
+  std::error_code terminal_ec_{};
 };
 
 analytics_stream::analytics_stream(asio::io_context& io,

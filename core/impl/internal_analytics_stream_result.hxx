@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *   Copyright 2024. Couchbase, Inc.
+ *   Copyright 2026. Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -32,13 +32,19 @@
 #include <utility>
 #include <vector>
 
+namespace couchbase::core::impl
+{
+class observability_recorder;
+} // namespace couchbase::core::impl
+
 namespace couchbase
 {
 class internal_analytics_stream_result
   : public std::enable_shared_from_this<internal_analytics_stream_result>
 {
 public:
-  explicit internal_analytics_stream_result(core::analytics_stream stream);
+  internal_analytics_stream_result(core::analytics_stream stream,
+                                   std::unique_ptr<core::impl::observability_recorder> obs_rec);
   // Non-copyable and non-movable: holds a std::mutex and is only ever owned via shared_ptr.
   internal_analytics_stream_result(const internal_analytics_stream_result&) = delete;
   internal_analytics_stream_result(internal_analytics_stream_result&&) = delete;
@@ -73,6 +79,12 @@ private:
   void resolve_meta_data(std::error_code ec);
 
   core::analytics_stream stream_;
+
+  // Observability recorder for the whole streaming operation. Its operation span already parents
+  // the request; finish() is called exactly once from resolve_meta_data() (the single terminal
+  // hook, reached on drain/error/cancel/destruction), recording the operation latency metric and
+  // ending the span — the same instrumentation buffered analytics_query() emits via its recorder.
+  std::unique_ptr<core::impl::observability_recorder> obs_rec_;
 
   // Guards the "only one outstanding next()" contract. Set while a pull is in flight and cleared
   // when its handler runs; a concurrent/overlapping next() is rejected with invalid_argument

@@ -834,11 +834,11 @@ TEST_CASE("integration: streaming analytics surfaces a query error", "[integrati
     "SELECT * FROM nonexistent_dataset_that_does_not_exist_xyz LIMIT 1";
   auto [err, result] = cluster.analytics_query_stream(error_statement).get();
 
-  if (err.ec()) {
-    // Error surfaced up front (before any row): acceptable.
-    SUCCEED("error surfaced up front");
-  } else {
-    bool saw_error = false;
+  // The error must surface — at dispatch or as the stream terminal. Fold both channels into one
+  // unconditional assertion instead of SUCCEED()-ing on the dispatch path, so a run that ends
+  // cleanly with no error (exercising none of the trailing-error machinery) is a visible failure.
+  bool saw_error = static_cast<bool>(err.ec());
+  if (!saw_error) {
     while (true) {
       auto [rerr, row] = result.next().get();
       if (rerr.ec()) {
@@ -849,8 +849,8 @@ TEST_CASE("integration: streaming analytics surfaces a query error", "[integrati
         break;
       }
     }
-    REQUIRE(saw_error);
   }
+  REQUIRE(saw_error);
 
   cluster.close().get();
 }

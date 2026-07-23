@@ -31,7 +31,10 @@
 #include "core/utils/binary.hxx"
 #include "error.hxx"
 #include "internal_query_stream_result.hxx"
+#include "observability_recorder.hxx"
 #include "query.hxx"
+
+#include <memory>
 
 namespace couchbase::core::impl
 {
@@ -212,6 +215,7 @@ build_query_request(std::string statement,
 void
 dispatch_query_stream(const core::cluster& core,
                       core::operations::query_request request,
+                      std::unique_ptr<observability_recorder> obs_rec,
                       query_stream_handler&& handler)
 {
   if (!request.adhoc) {
@@ -221,18 +225,25 @@ dispatch_query_stream(const core::cluster& core,
     auto& io = core.io_context();
     core.execute(
       std::move(request),
-      [&io, handler = std::move(handler)](operations::query_response resp) mutable {
+      [&io, obs_rec = std::move(obs_rec), handler = std::move(handler)](
+        operations::query_response resp) mutable {
         if (resp.ctx.ec) {
+          // Terminal reached before a handle exists: record the operation metric/span here.
+          obs_rec->finish(resp.ctx.ec);
           return handler(make_error(resp.ctx), {});
         }
         auto stream =
           std::make_shared<core::query_stream>(io, std::move(resp.rows), std::move(resp.meta));
-        stream->start([handler = std::move(handler), stream](std::error_code early_error) mutable {
+        stream->start([obs_rec = std::move(obs_rec), handler = std::move(handler), stream](
+                        std::error_code early_error) mutable {
           if (early_error) {
+            obs_rec->finish(early_error);
             return handler(couchbase::error{ early_error, "failed to start the streaming query" },
                            {});
           }
-          auto internal = std::make_shared<internal_query_stream_result>(std::move(*stream));
+          // Transfer the recorder to the handle; it finishes the operation at the stream terminal.
+          auto internal =
+            std::make_shared<internal_query_stream_result>(std::move(*stream), std::move(obs_rec));
           handler({}, query_stream_result{ std::move(internal) });
         });
       });
@@ -241,11 +252,14 @@ dispatch_query_stream(const core::cluster& core,
 
   core.query_stream(
     std::move(request),
-    [handler = std::move(handler)](core::query_stream stream, std::error_code ec) mutable {
+    [obs_rec = std::move(obs_rec), handler = std::move(handler)](core::query_stream stream,
+                                                                 std::error_code ec) mutable {
       if (ec) {
+        obs_rec->finish(ec);
         return handler(couchbase::error{ ec, "failed to start the streaming query" }, {});
       }
-      auto internal = std::make_shared<internal_query_stream_result>(std::move(stream));
+      auto internal =
+        std::make_shared<internal_query_stream_result>(std::move(stream), std::move(obs_rec));
       handler({}, query_stream_result{ std::move(internal) });
     });
 }

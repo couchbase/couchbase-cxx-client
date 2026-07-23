@@ -23,6 +23,7 @@
 #include "core/operations/document_analytics.hxx"
 #include "core/utils/binary.hxx"
 #include "internal_analytics_stream_result.hxx"
+#include "observability_recorder.hxx"
 
 #include <couchbase/analytics_metrics.hxx>
 #include <couchbase/analytics_options.hxx>
@@ -156,15 +157,20 @@ build_result(core::operations::analytics_response& resp) -> analytics_result
 void
 dispatch_analytics_stream(const core::cluster& core,
                           core::operations::analytics_request request,
+                          std::unique_ptr<observability_recorder> obs_rec,
                           analytics_stream_handler&& handler)
 {
   core.analytics_query_stream(
     std::move(request),
-    [handler = std::move(handler)](core::analytics_stream stream, std::error_code ec) mutable {
+    [obs_rec = std::move(obs_rec), handler = std::move(handler)](core::analytics_stream stream,
+                                                                 std::error_code ec) mutable {
       if (ec) {
+        obs_rec->finish(ec);
         return handler(couchbase::error{ ec, "failed to start the streaming analytics query" }, {});
       }
-      auto internal = std::make_shared<internal_analytics_stream_result>(std::move(stream));
+      // Transfer the recorder to the handle; it finishes the operation at the stream terminal.
+      auto internal =
+        std::make_shared<internal_analytics_stream_result>(std::move(stream), std::move(obs_rec));
       handler({}, analytics_stream_result{ std::move(internal) });
     });
 }
