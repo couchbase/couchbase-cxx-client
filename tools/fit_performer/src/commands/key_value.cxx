@@ -2023,6 +2023,11 @@ execute_streaming_command(const protocol::sdk::kv::rangescan::Scan& cmd, const c
     std::optional<protocol::shared::ContentAs> content_as{};
     if (cmd.has_content_as()) {
       content_as = cmd.content_as();
+      // Reject an unsupported transcoder/content-type combination now, while still on the command
+      // setup path: it is a pairing this performer does not support, and throwing here surfaces it
+      // as a non-success gRPC status (UNIMPLEMENTED, via run()). The producer below cannot raise it
+      // cleanly once the stream is running, so it must be caught up front.
+      common::ensure_content_combo_supported(transcoder, content_as.value());
     }
     return [transcoder,
             content_as,
@@ -2040,11 +2045,43 @@ execute_streaming_command(const protocol::sdk::kv::rangescan::Scan& cmd, const c
         spdlog::trace("next_fn has no more scan entries, returning std::nullopt");
         return std::nullopt;
       }
-      from_scan_result_item(stream_id,
-                            item.value(),
-                            transcoder,
-                            content_as,
-                            proto_res.mutable_sdk()->mutable_range_scan_result());
+      try {
+        from_scan_result_item(stream_id,
+                              item.value(),
+                              transcoder,
+                              content_as,
+                              proto_res.mutable_sdk()->mutable_range_scan_result());
+      } catch (const std::system_error& e) {
+        // A per-item SDK decode error carrying a std::error_code: surface it as a typed Couchbase
+        // exception via convert_error_code (as elsewhere in this file) so the driver sees the
+        // error_code/category rather than an opaque message. Still returned as an error result, not
+        // an escaping exception -- an escaping exception unwinds the stream writer task
+        // (stream.hxx) without a terminal stream message and hangs the driver until its test
+        // timeout.
+        spdlog::debug("next_fn failed decoding scan item \"{}\" for stream {}: {} ({})",
+                      item.value().id(),
+                      stream_id,
+                      e.what(),
+                      e.code().message());
+        auto err_res = common::create_new_result();
+        common::convert_error_code(e.code(), err_res.mutable_sdk()->mutable_exception());
+        return err_res;
+      } catch (const std::exception& e) {
+        // Any other per-item decode error: the transcoder/content-type combination was validated
+        // during setup, so result_to_content() no longer raises performer_exception on this path.
+        // Report it as an SDK error result rather than letting it escape the producer (see above).
+        spdlog::debug("next_fn failed decoding scan item \"{}\" for stream {}: {}",
+                      item.value().id(),
+                      stream_id,
+                      e.what());
+        auto err_res = common::create_new_result();
+        err_res.mutable_sdk()->mutable_exception()->mutable_other()->set_name(
+          fmt::format("range-scan decode failed (stream {}, id \"{}\"): {}",
+                      stream_id,
+                      item.value().id(),
+                      e.what()));
+        return err_res;
+      }
       return proto_res;
     };
   }

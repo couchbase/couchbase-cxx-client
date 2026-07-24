@@ -171,6 +171,11 @@ result_to_content(const Result& result,
   std::visit(
     overloaded{
       [&](std::monostate) {
+        // No transcoder specified: use the SDK's default read behaviour for this result type so the
+        // performer exercises the real SDK path. Transaction reads decode leniently (ignoring the
+        // document's common flags, per ExtBinarySupport), while ordinary KV reads use the strict
+        // JSON transcoder; any discrepancy here is an SDK issue to fix rather than to paper over in
+        // the performer.
         switch (proto_content_as.as_case()) {
           case protocol::shared::ContentAs::kAsString: {
             proto_res_content->set_content_as_string(result.template content_as<std::string>());
@@ -286,6 +291,62 @@ result_to_content(const Result& result,
           "unsupported transcoder - content type combination");
       } },
     transcoder);
+}
+
+// result_to_content()/multi_result_to_content() raise performer_exception for a transcoder /
+// content-type pair they cannot render. That pairing is a property of the request, not of the
+// document, so it can be checked before any document is read. Callers that decode inside a
+// streaming producer (e.g. range scan) must validate it up front instead: a performer_exception
+// thrown from the producer cannot be surfaced cleanly (it would abort the run via a blocking future
+// teardown), whereas one thrown here, during command setup, propagates to run() and becomes a
+// non-success gRPC status (UNIMPLEMENTED, the same performer_exception::unimplemented that
+// result_to_content() raises for the pairing). Keep the supported sets in sync with
+// result_to_content().
+inline void
+ensure_content_combo_supported(const transcoder& transcoder,
+                               const protocol::shared::ContentAs& proto_content_as)
+{
+  const auto content_case = proto_content_as.as_case();
+  const auto is_json_family = [&]() {
+    switch (content_case) {
+      case protocol::shared::ContentAs::kAsString:
+      case protocol::shared::ContentAs::kAsByteArray:
+      case protocol::shared::ContentAs::kAsJsonObject:
+      case protocol::shared::ContentAs::kAsJsonArray:
+      case protocol::shared::ContentAs::kAsBoolean:
+      case protocol::shared::ContentAs::kAsInteger:
+      case protocol::shared::ContentAs::kAsFloatingPoint:
+        return true;
+      default:
+        return false;
+    }
+  };
+  const bool supported =
+    std::visit(overloaded{
+                 [&](std::monostate) {
+                   return is_json_family();
+                 },
+                 [&](couchbase::codec::default_json_transcoder) {
+                   return is_json_family();
+                 },
+                 [&](couchbase::codec::raw_binary_transcoder) {
+                   return content_case == protocol::shared::ContentAs::kAsByteArray;
+                 },
+                 [&](couchbase::codec::raw_json_transcoder) {
+                   return content_case == protocol::shared::ContentAs::kAsString ||
+                          content_case == protocol::shared::ContentAs::kAsByteArray;
+                 },
+                 [&](couchbase::codec::raw_string_transcoder) {
+                   return content_case == protocol::shared::ContentAs::kAsString;
+                 },
+                 [&](auto) {
+                   return false;
+                 },
+               },
+               transcoder);
+  if (!supported) {
+    throw performer_exception::unimplemented("unsupported transcoder - content type combination");
+  }
 }
 
 template<typename Result>
