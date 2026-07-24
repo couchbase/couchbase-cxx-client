@@ -60,6 +60,9 @@ struct origin {
   auto operator=(const origin& other) -> origin&;
 
   [[nodiscard]] auto connection_string() const -> const std::string&;
+  // True when built from a couchbase2:// connection string (Protostellar transport). Lets the
+  // connect path branch to the gRPC client without re-parsing the connection string.
+  [[nodiscard]] auto uses_protostellar() const -> bool;
   [[nodiscard]] auto username() const -> std::string;
   [[nodiscard]] auto password() const -> std::string;
   [[nodiscard]] auto certificate_path() const -> std::string;
@@ -92,6 +95,7 @@ private:
   node_list::iterator next_node_{};
   bool exhausted_{ false };
   std::string connection_string_{};
+  bool uses_protostellar_{ false };
   cluster_credentials credentials_{};
   mutable std::shared_mutex credentials_mutex_{};
 };
