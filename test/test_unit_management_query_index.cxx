@@ -15,35 +15,16 @@
  *   limitations under the License.
  */
 
+#include "test/utils/http_context.hxx"
 #include "test_helper_integration.hxx"
 
-#include "core/cluster_options.hxx"
-#include "core/io/http_context.hxx"
 #include "core/io/http_message.hxx"
-#include "core/io/query_cache.hxx"
 #include "core/operations/management/query_index_create.hxx"
-#include "core/topology/configuration.hxx"
 
 #include <tao/json/value.hpp>
 
 #include <regex>
 #include <string>
-
-couchbase::core::http_context
-make_http_context()
-{
-  static couchbase::core::topology::configuration config{};
-  static couchbase::core::query_cache query_cache{};
-  static couchbase::core::cluster_options cluster_options{};
-  std::string hostname{};
-  std::uint16_t port{};
-  std::string canonical_hostname{};
-  std::uint16_t canonical_port{};
-  couchbase::core::http_context ctx{
-    config, cluster_options, query_cache, hostname, port, canonical_hostname, canonical_port,
-  };
-  return ctx;
-}
 
 TEST_CASE("unit: create query index key encoding", "[unit]")
 {
@@ -52,7 +33,7 @@ TEST_CASE("unit: create query index key encoding", "[unit]")
     "bucket_name", "scope_name", "collection_name",
     "test_index",  {},           { "bucket_name", "scope_name" },
   };
-  auto ctx = make_http_context();
+  auto ctx = test::utils::make_http_context();
   std::regex r{ "CREATE INDEX (.+) ON .*\\((.*)\\) .* USING GSI.*" };
 
   SECTION("single key")

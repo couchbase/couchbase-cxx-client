@@ -161,3 +161,45 @@ TEST_CASE("unit: encode_analytics_options emits the shared request-body fields",
   REQUIRE(body.at("$age").get_unsigned() == 42);
   REQUIRE(body.at("custom").get_boolean() == true);
 }
+
+TEST_CASE("unit: encode_analytics_options quotes the query context", "[unit][security]")
+{
+  ops::analytics_request req{};
+  req.statement = "SELECT 1";
+  tao::json::value body{};
+
+  SECTION("both names go through the identifier encoder")
+  {
+    req.bucket_name = "bkt";
+    req.scope_name = "scp";
+
+    ops::encode_analytics_options(body, req);
+
+    REQUIRE(body.at("query_context").get_string() == "default:`bkt`.`scp`");
+  }
+
+  SECTION("a backslash is escaped so it cannot introduce a unicode escape")
+  {
+    // The query context is lexed as SQL++, and a backslash followed by u0060 is expanded into a
+    // backtick before lexing unless the backslash run preceding the 'u' is of even length. Left
+    // raw, this value would close the scope identifier and have its tail parsed as SQL++ instead.
+    req.bucket_name = "bkt";
+    req.scope_name = "\\u0060.`Metadata`.`Dataverse";
+
+    ops::encode_analytics_options(body, req);
+
+    REQUIRE(body.at("query_context").get_string() ==
+            "default:`bkt`.`\\\\u0060.``Metadata``.``Dataverse`");
+  }
+
+  SECTION("a scope qualifier supplied by the caller is still passed through verbatim")
+  {
+    req.scope_qualifier = "default:`bkt`.`scp`";
+    req.bucket_name = "ignored";
+    req.scope_name = "ignored";
+
+    ops::encode_analytics_options(body, req);
+
+    REQUIRE(body.at("query_context").get_string() == "default:`bkt`.`scp`");
+  }
+}

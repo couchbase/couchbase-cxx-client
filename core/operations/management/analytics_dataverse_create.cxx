@@ -30,12 +30,16 @@ auto
 analytics_dataverse_create_request::encode_to(encoded_request_type& encoded,
                                               http_context& /* context */) const -> std::error_code
 {
-  std::string if_not_exists_clause = ignore_if_exists ? "IF NOT EXISTS" : "";
+  if (!utils::analytics::all_quotable({ dataverse_name })) {
+    return errc::common::invalid_argument;
+  }
+
+  std::string if_not_exists_clause = ignore_if_exists ? " IF NOT EXISTS" : "";
 
   const tao::json::value body{
     { "statement",
-      fmt::format("CREATE DATAVERSE {} {}",
-                  utils::analytics::uncompound_name(dataverse_name),
+      fmt::format("CREATE DATAVERSE {}{}",
+                  utils::analytics::quote_dataverse_name(dataverse_name),
                   if_not_exists_clause) },
   };
   encoded.headers["content-type"] = "application/json";

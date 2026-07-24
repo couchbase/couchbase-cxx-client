@@ -30,13 +30,17 @@ auto
 analytics_link_connect_request::encode_to(encoded_request_type& encoded,
                                           http_context& /* context */) const -> std::error_code
 {
-  std::string with_clause = force ? "WITH {\"force\": true}" : "";
+  if (!utils::analytics::all_quotable({ dataverse_name, link_name })) {
+    return errc::common::invalid_argument;
+  }
+
+  std::string with_clause = force ? " WITH {\"force\": true}" : "";
 
   const tao::json::value body{
     { "statement",
-      fmt::format("CONNECT LINK {}.`{}` {}",
-                  utils::analytics::uncompound_name(dataverse_name),
-                  link_name,
+      fmt::format("CONNECT LINK {}.{}{}",
+                  utils::analytics::quote_dataverse_name(dataverse_name),
+                  utils::analytics::quote_identifier(link_name),
                   with_clause) },
   };
   encoded.headers["content-type"] = "application/json";

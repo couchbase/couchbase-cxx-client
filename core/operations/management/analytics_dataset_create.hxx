@@ -46,6 +46,10 @@ struct analytics_dataset_create_request {
   std::string dataset_name;
   std::string bucket_name;
 
+  /**
+   * Optional SQL++ filter predicate expression (e.g., "type = 'airline'").
+   * Must be a valid, trusted SQL++ predicate expression provided by the caller.
+   */
   std::optional<std::string> condition{};
   std::optional<std::string> client_context_id{};
   std::optional<std::chrono::milliseconds> timeout{};
