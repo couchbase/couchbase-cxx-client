@@ -65,6 +65,15 @@ private:
   std::mt19937 generator_;
   fit_cxx::observability::span_owner spans_{};
 
+  // The core transactions object returned by get_core_transactions() is shared per connection
+  // across all concurrent gRPC worker threads. The test-only cleanup RPCs (transactionCleanup,
+  // transactionCleanupATR, clientRecordProcess) inject per-request hooks by overwriting the shared
+  // config's hook shared_ptrs and then immediately run a cleanup operation that reads them.
+  // Serialize those critical sections: concurrent RPCs would otherwise move-assign the same
+  // shared_ptr instance from multiple threads, releasing its control block twice (double-free /
+  // heap corruption).
+  std::mutex cleanup_config_mutex_;
+
   // Thread-safe accessors for the stashed-result state, which is shared across all concurrent
   // transactions/worker threads. Getters return copies so the value can be used safely (e.g. in a
   // blocking transaction op) after the lock is released.
