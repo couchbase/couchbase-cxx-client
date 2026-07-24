@@ -54,6 +54,16 @@ jobs:
           # SA: see CXXCBC-571, Valgrind reports memory leak, because ASIO does
           # not deallocate thread-local state of OpenSSL properly
           CB_BORINGSSL: OFF
+          # Build core/protostellar and its tests here so the couchbase2 transport is covered by the
+          # sanitizers. It is the only hand-written concurrency in the client besides the MCBP path
+          # (a gRPC threadpool callback posting onto the io_context), which is what TSan is for.
+          #
+          # Cost is not uniform across the legs. The four libstdc++ legs reuse the
+          # libgrpc++-dev/libprotobuf-dev packages this workflow already installs, so nothing extra is
+          # built. The tsan leg compiles with -stdlib=libc++ (see bin/build-tests), which makes
+          # cmake/GrpcProtobuf.cmake skip system-package detection to avoid an ABI mismatch, so that
+          # leg does build gRPC from source and takes correspondingly longer.
+          CB_COUCHBASE2: 1
           CB_NUMBER_OF_JOBS: 8
         run: ./bin/build-tests
       - name: Upload build artifacts
@@ -99,6 +109,25 @@ jobs:
         run: |
           chmod -R +x ./cmake-build-tests-${{ matrix.sanitizer }}
           ./bin/run-unit-tests
+      - name: Run CNG tests (${{ matrix.sanitizer }})
+        timeout-minutes: 30
+        # Building the couchbase2 code is not enough to exercise it: the CNG tests carry LABELS "cng"
+        # (test/cng/CMakeLists.txt), and bin/run-unit-tests filters --label-regex 'unit', so without
+        # this step they would be compiled under each sanitizer and never run. --no-tests=error keeps
+        # that from silently reverting -- a label that matched nothing would otherwise exit 0.
+        #
+        # The asan/lsan/tsan/ubsan legs get their instrumentation at compile time, so a plain ctest
+        # run here is instrumented. The valgrind leg is not: memcheck is a run-time wrapper that
+        # bin/run-unit-tests applies via --test-action, which is not mirrored here, so that leg gives
+        # these tests no more coverage than an ordinary build.
+        env:
+          TEST_LOG_LEVEL: trace
+          # bin/run-unit-tests exports this for the lsan leg; mirrored so the same known ASIO/OpenSSL
+          # thread-local leaks (CXXCBC-571) do not fail this step instead.
+          LSAN_OPTIONS: suppressions=${{ github.workspace }}/.lsan_suppressions
+        run: |
+          ctest --test-dir ./cmake-build-tests-${{ matrix.sanitizer }} --output-on-failure \
+                --label-regex 'cng' --no-tests=error --output-junit cng-results.xml
       - name: Upload report
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4
@@ -106,6 +135,7 @@ jobs:
           name: report-unit-${{ matrix.sanitizer }}
           path: |
             cmake-build-tests-${{ matrix.sanitizer }}/Testing/Temporary/*.log
+            cmake-build-tests-${{ matrix.sanitizer }}/cng-results.xml
   integration:
     needs: build
     strategy:

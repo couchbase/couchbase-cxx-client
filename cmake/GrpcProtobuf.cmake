@@ -215,3 +215,30 @@ else()
     endif()
   endforeach()
 endif()
+
+# gRPC's headers are not clean under this project's warning set: <grpcpp/...> trips
+# -Wold-style-cast, -Wsign-conversion and -Wgcc-compat, and with -Werror that is a hard failure in
+# any translation unit including them.
+#
+# It only bites on the fetched-from-source path. When find_package succeeds (Linux with
+# libgrpc-dev) the headers live under a system prefix and the compiler treats them as system headers
+# implicitly, so warnings are suppressed for free. Built from source -- macOS and Windows CI, per the
+# note at the top of this file -- their include directories are ordinary -I entries and every
+# warning applies. That asymmetry is why a target can compile on the Linux leg and fail on all five
+# others.
+#
+# fit_performer sidesteps this by turning its own warnings off wholesale (/W0 or -w plus
+# COMPILE_WARNING_AS_ERROR OFF). That is not an option for couchbase_cxx_client, which compiles
+# core/protostellar/*.cxx and must keep full warnings on its own code, so the fix belongs on the
+# dependency: mark the interface include directories SYSTEM, exactly as is done for spdlog.
+#
+# Marking gRPC::grpc++ is sufficient and abseil/protobuf/boringssl need no separate handling --
+# both clang and gcc propagate system-ness down the include stack, so a header reached from a system
+# header is itself treated as one. Verified: with grpc-src/include as -I, <grpcpp/grpcpp.h> emits 26
+# errors across grpcpp and abseil-cpp; with it as -isystem and every other third-party directory
+# left as -I, zero.
+foreach(_grpc_system_target gRPC::grpc++ gRPC::grpc protobuf::libprotobuf)
+  if(TARGET ${_grpc_system_target})
+    declare_system_library(${_grpc_system_target})
+  endif()
+endforeach()
