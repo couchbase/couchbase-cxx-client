@@ -22,6 +22,9 @@
 #include "core/utils/name_codec.hxx"
 #include "error_utils.hxx"
 
+#include <algorithm>
+
+#include <spdlog/fmt/bundled/core.h>
 #include <tao/json/value.hpp>
 
 namespace couchbase::core::operations::management
@@ -30,20 +33,41 @@ auto
 analytics_index_create_request::encode_to(encoded_request_type& encoded,
                                           http_context& /* context */) const -> std::error_code
 {
-  std::string if_not_exists_clause = ignore_if_exists ? "IF NOT EXISTS" : "";
+  if (!utils::analytics::all_quotable({ dataverse_name, dataset_name, index_name })) {
+    return errc::common::invalid_argument;
+  }
+
+  std::string if_not_exists_clause = ignore_if_exists ? " IF NOT EXISTS" : "";
   std::vector<std::string> field_specs;
   field_specs.reserve(fields.size());
   for (const auto& [field_name, field_type] : fields) {
-    field_specs.emplace_back(fmt::format("{}:{}", field_name, field_type));
+    if (!utils::analytics::all_quotable({ field_name })) {
+      return errc::common::invalid_argument;
+    }
+    // The field type is the one value in this statement that is interpolated without being quoted,
+    // so it is validated instead of encoded, and validating means naming the set that is accepted:
+    // ASCII alphanumeric, which covers every type the service will index on and admits nothing
+    // structural. The grammar would in fact accept the type quoted, like the names above; a
+    // whitelist is preferred because it turns a bad type into a clear invalid_argument here rather
+    // than an opaque server error. It is written out rather than delegated to std::isalnum to keep
+    // it independent of the host locale. Names carry no equivalent check, because quoting already
+    // makes their content inert, and rejecting an unusable one is left to the server.
+    if (field_type.empty() || !std::all_of(field_type.begin(), field_type.end(), [](char c) {
+          return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
+        })) {
+      return errc::common::invalid_argument;
+    }
+    field_specs.emplace_back(
+      fmt::format("{}:{}", utils::analytics::quote_field_path(field_name), field_type));
   }
 
   const tao::json::value body{
     { "statement",
-      fmt::format("CREATE INDEX `{}` {} ON {}.`{}` ({})",
-                  index_name,
+      fmt::format("CREATE INDEX {}{} ON {}.{} ({})",
+                  utils::analytics::quote_identifier(index_name),
                   if_not_exists_clause,
-                  utils::analytics::uncompound_name(dataverse_name),
-                  dataset_name,
+                  utils::analytics::quote_dataverse_name(dataverse_name),
+                  utils::analytics::quote_identifier(dataset_name),
                   utils::join_strings(field_specs, ",")) },
   };
   encoded.headers["content-type"] = "application/json";

@@ -20,6 +20,7 @@
 #include "core/cluster_options.hxx"
 #include "core/logger/logger.hxx"
 #include "core/utils/json.hxx"
+#include "core/utils/name_codec.hxx"
 
 #include <couchbase/error_codes.hxx>
 
@@ -63,8 +64,11 @@ encode_analytics_options(tao::json::value& body, const analytics_request& reques
   if (request.scope_qualifier) {
     body["query_context"] = request.scope_qualifier.value();
   } else if (request.scope_name && request.bucket_name) {
-    body["query_context"] =
-      fmt::format("default:`{}`.`{}`", *request.bucket_name, *request.scope_name);
+    // The query context is parsed as SQL++, so its two names are quoted through the same encoder
+    // the management statements use rather than wrapped in bare backticks.
+    body["query_context"] = fmt::format("default:{}.{}",
+                                        utils::analytics::quote_identifier(*request.bucket_name),
+                                        utils::analytics::quote_identifier(*request.scope_name));
   }
   for (const auto& [name, value] : request.raw) {
     body[name] = utils::json::parse(value);

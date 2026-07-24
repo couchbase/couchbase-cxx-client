@@ -201,6 +201,47 @@ TEST_CASE("integration: analytics query", "[integration]")
             couchbase::core::operations::analytics_response::analytics_status::fatal);
   }
 
+  SECTION("analytics management dataverse create with slash path")
+  {
+    std::string custom_dataverse = fmt::format("Default/{}", test::utils::uniq_id("dataverse"));
+    std::string custom_dataset = test::utils::uniq_id("dataset");
+
+    {
+      couchbase::core::operations::management::analytics_dataverse_create_request req{};
+      req.dataverse_name = custom_dataverse;
+      req.ignore_if_exists = true;
+      auto resp = test::utils::execute(integration.cluster, req);
+      REQUIRE_SUCCESS(resp.ctx.ec);
+    }
+
+    {
+      couchbase::core::operations::management::analytics_dataset_create_request req{};
+      req.dataverse_name = custom_dataverse;
+      req.dataset_name = custom_dataset;
+      req.bucket_name = integration.ctx.bucket;
+      req.ignore_if_exists = true;
+      auto resp = test::utils::execute(integration.cluster, req);
+      REQUIRE_SUCCESS(resp.ctx.ec);
+    }
+
+    {
+      couchbase::core::operations::management::analytics_dataset_drop_request req{};
+      req.dataverse_name = custom_dataverse;
+      req.dataset_name = custom_dataset;
+      req.ignore_if_does_not_exist = true;
+      auto resp = test::utils::execute(integration.cluster, req);
+      REQUIRE_SUCCESS(resp.ctx.ec);
+    }
+
+    {
+      couchbase::core::operations::management::analytics_dataverse_drop_request req{};
+      req.dataverse_name = custom_dataverse;
+      req.ignore_if_does_not_exist = true;
+      auto resp = test::utils::execute(integration.cluster, req);
+      REQUIRE_SUCCESS(resp.ctx.ec);
+    }
+  }
+
   {
     couchbase::core::operations::management::analytics_dataset_drop_request req{};
     req.dataset_name = dataset_name;
@@ -853,4 +894,262 @@ TEST_CASE("integration: streaming analytics surfaces a query error", "[integrati
   REQUIRE(saw_error);
 
   cluster.close().get();
+}
+
+TEST_CASE("integration: analytics management identifier encoding", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+
+  if (integration.ctx.deployment == test::utils::deployment_type::elixir) {
+    SKIP("elixir deployment does not support analytics");
+  }
+  if (!integration.has_analytics_service()) {
+    SKIP("cluster does not have analytics service");
+  }
+
+  const auto prefix = test::utils::uniq_id("enc");
+
+  // A busy Analytics service answers a well-formed DDL request with HTTP 503 "Analytics Service is
+  // temporarily unavailable", which recovers within seconds. Only that status is retried: any other
+  // failure, such as a name the server refuses outright, is returned on the first attempt so that
+  // it surfaces as itself instead of being hidden behind a retry budget.
+  auto execute_ddl = [&integration](auto request) -> std::error_code {
+    constexpr std::uint32_t service_unavailable{ 503 };
+    std::error_code ec{};
+    test::utils::wait_until(
+      [&] {
+        auto resp = test::utils::execute(integration.cluster, request);
+        ec = resp.ctx.ec;
+        return !ec || resp.ctx.http_status != service_unavailable;
+      },
+      std::chrono::seconds{ 15 },
+      std::chrono::milliseconds{ 200 });
+    return ec;
+  };
+
+  // Reads every dataverse name the server actually stored, so the assertions below compare against
+  // server state rather than against the statement the client generated.
+  auto stored_dataverses = [&integration]() -> std::vector<std::string> {
+    couchbase::core::operations::analytics_request req{};
+    req.statement = "SELECT VALUE DataverseName FROM Metadata.`Dataverse`";
+    auto resp = test::utils::execute(integration.cluster, req);
+    REQUIRE_SUCCESS(resp.ctx.ec);
+    std::vector<std::string> names;
+    names.reserve(resp.rows.size());
+    for (const auto& row : resp.rows) {
+      names.push_back(couchbase::core::utils::json::parse(row).get_string());
+    }
+    return names;
+  };
+
+  auto create_dataverse = [&execute_ddl](const std::string& name) {
+    couchbase::core::operations::management::analytics_dataverse_create_request req{};
+    req.dataverse_name = name;
+    req.ignore_if_exists = true;
+    return execute_ddl(req);
+  };
+
+  auto drop_dataverse = [&execute_ddl](const std::string& name) {
+    couchbase::core::operations::management::analytics_dataverse_drop_request req{};
+    req.dataverse_name = name;
+    req.ignore_if_does_not_exist = true;
+    return execute_ddl(req);
+  };
+
+  SECTION("adversarial names round-trip through the server unchanged")
+  {
+    // Every name here is representable, but escapes the identifier if the backslash is left
+    // unescaped. "\\u0060" is the payload that defeats backtick-doubling: the parser expands
+    // \uXXXX (with any number of 'u' characters) before the lexer runs, so an unescaped backslash
+    // turns those six characters into a real backtick that closes the identifier. None of these
+    // contain a literal backtick, which is precisely why doubling backticks does not stop them.
+    const std::vector<std::string> names{
+      prefix + "-plain",
+      prefix + "-back\\slash",
+      prefix + "-\\u0060",
+      prefix + "-\\u0060 IF NOT EXISTS",
+      prefix + "-\\uu0060 IF NOT EXISTS",
+      prefix + "-\\n\\t\\\\",
+    };
+
+    for (const auto& name : names) {
+      REQUIRE_SUCCESS(create_dataverse(name));
+    }
+
+    // Each name must come back byte-for-byte. If the escaping regressed, the identifier would have
+    // been cut short and the stored name would be a truncated prefix instead.
+    for (const auto& name : names) {
+      REQUIRE(test::utils::wait_until([&]() {
+        auto stored = stored_dataverses();
+        return std::find(stored.begin(), stored.end(), name) != stored.end();
+      }));
+    }
+
+    // And nothing else appeared: an injected statement would leave behind an object we never named.
+    auto stored = stored_dataverses();
+    std::vector<std::string> ours;
+    for (const auto& name : stored) {
+      if (name.find(prefix) != std::string::npos) {
+        ours.push_back(name);
+      }
+    }
+    std::sort(ours.begin(), ours.end());
+    auto expected = names;
+    std::sort(expected.begin(), expected.end());
+    REQUIRE(ours == expected);
+
+    for (const auto& name : names) {
+      REQUIRE_SUCCESS(drop_dataverse(name));
+    }
+  }
+
+  SECTION("a name containing a backtick is refused without reaching the server")
+  {
+    const auto before = stored_dataverses();
+
+    REQUIRE(create_dataverse(prefix + "-a`b") == couchbase::errc::common::invalid_argument);
+    REQUIRE(drop_dataverse(prefix + "-a`b") == couchbase::errc::common::invalid_argument);
+
+    REQUIRE(stored_dataverses() == before);
+  }
+
+  SECTION("a compound dataverse name round-trips with a backslash in either part")
+  {
+    // quote_dataverse_name() maps '/' to a dot-qualified pair of identifiers, so it escapes each
+    // part separately. A backslash on either side of the separator has to stay inside its own part.
+    const auto compound = prefix + "-a\\b/" + prefix + "-c\\d";
+    REQUIRE_SUCCESS(create_dataverse(compound));
+
+    // Analytics stores a two-part dataverse under the literal "first/second" name.
+    REQUIRE(test::utils::wait_until([&]() {
+      auto stored = stored_dataverses();
+      return std::find(stored.begin(), stored.end(), compound) != stored.end();
+    }));
+
+    REQUIRE_SUCCESS(drop_dataverse(compound));
+  }
+
+  SECTION("a dotted field name with a backslash keeps the statement parseable")
+  {
+    // quote_field_path() is a separate escaper from the object-name path: it splits on '.' and
+    // escapes each segment, so a backslash inside a segment must not leak into the field list.
+    const auto dataverse = prefix + "-fdv";
+    const auto dataset = prefix + "-fds";
+
+    REQUIRE_SUCCESS(create_dataverse(dataverse));
+    {
+      couchbase::core::operations::management::analytics_dataset_create_request req{};
+      req.dataverse_name = dataverse;
+      req.dataset_name = dataset;
+      req.bucket_name = integration.ctx.bucket;
+      req.ignore_if_exists = true;
+      REQUIRE_SUCCESS(execute_ddl(req));
+    }
+    {
+      couchbase::core::operations::management::analytics_index_create_request req{};
+      req.dataverse_name = dataverse;
+      req.dataset_name = dataset;
+      req.index_name = prefix + "-fidx";
+      req.fields["addr\\ess.city"] = "string";
+      req.ignore_if_exists = true;
+      REQUIRE_SUCCESS(execute_ddl(req));
+    }
+    {
+      couchbase::core::operations::management::analytics_index_drop_request req{};
+      req.dataverse_name = dataverse;
+      req.dataset_name = dataset;
+      req.index_name = prefix + "-fidx";
+      req.ignore_if_does_not_exist = true;
+      REQUIRE_SUCCESS(execute_ddl(req));
+    }
+    {
+      couchbase::core::operations::management::analytics_dataset_drop_request req{};
+      req.dataverse_name = dataverse;
+      req.dataset_name = dataset;
+      req.ignore_if_does_not_exist = true;
+      REQUIRE_SUCCESS(execute_ddl(req));
+    }
+    REQUIRE_SUCCESS(drop_dataverse(dataverse));
+  }
+
+  SECTION("a drop cannot be redirected onto a different dataverse")
+  {
+    // The sharpest form of the historical bypass: with backtick-doubling, a name shaped like
+    // "victim\\u0060.\\u0060x" parses as the two-part name `victim`.`x` once the escapes expand,
+    // so drop_dataverse(attacker_name) would have targeted "victim" instead. Correct escaping keeps
+    // the whole thing one literal identifier, so the victim is never touched.
+    const auto victim = prefix + "-victim";
+    REQUIRE_SUCCESS(create_dataverse(victim));
+
+    const auto attacker = victim + "\\u0060.\\u0060x";
+    // Whether this fails outright or drops a (non-existent) dataverse whose literal name is the
+    // attacker string, the one thing that must not happen is the victim disappearing.
+    drop_dataverse(attacker);
+
+    auto stored = stored_dataverses();
+    REQUIRE(std::find(stored.begin(), stored.end(), victim) != stored.end());
+
+    REQUIRE_SUCCESS(drop_dataverse(victim));
+  }
+
+  SECTION("adversarial dataset and index names round-trip")
+  {
+    const auto dataverse = prefix + "-dv";
+    const auto dataset = prefix + "-\\u0060ds";
+    const auto index = prefix + "-\\u0060idx";
+
+    REQUIRE_SUCCESS(create_dataverse(dataverse));
+
+    {
+      couchbase::core::operations::management::analytics_dataset_create_request req{};
+      req.dataverse_name = dataverse;
+      req.dataset_name = dataset;
+      req.bucket_name = integration.ctx.bucket;
+      req.ignore_if_exists = true;
+      REQUIRE_SUCCESS(execute_ddl(req));
+    }
+
+    {
+      couchbase::core::operations::management::analytics_index_create_request req{};
+      req.dataverse_name = dataverse;
+      req.dataset_name = dataset;
+      req.index_name = index;
+      req.fields["testkey"] = "string";
+      req.ignore_if_exists = true;
+      REQUIRE_SUCCESS(execute_ddl(req));
+    }
+
+    REQUIRE(test::utils::wait_until([&]() {
+      couchbase::core::operations::analytics_request req{};
+      req.statement = "SELECT VALUE {\"ds\": DatasetName, \"ix\": IndexName} FROM Metadata.`Index`";
+      auto resp = test::utils::execute(integration.cluster, req);
+      if (resp.ctx.ec) {
+        return false;
+      }
+      for (const auto& row : resp.rows) {
+        auto parsed = couchbase::core::utils::json::parse(row);
+        if (parsed.at("ds").get_string() == dataset && parsed.at("ix").get_string() == index) {
+          return true;
+        }
+      }
+      return false;
+    }));
+
+    {
+      couchbase::core::operations::management::analytics_index_drop_request req{};
+      req.dataverse_name = dataverse;
+      req.dataset_name = dataset;
+      req.index_name = index;
+      req.ignore_if_does_not_exist = true;
+      REQUIRE_SUCCESS(execute_ddl(req));
+    }
+    {
+      couchbase::core::operations::management::analytics_dataset_drop_request req{};
+      req.dataverse_name = dataverse;
+      req.dataset_name = dataset;
+      req.ignore_if_does_not_exist = true;
+      REQUIRE_SUCCESS(execute_ddl(req));
+    }
+    REQUIRE_SUCCESS(drop_dataverse(dataverse));
+  }
 }

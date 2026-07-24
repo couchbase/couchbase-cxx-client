@@ -26,6 +26,7 @@
 #include "core/row_streamer.hxx"
 #include "core/service_type.hxx"
 #include "core/utils/json.hxx"
+#include "core/utils/name_codec.hxx"
 #include "error.hxx"
 #include "error_codes.hxx"
 #include "query_result.hxx"
@@ -252,8 +253,12 @@ private:
     tao::json::value payload{ { "statement", options.statement },
                               { "client_context_id", client_context_id_ } };
     if (options.database_name.has_value() && options.scope_name.has_value()) {
+      // The query context is parsed as SQL++, so its two names are quoted through the same encoder
+      // the management statements use rather than wrapped in bare backticks.
       payload["query_context"] =
-        fmt::format("default:`{}`.`{}`", options.database_name.value(), options.scope_name.value());
+        fmt::format("default:{}.{}",
+                    core::utils::analytics::quote_identifier(options.database_name.value()),
+                    core::utils::analytics::quote_identifier(options.scope_name.value()));
     }
     if (!options.positional_parameters.empty()) {
       std::vector<tao::json::value> params_json;
@@ -334,8 +339,8 @@ private:
     }
   }
 
-  auto parse_error(const std::uint32_t& http_status_code,
-                   const tao::json::value& metadata_header) -> error_parse_result
+  auto parse_error(const std::uint32_t& http_status_code, const tao::json::value& metadata_header)
+    -> error_parse_result
   {
     const auto* errors_json = metadata_header.find("errors");
     if (errors_json == nullptr) {

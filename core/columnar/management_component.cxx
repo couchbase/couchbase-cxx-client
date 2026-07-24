@@ -22,6 +22,7 @@
 #include "core/platform/uuid.h"
 #include "core/utils/json.hxx"
 #include "core/utils/movable_function.hxx"
+#include "core/utils/name_codec.hxx"
 #include "error.hxx"
 #include "error_codes.hxx"
 
@@ -52,8 +53,8 @@ public:
   {
   }
 
-  auto parse_management_error(const std::uint32_t& http_status,
-                              const tao::json::value& body) -> error
+  auto parse_management_error(const std::uint32_t& http_status, const tao::json::value& body)
+    -> error
   {
     const auto* errors_json = body.find("errors");
     if (errors_json == nullptr) {
@@ -209,8 +210,12 @@ public:
   auto database_create(const create_database_options& options, create_database_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, error>
   {
+    if (!core::utils::analytics::all_quotable({ options.name })) {
+      return tl::unexpected{ error{ client_errc::invalid_argument,
+                                    "database name cannot be quoted as an identifier" } };
+    }
     query_based_management_request req{
-      fmt::format("CREATE DATABASE `{}`", options.name),
+      fmt::format("CREATE DATABASE {}", core::utils::analytics::quote_identifier(options.name)),
       options.timeout,
     };
     if (options.ignore_if_exists) {
@@ -224,8 +229,12 @@ public:
   auto database_drop(const drop_database_options& options, drop_database_callback&& callback)
     -> tl::expected<std::shared_ptr<pending_operation>, error>
   {
+    if (!core::utils::analytics::all_quotable({ options.name })) {
+      return tl::unexpected{ error{ client_errc::invalid_argument,
+                                    "database name cannot be quoted as an identifier" } };
+    }
     query_based_management_request req{
-      fmt::format("DROP DATABASE `{}`", options.name),
+      fmt::format("DROP DATABASE {}", core::utils::analytics::quote_identifier(options.name)),
       options.timeout,
     };
     if (options.ignore_if_not_exists) {

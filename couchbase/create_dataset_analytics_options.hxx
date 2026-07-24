@@ -49,7 +49,12 @@ public:
   /**
    * WHERE clause to use for creating the dataset
    *
-   * @param condition
+   * The value is an arbitrary SQL++ predicate and is embedded in the generated statement verbatim.
+   * Unlike the dataverse, dataset and bucket names, it is not quoted or escaped, because there is
+   * no encoding that would leave a predicate meaningful. Pass only expressions the application
+   * itself controls; interpolating unvalidated input here allows arbitrary SQL++ to be injected.
+   *
+   * @param condition SQL++ predicate expression, e.g. `type = "airline"`
    * @return reference to this object, for use in chaining
    *
    * @since 1.0.0

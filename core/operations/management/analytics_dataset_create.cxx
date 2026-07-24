@@ -30,16 +30,22 @@ auto
 analytics_dataset_create_request::encode_to(encoded_request_type& encoded,
                                             http_context& /* context */) const -> std::error_code
 {
-  std::string where_clause = condition ? fmt::format("WHERE {}", *condition) : "";
-  std::string if_not_exists_clause = ignore_if_exists ? "IF NOT EXISTS" : "";
+  if (!utils::analytics::all_quotable({ dataverse_name, dataset_name, bucket_name })) {
+    return errc::common::invalid_argument;
+  }
+
+  // Note: condition is a raw SQL++ predicate expression (e.g., "type = 'airline'")
+  // provided by the caller and is appended verbatim to the WHERE clause.
+  std::string where_clause = condition ? fmt::format(" WHERE {}", *condition) : "";
+  std::string if_not_exists_clause = ignore_if_exists ? " IF NOT EXISTS" : "";
 
   const tao::json::value body{
     { "statement",
-      fmt::format("CREATE DATASET {} {}.`{}` ON `{}` {}",
+      fmt::format("CREATE DATASET{} {}.{} ON {}{}",
                   if_not_exists_clause,
-                  utils::analytics::uncompound_name(dataverse_name),
-                  dataset_name,
-                  bucket_name,
+                  utils::analytics::quote_dataverse_name(dataverse_name),
+                  utils::analytics::quote_identifier(dataset_name),
+                  utils::analytics::quote_identifier(bucket_name),
                   where_clause) },
   };
   encoded.headers["content-type"] = "application/json";
