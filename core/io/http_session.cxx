@@ -466,24 +466,56 @@ void
 http_session::set_idle(std::chrono::milliseconds timeout)
 {
   idle_timer_.expires_after(timeout);
-  return idle_timer_.async_wait([self = shared_from_this()](std::error_code ec) {
-    if (ec == asio::error::operation_aborted) {
-      return;
-    }
-    CB_LOG_DEBUG("{} idle timeout expired, stopping session: \"{}:{}\"",
-                 self->info_.log_prefix(),
-                 self->hostname_,
-                 self->service_);
-    self->stop();
+  // Bind the timeout handler to the session strand. idle_timer_ runs on the raw io_context in the
+  // plaintext constructor, and set_idle() also arms a liveness read on the strand, so without this
+  // the idle-timeout stop() could run concurrently with the armed read's completion on a
+  // multi-threaded io_context. Binding serializes idle-timeout teardown with the read/write
+  // handlers (same reasoning as posting stop() onto the strand elsewhere).
+  idle_timer_.async_wait(
+    asio::bind_executor(get_executor(), [self = shared_from_this()](std::error_code ec) {
+      if (ec == asio::error::operation_aborted) {
+        return;
+      }
+      CB_LOG_DEBUG("{} idle timeout expired, stopping session: \"{}:{}\"",
+                   self->info_.log_prefix(),
+                   self->hostname_,
+                   self->service_);
+      self->stop();
+    }));
+  // Keep a read armed while the connection is idle so that a peer-initiated
+  // close (FIN/RST) is noticed promptly and the session removed from the pool,
+  // instead of being handed to the next request as a dead socket that then
+  // stalls until the service timeout.  Other SDKs get this from their HTTP
+  // stacks (Netty channelInactive, Go net/http and Rust hyper liveness checks);
+  // here the read completion (EOF/error, or unexpected data) tears the session
+  // down -- see do_read().  Posted onto the session executor so it never races
+  // with an in-flight read.
+  idle_ = true;
+  asio::post(get_executor(), [self = shared_from_this()]() {
+    self->do_read();
   });
 }
 
 auto
 http_session::reset_idle() -> bool
 {
+  // The session is leaving the pool to service a request, so the read armed by
+  // set_idle() is no longer an idle liveness probe -- it becomes the read that
+  // receives the response.  Clear the flag first so do_read() treats any
+  // subsequent completion as normal request/response traffic, not a stale
+  // connection.
+  idle_ = false;
   // Return true if cancel() is successful. Since the idle_timer_ has a single pending
   // wait per session, we know the timer has already expired if cancel() returns 0.
-  return idle_timer_.cancel() != 0;
+  const auto reset = idle_timer_.cancel() != 0;
+  if (!reset) {
+    // The idle timer already fired: its (strand-bound) handler is about to stop() this session,
+    // so it is being torn down rather than checked out. Restore idle_ so the still-armed liveness
+    // read stays on the idle path (tearing the connection down) instead of being fed to the
+    // response parser as if it were request traffic.
+    idle_ = true;
+  }
+  return reset;
 }
 
 void
@@ -708,8 +740,26 @@ http_session::do_read()
 
       self->last_active_ = std::chrono::steady_clock::now();
       if (ec) {
-        CB_LOG_ERROR(
-          "{} IO error while reading from the socket: {}", self->info_.log_prefix(), ec.message());
+        if (self->idle_) {
+          // Expected: the peer closed a pooled idle connection.  Tear it down
+          // quietly so it is removed from the pool rather than reused dead.
+          CB_LOG_DEBUG("{} idle HTTP connection closed by peer ({}), stopping session",
+                       self->info_.log_prefix(),
+                       ec.message());
+        } else {
+          CB_LOG_ERROR("{} IO error while reading from the socket: {}",
+                       self->info_.log_prefix(),
+                       ec.message());
+        }
+        return self->stop();
+      }
+      if (self->idle_) {
+        // A pooled keep-alive connection must not receive data until it is
+        // checked out for a request (which clears idle_ via reset_idle()).
+        // Unsolicited bytes mean the connection is in an unexpected state, so
+        // drop it rather than feed them into an empty response parser.
+        CB_LOG_DEBUG("{} unexpected data on idle HTTP connection, stopping session",
+                     self->info_.log_prefix());
         return self->stop();
       }
 
