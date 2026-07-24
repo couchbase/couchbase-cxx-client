@@ -320,9 +320,15 @@ transaction_context::handle_error(const std::exception_ptr& err, txn_complete_ca
         current_attempt_context_->rollback();
       } catch (const std::exception& er_rollback) {
         cleanup().add_attempt(current_attempt_context_);
+        // A failed auto-rollback (including one that runs out of time and expires) re-raises the
+        // ORIGINAL error that provoked the rollback, with retry suppressed - the application cares
+        // about what made the rollback happen, not that the rollback then also failed. The
+        // reference SDKs surface EXPIRED only for an application-driven rollback, which this SDK
+        // does not expose (design doc "The Core Loop": propagate the original
+        // TransactionOperationFailed with retry set to false).
         CB_ATTEMPT_CTX_LOG_TRACE(
           current_attempt_context_,
-          "got error \"{}\" while auto rolling back, throwing original error",
+          "got error \"{}\" while auto rolling back, throwing original error \"{}\"",
           er_rollback.what(),
           er.what());
         auto final = er.get_final_exception(*this);
