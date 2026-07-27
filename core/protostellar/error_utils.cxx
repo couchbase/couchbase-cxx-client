@@ -76,6 +76,20 @@ map_precondition(const std::string& type) -> std::error_code
   if (type == "VALUE_TOO_LARGE") {
     return errc::key_value::value_too_large;
   }
+  if (type == "DOC_NOT_NUMERIC") {
+    // Increment/Decrement against a document that is not a counter. Only those two operations can
+    // produce it, and without this it arrives as internal_server_failure -- telling the caller the
+    // cluster is broken when their document simply is not a number.
+    return errc::key_value::delta_invalid;
+  }
+  if (type == "DURABILITY_IMPOSSIBLE") {
+    // Fewer live nodes than the requested durability needs. Actionable by the caller (ask for less,
+    // or grow the cluster), so it must not be flattened into a generic server failure either.
+    return errc::key_value::durability_impossible;
+  }
+  // POISONED_CAS deliberately falls through: the gateway can emit it, but the SDK has no error for
+  // a CAS that the server considers corrupt, and inventing one here would be a guess. Revisit if
+  // couchbase::errc grows a member for it.
   return errc::common::internal_server_failure;
 }
 

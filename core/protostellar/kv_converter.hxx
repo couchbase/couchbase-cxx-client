@@ -24,10 +24,20 @@
 
 #include "core/document_id.hxx"
 #include "core/error_context/key_value.hxx"
+#include "core/operations/document_append.hxx"
+#include "core/operations/document_decrement.hxx"
+#include "core/operations/document_exists.hxx"
 #include "core/operations/document_get.hxx"
+#include "core/operations/document_get_and_lock.hxx"
+#include "core/operations/document_get_and_touch.hxx"
+#include "core/operations/document_get_projected.hxx"
+#include "core/operations/document_increment.hxx"
 #include "core/operations/document_insert.hxx"
+#include "core/operations/document_prepend.hxx"
 #include "core/operations/document_remove.hxx"
 #include "core/operations/document_replace.hxx"
+#include "core/operations/document_touch.hxx"
+#include "core/operations/document_unlock.hxx"
 #include "core/operations/document_upsert.hxx"
 #include "core/utils/binary.hxx"
 
@@ -166,6 +176,37 @@ decode(const v1::GetResponse& proto, key_value_error_context ctx) -> operations:
   return response;
 }
 
+inline auto
+encode(const operations::get_projected_request& request) -> v1::GetRequest
+{
+  v1::GetRequest proto;
+  set_location(proto, request.id);
+  for (const auto& path : request.projections) {
+    proto.add_project(path);
+  }
+  return proto;
+}
+
+inline auto
+decode(const v1::GetResponse& proto,
+       key_value_error_context ctx,
+       const operations::get_projected_request& /* request */) -> operations::get_projected_response
+{
+  operations::get_projected_response response;
+  response.ctx = std::move(ctx);
+  if (content_is_compressed(proto)) {
+    response.ctx.override_ec(errc::common::feature_not_available);
+    return response;
+  }
+  response.value = utils::to_binary(proto.content_uncompressed());
+  response.cas = couchbase::cas{ proto.cas() };
+  response.flags = proto.content_flags();
+  if (proto.has_expiry()) {
+    response.expiry = static_cast<std::uint32_t>(proto.expiry().seconds());
+  }
+  return response;
+}
+
 // ── Mutations (upsert / insert / replace / remove) ─────────────────────────────
 
 template<typename Response, typename Proto>
@@ -269,6 +310,214 @@ inline auto
 decode(const v1::RemoveResponse& proto, key_value_error_context ctx) -> operations::remove_response
 {
   return decode_mutation<operations::remove_response>(proto, std::move(ctx));
+}
+
+// ── Touch / Exists / lock / counters / append / prepend ────────────────────────
+
+inline auto
+encode(const operations::touch_request& request) -> v1::TouchRequest
+{
+  v1::TouchRequest proto;
+  set_location(proto, request.id);
+  set_expiry(proto, request.expiry);
+  return proto;
+}
+
+inline auto
+decode(const v1::TouchResponse& proto, key_value_error_context ctx) -> operations::touch_response
+{
+  operations::touch_response response;
+  response.ctx = std::move(ctx);
+  response.cas = couchbase::cas{ proto.cas() };
+  return response;
+}
+
+inline auto
+encode(const operations::exists_request& request) -> v1::ExistsRequest
+{
+  v1::ExistsRequest proto;
+  set_location(proto, request.id);
+  return proto;
+}
+
+inline auto
+decode(const v1::ExistsResponse& proto, key_value_error_context ctx) -> operations::exists_response
+{
+  operations::exists_response response;
+  response.ctx = std::move(ctx);
+  response.document_exists = proto.result();
+  response.cas = couchbase::cas{ proto.cas() };
+  return response;
+}
+
+inline auto
+encode(const operations::get_and_lock_request& request) -> v1::GetAndLockRequest
+{
+  v1::GetAndLockRequest proto;
+  set_location(proto, request.id);
+  proto.set_lock_time_secs(request.lock_time);
+  return proto;
+}
+
+inline auto
+decode(const v1::GetAndLockResponse& proto, key_value_error_context ctx)
+  -> operations::get_and_lock_response
+{
+  operations::get_and_lock_response response;
+  response.ctx = std::move(ctx);
+  if (content_is_compressed(proto)) {
+    response.ctx.override_ec(errc::common::feature_not_available);
+    return response;
+  }
+  response.value = utils::to_binary(proto.content_uncompressed());
+  response.cas = couchbase::cas{ proto.cas() };
+  response.flags = proto.content_flags();
+  return response;
+}
+
+inline auto
+encode(const operations::unlock_request& request) -> v1::UnlockRequest
+{
+  v1::UnlockRequest proto;
+  set_location(proto, request.id);
+  proto.set_cas(request.cas.value());
+  return proto;
+}
+
+inline auto
+decode(const v1::UnlockResponse& /* proto */, key_value_error_context ctx)
+  -> operations::unlock_response
+{
+  operations::unlock_response response;
+  response.ctx = std::move(ctx);
+  return response;
+}
+
+inline auto
+encode(const operations::get_and_touch_request& request) -> v1::GetAndTouchRequest
+{
+  v1::GetAndTouchRequest proto;
+  set_location(proto, request.id);
+  set_expiry(proto, request.expiry);
+  return proto;
+}
+
+inline auto
+decode(const v1::GetAndTouchResponse& proto, key_value_error_context ctx)
+  -> operations::get_and_touch_response
+{
+  operations::get_and_touch_response response;
+  response.ctx = std::move(ctx);
+  if (content_is_compressed(proto)) {
+    response.ctx.override_ec(errc::common::feature_not_available);
+    return response;
+  }
+  response.value = utils::to_binary(proto.content_uncompressed());
+  response.cas = couchbase::cas{ proto.cas() };
+  response.flags = proto.content_flags();
+  return response;
+}
+
+template<typename Request, typename Proto>
+inline void
+set_counter_fields(Proto& proto, const Request& request)
+{
+  set_location(proto, request.id);
+  proto.set_delta(request.delta);
+  set_expiry(proto, request.expiry);
+  if (request.initial_value.has_value()) {
+    proto.set_initial(static_cast<std::int64_t>(request.initial_value.value()));
+  }
+  if (const auto level = to_proto_durability(request.durability_level); level) {
+    proto.set_durability_level(*level);
+  }
+}
+
+template<typename Response, typename Proto>
+inline auto
+decode_counter(const Proto& proto, key_value_error_context ctx) -> Response
+{
+  Response response;
+  response.ctx = std::move(ctx);
+  response.content = static_cast<std::uint64_t>(proto.content());
+  response.cas = couchbase::cas{ proto.cas() };
+  if (proto.has_mutation_token()) {
+    response.token = to_core_token(proto.mutation_token());
+  }
+  return response;
+}
+
+inline auto
+encode(const operations::increment_request& request) -> v1::IncrementRequest
+{
+  v1::IncrementRequest proto;
+  set_counter_fields(proto, request);
+  return proto;
+}
+
+inline auto
+decode(const v1::IncrementResponse& proto, key_value_error_context ctx)
+  -> operations::increment_response
+{
+  return decode_counter<operations::increment_response>(proto, std::move(ctx));
+}
+
+inline auto
+encode(const operations::decrement_request& request) -> v1::DecrementRequest
+{
+  v1::DecrementRequest proto;
+  set_counter_fields(proto, request);
+  return proto;
+}
+
+inline auto
+decode(const v1::DecrementResponse& proto, key_value_error_context ctx)
+  -> operations::decrement_response
+{
+  return decode_counter<operations::decrement_response>(proto, std::move(ctx));
+}
+
+inline auto
+encode(const operations::append_request& request) -> v1::AppendRequest
+{
+  v1::AppendRequest proto;
+  set_location(proto, request.id);
+  proto.set_content(utils::to_string(request.value));
+  if (request.cas.value() != 0) {
+    proto.set_cas(request.cas.value());
+  }
+  if (const auto level = to_proto_durability(request.durability_level); level) {
+    proto.set_durability_level(*level);
+  }
+  return proto;
+}
+
+inline auto
+decode(const v1::AppendResponse& proto, key_value_error_context ctx) -> operations::append_response
+{
+  return decode_mutation<operations::append_response>(proto, std::move(ctx));
+}
+
+inline auto
+encode(const operations::prepend_request& request) -> v1::PrependRequest
+{
+  v1::PrependRequest proto;
+  set_location(proto, request.id);
+  proto.set_content(utils::to_string(request.value));
+  if (request.cas.value() != 0) {
+    proto.set_cas(request.cas.value());
+  }
+  if (const auto level = to_proto_durability(request.durability_level); level) {
+    proto.set_durability_level(*level);
+  }
+  return proto;
+}
+
+inline auto
+decode(const v1::PrependResponse& proto, key_value_error_context ctx)
+  -> operations::prepend_response
+{
+  return decode_mutation<operations::prepend_response>(proto, std::move(ctx));
 }
 
 } // namespace couchbase::core::protostellar::kv

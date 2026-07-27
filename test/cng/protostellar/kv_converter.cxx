@@ -26,6 +26,7 @@
 
 #include <array>
 #include <cstdint>
+#include <limits>
 #include <string>
 
 namespace couchbase::cng::test
@@ -158,6 +159,73 @@ expiry_encodes_every_branch_explicitly()
   }
 }
 
+// The counter seed is optional in the proto, so "not supplied" and "supplied as zero" are different
+// wire messages -- gocb always sends a seed and is the outlier; jvm and .NET send it only when the
+// caller asked for one, which is what is pinned here. INT64_MAX is the largest representable seed
+// and must still be encoded exactly; anything above it is refused by the component before encoding
+// (see a_counter_seed_above_int64_max_is_rejected_before_dispatch), because this converter returns
+// the request message by value and has no error channel of its own.
+void
+counter_initial_value_is_optional_and_encodes_its_upper_bound()
+{
+  ops::increment_request without_seed;
+  without_seed.id = test_id();
+  const auto encoded_without = pk::encode(without_seed);
+  assert_true(!encoded_without.has_initial(),
+              "no seed was supplied, so the optional initial field stays absent");
+
+  ops::increment_request with_zero;
+  with_zero.id = test_id();
+  with_zero.initial_value = 0U;
+  const auto encoded_zero = pk::encode(with_zero);
+  assert_true(encoded_zero.has_initial(), "a seed of zero is still a seed and must be present");
+  assert_eq(encoded_zero.initial(), std::int64_t{ 0 }, "zero seed value");
+
+  ops::increment_request at_max;
+  at_max.id = test_id();
+  at_max.initial_value = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+  assert_eq(pk::encode(at_max).initial(),
+            std::numeric_limits<std::int64_t>::max(),
+            "the largest representable seed survives the narrowing unchanged");
+
+  ops::decrement_request decrement_at_max;
+  decrement_at_max.id = test_id();
+  decrement_at_max.initial_value =
+    static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+  assert_eq(pk::encode(decrement_at_max).initial(),
+            std::numeric_limits<std::int64_t>::max(),
+            "decrement shares set_counter_fields, so it shares the bound");
+}
+
+// The remaining expiry-bearing operations added here. `touch` is pinned separately by
+// touch_always_sends_an_expiry_arm; these three shared the same defect and had no expiry assertion
+// at all. Like touch, none of them has a preserve_expiry option -- GetAndTouchRequest,
+// IncrementRequest and DecrementRequest have no such field in the proto -- so the oneof is the only
+// channel for the expiry and it must always be set. An omitted oneof would leave the gateway
+// nothing to act on, so get_and_touch(id, 0) would report success and leave the old TTL in place.
+void
+expiry_encodes_every_branch_for_get_and_touch_and_the_counters()
+{
+  for (const auto& expected : expiry_cases) {
+    const auto label = "expiry=" + std::to_string(expected.expiry);
+
+    ops::get_and_touch_request get_and_touch;
+    get_and_touch.id = test_id();
+    get_and_touch.expiry = expected.expiry;
+    assert_expiry(pk::encode(get_and_touch), expected, "get_and_touch " + label);
+
+    ops::increment_request increment;
+    increment.id = test_id();
+    increment.expiry = expected.expiry;
+    assert_expiry(pk::encode(increment), expected, "increment " + label);
+
+    ops::decrement_request decrement;
+    decrement.id = test_id();
+    decrement.expiry = expected.expiry;
+    assert_expiry(pk::encode(decrement), expected, "decrement " + label);
+  }
+}
+
 // preserve_expiry wins over expiry, which is what upsert_options and replace_options document, and
 // the gateway's encoding for it is an omitted oneof (kvserver.go:484 for upsert, :581 for replace).
 void
@@ -226,6 +294,21 @@ upsert_never_emits_a_gateway_rejected_expiry_shape()
                     label + ": a non-preserving upsert always sets the oneof");
       }
     }
+  }
+}
+
+// Touch and GetAndTouch have no preserve concept and reject an absent oneof outright -- their arm
+// dispatch falls through to "Expiry time specification is unknown." (kvserver.go:297-303 for Touch,
+// :131-137 for GetAndTouch). A zero expiry therefore has to be sent, not omitted; the gateway maps
+// it to never-expires (helpers.go:49-51), which is what touch(0) means on the classic path too.
+void
+touch_always_sends_an_expiry_arm()
+{
+  for (const auto& expected : expiry_cases) {
+    ops::touch_request touch;
+    touch.id = test_id();
+    touch.expiry = expected.expiry;
+    assert_expiry(pk::encode(touch), expected, "touch expiry=" + std::to_string(expected.expiry));
   }
 }
 
@@ -304,6 +387,84 @@ durability_none_is_left_unset()
   assert_false(proto.has_durability_level(), "insert leaves durability unset for none");
 }
 
+void
+lifecycle_ops_encode_expected_fields()
+{
+  ops::touch_request touch;
+  touch.id = document_id{ "b", "s", "c", "k" };
+  touch.expiry = 120U;
+  const auto touch_proto = pk::encode(touch);
+  assert_eq(touch_proto.key(), std::string{ "k" }, "touch key");
+  assert_true(touch_proto.expiry_case() == v1::TouchRequest::kExpirySecs, "touch expiry secs");
+  assert_eq(touch_proto.expiry_secs(), static_cast<std::uint32_t>(120), "touch expiry value");
+
+  ops::get_and_lock_request lock;
+  lock.id = document_id{ "b", "s", "c", "k" };
+  lock.lock_time = 30U;
+  assert_eq(pk::encode(lock).lock_time_secs(), static_cast<std::uint32_t>(30), "lock time");
+
+  ops::unlock_request unlock;
+  unlock.id = document_id{ "b", "s", "c", "k" };
+  unlock.cas = couchbase::cas{ 0x42ULL };
+  assert_eq(pk::encode(unlock).cas(), 0x42ULL, "unlock cas");
+}
+
+void
+exists_and_lock_responses_decode()
+{
+  v1::ExistsResponse exists_proto;
+  exists_proto.set_result(true);
+  exists_proto.set_cas(0x9ULL);
+  const auto exists = pk::decode(exists_proto, key_value_error_context{});
+  assert_true(exists.exists(), "exists result");
+  assert_eq(exists.cas.value(), 0x9ULL, "exists cas");
+
+  v1::GetAndLockResponse lock_proto;
+  lock_proto.set_content_uncompressed("locked-value");
+  lock_proto.set_cas(0xabcULL);
+  lock_proto.set_content_flags(0x06U);
+  const auto locked = pk::decode(lock_proto, key_value_error_context{});
+  assert_eq(cu::to_string(locked.value), std::string{ "locked-value" }, "get_and_lock value");
+  assert_eq(locked.cas.value(), 0xabcULL, "get_and_lock cas");
+}
+
+void
+counter_encodes_and_decodes()
+{
+  ops::increment_request inc;
+  inc.id = document_id{ "b", "s", "c", "counter" };
+  inc.delta = 5ULL;
+  inc.initial_value = 42ULL;
+  inc.expiry = 100U;
+  inc.durability_level = couchbase::durability_level::majority;
+  const auto proto = pk::encode(inc);
+  assert_eq(proto.delta(), 5ULL, "counter delta");
+  assert_true(proto.has_initial(), "counter initial set");
+  assert_eq(proto.initial(), std::int64_t{ 42 }, "counter initial value");
+  assert_true(proto.expiry_case() == v1::IncrementRequest::kExpirySecs, "counter expiry secs");
+  assert_true(proto.has_durability_level(), "counter durability set");
+
+  v1::IncrementResponse resp;
+  resp.set_cas(0x1ULL);
+  resp.set_content(43);
+  const auto result = pk::decode(resp, key_value_error_context{});
+  assert_eq(result.content, static_cast<std::uint64_t>(43), "counter content");
+  assert_eq(result.cas.value(), 0x1ULL, "counter cas");
+}
+
+void
+append_encodes_content_and_cas()
+{
+  ops::append_request append;
+  append.id = document_id{ "b", "s", "c", "k" };
+  append.value = cu::to_binary("-tail");
+  append.cas = couchbase::cas{ 0x55ULL };
+  const auto proto = pk::encode(append);
+  assert_eq(proto.content(), std::string{ "-tail" }, "append content");
+  assert_true(proto.has_cas(), "append cas set");
+  assert_eq(proto.cas(), 0x55ULL, "append cas value");
+}
+
 } // namespace
 
 auto
@@ -316,13 +477,22 @@ tests() -> test_suite
       { "get_response_decodes_value_cas_flags", get_response_decodes_value_cas_flags },
       { "get_response_refuses_compressed_content", get_response_refuses_compressed_content },
       { "expiry_encodes_every_branch_explicitly", expiry_encodes_every_branch_explicitly },
+      { "expiry_encodes_every_branch_for_get_and_touch_and_the_counters",
+        expiry_encodes_every_branch_for_get_and_touch_and_the_counters },
+      { "counter_initial_value_is_optional_and_encodes_its_upper_bound",
+        counter_initial_value_is_optional_and_encodes_its_upper_bound },
       { "preserve_expiry_omits_the_expiry_oneof", preserve_expiry_omits_the_expiry_oneof },
+      { "touch_always_sends_an_expiry_arm", touch_always_sends_an_expiry_arm },
       { "upsert_never_emits_a_gateway_rejected_expiry_shape",
         upsert_never_emits_a_gateway_rejected_expiry_shape },
       { "upsert_request_encodes_all_fields", upsert_request_encodes_all_fields },
       { "mutation_response_decodes_cas_and_token", mutation_response_decodes_cas_and_token },
       { "replace_and_remove_encode_cas", replace_and_remove_encode_cas },
       { "durability_none_is_left_unset", durability_none_is_left_unset },
+      { "lifecycle_ops_encode_expected_fields", lifecycle_ops_encode_expected_fields },
+      { "exists_and_lock_responses_decode", exists_and_lock_responses_decode },
+      { "counter_encodes_and_decodes", counter_encodes_and_decodes },
+      { "append_encodes_content_and_cas", append_encodes_content_and_cas },
     },
   };
 }

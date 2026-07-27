@@ -40,6 +40,8 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdint>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -66,6 +68,10 @@ public:
     -> grpc::Status override
   {
     record_auth(context);
+    last_project.clear();
+    for (int i = 0; i < request->project_size(); ++i) {
+      last_project.push_back(request->project(i));
+    }
     if (request->key() == "missing") {
       return { grpc::StatusCode::NOT_FOUND, "no such document" };
     }
@@ -148,6 +154,7 @@ public:
     return grpc::Status::OK;
   }
 
+  std::vector<std::string> last_project{};
   std::string last_auth_header{};
 
   // Test knobs. `reply_delay` makes every handler sleep before answering, so a client-side deadline
@@ -604,6 +611,43 @@ an_exhausted_default_timeout_is_also_rejected()
   assert_eq(server.service().calls_received.load(), 0, "nothing reached the server");
 }
 
+// increment_request::initial_value is uint64 while the proto's `initial` field is int64, so a seed
+// above INT64_MAX has no representation on the wire and would arrive as a negative number -- the
+// gateway would be asked to seed a counter with it. It is refused before anything is encoded.
+//
+// calls_received is the assertion that distinguishes the two stories: "refused locally" and "sent
+// and then rejected by the gateway" would both surface as invalid_argument, and only the counter
+// separates them.
+void
+a_counter_seed_above_int64_max_is_rejected_before_dispatch()
+{
+  in_process_server server;
+  asio::io_context io;
+  auto work = asio::make_work_guard(io);
+  component comp{ io, component_config{ server.channel(), cluster_credentials{}, { 5000ms } } };
+
+  ops::increment_request request;
+  request.id = make_id("k1");
+  request.initial_value =
+    static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) + 1ULL;
+
+  std::optional<ops::increment_response> outcome;
+  int completions = 0;
+  comp.execute(std::move(request), [&](ops::increment_response response) {
+    ++completions;
+    outcome = std::move(response);
+    work.reset();
+  });
+  io.run();
+
+  assert_true(outcome.has_value(), "the handler runs");
+  assert_eq(completions, 1, "the handler runs exactly once");
+  assert_true(
+    outcome->ctx.ec() == couchbase::errc::common::invalid_argument,
+    "a counter seed that cannot be represented is an invalid argument, not a wrapped one");
+  assert_eq(server.service().calls_received.load(), 0, "nothing reached the server");
+}
+
 // Cancelling an in-flight call still completes the handler, exactly once. A cancellation that
 // dropped the completion would hang whatever is waiting on it, which is worse than the error.
 void
@@ -634,6 +678,33 @@ cancellation_completes_the_handler_once()
               "cancellation surfaces as request_canceled");
 }
 
+void
+get_projected_encodes_projections_and_decodes_response()
+{
+  in_process_server server;
+  asio::io_context io;
+  auto work = asio::make_work_guard(io);
+  component comp{ io, component_config{ server.channel(), cluster_credentials{}, 5000ms } };
+
+  ops::get_projected_request request;
+  request.id = make_id("k1");
+  request.projections = { "foo", "bar.baz" };
+
+  ops::get_projected_response outcome;
+  comp.execute(std::move(request), [&](ops::get_projected_response response) {
+    outcome = std::move(response);
+    work.reset();
+  });
+  io.run();
+
+  assert_false(static_cast<bool>(outcome.ctx.ec()), "get_projected succeeded");
+  assert_eq(cu::to_string(outcome.value), std::string{ "value:k1" }, "value round-trips");
+  assert_eq(outcome.cas.value(), 0x2222ULL, "cas round-trips");
+  assert_eq(server.service().last_project.size(), 2U, "projection size matches");
+  assert_eq(server.service().last_project[0], "foo", "first projection path matches");
+  assert_eq(server.service().last_project[1], "bar.baz", "second projection path matches");
+}
+
 } // namespace
 
 auto
@@ -643,6 +714,9 @@ tests() -> test_suite
     "protostellar_component",
     {
       { "get_round_trips_on_the_io_thread", get_round_trips_on_the_io_thread, timeout::network },
+      { "get_projected_encodes_projections_and_decodes_response",
+        get_projected_encodes_projections_and_decodes_response,
+        timeout::network },
       { "get_maps_not_found_into_the_error_context",
         get_maps_not_found_into_the_error_context,
         timeout::network },
@@ -673,6 +747,9 @@ tests() -> test_suite
       { "get_honours_the_request_timeout", get_honours_the_request_timeout, timeout::network },
       { "mutation_timeout_is_reported_as_ambiguous",
         mutation_timeout_is_reported_as_ambiguous,
+        timeout::network },
+      { "a_counter_seed_above_int64_max_is_rejected_before_dispatch",
+        a_counter_seed_above_int64_max_is_rejected_before_dispatch,
         timeout::network },
       { "an_exhausted_budget_is_rejected_before_dispatch",
         an_exhausted_budget_is_rejected_before_dispatch,
