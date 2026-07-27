@@ -66,6 +66,20 @@ function(add_cng_test relpath)
   add_test(NAME ${target} COMMAND $<TARGET_FILE:${target}>)
   # The harness returns 77 when every case was skipped; map that to ctest's "Skipped".
   set_tests_properties(${target} PROPERTIES SKIP_RETURN_CODE 77 LABELS "cng")
+  # Same TSan configuration cmake/Testing.cmake attaches to the Catch2 suites. Sanitizers are applied
+  # per target (cmake/Sanitizers.cmake), so gRPC and abseil -- fetched and built as ordinary
+  # dependencies -- carry no instrumentation, and TSan cannot see the happens-before edges inside
+  # their event-engine and futex code. Without ignore_noninstrumented_modules it reports those as
+  # races: dispatcher tests drive real gRPC threads and produced 54 such reports. Set on the test
+  # rather than in CI so a local `ctest` under TSan behaves the same way.
+  if(DEFINED COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS AND EXISTS "${COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS}")
+    set_tests_properties(
+      ${target}
+      PROPERTIES
+        ENVIRONMENT
+        "TSAN_OPTIONS=halt_on_error=0,second_deadlock_stack=1,ignore_noninstrumented_modules=1,suppressions=${COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS}"
+    )
+  endif()
 endfunction()
 
 add_cng_test(framework/framework_selftest)
@@ -83,6 +97,11 @@ if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 AND TARGET couchbase_cxx_protostellar)
   add_cng_test(protostellar/codegen_smoke)
   target_link_libraries(cng_codegen_smoke_test PRIVATE couchbase_cxx_protostellar)
 
-  # gRPC<->asio bridge (CXXCBC-889): links the transport lib and drives an in-process server.
-  add_cng_test(protostellar/dispatcher LIBS couchbase_cxx_protostellar_transport)
+  # gRPC<->asio bridge (CXXCBC-889). The transport now lives in the client library, so link
+  # that (LINK_CLIENT) plus the stubs library for the generated KvService the in-process test
+  # server implements.
+  add_cng_test(protostellar/dispatcher LINK_CLIENT LIBS couchbase_cxx_protostellar)
+
+  # TLS/auth credentials (CXXCBC-890).
+  add_cng_test(protostellar/credentials LINK_CLIENT LIBS couchbase_cxx_protostellar)
 endif()

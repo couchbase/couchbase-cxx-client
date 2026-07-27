@@ -63,6 +63,12 @@ function(enable_sanitizers project_name)
        STREQUAL
        "")
       target_compile_options(${project_name} PUBLIC -fsanitize=${LIST_OF_SANITIZERS})
+      if("thread" IN_LIST SANITIZERS AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "14.0.0")
+        # GCC 14+ emits -Wtsan compile-time warnings for std::atomic_thread_fence (e.g. in Asio headers).
+        # Under -Werror, this breaks compilation. -Wno-error=tsan prevents compile errors while keeping
+        # runtime TSan instrumentation (-fsanitize=thread) fully active to catch actual data races.
+        target_compile_options(${project_name} PUBLIC -Wno-error=tsan)
+      endif()
       target_link_libraries(${project_name} PUBLIC -fsanitize=${LIST_OF_SANITIZERS})
       target_compile_definitions(${project_name} PUBLIC COUCHBASE_CXX_CLIENT_BUILD_SANITIZED=1)
       message(STATUS "Enabled sanitizers: ${LIST_OF_SANITIZERS}")

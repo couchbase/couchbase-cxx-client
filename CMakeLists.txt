@@ -510,6 +510,11 @@ set(couchbase_cxx_client_FILES
     core/cluster_label_listener.cxx
 )
 
+if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2)
+  # The Protostellar transport is compiled into the client library (see cmake/Protostellar.cmake).
+  list(APPEND couchbase_cxx_client_FILES ${couchbase_cxx_protostellar_TRANSPORT_FILES})
+endif()
+
 set(couchbase_cxx_client_LIBRARIES)
 set(couchbase_cxx_client_DEFAULT_LIBRARY)
 
@@ -594,6 +599,10 @@ foreach(TARGET ${couchbase_cxx_client_LIBRARIES})
             $<BUILD_INTERFACE:jsonsl>)
   if(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
     target_link_libraries(${TARGET} PRIVATE $<BUILD_INTERFACE:opentelemetry_api>)
+  endif()
+  if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2)
+    # Generated Protostellar stubs + gRPC/protobuf, consumed by core/protostellar/*.
+    target_link_libraries(${TARGET} PRIVATE $<BUILD_INTERFACE:couchbase_cxx_protostellar>)
   endif()
 
   if(HAVE_BACKTRACE)

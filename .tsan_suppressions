@@ -22,3 +22,12 @@ signal:operator delete
 # Catch2 RunContext is not thread-safe. Some integration tests call REQUIRE
 # macros from IO-thread callbacks, racing with Catch2's internal state.
 race:Catch::RunContext
+
+# gRPC and Abseil internal synchronization (uninstrumented gRPC calls)
+race:grpc_core::*
+race:grpc::*
+race:grpc_*
+race:gpr_*
+race:absl::*
+called_from_lib:libgrpc.so*
+called_from_lib:libgpr.so*
