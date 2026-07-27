@@ -20,6 +20,11 @@
 #ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
 #include "core/protostellar/component.hxx"
 #include "core/protostellar/credentials.hxx"
+#include "core/protostellar/error_utils.hxx"
+
+#include <couchbase/retry_strategy.hxx>
+
+#include <asio/steady_timer.hpp>
 #endif
 
 #define COUCHBASE_CXX_CLIENT_IGNORE_CORE_DEPRECATIONS
@@ -304,6 +309,23 @@ is_feature_supported(const operations::management::search_index_upsert_request& 
 {
   return !request.index.is_vector_index() || capabilities.supports_vector_search();
 }
+
+#ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
+// Extract the error_code from a response's error context. KV responses carry a
+// key_value_error_context (ec() accessor); the query/analytics/search/view/management responses
+// carry a plain error_context::* struct with an `ec` field.
+inline auto
+protostellar_response_ec(const key_value_error_context& ctx) -> std::error_code
+{
+  return ctx.ec();
+}
+template<typename Context>
+inline auto
+protostellar_response_ec(const Context& ctx) -> std::error_code
+{
+  return ctx.ec;
+}
+#endif
 } // namespace
 
 #ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
@@ -754,7 +776,7 @@ public:
 #ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
     if (auto component = protostellar_component(); component) {
       if constexpr (protostellar::component_supports_v<Request>) {
-        component->execute(std::move(request), std::forward<Handler>(handler));
+        execute_protostellar(std::move(request), std::forward<Handler>(handler));
         return;
       } else {
         return handler(request.make_response(
@@ -797,7 +819,9 @@ public:
 #ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
     if (auto component = protostellar_component(); component) {
       if constexpr (component_routes<Request>::value) {
-        component->execute(std::move(request), std::forward<Handler>(handler));
+        // Query/analytics/search/view/management requests do not carry a retry_context, so they
+        // dispatch directly; transport-level retry applies to the KV path (which does).
+        component->execute(request, std::forward<Handler>(handler));
         return;
       } else {
         // Remaining management ops over couchbase2 are not wired yet. Reject cleanly rather than
@@ -1007,6 +1031,116 @@ public:
     return false;
 #endif
   }
+
+#ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
+  // Execute a couchbase2 operation through the component with transport-level retry. Retryable
+  // errors (see protostellar::retry_reason_for) consult the request's retry strategy (falling back
+  // to the origin default), and on a positive decision the request is re-issued after a backoff.
+  // Idempotency is enforced by the strategy, so ambiguous mutations are not replayed.
+  //
+  // The deadline is resolved here, before the first attempt, and every attempt is issued against
+  // it. Falling back to the cluster's KV default when the request carries no timeout is what bounds
+  // the loop at all: the public API leaves the per-operation timeout unset unless the caller asks
+  // for one, and the strategy never refuses a retry for service_not_available, so a request issued
+  // with default options against an unavailable gateway would otherwise retry until the process
+  // ended -- never completing, and never reporting an error either.
+  template<class Request, class Handler>
+  void execute_protostellar(Request request, Handler&& handler)
+  {
+    // The fallback below is the KV default, so routing anything else here would bound it with a
+    // budget belonging to another service. Non-KV requests carry no retry_context and have their
+    // own path.
+    static_assert(protostellar::component_supports_v<Request>,
+                  "execute_protostellar resolves the key-value timeout");
+    const auto deadline = std::chrono::steady_clock::now() +
+                          request.timeout.value_or(origin_.options().key_value_timeout);
+    // Held by shared_ptr and re-issued from there. The request owns the document body for a
+    // mutation, so copying it to keep a re-issue possible charged every operation on the data plane
+    // for a retry that in normal operation never happens.
+    dispatch_protostellar(
+      std::make_shared<Request>(std::move(request)), std::forward<Handler>(handler), deadline);
+  }
+
+  // One attempt of the above, re-entered from the backoff timer for each retry.
+  template<class Request, class Handler>
+  void dispatch_protostellar(std::shared_ptr<Request> request,
+                             Handler&& handler,
+                             std::chrono::steady_clock::time_point deadline)
+  {
+    // Each attempt gets what is LEFT of the operation's budget rather than a fresh full-length one.
+    // Without this an attempt started just inside the deadline would run for the whole timeout
+    // again, so a retried operation could take roughly twice its nominal budget. Narrowing keeps
+    // the request carrying a duration -- which is all the component accepts -- while making that
+    // duration mean "until the operation's deadline". A non-positive remainder is not
+    // special-cased, and is in fact how the loop ends: the component rejects an exhausted budget
+    // as a timeout instead of dispatching a call with no deadline.
+    request->timeout = std::chrono::duration_cast<std::chrono::milliseconds>(
+      deadline - std::chrono::steady_clock::now());
+    // Re-read through the locked accessor on every attempt: a retry re-enters this
+    // function from a timer, long after the caller checked.
+    auto component = protostellar_component();
+    if (!component) {
+      return handler(
+        request->make_response(make_key_value_error_context(errc::network::cluster_closed,
+                                                            request->id,
+                                                            request->retries.retry_attempts(),
+                                                            request->retries.retry_reasons()),
+                               typename Request::encoded_response_type{}));
+    }
+    component->execute(
+      *request,
+      [self = shared_from_this(), request, handler = std::forward<Handler>(handler), deadline](
+        auto response) mutable {
+        if (!self->stopped_) {
+          if (auto reason = protostellar::retry_reason_for(protostellar_response_ec(response.ctx));
+              reason.has_value()) {
+            auto strategy = request->retries.strategy()
+                              ? request->retries.strategy()
+                              : self->origin_.options().default_retry_strategy_;
+            if (strategy) {
+              const auto action = strategy->retry_after(request->retries, reason.value());
+              // The wait is capped at the deadline rather than the retry being refused for landing
+              // past it. Refusing would end the operation early on the last attempt's transport
+              // error -- temporary_failure for an unreachable gateway -- while the caller's budget
+              // was still running, so the same condition that times out over the classic transport
+              // would report a different code here. Capping lets the operation use its whole budget
+              // and end on the deadline: the attempt scheduled at it gets a non-positive remainder
+              // above, which the component answers as a timeout carrying the accumulated attempts
+              // and reasons. That is terminal, so the loop cannot spin on it -- retry_reason_for
+              // does not classify a timeout as retryable. Both other implementations of this loop
+              // cap the same way (io/retry_orchestrator.hxx cap_duration, and Java's
+              // RetryOrchestratorProtostellar.capDuration).
+              const auto when =
+                std::min(std::chrono::steady_clock::now() + action.duration(), deadline);
+              if (action.need_to_retry()) {
+                // Recorded before the re-issue, so the next attempt carries the accumulated count
+                // and the error context it builds reports the retries that preceded it.
+                request->retries.record_retry_attempt(reason.value());
+                auto timer = std::make_shared<asio::steady_timer>(self->ctx_);
+                timer->expires_at(when);
+                timer->async_wait([self,
+                                   request,
+                                   handler = std::move(handler),
+                                   deadline,
+                                   response = std::move(response),
+                                   timer](const std::error_code& timer_ec) mutable {
+                  if (timer_ec) {
+                    // timer cancelled (e.g. cluster closed): deliver the last retryable response
+                    // rather than dropping the caller's completion, which would hang it.
+                    handler(std::move(response));
+                    return;
+                  }
+                  self->dispatch_protostellar(std::move(request), std::move(handler), deadline);
+                });
+                return;
+              }
+            }
+          }
+        }
+        handler(std::move(response));
+      });
+  }
+#endif
 
   void do_open(utils::movable_function<void(std::error_code)> handler)
   {

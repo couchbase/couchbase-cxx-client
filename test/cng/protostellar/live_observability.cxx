@@ -310,12 +310,14 @@ kv_op_emits_span_and_metric_over_couchbase2()
             std::string{ "_default" },
             "the metric is tagged with the collection");
 
-  // couchbase.retries is deliberately NOT asserted. It is emitted, but make_error_context pins
-  // retry_attempts at 0 and the retry loops never write the accumulated state back, so its value is
-  // always "0" regardless of what happened. Asserting "0" would lock that defect in as expected
-  // behaviour; it is tracked separately (CXXCBC-921).
+  // Only the presence of couchbase.retries is asserted here. The value is real for KV -- the retry
+  // loop's accumulated count reaches the error context -- but this upsert succeeds on its first
+  // attempt, so the only value it can carry is "0", and asserting that would pass just as well if
+  // the plumbing were removed again. What the count reports is pinned where it can fail:
+  // protostellar/kv_retry.cxx drives an operation that is actually retried. The other services
+  // still report zero whatever happened (CXXCBC-921).
   assert_false(observed->tag("upsert", "couchbase.retries").empty(),
-               "the retry attribute is present (its value is tracked by CXXCBC-921)");
+               "the retry attribute is present");
 }
 
 } // namespace

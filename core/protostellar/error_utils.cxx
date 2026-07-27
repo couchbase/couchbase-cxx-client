@@ -241,8 +241,28 @@ error_message(const grpc::Status& status) -> std::string
 }
 
 auto
-make_error_context(const grpc::Status& status, const document_id& id, operation_kind kind)
-  -> key_value_error_context
+retry_reason_for(std::error_code ec) -> std::optional<couchbase::retry_reason>
+{
+  // UNAVAILABLE maps to temporary_failure (error_utils map_status_code): the call did not reach a
+  // healthy server, so it is safe to retry (even for mutations — the strategy's
+  // allows_non_idempotent_retry(service_not_available) permits it). Everything else is terminal at
+  // the transport: timeouts consumed the budget, cas_mismatch/auth/not_found are semantic.
+  if (ec == errc::common::temporary_failure) {
+    return couchbase::retry_reason::service_not_available;
+  }
+  // A locked document (FAILED_PRECONDITION "LOCKED") is retried with backoff per RFC 77.
+  if (ec == errc::key_value::document_locked) {
+    return couchbase::retry_reason::key_value_locked;
+  }
+  return std::nullopt;
+}
+
+auto
+make_error_context(const grpc::Status& status,
+                   const document_id& id,
+                   operation_kind kind,
+                   std::size_t retry_attempts,
+                   std::set<couchbase::retry_reason> retry_reasons) -> key_value_error_context
 {
   const auto ec = map_status(status, kind);
   std::optional<key_value_extended_error_info> extended{};
@@ -256,8 +276,8 @@ make_error_context(const grpc::Status& status, const document_id& id, operation_
     ec,
     {},
     {},
-    0,
-    {},
+    retry_attempts,
+    std::move(retry_reasons),
     id.key(),
     id.bucket(),
     id.scope(),

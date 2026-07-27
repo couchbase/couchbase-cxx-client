@@ -17,8 +17,13 @@
 
 #pragma once
 
+#include <couchbase/retry_reason.hxx>
+
 #include <grpcpp/grpcpp.h>
 
+#include <cstddef>
+#include <optional>
+#include <set>
 #include <string>
 #include <system_error>
 
@@ -68,8 +73,25 @@ error_message(const grpc::Status& status) -> std::string;
 // Build a KV error context from a gRPC status: maps the status code to an error_code and, on
 // failure, attaches the server-provided message (see error_message) as the context's
 // human-readable explanation so callers see why the gateway rejected the operation.
+//
+// The retry counters are parameters rather than fixed at zero because only the caller knows them:
+// the retry loop lives in cluster_impl and accumulates them across attempts, while this function
+// sees one attempt at a time. RFC 77 makes them part of the error context, so a couchbase2
+// operation that was retried has to report it the way the classic transport does
+// (core/error_context/key_value.cxx carries the same pair for the same reason).
 [[nodiscard]] auto
-make_error_context(const grpc::Status& status, const document_id& id, operation_kind kind)
-  -> key_value_error_context;
+make_error_context(const grpc::Status& status,
+                   const document_id& id,
+                   operation_kind kind,
+                   std::size_t retry_attempts = 0,
+                   std::set<couchbase::retry_reason> retry_reasons = {}) -> key_value_error_context;
+
+// Classify a mapped error_code for the couchbase2 retry loop: returns the retry_reason to feed the
+// retry strategy, or nullopt when the error is not retryable at the transport. Transport-level
+// unavailability (UNAVAILABLE -> temporary_failure) and a locked document (document_locked ->
+// key_value_locked, RFC 77) retry; timeouts, cas mismatches, auth, etc. are terminal. Idempotency
+// is enforced downstream by the retry strategy, not here.
+[[nodiscard]] auto
+retry_reason_for(std::error_code ec) -> std::optional<couchbase::retry_reason>;
 
 } // namespace couchbase::core::protostellar

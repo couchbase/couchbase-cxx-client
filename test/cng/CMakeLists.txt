@@ -123,6 +123,9 @@ if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 AND TARGET couchbase_cxx_protostellar)
   add_cng_test(protostellar/component_kv_operations LINK_CLIENT LIBS couchbase_cxx_protostellar)
   add_cng_test(protostellar/live_kv_operations LINK_CLIENT LIBS couchbase_cxx_protostellar)
 
+  # KV transport-level retry, including the overall time budget (CXXCBC-896).
+  add_cng_test(protostellar/kv_retry LINK_CLIENT LIBS couchbase_cxx_protostellar)
+
   # Live KV verification vs a real gateway (CXXCBC-891).
   add_cng_test(protostellar/live_kv LINK_CLIENT LIBS couchbase_cxx_protostellar)
 
@@ -179,4 +182,5 @@ if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 AND TARGET couchbase_cxx_protostellar)
 
   # Live Search index management verification (CXXCBC-901).
   add_cng_test(protostellar/live_search_index_admin LINK_CLIENT LIBS couchbase_cxx_protostellar)
+
 endif()

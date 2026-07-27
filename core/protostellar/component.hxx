@@ -160,172 +160,172 @@ public:
   // Out of line: `stubs` is incomplete here, so its deleter cannot be instantiated in this header.
   ~component();
 
-  auto execute(operations::get_request request,
+  auto execute(const operations::get_request& request,
                utils::movable_function<void(operations::get_response)>&& handler) -> pending_call;
-  auto execute(operations::get_projected_request request,
+  auto execute(const operations::get_projected_request& request,
                utils::movable_function<void(operations::get_projected_response)>&& handler)
     -> pending_call;
-  auto execute(operations::upsert_request request,
+  auto execute(const operations::upsert_request& request,
                utils::movable_function<void(operations::upsert_response)>&& handler)
     -> pending_call;
-  auto execute(operations::insert_request request,
+  auto execute(const operations::insert_request& request,
                utils::movable_function<void(operations::insert_response)>&& handler)
     -> pending_call;
-  auto execute(operations::replace_request request,
+  auto execute(const operations::replace_request& request,
                utils::movable_function<void(operations::replace_response)>&& handler)
     -> pending_call;
-  auto execute(operations::remove_request request,
+  auto execute(const operations::remove_request& request,
                utils::movable_function<void(operations::remove_response)>&& handler)
     -> pending_call;
-  auto execute(operations::touch_request request,
+  auto execute(const operations::touch_request& request,
                utils::movable_function<void(operations::touch_response)>&& handler) -> pending_call;
-  auto execute(operations::exists_request request,
+  auto execute(const operations::exists_request& request,
                utils::movable_function<void(operations::exists_response)>&& handler)
     -> pending_call;
-  auto execute(operations::get_and_lock_request request,
+  auto execute(const operations::get_and_lock_request& request,
                utils::movable_function<void(operations::get_and_lock_response)>&& handler)
     -> pending_call;
-  auto execute(operations::unlock_request request,
+  auto execute(const operations::unlock_request& request,
                utils::movable_function<void(operations::unlock_response)>&& handler)
     -> pending_call;
-  auto execute(operations::get_and_touch_request request,
+  auto execute(const operations::get_and_touch_request& request,
                utils::movable_function<void(operations::get_and_touch_response)>&& handler)
     -> pending_call;
-  auto execute(operations::increment_request request,
+  auto execute(const operations::increment_request& request,
                utils::movable_function<void(operations::increment_response)>&& handler)
     -> pending_call;
-  auto execute(operations::decrement_request request,
+  auto execute(const operations::decrement_request& request,
                utils::movable_function<void(operations::decrement_response)>&& handler)
     -> pending_call;
-  auto execute(operations::append_request request,
+  auto execute(const operations::append_request& request,
                utils::movable_function<void(operations::append_response)>&& handler)
     -> pending_call;
-  auto execute(operations::prepend_request request,
+  auto execute(const operations::prepend_request& request,
                utils::movable_function<void(operations::prepend_response)>&& handler)
     -> pending_call;
 
   // N1QL query over the couchbase2 server-streaming transport. Rows are buffered into the response;
   // the terminal message carries the metadata.
-  auto execute(operations::query_request request,
+  auto execute(const operations::query_request& request,
                utils::movable_function<void(operations::query_response)>&& handler) -> pending_call;
 
   // Analytics over the couchbase2 server-streaming transport; same shape as query.
-  auto execute(operations::analytics_request request,
+  auto execute(const operations::analytics_request& request,
                utils::movable_function<void(operations::analytics_response)>&& handler)
     -> pending_call;
 
   // FTS search over the couchbase2 server-streaming transport. Hits are buffered into the response.
-  auto execute(operations::search_request request,
+  auto execute(const operations::search_request& request,
                utils::movable_function<void(operations::search_response)>&& handler)
     -> pending_call;
 
   // Map/reduce views over the couchbase2 server-streaming transport.
-  auto execute(operations::document_view_request request,
+  auto execute(const operations::document_view_request& request,
                utils::movable_function<void(operations::document_view_response)>&& handler)
     -> pending_call;
 
   // Bucket management (unary admin RPCs over admin.bucket.v1).
   auto execute(
-    operations::management::bucket_get_all_request request,
+    const operations::management::bucket_get_all_request& request,
     utils::movable_function<void(operations::management::bucket_get_all_response)>&& handler)
     -> pending_call;
-  auto execute(operations::management::bucket_get_request request,
+  auto execute(const operations::management::bucket_get_request& request,
                utils::movable_function<void(operations::management::bucket_get_response)>&& handler)
     -> pending_call;
   auto execute(
-    operations::management::bucket_create_request request,
+    const operations::management::bucket_create_request& request,
     utils::movable_function<void(operations::management::bucket_create_response)>&& handler)
     -> pending_call;
   auto execute(
-    operations::management::bucket_update_request request,
+    const operations::management::bucket_update_request& request,
     utils::movable_function<void(operations::management::bucket_update_response)>&& handler)
     -> pending_call;
   auto execute(
-    operations::management::bucket_drop_request request,
+    const operations::management::bucket_drop_request& request,
     utils::movable_function<void(operations::management::bucket_drop_response)>&& handler)
     -> pending_call;
   auto execute(
-    operations::management::bucket_flush_request request,
+    const operations::management::bucket_flush_request& request,
     utils::movable_function<void(operations::management::bucket_flush_response)>&& handler)
     -> pending_call;
 
   // Scope/collection management (unary admin RPCs over admin.collection.v1).
   auto execute(
-    operations::management::scope_get_all_request request,
+    const operations::management::scope_get_all_request& request,
     utils::movable_function<void(operations::management::scope_get_all_response)>&& handler)
     -> pending_call;
   auto execute(
-    operations::management::scope_create_request request,
+    const operations::management::scope_create_request& request,
     utils::movable_function<void(operations::management::scope_create_response)>&& handler)
     -> pending_call;
-  auto execute(operations::management::scope_drop_request request,
+  auto execute(const operations::management::scope_drop_request& request,
                utils::movable_function<void(operations::management::scope_drop_response)>&& handler)
     -> pending_call;
   auto execute(
-    operations::management::collection_create_request request,
+    const operations::management::collection_create_request& request,
     utils::movable_function<void(operations::management::collection_create_response)>&& handler)
     -> pending_call;
   auto execute(
-    operations::management::collection_update_request request,
+    const operations::management::collection_update_request& request,
     utils::movable_function<void(operations::management::collection_update_response)>&& handler)
     -> pending_call;
   auto execute(
-    operations::management::collection_drop_request request,
+    const operations::management::collection_drop_request& request,
     utils::movable_function<void(operations::management::collection_drop_response)>&& handler)
     -> pending_call;
 
   // Query index management (unary admin RPCs over admin.query.v1).
   auto execute(
-    operations::management::query_index_get_all_request request,
+    const operations::management::query_index_get_all_request& request,
     utils::movable_function<void(operations::management::query_index_get_all_response)>&& handler)
     -> pending_call;
   auto execute(
-    operations::management::query_index_create_request request,
+    const operations::management::query_index_create_request& request,
     utils::movable_function<void(operations::management::query_index_create_response)>&& handler)
     -> pending_call;
   auto execute(
-    operations::management::query_index_drop_request request,
+    const operations::management::query_index_drop_request& request,
     utils::movable_function<void(operations::management::query_index_drop_response)>&& handler)
     -> pending_call;
   auto execute(
-    operations::management::query_index_build_deferred_request request,
+    const operations::management::query_index_build_deferred_request& request,
     utils::movable_function<void(operations::management::query_index_build_deferred_response)>&&
       handler) -> pending_call;
 
   // Search index management (unary admin RPCs over admin.search.v1).
   auto execute(
-    operations::management::search_index_upsert_request request,
+    const operations::management::search_index_upsert_request& request,
     utils::movable_function<void(operations::management::search_index_upsert_response)>&& handler)
     -> pending_call;
   auto execute(
-    operations::management::search_index_get_request request,
+    const operations::management::search_index_get_request& request,
     utils::movable_function<void(operations::management::search_index_get_response)>&& handler)
     -> pending_call;
   auto execute(
-    operations::management::search_index_get_all_request request,
+    const operations::management::search_index_get_all_request& request,
     utils::movable_function<void(operations::management::search_index_get_all_response)>&& handler)
     -> pending_call;
   auto execute(
-    operations::management::search_index_drop_request request,
+    const operations::management::search_index_drop_request& request,
     utils::movable_function<void(operations::management::search_index_drop_response)>&& handler)
     -> pending_call;
   auto execute(
-    operations::management::search_index_analyze_document_request request,
+    const operations::management::search_index_analyze_document_request& request,
     utils::movable_function<void(operations::management::search_index_analyze_document_response)>&&
       handler) -> pending_call;
-  auto execute(operations::management::search_index_get_documents_count_request request,
+  auto execute(const operations::management::search_index_get_documents_count_request& request,
                utils::movable_function<
                  void(operations::management::search_index_get_documents_count_response)>&& handler)
     -> pending_call;
   auto execute(
-    operations::management::search_index_control_ingest_request request,
+    const operations::management::search_index_control_ingest_request& request,
     utils::movable_function<void(operations::management::search_index_control_ingest_response)>&&
       handler) -> pending_call;
   auto execute(
-    operations::management::search_index_control_query_request request,
+    const operations::management::search_index_control_query_request& request,
     utils::movable_function<void(operations::management::search_index_control_query_response)>&&
       handler) -> pending_call;
-  auto execute(operations::management::search_index_control_plan_freeze_request request,
+  auto execute(const operations::management::search_index_control_plan_freeze_request& request,
                utils::movable_function<
                  void(operations::management::search_index_control_plan_freeze_response)>&& handler)
     -> pending_call;
