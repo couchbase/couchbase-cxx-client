@@ -17,6 +17,11 @@
 
 #include <couchbase/build_config.hxx>
 
+#ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
+#include "core/protostellar/component.hxx"
+#include "core/protostellar/credentials.hxx"
+#endif
+
 #define COUCHBASE_CXX_CLIENT_IGNORE_CORE_DEPRECATIONS
 #include "cluster.hxx"
 
@@ -492,6 +497,25 @@ public:
                  couchbase::core::meta::sdk_semver(),
                  origin_.connection_string(),
                  origin_.to_json());
+    // The scheme is recognised in every build; only the ability to serve it is conditional. The
+    // parser stays identical either way, so no API or ABI depends on the build mode -- a build
+    // without couchbase2 support answers with a named error instead of attempting an MCBP handshake
+    // against the gateway's gRPC port, which surfaced as an unrelated bootstrap timeout.
+    if (origin_.uses_protostellar()) {
+#ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
+      return open_protostellar(std::move(handler));
+#else
+      CB_LOG_ERROR(
+        R"([{}]: cannot open "{}": this build has no couchbase2 support )"
+        "(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 is off), so the couchbase2:// scheme cannot be "
+        "served.",
+        id_,
+        origin_.connection_string());
+      stopped_ = true;
+      work_.reset();
+      return handler(errc::common::feature_not_available);
+#endif
+    }
     setup_observability();
     if (origin_.options().enable_dns_srv) {
       auto [hostname, port] = origin_.next_address();
@@ -704,6 +728,18 @@ public:
       return handler(request.make_response(
         make_key_value_error_context(errc::network::cluster_closed, request.id), response_type{}));
     }
+#ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
+    if (auto component = protostellar_component(); component) {
+      if constexpr (protostellar::component_supports_v<Request>) {
+        component->execute(std::move(request), std::forward<Handler>(handler));
+        return;
+      } else {
+        return handler(request.make_response(
+          make_key_value_error_context(errc::common::feature_not_available, request.id),
+          response_type{}));
+      }
+    }
+#endif
     if (auto bucket = find_bucket_by_name(request.id.bucket()); bucket != nullptr) {
       return bucket->execute(std::move(request), std::forward<Handler>(handler));
     }
@@ -735,6 +771,15 @@ public:
     if (stopped_) {
       return handler(request.make_response({ errc::network::cluster_closed }, response_type{}));
     }
+#ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
+    if (is_protostellar()) {
+      // Query/analytics/search/views/management over couchbase2 are not wired yet. Reject cleanly
+      // rather than falling through to the MCBP session manager, which is never bootstrapped on
+      // this path.
+      return handler(
+        request.make_response({ errc::common::feature_not_available }, response_type{}));
+    }
+#endif
     // cppcheck-suppress knownConditionTrueFalse
     if (!is_feature_supported(
           request, session_manager_->configuration_capabilities(), origin_.options())) {
@@ -823,6 +868,100 @@ public:
     for (const auto& bucket : buckets) {
       handler(bucket);
     }
+  }
+
+#ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
+  // couchbase2:// open path: the gateway does the routing, so there is no MCBP config bootstrap.
+  // Build a single gRPC channel + KV component to the first endpoint and report success.
+  void open_protostellar(utils::movable_function<void(std::error_code)>&& handler)
+  {
+    // next_address() dereferences the node iterator; a couchbase2:// string that parsed with no
+    // bootstrap node would make it UB, so fail cleanly instead.
+    if (origin_.get_nodes().empty()) {
+      return handler(errc::common::invalid_argument);
+    }
+    auto [hostname, port] = origin_.next_address();
+    auto endpoint = hostname + ":" + port;
+    // parse_connection_string() rejects a couchbase2:// string carrying more than one host, so this
+    // is only reachable for an origin assembled programmatically (set_nodes(), or the
+    // hostname/port constructors). Kept as a guard rather than an assertion: using the first
+    // endpoint is well defined, and the log says which one was chosen.
+    if (origin_.get_nodes().size() > 1) {
+      CB_LOG_INFO("[{}]: couchbase2 uses a single gateway endpoint (\"{}\"); the remaining {} "
+                  "node(s) on this origin are ignored (the gateway fronts the cluster).",
+                  id_,
+                  endpoint,
+                  origin_.get_nodes().size() - 1);
+    }
+
+    // Apply the same Capella safety clamp as the MCBP path (configure_tls_options): force peer
+    // verification against the managed service even if tls_verify=none was requested, and surface
+    // the same warnings. Without this the couchbase2 path would silently allow MITM on Capella.
+    auto options = origin_.options();
+    const auto requested_verify = options.tls_verify;
+    options.tls_verify = effective_tls_verify_mode(requested_verify, is_capella_host(hostname));
+    if (requested_verify == tls_verify_mode::none && options.tls_verify == tls_verify_mode::peer) {
+      CB_LOG_WARNING(R"([{}]: tls_verify=none was requested but "{}" is a Capella endpoint; )"
+                     "enforcing peer verification.",
+                     id_,
+                     hostname);
+    }
+    // The "verification is disabled" warning is not repeated here: make_channel_credentials() is
+    // the one point every couchbase2 channel passes through and warns there, so it also covers
+    // callers that build a component directly. Only the Capella clamp is specific to this path.
+
+    // Build the channel before starting observability. The two sibling failure paths in open()
+    // (an origin with no nodes) latch stopped_ and release the work guard while nothing has been
+    // started yet; doing the same after setup_observability() would leave its tracer, meter and
+    // reporters running with close() short-circuiting on stopped_ and never stopping them.
+    std::shared_ptr<grpc::Channel> channel;
+    try {
+      channel = protostellar::make_channel(endpoint, options, origin_.credentials());
+    } catch (const std::exception& e) {
+      CB_LOG_ERROR(R"([{}]: failed to establish couchbase2 channel: {})", id_, e.what());
+      stopped_ = true;
+      work_.reset();
+      return handler(errc::common::invalid_argument);
+    }
+    setup_observability();
+    {
+      // Written under the lock for symmetry with close(): the assignment itself happens before any
+      // caller can reach execute() (the open handler has not fired yet), but leaving one access
+      // unguarded is how the invariant gets lost later.
+      const std::scoped_lock lock(protostellar_mutex_);
+      protostellar_ = std::make_shared<protostellar::component>(
+        ctx_,
+        protostellar::component_config{
+          std::move(channel), origin_.credentials(), options.key_value_timeout });
+    }
+    CB_LOG_INFO(R"(open couchbase2 cluster, id: "{}", endpoint: "{}")", id_, endpoint);
+    return handler({});
+  }
+#endif
+
+#ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
+  // The KV component, or nullptr when this cluster is not a couchbase2 one. Returns a copy under
+  // the lock, in the same shape as find_bucket_by_name(): execute() runs on the caller's thread
+  // while close() resets the member on the io thread, and reading a shared_ptr that another thread
+  // is writing is a data race whatever the refcount does. Holding a copy also keeps the component
+  // alive for the duration of the call that is about to use it.
+  [[nodiscard]] auto protostellar_component() const -> std::shared_ptr<protostellar::component>
+  {
+    const std::scoped_lock lock(protostellar_mutex_);
+    return protostellar_;
+  }
+#endif
+
+  // True once the cluster has been opened with a couchbase2:// connection string. Compound /
+  // self-dispatching operations (replica reads, legacy durability) check this to reject cleanly
+  // instead of falling through to the MCBP bootstrap path, which does not exist on couchbase2.
+  [[nodiscard]] auto is_protostellar() const -> bool
+  {
+#ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
+    return protostellar_component() != nullptr;
+#else
+    return false;
+#endif
   }
 
   void do_open(utils::movable_function<void(std::error_code)> handler)
@@ -1276,6 +1415,19 @@ public:
         if (const auto session_manager = std::move(self->session_manager_); session_manager) {
           session_manager->close();
         }
+#ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
+        {
+          // Drop the reference under the lock, but destroy the component outside it: ~component
+          // drains in-flight gRPC calls, and holding protostellar_mutex_ across that would block
+          // every concurrent execute() on the io thread for the duration of the drain.
+          std::shared_ptr<protostellar::component> component;
+          {
+            const std::scoped_lock lock(self->protostellar_mutex_);
+            component = std::move(self->protostellar_);
+            self->protostellar_.reset();
+          }
+        }
+#endif
         self->work_.reset();
         // Observability members: stop in place, do NOT std::move. See the
         // comment above close() for why this matters across fork(child).
@@ -1437,6 +1589,14 @@ private:
   std::mutex buckets_mutex_{};
   std::map<std::string, std::shared_ptr<bucket>> buckets_{};
   couchbase::core::origin origin_{};
+#ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
+  // Set when the cluster was opened with a couchbase2:// connection string; KV ops route here
+  // instead of to the MCBP session manager. Guarded by protostellar_mutex_: execute() reads it on
+  // the caller's thread while close() resets it on the io thread. Always reach it through
+  // protostellar_component(). Mutable so the const observers can lock.
+  mutable std::mutex protostellar_mutex_{};
+  std::shared_ptr<protostellar::component> protostellar_{};
+#endif
   std::shared_ptr<class cluster_label_listener> cluster_label_listener_{
     std::make_shared<class cluster_label_listener>()
   };
@@ -1629,6 +1789,10 @@ cluster::execute(
   operations::get_all_replicas_request request,
   utils::movable_function<void(operations::get_all_replicas_response)>&& handler) const
 {
+  if (impl_->is_protostellar()) {
+    return handler(operations::get_all_replicas_response{
+      make_key_value_error_context(errc::common::feature_not_available, request.id) });
+  }
   auto bucket_name = request.id.bucket();
   return open_bucket(
     bucket_name,
@@ -1660,6 +1824,10 @@ cluster::execute(
   operations::get_any_replica_request request,
   utils::movable_function<void(operations::get_any_replica_response)>&& handler) const
 {
+  if (impl_->is_protostellar()) {
+    return handler(operations::get_any_replica_response{
+      make_key_value_error_context(errc::common::feature_not_available, request.id) });
+  }
   auto bucket_name = request.id.bucket();
   return open_bucket(
     bucket_name,
@@ -1705,6 +1873,14 @@ cluster::execute(
   operations::lookup_in_any_replica_request request,
   utils::movable_function<void(operations::lookup_in_any_replica_response)>&& handler) const
 {
+  if (impl_->is_protostellar()) {
+    return handler(operations::lookup_in_any_replica_response{ make_subdocument_error_context(
+      make_key_value_error_context(errc::common::feature_not_available, request.id),
+      errc::common::feature_not_available,
+      {},
+      {},
+      false) });
+  }
   return request.execute(impl_, std::move(handler));
 }
 
@@ -1713,6 +1889,14 @@ cluster::execute(
   operations::lookup_in_all_replicas_request request,
   utils::movable_function<void(operations::lookup_in_all_replicas_response)>&& handler) const
 {
+  if (impl_->is_protostellar()) {
+    return handler(operations::lookup_in_all_replicas_response{ make_subdocument_error_context(
+      make_key_value_error_context(errc::common::feature_not_available, request.id),
+      errc::common::feature_not_available,
+      {},
+      {},
+      false) });
+  }
   return request.execute(impl_, std::move(handler));
 }
 
@@ -2540,6 +2724,10 @@ void
 cluster::execute(operations::upsert_request_with_legacy_durability request,
                  utils::movable_function<void(operations::upsert_response)>&& handler) const
 {
+  if (impl_->is_protostellar()) {
+    return handler(operations::upsert_response{
+      make_key_value_error_context(errc::common::feature_not_available, request.id) });
+  }
   return request.execute(*this, std::move(handler));
 }
 
@@ -2547,6 +2735,10 @@ void
 cluster::execute(operations::insert_request_with_legacy_durability request,
                  utils::movable_function<void(operations::insert_response)>&& handler) const
 {
+  if (impl_->is_protostellar()) {
+    return handler(operations::insert_response{
+      make_key_value_error_context(errc::common::feature_not_available, request.id) });
+  }
   return request.execute(*this, std::move(handler));
 }
 
@@ -2554,6 +2746,10 @@ void
 cluster::execute(operations::append_request_with_legacy_durability request,
                  utils::movable_function<void(operations::append_response)>&& handler) const
 {
+  if (impl_->is_protostellar()) {
+    return handler(operations::append_response{
+      make_key_value_error_context(errc::common::feature_not_available, request.id) });
+  }
   return request.execute(*this, std::move(handler));
 }
 
@@ -2561,6 +2757,10 @@ void
 cluster::execute(operations::prepend_request_with_legacy_durability request,
                  utils::movable_function<void(operations::prepend_response)>&& handler) const
 {
+  if (impl_->is_protostellar()) {
+    return handler(operations::prepend_response{
+      make_key_value_error_context(errc::common::feature_not_available, request.id) });
+  }
   return request.execute(*this, std::move(handler));
 }
 
@@ -2568,6 +2768,10 @@ void
 cluster::execute(operations::replace_request_with_legacy_durability request,
                  utils::movable_function<void(operations::replace_response)>&& handler) const
 {
+  if (impl_->is_protostellar()) {
+    return handler(operations::replace_response{
+      make_key_value_error_context(errc::common::feature_not_available, request.id) });
+  }
   return request.execute(*this, std::move(handler));
 }
 
@@ -2575,6 +2779,14 @@ void
 cluster::execute(operations::mutate_in_request_with_legacy_durability request,
                  utils::movable_function<void(operations::mutate_in_response)>&& handler) const
 {
+  if (impl_->is_protostellar()) {
+    return handler(operations::mutate_in_response{ make_subdocument_error_context(
+      make_key_value_error_context(errc::common::feature_not_available, request.id),
+      errc::common::feature_not_available,
+      {},
+      {},
+      false) });
+  }
   return request.execute(*this, std::move(handler));
 }
 
@@ -2582,6 +2794,10 @@ void
 cluster::execute(operations::remove_request_with_legacy_durability request,
                  utils::movable_function<void(operations::remove_response)>&& handler) const
 {
+  if (impl_->is_protostellar()) {
+    return handler(operations::remove_response{
+      make_key_value_error_context(errc::common::feature_not_available, request.id) });
+  }
   return request.execute(*this, std::move(handler));
 }
 
@@ -2589,6 +2805,10 @@ void
 cluster::execute(operations::increment_request_with_legacy_durability request,
                  utils::movable_function<void(operations::increment_response)>&& handler) const
 {
+  if (impl_->is_protostellar()) {
+    return handler(operations::increment_response{
+      make_key_value_error_context(errc::common::feature_not_available, request.id) });
+  }
   return request.execute(*this, std::move(handler));
 }
 
@@ -2596,6 +2816,10 @@ void
 cluster::execute(operations::decrement_request_with_legacy_durability request,
                  utils::movable_function<void(operations::decrement_response)>&& handler) const
 {
+  if (impl_->is_protostellar()) {
+    return handler(operations::decrement_response{
+      make_key_value_error_context(errc::common::feature_not_available, request.id) });
+  }
   return request.execute(*this, std::move(handler));
 }
 

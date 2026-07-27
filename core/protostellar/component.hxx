@@ -52,6 +52,21 @@ struct component_config {
   std::chrono::milliseconds default_kv_timeout{ timeout_defaults::key_value_timeout };
 };
 
+// The core KV request types the component can execute over couchbase2. cluster_impl routes only
+// these to the component; any other KV request is answered with feature_not_available.
+template<typename Request>
+inline constexpr bool component_supports_v = false;
+template<>
+inline constexpr bool component_supports_v<operations::get_request> = true;
+template<>
+inline constexpr bool component_supports_v<operations::upsert_request> = true;
+template<>
+inline constexpr bool component_supports_v<operations::insert_request> = true;
+template<>
+inline constexpr bool component_supports_v<operations::replace_request> = true;
+template<>
+inline constexpr bool component_supports_v<operations::remove_request> = true;
+
 class component
 {
 public:
