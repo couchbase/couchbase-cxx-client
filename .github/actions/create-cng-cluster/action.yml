@@ -60,25 +60,48 @@ runs:
         # to the kubeconfig's current-context -- which is exactly what `k3d cluster create` sets.
         cbdinocluster -v init --auto --kube-config "$HOME/.kube/config"
         cbdinocluster ps
+    - name: Report runner capacity
+      shell: bash
+      run: |
+        # Three server pods plus k3s, the operator and the gateway share one runner, and when that
+        # does not fit the failure surfaces as a pod that never becomes ready -- which reads like a
+        # deployment problem rather than a resource one. Printed before allocation so the first
+        # failing run already carries the numbers, instead of costing a second run to collect them.
+        echo "== cpu";    nproc; cat /proc/loadavg
+        echo "== memory"; free -h
+        echo "== disk";   df -h / /var/lib/docker 2>/dev/null
+        echo "== kubernetes node capacity"
+        kubectl get nodes -o custom-columns='NAME:.metadata.name,CPU:.status.capacity.cpu,MEM:.status.capacity.memory,PODS:.status.capacity.pods'
     - name: Start Couchbase cluster with Cloud Native Gateway
       id: start-cluster
       shell: bash
       env:
-        # Single node: a GitHub-hosted runner has 4 vCPU / 16 GB, and the operator, the gateway and
-        # a server pod all have to fit. The `docker:` memory block that create-cluster uses is
-        # ignored by the cao deployer, so quotas stay at the server defaults (256 MB).
+        # Three KV nodes, which is what create-cluster allocates for the non-CNG suites on the same
+        # runner. A single node cannot satisfy any minimum durability level, so the bucket case that
+        # asks for one skips there instead of running -- and a topology that silently skips a case
+        # is how a test comes to pass everywhere except where it matters.
+        #
+        # The `docker:` memory block that create-cluster uses is ignored by the cao deployer, and its
+        # `cao:` section has no quota fields either, so the operator's 256 MiB service defaults apply
+        # until the resource is patched below.
         #
         # fts is in the list because the live search case needs a search service to answer, not an
         # index. It queries an index that was never created and accepts the gateway's
         # index-not-found, which is an answer only a cluster running fts can give; without the
         # service the request fails as an internal error instead and the case goes red. No index is
         # built here, so the default search quota is enough -- one that has to serve queries needs
-        # considerably more, which is a problem for whoever adds search index management.
+        # considerably more, which is what search index management will have to provision for.
         CLUSTER_CONFIG: |
           nodes:
             - count: 1
               version: ${{ inputs.version }}
-              services: [kv, n1ql, index, fts]
+              services: [kv, n1ql, index]
+            - count: 1
+              version: ${{ inputs.version }}
+              services: [kv, fts]
+            - count: 1
+              version: ${{ inputs.version }}
+              services: [kv]
           cao:
             operator-version: "${{ inputs.operator-version }}"
             gateway-version: "${{ inputs.gateway-version }}"
@@ -90,19 +113,53 @@ runs:
         # The tests set tls_verify_mode::none themselves, so the bare connstr is what they want:
         # couchbase2 is always TLS and the gateway's dev certificate is not chainable.
         echo "connstr=$(cbdinocluster -v connstr --couchbase2 $CBDC_ID)" >> "$GITHUB_OUTPUT"
+    - name: Raise the data service quota
+      shell: bash
+      run: |
+        # The bucket management cases create a bucket of their own, and at the operator's 256 MiB
+        # default the 100 MB test bucket leaves too little room for one -- they would report the
+        # gateway's "ram quota specified is too large" and skip, so the suite would stay green while
+        # testing less. 512 MiB is the smallest quota that fits the test bucket plus a 128 MB bucket
+        # under update, and is nothing against the runner's 16 GB.
+        #
+        # It has to be a patch: the quota cannot be expressed in the cluster definition, and setting
+        # it through /pools/default is reconciled away by the operator within the minute.
+        kubectl -n "cbdc2-$CBDC_ID" patch couchbasecluster cluster --type=merge \
+          -p '{"spec":{"cluster":{"dataServiceMemoryQuota":"512Mi"}}}'
+        # Waiting on condition=Available would prove nothing: it is already true from before the
+        # patch, so the wait returns instantly and the bucket could be created against the old
+        # quota. Poll the cluster itself for the applied value, and fail rather than let the
+        # bucket-management cases quietly skip for want of room.
+        MGMT=$(cbdinocluster mgmt "$CBDC_ID" | tail -1)
+        for _ in $(seq 1 30); do
+          QUOTA=$(curl -sS -u Administrator:password "$MGMT/pools/default" | jq -r '.memoryQuota')
+          echo "data service quota: $QUOTA"
+          [ "$QUOTA" = "512" ] && break
+          sleep 5
+        done
+        [ "$QUOTA" = "512" ] || { echo "::error::data service quota never reached 512 MiB"; exit 1; }
     - name: Add bucket
       shell: bash
       env:
         # Map input to an environment variable to prevent shell injection
         BUCKET: ${{ inputs.bucket }}
       run: |
-        # num-replicas 0: a single-node cluster cannot satisfy replicas, and the bucket would
-        # never come healthy.
-        cbdinocluster buckets add $CBDC_ID "$BUCKET" --ram-quota-mb 100 --num-replicas 0
+        # One replica, which three KV nodes can hold: a replica-less bucket is not what anything runs
+        # in production, and it hides the durability and replica-read paths behind a topology no
+        # caller has.
+        cbdinocluster buckets add $CBDC_ID "$BUCKET" --ram-quota-mb 100 --num-replicas 1
     - name: Dump cluster state on failure
       if: ${{ failure() }}
       shell: bash
       run: |
+        # Resources first: a pod that never became ready because the runner ran out of memory looks
+        # identical to one that failed to deploy, and only these two say which it was.
+        echo "== memory at failure"; free -h
+        echo "== disk at failure";   df -h / /var/lib/docker 2>/dev/null | sort -u
+        # Allocatable vs the sum of pod requests, plus any eviction or scheduling conditions.
+        kubectl describe nodes || true
+        # Pending pods and OOM kills show up here rather than in the pod description.
+        kubectl get events -A --sort-by=.lastTimestamp | tail -50 || true
         kubectl get pods,svc -A || true
         # The CouchbaseCluster CRD only exists once the operator is installed, so tolerate its
         # absence rather than letting it mask the output above.

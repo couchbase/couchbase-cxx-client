@@ -25,6 +25,7 @@
 #include "core/operations/analytics_response_parsing.hxx"
 #include "core/operations/query_response_parsing.hxx"
 #include "core/protostellar/analytics_converter.hxx"
+#include "core/protostellar/bucket_admin_converter.hxx"
 #include "core/protostellar/credentials.hxx"
 #include "core/protostellar/error_utils.hxx"
 #include "core/protostellar/kv_converter.hxx"
@@ -37,6 +38,7 @@
 #include "core/protostellar/query_proto.hxx"
 #include <couchbase/analytics/v1/analytics.grpc.pb.h>
 
+#include <couchbase/admin/bucket/v1/bucket.grpc.pb.h>
 #include <couchbase/kv/v1/kv.grpc.pb.h>
 #include <couchbase/search/v1/search.grpc.pb.h>
 #include <couchbase/view/v1/view.grpc.pb.h>
@@ -59,6 +61,7 @@ namespace query_v1 = ::couchbase::query::v1;
 namespace analytics_v1 = ::couchbase::analytics::v1;
 namespace search_v1 = ::couchbase::search::v1;
 namespace view_v1 = ::couchbase::view::v1;
+namespace bucket_admin_v1 = ::couchbase::admin::bucket::v1;
 
 // Defined here rather than in the header so the generated gRPC types stay out of every consumer of
 // component.hxx.
@@ -68,6 +71,7 @@ struct component::stubs {
   std::unique_ptr<analytics_v1::AnalyticsService::Stub> analytics;
   std::unique_ptr<search_v1::SearchService::Stub> search;
   std::unique_ptr<view_v1::ViewService::Stub> view;
+  std::unique_ptr<bucket_admin_v1::BucketAdminService::Stub> bucket_admin;
 };
 
 namespace
@@ -110,15 +114,35 @@ fail_expired_ctx(asio::io_context& io, Handler& handler, Response response) -> p
   });
   return {};
 }
+
+// A management response carrying the caller's client_context_id, which is what correlates it with
+// the request that produced it when several are in flight. The http error context has the field and
+// the classic path fills it, so leaving it empty here would lose the identifier on the couchbase2
+// path alone -- most visibly on the paths that send nothing, where there is no server response to
+// correlate by either.
+//
+// Only what the caller supplied is echoed. The classic path substitutes a generated uuid for an
+// absent one because it travels with the HTTP request and comes back in the server's own logs;
+// couchbase2 sends no such field, so an id the caller never chose would identify nothing.
+template<typename Request>
+[[nodiscard]] auto
+stamped_management(const Request& request) -> typename Request::response_type
+{
+  typename Request::response_type response;
+  response.ctx.client_context_id = request.client_context_id.value_or(std::string{});
+  return response;
+}
 } // namespace
 
 component::component(asio::io_context& io, component_config config)
   : io_{ io }
-  , stubs_{ std::make_unique<stubs>(stubs{ v1::KvService::NewStub(config.channel),
-                                           query_v1::QueryService::NewStub(config.channel),
-                                           analytics_v1::AnalyticsService::NewStub(config.channel),
-                                           search_v1::SearchService::NewStub(config.channel),
-                                           view_v1::ViewService::NewStub(config.channel) }) }
+  , stubs_{ std::make_unique<stubs>(
+      stubs{ v1::KvService::NewStub(config.channel),
+             query_v1::QueryService::NewStub(config.channel),
+             analytics_v1::AnalyticsService::NewStub(config.channel),
+             search_v1::SearchService::NewStub(config.channel),
+             view_v1::ViewService::NewStub(config.channel),
+             bucket_admin_v1::BucketAdminService::NewStub(config.channel) }) }
   , authorization_{ authorization_header(config.credentials) }
   , timeouts_{ config.timeouts }
   // Initialised last (see the declaration order in the header), so the channel can be moved in.
@@ -967,6 +991,249 @@ component::execute(operations::document_view_request request,
       response->ctx.view_name = std::move(view_name);
       response->ctx.client_context_id = std::move(client_context_id);
       handler(std::move(*response));
+    });
+}
+
+auto
+component::execute(
+  operations::management::bucket_get_all_request request,
+  utils::movable_function<void(operations::management::bucket_get_all_response)>&& handler)
+  -> pending_call
+{
+  const auto client_context_id = request.client_context_id.value_or(std::string{});
+  auto proto = std::make_shared<bucket_admin_v1::ListBucketsRequest>();
+  const auto timeout = request.timeout.value_or(timeouts_.management);
+  if (timeout <= std::chrono::milliseconds::zero()) {
+    return fail_expired_ctx(io_, handler, stamped_management(request));
+  }
+  const auto auth = authorization_;
+  auto* stub = stubs_->bucket_admin.get();
+  return dispatcher_.unary<bucket_admin_v1::ListBucketsResponse>(
+    timeout,
+    [stub, proto, auth](grpc::ClientContext& ctx,
+                        bucket_admin_v1::ListBucketsResponse& resp,
+                        std::function<void(grpc::Status)> cb) {
+      if (!auth.empty()) {
+        ctx.AddMetadata("authorization", auth);
+      }
+      stub->async()->ListBuckets(&ctx, proto.get(), &resp, std::move(cb));
+    },
+    [handler = std::move(handler), proto, client_context_id](
+      grpc::Status status, bucket_admin_v1::ListBucketsResponse resp) mutable {
+      (void)proto; // kept only to keep the request alive for the call
+      operations::management::bucket_get_all_response response;
+      response.ctx.client_context_id = client_context_id;
+      response.ctx.ec = map_status(status, operation_kind::read_only);
+      for (const auto& bucket : resp.buckets()) {
+        response.buckets.push_back(bucket_admin::decode_bucket(bucket));
+      }
+      handler(std::move(response));
+    });
+}
+
+auto
+component::execute(
+  operations::management::bucket_get_request request,
+  utils::movable_function<void(operations::management::bucket_get_response)>&& handler)
+  -> pending_call
+{
+  const auto client_context_id = request.client_context_id.value_or(std::string{});
+  // admin.bucket.v1 has no GetBucket RPC; filter the bucket list by name.
+  auto proto = std::make_shared<bucket_admin_v1::ListBucketsRequest>();
+  const auto timeout = request.timeout.value_or(timeouts_.management);
+  if (timeout <= std::chrono::milliseconds::zero()) {
+    return fail_expired_ctx(io_, handler, stamped_management(request));
+  }
+  const auto auth = authorization_;
+  const auto name = request.name;
+  auto* stub = stubs_->bucket_admin.get();
+  return dispatcher_.unary<bucket_admin_v1::ListBucketsResponse>(
+    timeout,
+    [stub, proto, auth](grpc::ClientContext& ctx,
+                        bucket_admin_v1::ListBucketsResponse& resp,
+                        std::function<void(grpc::Status)> cb) {
+      if (!auth.empty()) {
+        ctx.AddMetadata("authorization", auth);
+      }
+      stub->async()->ListBuckets(&ctx, proto.get(), &resp, std::move(cb));
+    },
+    [handler = std::move(handler), proto, client_context_id, name](
+      grpc::Status status, bucket_admin_v1::ListBucketsResponse resp) mutable {
+      (void)proto; // kept only to keep the request alive for the call
+      operations::management::bucket_get_response response;
+      response.ctx.client_context_id = client_context_id;
+      response.ctx.ec = map_status(status, operation_kind::read_only);
+      if (!response.ctx.ec) {
+        bool found = false;
+        for (const auto& bucket : resp.buckets()) {
+          if (bucket.bucket_name() == name) {
+            response.bucket = bucket_admin::decode_bucket(bucket);
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          response.ctx.ec = errc::common::bucket_not_found;
+        }
+      }
+      handler(std::move(response));
+    });
+}
+
+auto
+component::execute(
+  operations::management::bucket_create_request request,
+  utils::movable_function<void(operations::management::bucket_create_response)>&& handler)
+  -> pending_call
+{
+  const auto client_context_id = request.client_context_id.value_or(std::string{});
+  auto proto = std::make_shared<bucket_admin_v1::CreateBucketRequest>();
+  bucket_admin::apply_settings(request.bucket, *proto);
+  if (!bucket_admin::apply_create_only_settings(request.bucket, *proto)) {
+    operations::management::bucket_create_response response;
+    response.ctx.client_context_id = client_context_id;
+    response.ctx.ec = errc::common::feature_not_available;
+    // Posted rather than invoked here, for the reason fail_expired gives: completions arrive on the
+    // io context, never inline out of execute().
+    asio::post(io_, [handler = std::move(handler), response = std::move(response)]() mutable {
+      handler(std::move(response));
+    });
+    return {};
+  }
+  const auto timeout = request.timeout.value_or(timeouts_.management);
+  if (timeout <= std::chrono::milliseconds::zero()) {
+    return fail_expired_ctx(io_, handler, stamped_management(request));
+  }
+  const auto auth = authorization_;
+  auto* stub = stubs_->bucket_admin.get();
+  return dispatcher_.unary<bucket_admin_v1::CreateBucketResponse>(
+    timeout,
+    [stub, proto, auth](grpc::ClientContext& ctx,
+                        bucket_admin_v1::CreateBucketResponse& resp,
+                        std::function<void(grpc::Status)> cb) {
+      if (!auth.empty()) {
+        ctx.AddMetadata("authorization", auth);
+      }
+      stub->async()->CreateBucket(&ctx, proto.get(), &resp, std::move(cb));
+    },
+    [handler = std::move(handler), proto, client_context_id](
+      grpc::Status status, bucket_admin_v1::CreateBucketResponse /* resp */) mutable {
+      (void)proto; // kept only to keep the request alive for the call
+      operations::management::bucket_create_response response;
+      response.ctx.client_context_id = client_context_id;
+      response.ctx.ec = map_status(status, operation_kind::mutating);
+      if (response.ctx.ec) {
+        response.error_message = error_message(status);
+      }
+      handler(std::move(response));
+    });
+}
+
+auto
+component::execute(
+  operations::management::bucket_update_request request,
+  utils::movable_function<void(operations::management::bucket_update_response)>&& handler)
+  -> pending_call
+{
+  const auto client_context_id = request.client_context_id.value_or(std::string{});
+  auto proto = std::make_shared<bucket_admin_v1::UpdateBucketRequest>();
+  bucket_admin::apply_settings(request.bucket, *proto);
+  const auto timeout = request.timeout.value_or(timeouts_.management);
+  if (timeout <= std::chrono::milliseconds::zero()) {
+    return fail_expired_ctx(io_, handler, stamped_management(request));
+  }
+  const auto auth = authorization_;
+  auto* stub = stubs_->bucket_admin.get();
+  return dispatcher_.unary<bucket_admin_v1::UpdateBucketResponse>(
+    timeout,
+    [stub, proto, auth](grpc::ClientContext& ctx,
+                        bucket_admin_v1::UpdateBucketResponse& resp,
+                        std::function<void(grpc::Status)> cb) {
+      if (!auth.empty()) {
+        ctx.AddMetadata("authorization", auth);
+      }
+      stub->async()->UpdateBucket(&ctx, proto.get(), &resp, std::move(cb));
+    },
+    [handler = std::move(handler), proto, client_context_id](
+      grpc::Status status, bucket_admin_v1::UpdateBucketResponse /* resp */) mutable {
+      (void)proto; // kept only to keep the request alive for the call
+      operations::management::bucket_update_response response;
+      response.ctx.client_context_id = client_context_id;
+      response.ctx.ec = map_status(status, operation_kind::mutating);
+      if (response.ctx.ec) {
+        response.error_message = error_message(status);
+      }
+      handler(std::move(response));
+    });
+}
+
+auto
+component::execute(
+  operations::management::bucket_drop_request request,
+  utils::movable_function<void(operations::management::bucket_drop_response)>&& handler)
+  -> pending_call
+{
+  const auto client_context_id = request.client_context_id.value_or(std::string{});
+  auto proto = std::make_shared<bucket_admin_v1::DeleteBucketRequest>();
+  proto->set_bucket_name(request.name);
+  const auto timeout = request.timeout.value_or(timeouts_.management);
+  if (timeout <= std::chrono::milliseconds::zero()) {
+    return fail_expired_ctx(io_, handler, stamped_management(request));
+  }
+  const auto auth = authorization_;
+  auto* stub = stubs_->bucket_admin.get();
+  return dispatcher_.unary<bucket_admin_v1::DeleteBucketResponse>(
+    timeout,
+    [stub, proto, auth](grpc::ClientContext& ctx,
+                        bucket_admin_v1::DeleteBucketResponse& resp,
+                        std::function<void(grpc::Status)> cb) {
+      if (!auth.empty()) {
+        ctx.AddMetadata("authorization", auth);
+      }
+      stub->async()->DeleteBucket(&ctx, proto.get(), &resp, std::move(cb));
+    },
+    [handler = std::move(handler), proto, client_context_id](
+      grpc::Status status, bucket_admin_v1::DeleteBucketResponse /* resp */) mutable {
+      (void)proto; // kept only to keep the request alive for the call
+      operations::management::bucket_drop_response response;
+      response.ctx.client_context_id = client_context_id;
+      response.ctx.ec = map_status(status, operation_kind::mutating);
+      handler(std::move(response));
+    });
+}
+
+auto
+component::execute(
+  operations::management::bucket_flush_request request,
+  utils::movable_function<void(operations::management::bucket_flush_response)>&& handler)
+  -> pending_call
+{
+  const auto client_context_id = request.client_context_id.value_or(std::string{});
+  auto proto = std::make_shared<bucket_admin_v1::FlushBucketRequest>();
+  proto->set_bucket_name(request.name);
+  const auto timeout = request.timeout.value_or(timeouts_.management);
+  if (timeout <= std::chrono::milliseconds::zero()) {
+    return fail_expired_ctx(io_, handler, stamped_management(request));
+  }
+  const auto auth = authorization_;
+  auto* stub = stubs_->bucket_admin.get();
+  return dispatcher_.unary<bucket_admin_v1::FlushBucketResponse>(
+    timeout,
+    [stub, proto, auth](grpc::ClientContext& ctx,
+                        bucket_admin_v1::FlushBucketResponse& resp,
+                        std::function<void(grpc::Status)> cb) {
+      if (!auth.empty()) {
+        ctx.AddMetadata("authorization", auth);
+      }
+      stub->async()->FlushBucket(&ctx, proto.get(), &resp, std::move(cb));
+    },
+    [handler = std::move(handler), proto, client_context_id](
+      grpc::Status status, bucket_admin_v1::FlushBucketResponse /* resp */) mutable {
+      (void)proto; // kept only to keep the request alive for the call
+      operations::management::bucket_flush_response response;
+      response.ctx.client_context_id = client_context_id;
+      response.ctx.ec = map_status(status, operation_kind::mutating);
+      handler(std::move(response));
     });
 }
 

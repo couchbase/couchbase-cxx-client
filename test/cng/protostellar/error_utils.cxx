@@ -183,6 +183,14 @@ precondition_details_map_to_specific_kv_errors()
                 couchbase::errc::key_value::value_too_large,
               "VALUE_TOO_LARGE -> value_too_large");
 
+  // The one management precondition, and the only one not about a document: a bucket that has flush
+  // turned off. Falling back would report a broken cluster for a setting the caller can change.
+  assert_true(ps::map_status(status_with_detail(grpc::StatusCode::FAILED_PRECONDITION,
+                                                precondition("FLUSH_DISABLED")),
+                             ps::operation_kind::mutating) ==
+                couchbase::errc::management::bucket_not_flushable,
+              "FLUSH_DISABLED -> bucket_not_flushable");
+
   // FAILED_PRECONDITION with no (recognized) detail falls back to internal_server_failure.
   const grpc::Status bare{ grpc::StatusCode::FAILED_PRECONDITION, "no details" };
   assert_true(ps::map_status(bare, ps::operation_kind::mutating) ==

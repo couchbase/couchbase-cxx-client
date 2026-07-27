@@ -93,11 +93,13 @@ a plain release version maps to the public `couchbase/*` images on Docker Hub an
 credentials. CI pins release versions for exactly this reason, so the definition above is what an
 outside contributor can actually pull.
 
-There is deliberately no `docker:` memory block here: the `cao` deployer ignores it, so service
-quotas stay at the server defaults regardless. That is also why the bucket below is created with a
-small explicit quota. The four nodes cover every service the suite can touch, and `fts` has to be
-among them or the live search case fails rather than reporting a missing index. CI puts all of
-`kv, n1ql, index, fts` on one node, which is the smallest topology the suite runs against.
+There is deliberately no `docker:` memory block here: the `cao` deployer ignores it, so every service
+quota stays at the operator's 256 MiB default no matter what the definition says. Two parts of the
+suite need more than that — see [Cluster quota](#cluster-quota-bucket-and-search-management) — and it
+has to be set on the allocated cluster rather than here. The four nodes cover every service the suite
+can touch, and `fts` has to be among them or the live search case fails rather than reporting a
+missing index. CI puts all of `kv, n1ql, index, fts` on one node, which is the smallest topology the
+suite runs against.
 
 Other `cao` keys cbdinocluster understands include `username` / `password` (default
 `Administrator` / `password`) and `gateway-log-level`.
@@ -120,6 +122,62 @@ try a KV operation against a non-default collection by hand:
 $ cbdinocluster collections add-scope "$CBDC_ID" default myscope
 $ cbdinocluster collections add       "$CBDC_ID" default myscope mycollection
 ```
+
+### Cluster quota: bucket and search management
+
+The operator's default service quotas are **256 MiB each**, and that is not enough for two parts of
+the suite. Nothing in the definition file can change it: the `cao` deployer builds the
+`CouchbaseCluster` spec itself and emits no `cluster:` block, and the `cao:` section of a cluster
+definition has no quota fields — so the `docker:` memory keys, which do work for the docker deployer,
+are silently ignored here. Raise the quotas on the allocated cluster:
+
+```console
+$ kubectl -n cbdc2-"$CBDC_ID" patch couchbasecluster cluster --type=merge -p '{
+    "spec": {"cluster": {
+      "dataServiceMemoryQuota":   "1024Mi",
+      "searchServiceMemoryQuota": "2048Mi"
+    }}}'
+```
+
+**Data service.** One 256 MB `default` bucket consumes the whole 256 MiB data quota, leaving the
+bucket-management round trip — which creates a bucket, reads it back and asserts the settings
+survived — with nowhere to put one. It reports the gateway's own "ram quota specified is too large"
+and skips, so the suite stays green while quietly testing less. Creating the bucket smaller
+(`--ram-quota-mb 128`) frees enough room for the couchstore case; the 1024 MiB above is what a magma
+bucket needs, since the gateway rejects a magma bucket under a 1024 MB quota (and history retention
+requires a further 2048 MB).
+
+**Search service.** At 256 MiB an FTS index is accepted and then never builds a usable partition, so
+every query against it fails with `pindex not available` rather than returning hits. This is the
+quota search index management needs to be testable end to end.
+
+The operator owns both settings. Posting to `/pools/default` returns 200 and reads back as applied,
+and is reconciled away within the minute — patch the resource and give it ~20 seconds to appear.
+
+#### From nothing to a cluster the whole suite can use
+
+Sections 1–3 in one sequence, with the quotas raised before the bucket is created so nothing has to
+be resized afterwards:
+
+```console
+$ k3d cluster create mycluster                                   # once per machine
+$ cbdinocluster init --auto --kube-config ~/.kube/config          # once per machine
+
+$ CBDC_ID=$(cbdinocluster allocate --deployer cao --def-file cluster-def.yaml)
+$ kubectl -n cbdc2-"$CBDC_ID" patch couchbasecluster cluster --type=merge -p '{
+    "spec": {"cluster": {
+      "dataServiceMemoryQuota":   "1024Mi",
+      "searchServiceMemoryQuota": "2048Mi"
+    }}}'
+$ kubectl -n cbdc2-"$CBDC_ID" wait --for=condition=Available --timeout=5m couchbasecluster/cluster
+
+$ cbdinocluster buckets add "$CBDC_ID" default --ram-quota-mb 256
+$ export TEST_CONNECTION_STRING="$(cbdinocluster connstr --couchbase2 "$CBDC_ID")?tls_verify=none"
+$ ctest --test-dir build -L cng --output-on-failure
+```
+
+The patch is a separate step because the quotas cannot be expressed in `cluster-def.yaml`, and it has
+to come after `allocate` because the resource it patches does not exist until then.
 
 ### TLS: connect with `tls_verify=none`
 
@@ -186,21 +244,20 @@ be overridden:
 | `TEST_CB2_BUCKET` | `default` | must already exist; the tests do not create it |
 | `TEST_CB2_SEARCH_INDEX` | `cng-index` | the FTS index the live search case queries; see below |
 
-`TEST_CB2_SEARCH_INDEX` needs a word of its own, because the walkthrough above does **not** create
-an FTS index. The live search case still passes without one: it accepts either hits or
-`index_not_found`, and the latter is an answer only a gateway that ran the query can give, so the
-round trip is proven either way.
+`TEST_CB2_SEARCH_INDEX` needs a word of its own, because the walkthrough above does **not** create an
+FTS index, and an index created outside the gateway is not a substitute. The live search case
+therefore accepts either hits or `index_not_found` — the latter is an answer only a gateway that ran
+the query can give, so the round trip is proven either way.
 
 What it does need is a cluster **running the search service** — the definition above has an `fts`
 node for that reason. Query a cluster without one and the request fails as an internal error rather
-than as a missing index, because there is no service to report the index missing, and the case goes
-red for a reason that has nothing to do with the client.
+than as a missing index, because there is nothing to report the index missing, and the case goes red
+for a reason that has nothing to do with the client.
 
-What it cannot do without an index is exercise hit decoding — fragments, field values and locations
-all go untested against a real server. An index named `cng-index` over the test bucket, or this
-variable pointed at one you already have, covers that; note that an index only serves queries once
-the search service has the memory to build a partition for it, which the operator's default quota
-does not provide.
+What it does not do is exercise hit decoding: fragments, field values and locations go untested
+against a real server. Closing that gap means provisioning the index over `couchbase2://` itself,
+which arrives with search index management (CXXCBC-901), and giving the search service the memory to
+build a partition for it — see [Cluster quota](#cluster-quota-bucket-and-search-management).
 
 Point the suite at a shared cluster, or at one whose credentials differ from cbdinocluster's, and
 these are what you set:

@@ -49,6 +49,12 @@
 #include "core/operations/document_unlock.hxx"
 #include "core/operations/document_upsert.hxx"
 #include "core/operations/document_view.hxx"
+#include "core/operations/management/bucket_create.hxx"
+#include "core/operations/management/bucket_drop.hxx"
+#include "core/operations/management/bucket_flush.hxx"
+#include "core/operations/management/bucket_get.hxx"
+#include "core/operations/management/bucket_get_all.hxx"
+#include "core/operations/management/bucket_update.hxx"
 #include "core/protostellar/dispatcher.hxx"
 #include "core/timeout_defaults.hxx"
 #include "core/utils/movable_function.hxx"
@@ -72,6 +78,7 @@ struct component_timeouts {
   std::chrono::milliseconds analytics{ timeout_defaults::analytics_timeout };
   std::chrono::milliseconds search{ timeout_defaults::search_timeout };
   std::chrono::milliseconds view{ timeout_defaults::view_timeout };
+  std::chrono::milliseconds management{ timeout_defaults::management_timeout };
 };
 
 // Construction parameters for `component`, grouped so that adding one is a source-compatible
@@ -196,6 +203,31 @@ public:
   // Map/reduce views over the couchbase2 server-streaming transport.
   auto execute(operations::document_view_request request,
                utils::movable_function<void(operations::document_view_response)>&& handler)
+    -> pending_call;
+
+  // Bucket management (unary admin RPCs over admin.bucket.v1).
+  auto execute(
+    operations::management::bucket_get_all_request request,
+    utils::movable_function<void(operations::management::bucket_get_all_response)>&& handler)
+    -> pending_call;
+  auto execute(operations::management::bucket_get_request request,
+               utils::movable_function<void(operations::management::bucket_get_response)>&& handler)
+    -> pending_call;
+  auto execute(
+    operations::management::bucket_create_request request,
+    utils::movable_function<void(operations::management::bucket_create_response)>&& handler)
+    -> pending_call;
+  auto execute(
+    operations::management::bucket_update_request request,
+    utils::movable_function<void(operations::management::bucket_update_response)>&& handler)
+    -> pending_call;
+  auto execute(
+    operations::management::bucket_drop_request request,
+    utils::movable_function<void(operations::management::bucket_drop_response)>&& handler)
+    -> pending_call;
+  auto execute(
+    operations::management::bucket_flush_request request,
+    utils::movable_function<void(operations::management::bucket_flush_response)>&& handler)
     -> pending_call;
 
 private:
