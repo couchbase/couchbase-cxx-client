@@ -106,6 +106,7 @@ kv_crud_round_trip_against_live_gateway()
   config.channel = channel;
   config.credentials = credentials;
   config.default_kv_timeout = 20000ms;
+  config.default_query_timeout = 20000ms;
   component comp{ io, config };
 
   std::string failure;    // non-empty => the round-trip failed at some stage
@@ -202,6 +203,7 @@ insert_and_replace_round_trip_against_live_gateway()
   config.channel = channel;
   config.credentials = credentials;
   config.default_kv_timeout = 20000ms;
+  config.default_query_timeout = 20000ms;
   component comp{ io, config };
 
   std::string failure;
