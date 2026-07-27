@@ -85,12 +85,9 @@ runs:
         # `cao:` section has no quota fields either, so the operator's 256 MiB service defaults apply
         # until the resource is patched below.
         #
-        # fts is in the list because the live search case needs a search service to answer, not an
-        # index. It queries an index that was never created and accepts the gateway's
-        # index-not-found, which is an answer only a cluster running fts can give; without the
-        # service the request fails as an internal error instead and the case goes red. No index is
-        # built here, so the default search quota is enough -- one that has to serve queries needs
-        # considerably more, which is what search index management will have to provision for.
+        # fts is in the list because the live search cases need a search service to answer. The
+        # search index management cases go further and build real indexes on it, so the operator's
+        # default search quota is no longer enough and is raised alongside the data one below.
         CLUSTER_CONFIG: |
           nodes:
             - count: 1
@@ -113,7 +110,7 @@ runs:
         # The tests set tls_verify_mode::none themselves, so the bare connstr is what they want:
         # couchbase2 is always TLS and the gateway's dev certificate is not chainable.
         echo "connstr=$(cbdinocluster -v connstr --couchbase2 $CBDC_ID)" >> "$GITHUB_OUTPUT"
-    - name: Raise the data service quota
+    - name: Raise the data and search service quotas
       shell: bash
       run: |
         # The bucket and collection management cases create buckets of their own, and at the
@@ -126,22 +123,30 @@ runs:
         # runs the CNG suites serially, so no two test buckets are ever allocated at once. Three KV
         # nodes reserve it each, which is 3.8 GiB of the runner's 15.
         #
-        # It has to be a patch: the quota cannot be expressed in the cluster definition, and setting
-        # it through /pools/default is reconciled away by the operator within the minute.
+        # Search is raised because the search index management cases build real fulltext indexes and
+        # analyze a document against one, where before nothing was built on this service and the
+        # default was sized only to answer a request. What that default would in fact support was
+        # not measured; the quota follows what the cases now do.
+        #
+        # It has to be a patch: neither quota can be expressed in the cluster definition, and
+        # setting them through /pools/default is reconciled away by the operator within the minute.
         kubectl -n "cbdc2-$CBDC_ID" patch couchbasecluster cluster --type=merge \
-          -p '{"spec":{"cluster":{"dataServiceMemoryQuota":"1280Mi"}}}'
+          -p '{"spec":{"cluster":{"dataServiceMemoryQuota":"1280Mi","searchServiceMemoryQuota":"1Gi"}}}'
         # Waiting on condition=Available would prove nothing: it is already true from before the
         # patch, so the wait returns instantly and the bucket could be created against the old
-        # quota. Poll the cluster itself for the applied value, and fail here rather than leave the
-        # management cases to fail one by one on a bucket create.
+        # quota. Poll the cluster itself for the applied values, and fail here rather than leave
+        # the management cases to fail one by one on a bucket create.
         MGMT=$(cbdinocluster mgmt "$CBDC_ID" | tail -1)
         for _ in $(seq 1 30); do
-          QUOTA=$(curl -sS -u Administrator:password "$MGMT/pools/default" | jq -r '.memoryQuota')
-          echo "data service quota: $QUOTA"
-          [ "$QUOTA" = "1280" ] && break
+          POOLS=$(curl -sS -u Administrator:password "$MGMT/pools/default")
+          QUOTA=$(echo "$POOLS" | jq -r '.memoryQuota')
+          FTS_QUOTA=$(echo "$POOLS" | jq -r '.ftsMemoryQuota')
+          echo "data service quota: $QUOTA, search service quota: $FTS_QUOTA"
+          [ "$QUOTA" = "1280" ] && [ "$FTS_QUOTA" = "1024" ] && break
           sleep 5
         done
         [ "$QUOTA" = "1280" ] || { echo "::error::data service quota never reached 1280 MiB"; exit 1; }
+        [ "$FTS_QUOTA" = "1024" ] || { echo "::error::search service quota never reached 1 GiB"; exit 1; }
     - name: Add bucket
       shell: bash
       env:

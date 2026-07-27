@@ -33,6 +33,7 @@
 #include "core/protostellar/query_converter.hxx"
 #include "core/protostellar/query_index_admin_converter.hxx"
 #include "core/protostellar/search_converter.hxx"
+#include "core/protostellar/search_index_admin_converter.hxx"
 #include "core/protostellar/view_converter.hxx"
 
 #include <couchbase/error_codes.hxx>
@@ -43,6 +44,7 @@
 #include <couchbase/admin/bucket/v1/bucket.grpc.pb.h>
 #include <couchbase/admin/collection/v1/collection.grpc.pb.h>
 #include <couchbase/admin/query/v1/query.grpc.pb.h>
+#include <couchbase/admin/search/v1/search.grpc.pb.h>
 #include <couchbase/kv/v1/kv.grpc.pb.h>
 #include <couchbase/search/v1/search.grpc.pb.h>
 #include <couchbase/view/v1/view.grpc.pb.h>
@@ -68,6 +70,7 @@ namespace view_v1 = ::couchbase::view::v1;
 namespace bucket_admin_v1 = ::couchbase::admin::bucket::v1;
 namespace collection_admin_v1 = ::couchbase::admin::collection::v1;
 namespace query_admin_v1 = ::couchbase::admin::query::v1;
+namespace search_admin_v1 = ::couchbase::admin::search::v1;
 
 // Defined here rather than in the header so the generated gRPC types stay out of every consumer of
 // component.hxx.
@@ -80,6 +83,7 @@ struct component::stubs {
   std::unique_ptr<bucket_admin_v1::BucketAdminService::Stub> bucket_admin;
   std::unique_ptr<collection_admin_v1::CollectionAdminService::Stub> collection_admin;
   std::unique_ptr<query_admin_v1::QueryAdminService::Stub> query_admin;
+  std::unique_ptr<search_admin_v1::SearchAdminService::Stub> search_admin;
 };
 
 namespace
@@ -108,6 +112,21 @@ fail_expired(asio::io_context& io, const Request& request, Handler& handler) -> 
   return {};
 }
 
+// Deliver a prepared response carrying ec without sending anything. Posted rather than invoked:
+// completions arrive on the io context, never inline out of execute(), which would re-enter the
+// caller before it holds its pending_call.
+template<typename Response, typename Handler>
+auto
+fail_ctx(asio::io_context& io, Handler& handler, Response response, std::error_code ec)
+  -> pending_call
+{
+  response.ctx.ec = ec;
+  asio::post(io, [handler = std::move(handler), response = std::move(response)]() mutable {
+    handler(std::move(response));
+  });
+  return {};
+}
+
 // The same rule for the services whose responses carry their own error context rather than a
 // key_value one: they resolve a timeout exactly as the KV overloads do, so a non-positive one
 // would reach the dispatcher and produce a call with no deadline there too. The response the
@@ -116,11 +135,7 @@ template<typename Response, typename Handler>
 auto
 fail_expired_ctx(asio::io_context& io, Handler& handler, Response response) -> pending_call
 {
-  response.ctx.ec = errc::common::unambiguous_timeout;
-  asio::post(io, [handler = std::move(handler), response = std::move(response)]() mutable {
-    handler(std::move(response));
-  });
-  return {};
+  return fail_ctx(io, handler, std::move(response), errc::common::unambiguous_timeout);
 }
 
 // A management response carrying the caller's client_context_id, which is what correlates it with
@@ -140,6 +155,20 @@ stamped_management(const Request& request) -> typename Request::response_type
   response.ctx.client_context_id = request.client_context_id.value_or(std::string{});
   return response;
 }
+
+// FTS answers each of the search index management endpoints with {"status":"ok"} on success, and
+// the classic path copies that string into the response, where core-API consumers read it.
+// admin.search.v1 replies with empty messages, so a successful RPC is the same signal and carries
+// the same meaning. A failed one leaves the field empty rather than inventing a status the server
+// never reported; the error code is what describes it.
+template<typename Response>
+void
+set_ok_status(Response& response)
+{
+  if (!response.ctx.ec) {
+    response.status = "ok";
+  }
+}
 } // namespace
 
 component::component(asio::io_context& io, component_config config)
@@ -152,7 +181,8 @@ component::component(asio::io_context& io, component_config config)
              view_v1::ViewService::NewStub(config.channel),
              bucket_admin_v1::BucketAdminService::NewStub(config.channel),
              collection_admin_v1::CollectionAdminService::NewStub(config.channel),
-             query_admin_v1::QueryAdminService::NewStub(config.channel) }) }
+             query_admin_v1::QueryAdminService::NewStub(config.channel),
+             search_admin_v1::SearchAdminService::NewStub(config.channel) }) }
   , authorization_{ authorization_header(config.credentials) }
   , timeouts_{ config.timeouts }
   // Initialised last (see the declaration order in the header), so the channel can be moved in.
@@ -1733,6 +1763,572 @@ component::execute(
       response.ctx.client_context_id = client_context_id;
       response.ctx.ec = map_status(status, operation_kind::mutating);
       handler(std::move(response));
+    });
+}
+
+auto
+component::execute(
+  operations::management::search_index_upsert_request request,
+  utils::movable_function<void(operations::management::search_index_upsert_response)>&& handler)
+  -> pending_call
+{
+  const auto client_context_id = request.client_context_id.value_or(std::string{});
+  if (request.index.name.empty()) {
+    return fail_ctx(io_, handler, stamped_management(request), errc::common::invalid_argument);
+  }
+  const auto timeout = request.timeout.value_or(timeouts_.management);
+  if (timeout <= std::chrono::milliseconds::zero()) {
+    return fail_expired_ctx(io_, handler, stamped_management(request));
+  }
+  const auto auth = authorization_;
+  const auto name = request.index.name;
+  auto* stub = stubs_->search_admin.get();
+
+  // A uuid identifies a definition that already exists, so an upsert carrying one is an update and
+  // an upsert without one is a create. That is the same rule the classic path applies -- it sends
+  // the uuid as the body's "uuid" member, which FTS reads as prevIndexUUID -- and the two RPCs
+  // divide along the same line: UpdateIndex refuses a request with no uuid, and CreateIndex refuses
+  // a name that already exists.
+  //
+  // The proto is built before the handler is moved into the completion, so a definition the
+  // converter refuses is still reported through the handler the caller passed.
+  std::shared_ptr<search_admin_v1::UpdateIndexRequest> update_proto;
+  std::shared_ptr<search_admin_v1::CreateIndexRequest> create_proto;
+  if (!request.index.uuid.empty()) {
+    update_proto = std::make_shared<search_admin_v1::UpdateIndexRequest>();
+    if (!search_index_admin::apply_index(request.index, *update_proto->mutable_index())) {
+      return fail_ctx(io_, handler, stamped_management(request), errc::common::invalid_argument);
+    }
+    if (request.bucket_name.has_value()) {
+      update_proto->set_bucket_name(*request.bucket_name);
+    }
+    if (request.scope_name.has_value()) {
+      update_proto->set_scope_name(*request.scope_name);
+    }
+  } else {
+    create_proto = std::make_shared<search_admin_v1::CreateIndexRequest>();
+    if (!search_index_admin::apply_index(request.index, *create_proto)) {
+      return fail_ctx(io_, handler, stamped_management(request), errc::common::invalid_argument);
+    }
+    if (request.bucket_name.has_value()) {
+      create_proto->set_bucket_name(*request.bucket_name);
+    }
+    if (request.scope_name.has_value()) {
+      create_proto->set_scope_name(*request.scope_name);
+    }
+  }
+
+  auto invoke =
+    [handler = std::move(handler), client_context_id, name](grpc::Status status) mutable {
+      operations::management::search_index_upsert_response response;
+      response.ctx.client_context_id = client_context_id;
+      response.ctx.ec = map_status(status, operation_kind::mutating);
+      response.name = name;
+      set_ok_status(response);
+      handler(std::move(response));
+    };
+
+  if (update_proto) {
+    return dispatcher_.unary<search_admin_v1::UpdateIndexResponse>(
+      timeout,
+      [stub, proto = update_proto, auth](grpc::ClientContext& ctx,
+                                         search_admin_v1::UpdateIndexResponse& resp,
+                                         std::function<void(grpc::Status)> cb) {
+        if (!auth.empty()) {
+          ctx.AddMetadata("authorization", auth);
+        }
+        stub->async()->UpdateIndex(&ctx, proto.get(), &resp, std::move(cb));
+      },
+      [invoke = std::move(invoke), proto = update_proto](
+        grpc::Status status, search_admin_v1::UpdateIndexResponse /* r */) mutable {
+        invoke(std::move(status));
+      });
+  }
+  return dispatcher_.unary<search_admin_v1::CreateIndexResponse>(
+    timeout,
+    [stub, proto = create_proto, auth](grpc::ClientContext& ctx,
+                                       search_admin_v1::CreateIndexResponse& resp,
+                                       std::function<void(grpc::Status)> cb) {
+      if (!auth.empty()) {
+        ctx.AddMetadata("authorization", auth);
+      }
+      stub->async()->CreateIndex(&ctx, proto.get(), &resp, std::move(cb));
+    },
+    [invoke = std::move(invoke), proto = create_proto](
+      grpc::Status status, search_admin_v1::CreateIndexResponse /* r */) mutable {
+      invoke(std::move(status));
+    });
+}
+
+auto
+component::execute(
+  operations::management::search_index_get_request request,
+  utils::movable_function<void(operations::management::search_index_get_response)>&& handler)
+  -> pending_call
+{
+  const auto client_context_id = request.client_context_id.value_or(std::string{});
+  if (request.index_name.empty()) {
+    return fail_ctx(io_, handler, stamped_management(request), errc::common::invalid_argument);
+  }
+  auto proto = std::make_shared<search_admin_v1::GetIndexRequest>();
+  proto->set_name(request.index_name);
+  if (request.bucket_name.has_value()) {
+    proto->set_bucket_name(*request.bucket_name);
+  }
+  if (request.scope_name.has_value()) {
+    proto->set_scope_name(*request.scope_name);
+  }
+  const auto timeout = request.timeout.value_or(timeouts_.management);
+  if (timeout <= std::chrono::milliseconds::zero()) {
+    return fail_expired_ctx(io_, handler, stamped_management(request));
+  }
+  const auto auth = authorization_;
+  auto* stub = stubs_->search_admin.get();
+  return dispatcher_.unary<search_admin_v1::GetIndexResponse>(
+    timeout,
+    [stub, proto, auth](grpc::ClientContext& ctx,
+                        search_admin_v1::GetIndexResponse& resp,
+                        std::function<void(grpc::Status)> cb) {
+      if (!auth.empty()) {
+        ctx.AddMetadata("authorization", auth);
+      }
+      stub->async()->GetIndex(&ctx, proto.get(), &resp, std::move(cb));
+    },
+    [handler = std::move(handler), proto, client_context_id](
+      grpc::Status status, search_admin_v1::GetIndexResponse resp) mutable {
+      (void)proto; // kept only to keep the request alive for the call
+      operations::management::search_index_get_response response;
+      response.ctx.client_context_id = client_context_id;
+      response.ctx.ec = map_status(status, operation_kind::read_only);
+      if (!response.ctx.ec) {
+        // A success carrying no index describes no index. Reporting it as one -- the response
+        // would hold a default-constructed definition with an empty name -- is worse than saying
+        // the index is not there.
+        if (!resp.has_index()) {
+          response.ctx.ec = errc::common::index_not_found;
+        } else if (auto index = search_index_admin::decode_index(resp.index()); index.has_value()) {
+          response.index = std::move(*index);
+        } else {
+          response.ctx.ec = errc::common::parsing_failure;
+        }
+      }
+      set_ok_status(response);
+      handler(std::move(response));
+    });
+}
+
+auto
+component::execute(
+  operations::management::search_index_get_all_request request,
+  utils::movable_function<void(operations::management::search_index_get_all_response)>&& handler)
+  -> pending_call
+{
+  const auto client_context_id = request.client_context_id.value_or(std::string{});
+  auto proto = std::make_shared<search_admin_v1::ListIndexesRequest>();
+  if (request.bucket_name.has_value()) {
+    proto->set_bucket_name(*request.bucket_name);
+  }
+  if (request.scope_name.has_value()) {
+    proto->set_scope_name(*request.scope_name);
+  }
+  const auto timeout = request.timeout.value_or(timeouts_.management);
+  if (timeout <= std::chrono::milliseconds::zero()) {
+    return fail_expired_ctx(io_, handler, stamped_management(request));
+  }
+  const auto auth = authorization_;
+  auto* stub = stubs_->search_admin.get();
+  return dispatcher_.unary<search_admin_v1::ListIndexesResponse>(
+    timeout,
+    [stub, proto, auth](grpc::ClientContext& ctx,
+                        search_admin_v1::ListIndexesResponse& resp,
+                        std::function<void(grpc::Status)> cb) {
+      if (!auth.empty()) {
+        ctx.AddMetadata("authorization", auth);
+      }
+      stub->async()->ListIndexes(&ctx, proto.get(), &resp, std::move(cb));
+    },
+    [handler = std::move(handler), proto, client_context_id](
+      grpc::Status status, search_admin_v1::ListIndexesResponse resp) mutable {
+      (void)proto; // kept only to keep the request alive for the call
+      operations::management::search_index_get_all_response response;
+      response.ctx.client_context_id = client_context_id;
+      response.ctx.ec = map_status(status, operation_kind::read_only);
+      for (const auto& index : resp.indexes()) {
+        auto decoded = search_index_admin::decode_index(index);
+        if (!decoded.has_value()) {
+          // One definition that cannot be represented fails the listing. Skipping it would return
+          // a list shorter than the server's, which reads as "that index does not exist".
+          response.ctx.ec = errc::common::parsing_failure;
+          response.indexes.clear();
+          break;
+        }
+        response.indexes.push_back(std::move(*decoded));
+      }
+      set_ok_status(response);
+      handler(std::move(response));
+    });
+}
+
+auto
+component::execute(
+  operations::management::search_index_drop_request request,
+  utils::movable_function<void(operations::management::search_index_drop_response)>&& handler)
+  -> pending_call
+{
+  const auto client_context_id = request.client_context_id.value_or(std::string{});
+  if (request.index_name.empty()) {
+    return fail_ctx(io_, handler, stamped_management(request), errc::common::invalid_argument);
+  }
+  auto proto = std::make_shared<search_admin_v1::DeleteIndexRequest>();
+  proto->set_name(request.index_name);
+  if (request.bucket_name.has_value()) {
+    proto->set_bucket_name(*request.bucket_name);
+  }
+  if (request.scope_name.has_value()) {
+    proto->set_scope_name(*request.scope_name);
+  }
+  const auto timeout = request.timeout.value_or(timeouts_.management);
+  if (timeout <= std::chrono::milliseconds::zero()) {
+    return fail_expired_ctx(io_, handler, stamped_management(request));
+  }
+  const auto auth = authorization_;
+  auto* stub = stubs_->search_admin.get();
+  return dispatcher_.unary<search_admin_v1::DeleteIndexResponse>(
+    timeout,
+    [stub, proto, auth](grpc::ClientContext& ctx,
+                        search_admin_v1::DeleteIndexResponse& resp,
+                        std::function<void(grpc::Status)> cb) {
+      if (!auth.empty()) {
+        ctx.AddMetadata("authorization", auth);
+      }
+      stub->async()->DeleteIndex(&ctx, proto.get(), &resp, std::move(cb));
+    },
+    [handler = std::move(handler), proto, client_context_id](
+      grpc::Status status, search_admin_v1::DeleteIndexResponse /* r */) mutable {
+      (void)proto; // kept only to keep the request alive for the call
+      operations::management::search_index_drop_response response;
+      response.ctx.client_context_id = client_context_id;
+      response.ctx.ec = map_status(status, operation_kind::mutating);
+      set_ok_status(response);
+      handler(std::move(response));
+    });
+}
+
+auto
+component::execute(
+  operations::management::search_index_analyze_document_request request,
+  utils::movable_function<void(operations::management::search_index_analyze_document_response)>&&
+    handler) -> pending_call
+{
+  const auto client_context_id = request.client_context_id.value_or(std::string{});
+  if (request.index_name.empty()) {
+    return fail_ctx(io_, handler, stamped_management(request), errc::common::invalid_argument);
+  }
+  auto proto = std::make_shared<search_admin_v1::AnalyzeDocumentRequest>();
+  proto->set_name(request.index_name);
+  proto->set_doc(request.encoded_document);
+  if (request.bucket_name.has_value()) {
+    proto->set_bucket_name(*request.bucket_name);
+  }
+  if (request.scope_name.has_value()) {
+    proto->set_scope_name(*request.scope_name);
+  }
+  const auto timeout = request.timeout.value_or(timeouts_.management);
+  if (timeout <= std::chrono::milliseconds::zero()) {
+    return fail_expired_ctx(io_, handler, stamped_management(request));
+  }
+  const auto auth = authorization_;
+  auto* stub = stubs_->search_admin.get();
+  return dispatcher_.unary<search_admin_v1::AnalyzeDocumentResponse>(
+    timeout,
+    [stub, proto, auth](grpc::ClientContext& ctx,
+                        search_admin_v1::AnalyzeDocumentResponse& resp,
+                        std::function<void(grpc::Status)> cb) {
+      if (!auth.empty()) {
+        ctx.AddMetadata("authorization", auth);
+      }
+      stub->async()->AnalyzeDocument(&ctx, proto.get(), &resp, std::move(cb));
+    },
+    [handler = std::move(handler), proto, client_context_id](
+      grpc::Status status, search_admin_v1::AnalyzeDocumentResponse resp) mutable {
+      (void)proto; // kept only to keep the request alive for the call
+      operations::management::search_index_analyze_document_response response;
+      response.ctx.client_context_id = client_context_id;
+      response.ctx.ec = map_status(status, operation_kind::read_only);
+      response.analysis = resp.analyzed();
+      // The only response in this service that relays FTS's own status string; the rest infer it
+      // from the RPC. Prefer what the server said, and fall back only when it said nothing.
+      if (!response.ctx.ec && !resp.status().empty()) {
+        response.status = resp.status();
+      } else {
+        set_ok_status(response);
+      }
+      handler(std::move(response));
+    });
+}
+
+auto
+component::execute(
+  operations::management::search_index_get_documents_count_request request,
+  utils::movable_function<void(operations::management::search_index_get_documents_count_response)>&&
+    handler) -> pending_call
+{
+  const auto client_context_id = request.client_context_id.value_or(std::string{});
+  auto proto = std::make_shared<search_admin_v1::GetIndexedDocumentsCountRequest>();
+  proto->set_name(request.index_name);
+  if (request.bucket_name.has_value()) {
+    proto->set_bucket_name(*request.bucket_name);
+  }
+  if (request.scope_name.has_value()) {
+    proto->set_scope_name(*request.scope_name);
+  }
+  const auto timeout = request.timeout.value_or(timeouts_.management);
+  if (timeout <= std::chrono::milliseconds::zero()) {
+    return fail_expired_ctx(io_, handler, stamped_management(request));
+  }
+  const auto auth = authorization_;
+  auto* stub = stubs_->search_admin.get();
+  return dispatcher_.unary<search_admin_v1::GetIndexedDocumentsCountResponse>(
+    timeout,
+    [stub, proto, auth](grpc::ClientContext& ctx,
+                        search_admin_v1::GetIndexedDocumentsCountResponse& resp,
+                        std::function<void(grpc::Status)> cb) {
+      if (!auth.empty()) {
+        ctx.AddMetadata("authorization", auth);
+      }
+      stub->async()->GetIndexedDocumentsCount(&ctx, proto.get(), &resp, std::move(cb));
+    },
+    [handler = std::move(handler), proto, client_context_id](
+      grpc::Status status, search_admin_v1::GetIndexedDocumentsCountResponse resp) mutable {
+      (void)proto; // kept only to keep the request alive for the call
+      operations::management::search_index_get_documents_count_response response;
+      response.ctx.client_context_id = client_context_id;
+      response.ctx.ec = map_status(status, operation_kind::read_only);
+      response.count = resp.count();
+      set_ok_status(response);
+      handler(std::move(response));
+    });
+}
+
+auto
+component::execute(
+  operations::management::search_index_control_ingest_request request,
+  utils::movable_function<void(operations::management::search_index_control_ingest_response)>&&
+    handler) -> pending_call
+{
+  const auto client_context_id = request.client_context_id.value_or(std::string{});
+  if (request.index_name.empty()) {
+    return fail_ctx(io_, handler, stamped_management(request), errc::common::invalid_argument);
+  }
+  const auto timeout = request.timeout.value_or(timeouts_.management);
+  if (timeout <= std::chrono::milliseconds::zero()) {
+    return fail_expired_ctx(io_, handler, stamped_management(request));
+  }
+  const auto auth = authorization_;
+  const auto name = request.index_name;
+  const auto bucket = request.bucket_name;
+  const auto scope = request.scope_name;
+  auto* stub = stubs_->search_admin.get();
+  auto invoke = [handler = std::move(handler), client_context_id](grpc::Status status) mutable {
+    operations::management::search_index_control_ingest_response response;
+    response.ctx.client_context_id = client_context_id;
+    response.ctx.ec = map_status(status, operation_kind::mutating);
+    set_ok_status(response);
+    handler(std::move(response));
+  };
+  if (request.pause) {
+    auto proto = std::make_shared<search_admin_v1::PauseIndexIngestRequest>();
+    proto->set_name(name);
+    if (bucket.has_value()) {
+      proto->set_bucket_name(*bucket);
+    }
+    if (scope.has_value()) {
+      proto->set_scope_name(*scope);
+    }
+    return dispatcher_.unary<search_admin_v1::PauseIndexIngestResponse>(
+      timeout,
+      [stub, proto, auth](grpc::ClientContext& ctx,
+                          search_admin_v1::PauseIndexIngestResponse& resp,
+                          std::function<void(grpc::Status)> cb) {
+        if (!auth.empty()) {
+          ctx.AddMetadata("authorization", auth);
+        }
+        stub->async()->PauseIndexIngest(&ctx, proto.get(), &resp, std::move(cb));
+      },
+      [invoke = std::move(invoke),
+       proto](grpc::Status status, search_admin_v1::PauseIndexIngestResponse /* r */) mutable {
+        invoke(std::move(status));
+      });
+  }
+  auto proto = std::make_shared<search_admin_v1::ResumeIndexIngestRequest>();
+  proto->set_name(name);
+  if (bucket.has_value()) {
+    proto->set_bucket_name(*bucket);
+  }
+  if (scope.has_value()) {
+    proto->set_scope_name(*scope);
+  }
+  return dispatcher_.unary<search_admin_v1::ResumeIndexIngestResponse>(
+    timeout,
+    [stub, proto, auth](grpc::ClientContext& ctx,
+                        search_admin_v1::ResumeIndexIngestResponse& resp,
+                        std::function<void(grpc::Status)> cb) {
+      if (!auth.empty()) {
+        ctx.AddMetadata("authorization", auth);
+      }
+      stub->async()->ResumeIndexIngest(&ctx, proto.get(), &resp, std::move(cb));
+    },
+    [invoke = std::move(invoke),
+     proto](grpc::Status status, search_admin_v1::ResumeIndexIngestResponse /* r */) mutable {
+      invoke(std::move(status));
+    });
+}
+
+auto
+component::execute(
+  operations::management::search_index_control_query_request request,
+  utils::movable_function<void(operations::management::search_index_control_query_response)>&&
+    handler) -> pending_call
+{
+  const auto client_context_id = request.client_context_id.value_or(std::string{});
+  if (request.index_name.empty()) {
+    return fail_ctx(io_, handler, stamped_management(request), errc::common::invalid_argument);
+  }
+  const auto timeout = request.timeout.value_or(timeouts_.management);
+  if (timeout <= std::chrono::milliseconds::zero()) {
+    return fail_expired_ctx(io_, handler, stamped_management(request));
+  }
+  const auto auth = authorization_;
+  const auto name = request.index_name;
+  const auto bucket = request.bucket_name;
+  const auto scope = request.scope_name;
+  auto* stub = stubs_->search_admin.get();
+  auto invoke = [handler = std::move(handler), client_context_id](grpc::Status status) mutable {
+    operations::management::search_index_control_query_response response;
+    response.ctx.client_context_id = client_context_id;
+    response.ctx.ec = map_status(status, operation_kind::mutating);
+    set_ok_status(response);
+    handler(std::move(response));
+  };
+  if (request.allow) {
+    auto proto = std::make_shared<search_admin_v1::AllowIndexQueryingRequest>();
+    proto->set_name(name);
+    if (bucket.has_value()) {
+      proto->set_bucket_name(*bucket);
+    }
+    if (scope.has_value()) {
+      proto->set_scope_name(*scope);
+    }
+    return dispatcher_.unary<search_admin_v1::AllowIndexQueryingResponse>(
+      timeout,
+      [stub, proto, auth](grpc::ClientContext& ctx,
+                          search_admin_v1::AllowIndexQueryingResponse& resp,
+                          std::function<void(grpc::Status)> cb) {
+        if (!auth.empty()) {
+          ctx.AddMetadata("authorization", auth);
+        }
+        stub->async()->AllowIndexQuerying(&ctx, proto.get(), &resp, std::move(cb));
+      },
+      [invoke = std::move(invoke),
+       proto](grpc::Status status, search_admin_v1::AllowIndexQueryingResponse /* r */) mutable {
+        invoke(std::move(status));
+      });
+  }
+  auto proto = std::make_shared<search_admin_v1::DisallowIndexQueryingRequest>();
+  proto->set_name(name);
+  if (bucket.has_value()) {
+    proto->set_bucket_name(*bucket);
+  }
+  if (scope.has_value()) {
+    proto->set_scope_name(*scope);
+  }
+  return dispatcher_.unary<search_admin_v1::DisallowIndexQueryingResponse>(
+    timeout,
+    [stub, proto, auth](grpc::ClientContext& ctx,
+                        search_admin_v1::DisallowIndexQueryingResponse& resp,
+                        std::function<void(grpc::Status)> cb) {
+      if (!auth.empty()) {
+        ctx.AddMetadata("authorization", auth);
+      }
+      stub->async()->DisallowIndexQuerying(&ctx, proto.get(), &resp, std::move(cb));
+    },
+    [invoke = std::move(invoke),
+     proto](grpc::Status status, search_admin_v1::DisallowIndexQueryingResponse /* r */) mutable {
+      invoke(std::move(status));
+    });
+}
+
+auto
+component::execute(
+  operations::management::search_index_control_plan_freeze_request request,
+  utils::movable_function<void(operations::management::search_index_control_plan_freeze_response)>&&
+    handler) -> pending_call
+{
+  const auto client_context_id = request.client_context_id.value_or(std::string{});
+  if (request.index_name.empty()) {
+    return fail_ctx(io_, handler, stamped_management(request), errc::common::invalid_argument);
+  }
+  const auto timeout = request.timeout.value_or(timeouts_.management);
+  if (timeout <= std::chrono::milliseconds::zero()) {
+    return fail_expired_ctx(io_, handler, stamped_management(request));
+  }
+  const auto auth = authorization_;
+  const auto name = request.index_name;
+  const auto bucket = request.bucket_name;
+  const auto scope = request.scope_name;
+  auto* stub = stubs_->search_admin.get();
+  auto invoke = [handler = std::move(handler), client_context_id](grpc::Status status) mutable {
+    operations::management::search_index_control_plan_freeze_response response;
+    response.ctx.client_context_id = client_context_id;
+    response.ctx.ec = map_status(status, operation_kind::mutating);
+    set_ok_status(response);
+    handler(std::move(response));
+  };
+  if (request.freeze) {
+    auto proto = std::make_shared<search_admin_v1::FreezeIndexPlanRequest>();
+    proto->set_name(name);
+    if (bucket.has_value()) {
+      proto->set_bucket_name(*bucket);
+    }
+    if (scope.has_value()) {
+      proto->set_scope_name(*scope);
+    }
+    return dispatcher_.unary<search_admin_v1::FreezeIndexPlanResponse>(
+      timeout,
+      [stub, proto, auth](grpc::ClientContext& ctx,
+                          search_admin_v1::FreezeIndexPlanResponse& resp,
+                          std::function<void(grpc::Status)> cb) {
+        if (!auth.empty()) {
+          ctx.AddMetadata("authorization", auth);
+        }
+        stub->async()->FreezeIndexPlan(&ctx, proto.get(), &resp, std::move(cb));
+      },
+      [invoke = std::move(invoke),
+       proto](grpc::Status status, search_admin_v1::FreezeIndexPlanResponse /* r */) mutable {
+        invoke(std::move(status));
+      });
+  }
+  auto proto = std::make_shared<search_admin_v1::UnfreezeIndexPlanRequest>();
+  proto->set_name(name);
+  if (bucket.has_value()) {
+    proto->set_bucket_name(*bucket);
+  }
+  if (scope.has_value()) {
+    proto->set_scope_name(*scope);
+  }
+  return dispatcher_.unary<search_admin_v1::UnfreezeIndexPlanResponse>(
+    timeout,
+    [stub, proto, auth](grpc::ClientContext& ctx,
+                        search_admin_v1::UnfreezeIndexPlanResponse& resp,
+                        std::function<void(grpc::Status)> cb) {
+      if (!auth.empty()) {
+        ctx.AddMetadata("authorization", auth);
+      }
+      stub->async()->UnfreezeIndexPlan(&ctx, proto.get(), &resp, std::move(cb));
+    },
+    [invoke = std::move(invoke),
+     proto](grpc::Status status, search_admin_v1::UnfreezeIndexPlanResponse /* r */) mutable {
+      invoke(std::move(status));
     });
 }
 
