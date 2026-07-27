@@ -183,4 +183,6 @@ if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 AND TARGET couchbase_cxx_protostellar)
   # Live Search index management verification (CXXCBC-901).
   add_cng_test(protostellar/live_search_index_admin LINK_CLIENT LIBS couchbase_cxx_protostellar)
 
+  # KV durable-timeout resolution (CXXCBC-904).
+  add_cng_test(protostellar/component_timeouts LINK_CLIENT LIBS couchbase_cxx_protostellar)
 endif()

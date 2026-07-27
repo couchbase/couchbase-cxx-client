@@ -30,6 +30,7 @@
 // context. cluster_impl routes KV ops here when the cluster was opened with couchbase2://.
 
 #include "core/cluster_credentials.hxx"
+#include "core/io/mcbp_traits.hxx"
 #include "core/operations/document_analytics.hxx"
 #include "core/operations/document_append.hxx"
 #include "core/operations/document_decrement.hxx"
@@ -98,6 +99,7 @@ struct component_timeouts {
   std::chrono::milliseconds search{ timeout_defaults::search_timeout };
   std::chrono::milliseconds view{ timeout_defaults::view_timeout };
   std::chrono::milliseconds management{ timeout_defaults::management_timeout };
+  std::chrono::milliseconds key_value_durable{ timeout_defaults::key_value_durable_timeout };
 };
 
 // Construction parameters for `component`, grouped so that adding one is a source-compatible
@@ -146,8 +148,40 @@ inline constexpr bool component_supports_v<operations::append_request> = true;
 template<>
 inline constexpr bool component_supports_v<operations::prepend_request> = true;
 
-// Default per-service operation timeouts applied when a request does not carry its own. Grouped in
-// a struct so adding a service does not grow the component constructor's positional argument list.
+// Resolves the effective timeout for a KV operation: the request's own timeout if set, else the
+// per-service default — the durable default for a synchronous-durability mutation (RFC 77
+// KvDurableTimeout), the standard KV default otherwise. Free function so it is unit-testable.
+//
+// No lower bound is imposed on an explicit request timeout. The MCBP path raises a durable
+// operation's timeout to a 1500ms floor, which it needs because it has no durable default at all
+// and a durable write there inherits the 2.5s KV budget; resolving KvDurableTimeout is the
+// RFC-specified mechanism for that, and neither RFC 59 nor RFC 77 states a floor. A caller who
+// names a timeout gets the one they named.
+[[nodiscard]] inline auto
+resolve_kv_timeout(std::optional<std::chrono::milliseconds> request_timeout,
+                   couchbase::durability_level level,
+                   const component_timeouts& timeouts) -> std::chrono::milliseconds
+{
+  const auto fallback =
+    (level == couchbase::durability_level::none) ? timeouts.key_value : timeouts.key_value_durable;
+  return request_timeout.value_or(fallback);
+}
+
+// The durability level a request asks for, or `none` for a request type that cannot carry one.
+// Lets a caller generic over the request type apply the rule above without knowing which types
+// have the member; `supports_durability_v` is the same trait the MCBP path keys its own durability
+// handling on, so the two transports agree on which operations are durable.
+template<class Request>
+[[nodiscard]] auto
+requested_durability(const Request& request) -> couchbase::durability_level
+{
+  if constexpr (io::mcbp_traits::supports_durability_v<Request>) {
+    return request.durability_level;
+  } else {
+    static_cast<void>(request);
+    return couchbase::durability_level::none;
+  }
+}
 
 class component
 {
