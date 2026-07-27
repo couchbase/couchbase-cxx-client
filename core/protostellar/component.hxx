@@ -240,8 +240,9 @@ public:
                utils::movable_function<void(operations::prepend_response)>&& handler)
     -> pending_call;
 
-  // N1QL query over the couchbase2 server-streaming transport. Rows are buffered into the response;
-  // the terminal message carries the metadata.
+  // N1QL query over the couchbase2 server-streaming transport. Rows are buffered into the response
+  // when no callback is provided, or delivered incrementally to row_callback when present; the
+  // terminal message carries the metadata.
   auto execute(const operations::query_request& request,
                utils::movable_function<void(operations::query_response)>&& handler) -> pending_call;
 

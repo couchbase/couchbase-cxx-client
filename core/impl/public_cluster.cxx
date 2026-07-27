@@ -15,6 +15,8 @@
  *   limitations under the License.
  */
 
+#include <couchbase/build_config.hxx>
+
 #include "core/cluster.hxx"
 
 #include "analytics.hxx"

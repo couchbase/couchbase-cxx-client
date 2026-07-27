@@ -122,6 +122,12 @@ can_encode_rejects_unsupported_features()
   ops::analytics_request with_raw = base;
   with_raw.raw.emplace("timeout", couchbase::core::json_string{ "\"1s\"" });
   assert_false(pa::can_encode(with_raw), "raw passthrough is not supported");
+
+  ops::analytics_request with_row_callback = base;
+  with_row_callback.row_callback = [](std::string) {
+    return couchbase::core::utils::json::stream_control::next_row;
+  };
+  assert_true(pa::can_encode(with_row_callback), "the analytics streaming row callback is wired");
 }
 
 // Every way of naming a scope has to be refused, not just the one the original test covered. The
