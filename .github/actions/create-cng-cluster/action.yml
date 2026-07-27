@@ -1,0 +1,107 @@
+name: create-cng-cluster
+description: >
+  Creates a Couchbase cluster fronted by Cloud Native Gateway (the couchbase2:// gRPC endpoint)
+  using cbdinocluster's Couchbase Autonomous Operator deployer on a local k3d Kubernetes cluster.
+  Separate from create-cluster because CNG is only deployable by the operator: the docker deployer
+  has no gateway, so there is no couchbase2:// endpoint to connect to.
+inputs:
+  version:
+    description: 'Couchbase Server version to use'
+    required: true
+  operator-version:
+    # Release versions only. cbdinocluster maps a version with a build number (e.g. 2.8.0-123) to
+    # ghcr.io/cb-vanilla/*, which needs a Couchbase-org token; a plain release maps to the public
+    # couchbase/* image on Docker Hub and needs no credentials at all. Keep it that way.
+    # 2.8.0 also matches the cao-tools version cbdinocluster's `init` downloads by default.
+    description: 'Couchbase Autonomous Operator release version'
+    required: false
+    default: '2.8.0'
+  gateway-version:
+    description: 'Cloud Native Gateway release version'
+    required: false
+    default: '1.2.1'
+  bucket:
+    description: 'Bucket to create for the tests'
+    required: false
+    default: 'default'
+outputs:
+  connstr:
+    description: 'couchbase2:// connection string for the gateway'
+    value: ${{ steps.start-cluster.outputs.connstr }}
+  id:
+    description: 'The cbdinocluster ID of the created cluster'
+    value: ${{ steps.start-cluster.outputs.id }}
+runs:
+  using: composite
+  steps:
+    - name: Install k3d and cbdinocluster
+      shell: bash
+      run: |
+        mkdir -p "$HOME/bin"
+        wget -nv -O $HOME/bin/k3d https://github.com/k3d-io/k3d/releases/download/v5.9.0/k3d-linux-amd64
+        # Newer than the v0.0.86 that create-cluster (docker deployer) pins: the cao deployer only
+        # learned to create buckets in v0.0.104 ("Implemented gocbcorex based helper for caodeploy"),
+        # and before that `buckets add` fails outright with "caodeploy does not support creating
+        # buckets". v0.0.104 is the floor; this pins the newest release at time of writing.
+        wget -nv -O $HOME/bin/cbdinocluster https://github.com/couchbaselabs/cbdinocluster/releases/download/v0.0.119/cbdinocluster-linux-amd64
+        chmod +x $HOME/bin/k3d $HOME/bin/cbdinocluster
+        echo "$HOME/bin" >> $GITHUB_PATH
+    - name: Create Kubernetes cluster
+      shell: bash
+      run: |
+        k3d cluster create cbdino --wait
+        kubectl wait --for=condition=Ready nodes --all --timeout=180s
+        kubectl get nodes -o wide
+    - name: Initialize cbdinocluster
+      shell: bash
+      run: |
+        # No context flag on purpose. cbdinocluster registers --k8s-context but its handler reads an
+        # unregistered "kube-context", so the value is discarded either way and it always falls back
+        # to the kubeconfig's current-context -- which is exactly what `k3d cluster create` sets.
+        cbdinocluster -v init --auto --kube-config "$HOME/.kube/config"
+        cbdinocluster ps
+    - name: Start Couchbase cluster with Cloud Native Gateway
+      id: start-cluster
+      shell: bash
+      env:
+        # Single node: a GitHub-hosted runner has 4 vCPU / 16 GB, and the operator, the gateway and
+        # a server pod all have to fit. The `docker:` memory block that create-cluster uses is
+        # ignored by the cao deployer, so quotas stay at the server defaults (256 MB).
+        CLUSTER_CONFIG: |
+          nodes:
+            - count: 1
+              version: ${{ inputs.version }}
+              services: [kv, n1ql, index]
+          cao:
+            operator-version: "${{ inputs.operator-version }}"
+            gateway-version: "${{ inputs.gateway-version }}"
+          expiry: 1h
+      run: |
+        CBDC_ID=$(cbdinocluster -v alloc --deployer cao --def="${CLUSTER_CONFIG}")
+        echo "CBDC_ID=$CBDC_ID" >> "$GITHUB_ENV"
+        echo "id=$CBDC_ID" >> "$GITHUB_OUTPUT"
+        # The tests set tls_verify_mode::none themselves, so the bare connstr is what they want:
+        # couchbase2 is always TLS and the gateway's dev certificate is not chainable.
+        echo "connstr=$(cbdinocluster -v connstr --couchbase2 $CBDC_ID)" >> "$GITHUB_OUTPUT"
+    - name: Add bucket
+      shell: bash
+      env:
+        # Map input to an environment variable to prevent shell injection
+        BUCKET: ${{ inputs.bucket }}
+      run: |
+        # num-replicas 0: a single-node cluster cannot satisfy replicas, and the bucket would
+        # never come healthy.
+        cbdinocluster buckets add $CBDC_ID "$BUCKET" --ram-quota-mb 100 --num-replicas 0
+    - name: Dump cluster state on failure
+      if: ${{ failure() }}
+      shell: bash
+      run: |
+        kubectl get pods,svc -A || true
+        # The CouchbaseCluster CRD only exists once the operator is installed, so tolerate its
+        # absence rather than letting it mask the output above.
+        kubectl get couchbaseclusters -A || true
+        kubectl describe pods -A || true
+        # `kubectl logs` has no -A/--all-namespaces, so walk the namespaces explicitly.
+        for ns in $(kubectl get ns -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
+          kubectl logs -n "$ns" -l app=couchbase-operator --tail=200 || true
+        done

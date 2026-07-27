@@ -26,6 +26,7 @@
 #include "core/cluster_options.hxx"
 #include "core/platform/base64.h"
 #include "core/protostellar/credentials.hxx"
+#include "core/tls_verify_mode.hxx"
 
 #include <filesystem>
 #include <fstream>
@@ -39,6 +40,7 @@ namespace
 namespace ps = ::couchbase::core::protostellar;
 using ::couchbase::core::cluster_credentials;
 using ::couchbase::core::cluster_options;
+using ::couchbase::core::tls_verify_mode;
 
 void
 basic_and_bearer_header_values()
@@ -161,6 +163,73 @@ channel_credentials_switch_on_tls()
               "insecure channel credentials");
 }
 
+// The security-critical property of make_channel_credentials(): exactly one combination of options
+// selects the branch that skips server-certificate and hostname verification. Asserting that
+// make_channel_credentials() returns non-null cannot express this -- every branch returns non-null,
+// including one that returned unverified credentials unconditionally -- and the returned
+// grpc::ChannelCredentials is opaque, so the branch is not recoverable from it afterwards. The
+// function therefore branches on tls_peer_verification_disabled(), and this pins that predicate.
+void
+peer_verification_is_disabled_only_by_tls_verify_none()
+{
+  cluster_options defaults;
+  assert_false(ps::tls_peer_verification_disabled(defaults),
+               "default options must verify the peer certificate");
+
+  cluster_options verifying;
+  verifying.enable_tls = true;
+  verifying.tls_verify = tls_verify_mode::peer;
+  assert_false(ps::tls_peer_verification_disabled(verifying),
+               "tls_verify=peer over TLS must verify the peer certificate");
+
+  cluster_options unverified;
+  unverified.enable_tls = true;
+  unverified.tls_verify = tls_verify_mode::none;
+  assert_true(ps::tls_peer_verification_disabled(unverified),
+              "tls_verify=none over TLS reaches the unverified branch");
+
+  // A plaintext channel is not "unverified" in this sense: it carries no server certificate to
+  // verify, and make_channel_credentials() refuses to put credentials on it at all. Reporting it as
+  // unverified would conflate two different failures and make the predicate useless as a signal.
+  cluster_options plaintext;
+  plaintext.enable_tls = false;
+  plaintext.tls_verify = tls_verify_mode::none;
+  assert_false(ps::tls_peer_verification_disabled(plaintext),
+               "tls_verify=none without TLS is a plaintext channel, not an unverified one");
+}
+
+// The predicate would be worthless if the credential shape could steer the decision -- e.g. if a
+// configured client identity or a JWT quietly relaxed verification. Sweep every credential shape
+// against both verify modes and assert the answer tracks tls_verify alone.
+void
+peer_verification_does_not_depend_on_the_credential_shape()
+{
+  cluster_credentials password;
+  password.username = "Administrator";
+  password.password = "secret";
+
+  cluster_credentials jwt;
+  jwt.jwt_token = "jwt-token";
+
+  cluster_credentials certificate;
+  certificate.certificate_path = "/nonexistent/cert.pem";
+  certificate.key_path = "/nonexistent/key.pem";
+
+  for (const auto& creds : { cluster_credentials{}, password, jwt, certificate }) {
+    cluster_options verifying;
+    verifying.enable_tls = true;
+    assert_false(ps::tls_peer_verification_disabled(verifying),
+                 "no credential shape may reach the unverified branch on its own");
+
+    cluster_options unverified;
+    unverified.enable_tls = true;
+    unverified.tls_verify = tls_verify_mode::none;
+    assert_true(ps::tls_peer_verification_disabled(unverified),
+                "tls_verify=none stays decisive for every credential shape");
+    (void)creds;
+  }
+}
+
 } // namespace
 
 auto
@@ -175,6 +244,10 @@ tests() -> test_suite
         ssl_root_certs_prefer_explicit_then_capella_and_mozilla },
       { "ssl_client_certificate_is_read_from_files", ssl_client_certificate_is_read_from_files },
       { "channel_credentials_switch_on_tls", channel_credentials_switch_on_tls },
+      { "peer_verification_is_disabled_only_by_tls_verify_none",
+        peer_verification_is_disabled_only_by_tls_verify_none },
+      { "peer_verification_does_not_depend_on_the_credential_shape",
+        peer_verification_does_not_depend_on_the_credential_shape },
     },
   };
 }

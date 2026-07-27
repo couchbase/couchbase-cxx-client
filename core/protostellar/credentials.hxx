@@ -60,8 +60,20 @@ bearer_auth_value(const std::string& jwt_token) -> std::string;
 [[nodiscard]] auto
 authorization_header(const cluster_credentials& credentials) -> std::string;
 
+// Whether these options select a channel that encrypts but does NOT verify the server certificate
+// or hostname. make_channel_credentials() branches on exactly this predicate, so pinning it in a
+// test pins the real decision: grpc::ChannelCredentials is opaque, and nothing about the object it
+// returns reveals which branch produced it.
+//
+// Only tls_verify=none on a TLS-enabled channel reaches that branch. A plaintext channel is a
+// different thing, not a weaker one -- it presents no certificate at all, and
+// make_channel_credentials refuses to put credentials on it.
+[[nodiscard]] auto
+tls_peer_verification_disabled(const cluster_options& options) -> bool;
+
 // Channel credentials for a couchbase2 endpoint: TLS (from build_ssl_options) when TLS is
-// enabled, otherwise insecure.
+// enabled, otherwise insecure. When tls_peer_verification_disabled() holds, the channel is
+// encrypted but unverified, and taking that branch is logged at warning level.
 [[nodiscard]] auto
 make_channel_credentials(const cluster_options& options, const cluster_credentials& credentials)
   -> std::shared_ptr<grpc::ChannelCredentials>;
