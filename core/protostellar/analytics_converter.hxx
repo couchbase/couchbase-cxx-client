@@ -22,8 +22,8 @@
 // and are buffered into analytics_response::rows; the terminal message carries the metadata.
 //
 // Features with no couchbase2 equivalent are reported by can_encode() so the component can surface
-// feature_not_available rather than silently dropping them: the `raw` passthrough map, the
-// streaming row_callback (only the buffered result path is wired), and scoped analytics.
+// feature_not_available rather than silently dropping them: the `raw` passthrough map and scoped
+// analytics. The streaming row_callback IS wired (CXXCBC-910), so it no longer gates here.
 //
 // Scoped analytics is refused because the schema cannot express it, not merely because it is
 // unimplemented. AnalyticsQueryRequest at the pinned protostellar revision retired the field the
@@ -55,9 +55,8 @@ namespace v1 = ::couchbase::analytics::v1;
 [[nodiscard]] inline auto
 can_encode(const operations::analytics_request& request) -> bool
 {
-  return request.raw.empty() && !request.row_callback.has_value() &&
-         !request.bucket_name.has_value() && !request.scope_name.has_value() &&
-         !request.scope_qualifier.has_value();
+  return request.raw.empty() && !request.bucket_name.has_value() &&
+         !request.scope_name.has_value() && !request.scope_qualifier.has_value();
 }
 
 inline auto

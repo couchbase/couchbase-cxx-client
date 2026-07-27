@@ -186,4 +186,6 @@ if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 AND TARGET couchbase_cxx_protostellar)
 
   # KV durable-timeout resolution (CXXCBC-904).
   add_cng_test(protostellar/component_timeouts LINK_CLIENT LIBS couchbase_cxx_protostellar)
+  # Streaming backpressure & cancel (CXXCBC-910).
+  add_cng_test(protostellar/query_streaming LINK_CLIENT LIBS couchbase_cxx_protostellar)
 endif()

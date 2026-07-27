@@ -24,8 +24,8 @@
 //
 // Query features with no couchbase2 equivalent are reported by can_encode() so the component can
 // surface feature_not_available rather than silently dropping them: the `raw` passthrough map,
-// use_replica, the streaming row_callback (only the buffered result path is wired), node targeting
-// via send_to_node, and tuning values too large for the proto's uint32 fields.
+// use_replica, node targeting via send_to_node, and tuning values too large for the proto's
+// uint32 fields. The streaming row_callback IS wired (CXXCBC-910), so it no longer gates here.
 
 #include "core/json_string.hxx"
 #include "core/operations/document_query.hxx"
@@ -59,9 +59,9 @@ fits_uint32(const std::optional<std::uint64_t>& value) -> bool
 can_encode(const operations::query_request& request) -> bool
 {
   return request.raw.empty() && !request.use_replica.value_or(false) &&
-         !request.row_callback.has_value() && !request.send_to_node.has_value() &&
-         fits_uint32(request.max_parallelism) && fits_uint32(request.pipeline_batch) &&
-         fits_uint32(request.pipeline_cap) && fits_uint32(request.scan_cap);
+         !request.send_to_node.has_value() && fits_uint32(request.max_parallelism) &&
+         fits_uint32(request.pipeline_batch) && fits_uint32(request.pipeline_cap) &&
+         fits_uint32(request.scan_cap);
 }
 
 // Split the SDK query_context ("default:`bucket`.`scope`") into the proto's bucket_name/scope_name.
