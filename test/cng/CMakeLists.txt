@@ -104,4 +104,7 @@ if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 AND TARGET couchbase_cxx_protostellar)
 
   # TLS/auth credentials (CXXCBC-890).
   add_cng_test(protostellar/credentials LINK_CLIENT LIBS couchbase_cxx_protostellar)
+
+  # Error mapping (CXXCBC-893).
+  add_cng_test(protostellar/error_utils LINK_CLIENT LIBS couchbase_cxx_protostellar)
 endif()
