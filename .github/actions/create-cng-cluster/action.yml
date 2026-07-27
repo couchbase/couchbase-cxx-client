@@ -116,28 +116,32 @@ runs:
     - name: Raise the data service quota
       shell: bash
       run: |
-        # The bucket management cases create a bucket of their own, and at the operator's 256 MiB
-        # default the 100 MB test bucket leaves too little room for one -- they would report the
-        # gateway's "ram quota specified is too large" and skip, so the suite would stay green while
-        # testing less. 512 MiB is the smallest quota that fits the test bucket plus a 128 MB bucket
-        # under update, and is nothing against the runner's 16 GB.
+        # The bucket and collection management cases create buckets of their own, and at the
+        # operator's 256 MiB default the 100 MB test bucket leaves no room for one -- the create
+        # would report the gateway's "ram quota specified is too large" and fail the case.
+        #
+        # 1280 MiB is set by the largest of those buckets: the collection history retention case
+        # needs a magma bucket, and the gateway refuses to create one below 1024 MB whatever the
+        # server would accept. With the 100 MB test bucket alongside it that is 1124 MB, and ctest
+        # runs the CNG suites serially, so no two test buckets are ever allocated at once. Three KV
+        # nodes reserve it each, which is 3.8 GiB of the runner's 15.
         #
         # It has to be a patch: the quota cannot be expressed in the cluster definition, and setting
         # it through /pools/default is reconciled away by the operator within the minute.
         kubectl -n "cbdc2-$CBDC_ID" patch couchbasecluster cluster --type=merge \
-          -p '{"spec":{"cluster":{"dataServiceMemoryQuota":"512Mi"}}}'
+          -p '{"spec":{"cluster":{"dataServiceMemoryQuota":"1280Mi"}}}'
         # Waiting on condition=Available would prove nothing: it is already true from before the
         # patch, so the wait returns instantly and the bucket could be created against the old
-        # quota. Poll the cluster itself for the applied value, and fail rather than let the
-        # bucket-management cases quietly skip for want of room.
+        # quota. Poll the cluster itself for the applied value, and fail here rather than leave the
+        # management cases to fail one by one on a bucket create.
         MGMT=$(cbdinocluster mgmt "$CBDC_ID" | tail -1)
         for _ in $(seq 1 30); do
           QUOTA=$(curl -sS -u Administrator:password "$MGMT/pools/default" | jq -r '.memoryQuota')
           echo "data service quota: $QUOTA"
-          [ "$QUOTA" = "512" ] && break
+          [ "$QUOTA" = "1280" ] && break
           sleep 5
         done
-        [ "$QUOTA" = "512" ] || { echo "::error::data service quota never reached 512 MiB"; exit 1; }
+        [ "$QUOTA" = "1280" ] || { echo "::error::data service quota never reached 1280 MiB"; exit 1; }
     - name: Add bucket
       shell: bash
       env:

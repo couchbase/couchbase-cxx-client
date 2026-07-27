@@ -55,6 +55,12 @@
 #include "core/operations/management/bucket_get.hxx"
 #include "core/operations/management/bucket_get_all.hxx"
 #include "core/operations/management/bucket_update.hxx"
+#include "core/operations/management/collection_create.hxx"
+#include "core/operations/management/collection_drop.hxx"
+#include "core/operations/management/collection_update.hxx"
+#include "core/operations/management/scope_create.hxx"
+#include "core/operations/management/scope_drop.hxx"
+#include "core/operations/management/scope_get_all.hxx"
 #include "core/protostellar/dispatcher.hxx"
 #include "core/timeout_defaults.hxx"
 #include "core/utils/movable_function.hxx"
@@ -228,6 +234,31 @@ public:
   auto execute(
     operations::management::bucket_flush_request request,
     utils::movable_function<void(operations::management::bucket_flush_response)>&& handler)
+    -> pending_call;
+
+  // Scope/collection management (unary admin RPCs over admin.collection.v1).
+  auto execute(
+    operations::management::scope_get_all_request request,
+    utils::movable_function<void(operations::management::scope_get_all_response)>&& handler)
+    -> pending_call;
+  auto execute(
+    operations::management::scope_create_request request,
+    utils::movable_function<void(operations::management::scope_create_response)>&& handler)
+    -> pending_call;
+  auto execute(operations::management::scope_drop_request request,
+               utils::movable_function<void(operations::management::scope_drop_response)>&& handler)
+    -> pending_call;
+  auto execute(
+    operations::management::collection_create_request request,
+    utils::movable_function<void(operations::management::collection_create_response)>&& handler)
+    -> pending_call;
+  auto execute(
+    operations::management::collection_update_request request,
+    utils::movable_function<void(operations::management::collection_update_response)>&& handler)
+    -> pending_call;
+  auto execute(
+    operations::management::collection_drop_request request,
+    utils::movable_function<void(operations::management::collection_drop_response)>&& handler)
     -> pending_call;
 
 private:

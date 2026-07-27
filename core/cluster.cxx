@@ -782,7 +782,13 @@ public:
                     std::is_same_v<Request, operations::management::bucket_create_request> ||
                     std::is_same_v<Request, operations::management::bucket_update_request> ||
                     std::is_same_v<Request, operations::management::bucket_drop_request> ||
-                    std::is_same_v<Request, operations::management::bucket_flush_request>) {
+                    std::is_same_v<Request, operations::management::bucket_flush_request> ||
+                    std::is_same_v<Request, operations::management::scope_get_all_request> ||
+                    std::is_same_v<Request, operations::management::scope_create_request> ||
+                    std::is_same_v<Request, operations::management::scope_drop_request> ||
+                    std::is_same_v<Request, operations::management::collection_create_request> ||
+                    std::is_same_v<Request, operations::management::collection_update_request> ||
+                    std::is_same_v<Request, operations::management::collection_drop_request>) {
         component->execute(std::move(request), std::forward<Handler>(handler));
         return;
       } else {
@@ -815,6 +821,16 @@ public:
                                             bucket_capability cap,
                                             Handler&& handler)
   {
+    // There is no bucket capability to read over couchbase2, and no MCBP connection to read it
+    // over: open_bucket() below would bootstrap a session against a port the gateway does not
+    // serve, so a request that only wants a capability checked would fail on the check rather
+    // than on what it asked for. The gateway still validates the capability the request depends
+    // on -- history retention needs a magma bucket wherever the request arrives from -- so
+    // routing straight through refuses the same requests, one hop later and in the server's own
+    // words.
+    if (is_protostellar()) {
+      return execute(std::move(request), std::forward<Handler>(handler));
+    }
     auto bucket_name = request.bucket_name;
     return open_bucket(
       bucket_name,

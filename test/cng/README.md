@@ -140,9 +140,11 @@ $ kubectl -n cbdc2-"$CBDC_ID" patch couchbasecluster cluster --type=merge -p '{
 ```
 
 **Data service.** One 256 MB `default` bucket consumes the whole 256 MiB data quota, leaving the
-bucket-management round trip — which creates a bucket, reads it back and asserts the settings
-survived — with nowhere to put one. It reports the gateway's own "ram quota specified is too large"
-and skips, so the suite stays green while quietly testing less. Creating the bucket smaller
+cases that create a bucket of their own with nowhere to put one — the bucket-management round trip,
+which reads its bucket back and asserts the settings survived, and the collection-management case
+that gives a bucket its own maximum expiry to check that a collection's expiry is layered over it
+rather than merged into it. Both report the gateway's own "ram quota specified is too large" and
+skip, so the suite stays green while quietly testing less. Creating the bucket smaller
 (`--ram-quota-mb 128`) frees enough room for the couchstore case; the 1024 MiB above is what a magma
 bucket needs, since the gateway rejects a magma bucket under a 1024 MB quota (and history retention
 requires a further 2048 MB).
