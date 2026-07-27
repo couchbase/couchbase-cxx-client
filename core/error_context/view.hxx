@@ -36,6 +36,11 @@ struct view {
   std::string view_name{};
   std::vector<std::string> query_string{};
 
+  // The message the service reported, when it reported one. Over couchbase2 this is the gRPC
+  // status message, which is the only error detail that transport carries -- http_status and
+  // http_body stay empty there.
+  std::string first_error_message{};
+
   std::string method{};
   std::string path{};
   std::uint32_t http_status{};

@@ -48,6 +48,9 @@ struct traits<couchbase::core::error_context::search> {
     if (const auto& val = ctx.parameters; val.has_value()) {
       v["parameters"] = val.value();
     }
+    if (!ctx.first_error_message.empty()) {
+      v["first_error_message"] = ctx.first_error_message;
+    }
     if (const auto& reasons = ctx.retry_reasons; !reasons.empty()) {
       tao::json::value reasons_json = tao::json::empty_array;
       for (const auto& reason : reasons) {

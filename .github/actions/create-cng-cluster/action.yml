@@ -67,11 +67,18 @@ runs:
         # Single node: a GitHub-hosted runner has 4 vCPU / 16 GB, and the operator, the gateway and
         # a server pod all have to fit. The `docker:` memory block that create-cluster uses is
         # ignored by the cao deployer, so quotas stay at the server defaults (256 MB).
+        #
+        # fts is in the list because the live search case needs a search service to answer, not an
+        # index. It queries an index that was never created and accepts the gateway's
+        # index-not-found, which is an answer only a cluster running fts can give; without the
+        # service the request fails as an internal error instead and the case goes red. No index is
+        # built here, so the default search quota is enough -- one that has to serve queries needs
+        # considerably more, which is a problem for whoever adds search index management.
         CLUSTER_CONFIG: |
           nodes:
             - count: 1
               version: ${{ inputs.version }}
-              services: [kv, n1ql, index]
+              services: [kv, n1ql, index, fts]
           cao:
             operator-version: "${{ inputs.operator-version }}"
             gateway-version: "${{ inputs.gateway-version }}"

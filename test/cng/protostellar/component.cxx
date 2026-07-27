@@ -229,7 +229,7 @@ get_round_trips_on_the_io_thread()
   in_process_server server;
   asio::io_context io;
   auto work = asio::make_work_guard(io);
-  component comp{ io, component_config{ server.channel(), cluster_credentials{}, 5000ms } };
+  component comp{ io, component_config{ server.channel(), cluster_credentials{}, { 5000ms } } };
 
   ops::get_request request;
   request.id = make_id("k1");
@@ -255,7 +255,7 @@ get_maps_not_found_into_the_error_context()
   in_process_server server;
   asio::io_context io;
   auto work = asio::make_work_guard(io);
-  component comp{ io, component_config{ server.channel(), cluster_credentials{}, 5000ms } };
+  component comp{ io, component_config{ server.channel(), cluster_credentials{}, { 5000ms } } };
 
   ops::get_request request;
   request.id = make_id("missing");
@@ -277,7 +277,7 @@ upsert_returns_cas_and_mutation_token()
   in_process_server server;
   asio::io_context io;
   auto work = asio::make_work_guard(io);
-  component comp{ io, component_config{ server.channel(), cluster_credentials{}, 5000ms } };
+  component comp{ io, component_config{ server.channel(), cluster_credentials{}, { 5000ms } } };
 
   ops::upsert_request request;
   request.id = make_id("k1");
@@ -302,7 +302,7 @@ get_handles_compressed_content_with_feature_not_available()
   in_process_server server;
   asio::io_context io;
   auto work = asio::make_work_guard(io);
-  component comp{ io, component_config{ server.channel(), cluster_credentials{}, 5000ms } };
+  component comp{ io, component_config{ server.channel(), cluster_credentials{}, { 5000ms } } };
 
   ops::get_request request;
   request.id = make_id("compressed");
@@ -324,7 +324,7 @@ insert_returns_cas_and_mutation_token()
   in_process_server server;
   asio::io_context io;
   auto work = asio::make_work_guard(io);
-  component comp{ io, component_config{ server.channel(), cluster_credentials{}, 5000ms } };
+  component comp{ io, component_config{ server.channel(), cluster_credentials{}, { 5000ms } } };
 
   ops::insert_request request;
   request.id = make_id("k1");
@@ -349,7 +349,7 @@ insert_maps_already_exists_into_error_context()
   in_process_server server;
   asio::io_context io;
   auto work = asio::make_work_guard(io);
-  component comp{ io, component_config{ server.channel(), cluster_credentials{}, 5000ms } };
+  component comp{ io, component_config{ server.channel(), cluster_credentials{}, { 5000ms } } };
 
   ops::insert_request request;
   request.id = make_id("exists");
@@ -372,7 +372,7 @@ replace_returns_cas_and_mutation_token()
   in_process_server server;
   asio::io_context io;
   auto work = asio::make_work_guard(io);
-  component comp{ io, component_config{ server.channel(), cluster_credentials{}, 5000ms } };
+  component comp{ io, component_config{ server.channel(), cluster_credentials{}, { 5000ms } } };
 
   ops::replace_request request;
   request.id = make_id("k1");
@@ -397,7 +397,7 @@ replace_maps_not_found_into_error_context()
   in_process_server server;
   asio::io_context io;
   auto work = asio::make_work_guard(io);
-  component comp{ io, component_config{ server.channel(), cluster_credentials{}, 5000ms } };
+  component comp{ io, component_config{ server.channel(), cluster_credentials{}, { 5000ms } } };
 
   ops::replace_request request;
   request.id = make_id("missing");
@@ -420,7 +420,7 @@ remove_returns_cas_and_mutation_token()
   in_process_server server;
   asio::io_context io;
   auto work = asio::make_work_guard(io);
-  component comp{ io, component_config{ server.channel(), cluster_credentials{}, 5000ms } };
+  component comp{ io, component_config{ server.channel(), cluster_credentials{}, { 5000ms } } };
 
   ops::remove_request request;
   request.id = make_id("k1");
@@ -444,7 +444,7 @@ remove_maps_not_found_into_error_context()
   in_process_server server;
   asio::io_context io;
   auto work = asio::make_work_guard(io);
-  component comp{ io, component_config{ server.channel(), cluster_credentials{}, 5000ms } };
+  component comp{ io, component_config{ server.channel(), cluster_credentials{}, { 5000ms } } };
 
   ops::remove_request request;
   request.id = make_id("missing");
@@ -470,7 +470,7 @@ authorization_header_passed_to_grpc_context()
   creds.username = "Administrator";
   creds.password = "password";
 
-  component comp{ io, component_config{ server.channel(), creds, 5000ms } };
+  component comp{ io, component_config{ server.channel(), creds, { 5000ms } } };
 
   ops::get_request request;
   request.id = make_id("k1");
@@ -504,7 +504,7 @@ get_honours_the_request_timeout()
   server.service().reply_delay.store(400ms);
   asio::io_context io;
   auto work = asio::make_work_guard(io);
-  component comp{ io, component_config{ server.channel(), cluster_credentials{}, 5000ms } };
+  component comp{ io, component_config{ server.channel(), cluster_credentials{}, { 5000ms } } };
 
   ops::get_request request;
   request.id = make_id("k1");
@@ -534,7 +534,7 @@ mutation_timeout_is_reported_as_ambiguous()
   server.service().reply_delay.store(400ms);
   asio::io_context io;
   auto work = asio::make_work_guard(io);
-  component comp{ io, component_config{ server.channel(), cluster_credentials{}, 5000ms } };
+  component comp{ io, component_config{ server.channel(), cluster_credentials{}, { 5000ms } } };
 
   ops::upsert_request request;
   request.id = make_id("k1");
@@ -565,7 +565,7 @@ an_exhausted_budget_is_rejected_before_dispatch()
   in_process_server server;
   asio::io_context io;
   auto work = asio::make_work_guard(io);
-  component comp{ io, component_config{ server.channel(), cluster_credentials{}, 5000ms } };
+  component comp{ io, component_config{ server.channel(), cluster_credentials{}, { 5000ms } } };
 
   ops::get_request request;
   request.id = make_id("k1");
@@ -600,7 +600,7 @@ an_exhausted_default_timeout_is_also_rejected()
   in_process_server server;
   asio::io_context io;
   auto work = asio::make_work_guard(io);
-  component comp{ io, component_config{ server.channel(), cluster_credentials{}, 0ms } };
+  component comp{ io, component_config{ server.channel(), cluster_credentials{}, { 0ms } } };
 
   ops::remove_request request;
   request.id = make_id("k1");
@@ -664,7 +664,7 @@ cancellation_completes_the_handler_once()
   server.service().reply_delay.store(400ms);
   asio::io_context io;
   auto work = asio::make_work_guard(io);
-  component comp{ io, component_config{ server.channel(), cluster_credentials{}, 5000ms } };
+  component comp{ io, component_config{ server.channel(), cluster_credentials{}, { 5000ms } } };
 
   ops::get_request request;
   request.id = make_id("k1");
@@ -691,7 +691,7 @@ get_projected_encodes_projections_and_decodes_response()
   in_process_server server;
   asio::io_context io;
   auto work = asio::make_work_guard(io);
-  component comp{ io, component_config{ server.channel(), cluster_credentials{}, 5000ms } };
+  component comp{ io, component_config{ server.channel(), cluster_credentials{}, { 5000ms } } };
 
   ops::get_projected_request request;
   request.id = make_id("k1");

@@ -20,6 +20,8 @@
 #include "core/error_context/analytics.hxx"
 #include "core/error_context/key_value.hxx"
 #include "core/error_context/query.hxx"
+#include "core/error_context/search.hxx"
+#include "core/error_context/view.hxx"
 #include "core/operations/analytics_response_parsing.hxx"
 #include "core/operations/query_response_parsing.hxx"
 #include "core/protostellar/analytics_converter.hxx"
@@ -27,6 +29,8 @@
 #include "core/protostellar/error_utils.hxx"
 #include "core/protostellar/kv_converter.hxx"
 #include "core/protostellar/query_converter.hxx"
+#include "core/protostellar/search_converter.hxx"
+#include "core/protostellar/view_converter.hxx"
 
 #include <couchbase/error_codes.hxx>
 
@@ -34,6 +38,8 @@
 #include <couchbase/analytics/v1/analytics.grpc.pb.h>
 
 #include <couchbase/kv/v1/kv.grpc.pb.h>
+#include <couchbase/search/v1/search.grpc.pb.h>
+#include <couchbase/view/v1/view.grpc.pb.h>
 
 #include <asio/post.hpp>
 
@@ -51,6 +57,8 @@ namespace couchbase::core::protostellar
 namespace v1 = ::couchbase::kv::v1;
 namespace query_v1 = ::couchbase::query::v1;
 namespace analytics_v1 = ::couchbase::analytics::v1;
+namespace search_v1 = ::couchbase::search::v1;
+namespace view_v1 = ::couchbase::view::v1;
 
 // Defined here rather than in the header so the generated gRPC types stay out of every consumer of
 // component.hxx.
@@ -58,6 +66,8 @@ struct component::stubs {
   std::unique_ptr<v1::KvService::Stub> kv;
   std::unique_ptr<query_v1::QueryService::Stub> query;
   std::unique_ptr<analytics_v1::AnalyticsService::Stub> analytics;
+  std::unique_ptr<search_v1::SearchService::Stub> search;
+  std::unique_ptr<view_v1::ViewService::Stub> view;
 };
 
 namespace
@@ -104,14 +114,13 @@ fail_expired_ctx(asio::io_context& io, Handler& handler, Response response) -> p
 
 component::component(asio::io_context& io, component_config config)
   : io_{ io }
-  , stubs_{ std::make_unique<stubs>(
-      stubs{ v1::KvService::NewStub(config.channel),
-             query_v1::QueryService::NewStub(config.channel),
-             analytics_v1::AnalyticsService::NewStub(config.channel) }) }
+  , stubs_{ std::make_unique<stubs>(stubs{ v1::KvService::NewStub(config.channel),
+                                           query_v1::QueryService::NewStub(config.channel),
+                                           analytics_v1::AnalyticsService::NewStub(config.channel),
+                                           search_v1::SearchService::NewStub(config.channel),
+                                           view_v1::ViewService::NewStub(config.channel) }) }
   , authorization_{ authorization_header(config.credentials) }
-  , default_kv_timeout_{ config.default_kv_timeout }
-  , default_query_timeout_{ config.default_query_timeout }
-  , default_analytics_timeout_{ config.default_analytics_timeout }
+  , timeouts_{ config.timeouts }
   // Initialised last (see the declaration order in the header), so the channel can be moved in.
   , dispatcher_{ io, std::move(config.channel) }
 {
@@ -124,7 +133,7 @@ component::execute(operations::get_request request,
                    utils::movable_function<void(operations::get_response)>&& handler)
   -> pending_call
 {
-  const auto timeout = request.timeout.value_or(default_kv_timeout_);
+  const auto timeout = request.timeout.value_or(timeouts_.key_value);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }
@@ -159,7 +168,7 @@ component::execute(operations::get_projected_request request,
 {
   auto proto = std::make_shared<v1::GetRequest>(kv::encode(request));
   const auto id = request.id;
-  const auto timeout = request.timeout.value_or(default_kv_timeout_);
+  const auto timeout = request.timeout.value_or(timeouts_.key_value);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }
@@ -190,7 +199,7 @@ component::execute(operations::upsert_request request,
                    utils::movable_function<void(operations::upsert_response)>&& handler)
   -> pending_call
 {
-  const auto timeout = request.timeout.value_or(default_kv_timeout_);
+  const auto timeout = request.timeout.value_or(timeouts_.key_value);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }
@@ -220,7 +229,7 @@ component::execute(operations::insert_request request,
                    utils::movable_function<void(operations::insert_response)>&& handler)
   -> pending_call
 {
-  const auto timeout = request.timeout.value_or(default_kv_timeout_);
+  const auto timeout = request.timeout.value_or(timeouts_.key_value);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }
@@ -250,7 +259,7 @@ component::execute(operations::replace_request request,
                    utils::movable_function<void(operations::replace_response)>&& handler)
   -> pending_call
 {
-  const auto timeout = request.timeout.value_or(default_kv_timeout_);
+  const auto timeout = request.timeout.value_or(timeouts_.key_value);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }
@@ -280,7 +289,7 @@ component::execute(operations::remove_request request,
                    utils::movable_function<void(operations::remove_response)>&& handler)
   -> pending_call
 {
-  const auto timeout = request.timeout.value_or(default_kv_timeout_);
+  const auto timeout = request.timeout.value_or(timeouts_.key_value);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }
@@ -312,7 +321,7 @@ component::execute(operations::touch_request request,
 {
   auto proto = std::make_shared<v1::TouchRequest>(kv::encode(request));
   const auto id = request.id;
-  const auto timeout = request.timeout.value_or(default_kv_timeout_);
+  const auto timeout = request.timeout.value_or(timeouts_.key_value);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }
@@ -341,7 +350,7 @@ component::execute(operations::exists_request request,
 {
   auto proto = std::make_shared<v1::ExistsRequest>(kv::encode(request));
   const auto id = request.id;
-  const auto timeout = request.timeout.value_or(default_kv_timeout_);
+  const auto timeout = request.timeout.value_or(timeouts_.key_value);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }
@@ -371,7 +380,7 @@ component::execute(operations::get_and_lock_request request,
 {
   auto proto = std::make_shared<v1::GetAndLockRequest>(kv::encode(request));
   const auto id = request.id;
-  const auto timeout = request.timeout.value_or(default_kv_timeout_);
+  const auto timeout = request.timeout.value_or(timeouts_.key_value);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }
@@ -405,7 +414,7 @@ component::execute(operations::unlock_request request,
 {
   auto proto = std::make_shared<v1::UnlockRequest>(kv::encode(request));
   const auto id = request.id;
-  const auto timeout = request.timeout.value_or(default_kv_timeout_);
+  const auto timeout = request.timeout.value_or(timeouts_.key_value);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }
@@ -435,7 +444,7 @@ component::execute(operations::get_and_touch_request request,
 {
   auto proto = std::make_shared<v1::GetAndTouchRequest>(kv::encode(request));
   const auto id = request.id;
-  const auto timeout = request.timeout.value_or(default_kv_timeout_);
+  const auto timeout = request.timeout.value_or(timeouts_.key_value);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }
@@ -506,7 +515,7 @@ component::execute(operations::increment_request request,
   }
   auto proto = std::make_shared<v1::IncrementRequest>(kv::encode(request));
   const auto id = request.id;
-  const auto timeout = request.timeout.value_or(default_kv_timeout_);
+  const auto timeout = request.timeout.value_or(timeouts_.key_value);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }
@@ -539,7 +548,7 @@ component::execute(operations::decrement_request request,
   }
   auto proto = std::make_shared<v1::DecrementRequest>(kv::encode(request));
   const auto id = request.id;
-  const auto timeout = request.timeout.value_or(default_kv_timeout_);
+  const auto timeout = request.timeout.value_or(timeouts_.key_value);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }
@@ -569,7 +578,7 @@ component::execute(operations::append_request request,
 {
   auto proto = std::make_shared<v1::AppendRequest>(kv::encode(request));
   const auto id = request.id;
-  const auto timeout = request.timeout.value_or(default_kv_timeout_);
+  const auto timeout = request.timeout.value_or(timeouts_.key_value);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }
@@ -599,7 +608,7 @@ component::execute(operations::prepend_request request,
 {
   auto proto = std::make_shared<v1::PrependRequest>(kv::encode(request));
   const auto id = request.id;
-  const auto timeout = request.timeout.value_or(default_kv_timeout_);
+  const auto timeout = request.timeout.value_or(timeouts_.key_value);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }
@@ -638,7 +647,7 @@ component::execute(operations::query_request request,
     return response;
   };
 
-  const auto timeout = request.timeout.value_or(default_query_timeout_);
+  const auto timeout = request.timeout.value_or(timeouts_.query);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired_ctx(io_, handler, stamped());
   }
@@ -742,7 +751,7 @@ component::execute(operations::analytics_request request,
     return response;
   };
 
-  const auto timeout = request.timeout.value_or(default_analytics_timeout_);
+  const auto timeout = request.timeout.value_or(timeouts_.analytics);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired_ctx(io_, handler, stamped());
   }
@@ -824,6 +833,140 @@ component::execute(operations::analytics_request request,
         response.ctx.ec = operations::map_analytics_error(response.meta);
       }
       handler(std::move(response));
+    });
+}
+
+auto
+component::execute(operations::search_request request,
+                   utils::movable_function<void(operations::search_response)>&& handler)
+  -> pending_call
+{
+  auto index_name = request.index_name;
+  auto query_str = request.query.str();
+  auto client_context_id = request.client_context_id.value_or(std::string{});
+  // Stamped even on the paths that send nothing, as the query overload does: the error context
+  // identifies which search failed, and a caller correlating by index or client_context_id has no
+  // other handle on it.
+  const auto stamped = [&index_name, &query_str, &client_context_id]() {
+    operations::search_response response;
+    response.ctx.index_name = index_name;
+    response.ctx.query = query_str;
+    response.ctx.client_context_id = client_context_id;
+    return response;
+  };
+
+  const auto timeout = request.timeout.value_or(timeouts_.search);
+  if (timeout <= std::chrono::milliseconds::zero()) {
+    return fail_expired_ctx(io_, handler, stamped());
+  }
+
+  // Unmappable query shape or gated feature (facets, sort specs, vector search, mutation tokens,
+  // raw): fail cleanly rather than dropping the caller's intent. A query that is not JSON at all is
+  // the caller's own error and is reported as invalid_argument, so a malformed query is not
+  // mistaken for a gap in couchbase2 search support.
+  auto encoded = search::encode(request);
+  if (!encoded.has_value()) {
+    auto response = stamped();
+    response.ctx.ec = search::query_is_malformed(request) ? errc::common::invalid_argument
+                                                          : errc::common::feature_not_available;
+    // Posted rather than invoked here, for the reason fail_expired above gives: completions arrive
+    // on the io context, never inline out of execute().
+    asio::post(io_, [handler = std::move(handler), response = std::move(response)]() mutable {
+      handler(std::move(response));
+    });
+    return {};
+  }
+
+  auto proto = std::make_shared<search_v1::SearchQueryRequest>(std::move(*encoded));
+  const auto auth = authorization_;
+  auto* stub = stubs_->search.get();
+  auto response = std::make_shared<operations::search_response>();
+
+  return dispatcher_.server_stream<search_v1::SearchQueryResponse>(
+    timeout,
+    [stub, proto, auth](grpc::ClientContext& ctx,
+                        grpc::ClientReadReactor<search_v1::SearchQueryResponse>* reactor) {
+      if (!auth.empty()) {
+        ctx.AddMetadata("authorization", auth);
+      }
+      stub->async()->SearchQuery(&ctx, proto.get(), reactor);
+    },
+    [response](search_v1::SearchQueryResponse message) {
+      search::decode(message, *response);
+    },
+    [handler = std::move(handler), response, proto, index_name, query_str, client_context_id](
+      grpc::Status status) mutable {
+      (void)proto; // kept only to keep the request alive for the call
+      response->ctx.ec = map_status(status, operation_kind::read_only);
+      response->ctx.first_error_message = error_message(status);
+      response->ctx.index_name = std::move(index_name);
+      response->ctx.query = std::move(query_str);
+      response->ctx.client_context_id = std::move(client_context_id);
+      handler(std::move(*response));
+    });
+}
+
+auto
+component::execute(operations::document_view_request request,
+                   utils::movable_function<void(operations::document_view_response)>&& handler)
+  -> pending_call
+{
+  auto design_document = request.document_name;
+  auto view_name = request.view_name;
+  auto client_context_id = request.client_context_id.value_or(std::string{});
+  // Stamped on every path for the reason the query and search overloads give: a response naming no
+  // view leaves the caller nothing to correlate the failure with.
+  const auto stamped = [&design_document, &view_name, &client_context_id]() {
+    operations::document_view_response response;
+    response.ctx.design_document_name = design_document;
+    response.ctx.view_name = view_name;
+    response.ctx.client_context_id = client_context_id;
+    return response;
+  };
+
+  const auto timeout = request.timeout.value_or(timeouts_.view);
+  if (timeout <= std::chrono::milliseconds::zero()) {
+    return fail_expired_ctx(io_, handler, stamped());
+  }
+
+  // raw / query_string / full_set have no couchbase2 mapping: fail cleanly.
+  if (!view::can_encode(request)) {
+    auto response = stamped();
+    response.ctx.ec = errc::common::feature_not_available;
+    // Posted rather than invoked here, for the reason fail_expired above gives: completions arrive
+    // on the io context, never inline out of execute().
+    asio::post(io_, [handler = std::move(handler), response = std::move(response)]() mutable {
+      handler(std::move(response));
+    });
+    return {};
+  }
+
+  auto proto = std::make_shared<view_v1::ViewQueryRequest>(view::encode(request));
+  const auto auth = authorization_;
+  auto* stub = stubs_->view.get();
+  auto response = std::make_shared<operations::document_view_response>();
+
+  return dispatcher_.server_stream<view_v1::ViewQueryResponse>(
+    timeout,
+    [stub, proto, auth](grpc::ClientContext& ctx,
+                        grpc::ClientReadReactor<view_v1::ViewQueryResponse>* reactor) {
+      if (!auth.empty()) {
+        ctx.AddMetadata("authorization", auth);
+      }
+      stub->async()->ViewQuery(&ctx, proto.get(), reactor);
+    },
+    [response](view_v1::ViewQueryResponse message) {
+      view::decode_rows(message, *response);
+    },
+    [handler = std::move(handler), response, proto, design_document, view_name, client_context_id](
+      grpc::Status status) mutable {
+      (void)proto; // kept only to keep the request alive for the call
+      response->ctx.ec = map_status(status, operation_kind::read_only);
+      response->ctx.first_error_message = error_message(status);
+      response->ctx.design_document_name = std::move(design_document);
+      response->ctx.view_name = std::move(view_name);
+      response->ctx.client_context_id = std::move(client_context_id);
+      handler(std::move(*response));
     });
 }
 
