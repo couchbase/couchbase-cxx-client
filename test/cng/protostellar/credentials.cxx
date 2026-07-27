@@ -29,6 +29,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <random>
 #include <string>
 
 namespace couchbase::cng::test
@@ -116,9 +117,16 @@ ssl_root_certs_prefer_explicit_then_capella_and_mozilla()
 void
 ssl_client_certificate_is_read_from_files()
 {
-  const auto dir = std::filesystem::temp_directory_path();
-  const auto cert_path = dir / "cng_test_cert.pem";
-  const auto key_path = dir / "cng_test_key.pem";
+  // Own a private directory rather than writing fixed names into the shared temp directory: under a
+  // parallel ctest two runs would otherwise race on the same paths, and a leftover file from a
+  // killed run would be picked up by the next one.
+  std::random_device entropy;
+  const auto dir =
+    std::filesystem::temp_directory_path() / ("cng_credentials_test-" + std::to_string(entropy()));
+  std::filesystem::create_directories(dir);
+
+  const auto cert_path = dir / "cert.pem";
+  const auto key_path = dir / "key.pem";
   {
     std::ofstream{ cert_path } << "CERT-CHAIN-CONTENTS";
     std::ofstream{ key_path } << "PRIVATE-KEY-CONTENTS";
@@ -134,8 +142,7 @@ ssl_client_certificate_is_read_from_files()
   assert_eq(ssl.pem_private_key, std::string{ "PRIVATE-KEY-CONTENTS" }, "client key is read");
 
   std::error_code ec;
-  std::filesystem::remove(cert_path, ec);
-  std::filesystem::remove(key_path, ec);
+  std::filesystem::remove_all(dir, ec);
 }
 
 void
