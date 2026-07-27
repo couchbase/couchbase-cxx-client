@@ -343,6 +343,15 @@ make_component_timeouts(const cluster_options& options) -> protostellar::compone
   timeouts.management = options.management_timeout;
   return timeouts;
 }
+
+// Core carries only the on/off switch, so min_size and min_ratio keep the converter's defaults.
+inline auto
+make_compression_settings(const cluster_options& options) -> protostellar::kv::compression_settings
+{
+  protostellar::kv::compression_settings compression{};
+  compression.enabled = options.enable_compression;
+  return compression;
+}
 #endif
 } // namespace
 
@@ -1010,8 +1019,10 @@ public:
       const std::scoped_lock lock(protostellar_mutex_);
       protostellar_ = std::make_shared<protostellar::component>(
         ctx_,
-        protostellar::component_config{
-          std::move(channel), origin_.credentials(), make_component_timeouts(options) });
+        protostellar::component_config{ std::move(channel),
+                                        origin_.credentials(),
+                                        make_component_timeouts(options),
+                                        make_compression_settings(options) });
     }
     CB_LOG_INFO(R"(open couchbase2 cluster, id: "{}", endpoint: "{}")", id_, endpoint);
     return handler({});

@@ -30,9 +30,8 @@ default_channel_arguments() -> grpc::ChannelArguments
   args.SetInt(GRPC_ARG_KEEPALIVE_TIME_MS, 30'000);
   args.SetInt(GRPC_ARG_KEEPALIVE_TIMEOUT_MS, 5'000);
   args.SetInt(GRPC_ARG_KEEPALIVE_PERMIT_WITHOUT_CALLS, 1);
-  // RFC 77 (Bootstrapping -> Maximum Message Size): couchbase2 clients must raise the receive
-  // limit to 25 MiB; gRPC's 4 MB default is too small for the largest values Couchbase serves.
-  args.SetMaxReceiveMessageSize(25 * 1024 * 1024);
+  // gRPC's 4 MB default is too small for the largest values Couchbase serves.
+  args.SetMaxReceiveMessageSize(static_cast<int>(max_receive_message_size));
   return args;
 }
 

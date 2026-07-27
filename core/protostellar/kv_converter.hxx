@@ -139,11 +139,9 @@ to_core_token(const v1::MutationToken& token) -> couchbase::mutation_token
 }
 
 // Every response that carries a document body puts it in a content oneof, and the generated
-// accessor for the inactive arm returns the empty-string singleton. Reading content_uncompressed()
-// while the compressed arm is active would therefore produce an empty value with a valid CAS and
-// no error -- indistinguishable from an empty document. Compression negotiation lands in
-// CXXCBC-905; until then every body-bearing decoder refuses the compressed arm instead of losing
-// the value, which is the same fail-closed rule the request side applies.
+// accessor for the inactive arm returns the empty-string singleton. The active arm therefore has to
+// be tested before reading either one, or a compressed payload decodes to an empty value with a
+// valid CAS -- indistinguishable from an empty document.
 template<typename Proto>
 [[nodiscard]] auto
 content_is_compressed(const Proto& proto) -> bool
@@ -151,13 +149,84 @@ content_is_compressed(const Proto& proto) -> bool
   return proto.content_case() == Proto::kContentCompressed;
 }
 
+// ── Compression (RFC 77) ───────────────────────────────────────────────────────
+
+// The user's compression knobs. Defaults mirror the classic SDK (enabled; snappy applied only when
+// the value is at least min_size and shrinks below min_ratio). Core only threads the enabled flag,
+// so min_size/min_ratio use the standard defaults.
+struct compression_settings {
+  bool enabled{ true };
+  std::size_t min_size{ 32 };
+  double min_ratio{ 0.83 };
+};
+
+// snappy lives in kv_converter.cxx (compiled into the client library) so <snappy.h> stays out of
+// this header, which white-box tests include — they then need neither snappy's headers nor its
+// symbols. maybe_compress returns the compressed bytes when compression is enabled and the value
+// clears the size/ratio threshold, else std::nullopt ("store uncompressed"); snappy_uncompress
+// returns std::nullopt on malformed input and on a frame declaring more than the transport's
+// maximum message size, which no legitimate value can exceed.
+[[nodiscard]] auto
+maybe_compress(const std::vector<std::byte>& value, const compression_settings& compression)
+  -> std::optional<std::string>;
+[[nodiscard]] auto
+snappy_uncompress(const std::string& compressed) -> std::optional<std::string>;
+
+// Signals the gateway that it may return snappy-compressed content (RFC 77: send
+// COMPRESSION_ENABLED_OPTIONAL when enabled; leave the field unset when the user disabled
+// compression; never COMPRESSION_ENABLED_ALWAYS).
+template<typename Proto>
+inline void
+set_read_compression(Proto& proto, const compression_settings& compression)
+{
+  if (compression.enabled) {
+    proto.set_compression(v1::COMPRESSION_ENABLED_OPTIONAL);
+  }
+}
+
+// Fills a write request's content oneof, snappy-compressing when maybe_compress deems it
+// worthwhile.
+template<typename Proto>
+inline void
+set_write_content(Proto& proto,
+                  const std::vector<std::byte>& value,
+                  const compression_settings& compression)
+{
+  if (auto compressed = maybe_compress(value, compression)) {
+    proto.set_content_compressed(std::move(*compressed));
+  } else {
+    proto.set_content_uncompressed(utils::to_string(value));
+  }
+}
+
+// Reads a response's content oneof, snappy-decoding a compressed payload. Returns nullopt when the
+// compressed arm does not decode: handing back empty bytes instead would produce a value that no
+// caller can distinguish from an empty document, which is the same silent data-loss trap that made
+// the unguarded oneof read wrong before compression landed. A gateway emitting an undecodable
+// snappy frame is a server-side fault, so the callers surface it as internal_server_failure rather
+// than inventing a value.
+template<typename Proto>
+inline auto
+decode_content(const Proto& proto) -> std::optional<std::vector<std::byte>>
+{
+  if (content_is_compressed(proto)) {
+    if (auto uncompressed = snappy_uncompress(proto.content_compressed())) {
+      return utils::to_binary(*uncompressed);
+    }
+    return std::nullopt;
+  }
+  return utils::to_binary(proto.content_uncompressed());
+}
+
 // ── Get ───────────────────────────────────────────────────────────────────────
 
 inline auto
-encode(const operations::get_request& request) -> v1::GetRequest
+encode(const operations::get_request& request, const compression_settings& compression)
+  -> v1::GetRequest
 {
   v1::GetRequest proto;
   set_location(proto, request.id);
+  set_read_compression(proto, compression);
   return proto;
 }
 
@@ -166,21 +235,24 @@ decode(const v1::GetResponse& proto, key_value_error_context ctx) -> operations:
 {
   operations::get_response response;
   response.ctx = std::move(ctx);
-  if (content_is_compressed(proto)) {
-    response.ctx.override_ec(errc::common::feature_not_available);
+  auto value = decode_content(proto);
+  if (!value) {
+    response.ctx.override_ec(errc::common::internal_server_failure);
     return response;
   }
-  response.value = utils::to_binary(proto.content_uncompressed());
+  response.value = std::move(*value);
   response.cas = couchbase::cas{ proto.cas() };
   response.flags = proto.content_flags();
   return response;
 }
 
 inline auto
-encode(const operations::get_projected_request& request) -> v1::GetRequest
+encode(const operations::get_projected_request& request, const compression_settings& compression)
+  -> v1::GetRequest
 {
   v1::GetRequest proto;
   set_location(proto, request.id);
+  set_read_compression(proto, compression);
   for (const auto& path : request.projections) {
     proto.add_project(path);
   }
@@ -194,11 +266,12 @@ decode(const v1::GetResponse& proto,
 {
   operations::get_projected_response response;
   response.ctx = std::move(ctx);
-  if (content_is_compressed(proto)) {
-    response.ctx.override_ec(errc::common::feature_not_available);
+  auto value = decode_content(proto);
+  if (!value) {
+    response.ctx.override_ec(errc::common::internal_server_failure);
     return response;
   }
-  response.value = utils::to_binary(proto.content_uncompressed());
+  response.value = std::move(*value);
   response.cas = couchbase::cas{ proto.cas() };
   response.flags = proto.content_flags();
   if (proto.has_expiry()) {
@@ -223,11 +296,12 @@ decode_mutation(const Proto& proto, key_value_error_context ctx) -> Response
 }
 
 inline auto
-encode(const operations::upsert_request& request) -> v1::UpsertRequest
+encode(const operations::upsert_request& request, const compression_settings& compression)
+  -> v1::UpsertRequest
 {
   v1::UpsertRequest proto;
   set_location(proto, request.id);
-  proto.set_content_uncompressed(utils::to_string(request.value));
+  set_write_content(proto, request.value, compression);
   proto.set_content_flags(request.flags);
   // preserve_expiry is expressed by omitting the oneof, NOT through the proto's
   // preserve_expiry_on_existing flag. The gateway rejects that flag outright whenever the oneof is
@@ -242,11 +316,12 @@ encode(const operations::upsert_request& request) -> v1::UpsertRequest
 }
 
 inline auto
-encode(const operations::insert_request& request) -> v1::InsertRequest
+encode(const operations::insert_request& request, const compression_settings& compression)
+  -> v1::InsertRequest
 {
   v1::InsertRequest proto;
   set_location(proto, request.id);
-  proto.set_content_uncompressed(utils::to_string(request.value));
+  set_write_content(proto, request.value, compression);
   proto.set_content_flags(request.flags);
   // insert has no preserve_expiry: a document that does not exist yet has no expiry to preserve.
   set_expiry(proto, request.expiry);
@@ -257,11 +332,12 @@ encode(const operations::insert_request& request) -> v1::InsertRequest
 }
 
 inline auto
-encode(const operations::replace_request& request) -> v1::ReplaceRequest
+encode(const operations::replace_request& request, const compression_settings& compression)
+  -> v1::ReplaceRequest
 {
   v1::ReplaceRequest proto;
   set_location(proto, request.id);
-  proto.set_content_uncompressed(utils::to_string(request.value));
+  set_write_content(proto, request.value, compression);
   proto.set_content_flags(request.flags);
   if (request.cas.value() != 0) {
     proto.set_cas(request.cas.value());
@@ -351,11 +427,13 @@ decode(const v1::ExistsResponse& proto, key_value_error_context ctx) -> operatio
 }
 
 inline auto
-encode(const operations::get_and_lock_request& request) -> v1::GetAndLockRequest
+encode(const operations::get_and_lock_request& request, const compression_settings& compression)
+  -> v1::GetAndLockRequest
 {
   v1::GetAndLockRequest proto;
   set_location(proto, request.id);
   proto.set_lock_time_secs(request.lock_time);
+  set_read_compression(proto, compression);
   return proto;
 }
 
@@ -365,11 +443,12 @@ decode(const v1::GetAndLockResponse& proto, key_value_error_context ctx)
 {
   operations::get_and_lock_response response;
   response.ctx = std::move(ctx);
-  if (content_is_compressed(proto)) {
-    response.ctx.override_ec(errc::common::feature_not_available);
+  auto value = decode_content(proto);
+  if (!value) {
+    response.ctx.override_ec(errc::common::internal_server_failure);
     return response;
   }
-  response.value = utils::to_binary(proto.content_uncompressed());
+  response.value = std::move(*value);
   response.cas = couchbase::cas{ proto.cas() };
   response.flags = proto.content_flags();
   return response;
@@ -394,11 +473,13 @@ decode(const v1::UnlockResponse& /* proto */, key_value_error_context ctx)
 }
 
 inline auto
-encode(const operations::get_and_touch_request& request) -> v1::GetAndTouchRequest
+encode(const operations::get_and_touch_request& request, const compression_settings& compression)
+  -> v1::GetAndTouchRequest
 {
   v1::GetAndTouchRequest proto;
   set_location(proto, request.id);
   set_expiry(proto, request.expiry);
+  set_read_compression(proto, compression);
   return proto;
 }
 
@@ -408,11 +489,12 @@ decode(const v1::GetAndTouchResponse& proto, key_value_error_context ctx)
 {
   operations::get_and_touch_response response;
   response.ctx = std::move(ctx);
-  if (content_is_compressed(proto)) {
-    response.ctx.override_ec(errc::common::feature_not_available);
+  auto value = decode_content(proto);
+  if (!value) {
+    response.ctx.override_ec(errc::common::internal_server_failure);
     return response;
   }
-  response.value = utils::to_binary(proto.content_uncompressed());
+  response.value = std::move(*value);
   response.cas = couchbase::cas{ proto.cas() };
   response.flags = proto.content_flags();
   return response;
