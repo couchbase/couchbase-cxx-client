@@ -110,4 +110,7 @@ if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 AND TARGET couchbase_cxx_protostellar)
 
   # KV converter (CXXCBC-892).
   add_cng_test(protostellar/kv_converter LINK_CLIENT LIBS couchbase_cxx_protostellar)
+
+  # Protostellar KV component (CXXCBC-891).
+  add_cng_test(protostellar/component LINK_CLIENT LIBS couchbase_cxx_protostellar)
 endif()
