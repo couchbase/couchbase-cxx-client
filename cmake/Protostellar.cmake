@@ -23,6 +23,21 @@ endif()
 
 # The Protostellar schema. The .proto files live at the repository root under couchbase/**.
 # WARNING: do NOT add GIT_SHALLOW — a shallow clone cannot reach an arbitrary pinned commit.
+#
+# CAVEAT when bumping GIT_TAG: protobuf emits a class-scoped alias per enum value ("static
+# constexpr Status STATUS_TIMEOUT = ..."), so an enum value whose name is also an object-like macro
+# in the Windows SDK mangles the generated header. This breaks MSVC only — <winnt.h> is reached
+# transitively through asio and gRPC, so the Linux and macOS legs stay green and the failure shows
+# up an hour later in CI. One name collides today: QueryResponse.MetaData.Status.STATUS_TIMEOUT vs
+# winnt.h's ((DWORD)0x00000102L). couchbase/query/v1/query{,.grpc}.pb.h is therefore included only
+# through core/protostellar/query_proto.hxx, which suppresses the whole STATUS_* family around the
+# include with push_macro/pop_macro. A renamed or added enum value, or the same pattern in another
+# proto, introduces a new collision — after bumping, run
+#
+#   ./bin/check-proto-macro-collisions <build-dir>
+#
+# which lists the hazardous aliases and any source that includes a hazardous header directly
+# instead of through its wrapper.
 cpmaddpackage(
   NAME
   protostellar

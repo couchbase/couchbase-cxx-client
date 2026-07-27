@@ -131,4 +131,7 @@ if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 AND TARGET couchbase_cxx_protostellar)
 
   # Observability transport-agnostic recording (CXXCBC-902).
   add_cng_test(protostellar/live_observability LINK_CLIENT LIBS couchbase_cxx_protostellar)
+
+  # gRPC server-streaming primitive (CXXCBC-895), verified against an in-process stream.
+  add_cng_test(protostellar/streaming LINK_CLIENT LIBS couchbase_cxx_protostellar)
 endif()
