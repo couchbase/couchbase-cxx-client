@@ -167,4 +167,10 @@ if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 AND TARGET couchbase_cxx_protostellar)
 
   # Live Scope & Collection management verification (CXXCBC-900).
   add_cng_test(protostellar/live_collection_admin LINK_CLIENT LIBS couchbase_cxx_protostellar)
+  # Query index management converter (CXXCBC-901).
+  add_cng_test(protostellar/query_index_admin_converter LINK_CLIENT LIBS couchbase_cxx_protostellar)
+  add_cng_test(protostellar/query_index_admin_component LINK_CLIENT LIBS couchbase_cxx_protostellar)
+
+  # Live Query index management verification (CXXCBC-901).
+  add_cng_test(protostellar/live_query_index_admin LINK_CLIENT LIBS couchbase_cxx_protostellar)
 endif()

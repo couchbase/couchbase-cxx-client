@@ -306,6 +306,29 @@ is_feature_supported(const operations::management::search_index_upsert_request& 
 }
 } // namespace
 
+#ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
+// Whether the couchbase2 component can carry this request, answered by asking whether it has an
+// execute() overload for it.
+//
+// The alternative -- a hand-maintained list of request types -- has to agree with the overload set
+// and nothing checks that it does. A type in the list with no overload fails to compile, so that
+// half is safe; an overload with no entry in the list is silently unreachable, and that is how
+// query_index_build_deferred_request came to be wired to a gateway RPC that no caller could
+// reach. Detecting the overload makes the list *be* the overload set.
+template<typename Request, typename = void>
+struct component_routes : std::false_type {
+};
+
+template<typename Request>
+struct component_routes<
+  Request,
+  std::void_t<decltype(std::declval<protostellar::component&>().execute(
+    std::declval<Request>(),
+    std::declval<utils::movable_function<void(typename Request::response_type)>>()))>>
+  : std::true_type {
+};
+#endif
+
 class cluster_impl : public std::enable_shared_from_this<cluster_impl>
 {
 public:
@@ -773,22 +796,7 @@ public:
     }
 #ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
     if (auto component = protostellar_component(); component) {
-      if constexpr (std::is_same_v<Request, operations::query_request> ||
-                    std::is_same_v<Request, operations::analytics_request> ||
-                    std::is_same_v<Request, operations::search_request> ||
-                    std::is_same_v<Request, operations::document_view_request> ||
-                    std::is_same_v<Request, operations::management::bucket_get_all_request> ||
-                    std::is_same_v<Request, operations::management::bucket_get_request> ||
-                    std::is_same_v<Request, operations::management::bucket_create_request> ||
-                    std::is_same_v<Request, operations::management::bucket_update_request> ||
-                    std::is_same_v<Request, operations::management::bucket_drop_request> ||
-                    std::is_same_v<Request, operations::management::bucket_flush_request> ||
-                    std::is_same_v<Request, operations::management::scope_get_all_request> ||
-                    std::is_same_v<Request, operations::management::scope_create_request> ||
-                    std::is_same_v<Request, operations::management::scope_drop_request> ||
-                    std::is_same_v<Request, operations::management::collection_create_request> ||
-                    std::is_same_v<Request, operations::management::collection_update_request> ||
-                    std::is_same_v<Request, operations::management::collection_drop_request>) {
+      if constexpr (component_routes<Request>::value) {
         component->execute(std::move(request), std::forward<Handler>(handler));
         return;
       } else {
