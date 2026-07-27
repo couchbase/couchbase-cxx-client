@@ -140,4 +140,10 @@ if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 AND TARGET couchbase_cxx_protostellar)
 
   # Live N1QL query verification (CXXCBC-897).
   add_cng_test(protostellar/live_query LINK_CLIENT LIBS couchbase_cxx_protostellar)
+
+  # Analytics query converter (CXXCBC-898).
+  add_cng_test(protostellar/analytics_converter LINK_CLIENT LIBS couchbase_cxx_protostellar)
+
+  # Live Analytics query verification (CXXCBC-898).
+  add_cng_test(protostellar/live_analytics LINK_CLIENT LIBS couchbase_cxx_protostellar)
 endif()

@@ -23,6 +23,7 @@
 // context. cluster_impl routes KV ops here when the cluster was opened with couchbase2://.
 
 #include "core/cluster_credentials.hxx"
+#include "core/operations/document_analytics.hxx"
 #include "core/operations/document_append.hxx"
 #include "core/operations/document_decrement.hxx"
 #include "core/operations/document_exists.hxx"
@@ -62,6 +63,7 @@ struct component_config {
   cluster_credentials credentials{};
   std::chrono::milliseconds default_kv_timeout{ timeout_defaults::key_value_timeout };
   std::chrono::milliseconds default_query_timeout{ timeout_defaults::query_timeout };
+  std::chrono::milliseconds default_analytics_timeout{ timeout_defaults::analytics_timeout };
 };
 
 // The core KV request types the component can execute over couchbase2. cluster_impl routes only
@@ -159,6 +161,11 @@ public:
   auto execute(operations::query_request request,
                utils::movable_function<void(operations::query_response)>&& handler) -> pending_call;
 
+  // Analytics over the couchbase2 server-streaming transport; same shape as query.
+  auto execute(operations::analytics_request request,
+               utils::movable_function<void(operations::analytics_response)>&& handler)
+    -> pending_call;
+
 private:
   // The generated gRPC stubs are held behind an opaque pointer so the generated protobuf and gRPC
   // surface stays out of every translation unit that includes this header -- none of it appears in
@@ -170,6 +177,7 @@ private:
   std::string authorization_;
   std::chrono::milliseconds default_kv_timeout_;
   std::chrono::milliseconds default_query_timeout_;
+  std::chrono::milliseconds default_analytics_timeout_;
   // Declared last, so it is destroyed first: ~dispatcher() cancels and drains the calls issued
   // through the stubs above, which must therefore still be alive while it runs.
   dispatcher dispatcher_;

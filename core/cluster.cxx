@@ -773,13 +773,13 @@ public:
     }
 #ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
     if (auto component = protostellar_component(); component) {
-      if constexpr (std::is_same_v<Request, operations::query_request>) {
+      if constexpr (std::is_same_v<Request, operations::query_request> ||
+                    std::is_same_v<Request, operations::analytics_request>) {
         component->execute(std::move(request), std::forward<Handler>(handler));
         return;
       } else {
-        // Analytics/search/views/management over couchbase2 are not wired yet. Reject cleanly
-        // rather than falling through to the MCBP session manager, which is never bootstrapped on
-        // this path.
+        // Search/views/management over couchbase2 are not wired yet. Reject cleanly rather than
+        // falling through to the MCBP session manager, which is never bootstrapped on this path.
         return handler(
           request.make_response({ errc::common::feature_not_available }, response_type{}));
       }
@@ -939,7 +939,8 @@ public:
         protostellar::component_config{ std::move(channel),
                                         origin_.credentials(),
                                         options.key_value_timeout,
-                                        options.query_timeout });
+                                        options.query_timeout,
+                                        options.analytics_timeout });
     }
     CB_LOG_INFO(R"(open couchbase2 cluster, id: "{}", endpoint: "{}")", id_, endpoint);
     return handler({});
