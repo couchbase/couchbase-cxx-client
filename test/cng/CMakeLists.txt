@@ -119,8 +119,9 @@ if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 AND TARGET couchbase_cxx_protostellar)
   add_cng_test(protostellar/kv_converter LINK_CLIENT LIBS couchbase_cxx_protostellar)
 
   # Protostellar KV component (CXXCBC-891).
-  add_cng_test(protostellar/component LINK_CLIENT LIBS couchbase_cxx_protostellar)
-  add_cng_test(protostellar/component_kv_operations LINK_CLIENT LIBS couchbase_cxx_protostellar)
+  add_cng_test(protostellar/component LINK_CLIENT LIBS couchbase_cxx_protostellar snappy)
+  add_cng_test(protostellar/component_kv_operations LINK_CLIENT LIBS couchbase_cxx_protostellar
+               snappy)
   add_cng_test(protostellar/live_kv_operations LINK_CLIENT LIBS couchbase_cxx_protostellar)
 
   # KV transport-level retry, including the overall time budget (CXXCBC-896).

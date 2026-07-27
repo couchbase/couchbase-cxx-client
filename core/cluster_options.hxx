@@ -28,6 +28,8 @@
 #include "timeout_defaults.hxx"
 #include "tls_verify_mode.hxx"
 
+#include "core/protostellar/compression_settings.hxx"
+
 #include <couchbase/metrics/meter.hxx>
 #include <couchbase/retry_strategy.hxx>
 #include <couchbase/tracing/request_tracer.hxx>
@@ -72,6 +74,8 @@ public:
   bool enable_unordered_execution{ true };
   bool enable_clustermap_notification{ true };
   bool enable_compression{ true };
+  std::size_t compression_min_size{ 32 };
+  double compression_min_ratio{ 0.83 };
   bool enable_tracing{ true };
   bool enable_metrics{ true };
   bool enable_orphan_reporting{ true };
@@ -121,5 +125,15 @@ public:
   // per request from the operation timeout, so the value here is not used for it.
   row_streamer_options streaming{};
 };
+
+[[nodiscard]] inline auto
+make_compression_settings(const cluster_options& options) -> protostellar::kv::compression_settings
+{
+  protostellar::kv::compression_settings compression{};
+  compression.enabled = options.enable_compression;
+  compression.min_size = options.compression_min_size;
+  compression.min_ratio = options.compression_min_ratio;
+  return compression;
+}
 
 } // namespace couchbase::core

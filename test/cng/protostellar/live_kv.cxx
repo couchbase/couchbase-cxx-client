@@ -411,6 +411,113 @@ durable_mutations_against_live_gateway()
   assert_eq(accepted, levels.size(), "every durability level is accepted by the gateway");
 }
 
+// A value the client compressed has to survive the gateway: it arrives in the compressed arm of the
+// request oneof, is translated into an MCBP write carrying the snappy datatype, and reads back
+// byte-identical. The converter tests pin what the client puts on the wire and the in-process
+// server pins what it makes of a reply; neither can say whether the frame the client produces is
+// one a real gateway accepts. Truncating that frame is what this case fails on.
+//
+// The projected read is the second half: it reaches the gateway's ordinary Get handler, so it
+// negotiates compression like any other read and has to complete rather than be refused.
+void
+compressed_values_round_trip_against_live_gateway()
+{
+  const auto connstr_opt = safe_getenv("TEST_CONNECTION_STRING");
+  if (!connstr_opt.has_value()) {
+    skip("TEST_CONNECTION_STRING is not set");
+  }
+  const auto parsed = parse_connection_string(connstr_opt.value());
+  if (!parsed.uses_protostellar()) {
+    skip("TEST_CONNECTION_STRING is not a couchbase2:// endpoint");
+  }
+  if (parsed.bootstrap_nodes.empty()) {
+    skip("no nodes in TEST_CONNECTION_STRING");
+  }
+
+  const auto& node = parsed.bootstrap_nodes.front();
+  const auto port = node.port > 0 ? node.port : parsed.default_port;
+  const std::string endpoint = node.address + ":" + std::to_string(port);
+
+  cluster_options options;
+  options.enable_tls = true;
+  options.tls_verify = tls_verify_mode::none;
+
+  cluster_credentials credentials;
+  credentials.username = env_or("TEST_CB2_USERNAME", "Administrator");
+  credentials.password = env_or("TEST_CB2_PASSWORD", "password");
+
+  const auto bucket = env_or("TEST_CB2_BUCKET", "default");
+  const auto id = document_id{ bucket, "_default", "_default", "cng-live-compressed-key" };
+  const std::string body =
+    R"({"marker":"cng-compressed","padding":")" + std::string(4096, 'a') + R"("})";
+
+  // The document is well past min_size and mostly a single repeated byte, so the client's own
+  // threshold has to choose the compressed arm -- otherwise this case would silently degrade into
+  // an ordinary uncompressed round trip and assert nothing about compression.
+  assert_true(pk::maybe_compress(cu::to_binary(body), pk::compression_settings{}).has_value(),
+              "the fixture document is one the client compresses");
+
+  asio::io_context io;
+  auto work = asio::make_work_guard(io);
+  auto channel = ps::make_channel(endpoint, options, credentials);
+  component_config config;
+  config.channel = channel;
+  config.credentials = credentials;
+  config.timeouts.key_value = 20'000ms;
+  component comp{ io, config };
+
+  std::string failure;
+  bool completed{ false };
+
+  ops::upsert_request upsert;
+  upsert.id = id;
+  upsert.value = cu::to_binary(body);
+  comp.execute(std::move(upsert), [&](ops::upsert_response stored) {
+    if (stored.ctx.ec()) {
+      failure = "compressed upsert: " + stored.ctx.ec().message();
+      work.reset();
+      return;
+    }
+    ops::get_request get;
+    get.id = id;
+    comp.execute(std::move(get), [&](ops::get_response fetched) {
+      if (fetched.ctx.ec()) {
+        failure = "get of a compressed document: " + fetched.ctx.ec().message();
+        work.reset();
+        return;
+      }
+      if (cu::to_string(fetched.value) != body) {
+        failure = "get of a compressed document returned " + std::to_string(fetched.value.size()) +
+                  " bytes, expected " + std::to_string(body.size());
+        work.reset();
+        return;
+      }
+      ops::get_projected_request projected;
+      projected.id = id;
+      projected.projections = { "marker" };
+      comp.execute(std::move(projected), [&](ops::get_projected_response fields) {
+        if (fields.ctx.ec()) {
+          failure = "projected read of a compressed document: " + fields.ctx.ec().message();
+        } else if (cu::to_string(fields.value).find("cng-compressed") == std::string::npos) {
+          failure = "projected read returned " + cu::to_string(fields.value);
+        } else {
+          completed = true;
+        }
+        ops::remove_request cleanup;
+        cleanup.id = id;
+        comp.execute(std::move(cleanup), [&](ops::remove_response) {
+          work.reset();
+        });
+      });
+    });
+  });
+
+  io.run();
+
+  assert_true(failure.empty(), failure);
+  assert_true(completed, "compressed upsert -> get -> projected get completed");
+}
+
 } // namespace
 
 auto
@@ -429,6 +536,10 @@ tests() -> test_suite
         test_env::cluster_only },
       { "durable_mutations_against_live_gateway",
         durable_mutations_against_live_gateway,
+        timeout::integration,
+        test_env::cluster_only },
+      { "compressed_values_round_trip_against_live_gateway",
+        compressed_values_round_trip_against_live_gateway,
         timeout::integration,
         test_env::cluster_only },
     },

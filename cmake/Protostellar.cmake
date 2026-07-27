@@ -242,4 +242,5 @@ set(couchbase_cxx_protostellar_TRANSPORT_FILES
     ${PROJECT_SOURCE_DIR}/core/protostellar/dispatcher.cxx
     ${PROJECT_SOURCE_DIR}/core/protostellar/credentials.cxx
     ${PROJECT_SOURCE_DIR}/core/protostellar/error_utils.cxx
+    ${PROJECT_SOURCE_DIR}/core/protostellar/kv_converter.cxx
     ${PROJECT_SOURCE_DIR}/core/protostellar/component.cxx)
