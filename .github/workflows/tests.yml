@@ -176,3 +176,55 @@ jobs:
         uses: ./.github/actions/remove-cluster
         with:
           id: ${{ steps.cbdino.outputs.id }}
+  cng:
+    # CNG (couchbase2://) tests against a real Cloud Native Gateway. The gateway is only deployable
+    # by the Couchbase Autonomous Operator, so unlike the `integration` job this one needs a
+    # Kubernetes cluster (k3d) rather than the docker deployer.
+    needs: build
+    strategy:
+      fail-fast: false
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y libssl-dev cmake gcc g++ curl gdb libprotobuf-dev libgrpc-dev libgrpc++-dev
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build
+          path: ./cmake-build-tests
+      - name: Create Couchbase cluster with Cloud Native Gateway
+        id: cbdino
+        uses: ./.github/actions/create-cng-cluster
+        with:
+          version: 8.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run CNG tests
+        timeout-minutes: 40
+        env:
+          # The cng suite reads this to pick real-cluster mode; cases gated cluster_only skip
+          # without it. Credentials default to cbdinocluster's Administrator/password.
+          TEST_CONNECTION_STRING: ${{ steps.cbdino.outputs.connstr }}
+          TEST_LOG_LEVEL: trace
+        run: |
+          chmod -R +x ./cmake-build-tests
+          ctest --test-dir ./cmake-build-tests --output-on-failure --label-regex 'cng' \
+                --no-tests=error --output-junit cng-live-results.xml
+      - name: Upload CNG live test results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          # Distinct from the unit job's cng-test-results: artifact names must be unique per run.
+          name: cng-live-test-results
+          path: ./cmake-build-tests/cng-live-results.xml
+          if-no-files-found: warn
+      - name: Remove Couchbase cluster
+        if: ${{ always() }}
+        uses: ./.github/actions/remove-cluster
+        with:
+          id: ${{ steps.cbdino.outputs.id }}

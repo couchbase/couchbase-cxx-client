@@ -20,17 +20,22 @@
 #include "core/capella_ca.hxx"
 #include "core/cluster_credentials.hxx"
 #include "core/cluster_options.hxx"
+#include "core/logger/logger.hxx"
 #include "core/mozilla_ca_bundle.hxx"
 #include "core/platform/base64.h"
 #include "core/protostellar/dispatcher.hxx"
+#include "core/tls_verify_mode.hxx"
 
 #include <grpcpp/create_channel.h>
+#include <grpcpp/security/tls_certificate_provider.h>
+#include <grpcpp/security/tls_credentials_options.h>
 
 #include <fstream>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 namespace couchbase::core::protostellar
 {
@@ -166,16 +171,52 @@ authorization_header(const cluster_credentials& credentials) -> std::string
 }
 
 auto
+tls_peer_verification_disabled(const cluster_options& options) -> bool
+{
+  return options.enable_tls && options.tls_verify == tls_verify_mode::none;
+}
+
+auto
 make_channel_credentials(const cluster_options& options, const cluster_credentials& credentials)
   -> std::shared_ptr<grpc::ChannelCredentials>
 {
   if (!options.enable_tls) {
+    // Fail closed: never let username/password or a JWT ride a plaintext channel (base64 is not
+    // encryption). couchbase2:// implies TLS; a programmatic config that disables it while
+    // carrying credentials is a misconfiguration, not a downgrade we perform silently.
     if (credentials.uses_password() || credentials.uses_jwt() ||
         !credentials.certificate_path.empty() || !credentials.key_path.empty()) {
       throw std::invalid_argument(
         "couchbase2: refusing to send credentials over a plaintext channel; enable TLS");
     }
     return grpc::InsecureChannelCredentials();
+  }
+  if (tls_peer_verification_disabled(options)) {
+    // Encrypt the channel but skip server-certificate and hostname verification. Used against
+    // dev/test gateways whose certificate cannot be chained to a trusted CA (e.g. the CNG cert
+    // served by the Couchbase operator on a k8s NodePort).
+    //
+    // Warn here rather than only at the call site: this is the one point every couchbase2 channel
+    // passes through, including callers that build a component directly without going through
+    // cluster::open. A deployment that enabled this by accident has to be able to see it.
+    CB_LOG_WARNING("couchbase2: TLS certificate verification is DISABLED (tls_verify=none); the "
+                   "connection is encrypted but unauthenticated and can be intercepted. Do not use "
+                   "this outside development.");
+    grpc::experimental::TlsChannelCredentialsOptions tls;
+    tls.set_verify_server_certs(false);
+    tls.set_check_call_host(false);
+    tls.set_certificate_verifier(std::make_shared<grpc::experimental::NoOpCertificateVerifier>());
+    // Still present the configured client identity (mTLS) so certificate auth works even when the
+    // gateway's server certificate cannot be verified. Skipping server verification does not imply
+    // skipping our own authentication.
+    if (auto identity = read_client_identity(credentials)) {
+      tls.set_certificate_provider(
+        std::make_shared<grpc::experimental::StaticDataCertificateProvider>(
+          std::vector<grpc::experimental::IdentityKeyCertPair>{
+            { identity->first, identity->second } }));
+      tls.watch_identity_key_cert_pairs();
+    }
+    return grpc::experimental::TlsCredentials(tls);
   }
   return grpc::SslCredentials(build_ssl_options(options, credentials));
 }
