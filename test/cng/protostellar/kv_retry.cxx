@@ -225,8 +225,21 @@ a_retried_kv_operation_stays_within_its_budget()
   assert_true(result.ctx.ec() == couchbase::errc::common::unambiguous_timeout,
               "the operation ends on its deadline, reported as a timeout, got: " +
                 result.ctx.ec().message());
+#if defined(__has_feature)
+#if __has_feature(thread_sanitizer)
+  assert_true(elapsed < 2000ms,
+              "a retried operation finishes at its deadline, not a full timeout past it");
+#else
   assert_true(elapsed < 600ms,
               "a retried operation finishes at its deadline, not a full timeout past it");
+#endif
+#elif defined(__SANITIZE_THREAD__)
+  assert_true(elapsed < 2000ms,
+              "a retried operation finishes at its deadline, not a full timeout past it");
+#else
+  assert_true(elapsed < 600ms,
+              "a retried operation finishes at its deadline, not a full timeout past it");
+#endif
 }
 
 // A request issued through the public API carries no timeout unless the caller asked for one, and
@@ -445,9 +458,10 @@ a_retried_mutation_that_runs_out_of_budget_is_ambiguous()
 
 // Closing the cluster while an operation sits in its backoff must still answer the caller. The
 // re-entry does not touch protostellar_ directly -- it re-reads through the locked accessor, which
-// returns an empty pointer once close() has run, and answers cluster_closed. What this pins is the
-// property that matters to a caller: the completion is delivered exactly once and is not dropped,
-// whichever side of the close the timer lands on.
+// returns an empty pointer once close() has run, and answers cluster_closed. Two properties are
+// pinned here: that the completion is delivered and not dropped, whichever side of the close the
+// timer lands on, and that the answer is cluster_closed rather than the last retryable response,
+// which would tell the caller to try again against a cluster that is gone.
 //
 // The bounded wait is what keeps a dropped completion a failing assertion rather than a hung suite.
 void
@@ -509,6 +523,10 @@ closing_the_cluster_during_a_backoff_still_answers()
   closed.get_future().get();
 
   const auto arrived = answered.wait_for(5s) == std::future_status::ready;
+  auto answer_ec = std::error_code{};
+  if (arrived) {
+    answer_ec = answered.get().ctx.ec();
+  }
 
   guard.reset();
   io_thread.join();
@@ -517,6 +535,11 @@ closing_the_cluster_during_a_backoff_still_answers()
   assert_true(reached_the_service,
               "the first attempt reached the service, so a backoff was entered");
   assert_true(arrived, "closing the cluster mid-backoff still answers the caller");
+  // Not merely "an answer arrived": the last retryable response would report temporary_failure,
+  // which tells a caller to try again against a cluster that is gone. Asserting the code is what
+  // makes this case able to see which of the two it got.
+  assert_true(answer_ec == errc::network::cluster_closed,
+              "closing mid-backoff answers cluster_closed, got: " + answer_ec.message());
 }
 
 } // namespace
