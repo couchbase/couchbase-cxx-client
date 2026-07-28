@@ -1054,6 +1054,22 @@ public:
 #endif
   }
 
+  // couchbase2 wait_until_ready: there is no MCBP bootstrap to ping, so readiness is the gRPC
+  // channel's connectivity state. Delegates to the component's channel-state poll. Callers gate on
+  // is_protostellar(); the fail-closed branch only guards a misuse / non-couchbase2 build.
+  void protostellar_wait_until_ready(std::chrono::milliseconds timeout,
+                                     utils::movable_function<void(std::error_code)>&& handler)
+  {
+#ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
+    if (auto component = protostellar_component(); component) {
+      return component->wait_until_ready(timeout, std::move(handler));
+    }
+#else
+    (void)timeout;
+#endif
+    return handler(errc::common::feature_not_available);
+  }
+
 #ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
   // Execute a couchbase2 operation through the component with transport-level retry. Retryable
   // errors (see protostellar::retry_reason_for) consult the request's retry strategy (falling back
@@ -1964,6 +1980,20 @@ auto
 cluster::io_context() const -> asio::io_context&
 {
   return impl_->io_context();
+}
+
+auto
+cluster::is_protostellar() const -> bool
+{
+  return impl_->is_protostellar();
+}
+
+void
+cluster::protostellar_wait_until_ready(
+  std::chrono::milliseconds timeout,
+  utils::movable_function<void(std::error_code)>&& handler) const
+{
+  return impl_->protostellar_wait_until_ready(timeout, std::move(handler));
 }
 
 void

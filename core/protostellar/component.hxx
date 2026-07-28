@@ -85,6 +85,7 @@
 #include <chrono>
 #include <memory>
 #include <string>
+#include <system_error>
 
 namespace couchbase::core::protostellar
 {
@@ -365,6 +366,12 @@ public:
                utils::movable_function<
                  void(operations::management::search_index_control_plan_freeze_response)>&& handler)
     -> pending_call;
+
+  // couchbase2 wait_until_ready: poll the gRPC channel connectivity state until it reaches READY or
+  // the timeout elapses (no health RPC -- mirrors Java/Go, which poll getState()). Completes on the
+  // io_context with an empty error_code on success or unambiguous_timeout on deadline.
+  void wait_until_ready(std::chrono::milliseconds timeout,
+                        utils::movable_function<void(std::error_code)>&& handler);
 
 private:
   // The generated gRPC stubs are held behind an opaque pointer so the generated protobuf and gRPC

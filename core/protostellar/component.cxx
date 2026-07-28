@@ -51,6 +51,7 @@
 #include <couchbase/view/v1/view.grpc.pb.h>
 
 #include <asio/post.hpp>
+#include <asio/steady_timer.hpp>
 
 #include <chrono>
 #include <cstdint>
@@ -211,6 +212,95 @@ set_ok_status(Response& response)
 }
 } // namespace
 
+namespace
+{
+// wait_until_ready cadence. Mirrors Java's ProtostellarEndpoint poll interval; the channel's own
+// backoff drives reconnection, so this only bounds how quickly we notice it reached READY.
+constexpr std::chrono::milliseconds ready_poll_interval{ 50 };
+
+// Polls the gRPC channel connectivity state on the io_context until it reaches READY or the
+// deadline. No health RPC is sent -- READY is the sole success state, matching Java/Go (IDLE,
+// CONNECTING, TRANSIENT_FAILURE, SHUTDOWN all count as "still waiting"). Self-owning: the timer
+// callback holds the only strong reference between polls, so it lives exactly as long as the wait.
+class channel_ready_poll : public std::enable_shared_from_this<channel_ready_poll>
+{
+public:
+  channel_ready_poll(asio::io_context& io,
+                     std::shared_ptr<grpc::Channel> channel,
+                     std::chrono::milliseconds timeout,
+                     utils::movable_function<void(std::error_code)> handler)
+    : io_{ io }
+    , channel_{ std::move(channel) }
+    , deadline_{ std::chrono::steady_clock::now() + timeout }
+    , handler_{ std::move(handler) }
+    , timer_{ io }
+  {
+  }
+
+  // If the io_context is torn down (cluster closed) while a poll is pending, asio destroys the
+  // timer's handler without invoking it and this object dies unresolved. Deliver cluster_closed so
+  // a std::future caller never observes broken_promise and a callback caller never hangs -- the
+  // same guarantee the classic wait_until_ready_operation upholds in its destructor. The last
+  // strong reference is already gone when this runs, so no concurrent complete() is possible.
+  ~channel_ready_poll()
+  {
+    if (!completed_ && handler_) {
+      try {
+        handler_(errc::network::cluster_closed);
+      } catch (...) {
+        // Suppress exceptions escaping destructor
+      }
+    }
+  }
+
+  channel_ready_poll(const channel_ready_poll&) = delete;
+  channel_ready_poll(channel_ready_poll&&) = delete;
+  auto operator=(const channel_ready_poll&) -> channel_ready_poll& = delete;
+  auto operator=(channel_ready_poll&&) -> channel_ready_poll& = delete;
+
+  void run()
+  {
+    // Complete on the io thread regardless of the caller's thread, so the handler's execution
+    // context matches every other SDK completion.
+    asio::post(io_, [self = shared_from_this()]() {
+      self->poll();
+    });
+  }
+
+private:
+  void poll()
+  {
+    // GetState(true) forces a connect attempt on the lazily-dialed channel (Java: getState(true)).
+    if (channel_->GetState(true) == GRPC_CHANNEL_READY) {
+      return complete({});
+    }
+    if (std::chrono::steady_clock::now() >= deadline_) {
+      return complete(errc::common::unambiguous_timeout);
+    }
+    timer_.expires_after(ready_poll_interval);
+    timer_.async_wait([self = shared_from_this()](const std::error_code& ec) {
+      if (!ec) { // a cancelled timer (io_context teardown) simply drops the wait
+        self->poll();
+      }
+    });
+  }
+
+  void complete(std::error_code ec)
+  {
+    completed_ = true;
+    auto handler = std::move(handler_);
+    handler(ec);
+  }
+
+  asio::io_context& io_;
+  std::shared_ptr<grpc::Channel> channel_;
+  std::chrono::steady_clock::time_point deadline_;
+  utils::movable_function<void(std::error_code)> handler_;
+  asio::steady_timer timer_;
+  bool completed_{ false };
+};
+} // namespace
+
 component::component(asio::io_context& io, component_config config)
   : io_{ io }
   , stubs_{ std::make_unique<stubs>(
@@ -232,6 +322,15 @@ component::component(asio::io_context& io, component_config config)
 }
 
 component::~component() = default;
+
+void
+component::wait_until_ready(std::chrono::milliseconds timeout,
+                            utils::movable_function<void(std::error_code)>&& handler)
+{
+  std::make_shared<channel_ready_poll>(
+    dispatcher_.io_context(), dispatcher_.channel(), timeout, std::move(handler))
+    ->run();
+}
 
 auto
 component::execute(const operations::get_request& request,
