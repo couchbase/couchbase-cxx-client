@@ -71,6 +71,12 @@ vbucket_map_ready(const topology::configuration& config) -> bool;
  *
  * The operation is fully asynchronous: it owns itself for its lifetime and drives the poll cadence
  * with an asio timer on the cluster's io_context; it does not block a thread.
+ *
+ * On a couchbase2:// (Protostellar) cluster there is no MCBP bootstrap to ping, so readiness is
+ * instead the gRPC channel's connectivity state: the call polls until the channel reaches READY or
+ * @p timeout elapses (mirrors Java/Go; no health RPC is sent). @p bucket_name and @p services have
+ * no per-bucket/per-service connection to probe and are ignored; @c cluster_state::offline is still
+ * rejected with @c errc::common::invalid_argument.
  */
 void
 wait_until_ready(core::cluster core,
