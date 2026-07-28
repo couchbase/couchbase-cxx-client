@@ -71,6 +71,15 @@ public:
              grpc::ServerWriter<v1::QueryResponse>* writer) -> grpc::Status override
   {
     calls_received.fetch_add(1);
+    if (request->statement() == "metadata-error") {
+      v1::QueryResponse tail;
+      auto* meta = tail.mutable_meta_data();
+      meta->set_request_id("req-1");
+      meta->set_client_context_id("ctx-1");
+      meta->set_status(v1::QueryResponse_MetaData_Status_STATUS_SUCCESS);
+      writer->Write(tail);
+      return { grpc::StatusCode::UNAVAILABLE, "gateway went away after metadata" };
+    }
     {
       v1::QueryResponse batch;
       batch.add_rows("{\"row\":1}");
@@ -281,6 +290,29 @@ a_non_retryable_mid_stream_error_preserves_its_error_code()
     "a non-retryable error after delivery is preserved rather than remapped to request_canceled");
 }
 
+void
+metadata_only_stream_error_maps_to_request_canceled()
+{
+  in_process_query_server server;
+  asio::io_context io;
+  auto work = asio::make_work_guard(io);
+  auto comp = make_component(io, server);
+
+  ops::query_request request;
+  request.statement = "metadata-error";
+
+  ops::query_response outcome;
+  comp.execute(std::move(request), [&](ops::query_response response) {
+    outcome = std::move(response);
+    work.reset();
+  });
+  io.run();
+
+  assert_true(outcome.rows.empty(), "no rows were sent by the gateway");
+  assert_eq(outcome.meta.client_context_id, std::string{ "ctx-1" }, "metadata was received");
+  assert_true(outcome.ctx.ec == couchbase::errc::common::request_canceled,
+              "a retryable error after metadata delivery becomes request_canceled (CXXCBC-909)");
+}
 // The exhausted-budget guard on a non-KV path. The streaming services resolve a timeout exactly as
 // the KV overloads do, so a non-positive one would otherwise reach the dispatcher and become a
 // stream with no deadline -- one that cluster::close() then waits on. Asserting the server saw
@@ -487,6 +519,9 @@ tests() -> test_suite
         timeout::network },
       { "a_buffered_mid_stream_error_maps_to_request_canceled",
         a_buffered_mid_stream_error_maps_to_request_canceled,
+        timeout::network },
+      { "metadata_only_stream_error_maps_to_request_canceled",
+        metadata_only_stream_error_maps_to_request_canceled,
         timeout::network },
       { "mid_stream_error_after_delivery_maps_to_request_canceled",
         mid_stream_error_after_delivery_maps_to_request_canceled,

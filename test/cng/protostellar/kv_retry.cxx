@@ -225,8 +225,21 @@ a_retried_kv_operation_stays_within_its_budget()
   assert_true(result.ctx.ec() == couchbase::errc::common::unambiguous_timeout,
               "the operation ends on its deadline, reported as a timeout, got: " +
                 result.ctx.ec().message());
+#if defined(__has_feature)
+#if __has_feature(thread_sanitizer)
+  assert_true(elapsed < 2000ms,
+              "a retried operation finishes at its deadline, not a full timeout past it");
+#else
   assert_true(elapsed < 600ms,
               "a retried operation finishes at its deadline, not a full timeout past it");
+#endif
+#elif defined(__SANITIZE_THREAD__)
+  assert_true(elapsed < 2000ms,
+              "a retried operation finishes at its deadline, not a full timeout past it");
+#else
+  assert_true(elapsed < 600ms,
+              "a retried operation finishes at its deadline, not a full timeout past it");
+#endif
 }
 
 // A request issued through the public API carries no timeout unless the caller asked for one, and

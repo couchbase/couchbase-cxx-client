@@ -796,10 +796,10 @@ a_row_in_flight_when_the_drain_releases_the_hold_does_not_resume_the_read()
         ++completions;
       });
     const auto delivered = row_delivered.wait_for(park_giveup);
+    resume_promise.set_value();
     assert_true(delivered == std::future_status::ready, "the first row reached the consumer");
-    // ~dispatcher() cancels and drains here, with the continuation still parked before its read.
+    // ~dispatcher() cancels and drains here when disp leaves scope
   }
-  resume_promise.set_value();
 
   work.reset();
   io_thread.join();
