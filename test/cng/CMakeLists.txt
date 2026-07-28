@@ -186,4 +186,6 @@ if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 AND TARGET couchbase_cxx_protostellar)
 
   # KV durable-timeout resolution (CXXCBC-904).
   add_cng_test(protostellar/component_timeouts LINK_CLIENT LIBS couchbase_cxx_protostellar)
+  # Ping / diagnostics feature_not_available over couchbase2 (CXXCBC-907).
+  add_cng_test(protostellar/ping_diagnostics LINK_CLIENT LIBS couchbase_cxx_protostellar)
 endif()

@@ -71,6 +71,15 @@ public:
   {
     auto obs_rec = create_observability_recorder(
       core::tracing::operation::ping, std::nullopt, options.parent_span);
+#ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
+    if (core_.is_protostellar()) {
+      // couchbase2 has no per-bucket sessions to probe; mirror cluster::ping and the other SDKs.
+      obs_rec->finish(errc::common::feature_not_available);
+      return handler(error{ errc::common::feature_not_available,
+                            "ping is not supported over the couchbase2 protocol" },
+                     {});
+    }
+#endif
     return core_.ping(
       options.report_id,
       name_,
