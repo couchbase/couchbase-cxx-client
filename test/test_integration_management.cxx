@@ -3674,13 +3674,39 @@ TEST_CASE("integration: analytics index management with core API", "[integration
     if (integration.cluster_version().supports_analytics_pending_mutations() &&
         integration.cluster_version().major >= 7) {
       // Getting unexpected result in 6.6
-      couchbase::core::operations::management::analytics_get_pending_mutations_request req{};
-      auto resp = test::utils::execute(integration.cluster, req);
-      REQUIRE_SUCCESS(resp.ctx.ec);
+
       // In the Core API the key has the `dataverse.dataset` format
-      auto key = fmt::format("{}.{}", dataverse_name, dataset_name);
-      REQUIRE(resp.stats.count(key) == 1);
-      REQUIRE(resp.stats[key] >= 0);
+      const auto key = fmt::format("{}.{}", dataverse_name, dataset_name);
+
+      // CONNECT LINK returns before the dataset is registered with the ingestion pipeline, so the
+      // aggregate counter for a freshly created dataset appears about a second later, and reports
+      // -1 until its first count completes. How long that takes depends on how many other links the
+      // cluster is servicing, so sampling once here fails whenever earlier tests have left feeds
+      // behind. Poll instead, and accept only a counter that has actually been computed.
+      std::int64_t pending_mutations{ -1 };
+      std::error_code last_ec{};
+      const auto counted =
+        test::utils::wait_until([&integration, &key, &pending_mutations, &last_ec]() {
+          couchbase::core::operations::management::analytics_get_pending_mutations_request req{};
+          auto resp = test::utils::execute(integration.cluster, req);
+          last_ec = resp.ctx.ec;
+          if (last_ec) {
+            return false;
+          }
+          // find() rather than operator[], which would insert a zero for a missing key and leave
+          // the value assertion below unable to fail.
+          const auto it = resp.stats.find(key);
+          if (it == resp.stats.end()) {
+            return false;
+          }
+          pending_mutations = it->second;
+          return pending_mutations >= 0;
+        });
+      // Asserted before the timeout, so that a request that kept failing reports why rather than
+      // just that the counter never showed up.
+      REQUIRE_SUCCESS(last_ec);
+      REQUIRE(counted);
+      REQUIRE(pending_mutations >= 0);
     }
 
     {
@@ -4328,23 +4354,38 @@ TEST_CASE("integration: analytics index management with public API", "[integrati
     if (integration.cluster_version().supports_analytics_pending_mutations() &&
         integration.cluster_version().major >= 7) {
       // Getting unexpected result in 6.6
-      auto [error, res] = mgr.get_pending_mutations({}).get();
-      REQUIRE_SUCCESS(error.ec());
-      if (res.count(dataverse_name) == 0 && integration.cluster_version().major == 7 &&
-          integration.cluster_version().minor == 0) {
-        fmt::print(
-          "Cluster {}.{}.{}, dataverse_name: {}, context: {}. Allow pending mutation to be empty\n",
-          integration.cluster_version().major,
-          integration.cluster_version().minor,
-          integration.cluster_version().micro,
-          dataverse_name,
-          error.ctx().to_json());
-      } else {
-        INFO(fmt::format("dataverse_name: {}\ncontext: {}", dataverse_name, error.ctx().to_json()));
-        REQUIRE(res.count(dataverse_name) == 1);
-        REQUIRE(res[dataverse_name].count(dataset_name) == 1);
-        REQUIRE(res[dataverse_name][dataset_name] >= 0);
-      }
+
+      // connect_link() returns before the dataset is registered with the ingestion pipeline, so the
+      // counter appears about a second later and reads -1 until it has been computed. This used to
+      // be sampled once and the empty result tolerated on 7.0, where the delay is long enough to
+      // lose the race most often; waiting for the counter holds the assertion on every version.
+      std::int64_t pending_mutations{ -1 };
+      couchbase::error last_error{};
+      const auto counted = test::utils::wait_until(
+        [&mgr, &dataverse_name, &dataset_name, &pending_mutations, &last_error]() {
+          auto [error, res] = mgr.get_pending_mutations({}).get();
+          last_error = error;
+          if (error.ec()) {
+            return false;
+          }
+          // find() rather than operator[], which would insert empty entries and leave the value
+          // assertion below unable to fail.
+          const auto dataverse = res.find(dataverse_name);
+          if (dataverse == res.end()) {
+            return false;
+          }
+          const auto dataset = dataverse->second.find(dataset_name);
+          if (dataset == dataverse->second.end()) {
+            return false;
+          }
+          pending_mutations = dataset->second;
+          return pending_mutations >= 0;
+        });
+      INFO(
+        fmt::format("dataverse_name: {}\ncontext: {}", dataverse_name, last_error.ctx().to_json()));
+      REQUIRE_SUCCESS(last_error.ec());
+      REQUIRE(counted);
+      REQUIRE(pending_mutations >= 0);
     }
 
     {
