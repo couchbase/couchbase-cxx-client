@@ -106,6 +106,13 @@ if ENV["CB_OPENSSL_NO_ASM"] == "1"
   CB_CMAKE_EXTRAS << "-DOPENSSL_NO_ASM=1"
 end
 
+# couchbase2:// (Protostellar/gRPC) support is opt-in because it needs gRPC and protobuf >= 3.15.
+# Mirrors the CB_COUCHBASE2 switch in bin/build-tests. On Windows this is what gets the generated
+# gRPC stubs compiled by MSVC at all -- see .github/workflows/build.yml.
+unless ENV.fetch("CB_COUCHBASE2", "").empty?
+  CB_CMAKE_EXTRAS << "-DCOUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2=ON"
+end
+
 BUILD_DIR = if CB_SANITIZER.empty?
               File.join(PROJECT_ROOT, "cmake-build-tests")
             else

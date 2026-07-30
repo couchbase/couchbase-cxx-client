@@ -41,6 +41,11 @@ jobs:
         run: ./bin/build-tests
         env:
           CB_NUMBER_OF_JOBS: 8
+          # Generate and compile the Protostellar gRPC/protobuf stubs, and the CNG tests that use
+          # them. The gRPC/protobuf dev packages this needs are installed above. Without it the
+          # generated stubs are never built by CI, so codegen breakage would only ever surface
+          # locally; later commits add the couchbase2:// transport on top of the same option.
+          CB_COUCHBASE2: 1
       - name: Upload build artifacts
         if: ${{ success() }}
         uses: actions/upload-artifact@v4
@@ -56,7 +61,10 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y libssl-dev cmake gcc g++ curl gdb
+          # libgrpc++-dev/libprotobuf-dev pull in the gRPC runtime needed to *run* the gRPC-linked
+          # binaries in the prebuilt artifact -- currently cng_codegen_smoke_test. (A later commit
+          # links the transport into the client library itself, which extends this to every binary.)
+          sudo apt-get install -y libssl-dev cmake gcc g++ curl gdb libprotobuf-dev libgrpc-dev libgrpc++-dev
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -72,6 +80,45 @@ jobs:
         run: |
           chmod -R +x ./cmake-build-tests
           ./bin/run-unit-tests
+      - name: Run CNG tests
+        # The CNG tests carry LABELS "cng" (test/cng/CMakeLists.txt), which matches none of the
+        # --label-regex filters in bin/run-{unit,integration,transaction,benchmark}-tests. Without
+        # this step they are compiled and linked by the build job but never executed by any job.
+        #
+        # --no-tests=error is load-bearing: a --label-regex that matches nothing makes ctest exit 0
+        # (measured: exit 0 without the flag, 8 with it), so a renamed label or a BUILD_CNG_TESTS
+        # that silently went OFF would leave this step passing vacuously -- the same "green means
+        # nothing ran" failure this step exists to close. Needs ctest >= 3.20; CI has 3.28.3.
+        #
+        # --output-junit resolves relative to --test-dir, so the report lands beside the build tree.
+        # The name deliberately differs from the results.xml that bin/run-unit-tests has already
+        # written into the same directory, and it is uploaded as its own artifact rather than folded
+        # into unit-test-results: a CNG test is not a unit test.
+        #
+        # always(): a unit-test failure must not mask CNG results.
+        if: ${{ always() }}
+        timeout-minutes: 10
+        env:
+          TEST_LOG_LEVEL: trace
+        run: |
+          chmod -R +x ./cmake-build-tests
+          ctest --test-dir ./cmake-build-tests --output-on-failure --label-regex 'cng' \
+                --no-tests=error --output-junit cng-results.xml
+      - name: Upload test results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          # bin/run-unit-tests cds into the build dir before ctest, so --output-junit lands there.
+          path: ./cmake-build-tests/results.xml
+          if-no-files-found: warn
+      - name: Upload CNG test results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cng-test-results
+          path: ./cmake-build-tests/cng-results.xml
+          if-no-files-found: warn
   integration:
     needs: build
     strategy:
@@ -92,7 +139,10 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y libssl-dev cmake gcc g++ curl gdb
+          # libgrpc++-dev/libprotobuf-dev pull in the gRPC runtime needed to *run* the gRPC-linked
+          # binaries in the prebuilt artifact -- currently cng_codegen_smoke_test. (A later commit
+          # links the transport into the client library itself, which extends this to every binary.)
+          sudo apt-get install -y libssl-dev cmake gcc g++ curl gdb libprotobuf-dev libgrpc-dev libgrpc++-dev
       - uses: actions/checkout@v4
         with:
           submodules: recursive
