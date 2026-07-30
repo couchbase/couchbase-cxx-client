@@ -26,6 +26,7 @@
 #include "core/utils/binary.hxx"
 
 #include "analytics.hxx"
+#include "error.hxx"
 #include "internal_analytics_stream_result.hxx"
 #include "observability_recorder.hxx"
 
@@ -86,8 +87,10 @@ build_analytics_meta_data(core::operations::analytics_response::analytics_meta_d
 
 internal_analytics_stream_result::internal_analytics_stream_result(
   core::analytics_stream stream,
-  std::unique_ptr<core::impl::observability_recorder> obs_rec)
+  std::unique_ptr<core::impl::observability_recorder> obs_rec,
+  core::error_context::analytics ctx)
   : stream_{ std::move(stream) }
+  , ctx_{ std::move(ctx) }
   , obs_rec_{ std::move(obs_rec) }
 {
 }
@@ -122,7 +125,16 @@ internal_analytics_stream_result::resolve_meta_data(std::error_code ec)
 {
   std::pair<error, analytics_meta_data> value;
   if (ec) {
-    value.first = error(ec, "analytics stream ended with an error");
+    // Report the terminal against the request's context with whatever the response said stamped on,
+    // so a mid-stream failure carries the same detail (statement, service error, endpoint) as one
+    // that never started. A cancellation leaves the service error code and message unset, because
+    // the service never reported one, but the envelope parsed so far is still reported as the body:
+    // it names the request id the service logs are keyed by, and the buffered path likewise reports
+    // whatever body it received.
+    auto ctx = ctx_;
+    ctx.ec = ec;
+    core::apply_error_details(ctx, stream_.error_details());
+    value.first = core::impl::make_error(ctx);
   }
   auto core_meta = stream_.meta_data();
   if (core_meta) {
@@ -201,7 +213,17 @@ internal_analytics_stream_result::next(analytics_row_handler&& handler)
     // thread before terminal_reached_ becomes visible.
     self->resolve_meta_data(ec);
     if (ec) {
-      return handler(error(ec, "analytics stream ended with an error"), {});
+      // Deliver the contextual error resolve_meta_data() has just published rather than building a
+      // bare one here. This is the first and usually only observation of a mid-stream terminal, so
+      // it has to carry the same diagnostics as every later next() (served by the terminal_reached_
+      // guard above) and as meta_data(); constructing a fresh error here would report the one case
+      // this class exists to describe with an empty context.
+      error terminal_error;
+      {
+        const std::scoped_lock lk{ self->meta_mutex_ };
+        terminal_error = self->terminal_value_.first;
+      }
+      return handler(std::move(terminal_error), {});
     }
     return handler({}, {});
   });

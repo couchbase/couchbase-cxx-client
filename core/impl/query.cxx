@@ -223,45 +223,51 @@ dispatch_query_stream(const core::cluster& core,
     // buffered path and replay the already-parsed result through a buffered query_stream — no JSON
     // re-serialization or re-parsing — so callers observe identical semantics to the adhoc path.
     auto& io = core.io_context();
-    core.execute(
-      std::move(request),
-      [&io, obs_rec = std::move(obs_rec), handler = std::move(handler)](
-        operations::query_response resp) mutable {
-        if (resp.ctx.ec) {
-          // Terminal reached before a handle exists: record the operation metric/span here.
-          obs_rec->finish(resp.ctx.ec);
-          return handler(make_error(resp.ctx), {});
-        }
-        auto stream =
-          std::make_shared<core::query_stream>(io, std::move(resp.rows), std::move(resp.meta));
-        stream->start([obs_rec = std::move(obs_rec), handler = std::move(handler), stream](
-                        std::error_code early_error) mutable {
-          if (early_error) {
-            obs_rec->finish(early_error);
-            return handler(couchbase::error{ early_error, "failed to start the streaming query" },
-                           {});
-          }
-          // Transfer the recorder to the handle; it finishes the operation at the stream terminal.
-          auto internal =
-            std::make_shared<internal_query_stream_result>(std::move(*stream), std::move(obs_rec));
-          handler({}, query_stream_result{ std::move(internal) });
-        });
-      });
+    core.execute(std::move(request),
+                 [&io, obs_rec = std::move(obs_rec), handler = std::move(handler)](
+                   operations::query_response resp) mutable {
+                   if (resp.ctx.ec) {
+                     // Terminal reached before a handle exists: record the operation metric/span
+                     // here.
+                     obs_rec->finish(resp.ctx.ec);
+                     return handler(make_error(resp.ctx), {});
+                   }
+                   auto stream = std::make_shared<core::query_stream>(
+                     io, std::move(resp.rows), std::move(resp.meta));
+                   stream->start([obs_rec = std::move(obs_rec),
+                                  handler = std::move(handler),
+                                  stream,
+                                  ctx = std::move(resp.ctx)](std::error_code early_error) mutable {
+                     if (early_error) {
+                       obs_rec->finish(early_error);
+                       ctx.ec = early_error;
+                       return handler(make_error(ctx), {});
+                     }
+                     // Transfer the recorder to the handle; it finishes the operation at the stream
+                     // terminal. The buffered request's context travels with it, so a terminal
+                     // error is reported with the same detail the buffered path would have given.
+                     auto internal = std::make_shared<internal_query_stream_result>(
+                       std::move(*stream), std::move(obs_rec), std::move(ctx));
+                     handler({}, query_stream_result{ std::move(internal) });
+                   });
+                 });
     return;
   }
 
-  core.query_stream(
-    std::move(request),
-    [obs_rec = std::move(obs_rec), handler = std::move(handler)](core::query_stream stream,
-                                                                 std::error_code ec) mutable {
-      if (ec) {
-        obs_rec->finish(ec);
-        return handler(couchbase::error{ ec, "failed to start the streaming query" }, {});
-      }
-      auto internal =
-        std::make_shared<internal_query_stream_result>(std::move(stream), std::move(obs_rec));
-      handler({}, query_stream_result{ std::move(internal) });
-    });
+  core.query_stream(std::move(request),
+                    [obs_rec = std::move(obs_rec), handler = std::move(handler)](
+                      core::query_stream stream, core::error_context::query ctx) mutable {
+                      if (ctx.ec) {
+                        obs_rec->finish(ctx.ec);
+                        return handler(make_error(ctx), {});
+                      }
+                      // The context travels with the handle: a terminal error reached later is
+                      // reported with the same statement/endpoint detail as a failure to start,
+                      // plus whatever the trailer said.
+                      auto internal = std::make_shared<internal_query_stream_result>(
+                        std::move(stream), std::move(obs_rec), std::move(ctx));
+                      handler({}, query_stream_result{ std::move(internal) });
+                    });
 }
 
 auto

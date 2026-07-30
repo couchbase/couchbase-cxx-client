@@ -16,6 +16,8 @@
  */
 
 #include "core/cluster.hxx"
+#include "core/impl/internal_query_stream_result.hxx"
+#include "core/impl/observability_recorder.hxx"
 #include "core/query_stream.hxx"
 #include "test_helper_streaming.hxx"
 
@@ -23,8 +25,11 @@
 
 #include <asio/io_context.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <tao/json/from_string.hpp>
 
+#include <cstdint>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <system_error>
@@ -98,11 +103,13 @@ TEST_CASE("unit: query_stream surfaces a trailing query error after rows", "[uni
 
 TEST_CASE("unit: cluster exposes a core query_stream entry point", "[unit]")
 {
-  // Compile-only: the symbol exists with the expected signature.
-  using fn =
-    void (couchbase::core::cluster::*)(couchbase::core::operations::query_request,
-                                       couchbase::core::utils::movable_function<void(
-                                         couchbase::core::query_stream, std::error_code)>&&) const;
+  // Compile-only: the symbol exists with the expected signature. The handler receives an error
+  // context rather than a bare error_code, so a streaming failure carries the same diagnostics
+  // (statement, service error, endpoint) the buffered path reports.
+  using fn = void (couchbase::core::cluster::*)(
+    couchbase::core::operations::query_request,
+    couchbase::core::utils::movable_function<void(couchbase::core::query_stream,
+                                                  couchbase::core::error_context::query)>&&) const;
   constexpr fn p = &couchbase::core::cluster::query_stream;
   STATIC_REQUIRE(p != nullptr); // compile-time contract: the overload resolves to exactly `fn`
 }
@@ -349,4 +356,63 @@ TEST_CASE("unit: query_stream reports no signature when absent", "[unit]")
 
   REQUIRE(resolved);
   REQUIRE_FALSE(stream.signature().has_value()); // no signature key in the response
+}
+
+TEST_CASE("unit: a mid-stream query terminal error is reported with the request context", "[unit]")
+{
+  // Rows followed by a trailing error, so the terminal arrives from the stream itself. That is the
+  // path which hands the failure to the caller's first observing next(), and it is the only one
+  // that exercises it: cancel() publishes the terminal before next() runs, so a cancelled stream is
+  // served by the idempotent re-delivery guard instead.
+  asio::io_context io;
+  const std::string doc = R"({"requestID":"r-ctx","results":[{"a":1}],)"
+                          R"("status":"fatal","errors":[{"code":5000,"msg":"boom"}]})";
+  auto body = test::utils::make_cached_response_body(io, doc);
+  couchbase::core::query_stream stream{ io, std::move(body) };
+
+  std::error_code start_ec{ make_error_code(std::errc::operation_in_progress) };
+  stream.start([&start_ec](std::error_code ec) {
+    start_ec = ec;
+  });
+  io.run();
+  REQUIRE_FALSE(start_ec); // the error is in the trailer, so starting succeeds
+
+  couchbase::core::error_context::query ctx{};
+  ctx.statement = "SELECT a FROM x";
+  ctx.client_context_id = "cid-1";
+  ctx.method = "POST";
+  ctx.path = "/query/service";
+  ctx.hostname = "node.example";
+  ctx.port = 8093;
+  auto internal = std::make_shared<couchbase::internal_query_stream_result>(
+    std::move(stream), nullptr, std::move(ctx));
+
+  io.restart();
+  int rows = 0;
+  std::optional<couchbase::error> terminal;
+  std::function<void()> pump = [&]() {
+    internal->next([&](couchbase::error err, std::optional<couchbase::query_row> row) {
+      if (!row.has_value()) {
+        terminal = std::move(err);
+        return;
+      }
+      ++rows;
+      pump();
+    });
+  };
+  pump();
+  io.run();
+
+  REQUIRE(rows == 1);
+  REQUIRE(terminal.has_value());
+  REQUIRE(terminal->ec());
+  // The request-side fields come from the context the handle was built with, and the service-side
+  // ones from the trailer. A bare error built at the delivery site would carry neither.
+  const auto reported = tao::json::from_string(terminal->ctx().to_json());
+  REQUIRE(reported.at("statement").as<std::string>() == "SELECT a FROM x");
+  REQUIRE(reported.at("client_context_id").as<std::string>() == "cid-1");
+  REQUIRE(reported.at("hostname").as<std::string>() == "node.example");
+  REQUIRE(reported.at("port").as<std::uint16_t>() == 8093);
+  REQUIRE(reported.at("first_error_code").as<std::uint64_t>() == 5000);
+  REQUIRE(reported.at("first_error_message").as<std::string>() == "boom");
 }

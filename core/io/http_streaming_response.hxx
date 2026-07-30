@@ -59,6 +59,16 @@ private:
 
 class http_streaming_response_impl;
 
+// Where a streaming response was dispatched, captured at construction rather than held as a session
+// reference: an error context is built after the stream has been torn down, by which point the
+// session may already be back in the keep-alive pool or gone.
+struct http_dispatch_info {
+  std::string hostname{};
+  std::uint16_t port{};
+  std::string remote_address{};
+  std::string local_address{};
+};
+
 class http_streaming_response
 {
 public:
@@ -72,6 +82,7 @@ public:
   [[nodiscard]] auto headers() const -> const std::map<std::string, std::string>&;
   [[nodiscard]] auto body() -> http_streaming_response_body&;
   [[nodiscard]] auto must_close_connection() const -> bool;
+  [[nodiscard]] auto dispatch_info() const -> const http_dispatch_info&;
 
 private:
   std::shared_ptr<http_streaming_response_impl> impl_;

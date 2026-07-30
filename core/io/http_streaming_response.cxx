@@ -231,11 +231,13 @@ public:
   http_streaming_response_impl(std::uint32_t status_code,
                                std::string status_message,
                                std::map<std::string, std::string> headers,
-                               http_streaming_response_body body)
+                               http_streaming_response_body body,
+                               http_dispatch_info dispatch_info)
     : status_code_{ status_code }
     , status_message_{ std::move(status_message) }
     , headers_{ std::move(headers) }
     , body_{ std::move(body) }
+    , dispatch_info_{ std::move(dispatch_info) }
   {
   }
 
@@ -267,23 +269,42 @@ public:
     return false;
   }
 
+  [[nodiscard]] auto dispatch_info() const -> const http_dispatch_info&
+  {
+    return dispatch_info_;
+  }
+
 private:
   std::uint32_t status_code_;
   std::string status_message_;
   std::map<std::string, std::string> headers_;
   http_streaming_response_body body_;
+  http_dispatch_info dispatch_info_;
 };
 
 http_streaming_response::http_streaming_response(
   asio::io_context& io,
   const couchbase::core::io::http_streaming_parser& parser,
   std::shared_ptr<http_session> session)
-  : impl_{ std::make_shared<http_streaming_response_impl>(
-      parser.status_code,
-      parser.status_message,
-      parser.headers,
-      http_streaming_response_body{ io, std::move(session), parser.body_chunk, parser.complete }) }
+  : impl_{ nullptr }
 {
+  http_dispatch_info dispatch_info{};
+  if (session) {
+    // Taken from the session's http_context, the same source io::http_command stamps onto a
+    // buffered response, so both paths report the identical endpoint. The port is already a
+    // std::uint16_t there; http_session::port() is that same value rendered as a string for
+    // resolving and for the Host header, so parsing it back would only reintroduce a conversion.
+    dispatch_info.hostname = session->http_context().hostname;
+    dispatch_info.port = session->http_context().port;
+    dispatch_info.remote_address = session->remote_address();
+    dispatch_info.local_address = session->local_address();
+  }
+  impl_ = std::make_shared<http_streaming_response_impl>(
+    parser.status_code,
+    parser.status_message,
+    parser.headers,
+    http_streaming_response_body{ io, std::move(session), parser.body_chunk, parser.complete },
+    std::move(dispatch_info));
 }
 
 auto
@@ -314,5 +335,11 @@ auto
 http_streaming_response::must_close_connection() const -> bool
 {
   return impl_->must_close_connection();
+}
+
+auto
+http_streaming_response::dispatch_info() const -> const http_dispatch_info&
+{
+  return impl_->dispatch_info();
 }
 } // namespace couchbase::core::io

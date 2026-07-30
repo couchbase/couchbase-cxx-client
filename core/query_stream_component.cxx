@@ -112,13 +112,28 @@ public:
 
     http_request http_req{ service_type::query, "POST" };
     http_req.path = "/query/service";
+
+    // Everything about the request that an error context reports, known before dispatch. The
+    // response-side fields (HTTP status, the service's first error, the endpoint) are filled in as
+    // they become available, so a failure at any stage carries as much detail as the buffered path.
+    // Held behind a shared_ptr, not by value: it carries the encoded request body in
+    // `parameters`, and both the dispatch callback and the synchronous dispatch-failure branch
+    // below need it, so sharing avoids deep-copying that body on every streaming request.
+    auto base_ctx = std::make_shared<error_context::query>();
+    base_ctx->client_context_id = client_context_id;
+    base_ctx->statement = request.statement;
+    base_ctx->method = http_req.method;
+    base_ctx->path = http_req.path;
+
     try {
       http_req.body = build_streaming_query_body(request, client_context_id, timeout);
     } catch (const std::exception&) {
       // A caller-supplied raw/parameter value that is not valid JSON fails encoding; surface it as
       // invalid_argument rather than letting the exception escape the public API.
-      return handler({}, errc::common::invalid_argument);
+      base_ctx->ec = errc::common::invalid_argument;
+      return handler({}, std::move(*base_ctx));
     }
+    base_ctx->parameters = http_req.body;
     http_req.timeout = timeout;
     http_req.client_context_id = client_context_id;
     http_req.is_read_only = request.readonly;
@@ -139,11 +154,23 @@ public:
     const bool read_only = request.readonly;
     auto op = http_.do_http_request(
       http_req,
-      [self = shared_from_this(), callback_state, timeout, read_only](http_response resp,
-                                                                      dispatch_error err) mutable {
+      [self = shared_from_this(), callback_state, timeout, read_only, base_ctx](
+        http_response resp, dispatch_error err) mutable {
         if (auto ec = to_error_code(err)) {
-          self->invoke(callback_state, {}, ec);
+          base_ctx->ec = ec;
+          self->invoke(callback_state, {}, std::move(*base_ctx));
           return;
+        }
+        // The response is in hand, so the context can now name the endpoint and HTTP status.
+        base_ctx->http_status = resp.status_code();
+        const auto dispatch_info = resp.dispatch_info();
+        base_ctx->hostname = dispatch_info.hostname;
+        base_ctx->port = dispatch_info.port;
+        if (!dispatch_info.remote_address.empty()) {
+          base_ctx->last_dispatched_to = dispatch_info.remote_address;
+        }
+        if (!dispatch_info.local_address.empty()) {
+          base_ctx->last_dispatched_from = dispatch_info.local_address;
         }
         // Use the cluster's streaming tuning, but bound the server between reads with this
         // request's timeout: if it stalls mid-body the stream times out rather than hanging next()
@@ -152,20 +179,30 @@ public:
         options.idle_timeout = timeout;
         options.is_read_only = read_only;
         auto stream = std::make_shared<query_stream>(self->io_, resp.body(), options);
-        stream->start([self, callback_state, stream](std::error_code early_error) mutable {
-          if (early_error) {
-            // No consumer will ever take ownership of this stream, so tear the underlying body
-            // (socket + timers) down explicitly rather than leaking it until the last handle drops.
-            stream->cancel();
-            self->invoke(callback_state, {}, early_error);
-            return;
-          }
-          self->invoke(callback_state, std::move(*stream), {});
-        });
+        stream->start(
+          [self, callback_state, stream, base_ctx](std::error_code early_error) mutable {
+            if (early_error) {
+              // The preamble is what carried the failure, so stamp its diagnostics before tearing
+              // the stream down.
+              base_ctx->ec = early_error;
+              apply_error_details(*base_ctx, stream->error_details());
+              // No consumer will ever take ownership of this stream, so tear the underlying body
+              // (socket + timers) down explicitly rather than leaking it until the last handle
+              // drops.
+              stream->cancel();
+              self->invoke(callback_state, {}, std::move(*base_ctx));
+              return;
+            }
+            // Hand the base context to the consumer alongside the stream: a terminal error reached
+            // later is stamped onto it, so a mid-stream failure reports the same detail as this
+            // one.
+            self->invoke(callback_state, std::move(*stream), std::move(*base_ctx));
+          });
       });
 
     if (!op.has_value()) {
-      invoke(callback_state, {}, to_error_code(op.error()));
+      base_ctx->ec = to_error_code(op.error());
+      invoke(callback_state, {}, std::move(*base_ctx));
     }
   }
 
@@ -183,7 +220,7 @@ private:
 
   void invoke(const std::shared_ptr<callback_state_type>& state,
               query_stream stream,
-              std::error_code ec)
+              error_context::query ctx)
   {
     query_stream_component::handler_type handler;
     {
@@ -195,7 +232,7 @@ private:
       handler = std::move(state->handler);
     }
     if (handler) {
-      handler(std::move(stream), ec);
+      handler(std::move(stream), std::move(ctx));
     }
   }
 

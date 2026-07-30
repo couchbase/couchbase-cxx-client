@@ -1178,3 +1178,128 @@ TEST_CASE("integration: a rejected streaming query does not evict the pooled con
     cluster.close().get();
   }
 }
+
+TEST_CASE("integration: streaming query reports the same error context as buffered query",
+          "[integration]")
+{
+  test::utils::integration_test_guard integration;
+  if (!integration.cluster_version().supports_query()) {
+    SKIP("cluster does not support query");
+  }
+  auto cluster = integration.public_cluster();
+
+  // Regression: a streaming failure used to arrive with an empty error context, so everything the
+  // buffered path reports -- the service's own error code and message, the statement, the endpoint
+  // -- was lost precisely when it was needed. Compare the two paths on the same rejected statement.
+  const std::string error_query =
+    "SELECT * FROM `nonexistent_bucket_that_does_not_exist_xyz` LIMIT 1";
+
+  auto [buffered_err, buffered] = cluster.query(error_query, couchbase::query_options{}).get();
+  REQUIRE(buffered_err.ec());
+  const auto buffered_ctx = tao::json::from_string(buffered_err.ctx().to_json());
+  const auto expected_error_code = buffered_ctx.at("first_error_code").as<std::uint64_t>();
+  REQUIRE(expected_error_code != 0);
+
+  auto [err, result] = cluster.query_stream(error_query).get();
+  // The rejection surfaces either at dispatch or as the stream's terminal; take whichever fired.
+  auto streaming_err = err;
+  if (!streaming_err.ec()) {
+    while (true) {
+      auto [row_err, row] = result.next().get();
+      if (row_err.ec()) {
+        streaming_err = row_err;
+        break;
+      }
+      if (!row.has_value()) {
+        break;
+      }
+    }
+  }
+  REQUIRE(streaming_err.ec());
+
+  const auto streaming_ctx = tao::json::from_string(streaming_err.ctx().to_json());
+  REQUIRE(streaming_ctx.at("first_error_code").as<std::uint64_t>() == expected_error_code);
+  REQUIRE(streaming_ctx.at("first_error_message").as<std::string>() ==
+          buffered_ctx.at("first_error_message").as<std::string>());
+  REQUIRE(streaming_ctx.at("statement").as<std::string>() == error_query);
+  REQUIRE_FALSE(streaming_ctx.at("client_context_id").as<std::string>().empty());
+  REQUIRE_FALSE(streaming_ctx.at("hostname").as<std::string>().empty());
+  REQUIRE_FALSE(streaming_ctx.at("http_body").as<std::string>().empty());
+  REQUIRE(streaming_ctx.find("parameters") != nullptr);
+
+  cluster.close().get();
+}
+
+TEST_CASE("integration: a streaming query terminal error carries the request context",
+          "[integration]")
+{
+  test::utils::integration_test_guard integration;
+  if (!integration.cluster_version().supports_query()) {
+    SKIP("cluster does not support query");
+  }
+  auto cluster = integration.public_cluster();
+
+  // A terminal reached after the stream started must also be reported against the request's context
+  // rather than as a bare error code. cancel() is the deterministic way to reach one.
+  // 15000 is deliberate: the query service rejects a larger ARRAY_RANGE with error 5010 ("Out of
+  // range evaluating ARRAY_RANGE()") on the older servers in the CI matrix. Any row count above one
+  // works here -- the test cancels after the first row.
+  const std::string statement = "SELECT n FROM ARRAY_RANGE(0, 15000) AS n";
+  auto [err, result] = cluster.query_stream(statement).get();
+  REQUIRE_SUCCESS(err.ec());
+  REQUIRE(result.next().get().second.has_value());
+  result.cancel();
+
+  auto [terminal_err, row] = result.next().get();
+  REQUIRE(terminal_err.ec() == couchbase::errc::common::request_canceled);
+  const auto ctx = tao::json::from_string(terminal_err.ctx().to_json());
+  REQUIRE(ctx.at("statement").as<std::string>() == statement);
+  REQUIRE_FALSE(ctx.at("hostname").as<std::string>().empty());
+  REQUIRE(ctx.at("http_status").as<std::uint32_t>() == 200);
+  // Serialized only when non-zero, so its presence is what proves the endpoint was captured.
+  REQUIRE(ctx.find("port") != nullptr);
+
+  // A cancellation has no service-reported error, so the error code and message stay unset (both
+  // are omitted from the JSON when empty). The response envelope parsed before the cancel is still
+  // reported as the body: it names the request the service knows, and the buffered path likewise
+  // reports the body it received.
+  REQUIRE(ctx.find("first_error_code") == nullptr);
+  REQUIRE(ctx.find("first_error_message") == nullptr);
+  const auto body = tao::json::from_string(ctx.at("http_body").as<std::string>());
+  REQUIRE_FALSE(body.at("requestID").as<std::string>().empty());
+  REQUIRE(body.find("errors") == nullptr);
+
+  cluster.close().get();
+}
+
+TEST_CASE("integration: a streaming prepared statement keeps the buffered response diagnostics",
+          "[integration]")
+{
+  test::utils::integration_test_guard integration;
+  if (!integration.cluster_version().supports_query()) {
+    SKIP("cluster does not support query");
+  }
+  auto cluster = integration.public_cluster();
+
+  // A prepared statement (adhoc=false) is not streamed live: it runs buffered and its
+  // already-parsed response is replayed through the streaming handle, so the handle starts life
+  // with the fully populated context the buffered path built -- including the response body
+  // http_command captures for every request. The replay itself has no raw JSON left to report, so
+  // stamping the stream's diagnostics onto that context must not overwrite what is already there.
+  auto [err, result] =
+    cluster.query_stream(R"(SELECT "prepared" AS v)", couchbase::query_options{}.adhoc(false))
+      .get();
+  REQUIRE_SUCCESS(err.ec());
+  REQUIRE(result.next().get().second.has_value());
+
+  // cancel() reaches a terminal deterministically, which is where the context is stamped.
+  result.cancel();
+  auto [terminal_err, row] = result.next().get();
+  REQUIRE(terminal_err.ec() == couchbase::errc::common::request_canceled);
+
+  const auto ctx = tao::json::from_string(terminal_err.ctx().to_json());
+  REQUIRE(ctx.at("statement").as<std::string>() == R"(SELECT "prepared" AS v)");
+  REQUIRE_FALSE(ctx.at("http_body").as<std::string>().empty());
+
+  cluster.close().get();
+}
