@@ -67,6 +67,8 @@
 #include <asio/execution_context.hpp>
 #include <asio/post.hpp>
 
+#include <gsl/assert>
+
 #include <functional>
 #include <future>
 #include <memory>
@@ -461,17 +463,81 @@ public:
 
   void notify_fork(fork_event event)
   {
+    // asio requires notify_fork() to run with no thread inside io_context::run():
+    //
+    //   "This function must not be called while any other execution_context
+    //    function, or any function on an I/O object associated with the
+    //    execution_context, is being called in another thread."
+    //                                       -- asio/execution_context.hpp
+    //
+    // That is not a formality for fork_child: epoll_reactor::notify_fork() closes
+    // and recreates epoll_fd_, timer_fd_ and the interrupter, then rewrites every
+    // descriptor registration. Running it against a live reactor makes the IO
+    // thread epoll_wait() on a descriptor another thread is closing, and then
+    // dereference whatever epoll reports as a descriptor_state.
+    //
+    // So the fixup goes in the window where the IO thread is not running: after
+    // the join in fork_prepare, and before the restart that starts the new one.
     if (event == fork_event::prepare) {
       io_.stop();
-      io_thread_.join();
+      // Guarded like do_close() below, and for the same reason: close() already
+      // stopped the io_context and joined this thread, so a notify_fork(prepare)
+      // afterwards has nothing left to join -- and join() on a thread that is not
+      // joinable throws std::system_error, out of a void public API.
+      if (io_thread_.joinable()) {
+        io_thread_.join();
+      }
+    }
+
+    // Our own IO thread is gone at this point, checkable in program order
+    // rather than only by a sanitizer: fork_prepare has just joined it, and
+    // fork_child/fork_parent inherit an already-joined one, because prepare runs
+    // before fork() and only the forking thread survives into the child. If a
+    // later change moves the restart back above this line, this fires
+    // immediately instead of turning into an intermittent use-after-free.
+    //
+    // Note this covers io_thread_ only. On the fork_prepare path the
+    // transactions cleanup threads are still running below, so asio's "no other
+    // thread" precondition is satisfied here for the reactor (its notify_fork
+    // does nothing at all for fork_prepare) but not established process-wide.
+    Expects(!io_thread_.joinable());
+
+    if (event == fork_event::prepare) {
+      try {
+        io_.notify_fork(fork_event_to_asio(event));
+      } catch (...) {
+        // Same hazard as the fork_child/fork_parent path below, and the same remedy.
+        // Returning from here stopped and threadless would hang ~cluster_impl, which
+        // waits on a completion only the IO thread can deliver. So hand the cluster
+        // back a runnable io_context and let the caller see why: the fork must not go
+        // ahead, but the cluster itself is still usable and still destructible.
+        io_.restart();
+        io_thread_ = std::thread{ [&io = io_] {
+          io.run();
+        } };
+        throw;
+      }
     } else {
       // TODO(SA): close all sockets in fork_event::child
       io_.restart();
+      try {
+        io_.notify_fork(fork_event_to_asio(event));
+      } catch (...) {
+        // notify_fork() throws if re-registering a descriptor with the new
+        // epoll instance fails. The io_context is unusable after that (asio says
+        // to destroy it), but destruction itself needs a runner: do_close()
+        // waits on a completion only the IO thread can deliver, so returning
+        // from here stopped and threadless would hang ~cluster_impl instead of
+        // surfacing the failure.
+        io_thread_ = std::thread{ [&io = io_] {
+          io.run();
+        } };
+        throw;
+      }
       io_thread_ = std::thread{ [&io = io_] {
         io.run();
       } };
     }
-    io_.notify_fork(fork_event_to_asio(event));
 
     if (event != fork_event::child && transactions_) {
       transactions_->notify_fork(event);
@@ -766,9 +832,14 @@ cluster::notify_fork(fork_event event) -> void
       if (err.ec()) {
         // TODO(SA): we should fall to background reconnect loop similar to Columnar build
         CB_LOG_ERROR("Unable to reconnect instance after fork: {}", err.ec().message());
-        return;
+      } else {
+        impl_ = new_impl;
       }
-      impl_ = new_impl;
+      // Always fulfill the barrier. Returning early here used to hang this
+      // function forever: `barrier` is still owned by the enclosing scope below,
+      // so the promise is never destroyed and future.get() never sees a
+      // broken_promise either -- a failed post-fork reconnect just wedged the
+      // caller.
       barrier->set_value();
     });
 

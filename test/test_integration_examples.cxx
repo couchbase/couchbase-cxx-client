@@ -756,7 +756,14 @@ main(int argc, const char* argv[])
     cluster.notify_fork(couchbase::fork_event::child);
 
     fmt::print("CHILD(pid={}): continue after fork()\n", getpid());
-    auto collection = bucket.scope("tenant_agent_00").collection("users");
+
+    // Re-acquire the handles in the child. notify_fork(child) reconnects the
+    // cluster on a fresh set of sockets, so bucket/scope/collection handles
+    // obtained before the fork still refer to the pre-fork connections; using one
+    // here fails with errc::network::cluster_closed. Handles are cheap value
+    // types, so ask the cluster for them again. The parent does not need this --
+    // notify_fork(parent) leaves its connections in place.
+    auto collection = cluster.bucket(bucket_name).scope("tenant_agent_00").collection("users");
 
     {
       fmt::print("CHILD(pid={}): upsert into collection\n", getpid());
@@ -837,7 +844,9 @@ main(int argc, const char* argv[])
         flags.emplace_back("stopped");
       }
       if (WIFEXITED(status)) {
-        flags.emplace_back("exited");
+        // WEXITSTATUS is only defined once WIFEXITED holds, so it is reported from
+        // here rather than unconditionally at the call site.
+        flags.emplace_back(fmt::format("exited, exitstatus={}", WEXITSTATUS(status)));
       }
       if (WIFSIGNALED(status)) {
         flags.emplace_back("signaled");
@@ -850,11 +859,16 @@ main(int argc, const char* argv[])
       }
       return fmt::format("status=0x{:02x} ({})", status, fmt::join(flags, ", "));
     };
-    fmt::print("PARENT(pid={}): Child pid={} returned {}, {}\n",
-               getpid(),
-               child_pid,
-               WEXITSTATUS(status),
-               pretty_status(status));
+    fmt::print(
+      "PARENT(pid={}): Child pid={} returned {}\n", getpid(), child_pid, pretty_status(status));
+
+    // The child does the post-fork half of this example, so its outcome has to
+    // propagate: without this the parent returns 0 even when the child could not
+    // use the cluster at all.
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+      fmt::print("PARENT(pid={}): child pid={} did not exit cleanly\n", getpid(), child_pid);
+      return 1;
+    }
   }
 
   fmt::print("COMMON(pid={}): close cluster\n", getpid());

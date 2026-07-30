@@ -25,6 +25,7 @@ integration_test(node_id)
 integration_test(bucket_bootstrap)
 integration_test(handler_drop_lifetime)
 integration_test(wait_until_ready)
+integration_test(fork)
 
 unit_test(connection_string)
 unit_test(capella)
