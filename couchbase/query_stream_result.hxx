@@ -49,6 +49,8 @@ using query_row_handler = std::function<void(error, std::optional<query_row>)>;
  * (or @ref cancel() called) before @ref meta_data() resolves. Only a single @ref next()
  * call may be outstanding at a time.
  *
+ * @snippet{trimleft} test_integration_examples_streaming.cxx example-query-stream
+ *
  * @note The future-returning overloads (`next()`, `meta_data()`) and the eager @ref iterator
  * block the calling thread until the result is ready. They must not be called from within an SDK
  * completion handler (i.e. the library's I/O thread) — doing so blocks that thread against itself
@@ -91,6 +93,11 @@ public:
    *
    * Only one outstanding call is allowed at a time.
    *
+   * This is the overload to use from a completion handler: issuing the following pull from inside
+   * the handler drains the stream without ever blocking a thread.
+   *
+   * @snippet{trimleft} test_integration_examples_streaming.cxx example-query-stream-async
+   *
    * @param handler callable that implements @ref query_row_handler
    *
    * @since 1.4.0
@@ -103,6 +110,13 @@ public:
    *
    * Only one outstanding call is allowed at a time.
    *
+   * A failure reaches the caller through one of two channels — the error returned by the
+   * originating @ref cluster#query_stream() (the request never started) or the stream's terminal
+   * delivered here. Which one fires is not fixed, so both have to be handled. Once a terminal has
+   * been reached it is re-delivered on every further call rather than blocking on a drained stream:
+   *
+   * @snippet{trimleft} test_integration_examples_streaming.cxx example-query-stream-errors
+   *
    * @return future object that carries the result of the operation
    *
    * @since 1.4.0
@@ -112,6 +126,11 @@ public:
 
   /**
    * Returns the query signature captured from the response metadata, if present.
+   *
+   * The signature is part of the response preamble, so — unlike @ref meta_data() — it is available
+   * as soon as the stream has started, without draining it first:
+   *
+   * @snippet{trimleft} test_integration_examples_streaming.cxx example-query-stream
    *
    * @return optional binary JSON signature
    *
@@ -128,6 +147,12 @@ public:
    * each call returns its own future and all of them resolve together once the
    * metadata becomes available.
    *
+   * If the stream ended with an error, or was torn down by @ref cancel() before reaching a natural
+   * terminal, the returned future resolves with that error instead of waiting for a trailer that
+   * will never arrive:
+   *
+   * @snippet{trimleft} test_integration_examples_streaming.cxx example-query-stream-errors
+   *
    * @return future carrying (error, query_meta_data)
    *
    * @since 1.4.0
@@ -142,6 +167,17 @@ public:
    * but if a pull is in flight the underlying connection is not released until that pull settles
    * (up to the inter-read idle timeout). Call cancel() explicitly for prompt, deterministic
    * teardown of the connection and its timers.
+   *
+   * Part [2] of the example below consumes only a prefix of a large result and then cancels. The
+   * rows that were never pulled are never transferred, so the cost of a prefix read is proportional
+   * to the prefix rather than to the full result:
+   *
+   * @snippet{trimleft} test_integration_examples_streaming.cxx example-query-stream-iterator
+   *
+   * After cancel(), @ref next() reports @ref errc::common::request_canceled — a terminal that has
+   * to be told apart from a genuine failure. Rows consumed before the cancel remain valid:
+   *
+   * @snippet{trimleft} test_integration_examples_streaming.cxx example-query-stream-errors
    *
    * @since 1.4.0
    * @volatile
@@ -167,6 +203,13 @@ public:
    * (and whose row is empty) before comparing equal to @ref end(). A clean end-of-stream yields no
    * such element. This guarantees a `for (auto [err, row] : result)` loop can observe a terminal
    * error rather than silently stopping.
+   *
+   * @snippet{trimleft} test_integration_examples_streaming.cxx example-query-stream-iterator
+   *
+   * Part [2] of the error-handling example shows the terminal element being observed rather than
+   * silently truncating the result:
+   *
+   * @snippet{trimleft} test_integration_examples_streaming.cxx example-query-stream-errors
    *
    * This is a minimal single-pass iterator intended for range-based for and manual
    * `while (it != result.end())` loops. It compares only against @ref end() (never against another

@@ -67,6 +67,14 @@ public:
    * and decoding empty/malformed content throws the serializer's parse exception — gate on the
    * three-state next() contract (check the error, then the optional) before decoding.
    *
+   * Any type with a serializer-compatible specialization works as the document type:
+   *
+   * @snippet{trimleft} test_integration_examples_streaming.cxx streaming-product
+   *
+   * Usage:
+   *
+   * @snippet{trimleft} test_integration_examples_streaming.cxx example-query-stream
+   *
    * @tparam Serializer the serializer to use (defaults to @ref codec::tao_json_serializer)
    * @tparam Document the document type to decode into (defaults to the serializer's document_type)
    * @return the decoded document
