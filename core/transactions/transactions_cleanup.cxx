@@ -36,7 +36,9 @@
 #include <deque>
 #include <functional>
 #include <future>
+#include <list>
 #include <memory>
+#include <thread>
 #include <utility>
 
 namespace couchbase::core::transactions
@@ -661,10 +663,17 @@ transactions_cleanup::add_collection(const couchbase::transactions::transaction_
     auto it = std::find(collections_.begin(), collections_.end(), keyspace);
     if (it == collections_.end()) {
       collections_.emplace_back(keyspace);
-      // start cleaning right away
-      lost_attempt_cleanup_workers_.emplace_back([this, keyspace = collections_.back()]() {
-        this->clean_collection(keyspace);
-      });
+      // Spawn only while running. stop() takes the worker handles out and joins them, so a
+      // handle appended after that point is one nothing has agreed to join -- and a
+      // joinable std::thread that reaches its destructor terminates. Registering the
+      // keyspace is still right: start() spawns a worker for everything in collections_,
+      // so cleanup resumes for it on the next start.
+      if (running_) {
+        // start cleaning right away
+        lost_attempt_cleanup_workers_.emplace_back([this, keyspace = collections_.back()]() {
+          this->clean_collection(keyspace);
+        });
+      }
     }
     lock.unlock();
     CB_ATTEMPT_CLEANUP_LOG_DEBUG("added {} to lost transaction cleanup", keyspace);
@@ -674,11 +683,40 @@ transactions_cleanup::add_collection(const couchbase::transactions::transaction_
 void
 transactions_cleanup::start()
 {
-  running_ =
-    config_.cleanup_config.cleanup_client_attempts || config_.cleanup_config.cleanup_lost_attempts;
+  // The pool has to exist before any worker does: clean_collection() treats a missing pool
+  // as a broken invariant and gives up on the keyspace.
   if (config_.cleanup_config.cleanup_lost_attempts) {
     // Blocking per-ATR checks are offloaded to this bounded pool, never the single IO thread.
     atr_cleanup_pool_.emplace(max_in_flight_atr_checks_);
+  }
+
+  {
+    // running_ is read under mutex_ everywhere else -- is_running(), interruptable_wait(),
+    // add_collection() and stop() -- so it is written under it here too, rather than being
+    // the one unsynchronized access to it.
+    //
+    // Publishing it in the same critical section as the respawn below also settles who
+    // spawns what. A concurrent add_collection() either runs before this section and only
+    // registers its keyspace, which the loop then spawns for, or after it and spawns for
+    // itself, by which point the loop has already gone past. Exactly one worker per
+    // keyspace either way.
+    const std::unique_lock<std::mutex> lock(mutex_);
+    running_ = config_.cleanup_config.cleanup_client_attempts ||
+               config_.cleanup_config.cleanup_lost_attempts;
+
+    if (config_.cleanup_config.cleanup_lost_attempts) {
+      // Re-spawn a worker for every keyspace still registered from before a previous
+      // stop(). add_collection() below cannot do it: it dedupes on collections_, so
+      // for an already-registered keyspace it skips the worker and lost-attempt
+      // cleanup stays dead for the rest of the process. Any fork leaves exactly that
+      // state behind -- notify_fork(prepare) stops cleanup, notify_fork(parent)
+      // starts it again.
+      for (const auto& keyspace : collections_) {
+        lost_attempt_cleanup_workers_.emplace_back([this, keyspace]() {
+          this->clean_collection(keyspace);
+        });
+      }
+    }
   }
   if (config_.cleanup_config.cleanup_client_attempts) {
     cleanup_thr_ = std::thread([this] {
@@ -707,7 +745,26 @@ transactions_cleanup::stop()
     cleanup_thr_.join();
     CB_ATTEMPT_CLEANUP_LOG_DEBUG("cleanup attempt thread closed");
   }
-  for (auto& t : lost_attempt_cleanup_workers_) {
+  // Take the handles out under mutex_, then join them with the lock released.
+  //
+  // Under the lock, because add_collection() and start() append to this list while
+  // holding mutex_. Walking it while another thread appends is a data race on the
+  // list itself, and an append that lands after it was emptied would leave a
+  // joinable std::thread to be destroyed later, which terminates.
+  //
+  // With the lock released, because the workers themselves take mutex_ to see
+  // running_ (interruptable_wait, and the collections_ lookup in clean_collection),
+  // so joining while holding it deadlocks.
+  //
+  // Moving the handles out also drops them, which a later start() needs in order to
+  // spawn fresh workers. collections_ is deliberately kept: it also holds keyspaces
+  // registered at runtime, and discarding those would silently stop cleaning them.
+  std::list<std::thread> workers;
+  {
+    const std::unique_lock<std::mutex> lock(mutex_);
+    workers.swap(lost_attempt_cleanup_workers_);
+  }
+  for (auto& t : workers) {
     CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("shutting down all lost attempt threads...");
     if (t.joinable()) {
       t.join();
