@@ -756,7 +756,14 @@ main(int argc, const char* argv[])
     cluster.notify_fork(couchbase::fork_event::child);
 
     fmt::print("CHILD(pid={}): continue after fork()\n", getpid());
-    auto collection = bucket.scope("tenant_agent_00").collection("users");
+
+    // Re-acquire the handles in the child. notify_fork(child) reconnects the
+    // cluster on a fresh set of sockets, so bucket/scope/collection handles
+    // obtained before the fork still refer to the pre-fork connections; using one
+    // here fails with errc::network::cluster_closed. Handles are cheap value
+    // types, so ask the cluster for them again. The parent does not need this --
+    // notify_fork(parent) leaves its connections in place.
+    auto collection = cluster.bucket(bucket_name).scope("tenant_agent_00").collection("users");
 
     {
       fmt::print("CHILD(pid={}): upsert into collection\n", getpid());
@@ -833,28 +840,31 @@ main(int argc, const char* argv[])
       if (WIFCONTINUED(status)) {
         flags.emplace_back("continued");
       }
+      // Each W*() accessor is only defined once its own predicate holds, so each is
+      // reported from inside the matching branch. Unguarded they decode the wrong bits and
+      // invent events: glibc's WSTOPSIG is (status & 0xff00) >> 8, the same bits as the
+      // exit status, so a child that exited with code 3 was reported as "stopsig=3".
       if (WIFSTOPPED(status)) {
-        flags.emplace_back("stopped");
+        flags.emplace_back(fmt::format("stopped, stopsig={}", WSTOPSIG(status)));
       }
       if (WIFEXITED(status)) {
-        flags.emplace_back("exited");
+        flags.emplace_back(fmt::format("exited, exitstatus={}", WEXITSTATUS(status)));
       }
       if (WIFSIGNALED(status)) {
-        flags.emplace_back("signaled");
-      }
-      if (const auto signal = WSTOPSIG(status); signal > 0) {
-        flags.emplace_back(fmt::format("stopsig={}", signal));
-      }
-      if (const auto signal = WTERMSIG(status); signal > 0) {
-        flags.emplace_back(fmt::format("termsig={}", signal));
+        flags.emplace_back(fmt::format("signaled, termsig={}", WTERMSIG(status)));
       }
       return fmt::format("status=0x{:02x} ({})", status, fmt::join(flags, ", "));
     };
-    fmt::print("PARENT(pid={}): Child pid={} returned {}, {}\n",
-               getpid(),
-               child_pid,
-               WEXITSTATUS(status),
-               pretty_status(status));
+    fmt::print(
+      "PARENT(pid={}): Child pid={} returned {}\n", getpid(), child_pid, pretty_status(status));
+
+    // The child does the post-fork half of this example, so its outcome has to
+    // propagate: without this the parent returns 0 even when the child could not
+    // use the cluster at all.
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+      fmt::print("PARENT(pid={}): child pid={} did not exit cleanly\n", getpid(), child_pid);
+      return 1;
+    }
   }
 
   fmt::print("COMMON(pid={}): close cluster\n", getpid());
