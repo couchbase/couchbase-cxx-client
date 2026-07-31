@@ -862,9 +862,13 @@ cluster::notify_fork(fork_event event) -> void
       if (err.ec()) {
         // TODO(SA): we should fall to background reconnect loop similar to Columnar build
         CB_LOG_ERROR("Unable to reconnect instance after fork: {}", err.ec().message());
-      } else {
-        impl_ = new_impl;
       }
+      // Adopt the new impl either way. Leaving impl_ null on failure turned the
+      // child's next operation into a segfault, because every data-plane method
+      // dereferences impl_ unchecked; an impl that failed to open reports
+      // errc::network::cluster_closed instead, which is what a caller already gets
+      // from a handle it acquired before the fork.
+      impl_ = new_impl;
       // Always fulfill the barrier. Returning early here used to hang this
       // function forever: `barrier` is still owned by the enclosing scope below,
       // so the promise is never destroyed and future.get() never sees a
