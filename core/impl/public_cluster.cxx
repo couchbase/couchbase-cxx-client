@@ -813,6 +813,16 @@ cluster::connect(const std::string& connection_string,
 auto
 cluster::notify_fork(fork_event event) -> void
 {
+#if defined(_WIN32)
+  // No fork(2) on Windows, so there is nothing to prepare for or recover from.
+  // The function stays part of the API on every platform -- callers, the wrapper
+  // SDKs especially, should not have to compile differently per platform -- but
+  // here it does nothing. Doing the POSIX work instead would stop and restart the
+  // io_context and re-bootstrap the cluster for no reason, and asio's IOCP
+  // backend has no notify_fork to apply either.
+  (void)event;
+  return;
+#else
   if (!impl_) {
     return;
   }
@@ -845,6 +855,7 @@ cluster::notify_fork(fork_event event) -> void
 
     future.get();
   }
+#endif
 }
 
 void
