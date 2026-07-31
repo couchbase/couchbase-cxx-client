@@ -319,9 +319,15 @@ origin::to_json() const -> std::string
 couchbase::core::origin::origin(origin&& other) noexcept
   : options_(std::move(other.options_))
   , nodes_(std::move(other.nodes_))
-  , next_node_(other.next_node_)
+  // next_node_ is an iterator into nodes_. Container move construction transfers the buffer, so
+  // iterators into the source stay valid and now denote elements of nodes_ -- other.next_node_ can
+  // be adopted as-is, preserving the round-robin position. The empty case is guarded separately
+  // because that guarantee does not extend to a past-the-end iterator. nodes_ is declared before
+  // next_node_, so it is already initialized here.
+  , next_node_(nodes_.empty() ? nodes_.begin() : other.next_node_)
   , exhausted_(other.exhausted_)
   , connection_string_(std::move(other.connection_string_))
+  , uses_protostellar_(other.uses_protostellar_)
   , credentials_(std::move(other.credentials_))
 {
 }
@@ -330,20 +336,38 @@ auto
 couchbase::core::origin::operator=(origin&& other) noexcept -> origin&
 {
   if (this != &other) {
+    const auto offset = other.nodes_.empty() ? 0 : other.next_node_ - other.nodes_.begin();
     options_ = std::move(other.options_);
     nodes_ = std::move(other.nodes_);
-    next_node_ = other.next_node_;
+    next_node_ = nodes_.begin() + offset;
     exhausted_ = other.exhausted_;
     connection_string_ = std::move(other.connection_string_);
+    uses_protostellar_ = other.uses_protostellar_;
     credentials_ = std::move(other.credentials_);
   }
   return *this;
 }
 
+// A copy is a fresh origin that has not attempted anything, so the rotation cursor is deliberately
+// reset rather than carried. This matters: next_address() marks an origin exhausted as it hands out
+// the *last* node, which on a single-node cluster is the very first call, so a cluster origin is
+// normally exhausted immediately after bootstrap. open_bucket() copies that origin into every
+// bucket and on into every session, and mcbp_session::initiate_bootstrap() tests exhausted()
+// before it ever calls next_address() -- so carrying the flag would send a session that has tried
+// nothing down the "reached the end of the list of bootstrap nodes" path: an unconditional 500 ms
+// backoff, plus a spurious no_endpoints_left notification under COUCHBASE_CXX_CLIENT_COLUMNAR.
+//
+// Moving, by contrast, does carry it: a move transfers identity rather than producing an
+// independent origin.
+//
+// connection_string_ and uses_protostellar_ *are* copied. They were being dropped entirely, which
+// left connection_string() returning "" on any copied origin.
 couchbase::core::origin::origin(const couchbase::core::origin& other)
   : options_(other.options_)
   , nodes_(other.nodes_)
   , next_node_(nodes_.begin())
+  , connection_string_(other.connection_string_)
+  , uses_protostellar_(other.uses_protostellar_)
 {
   update_credentials(other.credentials());
 }
@@ -378,6 +402,7 @@ couchbase::core::origin::origin(couchbase::core::cluster_credentials auth,
                                 const couchbase::core::utils::connection_string& connstr)
   : options_(connstr.options)
   , connection_string_(connstr.input)
+  , uses_protostellar_(connstr.uses_protostellar())
   , credentials_(std::move(auth))
 {
   nodes_.reserve(connstr.bootstrap_nodes.size());
@@ -396,10 +421,13 @@ couchbase::core::origin::operator=(const couchbase::core::origin& other) -> couc
 {
   if (this != &other) {
     options_ = other.options_;
+    connection_string_ = other.connection_string_;
     update_credentials(other.credentials());
     nodes_ = other.nodes_;
+    // Rotation state is reset, not carried -- see the copy constructor for why.
     next_node_ = nodes_.begin();
     exhausted_ = false;
+    uses_protostellar_ = other.uses_protostellar_;
   }
   return *this;
 }
@@ -407,6 +435,11 @@ auto
 couchbase::core::origin::connection_string() const -> const std::string&
 {
   return connection_string_;
+}
+auto
+couchbase::core::origin::uses_protostellar() const -> bool
+{
+  return uses_protostellar_;
 }
 auto
 couchbase::core::origin::username() const -> std::string
@@ -502,6 +535,11 @@ couchbase::core::origin::set_nodes_from_config(const topology::configuration& co
     shuffle_nodes();
   }
   next_node_ = nodes_.begin();
+  // Matches set_nodes(): the node list has just been replaced, so any exhaustion recorded against
+  // the previous list is meaningless. Without this an origin that was exhausted stays exhausted
+  // across every config update -- cluster.cxx and io/config_tracker.cxx both call this on
+  // long-lived origins that next_address() will have marked exhausted.
+  exhausted_ = false;
 }
 void
 couchbase::core::origin::update_credentials(cluster_credentials auth)

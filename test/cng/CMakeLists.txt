@@ -74,6 +74,9 @@ add_cng_test(framework/framework_selftest)
 # links the client library.
 add_cng_test(connection_string/couchbase2_scheme LINK_CLIENT)
 
+# origin protocol marker (CXXCBC-888).
+add_cng_test(origin/protocol LINK_CLIENT)
+
 # Protostellar codegen smoke test — only when couchbase2 support (and thus the generated stubs
 # library) is built. See CXXCBC-886.
 if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 AND TARGET couchbase_cxx_protostellar)
