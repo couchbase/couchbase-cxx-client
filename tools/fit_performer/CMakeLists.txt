@@ -139,6 +139,11 @@ target_include_directories(
           ${CMAKE_SOURCE_DIR}/core)
 target_include_directories(fit_performer SYSTEM PRIVATE ${PROTO_SRC_DIR})
 
+# The generated couchbase/build_config.hxx records which optional components this build actually
+# compiled -- performerCapsFetch reads it so the performer only claims capabilities that are really
+# present. The client library does not export this directory, so it is added here explicitly.
+target_include_directories(fit_performer PRIVATE ${PROJECT_BINARY_DIR}/generated)
+
 target_link_libraries(
   fit_performer
   PRIVATE ${couchbase_cxx_client_DEFAULT_LIBRARY}

@@ -32,6 +32,8 @@
 #include "performer.pb.h"
 #include "transactions.commands.pb.h"
 
+#include <couchbase/build_config.hxx>
+
 #include <core/meta/features.hxx>
 #include <core/meta/version.hxx>
 #include <core/transactions/attempt_context_impl.hxx>
@@ -1587,6 +1589,21 @@ TxnService::performerCapsFetch(grpc::ServerContext* /*context*/,
   response->add_sdk_implementation_caps(protocol::sdk::Caps::SDK_VECTOR_SEARCH_BASE64);
   response->add_sdk_implementation_caps(protocol::sdk::Caps::SDK_ZONE_AWARE_READ_FROM_REPLICA);
   response->add_sdk_implementation_caps(protocol::sdk::Caps::SUPPORTS_AUTHENTICATOR);
+#ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
+  // Only a build that actually compiled the couchbase2 transport may claim
+  // these. The driver decides whether a run is couchbase2 from its own
+  // connection string, not from PROTOSTELLAR, so that one is self-description
+  // rather than a gate. SDK_COUCHBASE2_OBSERVABILITY is read: without it the
+  // driver disables the RFC 77 observability tests for a performer connected
+  // over couchbase2, which would silently skip what CXXCBC-902 implemented.
+  //
+  // Deliberately no transaction capability here: the transport has no subdoc
+  // operations and nothing for transactions.v1, while the transaction
+  // implementation stages through subdoc with xattrs, so transaction workloads
+  // cannot run over couchbase2 yet.
+  response->add_sdk_implementation_caps(protocol::sdk::Caps::PROTOSTELLAR);
+  response->add_sdk_implementation_caps(protocol::sdk::Caps::SDK_COUCHBASE2_OBSERVABILITY);
+#endif
 #ifdef COUCHBASE_CXX_CLIENT_SUPPORTS_APP_TELEMETRY
   response->add_sdk_implementation_caps(protocol::sdk::Caps::SDK_APP_TELEMETRY);
 #endif
