@@ -23,8 +23,10 @@
 
 #include "core/analytics_stream.hxx"
 
+#include "core/error_context/analytics.hxx"
 #include <atomic>
 #include <future>
+
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -44,7 +46,8 @@ class internal_analytics_stream_result
 {
 public:
   internal_analytics_stream_result(core::analytics_stream stream,
-                                   std::unique_ptr<core::impl::observability_recorder> obs_rec);
+                                   std::unique_ptr<core::impl::observability_recorder> obs_rec,
+                                   core::error_context::analytics ctx);
   // Non-copyable and non-movable: holds a std::mutex and is only ever owned via shared_ptr.
   internal_analytics_stream_result(const internal_analytics_stream_result&) = delete;
   internal_analytics_stream_result(internal_analytics_stream_result&&) = delete;
@@ -79,6 +82,11 @@ private:
   void resolve_meta_data(std::error_code ec);
 
   core::analytics_stream stream_;
+
+  // The request's error context as of a successfully started stream (statement, parameters, HTTP
+  // status, endpoint). A terminal error is reported against a copy of this with the trailer's
+  // diagnostics stamped on, so a mid-stream failure is as diagnosable as one that failed to start.
+  core::error_context::analytics ctx_;
 
   // Observability recorder for the whole streaming operation. Its operation span already parents
   // the request; finish() is called exactly once from resolve_meta_data() (the single terminal

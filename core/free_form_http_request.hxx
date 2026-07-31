@@ -18,6 +18,7 @@
 #include <couchbase/build_config.hxx>
 
 #include "core/impl/bootstrap_error.hxx"
+#include "core/io/http_streaming_response.hxx"
 #include "service_type.hxx"
 #include "utils/movable_function.hxx"
 
@@ -119,6 +120,9 @@ public:
   explicit http_response(io::http_streaming_response resp);
 
   [[nodiscard]] auto endpoint() const -> std::string;
+  // Where this response was dispatched. Empty for the in-memory/fault test bodies, which have no
+  // session behind them.
+  [[nodiscard]] auto dispatch_info() const -> io::http_dispatch_info;
   [[nodiscard]] auto status_code() const -> std::uint32_t;
   [[nodiscard]] auto content_length() const -> std::size_t;
 

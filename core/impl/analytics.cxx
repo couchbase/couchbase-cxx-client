@@ -22,6 +22,7 @@
 #include "core/cluster.hxx"
 #include "core/operations/document_analytics.hxx"
 #include "core/utils/binary.hxx"
+#include "error.hxx"
 #include "internal_analytics_stream_result.hxx"
 #include "observability_recorder.hxx"
 
@@ -162,15 +163,17 @@ dispatch_analytics_stream(const core::cluster& core,
 {
   core.analytics_query_stream(
     std::move(request),
-    [obs_rec = std::move(obs_rec), handler = std::move(handler)](core::analytics_stream stream,
-                                                                 std::error_code ec) mutable {
-      if (ec) {
-        obs_rec->finish(ec);
-        return handler(couchbase::error{ ec, "failed to start the streaming analytics query" }, {});
+    [obs_rec = std::move(obs_rec), handler = std::move(handler)](
+      core::analytics_stream stream, core::error_context::analytics ctx) mutable {
+      if (ctx.ec) {
+        obs_rec->finish(ctx.ec);
+        return handler(make_error(ctx), {});
       }
-      // Transfer the recorder to the handle; it finishes the operation at the stream terminal.
-      auto internal =
-        std::make_shared<internal_analytics_stream_result>(std::move(stream), std::move(obs_rec));
+      // Transfer the recorder to the handle; it finishes the operation at the stream terminal. The
+      // context travels with it so a terminal error is reported with the same statement/endpoint
+      // detail as a failure to start, plus whatever the trailer said.
+      auto internal = std::make_shared<internal_analytics_stream_result>(
+        std::move(stream), std::move(obs_rec), std::move(ctx));
       handler({}, analytics_stream_result{ std::move(internal) });
     });
 }

@@ -21,6 +21,8 @@
 // drive the state machine over in-memory bodies (no server, no analytics service required).
 
 #include "core/analytics_stream.hxx"
+#include "core/impl/internal_analytics_stream_result.hxx"
+#include "core/impl/observability_recorder.hxx"
 #include "core/operations/document_analytics.hxx"
 #include "test_helper_streaming.hxx"
 
@@ -28,8 +30,11 @@
 
 #include <asio/io_context.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <tao/json/from_string.hpp>
 
+#include <cstdint>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <system_error>
@@ -272,4 +277,60 @@ TEST_CASE("unit: analytics_stream reports no signature when absent", "[unit]")
 
   REQUIRE(resolved);
   REQUIRE_FALSE(stream.signature().has_value());
+}
+
+TEST_CASE("unit: a mid-stream analytics terminal error is reported with the request context",
+          "[unit]")
+{
+  // Counterpart of the query case in test_unit_query_stream.cxx: rows followed by a trailing error,
+  // so the terminal arrives from the stream and reaches the first observing next().
+  asio::io_context io;
+  const std::string doc = R"({"requestID":"r-ctx","results":[{"a":1}],)"
+                          R"("status":"fatal","errors":[{"code":24000,"msg":"boom"}]})";
+  auto body = test::utils::make_cached_response_body(io, doc);
+  couchbase::core::analytics_stream stream{ io, std::move(body) };
+
+  std::error_code start_ec{ make_error_code(std::errc::operation_in_progress) };
+  stream.start([&start_ec](std::error_code ec) {
+    start_ec = ec;
+  });
+  io.run();
+  REQUIRE_FALSE(start_ec); // the error is in the trailer, so starting succeeds
+
+  couchbase::core::error_context::analytics ctx{};
+  ctx.statement = "SELECT a FROM x";
+  ctx.client_context_id = "cid-1";
+  ctx.method = "POST";
+  ctx.path = "/analytics/service";
+  ctx.hostname = "node.example";
+  ctx.port = 8095;
+  auto internal = std::make_shared<couchbase::internal_analytics_stream_result>(
+    std::move(stream), nullptr, std::move(ctx));
+
+  io.restart();
+  int rows = 0;
+  std::optional<couchbase::error> terminal;
+  std::function<void()> pump = [&]() {
+    internal->next([&](couchbase::error err, std::optional<couchbase::analytics_row> row) {
+      if (!row.has_value()) {
+        terminal = std::move(err);
+        return;
+      }
+      ++rows;
+      pump();
+    });
+  };
+  pump();
+  io.run();
+
+  REQUIRE(rows == 1);
+  REQUIRE(terminal.has_value());
+  REQUIRE(terminal->ec());
+  const auto reported = tao::json::from_string(terminal->ctx().to_json());
+  REQUIRE(reported.at("statement").as<std::string>() == "SELECT a FROM x");
+  REQUIRE(reported.at("client_context_id").as<std::string>() == "cid-1");
+  REQUIRE(reported.at("hostname").as<std::string>() == "node.example");
+  REQUIRE(reported.at("port").as<std::uint16_t>() == 8095);
+  REQUIRE(reported.at("first_error_code").as<std::uint64_t>() == 24000);
+  REQUIRE(reported.at("first_error_message").as<std::string>() == "boom");
 }

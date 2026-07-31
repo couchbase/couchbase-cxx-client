@@ -35,6 +35,8 @@
 #include "core/operations/management/collection_create.hxx"
 #include "core/operations/management/collections.hxx"
 
+#include <tao/json/from_string.hpp>
+
 TEST_CASE("integration: analytics query", "[integration]")
 {
   test::utils::integration_test_guard integration;
@@ -1152,4 +1154,55 @@ TEST_CASE("integration: analytics management identifier encoding", "[integration
     }
     REQUIRE_SUCCESS(drop_dataverse(dataverse));
   }
+}
+
+TEST_CASE("integration: streaming analytics reports the same error context as buffered analytics",
+          "[integration]")
+{
+  test::utils::integration_test_guard integration;
+
+  if (integration.ctx.deployment == test::utils::deployment_type::elixir) {
+    SKIP("elixir deployment does not support analytics");
+  }
+  if (!integration.has_analytics_service()) {
+    SKIP("cluster does not have analytics service");
+  }
+
+  auto cluster = integration.public_cluster();
+
+  // Regression: a streaming failure used to arrive with an empty error context, losing the
+  // service's own error code and message exactly when they were needed. Compare against the
+  // buffered path.
+  const std::string error_statement = "SELECT * FROM `nonexistent_dataset_xyz`";
+
+  auto [buffered_err, buffered] =
+    cluster.analytics_query(error_statement, couchbase::analytics_options{}).get();
+  REQUIRE(buffered_err.ec());
+  const auto buffered_ctx = tao::json::from_string(buffered_err.ctx().to_json());
+  const auto expected_error_code = buffered_ctx.at("first_error_code").as<std::uint64_t>();
+  REQUIRE(expected_error_code != 0);
+
+  auto [err, result] = cluster.analytics_query_stream(error_statement).get();
+  auto streaming_err = err;
+  if (!streaming_err.ec()) {
+    while (true) {
+      auto [row_err, row] = result.next().get();
+      if (row_err.ec()) {
+        streaming_err = row_err;
+        break;
+      }
+      if (!row.has_value()) {
+        break;
+      }
+    }
+  }
+  REQUIRE(streaming_err.ec());
+
+  const auto streaming_ctx = tao::json::from_string(streaming_err.ctx().to_json());
+  REQUIRE(streaming_ctx.at("first_error_code").as<std::uint64_t>() == expected_error_code);
+  REQUIRE(streaming_ctx.at("statement").as<std::string>() == error_statement);
+  REQUIRE_FALSE(streaming_ctx.at("hostname").as<std::string>().empty());
+  REQUIRE_FALSE(streaming_ctx.at("http_body").as<std::string>().empty());
+
+  cluster.close().get();
 }

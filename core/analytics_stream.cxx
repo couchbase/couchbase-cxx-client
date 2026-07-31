@@ -54,6 +54,28 @@ normalize_stream_error(std::error_code ec) -> std::error_code
 }
 } // namespace
 
+namespace
+{
+// Lift the service-reported diagnostics out of a parsed preamble/trailer. Called for both sections,
+// so whichever one carried the failure is what the error context ends up describing.
+auto
+extract_error_details(const operations::analytics_response::analytics_meta_data& meta,
+                      std::string raw) -> stream_error_details
+{
+  stream_error_details details{};
+  details.client_context_id = meta.client_context_id;
+  // Retained whether or not the section reports an error: it becomes error_context::http_body,
+  // which the buffered path fills for every response, and even an error-free envelope names the
+  // request the service logged.
+  details.raw = std::move(raw);
+  if (!meta.errors.empty()) {
+    details.first_error_code = meta.errors.front().code;
+    details.first_error_message = meta.errors.front().message;
+  }
+  return details;
+}
+} // namespace
+
 class analytics_stream_impl : public std::enable_shared_from_this<analytics_stream_impl>
 {
 public:
@@ -73,11 +95,18 @@ public:
       try {
         meta = operations::parse_analytics_meta(utils::json::parse(preamble));
       } catch (const std::exception&) {
+        {
+          // Keep the unparseable preamble: it is the only diagnostic there is for a malformed
+          // response, and the buffered path reports the raw body in the same situation.
+          const std::scoped_lock lock{ self->mutex_ };
+          self->error_details_.raw = std::move(preamble);
+        }
         return on_ready(errc::common::parsing_failure);
       }
       {
         const std::scoped_lock lock{ self->mutex_ };
         self->signature_ = meta.signature;
+        self->error_details_ = extract_error_details(meta, std::move(preamble));
       }
       // An upfront error is rare for the streaming path (status/errors usually arrive in the
       // trailer). The preamble status is typically "running", so only surface an early error when
@@ -130,9 +159,14 @@ public:
           auto meta = operations::parse_analytics_meta(utils::json::parse(raw_meta.value()));
           terminal_ec = operations::map_analytics_error(meta);
           const std::scoped_lock lock{ self->mutex_ };
+          // The trailer is where a request that failed part-way reports itself, so its diagnostics
+          // supersede the preamble's for the terminal error.
+          self->error_details_ = extract_error_details(meta, std::move(raw_meta.value()));
           self->meta_data_ = std::move(meta);
         } catch (const std::exception&) {
           terminal_ec = errc::common::parsing_failure;
+          const std::scoped_lock lock{ self->mutex_ };
+          self->error_details_.raw = std::move(raw_meta.value());
         }
       }
       {
@@ -157,6 +191,12 @@ public:
     return meta_data_;
   }
 
+  [[nodiscard]] auto error_details() const -> stream_error_details
+  {
+    const std::scoped_lock lock{ mutex_ };
+    return error_details_;
+  }
+
   void cancel()
   {
     streamer_.cancel();
@@ -167,6 +207,7 @@ private:
   mutable std::mutex mutex_{};
   std::optional<std::string> signature_{};
   std::optional<operations::analytics_response::analytics_meta_data> meta_data_{};
+  stream_error_details error_details_{};
   // Terminal-sticky state (guarded by mutex_): once next_row reports the terminal, it is remembered
   // so every later pull re-delivers it instead of parking on the drained channel.
   bool terminal_reached_{ false };
@@ -197,6 +238,12 @@ auto
 analytics_stream::signature() const -> std::optional<std::string>
 {
   return impl_->signature();
+}
+
+auto
+analytics_stream::error_details() const -> stream_error_details
+{
+  return impl_->error_details();
 }
 
 auto

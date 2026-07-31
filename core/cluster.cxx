@@ -1738,19 +1738,35 @@ cluster::execute(operations::query_request request,
 }
 
 void
-cluster::query_stream(
-  operations::query_request request,
-  utils::movable_function<void(couchbase::core::query_stream, std::error_code)>&& handler) const
+cluster::query_stream(operations::query_request request,
+                      utils::movable_function<void(couchbase::core::query_stream,
+                                                   error_context::query)>&& handler) const
 {
   // Mirror operations::query_request::encode_to: use_replica is only honored when the cluster
-  // advertises read-from-replica support, otherwise the request is rejected up front.
+  // advertises read-from-replica support, otherwise the request is rejected up front. Rejected here
+  // means nothing was dispatched, so the context can only describe the request itself.
   if (request.use_replica.has_value()) {
+    auto reject = [&request](std::error_code ec) {
+      error_context::query ctx{};
+      ctx.ec = ec;
+      ctx.statement = request.statement;
+      // Generate an id when the caller supplied none, the way every dispatched path does, so even
+      // a request rejected before dispatch has a context that can be correlated with the logs.
+      // Not value_or(): its argument is evaluated whether or not the optional is engaged, which
+      // would generate and format a UUID only to discard it whenever the caller supplied an id.
+      ctx.client_context_id = request.client_context_id.has_value()
+                                ? *request.client_context_id
+                                : uuid::to_string(uuid::random());
+      ctx.method = "POST";
+      ctx.path = "/query/service";
+      return ctx;
+    };
     auto [ec, manager] = impl_->http_session_manager();
     if (ec) {
-      return handler({}, ec);
+      return handler({}, reject(ec));
     }
     if (!manager->configuration_capabilities().supports_read_from_replica()) {
-      return handler({}, errc::common::feature_not_available);
+      return handler({}, reject(errc::common::feature_not_available));
     }
   }
 
@@ -1766,7 +1782,8 @@ cluster::query_stream(
 void
 cluster::analytics_query_stream(
   operations::analytics_request request,
-  utils::movable_function<void(couchbase::core::analytics_stream, std::error_code)>&& handler) const
+  utils::movable_function<void(couchbase::core::analytics_stream, error_context::analytics)>&&
+    handler) const
 {
   auto cluster_opts = impl_->origin().second.options();
   auto default_timeout = cluster_opts.default_timeout_for(service_type::analytics);

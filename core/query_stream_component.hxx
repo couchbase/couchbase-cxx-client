@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "error_context/query.hxx"
 #include "operations/document_query.hxx"
 #include "query_stream.hxx"
 #include "utils/movable_function.hxx"
@@ -46,7 +47,14 @@ class http_component;
 class query_stream_component
 {
 public:
-  using handler_type = utils::movable_function<void(query_stream, std::error_code)>;
+  // The context carries the error code (error_context::query::ec) alongside the diagnostics the
+  // buffered path reports — statement, parameters, the service's first error, HTTP status and body,
+  // and where the request was dispatched — so a streaming failure is as diagnosable as a buffered
+  // one. It is delivered on both outcomes: when the stream fails to start it describes that
+  // failure, and when it starts it describes the request and its dispatch, for the consumer to
+  // report a terminal error against later. Only `ec` differs between the two: falsy means the
+  // stream started.
+  using handler_type = utils::movable_function<void(query_stream, error_context::query)>;
 
   query_stream_component(asio::io_context& io,
                          http_component http,

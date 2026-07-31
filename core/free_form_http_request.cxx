@@ -67,7 +67,18 @@ public:
 
   [[nodiscard]] auto endpoint() const -> std::string
   {
-    return {};
+    if (cached_body_ || fault_enabled_) {
+      return {};
+    }
+    return streaming_resp_.dispatch_info().remote_address;
+  }
+
+  [[nodiscard]] auto dispatch_info() const -> io::http_dispatch_info
+  {
+    if (cached_body_ || fault_enabled_) {
+      return {};
+    }
+    return streaming_resp_.dispatch_info();
   }
 
   [[nodiscard]] auto status_code() const -> std::uint32_t
@@ -194,6 +205,11 @@ auto
 http_response::endpoint() const -> std::string
 {
   return impl_->endpoint();
+}
+auto
+http_response::dispatch_info() const -> io::http_dispatch_info
+{
+  return impl_->dispatch_info();
 }
 auto
 http_response::status_code() const -> std::uint32_t

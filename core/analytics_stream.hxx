@@ -19,6 +19,7 @@
 
 #include "core/operations/document_analytics.hxx"
 #include "row_streamer.hxx"
+#include "stream_error_details.hxx"
 #include "utils/movable_function.hxx"
 
 #include <memory>
@@ -62,6 +63,13 @@ public:
    * the response carried an upfront error (or the preamble failed to parse).
    */
   void start(utils::movable_function<void(std::error_code early_error)>&& on_ready);
+
+  /**
+   * Service-reported diagnostics from the most recently parsed JSON section — the preamble after
+   * start(), the trailer once the terminal has been reached. The dispatch layer stamps these into
+   * the error context so a streaming failure reports the same detail as a buffered one.
+   */
+  [[nodiscard]] auto error_details() const -> stream_error_details;
 
   /**
    * Retrieves the next row. A populated row is delivered with a falsy error_code. An empty row
