@@ -479,6 +479,13 @@ public:
     // So the fixup goes in the window where the IO thread is not running: after
     // the join in fork_prepare, and before the restart that starts the new one.
     if (event == fork_event::prepare) {
+      // Quiesce the transactions cleanup threads BEFORE stopping the io_context.
+      // transactions_cleanup::stop() joins workers that may be blocking on a KV
+      // operation, and only the IO thread can complete those -- so stopping the
+      // io_context first can leave that join waiting forever.
+      if (transactions_) {
+        transactions_->notify_fork(event);
+      }
       io_.stop();
       // Guarded like do_close() below, and for the same reason: close() already
       // stopped the io_context and joined this thread, so a notify_fork(prepare)
@@ -496,25 +503,35 @@ public:
     // later change moves the restart back above this line, this fires
     // immediately instead of turning into an intermittent use-after-free.
     //
-    // Note this covers io_thread_ only. On the fork_prepare path the
-    // transactions cleanup threads are still running below, so asio's "no other
-    // thread" precondition is satisfied here for the reactor (its notify_fork
-    // does nothing at all for fork_prepare) but not established process-wide.
+    // The transactions cleanup threads were stopped above, before io_.stop(), so
+    // by here the only threads this cluster owned are gone.
     Expects(!io_thread_.joinable());
 
     if (event == fork_event::prepare) {
       try {
         io_.notify_fork(fork_event_to_asio(event));
       } catch (...) {
-        // Same hazard as the fork_child/fork_parent path below, and the same remedy.
-        // Returning from here stopped and threadless would hang ~cluster_impl, which
-        // waits on a completion only the IO thread can deliver. So hand the cluster
-        // back a runnable io_context and let the caller see why: the fork must not go
-        // ahead, but the cluster itself is still usable and still destructible.
+        // Undo everything this prepare did, then report. Returning stopped and threadless
+        // would hang ~cluster_impl, which waits on a completion only the IO thread can
+        // deliver -- the same hazard as the fork_child/fork_parent path below. The fork
+        // must not go ahead, but the cluster stays usable and destructible.
+        //
+        // The io_context comes back first: restarting cleanup spawns workers that issue KV
+        // operations, and only the IO thread completes those. Restoring cleanup matters as
+        // much as restoring the thread -- it was stopped above, and leaving it stopped
+        // would silently disable lost-attempts cleanup for the rest of the process while
+        // this function claimed the cluster was fine.
+        //
+        // Note for the caller: do not try to compensate by calling notify_fork(parent)
+        // after this throws. Prepare has already been undone here, and that call would
+        // find a restarted IO thread and trip the precondition above.
         io_.restart();
         io_thread_ = std::thread{ [&io = io_] {
           io.run();
         } };
+        if (transactions_) {
+          transactions_->notify_fork(fork_event::parent);
+        }
         throw;
       }
     } else {
@@ -539,7 +556,10 @@ public:
       } };
     }
 
-    if (event != fork_event::child && transactions_) {
+    // prepare was handled above, before the io_context was stopped. The child does
+    // not restart cleanup on this impl: it is about to be replaced, and the
+    // replacement starts its own.
+    if (event == fork_event::parent && transactions_) {
       transactions_->notify_fork(event);
     }
   }
