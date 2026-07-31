@@ -65,10 +65,24 @@ public:
         return;
       }
       closed_ = true;
+      // Only stop the session when the response was abandoned mid-body: such a connection is left
+      // at an arbitrary offset and cannot be reused. A response that was already fully received
+      // (reading_complete_) leaves the connection at a message boundary, and http_session has
+      // already handed it back to the keep-alive pool via its stream-end handler
+      // (http_session_manager::check_in) — stopping it here would evict a live pooled connection
+      // and make the *next* unrelated request on it fail with request_canceled.
+      //
+      // The response can be complete before a single read_some: a small body (notably an error
+      // response, whose preamble carries the error and which a consumer therefore cancels rather
+      // than drains) arrives whole in the initial parse, so reading_complete_ is set at
+      // construction while session_ is still held.
+      //
       // Hand the session out to be stopped below, then drop our reference. Written as two
       // statements rather than std::exchange because cppcheck's flow analysis mis-models the
       // std::exchange return value and wrongly reports the `if (to_stop)` guard as always-false.
-      to_stop = session_;
+      if (!reading_complete_) {
+        to_stop = session_;
+      }
       session_ = nullptr;
       final_ec_ = ec;
       // close() is only reached on error/cancel (a clean end sets reading_complete_ instead), so

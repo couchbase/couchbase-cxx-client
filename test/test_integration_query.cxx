@@ -1120,3 +1120,61 @@ TEST_CASE("integration: streaming query matches buffered query", "[integration]"
 
   cluster.close().get();
 }
+
+TEST_CASE("integration: a rejected streaming query does not evict the pooled connection",
+          "[integration]")
+{
+  test::utils::integration_test_guard integration;
+  if (!integration.cluster_version().supports_query()) {
+    SKIP("cluster does not support query");
+  }
+
+  // A query the service rejects outright answers with a small body that arrives complete in a
+  // single read, so http_session has already handed the connection back to the keep-alive pool (via
+  // its stream-end handler) by the time the streaming layer reports the preamble error and tears
+  // the stream down. That teardown must not stop the session: it no longer belongs to the stream.
+  //
+  // Regression: it did, which raced a stop() against the next request that checked the very same
+  // pooled connection out, failing a perfectly well-formed request with request_canceled. Because
+  // it is a race the repeat below matters -- the defect reproduced on roughly three runs in four,
+  // so a single round would let it through about a quarter of the time.
+  const std::string error_query =
+    "SELECT * FROM `nonexistent_bucket_that_does_not_exist_xyz` LIMIT 1";
+  constexpr int rounds{ 5 };
+
+  for (int round = 0; round < rounds; ++round) {
+    // A fresh connection per round, so each round races against a pool holding exactly the
+    // connection the rejected stream released.
+    auto cluster = integration.public_cluster();
+    {
+      auto [err, result] = cluster.query_stream(error_query).get();
+      // The rejection surfaces either at dispatch or as the stream's terminal; drain in the latter
+      // case so the stream reaches its terminal either way. Assert that it was in fact rejected:
+      // a run where the statement unexpectedly succeeded would exercise none of the teardown this
+      // test guards, and must be a visible failure rather than a silent pass.
+      bool rejected = static_cast<bool>(err.ec());
+      if (!rejected) {
+        while (true) {
+          auto [row_err, row] = result.next().get();
+          if (row_err.ec()) {
+            rejected = true;
+            break;
+          }
+          if (!row.has_value()) {
+            break;
+          }
+        }
+      }
+      REQUIRE(rejected);
+    }
+
+    // The next request is the one that checks out the released connection, and it must succeed.
+    auto [err, result] = cluster.query(R"(SELECT "ok" AS v)", couchbase::query_options{}).get();
+    REQUIRE_SUCCESS(err.ec());
+    auto rows = result.rows_as<couchbase::codec::tao_json_serializer, tao::json::value>();
+    REQUIRE(rows.size() == 1);
+    REQUIRE(rows[0].at("v").get_string() == "ok");
+
+    cluster.close().get();
+  }
+}
