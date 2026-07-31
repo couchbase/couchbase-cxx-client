@@ -82,4 +82,7 @@ add_cng_test(origin/protocol LINK_CLIENT)
 if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 AND TARGET couchbase_cxx_protostellar)
   add_cng_test(protostellar/codegen_smoke)
   target_link_libraries(cng_codegen_smoke_test PRIVATE couchbase_cxx_protostellar)
+
+  # gRPC<->asio bridge (CXXCBC-889): links the transport lib and drives an in-process server.
+  add_cng_test(protostellar/dispatcher LIBS couchbase_cxx_protostellar_transport)
 endif()

@@ -195,3 +195,15 @@ if(MSVC)
 else()
   target_compile_options(couchbase_cxx_protostellar PRIVATE -w)
 endif()
+
+# Hand-written transport that bridges gRPC's callback API onto asio (CXXCBC-889 onward).
+# Kept separate from the generated stubs so it builds under the project's normal warnings; the
+# third-party headers it pulls in (gRPC via the stubs lib, asio) arrive as SYSTEM includes.
+add_library(couchbase_cxx_protostellar_transport STATIC
+            ${PROJECT_SOURCE_DIR}/core/protostellar/dispatcher.cxx)
+add_library(couchbase::cxx_protostellar_transport ALIAS couchbase_cxx_protostellar_transport)
+target_include_directories(couchbase_cxx_protostellar_transport PUBLIC ${PROJECT_SOURCE_DIR})
+target_link_libraries(couchbase_cxx_protostellar_transport PUBLIC couchbase_cxx_protostellar asio)
+set_target_properties(couchbase_cxx_protostellar_transport PROPERTIES POSITION_INDEPENDENT_CODE ON)
+set_project_options(couchbase_cxx_protostellar_transport)
+set_project_warnings(couchbase_cxx_protostellar_transport)
