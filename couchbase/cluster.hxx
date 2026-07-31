@@ -117,6 +117,10 @@ public:
    * This function must not be called while operations are in flight on this
    * cluster from another thread.
    *
+   * On platforms without @c fork(), Windows in particular, this function does
+   * nothing. It remains callable everywhere so that portable code does not have to
+   * guard the calls, but nothing about the cluster changes.
+   *
    * @param event the fork-related event that is about to happen, or just happened.
    *
    * @throws std::system_error if the I/O backend cannot be carried across the fork.
