@@ -535,7 +535,14 @@ public:
         throw;
       }
     } else {
-      // TODO(SA): close all sockets in fork_event::child
+      // TODO(CXXCBC-913): disown this cluster's sockets here, instead of leaving it to the
+      // reconnect. epoll_reactor::notify_fork(fork_child) below re-registers every
+      // descriptor inherited from the parent into the child's new epoll instance, so
+      // from here until those sockets are closed the child polls file descriptions the
+      // parent is still using. Closing them is at least no longer destructive -- see
+      // stream_impl::close(), which detaches a socket it did not open rather than
+      // shutting it down -- but it happens on the reconnect path, asynchronously, and
+      // only once the replaced impl is destroyed.
       io_.restart();
       try {
         io_.notify_fork(fork_event_to_asio(event));
