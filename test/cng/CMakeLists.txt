@@ -13,16 +13,24 @@ add_library(
   ${PROJECT_SOURCE_DIR}/test/cng/framework/test_main.cxx)
 target_include_directories(cng_test_main PUBLIC ${PROJECT_SOURCE_DIR}/test/cng
                                                 ${PROJECT_SOURCE_DIR})
-target_include_directories(
-  cng_test_main SYSTEM BEFORE
-  PUBLIC $<BUILD_INTERFACE:$<TARGET_PROPERTY:spdlog::spdlog,INTERFACE_INCLUDE_DIRECTORIES>>)
-target_link_libraries(cng_test_main PUBLIC Threads::Threads)
+# spdlog is linked, not merely included, so the framework compiles bundled fmt in the same mode as
+# the client library. Borrowing only spdlog's include directories left SPDLOG_COMPILED_LIB undefined
+# here, and spdlog/fmt/fmt.h responds by defining FMT_HEADER_ONLY, which emits definitions of
+# fmt::v11::vformat, report_error, is_printable, write_loc and friends into test_runner.obj and
+# test_main.obj. A test that also links the client -- any add_cng_test(... LINK_CLIENT) -- then puts
+# those next to the compiled spdlog's copies of the same symbols. ld folds that silently; link.exe
+# does not, and fails with LNK2005. declare_system_library() already marks spdlog's includes SYSTEM,
+# so linking it keeps its headers out of /W4 /WX without the manual BEFORE override.
+target_link_libraries(cng_test_main PUBLIC Threads::Threads spdlog::spdlog)
 set_project_options(cng_test_main)
 set_project_warnings(cng_test_main)
 
-# add_cng_test(<relpath>) — relpath is under test/cng/ without extension (e.g.
-# framework/framework_selftest). The executable/ctest name is the file stem prefixed with cng_.
+# add_cng_test(<relpath> [LINK_CLIENT] [LIBS <lib>...]) — relpath is under test/cng/ without
+# extension (e.g. framework/framework_selftest). The executable/ctest name is the file stem
+# prefixed with cng_. LINK_CLIENT links the client library and its core header include set, for
+# tests that exercise core code (e.g. the connection-string parser).
 function(add_cng_test relpath)
+  cmake_parse_arguments(ARG "LINK_CLIENT" "" "LIBS" ${ARGN})
   get_filename_component(stem ${relpath} NAME_WE)
   set(target cng_${stem}_test)
   # The name comes from the file stem, not the full relpath, so kv/options.cxx and
@@ -38,6 +46,21 @@ function(add_cng_test relpath)
     ${target} SYSTEM BEFORE
     PRIVATE $<BUILD_INTERFACE:$<TARGET_PROPERTY:spdlog::spdlog,INTERFACE_INCLUDE_DIRECTORIES>>)
   target_link_libraries(${target} PRIVATE cng_test_main Threads::Threads)
+  if(ARG_LINK_CLIENT)
+    target_include_directories(${target} PRIVATE ${PROJECT_BINARY_DIR}/generated
+                                                 ${PROJECT_BINARY_DIR}/generated_$<CONFIG>)
+    target_include_directories(
+      ${target} SYSTEM BEFORE
+      PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/expected/include>
+              $<BUILD_INTERFACE:$<TARGET_PROPERTY:asio,INTERFACE_INCLUDE_DIRECTORIES>>)
+    propagate_public_compile_definitions(${target} spdlog::spdlog asio)
+    target_link_libraries(
+      ${target} PRIVATE ${couchbase_cxx_client_DEFAULT_LIBRARY}
+                        $<BUILD_INTERFACE:Microsoft.GSL::GSL> $<BUILD_INTERFACE:taocpp::json>)
+  endif()
+  if(ARG_LIBS)
+    target_link_libraries(${target} PRIVATE ${ARG_LIBS})
+  endif()
   set_project_options(${target})
   set_project_warnings(${target})
   add_test(NAME ${target} COMMAND $<TARGET_FILE:${target}>)
@@ -46,6 +69,10 @@ function(add_cng_test relpath)
 endfunction()
 
 add_cng_test(framework/framework_selftest)
+
+# couchbase2:// connection-string scheme (CXXCBC-887). Exercises the core parser, so it
+# links the client library.
+add_cng_test(connection_string/couchbase2_scheme LINK_CLIENT)
 
 # Protostellar codegen smoke test — only when couchbase2 support (and thus the generated stubs
 # library) is built. See CXXCBC-886.

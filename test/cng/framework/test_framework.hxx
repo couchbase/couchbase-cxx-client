@@ -35,8 +35,10 @@
 #include <utility>
 #include <vector>
 
-// The wrapper (not <spdlog/fmt/bundled/format.h>) is required: it defines FMT_HEADER_ONLY for this
-// standalone test framework, which links spdlog's headers only, not its compiled fmt.
+// The wrapper (not <spdlog/fmt/bundled/format.h>) is required: it selects bundled fmt and derives
+// the header-only-vs-compiled mode from SPDLOG_COMPILED_LIB, which cng_test_main picks up by
+// linking spdlog::spdlog. Including the bundled header directly would bypass that and reintroduce
+// the duplicate fmt definitions that MSVC rejects -- see the note in test/cng/CMakeLists.txt.
 #include <spdlog/fmt/fmt.h>
 
 namespace couchbase::cng::test

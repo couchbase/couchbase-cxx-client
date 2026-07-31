@@ -34,6 +34,13 @@ struct connection_string {
     http,
   };
 
+  // Which client protocol the scheme selects. The classic MCBP stack (couchbase/couchbases/
+  // http/https) versus the Protostellar gRPC transport (couchbase2).
+  enum class protocol_type {
+    mcbp,
+    protostellar,
+  };
+
   enum class address_type {
     ipv4,
     ipv6,
@@ -68,9 +75,17 @@ struct connection_string {
   std::optional<std::string> default_bucket_name{};
   bootstrap_mode default_mode{ connection_string::bootstrap_mode::gcccp };
   std::uint16_t default_port{ 11210 };
+  protocol_type protocol{ protocol_type::mcbp };
 
   std::vector<std::string> warnings{};
   std::optional<std::string> error{};
+
+  // True for the couchbase2:// (Protostellar) transport. The upper layer branches on this to
+  // pick the gRPC client instead of the MCBP stack.
+  [[nodiscard]] auto uses_protostellar() const -> bool
+  {
+    return protocol == protocol_type::protostellar;
+  }
 };
 
 auto

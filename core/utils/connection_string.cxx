@@ -91,6 +91,12 @@ struct action<scheme> {
       cs.default_port = 18091;
       cs.default_mode = connection_string::bootstrap_mode::http;
       cs.tls = true;
+    } else if (cs.scheme == "couchbase2") {
+      // Protostellar: the gateway does routing, so there is no MCBP-style config bootstrap.
+      cs.default_port = 18098;
+      cs.default_mode = connection_string::bootstrap_mode::unspecified;
+      cs.tls = true;
+      cs.protocol = connection_string::protocol_type::protostellar;
     } else {
       cs.default_mode = connection_string::bootstrap_mode::unspecified;
       cs.default_port = 0;
@@ -364,6 +370,19 @@ extract_options(connection_string& connstr)
       connstr.bootstrap_nodes[0].type != connection_string::address_type::dns) {
     connstr.options.enable_dns_srv = false;
   }
+  // couchbase2:// never resolves DNS *SRV*: there are no _couchbaseXXX._tcp records for a gateway,
+  // which is addressed directly and does its own routing. This does not turn off name resolution --
+  // ordinary A/AAAA lookup still happens inside gRPC, which is how a CNG cluster behind a network
+  // load balancer is reached (one hostname, one address per instance).
+  //
+  // cluster::open() already returns into open_protostellar() before reaching the DNS SRV branch, so
+  // this changes no behaviour today; it keeps the parsed options honest -- to_json() reports
+  // enable_dns_srv in diagnostics -- and stops the option becoming live if that ordering changes.
+  // Placed with the rule above, before the parameter loop, so an explicit enable_dns_srv= still
+  // wins, same as the single-node rule it sits next to.
+  if (connstr.protocol == connection_string::protocol_type::protostellar) {
+    connstr.options.enable_dns_srv = false;
+  }
   for (const auto& [name, value] : connstr.params) {
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
     if (name == "security.trust_only_pem_file") {
@@ -598,6 +617,34 @@ extract_options(connection_string& connstr)
     }
   }
 }
+// couchbase2:// addresses one CNG endpoint. The gateway performs routing, so there is no node list
+// to rotate through and no MCBP bootstrap mode to select per node. Reject strings that ask for
+// either instead of silently honouring only the first host. couchbase-jvm-clients does the same,
+// though it validates at transport construction (CoreProtostellar) rather than while parsing; here
+// connection_string already carries an error field, so failing at the parse boundary keeps the
+// diagnosis next to the input that caused it.
+void
+validate_protostellar(connection_string& connstr)
+{
+  if (connstr.error.has_value() ||
+      connstr.protocol != connection_string::protocol_type::protostellar) {
+    return;
+  }
+  if (connstr.bootstrap_nodes.size() != 1) {
+    connstr.error =
+      fmt::format(R"(connection string with scheme "couchbase2" must have exactly one host, )"
+                  R"(but got {}: "{}")",
+                  connstr.bootstrap_nodes.size(),
+                  connstr.input);
+    return;
+  }
+  if (connstr.bootstrap_nodes[0].mode != connection_string::bootstrap_mode::unspecified) {
+    connstr.error =
+      fmt::format(R"(connection string with scheme "couchbase2" does not accept a bootstrap mode )"
+                  R"(suffix, because the gateway does not use MCBP or HTTP config bootstrap: "{}")",
+                  connstr.input);
+  }
+}
 } // namespace
 
 auto
@@ -630,6 +677,7 @@ parse_connection_string(const std::string& input, cluster_options options) -> co
     }
   }
   extract_options(res);
+  validate_protostellar(res);
   return res;
 }
 } // namespace couchbase::core::utils
