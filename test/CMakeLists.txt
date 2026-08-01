@@ -102,6 +102,7 @@ unit_test(waitable_op_list)
 unit_test(row_streamer)
 
 integration_test(examples)
+integration_test(examples_streaming)
 transaction_test(examples)
 
 if(COUCHBASE_CXX_CLIENT_COLUMNAR)

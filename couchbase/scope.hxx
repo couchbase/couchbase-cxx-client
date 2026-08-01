@@ -123,6 +123,12 @@ public:
    * request falls back to the buffered @ref query() path and its rows are replayed through the
    * returned handle.
    *
+   * The handler runs on the library's I/O thread, so the stream must be drained with the callback
+   * @ref query_stream_result#next() overload rather than the blocking ones. The example is written
+   * against @ref cluster#query_stream(), but the scope-level overload behaves identically:
+   *
+   * @snippet{trimleft} test_integration_examples_streaming.cxx example-query-stream-async
+   *
    * @param statement the N1QL query statement.
    * @param options options to customize the query request.
    * @param handler the handler that implements @ref query_stream_handler
@@ -136,6 +142,12 @@ public:
 
   /**
    * Performs a streaming query against the query (N1QL) services.
+   *
+   * Unqualified keyspaces in the statement resolve against this scope, so it names the collection
+   * rather than the bucket. The result can be consumed with a range-based for loop, and abandoned
+   * early without transferring the rows that were never read:
+   *
+   * @snippet{trimleft} test_integration_examples_streaming.cxx example-query-stream-iterator
    *
    * @param statement the N1QL query statement.
    * @param options options to customize the query request.
@@ -247,6 +259,11 @@ public:
 
   /**
    * Performs a streaming query against the analytics services.
+   *
+   * The example is written against @ref cluster#analytics_query_stream(), but the scope-level
+   * overload behaves identically apart from resolving the statement against this scope:
+   *
+   * @snippet{trimleft} test_integration_examples_streaming.cxx example-analytics-stream
    *
    * @param statement the analytics query statement.
    * @param options options to customize the query request.

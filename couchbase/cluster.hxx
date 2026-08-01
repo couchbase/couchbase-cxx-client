@@ -233,6 +233,11 @@ public:
    * request falls back to the buffered @ref query() path and its rows are replayed through the
    * returned handle.
    *
+   * The handler runs on the library's I/O thread, so the stream must be drained with the callback
+   * @ref query_stream_result#next() overload rather than the blocking ones:
+   *
+   * @snippet{trimleft} test_integration_examples_streaming.cxx example-query-stream-async
+   *
    * @param statement the N1QL query statement.
    * @param options options to customize the query request.
    * @param handler the handler that implements @ref query_stream_handler
@@ -246,6 +251,21 @@ public:
 
   /**
    * Performs a streaming query against the query (N1QL) services.
+   *
+   * Rows are pulled from the returned handle one at a time, so a result of any size costs the same
+   * bounded amount of memory:
+   *
+   * @snippet{trimleft} test_integration_examples_streaming.cxx example-query-stream
+   *
+   * The document type the rows are decoded into:
+   *
+   * @snippet{trimleft} test_integration_examples_streaming.cxx streaming-product
+   *
+   * A failure surfaces either here, before the stream starts, or as the terminal of
+   * @ref query_stream_result#next() — possibly after rows have already been consumed, which a
+   * buffered @ref query() cannot produce. Both channels have to be handled:
+   *
+   * @snippet{trimleft} test_integration_examples_streaming.cxx example-query-stream-errors
    *
    * @param statement the N1QL query statement.
    * @param options options to customize the query request.
@@ -344,6 +364,12 @@ public:
    * The handler resolves as soon as the response preamble has been parsed; rows are then pulled
    * lazily from the @ref analytics_stream_result, so the full result is never buffered in memory.
    *
+   * The handler runs on the library's I/O thread, so the stream must be drained with the callback
+   * @ref analytics_stream_result#next() overload rather than the blocking ones. The query
+   * equivalent shows the pattern:
+   *
+   * @snippet{trimleft} test_integration_examples_streaming.cxx example-query-stream-async
+   *
    * @param statement the analytics query statement.
    * @param options options to customize the query request.
    * @param handler the handler that implements @ref analytics_stream_handler
@@ -357,6 +383,8 @@ public:
 
   /**
    * Performs a streaming query against the analytics services.
+   *
+   * @snippet{trimleft} test_integration_examples_streaming.cxx example-analytics-stream
    *
    * @param statement the analytics query statement.
    * @param options options to customize the query request.

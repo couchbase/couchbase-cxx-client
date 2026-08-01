@@ -49,6 +49,8 @@ using analytics_row_handler = std::function<void(error, std::optional<analytics_
  * (or @ref cancel() called) before @ref meta_data() resolves. Only a single @ref next()
  * call may be outstanding at a time.
  *
+ * @snippet{trimleft} test_integration_examples_streaming.cxx example-analytics-stream
+ *
  * @note The future-returning overloads (`next()`, `meta_data()`) and the eager @ref iterator
  * block the calling thread until the result is ready. They must not be called from within an SDK
  * completion handler (i.e. the library's I/O thread) — doing so blocks that thread against itself
@@ -112,6 +114,11 @@ public:
 
   /**
    * Returns the analytics signature captured from the response metadata, if present.
+   *
+   * The signature is part of the response preamble, so — unlike @ref meta_data() — it is available
+   * as soon as the stream has started, without draining it first:
+   *
+   * @snippet{trimleft} test_integration_examples_streaming.cxx example-analytics-stream
    *
    * @return optional binary JSON signature
    *
