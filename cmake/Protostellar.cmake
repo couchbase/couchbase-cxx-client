@@ -204,4 +204,5 @@ endif()
 # bundle). The source list is exported for CMakeLists.txt to append to couchbase_cxx_client_FILES.
 set(couchbase_cxx_protostellar_TRANSPORT_FILES
     ${PROJECT_SOURCE_DIR}/core/protostellar/dispatcher.cxx
-    ${PROJECT_SOURCE_DIR}/core/protostellar/credentials.cxx)
+    ${PROJECT_SOURCE_DIR}/core/protostellar/credentials.cxx
+    ${PROJECT_SOURCE_DIR}/core/protostellar/error_utils.cxx)
