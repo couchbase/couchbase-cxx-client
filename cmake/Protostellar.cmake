@@ -196,14 +196,12 @@ else()
   target_compile_options(couchbase_cxx_protostellar PRIVATE -w)
 endif()
 
-# Hand-written transport that bridges gRPC's callback API onto asio (CXXCBC-889 onward).
-# Kept separate from the generated stubs so it builds under the project's normal warnings; the
-# third-party headers it pulls in (gRPC via the stubs lib, asio) arrive as SYSTEM includes.
-add_library(couchbase_cxx_protostellar_transport STATIC
-            ${PROJECT_SOURCE_DIR}/core/protostellar/dispatcher.cxx)
-add_library(couchbase::cxx_protostellar_transport ALIAS couchbase_cxx_protostellar_transport)
-target_include_directories(couchbase_cxx_protostellar_transport PUBLIC ${PROJECT_SOURCE_DIR})
-target_link_libraries(couchbase_cxx_protostellar_transport PUBLIC couchbase_cxx_protostellar asio)
-set_target_properties(couchbase_cxx_protostellar_transport PROPERTIES POSITION_INDEPENDENT_CODE ON)
-set_project_options(couchbase_cxx_protostellar_transport)
-set_project_warnings(couchbase_cxx_protostellar_transport)
+# The hand-written transport (core/protostellar/*.cxx: the gRPC<->asio bridge, credentials, and
+# later the cluster component) is compiled into couchbase_cxx_client itself, guarded by
+# COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 -- the client library links this stubs library. Keeping
+# the transport in the client library (rather than a standalone lib) avoids a dependency cycle
+# once cluster_impl calls into it, and lets it reuse core utilities (base64, the Mozilla CA
+# bundle). The source list is exported for CMakeLists.txt to append to couchbase_cxx_client_FILES.
+set(couchbase_cxx_protostellar_TRANSPORT_FILES
+    ${PROJECT_SOURCE_DIR}/core/protostellar/dispatcher.cxx
+    ${PROJECT_SOURCE_DIR}/core/protostellar/credentials.cxx)

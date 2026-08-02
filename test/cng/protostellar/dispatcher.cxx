@@ -100,6 +100,7 @@ public:
     // Immediate deadline: cancels the in-flight (possibly sleeping) call rather than waiting it
     // out.
     server_->Shutdown(std::chrono::system_clock::now());
+    server_->Wait();
   }
 
   [[nodiscard]] auto channel() -> std::shared_ptr<grpc::Channel>

@@ -70,10 +70,15 @@ else()
       set(_gRPC_SSL_INCLUDE_DIR "" CACHE INTERNAL "")
     endif()
     set(gRPC_SSL_PROVIDER "" CACHE STRING "" FORCE)
+  elseif(TARGET PkgConfig::PKG_CONFIG_OPENSSL)
+    # OpenSSL was found via pkg-config (when CMake's find_package(OpenSSL) returned an unusable setup).
+    # Reuse PkgConfig::PKG_CONFIG_OPENSSL directly so gRPC links the exact same OpenSSL library.
+    set(_gRPC_SSL_LIBRARIES PkgConfig::PKG_CONFIG_OPENSSL CACHE INTERNAL "")
+    set(gRPC_SSL_PROVIDER "" CACHE STRING "" FORCE)
   else()
-    # No existing BoringSSL; let gRPC build its own from submodule
-    list(APPEND _GRPC_SUBMODULES "third_party/boringssl-with-bazel")
-    set(gRPC_SSL_PROVIDER "module" CACHE STRING "" FORCE)
+    # No project-provided BoringSSL or pkg-config OpenSSL; point gRPC at the OpenSSL package.
+    find_package(OpenSSL REQUIRED)
+    set(gRPC_SSL_PROVIDER "package" CACHE STRING "" FORCE)
   endif()
 
   # Fetch gRPC from source with selected submodules.
