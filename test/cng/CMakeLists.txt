@@ -107,4 +107,7 @@ if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 AND TARGET couchbase_cxx_protostellar)
 
   # Error mapping (CXXCBC-893).
   add_cng_test(protostellar/error_utils LINK_CLIENT LIBS couchbase_cxx_protostellar)
+
+  # KV converter (CXXCBC-892).
+  add_cng_test(protostellar/kv_converter LINK_CLIENT LIBS couchbase_cxx_protostellar)
 endif()
