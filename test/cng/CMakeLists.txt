@@ -102,6 +102,9 @@ if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 AND TARGET couchbase_cxx_protostellar)
   # server implements.
   add_cng_test(protostellar/dispatcher LINK_CLIENT LIBS couchbase_cxx_protostellar)
 
+  # Regression test for the gRPC callback-queue teardown race (CXXCBC-919).
+  add_cng_test(protostellar/callback_queue_churn LINK_CLIENT LIBS couchbase_cxx_protostellar)
+
   # TLS/auth credentials (CXXCBC-890).
   add_cng_test(protostellar/credentials LINK_CLIENT LIBS couchbase_cxx_protostellar)
 

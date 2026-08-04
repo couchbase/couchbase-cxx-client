@@ -22,6 +22,8 @@
 
 #include "framework/test_runner.hxx"
 
+#include "callback_queue_keepalive.hxx"
+
 #include "core/cluster_credentials.hxx"
 #include "core/document_id.hxx"
 #include "core/error_context/key_value.hxx"
@@ -177,6 +179,11 @@ class in_process_server
 public:
   in_process_server()
   {
+    // Pin gRPC's process-global callback completion queue for the lifetime of this binary.
+    // Without it, destroying the last channel between cases drives a teardown that races
+    // gRPC's own polling threads and aborts the process (CXXCBC-919).
+    pin_callback_queue();
+
     grpc::ServerBuilder builder;
     builder.RegisterService(&service_);
     server_ = builder.BuildAndStart();
