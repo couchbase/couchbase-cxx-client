@@ -155,6 +155,24 @@ set_target_properties(
              COMPILE_WARNING_AS_ERROR OFF
              CXX_CLANG_TIDY ""
              CXX_INCLUDE_WHAT_YOU_USE "")
+# The generated stubs MUST be compiled with the same sanitizer flags as everything that includes the
+# generated headers, because protobuf changes the LAYOUT of every message under ThreadSanitizer:
+# port_def.inc defines PROTOBUF_TSAN from the compiler's thread_sanitizer feature test, and
+# PROTOBUF_TSAN_DECLARE_MEMBER -- which appears in every generated message's Impl_ -- then adds a
+# `::uint32_t _tsan_detect_race` member. So sizeof(UpsertResponse) is 40 without -fsanitize=thread
+# and 48 with it, and every setter additionally stores a race-detection byte past the smaller size.
+#
+# enable_sanitizers() attaches the flags PUBLIC to the client target, which propagates UP to the
+# tests but never DOWN into this library (the client links it PRIVATE). That left RpcMethodHandler
+# -- instantiated in the uninstrumented kv.grpc.pb.cc -- reserving a 40-byte `ResponseType rsp` on
+# its stack directly below the saved `param` reference, while the instrumented handler's set_cas()
+# wrote the race byte at offset 40, zeroing that pointer's low byte. RunHandler then read
+# param.request from an address 32 bytes off, got a null, and destroyed a null request: the
+# `unit (tsan)` SEGV in cng_component_test at method_handler.h:119 (CXXCBC-917).
+#
+# PROTOBUF_TSAN cannot be forced to a fixed value instead -- port_def.inc #errors if it is already
+# defined -- so matching the flags is the only supported remedy.
+enable_sanitizers(couchbase_cxx_protostellar)
 # NOTE (ABI visibility): couchbase_cxx_client links this library whenever
 # COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 is on (see the target_link_libraries guarded by that option
 # in the top-level CMakeLists.txt, alongside the transport sources appended below). So in a
