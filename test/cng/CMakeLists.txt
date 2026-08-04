@@ -91,6 +91,10 @@ add_cng_test(connection_string/couchbase2_scheme LINK_CLIENT)
 # origin protocol marker (CXXCBC-888).
 add_cng_test(origin/protocol LINK_CLIENT)
 
+# What couchbase2:// does in a build without couchbase2 support (CXXCBC-891). Deliberately outside
+# the guard below: the behaviour it pins only exists in the default configuration.
+add_cng_test(cluster/couchbase2_build_support LINK_CLIENT)
+
 # Protostellar codegen smoke test — only when couchbase2 support (and thus the generated stubs
 # library) is built. See CXXCBC-886.
 if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 AND TARGET couchbase_cxx_protostellar)
@@ -116,4 +120,7 @@ if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 AND TARGET couchbase_cxx_protostellar)
 
   # Live KV verification vs a real gateway (CXXCBC-891).
   add_cng_test(protostellar/live_kv LINK_CLIENT LIBS couchbase_cxx_protostellar)
+
+  # Live connect-branch round-trip via core::cluster::open/execute (CXXCBC-891; cluster_only).
+  add_cng_test(protostellar/live_connect LINK_CLIENT LIBS couchbase_cxx_protostellar)
 endif()
