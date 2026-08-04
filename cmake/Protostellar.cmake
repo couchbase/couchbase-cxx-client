@@ -155,15 +155,18 @@ set_target_properties(
              COMPILE_WARNING_AS_ERROR OFF
              CXX_CLANG_TIDY ""
              CXX_INCLUDE_WHAT_YOU_USE "")
-# NOTE (ABI visibility): nothing links this library into couchbase_cxx_client yet -- at this commit
-# it stands alone and only the codegen smoke test links it. Once a later commit embeds the transport
-# in the client, the generated protobuf/gRPC symbols will land in the exported ABI of
+# NOTE (ABI visibility): couchbase_cxx_client links this library whenever
+# COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 is on (see the target_link_libraries guarded by that option
+# in the top-level CMakeLists.txt, alongside the transport sources appended below). So in a
+# couchbase2-enabled build the generated protobuf/gRPC symbols already land in the exported ABI of
 # libcouchbase_cxx_client.so with default visibility, which can clash with an application linking
-# its own protobuf/gRPC. The fix is hidden visibility here + --exclude-libs on the shared client
+# its own protobuf/gRPC. What keeps that off released artefacts today is only that the option
+# defaults to OFF -- it is not, as this note previously claimed, that nothing links the library.
+# The fix is hidden visibility here + --exclude-libs on the shared client
 # target, BUT that will require reworking how the white-box CNG tests link (they will link this
 # static lib AND the client lib that embeds it; default visibility merges the two protobuf
 # descriptor copies into one, hidden visibility does not -> duplicate descriptor registration
-# abort). Deferred to the ship-enable ticket; the option is OFF by default.
+# abort). Deferred to the ship-enable ticket.
 if(MSVC)
   # /bigobj: the generated translation units are large -- search.pb.cc is 18k lines and yields a
   # 7.4 MB object -- and protobuf-generated code this size can exceed the COFF section limit
@@ -205,4 +208,5 @@ endif()
 set(couchbase_cxx_protostellar_TRANSPORT_FILES
     ${PROJECT_SOURCE_DIR}/core/protostellar/dispatcher.cxx
     ${PROJECT_SOURCE_DIR}/core/protostellar/credentials.cxx
-    ${PROJECT_SOURCE_DIR}/core/protostellar/error_utils.cxx)
+    ${PROJECT_SOURCE_DIR}/core/protostellar/error_utils.cxx
+    ${PROJECT_SOURCE_DIR}/core/protostellar/component.cxx)

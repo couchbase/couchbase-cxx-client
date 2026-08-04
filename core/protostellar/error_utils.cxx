@@ -124,7 +124,7 @@ map_already_exists(const std::string& resource_type) -> std::error_code
 } // namespace
 
 auto
-map_status_code(grpc::StatusCode code) -> std::error_code
+map_status_code(grpc::StatusCode code, operation_kind kind) -> std::error_code
 {
   switch (code) {
     case grpc::StatusCode::OK:
@@ -137,10 +137,14 @@ map_status_code(grpc::StatusCode code) -> std::error_code
       // gRPC ABORTED is the canonical concurrency-conflict code; for KV that is a CAS mismatch.
       return errc::common::cas_mismatch;
     case grpc::StatusCode::DEADLINE_EXCEEDED:
-      // A server-side deadline on a mutation is genuinely ambiguous (the write may already have
-      // been applied), so default to the ambiguous timeout rather than telling the retry layer
-      // it is safe to replay a possibly-non-idempotent operation.
-      return errc::common::ambiguous_timeout;
+      // A deadline on a mutation is genuinely ambiguous -- the write may already have been applied
+      // server-side -- so it must not tell the retry layer it is safe to replay a
+      // possibly-non-idempotent operation. A read changed nothing by definition, so reporting it
+      // as ambiguous would be strictly wrong: it claims the operation may have mutated state that
+      // it cannot have touched, and a caller that declines to retry ambiguous operations would
+      // give up on an operation that is perfectly safe to repeat.
+      return kind == operation_kind::read_only ? errc::common::unambiguous_timeout
+                                               : errc::common::ambiguous_timeout;
     case grpc::StatusCode::CANCELLED:
       return errc::common::request_canceled;
     case grpc::StatusCode::UNAUTHENTICATED:
@@ -165,15 +169,13 @@ map_status_code(grpc::StatusCode code) -> std::error_code
 }
 
 auto
-map_status(const grpc::Status& status) -> std::error_code
+map_status(const grpc::Status& status, operation_kind kind) -> std::error_code
 {
   const auto code = status.error_code();
 
   // The typed google.rpc.Status details refine three codes into specific SDK errors (RFC 77 "Other
-  // errors" + errorhandler.go). Everything else is keyed on the bare gRPC code.
-  // NOTE: DEADLINE_EXCEEDED is mapped to the safe ambiguous_timeout default. Distinguishing the
-  // read-only case (unambiguous for reads) would need the request's readonly flag, which is not
-  // available at this layer.
+  // errors" + errorhandler.go). Everything else is keyed on the bare gRPC code, plus `kind` for
+  // DEADLINE_EXCEEDED (see map_status_code).
   google::rpc::Status rich;
   const bool have_rich =
     !status.error_details().empty() && rich.ParseFromString(status.error_details());
@@ -202,7 +204,7 @@ map_status(const grpc::Status& status) -> std::error_code
       }
       return errc::key_value::document_exists;
     default:
-      return map_status_code(code);
+      return map_status_code(code, kind);
   }
 }
 
@@ -219,9 +221,10 @@ error_message(const grpc::Status& status) -> std::string
 }
 
 auto
-make_error_context(const grpc::Status& status, const document_id& id) -> key_value_error_context
+make_error_context(const grpc::Status& status, const document_id& id, operation_kind kind)
+  -> key_value_error_context
 {
-  const auto ec = map_status(status);
+  const auto ec = map_status(status, kind);
   std::optional<key_value_extended_error_info> extended{};
   if (!status.ok()) {
     if (auto message = error_message(status); !message.empty()) {
