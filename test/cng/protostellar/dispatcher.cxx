@@ -188,6 +188,28 @@ deadline_surfaces_as_deadline_exceeded()
               "short deadline yields DEADLINE_EXCEEDED");
 }
 
+// Regression test for the review finding on this PR: unary() used to set a deadline only when the
+// timeout was positive, so a caller whose budget was already spent got a call with *no* deadline --
+// one that runs until the channel breaks, and that cluster::close() then blocks on. The server here
+// delays well past any deadline, so without the clamp the call would wait the delay out and come
+// back OK; the elapsed check is what separates "the deadline fired" from "something else failed".
+//
+// Every caller in component.cxx already rejects a non-positive timeout before dispatch, so this
+// covers the primitive's own guarantee rather than a reachable production path.
+void
+a_non_positive_timeout_expires_the_call_rather_than_removing_the_deadline()
+{
+  in_process_server server{ 2000ms };
+  for (const auto timeout : { 0ms, -1ms, -30'000ms }) {
+    const auto started = std::chrono::steady_clock::now();
+    const auto outcome = run_get(timeout, server, /*cancel_immediately=*/false);
+    const auto elapsed = std::chrono::steady_clock::now() - started;
+    assert_true(outcome.status.error_code() == grpc::StatusCode::DEADLINE_EXCEEDED,
+                "a non-positive timeout expires the call instead of leaving it unbounded");
+    assert_true(elapsed < 1500ms, "it expires at once rather than waiting the server out");
+  }
+}
+
 void
 cancellation_surfaces_as_cancelled()
 {
@@ -251,6 +273,9 @@ tests() -> test_suite
       { "delivers_response_on_io_thread", delivers_response_on_io_thread, timeout::network },
       { "deadline_surfaces_as_deadline_exceeded",
         deadline_surfaces_as_deadline_exceeded,
+        timeout::network },
+      { "a_non_positive_timeout_expires_the_call_rather_than_removing_the_deadline",
+        a_non_positive_timeout_expires_the_call_rather_than_removing_the_deadline,
         timeout::network },
       { "cancellation_surfaces_as_cancelled",
         cancellation_surfaces_as_cancelled,

@@ -1,0 +1,167 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+#  Copyright 2026. Couchbase, Inc.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+
+# Reports generated-protobuf identifiers that a Windows SDK macro would mangle, and sources that
+# reach a hazardous generated header without going through its shielding wrapper.
+#
+# protobuf emits a class-scoped alias per enum value ("static constexpr Status STATUS_TIMEOUT =
+# ..."). Where the Windows SDK defines an object-like macro of the same name -- <winnt.h> has
+# STATUS_TIMEOUT as ((DWORD)0x00000102L), and asio and gRPC reach <winnt.h> transitively -- the
+# alias expands into a parenthesised constant and the generated header stops parsing. Only MSVC is
+# affected, so the Linux and macOS legs stay green and the failure surfaces an hour into CI.
+#
+# Run this after moving the schema pin in cmake/Protostellar.cmake:
+#
+#   ./bin/check-proto-macro-collisions [build-dir]
+#
+# Exits non-zero when a collision is unshielded. A newly colliding family needs the same treatment
+# as core/protostellar/query_proto.hxx: push_macro/#undef around the include, pop_macro after it.
+
+require 'set'
+
+BUILD = ARGV[0] || 'build'
+GENERATED = File.join(BUILD, 'protostellar_generated')
+# Anchored to this script rather than to the caller's cwd. The source scan below walks fixed
+# relative roots and skips any that does not exist, so running from elsewhere would report "(none)"
+# having looked at nothing -- a clean result that means only that the search missed.
+REPO = File.expand_path('..', __dir__)
+
+unless Dir.exist?(GENERATED)
+  warn "#{GENERATED} not found -- configure with -DCOUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2=ON first"
+  exit 2
+end
+
+# Object-like macros the Windows SDK defines for names an enum value plausibly reuses. <winnt.h> is
+# always live once anything reaches <windows.h>; the <ntstatus.h> entries only bite when a
+# dependency pulls that header in, which is why the wrapper suppresses whole families rather than
+# individual names. This list is a tripwire, not the SDK's full ~5000-entry STATUS_* namespace: a
+# clean run means "no known collision", not "provably none".
+WINDOWS_MACROS = %w[
+  STATUS_ABANDONED_WAIT_0 STATUS_ACCESS_VIOLATION STATUS_ARRAY_BOUNDS_EXCEEDED
+  STATUS_ASSERTION_FAILURE STATUS_BREAKPOINT STATUS_CONTROL_C_EXIT STATUS_DATATYPE_MISALIGNMENT
+  STATUS_DLL_INIT_FAILED STATUS_DLL_NOT_FOUND STATUS_ENCLAVE_VIOLATION STATUS_ENTRYPOINT_NOT_FOUND
+  STATUS_FATAL_APP_EXIT STATUS_FLOAT_DENORMAL_OPERAND STATUS_FLOAT_DIVIDE_BY_ZERO
+  STATUS_FLOAT_INEXACT_RESULT STATUS_FLOAT_INVALID_OPERATION STATUS_FLOAT_MULTIPLE_FAULTS
+  STATUS_FLOAT_MULTIPLE_TRAPS STATUS_FLOAT_OVERFLOW STATUS_FLOAT_STACK_CHECK
+  STATUS_FLOAT_UNDERFLOW STATUS_GUARD_PAGE_VIOLATION STATUS_HEAP_CORRUPTION
+  STATUS_ILLEGAL_INSTRUCTION STATUS_INTEGER_DIVIDE_BY_ZERO STATUS_INTEGER_OVERFLOW
+  STATUS_INTERRUPTED STATUS_INVALID_CRUNTIME_PARAMETER STATUS_INVALID_DISPOSITION
+  STATUS_INVALID_HANDLE STATUS_INVALID_PARAMETER STATUS_IN_PAGE_ERROR STATUS_LONGJUMP
+  STATUS_NONCONTINUABLE_EXCEPTION STATUS_NO_MEMORY STATUS_ORDINAL_NOT_FOUND STATUS_PENDING
+  STATUS_PRIVILEGED_INSTRUCTION STATUS_REG_NAT_CONSUMPTION STATUS_SEGMENT_NOTIFICATION
+  STATUS_SINGLE_STEP STATUS_STACK_BUFFER_OVERRUN STATUS_STACK_OVERFLOW
+  STATUS_SXS_EARLY_DEACTIVATION STATUS_SXS_INVALID_DEACTIVATION STATUS_THREAD_NOT_RUNNING
+  STATUS_TIMEOUT STATUS_UNWIND_CONSOLIDATE STATUS_USER_APC STATUS_WAIT_0
+  STATUS_SUCCESS STATUS_ALREADY_REGISTERED
+  DELETE ERROR
+].to_set.freeze
+
+# Generated header (relative to the generated root) => the wrapper that shields it. Sources must
+# include the wrapper; a direct include of the generated header bypasses the macro suppression.
+WRAPPERS = {
+  'couchbase/query/v1/query.pb.h' => 'core/protostellar/query_proto.hxx',
+  'couchbase/query/v1/query.grpc.pb.h' => 'core/protostellar/query_proto.hxx'
+}.freeze
+
+ALIAS_DECL = /^\s*static\s+constexpr\s+\w+\s+(\w+)\s*=/.freeze
+
+# --- 1. which generated headers declare a name a Windows macro would eat ------------------------
+
+collisions = {} # generated header (relative) => { alias => [line, ...] }
+Dir.glob(File.join(GENERATED, '**', '*.pb.h')).sort.each do |path|
+  rel = path.sub("#{GENERATED}/", '')
+  File.foreach(path).with_index(1) do |line, no|
+    m = ALIAS_DECL.match(line) or next
+    next unless WINDOWS_MACROS.include?(m[1])
+
+    ((collisions[rel] ||= {})[m[1]] ||= []) << no
+  end
+end
+
+# A .grpc.pb.h includes its .pb.h, so a hazard in the latter is reachable through the former too.
+collisions.keys.each do |rel|
+  grpc = rel.sub(/\.pb\.h\z/, '.grpc.pb.h')
+  collisions[grpc] ||= {} if File.exist?(File.join(GENERATED, grpc))
+end
+
+puts '--- generated aliases that a Windows SDK macro would mangle ---'
+if collisions.empty?
+  puts '(none)'
+else
+  collisions.sort.each do |rel, aliases|
+    shield = WRAPPERS[rel] || '** UNSHIELDED: no wrapper registered **'
+    detail = aliases.map { |name, lines| "#{name}:#{lines.join(',')}" }.join(' ')
+    puts format('%-46s %s', rel, detail.empty? ? "(via its .pb.h)  -> #{shield}" : "#{detail}  -> #{shield}")
+  end
+end
+
+unshielded_headers = collisions.keys.reject { |rel| WRAPPERS.key?(rel) }.sort
+
+# --- 2. sources that reach a hazardous header without the wrapper -------------------------------
+
+bypasses = []
+scanned = 0
+%w[core couchbase test tools].each do |root|
+  absolute = File.join(REPO, root)
+  unless Dir.exist?(absolute)
+    warn "expected source root #{absolute} is missing; the bypass scan is incomplete"
+    next
+  end
+
+  Dir.glob("#{absolute}/**/*.{cxx,hxx,cpp,hpp}").sort.each do |path|
+    src = path.sub("#{REPO}/", '')
+    scanned += 1
+    File.foreach(path).with_index(1) do |line, no|
+      m = /^\s*#\s*include\s*[<"]([^>"]+)[>"]/.match(line) or next
+      header = m[1]
+      next unless collisions.key?(header)
+
+      wrapper = WRAPPERS[header]
+      next if wrapper.nil?      # unregistered: already reported above
+      next if src == wrapper    # the wrapper is allowed to include it
+
+      bypasses << [src, no, header, wrapper]
+    end
+  end
+end
+
+puts
+puts '--- sources bypassing a wrapper ---'
+if bypasses.empty?
+  puts '(none)'
+else
+  bypasses.each do |src, no, header, wrapper|
+    puts "#{src}:#{no}: includes <#{header}> directly; include \"#{wrapper}\" instead"
+  end
+end
+
+puts
+problems = unshielded_headers.size + bypasses.size
+if problems.zero?
+  # The source count is part of the result: "no bypasses" is only meaningful alongside evidence that
+  # something was actually read.
+  puts "ok: #{collisions.size} hazardous generated header(s), all reached through a wrapper " \
+       "(#{scanned} source file(s) scanned)"
+  exit 0
+end
+unless unshielded_headers.empty?
+  puts "#{unshielded_headers.size} generated header(s) collide with no wrapper registered:"
+  unshielded_headers.each { |rel| puts "  #{rel}" }
+  puts 'Add a wrapper modelled on core/protostellar/query_proto.hxx and register it in WRAPPERS.'
+end
+puts "#{bypasses.size} source(s) bypass a wrapper." unless bypasses.empty?
+exit 1
