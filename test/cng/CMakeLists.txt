@@ -128,4 +128,7 @@ if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 AND TARGET couchbase_cxx_protostellar)
 
   # Live connect-branch round-trip via core::cluster::open/execute (CXXCBC-891; cluster_only).
   add_cng_test(protostellar/live_connect LINK_CLIENT LIBS couchbase_cxx_protostellar)
+
+  # Observability transport-agnostic recording (CXXCBC-902).
+  add_cng_test(protostellar/live_observability LINK_CLIENT LIBS couchbase_cxx_protostellar)
 endif()
