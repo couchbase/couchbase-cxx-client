@@ -23,10 +23,20 @@
 // context. cluster_impl routes KV ops here when the cluster was opened with couchbase2://.
 
 #include "core/cluster_credentials.hxx"
+#include "core/operations/document_append.hxx"
+#include "core/operations/document_decrement.hxx"
+#include "core/operations/document_exists.hxx"
 #include "core/operations/document_get.hxx"
+#include "core/operations/document_get_and_lock.hxx"
+#include "core/operations/document_get_and_touch.hxx"
+#include "core/operations/document_get_projected.hxx"
+#include "core/operations/document_increment.hxx"
 #include "core/operations/document_insert.hxx"
+#include "core/operations/document_prepend.hxx"
 #include "core/operations/document_remove.hxx"
 #include "core/operations/document_replace.hxx"
+#include "core/operations/document_touch.hxx"
+#include "core/operations/document_unlock.hxx"
 #include "core/operations/document_upsert.hxx"
 #include "core/protostellar/dispatcher.hxx"
 #include "core/timeout_defaults.hxx"
@@ -59,6 +69,8 @@ inline constexpr bool component_supports_v = false;
 template<>
 inline constexpr bool component_supports_v<operations::get_request> = true;
 template<>
+inline constexpr bool component_supports_v<operations::get_projected_request> = true;
+template<>
 inline constexpr bool component_supports_v<operations::upsert_request> = true;
 template<>
 inline constexpr bool component_supports_v<operations::insert_request> = true;
@@ -66,6 +78,24 @@ template<>
 inline constexpr bool component_supports_v<operations::replace_request> = true;
 template<>
 inline constexpr bool component_supports_v<operations::remove_request> = true;
+template<>
+inline constexpr bool component_supports_v<operations::touch_request> = true;
+template<>
+inline constexpr bool component_supports_v<operations::exists_request> = true;
+template<>
+inline constexpr bool component_supports_v<operations::get_and_lock_request> = true;
+template<>
+inline constexpr bool component_supports_v<operations::unlock_request> = true;
+template<>
+inline constexpr bool component_supports_v<operations::get_and_touch_request> = true;
+template<>
+inline constexpr bool component_supports_v<operations::increment_request> = true;
+template<>
+inline constexpr bool component_supports_v<operations::decrement_request> = true;
+template<>
+inline constexpr bool component_supports_v<operations::append_request> = true;
+template<>
+inline constexpr bool component_supports_v<operations::prepend_request> = true;
 
 class component
 {
@@ -80,6 +110,9 @@ public:
 
   auto execute(operations::get_request request,
                utils::movable_function<void(operations::get_response)>&& handler) -> pending_call;
+  auto execute(operations::get_projected_request request,
+               utils::movable_function<void(operations::get_projected_response)>&& handler)
+    -> pending_call;
   auto execute(operations::upsert_request request,
                utils::movable_function<void(operations::upsert_response)>&& handler)
     -> pending_call;
@@ -91,6 +124,32 @@ public:
     -> pending_call;
   auto execute(operations::remove_request request,
                utils::movable_function<void(operations::remove_response)>&& handler)
+    -> pending_call;
+  auto execute(operations::touch_request request,
+               utils::movable_function<void(operations::touch_response)>&& handler) -> pending_call;
+  auto execute(operations::exists_request request,
+               utils::movable_function<void(operations::exists_response)>&& handler)
+    -> pending_call;
+  auto execute(operations::get_and_lock_request request,
+               utils::movable_function<void(operations::get_and_lock_response)>&& handler)
+    -> pending_call;
+  auto execute(operations::unlock_request request,
+               utils::movable_function<void(operations::unlock_response)>&& handler)
+    -> pending_call;
+  auto execute(operations::get_and_touch_request request,
+               utils::movable_function<void(operations::get_and_touch_response)>&& handler)
+    -> pending_call;
+  auto execute(operations::increment_request request,
+               utils::movable_function<void(operations::increment_response)>&& handler)
+    -> pending_call;
+  auto execute(operations::decrement_request request,
+               utils::movable_function<void(operations::decrement_response)>&& handler)
+    -> pending_call;
+  auto execute(operations::append_request request,
+               utils::movable_function<void(operations::append_response)>&& handler)
+    -> pending_call;
+  auto execute(operations::prepend_request request,
+               utils::movable_function<void(operations::prepend_response)>&& handler)
     -> pending_call;
 
 private:
