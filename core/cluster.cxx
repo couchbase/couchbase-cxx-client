@@ -772,12 +772,17 @@ public:
       return handler(request.make_response({ errc::network::cluster_closed }, response_type{}));
     }
 #ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
-    if (is_protostellar()) {
-      // Query/analytics/search/views/management over couchbase2 are not wired yet. Reject cleanly
-      // rather than falling through to the MCBP session manager, which is never bootstrapped on
-      // this path.
-      return handler(
-        request.make_response({ errc::common::feature_not_available }, response_type{}));
+    if (auto component = protostellar_component(); component) {
+      if constexpr (std::is_same_v<Request, operations::query_request>) {
+        component->execute(std::move(request), std::forward<Handler>(handler));
+        return;
+      } else {
+        // Analytics/search/views/management over couchbase2 are not wired yet. Reject cleanly
+        // rather than falling through to the MCBP session manager, which is never bootstrapped on
+        // this path.
+        return handler(
+          request.make_response({ errc::common::feature_not_available }, response_type{}));
+      }
     }
 #endif
     // cppcheck-suppress knownConditionTrueFalse
@@ -931,8 +936,10 @@ public:
       const std::scoped_lock lock(protostellar_mutex_);
       protostellar_ = std::make_shared<protostellar::component>(
         ctx_,
-        protostellar::component_config{
-          std::move(channel), origin_.credentials(), options.key_value_timeout });
+        protostellar::component_config{ std::move(channel),
+                                        origin_.credentials(),
+                                        options.key_value_timeout,
+                                        options.query_timeout });
     }
     CB_LOG_INFO(R"(open couchbase2 cluster, id: "{}", endpoint: "{}")", id_, endpoint);
     return handler({});

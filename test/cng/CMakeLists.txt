@@ -126,12 +126,18 @@ if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 AND TARGET couchbase_cxx_protostellar)
   # Live KV verification vs a real gateway (CXXCBC-891).
   add_cng_test(protostellar/live_kv LINK_CLIENT LIBS couchbase_cxx_protostellar)
 
-  # Live connect-branch round-trip via core::cluster::open/execute (CXXCBC-891; cluster_only).
+  # Live connect verification (CXXCBC-891).
   add_cng_test(protostellar/live_connect LINK_CLIENT LIBS couchbase_cxx_protostellar)
 
   # Observability transport-agnostic recording (CXXCBC-902).
   add_cng_test(protostellar/live_observability LINK_CLIENT LIBS couchbase_cxx_protostellar)
 
-  # gRPC server-streaming primitive (CXXCBC-895), verified against an in-process stream.
+  # Streaming responses primitive (CXXCBC-895).
   add_cng_test(protostellar/streaming LINK_CLIENT LIBS couchbase_cxx_protostellar)
+
+  # N1QL query converter (CXXCBC-897).
+  add_cng_test(protostellar/query_converter LINK_CLIENT LIBS couchbase_cxx_protostellar)
+
+  # Live N1QL query verification (CXXCBC-897).
+  add_cng_test(protostellar/live_query LINK_CLIENT LIBS couchbase_cxx_protostellar)
 endif()

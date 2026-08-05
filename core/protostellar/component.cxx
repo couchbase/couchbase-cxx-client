@@ -18,11 +18,16 @@
 #include "core/protostellar/component.hxx"
 
 #include "core/error_context/key_value.hxx"
+#include "core/error_context/query.hxx"
+#include "core/operations/query_response_parsing.hxx"
 #include "core/protostellar/credentials.hxx"
 #include "core/protostellar/error_utils.hxx"
 #include "core/protostellar/kv_converter.hxx"
+#include "core/protostellar/query_converter.hxx"
 
 #include <couchbase/error_codes.hxx>
+
+#include "core/protostellar/query_proto.hxx"
 
 #include <couchbase/kv/v1/kv.grpc.pb.h>
 
@@ -35,15 +40,18 @@
 #include <string>
 #include <system_error>
 #include <utility>
+#include <vector>
 
 namespace couchbase::core::protostellar
 {
 namespace v1 = ::couchbase::kv::v1;
+namespace query_v1 = ::couchbase::query::v1;
 
 // Defined here rather than in the header so the generated gRPC types stay out of every consumer of
 // component.hxx.
 struct component::stubs {
   std::unique_ptr<v1::KvService::Stub> kv;
+  std::unique_ptr<query_v1::QueryService::Stub> query;
 };
 
 namespace
@@ -71,13 +79,30 @@ fail_expired(asio::io_context& io, const Request& request, Handler& handler) -> 
   });
   return {};
 }
+
+// The same rule for the services whose responses carry their own error context rather than a
+// key_value one: they resolve a timeout exactly as the KV overloads do, so a non-positive one
+// would reach the dispatcher and produce a call with no deadline there too. The response the
+// overload would have built is stamped and delivered without anything being sent.
+template<typename Response, typename Handler>
+auto
+fail_expired_ctx(asio::io_context& io, Handler& handler, Response response) -> pending_call
+{
+  response.ctx.ec = errc::common::unambiguous_timeout;
+  asio::post(io, [handler = std::move(handler), response = std::move(response)]() mutable {
+    handler(std::move(response));
+  });
+  return {};
+}
 } // namespace
 
 component::component(asio::io_context& io, component_config config)
   : io_{ io }
-  , stubs_{ std::make_unique<stubs>(stubs{ v1::KvService::NewStub(config.channel) }) }
+  , stubs_{ std::make_unique<stubs>(stubs{ v1::KvService::NewStub(config.channel),
+                                           query_v1::QueryService::NewStub(config.channel) }) }
   , authorization_{ authorization_header(config.credentials) }
   , default_kv_timeout_{ config.default_kv_timeout }
+  , default_query_timeout_{ config.default_query_timeout }
   // Initialised last (see the declaration order in the header), so the channel can be moved in.
   , dispatcher_{ io, std::move(config.channel) }
 {
@@ -585,6 +610,110 @@ component::execute(operations::prepend_request request,
       (void)proto; // kept only to keep the request alive for the call
       auto ctx = make_error_context(status, id, operation_kind::mutating);
       handler(kv::decode(resp, std::move(ctx)));
+    });
+}
+
+auto
+component::execute(operations::query_request request,
+                   utils::movable_function<void(operations::query_response)>&& handler)
+  -> pending_call
+{
+  auto statement = request.statement;
+  auto client_context_id = request.client_context_id.value_or(std::string{});
+  // Stamped even on the paths that send nothing: the error context identifies which query failed,
+  // and a caller correlating by statement or client_context_id has no other handle on it.
+  const auto stamped = [&statement, &client_context_id]() {
+    operations::query_response response;
+    response.ctx.statement = statement;
+    response.ctx.client_context_id = client_context_id;
+    return response;
+  };
+
+  const auto timeout = request.timeout.value_or(default_query_timeout_);
+  if (timeout <= std::chrono::milliseconds::zero()) {
+    return fail_expired_ctx(io_, handler, stamped());
+  }
+
+  // Features with no couchbase2 equivalent (raw passthrough, use_replica, streaming row_callback,
+  // node targeting, out-of-range tuning values): fail cleanly rather than silently dropping the
+  // caller's intent.
+  if (!query::can_encode(request)) {
+    auto response = stamped();
+    response.ctx.ec = errc::common::feature_not_available;
+    // Posted rather than invoked here, for the reason fail_expired above gives: completions arrive
+    // on the SDK's execution context, and calling back inline would re-enter the caller before it
+    // has its pending_call.
+    asio::post(io_, [handler = std::move(handler), response = std::move(response)]() mutable {
+      handler(std::move(response));
+    });
+    return {};
+  }
+
+  auto proto = std::make_shared<query_v1::QueryRequest>(query::encode(request));
+  const auto auth = authorization_;
+  // N1QL is the one service where read-only-ness is a property of the statement rather than of
+  // the operation, and the request already carries the flag, so a timed-out read-only query is
+  // reported as unambiguous exactly like a KV read.
+  const auto kind = request.readonly ? operation_kind::read_only : operation_kind::mutating;
+  auto* stub = stubs_->query.get();
+
+  // Accumulated across streamed messages; shared between the row and completion callbacks.
+  auto rows = std::make_shared<std::vector<std::string>>();
+  auto meta = std::make_shared<operations::query_response::query_meta_data>();
+  // Whether a MetaData message arrived at all, which is not the same as what it said. The gateway
+  // leaves MetaData nil when its own result.MetaData() fails and still ends the stream OK, and an
+  // absent status must not be classified as a failed one.
+  auto meta_received = std::make_shared<bool>(false);
+
+  return dispatcher_.server_stream<query_v1::QueryResponse>(
+    timeout,
+    [stub, proto, auth](grpc::ClientContext& ctx,
+                        grpc::ClientReadReactor<query_v1::QueryResponse>* reactor) {
+      if (!auth.empty()) {
+        ctx.AddMetadata("authorization", auth);
+      }
+      stub->async()->Query(&ctx, proto.get(), reactor);
+    },
+    [rows, meta, meta_received](query_v1::QueryResponse message) {
+      for (const auto& row : message.rows()) {
+        rows->push_back(row);
+      }
+      if (message.has_meta_data()) {
+        *meta_received = true;
+        query::decode_meta_data(message.meta_data(), *meta);
+      }
+    },
+    // `proto` is captured so the request outlives the in-flight stream.
+    [handler = std::move(handler),
+     rows,
+     meta,
+     meta_received,
+     proto,
+     statement,
+     client_context_id,
+     kind](grpc::Status status) mutable {
+      (void)proto; // kept only to keep the request alive for the call
+      operations::query_response response;
+      response.ctx.ec = map_status(status, kind);
+      response.ctx.statement = std::move(statement);
+      response.ctx.client_context_id =
+        meta->client_context_id.empty() ? std::move(client_context_id) : meta->client_context_id;
+      if (!status.ok()) {
+        response.ctx.first_error_message = error_message(status);
+      }
+      response.meta = std::move(*meta);
+      response.rows = std::move(*rows);
+      // A terminal status other than "success" arriving with an OK trailer would otherwise be
+      // reported as a successful query whose own metadata says it failed. map_query_error is the
+      // classifier the classic path uses, so the two transports agree on the mapping; the proto
+      // carries no errors list, and for that case it yields internal_server_failure -- the same
+      // fallback document_query.cxx applies when the payload has no error code to classify.
+      //
+      // A transport-level error already in ctx.ec is more specific, so it wins.
+      if (!response.ctx.ec && *meta_received) {
+        response.ctx.ec = operations::map_query_error(response.meta);
+      }
+      handler(std::move(response));
     });
 }
 
