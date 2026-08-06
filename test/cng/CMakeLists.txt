@@ -119,8 +119,9 @@ if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 AND TARGET couchbase_cxx_protostellar)
   add_cng_test(protostellar/kv_converter LINK_CLIENT LIBS couchbase_cxx_protostellar)
 
   # Protostellar KV component (CXXCBC-891).
-  add_cng_test(protostellar/component LINK_CLIENT LIBS couchbase_cxx_protostellar)
-  add_cng_test(protostellar/component_kv_operations LINK_CLIENT LIBS couchbase_cxx_protostellar)
+  add_cng_test(protostellar/component LINK_CLIENT LIBS couchbase_cxx_protostellar snappy)
+  add_cng_test(protostellar/component_kv_operations LINK_CLIENT LIBS couchbase_cxx_protostellar
+               snappy)
   add_cng_test(protostellar/live_kv_operations LINK_CLIENT LIBS couchbase_cxx_protostellar)
 
   # KV transport-level retry, including the overall time budget (CXXCBC-896).
@@ -185,4 +186,8 @@ if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 AND TARGET couchbase_cxx_protostellar)
 
   # KV durable-timeout resolution (CXXCBC-904).
   add_cng_test(protostellar/component_timeouts LINK_CLIENT LIBS couchbase_cxx_protostellar)
+  # Streaming backpressure & cancel (CXXCBC-910).
+  add_cng_test(protostellar/query_streaming LINK_CLIENT LIBS couchbase_cxx_protostellar)
+  # Live wait_until_ready (CXXCBC-908).
+  add_cng_test(protostellar/live_wait_until_ready LINK_CLIENT LIBS couchbase_cxx_protostellar)
 endif()

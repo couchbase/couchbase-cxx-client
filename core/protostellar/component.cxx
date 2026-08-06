@@ -35,6 +35,7 @@
 #include "core/protostellar/search_converter.hxx"
 #include "core/protostellar/search_index_admin_converter.hxx"
 #include "core/protostellar/view_converter.hxx"
+#include "core/utils/json_stream_control.hxx"
 
 #include <couchbase/error_codes.hxx>
 
@@ -50,6 +51,7 @@
 #include <couchbase/view/v1/view.grpc.pb.h>
 
 #include <asio/post.hpp>
+#include <asio/steady_timer.hpp>
 
 #include <chrono>
 #include <cstdint>
@@ -120,6 +122,37 @@ fail_expired(asio::io_context& io, const Request& request, Handler& handler) -> 
   return {};
 }
 
+// Shared state for a streaming query/analytics/search/view response consumed row by row
+// (CXXCBC-910). `callback` is empty for the buffered path. `received_any` drives the CXXCBC-909
+// rule: once the gateway has sent anything the statement has begun executing, so a later error must
+// fail as request_canceled and never retry. It latches on arrival rather than on delivery to a
+// consumer, because a buffered request (no row_callback) is just as unsafe to replay -- a
+// `DELETE FROM ... WHERE ...` whose connection drops after the first result message would otherwise
+// map to a retryable error and apply the mutation twice. `stopped` latches when the consumer
+// returns stream_control::stop -- we keep reading to capture the terminal metadata (matching the
+// HTTP row_callback contract) but stop invoking it.
+struct row_stream_state {
+  std::function<utils::json::stream_control(std::string)> callback{};
+  bool stopped{ false };
+  bool received_any{ false };
+
+  // Feeds one row to the consumer. Returns true when the caller should buffer the row instead
+  // (no row_callback wired); in that case `row` is left untouched.
+  auto consume(std::string&& row) -> bool
+  {
+    received_any = true;
+    if (!callback) {
+      return true;
+    }
+    if (!stopped) {
+      if (callback(std::move(row)) == utils::json::stream_control::stop) {
+        stopped = true;
+      }
+    }
+    return false;
+  }
+};
+
 // Deliver a prepared response carrying ec without sending anything. Posted rather than invoked:
 // completions arrive on the io context, never inline out of execute(), which would re-enter the
 // caller before it holds its pending_call.
@@ -179,6 +212,95 @@ set_ok_status(Response& response)
 }
 } // namespace
 
+namespace
+{
+// wait_until_ready cadence. Mirrors Java's ProtostellarEndpoint poll interval; the channel's own
+// backoff drives reconnection, so this only bounds how quickly we notice it reached READY.
+constexpr std::chrono::milliseconds ready_poll_interval{ 50 };
+
+// Polls the gRPC channel connectivity state on the io_context until it reaches READY or the
+// deadline. No health RPC is sent -- READY is the sole success state, matching Java/Go (IDLE,
+// CONNECTING, TRANSIENT_FAILURE, SHUTDOWN all count as "still waiting"). Self-owning: the timer
+// callback holds the only strong reference between polls, so it lives exactly as long as the wait.
+class channel_ready_poll : public std::enable_shared_from_this<channel_ready_poll>
+{
+public:
+  channel_ready_poll(asio::io_context& io,
+                     std::shared_ptr<grpc::Channel> channel,
+                     std::chrono::milliseconds timeout,
+                     utils::movable_function<void(std::error_code)> handler)
+    : io_{ io }
+    , channel_{ std::move(channel) }
+    , deadline_{ std::chrono::steady_clock::now() + timeout }
+    , handler_{ std::move(handler) }
+    , timer_{ io }
+  {
+  }
+
+  // If the io_context is torn down (cluster closed) while a poll is pending, asio destroys the
+  // timer's handler without invoking it and this object dies unresolved. Deliver cluster_closed so
+  // a std::future caller never observes broken_promise and a callback caller never hangs -- the
+  // same guarantee the classic wait_until_ready_operation upholds in its destructor. The last
+  // strong reference is already gone when this runs, so no concurrent complete() is possible.
+  ~channel_ready_poll()
+  {
+    if (!completed_ && handler_) {
+      try {
+        handler_(errc::network::cluster_closed);
+      } catch (...) {
+        // Suppress exceptions escaping destructor
+      }
+    }
+  }
+
+  channel_ready_poll(const channel_ready_poll&) = delete;
+  channel_ready_poll(channel_ready_poll&&) = delete;
+  auto operator=(const channel_ready_poll&) -> channel_ready_poll& = delete;
+  auto operator=(channel_ready_poll&&) -> channel_ready_poll& = delete;
+
+  void run()
+  {
+    // Complete on the io thread regardless of the caller's thread, so the handler's execution
+    // context matches every other SDK completion.
+    asio::post(io_, [self = shared_from_this()]() {
+      self->poll();
+    });
+  }
+
+private:
+  void poll()
+  {
+    // GetState(true) forces a connect attempt on the lazily-dialed channel (Java: getState(true)).
+    if (channel_->GetState(true) == GRPC_CHANNEL_READY) {
+      return complete({});
+    }
+    if (std::chrono::steady_clock::now() >= deadline_) {
+      return complete(errc::common::unambiguous_timeout);
+    }
+    timer_.expires_after(ready_poll_interval);
+    timer_.async_wait([self = shared_from_this()](const std::error_code& ec) {
+      if (!ec) { // a cancelled timer (io_context teardown) simply drops the wait
+        self->poll();
+      }
+    });
+  }
+
+  void complete(std::error_code ec)
+  {
+    completed_ = true;
+    auto handler = std::move(handler_);
+    handler(ec);
+  }
+
+  asio::io_context& io_;
+  std::shared_ptr<grpc::Channel> channel_;
+  std::chrono::steady_clock::time_point deadline_;
+  utils::movable_function<void(std::error_code)> handler_;
+  asio::steady_timer timer_;
+  bool completed_{ false };
+};
+} // namespace
+
 component::component(asio::io_context& io, component_config config)
   : io_{ io }
   , stubs_{ std::make_unique<stubs>(
@@ -193,12 +315,22 @@ component::component(asio::io_context& io, component_config config)
              search_admin_v1::SearchAdminService::NewStub(config.channel) }) }
   , authorization_{ authorization_header(config.credentials) }
   , timeouts_{ config.timeouts }
+  , compression_{ config.compression }
   // Initialised last (see the declaration order in the header), so the channel can be moved in.
   , dispatcher_{ io, std::move(config.channel) }
 {
 }
 
 component::~component() = default;
+
+void
+component::wait_until_ready(std::chrono::milliseconds timeout,
+                            utils::movable_function<void(std::error_code)>&& handler)
+{
+  std::make_shared<channel_ready_poll>(
+    dispatcher_.io_context(), dispatcher_.channel(), timeout, std::move(handler))
+    ->run();
+}
 
 auto
 component::execute(const operations::get_request& request,
@@ -209,7 +341,7 @@ component::execute(const operations::get_request& request,
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }
-  auto proto = std::make_shared<v1::GetRequest>(kv::encode(request));
+  auto proto = std::make_shared<v1::GetRequest>(kv::encode(request, compression_));
   const auto id = request.id;
   const auto retry_attempts = request.retries.retry_attempts();
   const auto retry_reasons = request.retries.retry_reasons();
@@ -229,8 +361,8 @@ component::execute(const operations::get_request& request,
       grpc::Status status, v1::GetResponse resp) mutable {
       (void)proto; // kept only to keep the request alive for the call
       // A get reads and nothing more, so a deadline here is unambiguous: the document cannot have
-      // changed. kv::decode owns the compressed-content rule (it reports feature_not_available
-      // rather than handing back an empty value with a success status).
+      // changed. kv::decode owns the compressed-content rule (it reports the decode failure rather
+      // than handing back an empty value with a success status).
       auto ctx =
         make_error_context(status, id, operation_kind::read_only, retry_attempts, retry_reasons);
       handler(kv::decode(resp, std::move(ctx)));
@@ -242,7 +374,7 @@ component::execute(const operations::get_projected_request& request,
                    utils::movable_function<void(operations::get_projected_response)>&& handler)
   -> pending_call
 {
-  auto proto = std::make_shared<v1::GetRequest>(kv::encode(request));
+  auto proto = std::make_shared<v1::GetRequest>(kv::encode(request, compression_));
   const auto id = request.id;
   const auto retry_attempts = request.retries.retry_attempts();
   const auto retry_reasons = request.retries.retry_reasons();
@@ -266,10 +398,6 @@ component::execute(const operations::get_projected_request& request,
       (void)proto; // kept only to keep the request alive for the call
       auto ctx =
         make_error_context(status, id, operation_kind::read_only, retry_attempts, retry_reasons);
-      if (status.ok() && resp.content_case() == v1::GetResponse::kContentCompressed) {
-        ctx = make_key_value_error_context(
-          errc::common::feature_not_available, id, retry_attempts, retry_reasons);
-      }
       handler(kv::decode(resp, std::move(ctx), request));
     });
 }
@@ -283,7 +411,7 @@ component::execute(const operations::upsert_request& request,
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }
-  auto proto = std::make_shared<v1::UpsertRequest>(kv::encode(request));
+  auto proto = std::make_shared<v1::UpsertRequest>(kv::encode(request, compression_));
   const auto id = request.id;
   const auto retry_attempts = request.retries.retry_attempts();
   const auto retry_reasons = request.retries.retry_reasons();
@@ -316,7 +444,7 @@ component::execute(const operations::insert_request& request,
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }
-  auto proto = std::make_shared<v1::InsertRequest>(kv::encode(request));
+  auto proto = std::make_shared<v1::InsertRequest>(kv::encode(request, compression_));
   const auto id = request.id;
   const auto retry_attempts = request.retries.retry_attempts();
   const auto retry_reasons = request.retries.retry_reasons();
@@ -349,7 +477,7 @@ component::execute(const operations::replace_request& request,
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }
-  auto proto = std::make_shared<v1::ReplaceRequest>(kv::encode(request));
+  auto proto = std::make_shared<v1::ReplaceRequest>(kv::encode(request, compression_));
   const auto id = request.id;
   const auto retry_attempts = request.retries.retry_attempts();
   const auto retry_reasons = request.retries.retry_reasons();
@@ -477,7 +605,7 @@ component::execute(const operations::get_and_lock_request& request,
                    utils::movable_function<void(operations::get_and_lock_response)>&& handler)
   -> pending_call
 {
-  auto proto = std::make_shared<v1::GetAndLockRequest>(kv::encode(request));
+  auto proto = std::make_shared<v1::GetAndLockRequest>(kv::encode(request, compression_));
   const auto id = request.id;
   const auto retry_attempts = request.retries.retry_attempts();
   const auto retry_reasons = request.retries.retry_reasons();
@@ -502,10 +630,6 @@ component::execute(const operations::get_and_lock_request& request,
       (void)proto; // kept only to keep the request alive for the call
       auto ctx =
         make_error_context(status, id, operation_kind::mutating, retry_attempts, retry_reasons);
-      if (status.ok() && resp.content_case() == v1::GetAndLockResponse::kContentCompressed) {
-        ctx = make_key_value_error_context(
-          errc::common::feature_not_available, id, retry_attempts, retry_reasons);
-      }
       handler(kv::decode(resp, std::move(ctx)));
     });
 }
@@ -548,7 +672,7 @@ component::execute(const operations::get_and_touch_request& request,
                    utils::movable_function<void(operations::get_and_touch_response)>&& handler)
   -> pending_call
 {
-  auto proto = std::make_shared<v1::GetAndTouchRequest>(kv::encode(request));
+  auto proto = std::make_shared<v1::GetAndTouchRequest>(kv::encode(request, compression_));
   const auto id = request.id;
   const auto retry_attempts = request.retries.retry_attempts();
   const auto retry_reasons = request.retries.retry_reasons();
@@ -573,10 +697,6 @@ component::execute(const operations::get_and_touch_request& request,
       (void)proto; // kept only to keep the request alive for the call
       auto ctx =
         make_error_context(status, id, operation_kind::mutating, retry_attempts, retry_reasons);
-      if (status.ok() && resp.content_case() == v1::GetAndTouchResponse::kContentCompressed) {
-        ctx = make_key_value_error_context(
-          errc::common::feature_not_available, id, retry_attempts, retry_reasons);
-      }
       handler(kv::decode(resp, std::move(ctx)));
     });
 }
@@ -774,9 +894,9 @@ component::execute(const operations::query_request& request,
     return fail_expired_ctx(io_, handler, stamped());
   }
 
-  // Features with no couchbase2 equivalent (raw passthrough, use_replica, streaming row_callback,
-  // node targeting, out-of-range tuning values): fail cleanly rather than silently dropping the
-  // caller's intent.
+  // Features with no couchbase2 equivalent (raw passthrough, use_replica, node targeting,
+  // out-of-range tuning values): fail cleanly rather than silently dropping the caller's intent.
+  // The streaming row_callback is wired below and is deliberately not among them.
   if (!query::can_encode(request)) {
     auto response = stamped();
     response.ctx.ec = errc::common::feature_not_available;
@@ -797,13 +917,18 @@ component::execute(const operations::query_request& request,
   const auto kind = request.readonly ? operation_kind::read_only : operation_kind::mutating;
   auto* stub = stubs_->query.get();
 
-  // Accumulated across streamed messages; shared between the row and completion callbacks.
+  // Accumulated across streamed messages; shared between the row and completion callbacks. With a
+  // row_callback wired, rows are delivered to the consumer as they arrive and `rows` stays empty.
   auto rows = std::make_shared<std::vector<std::string>>();
   auto meta = std::make_shared<operations::query_response::query_meta_data>();
   // Whether a MetaData message arrived at all, which is not the same as what it said. The gateway
   // leaves MetaData nil when its own result.MetaData() fails and still ends the stream OK, and an
   // absent status must not be classified as a failed one.
   auto meta_received = std::make_shared<bool>(false);
+  auto stream = std::make_shared<row_stream_state>();
+  if (request.row_callback) {
+    stream->callback = std::move(*request.row_callback);
+  }
 
   return dispatcher_.server_stream<query_v1::QueryResponse>(
     timeout,
@@ -814,12 +939,17 @@ component::execute(const operations::query_request& request,
       }
       stub->async()->Query(&ctx, proto.get(), reactor);
     },
-    [rows, meta, meta_received](query_v1::QueryResponse message) {
-      for (const auto& row : message.rows()) {
-        rows->push_back(row);
+    [rows, meta, meta_received, stream](query_v1::QueryResponse message) {
+      for (auto& row : *message.mutable_rows()) {
+        if (stream->consume(std::move(row))) {
+          rows->push_back(std::move(row));
+        }
       }
       if (message.has_meta_data()) {
         *meta_received = true;
+        // Metadata means the statement executed, so it bars a retry exactly as a row does. A
+        // metadata-only message is the whole response for a statement that returns no rows.
+        stream->received_any = true;
         query::decode_meta_data(message.meta_data(), *meta);
       }
     },
@@ -828,6 +958,7 @@ component::execute(const operations::query_request& request,
      rows,
      meta,
      meta_received,
+     stream,
      proto,
      statement,
      client_context_id,
@@ -835,6 +966,10 @@ component::execute(const operations::query_request& request,
       (void)proto; // kept only to keep the request alive for the call
       operations::query_response response;
       response.ctx.ec = map_status(status, kind);
+      // CXXCBC-909: a mid-stream error after the gateway sent anything cannot be retried.
+      if (stream->received_any && !status.ok()) {
+        response.ctx.ec = errc::common::request_canceled;
+      }
       response.ctx.statement = std::move(statement);
       response.ctx.client_context_id =
         meta->client_context_id.empty() ? std::move(client_context_id) : meta->client_context_id;
@@ -878,8 +1013,8 @@ component::execute(const operations::analytics_request& request,
     return fail_expired_ctx(io_, handler, stamped());
   }
 
-  // Scoped analytics, raw passthrough, and the streaming row_callback have no couchbase2 mapping:
-  // fail cleanly rather than dropping the caller's intent.
+  // Scoped analytics and raw passthrough have no couchbase2 mapping: fail cleanly rather than
+  // dropping the caller's intent. The streaming row_callback is wired below and is not among them.
   if (!analytics::can_encode(request)) {
     auto response = stamped();
     response.ctx.ec = errc::common::feature_not_available;
@@ -905,6 +1040,10 @@ component::execute(const operations::analytics_request& request,
   // gateway reported as running. Classifying without this would turn a stream that ended OK with no
   // metadata into an error.
   auto meta_received = std::make_shared<bool>(false);
+  auto stream = std::make_shared<row_stream_state>();
+  if (request.row_callback) {
+    stream->callback = std::move(*request.row_callback);
+  }
 
   return dispatcher_.server_stream<analytics_v1::AnalyticsQueryResponse>(
     timeout,
@@ -915,12 +1054,17 @@ component::execute(const operations::analytics_request& request,
       }
       stub->async()->AnalyticsQuery(&ctx, proto.get(), reactor);
     },
-    [rows, meta, meta_received](analytics_v1::AnalyticsQueryResponse message) {
-      for (const auto& row : message.rows()) {
-        rows->push_back(row);
+    [rows, meta, meta_received, stream](analytics_v1::AnalyticsQueryResponse message) {
+      for (auto& row : *message.mutable_rows()) {
+        if (stream->consume(std::move(row))) {
+          rows->push_back(std::move(row));
+        }
       }
       if (message.has_meta_data()) {
         *meta_received = true;
+        // Metadata means the statement executed, so it bars a retry exactly as a row does. A
+        // metadata-only message is the whole response for a statement that returns no rows.
+        stream->received_any = true;
         analytics::decode_meta_data(message.meta_data(), *meta);
       }
     },
@@ -929,6 +1073,7 @@ component::execute(const operations::analytics_request& request,
      rows,
      meta,
      meta_received,
+     stream,
      proto,
      statement,
      client_context_id,
@@ -936,6 +1081,10 @@ component::execute(const operations::analytics_request& request,
       (void)proto; // kept only to keep the request alive for the call
       operations::analytics_response response;
       response.ctx.ec = map_status(status, kind);
+      // CXXCBC-909: a mid-stream error after the gateway sent anything cannot be retried.
+      if (stream->received_any && !status.ok()) {
+        response.ctx.ec = errc::common::request_canceled;
+      }
       response.ctx.statement = std::move(statement);
       response.ctx.client_context_id =
         meta->client_context_id.empty() ? std::move(client_context_id) : meta->client_context_id;

@@ -40,7 +40,8 @@
 
 #include <grpcpp/server_builder.h>
 
-#include <atomic>
+#include <snappy.h>
+
 #include <chrono>
 #include <cstdint>
 #include <limits>
@@ -74,11 +75,18 @@ public:
     for (int i = 0; i < request->project_size(); ++i) {
       last_project.push_back(request->project(i));
     }
+    last_get_compression.reset();
+    if (request->has_compression()) {
+      last_get_compression = request->compression();
+    }
     if (request->key() == "missing") {
       return { grpc::StatusCode::NOT_FOUND, "no such document" };
     }
     if (request->key() == "compressed") {
-      response->set_content_compressed("dummy_compressed_data");
+      std::string compressed;
+      static const std::string src{ "hello_snappy_decompressed_value" };
+      snappy::Compress(src.data(), src.size(), &compressed);
+      response->set_content_compressed(compressed);
       response->set_cas(0x2222ULL);
       return grpc::Status::OK;
     }
@@ -95,6 +103,12 @@ public:
     record_auth(context);
     if (request->key() == "fail") {
       return { grpc::StatusCode::UNAVAILABLE, "node unavailable" };
+    }
+    last_upsert_content_case = request->content_case();
+    if (request->has_content_compressed()) {
+      last_upsert_compressed_payload = request->content_compressed();
+    } else if (request->has_content_uncompressed()) {
+      last_upsert_uncompressed_payload = request->content_uncompressed();
     }
     response->set_cas(0x3333ULL);
     auto* token = response->mutable_mutation_token();
@@ -157,7 +171,11 @@ public:
   }
 
   std::vector<std::string> last_project{};
+  std::optional<v1::CompressionEnabled> last_get_compression{};
   std::string last_auth_header{};
+  v1::UpsertRequest::ContentCase last_upsert_content_case{ v1::UpsertRequest::CONTENT_NOT_SET };
+  std::string last_upsert_compressed_payload{};
+  std::string last_upsert_uncompressed_payload{};
 
   // Test knobs. `reply_delay` makes every handler sleep before answering, so a client-side deadline
   // can fire while the call is genuinely in flight. `calls_received` counts the requests that
@@ -229,7 +247,7 @@ get_round_trips_on_the_io_thread()
   in_process_server server;
   asio::io_context io;
   auto work = asio::make_work_guard(io);
-  component comp{ io, component_config{ server.channel(), cluster_credentials{}, { 5000ms } } };
+  component comp{ io, component_config{ server.channel(), cluster_credentials{}, { 5000ms }, {} } };
 
   ops::get_request request;
   request.id = make_id("k1");
@@ -255,7 +273,7 @@ get_maps_not_found_into_the_error_context()
   in_process_server server;
   asio::io_context io;
   auto work = asio::make_work_guard(io);
-  component comp{ io, component_config{ server.channel(), cluster_credentials{}, { 5000ms } } };
+  component comp{ io, component_config{ server.channel(), cluster_credentials{}, { 5000ms }, {} } };
 
   ops::get_request request;
   request.id = make_id("missing");
@@ -277,7 +295,7 @@ upsert_returns_cas_and_mutation_token()
   in_process_server server;
   asio::io_context io;
   auto work = asio::make_work_guard(io);
-  component comp{ io, component_config{ server.channel(), cluster_credentials{}, { 5000ms } } };
+  component comp{ io, component_config{ server.channel(), cluster_credentials{}, { 5000ms }, {} } };
 
   ops::upsert_request request;
   request.id = make_id("k1");
@@ -297,7 +315,7 @@ upsert_returns_cas_and_mutation_token()
 }
 
 void
-get_handles_compressed_content_with_feature_not_available()
+get_decompresses_compressed_content()
 {
   in_process_server server;
   asio::io_context io;
@@ -314,8 +332,44 @@ get_handles_compressed_content_with_feature_not_available()
   });
   io.run();
 
-  assert_true(outcome.ctx.ec() == couchbase::errc::common::feature_not_available,
-              "compressed content surfaces feature_not_available");
+  assert_false(static_cast<bool>(outcome.ctx.ec()), "get compressed succeeded");
+  assert_eq(cu::to_string(outcome.value),
+            std::string{ "hello_snappy_decompressed_value" },
+            "value decompressed via snappy");
+}
+
+void
+upsert_compresses_large_payload_when_enabled()
+{
+  in_process_server server;
+  asio::io_context io;
+  auto work = asio::make_work_guard(io);
+  component comp{
+    io, component_config{ server.channel(), cluster_credentials{}, { 5000ms }, { true } }
+  };
+
+  const std::string large_body(1024, 'z');
+  ops::upsert_request request;
+  request.id = make_id("k1");
+  request.value = cu::to_binary(large_body);
+
+  ops::upsert_response outcome;
+  comp.execute(std::move(request), [&](ops::upsert_response response) {
+    outcome = std::move(response);
+    work.reset();
+  });
+  io.run();
+
+  assert_false(static_cast<bool>(outcome.ctx.ec()), "upsert large body succeeded");
+  assert_true(server.service().last_upsert_content_case == v1::UpsertRequest::kContentCompressed,
+              "large payload sent as content_compressed over gRPC");
+
+  std::string decompressed;
+  const bool ok = snappy::Uncompress(server.service().last_upsert_compressed_payload.data(),
+                                     server.service().last_upsert_compressed_payload.size(),
+                                     &decompressed);
+  assert_true(ok, "server received valid snappy compressed payload");
+  assert_eq(decompressed, large_body, "decompressed payload matches original 1024-byte input");
 }
 
 void
@@ -712,6 +766,40 @@ get_projected_encodes_projections_and_decodes_response()
   assert_eq(server.service().last_project[1], "bar.baz", "second projection path matches");
 }
 
+// A projected read reaches the gateway's ordinary Get handler, which decides on compression from
+// the request's own field. Both halves are asserted on one call: what left the client, and what it
+// made of the compressed answer that opting in invites.
+void
+get_projected_negotiates_and_decodes_compression()
+{
+  in_process_server server;
+  asio::io_context io;
+  auto work = asio::make_work_guard(io);
+  component comp{
+    io, component_config{ server.channel(), cluster_credentials{}, { 5000ms }, { true } }
+  };
+
+  ops::get_projected_request request;
+  request.id = make_id("compressed");
+  request.projections = { "foo" };
+
+  ops::get_projected_response outcome;
+  comp.execute(std::move(request), [&](ops::get_projected_response response) {
+    outcome = std::move(response);
+    work.reset();
+  });
+  io.run();
+
+  assert_true(server.service().last_get_compression.has_value(),
+              "a projected read opts in to compression");
+  assert_true(server.service().last_get_compression.value() == v1::COMPRESSION_ENABLED_OPTIONAL,
+              "it opts in as OPTIONAL, never ALWAYS");
+  assert_false(static_cast<bool>(outcome.ctx.ec()), "get_projected compressed succeeded");
+  assert_eq(cu::to_string(outcome.value),
+            std::string{ "hello_snappy_decompressed_value" },
+            "projected value decompressed via snappy");
+}
+
 } // namespace
 
 auto
@@ -721,14 +809,20 @@ tests() -> test_suite
     "protostellar_component",
     {
       { "get_round_trips_on_the_io_thread", get_round_trips_on_the_io_thread, timeout::network },
+      { "get_projected_negotiates_and_decodes_compression",
+        get_projected_negotiates_and_decodes_compression,
+        timeout::network },
       { "get_projected_encodes_projections_and_decodes_response",
         get_projected_encodes_projections_and_decodes_response,
         timeout::network },
       { "get_maps_not_found_into_the_error_context",
         get_maps_not_found_into_the_error_context,
         timeout::network },
-      { "get_handles_compressed_content_with_feature_not_available",
-        get_handles_compressed_content_with_feature_not_available,
+      { "get_decompresses_compressed_content",
+        get_decompresses_compressed_content,
+        timeout::network },
+      { "upsert_compresses_large_payload_when_enabled",
+        upsert_compresses_large_payload_when_enabled,
         timeout::network },
       { "upsert_returns_cas_and_mutation_token",
         upsert_returns_cas_and_mutation_token,

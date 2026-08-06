@@ -79,6 +79,15 @@ public:
 
   [[nodiscard]] auto io_context() const -> asio::io_context&;
 
+  // True once the cluster was opened with a couchbase2:// connection string.
+  [[nodiscard]] auto is_protostellar() const -> bool;
+
+  // couchbase2 wait_until_ready (channel connectivity-state poll). Only meaningful when
+  // is_protostellar() is true; the classic MCBP path lives in core::impl::wait_until_ready.
+  void protostellar_wait_until_ready(
+    std::chrono::milliseconds timeout,
+    utils::movable_function<void(std::error_code)>&& handler) const;
+
   [[nodiscard]] auto origin() const -> std::pair<std::error_code, core::origin>;
 
   void open(core::origin origin, utils::movable_function<void(std::error_code)>&& handler) const;

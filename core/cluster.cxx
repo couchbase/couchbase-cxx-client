@@ -343,6 +343,15 @@ make_component_timeouts(const cluster_options& options) -> protostellar::compone
   timeouts.management = options.management_timeout;
   return timeouts;
 }
+
+// Core carries only the on/off switch, so min_size and min_ratio keep the converter's defaults.
+inline auto
+make_compression_settings(const cluster_options& options) -> protostellar::kv::compression_settings
+{
+  protostellar::kv::compression_settings compression{};
+  compression.enabled = options.enable_compression;
+  return compression;
+}
 #endif
 } // namespace
 
@@ -1010,8 +1019,10 @@ public:
       const std::scoped_lock lock(protostellar_mutex_);
       protostellar_ = std::make_shared<protostellar::component>(
         ctx_,
-        protostellar::component_config{
-          std::move(channel), origin_.credentials(), make_component_timeouts(options) });
+        protostellar::component_config{ std::move(channel),
+                                        origin_.credentials(),
+                                        make_component_timeouts(options),
+                                        make_compression_settings(options) });
     }
     CB_LOG_INFO(R"(open couchbase2 cluster, id: "{}", endpoint: "{}")", id_, endpoint);
     return handler({});
@@ -1041,6 +1052,22 @@ public:
 #else
     return false;
 #endif
+  }
+
+  // couchbase2 wait_until_ready: there is no MCBP bootstrap to ping, so readiness is the gRPC
+  // channel's connectivity state. Delegates to the component's channel-state poll. Callers gate on
+  // is_protostellar(); the fail-closed branch only guards a misuse / non-couchbase2 build.
+  void protostellar_wait_until_ready(std::chrono::milliseconds timeout,
+                                     utils::movable_function<void(std::error_code)>&& handler)
+  {
+#ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
+    if (auto component = protostellar_component(); component) {
+      return component->wait_until_ready(timeout, std::move(handler));
+    }
+#else
+    (void)timeout;
+#endif
+    return handler(errc::common::feature_not_available);
   }
 
 #ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
@@ -1953,6 +1980,20 @@ auto
 cluster::io_context() const -> asio::io_context&
 {
   return impl_->io_context();
+}
+
+auto
+cluster::is_protostellar() const -> bool
+{
+  return impl_->is_protostellar();
+}
+
+void
+cluster::protostellar_wait_until_ready(
+  std::chrono::milliseconds timeout,
+  utils::movable_function<void(std::error_code)>&& handler) const
+{
+  return impl_->protostellar_wait_until_ready(timeout, std::move(handler));
 }
 
 void

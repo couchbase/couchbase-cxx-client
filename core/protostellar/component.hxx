@@ -76,6 +76,7 @@
 #include "core/operations/management/search_index_get_documents_count.hxx"
 #include "core/operations/management/search_index_upsert.hxx"
 #include "core/protostellar/dispatcher.hxx"
+#include "core/protostellar/kv_converter.hxx"
 #include "core/timeout_defaults.hxx"
 #include "core/utils/movable_function.hxx"
 
@@ -84,6 +85,7 @@
 #include <chrono>
 #include <memory>
 #include <string>
+#include <system_error>
 
 namespace couchbase::core::protostellar
 {
@@ -111,6 +113,7 @@ struct component_config {
   std::shared_ptr<grpc::Channel> channel{};
   cluster_credentials credentials{};
   component_timeouts timeouts{};
+  kv::compression_settings compression{};
 };
 
 // The core KV request types the component can execute over couchbase2. cluster_impl routes only
@@ -364,6 +367,12 @@ public:
                  void(operations::management::search_index_control_plan_freeze_response)>&& handler)
     -> pending_call;
 
+  // couchbase2 wait_until_ready: poll the gRPC channel connectivity state until it reaches READY or
+  // the timeout elapses (no health RPC -- mirrors Java/Go, which poll getState()). Completes on the
+  // io_context with an empty error_code on success or unambiguous_timeout on deadline.
+  void wait_until_ready(std::chrono::milliseconds timeout,
+                        utils::movable_function<void(std::error_code)>&& handler);
+
 private:
   // The generated gRPC stubs are held behind an opaque pointer so the generated protobuf and gRPC
   // surface stays out of every translation unit that includes this header -- none of it appears in
@@ -374,6 +383,7 @@ private:
   std::unique_ptr<stubs> stubs_;
   std::string authorization_;
   component_timeouts timeouts_;
+  kv::compression_settings compression_;
   // Declared last, so it is destroyed first: ~dispatcher() cancels and drains the calls issued
   // through the stubs above, which must therefore still be alive while it runs.
   dispatcher dispatcher_;
