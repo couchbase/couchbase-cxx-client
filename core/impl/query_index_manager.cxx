@@ -432,6 +432,39 @@ public:
                                     collection_name,
                                     options.parent_span);
 
+    // A closed cluster is the only thing origin() reports an error for, and it cannot be asked
+    // which transport it is on. Report it here rather than routing on a state that could not be
+    // read: the composite below would open a sub-operation span for a request it never sends.
+    const auto [origin_ec, origin] = core_.origin();
+    if (origin_ec) {
+      top_obs_rec->finish(origin_ec);
+      return handler(couchbase::error{ origin_ec });
+    }
+
+    // Over couchbase2 the gateway does server-side what the two round trips below do here:
+    // BuildDeferredIndexes takes the keyspace and builds every deferred index in it. RFC 77 lists
+    // it among the single operations rather than the composite ones -- only WatchIndexes is
+    // composite there -- so it is dispatched as one request and carries no sub-operation spans.
+    if (origin.uses_protostellar()) {
+      core::operations::management::query_index_build_deferred_request request{
+        bucket_name,
+        scope_name.empty() ? std::optional<std::string>{}
+                           : std::optional<std::string>{ scope_name },
+        collection_name.empty() ? std::optional<std::string>{}
+                                : std::optional<std::string>{ collection_name },
+        {},
+        {},
+        timeout,
+        top_obs_rec->operation_span(),
+      };
+      return core_.execute(
+        std::move(request),
+        [top_obs_rec = std::move(top_obs_rec), handler = std::move(handler)](const auto& resp) {
+          top_obs_rec->finish(resp.ctx.retry_attempts, resp.ctx.ec);
+          handler(core::impl::make_error(resp.ctx));
+        });
+    }
+
     auto get_all_deferred_obs_rec = create_suboperation_observability_recorder(
       core::tracing::operation::mgr_query_get_all_deferred_indexes,
       bucket_name,

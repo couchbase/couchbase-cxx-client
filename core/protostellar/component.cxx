@@ -31,6 +31,7 @@
 #include "core/protostellar/error_utils.hxx"
 #include "core/protostellar/kv_converter.hxx"
 #include "core/protostellar/query_converter.hxx"
+#include "core/protostellar/query_index_admin_converter.hxx"
 #include "core/protostellar/search_converter.hxx"
 #include "core/protostellar/view_converter.hxx"
 
@@ -41,6 +42,7 @@
 
 #include <couchbase/admin/bucket/v1/bucket.grpc.pb.h>
 #include <couchbase/admin/collection/v1/collection.grpc.pb.h>
+#include <couchbase/admin/query/v1/query.grpc.pb.h>
 #include <couchbase/kv/v1/kv.grpc.pb.h>
 #include <couchbase/search/v1/search.grpc.pb.h>
 #include <couchbase/view/v1/view.grpc.pb.h>
@@ -65,6 +67,7 @@ namespace search_v1 = ::couchbase::search::v1;
 namespace view_v1 = ::couchbase::view::v1;
 namespace bucket_admin_v1 = ::couchbase::admin::bucket::v1;
 namespace collection_admin_v1 = ::couchbase::admin::collection::v1;
+namespace query_admin_v1 = ::couchbase::admin::query::v1;
 
 // Defined here rather than in the header so the generated gRPC types stay out of every consumer of
 // component.hxx.
@@ -76,6 +79,7 @@ struct component::stubs {
   std::unique_ptr<view_v1::ViewService::Stub> view;
   std::unique_ptr<bucket_admin_v1::BucketAdminService::Stub> bucket_admin;
   std::unique_ptr<collection_admin_v1::CollectionAdminService::Stub> collection_admin;
+  std::unique_ptr<query_admin_v1::QueryAdminService::Stub> query_admin;
 };
 
 namespace
@@ -147,7 +151,8 @@ component::component(asio::io_context& io, component_config config)
              search_v1::SearchService::NewStub(config.channel),
              view_v1::ViewService::NewStub(config.channel),
              bucket_admin_v1::BucketAdminService::NewStub(config.channel),
-             collection_admin_v1::CollectionAdminService::NewStub(config.channel) }) }
+             collection_admin_v1::CollectionAdminService::NewStub(config.channel),
+             query_admin_v1::QueryAdminService::NewStub(config.channel) }) }
   , authorization_{ authorization_header(config.credentials) }
   , timeouts_{ config.timeouts }
   // Initialised last (see the declaration order in the header), so the channel can be moved in.
@@ -1526,6 +1531,207 @@ component::execute(
       response.ctx.client_context_id = client_context_id;
       response.ctx.ec = map_status(status, operation_kind::mutating);
       response.uid = resp.manifest_uid();
+      handler(std::move(response));
+    });
+}
+
+auto
+component::execute(
+  operations::management::query_index_get_all_request request,
+  utils::movable_function<void(operations::management::query_index_get_all_response)>&& handler)
+  -> pending_call
+{
+  const auto client_context_id = request.client_context_id.value_or(std::string{});
+  auto proto = std::make_shared<query_admin_v1::GetAllIndexesRequest>(
+    query_index_admin::encode_get_all(request));
+  const auto timeout = request.timeout.value_or(timeouts_.management);
+  if (timeout <= std::chrono::milliseconds::zero()) {
+    return fail_expired_ctx(io_, handler, stamped_management(request));
+  }
+  const auto auth = authorization_;
+  auto* stub = stubs_->query_admin.get();
+  return dispatcher_.unary<query_admin_v1::GetAllIndexesResponse>(
+    timeout,
+    [stub, proto, auth](grpc::ClientContext& ctx,
+                        query_admin_v1::GetAllIndexesResponse& resp,
+                        std::function<void(grpc::Status)> cb) {
+      if (!auth.empty()) {
+        ctx.AddMetadata("authorization", auth);
+      }
+      stub->async()->GetAllIndexes(&ctx, proto.get(), &resp, std::move(cb));
+    },
+    [handler = std::move(handler), proto, client_context_id](
+      grpc::Status status, query_admin_v1::GetAllIndexesResponse resp) mutable {
+      (void)proto; // kept only to keep the request alive for the call
+      operations::management::query_index_get_all_response response;
+      response.ctx.client_context_id = client_context_id;
+      response.ctx.ec = map_status(status, operation_kind::read_only);
+      for (const auto& index : resp.indexes()) {
+        response.indexes.push_back(query_index_admin::decode_index(index));
+      }
+      handler(std::move(response));
+    });
+}
+
+auto
+component::execute(
+  operations::management::query_index_create_request request,
+  utils::movable_function<void(operations::management::query_index_create_response)>&& handler)
+  -> pending_call
+{
+  const auto client_context_id = request.client_context_id.value_or(std::string{});
+  if (!query_index_admin::can_encode(request)) {
+    auto response = stamped_management(request);
+    response.ctx.ec = errc::common::feature_not_available;
+    // Posted rather than invoked here, for the reason fail_expired above gives: completions arrive
+    // on the io context, never inline out of execute().
+    asio::post(io_, [handler = std::move(handler), response = std::move(response)]() mutable {
+      handler(std::move(response));
+    });
+    return {};
+  }
+  const auto timeout = request.timeout.value_or(timeouts_.management);
+  if (timeout <= std::chrono::milliseconds::zero()) {
+    return fail_expired_ctx(io_, handler, stamped_management(request));
+  }
+  const auto auth = authorization_;
+  auto* stub = stubs_->query_admin.get();
+
+  if (request.is_primary) {
+    auto proto = std::make_shared<query_admin_v1::CreatePrimaryIndexRequest>(
+      query_index_admin::encode_create_primary(request));
+    return dispatcher_.unary<query_admin_v1::CreatePrimaryIndexResponse>(
+      timeout,
+      [stub, proto, auth](grpc::ClientContext& ctx,
+                          query_admin_v1::CreatePrimaryIndexResponse& resp,
+                          std::function<void(grpc::Status)> cb) {
+        if (!auth.empty()) {
+          ctx.AddMetadata("authorization", auth);
+        }
+        stub->async()->CreatePrimaryIndex(&ctx, proto.get(), &resp, std::move(cb));
+      },
+      [handler = std::move(handler), proto, client_context_id](
+        grpc::Status status, query_admin_v1::CreatePrimaryIndexResponse /* resp */) mutable {
+        (void)proto; // kept only to keep the request alive for the call
+        operations::management::query_index_create_response response;
+        response.ctx.client_context_id = client_context_id;
+        response.ctx.ec = map_status(status, operation_kind::mutating);
+        handler(std::move(response));
+      });
+  }
+
+  auto proto =
+    std::make_shared<query_admin_v1::CreateIndexRequest>(query_index_admin::encode_create(request));
+  return dispatcher_.unary<query_admin_v1::CreateIndexResponse>(
+    timeout,
+    [stub, proto, auth](grpc::ClientContext& ctx,
+                        query_admin_v1::CreateIndexResponse& resp,
+                        std::function<void(grpc::Status)> cb) {
+      if (!auth.empty()) {
+        ctx.AddMetadata("authorization", auth);
+      }
+      stub->async()->CreateIndex(&ctx, proto.get(), &resp, std::move(cb));
+    },
+    [handler = std::move(handler), proto, client_context_id](
+      grpc::Status status, query_admin_v1::CreateIndexResponse /* resp */) mutable {
+      (void)proto; // kept only to keep the request alive for the call
+      operations::management::query_index_create_response response;
+      response.ctx.client_context_id = client_context_id;
+      response.ctx.ec = map_status(status, operation_kind::mutating);
+      handler(std::move(response));
+    });
+}
+
+auto
+component::execute(
+  operations::management::query_index_drop_request request,
+  utils::movable_function<void(operations::management::query_index_drop_response)>&& handler)
+  -> pending_call
+{
+  const auto client_context_id = request.client_context_id.value_or(std::string{});
+  const auto timeout = request.timeout.value_or(timeouts_.management);
+  if (timeout <= std::chrono::milliseconds::zero()) {
+    return fail_expired_ctx(io_, handler, stamped_management(request));
+  }
+  const auto auth = authorization_;
+  auto* stub = stubs_->query_admin.get();
+
+  if (request.is_primary) {
+    auto proto = std::make_shared<query_admin_v1::DropPrimaryIndexRequest>(
+      query_index_admin::encode_drop_primary(request));
+    return dispatcher_.unary<query_admin_v1::DropPrimaryIndexResponse>(
+      timeout,
+      [stub, proto, auth](grpc::ClientContext& ctx,
+                          query_admin_v1::DropPrimaryIndexResponse& resp,
+                          std::function<void(grpc::Status)> cb) {
+        if (!auth.empty()) {
+          ctx.AddMetadata("authorization", auth);
+        }
+        stub->async()->DropPrimaryIndex(&ctx, proto.get(), &resp, std::move(cb));
+      },
+      [handler = std::move(handler), proto, client_context_id](
+        grpc::Status status, query_admin_v1::DropPrimaryIndexResponse /* resp */) mutable {
+        (void)proto; // kept only to keep the request alive for the call
+        operations::management::query_index_drop_response response;
+        response.ctx.client_context_id = client_context_id;
+        response.ctx.ec = map_status(status, operation_kind::mutating);
+        handler(std::move(response));
+      });
+  }
+
+  auto proto =
+    std::make_shared<query_admin_v1::DropIndexRequest>(query_index_admin::encode_drop(request));
+  return dispatcher_.unary<query_admin_v1::DropIndexResponse>(
+    timeout,
+    [stub, proto, auth](grpc::ClientContext& ctx,
+                        query_admin_v1::DropIndexResponse& resp,
+                        std::function<void(grpc::Status)> cb) {
+      if (!auth.empty()) {
+        ctx.AddMetadata("authorization", auth);
+      }
+      stub->async()->DropIndex(&ctx, proto.get(), &resp, std::move(cb));
+    },
+    [handler = std::move(handler), proto, client_context_id](
+      grpc::Status status, query_admin_v1::DropIndexResponse /* resp */) mutable {
+      (void)proto; // kept only to keep the request alive for the call
+      operations::management::query_index_drop_response response;
+      response.ctx.client_context_id = client_context_id;
+      response.ctx.ec = map_status(status, operation_kind::mutating);
+      handler(std::move(response));
+    });
+}
+
+auto
+component::execute(
+  operations::management::query_index_build_deferred_request request,
+  utils::movable_function<void(operations::management::query_index_build_deferred_response)>&&
+    handler) -> pending_call
+{
+  const auto client_context_id = request.client_context_id.value_or(std::string{});
+  auto proto = std::make_shared<query_admin_v1::BuildDeferredIndexesRequest>(
+    query_index_admin::encode_build_deferred(request));
+  const auto timeout = request.timeout.value_or(timeouts_.management);
+  if (timeout <= std::chrono::milliseconds::zero()) {
+    return fail_expired_ctx(io_, handler, stamped_management(request));
+  }
+  const auto auth = authorization_;
+  auto* stub = stubs_->query_admin.get();
+  return dispatcher_.unary<query_admin_v1::BuildDeferredIndexesResponse>(
+    timeout,
+    [stub, proto, auth](grpc::ClientContext& ctx,
+                        query_admin_v1::BuildDeferredIndexesResponse& resp,
+                        std::function<void(grpc::Status)> cb) {
+      if (!auth.empty()) {
+        ctx.AddMetadata("authorization", auth);
+      }
+      stub->async()->BuildDeferredIndexes(&ctx, proto.get(), &resp, std::move(cb));
+    },
+    [handler = std::move(handler), proto, client_context_id](
+      grpc::Status status, query_admin_v1::BuildDeferredIndexesResponse /* resp */) mutable {
+      (void)proto; // kept only to keep the request alive for the call
+      operations::management::query_index_build_deferred_response response;
+      response.ctx.client_context_id = client_context_id;
+      response.ctx.ec = map_status(status, operation_kind::mutating);
       handler(std::move(response));
     });
 }

@@ -58,6 +58,10 @@
 #include "core/operations/management/collection_create.hxx"
 #include "core/operations/management/collection_drop.hxx"
 #include "core/operations/management/collection_update.hxx"
+#include "core/operations/management/query_index_build_deferred.hxx"
+#include "core/operations/management/query_index_create.hxx"
+#include "core/operations/management/query_index_drop.hxx"
+#include "core/operations/management/query_index_get_all.hxx"
 #include "core/operations/management/scope_create.hxx"
 #include "core/operations/management/scope_drop.hxx"
 #include "core/operations/management/scope_get_all.hxx"
@@ -260,6 +264,24 @@ public:
     operations::management::collection_drop_request request,
     utils::movable_function<void(operations::management::collection_drop_response)>&& handler)
     -> pending_call;
+
+  // Query index management (unary admin RPCs over admin.query.v1).
+  auto execute(
+    operations::management::query_index_get_all_request request,
+    utils::movable_function<void(operations::management::query_index_get_all_response)>&& handler)
+    -> pending_call;
+  auto execute(
+    operations::management::query_index_create_request request,
+    utils::movable_function<void(operations::management::query_index_create_response)>&& handler)
+    -> pending_call;
+  auto execute(
+    operations::management::query_index_drop_request request,
+    utils::movable_function<void(operations::management::query_index_drop_response)>&& handler)
+    -> pending_call;
+  auto execute(
+    operations::management::query_index_build_deferred_request request,
+    utils::movable_function<void(operations::management::query_index_build_deferred_response)>&&
+      handler) -> pending_call;
 
 private:
   // The generated gRPC stubs are held behind an opaque pointer so the generated protobuf and gRPC
