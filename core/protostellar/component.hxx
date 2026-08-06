@@ -65,6 +65,15 @@
 #include "core/operations/management/scope_create.hxx"
 #include "core/operations/management/scope_drop.hxx"
 #include "core/operations/management/scope_get_all.hxx"
+#include "core/operations/management/search_index_analyze_document.hxx"
+#include "core/operations/management/search_index_control_ingest.hxx"
+#include "core/operations/management/search_index_control_plan_freeze.hxx"
+#include "core/operations/management/search_index_control_query.hxx"
+#include "core/operations/management/search_index_drop.hxx"
+#include "core/operations/management/search_index_get.hxx"
+#include "core/operations/management/search_index_get_all.hxx"
+#include "core/operations/management/search_index_get_documents_count.hxx"
+#include "core/operations/management/search_index_upsert.hxx"
 #include "core/protostellar/dispatcher.hxx"
 #include "core/timeout_defaults.hxx"
 #include "core/utils/movable_function.hxx"
@@ -282,6 +291,44 @@ public:
     operations::management::query_index_build_deferred_request request,
     utils::movable_function<void(operations::management::query_index_build_deferred_response)>&&
       handler) -> pending_call;
+
+  // Search index management (unary admin RPCs over admin.search.v1).
+  auto execute(
+    operations::management::search_index_upsert_request request,
+    utils::movable_function<void(operations::management::search_index_upsert_response)>&& handler)
+    -> pending_call;
+  auto execute(
+    operations::management::search_index_get_request request,
+    utils::movable_function<void(operations::management::search_index_get_response)>&& handler)
+    -> pending_call;
+  auto execute(
+    operations::management::search_index_get_all_request request,
+    utils::movable_function<void(operations::management::search_index_get_all_response)>&& handler)
+    -> pending_call;
+  auto execute(
+    operations::management::search_index_drop_request request,
+    utils::movable_function<void(operations::management::search_index_drop_response)>&& handler)
+    -> pending_call;
+  auto execute(
+    operations::management::search_index_analyze_document_request request,
+    utils::movable_function<void(operations::management::search_index_analyze_document_response)>&&
+      handler) -> pending_call;
+  auto execute(operations::management::search_index_get_documents_count_request request,
+               utils::movable_function<
+                 void(operations::management::search_index_get_documents_count_response)>&& handler)
+    -> pending_call;
+  auto execute(
+    operations::management::search_index_control_ingest_request request,
+    utils::movable_function<void(operations::management::search_index_control_ingest_response)>&&
+      handler) -> pending_call;
+  auto execute(
+    operations::management::search_index_control_query_request request,
+    utils::movable_function<void(operations::management::search_index_control_query_response)>&&
+      handler) -> pending_call;
+  auto execute(operations::management::search_index_control_plan_freeze_request request,
+               utils::movable_function<
+                 void(operations::management::search_index_control_plan_freeze_response)>&& handler)
+    -> pending_call;
 
 private:
   // The generated gRPC stubs are held behind an opaque pointer so the generated protobuf and gRPC
