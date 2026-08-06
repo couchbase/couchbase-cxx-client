@@ -82,6 +82,12 @@ map_precondition(const std::string& type) -> std::error_code
     // cluster is broken when their document simply is not a number.
     return errc::key_value::delta_invalid;
   }
+  if (type == "FLUSH_DISABLED") {
+    // The one management precondition the gateway raises. Without it a flush against a bucket that
+    // simply has flush turned off reports internal_server_failure, where the caller can act on
+    // knowing that flush is disabled.
+    return errc::management::bucket_not_flushable;
+  }
   if (type == "DURABILITY_IMPOSSIBLE") {
     // Fewer live nodes than the requested durability needs. Actionable by the caller (ask for less,
     // or grow the cluster), so it must not be flattened into a generic server failure either.

@@ -157,4 +157,9 @@ if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 AND TARGET couchbase_cxx_protostellar)
 
   # Live Views verification (CXXCBC-899).
   add_cng_test(protostellar/live_view LINK_CLIENT LIBS couchbase_cxx_protostellar)
+  # Bucket management converter (CXXCBC-900).
+  add_cng_test(protostellar/bucket_admin_converter LINK_CLIENT LIBS couchbase_cxx_protostellar)
+
+  # Live Bucket management verification (CXXCBC-900).
+  add_cng_test(protostellar/live_bucket_admin LINK_CLIENT LIBS couchbase_cxx_protostellar)
 endif()

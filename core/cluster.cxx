@@ -776,12 +776,18 @@ public:
       if constexpr (std::is_same_v<Request, operations::query_request> ||
                     std::is_same_v<Request, operations::analytics_request> ||
                     std::is_same_v<Request, operations::search_request> ||
-                    std::is_same_v<Request, operations::document_view_request>) {
+                    std::is_same_v<Request, operations::document_view_request> ||
+                    std::is_same_v<Request, operations::management::bucket_get_all_request> ||
+                    std::is_same_v<Request, operations::management::bucket_get_request> ||
+                    std::is_same_v<Request, operations::management::bucket_create_request> ||
+                    std::is_same_v<Request, operations::management::bucket_update_request> ||
+                    std::is_same_v<Request, operations::management::bucket_drop_request> ||
+                    std::is_same_v<Request, operations::management::bucket_flush_request>) {
         component->execute(std::move(request), std::forward<Handler>(handler));
         return;
       } else {
-        // Management over couchbase2 is not wired yet. Reject cleanly rather than falling through
-        // to the MCBP session manager, which is never bootstrapped on this path.
+        // Remaining management ops over couchbase2 are not wired yet. Reject cleanly rather than
+        // falling through to the MCBP session manager, which is never bootstrapped on this path.
         return handler(
           request.make_response({ errc::common::feature_not_available }, response_type{}));
       }
@@ -944,7 +950,8 @@ public:
             options.query_timeout,
             options.analytics_timeout,
             options.search_timeout,
-            options.view_timeout
+            options.view_timeout,
+            options.management_timeout
           } });
     }
     CB_LOG_INFO(R"(open couchbase2 cluster, id: "{}", endpoint: "{}")", id_, endpoint);
