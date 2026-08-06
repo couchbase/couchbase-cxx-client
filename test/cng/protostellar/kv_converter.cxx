@@ -373,6 +373,28 @@ replace_and_remove_encode_cas()
               "remove durability");
 }
 
+// Each durable level must map onto its own proto level, `majority_and_persist_to_active` included —
+// it was the one level nothing asserted.
+//
+// This is the mapping's only guard, and no live case can stand in for it. The proto enum has no
+// NONE member and starts at MAJORITY = 0, so the three durable levels occupy 0, 1, 2 in declaration
+// order; a level shifted by one is still a value the gateway accepts, so the write succeeds and the
+// caller silently gets weaker or stronger guarantees than were asked for.
+void
+durability_levels_map_to_their_own_proto_levels()
+{
+  assert_true(pk::to_proto_durability(couchbase::durability_level::majority) ==
+                v1::DURABILITY_LEVEL_MAJORITY,
+              "majority");
+  assert_true(
+    pk::to_proto_durability(couchbase::durability_level::majority_and_persist_to_active) ==
+      v1::DURABILITY_LEVEL_MAJORITY_AND_PERSIST_TO_ACTIVE,
+    "majority_and_persist_to_active");
+  assert_true(pk::to_proto_durability(couchbase::durability_level::persist_to_majority) ==
+                v1::DURABILITY_LEVEL_PERSIST_TO_MAJORITY,
+              "persist_to_majority");
+}
+
 void
 durability_none_is_left_unset()
 {
@@ -489,6 +511,8 @@ tests() -> test_suite
       { "mutation_response_decodes_cas_and_token", mutation_response_decodes_cas_and_token },
       { "replace_and_remove_encode_cas", replace_and_remove_encode_cas },
       { "durability_none_is_left_unset", durability_none_is_left_unset },
+      { "durability_levels_map_to_their_own_proto_levels",
+        durability_levels_map_to_their_own_proto_levels },
       { "lifecycle_ops_encode_expected_fields", lifecycle_ops_encode_expected_fields },
       { "exists_and_lock_responses_decode", exists_and_lock_responses_decode },
       { "counter_encodes_and_decodes", counter_encodes_and_decodes },

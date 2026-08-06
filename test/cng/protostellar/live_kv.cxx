@@ -35,13 +35,17 @@
 #include "core/utils/binary.hxx"
 #include "core/utils/connection_string.hxx"
 
+#include <couchbase/durability_level.hxx>
 #include <couchbase/error_codes.hxx>
 
 #include <asio/executor_work_guard.hpp>
 #include <asio/io_context.hpp>
 
+#include <array>
+#include <cstddef>
 #include <cstdlib>
 #include <string>
+#include <utility>
 
 namespace couchbase::cng::test
 {
@@ -307,6 +311,106 @@ insert_and_replace_round_trip_against_live_gateway()
     "insert -> dup_insert -> replace -> missing_replace -> remove -> missing_remove completed");
 }
 
+// A durable mutation must be accepted by a real gateway at every level this transport can express.
+//
+// What this case cannot pin is which timeout budget the client resolved: a gateway answers a
+// durable write identically whichever budget was chosen, so that property is asserted against an
+// in-process server in component_timeouts.cxx instead. What only a live run can catch is a level
+// the gateway refuses or does not understand -- the converter test pins what the client sends, not
+// what the server accepts, and the two are different claims.
+//
+// Each level gets its own io_context and component so that a level which hangs or fails is
+// attributed to itself rather than to whichever one happens to run first.
+void
+durable_mutations_against_live_gateway()
+{
+  const auto connstr_opt = safe_getenv("TEST_CONNECTION_STRING");
+  if (!connstr_opt.has_value()) {
+    skip("TEST_CONNECTION_STRING is not set");
+  }
+  const auto parsed = parse_connection_string(connstr_opt.value());
+  if (!parsed.uses_protostellar()) {
+    skip("TEST_CONNECTION_STRING is not a couchbase2:// endpoint");
+  }
+  if (parsed.bootstrap_nodes.empty()) {
+    skip("no nodes in TEST_CONNECTION_STRING");
+  }
+
+  const auto& node = parsed.bootstrap_nodes.front();
+  const auto port = node.port > 0 ? node.port : parsed.default_port;
+  const std::string endpoint = node.address + ":" + std::to_string(port);
+
+  cluster_options options;
+  options.enable_tls = true;
+  options.tls_verify = tls_verify_mode::none;
+
+  cluster_credentials credentials;
+  credentials.username = env_or("TEST_CB2_USERNAME", "Administrator");
+  credentials.password = env_or("TEST_CB2_PASSWORD", "password");
+
+  const auto bucket = env_or("TEST_CB2_BUCKET", "default");
+  const auto id = document_id{ bucket, "_default", "_default", "cng-live-durable-key" };
+
+  const std::array<std::pair<couchbase::durability_level, const char*>, 3> levels{ {
+    { couchbase::durability_level::majority, "majority" },
+    { couchbase::durability_level::majority_and_persist_to_active,
+      "majority_and_persist_to_active" },
+    { couchbase::durability_level::persist_to_majority, "persist_to_majority" },
+  } };
+
+  std::string failure;
+  std::size_t accepted = 0;
+
+  for (const auto& [level, name] : levels) {
+    asio::io_context io;
+    auto work = asio::make_work_guard(io);
+    auto channel = ps::make_channel(endpoint, options, credentials);
+    component_config config;
+    config.channel = channel;
+    config.credentials = credentials;
+    config.timeouts.key_value = 20'000ms;
+    config.timeouts.key_value_durable = 20'000ms;
+    component comp{ io, config };
+
+    ops::upsert_request upsert;
+    upsert.id = id;
+    upsert.value = cu::to_binary(R"({"cng":true})");
+    upsert.durability_level = level;
+    comp.execute(std::move(upsert), [&, name = name](ops::upsert_response result) {
+      if (result.ctx.ec()) {
+        failure = std::string{ "durable upsert (" } + name + "): " + result.ctx.ec().message();
+      } else {
+        ++accepted;
+      }
+      work.reset();
+    });
+    io.run();
+
+    if (!failure.empty()) {
+      break;
+    }
+  }
+
+  {
+    asio::io_context io;
+    auto work = asio::make_work_guard(io);
+    auto channel = ps::make_channel(endpoint, options, credentials);
+    component_config config;
+    config.channel = channel;
+    config.credentials = credentials;
+    component comp{ io, config };
+    ops::remove_request cleanup;
+    cleanup.id = id;
+    comp.execute(std::move(cleanup), [&](ops::remove_response) {
+      work.reset();
+    });
+    io.run();
+  }
+
+  assert_true(failure.empty(), failure);
+  assert_eq(accepted, levels.size(), "every durability level is accepted by the gateway");
+}
+
 } // namespace
 
 auto
@@ -321,6 +425,10 @@ tests() -> test_suite
         test_env::cluster_only },
       { "insert_and_replace_round_trip_against_live_gateway",
         insert_and_replace_round_trip_against_live_gateway,
+        timeout::integration,
+        test_env::cluster_only },
+      { "durable_mutations_against_live_gateway",
+        durable_mutations_against_live_gateway,
         timeout::integration,
         test_env::cluster_only },
     },

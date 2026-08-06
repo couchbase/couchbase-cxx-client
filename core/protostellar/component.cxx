@@ -279,7 +279,7 @@ component::execute(const operations::upsert_request& request,
                    utils::movable_function<void(operations::upsert_response)>&& handler)
   -> pending_call
 {
-  const auto timeout = request.timeout.value_or(timeouts_.key_value);
+  const auto timeout = resolve_kv_timeout(request.timeout, request.durability_level, timeouts_);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }
@@ -312,7 +312,7 @@ component::execute(const operations::insert_request& request,
                    utils::movable_function<void(operations::insert_response)>&& handler)
   -> pending_call
 {
-  const auto timeout = request.timeout.value_or(timeouts_.key_value);
+  const auto timeout = resolve_kv_timeout(request.timeout, request.durability_level, timeouts_);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }
@@ -345,7 +345,7 @@ component::execute(const operations::replace_request& request,
                    utils::movable_function<void(operations::replace_response)>&& handler)
   -> pending_call
 {
-  const auto timeout = request.timeout.value_or(timeouts_.key_value);
+  const auto timeout = resolve_kv_timeout(request.timeout, request.durability_level, timeouts_);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }
@@ -378,7 +378,7 @@ component::execute(const operations::remove_request& request,
                    utils::movable_function<void(operations::remove_response)>&& handler)
   -> pending_call
 {
-  const auto timeout = request.timeout.value_or(timeouts_.key_value);
+  const auto timeout = resolve_kv_timeout(request.timeout, request.durability_level, timeouts_);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }
@@ -627,7 +627,7 @@ component::execute(const operations::increment_request& request,
   const auto id = request.id;
   const auto retry_attempts = request.retries.retry_attempts();
   const auto retry_reasons = request.retries.retry_reasons();
-  const auto timeout = request.timeout.value_or(timeouts_.key_value);
+  const auto timeout = resolve_kv_timeout(request.timeout, request.durability_level, timeouts_);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }
@@ -663,7 +663,7 @@ component::execute(const operations::decrement_request& request,
   const auto id = request.id;
   const auto retry_attempts = request.retries.retry_attempts();
   const auto retry_reasons = request.retries.retry_reasons();
-  const auto timeout = request.timeout.value_or(timeouts_.key_value);
+  const auto timeout = resolve_kv_timeout(request.timeout, request.durability_level, timeouts_);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }
@@ -696,7 +696,7 @@ component::execute(const operations::append_request& request,
   const auto id = request.id;
   const auto retry_attempts = request.retries.retry_attempts();
   const auto retry_reasons = request.retries.retry_reasons();
-  const auto timeout = request.timeout.value_or(timeouts_.key_value);
+  const auto timeout = resolve_kv_timeout(request.timeout, request.durability_level, timeouts_);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }
@@ -729,7 +729,7 @@ component::execute(const operations::prepend_request& request,
   const auto id = request.id;
   const auto retry_attempts = request.retries.retry_attempts();
   const auto retry_reasons = request.retries.retry_reasons();
-  const auto timeout = request.timeout.value_or(timeouts_.key_value);
+  const auto timeout = resolve_kv_timeout(request.timeout, request.durability_level, timeouts_);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }

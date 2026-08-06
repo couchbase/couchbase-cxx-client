@@ -325,6 +325,24 @@ protostellar_response_ec(const Context& ctx) -> std::error_code
 {
   return ctx.ec;
 }
+
+// The cluster's configured timeouts, in the form the component and the retry loop both read them
+// from. Assigned per field rather than brace-initialised positionally: every member has the same
+// type, so a mis-ordering is not a compile error, and an omitted one silently takes the struct's
+// own default instead of the value the caller configured.
+inline auto
+make_component_timeouts(const cluster_options& options) -> protostellar::component_timeouts
+{
+  protostellar::component_timeouts timeouts{};
+  timeouts.key_value = options.key_value_timeout;
+  timeouts.key_value_durable = options.key_value_durable_timeout;
+  timeouts.query = options.query_timeout;
+  timeouts.analytics = options.analytics_timeout;
+  timeouts.search = options.search_timeout;
+  timeouts.view = options.view_timeout;
+  timeouts.management = options.management_timeout;
+  return timeouts;
+}
 #endif
 } // namespace
 
@@ -993,14 +1011,7 @@ public:
       protostellar_ = std::make_shared<protostellar::component>(
         ctx_,
         protostellar::component_config{
-          std::move(channel), origin_.credentials(), protostellar::component_timeouts {
-            options.key_value_timeout,
-            options.query_timeout,
-            options.analytics_timeout,
-            options.search_timeout,
-            options.view_timeout,
-            options.management_timeout
-          } });
+          std::move(channel), origin_.credentials(), make_component_timeouts(options) });
     }
     CB_LOG_INFO(R"(open couchbase2 cluster, id: "{}", endpoint: "{}")", id_, endpoint);
     return handler({});
@@ -1044,16 +1055,26 @@ public:
   // for one, and the strategy never refuses a retry for service_not_available, so a request issued
   // with default options against an unavailable gateway would otherwise retry until the process
   // ended -- never completing, and never reporting an error either.
+  //
+  // Which default applies is resolve_kv_timeout's rule, not a second copy of it: a durable mutation
+  // is bounded by KvDurableTimeout and everything else by the standard KV timeout. It has to be
+  // applied here, because dispatch_protostellar narrows request->timeout on every attempt including
+  // the first -- so the component is always handed an engaged timeout and its own fallback never
+  // selects for a request that arrives through this loop. Resolving with the standard default here
+  // would cap a durable mutation at the budget the durable default exists to replace.
   template<class Request, class Handler>
   void execute_protostellar(Request request, Handler&& handler)
   {
-    // The fallback below is the KV default, so routing anything else here would bound it with a
+    // The fallback below is a KV default, so routing anything else here would bound it with a
     // budget belonging to another service. Non-KV requests carry no retry_context and have their
     // own path.
     static_assert(protostellar::component_supports_v<Request>,
                   "execute_protostellar resolves the key-value timeout");
-    const auto deadline = std::chrono::steady_clock::now() +
-                          request.timeout.value_or(origin_.options().key_value_timeout);
+    const auto deadline =
+      std::chrono::steady_clock::now() +
+      protostellar::resolve_kv_timeout(request.timeout,
+                                       protostellar::requested_durability(request),
+                                       make_component_timeouts(origin_.options()));
     // Held by shared_ptr and re-issued from there. The request owns the document body for a
     // mutation, so copying it to keep a re-issue possible charged every operation on the data plane
     // for a retry that in normal operation never happens.
