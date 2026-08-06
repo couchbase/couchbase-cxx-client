@@ -62,6 +62,13 @@
 namespace couchbase::cng::test
 {
 
+// safe_getenv, not std::getenv: MSVC deprecates getenv (C4996) and these builds are -Werror.
+[[nodiscard]] inline auto
+env_or(const char* name, const char* fallback) -> std::string
+{
+  return safe_getenv(name).value_or(fallback);
+}
+
 // RAII owner of the io_context worker thread the live tests run against. It keeps a work guard so
 // io_context::run() stays alive on a dedicated thread, and on scope exit -- normal OR via an
 // assertion/skip exception -- it releases the guard and joins the thread. Declare it after the
@@ -212,11 +219,6 @@ public:
   }
 
 private:
-  [[nodiscard]] static auto env_or(const char* name, const char* fallback) -> std::string
-  {
-    return safe_getenv(name).value_or(fallback);
-  }
-
   asio::io_context io_{};
   // Declared after io_ and before component_: the component drains its gRPC calls as it is
   // destroyed, which needs the io thread still running, and the guard joins it afterwards.
@@ -324,11 +326,6 @@ public:
   }
 
 private:
-  [[nodiscard]] static auto env_or(const char* name, const char* fallback) -> std::string
-  {
-    return safe_getenv(name).value_or(fallback);
-  }
-
   asio::io_context io_{};
   // io_ -> runner_ -> cluster_, so the cluster tears down while the io thread is still running
   // and the thread is joined afterwards.

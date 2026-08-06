@@ -17,6 +17,13 @@
 
 #pragma once
 
+// Views are deprecated in the core API but still routable over couchbase2, so the component names
+// document_view_request in its interface. Suppress the core-deprecation attribute for this header's
+// includes and declarations (portable convention shared with cluster.cxx). push/pop the macro so an
+// including translation unit that already defined it keeps its state restored.
+#pragma push_macro("COUCHBASE_CXX_CLIENT_IGNORE_CORE_DEPRECATIONS")
+#define COUCHBASE_CXX_CLIENT_IGNORE_CORE_DEPRECATIONS
+
 // The Protostellar KV component: the couchbase2 counterpart to the MCBP data-plane. It owns the
 // gRPC stubs over a channel and executes core KV operations by encoding the request (kv_converter),
 // dispatching it through the gRPC<->asio bridge, and decoding the reply plus a mapped error
@@ -37,9 +44,11 @@
 #include "core/operations/document_query.hxx"
 #include "core/operations/document_remove.hxx"
 #include "core/operations/document_replace.hxx"
+#include "core/operations/document_search.hxx"
 #include "core/operations/document_touch.hxx"
 #include "core/operations/document_unlock.hxx"
 #include "core/operations/document_upsert.hxx"
+#include "core/operations/document_view.hxx"
 #include "core/protostellar/dispatcher.hxx"
 #include "core/timeout_defaults.hxx"
 #include "core/utils/movable_function.hxx"
@@ -53,6 +62,18 @@
 namespace couchbase::core::protostellar
 {
 
+// Per-service defaults, used when a request does not carry its own timeout. Each field is defaulted
+// from timeout_defaults rather than left value-initialised: a zero here no longer means "no limit"
+// but "budget already spent", so a default-constructed aggregate would reject every request that
+// relies on the default instead of running it.
+struct component_timeouts {
+  std::chrono::milliseconds key_value{ timeout_defaults::key_value_timeout };
+  std::chrono::milliseconds query{ timeout_defaults::query_timeout };
+  std::chrono::milliseconds analytics{ timeout_defaults::analytics_timeout };
+  std::chrono::milliseconds search{ timeout_defaults::search_timeout };
+  std::chrono::milliseconds view{ timeout_defaults::view_timeout };
+};
+
 // Construction parameters for `component`, grouped so that adding one is a source-compatible
 // change. Every field a caller can reasonably omit carries a default, so a new trailing field
 // leaves existing initialisers compiling instead of silently shifting a positional argument onto
@@ -61,9 +82,7 @@ namespace couchbase::core::protostellar
 struct component_config {
   std::shared_ptr<grpc::Channel> channel{};
   cluster_credentials credentials{};
-  std::chrono::milliseconds default_kv_timeout{ timeout_defaults::key_value_timeout };
-  std::chrono::milliseconds default_query_timeout{ timeout_defaults::query_timeout };
-  std::chrono::milliseconds default_analytics_timeout{ timeout_defaults::analytics_timeout };
+  component_timeouts timeouts{};
 };
 
 // The core KV request types the component can execute over couchbase2. cluster_impl routes only
@@ -100,6 +119,9 @@ template<>
 inline constexpr bool component_supports_v<operations::append_request> = true;
 template<>
 inline constexpr bool component_supports_v<operations::prepend_request> = true;
+
+// Default per-service operation timeouts applied when a request does not carry its own. Grouped in
+// a struct so adding a service does not grow the component constructor's positional argument list.
 
 class component
 {
@@ -166,6 +188,16 @@ public:
                utils::movable_function<void(operations::analytics_response)>&& handler)
     -> pending_call;
 
+  // FTS search over the couchbase2 server-streaming transport. Hits are buffered into the response.
+  auto execute(operations::search_request request,
+               utils::movable_function<void(operations::search_response)>&& handler)
+    -> pending_call;
+
+  // Map/reduce views over the couchbase2 server-streaming transport.
+  auto execute(operations::document_view_request request,
+               utils::movable_function<void(operations::document_view_response)>&& handler)
+    -> pending_call;
+
 private:
   // The generated gRPC stubs are held behind an opaque pointer so the generated protobuf and gRPC
   // surface stays out of every translation unit that includes this header -- none of it appears in
@@ -175,12 +207,12 @@ private:
   asio::io_context& io_;
   std::unique_ptr<stubs> stubs_;
   std::string authorization_;
-  std::chrono::milliseconds default_kv_timeout_;
-  std::chrono::milliseconds default_query_timeout_;
-  std::chrono::milliseconds default_analytics_timeout_;
+  component_timeouts timeouts_;
   // Declared last, so it is destroyed first: ~dispatcher() cancels and drains the calls issued
   // through the stubs above, which must therefore still be alive while it runs.
   dispatcher dispatcher_;
 };
 
 } // namespace couchbase::core::protostellar
+
+#pragma pop_macro("COUCHBASE_CXX_CLIENT_IGNORE_CORE_DEPRECATIONS")

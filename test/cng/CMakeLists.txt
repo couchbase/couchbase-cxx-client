@@ -146,4 +146,15 @@ if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 AND TARGET couchbase_cxx_protostellar)
 
   # Live Analytics query verification (CXXCBC-898).
   add_cng_test(protostellar/live_analytics LINK_CLIENT LIBS couchbase_cxx_protostellar)
+  # FTS search converter (CXXCBC-899).
+  add_cng_test(protostellar/search_converter LINK_CLIENT LIBS couchbase_cxx_protostellar)
+
+  # Views converter (CXXCBC-899).
+  add_cng_test(protostellar/view_converter LINK_CLIENT LIBS couchbase_cxx_protostellar)
+
+  # Live FTS search verification (CXXCBC-899).
+  add_cng_test(protostellar/live_search LINK_CLIENT LIBS couchbase_cxx_protostellar)
+
+  # Live Views verification (CXXCBC-899).
+  add_cng_test(protostellar/live_view LINK_CLIENT LIBS couchbase_cxx_protostellar)
 endif()

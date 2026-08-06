@@ -95,8 +95,9 @@ outside contributor can actually pull.
 
 There is deliberately no `docker:` memory block here: the `cao` deployer ignores it, so service
 quotas stay at the server defaults regardless. That is also why the bucket below is created with a
-small explicit quota. The four nodes cover every service the suite can touch; if you only need KV
-and query, a single `services: [kv, n1ql, index]` node is enough, which is what CI allocates.
+small explicit quota. The four nodes cover every service the suite can touch, and `fts` has to be
+among them or the live search case fails rather than reporting a missing index. CI puts all of
+`kv, n1ql, index, fts` on one node, which is the smallest topology the suite runs against.
 
 Other `cao` keys cbdinocluster understands include `username` / `password` (default
 `Administrator` / `password`) and `gateway-log-level`.
@@ -183,6 +184,23 @@ be overridden:
 | `TEST_CB2_USERNAME` | `Administrator` | must be able to read and write the bucket below |
 | `TEST_CB2_PASSWORD` | `password` | |
 | `TEST_CB2_BUCKET` | `default` | must already exist; the tests do not create it |
+| `TEST_CB2_SEARCH_INDEX` | `cng-index` | the FTS index the live search case queries; see below |
+
+`TEST_CB2_SEARCH_INDEX` needs a word of its own, because the walkthrough above does **not** create
+an FTS index. The live search case still passes without one: it accepts either hits or
+`index_not_found`, and the latter is an answer only a gateway that ran the query can give, so the
+round trip is proven either way.
+
+What it does need is a cluster **running the search service** — the definition above has an `fts`
+node for that reason. Query a cluster without one and the request fails as an internal error rather
+than as a missing index, because there is no service to report the index missing, and the case goes
+red for a reason that has nothing to do with the client.
+
+What it cannot do without an index is exercise hit decoding — fragments, field values and locations
+all go untested against a real server. An index named `cng-index` over the test bucket, or this
+variable pointed at one you already have, covers that; note that an index only serves queries once
+the search service has the memory to build a partition for it, which the operator's default quota
+does not provide.
 
 Point the suite at a shared cluster, or at one whose credentials differ from cbdinocluster's, and
 these are what you set:
