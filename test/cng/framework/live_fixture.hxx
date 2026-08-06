@@ -45,6 +45,10 @@
 #include "core/tls_verify_mode.hxx"
 #include "core/utils/connection_string.hxx"
 
+// Inside the guarded region, not above it: this header reaches core/protostellar/dispatcher.hxx,
+// and a core header parsed before the #define above is what the comment there describes.
+#include "protostellar/callback_queue_keepalive.hxx"
+
 #include <couchbase/error_codes.hxx>
 
 #include <asio/executor_work_guard.hpp>
@@ -149,6 +153,12 @@ class live_kv_fixture
 public:
   live_kv_fixture()
   {
+    // A fixture per case means the last channel is destroyed between cases, and gRPC tears down its
+    // process-global callback queue when the last reference goes -- racing the threads still
+    // polling it and aborting the process. See callback_queue_keepalive.hxx (CXXCBC-919); the
+    // in-process harnesses pin it for the same reason.
+    pin_callback_queue();
+
     const auto connection_string = safe_getenv("TEST_CONNECTION_STRING");
     if (!connection_string.has_value()) {
       skip("TEST_CONNECTION_STRING is not set");
@@ -243,6 +253,8 @@ class live_cluster_fixture
 public:
   live_cluster_fixture()
   {
+    pin_callback_queue(); // see live_kv_fixture: a channel per case cycles gRPC's callback queue
+
     const auto connection_string = safe_getenv("TEST_CONNECTION_STRING");
     if (!connection_string.has_value()) {
       skip("TEST_CONNECTION_STRING is not set");

@@ -26,6 +26,7 @@
 #include "core/operations/query_response_parsing.hxx"
 #include "core/protostellar/analytics_converter.hxx"
 #include "core/protostellar/bucket_admin_converter.hxx"
+#include "core/protostellar/collection_admin_converter.hxx"
 #include "core/protostellar/credentials.hxx"
 #include "core/protostellar/error_utils.hxx"
 #include "core/protostellar/kv_converter.hxx"
@@ -39,6 +40,7 @@
 #include <couchbase/analytics/v1/analytics.grpc.pb.h>
 
 #include <couchbase/admin/bucket/v1/bucket.grpc.pb.h>
+#include <couchbase/admin/collection/v1/collection.grpc.pb.h>
 #include <couchbase/kv/v1/kv.grpc.pb.h>
 #include <couchbase/search/v1/search.grpc.pb.h>
 #include <couchbase/view/v1/view.grpc.pb.h>
@@ -62,6 +64,7 @@ namespace analytics_v1 = ::couchbase::analytics::v1;
 namespace search_v1 = ::couchbase::search::v1;
 namespace view_v1 = ::couchbase::view::v1;
 namespace bucket_admin_v1 = ::couchbase::admin::bucket::v1;
+namespace collection_admin_v1 = ::couchbase::admin::collection::v1;
 
 // Defined here rather than in the header so the generated gRPC types stay out of every consumer of
 // component.hxx.
@@ -72,6 +75,7 @@ struct component::stubs {
   std::unique_ptr<search_v1::SearchService::Stub> search;
   std::unique_ptr<view_v1::ViewService::Stub> view;
   std::unique_ptr<bucket_admin_v1::BucketAdminService::Stub> bucket_admin;
+  std::unique_ptr<collection_admin_v1::CollectionAdminService::Stub> collection_admin;
 };
 
 namespace
@@ -142,7 +146,8 @@ component::component(asio::io_context& io, component_config config)
              analytics_v1::AnalyticsService::NewStub(config.channel),
              search_v1::SearchService::NewStub(config.channel),
              view_v1::ViewService::NewStub(config.channel),
-             bucket_admin_v1::BucketAdminService::NewStub(config.channel) }) }
+             bucket_admin_v1::BucketAdminService::NewStub(config.channel),
+             collection_admin_v1::CollectionAdminService::NewStub(config.channel) }) }
   , authorization_{ authorization_header(config.credentials) }
   , timeouts_{ config.timeouts }
   // Initialised last (see the declaration order in the header), so the channel can be moved in.
@@ -1233,6 +1238,294 @@ component::execute(
       operations::management::bucket_flush_response response;
       response.ctx.client_context_id = client_context_id;
       response.ctx.ec = map_status(status, operation_kind::mutating);
+      handler(std::move(response));
+    });
+}
+
+auto
+component::execute(
+  operations::management::scope_get_all_request request,
+  utils::movable_function<void(operations::management::scope_get_all_response)>&& handler)
+  -> pending_call
+{
+  const auto client_context_id = request.client_context_id.value_or(std::string{});
+  auto proto = std::make_shared<collection_admin_v1::ListCollectionsRequest>();
+  proto->set_bucket_name(request.bucket_name);
+  const auto timeout = request.timeout.value_or(timeouts_.management);
+  if (timeout <= std::chrono::milliseconds::zero()) {
+    return fail_expired_ctx(io_, handler, stamped_management(request));
+  }
+  const auto auth = authorization_;
+  auto* stub = stubs_->collection_admin.get();
+  return dispatcher_.unary<collection_admin_v1::ListCollectionsResponse>(
+    timeout,
+    [stub, proto, auth](grpc::ClientContext& ctx,
+                        collection_admin_v1::ListCollectionsResponse& resp,
+                        std::function<void(grpc::Status)> cb) {
+      if (!auth.empty()) {
+        ctx.AddMetadata("authorization", auth);
+      }
+      stub->async()->ListCollections(&ctx, proto.get(), &resp, std::move(cb));
+    },
+    [handler = std::move(handler), proto, client_context_id](
+      grpc::Status status, collection_admin_v1::ListCollectionsResponse resp) mutable {
+      (void)proto; // kept only to keep the request alive for the call
+      operations::management::scope_get_all_response response;
+      response.ctx.client_context_id = client_context_id;
+      response.ctx.ec = map_status(status, operation_kind::read_only);
+      if (!response.ctx.ec) {
+        response.manifest = collection_admin::decode_manifest(resp);
+      }
+      handler(std::move(response));
+    });
+}
+
+auto
+component::execute(
+  operations::management::scope_create_request request,
+  utils::movable_function<void(operations::management::scope_create_response)>&& handler)
+  -> pending_call
+{
+  const auto client_context_id = request.client_context_id.value_or(std::string{});
+  auto proto = std::make_shared<collection_admin_v1::CreateScopeRequest>();
+  proto->set_bucket_name(request.bucket_name);
+  proto->set_scope_name(request.scope_name);
+  const auto timeout = request.timeout.value_or(timeouts_.management);
+  if (timeout <= std::chrono::milliseconds::zero()) {
+    return fail_expired_ctx(io_, handler, stamped_management(request));
+  }
+  const auto auth = authorization_;
+  auto* stub = stubs_->collection_admin.get();
+  return dispatcher_.unary<collection_admin_v1::CreateScopeResponse>(
+    timeout,
+    [stub, proto, auth](grpc::ClientContext& ctx,
+                        collection_admin_v1::CreateScopeResponse& resp,
+                        std::function<void(grpc::Status)> cb) {
+      if (!auth.empty()) {
+        ctx.AddMetadata("authorization", auth);
+      }
+      stub->async()->CreateScope(&ctx, proto.get(), &resp, std::move(cb));
+    },
+    [handler = std::move(handler), proto, client_context_id](
+      grpc::Status status, collection_admin_v1::CreateScopeResponse resp) mutable {
+      (void)proto; // kept only to keep the request alive for the call
+      operations::management::scope_create_response response;
+      response.ctx.client_context_id = client_context_id;
+      response.ctx.ec = map_status(status, operation_kind::mutating);
+      response.uid = resp.manifest_uid();
+      handler(std::move(response));
+    });
+}
+
+auto
+component::execute(
+  operations::management::scope_drop_request request,
+  utils::movable_function<void(operations::management::scope_drop_response)>&& handler)
+  -> pending_call
+{
+  const auto client_context_id = request.client_context_id.value_or(std::string{});
+  auto proto = std::make_shared<collection_admin_v1::DeleteScopeRequest>();
+  proto->set_bucket_name(request.bucket_name);
+  proto->set_scope_name(request.scope_name);
+  const auto timeout = request.timeout.value_or(timeouts_.management);
+  if (timeout <= std::chrono::milliseconds::zero()) {
+    return fail_expired_ctx(io_, handler, stamped_management(request));
+  }
+  const auto auth = authorization_;
+  auto* stub = stubs_->collection_admin.get();
+  return dispatcher_.unary<collection_admin_v1::DeleteScopeResponse>(
+    timeout,
+    [stub, proto, auth](grpc::ClientContext& ctx,
+                        collection_admin_v1::DeleteScopeResponse& resp,
+                        std::function<void(grpc::Status)> cb) {
+      if (!auth.empty()) {
+        ctx.AddMetadata("authorization", auth);
+      }
+      stub->async()->DeleteScope(&ctx, proto.get(), &resp, std::move(cb));
+    },
+    [handler = std::move(handler), proto, client_context_id](
+      grpc::Status status, collection_admin_v1::DeleteScopeResponse resp) mutable {
+      (void)proto; // kept only to keep the request alive for the call
+      operations::management::scope_drop_response response;
+      response.ctx.client_context_id = client_context_id;
+      response.ctx.ec = map_status(status, operation_kind::mutating);
+      response.uid = resp.manifest_uid();
+      handler(std::move(response));
+    });
+}
+
+auto
+component::execute(
+  operations::management::collection_create_request request,
+  utils::movable_function<void(operations::management::collection_create_response)>&& handler)
+  -> pending_call
+{
+  const auto client_context_id = request.client_context_id.value_or(std::string{});
+  // -1 is the lowest value the sign carries a meaning for, and the classic path refuses anything
+  // below it before encoding (collection_create.cxx:39-44). encode_max_expiry maps every negative
+  // onto the no-expiry wire form, so without this the same request would be invalid over
+  // couchbase:// and create a never-expiring collection over couchbase2://.
+  if (request.max_expiry.value_or(0) < -1) {
+    auto response = stamped_management(request);
+    response.ctx.ec = errc::common::invalid_argument;
+    asio::post(io_, [handler = std::move(handler), response = std::move(response)]() mutable {
+      handler(std::move(response));
+    });
+    return {};
+  }
+
+  auto proto = std::make_shared<collection_admin_v1::CreateCollectionRequest>();
+  proto->set_bucket_name(request.bucket_name);
+  proto->set_scope_name(request.scope_name);
+  proto->set_collection_name(request.collection_name);
+  // A created collection inherits the bucket default from an unset max_expiry_secs, which is what
+  // a core max_expiry of 0 asks for, so encode_max_expiry declining to produce a value is already
+  // the right wire form here.
+  if (request.max_expiry.has_value()) {
+    if (const auto secs = collection_admin::encode_max_expiry(*request.max_expiry);
+        secs.has_value()) {
+      proto->set_max_expiry_secs(secs.value());
+    }
+  }
+  if (request.history.has_value()) {
+    proto->set_history_retention_enabled(*request.history);
+  }
+  const auto timeout = request.timeout.value_or(timeouts_.management);
+  if (timeout <= std::chrono::milliseconds::zero()) {
+    return fail_expired_ctx(io_, handler, stamped_management(request));
+  }
+  const auto auth = authorization_;
+  auto* stub = stubs_->collection_admin.get();
+  return dispatcher_.unary<collection_admin_v1::CreateCollectionResponse>(
+    timeout,
+    [stub, proto, auth](grpc::ClientContext& ctx,
+                        collection_admin_v1::CreateCollectionResponse& resp,
+                        std::function<void(grpc::Status)> cb) {
+      if (!auth.empty()) {
+        ctx.AddMetadata("authorization", auth);
+      }
+      stub->async()->CreateCollection(&ctx, proto.get(), &resp, std::move(cb));
+    },
+    [handler = std::move(handler), proto, client_context_id](
+      grpc::Status status, collection_admin_v1::CreateCollectionResponse resp) mutable {
+      (void)proto; // kept only to keep the request alive for the call
+      operations::management::collection_create_response response;
+      response.ctx.client_context_id = client_context_id;
+      response.ctx.ec = map_status(status, operation_kind::mutating);
+      response.uid = resp.manifest_uid();
+      handler(std::move(response));
+    });
+}
+
+auto
+component::execute(
+  operations::management::collection_update_request request,
+  utils::movable_function<void(operations::management::collection_update_response)>&& handler)
+  -> pending_call
+{
+  const auto client_context_id = request.client_context_id.value_or(std::string{});
+  // The sentinel translation create does, minus the one value update cannot express, and with the
+  // same lower bound. Below -1 the classic path refuses the request (collection_update.cxx:39-45).
+  // An explicit 0 is the reset to the bucket's own expiry that the classic path sends as maxTTL=0,
+  // and there is no wire form left for it: an explicit 0 already means "no expiry", and an unset
+  // field means "leave the collection as it is" rather than "inherit the bucket default". Refuse
+  // it, because reporting success for a setting the gateway was never asked to apply would leave
+  // the caller's documents expiring on the old policy.
+  if (request.max_expiry.has_value()) {
+    std::error_code refusal{};
+    if (*request.max_expiry < -1) {
+      refusal = errc::common::invalid_argument;
+    } else if (*request.max_expiry == 0) {
+      refusal = errc::common::feature_not_available;
+    }
+    if (refusal) {
+      auto response = stamped_management(request);
+      response.ctx.ec = refusal;
+      // Posted rather than invoked inline, so the completion arrives on the SDK's execution context
+      // after the caller holds its pending_call.
+      asio::post(io_, [handler = std::move(handler), response = std::move(response)]() mutable {
+        handler(std::move(response));
+      });
+      return {};
+    }
+  }
+
+  auto proto = std::make_shared<collection_admin_v1::UpdateCollectionRequest>();
+  proto->set_bucket_name(request.bucket_name);
+  proto->set_scope_name(request.scope_name);
+  proto->set_collection_name(request.collection_name);
+  // Zero is refused above, so what reaches here is a no-expiry sentinel or a positive TTL, and
+  // both of those encode to a value.
+  if (request.max_expiry.has_value()) {
+    if (const auto secs = collection_admin::encode_max_expiry(*request.max_expiry);
+        secs.has_value()) {
+      proto->set_max_expiry_secs(secs.value());
+    }
+  }
+  if (request.history.has_value()) {
+    proto->set_history_retention_enabled(*request.history);
+  }
+  const auto timeout = request.timeout.value_or(timeouts_.management);
+  if (timeout <= std::chrono::milliseconds::zero()) {
+    return fail_expired_ctx(io_, handler, stamped_management(request));
+  }
+  const auto auth = authorization_;
+  auto* stub = stubs_->collection_admin.get();
+  return dispatcher_.unary<collection_admin_v1::UpdateCollectionResponse>(
+    timeout,
+    [stub, proto, auth](grpc::ClientContext& ctx,
+                        collection_admin_v1::UpdateCollectionResponse& resp,
+                        std::function<void(grpc::Status)> cb) {
+      if (!auth.empty()) {
+        ctx.AddMetadata("authorization", auth);
+      }
+      stub->async()->UpdateCollection(&ctx, proto.get(), &resp, std::move(cb));
+    },
+    [handler = std::move(handler), proto, client_context_id](
+      grpc::Status status, collection_admin_v1::UpdateCollectionResponse resp) mutable {
+      (void)proto; // kept only to keep the request alive for the call
+      operations::management::collection_update_response response;
+      response.ctx.client_context_id = client_context_id;
+      response.ctx.ec = map_status(status, operation_kind::mutating);
+      response.uid = resp.manifest_uid();
+      handler(std::move(response));
+    });
+}
+
+auto
+component::execute(
+  operations::management::collection_drop_request request,
+  utils::movable_function<void(operations::management::collection_drop_response)>&& handler)
+  -> pending_call
+{
+  const auto client_context_id = request.client_context_id.value_or(std::string{});
+  auto proto = std::make_shared<collection_admin_v1::DeleteCollectionRequest>();
+  proto->set_bucket_name(request.bucket_name);
+  proto->set_scope_name(request.scope_name);
+  proto->set_collection_name(request.collection_name);
+  const auto timeout = request.timeout.value_or(timeouts_.management);
+  if (timeout <= std::chrono::milliseconds::zero()) {
+    return fail_expired_ctx(io_, handler, stamped_management(request));
+  }
+  const auto auth = authorization_;
+  auto* stub = stubs_->collection_admin.get();
+  return dispatcher_.unary<collection_admin_v1::DeleteCollectionResponse>(
+    timeout,
+    [stub, proto, auth](grpc::ClientContext& ctx,
+                        collection_admin_v1::DeleteCollectionResponse& resp,
+                        std::function<void(grpc::Status)> cb) {
+      if (!auth.empty()) {
+        ctx.AddMetadata("authorization", auth);
+      }
+      stub->async()->DeleteCollection(&ctx, proto.get(), &resp, std::move(cb));
+    },
+    [handler = std::move(handler), proto, client_context_id](
+      grpc::Status status, collection_admin_v1::DeleteCollectionResponse resp) mutable {
+      (void)proto; // kept only to keep the request alive for the call
+      operations::management::collection_drop_response response;
+      response.ctx.client_context_id = client_context_id;
+      response.ctx.ec = map_status(status, operation_kind::mutating);
+      response.uid = resp.manifest_uid();
       handler(std::move(response));
     });
 }

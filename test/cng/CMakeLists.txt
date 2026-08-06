@@ -162,4 +162,9 @@ if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 AND TARGET couchbase_cxx_protostellar)
 
   # Live Bucket management verification (CXXCBC-900).
   add_cng_test(protostellar/live_bucket_admin LINK_CLIENT LIBS couchbase_cxx_protostellar)
+  # Scope & Collection management converter (CXXCBC-900).
+  add_cng_test(protostellar/collection_admin_converter LINK_CLIENT LIBS couchbase_cxx_protostellar)
+
+  # Live Scope & Collection management verification (CXXCBC-900).
+  add_cng_test(protostellar/live_collection_admin LINK_CLIENT LIBS couchbase_cxx_protostellar)
 endif()

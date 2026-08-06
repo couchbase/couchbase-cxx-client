@@ -214,9 +214,9 @@ jobs:
         run: |
           chmod -R +x ./cmake-build-tests
           # --verbose rather than --output-on-failure, which prints nothing for a passing suite.
-          # Several cluster-only cases skip themselves on a condition of the cluster -- no spare
-          # KV quota, too few data servers for a minimum durability level, a service the gateway
-          # does not implement -- and each of those decisions is invisible in a green log without
+          # Several cluster-only cases skip themselves on a condition of the cluster -- too few
+          # data servers for a minimum durability level, a service the gateway does not implement
+          # -- and each of those decisions is invisible in a green log without
           # this. A suite that quietly stops exercising a case still reports 100% passed, which is
           # the failure mode these tests exist to prevent, so the log has to say what ran.
           ctest --test-dir ./cmake-build-tests --verbose --label-regex 'cng' \
