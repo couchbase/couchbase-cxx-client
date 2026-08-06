@@ -93,15 +93,23 @@ namespace
 // deadline at all -- an RPC that runs until the channel breaks, and that cluster::close() then
 // blocks on. Turning "no time left" into "no limit" is the wrong direction for the mistake to go.
 //
-// Nothing is sent, so the operation provably did not reach the server. That makes it an
-// unambiguous timeout for every operation, mutating ones included: the ambiguity that
-// ambiguous_timeout warns about is whether the server applied the write, and here it never saw it.
+// This attempt sends nothing, but that does not make the operation unsent: the retry loop reaches
+// here to end an operation whose earlier attempts were dispatched. The ambiguity ambiguous_timeout
+// warns about is whether the server applied a write, so it is decided by whether anything was ever
+// sent, not by whether this attempt was -- the same rule the MCBP path applies in
+// mcbp_command::cancel(). An idempotent operation is safe to replay either way, and a first attempt
+// (no retries recorded) provably reached nobody.
 template<typename Request, typename Handler>
 auto
 fail_expired(asio::io_context& io, const Request& request, Handler& handler) -> pending_call
 {
+  const auto ec =
+    (request.retries.idempotent() || request.retries.retry_attempts() == 0)
+      ? errc::common::unambiguous_timeout // safe to retry, or never sent to the server
+      : errc::common::ambiguous_timeout;  // non-idempotent and dispatched at least once
   auto response = request.make_response(
-    make_key_value_error_context(errc::common::unambiguous_timeout, request.id),
+    make_key_value_error_context(
+      ec, request.id, request.retries.retry_attempts(), request.retries.retry_reasons()),
     typename Request::encoded_response_type{});
   // Delivered through the io_context, not inline on the caller's thread: "completions arrive on the
   // SDK's execution context" is the contract every other path here honours, and a synchronous
@@ -193,7 +201,7 @@ component::component(asio::io_context& io, component_config config)
 component::~component() = default;
 
 auto
-component::execute(operations::get_request request,
+component::execute(const operations::get_request& request,
                    utils::movable_function<void(operations::get_response)>&& handler)
   -> pending_call
 {
@@ -203,6 +211,8 @@ component::execute(operations::get_request request,
   }
   auto proto = std::make_shared<v1::GetRequest>(kv::encode(request));
   const auto id = request.id;
+  const auto retry_attempts = request.retries.retry_attempts();
+  const auto retry_reasons = request.retries.retry_reasons();
   const auto auth = authorization_;
   auto* stub = stubs_->kv.get();
   return dispatcher_.unary<v1::GetResponse>(
@@ -215,23 +225,27 @@ component::execute(operations::get_request request,
       stub->async()->Get(&ctx, proto.get(), &resp, std::move(cb));
     },
     // `proto` is captured here too so the request outlives the in-flight call.
-    [handler = std::move(handler), id, proto](grpc::Status status, v1::GetResponse resp) mutable {
+    [handler = std::move(handler), id, proto, retry_attempts, retry_reasons](
+      grpc::Status status, v1::GetResponse resp) mutable {
       (void)proto; // kept only to keep the request alive for the call
       // A get reads and nothing more, so a deadline here is unambiguous: the document cannot have
       // changed. kv::decode owns the compressed-content rule (it reports feature_not_available
       // rather than handing back an empty value with a success status).
-      auto ctx = make_error_context(status, id, operation_kind::read_only);
+      auto ctx =
+        make_error_context(status, id, operation_kind::read_only, retry_attempts, retry_reasons);
       handler(kv::decode(resp, std::move(ctx)));
     });
 }
 
 auto
-component::execute(operations::get_projected_request request,
+component::execute(const operations::get_projected_request& request,
                    utils::movable_function<void(operations::get_projected_response)>&& handler)
   -> pending_call
 {
   auto proto = std::make_shared<v1::GetRequest>(kv::encode(request));
   const auto id = request.id;
+  const auto retry_attempts = request.retries.retry_attempts();
+  const auto retry_reasons = request.retries.retry_reasons();
   const auto timeout = request.timeout.value_or(timeouts_.key_value);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
@@ -247,19 +261,21 @@ component::execute(operations::get_projected_request request,
       }
       stub->async()->Get(&ctx, proto.get(), &resp, std::move(cb));
     },
-    [handler = std::move(handler), id, proto, request](grpc::Status status,
-                                                       v1::GetResponse resp) mutable {
+    [handler = std::move(handler), id, proto, request, retry_attempts, retry_reasons](
+      grpc::Status status, v1::GetResponse resp) mutable {
       (void)proto; // kept only to keep the request alive for the call
-      auto ctx = make_error_context(status, id, operation_kind::read_only);
+      auto ctx =
+        make_error_context(status, id, operation_kind::read_only, retry_attempts, retry_reasons);
       if (status.ok() && resp.content_case() == v1::GetResponse::kContentCompressed) {
-        ctx = make_key_value_error_context(errc::common::feature_not_available, id);
+        ctx = make_key_value_error_context(
+          errc::common::feature_not_available, id, retry_attempts, retry_reasons);
       }
       handler(kv::decode(resp, std::move(ctx), request));
     });
 }
 
 auto
-component::execute(operations::upsert_request request,
+component::execute(const operations::upsert_request& request,
                    utils::movable_function<void(operations::upsert_response)>&& handler)
   -> pending_call
 {
@@ -269,6 +285,8 @@ component::execute(operations::upsert_request request,
   }
   auto proto = std::make_shared<v1::UpsertRequest>(kv::encode(request));
   const auto id = request.id;
+  const auto retry_attempts = request.retries.retry_attempts();
+  const auto retry_reasons = request.retries.retry_reasons();
   const auto auth = authorization_;
   auto* stub = stubs_->kv.get();
   return dispatcher_.unary<v1::UpsertResponse>(
@@ -280,16 +298,17 @@ component::execute(operations::upsert_request request,
       }
       stub->async()->Upsert(&ctx, proto.get(), &resp, std::move(cb));
     },
-    [handler = std::move(handler), id, proto](grpc::Status status,
-                                              v1::UpsertResponse resp) mutable {
+    [handler = std::move(handler), id, proto, retry_attempts, retry_reasons](
+      grpc::Status status, v1::UpsertResponse resp) mutable {
       (void)proto; // kept only to keep the request alive for the call
-      auto ctx = make_error_context(status, id, operation_kind::mutating);
+      auto ctx =
+        make_error_context(status, id, operation_kind::mutating, retry_attempts, retry_reasons);
       handler(kv::decode(resp, std::move(ctx)));
     });
 }
 
 auto
-component::execute(operations::insert_request request,
+component::execute(const operations::insert_request& request,
                    utils::movable_function<void(operations::insert_response)>&& handler)
   -> pending_call
 {
@@ -299,6 +318,8 @@ component::execute(operations::insert_request request,
   }
   auto proto = std::make_shared<v1::InsertRequest>(kv::encode(request));
   const auto id = request.id;
+  const auto retry_attempts = request.retries.retry_attempts();
+  const auto retry_reasons = request.retries.retry_reasons();
   const auto auth = authorization_;
   auto* stub = stubs_->kv.get();
   return dispatcher_.unary<v1::InsertResponse>(
@@ -310,16 +331,17 @@ component::execute(operations::insert_request request,
       }
       stub->async()->Insert(&ctx, proto.get(), &resp, std::move(cb));
     },
-    [handler = std::move(handler), id, proto](grpc::Status status,
-                                              v1::InsertResponse resp) mutable {
+    [handler = std::move(handler), id, proto, retry_attempts, retry_reasons](
+      grpc::Status status, v1::InsertResponse resp) mutable {
       (void)proto; // kept only to keep the request alive for the call
-      auto ctx = make_error_context(status, id, operation_kind::mutating);
+      auto ctx =
+        make_error_context(status, id, operation_kind::mutating, retry_attempts, retry_reasons);
       handler(kv::decode(resp, std::move(ctx)));
     });
 }
 
 auto
-component::execute(operations::replace_request request,
+component::execute(const operations::replace_request& request,
                    utils::movable_function<void(operations::replace_response)>&& handler)
   -> pending_call
 {
@@ -329,6 +351,8 @@ component::execute(operations::replace_request request,
   }
   auto proto = std::make_shared<v1::ReplaceRequest>(kv::encode(request));
   const auto id = request.id;
+  const auto retry_attempts = request.retries.retry_attempts();
+  const auto retry_reasons = request.retries.retry_reasons();
   const auto auth = authorization_;
   auto* stub = stubs_->kv.get();
   return dispatcher_.unary<v1::ReplaceResponse>(
@@ -340,16 +364,17 @@ component::execute(operations::replace_request request,
       }
       stub->async()->Replace(&ctx, proto.get(), &resp, std::move(cb));
     },
-    [handler = std::move(handler), id, proto](grpc::Status status,
-                                              v1::ReplaceResponse resp) mutable {
+    [handler = std::move(handler), id, proto, retry_attempts, retry_reasons](
+      grpc::Status status, v1::ReplaceResponse resp) mutable {
       (void)proto; // kept only to keep the request alive for the call
-      auto ctx = make_error_context(status, id, operation_kind::mutating);
+      auto ctx =
+        make_error_context(status, id, operation_kind::mutating, retry_attempts, retry_reasons);
       handler(kv::decode(resp, std::move(ctx)));
     });
 }
 
 auto
-component::execute(operations::remove_request request,
+component::execute(const operations::remove_request& request,
                    utils::movable_function<void(operations::remove_response)>&& handler)
   -> pending_call
 {
@@ -359,6 +384,8 @@ component::execute(operations::remove_request request,
   }
   auto proto = std::make_shared<v1::RemoveRequest>(kv::encode(request));
   const auto id = request.id;
+  const auto retry_attempts = request.retries.retry_attempts();
+  const auto retry_reasons = request.retries.retry_reasons();
   const auto auth = authorization_;
   auto* stub = stubs_->kv.get();
   return dispatcher_.unary<v1::RemoveResponse>(
@@ -370,21 +397,24 @@ component::execute(operations::remove_request request,
       }
       stub->async()->Remove(&ctx, proto.get(), &resp, std::move(cb));
     },
-    [handler = std::move(handler), id, proto](grpc::Status status,
-                                              v1::RemoveResponse resp) mutable {
+    [handler = std::move(handler), id, proto, retry_attempts, retry_reasons](
+      grpc::Status status, v1::RemoveResponse resp) mutable {
       (void)proto; // kept only to keep the request alive for the call
-      auto ctx = make_error_context(status, id, operation_kind::mutating);
+      auto ctx =
+        make_error_context(status, id, operation_kind::mutating, retry_attempts, retry_reasons);
       handler(kv::decode(resp, std::move(ctx)));
     });
 }
 
 auto
-component::execute(operations::touch_request request,
+component::execute(const operations::touch_request& request,
                    utils::movable_function<void(operations::touch_response)>&& handler)
   -> pending_call
 {
   auto proto = std::make_shared<v1::TouchRequest>(kv::encode(request));
   const auto id = request.id;
+  const auto retry_attempts = request.retries.retry_attempts();
+  const auto retry_reasons = request.retries.retry_reasons();
   const auto timeout = request.timeout.value_or(timeouts_.key_value);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
@@ -400,20 +430,24 @@ component::execute(operations::touch_request request,
       }
       stub->async()->Touch(&ctx, proto.get(), &resp, std::move(cb));
     },
-    [handler = std::move(handler), id, proto](grpc::Status status, v1::TouchResponse resp) mutable {
+    [handler = std::move(handler), id, proto, retry_attempts, retry_reasons](
+      grpc::Status status, v1::TouchResponse resp) mutable {
       (void)proto; // kept only to keep the request alive for the call
-      auto ctx = make_error_context(status, id, operation_kind::mutating);
+      auto ctx =
+        make_error_context(status, id, operation_kind::mutating, retry_attempts, retry_reasons);
       handler(kv::decode(resp, std::move(ctx)));
     });
 }
 
 auto
-component::execute(operations::exists_request request,
+component::execute(const operations::exists_request& request,
                    utils::movable_function<void(operations::exists_response)>&& handler)
   -> pending_call
 {
   auto proto = std::make_shared<v1::ExistsRequest>(kv::encode(request));
   const auto id = request.id;
+  const auto retry_attempts = request.retries.retry_attempts();
+  const auto retry_reasons = request.retries.retry_reasons();
   const auto timeout = request.timeout.value_or(timeouts_.key_value);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
@@ -429,21 +463,24 @@ component::execute(operations::exists_request request,
       }
       stub->async()->Exists(&ctx, proto.get(), &resp, std::move(cb));
     },
-    [handler = std::move(handler), id, proto](grpc::Status status,
-                                              v1::ExistsResponse resp) mutable {
+    [handler = std::move(handler), id, proto, retry_attempts, retry_reasons](
+      grpc::Status status, v1::ExistsResponse resp) mutable {
       (void)proto; // kept only to keep the request alive for the call
-      auto ctx = make_error_context(status, id, operation_kind::read_only);
+      auto ctx =
+        make_error_context(status, id, operation_kind::read_only, retry_attempts, retry_reasons);
       handler(kv::decode(resp, std::move(ctx)));
     });
 }
 
 auto
-component::execute(operations::get_and_lock_request request,
+component::execute(const operations::get_and_lock_request& request,
                    utils::movable_function<void(operations::get_and_lock_response)>&& handler)
   -> pending_call
 {
   auto proto = std::make_shared<v1::GetAndLockRequest>(kv::encode(request));
   const auto id = request.id;
+  const auto retry_attempts = request.retries.retry_attempts();
+  const auto retry_reasons = request.retries.retry_reasons();
   const auto timeout = request.timeout.value_or(timeouts_.key_value);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
@@ -460,24 +497,28 @@ component::execute(operations::get_and_lock_request request,
       }
       stub->async()->GetAndLock(&ctx, proto.get(), &resp, std::move(cb));
     },
-    [handler = std::move(handler), id, proto](grpc::Status status,
-                                              v1::GetAndLockResponse resp) mutable {
+    [handler = std::move(handler), id, proto, retry_attempts, retry_reasons](
+      grpc::Status status, v1::GetAndLockResponse resp) mutable {
       (void)proto; // kept only to keep the request alive for the call
-      auto ctx = make_error_context(status, id, operation_kind::mutating);
+      auto ctx =
+        make_error_context(status, id, operation_kind::mutating, retry_attempts, retry_reasons);
       if (status.ok() && resp.content_case() == v1::GetAndLockResponse::kContentCompressed) {
-        ctx = make_key_value_error_context(errc::common::feature_not_available, id);
+        ctx = make_key_value_error_context(
+          errc::common::feature_not_available, id, retry_attempts, retry_reasons);
       }
       handler(kv::decode(resp, std::move(ctx)));
     });
 }
 
 auto
-component::execute(operations::unlock_request request,
+component::execute(const operations::unlock_request& request,
                    utils::movable_function<void(operations::unlock_response)>&& handler)
   -> pending_call
 {
   auto proto = std::make_shared<v1::UnlockRequest>(kv::encode(request));
   const auto id = request.id;
+  const auto retry_attempts = request.retries.retry_attempts();
+  const auto retry_reasons = request.retries.retry_reasons();
   const auto timeout = request.timeout.value_or(timeouts_.key_value);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
@@ -493,21 +534,24 @@ component::execute(operations::unlock_request request,
       }
       stub->async()->Unlock(&ctx, proto.get(), &resp, std::move(cb));
     },
-    [handler = std::move(handler), id, proto](grpc::Status status,
-                                              v1::UnlockResponse resp) mutable {
+    [handler = std::move(handler), id, proto, retry_attempts, retry_reasons](
+      grpc::Status status, v1::UnlockResponse resp) mutable {
       (void)proto; // kept only to keep the request alive for the call
-      auto ctx = make_error_context(status, id, operation_kind::mutating);
+      auto ctx =
+        make_error_context(status, id, operation_kind::mutating, retry_attempts, retry_reasons);
       handler(kv::decode(resp, std::move(ctx)));
     });
 }
 
 auto
-component::execute(operations::get_and_touch_request request,
+component::execute(const operations::get_and_touch_request& request,
                    utils::movable_function<void(operations::get_and_touch_response)>&& handler)
   -> pending_call
 {
   auto proto = std::make_shared<v1::GetAndTouchRequest>(kv::encode(request));
   const auto id = request.id;
+  const auto retry_attempts = request.retries.retry_attempts();
+  const auto retry_reasons = request.retries.retry_reasons();
   const auto timeout = request.timeout.value_or(timeouts_.key_value);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
@@ -524,12 +568,14 @@ component::execute(operations::get_and_touch_request request,
       }
       stub->async()->GetAndTouch(&ctx, proto.get(), &resp, std::move(cb));
     },
-    [handler = std::move(handler), id, proto](grpc::Status status,
-                                              v1::GetAndTouchResponse resp) mutable {
+    [handler = std::move(handler), id, proto, retry_attempts, retry_reasons](
+      grpc::Status status, v1::GetAndTouchResponse resp) mutable {
       (void)proto; // kept only to keep the request alive for the call
-      auto ctx = make_error_context(status, id, operation_kind::mutating);
+      auto ctx =
+        make_error_context(status, id, operation_kind::mutating, retry_attempts, retry_reasons);
       if (status.ok() && resp.content_case() == v1::GetAndTouchResponse::kContentCompressed) {
-        ctx = make_key_value_error_context(errc::common::feature_not_available, id);
+        ctx = make_key_value_error_context(
+          errc::common::feature_not_available, id, retry_attempts, retry_reasons);
       }
       handler(kv::decode(resp, std::move(ctx)));
     });
@@ -570,7 +616,7 @@ fail_invalid_argument(asio::io_context& io, const Request& request, Handler& han
 } // namespace
 
 auto
-component::execute(operations::increment_request request,
+component::execute(const operations::increment_request& request,
                    utils::movable_function<void(operations::increment_response)>&& handler)
   -> pending_call
 {
@@ -579,6 +625,8 @@ component::execute(operations::increment_request request,
   }
   auto proto = std::make_shared<v1::IncrementRequest>(kv::encode(request));
   const auto id = request.id;
+  const auto retry_attempts = request.retries.retry_attempts();
+  const auto retry_reasons = request.retries.retry_reasons();
   const auto timeout = request.timeout.value_or(timeouts_.key_value);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
@@ -594,16 +642,17 @@ component::execute(operations::increment_request request,
       }
       stub->async()->Increment(&ctx, proto.get(), &resp, std::move(cb));
     },
-    [handler = std::move(handler), id, proto](grpc::Status status,
-                                              v1::IncrementResponse resp) mutable {
+    [handler = std::move(handler), id, proto, retry_attempts, retry_reasons](
+      grpc::Status status, v1::IncrementResponse resp) mutable {
       (void)proto; // kept only to keep the request alive for the call
-      auto ctx = make_error_context(status, id, operation_kind::mutating);
+      auto ctx =
+        make_error_context(status, id, operation_kind::mutating, retry_attempts, retry_reasons);
       handler(kv::decode(resp, std::move(ctx)));
     });
 }
 
 auto
-component::execute(operations::decrement_request request,
+component::execute(const operations::decrement_request& request,
                    utils::movable_function<void(operations::decrement_response)>&& handler)
   -> pending_call
 {
@@ -612,6 +661,8 @@ component::execute(operations::decrement_request request,
   }
   auto proto = std::make_shared<v1::DecrementRequest>(kv::encode(request));
   const auto id = request.id;
+  const auto retry_attempts = request.retries.retry_attempts();
+  const auto retry_reasons = request.retries.retry_reasons();
   const auto timeout = request.timeout.value_or(timeouts_.key_value);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
@@ -627,21 +678,24 @@ component::execute(operations::decrement_request request,
       }
       stub->async()->Decrement(&ctx, proto.get(), &resp, std::move(cb));
     },
-    [handler = std::move(handler), id, proto](grpc::Status status,
-                                              v1::DecrementResponse resp) mutable {
+    [handler = std::move(handler), id, proto, retry_attempts, retry_reasons](
+      grpc::Status status, v1::DecrementResponse resp) mutable {
       (void)proto; // kept only to keep the request alive for the call
-      auto ctx = make_error_context(status, id, operation_kind::mutating);
+      auto ctx =
+        make_error_context(status, id, operation_kind::mutating, retry_attempts, retry_reasons);
       handler(kv::decode(resp, std::move(ctx)));
     });
 }
 
 auto
-component::execute(operations::append_request request,
+component::execute(const operations::append_request& request,
                    utils::movable_function<void(operations::append_response)>&& handler)
   -> pending_call
 {
   auto proto = std::make_shared<v1::AppendRequest>(kv::encode(request));
   const auto id = request.id;
+  const auto retry_attempts = request.retries.retry_attempts();
+  const auto retry_reasons = request.retries.retry_reasons();
   const auto timeout = request.timeout.value_or(timeouts_.key_value);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
@@ -657,21 +711,24 @@ component::execute(operations::append_request request,
       }
       stub->async()->Append(&ctx, proto.get(), &resp, std::move(cb));
     },
-    [handler = std::move(handler), id, proto](grpc::Status status,
-                                              v1::AppendResponse resp) mutable {
+    [handler = std::move(handler), id, proto, retry_attempts, retry_reasons](
+      grpc::Status status, v1::AppendResponse resp) mutable {
       (void)proto; // kept only to keep the request alive for the call
-      auto ctx = make_error_context(status, id, operation_kind::mutating);
+      auto ctx =
+        make_error_context(status, id, operation_kind::mutating, retry_attempts, retry_reasons);
       handler(kv::decode(resp, std::move(ctx)));
     });
 }
 
 auto
-component::execute(operations::prepend_request request,
+component::execute(const operations::prepend_request& request,
                    utils::movable_function<void(operations::prepend_response)>&& handler)
   -> pending_call
 {
   auto proto = std::make_shared<v1::PrependRequest>(kv::encode(request));
   const auto id = request.id;
+  const auto retry_attempts = request.retries.retry_attempts();
+  const auto retry_reasons = request.retries.retry_reasons();
   const auto timeout = request.timeout.value_or(timeouts_.key_value);
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
@@ -687,16 +744,17 @@ component::execute(operations::prepend_request request,
       }
       stub->async()->Prepend(&ctx, proto.get(), &resp, std::move(cb));
     },
-    [handler = std::move(handler), id, proto](grpc::Status status,
-                                              v1::PrependResponse resp) mutable {
+    [handler = std::move(handler), id, proto, retry_attempts, retry_reasons](
+      grpc::Status status, v1::PrependResponse resp) mutable {
       (void)proto; // kept only to keep the request alive for the call
-      auto ctx = make_error_context(status, id, operation_kind::mutating);
+      auto ctx =
+        make_error_context(status, id, operation_kind::mutating, retry_attempts, retry_reasons);
       handler(kv::decode(resp, std::move(ctx)));
     });
 }
 
 auto
-component::execute(operations::query_request request,
+component::execute(const operations::query_request& request,
                    utils::movable_function<void(operations::query_response)>&& handler)
   -> pending_call
 {
@@ -800,7 +858,7 @@ component::execute(operations::query_request request,
 }
 
 auto
-component::execute(operations::analytics_request request,
+component::execute(const operations::analytics_request& request,
                    utils::movable_function<void(operations::analytics_response)>&& handler)
   -> pending_call
 {
@@ -901,7 +959,7 @@ component::execute(operations::analytics_request request,
 }
 
 auto
-component::execute(operations::search_request request,
+component::execute(const operations::search_request& request,
                    utils::movable_function<void(operations::search_response)>&& handler)
   -> pending_call
 {
@@ -971,7 +1029,7 @@ component::execute(operations::search_request request,
 }
 
 auto
-component::execute(operations::document_view_request request,
+component::execute(const operations::document_view_request& request,
                    utils::movable_function<void(operations::document_view_response)>&& handler)
   -> pending_call
 {
@@ -1036,7 +1094,7 @@ component::execute(operations::document_view_request request,
 
 auto
 component::execute(
-  operations::management::bucket_get_all_request request,
+  const operations::management::bucket_get_all_request& request,
   utils::movable_function<void(operations::management::bucket_get_all_response)>&& handler)
   -> pending_call
 {
@@ -1073,7 +1131,7 @@ component::execute(
 
 auto
 component::execute(
-  operations::management::bucket_get_request request,
+  const operations::management::bucket_get_request& request,
   utils::movable_function<void(operations::management::bucket_get_response)>&& handler)
   -> pending_call
 {
@@ -1122,7 +1180,7 @@ component::execute(
 
 auto
 component::execute(
-  operations::management::bucket_create_request request,
+  const operations::management::bucket_create_request& request,
   utils::movable_function<void(operations::management::bucket_create_response)>&& handler)
   -> pending_call
 {
@@ -1171,7 +1229,7 @@ component::execute(
 
 auto
 component::execute(
-  operations::management::bucket_update_request request,
+  const operations::management::bucket_update_request& request,
   utils::movable_function<void(operations::management::bucket_update_response)>&& handler)
   -> pending_call
 {
@@ -1209,7 +1267,7 @@ component::execute(
 
 auto
 component::execute(
-  operations::management::bucket_drop_request request,
+  const operations::management::bucket_drop_request& request,
   utils::movable_function<void(operations::management::bucket_drop_response)>&& handler)
   -> pending_call
 {
@@ -1244,7 +1302,7 @@ component::execute(
 
 auto
 component::execute(
-  operations::management::bucket_flush_request request,
+  const operations::management::bucket_flush_request& request,
   utils::movable_function<void(operations::management::bucket_flush_response)>&& handler)
   -> pending_call
 {
@@ -1279,7 +1337,7 @@ component::execute(
 
 auto
 component::execute(
-  operations::management::scope_get_all_request request,
+  const operations::management::scope_get_all_request& request,
   utils::movable_function<void(operations::management::scope_get_all_response)>&& handler)
   -> pending_call
 {
@@ -1317,7 +1375,7 @@ component::execute(
 
 auto
 component::execute(
-  operations::management::scope_create_request request,
+  const operations::management::scope_create_request& request,
   utils::movable_function<void(operations::management::scope_create_response)>&& handler)
   -> pending_call
 {
@@ -1354,7 +1412,7 @@ component::execute(
 
 auto
 component::execute(
-  operations::management::scope_drop_request request,
+  const operations::management::scope_drop_request& request,
   utils::movable_function<void(operations::management::scope_drop_response)>&& handler)
   -> pending_call
 {
@@ -1391,7 +1449,7 @@ component::execute(
 
 auto
 component::execute(
-  operations::management::collection_create_request request,
+  const operations::management::collection_create_request& request,
   utils::movable_function<void(operations::management::collection_create_response)>&& handler)
   -> pending_call
 {
@@ -1454,7 +1512,7 @@ component::execute(
 
 auto
 component::execute(
-  operations::management::collection_update_request request,
+  const operations::management::collection_update_request& request,
   utils::movable_function<void(operations::management::collection_update_response)>&& handler)
   -> pending_call
 {
@@ -1529,7 +1587,7 @@ component::execute(
 
 auto
 component::execute(
-  operations::management::collection_drop_request request,
+  const operations::management::collection_drop_request& request,
   utils::movable_function<void(operations::management::collection_drop_response)>&& handler)
   -> pending_call
 {
@@ -1567,7 +1625,7 @@ component::execute(
 
 auto
 component::execute(
-  operations::management::query_index_get_all_request request,
+  const operations::management::query_index_get_all_request& request,
   utils::movable_function<void(operations::management::query_index_get_all_response)>&& handler)
   -> pending_call
 {
@@ -1605,7 +1663,7 @@ component::execute(
 
 auto
 component::execute(
-  operations::management::query_index_create_request request,
+  const operations::management::query_index_create_request& request,
   utils::movable_function<void(operations::management::query_index_create_response)>&& handler)
   -> pending_call
 {
@@ -1674,7 +1732,7 @@ component::execute(
 
 auto
 component::execute(
-  operations::management::query_index_drop_request request,
+  const operations::management::query_index_drop_request& request,
   utils::movable_function<void(operations::management::query_index_drop_response)>&& handler)
   -> pending_call
 {
@@ -1733,7 +1791,7 @@ component::execute(
 
 auto
 component::execute(
-  operations::management::query_index_build_deferred_request request,
+  const operations::management::query_index_build_deferred_request& request,
   utils::movable_function<void(operations::management::query_index_build_deferred_response)>&&
     handler) -> pending_call
 {
@@ -1768,7 +1826,7 @@ component::execute(
 
 auto
 component::execute(
-  operations::management::search_index_upsert_request request,
+  const operations::management::search_index_upsert_request& request,
   utils::movable_function<void(operations::management::search_index_upsert_response)>&& handler)
   -> pending_call
 {
@@ -1862,7 +1920,7 @@ component::execute(
 
 auto
 component::execute(
-  operations::management::search_index_get_request request,
+  const operations::management::search_index_get_request& request,
   utils::movable_function<void(operations::management::search_index_get_response)>&& handler)
   -> pending_call
 {
@@ -1919,7 +1977,7 @@ component::execute(
 
 auto
 component::execute(
-  operations::management::search_index_get_all_request request,
+  const operations::management::search_index_get_all_request& request,
   utils::movable_function<void(operations::management::search_index_get_all_response)>&& handler)
   -> pending_call
 {
@@ -1971,7 +2029,7 @@ component::execute(
 
 auto
 component::execute(
-  operations::management::search_index_drop_request request,
+  const operations::management::search_index_drop_request& request,
   utils::movable_function<void(operations::management::search_index_drop_response)>&& handler)
   -> pending_call
 {
@@ -2016,7 +2074,7 @@ component::execute(
 
 auto
 component::execute(
-  operations::management::search_index_analyze_document_request request,
+  const operations::management::search_index_analyze_document_request& request,
   utils::movable_function<void(operations::management::search_index_analyze_document_response)>&&
     handler) -> pending_call
 {
@@ -2069,7 +2127,7 @@ component::execute(
 
 auto
 component::execute(
-  operations::management::search_index_get_documents_count_request request,
+  const operations::management::search_index_get_documents_count_request& request,
   utils::movable_function<void(operations::management::search_index_get_documents_count_response)>&&
     handler) -> pending_call
 {
@@ -2112,7 +2170,7 @@ component::execute(
 
 auto
 component::execute(
-  operations::management::search_index_control_ingest_request request,
+  const operations::management::search_index_control_ingest_request& request,
   utils::movable_function<void(operations::management::search_index_control_ingest_response)>&&
     handler) -> pending_call
 {
@@ -2186,7 +2244,7 @@ component::execute(
 
 auto
 component::execute(
-  operations::management::search_index_control_query_request request,
+  const operations::management::search_index_control_query_request& request,
   utils::movable_function<void(operations::management::search_index_control_query_response)>&&
     handler) -> pending_call
 {
@@ -2260,7 +2318,7 @@ component::execute(
 
 auto
 component::execute(
-  operations::management::search_index_control_plan_freeze_request request,
+  const operations::management::search_index_control_plan_freeze_request& request,
   utils::movable_function<void(operations::management::search_index_control_plan_freeze_response)>&&
     handler) -> pending_call
 {

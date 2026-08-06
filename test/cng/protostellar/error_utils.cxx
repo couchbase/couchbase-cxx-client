@@ -270,6 +270,30 @@ make_error_context_maps_code_and_attaches_message()
   assert_false(ok_ctx.extended_error_info().has_value(), "success carries no extended error info");
 }
 
+void
+retry_reason_for_classifies_retryable_errors()
+{
+  // UNAVAILABLE -> temporary_failure is the one transport-level retryable condition.
+  const auto retryable = ps::retry_reason_for(couchbase::errc::common::temporary_failure);
+  assert_true(retryable.has_value() &&
+                retryable.value() == couchbase::retry_reason::service_not_available,
+              "temporary_failure retries as service_not_available");
+
+  // Terminal conditions must not retry.
+  assert_false(ps::retry_reason_for(couchbase::errc::common::ambiguous_timeout).has_value(),
+               "ambiguous timeout is terminal");
+  assert_false(ps::retry_reason_for(couchbase::errc::common::cas_mismatch).has_value(),
+               "cas mismatch is terminal");
+
+  // A locked document retries with the KV_LOCKED reason (RFC 77).
+  const auto locked = ps::retry_reason_for(couchbase::errc::key_value::document_locked);
+  assert_true(locked.has_value() && locked.value() == couchbase::retry_reason::key_value_locked,
+              "document_locked retries as key_value_locked");
+  assert_false(ps::retry_reason_for(couchbase::errc::key_value::document_not_found).has_value(),
+               "not found is terminal");
+  assert_false(ps::retry_reason_for(std::error_code{}).has_value(), "success does not retry");
+}
+
 } // namespace
 
 auto
@@ -290,6 +314,8 @@ tests() -> test_suite
       { "error_message_prefers_rich_details", error_message_prefers_rich_details },
       { "make_error_context_maps_code_and_attaches_message",
         make_error_context_maps_code_and_attaches_message },
+      { "retry_reason_for_classifies_retryable_errors",
+        retry_reason_for_classifies_retryable_errors },
     },
   };
 }
