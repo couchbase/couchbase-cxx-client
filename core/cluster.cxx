@@ -3099,4 +3099,15 @@ cluster::find_bucket_by_name(const std::string& name) const -> std::shared_ptr<b
   return impl_->find_bucket_by_name(name);
 }
 
+auto
+cluster::is_protostellar() const -> bool
+{
+#ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
+  if (impl_) {
+    return impl_->is_protostellar();
+  }
+#endif
+  return false;
+}
+
 } // namespace couchbase::core

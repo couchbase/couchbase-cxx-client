@@ -398,6 +398,17 @@ public:
   {
     auto obs_rec = create_observability_recorder(
       core::tracing::operation::ping, std::nullopt, options.parent_span);
+#ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
+    if (core_.is_protostellar()) {
+      // couchbase2 is a thin gRPC client with no per-service sessions to actively probe, and RFC 77
+      // defines no ping semantics for it. Mirror Java/Go/.NET, which surface ping as
+      // feature_not_available on this protocol, rather than returning a misleading empty report.
+      obs_rec->finish(errc::common::feature_not_available);
+      return handler(error{ errc::common::feature_not_available,
+                            "ping is not supported over the couchbase2 protocol" },
+                     {});
+    }
+#endif
     return core_.ping(
       options.report_id,
       {},
@@ -413,6 +424,16 @@ public:
   {
     auto obs_rec = create_observability_recorder(
       core::tracing::operation::diagnostics, std::nullopt, options.parent_span);
+#ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
+    if (core_.is_protostellar()) {
+      // No per-service sessions exist to report on over couchbase2, and the RFC 77 Diagnostics
+      // section is empty. Mirror Java/Go/.NET (feature_not_available) instead of an empty report.
+      obs_rec->finish(errc::common::feature_not_available);
+      return handler(error{ errc::common::feature_not_available,
+                            "diagnostics is not supported over the couchbase2 protocol" },
+                     {});
+    }
+#endif
     return core_.diagnostics(
       options.report_id,
       [obs_rec = std::move(obs_rec), handler = std::move(handler)](const auto& resp) mutable {

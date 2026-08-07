@@ -367,6 +367,7 @@ public:
   [[nodiscard]] auto cluster_label_listener() const
     -> const std::shared_ptr<cluster_label_listener>&;
   [[nodiscard]] auto find_bucket_by_name(const std::string& name) const -> std::shared_ptr<bucket>;
+  [[nodiscard]] auto is_protostellar() const -> bool;
 
 private:
   std::shared_ptr<cluster_impl> impl_;
