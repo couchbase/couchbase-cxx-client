@@ -120,6 +120,38 @@ else()
 
   FetchContent_MakeAvailable(grpc)
 
+  # Compile all fetched gRPC, Protobuf, Abseil, upb, re2 targets with the project's sanitizer
+  # flags so that all translation units agree on struct layouts, member definitions, and TSan
+  # instrumentation (mirroring commit be6fb44f9 / CXXCBC-917 for couchbase_cxx_protostellar).
+  if(LIST_OF_SANITIZERS AND NOT "${LIST_OF_SANITIZERS}" STREQUAL "")
+    function(couchbase_get_targets_recursively out_var dir)
+      get_property(_targets DIRECTORY "${dir}" PROPERTY BUILDSYSTEM_TARGETS)
+      get_property(_subdirs DIRECTORY "${dir}" PROPERTY SUBDIRECTORIES)
+      foreach(_subdir IN LISTS _subdirs)
+        couchbase_get_targets_recursively(_sub_targets "${_subdir}")
+        list(APPEND _targets ${_sub_targets})
+      endforeach()
+      set(${out_var} "${_targets}" PARENT_SCOPE)
+    endfunction()
+
+    couchbase_get_targets_recursively(_fetched_targets "${grpc_SOURCE_DIR}")
+    foreach(_fetched_target IN LISTS _fetched_targets)
+      get_target_property(_target_type ${_fetched_target} TYPE)
+      if(_target_type STREQUAL "STATIC_LIBRARY"
+         OR _target_type STREQUAL "SHARED_LIBRARY"
+         OR _target_type STREQUAL "OBJECT_LIBRARY"
+         OR _target_type STREQUAL "EXECUTABLE")
+        target_compile_options(${_fetched_target} PRIVATE -fsanitize=${LIST_OF_SANITIZERS})
+        target_link_options(${_fetched_target} PRIVATE -fsanitize=${LIST_OF_SANITIZERS})
+        if("thread" IN_LIST SANITIZERS
+           AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
+           AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "14.0.0")
+          target_compile_options(${_fetched_target} PRIVATE -Wno-error=tsan)
+        endif()
+      endif()
+    endforeach()
+  endif()
+
   # Abseil-cpp bundled with gRPC v1.65.5 has a bug in its randen HWAES compile
   # options on Apple ARM64: CMake's option deduplication strips the second
   # -Xarch_x86_64 prefix, leaving -msse4.1 unscoped, which causes a hard error

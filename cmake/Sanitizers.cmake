@@ -1,78 +1,79 @@
-function(enable_sanitizers project_name)
+# Evaluated at file scope when Sanitizers.cmake is included by top-level CMakeLists.txt.
+# Setting options and computing LIST_OF_SANITIZERS globally (rather than scoped inside
+# enable_sanitizers()) ensures LIST_OF_SANITIZERS and SANITIZERS are available to
+# ThirdPartyDependencies.cmake and FetchContent hooks when configuring bundled dependencies.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES ".*Clang")
+  option(ENABLE_COVERAGE "Enable coverage reporting for gcc/clang" FALSE)
 
-  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES ".*Clang")
-    option(ENABLE_COVERAGE "Enable coverage reporting for gcc/clang" FALSE)
+  set(SANITIZERS "")
 
-    if(ENABLE_COVERAGE)
-      target_compile_options(${project_name} INTERFACE --coverage -O0 -g)
-      target_link_libraries(${project_name} INTERFACE --coverage)
-    endif()
-
-    set(SANITIZERS "")
-
-    option(ENABLE_SANITIZER_ADDRESS "Enable address sanitizer" FALSE)
-    if(ENABLE_SANITIZER_ADDRESS)
-      list(APPEND SANITIZERS "address")
-    endif()
-
-    option(ENABLE_SANITIZER_LEAK "Enable leak sanitizer" FALSE)
-    if(ENABLE_SANITIZER_LEAK)
-      list(APPEND SANITIZERS "leak")
-    endif()
-
-    option(ENABLE_SANITIZER_UNDEFINED_BEHAVIOUR "Enable undefined behaviour sanitizer" FALSE)
-    if(ENABLE_SANITIZER_UNDEFINED_BEHAVIOUR)
-      list(APPEND SANITIZERS "undefined")
-    endif()
-
-    option(ENABLE_SANITIZER_THREAD "Enable thread sanitizer" FALSE)
-    if(ENABLE_SANITIZER_THREAD)
-      if("address" IN_LIST SANITIZERS OR "leak" IN_LIST SANITIZERS)
-        message(WARNING "Thread sanitizer does not work with Address and Leak sanitizer enabled")
-      else()
-        list(APPEND SANITIZERS "thread")
-        # Propagate the suppression file path so that test targets can set TSAN_OPTIONS.
-        set(COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS
-            "${PROJECT_SOURCE_DIR}/.tsan_suppressions"
-            CACHE FILEPATH "Path to TSan suppressions file")
-      endif()
-    endif()
-
-    option(ENABLE_SANITIZER_MEMORY "Enable memory sanitizer" FALSE)
-    if(ENABLE_SANITIZER_MEMORY AND CMAKE_CXX_COMPILER_ID MATCHES ".*Clang")
-      if("address" IN_LIST SANITIZERS
-         OR "thread" IN_LIST SANITIZERS
-         OR "leak" IN_LIST SANITIZERS)
-        message(WARNING "Memory sanitizer does not work with Address, Thread and Leak sanitizer enabled")
-      else()
-        list(APPEND SANITIZERS "memory")
-      endif()
-    endif()
-
-    list(
-      JOIN
-      SANITIZERS
-      ","
-      LIST_OF_SANITIZERS)
-
+  option(ENABLE_SANITIZER_ADDRESS "Enable address sanitizer" FALSE)
+  if(ENABLE_SANITIZER_ADDRESS)
+    list(APPEND SANITIZERS "address")
   endif()
 
-  if(LIST_OF_SANITIZERS)
-    if(NOT
-       "${LIST_OF_SANITIZERS}"
-       STREQUAL
-       "")
-      target_compile_options(${project_name} PUBLIC -fsanitize=${LIST_OF_SANITIZERS})
-      if("thread" IN_LIST SANITIZERS AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "14.0.0")
-        # GCC 14+ emits -Wtsan compile-time warnings for std::atomic_thread_fence (e.g. in Asio headers).
-        # Under -Werror, this breaks compilation. -Wno-error=tsan prevents compile errors while keeping
-        # runtime TSan instrumentation (-fsanitize=thread) fully active to catch actual data races.
-        target_compile_options(${project_name} PUBLIC -Wno-error=tsan)
-      endif()
-      target_link_libraries(${project_name} PUBLIC -fsanitize=${LIST_OF_SANITIZERS})
-      target_compile_definitions(${project_name} PUBLIC COUCHBASE_CXX_CLIENT_BUILD_SANITIZED=1)
-      message(STATUS "Enabled sanitizers: ${LIST_OF_SANITIZERS}")
+  option(ENABLE_SANITIZER_LEAK "Enable leak sanitizer" FALSE)
+  if(ENABLE_SANITIZER_LEAK)
+    list(APPEND SANITIZERS "leak")
+  endif()
+
+  option(ENABLE_SANITIZER_UNDEFINED_BEHAVIOUR "Enable undefined behaviour sanitizer" FALSE)
+  if(ENABLE_SANITIZER_UNDEFINED_BEHAVIOUR)
+    list(APPEND SANITIZERS "undefined")
+  endif()
+
+  option(ENABLE_SANITIZER_THREAD "Enable thread sanitizer" FALSE)
+  if(ENABLE_SANITIZER_THREAD)
+    if("address" IN_LIST SANITIZERS OR "leak" IN_LIST SANITIZERS)
+      message(WARNING "Thread sanitizer does not work with Address and Leak sanitizer enabled")
+    else()
+      list(APPEND SANITIZERS "thread")
+      # Propagate the suppression file path so that test targets can set TSAN_OPTIONS.
+      set(COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS
+          "${PROJECT_SOURCE_DIR}/.tsan_suppressions"
+          CACHE FILEPATH "Path to TSan suppressions file")
     endif()
+  endif()
+
+  option(ENABLE_SANITIZER_MEMORY "Enable memory sanitizer" FALSE)
+  if(ENABLE_SANITIZER_MEMORY AND CMAKE_CXX_COMPILER_ID MATCHES ".*Clang")
+    if("address" IN_LIST SANITIZERS
+       OR "thread" IN_LIST SANITIZERS
+       OR "leak" IN_LIST SANITIZERS)
+      message(WARNING "Memory sanitizer does not work with Address, Thread and Leak sanitizer enabled")
+    else()
+      list(APPEND SANITIZERS "memory")
+    endif()
+  endif()
+
+  list(
+    JOIN
+    SANITIZERS
+    ","
+    LIST_OF_SANITIZERS)
+
+endif()
+
+function(enable_sanitizers project_name)
+
+  if(ENABLE_COVERAGE)
+    target_compile_options(${project_name} INTERFACE --coverage -O0 -g)
+    target_link_libraries(${project_name} INTERFACE --coverage)
+  endif()
+
+  if(LIST_OF_SANITIZERS AND NOT "${LIST_OF_SANITIZERS}" STREQUAL "")
+    target_compile_options(${project_name} PUBLIC -fsanitize=${LIST_OF_SANITIZERS})
+    if("thread" IN_LIST SANITIZERS
+       AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
+       AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "14.0.0")
+      # GCC 14+ emits -Wtsan compile-time warnings for std::atomic_thread_fence (e.g. in Asio headers).
+      # Under -Werror, this breaks compilation. -Wno-error=tsan prevents compile errors while keeping
+      # runtime TSan instrumentation (-fsanitize=thread) fully active to catch actual data races.
+      target_compile_options(${project_name} PUBLIC -Wno-error=tsan)
+    endif()
+    target_link_libraries(${project_name} PUBLIC -fsanitize=${LIST_OF_SANITIZERS})
+    target_compile_definitions(${project_name} PUBLIC COUCHBASE_CXX_CLIENT_BUILD_SANITIZED=1)
+    message(STATUS "Enabled sanitizers: ${LIST_OF_SANITIZERS}")
   endif()
 
 endfunction()
