@@ -66,6 +66,29 @@ search_request::encode_to(search_request::encoded_request_type& encoded,
   if (disable_scoring) {
     body["score"] = "none";
   }
+  if (scoring.has_value()) {
+    switch (scoring.value()) {
+      case couchbase::core::search_scoring_strategy::none:
+        body["score"] = "none";
+        break;
+      case couchbase::core::search_scoring_strategy::reciprocal_rank_fusion:
+        body["score"] = "rrf";
+        break;
+      case couchbase::core::search_scoring_strategy::relative_score_fusion:
+        body["score"] = "rsf";
+        break;
+    }
+    tao::json::value params = tao::json::empty_object;
+    if (score_rank_constant.has_value()) {
+      params["score_rank_constant"] = score_rank_constant.value();
+    }
+    if (score_window_size.has_value()) {
+      params["score_window_size"] = score_window_size.value();
+    }
+    if (!params.get_object().empty()) {
+      body["params"] = params;
+    }
+  }
   if (include_locations) {
     body["includeLocations"] = true;
   }
