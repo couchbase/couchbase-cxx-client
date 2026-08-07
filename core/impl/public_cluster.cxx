@@ -177,6 +177,8 @@ options_to_origin(const std::string& connection_string, cluster_options::built o
   user_options.server_group = opts.network.server_group;
 
   user_options.enable_compression = opts.compression.enabled;
+  user_options.compression_min_size = opts.compression.min_size;
+  user_options.compression_min_ratio = opts.compression.min_ratio;
 
   user_options.enable_metrics = opts.metrics.enabled;
   if (opts.metrics.enabled) {

@@ -1010,8 +1010,10 @@ public:
       const std::scoped_lock lock(protostellar_mutex_);
       protostellar_ = std::make_shared<protostellar::component>(
         ctx_,
-        protostellar::component_config{
-          std::move(channel), origin_.credentials(), make_component_timeouts(options) });
+        protostellar::component_config{ std::move(channel),
+                                        origin_.credentials(),
+                                        make_component_timeouts(options),
+                                        make_compression_settings(options) });
     }
     CB_LOG_INFO(R"(open couchbase2 cluster, id: "{}", endpoint: "{}")", id_, endpoint);
     return handler({});

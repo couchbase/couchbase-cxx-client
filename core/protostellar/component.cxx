@@ -193,6 +193,7 @@ component::component(asio::io_context& io, component_config config)
              search_admin_v1::SearchAdminService::NewStub(config.channel) }) }
   , authorization_{ authorization_header(config.credentials) }
   , timeouts_{ config.timeouts }
+  , compression_{ config.compression }
   // Initialised last (see the declaration order in the header), so the channel can be moved in.
   , dispatcher_{ io, std::move(config.channel) }
 {
@@ -209,7 +210,7 @@ component::execute(const operations::get_request& request,
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }
-  auto proto = std::make_shared<v1::GetRequest>(kv::encode(request));
+  auto proto = std::make_shared<v1::GetRequest>(kv::encode(request, compression_));
   const auto id = request.id;
   const auto retry_attempts = request.retries.retry_attempts();
   const auto retry_reasons = request.retries.retry_reasons();
@@ -229,8 +230,8 @@ component::execute(const operations::get_request& request,
       grpc::Status status, v1::GetResponse resp) mutable {
       (void)proto; // kept only to keep the request alive for the call
       // A get reads and nothing more, so a deadline here is unambiguous: the document cannot have
-      // changed. kv::decode owns the compressed-content rule (it reports feature_not_available
-      // rather than handing back an empty value with a success status).
+      // changed. kv::decode owns the compressed-content rule (it reports the decode failure rather
+      // than handing back an empty value with a success status).
       auto ctx =
         make_error_context(status, id, operation_kind::read_only, retry_attempts, retry_reasons);
       handler(kv::decode(resp, std::move(ctx)));
@@ -242,7 +243,7 @@ component::execute(const operations::get_projected_request& request,
                    utils::movable_function<void(operations::get_projected_response)>&& handler)
   -> pending_call
 {
-  auto proto = std::make_shared<v1::GetRequest>(kv::encode(request));
+  auto proto = std::make_shared<v1::GetRequest>(kv::encode(request, compression_));
   const auto id = request.id;
   const auto retry_attempts = request.retries.retry_attempts();
   const auto retry_reasons = request.retries.retry_reasons();
@@ -266,10 +267,6 @@ component::execute(const operations::get_projected_request& request,
       (void)proto; // kept only to keep the request alive for the call
       auto ctx =
         make_error_context(status, id, operation_kind::read_only, retry_attempts, retry_reasons);
-      if (status.ok() && resp.content_case() == v1::GetResponse::kContentCompressed) {
-        ctx = make_key_value_error_context(
-          errc::common::feature_not_available, id, retry_attempts, retry_reasons);
-      }
       handler(kv::decode(resp, std::move(ctx), request));
     });
 }
@@ -283,7 +280,7 @@ component::execute(const operations::upsert_request& request,
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }
-  auto proto = std::make_shared<v1::UpsertRequest>(kv::encode(request));
+  auto proto = std::make_shared<v1::UpsertRequest>(kv::encode(request, compression_));
   const auto id = request.id;
   const auto retry_attempts = request.retries.retry_attempts();
   const auto retry_reasons = request.retries.retry_reasons();
@@ -316,7 +313,7 @@ component::execute(const operations::insert_request& request,
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }
-  auto proto = std::make_shared<v1::InsertRequest>(kv::encode(request));
+  auto proto = std::make_shared<v1::InsertRequest>(kv::encode(request, compression_));
   const auto id = request.id;
   const auto retry_attempts = request.retries.retry_attempts();
   const auto retry_reasons = request.retries.retry_reasons();
@@ -349,7 +346,7 @@ component::execute(const operations::replace_request& request,
   if (timeout <= std::chrono::milliseconds::zero()) {
     return fail_expired(io_, request, handler);
   }
-  auto proto = std::make_shared<v1::ReplaceRequest>(kv::encode(request));
+  auto proto = std::make_shared<v1::ReplaceRequest>(kv::encode(request, compression_));
   const auto id = request.id;
   const auto retry_attempts = request.retries.retry_attempts();
   const auto retry_reasons = request.retries.retry_reasons();
@@ -477,7 +474,7 @@ component::execute(const operations::get_and_lock_request& request,
                    utils::movable_function<void(operations::get_and_lock_response)>&& handler)
   -> pending_call
 {
-  auto proto = std::make_shared<v1::GetAndLockRequest>(kv::encode(request));
+  auto proto = std::make_shared<v1::GetAndLockRequest>(kv::encode(request, compression_));
   const auto id = request.id;
   const auto retry_attempts = request.retries.retry_attempts();
   const auto retry_reasons = request.retries.retry_reasons();
@@ -502,10 +499,6 @@ component::execute(const operations::get_and_lock_request& request,
       (void)proto; // kept only to keep the request alive for the call
       auto ctx =
         make_error_context(status, id, operation_kind::mutating, retry_attempts, retry_reasons);
-      if (status.ok() && resp.content_case() == v1::GetAndLockResponse::kContentCompressed) {
-        ctx = make_key_value_error_context(
-          errc::common::feature_not_available, id, retry_attempts, retry_reasons);
-      }
       handler(kv::decode(resp, std::move(ctx)));
     });
 }
@@ -548,7 +541,7 @@ component::execute(const operations::get_and_touch_request& request,
                    utils::movable_function<void(operations::get_and_touch_response)>&& handler)
   -> pending_call
 {
-  auto proto = std::make_shared<v1::GetAndTouchRequest>(kv::encode(request));
+  auto proto = std::make_shared<v1::GetAndTouchRequest>(kv::encode(request, compression_));
   const auto id = request.id;
   const auto retry_attempts = request.retries.retry_attempts();
   const auto retry_reasons = request.retries.retry_reasons();
@@ -573,10 +566,6 @@ component::execute(const operations::get_and_touch_request& request,
       (void)proto; // kept only to keep the request alive for the call
       auto ctx =
         make_error_context(status, id, operation_kind::mutating, retry_attempts, retry_reasons);
-      if (status.ok() && resp.content_case() == v1::GetAndTouchResponse::kContentCompressed) {
-        ctx = make_key_value_error_context(
-          errc::common::feature_not_available, id, retry_attempts, retry_reasons);
-      }
       handler(kv::decode(resp, std::move(ctx)));
     });
 }

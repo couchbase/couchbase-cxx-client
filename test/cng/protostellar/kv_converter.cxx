@@ -19,14 +19,18 @@
 
 #include "framework/test_runner.hxx"
 
+#include "core/cluster_options.hxx"
+#include "core/protostellar/dispatcher.hxx"
 #include "core/protostellar/kv_converter.hxx"
 #include "core/utils/binary.hxx"
 
 #include <couchbase/error_codes.hxx>
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <string>
 
 namespace couchbase::cng::test
@@ -51,7 +55,7 @@ get_request_encodes_location()
 {
   ops::get_request request;
   request.id = document_id{ "travel-sample", "inventory", "airline", "airline_10" };
-  const auto proto = pk::encode(request);
+  const auto proto = pk::encode(request, pk::compression_settings{});
   assert_eq(proto.bucket_name(), std::string{ "travel-sample" }, "bucket");
   assert_eq(proto.scope_name(), std::string{ "inventory" }, "scope");
   assert_eq(proto.collection_name(), std::string{ "airline" }, "collection");
@@ -70,24 +74,6 @@ get_response_decodes_value_cas_flags()
   assert_eq(cu::to_string(response.value), std::string{ "{\"type\":\"airline\"}" }, "value");
   assert_eq(response.cas.value(), 0x1234'5678'9abc'def0ULL, "cas");
   assert_eq(response.flags, static_cast<std::uint32_t>(0x0200'0006), "flags");
-}
-
-// GetResponse.content is a oneof, and the accessor for the inactive arm returns the empty-string
-// singleton. Reading content_uncompressed() while the compressed arm is active would yield an empty
-// value with a valid CAS and no error, which no caller can tell apart from an empty document. Until
-// snappy negotiation lands (CXXCBC-905) the decoder has to fail closed.
-void
-get_response_refuses_compressed_content()
-{
-  v1::GetResponse proto;
-  proto.set_content_compressed("not-really-snappy");
-  proto.set_cas(0x1234ULL);
-  proto.set_content_flags(0x0200'0006U);
-
-  const auto response = pk::decode(proto, key_value_error_context{});
-  assert_true(response.ctx.ec() == errc::common::feature_not_available,
-              "the compressed arm is refused rather than decoded as an empty value");
-  assert_true(response.value.empty(), "no partial value is handed back");
 }
 
 // The three branches of set_expiry, plus the exact cutoff. Every expectation below is behaviour
@@ -143,19 +129,19 @@ expiry_encodes_every_branch_explicitly()
     upsert.id = test_id();
     upsert.value = cu::to_binary("v");
     upsert.expiry = expected.expiry;
-    assert_expiry(pk::encode(upsert), expected, "upsert " + label);
+    assert_expiry(pk::encode(upsert, pk::compression_settings{}), expected, "upsert " + label);
 
     ops::insert_request insert;
     insert.id = test_id();
     insert.value = cu::to_binary("v");
     insert.expiry = expected.expiry;
-    assert_expiry(pk::encode(insert), expected, "insert " + label);
+    assert_expiry(pk::encode(insert, pk::compression_settings{}), expected, "insert " + label);
 
     ops::replace_request replace;
     replace.id = test_id();
     replace.value = cu::to_binary("v");
     replace.expiry = expected.expiry;
-    assert_expiry(pk::encode(replace), expected, "replace " + label);
+    assert_expiry(pk::encode(replace, pk::compression_settings{}), expected, "replace " + label);
   }
 }
 
@@ -212,7 +198,8 @@ expiry_encodes_every_branch_for_get_and_touch_and_the_counters()
     ops::get_and_touch_request get_and_touch;
     get_and_touch.id = test_id();
     get_and_touch.expiry = expected.expiry;
-    assert_expiry(pk::encode(get_and_touch), expected, "get_and_touch " + label);
+    assert_expiry(
+      pk::encode(get_and_touch, pk::compression_settings{}), expected, "get_and_touch " + label);
 
     ops::increment_request increment;
     increment.id = test_id();
@@ -236,7 +223,7 @@ preserve_expiry_omits_the_expiry_oneof()
   upsert.value = cu::to_binary("v");
   upsert.expiry = 300U;
   upsert.preserve_expiry = true;
-  const auto upsert_proto = pk::encode(upsert);
+  const auto upsert_proto = pk::encode(upsert, pk::compression_settings{});
   assert_true(upsert_proto.expiry_case() == v1::UpsertRequest::EXPIRY_NOT_SET,
               "upsert expresses preserve by omitting the expiry oneof");
 
@@ -247,14 +234,15 @@ preserve_expiry_omits_the_expiry_oneof()
   replace.value = cu::to_binary("v");
   replace.expiry = 300U;
   replace.preserve_expiry = true;
-  assert_true(pk::encode(replace).expiry_case() == v1::ReplaceRequest::EXPIRY_NOT_SET,
+  assert_true(pk::encode(replace, pk::compression_settings{}).expiry_case() ==
+                v1::ReplaceRequest::EXPIRY_NOT_SET,
               "replace expresses preserve by omitting the expiry oneof");
 
   // ...and with the flag off, a default replace must clear the TTL rather than inherit it.
   ops::replace_request plain;
   plain.id = test_id();
   plain.value = cu::to_binary("v");
-  const auto plain_proto = pk::encode(plain);
+  const auto plain_proto = pk::encode(plain, pk::compression_settings{});
   assert_true(plain_proto.expiry_case() == v1::ReplaceRequest::kExpirySecs,
               "a default replace sends an explicit expiry");
   assert_eq(plain_proto.expiry_secs(), static_cast<std::uint32_t>(0), "...and it is zero");
@@ -280,7 +268,7 @@ upsert_never_emits_a_gateway_rejected_expiry_shape()
       request.value = cu::to_binary("v");
       request.expiry = expected.expiry;
       request.preserve_expiry = preserve;
-      const auto proto = pk::encode(request);
+      const auto proto = pk::encode(request, pk::compression_settings{});
 
       const std::string label = std::string{ "preserve=" } + (preserve ? "true" : "false") +
                                 " expiry=" + std::to_string(expected.expiry);
@@ -322,7 +310,7 @@ upsert_request_encodes_all_fields()
   request.expiry = 300U;
   request.durability_level = couchbase::durability_level::majority;
 
-  const auto proto = pk::encode(request);
+  const auto proto = pk::encode(request, pk::compression_settings{});
   assert_eq(proto.content_uncompressed(), std::string{ "document-body" }, "content");
   assert_eq(proto.content_flags(), static_cast<std::uint32_t>(6), "flags");
   assert_true(proto.expiry_case() == v1::UpsertRequest::kExpirySecs, "expiry uses seconds");
@@ -358,7 +346,7 @@ replace_and_remove_encode_cas()
   replace.id = test_id();
   replace.value = cu::to_binary("v");
   replace.cas = couchbase::cas{ 0x99ULL };
-  const auto replace_proto = pk::encode(replace);
+  const auto replace_proto = pk::encode(replace, pk::compression_settings{});
   assert_true(replace_proto.has_cas(), "replace carries cas");
   assert_eq(replace_proto.cas(), 0x99ULL, "replace cas value");
 
@@ -405,7 +393,7 @@ durability_none_is_left_unset()
   insert.id = test_id();
   insert.value = cu::to_binary("v");
   insert.durability_level = couchbase::durability_level::none;
-  const auto proto = pk::encode(insert);
+  const auto proto = pk::encode(insert, pk::compression_settings{});
   assert_false(proto.has_durability_level(), "insert leaves durability unset for none");
 }
 
@@ -423,7 +411,9 @@ lifecycle_ops_encode_expected_fields()
   ops::get_and_lock_request lock;
   lock.id = document_id{ "b", "s", "c", "k" };
   lock.lock_time = 30U;
-  assert_eq(pk::encode(lock).lock_time_secs(), static_cast<std::uint32_t>(30), "lock time");
+  assert_eq(pk::encode(lock, pk::compression_settings{}).lock_time_secs(),
+            static_cast<std::uint32_t>(30),
+            "lock time");
 
   ops::unlock_request unlock;
   unlock.id = document_id{ "b", "s", "c", "k" };
@@ -487,6 +477,233 @@ append_encodes_content_and_cas()
   assert_eq(proto.cas(), 0x55ULL, "append cas value");
 }
 
+// Every read that can carry a document body opts in, get_projected included: the gateway serves
+// projections from the same Get handler as a full read, so a projected read that stayed silent
+// would be the one path unable to accept a compressed body. gocb, the Java SDK and the .NET SDK all
+// put the projection paths and the compression mode on the same request.
+void
+read_compression_opt_in_follows_settings()
+{
+  ops::get_request get;
+  get.id = test_id();
+  ops::get_projected_request projected;
+  projected.id = test_id();
+  projected.projections = { "foo" };
+  ops::get_and_lock_request lock;
+  lock.id = test_id();
+  ops::get_and_touch_request touch;
+  touch.id = test_id();
+
+  const auto opted_in = [](const auto& proto, const std::string& label) {
+    assert_true(proto.has_compression(), label + ": enabled -> compression field present");
+    assert_true(proto.compression() == v1::COMPRESSION_ENABLED_OPTIONAL,
+                label + ": enabled -> OPTIONAL, never ALWAYS");
+  };
+  const pk::compression_settings enabled{ true };
+  opted_in(pk::encode(get, enabled), "get");
+  opted_in(pk::encode(projected, enabled), "get_projected");
+  opted_in(pk::encode(lock, enabled), "get_and_lock");
+  opted_in(pk::encode(touch, enabled), "get_and_touch");
+
+  const pk::compression_settings disabled{ false };
+  assert_false(pk::encode(get, disabled).has_compression(), "get: disabled -> field unset");
+  assert_false(pk::encode(projected, disabled).has_compression(),
+               "get_projected: disabled -> field unset");
+  assert_false(pk::encode(lock, disabled).has_compression(),
+               "get_and_lock: disabled -> field unset");
+  assert_false(pk::encode(touch, disabled).has_compression(),
+               "get_and_touch: disabled -> field unset");
+}
+
+// The gateway may answer any opted-in read with the compressed arm, so every read decoder has to
+// inflate it. A path that read content_uncompressed directly would hand back the empty-string
+// singleton with a success status.
+void
+every_read_path_decodes_compressed_content()
+{
+  const std::string plain(256, 'x');
+  const auto frame = pk::maybe_compress(cu::to_binary(plain), pk::compression_settings{});
+  assert_true(frame.has_value(), "the fixture value is compressible");
+
+  v1::GetResponse get_proto;
+  get_proto.set_content_compressed(*frame);
+  assert_eq(cu::to_string(pk::decode(get_proto, key_value_error_context{}).value), plain, "get");
+
+  ops::get_projected_request projected;
+  projected.id = test_id();
+  assert_eq(cu::to_string(pk::decode(get_proto, key_value_error_context{}, projected).value),
+            plain,
+            "get_projected");
+
+  v1::GetAndLockResponse lock_proto;
+  lock_proto.set_content_compressed(*frame);
+  assert_eq(
+    cu::to_string(pk::decode(lock_proto, key_value_error_context{}).value), plain, "get_and_lock");
+
+  v1::GetAndTouchResponse touch_proto;
+  touch_proto.set_content_compressed(*frame);
+  assert_eq(cu::to_string(pk::decode(touch_proto, key_value_error_context{}).value),
+            plain,
+            "get_and_touch");
+}
+
+void
+compression_round_trips_large_values()
+{
+  const std::string big(1024, 'a'); // well over min_size and highly compressible
+  ops::upsert_request request;
+  request.id = document_id{ "b", "s", "c", "k" };
+  request.value = cu::to_binary(big);
+
+  const auto compressed = pk::encode(request, pk::compression_settings{ true });
+  assert_true(compressed.content_case() == v1::UpsertRequest::kContentCompressed,
+              "large compressible value is snappy-compressed");
+
+  // A compressed response must snappy-decode back to the original (never empty-as-success).
+  v1::GetResponse response;
+  response.set_content_compressed(compressed.content_compressed());
+  const auto decoded = pk::decode(response, key_value_error_context{});
+  assert_eq(cu::to_string(decoded.value), big, "content_compressed decodes to the original value");
+
+  const auto raw = pk::encode(request, pk::compression_settings{ false });
+  assert_true(raw.content_case() == v1::UpsertRequest::kContentUncompressed,
+              "compression disabled sends raw content");
+}
+
+// A gateway emitting an undecodable snappy frame must not surface as an empty document -- an empty
+// value with a valid CAS is indistinguishable from a real empty one, which is the same silent
+// data-loss trap the unguarded content oneof had before compression landed. decode_content returns
+// nullopt and the decoder reports the server-side fault instead of inventing a value.
+void
+malformed_compressed_content_fails_closed()
+{
+  v1::GetResponse proto;
+  proto.set_content_compressed(std::string(64, '\xff')); // not a snappy frame
+  proto.set_cas(0x1234ULL);
+  proto.set_content_flags(0x0200'0006U);
+
+  const auto response = pk::decode(proto, key_value_error_context{});
+  assert_true(response.ctx.ec() == errc::common::internal_server_failure,
+              "undecodable compressed content is reported rather than silently emptied");
+  assert_true(response.value.empty(), "no invented value is handed back");
+
+  ops::get_projected_request projected;
+  projected.id = test_id();
+  const auto projected_response = pk::decode(proto, key_value_error_context{}, projected);
+  assert_true(projected_response.ctx.ec() == errc::common::internal_server_failure,
+              "a projected read reports it too");
+  assert_true(projected_response.value.empty(), "no invented projected value is handed back");
+}
+
+// snappy sizes its output buffer from the length declared in the frame header before it validates
+// the body, so an inflated length is an allocation request. Nothing larger than the transport's
+// maximum message size can have been carried here, and a std::bad_alloc raised inside a gRPC
+// completion would take the process down rather than fail the operation.
+void
+an_oversized_declared_length_is_refused()
+{
+  std::optional<std::string> frame;
+  {
+    const std::string oversized(couchbase::core::protostellar::max_receive_message_size + 1, 'a');
+    frame = pk::maybe_compress(cu::to_binary(oversized), pk::compression_settings{});
+  }
+  assert_true(frame.has_value(), "the fixture compresses");
+  assert_false(pk::snappy_uncompress(*frame).has_value(),
+               "a frame declaring more than the transport can carry is refused, not inflated");
+
+  v1::GetResponse proto;
+  proto.set_content_compressed(*frame);
+  const auto response = pk::decode(proto, key_value_error_context{});
+  assert_true(response.ctx.ec() == errc::common::internal_server_failure,
+              "the refusal surfaces as an error rather than an empty value");
+}
+
+void
+the_min_size_threshold_admits_a_value_of_exactly_min_size()
+{
+  const pk::compression_settings settings{};
+  const auto compresses = [&settings](std::size_t size) {
+    ops::upsert_request request;
+    request.id = test_id();
+    request.value = cu::to_binary(std::string(size, 'a'));
+    return pk::encode(request, settings).content_case() == v1::UpsertRequest::kContentCompressed;
+  };
+  assert_false(compresses(settings.min_size - 1), "one byte below min_size is sent raw");
+  assert_true(compresses(settings.min_size), "a value of exactly min_size is compressed");
+}
+
+// min_ratio is the largest compressed/original ratio still worth sending, so a value landing
+// exactly on it is compressed. The threshold is derived from the fixture's own compressed size over
+// a power-of-two original, which makes both the division and the comparison exact in binary
+// floating point -- an approximate ratio would not tell the inclusive bound from the exclusive one.
+void
+the_min_ratio_threshold_is_inclusive()
+{
+  const std::string original(1024, 'a');
+  const auto value = cu::to_binary(original);
+  const auto measured = pk::maybe_compress(value, pk::compression_settings{ true, 32, 1.0 });
+  assert_true(measured.has_value(), "the fixture compresses at ratio 1.0");
+  const auto exact_ratio = static_cast<double>(measured->size()) / static_cast<double>(1024);
+
+  assert_true(
+    pk::maybe_compress(value, pk::compression_settings{ true, 32, exact_ratio }).has_value(),
+    "a value landing exactly on min_ratio is compressed");
+  const auto below = static_cast<double>(measured->size() - 1) / static_cast<double>(1024);
+  assert_false(pk::maybe_compress(value, pk::compression_settings{ true, 32, below }).has_value(),
+               "a value that misses min_ratio is sent raw");
+}
+
+// A value can clear min_size and still be worth sending raw. Without the ratio check every
+// incompressible payload would go out larger than it arrived.
+void
+an_incompressible_value_is_sent_uncompressed()
+{
+  // A fixed linear congruential sequence rather than <random>: the bytes have to be the same on
+  // every platform for the ratio the assertion depends on to be the same.
+  std::uint32_t state{ 20260806U };
+  std::string noise;
+  noise.reserve(4096);
+  while (noise.size() < 4096) {
+    state = (state * 1103515245U) + 12345U;
+    noise.push_back(static_cast<char>((state >> 16U) & 0xFFU));
+  }
+
+  ops::upsert_request request;
+  request.id = test_id();
+  request.value = cu::to_binary(noise);
+  const auto proto = pk::encode(request, pk::compression_settings{});
+  assert_true(proto.content_case() == v1::UpsertRequest::kContentUncompressed,
+              "a value snappy cannot shrink past min_ratio is sent raw");
+}
+
+void
+cluster_options_maps_compression_settings()
+{
+  couchbase::core::cluster_options options;
+  options.enable_compression = false;
+  options.compression_min_size = 128;
+  options.compression_min_ratio = 0.5;
+
+  const auto settings = couchbase::core::make_compression_settings(options);
+  assert_false(settings.enabled, "enable_compression mapped");
+  assert_eq(settings.min_size, std::size_t{ 128 }, "min_size mapped");
+  assert_eq(settings.min_ratio, 0.5, "min_ratio mapped");
+}
+
+void
+custom_compression_thresholds_are_honoured()
+{
+  const std::string text(256, 'a');
+  ops::upsert_request request;
+  request.id = test_id();
+  request.value = cu::to_binary(text);
+
+  const pk::compression_settings custom{ true, 512, 0.83 };
+  const auto proto = pk::encode(request, custom);
+  assert_true(proto.content_case() == v1::UpsertRequest::kContentUncompressed,
+              "payload below custom min_size is sent uncompressed");
+}
+
 } // namespace
 
 auto
@@ -497,7 +714,6 @@ tests() -> test_suite
     {
       { "get_request_encodes_location", get_request_encodes_location },
       { "get_response_decodes_value_cas_flags", get_response_decodes_value_cas_flags },
-      { "get_response_refuses_compressed_content", get_response_refuses_compressed_content },
       { "expiry_encodes_every_branch_explicitly", expiry_encodes_every_branch_explicitly },
       { "expiry_encodes_every_branch_for_get_and_touch_and_the_counters",
         expiry_encodes_every_branch_for_get_and_touch_and_the_counters },
@@ -517,6 +733,18 @@ tests() -> test_suite
       { "exists_and_lock_responses_decode", exists_and_lock_responses_decode },
       { "counter_encodes_and_decodes", counter_encodes_and_decodes },
       { "append_encodes_content_and_cas", append_encodes_content_and_cas },
+      { "read_compression_opt_in_follows_settings", read_compression_opt_in_follows_settings },
+      { "every_read_path_decodes_compressed_content", every_read_path_decodes_compressed_content },
+      { "compression_round_trips_large_values", compression_round_trips_large_values },
+      { "the_min_size_threshold_admits_a_value_of_exactly_min_size",
+        the_min_size_threshold_admits_a_value_of_exactly_min_size },
+      { "the_min_ratio_threshold_is_inclusive", the_min_ratio_threshold_is_inclusive },
+      { "an_incompressible_value_is_sent_uncompressed",
+        an_incompressible_value_is_sent_uncompressed },
+      { "malformed_compressed_content_fails_closed", malformed_compressed_content_fails_closed },
+      { "an_oversized_declared_length_is_refused", an_oversized_declared_length_is_refused },
+      { "cluster_options_maps_compression_settings", cluster_options_maps_compression_settings },
+      { "custom_compression_thresholds_are_honoured", custom_compression_thresholds_are_honoured },
     },
   };
 }

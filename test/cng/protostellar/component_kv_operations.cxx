@@ -54,6 +54,8 @@
 #include <google/rpc/error_details.pb.h>
 #include <google/rpc/status.pb.h>
 
+#include <snappy.h>
+
 #include <asio/executor_work_guard.hpp>
 #include <asio/io_context.hpp>
 
@@ -124,6 +126,19 @@ constexpr const char* key_missing_bucket = "missing-bucket";
 constexpr const char* key_missing_scope = "missing-scope";
 constexpr const char* key_missing_collection = "missing-collection";
 
+// What the compressed arm carries. It has to be a real snappy frame: an undecodable one is a
+// server fault and takes the internal_server_failure path, which would not tell us whether
+// decompression works.
+const std::string compressed_plaintext{ "hello_snappy_decompressed_value" };
+
+[[nodiscard]] auto
+snappy_frame() -> std::string
+{
+  std::string compressed;
+  snappy::Compress(compressed_plaintext.data(), compressed_plaintext.size(), &compressed);
+  return compressed;
+}
+
 // Records what each request carried so a case can assert the encoding directly, rather than infer
 // it from a response this same double produced.
 struct recorded_request {
@@ -184,7 +199,7 @@ public:
       return status;
     }
     if (request->key() == std::string{ key_compressed }) {
-      response->set_content_compressed("dummy_compressed_data");
+      response->set_content_compressed(snappy_frame());
       response->set_cas(0xa003ULL);
       return grpc::Status::OK;
     }
@@ -216,7 +231,7 @@ public:
       return status;
     }
     if (request->key() == std::string{ key_compressed }) {
-      response->set_content_compressed("dummy_compressed_data");
+      response->set_content_compressed(snappy_frame());
       response->set_cas(0xa004ULL);
       return grpc::Status::OK;
     }
@@ -609,7 +624,7 @@ get_and_lock_maps_a_locked_document_into_document_locked()
 }
 
 void
-get_and_lock_refuses_compressed_content()
+get_and_lock_decompresses_compressed_content()
 {
   in_process_server server;
   ops::get_and_lock_request request;
@@ -618,12 +633,11 @@ get_and_lock_refuses_compressed_content()
 
   const auto outcome = run(server, std::move(request));
 
-  // The guard has to be keyed on GetAndLockResponse. Copied from get's and left keyed on
-  // GetResponse it would still compile, and compressed content would be handed back as if it were
-  // the document body -- which is why this is checked through a real round trip.
-  assert_true(outcome.ctx.ec() == couchbase::errc::common::feature_not_available,
-              "compressed content is refused rather than returned as the value");
-  assert_true(outcome.value.empty(), "and no body is handed back");
+  // The value has to come back intact: handing back the raw snappy frame, or an empty body, are
+  // the two ways this goes wrong quietly.
+  assert_false(static_cast<bool>(outcome.ctx.ec()),
+               "get_and_lock with compressed content succeeded");
+  assert_eq(cu::to_string(outcome.value), compressed_plaintext, "the body is decompressed");
 }
 
 // --- unlock -------------------------------------------------------------------------------------
@@ -690,7 +704,7 @@ get_and_touch_encodes_the_expiry_and_returns_the_value()
 }
 
 void
-get_and_touch_refuses_compressed_content()
+get_and_touch_decompresses_compressed_content()
 {
   in_process_server server;
   ops::get_and_touch_request request;
@@ -699,9 +713,9 @@ get_and_touch_refuses_compressed_content()
 
   const auto outcome = run(server, std::move(request));
 
-  assert_true(outcome.ctx.ec() == couchbase::errc::common::feature_not_available,
-              "compressed content is refused rather than returned as the value");
-  assert_true(outcome.value.empty(), "and no body is handed back");
+  assert_false(static_cast<bool>(outcome.ctx.ec()),
+               "get_and_touch with compressed content succeeded");
+  assert_eq(cu::to_string(outcome.value), compressed_plaintext, "the body is decompressed");
 }
 
 // --- increment / decrement ----------------------------------------------------------------------
@@ -1436,8 +1450,8 @@ tests() -> test_suite
       { "get_and_lock_maps_a_locked_document_into_document_locked",
         get_and_lock_maps_a_locked_document_into_document_locked,
         timeout::network },
-      { "get_and_lock_refuses_compressed_content",
-        get_and_lock_refuses_compressed_content,
+      { "get_and_lock_decompresses_compressed_content",
+        get_and_lock_decompresses_compressed_content,
         timeout::network },
       { "unlock_sends_the_cas_and_completes",
         unlock_sends_the_cas_and_completes,
@@ -1449,8 +1463,8 @@ tests() -> test_suite
       { "get_and_touch_encodes_the_expiry_and_returns_the_value",
         get_and_touch_encodes_the_expiry_and_returns_the_value,
         timeout::network },
-      { "get_and_touch_refuses_compressed_content",
-        get_and_touch_refuses_compressed_content,
+      { "get_and_touch_decompresses_compressed_content",
+        get_and_touch_decompresses_compressed_content,
         timeout::network },
       { "increment_encodes_the_delta_and_initial_and_returns_the_counter",
         increment_encodes_the_delta_and_initial_and_returns_the_counter,

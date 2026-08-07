@@ -28,6 +28,7 @@
 #include <algorithm>
 #include <chrono>
 #include <condition_variable>
+#include <cstddef>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -38,6 +39,11 @@
 
 namespace couchbase::core::protostellar
 {
+
+// RFC 77 (Bootstrapping -> Maximum Message Size): couchbase2 clients raise the receive limit to
+// 25 MiB, so nothing the transport hands to a converter can legitimately exceed it -- including a
+// value a compressed payload claims to inflate to.
+constexpr std::size_t max_receive_message_size{ std::size_t{ 25 } * 1024 * 1024 };
 
 // Registry of in-flight gRPC calls so the transport can cancel and drain them at shutdown. Without
 // it, teardown could destroy the io_context (and channel) while a gRPC callback is still pending on
