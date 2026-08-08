@@ -15,14 +15,14 @@
  *   limitations under the License.
  */
 
-#include <couchbase/bucket.hxx>
-
 #include "core/cluster.hxx"
 #include "core/tracing/constants.hxx"
 #include "core/tracing/tracer_wrapper.hxx"
 #include "diagnostics.hxx"
 #include "observability_recorder.hxx"
 #include "wait_until_ready.hxx"
+#include <couchbase/bucket.hxx>
+#include <couchbase/build_config.hxx>
 
 #include <couchbase/collection.hxx>
 #include <couchbase/collection_manager.hxx>

@@ -250,6 +250,7 @@ observed_budget_for(Request request) -> std::int64_t
   guard.reset();
   io_thread.join();
   server->Shutdown(std::chrono::system_clock::now());
+  server->Wait();
 
   assert_false(static_cast<bool>(open_ec), "open(couchbase2://) succeeds");
   assert_true(arrived, "the operation completes");

@@ -40,6 +40,8 @@
 #include <atomic>
 #include <chrono>
 #include <cstddef>
+#include <functional>
+#include <future>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -68,6 +70,9 @@ struct service_plan {
   bool send_metadata{ false };          // trailing metadata-only message, as N1QL sends
   bool park_until_cancelled{ false };   // hold the stream open so the client's deadline/cancel wins
   grpc::Status terminal{ grpc::Status::OK };
+  // Signalled after the first message is written, so a case can wait for the stream to be
+  // parked between reads rather than guessing with a sleep.
+  std::function<void()> on_first_write{};
 };
 
 // This tree is C++17, so designated initialisers are out. Named factories rather than positional
@@ -130,6 +135,9 @@ public:
       batch.add_rows("{\"row\":" + std::to_string(i) + "}");
       if (!writer->Write(batch)) {
         return { grpc::StatusCode::CANCELLED, "client went away" };
+      }
+      if (i == 1 && plan_.on_first_write) {
+        plan_.on_first_write();
       }
     }
     if (plan_.send_metadata) {
@@ -695,6 +703,111 @@ streams_launched_from_many_threads_all_complete()
             "every stream launched concurrently completes exactly once");
 }
 
+// A stream parked between reads -- gRPC has delivered a message and is waiting for the io_context
+// to issue the next StartRead -- is the steady state of the backpressure design, and the one state
+// TryCancel alone cannot finish: no read is outstanding to fail, and the read hold defers OnDone.
+// Without a cancel hook that releases that hold, ~dispatcher() waits for an OnDone that cannot
+// fire, so this case fails by timing out rather than by assertion.
+void
+destructor_drains_a_parked_stream()
+{
+  std::promise<void> first_write_promise;
+  auto first_write_future = first_write_promise.get_future();
+
+  auto plan = streams_rows(3);
+  plan.on_first_write = [&first_write_promise]() {
+    first_write_promise.set_value();
+  };
+  in_process_query_server server{ std::move(plan) };
+  const auto channel = server.channel();
+  stream_fixture fixture{ channel };
+  const auto probe = std::make_shared<int>(0);
+
+  {
+    asio::io_context io;
+    dispatcher disp{ io, channel };
+    disp.server_stream<v1::QueryResponse>(
+      timeout::network,
+      fixture.invoker(),
+      [](v1::QueryResponse) {
+      },
+      [probe](grpc::Status) {
+      });
+    // Wait deterministically for gRPC to deliver the first write from the server and park. The
+    // io_context is never run, so nothing issues the next StartRead.
+    const auto write_status = first_write_future.wait_for(10s);
+    assert_true(write_status == std::future_status::ready,
+                "server delivered its first batch to the stream");
+    std::this_thread::sleep_for(10ms);
+  }
+
+  assert_eq(
+    probe.use_count(), long{ 1 }, "the parked reactor is released once the drain completes");
+}
+
+// Releasing the read hold is what permits gRPC to destroy the reader, and it destroys it
+// synchronously inside RemoveHold. The drain returns only after OnDone, which gRPC delivers after
+// that destruction -- so once ~dispatcher() has returned, a queued continuation that still issues
+// StartRead dispatches through a destroyed reader. This parks a continuation between its row and
+// its next read, drains, and only then lets it resume, which is the interleaving
+// streams_launched_from_many_threads_all_complete reaches by chance and this case reaches every
+// run.
+//
+// The consumer runs outside the reactor's lock, which this case also pins: parking inside on_row
+// must not block the drain, so a guard that held the lock across the consumer callback would hang
+// here rather than fail.
+void
+a_row_in_flight_when_the_drain_releases_the_hold_does_not_resume_the_read()
+{
+  std::promise<void> row_delivered_promise;
+  auto row_delivered = row_delivered_promise.get_future();
+  std::promise<void> resume_promise;
+  auto resume = resume_promise.get_future();
+
+  auto plan = streams_rows(1);
+  plan.park_until_cancelled = true;
+  in_process_query_server server{ std::move(plan) };
+  const auto channel = server.channel();
+  stream_fixture fixture{ channel };
+
+  asio::io_context io;
+  auto work = asio::make_work_guard(io);
+  std::thread io_thread{ [&io]() {
+    io.run();
+  } };
+
+  auto rows = 0;
+  auto completions = 0;
+
+  {
+    dispatcher disp{ io, channel };
+    disp.server_stream<v1::QueryResponse>(
+      timeout::network,
+      fixture.invoker(),
+      [&](v1::QueryResponse) {
+        if (++rows == 1) {
+          row_delivered_promise.set_value();
+          // Bounded rather than indefinite: a regression that never releases this parks the io
+          // thread, and a case that fails is worth more than one that hangs.
+          resume.wait_for(park_giveup);
+        }
+      },
+      [&completions](grpc::Status) {
+        ++completions;
+      });
+    const auto delivered = row_delivered.wait_for(park_giveup);
+    resume_promise.set_value();
+    assert_true(delivered == std::future_status::ready, "the first row reached the consumer");
+    // ~dispatcher() cancels and drains here when disp leaves scope
+  }
+
+  work.reset();
+  io_thread.join();
+
+  assert_eq(rows, 1, "the row delivered before the drain is not lost");
+  assert_eq(completions, 1, "the stream completes exactly once after the parked read is abandoned");
+}
+
 } // namespace
 
 auto
@@ -728,6 +841,10 @@ tests() -> test_suite
         timeout::network },
       { "an_invoker_that_throws_leaves_nothing_registered",
         an_invoker_that_throws_leaves_nothing_registered,
+        timeout::network },
+      { "destructor_drains_a_parked_stream", destructor_drains_a_parked_stream, timeout::network },
+      { "a_row_in_flight_when_the_drain_releases_the_hold_does_not_resume_the_read",
+        a_row_in_flight_when_the_drain_releases_the_hold_does_not_resume_the_read,
         timeout::network },
       { "concurrent_streams_are_all_drained_by_the_destructor",
         concurrent_streams_are_all_drained_by_the_destructor,
