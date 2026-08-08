@@ -340,11 +340,13 @@ can_encode_rejects_unsupported_features()
   without_replica.use_replica = false;
   assert_true(pq::can_encode(without_replica), "use_replica=false is not a rejection");
 
+  // Wired as of CXXCBC-910: rows are handed to the callback as they arrive rather than buffered,
+  // so this is no longer a reason to refuse the request.
   ops::query_request with_row_callback = base;
   with_row_callback.row_callback = [](std::string) {
     return couchbase::core::utils::json::stream_control::next_row;
   };
-  assert_false(pq::can_encode(with_row_callback), "the streaming row callback is not wired");
+  assert_true(pq::can_encode(with_row_callback), "the streaming row callback is wired");
 
   // There is no proto field for node targeting and the gateway routes on its own, so honouring
   // the request is impossible; couchbase-jvm-clients raises the same refusal.

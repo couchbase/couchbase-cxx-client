@@ -19,11 +19,12 @@
 
 // Translates the core analytics request/response to and from the couchbase.analytics.v1 protobuf
 // messages, mirroring query_converter. Rows arrive across streamed AnalyticsQueryResponse messages
-// and are buffered into analytics_response::rows; the terminal message carries the metadata.
+// and are buffered into analytics_response::rows when no callback is provided, or delivered
+// incrementally to row_callback when present; the terminal message carries the metadata.
 //
 // Features with no couchbase2 equivalent are reported by can_encode() so the component can surface
-// feature_not_available rather than silently dropping them: the `raw` passthrough map, the
-// streaming row_callback (only the buffered result path is wired), and scoped analytics.
+// feature_not_available rather than silently dropping them: the `raw` passthrough map and scoped
+// analytics.
 //
 // Scoped analytics is refused because the schema cannot express it, not merely because it is
 // unimplemented. AnalyticsQueryRequest at the pinned protostellar revision retired the field the
@@ -55,9 +56,8 @@ namespace v1 = ::couchbase::analytics::v1;
 [[nodiscard]] inline auto
 can_encode(const operations::analytics_request& request) -> bool
 {
-  return request.raw.empty() && !request.row_callback.has_value() &&
-         !request.bucket_name.has_value() && !request.scope_name.has_value() &&
-         !request.scope_qualifier.has_value();
+  return request.raw.empty() && !request.bucket_name.has_value() &&
+         !request.scope_name.has_value() && !request.scope_qualifier.has_value();
 }
 
 inline auto

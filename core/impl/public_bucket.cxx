@@ -16,6 +16,7 @@
  */
 
 #include <couchbase/bucket.hxx>
+#include <couchbase/build_config.hxx>
 
 #include "core/cluster.hxx"
 #include "core/tracing/constants.hxx"
