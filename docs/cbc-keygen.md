@@ -24,6 +24,7 @@ You can also set the number of vbuckets with the `--number-of-vbuckets` switch.
 
 ### OPTIONS
 
+<dl>
 <dt>`-h,--help`</dt><dd>Print this help message and exit</dd>
 <dt>`--number-of-keys=INTEGER`</dt><dd>How many keys to generate. [default: `1`]</dd>
 <dt>`--fixed-length=INTEGER`</dt><dd>The length of the key to generate. [default: `6`]</dd>

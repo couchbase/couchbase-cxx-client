@@ -52,7 +52,6 @@ Perform Analytics query. See [cbc-analytics](#cbc-analytics) for more informatio
 <dd>
 Run simple workload generator. See [cbc-pillowfight](#cbc-pillowfight) for more information.
 </dd>
-</dl>
 
 <dt>keygen</dt>
 <dd>
@@ -63,6 +62,7 @@ Generate batches of keys with specific properties. See [cbc-keygen](#cbc-keygen)
 <dd>
 Retrieve cluster configuration. See [cbc-config](#cbc-config) for more information.
 </dd>
+</dl>
 
 ### OPTIONS
 

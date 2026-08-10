@@ -19,7 +19,7 @@
 
 /**
  * @page cli Command Line Tools
- * @brief Indexes of the API grouped by stability.
+ * @brief The command line tools shipped with the library.
  *
  * @subpage cbc
  *

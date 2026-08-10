@@ -1,4 +1,4 @@
-# cbc-config - Fetch Cluster Configuration
+# cbc-config - Fetch Cluster Configuration {#cbc-config}
 
 ### NAME
 
@@ -15,6 +15,7 @@ This tool retrieves configuration of the cluster in JSON format.
 
 ### OPTIONS
 
+<dl>
 <dt>`-h,--help`</dt><dd>Print this help message and exit</dd>
 <dt>`--pretty-json`</dt><dd>Try to pretty-print as JSON value (prints AS-IS if the document is not a JSON).</dd>
 <dt>`--level=LEVEL`</dt><dd>Level of the config. Allowed values are: `bucket`, `cluster`. (`--bucket-name` is required for `bucket`).</dd>

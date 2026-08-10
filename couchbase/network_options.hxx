@@ -38,7 +38,7 @@ public:
   /**
    * Selects network to use.
    *
-   * @param name network name as it is exposed in the configuration.
+   * @param network_name network name as it is exposed in the configuration.
    * @return this object for chaining purposes.
    *
    * @see

@@ -56,6 +56,7 @@ public:
    * @param cas
    * @param value raw document contents along with flags describing its structure
    * @param expiry_time optional point in time when the document will expire
+   * @param crypto_manager manager handed to the transcoder to decrypt encrypted fields
    *
    * @since 1.0.0
    * @committed
