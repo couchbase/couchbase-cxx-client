@@ -733,8 +733,12 @@ destructor_drains_a_parked_stream()
       },
       [probe](grpc::Status) {
       });
-    // Wait deterministically for gRPC to deliver the first write from the server and park. The
-    // io_context is never run, so nothing issues the next StartRead.
+    // The future pins the write: the server has delivered its first batch. The park that follows
+    // it is not pinned -- the sleep only gives gRPC time to reach it, and a slow machine could
+    // still drain before the reactor parks. The deterministic cover for the parked state is
+    // a_row_in_flight_when_the_drain_releases_the_hold_does_not_resume_the_read, which holds the
+    // consumer inside on_row until after the drain. The io_context is never run here, so nothing
+    // issues the next StartRead.
     const auto write_status = first_write_future.wait_for(10s);
     assert_true(write_status == std::future_status::ready,
                 "server delivered its first batch to the stream");
@@ -779,6 +783,11 @@ a_row_in_flight_when_the_drain_releases_the_hold_does_not_resume_the_read()
   auto rows = 0;
   auto completions = 0;
 
+  // Every assertion runs after join(), not inside the scope. assert_true throws, so an assertion
+  // here would skip resume_promise.set_value(), work.reset() and io_thread.join(), and destroying
+  // a joinable std::thread terminates the process instead of reporting a failed case.
+  auto delivered = std::future_status::timeout;
+
   {
     dispatcher disp{ io, channel };
     disp.server_stream<v1::QueryResponse>(
@@ -795,15 +804,17 @@ a_row_in_flight_when_the_drain_releases_the_hold_does_not_resume_the_read()
       [&completions](grpc::Status) {
         ++completions;
       });
-    const auto delivered = row_delivered.wait_for(park_giveup);
-    assert_true(delivered == std::future_status::ready, "the first row reached the consumer");
+    delivered = row_delivered.wait_for(park_giveup);
     // ~dispatcher() cancels and drains here, with the continuation still parked before its read.
+    // The park is released only after the scope closes, so the drain provably observes the parked
+    // state rather than racing the io thread's next StartRead.
   }
   resume_promise.set_value();
 
   work.reset();
   io_thread.join();
 
+  assert_true(delivered == std::future_status::ready, "the first row reached the consumer");
   assert_eq(rows, 1, "the row delivered before the drain is not lost");
   assert_eq(completions, 1, "the stream completes exactly once after the parked read is abandoned");
 }

@@ -837,9 +837,10 @@ public:
 #ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
     if (auto component = protostellar_component(); component) {
       if constexpr (component_routes<Request>::value) {
-        // Query/analytics/search/view/management requests do not carry a retry_context, so they
-        // dispatch directly; transport-level retry applies to the KV path (which does).
-        component->execute(request, std::forward<Handler>(handler));
+        // Query/analytics/search/view/management requests carry no retry_context on the request, so
+        // execute_protostellar_http supplies the retry state and re-dispatches a retryable
+        // (service_not_available) response under the same overall-deadline bound as the KV path.
+        execute_protostellar_http(std::move(request), std::forward<Handler>(handler));
         return;
       } else {
         // Remaining management ops over couchbase2 are not wired yet. Reject cleanly rather than
@@ -1033,13 +1034,19 @@ public:
   }
 #endif
 
-  // True once the cluster has been opened with a couchbase2:// connection string. Compound /
+  // True when the cluster was configured with a couchbase2:// connection string -- a property of
+  // the origin, so it holds from construction and stays true after close(). Compound /
   // self-dispatching operations (replica reads, legacy durability) check this to reject cleanly
   // instead of falling through to the MCBP bootstrap path, which does not exist on couchbase2.
+  //
+  // It answers "which transport was configured", never "is the transport usable". Most callers want
+  // exactly the former and reject with feature_not_available, which is a capability statement and
+  // is correct whether the cluster is open or closed. The callers that do need liveness test
+  // stopped_ themselves, or route into a dispatch that re-reads the component under the lock.
   [[nodiscard]] auto is_protostellar() const -> bool
   {
 #ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
-    return protostellar_component() != nullptr;
+    return origin_.uses_protostellar();
 #else
     return false;
 #endif
@@ -1148,11 +1155,15 @@ public:
                                    response = std::move(response),
                                    timer](const std::error_code& timer_ec) mutable {
                   if (timer_ec) {
-                    // timer cancelled (e.g. cluster closed): deliver the last retryable response
-                    // rather than dropping the caller's completion, which would hang it.
+                    // Timer cancelled: deliver the last retryable response rather than dropping
+                    // the caller's completion, which would hang it.
                     handler(std::move(response));
                     return;
                   }
+                  // A cluster closed during the backoff is answered by dispatch_protostellar,
+                  // which re-reads the component under the lock and reports cluster_closed. The
+                  // last retryable response would instead report a temporary failure, which reads
+                  // as "retry later" for a cluster that is gone.
                   self->dispatch_protostellar(std::move(request), std::move(handler), deadline);
                 });
                 return;
@@ -1160,6 +1171,122 @@ public:
             }
           }
         }
+        handler(std::move(response));
+      });
+  }
+
+  template<typename Request>
+  static auto timeout_for(const protostellar::component_timeouts& timeouts)
+    -> std::chrono::milliseconds
+  {
+    if constexpr (std::is_same_v<Request, operations::query_request>) {
+      return timeouts.query;
+    } else if constexpr (std::is_same_v<Request, operations::analytics_request>) {
+      return timeouts.analytics;
+    } else if constexpr (std::is_same_v<Request, operations::search_request>) {
+      return timeouts.search;
+    } else if constexpr (std::is_same_v<Request, operations::document_view_request>) {
+      return timeouts.view;
+    } else {
+      return timeouts.management;
+    }
+  }
+
+  // Retry for non-KV couchbase2 operations (query/analytics/search/view/management). These
+  // HTTP-shaped requests carry no retry_context, so the retry state lives here: a heap
+  // retry_context threaded across re-dispatches, mutated in place so the strategy sees the
+  // accumulated attempts. In practice only service_not_available (a transport UNAVAILABLE -- the
+  // call never reached a server) arises on this path: retry_reason_for is shared with the KV path
+  // and can also report key_value_locked, which no query/analytics/search/view/management response
+  // produces. The strategy permits service_not_available for non-idempotent ops too, so the fixed
+  // retry_context<false> idempotency is not load-bearing. The strategy is the origin
+  // default (these requests have no per-request override). Like the KV path, retries are bounded by
+  // the strategy and by an overall deadline stamped before the first attempt: the request's own
+  // timeout when it carries one, the per-service default otherwise. Every attempt is therefore
+  // bounded, including the first.
+  //
+  // This overload stamps that deadline; the one below carries it. Taking a plain time_point rather
+  // than an optional keeps "no deadline yet" unrepresentable once the loop has started.
+  template<class Request, class Handler>
+  void execute_protostellar_http(Request request, Handler&& handler)
+  {
+    const auto default_timeout = timeout_for<Request>(make_component_timeouts(origin_.options()));
+    const auto deadline =
+      std::chrono::steady_clock::now() + request.timeout.value_or(default_timeout);
+    execute_protostellar_http(
+      std::move(request),
+      std::forward<Handler>(handler),
+      std::make_shared<io::retry_context<false>>(origin_.options().default_retry_strategy_),
+      deadline);
+  }
+
+  template<class Request, class Handler>
+  void execute_protostellar_http(Request request,
+                                 Handler&& handler,
+                                 std::shared_ptr<io::retry_context<false>> retries,
+                                 std::chrono::steady_clock::time_point deadline)
+  {
+    // Re-read through the locked accessor on every attempt: a retry re-enters this
+    // function from a timer, long after the caller checked.
+    auto component = protostellar_component();
+    if (!component) {
+      auto response = request.make_response({ errc::network::cluster_closed },
+                                            typename Request::encoded_response_type{});
+      // A cluster closed mid-backoff reaches here with attempts already behind it, and dropping
+      // them would report the operation as never retried.
+      response.ctx.retry_attempts = retries->retry_attempts();
+      response.ctx.retry_reasons = retries->retry_reasons();
+      return handler(std::move(response));
+    }
+
+    auto request_ptr = std::make_shared<Request>(std::move(request));
+    component->execute(
+      *request_ptr,
+      [self = shared_from_this(),
+       request_ptr,
+       handler = std::forward<Handler>(handler),
+       retries,
+       deadline](auto response) mutable {
+        if (!self->stopped_ && retries->strategy()) {
+          if (auto reason = protostellar::retry_reason_for(protostellar_response_ec(response.ctx));
+              reason.has_value()) {
+            const auto action = retries->strategy()->retry_after(*retries, reason.value());
+            const auto when =
+              std::min(std::chrono::steady_clock::now() + action.duration(), deadline);
+            if (action.need_to_retry()) {
+              retries->record_retry_attempt(reason.value());
+              auto timer = std::make_shared<asio::steady_timer>(self->ctx_);
+              timer->expires_at(when);
+              timer->async_wait([self,
+                                 request_ptr = std::move(request_ptr),
+                                 handler = std::move(handler),
+                                 retries,
+                                 deadline,
+                                 response = std::move(response),
+                                 timer](const std::error_code& timer_ec) mutable {
+                if (timer_ec) {
+                  // Timer cancelled: deliver the last response rather than dropping the caller's
+                  // completion, which would hang it.
+                  response.ctx.retry_attempts = retries->retry_attempts();
+                  response.ctx.retry_reasons = retries->retry_reasons();
+                  handler(std::move(response));
+                  return;
+                }
+                // A cluster closed during the backoff is answered by the re-entry below, which
+                // re-reads the component under the lock and reports cluster_closed -- the same
+                // answer a caller gets when the cluster is already closed on arrival.
+                auto next_request = *request_ptr;
+                next_request.timeout = std::chrono::duration_cast<std::chrono::milliseconds>(
+                  deadline - std::chrono::steady_clock::now());
+                self->execute_protostellar_http(
+                  std::move(next_request), std::move(handler), retries, deadline);
+              });
+              return;
+            }
+          }
+        }
+        response.ctx.retry_attempts = retries->retry_attempts();
+        response.ctx.retry_reasons = retries->retry_reasons();
         handler(std::move(response));
       });
   }
@@ -1475,7 +1602,7 @@ public:
     if (!report_id) {
       report_id = std::make_optional(uuid::to_string(uuid::random()));
     }
-    if (stopped_) {
+    if (stopped_ || is_protostellar()) {
       return handler({ report_id.value(), meta::sdk_id() });
     }
     if (services.empty()) {
@@ -1547,7 +1674,7 @@ public:
     if (!report_id) {
       report_id = std::make_optional(uuid::to_string(uuid::random()));
     }
-    if (stopped_) {
+    if (stopped_ || is_protostellar()) {
       return handler({ report_id.value(), couchbase::core::meta::sdk_id() });
     }
     asio::post(asio::bind_executor(
