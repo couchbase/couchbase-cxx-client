@@ -601,6 +601,13 @@ public:
     // Spawn new thread to avoid joining IO thread from the same thread
     std::thread([self = shared_from_this(), handler = std::move(handler)]() mutable {
       self->do_close();
+      // Drop the reference before signalling completion, not after. handler() is what releases
+      // the caller's wait, so anything this thread still owns afterwards outlives that wait. When
+      // this is the last reference, releasing it later means ~cluster_impl -- which starts another
+      // thread and joins the IO thread -- runs unsynchronised with the caller, and a caller that
+      // returns from main() leaves those threads running while static destructors tear down the
+      // gRPC and abseil singletons underneath them.
+      self.reset();
       handler();
     }).detach();
   }
