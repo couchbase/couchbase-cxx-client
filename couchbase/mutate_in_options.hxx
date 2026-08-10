@@ -80,8 +80,8 @@ struct mutate_in_options : public common_durability_options<mutate_in_options> {
    *
    * If true, and the document exists, its expiry will not be modified. Otherwise the document's
    * expiry is determined by
-   * {@link #expiry(std::chrono::seconds)} or {@link
-   * #expiry(std::chrono::system_clock::time_point)}.
+   * {@link #expiry expiry(std::chrono::seconds)} or {@link #expiry
+   * expiry(std::chrono::system_clock::time_point)}.
    *
    * Requires Couchbase Server 7.0 or later.
    *
@@ -101,7 +101,7 @@ struct mutate_in_options : public common_durability_options<mutate_in_options> {
    * Sets the expiry for the document. By default the document will never expire.
    *
    * The duration must be less than 50 years. For expiry further in the future, use
-   * {@link #expiry(std::chrono::system_clock::time_point)}.
+   * {@link #expiry expiry(std::chrono::system_clock::time_point)}.
    *
    * @param duration the duration after which the document will expire (zero duration means never
    * expire).

@@ -53,8 +53,8 @@ public:
   /**
    * Allows to customize the enhanced durability requirements for this operation.
    *
-   * @note if a {@link #durability(persist_to, replicate_to)} has been set beforehand it will be set
-   * back to {@link persist_to::none} and
+   * @note if a {@link #durability durability(persist_to, replicate_to)} has been set beforehand it
+   * will be set back to {@link persist_to::none} and
    * {@link replicate_to::none}, since it is not allowed to use both mechanisms at the same
    * time.</p>
    *
@@ -75,7 +75,8 @@ public:
   /**
    * Allows to customize the poll-based durability requirements for this operation.
    *
-   * @note if a {@link #durability(durability_level)} has been set beforehand it will be set back to
+   * @note if a {@link #durability durability(durability_level)} has been set beforehand it will be
+   * set back to
    * {@link durability_level::none}, since it is not allowed to use both mechanisms at the same
    * time.
    *

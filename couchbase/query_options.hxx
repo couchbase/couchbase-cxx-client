@@ -137,8 +137,9 @@ struct query_options : public common_options<query_options> {
    *
    * If this method is set to true, the server will send metrics back to the client which are
    * available through the
-   * {@link query_meta_data#metrics()} section. As opposed to {@link #profile(query_profile)},
-   * returning metrics is rather cheap and can also be enabled in production if needed.
+   * {@link query_meta_data#metrics()} section. As opposed to {@link #profile
+   * profile(query_profile)}, returning metrics is rather cheap and can also be enabled in
+   * production if needed.
    *
    * @param metrics set to true if the server should return simple query metrics.
    * @return this options builder for chaining purposes.
@@ -385,10 +386,11 @@ struct query_options : public common_options<query_options> {
    * mutations. If you want to include all the mutations up to the point of the query, use {@link
    * query_scan_consistency::request_plus}.
    *
-   * Note that you cannot use this method and {@link #consistent_with(const mutation_state&)} at the
-   * same time, since they are mutually exclusive. As a rule of thumb, if you only care to be
-   * consistent with the mutation you just wrote on the same thread/app, use
-   * {@link #consistent_with(const mutation_state&)}. If you need "global" scan consistency, use
+   * Note that you cannot use this method and {@link #consistent_with consistent_with(const
+   * mutation_state&)} at the same time, since they are mutually exclusive. As a rule of thumb, if
+   * you only care to be consistent with the mutation you just wrote on the same thread/app, use
+   * {@link #consistent_with consistent_with(const mutation_state&)}. If you need "global" scan
+   * consistency, use
    * {@link query_scan_consistency::request_plus} on this method.
    *
    * @param scan_consistency the index scan consistency to be used for this query
@@ -411,12 +413,12 @@ struct query_options : public common_options<query_options> {
    * and if you want your N1QL query to include those you need to pass the mutation tokens into a
    * {@link mutation_state}.
    *
-   * Note that you cannot use this method and {@link #scan_consistency(query_scan_consistency)} at
-   * the same time, since they are mutually exclusive. As a rule of thumb, if you only care to be
-   * consistent with the mutation you just wrote on the same thread/app, use this method. If you
-   * need "global" scan consistency, use
-   * {@link query_scan_consistency#request_plus} on {@link
-   * #scan_consistency(query_scan_consistency)}.
+   * Note that you cannot use this method and {@link #scan_consistency
+   * scan_consistency(query_scan_consistency)} at the same time, since they are mutually exclusive.
+   * As a rule of thumb, if you only care to be consistent with the mutation you just wrote on the
+   * same thread/app, use this method. If you need "global" scan consistency, use
+   * {@link query_scan_consistency#request_plus} on {@link #scan_consistency
+   * scan_consistency(query_scan_consistency)}.
    *
    * @param state the mutation state containing the mutation tokens.
    * @return this options builder for chaining purposes.

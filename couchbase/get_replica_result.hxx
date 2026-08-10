@@ -53,6 +53,7 @@ public:
    * @param cas
    * @param is_replica true if the document originates from replica node
    * @param value raw document contents along with flags describing its structure
+   * @param crypto_manager manager handed to the transcoder to decrypt encrypted fields
    *
    * @since 1.0.0
    * @committed

@@ -47,8 +47,8 @@ namespace couchbase
  * In the example below the following rules enforced by the boolean query:
  * * retrieved documents MUST match `"hostel room"` in their `reviews.content` field AND have `true`
  * in `free_breakfast` field.
- * * also the documents SHOULD have EITHER `reviews.ratings.Overall > 4` OR `reviews.ratings.Service
- * > 5`.
+ * * also the documents SHOULD have EITHER `reviews.ratings.Overall > 4` OR
+ * `reviews.ratings.Service > 5`.
  * * and finally, exclude documents with `city` `"Padfield"` or `"Gilingham"`.
  *
  * @snippet{trimleft} test_unit_search.cxx search-boolean

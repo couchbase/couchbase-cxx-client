@@ -135,10 +135,10 @@ struct search_options : public common_options<search_options> {
    * data it has in the index right away. This is fast, but might not include the most recent
    * mutations.
    *
-   * Note that you cannot use this method and {@link #consistent_with(const mutation_state&)} at the
-   * same time, since they are mutually exclusive. As a rule of thumb, if you only care to be
-   * consistent with the mutation you just wrote on the same thread/app, use
-   * {@link #consistent_with(const mutation_state&)}.
+   * Note that you cannot use this method and {@link #consistent_with consistent_with(const
+   * mutation_state&)} at the same time, since they are mutually exclusive. As a rule of thumb, if
+   * you only care to be consistent with the mutation you just wrote on the same thread/app, use
+   * {@link #consistent_with consistent_with(const mutation_state&)}.
    *
    * @param scan_consistency the index scan consistency to be used for this query
    * @return this options builder for chaining purposes.
@@ -160,9 +160,10 @@ struct search_options : public common_options<search_options> {
    * and if you want your N1QL query to include those you need to pass the mutation tokens into a
    * {@link mutation_state}.
    *
-   * Note that you cannot use this method and {@link #scan_consistency(search_scan_consistency)} at
-   * the same time, since they are mutually exclusive. As a rule of thumb, if you only care to be
-   * consistent with the mutation you just wrote on the same thread/app, use this method.
+   * Note that you cannot use this method and {@link #scan_consistency
+   * scan_consistency(search_scan_consistency)} at the same time, since they are mutually exclusive.
+   * As a rule of thumb, if you only care to be consistent with the mutation you just wrote on the
+   * same thread/app, use this method.
    *
    * @param state the mutation state containing the mutation tokens.
    * @return this options builder for chaining purposes.
