@@ -27,3 +27,26 @@
 #cmakedefine COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
 #cmakedefine COUCHBASE_CXX_CLIENT_CREATE_OPERATION_SPAN_IN_CORE
 #cmakedefine COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY
+
+#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
+/*
+ * The Columnar build mode is deprecated in 1.4.0 and removed in 1.5.0. The configure step prints
+ * the full notice; this repeats it in every translation unit including this header, so it survives
+ * a build log that scrolls past CMake's output.
+ *
+ * #pragma message is the only spelling no warnings-as-errors setting can turn fatal: GCC reports
+ * it as a note, which carries no warning flag to escalate, and MSVC emits it with no warning
+ * number for /WX to act on. Clang reports it under -W#pragma-messages, which plain -Werror leaves
+ * alone but -Werror=#pragma-messages promotes, so the mapping is pinned back to a warning across
+ * the pragma. #warning and #pragma GCC warning are errors under -Werror and must not be used.
+ */
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic warning "-W#pragma-messages"
+#endif
+#pragma message("COUCHBASE_CXX_CLIENT_COLUMNAR is deprecated in 1.4.0 and will be removed in "     \
+                "1.5.0; see the CMake configure output for details")
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
+#endif
