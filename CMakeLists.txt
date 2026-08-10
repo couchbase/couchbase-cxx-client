@@ -14,9 +14,20 @@ if(NOT DEFINED COUCHBASE_CXX_CLIENT_MASTER_PROJECT)
   endif()
 endif()
 
-option(COUCHBASE_CXX_CLIENT_COLUMNAR "Build with Columnar additions" FALSE)
+option(COUCHBASE_CXX_CLIENT_COLUMNAR "Build with Columnar additions (deprecated)" FALSE)
 if(COUCHBASE_CXX_CLIENT_COLUMNAR)
-  message(STATUS "COUCHBASE_CXX_CLIENT_COLUMNAR=${COUCHBASE_CXX_CLIENT_COLUMNAR} building with Columnar additions.")
+  # WARNING rather than DEPRECATION: DEPRECATION is silent unless CMAKE_WARN_DEPRECATED is set and
+  # is fatal under CMAKE_ERROR_DEPRECATED, and this notice must always print and never fail a build.
+  # One flowing paragraph: message() re-wraps its argument and renders embedded newlines as blank
+  # lines, so hand-drawn layout reads worse than none.
+  message(
+    WARNING
+      "DEPRECATED: COUCHBASE_CXX_CLIENT_COLUMNAR=${COUCHBASE_CXX_CLIENT_COLUMNAR}. "
+      "The Columnar build mode is deprecated in 1.4.0 and will be removed in 1.5.0, together with "
+      "the code it guards: core/columnar and every COUCHBASE_CXX_CLIENT_COLUMNAR conditional "
+      "around it. This is a notice, not an error: the mode builds and behaves exactly as before for "
+      "the whole 1.4.x series. Builds that set the option must move off it before upgrading to "
+      "1.5.0. Translation units including couchbase/build_config.hxx repeat this as a diagnostic.")
 endif()
 
 project(
