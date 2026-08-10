@@ -172,6 +172,33 @@ TEST_CASE("unit: user_agent string", "[unit]")
           couchbase::core::meta::user_agent_for_http("0xDEADBEEF", "0xCAFEBEBE", "hello\nworld"));
 }
 
+TEST_CASE("unit: build info reports whether couchbase2 is supported", "[unit]")
+{
+  const auto info = couchbase::core::meta::sdk_build_info();
+  const auto entry = info.find("couchbase2");
+  REQUIRE(entry != info.end());
+
+  // Asserted against the macro rather than against a fixed value, so the case holds in either
+  // configuration and still fails if the entry stops tracking how the library was built.
+#if defined(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2)
+  REQUIRE(entry->second == "true");
+#else
+  REQUIRE(entry->second == "false");
+#endif
+
+  // The JSON rendering keeps its own list of which keys are booleans, so the raw entry above says
+  // nothing about it: assert the rendered type as well as the value, or dropping the key from that
+  // list would silently turn it back into a string.
+  // Through a string_view: parse() also has a json_string overload, and std::string converts to
+  // both.
+  const auto build_info_json = couchbase::core::meta::sdk_build_info_json();
+  const auto rendered = couchbase::core::utils::json::parse(std::string_view{ build_info_json });
+  const auto* couchbase2 = rendered.find("couchbase2");
+  REQUIRE(couchbase2 != nullptr);
+  REQUIRE(couchbase2->is_boolean());
+  REQUIRE(couchbase2->get_boolean() == (entry->second == "true"));
+}
+
 TEST_CASE("unit: utils::movable_function should be false after moving value out", "[unit]")
 {
   auto ptr = std::make_unique<int>(42);

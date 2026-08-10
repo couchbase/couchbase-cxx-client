@@ -45,7 +45,7 @@ public:
           info[name] = std::stoi(value);
         } else if (name == "snapshot" || name == "static_stdlib" || name == "static_openssl" ||
                    name == "static_target" || name == "static_boringssl" || name == "columnar" ||
-                   name == "mozilla_ca_bundle_embedded") {
+                   name == "couchbase2" || name == "mozilla_ca_bundle_embedded") {
           info[name] = value == "true";
         } else {
           info[name] = value;
@@ -65,6 +65,12 @@ public:
     fmt::print(stdout, "CMake: {}\n", info["cmake_version"]);
     fmt::print(stdout, "ASIO: {}\n", info["asio"]);
     fmt::print(stdout, "Snappy: {}\n", info["snappy"]);
+    // Printed whether or not it is available: "not supported" is the answer someone running this
+    // command is usually after, and omitting the line would leave them unable to tell it apart
+    // from an older build that never reported it.
+    fmt::print(stdout,
+               "Cloud Native Gateway (couchbase2://): {}\n",
+               info["couchbase2"] == "true" ? "supported" : "not supported");
 #ifdef COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY
     fmt::print(stdout, "OpenTelemetry: {}\n", info["opentelemetry"]);
 #endif
