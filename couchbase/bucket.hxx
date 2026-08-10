@@ -90,8 +90,13 @@ public:
    * @param options custom options to change the default behavior.
    * @param handler the handler that implements @ref ping_handler.
    *
+   * @note Not served over the @ref couchbase2 "couchbase2" transport, which opens no per-bucket
+   * sessions to probe and reports @ref errc::common::feature_not_available instead.
+   *
    * @since 1.0.0
    * @committed
+   * @cng_since{1.4.0}
+   * @cng_uncommitted
    */
   void ping(const ping_options& options, ping_handler&& handler) const;
 
@@ -104,8 +109,13 @@ public:
    * @param options custom options to change the default behavior.
    * @return future object that carries result of the operation.
    *
+   * @note Not served over the @ref couchbase2 "couchbase2" transport, which opens no per-bucket
+   * sessions to probe and reports @ref errc::common::feature_not_available instead.
+   *
    * @since 1.0.0
    * @committed
+   * @cng_since{1.4.0}
+   * @cng_uncommitted
    */
   [[nodiscard]] auto ping(const ping_options& options = {}) const
     -> std::future<std::pair<error, ping_result>>;

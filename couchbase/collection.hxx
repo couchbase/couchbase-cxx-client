@@ -340,8 +340,13 @@ public:
    * @exception errc::common::ambiguous_timeout
    * @exception errc::common::unambiguous_timeout
    *
+   * @note Not served over the @ref couchbase2 "couchbase2" transport, which reports
+   * @ref errc::common::feature_not_available for replica reads.
+   *
    * @since 1.0.0
    * @committed
+   * @cng_since{1.4.0}
+   * @cng_uncommitted
    */
   void get_any_replica(std::string document_id,
                        const get_any_replica_options& options,
@@ -368,8 +373,13 @@ public:
    * @exception errc::common::ambiguous_timeout
    * @exception errc::common::unambiguous_timeout
    *
+   * @note Not served over the @ref couchbase2 "couchbase2" transport, which reports
+   * @ref errc::common::feature_not_available for replica reads.
+   *
    * @since 1.0.0
    * @committed
+   * @cng_since{1.4.0}
+   * @cng_uncommitted
    */
   [[nodiscard]] auto get_any_replica(std::string document_id,
                                      const get_any_replica_options& options = {}) const
@@ -392,8 +402,13 @@ public:
    * @exception errc::common::ambiguous_timeout
    * @exception errc::common::unambiguous_timeout
    *
+   * @note Not served over the @ref couchbase2 "couchbase2" transport, which reports
+   * @ref errc::common::feature_not_available for replica reads.
+   *
    * @since 1.0.0
    * @committed
+   * @cng_since{1.4.0}
+   * @cng_uncommitted
    */
   void get_all_replicas(std::string document_id,
                         const get_all_replicas_options& options,
@@ -423,8 +438,13 @@ public:
    * @exception errc::common::ambiguous_timeout
    * @exception errc::common::unambiguous_timeout
    *
+   * @note Not served over the @ref couchbase2 "couchbase2" transport, which reports
+   * @ref errc::common::feature_not_available for replica reads.
+   *
    * @since 1.0.0
    * @committed
+   * @cng_since{1.4.0}
+   * @cng_uncommitted
    */
   [[nodiscard]] auto get_all_replicas(std::string document_id,
                                       const get_all_replicas_options& options = {}) const
@@ -792,8 +812,13 @@ public:
    * @exception errc::common::ambiguous_timeout
    * @exception errc::common::unambiguous_timeout
    *
+   * @note Not served over the @ref couchbase2 "couchbase2" transport, which reports
+   * @ref errc::common::feature_not_available for subdocument mutations.
+   *
    * @since 1.0.0
    * @committed
+   * @cng_since{1.4.0}
+   * @cng_uncommitted
    */
   void mutate_in(std::string document_id,
                  const mutate_in_specs& specs,
@@ -817,8 +842,13 @@ public:
    * @exception errc::common::ambiguous_timeout
    * @exception errc::common::unambiguous_timeout
    *
+   * @note Not served over the @ref couchbase2 "couchbase2" transport, which reports
+   * @ref errc::common::feature_not_available for subdocument mutations.
+   *
    * @since 1.0.0
    * @committed
+   * @cng_since{1.4.0}
+   * @cng_uncommitted
    */
   [[nodiscard]] auto mutate_in(std::string document_id,
                                const mutate_in_specs& specs,
@@ -838,8 +868,13 @@ public:
    * @exception errc::common::ambiguous_timeout
    * @exception errc::common::unambiguous_timeout
    *
+   * @note Not served over the @ref couchbase2 "couchbase2" transport, which reports
+   * @ref errc::common::feature_not_available for subdocument lookups.
+   *
    * @since 1.0.0
    * @committed
+   * @cng_since{1.4.0}
+   * @cng_uncommitted
    */
   void lookup_in(std::string document_id,
                  const lookup_in_specs& specs,
@@ -859,8 +894,13 @@ public:
    * @exception errc::common::ambiguous_timeout
    * @exception errc::common::unambiguous_timeout
    *
+   * @note Not served over the @ref couchbase2 "couchbase2" transport, which reports
+   * @ref errc::common::feature_not_available for subdocument lookups.
+   *
    * @since 1.0.0
    * @committed
+   * @cng_since{1.4.0}
+   * @cng_uncommitted
    */
   [[nodiscard]] auto lookup_in(std::string document_id,
                                const lookup_in_specs& specs,
@@ -885,8 +925,13 @@ public:
    * @exception errc::common::ambiguous_timeout
    * @exception errc::common::unambiguous_timeout
    *
+   * @note Not served over the @ref couchbase2 "couchbase2" transport, which reports
+   * @ref errc::common::feature_not_available for replica lookups.
+   *
    * @since 1.0.0
    * @committed
+   * @cng_since{1.4.0}
+   * @cng_uncommitted
    */
   void lookup_in_all_replicas(std::string document_id,
                               const lookup_in_specs& specs,
@@ -911,8 +956,13 @@ public:
    * @exception errc::common::ambiguous_timeout
    * @exception errc::common::unambiguous_timeout
    *
+   * @note Not served over the @ref couchbase2 "couchbase2" transport, which reports
+   * @ref errc::common::feature_not_available for replica lookups.
+   *
    * @since 1.0.0
    * @committed
+   * @cng_since{1.4.0}
+   * @cng_uncommitted
    */
   [[nodiscard]] auto lookup_in_all_replicas(std::string document_id,
                                             const lookup_in_specs& specs,
@@ -933,8 +983,13 @@ public:
    * @exception errc::common::ambiguous_timeout
    * @exception errc::common::unambiguous_timeout
    *
+   * @note Not served over the @ref couchbase2 "couchbase2" transport, which reports
+   * @ref errc::common::feature_not_available for replica lookups.
+   *
    * @since 1.0.0
    * @committed
+   * @cng_since{1.4.0}
+   * @cng_uncommitted
    */
   void lookup_in_any_replica(std::string document_id,
                              const lookup_in_specs& specs,
@@ -955,8 +1010,13 @@ public:
    * @exception errc::common::ambiguous_timeout
    * @exception errc::common::unambiguous_timeout
    *
+   * @note Not served over the @ref couchbase2 "couchbase2" transport, which reports
+   * @ref errc::common::feature_not_available for replica lookups.
+   *
    * @since 1.0.0
    * @committed
+   * @cng_since{1.4.0}
+   * @cng_uncommitted
    */
   [[nodiscard]] auto lookup_in_any_replica(std::string document_id,
                                            const lookup_in_specs& specs,
@@ -1085,8 +1145,15 @@ public:
    * system may have to scan a lot of documents to find the matching documents. For low latency
    * range queries, it is recommended that you use SQL++ with the necessary indexes.
    *
+   * @note Not served over the @ref couchbase2 "couchbase2" transport, and not refused up front: the
+   * scan needs the bucket configuration and the per-node connections that transport does not open,
+   * so it fails on that path rather than reporting
+   * @ref errc::common::feature_not_available.
+   *
    * @since 1.0.0
    * @volatile
+   * @cng_since{1.4.0}
+   * @cng_uncommitted
    */
   void scan(const scan_type& scan_type, const scan_options& options, scan_handler&& handler) const;
 
@@ -1102,8 +1169,15 @@ public:
    * system may have to scan a lot of documents to find the matching documents. For low latency
    * range queries, it is recommended that you use SQL++ with the necessary indexes.
    *
+   * @note Not served over the @ref couchbase2 "couchbase2" transport, and not refused up front: the
+   * scan needs the bucket configuration and the per-node connections that transport does not open,
+   * so it fails on that path rather than reporting
+   * @ref errc::common::feature_not_available.
+   *
    * @since 1.0.0
    * @volatile
+   * @cng_since{1.4.0}
+   * @cng_uncommitted
    */
   [[nodiscard]] auto scan(const scan_type& scan_type, const scan_options& options = {}) const
     -> std::future<std::pair<error, scan_result>>;

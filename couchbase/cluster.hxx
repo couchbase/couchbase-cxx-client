@@ -69,8 +69,16 @@ public:
    * over this options).
    * @param handler the handler
    *
+   * @note A connection string with the @c couchbase2:// scheme selects the @ref couchbase2
+   * "couchbase2" transport, which routes every operation through a Cloud Native Gateway (CNG). It
+   * requires a library built with that support and restricts how the connection string may be
+   * written; see
+   * @ref couchbase2.
+   *
    * @since 1.0.0
    * @committed
+   * @cng_since{1.4.0}
+   * @cng_uncommitted
    */
   static void connect(const std::string& connection_string,
                       const cluster_options& options,
@@ -85,8 +93,16 @@ public:
    *
    * @return future object that carries cluster object and operation status
    *
+   * @note A connection string with the @c couchbase2:// scheme selects the @ref couchbase2
+   * "couchbase2" transport, which routes every operation through a Cloud Native Gateway (CNG). It
+   * requires a library built with that support and restricts how the connection string may be
+   * written; see
+   * @ref couchbase2.
+   *
    * @since 1.0.0
    * @committed
+   * @cng_since{1.4.0}
+   * @cng_uncommitted
    */
   [[nodiscard]] static auto connect(const std::string& connection_string,
                                     const cluster_options& options)
@@ -406,8 +422,13 @@ public:
    * @param options custom options to change the default behavior.
    * @param handler the handler that implements @ref ping_handler.
    *
+   * @note Not served over the @ref couchbase2 "couchbase2" transport, which has no per-node service
+   * endpoints to probe and reports @ref errc::common::feature_not_available instead.
+   *
    * @since 1.0.0
    * @committed
+   * @cng_since{1.4.0}
+   * @cng_uncommitted
    */
   void ping(const ping_options& options, ping_handler&& handler) const;
 
@@ -420,8 +441,13 @@ public:
    * @param options custom options to change the default behavior.
    * @return future object that carries result of the operation.
    *
+   * @note Not served over the @ref couchbase2 "couchbase2" transport, which has no per-node service
+   * endpoints to probe and reports @ref errc::common::feature_not_available instead.
+   *
    * @since 1.0.0
    * @committed
+   * @cng_since{1.4.0}
+   * @cng_uncommitted
    */
   [[nodiscard]] auto ping(const ping_options& options = {}) const
     -> std::future<std::pair<error, ping_result>>;
@@ -439,8 +465,14 @@ public:
    * @param options custom options to change the default behavior.
    * @param handler the handler that implements @ref diagnostics_handler.
    *
+   * @note Not served over the @ref couchbase2 "couchbase2" transport, which keeps no per-node
+   * connection state to report on and returns @ref errc::common::feature_not_available rather than
+   * an empty report.
+   *
    * @since 1.0.0
    * @committed
+   * @cng_since{1.4.0}
+   * @cng_uncommitted
    */
   void diagnostics(const diagnostics_options& options, diagnostics_handler&& handler) const;
 
@@ -457,8 +489,14 @@ public:
    * @param options custom options to change the default behavior.
    * @return future object that carries result of the operation.
    *
+   * @note Not served over the @ref couchbase2 "couchbase2" transport, which keeps no per-node
+   * connection state to report on and returns @ref errc::common::feature_not_available rather than
+   * an empty report.
+   *
    * @since 1.0.0
    * @committed
+   * @cng_since{1.4.0}
+   * @cng_uncommitted
    */
   [[nodiscard]] auto diagnostics(const diagnostics_options& options = {}) const
     -> std::future<std::pair<error, diagnostics_result>>;
