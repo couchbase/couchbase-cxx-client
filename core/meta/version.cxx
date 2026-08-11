@@ -96,6 +96,16 @@ sdk_build_info() -> std::map<std::string, std::string>
     "false"
 #endif
     ;
+  // Whether this build can serve couchbase2:// connection strings, i.e. whether it was compiled
+  // with Cloud Native Gateway support. A build without it rejects the scheme at connect time, so
+  // the answer is worth reporting next to the other build-time switches.
+  info["couchbase2"] =
+#if defined(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2)
+    "true"
+#else
+    "false"
+#endif
+    ;
   info["post_linked_openssl"] = COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL;
   info["static_openssl"] =
 #if defined(COUCHBASE_CXX_CLIENT_STATIC_OPENSSL)
@@ -194,7 +204,7 @@ sdk_build_info_json() -> std::string
         name == "version_build" || name == "mozilla_ca_bundle_size") {
       info[name] = std::stoi(value);
     } else if (name == "snapshot" || name == "static_stdlib" || name == "static_openssl" ||
-               name == "mozilla_ca_bundle_embedded") {
+               name == "couchbase2" || name == "mozilla_ca_bundle_embedded") {
       info[name] = value == "true";
     } else {
       info[name] = value;
