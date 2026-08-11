@@ -7,4 +7,6 @@ Name: couchbase_cxx_client_static-@COUCHBASE_CXX_CLIENT_PKGCONFIG_VERSION@
 Description: Couchbase C++ SDK (static)
 Version: @COUCHBASE_CXX_CLIENT_PKGCONFIG_VERSION@
 Libs: -L${libdir} -lcouchbase_cxx_client_static
+Requires.private: @couchbase_cxx_client_static_PC_REQUIRES_PRIVATE@
+Libs.private: @couchbase_cxx_client_static_PC_LIBS_PRIVATE@
 Cflags: -I${includedir}

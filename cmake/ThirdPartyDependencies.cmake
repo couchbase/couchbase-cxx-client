@@ -16,6 +16,11 @@ function(declare_system_library target)
                                              $<TARGET_PROPERTY:${target},INTERFACE_INCLUDE_DIRECTORIES>)
 endfunction()
 
+# Vendored dependencies that declare install rules no option can switch off send them here instead,
+# and the packaging install step deletes this one directory. Defined before any of them is added so
+# gRPC and curl share it.
+set(COUCHBASE_CXX_CLIENT_VENDORED_INSTALL_JUNK_DIR "vendored-not-installed")
+
 include(cmake/OpenSSL.cmake)
 
 if(NOT TARGET spdlog::spdlog)
@@ -47,60 +52,103 @@ if((COUCHBASE_CXX_CLIENT_BUILD_TOOLS AND COUCHBASE_CXX_CLIENT_BUILD_FIT_PERFORME
 endif()
 
 if(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
-  if(NOT TARGET opentelemetry)
-    # When OpenTelemetry's WITH_OTLP_HTTP is enabled it unconditionally pulls
-    # curl (via cmake/curl.cmake). If find_package(CURL) fails on the build
-    # host, OTel fetches curl from source and curl's CMakeLists.txt calls
-    # install(TARGETS libcurl_static EXPORT ...). When curl is linked against
-    # our statically built BoringSSL, the export fails because the ssl/crypto
-    # targets are not part of any install set:
-    #
-    #   export called with target "libcurl_static" which requires target "ssl"
-    #   that is not in any export set.
-    #
-    # We never install or consume curl's export files, so skip the export
-    # target entirely by setting CURL_ENABLE_EXPORT_TARGET=OFF before the
-    # cpmaddpackage call. The variable is a no-op when system curl is used.
-    set(CURL_ENABLE_EXPORT_TARGET OFF CACHE BOOL "" FORCE)
+  # OpenTelemetry's OTLP/HTTP exporter needs libcurl, and its cmake/curl.cmake takes the platform's
+  # copy when find_package(CURL) succeeds. That copy is linked against the platform's OpenSSL, so it
+  # puts a second TLS implementation into every process loading the SDK next to the BoringSSL linked
+  # here -- visible as libssl/libcrypto among cbc's dependencies.
+  #
+  # Declaring curl first is what avoids it. OpenTelemetry declares curl under the name "curl" and
+  # then calls FetchContent_MakeAvailable(curl), which does nothing when the name is already
+  # populated, and its own alias step is skipped because CURL::libcurl already exists. Its fetch
+  # branch is also the wrong shape for packaging: it forces BUILD_SHARED_LIBS ON, producing a
+  # libcurl.so this project would have to ship.
+  #
+  # CMAKE_DISABLE_FIND_PACKAGE_CURL stops it preferring a system libcurl over this one; both of its
+  # call sites are QUIET and not REQUIRED, so disabling the search is safe.
+  if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND NOT TARGET CURL::libcurl)
+    set(CMAKE_DISABLE_FIND_PACKAGE_CURL ON)
 
-    # Same scenario, second symptom: curl's configure probes for
-    # SSL_CTX_set_srp_username via check_symbol_exists against
-    # <openssl/ssl.h>. On Linux hosts with system OpenSSL installed the
-    # probe succeeds (OpenSSL has SRP) and curl sets USE_TLS_SRP=1. At
-    # compile time the include search order resolves <openssl/ssl.h> to
-    # our BoringSSL headers, which deliberately omit SRP, and curl's
-    # lib/vtls/openssl.c then fails with:
-    #
-    #   error: implicit declaration of function 'SSL_CTX_set_srp_username'
-    #   error: implicit declaration of function 'SSL_CTX_set_srp_password'
-    #
-    # We do not use TLS-SRP. Disable it in curl's configure to skip the
-    # probe entirely; this gates the #ifdef USE_OPENSSL_SRP block in
-    # openssl.c and removes the BoringSSL/OpenSSL header mismatch.
-    set(CURL_DISABLE_SRP ON CACHE BOOL "" FORCE)
+    # Keep the tag in step with the one OpenTelemetry pins in its third_party_release, so the
+    # version it expects is the version it gets.
+    cpmaddpackage(
+      NAME
+      curl
+      GITHUB_REPOSITORY
+      "curl/curl"
+      GIT_TAG
+      curl-8_12_0
+      OPTIONS
+      # curl asks find_package(OpenSSL REQUIRED) and then links OpenSSL::SSL and OpenSSL::Crypto by
+      # target. Those targets are already BoringSSL aliases, so the only thing missing is a
+      # find_package that succeeds without an OpenSSL installation: see
+      # cmake/vendored_openssl/FindOpenSSL.cmake. curl appends its own CMake directory to
+      # CMAKE_MODULE_PATH, so replacing it here costs nothing.
+      "CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/vendored_openssl"
+      "COUCHBASE_CXX_CLIENT_BORINGSSL_INCLUDE_DIR ${boringssl_SOURCE_DIR}/src/include"
+      "CURL_USE_OPENSSL ON"
+      # curl identifies the TLS library, and probes for a few functions, with check_symbol_exists.
+      # Those compile a TryCompile project which does NOT inherit ALIAS targets, so the probes
+      # cannot resolve OpenSSL::SSL -> BoringSSL and fail outright ("Target links to OpenSSL::SSL
+      # but the target was not found"). Every one of them is guarded by if(NOT DEFINED ...), so
+      # answering in advance skips them. The answers describe BoringSSL: it is not AWS-LC or
+      # LibreSSL, and it does provide SSL_set0_wbio. SRP is not probed at all because
+      # CURL_DISABLE_SRP is on below.
+      "HAVE_BORINGSSL 1"
+      "HAVE_AWSLC 0"
+      "HAVE_LIBRESSL 0"
+      "HAVE_SSL_SET0_WBIO 1"
+      # TLS-SRP probes against <openssl/ssl.h> and would find the platform OpenSSL's declarations
+      # while compiling against BoringSSL headers, which omit SRP: curl then fails on implicit
+      # declarations of SSL_CTX_set_srp_username. Nothing here uses TLS-SRP.
+      "CURL_DISABLE_SRP ON"
+      # curl's install(TARGETS libcurl_static EXPORT ...) fails because the BoringSSL targets it
+      # links belong to no export set, and nothing here consumes curl's export files.
+      "CURL_ENABLE_EXPORT_TARGET OFF"
+      # CURL_ENABLE_EXPORT_TARGET only suppresses the CMake export file: curl still installs its
+      # archive, its headers, curl-config and libcurl.pc. Send them where gRPC's go, so the single
+      # cleanup in the packaging install step covers both.
+      "CMAKE_INSTALL_BINDIR ${COUCHBASE_CXX_CLIENT_VENDORED_INSTALL_JUNK_DIR}/bin"
+      "CMAKE_INSTALL_LIBDIR ${COUCHBASE_CXX_CLIENT_VENDORED_INSTALL_JUNK_DIR}/lib"
+      "CMAKE_INSTALL_INCLUDEDIR ${COUCHBASE_CXX_CLIENT_VENDORED_INSTALL_JUNK_DIR}/include"
+      "CMAKE_INSTALL_DATADIR ${COUCHBASE_CXX_CLIENT_VENDORED_INSTALL_JUNK_DIR}/share"
+      "CMAKE_INSTALL_DATAROOTDIR ${COUCHBASE_CXX_CLIENT_VENDORED_INSTALL_JUNK_DIR}/share"
+      "BUILD_SHARED_LIBS OFF"
+      "BUILD_STATIC_LIBS ON"
+      "BUILD_CURL_EXE OFF"
+      "BUILD_LIBCURL_DOCS OFF"
+      "BUILD_MISC_DOCS OFF"
+      "ENABLE_CURL_MANUAL OFF"
+      "BUILD_TESTING OFF"
+      # Everything below is a dependency the exporter does not need and that would otherwise become
+      # a build requirement or another shared library in the package.
+      "CURL_USE_LIBPSL OFF"
+      "CURL_USE_LIBSSH2 OFF"
+      "CURL_USE_LIBSSH OFF"
+      "CURL_USE_GSSAPI OFF"
+      "USE_LIBIDN2 OFF"
+      "CURL_BROTLI OFF"
+      "CURL_ZSTD OFF"
+      "USE_NGHTTP2 OFF"
+      "CURL_DISABLE_LDAP ON"
+      "CURL_DISABLE_LDAPS ON"
+      "CMAKE_C_VISIBILITY_PRESET hidden"
+      "CMAKE_POSITION_INDEPENDENT_CODE ON")
 
-    if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
-      # Third symptom of the same curl-vs-BoringSSL clash: curl probes
-      # for OPENSSL_IS_AWSLC and OPENSSL_IS_BORINGSSL via
-      # check_symbol_exists, which lists OpenSSL::SSL in
-      # CMAKE_REQUIRED_LIBRARIES. check_symbol_exists generates a
-      # TryCompile sub-project that does NOT inherit ALIAS targets
-      # from the parent scope; cmake/OpenSSL.cmake aliases
-      # OpenSSL::SSL -> BoringSSL's `ssl` OBJECT library, which works
-      # for the main project but resolves to "target not found" in
-      # TryCompile. On hosts whose system OpenSSL has libcrypto but
-      # not libssl (e.g. alpine3.21 without openssl-dev), curl's
-      # find_package(OpenSSL) returns OpenSSL::Crypto without
-      # OpenSSL::SSL either, so the fallback path doesn't save us
-      # and configure dies at curl's CMakeLists.txt:839
-      # (check_symbol_exists for OPENSSL_IS_AWSLC).
-      #
-      # We are building against BoringSSL, so pre-populate the probe
-      # outputs in the cache. check_symbol_exists skips the check
-      # entirely when the output variable is already cached.
-      set(HAVE_OPENSSL_IS_BORINGSSL 1 CACHE INTERNAL "")
-      set(HAVE_OPENSSL_IS_AWSLC 0 CACHE INTERNAL "")
+    if(TARGET libcurl_static AND NOT TARGET CURL::libcurl)
+      add_library(CURL::libcurl ALIAS libcurl_static)
     endif()
+    if(NOT TARGET CURL::libcurl)
+      message(FATAL_ERROR "Vendored curl did not provide CURL::libcurl")
+    endif()
+    declare_system_library(CURL::libcurl)
+  endif()
+
+  if(NOT TARGET opentelemetry)
+    # These curl settings apply to the configuration that does NOT vendor curl above, where
+    # OpenTelemetry resolves the platform's libcurl: they are no-ops against a system package, and
+    # they keep the from-source path working for a build that does not use BoringSSL.
+    set(CURL_ENABLE_EXPORT_TARGET OFF CACHE BOOL "" FORCE)
+    set(CURL_DISABLE_SRP ON CACHE BOOL "" FORCE)
 
     # https://github.com/open-telemetry/opentelemetry-cpp/releases
     cpmaddpackage(

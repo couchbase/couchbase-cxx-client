@@ -1,26 +1,99 @@
 # NOTE: This file MUST be in sync with cmake/ThirdPartyDependencies.cmake
+#
+# This is the Black Duck inventory across every configuration the project
+# ships, not a per-artefact bill of materials and not a complete list of every
+# piece of third-party code in the binaries. A component here is compiled into
+# them rather than linked from a package, so nothing in the package metadata
+# reveals it -- but which binary carries which component, and whether it is
+# built at all, depends on the options a given package uses:
+#
+#   BoringSSL       every configuration, in the library and in the tools
+#   gRPC and its    only where couchbase2:// or the FIT performer is enabled;
+#   submodules      in the library when couchbase2:// is on (the Linux
+#                   packages), otherwise only in fit_performer (Alpine)
+#   curl            only in cbc and fit_performer, through OpenTelemetry's
+#                   OTLP exporter; the library links no more of OpenTelemetry
+#                   than its header-only API
+#
+# Individual entries below record their own conditions where they differ again,
+# as zlib does.
+#
+# Components tracked elsewhere rather than here: the small libraries vendored
+# directly into third_party/ (jsonsl, tl::expected) and PEGTL, which arrives
+# inside taocpp json. Their terms do ship with the packages -- jsonsl and
+# tl::expected through cmake/Packaging.cmake, under <docdir>/third_party/, and
+# PEGTL through taocpp json's own install rules, under <docdir>/../tao/pegtl --
+# but none of them carries a Black Duck component entry, so do not read the list
+# below as exhaustive of the code in the artefacts.
+#
+# Versions are the tags or commits the build actually fetches. The gRPC
+# submodules are listed separately from gRPC because they are separate
+# upstreams with their own advisories.
+---
 components:
   boringssl:
     bd-id: 1e303b15-b82b-4a4d-8cd6-a2048fb2c73d
-    versions: [ 20200921 ]
+    versions: [202308211007]
   spdlog:
     bd-id: 7785114c-5b78-4aad-8771-72a739a1f06e
-    versions: [ v1.15.0 ]
+    versions: [v1.15.0]
+  # Compiled from spdlog's bundled copy: the build sets SPDLOG_FMT_EXTERNAL OFF.
+  fmt:
+    bd-id: eae20828-18b8-478f-83b3-4a058748a28b
+    versions: [11.0.2]
   gsl:
     bd-id: 9e753ffd-aa29-46e6-a7fc-d4b972710c0b
-    versions: [ 4.0.0 ]
+    versions: [4.0.0]
   hdr_histogram:
     bd-id: 43a908e1-df66-4cd1-b18f-63c94e41965e
-    versions: [ 0.11.8 ]
+    versions: [0.11.8]
   llhttp:
     bd-id: 0bcb0de9-f810-47e1-826b-4c3696a0c276
-    versions: [ v9.3.0 ]
+    versions: [v9.3.0]
   snappy:
     bd-id: fd5e5c60-2c67-4d20-8be9-b7648156cef3
-    versions: [ 1.2.2 ]
+    versions: [1.2.2]
   asio:
     bd-id: 3739d5e9-9ad8-4845-8077-1770167a69c2
-    versions: [ 1.31.0 ]
+    versions: [1.34.2]
   json:
     bd-id: cae0f7d2-4279-473a-9f71-eabdd121d2e3
-    versions: [ 1.0.0-beta.14 ]
+    versions: [1.0.0-beta.14]
+  cli11:
+    bd-id: 4e90a28f-ea12-4ac7-a39e-011fbd19a26a
+    versions: [v2.5.0]
+  opentelemetry-cpp:
+    bd-id: 11ad39bd-fc26-45d9-b4a3-41fa96f715a1
+    versions: [v1.23.0]
+  # Linked by cbc and the FIT performer for OpenTelemetry's OTLP/HTTP exporter,
+  # and built against this package's BoringSSL rather than the platform's
+  # OpenSSL.
+  curl:
+    bd-id: 5495fd92-f4e5-4099-aa40-bd0f22b2f602
+    versions: [curl-8_12_0]
+  # gRPC and the submodules it is fetched with. Only built when
+  # couchbase2:// support or the FIT performer is enabled, which is the case
+  # for the Linux packages.
+  grpc:
+    bd-id: 485684cf-4c63-4481-955f-c3ede2325013
+    versions: [v1.65.5]
+  protobuf:
+    bd-id: 1ac59252-efa9-4847-adda-55c704035f0c
+    versions: [v3.26.1]
+  abseil-cpp:
+    bd-id: 48190a0a-604d-41eb-aadc-9c942ecdb6fd
+    versions: [20240116.0]
+  re2:
+    bd-id: 2cc499cd-32b6-4b1b-8730-a482a94619bd
+    versions: [2022-04-01]
+  # The checked-out commit is exactly the cares-1_19_1 tag, although the
+  # ares_version.h it carries still reads 1.19.0.
+  c-ares:
+    bd-id: 3c284f73-2808-4837-845b-b6725cf7e840
+    versions: [cares-1_19_1]
+  # Fetched with gRPC on every platform to keep CPM's cache key identical
+  # everywhere, but compiled only on Windows; elsewhere gRPC links the system
+  # zlib.
+  zlib:
+    bd-id: b9185555-6e31-401e-b373-bfec7955a8ab
+    versions: [v1.3]

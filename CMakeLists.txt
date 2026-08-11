@@ -101,22 +101,34 @@ find_package(Threads REQUIRED)
 
 option(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY "Build with OpenTelemetry" ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT})
 option(COUCHBASE_CXX_CLIENT_BUILD_TOOLS "Build tools" ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT})
-# fit_performer links gRPC/Protobuf. Any gRPC-based component can only be built where the platform
-# provides gRPC and protobuf >= 3.15 (needed for the proto3 "optional" has_*() accessors our
-# schemas use); turn this OFF where they are missing (e.g. EL8, EL9's protobuf 3.14) so the rest of
-# the tools still build. fit_performer is currently the only gRPC-based component,
-# but future gRPC features are expected to follow the same platform gating.
+# fit_performer links gRPC/Protobuf, which cmake/GrpcProtobuf.cmake resolves from the platform or
+# builds from source, so this no longer depends on what the platform packages. Turning it OFF only
+# skips the tool.
 option(COUCHBASE_CXX_CLIENT_BUILD_FIT_PERFORMER
-       "Build the FIT performer integration-test tool (requires gRPC + protobuf >= 3.15)"
+       "Build the FIT performer integration-test tool"
        ${COUCHBASE_CXX_CLIENT_BUILD_TOOLS})
 
-# couchbase2:// (Protostellar) support. Like the FIT performer it needs gRPC + protobuf >= 3.15.
-# Default OFF: the transport is experimental and opt-in. When enabled it vendors the Protostellar
-# schema and builds the generated stubs; later commits compile the couchbase2 transport into the
-# client library on top of them.
+# couchbase2:// (Protostellar) support. Like the FIT performer it pulls in gRPC and protobuf. Default
+# OFF: the transport is experimental and opt-in. When enabled it vendors the Protostellar schema,
+# builds the generated stubs, and compiles the couchbase2 transport into the client library on top of
+# them.
 option(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
-       "Build with couchbase2:// (Protostellar/gRPC) support (requires gRPC + protobuf >= 3.15)"
+       "Build with couchbase2:// (Protostellar/gRPC) support"
        OFF)
+
+# Build the way the redistributable packages are built.
+#
+# The packages must carry every vendored dependency inside their own artefacts, so this switch makes
+# the build resolve gRPC, Protobuf and their transitive dependencies from source, hide the generated
+# Protostellar stubs from the shared library's exported ABI, and link the in-tree executables against
+# the static client so each holds exactly one copy of them.
+#
+# All of that is expensive: a source build of gRPC on every configure, and a full copy of the client
+# and the vendored stack in every executable that is linked. A development or CI build needs none of
+# it -- it wants the platform's gRPC where one exists and the shared client everywhere -- so the
+# switch is off by default and the packaging manifests turn it on.
+option(COUCHBASE_CXX_CLIENT_PACKAGE_BUILD
+       "Resolve and link the vendored dependencies the way the redistributable packages do" FALSE)
 
 include(cmake/ThirdPartyDependencies.cmake)
 
@@ -124,6 +136,29 @@ if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2)
   # Vendors the Protostellar schema (CPM) and builds the generated gRPC/protobuf stubs library.
   include(cmake/Protostellar.cmake)
 endif()
+
+# Remove the staging prefix at the end of ANY install, not only the three packaging manifests.
+#
+# The vendored dependencies declare install rules no option switches off, and they are redirected
+# under one throwaway prefix. The RPM, DEB and Alpine steps each delete it -- but nothing else does,
+# so a plain "cmake --install" left gRPC's headers, archives and roots.pem sitting under
+# <prefix>/vendored-not-installed. That affects every source build with a vendored dependency, which
+# since AUTO includes any host without a system gRPC.
+#
+# Declared here, unconditionally, rather than in cmake/Packaging.cmake: that file is included only
+# when COUCHBASE_CXX_CLIENT_INSTALL is ON, while the vendored dependencies register their install
+# rules regardless, so with INSTALL off "cmake --install" still staged them and nothing removed them.
+# install(CODE) runs in declaration order, and this point is after the dependencies were added.
+# CMAKE_INSTALL_PREFIX is escaped so the generated script reads it at install time: "cmake --install
+# --prefix <other>" stages the redirected files under the override, and expanding the configured
+# prefix here would try to delete them from somewhere else entirely, leaving them behind.
+install(CODE "
+  set(_junk \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${COUCHBASE_CXX_CLIENT_VENDORED_INSTALL_JUNK_DIR}\")
+  if(EXISTS \"\${_junk}\")
+    message(STATUS \"Removing vendored staging prefix: \${_junk}\")
+    file(REMOVE_RECURSE \"\${_junk}\")
+  endif()
+")
 
 include(cmake/VersionInfo.cmake)
 

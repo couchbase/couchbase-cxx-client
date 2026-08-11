@@ -4,12 +4,10 @@
 # For VCS builds the schema is fetched via CPM (DOWNLOAD_ONLY, no CMakeLists), mirroring how
 # tools/fit_performer vendors couchbaselabs/fit-protocol.
 #
-# NOTE: offline/tarball builds are NOT yet fully wired for couchbase2. Before this feature ships
-# enabled, the source-tarball step must (a) enable COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 in the
-# inner packaging configure so these CPM packages are fetched into the cache, and (b) add
-# protostellar/api_common_protos glob entries to cmake/tarball_glob.txt so they are embedded in
-# the tarball (mirroring fit_protocol). Until then a FETCHCONTENT_FULLY_DISCONNECTED build with
-# this option ON will fail. To be addressed as part of the ship-enable work.
+# Offline/tarball builds are wired: cmake/Packaging.cmake enables COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
+# in the inner packaging configure so these CPM packages land in the cache, and cmake/tarball_glob.txt
+# carries protostellar/api_common_protos entries so they are embedded in the tarball. Both are load
+# bearing for RPM/DEB builds, which run without network access.
 #
 # gRPC::grpc++, gRPC::grpc_cpp_plugin, protobuf::libprotobuf and protobuf::protoc are provided by
 # cmake/GrpcProtobuf.cmake, which CMakeLists.txt includes before this module.
@@ -170,6 +168,11 @@ set_target_properties(
              COMPILE_WARNING_AS_ERROR OFF
              CXX_CLANG_TIDY ""
              CXX_INCLUDE_WHAT_YOU_USE "")
+if(COUCHBASE_CXX_CLIENT_PACKAGE_BUILD)
+  set_target_properties(
+    couchbase_cxx_protostellar PROPERTIES C_VISIBILITY_PRESET hidden CXX_VISIBILITY_PRESET hidden
+                                          VISIBILITY_INLINES_HIDDEN ON)
+endif()
 # The generated stubs MUST be compiled with the same sanitizer flags as everything that includes the
 # generated headers, because protobuf changes the LAYOUT of every message under ThreadSanitizer:
 # port_def.inc defines PROTOBUF_TSAN from the compiler's thread_sanitizer feature test, and
@@ -188,18 +191,19 @@ set_target_properties(
 # PROTOBUF_TSAN cannot be forced to a fixed value instead -- port_def.inc #errors if it is already
 # defined -- so matching the flags is the only supported remedy.
 enable_sanitizers(couchbase_cxx_protostellar)
-# NOTE (ABI visibility): couchbase_cxx_client links this library whenever
-# COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 is on (see the target_link_libraries guarded by that option
-# in the top-level CMakeLists.txt, alongside the transport sources appended below). So in a
-# couchbase2-enabled build the generated protobuf/gRPC symbols already land in the exported ABI of
-# libcouchbase_cxx_client.so with default visibility, which can clash with an application linking
-# its own protobuf/gRPC. What keeps that off released artefacts today is only that the option
-# defaults to OFF -- it is not, as this note previously claimed, that nothing links the library.
-# The fix is hidden visibility here + --exclude-libs on the shared client
-# target, BUT that will require reworking how the white-box CNG tests link (they will link this
-# static lib AND the client lib that embeds it; default visibility merges the two protobuf
-# descriptor copies into one, hidden visibility does not -> duplicate descriptor registration
-# abort). Deferred to the ship-enable ticket.
+# ABI visibility, above: couchbase_cxx_client links this library whenever
+# COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 is on, so without hidden visibility the generated
+# protobuf/gRPC symbols land in the exported ABI of libcouchbase_cxx_client.so, where an application
+# linking its own protobuf/gRPC interposes on them. That is what the shipped library must not do, so
+# COUCHBASE_CXX_CLIENT_PACKAGE_BUILD hides them; gRPC and protobuf themselves are covered in
+# cmake/GrpcProtobuf.cmake.
+#
+# Hiding them splits the process into two protobuf worlds: symbols in this archive resolve at static
+# link time regardless of visibility, so an executable that links BOTH this library and the shared
+# client gets its own copy of every generated message alongside the one inside the .so, with two
+# descriptor pools and two type identities for the same message. Nothing in a package links that
+# combination, but the CNG tests do, which is why they follow the same switch and link the static
+# client only when it is on (test/cng/CMakeLists.txt).
 if(MSVC)
   # /bigobj: the generated translation units are large -- search.pb.cc is 18k lines and yields a
   # 7.4 MB object -- and protobuf-generated code this size can exceed the COFF section limit

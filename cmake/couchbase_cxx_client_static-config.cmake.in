@@ -1,9 +1,16 @@
 @PACKAGE_INIT@
 
+include(CMakeFindDependencyMacro)
+@couchbase_cxx_client_static_FIND_DEPENDENCIES@
+
 add_library(couchbase_cxx_client::couchbase_cxx_client_static STATIC IMPORTED GLOBAL)
 
+# The archive holds every vendored dependency, but not the platform libraries their objects still
+# reference; see cmake/Packaging.cmake for which and why.
 set_target_properties(couchbase_cxx_client::couchbase_cxx_client_static PROPERTIES
   IMPORTED_LOCATION "@CMAKE_INSTALL_PREFIX@/@CMAKE_INSTALL_LIBDIR@/libcouchbase_cxx_client_static.a"
+  INTERFACE_LINK_LIBRARIES "@couchbase_cxx_client_static_LINK_LIBRARIES@"
+  INTERFACE_LINK_OPTIONS "@couchbase_cxx_client_static_LINK_OPTIONS@"
 )
 
 set(COUCHBASE_CXX_CLIENT_STATIC_INCLUDE_DIR "@CMAKE_INSTALL_PREFIX@/@CMAKE_INSTALL_INCLUDEDIR@")

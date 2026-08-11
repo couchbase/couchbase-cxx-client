@@ -3,12 +3,7 @@ Section: libs
 Priority: optional
 Maintainer: Couchbase SDK Team <support@couchbase.com>
 Build-Depends: debhelper (>= 9), cmake, pkg-config,
-	libcurl4-openssl-dev,
-	protobuf-compiler,
-	protobuf-compiler-grpc,
-	libprotobuf-dev,
-	libgrpc-dev,
-	libgrpc++-dev,
+	zlib1g-dev,
 	nlohmann-json3-dev
 Standards-Version: 4.5.0
 Vcs-Browser: https://github.com/couchbase/couchbase-cxx-client
@@ -25,7 +20,7 @@ Package: couchbase-cxx-client-tools
 Architecture: any
 Multi-Arch: same
 Section: utils
-Depends: couchbase-cxx-client (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: Couchbase C++ SDK, command line tools.
  This is the command line tools for the client and protocol library for
  Couchbase project.
@@ -33,7 +28,9 @@ Description: Couchbase C++ SDK, command line tools.
 Package: couchbase-cxx-client-dev
 Architecture: any
 Multi-Arch: same
-Depends: couchbase-cxx-client (= ${binary:Version}), ${misc:Depends}
+# zlib1g-dev because the installed CMake config for the static library emits find_dependency(ZLIB):
+# the archive carries gRPC objects that call it, and Build-Depends do not reach consumers.
+Depends: couchbase-cxx-client (= ${binary:Version}), zlib1g-dev, ${misc:Depends}
 Description: Couchbase C++ SDK, development files.
  This is the development files for the client and protocol library for
  Couchbase project.
@@ -42,7 +39,7 @@ Package: couchbase-cxx-client-fit-performer
 Architecture: any
 Multi-Arch: same
 Section: devel
-Depends: couchbase-cxx-client (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: Couchbase C++ SDK, FIT performer.
  FIT integration-test performer built against the Couchbase C++ SDK. It is
  packaged separately so that nothing depends on it automatically; install it on

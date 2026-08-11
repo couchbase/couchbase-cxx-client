@@ -1,3 +1,49 @@
+# Which client library the tools link.
+#
+# The tools do not merely consume the SDK's public API: cbc links OpenTelemetry's OTLP exporter and
+# fit_performer links gRPC and protobuf for its own service, so each needs protobuf (and, for
+# fit_performer, gRPC) in its own right. In a package the shared client embeds those statically and
+# hides them, so it exports none of them -- and a tool linking the shared client ends up running a
+# second protobuf, a second gRPC and a second BoringSSL alongside the ones inside the library. Two
+# gRPC event engines and two BoringSSL instances in one process is the blob duplication this
+# packaging exists to avoid, and it is not merely wasted space: each copy carries its own descriptor
+# pool, RNG and error queue.
+#
+# Linking the static library instead puts exactly one copy of every vendored dependency in each
+# executable. The tools then have no runtime dependency on libcouchbase_cxx_client.so, which is why
+# the RPM, DEB and Alpine tool packages no longer declare one. That is what the packages need, so
+# this follows COUCHBASE_CXX_CLIENT_PACKAGE_BUILD.
+#
+# Off it the tools link the shared library, which is far cheaper to link and is the right trade for
+# a build that only needs them to compile and run. It is NOT the shipped configuration: the
+# duplication described above comes back, so a tool built that way exercises a different set of
+# libraries than the packages contain.
+option(COUCHBASE_CXX_CLIENT_STATIC_TOOLS "Link the command line tools against the static client library"
+       ${COUCHBASE_CXX_CLIENT_PACKAGE_BUILD})
+
+# The intermediate target rather than the bundled archive: cmake/Bundler.cmake gives the bundle only
+# a location and its include directories, so linking it drops every dependency the archive cannot
+# contain -- system zlib among them. The intermediate carries the full link interface and the same
+# objects, and the archives it pulls in are the same ones the bundle would have contained, so there
+# is still exactly one copy of each. The bundle exists to be installed for external consumers.
+# Asked for and unavailable is an error, not a downgrade. Falling back to the shared library would
+# give back exactly what the option exists to prevent -- a second protobuf, a runtime dependency on
+# libcouchbase_cxx_client.so, and tool packages whose declared dependencies no longer describe them
+# -- and it would do it silently, in the packaging configuration where it matters most.
+if(COUCHBASE_CXX_CLIENT_STATIC_TOOLS)
+  if(NOT COUCHBASE_CXX_CLIENT_BUILD_STATIC
+     OR NOT TARGET couchbase_cxx_client::couchbase_cxx_client_static_intermediate)
+    message(
+      FATAL_ERROR
+        "COUCHBASE_CXX_CLIENT_STATIC_TOOLS is ON, but the static client library is not being built. "
+        "Set COUCHBASE_CXX_CLIENT_BUILD_STATIC=ON, or turn STATIC_TOOLS off to link the tools "
+        "against the shared library.")
+  endif()
+  set(couchbase_cxx_tools_client_library couchbase_cxx_client::couchbase_cxx_client_static_intermediate)
+else()
+  set(couchbase_cxx_tools_client_library ${couchbase_cxx_client_DEFAULT_LIBRARY})
+endif()
+
 if(NOT TARGET CLI11::CLI11)
   # https://github.com/CLIUtils/CLI11/releases
   cpmaddpackage(
@@ -16,6 +62,11 @@ if(NOT TARGET CLI11::CLI11)
     "CLI11_SINGLE_FILE_TESTS OFF"
     "CLI11_INSTALL OFF"
     "CLI11_PRECOMPILED ON")
+  # cpmaddpackage sets cli11_SOURCE_DIR in this directory's scope only, and cmake/Packaging.cmake
+  # needs it to install CLI11's licence alongside cbc. Promoted so it survives the scope boundary.
+  set(cli11_SOURCE_DIR
+      "${cli11_SOURCE_DIR}"
+      CACHE INTERNAL "")
 endif()
 
 add_executable(
@@ -43,7 +94,7 @@ set_project_options(cbc)
 target_link_libraries(
   cbc
   PRIVATE ${CMAKE_THREAD_LIBS_INIT}
-          ${couchbase_cxx_client_DEFAULT_LIBRARY}
+          ${couchbase_cxx_tools_client_library}
           $<BUILD_INTERFACE:CLI11>
           $<BUILD_INTERFACE:Microsoft.GSL::GSL>
           $<BUILD_INTERFACE:taocpp::json>

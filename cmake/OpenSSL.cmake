@@ -1,4 +1,11 @@
 option(COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL "Rely on application to link OpenSSL library" FALSE)
+
+# The pkg-config module both fallbacks below ask for, named once because cmake/Packaging.cmake has to
+# request the same one in the installed package config: a consumer that resolves a different module
+# than the archive was built against gets a different TLS installation, quietly.
+set(COUCHBASE_CXX_CLIENT_OPENSSL_PKGCONFIG_MODULE
+    "openssl11"
+    CACHE STRING "pkg-config module used when find_package(OpenSSL) is unusable")
 option(COUCHBASE_CXX_CLIENT_USE_HOMEBREW_TO_DETECT_OPENSSL "Use homebrew to determine OpenSSL root directory" TRUE)
 option(COUCHBASE_CXX_CLIENT_USE_SCOOP_TO_DETECT_OPENSSL "Use scoop to determine OpenSSL root directory" TRUE)
 option(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL "Build and statically link BoringSSL library" FALSE)
@@ -115,7 +122,7 @@ else()
           REQUIRED
           IMPORTED_TARGET
           GLOBAL
-          openssl11)
+          ${COUCHBASE_CXX_CLIENT_OPENSSL_PKGCONFIG_MODULE})
         if(PKG_CONFIG_OPENSSL_FOUND)
           message(STATUS "PKG_CONFIG_OPENSSL_VERSION: ${PKG_CONFIG_OPENSSL_VERSION}")
           message(STATUS "PKG_CONFIG_OPENSSL_INCLUDE_DIRS: ${PKG_CONFIG_OPENSSL_INCLUDE_DIRS}")
@@ -134,7 +141,7 @@ else()
       REQUIRED
       IMPORTED_TARGET
       GLOBAL
-      openssl11)
+      ${COUCHBASE_CXX_CLIENT_OPENSSL_PKGCONFIG_MODULE})
     if(PKG_CONFIG_OPENSSL_FOUND)
       message(STATUS "PKG_CONFIG_OPENSSL_VERSION: ${PKG_CONFIG_OPENSSL_VERSION}")
       message(STATUS "PKG_CONFIG_OPENSSL_INCLUDE_DIRS: ${PKG_CONFIG_OPENSSL_INCLUDE_DIRS}")

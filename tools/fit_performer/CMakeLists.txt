@@ -146,7 +146,7 @@ target_include_directories(fit_performer PRIVATE ${PROJECT_BINARY_DIR}/generated
 
 target_link_libraries(
   fit_performer
-  PRIVATE ${couchbase_cxx_client_DEFAULT_LIBRARY}
+  PRIVATE ${couchbase_cxx_tools_client_library}
           Microsoft.GSL::GSL
           system_metrics_cxx
           spdlog::spdlog
