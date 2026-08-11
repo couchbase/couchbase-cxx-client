@@ -79,9 +79,23 @@ public:
    * {@link durability_level::none}, since it is not allowed to use both mechanisms at the same
    * time.
    *
+   * @note Not served over the @ref couchbase2 "couchbase2" transport, and not refused before the
+   * mutation is applied: observing persistence and replication needs per-node connections that
+   * transport does not open, so the mutation is sent to the gateway and applied and only the
+   * polling that follows fails. The document is already written when the error arrives, and that
+   * error comes from the failed poll rather than being
+   * @ref errc::common::feature_not_available. Level-based durability, set by
+   * @c durability(durability_level), is served normally and is the durability to use over that
+   * transport.
+   *
    * @param persist_to_nodes the durability persistence requirement.
    * @param replicate_to_nodes the durability replication requirement.
    * @return this options builder for chaining purposes.
+   *
+   * @since 1.0.0
+   * @committed
+   * @cng_since{1.4.0}
+   * @cng_uncommitted
    */
   auto durability(persist_to persist_to_nodes, replicate_to replicate_to_nodes) -> derived_class&
   {

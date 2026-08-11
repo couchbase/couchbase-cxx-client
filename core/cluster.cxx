@@ -962,10 +962,13 @@ public:
     }
     auto [hostname, port] = origin_.next_address();
     auto endpoint = hostname + ":" + port;
-    // parse_connection_string() rejects a couchbase2:// string carrying more than one host, so this
-    // is only reachable for an origin assembled programmatically (set_nodes(), or the
-    // hostname/port constructors). Kept as a guard rather than an assertion: using the first
-    // endpoint is well defined, and the log says which one was chosen.
+    // Several nodes reach here from an origin assembled programmatically (set_nodes(), or the
+    // hostname/port constructors), and from a connection string naming more than one host:
+    // parse_connection_string() records that as an error on the connection_string, but no caller
+    // reads that field, so the origin is built with every host regardless. Kept as a log rather
+    // than a rejection: one endpoint is as good as another here, and since the node list is
+    // shuffled unless preserve_bootstrap_nodes_order is set, the message is what says which one
+    // this process picked.
     if (origin_.get_nodes().size() > 1) {
       CB_LOG_INFO("[{}]: couchbase2 uses a single gateway endpoint (\"{}\"); the remaining {} "
                   "node(s) on this origin are ignored (the gateway fronts the cluster).",

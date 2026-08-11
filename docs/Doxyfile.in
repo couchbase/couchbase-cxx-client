@@ -292,7 +292,13 @@ TAB_SIZE               = 4
 ALIASES                = "committed=\xrefitem stability_committed \"Committed\" \"Committed Interfaces\" Generally available API and should be preferred in production" \
                          "uncommitted=\xrefitem stability_uncommitted \"Uncommitted\" \"Uncommitted Interfaces\" Might be changed in the future, and eventually promoted to committed" \
                          "volatile=\xrefitem stability_volatile \"Volatile\" \"Volatile Interfaces\" Should not be used in production" \
-                         "internal=\xrefitem stability_internal \"Internal\" \"Internal Interfaces\" Internal interface"
+                         "internal=\xrefitem stability_internal \"Internal\" \"Internal Interfaces\" Internal interface" \
+                         "cng_since{1}=@since \1 -- Cloud Native Gateway (CNG, \
+                         couchbase2://) support" \
+                         "cng_uncommitted=\xrefitem stability_uncommitted \"Uncommitted\" \
+                         \"Uncommitted Interfaces\" Cloud Native Gateway (CNG, \
+                         couchbase2://) support is uncommitted and may change in a future \
+                         release, independently of the stability of the API it applies to"
 
 # Set the OPTIMIZE_OUTPUT_FOR_C tag to YES if your project consists of C sources
 # only. Doxygen will then generate output that is more tailored for C. For
@@ -955,6 +961,7 @@ WARN_LOGFILE           =
 INPUT                  = ${DOXYGEN_INPUT_DIR} \
                          ${PROJECT_SOURCE_DIR}/docs/mainpage.hxx \
                          ${PROJECT_SOURCE_DIR}/docs/stability.hxx \
+                         ${PROJECT_SOURCE_DIR}/docs/couchbase2.hxx \
                          ${PROJECT_SOURCE_DIR}/docs/cli.hxx \
                          ${PROJECT_SOURCE_DIR}/docs/cbc.md \
                          ${PROJECT_SOURCE_DIR}/docs/cbc-get.md \
