@@ -311,6 +311,30 @@ if(COUCHBASE_CXX_CLIENT_BUILD_STATIC)
           DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
 
   install(FILES ${couchbase_cxx_client_static_IMPORTED_LOCATION} DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+  # This archive carries every vendored dependency, so its debug info dwarfs everything else the
+  # development package ships: 2.8 GB against the 126 MB of the same archive stripped. Most
+  # distributions strip static archives themselves -- EL through brp-strip-static-archive, Debian
+  # through dh_strip -- but Fedora no longer does, and there the development package went out at
+  # 332 MB where every other target ships 13 MB.
+  #
+  # Strip it here so what ships does not depend on which of those a distribution still runs. Only for
+  # a package build: a local install is where someone debugging into the vendored code wants the
+  # symbols, and stripping is a no-op on a distribution that has already done it.
+  if(COUCHBASE_CXX_CLIENT_PACKAGE_BUILD AND CMAKE_STRIP)
+    get_filename_component(_static_archive_name "${couchbase_cxx_client_static_IMPORTED_LOCATION}" NAME)
+    install(
+      CODE "
+      set(_archive \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/${_static_archive_name}\")
+      if(EXISTS \"\${_archive}\")
+        message(STATUS \"Stripping debug info from \${_archive}\")
+        execute_process(COMMAND \"${CMAKE_STRIP}\" --strip-debug \"\${_archive}\" RESULT_VARIABLE _strip_result)
+        if(NOT _strip_result EQUAL 0)
+          message(FATAL_ERROR \"Failed to strip \${_archive}: \${_strip_result}\")
+        endif()
+      endif()
+    ")
+  endif()
 endif()
 
 if(COUCHBASE_CXX_CLIENT_BUILD_SHARED)
