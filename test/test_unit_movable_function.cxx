@@ -19,12 +19,14 @@
 
 #include "core/utils/movable_function.hxx"
 
+#include <any>
 #include <array>
 #include <cstddef>
 #include <functional>
 #include <memory>
 #include <new>
 #include <stdexcept>
+#include <type_traits>
 #include <utility>
 
 namespace
@@ -573,3 +575,42 @@ TEST_CASE("unit: assigning a throwing-to-construct callable preserves the curren
   REQUIRE(static_cast<bool>(f));
   REQUIRE(f() == 7);
 }
+
+namespace
+{
+using callback = couchbase::core::utils::movable_function<void(int)>;
+
+struct matching_callable {
+  void operator()(int) const
+  {
+  }
+};
+
+struct wrong_signature {
+  void operator()(int, int) const
+  {
+  }
+};
+
+// Asking whether movable_function is copy constructible must answer, not recurse.
+//
+// The constructor constraint is instantiated with F = const movable_function&, and its
+// constructibility term then asks for the very trait being computed. std::conjunction stops at the
+// self-exclusion before that term is instantiated; joining the terms with && does not, because &&
+// instantiates every operand whatever the first one answers. std::any asks exactly this question
+// about anything it is handed, which is how the recursion was reached from
+// core/io/mcbp_command.hxx.
+//
+// These are static assertions because the defect is a compile error, not a wrong answer: where it
+// bites, this translation unit does not build. Only a toolchain whose std::is_constructible is a
+// class template rather than a compiler builtin reaches it -- gcc 8 does, gcc 9 and later do not --
+// so on a modern compiler these hold either way and pin the constraint's meaning instead.
+static_assert(!std::is_copy_constructible_v<callback>);
+static_assert(!std::is_constructible_v<std::any, callback>);
+static_assert(std::is_move_constructible_v<callback>);
+
+// The constraint still admits and rejects what it did before.
+static_assert(std::is_constructible_v<callback, matching_callable>);
+static_assert(!std::is_constructible_v<callback, wrong_signature>);
+static_assert(!std::is_constructible_v<callback, int>);
+} // namespace
