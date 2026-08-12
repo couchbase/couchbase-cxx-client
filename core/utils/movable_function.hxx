@@ -247,10 +247,18 @@ class movable_function<R(Args...)>
   // constructing a std::decay_t<F> from the forwarded argument, so a callable that cannot be
   // constructed there (e.g. a non-movable functor passed as an rvalue) is removed from overload
   // resolution rather than producing a hard error inside emplace().
+  //
+  // std::conjunction, not &&: the terms have to be instantiated one at a time, stopping at the
+  // first that is false. Asking whether this type is copy constructible -- which anything holding
+  // it in a std::any does -- instantiates this constraint with F = const movable_function&, and the
+  // constructibility term then asks for the trait that is already being computed. && evaluates
+  // lazily but instantiates every operand regardless, so the self-exclusion has to gate the others
+  // rather than merely precede them.
   template<typename F>
-  using enable_if_callable = std::enable_if_t<!std::is_same_v<std::decay_t<F>, movable_function> &&
-                                              std::is_constructible_v<std::decay_t<F>, F> &&
-                                              std::is_invocable_r_v<R, std::decay_t<F>&, Args...>>;
+  using enable_if_callable = std::enable_if_t<
+    std::conjunction_v<std::negation<std::is_same<std::decay_t<F>, movable_function>>,
+                       std::is_constructible<std::decay_t<F>, F>,
+                       std::is_invocable_r<R, std::decay_t<F>&, Args...>>>;
 
 public:
   movable_function() noexcept = default;
