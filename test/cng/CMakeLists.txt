@@ -5,6 +5,47 @@
 
 find_package(Threads REQUIRED)
 
+# Which client library the LINK_CLIENT tests link.
+#
+# The couchbase2 tests also link couchbase_cxx_protostellar directly, to construct the generated
+# protobuf messages the converters take. Under COUCHBASE_CXX_CLIENT_PACKAGE_BUILD
+# cmake/Protostellar.cmake builds those stubs with hidden visibility, so the shared client does not
+# export them: an executable linking the shared client AND the stubs archive would then get a second
+# copy of every generated message, with its own descriptor pool and its own type identity for the
+# same message, and a message built on one side would not be the same type as the one the other side
+# expects. Linking the static client keeps exactly one copy in the executable.
+#
+# Off that switch the stubs keep default visibility, the copies in the executable resolve to the
+# ones inside the .so, and the tests link the shared client -- which is what a development or CI
+# build wants, because the static client puts a full copy of the client and everything it vendors in
+# each of these executables.
+#
+# The intermediate target rather than the bundled archive: cmake/Bundler.cmake gives the bundle only
+# a location and its include directories, so linking it drops every dependency the archive cannot
+# contain -- system zlib among them. The intermediate carries the full link interface and the same
+# objects, and the archives it pulls in are the same ones the bundle would have contained, so there
+# is still exactly one copy of each. The bundle exists to be installed for external consumers.
+#
+# Where it is unavailable, fall back to the default and skip the couchbase2 tests below rather than
+# build a target that would fail this way.
+set(cng_test_client_library ${couchbase_cxx_client_DEFAULT_LIBRARY})
+set(cng_test_couchbase2_supported TRUE)
+if(COUCHBASE_CXX_CLIENT_PACKAGE_BUILD)
+  if(TARGET couchbase_cxx_client::couchbase_cxx_client_static_intermediate)
+    set(cng_test_client_library couchbase_cxx_client::couchbase_cxx_client_static_intermediate)
+  else()
+    set(cng_test_couchbase2_supported FALSE)
+    if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2)
+      message(
+        WARNING
+          "The couchbase2 CNG tests need COUCHBASE_CXX_CLIENT_BUILD_STATIC=ON under "
+          "COUCHBASE_CXX_CLIENT_PACKAGE_BUILD and are skipped. They link the generated protobuf "
+          "stubs directly, which only agrees with the client library when both come from the same "
+          "static archive.")
+    endif()
+  endif()
+endif()
+
 # Shared harness: the runner + the shared main(). Each test executable links this and provides
 # its own tests(). fmt comes from spdlog's bundled copy (header include dirs only).
 add_library(
@@ -55,7 +96,7 @@ function(add_cng_test relpath)
               $<BUILD_INTERFACE:$<TARGET_PROPERTY:asio,INTERFACE_INCLUDE_DIRECTORIES>>)
     propagate_public_compile_definitions(${target} spdlog::spdlog asio)
     target_link_libraries(
-      ${target} PRIVATE ${couchbase_cxx_client_DEFAULT_LIBRARY}
+      ${target} PRIVATE ${cng_test_client_library}
                         $<BUILD_INTERFACE:Microsoft.GSL::GSL> $<BUILD_INTERFACE:taocpp::json>)
   endif()
   if(ARG_LIBS)
@@ -97,7 +138,9 @@ add_cng_test(cluster/couchbase2_build_support LINK_CLIENT)
 
 # Protostellar codegen smoke test — only when couchbase2 support (and thus the generated stubs
 # library) is built. See CXXCBC-886.
-if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 AND TARGET couchbase_cxx_protostellar)
+if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
+   AND TARGET couchbase_cxx_protostellar
+   AND cng_test_couchbase2_supported)
   add_cng_test(protostellar/codegen_smoke)
   target_link_libraries(cng_codegen_smoke_test PRIVATE couchbase_cxx_protostellar)
 

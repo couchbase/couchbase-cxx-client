@@ -4,6 +4,80 @@ include(CMakePackageConfigHelpers)
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/couchbase DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(FILES LICENSE.txt DESTINATION ${CMAKE_INSTALL_DOCDIR})
 
+
+# Notices for everything compiled into the binaries.
+#
+# Vendoring moved these dependencies from distribution packages -- each of which carried its own
+# licence -- into our own artefacts, so the obligation to ship their terms moved with them. Apache
+# 2.0 requires the NOTICE file to travel with any distribution of the work (gRPC, Protobuf, Abseil),
+# and the BSD/MIT projects require their copyright notice to be reproduced (BoringSSL, re2, c-ares,
+# zlib, curl, utf8_range).
+#
+# Installed only when the dependency was actually built from source: a build that links the
+# platform's gRPC ships none of its code and owes nothing.
+function(couchbase_install_third_party_licence name)
+  set(_found FALSE)
+  foreach(candidate IN LISTS ARGN)
+    if(candidate AND EXISTS "${candidate}")
+      install(FILES "${candidate}" DESTINATION "${CMAKE_INSTALL_DOCDIR}/third_party/${name}")
+      set(_found TRUE)
+    endif()
+  endforeach()
+  # Said out loud, because a licence that quietly fails to install looks exactly like one that was
+  # never required. cli11 went missing this way: it is added from tools/CMakeLists.txt, so its
+  # source directory is a child-scope variable and is simply empty here.
+  if(NOT _found)
+    message(WARNING "No licence file found for vendored component '${name}'; it will not ship with "
+                    "the packages even though its code may be compiled in. Checked: ${ARGN}")
+  endif()
+endfunction()
+
+if(boringssl_SOURCE_DIR)
+  couchbase_install_third_party_licence(boringssl "${boringssl_SOURCE_DIR}/LICENSE")
+endif()
+if(curl_SOURCE_DIR)
+  couchbase_install_third_party_licence(curl "${curl_SOURCE_DIR}/COPYING")
+endif()
+if(opentelemetry_SOURCE_DIR)
+  # Statically linked into cbc and fit_performer through the OTLP exporters; the library itself uses
+  # only the header-only API, which is equally contained.
+  couchbase_install_third_party_licence(opentelemetry-cpp "${opentelemetry_SOURCE_DIR}/LICENSE")
+endif()
+if(grpc_SOURCE_DIR)
+  couchbase_install_third_party_licence(grpc "${grpc_SOURCE_DIR}/LICENSE" "${grpc_SOURCE_DIR}/NOTICE.txt")
+  # Fetched as submodules of gRPC and compiled into the same binaries, so their notices ship too.
+  couchbase_install_third_party_licence(abseil-cpp "${grpc_SOURCE_DIR}/third_party/abseil-cpp/LICENSE")
+  couchbase_install_third_party_licence(protobuf "${grpc_SOURCE_DIR}/third_party/protobuf/LICENSE")
+  couchbase_install_third_party_licence(re2 "${grpc_SOURCE_DIR}/third_party/re2/LICENSE")
+  couchbase_install_third_party_licence(c-ares "${grpc_SOURCE_DIR}/third_party/cares/cares/LICENSE.md")
+  couchbase_install_third_party_licence(zlib "${grpc_SOURCE_DIR}/third_party/zlib/LICENSE")
+  couchbase_install_third_party_licence(utf8_range
+                                        "${grpc_SOURCE_DIR}/third_party/protobuf/third_party/utf8_range/LICENSE")
+endif()
+if(api_common_protos_SOURCE_DIR)
+  couchbase_install_third_party_licence(api-common-protos "${api_common_protos_SOURCE_DIR}/LICENSE")
+endif()
+
+# The SDK's own bundled dependencies. These are compiled into the client library in every
+# configuration, and since the tools packages stopped depending on the library package they are
+# carried inside cbc and fit_performer as well, so the same obligation applies to those packages.
+couchbase_install_third_party_licence(spdlog "${spdlog_SOURCE_DIR}/LICENSE")
+couchbase_install_third_party_licence(fmt "${fmt_SOURCE_DIR}/LICENSE.txt"
+                                      "${spdlog_SOURCE_DIR}/include/spdlog/fmt/bundled/fmt.license.rst")
+couchbase_install_third_party_licence(hdr_histogram "${hdr_histogram_SOURCE_DIR}/COPYING.txt")
+couchbase_install_third_party_licence(snappy "${snappy_SOURCE_DIR}/COPYING")
+couchbase_install_third_party_licence(llhttp "${llhttp_SOURCE_DIR}/LICENSE-MIT")
+couchbase_install_third_party_licence(json "${json_SOURCE_DIR}/LICENSE")
+couchbase_install_third_party_licence(gsl "${gsl_SOURCE_DIR}/LICENSE")
+# Only fetched when the tools are built, and only cbc contains it.
+if(COUCHBASE_CXX_CLIENT_BUILD_TOOLS)
+  couchbase_install_third_party_licence(cli11 "${cli11_SOURCE_DIR}/LICENSE")
+endif()
+couchbase_install_third_party_licence(asio "${asio_SOURCE_DIR}/asio/LICENSE_1_0.txt")
+# Checked into this repository rather than fetched, so their paths are fixed.
+couchbase_install_third_party_licence(expected "${PROJECT_SOURCE_DIR}/third_party/expected/COPYING")
+couchbase_install_third_party_licence(jsonsl "${PROJECT_SOURCE_DIR}/third_party/jsonsl/LICENSE")
+
 set(COUCHBASE_CXX_CLIENT_PKGCONFIG_VERSION
     "${COUCHBASE_CXX_CLIENT_SEMVER}"
     CACHE STRING "The version to use in couchbase_cxx_client.pc")
@@ -26,6 +100,203 @@ endif()
 
 if(COUCHBASE_CXX_CLIENT_BUILD_STATIC)
   get_target_property(couchbase_cxx_client_static_IMPORTED_LOCATION couchbase_cxx_client_static IMPORTED_LOCATION)
+
+  # What the installed archive still needs from outside itself.
+  #
+  # cmake/Bundler.cmake archives STATIC_LIBRARY dependencies and nothing else, and an IMPORTED target
+  # carries no link interface of its own, so every dependency resolved as a shared library stays
+  # outside the archive. Publishing them here is what stops a consumer linking it from hitting
+  # unresolved symbols.
+  #
+  # Which ones those are is a property of the configuration, not a fixed list. The packaging
+  # configuration bundles everything and needs only the platform libraries -- which is also what
+  # cbc's own link line carries -- while an install built against the platform's gRPC or OpenSSL
+  # needs those named too. The package targets are therefore taken from the graph below; only the
+  # platform libraries, which are not targets at all, stay conditional on the platform.
+  set(_static_deps "find_dependency(Threads)")
+  set(_static_libs "Threads::Threads")
+  # Threads::Threads carries the platform's thread flag; pkg-config has no equivalent, so the flag
+  # itself goes into Libs.private. It is empty where pthread lives in libc, which is every platform
+  # this currently builds on except EL8, where it is -lpthread.
+  set(_static_pc "${CMAKE_THREAD_LIBS_INIT}")
+
+  # Which package targets to name is decided by the link graph, not by re-deriving the option
+  # combinations that produced it.
+  #
+  # Five review rounds were spent adding one more entry to a hand-written list, and a sixth found
+  # that zlib reaches the archive through OpenSSL's interface as well as through gRPC -- so a
+  # condition of "couchbase2 is on" was wrong in a configuration nobody had considered.
+  # cmake/Bundler.cmake already walks the graph to decide what to archive; what it declined to
+  # archive is exactly what has to be named here, so that list is the input.
+  #
+  # The mapping from a target to the find_dependency that recreates it stays explicit, because it is
+  # not mechanical: the package providing protobuf::libprotobuf is called Protobuf, the version
+  # floor is the one cmake/GrpcProtobuf.cmake enforces, and the pkg-config fallback in
+  # cmake/OpenSSL.cmake has no find_dependency form at all.
+  get_property(_bundle_external GLOBAL PROPERTY couchbase_cxx_client_static_EXTERNAL_LIBS)
+  get_property(_bundle_opts GLOBAL PROPERTY couchbase_cxx_client_static_EXTERNAL_OPTS)
+
+  if("ZLIB::ZLIB" IN_LIST _bundle_external)
+    string(APPEND _static_deps "\nfind_dependency(ZLIB)")
+    list(APPEND _static_libs "ZLIB::ZLIB")
+    string(APPEND _static_pc " -lz")
+  endif()
+
+  # Without COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL the client links the platform's OpenSSL, PUBLIC and
+  # shared. BoringSSL itself is a pair of STATIC_LIBRARY targets and is archived, so it needs nothing
+  # here, and COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL links no TLS at all -- both of which the graph
+  # states directly rather than by inference.
+  #
+  # cmake/OpenSSL.cmake falls back to pkg-config when CMake's own OpenSSL targets are unusable, and
+  # the client target in CMakeLists.txt then links PkgConfig::PKG_CONFIG_OPENSSL. Exporting
+  # find_dependency(OpenSSL) in that case would hand the consumer back exactly the targets the build
+  # rejected, so the fallback is exported as the fallback.
+  set(_static_pc_requires)
+  if("PkgConfig::PKG_CONFIG_OPENSSL" IN_LIST _bundle_external)
+    # The same module the build resolved, not "openssl": on a host where only openssl11 exists --
+    # which is the reason this fallback is taken at all -- asking for the wrong one either fails or
+    # silently selects a different TLS installation than the archive was compiled against.
+    string(
+      APPEND
+      _static_deps
+      "\nfind_dependency(PkgConfig)\npkg_check_modules(PKG_CONFIG_OPENSSL REQUIRED IMPORTED_TARGET ${COUCHBASE_CXX_CLIENT_OPENSSL_PKGCONFIG_MODULE})"
+    )
+    list(APPEND _static_libs "PkgConfig::PKG_CONFIG_OPENSSL")
+    # Requires.private rather than -lssl -lcrypto, so pkg-config resolves the module and carries its
+    # library directories and flags across; flattening it to two names drops both.
+    list(APPEND _static_pc_requires "${COUCHBASE_CXX_CLIENT_OPENSSL_PKGCONFIG_MODULE}")
+  elseif("OpenSSL::SSL" IN_LIST _bundle_external OR "OpenSSL::Crypto" IN_LIST _bundle_external)
+    string(APPEND _static_deps "\nfind_dependency(OpenSSL)")
+    list(APPEND _static_libs "OpenSSL::SSL" "OpenSSL::Crypto")
+    string(APPEND _static_pc " -lssl -lcrypto")
+  endif()
+
+  # The generated stubs are archived; the gRPC and Protobuf they call are not, whenever
+  # cmake/GrpcProtobuf.cmake resolved them from the platform. Keyed on the graph, this is
+  # automatically silent when gRPC was resolved only for the FIT performer, which is a separate
+  # executable and puts nothing in this archive.
+  if("gRPC::grpc++" IN_LIST _bundle_external OR "grpc++" IN_LIST _bundle_external)
+    string(APPEND _static_deps "\nfind_dependency(gRPC)\nfind_dependency(Protobuf 3.15)")
+    list(APPEND _static_libs "gRPC::grpc++" "protobuf::libprotobuf")
+    string(APPEND _static_pc " -lgrpc++ -lgrpc -lprotobuf")
+  endif()
+
+  # Every plain link item the graph carries: Windows import libraries (iphlpapi for GetNetworkParams,
+  # bcrypt for the BCrypt* calls in core/crypto, ws2_32 and crypt32 from a source-built gRPC),
+  # libexecinfo where backtrace() is not in libc, and whatever else a subdirectory contributed.
+  #
+  # Taken from the graph rather than written out per platform, because the hand-written version was
+  # wrong in a new way every round -- keyed on MINGW when MSVC needed it too, or simply missing an
+  # entry contributed somewhere nobody thought to look.
+  #
+  # Published by NAME: cmake/CompilerOptions.cmake and gRPC both contribute find_library results, and
+  # an absolute path from the build host means nothing on a consumer's machine.
+  foreach(_ext IN LISTS _bundle_external)
+    if(TARGET ${_ext})
+      continue()
+    endif()
+    get_filename_component(_ext_name "${_ext}" NAME_WE)
+    string(REGEX REPLACE "^lib" "" _ext_name "${_ext_name}")
+    string(REGEX REPLACE "^-l" "" _ext_name "${_ext_name}")
+    if(_ext_name AND NOT _ext_name IN_LIST _static_libs)
+      list(APPEND _static_libs "${_ext_name}")
+      string(APPEND _static_pc " -l${_ext_name}")
+    endif()
+  endforeach()
+
+  # bcrypt cannot be taken from the graph. core/crypto/cbcrypto.cc calls BCryptOpenAlgorithmProvider
+  # under MSVC, but it is compiled straight into the client from the source list -- the
+  # core/crypto/CMakeLists.txt that links bcrypt.lib is never added by any add_subdirectory, so that
+  # link never happens. Whether bcrypt reaches the graph at all therefore depends on some other
+  # dependency happening to pull it in, which is not something to leave a shipped package resting on.
+  if(WIN32 AND NOT bcrypt IN_LIST _static_libs)
+    list(APPEND _static_libs bcrypt)
+    string(APPEND _static_pc " -lbcrypt")
+  endif()
+
+  # The three below are not in the graph as link items on every platform -- libc supplies them and
+  # the toolchain adds them implicitly -- but a consumer linking a bare archive gets no such help.
+  # Deduplicated against the graph above, so naming one twice costs nothing while missing one breaks
+  # the package.
+  if(CMAKE_DL_LIBS AND NOT CMAKE_DL_LIBS IN_LIST _static_libs)
+    list(APPEND _static_libs "${CMAKE_DL_LIBS}")
+    string(APPEND _static_pc " -l${CMAKE_DL_LIBS}")
+  endif()
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    foreach(_libc_extra m rt)
+      if(NOT _libc_extra IN_LIST _static_libs)
+        list(APPEND _static_libs ${_libc_extra})
+        string(APPEND _static_pc " -l${_libc_extra}")
+      endif()
+    endforeach()
+  endif()
+
+  # Audit everything published above against the whole graph the bundler walked.
+  #
+  # The package targets come from that graph, but the platform libraries above are still written by
+  # hand, and that half is where the misses were: bcrypt from core/crypto, iphlpapi from the client
+  # target, libexecinfo from CompilerOptions -- each contributed by a subdirectory nobody thought to
+  # enumerate, and each found by a reviewer rather than by the build. This closes that loop:
+  # cmake/Bundler.cmake records every link item it did NOT archive, and anything unrepresented is
+  # reported at configure time.
+  #
+  # A warning, not an error: the mapping from a link item to the name a consumer needs is not always
+  # one to one -- a namespaced target and its find_dependency package differ (protobuf::libprotobuf
+  # comes from Protobuf), and header-only interface targets contribute nothing to link. Judgement
+  # belongs to whoever reads it, so this reports and does not guess.
+  # Reduce both sides to bare lowercase names, so a path, an -lfoo, a foo.lib and a namespaced
+  # target all compare alike. Compared as list members rather than by regex: a target name is not a
+  # pattern, and gRPC::grpc++ is not even a valid one.
+  set(_published_names)
+  foreach(_pub IN LISTS _static_libs)
+    string(REGEX REPLACE "^.*::" "" _pub "${_pub}")
+    string(TOLOWER "${_pub}" _pub)
+    list(APPEND _published_names "${_pub}")
+  endforeach()
+  string(REPLACE " " ";" _pc_items "${_static_pc}")
+  foreach(_pub IN LISTS _pc_items)
+    string(REGEX REPLACE "^-l" "" _pub "${_pub}")
+    string(TOLOWER "${_pub}" _pub)
+    list(APPEND _published_names "${_pub}")
+  endforeach()
+
+  set(_unrepresented)
+  foreach(_ext IN LISTS _bundle_external)
+    if(_ext MATCHES "::")
+      string(REGEX REPLACE "^.*::" "" _ext_name "${_ext}")
+    else()
+      get_filename_component(_ext_name "${_ext}" NAME_WE)
+      string(REGEX REPLACE "^lib" "" _ext_name "${_ext_name}")
+      string(REGEX REPLACE "^-l" "" _ext_name "${_ext_name}")
+    endif()
+    string(TOLOWER "${_ext_name}" _ext_name)
+    if(_ext_name AND NOT _ext_name IN_LIST _published_names)
+      list(APPEND _unrepresented "${_ext}")
+    endif()
+  endforeach()
+  if(_unrepresented)
+    message(
+      WARNING
+        "The installed static package does not name these dependencies, which cmake/Bundler.cmake "
+        "left outside the archive: ${_unrepresented}. A consumer linking "
+        "libcouchbase_cxx_client_static.a may get unresolved symbols from them. Add them in "
+        "cmake/Packaging.cmake, or record why they need no entry.")
+  endif()
+
+  # Link options the archive was built with, kept apart from the libraries because pkg-config wants
+  # them verbatim in Libs.private and CMake wants them as INTERFACE_LINK_OPTIONS. A sanitizer build
+  # is the case that matters: the objects carry references into the sanitizer runtime, and a
+  # consumer linking without the flag gets undefined symbols with no indication why.
+  list(JOIN _bundle_opts ";" couchbase_cxx_client_static_LINK_OPTIONS)
+  foreach(_opt IN LISTS _bundle_opts)
+    string(APPEND _static_pc " ${_opt}")
+  endforeach()
+
+  list(JOIN _static_pc_requires ", " couchbase_cxx_client_static_PC_REQUIRES_PRIVATE)
+
+  set(couchbase_cxx_client_static_FIND_DEPENDENCIES "${_static_deps}")
+  list(JOIN _static_libs ";" couchbase_cxx_client_static_LINK_LIBRARIES)
+  string(STRIP "${_static_pc}" couchbase_cxx_client_static_PC_LIBS_PRIVATE)
 
   configure_package_config_file(
     ${PROJECT_SOURCE_DIR}/cmake/couchbase_cxx_client_static-config.cmake.in
@@ -129,6 +400,13 @@ add_custom_command(
     -DCOUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE_ROOT="${PROJECT_BINARY_DIR}/packaging/${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/cache"
     -DCOUCHBASE_CXX_CLIENT_BUILD_TESTS=OFF -DCOUCHBASE_CXX_CLIENT_BUILD_TOOLS=ON -DCOUCHBASE_CXX_CLIENT_BUILD_DOCS=OFF
     -DCOUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY=ON
+    # couchbase2:// pulls gRPC, protobuf, abseil, re2, c-ares and the Protostellar schema. This
+    # configure exists to populate third_party_cache, so it must enable every option any consumer of
+    # the tarball may build with -- an option left OFF here is a dependency missing from the cache,
+    # and a from-tarball build with it ON then reaches the network (or fails, when offline).
+    # PACKAGE_BUILD for the same reason: without it gRPC resolves from the platform's packages on a
+    # host that has them, and its sources never enter the cache the packages build from.
+    -DCOUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2=ON -DCOUCHBASE_CXX_CLIENT_PACKAGE_BUILD=ON
     -DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON -DCPM_DOWNLOAD_ALL=ON -DCPM_USE_NAMED_CACHE_DIRECTORIES=ON
     -DCPM_USE_LOCAL_PACKAGES=OFF -DCOUCHBASE_CXX_CLIENT_BUILD_STATIC=ON -DCOUCHBASE_CXX_CLIENT_BUILD_SHARED=ON
     -DCOUCHBASE_CXX_CLIENT_INSTALL=ON -DCOUCHBASE_CXX_RECORD_BUILD_INFO_FOR_TARBALL=ON
@@ -142,7 +420,26 @@ add_custom_command(
     "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/cache" -wholename "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/cache/{}"
     -type f
     | grep -v
-        -e "/benchmark"
+        -e "/third_party/benchmark/"
+        -e "/grpc/doc/"
+        -e "/grpc/examples/"
+        -e "/grpc/src/android"
+        -e "/grpc/src/csharp"
+        -e "/grpc/src/objective-c"
+        -e "/grpc/src/php"
+        -e "/grpc/src/python"
+        -e "/grpc/src/ruby"
+        -e "/grpc/test/.*\\.cc"
+        -e "/grpc/tools/"
+        -e "/protobuf/conformance"
+        -e "/protobuf/csharp"
+        -e "/protobuf/examples"
+        -e "/protobuf/java"
+        -e "/protobuf/objectivec"
+        -e "/protobuf/php"
+        -e "/protobuf/python"
+        -e "/protobuf/ruby"
+        -e "/protobuf/rust"
         -e "/opentelemetry.*/functional"
         -e "/opentelemetry.*/install"
         -e "/opentelemetry.*/test"

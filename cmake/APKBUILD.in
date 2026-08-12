@@ -25,13 +25,15 @@ url="https://docs.couchbase.com/cxx-sdk/current/hello-world/overview.html"
 arch="all"
 license="Apache-2.0"
 depends=""
+# The -dev subpackage installs the static library's CMake config, which runs find_dependency(ZLIB);
+# a build dependency does not reach whoever installs that package, so zlib-dev is declared for it
+# here as it is in the RPM and Debian manifests.
+depends_dev="zlib-dev"
 makedepends="
 	linux-headers
 	cmake
 	ninja
-	curl-dev
-	protobuf-dev
-	grpc-dev
+	zlib-dev
 	nlohmann-json
 "
 subpackages="${pkgname}-dev ${pkgname}-tools"
@@ -49,6 +51,7 @@ build() {
 		-DCOUCHBASE_CXX_CLIENT_PKGCONFIG_VERSION="${pkgver}" \
 		-DCOUCHBASE_CXX_CLIENT_INSTALL=ON \
 		-DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON \
+		-DCOUCHBASE_CXX_CLIENT_PACKAGE_BUILD=ON \
 		-DCOUCHBASE_CXX_CLIENT_BUILD_EXAMPLES=OFF \
 		-DCOUCHBASE_CXX_CLIENT_BUILD_TESTS=OFF \
 		-DCOUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY=ON \
@@ -60,11 +63,29 @@ build() {
 
 tools() {
 	pkgdesc="${pkgdesc} (tools)"
-	depends="${pkgname}=${pkgver}-r${pkgrel}"
 
 	amove usr/bin
+
+	# cbc no longer depends on the library package and carries the SDK and taocpp code inside the
+	# binary, so the notices for that code have to ship with it. Copied under this subpackage's own
+	# documentation directory rather than shared with the base package, which is what the Debian
+	# packaging has to do -- dpkg rejects two packages owning one path even when the contents match.
+	# Whether apk would tolerate sharing was not established; a private directory needs no answer.
+	local _doc="${subpkgdir}/usr/share/doc/${subpkgname}"
+	mkdir -p "${_doc}/tao/json" "${_doc}/tao/pegtl"
+	cp "${pkgdir}/usr/share/doc/couchbase_cxx_client/LICENSE.txt" "${_doc}/"
+	cp "${pkgdir}/usr/share/doc/tao/json/LICENSE" "${_doc}/tao/json/"
+	cp "${pkgdir}/usr/share/doc/tao/pegtl/LICENSE" "${_doc}/tao/pegtl/"
+	# And the notices for the vendored dependencies compiled into cbc, which the base package
+	# receives from the install step but this subpackage does not.
+	cp -r "${pkgdir}/usr/share/doc/couchbase_cxx_client/third_party" "${_doc}/"
 }
 
 package() {
 	DESTDIR="${pkgdir}" cmake --install apk-build
+	# The vendored gRPC and curl install their headers, archives and pkg-config files regardless of
+	# the options that are supposed to gate them; cmake/GrpcProtobuf.cmake and
+	# cmake/ThirdPartyDependencies.cmake redirect all of it under this one prefix so it can be
+	# dropped in a single step. Nothing packaged here comes from it.
+	rm -rf "${pkgdir}/usr/vendored-not-installed"
 }

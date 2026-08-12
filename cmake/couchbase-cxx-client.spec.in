@@ -11,32 +11,23 @@
 
 # gRPC support gate (grpc_supported).
 #
-# Some components link system gRPC + Protobuf. A platform can build ANY gRPC-based component only
-# if it provides BOTH:
-#   1. gRPC:     grpc-devel + grpc-plugins (the grpc_cpp_plugin protoc plugin), and
-#   2. Protobuf: version >= 3.15. Our .proto schemas use proto3 "optional" fields, whose generated
-#      has_*() accessors are only emitted by protobuf >= 3.15; older protobuf fails to compile
-#      (e.g. EL9 ships protobuf 3.14 in CRB -> "has_as_json_object() was not declared").
+# gRPC, Protobuf, Abseil, re2 and c-ares are built from source (cmake/GrpcProtobuf.cmake) and
+# embedded statically, so this gate no longer tracks what the distribution packages. Linking the
+# platform's gRPC would pull in the platform's OpenSSL alongside the BoringSSL this package already
+# links statically -- two TLS stacks in one address space -- and would couple the build to the
+# distribution's protobuf version. Neither is acceptable for a redistributable binary, so the
+# packages are not installed and the from-source path is the only one taken.
 #
-# The platforms below are gated by gRPC/Protobuf availability -- NOT by any individual component.
-# fit_performer is currently the only gRPC-based component packaged, but every future gRPC-based
-# feature is expected to gate on grpc_supported and inherit this same matrix.
+# What the gate now tracks is whether the toolchain has been verified to compile gRPC v1.65.5 and
+# the Abseil it vendors. EL8 (gcc 8) is excluded because that combination is untested there, not
+# because of a known incompatibility -- gRPC itself only asks for cxx_std_14. EL8 already opts out
+# of OpenTelemetry below for related toolchain-age reasons. To add it, build the mock root and
+# confirm before flipping this test.
 #
-# Support matrix (versions are indicative and may drift; the load-bearing fact is protobuf >= 3.15):
-#   - Fedora             grpc + protobuf >= 3.15 in repos     -> gRPC supported
-#   - EL10+ (rocky/rhel) grpc (EPEL) + protobuf >= 3.15 (CRB) -> gRPC supported
-#   - Amazon Linux 2023  grpc + protobuf >= 3.15 in repos     -> gRPC supported (only amzn root)
-#   - EL9   (rocky/rhel) protobuf 3.14 in CRB                 -> no: protobuf too old
-#   - EL8                no grpc packaged                     -> no: grpc unavailable
-#
-# To enable another distribution: confirm it provides grpc-devel, grpc-plugins, and
-# protobuf-devel >= 3.15, then add it to the test below.
-#
-# The gate below matches any Amazon Linux; the only amzn build root is amazonlinux-2023, which meets
-# the requirement. A tighter "amzn >= 2023" test is deliberately avoided: RPM's conditional
-# expression parser treats the leading-zero form (02023) as octal, so that comparison is false on
-# AL2023. If an older Amazon Linux is ever added as a root, verify it ships protobuf >= 3.15 first.
-%if 0%{?fedora} > 0 || 0%{?rhel} >= 10 || 0%{?amzn}
+# The gate matches any Amazon Linux; the only amzn build root is amazonlinux-2023. A tighter
+# "amzn >= 2023" test is deliberately avoided: RPM's conditional expression parser treats the
+# leading-zero form (02023) as octal, so that comparison is false on AL2023.
+%if 0%{?fedora} > 0 || 0%{?rhel} >= 9 || 0%{?amzn}
 %global grpc_supported 1
 %endif
 
@@ -50,20 +41,24 @@ License: ASL 2.0
 URL: https://docs.couchbase.com/cxx-sdk/current/hello-world/overview.html
 BuildRequires: gcc, gcc-c++
 BuildRequires: cmake >= 3.19
+# OpenTelemetry's OTLP/HTTP exporter -- linked by cbc, not by the SDK library, which uses only the
+# header-only opentelemetry_api -- needs libcurl and nlohmann-json. curl is built from source here
+# and linked against this package's BoringSSL, so the platform's libcurl (and the OpenSSL behind it)
+# stays out of the picture entirely; only nlohmann-json, which is header-only and therefore
+# duplicates nothing, is taken from the distribution. Protobuf is deliberately absent: OpenTelemetry
+# reuses the protobuf that the from-source gRPC builds.
 %if 0%{?amzn} == 0 && (0%{?rhel} >= 9 || 0%{?fedora} > 0)
-BuildRequires: curl-devel
-BuildRequires: protobuf-devel
 BuildRequires: json-devel
 %else
 # CentOS 8 / Rocky 8 - skip these packages (no OpenTelemetry)
 %endif
 %if 0%{?grpc_supported}
-BuildRequires: grpc-devel
-BuildRequires: grpc-plugins
-# protobuf-devel is also pulled by the OpenTelemetry block above on most targets, but Amazon Linux
-# skips that block (no OTel), so require it here to keep the gRPC build self-contained.
-BuildRequires: protobuf-devel
-BuildRequires: protobuf-compiler
+# gRPC links zlib, and it is the one gRPC dependency taken from the system
+# (gRPC_ZLIB_PROVIDER=package). zlib is a distribution shared library that other libraries loaded
+# alongside this one already use, so bundling gRPC's copy would add a second one rather than remove
+# a dependency. Previously satisfied only as a transitive dependency of grpc-devel, which is no
+# longer installed.
+BuildRequires: zlib-devel
 %endif
 Source0: @COUCHBASE_CXX_CLIENT_TARBALL_NAME@.tar.gz
 
@@ -76,22 +71,26 @@ Source0: @COUCHBASE_CXX_CLIENT_TARBALL_NAME@.tar.gz
 %description
 This is the client and protocol library for Couchbase project.
 
+# No dependency on the library package: cbc links the static library, because it needs protobuf in
+# its own right (through OpenTelemetry's OTLP exporter) and would otherwise load a second copy
+# alongside the one inside libcouchbase_cxx_client.so.
 %package tools
 Summary: Couchbase C++ SDK, command line tools
-Requires: %{name}%{?_isa} = %{version}-%{release}
 %description -n %{name}-tools
 CLI tools from the Couchbase C++ SDK.
 
+# zlib-devel because the installed CMake config for the static library emits find_dependency(ZLIB):
+# the archive carries gRPC objects that call it, and BuildRequires do not reach consumers.
 %package devel
 Summary: Couchbase C++ SDK, development files
 Requires: %{name}%{?_isa} = %{version}-%{release}
+Requires: zlib-devel
 %description devel
 Development files for the Couchbase C++ SDK.
 
 %if 0%{?grpc_supported}
 %package fit-performer
 Summary: Couchbase C++ SDK, FIT performer
-Requires: %{name}%{?_isa} = %{version}-%{release}
 %description fit-performer
 FIT integration-test performer built against the Couchbase C++ SDK. It is
 packaged separately so that nothing depends on it automatically; install it on
@@ -107,6 +106,7 @@ demand to run integration verification against the production SDK packages.
     -DBUILD_SHARED_LIBS=OFF \
     -DCOUCHBASE_CXX_CLIENT_INSTALL=ON \
     -DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON \
+    -DCOUCHBASE_CXX_CLIENT_PACKAGE_BUILD=ON \
     -DCOUCHBASE_CXX_CLIENT_BUILD_EXAMPLES=OFF \
     -DCOUCHBASE_CXX_CLIENT_BUILD_TESTS=OFF \
 %if 0%{?amzn} == 0 && (0%{?rhel} >= 9 || 0%{?fedora} > 0)
@@ -117,8 +117,10 @@ demand to run integration verification against the production SDK packages.
     -DCOUCHBASE_CXX_CLIENT_BUILD_TOOLS=ON \
 %if 0%{?grpc_supported}
     -DCOUCHBASE_CXX_CLIENT_BUILD_FIT_PERFORMER=ON \
+    -DCOUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2=ON \
 %else
     -DCOUCHBASE_CXX_CLIENT_BUILD_FIT_PERFORMER=OFF \
+    -DCOUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2=OFF \
 %endif
     -DCOUCHBASE_CXX_CLIENT_BUILD_STATIC=ON \
     -DCOUCHBASE_CXX_CLIENT_BUILD_SHARED=ON
@@ -136,14 +138,33 @@ DESTDIR="%{buildroot}" /usr/bin/cmake --install "redhat-linux-build"
 %else
 %cmake_install
 %endif
+# The vendored gRPC installs its headers, pkg-config files and etc/roots.pem regardless of
+# gRPC_INSTALL. cmake/GrpcProtobuf.cmake redirects all of them under this one prefix so they can be
+# dropped together; nothing packaged here comes from it.
+rm -rf "%{buildroot}%{_prefix}/vendored-not-installed"
 
 %files
 %license %{_docdir}/couchbase*/LICENSE.txt
 %license %{_docdir}/tao/pegtl/LICENSE
 %license %{_docdir}/tao/json/LICENSE
+# Notices for the dependencies compiled into this binary. Vendoring moved them out of distribution
+# packages that carried their own terms, so the terms ship here instead. rpm permits several
+# subpackages to own these paths because each stages the identical file from one buildroot.
+%license %{_docdir}/couchbase*/third_party/*/*
 %{_libdir}/libcouchbase_cxx_client.so.*
 
+# The licence files are repeated here rather than inherited: this package no longer requires the
+# base package, and cbc carries the SDK and taocpp code inside the binary, so installing it alone
+# must still install the terms that code ships under. rpm accepts the same path in several
+# subpackages because every one of them stages the identical file out of the same buildroot.
 %files tools
+%license %{_docdir}/couchbase*/LICENSE.txt
+%license %{_docdir}/tao/pegtl/LICENSE
+%license %{_docdir}/tao/json/LICENSE
+# Notices for the dependencies compiled into this binary. Vendoring moved them out of distribution
+# packages that carried their own terms, so the terms ship here instead. rpm permits several
+# subpackages to own these paths because each stages the identical file from one buildroot.
+%license %{_docdir}/couchbase*/third_party/*/*
 %{_bindir}/cbc
 
 %files devel
@@ -157,6 +178,13 @@ DESTDIR="%{buildroot}" /usr/bin/cmake --install "redhat-linux-build"
 
 %if 0%{?grpc_supported}
 %files fit-performer
+%license %{_docdir}/couchbase*/LICENSE.txt
+%license %{_docdir}/tao/pegtl/LICENSE
+%license %{_docdir}/tao/json/LICENSE
+# Notices for the dependencies compiled into this binary. Vendoring moved them out of distribution
+# packages that carried their own terms, so the terms ship here instead. rpm permits several
+# subpackages to own these paths because each stages the identical file from one buildroot.
+%license %{_docdir}/couchbase*/third_party/*/*
 %{_bindir}/fit_performer
 %endif
 

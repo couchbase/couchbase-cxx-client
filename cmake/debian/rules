@@ -22,8 +22,29 @@ override_dh_auto_configure:
 		>> debian/couchbase-cxx-client-dev.install
 	echo "usr/bin/cbc" \
 		> debian/couchbase-cxx-client-tools.install
+# Neither tools nor fit-performer depends on the library package any more, and both binaries
+# statically embed the SDK and taocpp code, so each has to carry those notices itself.
+# Installed under each package's OWN doc directory, not shared: dpkg refuses to let two
+# packages own the same path even when the contents are identical -- unlike rpm, which
+# reference-counts them -- and co-installing would fail with an overwrite error.
+	echo "usr/share/doc/couchbase_cxx_client/LICENSE.txt usr/share/doc/couchbase-cxx-client-tools/" \
+		>> debian/couchbase-cxx-client-tools.install
+	echo "usr/share/doc/tao/json/LICENSE usr/share/doc/couchbase-cxx-client-tools/tao/json/" \
+		>> debian/couchbase-cxx-client-tools.install
+	echo "usr/share/doc/tao/pegtl/LICENSE usr/share/doc/couchbase-cxx-client-tools/tao/pegtl/" \
+		>> debian/couchbase-cxx-client-tools.install
+	echo "usr/share/doc/couchbase_cxx_client/third_party usr/share/doc/couchbase-cxx-client-tools/" \
+		>> debian/couchbase-cxx-client-tools.install
 	echo "usr/bin/fit_performer" \
 		> debian/couchbase-cxx-client-fit-performer.install
+	echo "usr/share/doc/couchbase_cxx_client/LICENSE.txt usr/share/doc/couchbase-cxx-client-fit-performer/" \
+		>> debian/couchbase-cxx-client-fit-performer.install
+	echo "usr/share/doc/tao/json/LICENSE usr/share/doc/couchbase-cxx-client-fit-performer/tao/json/" \
+		>> debian/couchbase-cxx-client-fit-performer.install
+	echo "usr/share/doc/tao/pegtl/LICENSE usr/share/doc/couchbase-cxx-client-fit-performer/tao/pegtl/" \
+		>> debian/couchbase-cxx-client-fit-performer.install
+	echo "usr/share/doc/couchbase_cxx_client/third_party usr/share/doc/couchbase-cxx-client-fit-performer/" \
+		>> debian/couchbase-cxx-client-fit-performer.install
 	echo "usr/lib/$(DEB_HOST_MULTIARCH)/libcouchbase_cxx_client.so.*" \
 		> debian/couchbase-cxx-client.install
 	echo "usr/share/doc/tao/json/LICENSE" \
@@ -31,6 +52,8 @@ override_dh_auto_configure:
 	echo "usr/share/doc/tao/pegtl/LICENSE" \
 		>> debian/couchbase-cxx-client.install
 	echo "usr/share/doc/couchbase_cxx_client/LICENSE.txt" \
+		>> debian/couchbase-cxx-client.install
+	echo "usr/share/doc/couchbase_cxx_client/third_party" \
 		>> debian/couchbase-cxx-client.install
 	dh_auto_configure -- \
 		-DCMAKE_BUILD_TYPE=RelWithDebInfo \
@@ -40,9 +63,18 @@ override_dh_auto_configure:
 		-DCOUCHBASE_CXX_CLIENT_BUILD_EXAMPLES=OFF \
 		-DCOUCHBASE_CXX_CLIENT_BUILD_TESTS=OFF \
 		-DCOUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY=ON \
+		-DCOUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2=ON \
+		-DCOUCHBASE_CXX_CLIENT_PACKAGE_BUILD=ON \
 		-DCOUCHBASE_CXX_CLIENT_BUILD_TOOLS=ON \
 		-DCOUCHBASE_CXX_CLIENT_BUILD_STATIC=ON \
 		-DCOUCHBASE_CXX_CLIENT_BUILD_SHARED=ON
 
 override_dh_auto_build:
 	dh_auto_build
+
+override_dh_auto_install:
+	dh_auto_install
+	# The vendored gRPC and curl install their headers, archives and pkg-config files regardless of
+	# the options that are supposed to gate them; the build redirects all of it under this one prefix.
+	# dh_install only picks up the paths listed above, but staging it serves no purpose.
+	rm -rf debian/tmp/usr/vendored-not-installed
