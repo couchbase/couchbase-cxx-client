@@ -143,6 +143,9 @@ curl/*/curl/**/*.inc
 curl/*/curl/*.rc
 curl/*/curl/**/*.rc
 curl/*/curl/**/*.cmake
+# Read by the install rules of curl from its source tree, so a tarball without it fails the install
+# step of every package build even though nothing links it.
+curl/*/curl/scripts/mk-ca-bundle.pl
 protostellar/*/protostellar/**/*.proto
 api_common_protos/*/api_common_protos/google/rpc/*.proto
 api_common_protos/*/api_common_protos/LICENSE*

@@ -416,7 +416,12 @@ add_custom_command(
     "-DCOUCHBASE_CXX_CLIENT_SOURCE_DATE_EPOCH=${COUCHBASE_CXX_CLIENT_SOURCE_DATE_EPOCH}"
     "-DCOUCHBASE_CXX_CLIENT_BUILD_TIMESTAMP=${COUCHBASE_CXX_CLIENT_BUILD_TIMESTAMP}"
   COMMAND
-    ${XARGS} -a ${COUCHBASE_CXX_TARBALL_THIRD_PARTY_GLOB_FILE} -I {} find
+    # -d: one pattern per line, with quote processing off. Without it an apostrophe anywhere in the
+    # glob file -- a comment is enough -- aborts xargs, and since its status is hidden by the pipe
+    # below, every pattern after that line is dropped from a tarball that still reports success.
+    # The argument has to reach xargs as backslash-n, which takes four backslashes here: CMake
+    # collapses them to two, and the shell that ninja runs the command in collapses those to one.
+    ${XARGS} -d "\\\\n" -a ${COUCHBASE_CXX_TARBALL_THIRD_PARTY_GLOB_FILE} -I {} find
     "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/cache" -wholename "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/cache/{}"
     -type f
     | grep -v
@@ -459,7 +464,8 @@ add_custom_command(
     | LC_ALL=C sort -u >
     "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/third_party_manifest.txt"
   COMMAND ${CMAKE_COMMAND} -E make_directory "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/filtered_cache"
-  COMMAND ${XARGS} -a "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/third_party_manifest.txt" -I {} ${CP} --parents
+  COMMAND ${XARGS} -d "\\\\n" -a "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/third_party_manifest.txt" -I {} ${CP}
+          --parents
           {} "${COUCHBASE_CXX_CLIENT_TARBALL_NAME}/tmp/filtered_cache"
   COMMAND
     ${CMAKE_COMMAND} -E rename
