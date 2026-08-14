@@ -53,8 +53,9 @@ core/crud_component.cxx         New KV operations (get, upsert, replace, …).
 core/collections_component.cxx  CID resolution and dispatch.
 core/response_handler.hxx       Interface for handling MCBP responses.
 test/                           Integration + unit tests (Catch2).
-test/cng/                       couchbase2:// tests — hand-rolled harness in
-                                test/cng/framework/, NOT Catch2. See test/cng/README.md.
+test/framework/                 Hand-rolled test harness, NOT Catch2.
+test/cng/                       couchbase2:// tests — built on test/framework/.
+                                See test/cng/README.md.
 tools/                          cbc CLI, fit_performer, system_metrics.
 cmake/                          Build and packaging: dependency resolution, the RPM spec,
                                 debian/ and APKBUILD templates, tarball_glob.txt. CI runs
@@ -147,7 +148,7 @@ in `test/test_integration_crud_component.cxx`. Tests must not rely on fixed
 ### couchbase2:// (CNG) tests
 
 `test/cng/` is a second suite with its own conventions, and the commands above do
-not apply to it. It uses the hand-rolled harness in `test/cng/framework/` rather
+not apply to it. It uses the hand-rolled harness in `test/framework/` rather
 than Catch2, is gated by `COUCHBASE_CXX_CLIENT_BUILD_CNG_TESTS`, and runs under
 ctest with the `cng` label. Each case declares whether it needs a cluster;
 cluster-only cases skip (exit 77) when `TEST_CONNECTION_STRING` is unset.

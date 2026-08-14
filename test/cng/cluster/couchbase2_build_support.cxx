@@ -49,7 +49,7 @@
 #include <string>
 #include <thread>
 
-namespace couchbase::cng::test
+namespace couchbase::test
 {
 namespace
 {
@@ -133,4 +133,4 @@ tests() -> test_suite
   };
 }
 
-} // namespace couchbase::cng::test
+} // namespace couchbase::test

@@ -710,10 +710,16 @@ endif()
 # test links only what it exercises (see test/cng/CMakeLists.txt).
 option(COUCHBASE_CXX_CLIENT_BUILD_CNG_TESTS "Build CNG (Protostellar) tests"
        ${COUCHBASE_CXX_CLIENT_BUILD_TESTS})
-if(COUCHBASE_CXX_CLIENT_BUILD_CNG_TESTS)
-  # Enable testing at the top level so `ctest` from the build root discovers the CNG tests even
-  # when the main (Catch2) suite is disabled and cmake/Testing.cmake was not included.
+
+# The hand-rolled framework both test trees build on, and its self-test. Testing is enabled at the
+# top level here so `ctest` from the build root discovers these even when the main (Catch2) suite
+# is disabled and cmake/Testing.cmake was not included.
+if(COUCHBASE_CXX_CLIENT_BUILD_TESTS OR COUCHBASE_CXX_CLIENT_BUILD_CNG_TESTS)
   enable_testing()
+  include(cmake/TestFramework.cmake)
+endif()
+
+if(COUCHBASE_CXX_CLIENT_BUILD_CNG_TESTS)
   add_subdirectory(test/cng)
 endif()
 

@@ -15,7 +15,7 @@
  *   limitations under the License.
  */
 
-// Self-test for the CNG test framework. It exercises the runner's pass / fail / skip / timeout /
+// Self-test for the test framework. It exercises the runner's pass / fail / skip / timeout /
 // env-gating / filter behaviour by driving run() with in-memory sub-suites and asserting on the
 // returned run_result. Because it asserts on the runner's *return value* (rather than letting an
 // inner failure propagate), every case here passes and this binary exits 0.
@@ -28,7 +28,7 @@
 #include <sstream>
 #include <thread>
 
-namespace couchbase::cng::test
+namespace couchbase::test
 {
 namespace
 {
@@ -213,4 +213,4 @@ tests() -> test_suite
   };
 }
 
-} // namespace couchbase::cng::test
+} // namespace couchbase::test

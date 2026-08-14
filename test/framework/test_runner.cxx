@@ -26,7 +26,7 @@
 
 #include <spdlog/fmt/fmt.h>
 
-namespace couchbase::cng::test
+namespace couchbase::test
 {
 namespace
 {
@@ -192,4 +192,4 @@ safe_getenv(const std::string& name) noexcept -> std::optional<std::string>
 #endif
 }
 
-} // namespace couchbase::cng::test
+} // namespace couchbase::test

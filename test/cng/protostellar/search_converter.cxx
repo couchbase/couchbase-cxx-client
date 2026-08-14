@@ -27,7 +27,7 @@
 #include <cstdint>
 #include <string>
 
-namespace couchbase::cng::test
+namespace couchbase::test
 {
 namespace
 {
@@ -311,4 +311,4 @@ tests() -> test_suite
   };
 }
 
-} // namespace couchbase::cng::test
+} // namespace couchbase::test
