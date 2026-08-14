@@ -37,7 +37,7 @@ using ::couchbase::core::origin;
 using ::couchbase::core::utils::parse_connection_string;
 
 void
-couchbase2_origin_is_protostellar()
+couchbase2_origin_is_protostellar([[maybe_unused]] context& ctx)
 {
   const auto cs = parse_connection_string("couchbase2://localhost");
   assert_false(cs.error.has_value(), "connection string parses");
@@ -46,7 +46,7 @@ couchbase2_origin_is_protostellar()
 }
 
 void
-classic_origin_is_not_protostellar()
+classic_origin_is_not_protostellar([[maybe_unused]] context& ctx)
 {
   const auto cs = parse_connection_string("couchbase://localhost");
   assert_false(cs.error.has_value(), "connection string parses");
@@ -55,7 +55,7 @@ classic_origin_is_not_protostellar()
 }
 
 void
-protocol_survives_copy_and_move()
+protocol_survives_copy_and_move([[maybe_unused]] context& ctx)
 {
   const auto cs = parse_connection_string("couchbase2://localhost");
   assert_false(cs.error.has_value(), "connection string parses");
@@ -94,7 +94,7 @@ protocol_survives_copy_and_move()
 // the flag therefore costs an unconditional 500 ms backoff per session. Pinned here so the
 // semantics cannot regress silently.
 void
-rotation_state_resets_on_copy_and_travels_on_move()
+rotation_state_resets_on_copy_and_travels_on_move([[maybe_unused]] context& ctx)
 {
   auto cs = parse_connection_string("couchbase://a.example.com,b.example.com");
   assert_false(cs.error.has_value(), "connection string parses");

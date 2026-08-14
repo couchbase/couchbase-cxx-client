@@ -4,11 +4,19 @@ These tests exercise the Protostellar / Cloud Native Gateway (CNG) transport. Th
 with the hand-rolled harness under `test/framework/` (not Catch2) and are enabled by the
 `COUCHBASE_CXX_CLIENT_BUILD_CNG_TESTS` CMake option.
 
-Each test declares an environment gate:
+Each case declares what it requires of the environment, beside its registration rather than inside
+its body — `{ needs::real_cluster() }`, `{ needs::service("n1ql") }`, and so on. The runner checks
+those before the case and decides:
 
-- **env-agnostic** — runs anywhere; uses in-process or loopback gRPC servers. No cluster needed.
-- **cluster-only** — needs a reachable `couchbase2://` gateway; skipped when
-  `TEST_CONNECTION_STRING` is unset (the harness exits `77`, which ctest reports as *Skipped*).
+- **satisfied** — the case runs.
+- **not satisfied** — the case is skipped, and the run ends with a list of what was missing and how
+  many cases each gap turned away. A case with no requirements needs no server: it is pure, or it
+  stands up an in-process gRPC server of its own.
+- **undetermined** — the case **fails**. A configured gateway that cannot be reached is not the same
+  as no gateway configured, and only the second is a reason to skip.
+
+`ctest` reports a binary whose every case was skipped as *Skipped* (the harness exits `77`).
+`<binary> --list-tests` prints each case with what it requires.
 
 Getting the cluster-only tests to run means standing up a Couchbase cluster whose Cloud Native
 Gateway is deployed, and pointing the tests at its `couchbase2://` endpoint. The rest of this

@@ -59,7 +59,7 @@ binary_json(const std::string& json) -> couchbase::core::json_string
 }
 
 void
-encode_maps_core_fields()
+encode_maps_core_fields([[maybe_unused]] context& ctx)
 {
   ops::query_request request;
   request.statement = "SELECT 1";
@@ -96,7 +96,7 @@ encode_maps_core_fields()
 // and the binary arm is the only arm the public API produces. Asserting on the payload rather
 // than on "a parameter is present" is what separates the two.
 void
-positional_parameters_carry_their_json_payload()
+positional_parameters_carry_their_json_payload([[maybe_unused]] context& ctx)
 {
   ops::query_request request;
   request.statement = "SELECT * FROM b WHERE id = $1 AND n = $2";
@@ -110,7 +110,7 @@ positional_parameters_carry_their_json_payload()
 }
 
 void
-named_parameters_carry_their_json_payload()
+named_parameters_carry_their_json_payload([[maybe_unused]] context& ctx)
 {
   ops::query_request request;
   request.statement = "SELECT * FROM b WHERE id = $id";
@@ -129,7 +129,7 @@ named_parameters_carry_their_json_payload()
 // A parameter whose JSON contains a NUL or a non-ASCII byte must survive intact and keep its
 // length -- treating the payload as a C string would truncate at the NUL.
 void
-a_parameter_payload_is_copied_byte_for_byte()
+a_parameter_payload_is_copied_byte_for_byte([[maybe_unused]] context& ctx)
 {
   // "a<NUL>b<U+00E9>" as JSON: an embedded NUL and a multi-byte UTF-8 sequence. Built with an
   // explicit length because a NUL would otherwise end the literal.
@@ -146,7 +146,7 @@ a_parameter_payload_is_copied_byte_for_byte()
 // The string arm is unreachable from the public API but is what a direct core caller would build,
 // and json_payload() has to handle both.
 void
-a_string_arm_parameter_is_encoded_too()
+a_string_arm_parameter_is_encoded_too([[maybe_unused]] context& ctx)
 {
   ops::query_request request;
   request.statement = "SELECT $1";
@@ -159,7 +159,7 @@ a_string_arm_parameter_is_encoded_too()
 // A default-constructed json_string holds neither arm. It must encode as empty rather than trip
 // over the variant.
 void
-an_empty_parameter_encodes_as_empty()
+an_empty_parameter_encodes_as_empty([[maybe_unused]] context& ctx)
 {
   ops::query_request request;
   request.statement = "SELECT $1";
@@ -175,7 +175,7 @@ an_empty_parameter_encodes_as_empty()
 // backtick-delimited identifiers therefore has to leave both fields unset rather than send half
 // of one.
 void
-query_context_sets_both_fields_or_neither()
+query_context_sets_both_fields_or_neither([[maybe_unused]] context& ctx)
 {
   ops::query_request base;
   base.statement = "SELECT 1";
@@ -203,7 +203,7 @@ query_context_sets_both_fields_or_neither()
 }
 
 void
-encode_maps_mutation_state_to_consistent_with()
+encode_maps_mutation_state_to_consistent_with([[maybe_unused]] context& ctx)
 {
   ops::query_request request;
   request.statement = "SELECT 1";
@@ -222,7 +222,7 @@ encode_maps_mutation_state_to_consistent_with()
 // otherwise fall through and send the proto default (NOT_BOUNDED / OFF), silently downgrading the
 // caller's consistency or profiling request.
 void
-every_scan_consistency_and_profile_value_maps()
+every_scan_consistency_and_profile_value_maps([[maybe_unused]] context& ctx)
 {
   ops::query_request request;
   request.statement = "SELECT 1";
@@ -253,7 +253,7 @@ every_scan_consistency_and_profile_value_maps()
 // scan_wait is a google.protobuf.Duration, whose seconds and nanos are separate fields. A value
 // with a sub-second remainder is where a lossy cast shows up.
 void
-scan_wait_splits_into_seconds_and_nanos()
+scan_wait_splits_into_seconds_and_nanos([[maybe_unused]] context& ctx)
 {
   ops::query_request request;
   request.statement = "SELECT 1";
@@ -268,7 +268,7 @@ scan_wait_splits_into_seconds_and_nanos()
 }
 
 void
-tuning_fields_map_to_their_proto_counterparts()
+tuning_fields_map_to_their_proto_counterparts([[maybe_unused]] context& ctx)
 {
   ops::query_request request;
   request.statement = "SELECT 1";
@@ -291,7 +291,7 @@ tuning_fields_map_to_their_proto_counterparts()
 // for, so can_encode rejects it -- the same convention the converter uses for every other
 // "cannot express this" case.
 void
-can_encode_rejects_tuning_values_that_do_not_fit_uint32()
+can_encode_rejects_tuning_values_that_do_not_fit_uint32([[maybe_unused]] context& ctx)
 {
   constexpr auto max32 = std::uint64_t{ std::numeric_limits<std::uint32_t>::max() };
 
@@ -321,7 +321,7 @@ can_encode_rejects_tuning_values_that_do_not_fit_uint32()
 }
 
 void
-can_encode_rejects_unsupported_features()
+can_encode_rejects_unsupported_features([[maybe_unused]] context& ctx)
 {
   ops::query_request base;
   base.statement = "SELECT 1";
@@ -356,7 +356,7 @@ can_encode_rejects_unsupported_features()
 }
 
 void
-decode_meta_data_maps_status_metrics_warnings()
+decode_meta_data_maps_status_metrics_warnings([[maybe_unused]] context& ctx)
 {
   v1::QueryResponse_MetaData proto;
   proto.set_request_id("req-7");
@@ -405,7 +405,7 @@ decode_meta_data_maps_status_metrics_warnings()
 // them must leave the corresponding optionals unset rather than fabricate empty values, because
 // the SDK surface distinguishes "not requested" from "requested and empty".
 void
-decode_meta_data_leaves_absent_optionals_unset()
+decode_meta_data_leaves_absent_optionals_unset([[maybe_unused]] context& ctx)
 {
   v1::QueryResponse_MetaData proto;
   proto.set_request_id("req-8");
@@ -423,7 +423,7 @@ decode_meta_data_leaves_absent_optionals_unset()
 // Every Status the schema defines has a string. A value with no case would decode as "unknown",
 // which the SDK surface cannot distinguish from the schema's own STATUS_UNKNOWN.
 void
-every_metadata_status_decodes_to_its_own_string()
+every_metadata_status_decodes_to_its_own_string([[maybe_unused]] context& ctx)
 {
   const std::vector<std::pair<v1::QueryResponse_MetaData_Status, std::string>> expected{
     { v1::QueryResponse_MetaData_Status_STATUS_RUNNING, "running" },
