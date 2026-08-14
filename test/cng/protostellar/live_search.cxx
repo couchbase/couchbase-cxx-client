@@ -23,7 +23,7 @@
 // that answer can only come from a gateway that ran the query.
 
 #include "cng/fixtures/live_fixture.hxx"
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/operations.hxx"
 
@@ -139,22 +139,18 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_live_search",
+    suite_name,
     {
-      { "an_expired_budget_is_refused_on_the_io_context",
-        an_expired_budget_is_refused_on_the_io_context,
+      { CASE(an_expired_budget_is_refused_on_the_io_context),
         { needs::real_cluster() },
         timeout::integration },
-      { "search_round_trip_against_live_gateway",
-        search_round_trip_against_live_gateway,
+      { CASE(search_round_trip_against_live_gateway),
         { needs::real_cluster() },
         timeout::integration },
-      { "an_untranslated_query_shape_is_refused_by_the_client",
-        an_untranslated_query_shape_is_refused_by_the_client,
+      { CASE(an_untranslated_query_shape_is_refused_by_the_client),
         { needs::real_cluster() },
         timeout::integration },
-      { "a_malformed_query_is_reported_as_invalid_argument",
-        a_malformed_query_is_reported_as_invalid_argument,
+      { CASE(a_malformed_query_is_reported_as_invalid_argument),
         { needs::real_cluster() },
         timeout::integration },
     },

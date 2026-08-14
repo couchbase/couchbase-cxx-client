@@ -26,7 +26,7 @@
 
 #define COUCHBASE_CXX_CLIENT_IGNORE_CORE_DEPRECATIONS
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/operations.hxx"
 
@@ -434,24 +434,12 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_retry",
+    suite_name,
     {
-      { "non_kv_retry_dispatch_semantics",
-        non_kv_retry_dispatch_semantics,
-        {},
-        timeout::integration },
-      { "closing_the_cluster_during_a_non_kv_backoff_still_answers",
-        closing_the_cluster_during_a_non_kv_backoff_still_answers,
-        {},
-        timeout::slow },
-      { "non_kv_retry_budget_exhaustion",
-        non_kv_retry_budget_exhaustion,
-        {},
-        timeout::integration },
-      { "custom_retry_strategy_rejects_non_kv",
-        custom_retry_strategy_rejects_non_kv,
-        {},
-        timeout::integration },
+      { CASE(non_kv_retry_dispatch_semantics), {}, timeout::integration },
+      { CASE(closing_the_cluster_during_a_non_kv_backoff_still_answers), {}, timeout::slow },
+      { CASE(non_kv_retry_budget_exhaustion), {}, timeout::integration },
+      { CASE(custom_retry_strategy_rejects_non_kv), {}, timeout::integration },
     },
   };
 }

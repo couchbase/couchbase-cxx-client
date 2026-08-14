@@ -31,7 +31,7 @@
 #define COUCHBASE_CXX_CLIENT_IGNORE_CORE_DEPRECATIONS
 
 #include "cng/fixtures/live_fixture.hxx"
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include <couchbase/error_codes.hxx>
 
@@ -148,22 +148,18 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_live_analytics",
+    suite_name,
     {
-      { "analytics_round_trip_against_live_gateway",
-        analytics_round_trip_against_live_gateway,
+      { CASE(analytics_round_trip_against_live_gateway),
         { needs::real_cluster() },
         timeout::integration },
-      { "scope_qualified_analytics_is_refused_by_the_client",
-        scope_qualified_analytics_is_refused_by_the_client,
+      { CASE(scope_qualified_analytics_is_refused_by_the_client),
         { needs::real_cluster() },
         timeout::integration },
-      { "an_unsupported_option_is_refused_without_a_round_trip",
-        an_unsupported_option_is_refused_without_a_round_trip,
+      { CASE(an_unsupported_option_is_refused_without_a_round_trip),
         { needs::real_cluster() },
         timeout::integration },
-      { "an_expired_budget_is_refused_on_the_io_context",
-        an_expired_budget_is_refused_on_the_io_context,
+      { CASE(an_expired_budget_is_refused_on_the_io_context),
         { needs::real_cluster() },
         timeout::integration },
     },

@@ -23,7 +23,11 @@
 // where there is one. They are also what makes the three outcomes visible from the outside --
 // unset connection string skips them, an unreachable one fails them.
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
+
+// This file builds a message rather than passing a literal, so it asks for fmt itself;
+// framework/test_framework.hxx deliberately does not.
+#include <spdlog/fmt/fmt.h>
 
 #include <cstddef>
 #include <string>
@@ -85,25 +89,19 @@ auto
 tests() -> test_suite
 {
   return {
-    "framework_cluster_probes",
+    suite_name,
     {
-      { "the_version_probe_reports_a_plausible_release",
-        the_version_probe_reports_a_plausible_release,
+      { CASE(the_version_probe_reports_a_plausible_release),
         { needs::real_cluster(), needs::service("kv") },
         timeout::integration },
       // No needs::service("kv") here, deliberately: the gate would call the same cached probe the
       // body asserts on, so a probe wrongly answering false would skip this case instead of failing
       // it -- and the one case whose job is to catch that would be the one that never runs.
-      { "the_kv_service_is_always_present",
-        the_kv_service_is_always_present,
-        { needs::real_cluster() },
-        timeout::integration },
-      { "the_topology_probes_answer_with_counts",
-        the_topology_probes_answer_with_counts,
+      { CASE(the_kv_service_is_always_present), { needs::real_cluster() }, timeout::integration },
+      { CASE(the_topology_probes_answer_with_counts),
         { needs::real_cluster(), needs::service("kv") },
         timeout::integration },
-      { "the_storage_backend_is_one_the_server_names",
-        the_storage_backend_is_one_the_server_names,
+      { CASE(the_storage_backend_is_one_the_server_names),
         { needs::real_cluster(), needs::service("kv"), needs::cluster_version(v7_1) },
         timeout::integration },
     },

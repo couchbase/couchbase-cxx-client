@@ -17,7 +17,7 @@
 
 // Unit tests for the KV converter (CXXCBC-892). Pure translation, no server (env-agnostic).
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/cluster_options.hxx"
 #include "core/protostellar/dispatcher.hxx"
@@ -710,41 +710,35 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_kv_converter",
+    suite_name,
     {
-      { "get_request_encodes_location", get_request_encodes_location },
-      { "get_response_decodes_value_cas_flags", get_response_decodes_value_cas_flags },
-      { "expiry_encodes_every_branch_explicitly", expiry_encodes_every_branch_explicitly },
-      { "expiry_encodes_every_branch_for_get_and_touch_and_the_counters",
-        expiry_encodes_every_branch_for_get_and_touch_and_the_counters },
-      { "counter_initial_value_is_optional_and_encodes_its_upper_bound",
-        counter_initial_value_is_optional_and_encodes_its_upper_bound },
-      { "preserve_expiry_omits_the_expiry_oneof", preserve_expiry_omits_the_expiry_oneof },
-      { "touch_always_sends_an_expiry_arm", touch_always_sends_an_expiry_arm },
-      { "upsert_never_emits_a_gateway_rejected_expiry_shape",
-        upsert_never_emits_a_gateway_rejected_expiry_shape },
-      { "upsert_request_encodes_all_fields", upsert_request_encodes_all_fields },
-      { "mutation_response_decodes_cas_and_token", mutation_response_decodes_cas_and_token },
-      { "replace_and_remove_encode_cas", replace_and_remove_encode_cas },
-      { "durability_none_is_left_unset", durability_none_is_left_unset },
-      { "durability_levels_map_to_their_own_proto_levels",
-        durability_levels_map_to_their_own_proto_levels },
-      { "lifecycle_ops_encode_expected_fields", lifecycle_ops_encode_expected_fields },
-      { "exists_and_lock_responses_decode", exists_and_lock_responses_decode },
-      { "counter_encodes_and_decodes", counter_encodes_and_decodes },
-      { "append_encodes_content_and_cas", append_encodes_content_and_cas },
-      { "read_compression_opt_in_follows_settings", read_compression_opt_in_follows_settings },
-      { "every_read_path_decodes_compressed_content", every_read_path_decodes_compressed_content },
-      { "compression_round_trips_large_values", compression_round_trips_large_values },
-      { "the_min_size_threshold_admits_a_value_of_exactly_min_size",
-        the_min_size_threshold_admits_a_value_of_exactly_min_size },
-      { "the_min_ratio_threshold_is_inclusive", the_min_ratio_threshold_is_inclusive },
-      { "an_incompressible_value_is_sent_uncompressed",
-        an_incompressible_value_is_sent_uncompressed },
-      { "malformed_compressed_content_fails_closed", malformed_compressed_content_fails_closed },
-      { "an_oversized_declared_length_is_refused", an_oversized_declared_length_is_refused },
-      { "cluster_options_maps_compression_settings", cluster_options_maps_compression_settings },
-      { "custom_compression_thresholds_are_honoured", custom_compression_thresholds_are_honoured },
+      { CASE(get_request_encodes_location) },
+      { CASE(get_response_decodes_value_cas_flags) },
+      { CASE(expiry_encodes_every_branch_explicitly) },
+      { CASE(expiry_encodes_every_branch_for_get_and_touch_and_the_counters) },
+      { CASE(counter_initial_value_is_optional_and_encodes_its_upper_bound) },
+      { CASE(preserve_expiry_omits_the_expiry_oneof) },
+      { CASE(touch_always_sends_an_expiry_arm) },
+      { CASE(upsert_never_emits_a_gateway_rejected_expiry_shape) },
+      { CASE(upsert_request_encodes_all_fields) },
+      { CASE(mutation_response_decodes_cas_and_token) },
+      { CASE(replace_and_remove_encode_cas) },
+      { CASE(durability_none_is_left_unset) },
+      { CASE(durability_levels_map_to_their_own_proto_levels) },
+      { CASE(lifecycle_ops_encode_expected_fields) },
+      { CASE(exists_and_lock_responses_decode) },
+      { CASE(counter_encodes_and_decodes) },
+      { CASE(append_encodes_content_and_cas) },
+      { CASE(read_compression_opt_in_follows_settings) },
+      { CASE(every_read_path_decodes_compressed_content) },
+      { CASE(compression_round_trips_large_values) },
+      { CASE(the_min_size_threshold_admits_a_value_of_exactly_min_size) },
+      { CASE(the_min_ratio_threshold_is_inclusive) },
+      { CASE(an_incompressible_value_is_sent_uncompressed) },
+      { CASE(malformed_compressed_content_fails_closed) },
+      { CASE(an_oversized_declared_length_is_refused) },
+      { CASE(cluster_options_maps_compression_settings) },
+      { CASE(custom_compression_thresholds_are_honoured) },
     },
   };
 }

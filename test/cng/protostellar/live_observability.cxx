@@ -29,7 +29,7 @@
 // everything below observability -- it is what caught setup_observability() going missing from
 // open_protostellar(). cluster_only, and the CI `cng` job runs it on every pull request.
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include <couchbase/cluster.hxx>
 #include <couchbase/codec/tao_json_serializer.hxx>
@@ -326,10 +326,9 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_live_observability",
+    suite_name,
     {
-      { "kv_op_emits_span_and_metric_over_couchbase2",
-        kv_op_emits_span_and_metric_over_couchbase2,
+      { CASE(kv_op_emits_span_and_metric_over_couchbase2),
         { needs::real_cluster() },
         timeout::integration },
     },

@@ -31,7 +31,7 @@
 // wrongly say "the client is broken".
 
 #include "cng/fixtures/live_fixture.hxx"
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/error_context/key_value.hxx"
 #include "core/utils/binary.hxx"
@@ -441,42 +441,31 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_live_kv_operations",
+    suite_name,
     {
-      { "exists_distinguishes_a_present_document_from_a_missing_one",
-        exists_distinguishes_a_present_document_from_a_missing_one,
+      { CASE(exists_distinguishes_a_present_document_from_a_missing_one),
         { needs::real_cluster() },
         timeout::integration },
-      { "touch_expires_a_document",
-        touch_expires_a_document,
+      { CASE(touch_expires_a_document), { needs::real_cluster() }, timeout::integration },
+      { CASE(get_and_lock_blocks_a_write_and_unlock_releases_it),
         { needs::real_cluster() },
         timeout::integration },
-      { "get_and_lock_blocks_a_write_and_unlock_releases_it",
-        get_and_lock_blocks_a_write_and_unlock_releases_it,
+      { CASE(unlock_with_the_wrong_cas_is_refused),
         { needs::real_cluster() },
         timeout::integration },
-      { "unlock_with_the_wrong_cas_is_refused",
-        unlock_with_the_wrong_cas_is_refused,
+      { CASE(get_and_touch_returns_the_value_and_applies_the_expiry),
         { needs::real_cluster() },
         timeout::integration },
-      { "get_and_touch_returns_the_value_and_applies_the_expiry",
-        get_and_touch_returns_the_value_and_applies_the_expiry,
+      { CASE(counters_increment_and_decrement_a_live_value),
         { needs::real_cluster() },
         timeout::integration },
-      { "counters_increment_and_decrement_a_live_value",
-        counters_increment_and_decrement_a_live_value,
+      { CASE(append_and_prepend_extend_a_live_value),
         { needs::real_cluster() },
         timeout::integration },
-      { "append_and_prepend_extend_a_live_value",
-        append_and_prepend_extend_a_live_value,
+      { CASE(incrementing_a_non_numeric_document_is_reported_as_delta_invalid),
         { needs::real_cluster() },
         timeout::integration },
-      { "incrementing_a_non_numeric_document_is_reported_as_delta_invalid",
-        incrementing_a_non_numeric_document_is_reported_as_delta_invalid,
-        { needs::real_cluster() },
-        timeout::integration },
-      { "append_to_a_missing_document_is_reported_as_not_found",
-        append_to_a_missing_document_is_reported_as_not_found,
+      { CASE(append_to_a_missing_document_is_reported_as_not_found),
         { needs::real_cluster() },
         timeout::integration },
     },

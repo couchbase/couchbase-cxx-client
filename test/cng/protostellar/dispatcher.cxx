@@ -21,7 +21,7 @@
 // destroying the dispatcher with a call still in flight cancels and drains it rather than blocking.
 // Env-agnostic (no external server).
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "callback_queue_keepalive.hxx"
 
@@ -269,25 +269,15 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_dispatcher",
+    suite_name,
     {
-      { "delivers_response_on_io_thread", delivers_response_on_io_thread, {}, timeout::network },
-      { "deadline_surfaces_as_deadline_exceeded",
-        deadline_surfaces_as_deadline_exceeded,
+      { CASE(delivers_response_on_io_thread), {}, timeout::network },
+      { CASE(deadline_surfaces_as_deadline_exceeded), {}, timeout::network },
+      { CASE(a_non_positive_timeout_expires_the_call_rather_than_removing_the_deadline),
         {},
         timeout::network },
-      { "a_non_positive_timeout_expires_the_call_rather_than_removing_the_deadline",
-        a_non_positive_timeout_expires_the_call_rather_than_removing_the_deadline,
-        {},
-        timeout::network },
-      { "cancellation_surfaces_as_cancelled",
-        cancellation_surfaces_as_cancelled,
-        {},
-        timeout::network },
-      { "destructor_cancels_and_drains_an_in_flight_call",
-        destructor_cancels_and_drains_an_in_flight_call,
-        {},
-        timeout::network },
+      { CASE(cancellation_surfaces_as_cancelled), {}, timeout::network },
+      { CASE(destructor_cancels_and_drains_an_in_flight_call), {}, timeout::network },
     },
   };
 }

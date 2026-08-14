@@ -18,7 +18,7 @@
 // Unit tests for the couchbase2:// connection-string scheme (CXXCBC-887). Pure parsing, no
 // server, so these run in every mode (env-agnostic).
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/utils/connection_string.hxx"
 
@@ -136,15 +136,15 @@ auto
 tests() -> test_suite
 {
   return {
-    "connection_string_couchbase2",
+    suite_name,
     {
-      { "couchbase2_defaults", couchbase2_defaults },
-      { "couchbase2_explicit_port_wins", couchbase2_explicit_port_wins },
-      { "couchbase2_rejects_multiple_hosts", couchbase2_rejects_multiple_hosts },
-      { "couchbase2_rejects_mode_suffix", couchbase2_rejects_mode_suffix },
-      { "couchbase2_disables_dns_srv", couchbase2_disables_dns_srv },
-      { "couchbase2_params_pass_through", couchbase2_params_pass_through },
-      { "classic_schemes_remain_mcbp", classic_schemes_remain_mcbp },
+      { CASE(couchbase2_defaults) },
+      { CASE(couchbase2_explicit_port_wins) },
+      { CASE(couchbase2_rejects_multiple_hosts) },
+      { CASE(couchbase2_rejects_mode_suffix) },
+      { CASE(couchbase2_disables_dns_srv) },
+      { CASE(couchbase2_params_pass_through) },
+      { CASE(classic_schemes_remain_mcbp) },
     },
   };
 }

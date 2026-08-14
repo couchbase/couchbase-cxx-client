@@ -23,9 +23,8 @@
 // `--list-tests` prints each case name and what it requires, then exits. cmake/TestFramework.cmake
 // runs it after linking to register one ctest entry per case.
 //
-// `--no-share-clusters` gives every case a cluster of its own. Sharing is the runner's decision,
-// not the test's; this is the switch that takes the optimisation away when a failure looks like
-// one case standing on another's state.
+// Every other argument is a case name to run. An argument that matches no case is a failure, not a
+// request to run nothing.
 
 #include "test_runner.hxx"
 
@@ -105,6 +104,12 @@ main(int argc, char* argv[]) -> int
   } else {
     std::cout << fmt::format(
       "Suite \"{}\": {} passed, {} skipped\n", suite.name, result.passed, result.skipped);
+  }
+
+  // Skipped after a timeout for the same reason main() leaves through _Exit below: a detached
+  // worker may still be inside the very library the teardown is about to unload.
+  if (suite.teardown != nullptr && result.timed_out == 0) {
+    suite.teardown();
   }
 
   // A timed-out case leaves its worker detached and still running. Returning from main would run
