@@ -17,11 +17,16 @@
 
 #include "test_runner.hxx"
 
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <future>
+#include <limits>
+#include <memory>
+#include <stdexcept>
 #include <thread>
 
 #include <spdlog/fmt/fmt.h>
@@ -163,6 +168,70 @@ exit_code(const run_result& result) -> int
     return 1;
   }
   return 0;
+}
+
+auto
+case_names(const test_suite& suite) -> std::vector<std::string>
+{
+  std::vector<std::string> names;
+  names.reserve(suite.test_cases.size() + suite.slow_test_cases.size());
+  for (const auto& tc : suite.test_cases) {
+    names.push_back(tc.name);
+  }
+  for (const auto& tc : suite.slow_test_cases) {
+    names.push_back(tc.name);
+  }
+  return names;
+}
+
+auto
+timeout_multiplier(const std::optional<std::string>& raw) -> double
+{
+  if (!raw.has_value()) {
+    return 1.0;
+  }
+  std::size_t consumed{ 0 };
+  double factor{ 0.0 };
+  try {
+    factor = std::stod(*raw, &consumed);
+  } catch (const std::exception&) {
+    consumed = 0;
+  }
+  // The whole value has to be a number: "10x" must not be read as 10, because the run would then
+  // silently use a budget nobody asked for.
+  //
+  // isfinite rejects "inf", which passes a bare `> 0.0` test and then makes every scaled budget
+  // undefined at the cast in scale_timeouts. NaN is already rejected: any comparison against it is
+  // false.
+  if (consumed != raw->size() || !std::isfinite(factor) || !(factor > 0.0)) {
+    throw std::invalid_argument(
+      fmt::format("{} must be a positive number, got \"{}\"", timeout_multiplier_variable, *raw));
+  }
+  return factor;
+}
+
+void
+scale_timeouts(test_suite& suite, double factor)
+{
+  const auto scale = [factor](test_case& tc) {
+    // Ceiling, not nearest: this exists to give a case more room on a slower runner, and rounding
+    // a budget down -- which std::llround does for any product with a fraction below .5 -- would
+    // quietly do the opposite of what the caller asked for.
+    const auto product = std::ceil(static_cast<double>(tc.timeout.count()) * factor);
+    // Saturate before narrowing. A product past the integer range is undefined at the cast, and on
+    // a signed overflow the budget would come back negative and clamp to 1ms -- a multiplier asking
+    // for more room would give every case the least possible.
+    constexpr auto ceiling = static_cast<double>(std::numeric_limits<long long>::max());
+    const auto scaled =
+      product >= ceiling ? std::numeric_limits<long long>::max() : static_cast<long long>(product);
+    tc.timeout = std::chrono::milliseconds{ std::max<long long>(scaled, 1) };
+  };
+  for (auto& tc : suite.test_cases) {
+    scale(tc);
+  }
+  for (auto& tc : suite.slow_test_cases) {
+    scale(tc);
+  }
 }
 
 auto

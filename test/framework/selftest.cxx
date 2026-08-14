@@ -24,8 +24,11 @@
 
 #include <chrono>
 #include <cstddef>
+#include <optional>
 #include <set>
 #include <sstream>
+#include <stdexcept>
+#include <string>
 #include <thread>
 
 namespace couchbase::test
@@ -104,6 +107,9 @@ runner_reports_a_skipped_case()
   const auto r = run_quiet(s, {}, false);
   assert_eq(r.skipped, std::size_t{ 1 }, "one skip counted");
   assert_eq(r.failed, std::size_t{ 0 }, "skip is not a failure");
+  // The other half of the contract couchbase_add_test() wires up as SKIP_RETURN_CODE: a binary that
+  // ran nothing but skips must report ctest Skipped, not success.
+  assert_eq(exit_code(r), 77, "an all-skipped binary reports 77");
 }
 
 void
@@ -187,6 +193,94 @@ a_timeout_is_reported_as_such()
   assert_eq(r.failed, std::size_t{ 1 }, "and still counted as a failure");
 }
 
+void
+case_names_covers_slow_cases_and_ignores_the_environment()
+{
+  const test_suite suite{
+    "listing",
+    { { "regular", body_pass, timeout::instant, test_env::cluster_only } },
+    { { "deliberately_slow", body_pass, timeout::slow } },
+  };
+
+  const auto names = case_names(suite);
+  assert_eq(names.size(), std::size_t{ 2 }, "both lists are enumerated");
+  assert_eq(names[0], std::string{ "regular" }, "in registration order");
+  assert_eq(names[1], std::string{ "deliberately_slow" }, "slow cases come last");
+}
+
+void
+timeout_multiplier_defaults_to_one_and_rejects_anything_but_a_number()
+{
+  assert_eq(timeout_multiplier(std::nullopt), 1.0, "unset means unscaled");
+  assert_eq(timeout_multiplier(std::optional<std::string>{ "10" }), 10.0, "an integer is read");
+  assert_eq(timeout_multiplier(std::optional<std::string>{ "2.5" }), 2.5, "so is a fraction");
+
+  // A trailing suffix must not be read as a bare number: silently running with a budget nobody
+  // asked for is how a leg goes green on timing rather than on behaviour.
+  assert_throws<std::invalid_argument>(
+    []() {
+      (void)timeout_multiplier(std::optional<std::string>{ "10x" });
+    },
+    "a trailing suffix is rejected");
+  assert_throws<std::invalid_argument>(
+    []() {
+      (void)timeout_multiplier(std::optional<std::string>{ "0" });
+    },
+    "zero would kill every case immediately");
+  assert_throws<std::invalid_argument>(
+    []() {
+      (void)timeout_multiplier(std::optional<std::string>{ "-1" });
+    },
+    "a negative factor is rejected");
+  // "inf" parses, and satisfies a bare positivity test. Accepting it makes every scaled budget
+  // undefined at the narrowing cast in scale_timeouts.
+  assert_throws<std::invalid_argument>(
+    []() {
+      (void)timeout_multiplier(std::optional<std::string>{ "inf" });
+    },
+    "a non-finite factor is rejected");
+}
+
+void
+scale_timeouts_multiplies_every_budget()
+{
+  test_suite suite{
+    "budgets",
+    { { "fast", body_pass, std::chrono::milliseconds{ 100 } } },
+    { { "slow", body_pass, std::chrono::milliseconds{ 1'000 } } },
+  };
+
+  scale_timeouts(suite, 10.0);
+  assert_eq(suite.test_cases[0].timeout.count(), 1'000, "the regular list is scaled");
+  assert_eq(suite.slow_test_cases[0].timeout.count(), 10'000, "and so is the slow list");
+
+  // Ceiling, not nearest and not truncation. Only a product whose fraction falls below .5 tells
+  // the three apart: 100 x 1.004 is 101 under ceil and 100 under both floor and llround.
+  test_suite fractional{ "fractional",
+                         { { "case", body_pass, std::chrono::milliseconds{ 100 } } } };
+  scale_timeouts(fractional, 1.004);
+  assert_eq(fractional.test_cases[0].timeout.count(), 101, "a fraction below .5 still rounds up");
+
+  // Rounding must not produce a zero budget, which would fail every case before it started.
+  scale_timeouts(suite, 0.0001);
+  assert_true(suite.test_cases[0].timeout.count() >= 1, "a budget never rounds down to nothing");
+}
+
+void
+a_scaled_budget_lets_a_case_outlive_its_original_one()
+{
+  // body_sleep runs for 200ms; 50ms is not enough and 50ms x 10 is.
+  test_suite suite{ "scaled", { { "sleeper", body_sleep, std::chrono::milliseconds{ 50 } } } };
+
+  const auto unscaled = run_quiet(suite, {}, false);
+  assert_eq(unscaled.timed_out, std::size_t{ 1 }, "the original budget kills the case");
+
+  scale_timeouts(suite, 10.0);
+  const auto scaled = run_quiet(suite, {}, false);
+  assert_eq(scaled.timed_out, std::size_t{ 0 }, "the scaled budget does not");
+  assert_eq(scaled.passed, std::size_t{ 1 }, "and the case reports its own outcome");
+}
+
 } // namespace
 
 auto
@@ -209,6 +303,14 @@ tests() -> test_suite
       { "a_filter_name_matching_nothing_fails", a_filter_name_matching_nothing_fails },
       { "a_suite_that_runs_nothing_does_not_pass", a_suite_that_runs_nothing_does_not_pass },
       { "a_timeout_is_reported_as_such", a_timeout_is_reported_as_such, timeout::fast },
+      { "case_names_covers_slow_cases_and_ignores_the_environment",
+        case_names_covers_slow_cases_and_ignores_the_environment },
+      { "timeout_multiplier_defaults_to_one_and_rejects_anything_but_a_number",
+        timeout_multiplier_defaults_to_one_and_rejects_anything_but_a_number },
+      { "scale_timeouts_multiplies_every_budget", scale_timeouts_multiplies_every_budget },
+      { "a_scaled_budget_lets_a_case_outlive_its_original_one",
+        a_scaled_budget_lets_a_case_outlive_its_original_one,
+        timeout::fast },
     },
   };
 }

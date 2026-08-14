@@ -29,7 +29,7 @@
 // never byte-identical to what was sent. Whether the three parameter blobs stay separate can only
 // be checked against a real definition, by looking for each blob's own member in its own blob.
 
-#include "fixtures/live_fixture.hxx"
+#include "cng/fixtures/live_fixture.hxx"
 #include "framework/test_runner.hxx"
 
 #include "core/operations/management/search_index_analyze_document.hxx"
