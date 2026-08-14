@@ -230,7 +230,7 @@ A single test binary can also be run directly, which is handy while iterating:
 
 ```console
 $ TEST_CONNECTION_STRING="couchbase2://<host>:<port>?tls_verify=none" \
-    ./build/test/cng/cng_live_kv_test
+    ./build/test/cng/cng_protostellar_live_kv
 ```
 
 ### Overriding the defaults

@@ -30,7 +30,7 @@
 // which of the KV surface they implement, and a skip says "not covered here" where a failure would
 // wrongly say "the client is broken".
 
-#include "fixtures/live_fixture.hxx"
+#include "cng/fixtures/live_fixture.hxx"
 #include "framework/test_runner.hxx"
 
 #include "core/error_context/key_value.hxx"
