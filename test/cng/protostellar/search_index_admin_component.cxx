@@ -29,7 +29,7 @@
 // InvalidArgument, so the error code alone does not say whether anything was sent. The recorded
 // call count does.
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "callback_queue_keepalive.hxx"
 
@@ -496,23 +496,17 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_search_index_admin_component",
+    suite_name,
     {
-      { "an_upsert_without_a_uuid_calls_create_index",
-        an_upsert_without_a_uuid_calls_create_index },
-      { "an_upsert_with_a_uuid_calls_update_index", an_upsert_with_a_uuid_calls_update_index },
-      { "the_control_operations_select_their_paired_rpc",
-        the_control_operations_select_their_paired_rpc },
-      { "an_empty_index_name_is_refused_without_a_round_trip",
-        an_empty_index_name_is_refused_without_a_round_trip },
-      { "a_definition_that_cannot_be_represented_is_not_sent",
-        a_definition_that_cannot_be_represented_is_not_sent },
-      { "a_get_response_without_an_index_reports_index_not_found",
-        a_get_response_without_an_index_reports_index_not_found },
-      { "an_index_that_cannot_be_decoded_reports_parsing_failure",
-        an_index_that_cannot_be_decoded_reports_parsing_failure },
-      { "a_successful_call_reports_status_ok", a_successful_call_reports_status_ok },
-      { "a_failed_call_reports_no_status", a_failed_call_reports_no_status },
+      { CASE(an_upsert_without_a_uuid_calls_create_index) },
+      { CASE(an_upsert_with_a_uuid_calls_update_index) },
+      { CASE(the_control_operations_select_their_paired_rpc) },
+      { CASE(an_empty_index_name_is_refused_without_a_round_trip) },
+      { CASE(a_definition_that_cannot_be_represented_is_not_sent) },
+      { CASE(a_get_response_without_an_index_reports_index_not_found) },
+      { CASE(an_index_that_cannot_be_decoded_reports_parsing_failure) },
+      { CASE(a_successful_call_reports_status_ok) },
+      { CASE(a_failed_call_reports_no_status) },
     },
   };
 }

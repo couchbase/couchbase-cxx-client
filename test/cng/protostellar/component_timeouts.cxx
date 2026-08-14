@@ -27,7 +27,7 @@
 
 #define COUCHBASE_CXX_CLIENT_IGNORE_CORE_DEPRECATIONS
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/operations.hxx"
 
@@ -305,23 +305,17 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_component_timeouts",
+    suite_name,
     {
-      { "non_durable_uses_the_standard_kv_timeout", non_durable_uses_the_standard_kv_timeout },
-      { "durable_uses_the_durable_timeout", durable_uses_the_durable_timeout },
-      { "explicit_request_timeout_always_wins", explicit_request_timeout_always_wins },
-      { "an_explicit_timeout_is_never_raised_to_a_floor",
-        an_explicit_timeout_is_never_raised_to_a_floor },
-      { "a_request_that_cannot_be_durable_asks_for_no_durability",
-        a_request_that_cannot_be_durable_asks_for_no_durability },
-      { "a_durable_mutation_without_a_timeout_gets_the_configured_durable_budget",
-        a_durable_mutation_without_a_timeout_gets_the_configured_durable_budget,
+      { CASE(non_durable_uses_the_standard_kv_timeout) },
+      { CASE(durable_uses_the_durable_timeout) },
+      { CASE(explicit_request_timeout_always_wins) },
+      { CASE(an_explicit_timeout_is_never_raised_to_a_floor) },
+      { CASE(a_request_that_cannot_be_durable_asks_for_no_durability) },
+      { CASE(a_durable_mutation_without_a_timeout_gets_the_configured_durable_budget),
         {},
         timeout::slow },
-      { "a_read_is_never_given_the_durable_budget",
-        a_read_is_never_given_the_durable_budget,
-        {},
-        timeout::slow },
+      { CASE(a_read_is_never_given_the_durable_budget), {}, timeout::slow },
     },
   };
 }

@@ -20,7 +20,7 @@
 // settings read back by get().
 
 #include "cng/fixtures/live_fixture.hxx"
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/management/bucket_settings.hxx"
 #include "core/operations/management/bucket_create.hxx"
@@ -411,30 +411,22 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_live_bucket_admin",
+    suite_name,
     {
-      { "list_buckets_against_live_gateway",
-        list_buckets_against_live_gateway,
+      { CASE(list_buckets_against_live_gateway), { needs::real_cluster() }, timeout::integration },
+      { CASE(bucket_settings_round_trip_against_live_gateway),
         { needs::real_cluster() },
         timeout::integration },
-      { "bucket_settings_round_trip_against_live_gateway",
-        bucket_settings_round_trip_against_live_gateway,
+      { CASE(minimum_durability_round_trips_against_live_gateway),
         { needs::real_cluster() },
         timeout::integration },
-      { "minimum_durability_round_trips_against_live_gateway",
-        minimum_durability_round_trips_against_live_gateway,
+      { CASE(bucket_lifecycle_against_live_gateway),
         { needs::real_cluster() },
         timeout::integration },
-      { "bucket_lifecycle_against_live_gateway",
-        bucket_lifecycle_against_live_gateway,
+      { CASE(bucket_errors_carry_the_bucket_specific_code),
         { needs::real_cluster() },
         timeout::integration },
-      { "bucket_errors_carry_the_bucket_specific_code",
-        bucket_errors_carry_the_bucket_specific_code,
-        { needs::real_cluster() },
-        timeout::integration },
-      { "a_memcached_bucket_is_refused_by_the_client",
-        a_memcached_bucket_is_refused_by_the_client,
+      { CASE(a_memcached_bucket_is_refused_by_the_client),
         { needs::real_cluster() },
         timeout::integration },
     },

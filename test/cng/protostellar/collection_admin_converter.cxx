@@ -18,7 +18,7 @@
 // Unit tests for the collection-admin <-> couchbase.admin.collection.v1 manifest decode and the
 // max_expiry encode that has to agree with it (CXXCBC-900). Pure, no server.
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/protostellar/collection_admin_converter.hxx"
 
@@ -128,16 +128,12 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_collection_admin_converter",
+    suite_name,
     {
-      { "decode_manifest_maps_scopes_and_collections",
-        decode_manifest_maps_scopes_and_collections },
-      { "encode_max_expiry_moves_the_sentinel_into_field_presence",
-        encode_max_expiry_moves_the_sentinel_into_field_presence },
-      { "decode_max_expiry_reads_field_presence_back_as_the_sentinel",
-        decode_max_expiry_reads_field_presence_back_as_the_sentinel },
-      { "max_expiry_round_trips_through_the_wire_form",
-        max_expiry_round_trips_through_the_wire_form },
+      { CASE(decode_manifest_maps_scopes_and_collections) },
+      { CASE(encode_max_expiry_moves_the_sentinel_into_field_presence) },
+      { CASE(decode_max_expiry_reads_field_presence_back_as_the_sentinel) },
+      { CASE(max_expiry_round_trips_through_the_wire_form) },
     },
   };
 }

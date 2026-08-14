@@ -24,7 +24,7 @@
 #define COUCHBASE_CXX_CLIENT_IGNORE_CORE_DEPRECATIONS
 
 #include "cng/fixtures/live_fixture.hxx"
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 // core/operations.hxx (complete operation types) must precede core/cluster.hxx, whose execute()
 // overloads and with_legacy_durability aliases require the full request definitions.
@@ -153,12 +153,9 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_live_connect",
+    suite_name,
     {
-      { "connect_and_round_trip_kv",
-        connect_and_round_trip_kv,
-        { needs::real_cluster() },
-        timeout::integration },
+      { CASE(connect_and_round_trip_kv), { needs::real_cluster() }, timeout::integration },
     },
   };
 }

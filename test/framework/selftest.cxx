@@ -20,7 +20,7 @@
 // returned run_result. Because it asserts on the runner's *return value* (rather than letting an
 // inner failure propagate), every case here passes and this binary exits 0.
 
-#include "test_runner.hxx"
+#include "test_registry.hxx"
 
 #include <chrono>
 #include <cstddef>
@@ -616,6 +616,62 @@ a_scaled_budget_lets_a_case_outlive_its_original_one([[maybe_unused]] context& c
 }
 
 void
+the_added_assertions_report_what_they_saw([[maybe_unused]] context& ctx)
+{
+  const auto message_of = [](auto&& fn) -> std::string {
+    try {
+      fn();
+    } catch (const test_assertion_failure& e) {
+      return e.what();
+    }
+    return {};
+  };
+
+  assert_ne(1, 2, "different values pass");
+  assert_contains("hello world", "lo wo", "a substring is found");
+  assert_starts_with("couchbase2://host", "couchbase2://", "a prefix is found");
+  assert_near(1.0, 1.05, 0.1, "within tolerance");
+  assert_no_throw([]() {
+  });
+
+  // Each failure has to say what it saw. A message that only reports which assertion failed sends
+  // the reader back to reproduce it before they can start.
+  assert_contains(message_of([]() {
+                    assert_ne(7, 7);
+                  }),
+                  "both are: 7",
+                  "assert_ne prints the value");
+  assert_contains(message_of([]() {
+                    assert_contains("abc", "xyz");
+                  }),
+                  R"("xyz" is not in "abc")",
+                  "assert_contains prints both strings");
+  assert_contains(message_of([]() {
+                    assert_starts_with("abc", "xyz");
+                  }),
+                  R"("abc" does not start with "xyz")",
+                  "assert_starts_with prints both strings");
+  // Both halves, because the tolerance is the part that tells the reader how near "near" was.
+  assert_contains(message_of([]() {
+                    assert_near(1.0, 2.0, 0.1);
+                  }),
+                  "expected: 2 ± 0.1",
+                  "assert_near prints the expectation and the tolerance");
+  assert_contains(message_of([]() {
+                    assert_no_throw([]() {
+                      throw std::runtime_error("the reason");
+                    });
+                  }),
+                  "the reason",
+                  "assert_no_throw prints the exception it caught");
+  assert_contains(message_of([]() {
+                    fail("unreachable branch");
+                  }),
+                  "unreachable branch",
+                  "fail() prints its message");
+}
+
+void
 the_configuration_reads_the_environment_it_documents(context& ctx)
 {
   // The context the runner handed this case is the one main() built from the environment, so this
@@ -634,49 +690,35 @@ auto
 tests() -> test_suite
 {
   return {
-    "framework_selftest",
+    suite_name,
     {
-      { "runner_reports_a_passing_case", runner_reports_a_passing_case },
-      { "runner_detects_a_failing_case", runner_detects_a_failing_case },
-      { "runner_reports_a_skipped_case", runner_reports_a_skipped_case },
-      { "runner_detects_a_timeout", runner_detects_a_timeout, {}, timeout::fast },
-      { "case_output_is_flushed_as_it_is_written", case_output_is_flushed_as_it_is_written },
-      { "an_unconfigured_cluster_skips_and_an_unreachable_one_fails",
-        an_unconfigured_cluster_skips_and_an_unreachable_one_fails },
-      { "a_satisfied_requirement_lets_the_case_run", a_satisfied_requirement_lets_the_case_run },
-      { "a_version_range_is_half_open", a_version_range_is_half_open },
-      { "probes_are_cached_across_every_case_in_the_binary",
-        probes_are_cached_across_every_case_in_the_binary },
-      { "a_failed_probe_is_not_retried_per_case", a_failed_probe_is_not_retried_per_case },
-      { "a_requirement_that_blocks_fails_its_case_rather_than_the_run",
-        a_requirement_that_blocks_fails_its_case_rather_than_the_run,
-        {},
-        timeout::fast },
-      { "a_requirement_that_throws_fails_its_case", a_requirement_that_throws_fails_its_case },
-      { "a_requirement_that_skips_does_not_run_its_case",
-        a_requirement_that_skips_does_not_run_its_case },
-      { "a_file_local_requirement_needs_no_framework_change",
-        a_file_local_requirement_needs_no_framework_change },
-      { "filter_selects_cases_by_name", filter_selects_cases_by_name },
-      { "a_failing_case_does_not_suppress_later_cases",
-        a_failing_case_does_not_suppress_later_cases },
-      { "slow_cases_run_after_a_failure", slow_cases_run_after_a_failure },
-      { "a_filter_name_matching_nothing_fails", a_filter_name_matching_nothing_fails },
-      { "a_suite_that_runs_nothing_does_not_pass", a_suite_that_runs_nothing_does_not_pass },
-      { "a_timeout_is_reported_as_such", a_timeout_is_reported_as_such, {}, timeout::fast },
-      { "case_names_covers_slow_cases_and_ignores_the_environment",
-        case_names_covers_slow_cases_and_ignores_the_environment },
-      { "list_output_carries_the_requirements_after_a_tab",
-        list_output_carries_the_requirements_after_a_tab },
-      { "timeout_multiplier_defaults_to_one_and_rejects_anything_but_a_number",
-        timeout_multiplier_defaults_to_one_and_rejects_anything_but_a_number },
-      { "scale_timeouts_multiplies_every_budget", scale_timeouts_multiplies_every_budget },
-      { "a_scaled_budget_lets_a_case_outlive_its_original_one",
-        a_scaled_budget_lets_a_case_outlive_its_original_one,
-        {},
-        timeout::fast },
-      { "the_configuration_reads_the_environment_it_documents",
-        the_configuration_reads_the_environment_it_documents },
+      { CASE(runner_reports_a_passing_case) },
+      { CASE(runner_detects_a_failing_case) },
+      { CASE(runner_reports_a_skipped_case) },
+      { CASE(runner_detects_a_timeout), {}, timeout::fast },
+      { CASE(case_output_is_flushed_as_it_is_written) },
+      { CASE(an_unconfigured_cluster_skips_and_an_unreachable_one_fails) },
+      { CASE(a_satisfied_requirement_lets_the_case_run) },
+      { CASE(a_version_range_is_half_open) },
+      { CASE(probes_are_cached_across_every_case_in_the_binary) },
+      { CASE(a_failed_probe_is_not_retried_per_case) },
+      { CASE(a_requirement_that_blocks_fails_its_case_rather_than_the_run), {}, timeout::fast },
+      { CASE(a_requirement_that_throws_fails_its_case) },
+      { CASE(a_requirement_that_skips_does_not_run_its_case) },
+      { CASE(a_file_local_requirement_needs_no_framework_change) },
+      { CASE(filter_selects_cases_by_name) },
+      { CASE(a_failing_case_does_not_suppress_later_cases) },
+      { CASE(slow_cases_run_after_a_failure) },
+      { CASE(a_filter_name_matching_nothing_fails) },
+      { CASE(a_suite_that_runs_nothing_does_not_pass) },
+      { CASE(a_timeout_is_reported_as_such), {}, timeout::fast },
+      { CASE(case_names_covers_slow_cases_and_ignores_the_environment) },
+      { CASE(list_output_carries_the_requirements_after_a_tab) },
+      { CASE(timeout_multiplier_defaults_to_one_and_rejects_anything_but_a_number) },
+      { CASE(scale_timeouts_multiplies_every_budget) },
+      { CASE(a_scaled_budget_lets_a_case_outlive_its_original_one), {}, timeout::fast },
+      { CASE(the_added_assertions_report_what_they_saw) },
+      { CASE(the_configuration_reads_the_environment_it_documents) },
     },
   };
 }

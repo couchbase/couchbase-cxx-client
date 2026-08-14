@@ -86,10 +86,12 @@ set_project_warnings(test_framework_cluster_probes)
 # on the machine that built it.
 #
 # NAMING RULE, which the whole scheme relies on: a case name is the name of the function that
-# implements it, so it is a C++ identifier in lower_snake_case -- [A-Za-z_][A-Za-z0-9_]* and nothing
-# else. No spaces, no punctuation, no colons. A Catch2 case is converted to one ONCE, when it is
-# migrated: the category prefix is dropped because the target's ctest label already carries it, and
-# the remaining words are joined with underscores. So
+# implements it -- the CASE macro in test/framework/test_registry.hxx stringifies the identifier, so
+# the two cannot drift -- and is therefore a C++ identifier in lower_snake_case,
+# [A-Za-z_][A-Za-z0-9_]* and nothing else. No spaces, no punctuation, no colons. A Catch2 case is
+# converted to one ONCE, when it is migrated: the category prefix is dropped because the target's
+# ctest label and the case's own requirements already carry it, and the remaining words are joined
+# with underscores. So
 # "integration: cluster remains usable in a forked child" is migrated as the function
 # cluster_remains_usable_in_a_forked_child.
 #
@@ -182,6 +184,9 @@ function(couchbase_add_test relpath)
 
   string(REPLACE "/" "_" target "${relpath}")
   add_executable(${target} ${PROJECT_SOURCE_DIR}/test/${relpath}.cxx)
+  # The suite name in the run's own output, taken from the path rather than written out again in
+  # the file: a hand-written one drifts the moment the file is renamed and nothing notices.
+  target_compile_definitions(${target} PRIVATE COUCHBASE_TEST_SUITE_NAME="${target}")
   target_include_directories(${target} PRIVATE ${PROJECT_SOURCE_DIR})
   target_include_directories(
     ${target} SYSTEM BEFORE
@@ -243,9 +248,14 @@ function(couchbase_add_test relpath)
     )
   endif()
   couchbase_discover_tests(${target} PROPERTIES ${properties})
+
 endfunction()
 
 # cng, because that is the leg whose steps deliberately do not apply --test-action memcheck: the
 # inner suites here assert on absolute millisecond budgets, which valgrind would blow with no
 # multiplier able to reach them.
 couchbase_add_test(framework/selftest LABEL cng)
+
+# What assert_success prints. It needs couchbase::error, and therefore the client library, but no
+# server: every value it asserts on is constructed by hand. cng for the same reason as above.
+couchbase_add_test(framework/errors_selftest LABEL cng LINK_CLIENT)

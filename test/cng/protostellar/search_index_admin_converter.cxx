@@ -19,7 +19,7 @@
 // Two properties: a definition survives the round trip whole, and one that cannot be represented
 // is refused rather than truncated. Pure, no server.
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/protostellar/search_index_admin_converter.hxx"
 #include "core/utils/json.hxx"
@@ -270,22 +270,19 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_search_index_admin_converter",
+    suite_name,
     {
-      { "apply_index_maps_fields_and_params", apply_index_maps_fields_and_params },
-      { "a_create_carries_no_uuid", a_create_carries_no_uuid },
-      { "an_update_carries_the_uuid", an_update_carries_the_uuid },
-      { "all_three_parameter_blobs_survive_the_round_trip",
-        all_three_parameter_blobs_survive_the_round_trip },
-      { "an_unset_parameter_blob_stays_unset", an_unset_parameter_blob_stays_unset },
-      { "an_unparseable_parameter_blob_is_refused", an_unparseable_parameter_blob_is_refused },
-      { "a_non_object_parameter_blob_is_refused", a_non_object_parameter_blob_is_refused },
-      { "a_map_member_that_is_not_json_is_refused", a_map_member_that_is_not_json_is_refused },
-      { "params_to_json_keeps_the_unset_convention_for_an_empty_map",
-        params_to_json_keeps_the_unset_convention_for_an_empty_map },
-      { "decode_index_maps_fields", decode_index_maps_fields },
-      { "a_definition_survives_the_full_encode_decode_cycle",
-        a_definition_survives_the_full_encode_decode_cycle },
+      { CASE(apply_index_maps_fields_and_params) },
+      { CASE(a_create_carries_no_uuid) },
+      { CASE(an_update_carries_the_uuid) },
+      { CASE(all_three_parameter_blobs_survive_the_round_trip) },
+      { CASE(an_unset_parameter_blob_stays_unset) },
+      { CASE(an_unparseable_parameter_blob_is_refused) },
+      { CASE(a_non_object_parameter_blob_is_refused) },
+      { CASE(a_map_member_that_is_not_json_is_refused) },
+      { CASE(params_to_json_keeps_the_unset_convention_for_an_empty_map) },
+      { CASE(decode_index_maps_fields) },
+      { CASE(a_definition_survives_the_full_encode_decode_cycle) },
     },
   };
 }

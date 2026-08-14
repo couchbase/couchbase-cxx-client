@@ -19,7 +19,7 @@
 // material from the SDK's TLS options, and the authorization header from credentials. Pure
 // construction, no server (env-agnostic).
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/capella_ca.hxx"
 #include "core/cluster_credentials.hxx"
@@ -236,18 +236,15 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_credentials",
+    suite_name,
     {
-      { "basic_and_bearer_header_values", basic_and_bearer_header_values },
-      { "authorization_header_selects_scheme", authorization_header_selects_scheme },
-      { "ssl_root_certs_prefer_explicit_then_capella_and_mozilla",
-        ssl_root_certs_prefer_explicit_then_capella_and_mozilla },
-      { "ssl_client_certificate_is_read_from_files", ssl_client_certificate_is_read_from_files },
-      { "channel_credentials_switch_on_tls", channel_credentials_switch_on_tls },
-      { "peer_verification_is_disabled_only_by_tls_verify_none",
-        peer_verification_is_disabled_only_by_tls_verify_none },
-      { "peer_verification_does_not_depend_on_the_credential_shape",
-        peer_verification_does_not_depend_on_the_credential_shape },
+      { CASE(basic_and_bearer_header_values) },
+      { CASE(authorization_header_selects_scheme) },
+      { CASE(ssl_root_certs_prefer_explicit_then_capella_and_mozilla) },
+      { CASE(ssl_client_certificate_is_read_from_files) },
+      { CASE(channel_credentials_switch_on_tls) },
+      { CASE(peer_verification_is_disabled_only_by_tls_verify_none) },
+      { CASE(peer_verification_does_not_depend_on_the_credential_shape) },
     },
   };
 }

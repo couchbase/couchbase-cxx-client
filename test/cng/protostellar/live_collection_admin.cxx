@@ -37,7 +37,7 @@
 // taken, and only a live case shows what that answer is.
 
 #include "cng/fixtures/live_fixture.hxx"
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/management/bucket_settings.hxx"
 #include "core/operations/management/bucket_create.hxx"
@@ -606,34 +606,27 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_live_collection_admin",
+    suite_name,
     {
-      { "list_collections_against_live_gateway",
-        list_collections_against_live_gateway,
+      { CASE(list_collections_against_live_gateway),
         { needs::real_cluster() },
         timeout::integration },
-      { "collection_max_expiry_round_trips_against_live_gateway",
-        collection_max_expiry_round_trips_against_live_gateway,
+      { CASE(collection_max_expiry_round_trips_against_live_gateway),
         { needs::real_cluster() },
         timeout::integration },
-      { "collection_update_max_expiry_against_live_gateway",
-        collection_update_max_expiry_against_live_gateway,
+      { CASE(collection_update_max_expiry_against_live_gateway),
         { needs::real_cluster() },
         timeout::integration },
-      { "collection_max_expiry_below_the_sentinel_is_refused_against_live_gateway",
-        collection_max_expiry_below_the_sentinel_is_refused_against_live_gateway,
+      { CASE(collection_max_expiry_below_the_sentinel_is_refused_against_live_gateway),
         { needs::real_cluster() },
         timeout::integration },
-      { "collection_max_expiry_is_layered_over_the_bucket_default",
-        collection_max_expiry_is_layered_over_the_bucket_default,
+      { CASE(collection_max_expiry_is_layered_over_the_bucket_default),
         { needs::real_cluster() },
         timeout::integration },
-      { "collection_history_retention_round_trips_against_live_gateway",
-        collection_history_retention_round_trips_against_live_gateway,
+      { CASE(collection_history_retention_round_trips_against_live_gateway),
         { needs::real_cluster() },
         timeout::integration },
-      { "collection_history_retention_on_a_couchstore_bucket_against_live_gateway",
-        collection_history_retention_on_a_couchstore_bucket_against_live_gateway,
+      { CASE(collection_history_retention_on_a_couchstore_bucket_against_live_gateway),
         { needs::real_cluster() },
         timeout::integration },
     },

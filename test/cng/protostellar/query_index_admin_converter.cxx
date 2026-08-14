@@ -24,7 +24,7 @@
 // The adversarial cases below reconstruct that join and count the tokens the query parser would
 // find in it.
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/protostellar/query_index_admin_converter.hxx"
 
@@ -419,25 +419,21 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_query_index_admin_converter",
+    suite_name,
     {
-      { "index_keys_are_escaped_into_one_token_each", index_keys_are_escaped_into_one_token_each },
-      { "a_hostile_key_cannot_add_terms_to_the_field_list",
-        a_hostile_key_cannot_add_terms_to_the_field_list },
-      { "an_ordinary_key_is_quoted_and_a_quoted_key_is_left_alone",
-        an_ordinary_key_is_quoted_and_a_quoted_key_is_left_alone },
-      { "encode_create_fills_the_secondary_request", encode_create_fills_the_secondary_request },
-      { "an_unset_keyspace_part_is_left_unset", an_unset_keyspace_part_is_left_unset },
-      { "create_picks_the_rpc_from_is_primary", create_picks_the_rpc_from_is_primary },
-      { "drop_picks_the_rpc_from_is_primary", drop_picks_the_rpc_from_is_primary },
-      { "a_conditional_secondary_index_cannot_be_encoded",
-        a_conditional_secondary_index_cannot_be_encoded },
-      { "decode_index_maps_fields", decode_index_maps_fields },
-      { "an_unrecognised_enum_decodes_as_unknown", an_unrecognised_enum_decodes_as_unknown },
-      { "decode_primary_index_has_no_keys", decode_primary_index_has_no_keys },
-      { "an_explicitly_empty_condition_is_not_an_absent_one",
-        an_explicitly_empty_condition_is_not_an_absent_one },
-      { "a_decoded_key_re_encodes_to_itself", a_decoded_key_re_encodes_to_itself },
+      { CASE(index_keys_are_escaped_into_one_token_each) },
+      { CASE(a_hostile_key_cannot_add_terms_to_the_field_list) },
+      { CASE(an_ordinary_key_is_quoted_and_a_quoted_key_is_left_alone) },
+      { CASE(encode_create_fills_the_secondary_request) },
+      { CASE(an_unset_keyspace_part_is_left_unset) },
+      { CASE(create_picks_the_rpc_from_is_primary) },
+      { CASE(drop_picks_the_rpc_from_is_primary) },
+      { CASE(a_conditional_secondary_index_cannot_be_encoded) },
+      { CASE(decode_index_maps_fields) },
+      { CASE(an_unrecognised_enum_decodes_as_unknown) },
+      { CASE(decode_primary_index_has_no_keys) },
+      { CASE(an_explicitly_empty_condition_is_not_an_absent_one) },
+      { CASE(a_decoded_key_re_encodes_to_itself) },
     },
   };
 }
