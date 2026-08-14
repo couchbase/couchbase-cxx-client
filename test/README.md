@@ -178,7 +178,31 @@ assert_eq(opts.key_value_timeout.count(), 20'000, "check key_value_timeout==2000
 
 Include the lightest header that does the job. Six unit files currently include `test_helper_integration.hxx` — dragging in `core/cluster.hxx` and `core/operations.hxx` — without ever constructing a cluster.
 
-`framework/test_registry.hxx` is what a test file needs. `framework/errors.hxx` is separate because it names `couchbase::error`, and a file that does not assert on one should not pay for it.
+`framework/test_registry.hxx` is what a test file needs, and it deliberately reaches nothing heavy: no formatting library, no `core/`, no `couchbase/`. `framework/errors.hxx` is separate because it names `couchbase::error`, and a file that does not assert on one should not pay for it. `framework/test_runner.hxx` is framework internals; a test does not include it.
+
+**Assertion messages are string literals.** Across the whole suite, five call sites out of about 1,370 build a message from values, and the framework is arranged so those five pay for it rather than everybody:
+
+```cpp
+assert_eq(actual, expected, "the value survives the round trip");        // yes: a literal
+assert_eq(actual, expected, fmt::format("round trip of {}", key));       // only if you must
+```
+
+The failure message already prints the operands — that is what `operand_printer` is for — so building one by hand is nearly always redundant. If a file genuinely needs it, that file includes `<spdlog/fmt/fmt.h>` itself.
+
+### Printing a type in a failure message
+
+`assert_eq` and `assert_ne` show both operands for any type with an `operand_printer`. Integers, `bool`, `char`, floating point, the string types and enums are built in; `framework/errors.hxx` adds `std::error_code` and `couchbase::error`. A type with none is not an error — the assertion still fires, it just omits the values. To teach the framework a type, specialise it next to the test that needs it:
+
+```cpp
+template<>
+struct couchbase::test::operand_printer<my_type> {
+  static constexpr bool available = true;
+  [[nodiscard]] static auto to_text(const my_type& value) -> std::string
+  {
+    return value.name();
+  }
+};
+```
 
 ## Comments in tests
 

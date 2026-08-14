@@ -25,6 +25,8 @@
 
 #include "context.hxx"
 
+#include <spdlog/fmt/fmt.h>
+
 #include "utils/integration_test_guard.hxx"
 #include "utils/server_version.hxx"
 

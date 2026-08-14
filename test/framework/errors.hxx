@@ -33,24 +33,6 @@
 #include <string>
 #include <system_error>
 
-// fmt has no formatter for std::error_code unless <fmt/std.h> is included, which nothing here
-// does. Specialised so assert_eq and assert_ne on error codes print operands rather than degrading
-// to the bare message. couchbase::error deliberately gets none: couchbase/fmt/error.hxx already
-// provides one, and a second definition in a translation unit that included both would be an ODR
-// violation.
-template<>
-struct fmt::formatter<std::error_code> : fmt::formatter<std::string> {
-  template<typename FormatContext>
-  auto format(const std::error_code& ec, FormatContext& ctx) const
-  {
-    if (!ec) {
-      return fmt::formatter<std::string>::format("success", ctx);
-    }
-    return fmt::formatter<std::string>::format(
-      fmt::format("{}:{} ({})", ec.category().name(), ec.value(), ec.message()), ctx);
-  }
-};
-
 namespace couchbase::test
 {
 
@@ -60,7 +42,8 @@ describe(const std::error_code& ec) -> std::string
   if (!ec) {
     return "success";
   }
-  return fmt::format("{}:{} ({})", ec.category().name(), ec.value(), ec.message());
+  return std::string{ ec.category().name() } + ':' + std::to_string(ec.value()) + " (" +
+         ec.message() + ")";
 }
 
 [[nodiscard]] inline auto
@@ -79,14 +62,34 @@ describe(const couchbase::error& error) -> std::string
   return result;
 }
 
+// So assert_eq and assert_ne on error values print operands rather than nothing. A class template
+// specialisation is found at the point of instantiation, so it works from a header included after
+// test_framework.hxx -- which a free function overload would not.
+template<>
+struct operand_printer<std::error_code> {
+  static constexpr bool available = true;
+  [[nodiscard]] static auto to_text(const std::error_code& ec) -> std::string
+  {
+    return describe(ec);
+  }
+};
+
+template<>
+struct operand_printer<couchbase::error> {
+  static constexpr bool available = true;
+  [[nodiscard]] static auto to_text(const couchbase::error& error) -> std::string
+  {
+    return describe(error);
+  }
+};
+
 inline void
 assert_success(const std::error_code& ec,
                std::string_view message = "expected success",
                source_location loc = source_location::current())
 {
   if (ec) {
-    throw test_assertion_failure(
-      fmt::format("{}:{}: {} ({})", loc.file_name(), loc.line(), message, describe(ec)));
+    throw test_assertion_failure(detail::at(loc, message) + " (" + describe(ec) + ")");
   }
 }
 
@@ -96,8 +99,7 @@ assert_success(const couchbase::error& error,
                source_location loc = source_location::current())
 {
   if (error.ec()) {
-    throw test_assertion_failure(
-      fmt::format("{}:{}: {} ({})", loc.file_name(), loc.line(), message, describe(error)));
+    throw test_assertion_failure(detail::at(loc, message) + " (" + describe(error) + ")");
   }
 }
 
@@ -110,12 +112,8 @@ assert_error(const std::error_code& ec,
              source_location loc = source_location::current())
 {
   if (ec != expected) {
-    throw test_assertion_failure(fmt::format("{}:{}: {} (actual: {}, expected: {})",
-                                             loc.file_name(),
-                                             loc.line(),
-                                             message,
-                                             describe(ec),
-                                             describe(expected)));
+    throw test_assertion_failure(detail::at(loc, message) + " (actual: " + describe(ec) +
+                                 ", expected: " + describe(expected) + ")");
   }
 }
 
@@ -126,12 +124,8 @@ assert_error(const couchbase::error& error,
              source_location loc = source_location::current())
 {
   if (error.ec() != expected) {
-    throw test_assertion_failure(fmt::format("{}:{}: {} (actual: {}, expected: {})",
-                                             loc.file_name(),
-                                             loc.line(),
-                                             message,
-                                             describe(error),
-                                             describe(expected)));
+    throw test_assertion_failure(detail::at(loc, message) + " (actual: " + describe(error) +
+                                 ", expected: " + describe(expected) + ")");
   }
 }
 

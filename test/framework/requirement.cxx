@@ -17,6 +17,8 @@
 
 #include "requirement.hxx"
 
+#include <spdlog/fmt/fmt.h>
+
 #include <functional>
 #include <optional>
 #include <utility>

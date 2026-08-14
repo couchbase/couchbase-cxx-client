@@ -377,31 +377,4 @@ scale_timeouts(configuration& config, double factor)
   config.requirement_budget = scale_budget(config.requirement_budget, factor);
 }
 
-auto
-safe_getenv(const std::string& name) noexcept -> std::optional<std::string>
-{
-  if (name.empty()) {
-    return std::nullopt;
-  }
-
-#if defined(_WIN32)
-  char* buf = nullptr;
-  std::size_t len = 0;
-  if (_dupenv_s(&buf, &len, name.c_str()) == 0 && buf != nullptr) {
-    std::string value(buf);
-    free(buf); // NOLINT(cppcoreguidelines-no-malloc) — _dupenv_s allocates with malloc
-    if (!value.empty()) {
-      return value;
-    }
-  }
-  return std::nullopt;
-#else
-  if (const char* value = std::getenv(name.c_str()); // NOLINT(concurrency-mt-unsafe)
-      value != nullptr && value[0] != '\0') {
-    return std::string{ value };
-  }
-  return std::nullopt;
-#endif
-}
-
 } // namespace couchbase::test
