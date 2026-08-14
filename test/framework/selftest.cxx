@@ -22,6 +22,13 @@
 
 #include "test_registry.hxx"
 
+// This one drives run() directly, which the registry header deliberately does not expose.
+#include "test_runner.hxx"
+
+// This file builds a message rather than passing a literal, so it asks for fmt itself;
+// framework/test_framework.hxx deliberately does not.
+#include <spdlog/fmt/fmt.h>
+
 #include <atomic>
 #include <chrono>
 #include <cstddef>
@@ -860,6 +867,22 @@ the_added_assertions_report_what_they_saw([[maybe_unused]] context& ctx)
                   }),
                   "both are: 7",
                   "assert_ne prints the value");
+  // assert_ne fails when its operands are equal, so both render the same text for almost any pair
+  // -- and a version that printed the wrong one would look identical. A char and its code compare
+  // equal while rendering differently, which pins which operand is shown. Deliberately not bool
+  // against int: MSVC rejects that mix under /WX with C4805.
+  assert_contains(message_of([]() {
+                    assert_ne('A', 65);
+                  }),
+                  "both are: 'A'",
+                  "assert_ne prints the first operand, not the second");
+  // Distinct-looking operands that compare equal, so rendering the wrong one is visible. Two
+  // identical ints cannot tell the two apart.
+  assert_contains(message_of([]() {
+                    assert_ne(std::string{ "same" }, "same");
+                  }),
+                  R"(both are: "same")",
+                  "assert_ne prints the operand it compared, not a placeholder");
   assert_contains(message_of([]() {
                     assert_contains("abc", "xyz");
                   }),
@@ -894,6 +917,132 @@ the_added_assertions_report_what_they_saw([[maybe_unused]] context& ctx)
                   }),
                   "unreachable branch",
                   "fail() prints its message");
+}
+
+void
+a_failure_names_the_file_and_line_it_came_from([[maybe_unused]] context& ctx)
+{
+  // The prefix every assertion carries. Without it a failing case reports what went wrong but not
+  // where, which is the first thing anybody needs.
+  const auto here = source_location::current();
+  const auto text = detail::at(here, "the message");
+
+  assert_contains(text, "selftest.cxx:", "the file is named");
+  assert_contains(text, ":" + std::to_string(here.line()) + ": ", "and so is the line");
+  assert_starts_with(text, here.file_name(), "the location comes first");
+  assert_true(text.size() > std::string{ here.file_name() }.size() + 1,
+              "and the message follows it");
+  assert_contains(text, "the message", "which is the message that was passed");
+}
+
+void
+operands_render_without_a_formatting_library([[maybe_unused]] context& ctx)
+{
+  // The framework renders operands itself so that no test translation unit has to include a
+  // formatting library to see the values that differed. These are the types that reaches.
+  assert_eq(detail::render(42), std::string{ "42" }, "an integer");
+  assert_eq(detail::render(-7), std::string{ "-7" }, "a negative integer");
+  assert_eq(detail::render(true), std::string{ "true" }, "a bool is a word, not a 1");
+  assert_eq(detail::render(false), std::string{ "false" }, "and so is false");
+  assert_eq(detail::render('x'), std::string{ "'x'" }, "a char is quoted");
+
+  // Escaped, not written through. what() hands back c_str(), so a NUL rendered into the message
+  // would end it at the operand -- the reader gets "(actual: '" and never learns the expectation.
+  assert_eq(detail::render('\0'), std::string{ R"('\0')" }, "a NUL renders as an escape");
+  assert_eq(detail::render('\n'), std::string{ R"('\n')" }, "and so does a newline");
+  assert_eq(
+    detail::render('\x01'), std::string{ R"('\x01')" }, "other control bytes go out as hex");
+
+  // Trailing zeros are trimmed: std::to_string pads to six decimals, and "2.000000 ± 0.125000"
+  // buries the numbers the reader came for.
+  assert_eq(detail::render(1.5), std::string{ "1.5" }, "a fraction keeps its digits");
+  assert_eq(detail::render(2.0), std::string{ "2" }, "a whole double loses its padding");
+  assert_eq(detail::render(0.125), std::string{ "0.125" }, "and a small one keeps all of its");
+
+  // Six fixed decimals took everything below 5e-7 to "0", so a tolerance printed as "+/- 0" and
+  // two different values printed the same with no reason given. Both halves are pinned: the value
+  // survives, and values this far apart do not collide.
+  assert_eq(detail::render(1e-9), std::string{ "1e-09" }, "a small value is not flattened to zero");
+  assert_true(detail::render(1e-7) != detail::render(2e-7),
+              "and two different small values do not render identically");
+
+  // Six significant digits renders both of these "1". The precision widens until the text parses
+  // back to the double it came from, which is what stops values that differ late from printing
+  // alike -- the same failure as the small ones above, one decade further out.
+  assert_true(detail::render(1.0000001) != detail::render(1.0000002),
+              "two doubles differing beyond six digits do not render identically");
+  assert_eq(
+    detail::render(0.1), std::string{ "0.1" }, "and a value that needs no widening is left alone");
+
+  // Quoted, so a difference that is only whitespace is visible.
+  assert_eq(detail::render(std::string{ "got " }), std::string{ "\"got \"" }, "a string is quoted");
+
+  // The same reason the char printer escapes: what() hands back c_str(), so a NUL inside a string
+  // operand ended the message at that operand. Reachable -- the KV cases compare document bodies
+  // as strings, and a body written through the binary transcoder can carry one.
+  assert_eq(detail::render(std::string{ "a\0b", 3 }),
+            std::string{ R"("a\0b")" },
+            "a NUL inside a string is escaped, not written through");
+  assert_eq(detail::render(std::string_view{ "x\ty", 3 }),
+            std::string{ R"("x\ty")" },
+            "and so is a control byte in a view");
+  assert_eq(detail::render(std::string_view{ "v" }), std::string{ "\"v\"" }, "so is a view");
+  assert_eq(detail::render("literal"), std::string{ "\"literal\"" }, "so is a string literal");
+  assert_eq(detail::render(static_cast<const char*>(nullptr)),
+            std::string{ "(null)" },
+            "a null pointer says so rather than crashing");
+
+  enum class colour : std::uint8_t {
+    red = 3
+  };
+  assert_eq(detail::render(colour::red), std::string{ "3" }, "an enum renders its value");
+
+  // 3 fits every integer type, so it pins neither the width nor the signedness of the cast.
+  enum class wide : std::uint64_t {
+    big = 4'294'967'296
+  };
+  // Wider than int, which is what this reaches. The cast is through std::intmax_t, so an unsigned
+  // enumerator above INT64_MAX would render negative -- unreachable here, because no enum in the
+  // tree has one and one would be pathological, so the boundary is named rather than tested.
+  assert_eq(detail::render(wide::big),
+            std::string{ "4294967296" },
+            "an enum wider than int keeps its value");
+
+  enum class depth : std::int8_t {
+    below = -2
+  };
+  assert_eq(
+    detail::render(depth::below), std::string{ "-2" }, "a negative enumerator keeps its sign");
+
+  // decay_t strips volatile and the printers take a const reference, so this combination has to be
+  // handled explicitly or it is a compile error inside the framework header rather than at the
+  // assertion that caused it.
+  const volatile bool flag = true;
+  assert_eq(detail::render(flag), std::string{ "true" }, "a volatile operand still renders");
+}
+
+void
+a_type_with_no_printer_still_fails_its_assertion([[maybe_unused]] context& ctx)
+{
+  // The point of the customisation point being opt-in: a type nobody taught the framework to print
+  // must not stop the assertion from firing, it just loses the operands.
+  struct opaque {
+    auto operator==(const opaque& /* other */) const -> bool
+    {
+      return false;
+    }
+  };
+  assert_false(detail::printable<opaque>, "the type has no printer");
+
+  std::string message;
+  try {
+    assert_eq(opaque{}, opaque{}, "two opaque values");
+  } catch (const test_assertion_failure& e) {
+    message = e.what();
+  }
+  assert_contains(message, "two opaque values", "the assertion still fires and names itself");
+  assert_true(message.find("actual:") == std::string::npos,
+              "and says nothing it cannot say truthfully");
 }
 
 void
@@ -1196,6 +1345,9 @@ tests() -> test_suite
       { CASE(a_skip_inside_assert_throws_with_skips_its_case) },
       { CASE(a_failed_assertion_inside_assert_throws_with_fails_its_case) },
       { CASE(a_scaled_budget_lets_a_case_outlive_its_original_one), {}, timeout::fast },
+      { CASE(a_failure_names_the_file_and_line_it_came_from) },
+      { CASE(operands_render_without_a_formatting_library) },
+      { CASE(a_type_with_no_printer_still_fails_its_assertion) },
       { CASE(the_added_assertions_report_what_they_saw) },
       { CASE(the_configuration_reads_the_environment_it_documents) },
     },

@@ -31,17 +31,14 @@
 
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <exception>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
-
-// The wrapper (not <spdlog/fmt/bundled/format.h>) is required: it selects bundled fmt and derives
-// the header-only-vs-compiled mode from SPDLOG_COMPILED_LIB, which test_framework_main picks up by
-// linking spdlog::spdlog. Including the bundled header directly would bypass that and reintroduce
-// the duplicate fmt definitions that MSVC rejects -- see the note in cmake/TestFramework.cmake.
-#include <spdlog/fmt/fmt.h>
 
 namespace couchbase::test
 {
@@ -189,6 +186,237 @@ struct test_suite {
 auto
 tests() -> test_suite;
 
+// ── Rendering an operand ──────────────────────────────────────────────────────
+//
+// A failure message wants to show the values that differed, and showing them is the only reason a
+// test framework needs formatting at all. Doing it with a formatting library means every test
+// translation unit pays for that library's headers: <spdlog/fmt/fmt.h> preprocesses to about 63,800
+// lines as this tree compiles it, against 45,900 for catch2/catch_test_macros.hpp -- so roughly the
+// cost of the Catch2 header it replaces, spent to render an int or a string.
+//
+// So the framework renders operands itself, through this customisation point. The printers below
+// need nothing beyond <string> and <type_traits>; the header as a whole still includes what its
+// declarations need. A type with no specialisation is not an error: its assertion still fires, and
+// simply omits the operands rather than dragging in a way to print them.
+//
+// A test that wants richer text in a message is free to build one -- with fmt, or anything else --
+// and pass it; that cost then falls on the file that asked for it.
+namespace detail
+{
+// what() hands back c_str(), so a raw control byte written into a message ends it there: a NUL in
+// an operand leaves the reader with "(actual: \"" and no expectation. Every printer that can carry
+// one routes through here, so the char and string forms cannot drift apart.
+inline void
+escape_into(std::string& text, char value)
+{
+  switch (value) {
+    case '\0':
+      text += "\\0";
+      return;
+    case '\n':
+      text += "\\n";
+      return;
+    case '\r':
+      text += "\\r";
+      return;
+    case '\t':
+      text += "\\t";
+      return;
+    default:
+      break;
+  }
+  const auto byte = static_cast<unsigned char>(value);
+  if (byte < 0x20U || byte == 0x7fU) {
+    constexpr char digits[] = "0123456789abcdef";
+    text += "\\x";
+    text += digits[byte >> 4U];
+    text += digits[byte & 0x0fU];
+    return;
+  }
+  text += value;
+}
+
+[[nodiscard]] inline auto
+quoted(std::string_view value) -> std::string
+{
+  std::string text{ '"' };
+  for (const auto byte : value) {
+    escape_into(text, byte);
+  }
+  text += '"';
+  return text;
+}
+} // namespace detail
+
+template<typename T, typename Enable = void>
+struct operand_printer {
+  static constexpr bool available = false;
+  [[nodiscard]] static auto to_text(const T& /* value */) -> std::string
+  {
+    return {};
+  }
+};
+
+template<typename T>
+struct operand_printer<
+  T,
+  std::enable_if_t<std::is_integral_v<T> && !std::is_same_v<T, bool> && !std::is_same_v<T, char>>> {
+  static constexpr bool available = true;
+  [[nodiscard]] static auto to_text(const T& value) -> std::string
+  {
+    return std::to_string(value);
+  }
+};
+
+template<>
+struct operand_printer<bool> {
+  static constexpr bool available = true;
+  [[nodiscard]] static auto to_text(const bool& value) -> std::string
+  {
+    return value ? "true" : "false";
+  }
+};
+
+template<>
+struct operand_printer<char> {
+  static constexpr bool available = true;
+  [[nodiscard]] static auto to_text(const char& value) -> std::string
+  {
+    std::string text{ '\'' };
+    detail::escape_into(text, value);
+    text += '\'';
+    return text;
+  }
+};
+
+template<typename T>
+struct operand_printer<T, std::enable_if_t<std::is_floating_point_v<T>>> {
+  static constexpr bool available = true;
+  [[nodiscard]] static auto to_text(const T& value) -> std::string
+  {
+    // The shortest form that reads back as the same value. std::to_string pads to six fixed
+    // decimals, so everything below 5e-7 trimmed to "0": a tolerance printed as "+/- 0", and two
+    // different values printed identically with no reason given -- which is the failure the
+    // char-pointer static_assert further down this header exists to prevent. <sstream> would cost
+    // more to include than everything else here put together, so this goes through snprintf and
+    // widens the precision until the text parses back to the value it came from.
+    char buffer[64]{};
+    if constexpr (std::is_same_v<T, long double>) {
+      for (int precision = 6; precision <= 21; ++precision) {
+        static_cast<void>(std::snprintf(buffer, sizeof(buffer), "%.*Lg", precision, value));
+        if (std::strtold(buffer, nullptr) == value) {
+          break;
+        }
+      }
+    } else {
+      const auto widened = static_cast<double>(value);
+      for (int precision = 6; precision <= 17; ++precision) {
+        static_cast<void>(std::snprintf(buffer, sizeof(buffer), "%.*g", precision, widened));
+        if (std::strtod(buffer, nullptr) == widened) {
+          break;
+        }
+      }
+    }
+    return std::string{ buffer };
+  }
+};
+
+// Quoted, so a trailing space or an empty string is visible rather than being read as a typo in the
+// message.
+template<>
+struct operand_printer<std::string> {
+  static constexpr bool available = true;
+  [[nodiscard]] static auto to_text(const std::string& value) -> std::string
+  {
+    return detail::quoted(value);
+  }
+};
+
+template<>
+struct operand_printer<std::string_view> {
+  static constexpr bool available = true;
+  [[nodiscard]] static auto to_text(const std::string_view& value) -> std::string
+  {
+    return detail::quoted(value);
+  }
+};
+
+// A string literal has type const char[N], and std::decay_t applies array-to-pointer decay, so the
+// operand reaches a printer as const char* and this is the specialisation selected. Taken by value,
+// which is what a decayed pointer is.
+template<>
+struct operand_printer<const char*> {
+  static constexpr bool available = true;
+  [[nodiscard]] static auto to_text(const char* value) -> std::string
+  {
+    return value == nullptr ? "(null)" : detail::quoted(value);
+  }
+};
+
+// Written out rather than inheriting from the const overload: clang-format 22 and 24 disagree on
+// how to lay out an empty derived-struct body, and CI runs 22.
+template<>
+struct operand_printer<char*> {
+  static constexpr bool available = true;
+  [[nodiscard]] static auto to_text(const char* value) -> std::string
+  {
+    return operand_printer<const char*>::to_text(value);
+  }
+};
+
+// The underlying value, not a name: the framework cannot know the enumerators, and a number the
+// reader can look up beats no operands at all.
+template<typename T>
+struct operand_printer<T, std::enable_if_t<std::is_enum_v<T>>> {
+  static constexpr bool available = true;
+  [[nodiscard]] static auto to_text(const T& value) -> std::string
+  {
+    return std::to_string(static_cast<std::intmax_t>(value));
+  }
+};
+
+namespace detail
+{
+template<typename T>
+inline constexpr bool printable = operand_printer<std::decay_t<T>>::available;
+
+template<typename T>
+[[nodiscard]] inline auto
+render(const T& value) -> std::string
+{
+  // std::decay_t strips volatile, so printable<volatile bool> is true and this branch is
+  // instantiated -- but a const volatile lvalue cannot bind to the printer's const& parameter, and
+  // the error would land inside this header rather than on the assertion that caused it. Copying
+  // is the only legal way to drop volatile. Gated, because a plain static_cast would break the
+  // string-literal path, where decay_t<const char[N]> is const char*.
+  if constexpr (std::is_volatile_v<T>) {
+    // Scalars only, and the assert says so rather than leaving a page of template errors: dropping
+    // volatile needs a copy, and a class type's copy constructor takes const& and cannot bind a
+    // const volatile lvalue. Reading such an object through a non-volatile reference is not an
+    // option either -- that is undefined for an object that really is volatile.
+    static_assert(std::is_scalar_v<std::decay_t<T>>,
+                  "a volatile operand must be a scalar: dropping volatile requires a copy, and a "
+                  "class type cannot be copied from a const volatile lvalue");
+    return operand_printer<std::decay_t<T>>::to_text(std::decay_t<T>{ value });
+  } else {
+    return operand_printer<std::decay_t<T>>::to_text(value);
+  }
+}
+
+// "file.cxx:12: what the assertion means". Built by concatenation rather than by a format call, so
+// nothing here needs a formatting library.
+[[nodiscard]] inline auto
+at(source_location loc, std::string_view message) -> std::string
+{
+  std::string text{ loc.file_name() };
+  text += ':';
+  text += std::to_string(loc.line());
+  text += ": ";
+  text.append(message.data(), message.size());
+  return text;
+}
+} // namespace detail
+
 // ── Assertions ────────────────────────────────────────────────────────────────
 
 [[noreturn]] inline void
@@ -203,7 +431,7 @@ assert_true(bool value,
             source_location loc = source_location::current())
 {
   if (!value) {
-    throw test_assertion_failure(fmt::format("{}:{}: {}", loc.file_name(), loc.line(), message));
+    throw test_assertion_failure(detail::at(loc, message));
   }
 }
 
@@ -215,10 +443,24 @@ assert_false(bool value,
   assert_true(!value, message, loc);
 }
 
-// Report both operands when they are formattable. Without this the message says only "expected
-// equal", so a failure tells you the values differed but not what they were -- the one place where
-// not using Catch2 (whose expression decomposition prints operands) costs something concrete. The
-// `if constexpr` keeps assert_eq usable with types fmt cannot format.
+// Comparing two char pointers compares addresses, not text: two distinct buffers holding "hello"
+// are unequal, and both operands then render as "hello" -- a failure message showing two identical
+// values and no reason. Only rejected when BOTH sides are char pointers; the mixed form
+// assert_eq(e.what(), std::string{...}) compares by value and is what the suite already writes.
+namespace detail
+{
+template<typename T>
+inline constexpr bool is_char_pointer =
+  std::is_same_v<std::decay_t<T>, char*> || std::is_same_v<std::decay_t<T>, const char*>;
+
+template<typename A, typename B>
+inline constexpr bool both_char_pointers = is_char_pointer<A> && is_char_pointer<B>;
+} // namespace detail
+
+// Report both operands where the types can be rendered. Without this the message says only
+// "expected equal", so a failure tells you the values differed but not what they were -- the one
+// place where not using Catch2 (whose expression decomposition prints operands) costs something
+// concrete.
 template<typename A, typename B>
 inline void
 assert_eq(const A& actual,
@@ -226,17 +468,16 @@ assert_eq(const A& actual,
           std::string_view message = "expected equal",
           source_location loc = source_location::current())
 {
+  static_assert(!detail::both_char_pointers<A, B>,
+                "comparing two char pointers compares addresses, not text: wrap one side in "
+                "std::string_view or std::string");
   if (!(actual == expected)) {
-    if constexpr (fmt::is_formattable<A>::value && fmt::is_formattable<B>::value) {
-      throw test_assertion_failure(fmt::format("{}:{}: {} (actual: {}, expected: {})",
-                                               loc.file_name(),
-                                               loc.line(),
-                                               message,
-                                               actual,
-                                               expected));
-    } else {
-      throw test_assertion_failure(fmt::format("{}:{}: {}", loc.file_name(), loc.line(), message));
+    auto text = detail::at(loc, message);
+    if constexpr (detail::printable<A> && detail::printable<B>) {
+      text +=
+        " (actual: " + detail::render(actual) + ", expected: " + detail::render(expected) + ")";
     }
+    throw test_assertion_failure(std::move(text));
   }
 }
 
@@ -247,13 +488,15 @@ assert_ne(const A& actual,
           std::string_view message = "expected different",
           source_location loc = source_location::current())
 {
+  static_assert(!detail::both_char_pointers<A, B>,
+                "comparing two char pointers compares addresses, not text: wrap one side in "
+                "std::string_view or std::string");
   if (actual == unexpected) {
-    if constexpr (fmt::is_formattable<A>::value) {
-      throw test_assertion_failure(
-        fmt::format("{}:{}: {} (both are: {})", loc.file_name(), loc.line(), message, actual));
-    } else {
-      throw test_assertion_failure(fmt::format("{}:{}: {}", loc.file_name(), loc.line(), message));
+    auto text = detail::at(loc, message);
+    if constexpr (detail::printable<A>) {
+      text += " (both are: " + detail::render(actual) + ")";
     }
+    throw test_assertion_failure(std::move(text));
   }
 }
 
@@ -264,12 +507,8 @@ assert_contains(std::string_view haystack,
                 source_location loc = source_location::current())
 {
   if (haystack.find(needle) == std::string_view::npos) {
-    throw test_assertion_failure(fmt::format(R"({}:{}: {} ("{}" is not in "{}"))",
-                                             loc.file_name(),
-                                             loc.line(),
-                                             message,
-                                             needle,
-                                             haystack));
+    throw test_assertion_failure(detail::at(loc, message) + " (" + detail::quoted(needle) +
+                                 " is not in " + detail::quoted(haystack) + ")");
   }
 }
 
@@ -280,12 +519,8 @@ assert_starts_with(std::string_view value,
                    source_location loc = source_location::current())
 {
   if (value.size() < prefix.size() || value.compare(0, prefix.size(), prefix) != 0) {
-    throw test_assertion_failure(fmt::format(R"({}:{}: {} ("{}" does not start with "{}"))",
-                                             loc.file_name(),
-                                             loc.line(),
-                                             message,
-                                             value,
-                                             prefix));
+    throw test_assertion_failure(detail::at(loc, message) + " (" + detail::quoted(value) +
+                                 " does not start with " + detail::quoted(prefix) + ")");
   }
 }
 
@@ -301,13 +536,9 @@ assert_near(double actual,
 {
   const auto difference = actual > expected ? actual - expected : expected - actual;
   if (!(difference <= tolerance)) {
-    throw test_assertion_failure(fmt::format("{}:{}: {} (actual: {}, expected: {} ± {})",
-                                             loc.file_name(),
-                                             loc.line(),
-                                             message,
-                                             actual,
-                                             expected,
-                                             tolerance));
+    throw test_assertion_failure(detail::at(loc, message) + " (actual: " + detail::render(actual) +
+                                 ", expected: " + detail::render(expected) + " ± " +
+                                 detail::render(tolerance) + ")");
   }
 }
 
@@ -316,7 +547,7 @@ assert_near(double actual,
 [[noreturn]] inline void
 fail(std::string_view message, source_location loc = source_location::current())
 {
-  throw test_assertion_failure(fmt::format("{}:{}: {}", loc.file_name(), loc.line(), message));
+  throw test_assertion_failure(detail::at(loc, message));
 }
 
 // Invoke `fn` and require it not to throw. The exception's own message is reported: a case that
@@ -334,14 +565,10 @@ assert_no_throw(Fn&& fn,
   } catch (const test_assertion_failure&) {
     throw;
   } catch (const std::exception& e) {
-    throw test_assertion_failure(
-      fmt::format("{}:{}: {} ({})", loc.file_name(), loc.line(), message, e.what()));
+    throw test_assertion_failure(detail::at(loc, message) + " (" + e.what() + ")");
   } catch (...) {
-    throw test_assertion_failure(
-      fmt::format("{}:{}: {} (an exception not derived from std::exception)",
-                  loc.file_name(),
-                  loc.line(),
-                  message));
+    throw test_assertion_failure(detail::at(loc, message) +
+                                 " (an exception not derived from std::exception)");
   }
 }
 
@@ -374,12 +601,11 @@ assert_throws(Fn&& fn,
   } catch (const Exc&) {
     threw_expected = true;
   } catch (...) {
-    throw test_assertion_failure(fmt::format(
-      "{}:{}: {} (a different exception type was thrown)", loc.file_name(), loc.line(), message));
+    throw test_assertion_failure(detail::at(loc, message) +
+                                 " (a different exception type was thrown)");
   }
   if (!threw_expected) {
-    throw test_assertion_failure(
-      fmt::format("{}:{}: {} (nothing was thrown)", loc.file_name(), loc.line(), message));
+    throw test_assertion_failure(detail::at(loc, message) + " (nothing was thrown)");
   }
 }
 
@@ -412,18 +638,17 @@ assert_throws_with(std::string_view substring,
     threw_expected = true;
     what = e.what();
   } catch (...) {
-    throw test_assertion_failure(fmt::format(
-      "{}:{}: {} (a different exception type was thrown)", loc.file_name(), loc.line(), message));
+    throw test_assertion_failure(detail::at(loc, message) +
+                                 " (a different exception type was thrown)");
   }
   if (!threw_expected) {
-    throw test_assertion_failure(
-      fmt::format("{}:{}: {} (nothing was thrown)", loc.file_name(), loc.line(), message));
+    throw test_assertion_failure(detail::at(loc, message) + " (nothing was thrown)");
   }
   // Both halves: the substring alone does not tell the reader what the exception actually said, and
   // that is the thing they need in order to decide whether the code or the expectation is wrong.
   if (what.find(substring) == std::string_view::npos) {
-    throw test_assertion_failure(fmt::format(
-      R"({}:{}: {} ("{}" is not in "{}"))", loc.file_name(), loc.line(), message, substring, what));
+    throw test_assertion_failure(detail::at(loc, message) + " (" + detail::quoted(substring) +
+                                 " is not in " + detail::quoted(what) + ")");
   }
 }
 

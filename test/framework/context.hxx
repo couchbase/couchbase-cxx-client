@@ -20,10 +20,9 @@
 // What a test case and its requirements are handed: the configuration the run was started with,
 // the process environment, and a small set of cached probes describing the server.
 //
-// This header stays lean on purpose -- <string>, <vector>, <optional>, <memory>, <chrono> and the
-// fmt wrapper. Every probe returns a plain type, so nothing here names a core or public SDK type
-// and a test file that only needs to *describe* its requirements pays no compile cost for the
-// client library. Reaching the cluster itself is cluster_access.hxx, which is not lean.
+// This header stays lean on purpose: standard library only, and not a formatting library either.
+// Every probe returns a plain type, so nothing here names a core or public SDK type, and a test
+// file that only needs to *describe* its requirements pays no compile cost for the client library.
 
 #include <chrono>
 #include <cstdint>
@@ -32,8 +31,6 @@
 #include <optional>
 #include <string>
 #include <vector>
-
-#include <spdlog/fmt/fmt.h>
 
 namespace couchbase::test
 {
@@ -81,7 +78,7 @@ struct server_version {
 
   [[nodiscard]] auto to_string() const -> std::string
   {
-    return fmt::format("{}.{}.{}", major, minor, micro);
+    return std::to_string(major) + '.' + std::to_string(minor) + '.' + std::to_string(micro);
   }
 
   [[nodiscard]] friend auto operator<(const server_version& a, const server_version& b) -> bool
@@ -158,6 +155,14 @@ public:
 // opens no connection.
 [[nodiscard]] auto
 make_probe_backend(const configuration& config) -> std::unique_ptr<probe_backend>;
+
+// Portable std::getenv wrapper returning std::nullopt for unset *or* empty values, matching the
+// wrappers in tools/utils.cxx and examples/external_circuit_breaker. Needed because MSVC treats
+// plain getenv() as deprecated, and the test tree builds with /W4 /WX. Lives here so every test
+// executable shares one implementation; context::env() is the same thing reached through a case's
+// own context.
+[[nodiscard]] auto
+safe_getenv(const std::string& name) noexcept -> std::optional<std::string>;
 
 class context
 {
