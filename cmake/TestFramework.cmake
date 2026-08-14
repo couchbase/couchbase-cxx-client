@@ -87,8 +87,9 @@ set_project_warnings(test_framework_cluster_probes)
 #
 # NAMING RULE, which the whole scheme relies on: a case name is the name of the function that
 # implements it -- the CASE macro in test/framework/test_registry.hxx stringifies the identifier, so
-# the two cannot drift -- and is therefore a C++ identifier in lower_snake_case,
-# [A-Za-z_][A-Za-z0-9_]* and nothing else. No spaces, no punctuation, no colons. A Catch2 case is
+# the two cannot drift -- and is therefore a C++ identifier, [A-Za-z_][A-Za-z0-9_]* and nothing
+# else, lower_snake_case by convention rather than by enforcement. No spaces, no punctuation, no
+# colons. A Catch2 case is
 # converted to one ONCE, when it is migrated: the category prefix is dropped because the target's
 # ctest label and the case's own requirements already carry it, and the remaining words are joined
 # with underscores. So

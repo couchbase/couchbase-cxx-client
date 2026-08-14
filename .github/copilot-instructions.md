@@ -142,8 +142,14 @@ Run all test suites:
 ```
 
 Every new KV operation added to `crud_component` must have a corresponding test
-in `test/test_integration_crud_component.cxx`. Tests must not rely on fixed
-`sleep_for` delays; use mutation tokens or polling loops instead.
+in `test/test_integration_crud_component.cxx`.
+
+**`test/README.md` is the standard a test is written and reviewed against**, and
+is not restated here: what a test is for, watching an assertion fail before
+trusting it, choosing a venue that can distinguish the failure, requirements
+rather than skip guards, and the reviewer's checklist. New tests use the
+hand-rolled framework in `test/framework/`, not Catch2, which is being removed
+(CXXCBC-945).
 
 ### couchbase2:// (CNG) tests
 
