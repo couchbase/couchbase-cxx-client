@@ -32,7 +32,11 @@
 // it covers was invisible from the core request that was already wired.
 
 #include "cng/fixtures/live_fixture.hxx"
+
+// This file builds a message rather than passing a literal, so it asks for fmt itself;
+// framework/test_framework.hxx deliberately does not.
 #include "framework/test_registry.hxx"
+#include <spdlog/fmt/fmt.h>
 
 #include "core/operations/management/query_index_create.hxx"
 #include "core/operations/management/query_index_drop.hxx"

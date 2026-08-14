@@ -92,11 +92,4 @@ scale_timeouts(test_suite& suite, double factor);
 void
 scale_timeouts(configuration& config, double factor);
 
-// Portable std::getenv wrapper returning std::nullopt for unset *or* empty values, matching the
-// wrappers in tools/utils.cxx and examples/external_circuit_breaker. Needed because MSVC treats
-// plain getenv() as deprecated, and the test tree builds with /W4 /WX. Lives here so every test
-// executable shares one implementation.
-[[nodiscard]] auto
-safe_getenv(const std::string& name) noexcept -> std::optional<std::string>;
-
 } // namespace couchbase::test

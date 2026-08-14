@@ -22,6 +22,7 @@
 // client library for couchbase::error, but no server: every value here is constructed by hand.
 
 #include "framework/errors.hxx"
+
 #include "framework/test_registry.hxx"
 
 #include <couchbase/error_codes.hxx>
@@ -97,10 +98,10 @@ assert_error_distinguishes_one_failure_from_another([[maybe_unused]] context& ct
 }
 
 void
-error_codes_format_as_operands([[maybe_unused]] context& ctx)
+error_codes_render_as_operands([[maybe_unused]] context& ctx)
 {
-  // assert_eq prints operands only where fmt can format them. Without the specialisation in
-  // errors.hxx, a mismatch between two error codes would say "expected equal" and nothing else.
+  // assert_eq prints operands only for types with an operand_printer. Without the specialisations
+  // in errors.hxx, a mismatch between two error codes would say "expected equal" and nothing else.
   const auto message = message_of([]() {
     assert_eq(make_error_code(couchbase::errc::common::unambiguous_timeout),
               make_error_code(couchbase::errc::common::request_canceled));
@@ -108,7 +109,11 @@ error_codes_format_as_operands([[maybe_unused]] context& ctx)
   assert_contains(message, "unambiguous_timeout", "the actual code renders");
   assert_contains(message, "request_canceled", "and so does the expected one");
 
-  assert_eq(fmt::format("{}", std::error_code{}), std::string{ "success" }, "success renders");
+  assert_true(operand_printer<std::error_code>::available, "error codes are printable");
+  assert_true(operand_printer<couchbase::error>::available, "and so are errors");
+  assert_eq(operand_printer<std::error_code>::to_text(std::error_code{}),
+            std::string{ "success" },
+            "a default error code renders as success");
 }
 } // namespace
 
@@ -122,7 +127,7 @@ tests() -> test_suite
       { CASE(a_failed_error_code_names_its_category_value_and_message) },
       { CASE(a_failed_error_names_its_message_and_cause) },
       { CASE(assert_error_distinguishes_one_failure_from_another) },
-      { CASE(error_codes_format_as_operands) },
+      { CASE(error_codes_render_as_operands) },
     },
   };
 }

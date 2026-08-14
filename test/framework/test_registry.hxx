@@ -27,7 +27,10 @@
   "A Catch2 header is included alongside framework/test_registry.hxx. A test file uses one or the other."
 #endif
 
-#include "test_runner.hxx"
+// test_framework.hxx, not test_runner.hxx: a test file needs the suite, the cases, the requirements
+// and the assertions, and none of the runner's API. Including the runner would put <map>, <set> and
+// <ostream> into every test translation unit for functions only the framework's own main() calls.
+#include "test_framework.hxx"
 
 #include <string>
 

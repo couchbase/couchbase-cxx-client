@@ -26,6 +26,10 @@
 
 #include "framework/test_registry.hxx"
 
+// This file builds a message rather than passing a literal, so it asks for fmt itself;
+// framework/test_framework.hxx deliberately does not.
+#include <spdlog/fmt/fmt.h>
+
 #include "core/protostellar/query_index_admin_converter.hxx"
 
 #include <cstddef>
