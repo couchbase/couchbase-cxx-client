@@ -23,7 +23,7 @@
 
 #define COUCHBASE_CXX_CLIENT_IGNORE_CORE_DEPRECATIONS
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/operations.hxx"
 
@@ -554,28 +554,13 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_kv_retry",
+    suite_name,
     {
-      { "a_retried_kv_operation_stays_within_its_budget",
-        a_retried_kv_operation_stays_within_its_budget,
-        {},
-        timeout::slow },
-      { "an_operation_without_a_timeout_is_bounded_by_the_cluster_default",
-        an_operation_without_a_timeout_is_bounded_by_the_cluster_default,
-        {},
-        timeout::slow },
-      { "a_retried_operation_reports_its_attempts_and_reasons",
-        a_retried_operation_reports_its_attempts_and_reasons,
-        {},
-        timeout::slow },
-      { "a_retried_mutation_that_runs_out_of_budget_is_ambiguous",
-        a_retried_mutation_that_runs_out_of_budget_is_ambiguous,
-        {},
-        timeout::slow },
-      { "closing_the_cluster_during_a_backoff_still_answers",
-        closing_the_cluster_during_a_backoff_still_answers,
-        {},
-        timeout::slow },
+      { CASE(a_retried_kv_operation_stays_within_its_budget), {}, timeout::slow },
+      { CASE(an_operation_without_a_timeout_is_bounded_by_the_cluster_default), {}, timeout::slow },
+      { CASE(a_retried_operation_reports_its_attempts_and_reasons), {}, timeout::slow },
+      { CASE(a_retried_mutation_that_runs_out_of_budget_is_ambiguous), {}, timeout::slow },
+      { CASE(closing_the_cluster_during_a_backoff_still_answers), {}, timeout::slow },
     },
   };
 }

@@ -26,7 +26,7 @@
 #define COUCHBASE_CXX_CLIENT_IGNORE_CORE_DEPRECATIONS
 
 #include "cng/fixtures/live_fixture.hxx"
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/operations.hxx"
 #include "core/operations/document_view.hxx"
@@ -129,18 +129,15 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_live_view",
+    suite_name,
     {
-      { "an_expired_budget_is_refused_on_the_io_context",
-        an_expired_budget_is_refused_on_the_io_context,
+      { CASE(an_expired_budget_is_refused_on_the_io_context),
         { needs::real_cluster() },
         timeout::integration },
-      { "view_round_trip_against_live_gateway",
-        view_round_trip_against_live_gateway,
+      { CASE(view_round_trip_against_live_gateway),
         { needs::real_cluster() },
         timeout::integration },
-      { "an_unsupported_option_is_refused_by_the_client",
-        an_unsupported_option_is_refused_by_the_client,
+      { CASE(an_unsupported_option_is_refused_by_the_client),
         { needs::real_cluster() },
         timeout::integration },
     },

@@ -17,7 +17,7 @@
 
 // Unit tests for Protostellar error mapping (CXXCBC-893). Pure, no server (env-agnostic).
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/protostellar/error_utils.hxx"
 
@@ -300,22 +300,17 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_error_utils",
+    suite_name,
     {
-      { "ok_maps_to_success", ok_maps_to_success },
-      { "status_codes_map_to_expected_errc", status_codes_map_to_expected_errc },
-      { "map_status_uses_the_status_code", map_status_uses_the_status_code },
-      { "deadline_exceeded_depends_on_the_operation_kind",
-        deadline_exceeded_depends_on_the_operation_kind },
-      { "precondition_details_map_to_specific_kv_errors",
-        precondition_details_map_to_specific_kv_errors },
-      { "resource_info_selects_typed_not_found_and_exists",
-        resource_info_selects_typed_not_found_and_exists },
-      { "error_message_prefers_rich_details", error_message_prefers_rich_details },
-      { "make_error_context_maps_code_and_attaches_message",
-        make_error_context_maps_code_and_attaches_message },
-      { "retry_reason_for_classifies_retryable_errors",
-        retry_reason_for_classifies_retryable_errors },
+      { CASE(ok_maps_to_success) },
+      { CASE(status_codes_map_to_expected_errc) },
+      { CASE(map_status_uses_the_status_code) },
+      { CASE(deadline_exceeded_depends_on_the_operation_kind) },
+      { CASE(precondition_details_map_to_specific_kv_errors) },
+      { CASE(resource_info_selects_typed_not_found_and_exists) },
+      { CASE(error_message_prefers_rich_details) },
+      { CASE(make_error_context_maps_code_and_attaches_message) },
+      { CASE(retry_reason_for_classifies_retryable_errors) },
     },
   };
 }

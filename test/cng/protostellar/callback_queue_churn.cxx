@@ -38,7 +38,7 @@
 // This case is deliberately cheap -- 200 cycles is about 80 ms -- so it can act as a canary without
 // slowing the suite.
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "callback_queue_keepalive.hxx"
 
@@ -155,12 +155,9 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_callback_queue_churn",
+    suite_name,
     {
-      { "cycling_servers_does_not_abort_the_process",
-        cycling_servers_does_not_abort_the_process,
-        {},
-        timeout::network },
+      { CASE(cycling_servers_does_not_abort_the_process), {}, timeout::network },
     },
   };
 }

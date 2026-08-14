@@ -21,7 +21,7 @@
 // queryserver.go, not off the converter -- an assertion derived from the code it tests only
 // notices that the code changed.
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/protostellar/query_converter.hxx"
 
@@ -457,33 +457,24 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_query_converter",
+    suite_name,
     {
-      { "encode_maps_core_fields", encode_maps_core_fields },
-      { "positional_parameters_carry_their_json_payload",
-        positional_parameters_carry_their_json_payload },
-      { "named_parameters_carry_their_json_payload", named_parameters_carry_their_json_payload },
-      { "a_parameter_payload_is_copied_byte_for_byte",
-        a_parameter_payload_is_copied_byte_for_byte },
-      { "a_string_arm_parameter_is_encoded_too", a_string_arm_parameter_is_encoded_too },
-      { "an_empty_parameter_encodes_as_empty", an_empty_parameter_encodes_as_empty },
-      { "query_context_sets_both_fields_or_neither", query_context_sets_both_fields_or_neither },
-      { "encode_maps_mutation_state_to_consistent_with",
-        encode_maps_mutation_state_to_consistent_with },
-      { "every_scan_consistency_and_profile_value_maps",
-        every_scan_consistency_and_profile_value_maps },
-      { "scan_wait_splits_into_seconds_and_nanos", scan_wait_splits_into_seconds_and_nanos },
-      { "tuning_fields_map_to_their_proto_counterparts",
-        tuning_fields_map_to_their_proto_counterparts },
-      { "can_encode_rejects_tuning_values_that_do_not_fit_uint32",
-        can_encode_rejects_tuning_values_that_do_not_fit_uint32 },
-      { "can_encode_rejects_unsupported_features", can_encode_rejects_unsupported_features },
-      { "decode_meta_data_maps_status_metrics_warnings",
-        decode_meta_data_maps_status_metrics_warnings },
-      { "decode_meta_data_leaves_absent_optionals_unset",
-        decode_meta_data_leaves_absent_optionals_unset },
-      { "every_metadata_status_decodes_to_its_own_string",
-        every_metadata_status_decodes_to_its_own_string },
+      { CASE(encode_maps_core_fields) },
+      { CASE(positional_parameters_carry_their_json_payload) },
+      { CASE(named_parameters_carry_their_json_payload) },
+      { CASE(a_parameter_payload_is_copied_byte_for_byte) },
+      { CASE(a_string_arm_parameter_is_encoded_too) },
+      { CASE(an_empty_parameter_encodes_as_empty) },
+      { CASE(query_context_sets_both_fields_or_neither) },
+      { CASE(encode_maps_mutation_state_to_consistent_with) },
+      { CASE(every_scan_consistency_and_profile_value_maps) },
+      { CASE(scan_wait_splits_into_seconds_and_nanos) },
+      { CASE(tuning_fields_map_to_their_proto_counterparts) },
+      { CASE(can_encode_rejects_tuning_values_that_do_not_fit_uint32) },
+      { CASE(can_encode_rejects_unsupported_features) },
+      { CASE(decode_meta_data_maps_status_metrics_warnings) },
+      { CASE(decode_meta_data_leaves_absent_optionals_unset) },
+      { CASE(every_metadata_status_decodes_to_its_own_string) },
     },
   };
 }

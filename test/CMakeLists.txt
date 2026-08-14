@@ -1,3 +1,7 @@
+# Migrated to the hand-rolled framework (CXXCBC-945). Registered here rather than with unit_test()
+# because it is no longer a Catch2 file.
+couchbase_add_test(unit/core/config_profiles LABEL unit LINK_CLIENT)
+
 integration_test(connect)
 integration_test(crud)
 integration_test(query)
@@ -45,7 +49,6 @@ unit_test(get_multi_transaction_id)
 unit_test(get_multi_fetch)
 unit_test(json_streaming_lexer)
 unit_test(jsonsl)
-unit_test(config_profiles)
 unit_test(options)
 unit_test(search)
 unit_test(query)

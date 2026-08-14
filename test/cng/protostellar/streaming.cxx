@@ -24,7 +24,7 @@
 // an invoker that throws), and concurrency (many streams sharing one dispatcher, which is what
 // makes the call tracker's mutex worth having and gives the TSan leg something to observe).
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "callback_queue_keepalive.hxx"
 
@@ -827,58 +827,26 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_streaming",
+    suite_name,
     {
-      { "server_stream_delivers_all_rows_on_the_io_thread",
-        server_stream_delivers_all_rows_on_the_io_thread,
+      { CASE(server_stream_delivers_all_rows_on_the_io_thread), {}, timeout::network },
+      { CASE(a_long_stream_preserves_order), {}, timeout::network },
+      { CASE(an_empty_stream_completes_without_rows), {}, timeout::network },
+      { CASE(a_server_error_reaches_on_done), {}, timeout::network },
+      { CASE(rows_delivered_before_a_mid_stream_error_are_kept), {}, timeout::network },
+      { CASE(a_deadline_expires_a_parked_stream), {}, timeout::network },
+      { CASE(a_non_positive_timeout_expires_the_call_rather_than_removing_the_deadline),
         {},
         timeout::network },
-      { "a_long_stream_preserves_order", a_long_stream_preserves_order, {}, timeout::network },
-      { "an_empty_stream_completes_without_rows",
-        an_empty_stream_completes_without_rows,
+      { CASE(cancelling_the_pending_call_ends_the_stream), {}, timeout::network },
+      { CASE(tearing_down_with_an_unrun_completion_releases_the_reactor), {}, timeout::network },
+      { CASE(an_invoker_that_throws_leaves_nothing_registered), {}, timeout::network },
+      { CASE(destructor_drains_a_parked_stream), {}, timeout::network },
+      { CASE(a_row_in_flight_when_the_drain_releases_the_hold_does_not_resume_the_read),
         {},
         timeout::network },
-      { "a_server_error_reaches_on_done", a_server_error_reaches_on_done, {}, timeout::network },
-      { "rows_delivered_before_a_mid_stream_error_are_kept",
-        rows_delivered_before_a_mid_stream_error_are_kept,
-        {},
-        timeout::network },
-      { "a_deadline_expires_a_parked_stream",
-        a_deadline_expires_a_parked_stream,
-        {},
-        timeout::network },
-      { "a_non_positive_timeout_expires_the_call_rather_than_removing_the_deadline",
-        a_non_positive_timeout_expires_the_call_rather_than_removing_the_deadline,
-        {},
-        timeout::network },
-      { "cancelling_the_pending_call_ends_the_stream",
-        cancelling_the_pending_call_ends_the_stream,
-        {},
-        timeout::network },
-      { "tearing_down_with_an_unrun_completion_releases_the_reactor",
-        tearing_down_with_an_unrun_completion_releases_the_reactor,
-        {},
-        timeout::network },
-      { "an_invoker_that_throws_leaves_nothing_registered",
-        an_invoker_that_throws_leaves_nothing_registered,
-        {},
-        timeout::network },
-      { "destructor_drains_a_parked_stream",
-        destructor_drains_a_parked_stream,
-        {},
-        timeout::network },
-      { "a_row_in_flight_when_the_drain_releases_the_hold_does_not_resume_the_read",
-        a_row_in_flight_when_the_drain_releases_the_hold_does_not_resume_the_read,
-        {},
-        timeout::network },
-      { "concurrent_streams_are_all_drained_by_the_destructor",
-        concurrent_streams_are_all_drained_by_the_destructor,
-        {},
-        timeout::network },
-      { "streams_launched_from_many_threads_all_complete",
-        streams_launched_from_many_threads_all_complete,
-        {},
-        timeout::network },
+      { CASE(concurrent_streams_are_all_drained_by_the_destructor), {}, timeout::network },
+      { CASE(streams_launched_from_many_threads_all_complete), {}, timeout::network },
     },
   };
 }
