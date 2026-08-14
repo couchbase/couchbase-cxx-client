@@ -11,6 +11,8 @@ find_package(Threads REQUIRED)
 # includes from one root: "framework/test_runner.hxx", "cng/fixtures/live_fixture.hxx".
 add_library(
   test_framework_main STATIC
+  ${PROJECT_SOURCE_DIR}/test/framework/context.cxx
+  ${PROJECT_SOURCE_DIR}/test/framework/requirement.cxx
   ${PROJECT_SOURCE_DIR}/test/framework/test_runner.cxx
   ${PROJECT_SOURCE_DIR}/test/framework/test_main.cxx)
 target_include_directories(test_framework_main PUBLIC ${PROJECT_SOURCE_DIR}/test
@@ -26,6 +28,51 @@ target_include_directories(test_framework_main PUBLIC ${PROJECT_SOURCE_DIR}/test
 target_link_libraries(test_framework_main PUBLIC Threads::Threads spdlog::spdlog)
 set_project_options(test_framework_main)
 set_project_warnings(test_framework_main)
+
+# The shared cluster helpers. Promoted out of test/CMakeLists.txt because the framework's cluster
+# probes are built on them, so they have to exist whenever either suite is built rather than only
+# when the Catch2 suite is.
+if(NOT TARGET test_utils)
+  add_subdirectory(test/utils)
+endif()
+
+# Exactly one of these provides make_probe_backend(), and couchbase_add_test() picks which by
+# whether the test links the client library. OBJECT rather than STATIC so the definition is always
+# contributed: an archive is only searched when something already references what it holds, and the
+# reference here comes from the framework's own main().
+#
+# The null one answers every probe with "I cannot ask", which the runner reports as undetermined and
+# therefore as a failure. A test that asks about the server from a binary with no way to reach one
+# is a registration mistake, and skipping it would hide the mistake for as long as it existed.
+add_library(test_framework_null_probes OBJECT ${PROJECT_SOURCE_DIR}/test/framework/null_probes.cxx)
+target_include_directories(test_framework_null_probes PRIVATE ${PROJECT_SOURCE_DIR}/test)
+target_include_directories(
+  test_framework_null_probes SYSTEM BEFORE
+  PRIVATE $<BUILD_INTERFACE:$<TARGET_PROPERTY:spdlog::spdlog,INTERFACE_INCLUDE_DIRECTORIES>>)
+set_target_properties(test_framework_null_probes PROPERTIES POSITION_INDEPENDENT_CODE ON)
+set_project_options(test_framework_null_probes)
+set_project_warnings(test_framework_null_probes)
+
+# The real one drives a connection through test::utils::integration_test_guard, so it is the only
+# part of the framework that includes core headers -- and it is a .cxx, which is what keeps
+# context.hxx lean.
+add_library(test_framework_cluster_probes OBJECT
+            ${PROJECT_SOURCE_DIR}/test/framework/cluster_probes.cxx)
+target_include_directories(
+  test_framework_cluster_probes PRIVATE ${PROJECT_SOURCE_DIR}/test ${PROJECT_SOURCE_DIR}
+                                       ${PROJECT_BINARY_DIR}/generated
+                                       ${PROJECT_BINARY_DIR}/generated_$<CONFIG>)
+target_include_directories(
+  test_framework_cluster_probes SYSTEM BEFORE
+  PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/expected/include>
+          $<BUILD_INTERFACE:$<TARGET_PROPERTY:spdlog::spdlog,INTERFACE_INCLUDE_DIRECTORIES>>
+          $<BUILD_INTERFACE:$<TARGET_PROPERTY:asio,INTERFACE_INCLUDE_DIRECTORIES>>)
+propagate_public_compile_definitions(test_framework_cluster_probes spdlog::spdlog asio)
+target_link_libraries(test_framework_cluster_probes PRIVATE $<BUILD_INTERFACE:Microsoft.GSL::GSL>
+                                                            $<BUILD_INTERFACE:taocpp::json>)
+set_target_properties(test_framework_cluster_probes PROPERTIES POSITION_INDEPENDENT_CODE ON)
+set_project_options(test_framework_cluster_probes)
+set_project_warnings(test_framework_cluster_probes)
 
 # couchbase_discover_tests(<target> PROPERTIES <prop> <value>...)
 #
@@ -128,14 +175,35 @@ function(couchbase_add_test relpath)
               $<BUILD_INTERFACE:$<TARGET_PROPERTY:asio,INTERFACE_INCLUDE_DIRECTORIES>>)
     propagate_public_compile_definitions(${target} spdlog::spdlog asio)
     target_link_libraries(
-      ${target} PRIVATE ${couchbase_cxx_client_test_library} $<BUILD_INTERFACE:Microsoft.GSL::GSL>
-                        $<BUILD_INTERFACE:taocpp::json>)
+      ${target}
+      PRIVATE ${couchbase_cxx_client_test_library} test_framework_cluster_probes test_utils
+              $<BUILD_INTERFACE:Microsoft.GSL::GSL> $<BUILD_INTERFACE:taocpp::json>)
+  else()
+    target_link_libraries(${target} PRIVATE test_framework_null_probes)
   endif()
   if(ARG_LIBS)
     target_link_libraries(${target} PRIVATE ${ARG_LIBS})
   endif()
   set_project_options(${target})
   set_project_warnings(${target})
+
+  # Join the aggregate that build_<suite>_tests depends on. bin/build-tests builds that aggregate
+  # rather than `all` whenever CB_TEST_SUITE is set, and a target missing from it is not built --
+  # which leaves the discovery file absent and the case registered as the _NOT_BUILT placeholder.
+  #
+  # cmake/Testing.cmake blanks these properties, and it is included after this file, so an append
+  # made while this file is being read is discarded. Only calls from test/CMakeLists.txt, which
+  # Testing.cmake reads later, survive -- which is why a framework test that needs to be in an
+  # aggregate is registered there and not here. cng has no aggregate; it is built only by `all`.
+  if(ARG_LABEL STREQUAL "unit")
+    set_property(GLOBAL APPEND PROPERTY COUCHBASE_UNIT_TESTS ${target})
+  elseif(ARG_LABEL STREQUAL "integration")
+    set_property(GLOBAL APPEND PROPERTY COUCHBASE_INTEGRATION_TESTS ${target})
+  elseif(ARG_LABEL STREQUAL "transaction")
+    set_property(GLOBAL APPEND PROPERTY COUCHBASE_TRANSACTION_TESTS ${target})
+  elseif(ARG_LABEL STREQUAL "benchmark")
+    set_property(GLOBAL APPEND PROPERTY COUCHBASE_BENCHMARKS ${target})
+  endif()
 
   # The harness returns 77 when every case was skipped; map that to ctest's "Skipped".
   set(properties SKIP_RETURN_CODE 77 LABELS "${ARG_LABEL}")

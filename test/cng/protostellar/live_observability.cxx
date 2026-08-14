@@ -227,7 +227,7 @@ env_or(const char* name, const char* fallback) -> std::string
 }
 
 void
-kv_op_emits_span_and_metric_over_couchbase2()
+kv_op_emits_span_and_metric_over_couchbase2([[maybe_unused]] context& ctx)
 {
   const auto connstr = safe_getenv("TEST_CONNECTION_STRING");
   if (!connstr.has_value()) {
@@ -330,8 +330,8 @@ tests() -> test_suite
     {
       { "kv_op_emits_span_and_metric_over_couchbase2",
         kv_op_emits_span_and_metric_over_couchbase2,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
     },
   };
 }

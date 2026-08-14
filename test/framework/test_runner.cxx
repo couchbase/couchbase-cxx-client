@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
+#include <functional>
 #include <future>
 #include <limits>
 #include <memory>
@@ -55,13 +56,13 @@ human(std::chrono::nanoseconds ns) -> std::string
   return fmt::format("{:.1f}ms", std::chrono::duration<double, std::milli>(ns).count());
 }
 
-// Run one case on a worker thread, enforcing `timeout`. On timeout the worker is detached: the
+// Run `body` on a worker thread, enforcing `timeout`. On timeout the worker is detached: the
 // packaged_task moved into it co-owns the future's shared state, so the detached thread writes
 // only to that heap state (never to this stack frame) and the result is simply never read.
 auto
-run_case(void (*func)(), std::chrono::milliseconds timeout) -> case_result
+run_bounded(std::function<void()> body, std::chrono::milliseconds timeout) -> case_result
 {
-  std::packaged_task<void()> task(func);
+  std::packaged_task<void()> task(std::move(body));
   auto future = task.get_future();
   const auto start = std::chrono::steady_clock::now();
   std::thread worker(std::move(task));
@@ -88,13 +89,88 @@ run_case(void (*func)(), std::chrono::milliseconds timeout) -> case_result
            fmt::format("timed out after {}", human(timeout)),
            /*timed_out=*/true };
 }
+
+// What the requirement phase concluded about one case.
+struct gate_result {
+  enum class verdict : std::uint8_t {
+    run,
+    skip,
+    fail
+  };
+  verdict outcome{ verdict::run };
+  std::string requirement{}; // which one decided, for the grouped skip report
+  std::string detail{};
+  // A requirement that blew its budget leaves a worker detached, exactly as a case body does, and
+  // the process must leave the same way (see main()).
+  bool timed_out{ false };
+};
+
+// Check every requirement of a case, in declaration order, stopping at the first that does not
+// hold. The whole phase runs on the bounded worker: a requirement that blocks must cost this case
+// its budget, not the run.
+auto
+check_requirements(const test_case& tc, context& ctx) -> gate_result
+{
+  if (tc.requirements.empty()) {
+    return {};
+  }
+
+  // On the heap, and captured by value: run_bounded detaches the worker when the budget is blown,
+  // so a stack local here would be written to by that worker after this function returned. `tc` and
+  // `ctx` are safe by reference -- both outlive the whole run.
+  auto gate = std::make_shared<gate_result>();
+  const auto bounded = run_bounded(
+    [&tc, &ctx, gate]() {
+      for (const auto& req : tc.requirements) {
+        if (req == nullptr) {
+          *gate = { gate_result::verdict::fail, "(null)", "a null requirement was registered" };
+          return;
+        }
+        check_result checked;
+        try {
+          checked = req->check(ctx);
+        } catch (const probe_failure& e) {
+          // The probe could not answer. Not knowing whether a case applies is not the same as
+          // knowing it does not, and only one of the two may pass silently.
+          checked = check_result::unknown(e.what());
+        }
+        switch (checked.value) {
+          case check_result::status::satisfied:
+            break;
+          case check_result::status::not_satisfied:
+            *gate = { gate_result::verdict::skip, req->describe(), std::move(checked.detail) };
+            return;
+          case check_result::status::undetermined:
+            *gate = { gate_result::verdict::fail, req->describe(), std::move(checked.detail) };
+            return;
+        }
+      }
+    },
+    ctx.config().requirement_budget);
+
+  if (bounded.outcome == case_result::status::failed) {
+    return { gate_result::verdict::fail,
+             "(requirement phase)",
+             bounded.timed_out ? fmt::format("checking requirements exceeded {}",
+                                             human(ctx.config().requirement_budget))
+                               : bounded.message,
+             bounded.timed_out };
+  }
+  // A requirement whose check() called skip() rather than returning a status. Falling through to
+  // the default-constructed gate would say "run", so the body would execute and report passed
+  // behind a precondition that declared itself unmet. Skip, not fail: skip() is a statement that
+  // the case does not apply, which is what not_satisfied means; undetermined keeps its own fail
+  // path.
+  if (bounded.outcome == case_result::status::skipped) {
+    return { gate_result::verdict::skip, "(requirement phase)", bounded.message };
+  }
+  return *gate;
+}
 } // namespace
 
 auto
-run(const test_suite& suite,
-    const std::set<std::string>& filter,
-    bool real_cluster,
-    std::ostream& out) -> run_result
+run(const test_suite& suite, const std::set<std::string>& filter, context& ctx, std::ostream& out)
+  -> run_result
 {
   run_result result;
   // Names the filter asked for that actually exist, so an unmatched name can be reported below.
@@ -108,13 +184,33 @@ run(const test_suite& suite,
         }
         matched.insert(tc.name);
       }
-      if (!should_run(tc.env, real_cluster)) {
-        out << fmt::format("Skipping \"{}\" (environment not applicable)\n", tc.name);
+
+      const auto gate = check_requirements(tc, ctx);
+      if (gate.outcome == gate_result::verdict::skip) {
+        out << fmt::format(
+          "Skipping \"{}\": needs {} ({})\n", tc.name, gate.requirement, gate.detail);
         ++result.skipped;
+        ++result.skipped_by_requirement[gate.requirement];
         continue;
       }
+      if (gate.outcome == gate_result::verdict::fail) {
+        out << fmt::format("\"{}\" FAILED: could not establish whether it needs {}: {}\n",
+                           tc.name,
+                           gate.requirement,
+                           gate.detail);
+        ++result.failed;
+        if (gate.timed_out) {
+          ++result.timed_out;
+        }
+        continue;
+      }
+
       out << fmt::format("Running \"{}\" (budget: {})...\n", tc.name, human(tc.timeout));
-      const auto r = run_case(tc.func, tc.timeout);
+      const auto r = run_bounded(
+        [&tc, &ctx]() {
+          tc.func(ctx);
+        },
+        tc.timeout);
       switch (r.outcome) {
         case case_result::status::passed:
           out << fmt::format("\"{}\" passed ({})\n", tc.name, human(r.duration));
@@ -185,6 +281,28 @@ case_names(const test_suite& suite) -> std::vector<std::string>
 }
 
 auto
+describe_cases(const test_suite& suite) -> std::vector<std::string>
+{
+  std::vector<std::string> lines;
+  const auto describe = [&lines](const std::vector<test_case>& cases) {
+    for (const auto& tc : cases) {
+      std::string requirements;
+      for (const auto& req : tc.requirements) {
+        if (!requirements.empty()) {
+          requirements += "; ";
+        }
+        requirements += req == nullptr ? "(null)" : req->describe();
+      }
+      lines.push_back(
+        fmt::format("{}\t{}", tc.name, requirements.empty() ? "no requirements" : requirements));
+    }
+  };
+  describe(suite.test_cases);
+  describe(suite.slow_test_cases);
+  return lines;
+}
+
+auto
 timeout_multiplier(const std::optional<std::string>& raw) -> double
 {
   if (!raw.has_value()) {
@@ -210,21 +328,30 @@ timeout_multiplier(const std::optional<std::string>& raw) -> double
   return factor;
 }
 
+namespace
+{
+auto
+scale_budget(std::chrono::milliseconds budget, double factor) -> std::chrono::milliseconds
+{
+  // Ceiling, not nearest: this exists to give a case more room on a slower runner, and rounding
+  // a budget down -- which std::llround does for any product with a fraction below .5 -- would
+  // quietly do the opposite of what the caller asked for.
+  const auto product = std::ceil(static_cast<double>(budget.count()) * factor);
+  // Saturate before narrowing. A product past the integer range is undefined at the cast, and on
+  // a signed overflow the budget would come back negative and clamp to 1ms -- a multiplier asking
+  // for more room would give every case the least possible.
+  constexpr auto ceiling = static_cast<double>(std::numeric_limits<long long>::max());
+  const auto scaled =
+    product >= ceiling ? std::numeric_limits<long long>::max() : static_cast<long long>(product);
+  return std::chrono::milliseconds{ std::max<long long>(scaled, 1) };
+}
+} // namespace
+
 void
 scale_timeouts(test_suite& suite, double factor)
 {
   const auto scale = [factor](test_case& tc) {
-    // Ceiling, not nearest: this exists to give a case more room on a slower runner, and rounding
-    // a budget down -- which std::llround does for any product with a fraction below .5 -- would
-    // quietly do the opposite of what the caller asked for.
-    const auto product = std::ceil(static_cast<double>(tc.timeout.count()) * factor);
-    // Saturate before narrowing. A product past the integer range is undefined at the cast, and on
-    // a signed overflow the budget would come back negative and clamp to 1ms -- a multiplier asking
-    // for more room would give every case the least possible.
-    constexpr auto ceiling = static_cast<double>(std::numeric_limits<long long>::max());
-    const auto scaled =
-      product >= ceiling ? std::numeric_limits<long long>::max() : static_cast<long long>(product);
-    tc.timeout = std::chrono::milliseconds{ std::max<long long>(scaled, 1) };
+    tc.timeout = scale_budget(tc.timeout, factor);
   };
   for (auto& tc : suite.test_cases) {
     scale(tc);
@@ -232,6 +359,15 @@ scale_timeouts(test_suite& suite, double factor)
   for (auto& tc : suite.slow_test_cases) {
     scale(tc);
   }
+}
+
+void
+scale_timeouts(configuration& config, double factor)
+{
+  // The requirement phase is where the cluster is opened, so it is the phase a slow runner is most
+  // likely to blow -- and exceeding it is reported as a failure, not a skip. Leaving it unscaled
+  // made the multiplier that exists for slow legs unable to reach the one budget they need most.
+  config.requirement_budget = scale_budget(config.requirement_budget, factor);
 }
 
 auto

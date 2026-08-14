@@ -51,7 +51,7 @@ search(std::string query) -> ops::search_request
 }
 
 void
-search_round_trip_against_live_gateway()
+search_round_trip_against_live_gateway([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -76,7 +76,7 @@ search_round_trip_against_live_gateway()
 // the same signal skip_unless_service_implemented() relies on, so this case keeps that helper
 // honest for the search suite.
 void
-an_untranslated_query_shape_is_refused_by_the_client()
+an_untranslated_query_shape_is_refused_by_the_client([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -95,7 +95,7 @@ an_untranslated_query_shape_is_refused_by_the_client()
 // A query that is not JSON is the caller's own error. Reporting it as feature_not_available would
 // tell them their cluster cannot do search, which is both wrong and unactionable.
 void
-a_malformed_query_is_reported_as_invalid_argument()
+a_malformed_query_is_reported_as_invalid_argument([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -111,7 +111,7 @@ a_malformed_query_is_reported_as_invalid_argument()
 // search it was: a caller correlating by index or client_context_id has no other handle on a
 // request that never reached the wire.
 void
-an_expired_budget_is_refused_on_the_io_context()
+an_expired_budget_is_refused_on_the_io_context([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -143,20 +143,20 @@ tests() -> test_suite
     {
       { "an_expired_budget_is_refused_on_the_io_context",
         an_expired_budget_is_refused_on_the_io_context,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "search_round_trip_against_live_gateway",
         search_round_trip_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "an_untranslated_query_shape_is_refused_by_the_client",
         an_untranslated_query_shape_is_refused_by_the_client,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "a_malformed_query_is_reported_as_invalid_argument",
         a_malformed_query_is_reported_as_invalid_argument,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
     },
   };
 }

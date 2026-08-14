@@ -24,7 +24,10 @@ string(REPLACE "\n" ";" listing "${listing}")
 # have silently truncated the ENVIRONMENT property rather than failing.
 set(script "set(properties [==[${TEST_PROPERTIES}]==])\n")
 set(case_count 0)
-foreach(case_name IN LISTS listing)
+foreach(line IN LISTS listing)
+  # Each line is "<case name>\t<what it requires>". Only the name is registered; the requirements
+  # are there for whoever runs --list-tests by hand.
+  string(REGEX REPLACE "\t.*$" "" case_name "${line}")
   string(STRIP "${case_name}" case_name)
   if(case_name STREQUAL "")
     continue()

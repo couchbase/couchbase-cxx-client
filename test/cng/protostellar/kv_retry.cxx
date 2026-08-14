@@ -157,7 +157,7 @@ private:
 // The assertion is placed between those two outcomes, so it fails if an attempt is ever handed more
 // time than the operation has left.
 void
-a_retried_kv_operation_stays_within_its_budget()
+a_retried_kv_operation_stays_within_its_budget([[maybe_unused]] context& ctx)
 {
   int port = 0;
   stalling_kv_service service;
@@ -251,7 +251,7 @@ a_retried_kv_operation_stays_within_its_budget()
 // where the bound comes from: a bound sourced from anywhere else would not honour it. The wait is
 // bounded so that "never completes" fails the case rather than hanging the suite.
 void
-an_operation_without_a_timeout_is_bounded_by_the_cluster_default()
+an_operation_without_a_timeout_is_bounded_by_the_cluster_default([[maybe_unused]] context& ctx)
 {
   int port = 0;
   unavailable_kv_service service;
@@ -328,7 +328,7 @@ an_operation_without_a_timeout_is_bounded_by_the_cluster_default()
 // The service decides the number of retries rather than the clock, which is what makes the exact
 // count assertable.
 void
-a_retried_operation_reports_its_attempts_and_reasons()
+a_retried_operation_reports_its_attempts_and_reasons([[maybe_unused]] context& ctx)
 {
   int port = 0;
   flaky_kv_service service{ 2 };
@@ -395,7 +395,7 @@ a_retried_operation_reports_its_attempts_and_reasons()
 //
 // The read in the sibling cases covers the other arm: idempotent, so unambiguous either way.
 void
-a_retried_mutation_that_runs_out_of_budget_is_ambiguous()
+a_retried_mutation_that_runs_out_of_budget_is_ambiguous([[maybe_unused]] context& ctx)
 {
   int port = 0;
   unavailable_kv_service service;
@@ -465,7 +465,7 @@ a_retried_mutation_that_runs_out_of_budget_is_ambiguous()
 //
 // The bounded wait is what keeps a dropped completion a failing assertion rather than a hung suite.
 void
-closing_the_cluster_during_a_backoff_still_answers()
+closing_the_cluster_during_a_backoff_still_answers([[maybe_unused]] context& ctx)
 {
   int port = 0;
   unavailable_kv_service service;
@@ -552,18 +552,23 @@ tests() -> test_suite
     {
       { "a_retried_kv_operation_stays_within_its_budget",
         a_retried_kv_operation_stays_within_its_budget,
+        {},
         timeout::slow },
       { "an_operation_without_a_timeout_is_bounded_by_the_cluster_default",
         an_operation_without_a_timeout_is_bounded_by_the_cluster_default,
+        {},
         timeout::slow },
       { "a_retried_operation_reports_its_attempts_and_reasons",
         a_retried_operation_reports_its_attempts_and_reasons,
+        {},
         timeout::slow },
       { "a_retried_mutation_that_runs_out_of_budget_is_ambiguous",
         a_retried_mutation_that_runs_out_of_budget_is_ambiguous,
+        {},
         timeout::slow },
       { "closing_the_cluster_during_a_backoff_still_answers",
         closing_the_cluster_during_a_backoff_still_answers,
+        {},
         timeout::slow },
     },
   };

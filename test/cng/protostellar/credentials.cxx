@@ -43,7 +43,7 @@ using ::couchbase::core::cluster_options;
 using ::couchbase::core::tls_verify_mode;
 
 void
-basic_and_bearer_header_values()
+basic_and_bearer_header_values([[maybe_unused]] context& ctx)
 {
   const auto expected_basic = "Basic " + ::couchbase::core::base64::encode("Administrator:secret");
   assert_eq(ps::basic_auth_value("Administrator", "secret"), expected_basic, "basic header value");
@@ -51,7 +51,7 @@ basic_and_bearer_header_values()
 }
 
 void
-authorization_header_selects_scheme()
+authorization_header_selects_scheme([[maybe_unused]] context& ctx)
 {
   cluster_credentials password;
   password.username = "Administrator";
@@ -79,7 +79,7 @@ authorization_header_selects_scheme()
 // itself rather than a copied fingerprint, so rotating that constant cannot leave this passing
 // vacuously.
 void
-ssl_root_certs_prefer_explicit_then_capella_and_mozilla()
+ssl_root_certs_prefer_explicit_then_capella_and_mozilla([[maybe_unused]] context& ctx)
 {
   const cluster_credentials no_creds;
   const std::string capella{ ::couchbase::core::default_ca::capellaCaCert };
@@ -117,7 +117,7 @@ ssl_root_certs_prefer_explicit_then_capella_and_mozilla()
 }
 
 void
-ssl_client_certificate_is_read_from_files()
+ssl_client_certificate_is_read_from_files([[maybe_unused]] context& ctx)
 {
   // Own a private directory rather than writing fixed names into the shared temp directory: under a
   // parallel ctest two runs would otherwise race on the same paths, and a leftover file from a
@@ -148,7 +148,7 @@ ssl_client_certificate_is_read_from_files()
 }
 
 void
-channel_credentials_switch_on_tls()
+channel_credentials_switch_on_tls([[maybe_unused]] context& ctx)
 {
   const cluster_credentials creds;
 
@@ -170,7 +170,7 @@ channel_credentials_switch_on_tls()
 // grpc::ChannelCredentials is opaque, so the branch is not recoverable from it afterwards. The
 // function therefore branches on tls_peer_verification_disabled(), and this pins that predicate.
 void
-peer_verification_is_disabled_only_by_tls_verify_none()
+peer_verification_is_disabled_only_by_tls_verify_none([[maybe_unused]] context& ctx)
 {
   cluster_options defaults;
   assert_false(ps::tls_peer_verification_disabled(defaults),
@@ -202,7 +202,7 @@ peer_verification_is_disabled_only_by_tls_verify_none()
 // configured client identity or a JWT quietly relaxed verification. Sweep every credential shape
 // against both verify modes and assert the answer tracks tls_verify alone.
 void
-peer_verification_does_not_depend_on_the_credential_shape()
+peer_verification_does_not_depend_on_the_credential_shape([[maybe_unused]] context& ctx)
 {
   cluster_credentials password;
   password.username = "Administrator";

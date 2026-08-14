@@ -101,6 +101,45 @@ build_origin(const test_context& ctx,
   return origin;
 }
 
+// Undo whatever the constructor got as far as, in the reverse order the destructor would. If the
+// cluster was opened, it is closed first, while the io threads are still running -- close needs
+// them to make progress. Any failure from the close is swallowed: the exception on its way out is
+// the one that describes what actually went wrong, and replacing it with a teardown error would
+// lose that.
+static void
+unwind(couchbase::core::cluster& cluster,
+       asio::io_context& io,
+       std::vector<std::thread>& threads,
+       bool opened);
+
+static void
+stop_io_threads(asio::io_context& io, std::vector<std::thread>& threads)
+{
+  io.stop();
+  for (auto& thread : threads) {
+    if (thread.joinable()) {
+      thread.join();
+    }
+  }
+  threads.clear();
+}
+
+static void
+unwind(couchbase::core::cluster& cluster,
+       asio::io_context& io,
+       std::vector<std::thread>& threads,
+       bool opened)
+{
+  if (opened) {
+    try {
+      close_cluster(cluster);
+    } catch (...) { // NOLINT(bugprone-empty-catch)
+      // Deliberately swallowed -- see the declaration above.
+    }
+  }
+  stop_io_threads(io, threads);
+}
+
 integration_test_guard::integration_test_guard()
   : ctx(test_context::load_from_environment())
   , io(static_cast<int>(ctx.number_of_io_threads))
@@ -117,9 +156,19 @@ integration_test_guard::integration_test_guard()
     auth.password = ctx.password;
   }
   io_threads = spawn_io_threads(io, ctx.number_of_io_threads);
-  origin = build_origin(ctx, auth, connstr);
-  open_cluster(cluster, origin);
-  gate_on_readiness(cluster, ctx.bucket);
+  // A constructor that throws never runs ~integration_test_guard, so the io threads spawned above
+  // would be destroyed while still joinable and terminate the process. An unreachable cluster has
+  // to reach the caller as an exception it can report.
+  bool opened = false;
+  try {
+    origin = build_origin(ctx, auth, connstr);
+    open_cluster(cluster, origin);
+    opened = true;
+    gate_on_readiness(cluster, ctx.bucket);
+  } catch (...) {
+    unwind(cluster, io, io_threads, opened);
+    throw;
+  }
 }
 
 integration_test_guard::integration_test_guard(const couchbase::core::cluster_options& opts)
@@ -136,17 +185,24 @@ integration_test_guard::integration_test_guard(const couchbase::core::cluster_op
   connstr.options.enable_mutation_tokens = opts.enable_mutation_tokens;
   origin = build_origin(ctx, auth, connstr);
   io_threads = spawn_io_threads(io, ctx.number_of_io_threads);
-  open_cluster(cluster, origin);
-  gate_on_readiness(cluster, ctx.bucket);
+  bool opened = false;
+  try {
+    open_cluster(cluster, origin);
+    opened = true;
+    gate_on_readiness(cluster, ctx.bucket);
+  } catch (...) {
+    unwind(cluster, io, io_threads, opened);
+    throw;
+  }
 }
 
 integration_test_guard::~integration_test_guard()
 {
-  close_cluster(cluster);
-  io.stop();
-  for (auto& thread : io_threads) {
-    thread.join();
-  }
+  // Same unwind as the constructor's failure path, and for the same reason: if close_cluster()
+  // throws here, the io threads are never joined and the vector destructor terminates -- during
+  // stack unwinding, if a test was already failing, which replaces the assertion message with
+  // "terminate called".
+  unwind(cluster, io, io_threads, /* opened= */ true);
 }
 
 auto

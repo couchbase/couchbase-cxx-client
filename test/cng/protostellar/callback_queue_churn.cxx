@@ -131,7 +131,7 @@ cycles_from_environment() -> int
 }
 
 void
-cycling_servers_does_not_abort_the_process()
+cycling_servers_does_not_abort_the_process([[maybe_unused]] context& ctx)
 {
   if (!safe_getenv("CNG_CALLBACK_QUEUE_NO_KEEPALIVE").has_value()) {
     pin_callback_queue();
@@ -159,6 +159,7 @@ tests() -> test_suite
     {
       { "cycling_servers_does_not_abort_the_process",
         cycling_servers_does_not_abort_the_process,
+        {},
         timeout::network },
     },
   };

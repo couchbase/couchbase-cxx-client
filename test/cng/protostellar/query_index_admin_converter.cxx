@@ -166,7 +166,7 @@ hostile_keys() -> std::vector<std::string>
 }
 
 void
-index_keys_are_escaped_into_one_token_each()
+index_keys_are_escaped_into_one_token_each([[maybe_unused]] context& ctx)
 {
   for (const auto& key : hostile_keys()) {
     const auto encoded = qi::encode_index_key(key);
@@ -183,7 +183,7 @@ index_keys_are_escaped_into_one_token_each()
 }
 
 void
-a_hostile_key_cannot_add_terms_to_the_field_list()
+a_hostile_key_cannot_add_terms_to_the_field_list([[maybe_unused]] context& ctx)
 {
   const auto keys = hostile_keys();
   const auto proto = qi::encode_create(create_request(keys));
@@ -196,7 +196,7 @@ a_hostile_key_cannot_add_terms_to_the_field_list()
 }
 
 void
-an_ordinary_key_is_quoted_and_a_quoted_key_is_left_alone()
+an_ordinary_key_is_quoted_and_a_quoted_key_is_left_alone([[maybe_unused]] context& ctx)
 {
   const auto proto = qi::encode_create(create_request({ "field", "two words", "`already`" }));
   assert_eq(static_cast<std::size_t>(proto.fields_size()), std::size_t{ 3 }, "three keys");
@@ -206,7 +206,7 @@ an_ordinary_key_is_quoted_and_a_quoted_key_is_left_alone()
 }
 
 void
-encode_create_fills_the_secondary_request()
+encode_create_fills_the_secondary_request([[maybe_unused]] context& ctx)
 {
   auto request = create_request({ "country" });
   request.scope_name = "inventory";
@@ -234,7 +234,7 @@ encode_create_fills_the_secondary_request()
 }
 
 void
-an_unset_keyspace_part_is_left_unset()
+an_unset_keyspace_part_is_left_unset([[maybe_unused]] context& ctx)
 {
   // A present-but-empty scope names a scope called "", which the gateway rejects; an absent one
   // means the whole bucket. The core request spells both as an empty string.
@@ -251,7 +251,7 @@ an_unset_keyspace_part_is_left_unset()
 }
 
 void
-create_picks_the_rpc_from_is_primary()
+create_picks_the_rpc_from_is_primary([[maybe_unused]] context& ctx)
 {
   auto request = create_request({});
   request.is_primary = true;
@@ -271,7 +271,7 @@ create_picks_the_rpc_from_is_primary()
 }
 
 void
-drop_picks_the_rpc_from_is_primary()
+drop_picks_the_rpc_from_is_primary([[maybe_unused]] context& ctx)
 {
   om::query_index_drop_request request{};
   request.bucket_name = "travel";
@@ -293,7 +293,7 @@ drop_picks_the_rpc_from_is_primary()
 }
 
 void
-a_conditional_secondary_index_cannot_be_encoded()
+a_conditional_secondary_index_cannot_be_encoded([[maybe_unused]] context& ctx)
 {
   auto request = create_request({ "country" });
   assert_true(qi::can_encode(request), "a plain secondary index is encodable");
@@ -308,7 +308,7 @@ a_conditional_secondary_index_cannot_be_encoded()
 }
 
 void
-decode_index_maps_fields()
+decode_index_maps_fields([[maybe_unused]] context& ctx)
 {
   v1::GetAllIndexesResponse_Index proto;
   proto.set_name("ix1");
@@ -341,7 +341,7 @@ decode_index_maps_fields()
 // schema has no value outside the two below today, so this is about what a schema bump decodes to:
 // naming an unrecognised type "gsi" is a claim about the index rather than an admission.
 void
-an_unrecognised_enum_decodes_as_unknown()
+an_unrecognised_enum_decodes_as_unknown([[maybe_unused]] context& ctx)
 {
   const auto out_of_range = static_cast<v1::IndexType>(9999);
   assert_eq(qi::index_type_to_string(out_of_range), std::string{ "unknown" }, "unknown index type");
@@ -354,7 +354,7 @@ an_unrecognised_enum_decodes_as_unknown()
 }
 
 void
-decode_primary_index_has_no_keys()
+decode_primary_index_has_no_keys([[maybe_unused]] context& ctx)
 {
   v1::GetAllIndexesResponse_Index proto;
   proto.set_name("#primary");
@@ -375,7 +375,7 @@ decode_primary_index_has_no_keys()
 // server reported an empty one" are two answers and only presence separates them. Reading
 // emptiness instead collapses the second onto the first.
 void
-an_explicitly_empty_condition_is_not_an_absent_one()
+an_explicitly_empty_condition_is_not_an_absent_one([[maybe_unused]] context& ctx)
 {
   v1::GetAllIndexesResponse_Index proto;
   proto.set_bucket_name("travel");
@@ -400,7 +400,7 @@ an_explicitly_empty_condition_is_not_an_absent_one()
 // GetAllIndexes reports keys in the quoted form, so a key read from one index and passed to
 // create_index() for another must name the same field.
 void
-a_decoded_key_re_encodes_to_itself()
+a_decoded_key_re_encodes_to_itself([[maybe_unused]] context& ctx)
 {
   v1::GetAllIndexesResponse_Index proto;
   proto.set_bucket_name("travel");

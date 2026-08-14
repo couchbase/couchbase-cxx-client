@@ -111,7 +111,7 @@ public:
 };
 
 void
-non_kv_retry_dispatch_semantics()
+non_kv_retry_dispatch_semantics([[maybe_unused]] context& ctx)
 {
   int port = 0;
   retry_query_service service;
@@ -205,7 +205,7 @@ non_kv_retry_dispatch_semantics()
 }
 
 void
-non_kv_retry_budget_exhaustion()
+non_kv_retry_budget_exhaustion([[maybe_unused]] context& ctx)
 {
   int port = 0;
   retry_query_service service;
@@ -278,7 +278,7 @@ non_kv_retry_budget_exhaustion()
 // with no component. The bounded wait for the first attempt is what keeps a dropped completion a
 // failing assertion rather than a hung suite.
 void
-closing_the_cluster_during_a_non_kv_backoff_still_answers()
+closing_the_cluster_during_a_non_kv_backoff_still_answers([[maybe_unused]] context& ctx)
 {
   int port = 0;
   retry_query_service service;
@@ -373,7 +373,7 @@ public:
 };
 
 void
-custom_retry_strategy_rejects_non_kv()
+custom_retry_strategy_rejects_non_kv([[maybe_unused]] context& ctx)
 {
   int port = 0;
   retry_query_service service;
@@ -438,19 +438,20 @@ tests() -> test_suite
     {
       { "non_kv_retry_dispatch_semantics",
         non_kv_retry_dispatch_semantics,
-        timeout::integration,
-        test_env::agnostic },
+        {},
+        timeout::integration },
       { "closing_the_cluster_during_a_non_kv_backoff_still_answers",
         closing_the_cluster_during_a_non_kv_backoff_still_answers,
+        {},
         timeout::slow },
       { "non_kv_retry_budget_exhaustion",
         non_kv_retry_budget_exhaustion,
-        timeout::integration,
-        test_env::agnostic },
+        {},
+        timeout::integration },
       { "custom_retry_strategy_rejects_non_kv",
         custom_retry_strategy_rejects_non_kv,
-        timeout::integration,
-        test_env::agnostic },
+        {},
+        timeout::integration },
     },
   };
 }
