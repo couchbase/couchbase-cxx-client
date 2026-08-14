@@ -52,7 +52,7 @@ binary_json(const std::string& json) -> couchbase::core::json_string
 }
 
 void
-encode_maps_core_fields()
+encode_maps_core_fields([[maybe_unused]] context& ctx)
 {
   ops::analytics_request request;
   request.statement = "SELECT 1";
@@ -81,7 +81,7 @@ encode_maps_core_fields()
 // sends
 // "". Asserting the length as well as the value keeps an empty-vs-empty comparison from passing.
 void
-parameters_from_the_binary_arm_carry_their_payload()
+parameters_from_the_binary_arm_carry_their_payload([[maybe_unused]] context& ctx)
 {
   const std::string payload{ R"({"a":1})" };
 
@@ -101,7 +101,7 @@ parameters_from_the_binary_arm_carry_their_payload()
 // A default-constructed json_string holds neither arm; it must encode as empty rather than trip
 // over the variant.
 void
-an_empty_parameter_encodes_as_empty()
+an_empty_parameter_encodes_as_empty([[maybe_unused]] context& ctx)
 {
   ops::analytics_request request;
   request.statement = "SELECT $1";
@@ -113,7 +113,7 @@ an_empty_parameter_encodes_as_empty()
 }
 
 void
-can_encode_rejects_unsupported_features()
+can_encode_rejects_unsupported_features([[maybe_unused]] context& ctx)
 {
   ops::analytics_request base;
   base.statement = "SELECT 1";
@@ -135,7 +135,7 @@ can_encode_rejects_unsupported_features()
 // analytics_scope_name, so there is nowhere to put a bucket/scope pair; encoding any of these would
 // drop the qualification and run the statement against the wrong scope.
 void
-can_encode_rejects_every_scope_qualification()
+can_encode_rejects_every_scope_qualification([[maybe_unused]] context& ctx)
 {
   ops::analytics_request base;
   base.statement = "SELECT 1";
@@ -154,7 +154,7 @@ can_encode_rejects_every_scope_qualification()
 }
 
 void
-decode_meta_data_maps_status_metrics_warnings()
+decode_meta_data_maps_status_metrics_warnings([[maybe_unused]] context& ctx)
 {
   v1::AnalyticsQueryResponse_MetaData proto;
   proto.set_request_id("req-9");
@@ -184,7 +184,7 @@ decode_meta_data_maps_status_metrics_warnings()
 // converter. Appending would duplicate warnings on this path only, and would grow without bound if
 // a gateway ever sent more than one MetaData message on a stream.
 void
-warnings_are_replaced_when_metadata_is_decoded_again()
+warnings_are_replaced_when_metadata_is_decoded_again([[maybe_unused]] context& ctx)
 {
   v1::AnalyticsQueryResponse_MetaData proto;
   proto.set_status("success");
@@ -205,7 +205,7 @@ warnings_are_replaced_when_metadata_is_decoded_again()
 // to reach the same enumerator, and anything unrecognised must land on `unknown` rather than on the
 // zero-valued `running`, which would read as a query still in flight.
 void
-status_strings_map_to_the_core_enum()
+status_strings_map_to_the_core_enum([[maybe_unused]] context& ctx)
 {
   const auto decode = [](const char* status) {
     v1::AnalyticsQueryResponse_MetaData proto;

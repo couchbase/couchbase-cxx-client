@@ -20,6 +20,7 @@
 #include "test_framework.hxx"
 
 #include <cstddef>
+#include <map>
 #include <optional>
 #include <ostream>
 #include <set>
@@ -33,6 +34,12 @@ struct run_result {
   std::size_t passed{ 0 };
   std::size_t skipped{ 0 };
   std::size_t failed{ 0 };
+  // Why cases were skipped: requirement description -> how many cases it turned away. Printed at
+  // the end of a run, because "37 skipped" without the reasons is how a permanently-false
+  // predicate stays invisible for a year. Every key is a requirement an environment could be given,
+  // so a skip the requirement phase itself decided -- a check() that called skip() -- appears in
+  // `skipped` alone; it has no requirement to name.
+  std::map<std::string, std::size_t> skipped_by_requirement{};
   // Cases that exceeded their budget. Counted in `failed` too; tracked separately because a
   // timeout leaves a detached worker thread running, which changes how the process must exit
   // (see main()).
@@ -40,15 +47,14 @@ struct run_result {
 };
 
 // Run a suite. `filter` empty => run every case; otherwise only cases whose name is in `filter`;
-// a filter name matching no case is itself a failure. `real_cluster` selects env-gated cases (see
-// should_run). Progress lines go to `out`. Every selected case runs even after one fails, so a
-// single CI round-trip reports every regression in the binary. Exposed (rather than buried in
-// main) so a self-test can drive it with in-memory suites.
+// a filter name matching no case is itself a failure. Each case's requirements are checked
+// against `ctx` first: unsatisfied skips it, undetermined fails it. Progress lines go to `out`.
+// Every selected case runs even after one fails, so a single CI round-trip reports every
+// regression in the binary. Exposed (rather than buried in main) so a self-test can drive it with
+// in-memory suites.
 auto
-run(const test_suite& suite,
-    const std::set<std::string>& filter,
-    bool real_cluster,
-    std::ostream& out) -> run_result;
+run(const test_suite& suite, const std::set<std::string>& filter, context& ctx, std::ostream& out)
+  -> run_result;
 
 // Process exit code for a result: any failure => 1; nothing ran but something skipped => 77
 // (the GNU/ctest "skipped" convention); otherwise 0.
@@ -61,6 +67,12 @@ exit_code(const run_result& result) -> int;
 // the machine that configured the build.
 [[nodiscard]] auto
 case_names(const test_suite& suite) -> std::vector<std::string>;
+
+// What --list-tests prints: the case name, then a tab, then what the case requires. The tab is
+// load-bearing -- cmake/TestFrameworkAddTests.cmake registers the part before it, so the same
+// output serves the build and a person trying to find out why a case never runs.
+[[nodiscard]] auto
+describe_cases(const test_suite& suite) -> std::vector<std::string>;
 
 // Environment variable holding a factor applied to every case's timeout budget.
 inline constexpr auto timeout_multiplier_variable = "CB_TEST_TIMEOUT_MULTIPLIER";
@@ -76,6 +88,11 @@ timeout_multiplier(const std::optional<std::string>& raw) -> double;
 // Multiply every budget in `suite` by `factor`, rounding up, to at least one millisecond.
 void
 scale_timeouts(test_suite& suite, double factor);
+
+// The same, for the budget the requirement phase runs under. Separate because the configuration is
+// resolved after the suite, and both have to be scaled by the same factor.
+void
+scale_timeouts(configuration& config, double factor);
 
 // Portable std::getenv wrapper returning std::nullopt for unset *or* empty values, matching the
 // wrappers in tools/utils.cxx and examples/external_circuit_breaker. Needed because MSVC treats

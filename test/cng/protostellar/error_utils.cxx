@@ -68,7 +68,7 @@ resource(const std::string& resource_type) -> google::rpc::ResourceInfo
 }
 
 void
-ok_maps_to_success()
+ok_maps_to_success([[maybe_unused]] context& ctx)
 {
   assert_false(
     static_cast<bool>(ps::map_status_code(grpc::StatusCode::OK, ps::operation_kind::mutating)),
@@ -76,7 +76,7 @@ ok_maps_to_success()
 }
 
 void
-status_codes_map_to_expected_errc()
+status_codes_map_to_expected_errc([[maybe_unused]] context& ctx)
 {
   assert_true(ps::map_status_code(grpc::StatusCode::NOT_FOUND, ps::operation_kind::mutating) ==
                 couchbase::errc::key_value::document_not_found,
@@ -118,7 +118,7 @@ status_codes_map_to_expected_errc()
 // since an upsert is idempotent and still mutates. Asserted through every layer that carries the
 // bit, so none of them can quietly drop it.
 void
-deadline_exceeded_depends_on_the_operation_kind()
+deadline_exceeded_depends_on_the_operation_kind([[maybe_unused]] context& ctx)
 {
   assert_true(
     ps::map_status_code(grpc::StatusCode::DEADLINE_EXCEEDED, ps::operation_kind::read_only) ==
@@ -147,7 +147,7 @@ deadline_exceeded_depends_on_the_operation_kind()
 }
 
 void
-map_status_uses_the_status_code()
+map_status_uses_the_status_code([[maybe_unused]] context& ctx)
 {
   const grpc::Status status{ grpc::StatusCode::NOT_FOUND, "missing" };
   assert_true(ps::map_status(status, ps::operation_kind::mutating) ==
@@ -156,7 +156,7 @@ map_status_uses_the_status_code()
 }
 
 void
-precondition_details_map_to_specific_kv_errors()
+precondition_details_map_to_specific_kv_errors([[maybe_unused]] context& ctx)
 {
   assert_true(ps::map_status(
                 status_with_detail(grpc::StatusCode::FAILED_PRECONDITION, precondition("LOCKED")),
@@ -199,7 +199,7 @@ precondition_details_map_to_specific_kv_errors()
 }
 
 void
-resource_info_selects_typed_not_found_and_exists()
+resource_info_selects_typed_not_found_and_exists([[maybe_unused]] context& ctx)
 {
   assert_true(ps::map_status(status_with_detail(grpc::StatusCode::NOT_FOUND, resource("bucket")),
                              ps::operation_kind::mutating) ==
@@ -230,7 +230,7 @@ resource_info_selects_typed_not_found_and_exists()
 }
 
 void
-error_message_prefers_rich_details()
+error_message_prefers_rich_details([[maybe_unused]] context& ctx)
 {
   google::rpc::Status rich;
   rich.set_code(static_cast<std::int32_t>(grpc::StatusCode::NOT_FOUND));
@@ -249,18 +249,18 @@ error_message_prefers_rich_details()
 }
 
 void
-make_error_context_maps_code_and_attaches_message()
+make_error_context_maps_code_and_attaches_message([[maybe_unused]] context& ctx)
 {
   const couchbase::core::document_id id{ "bucket", "scope", "collection", "key" };
 
   const grpc::Status failure{ grpc::StatusCode::NOT_FOUND, "document 'key' not found" };
-  const auto ctx = ps::make_error_context(failure, id, ps::operation_kind::mutating);
-  assert_true(ctx.ec() == couchbase::errc::key_value::document_not_found,
+  const auto error_ctx = ps::make_error_context(failure, id, ps::operation_kind::mutating);
+  assert_true(error_ctx.ec() == couchbase::errc::key_value::document_not_found,
               "make_error_context maps the status code");
-  assert_eq(ctx.id(), std::string{ "key" }, "carries the document key");
-  assert_eq(ctx.bucket(), std::string{ "bucket" }, "carries the bucket");
-  assert_true(ctx.extended_error_info().has_value(), "failure attaches extended error info");
-  assert_eq(ctx.extended_error_info()->context(),
+  assert_eq(error_ctx.id(), std::string{ "key" }, "carries the document key");
+  assert_eq(error_ctx.bucket(), std::string{ "bucket" }, "carries the bucket");
+  assert_true(error_ctx.extended_error_info().has_value(), "failure attaches extended error info");
+  assert_eq(error_ctx.extended_error_info()->context(),
             std::string{ "document 'key' not found" },
             "server message lands in the error context");
 
@@ -271,7 +271,7 @@ make_error_context_maps_code_and_attaches_message()
 }
 
 void
-retry_reason_for_classifies_retryable_errors()
+retry_reason_for_classifies_retryable_errors([[maybe_unused]] context& ctx)
 {
   // UNAVAILABLE -> temporary_failure is the one transport-level retryable condition.
   const auto retryable = ps::retry_reason_for(couchbase::errc::common::temporary_failure);

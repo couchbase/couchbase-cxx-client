@@ -33,7 +33,7 @@ namespace couchbase::test
 namespace
 {
 void
-ping_and_diagnostics_are_feature_not_available_over_couchbase2()
+ping_and_diagnostics_are_feature_not_available_over_couchbase2([[maybe_unused]] context& ctx)
 {
   couchbase::cluster_options options{ "Administrator", "password" };
   // couchbase2:// is TLS; skip verification so the lazy connect does not depend on a real cert.
@@ -73,8 +73,8 @@ tests() -> test_suite
     {
       { "ping_and_diagnostics_are_feature_not_available_over_couchbase2",
         ping_and_diagnostics_are_feature_not_available_over_couchbase2,
-        timeout::integration,
-        test_env::agnostic },
+        {},
+        timeout::integration },
     },
   };
 }

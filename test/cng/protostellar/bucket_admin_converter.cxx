@@ -34,7 +34,7 @@ namespace mgmt = ::couchbase::core::management::cluster;
 namespace v1 = ::couchbase::admin::bucket::v1;
 
 void
-apply_settings_maps_fields()
+apply_settings_maps_fields([[maybe_unused]] context& ctx)
 {
   mgmt::bucket_settings settings;
   settings.name = "b";
@@ -60,7 +60,7 @@ apply_settings_maps_fields()
 }
 
 void
-apply_settings_omits_unset_ram_quota()
+apply_settings_omits_unset_ram_quota([[maybe_unused]] context& ctx)
 {
   mgmt::bucket_settings settings;
   settings.name = "b";
@@ -77,7 +77,7 @@ apply_settings_omits_unset_ram_quota()
 }
 
 void
-apply_settings_rejects_memcached()
+apply_settings_rejects_memcached([[maybe_unused]] context& ctx)
 {
   mgmt::bucket_settings settings;
   settings.name = "legacy";
@@ -89,7 +89,7 @@ apply_settings_rejects_memcached()
 }
 
 void
-decode_bucket_maps_fields()
+decode_bucket_maps_fields([[maybe_unused]] context& ctx)
 {
   v1::ListBucketsResponse_Bucket proto;
   proto.set_bucket_name("travel");
@@ -114,7 +114,7 @@ decode_bucket_maps_fields()
 // Each of these settings is one the encode side writes, so a decode that skips it makes
 // get_bucket -> modify -> update_bucket send a default back and reset the bucket.
 void
-decode_bucket_reads_the_settings_update_would_resend()
+decode_bucket_reads_the_settings_update_would_resend([[maybe_unused]] context& ctx)
 {
   v1::ListBucketsResponse_Bucket proto;
   proto.set_bucket_name("magma");
@@ -139,7 +139,7 @@ decode_bucket_reads_the_settings_update_would_resend()
 }
 
 void
-decode_bucket_leaves_absent_optional_settings_unset()
+decode_bucket_leaves_absent_optional_settings_unset([[maybe_unused]] context& ctx)
 {
   v1::ListBucketsResponse_Bucket proto;
   proto.set_bucket_name("b");
@@ -156,7 +156,7 @@ decode_bucket_leaves_absent_optional_settings_unset()
 }
 
 void
-decode_bucket_drops_a_history_retention_the_core_field_cannot_hold()
+decode_bucket_drops_a_history_retention_the_core_field_cannot_hold([[maybe_unused]] context& ctx)
 {
   v1::ListBucketsResponse_Bucket proto;
   proto.set_bucket_name("b");

@@ -72,7 +72,7 @@ select(const std::string& statement) -> ops::query_request
 }
 
 void
-a_constant_projection_round_trips()
+a_constant_projection_round_trips([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -92,7 +92,7 @@ a_constant_projection_round_trips()
 // returns a static empty string for the binary arm, so before the fix the gateway received
 // `positional_parameters: [""]` and echoed an empty value here -- a wrong answer, not an error.
 void
-a_positional_parameter_reaches_the_query_engine()
+a_positional_parameter_reaches_the_query_engine([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -111,7 +111,7 @@ a_positional_parameter_reaches_the_query_engine()
 }
 
 void
-a_named_parameter_reaches_the_query_engine()
+a_named_parameter_reaches_the_query_engine([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -131,7 +131,7 @@ a_named_parameter_reaches_the_query_engine()
 // reader that stops at the first message with metadata, or that treats one message as one row,
 // loses part of the result.
 void
-a_result_larger_than_one_batch_arrives_complete_and_in_order()
+a_result_larger_than_one_batch_arrives_complete_and_in_order([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -151,7 +151,7 @@ a_result_larger_than_one_batch_arrives_complete_and_in_order()
 }
 
 void
-an_empty_result_still_carries_metadata()
+an_empty_result_still_carries_metadata([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -170,7 +170,7 @@ an_empty_result_still_carries_metadata()
 // to send disable_metrics for the default to hold. Without that line the SDK would return metrics
 // nobody asked for.
 void
-metrics_are_absent_unless_requested()
+metrics_are_absent_unless_requested([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -181,7 +181,7 @@ metrics_are_absent_unless_requested()
 }
 
 void
-metrics_are_returned_when_requested()
+metrics_are_returned_when_requested([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -198,7 +198,7 @@ metrics_are_returned_when_requested()
 }
 
 void
-a_profile_is_returned_when_requested()
+a_profile_is_returned_when_requested([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -215,7 +215,7 @@ a_profile_is_returned_when_requested()
 // NewInvalidQueryStatus), so this is `invalid_argument` over couchbase2 where the classic path
 // reports `parsing_failure`. couchbase-jvm-clients asserts the same divergence.
 void
-a_syntax_error_is_reported_as_invalid_argument()
+a_syntax_error_is_reported_as_invalid_argument([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -231,7 +231,7 @@ a_syntax_error_is_reported_as_invalid_argument()
 }
 
 void
-a_write_in_a_read_only_query_is_rejected()
+a_write_in_a_read_only_query_is_rejected([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -247,7 +247,7 @@ a_write_in_a_read_only_query_is_rejected()
 // NOT_FOUND carries a ResourceInfo whose type is "queryindex", which is what separates this from
 // the KV-flavoured document_not_found the bare code would map to.
 void
-dropping_a_missing_index_reports_index_not_found()
+dropping_a_missing_index_reports_index_not_found([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -262,7 +262,7 @@ dropping_a_missing_index_reports_index_not_found()
 // queryserver.go:144 refuses a request that carries both, and the converter sends both whenever
 // the caller sets both -- so this pins what the caller sees rather than leaving it to chance.
 void
-conflicting_consistency_is_rejected()
+conflicting_consistency_is_rejected([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -278,7 +278,7 @@ conflicting_consistency_is_rejected()
 
 // queryserver.go:178. Same shape as above: the converter forwards both, the gateway decides.
 void
-named_and_positional_parameters_together_are_rejected()
+named_and_positional_parameters_together_are_rejected([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -299,7 +299,7 @@ named_and_positional_parameters_together_are_rejected()
 // after execute() has returned. Checking the thread is what separates "rejected" from "rejected by
 // calling back inline", which no assertion on the response can see.
 void
-an_unsupported_option_is_refused_without_a_round_trip()
+an_unsupported_option_is_refused_without_a_round_trip([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -320,7 +320,7 @@ an_unsupported_option_is_refused_without_a_round_trip()
 
 // The same contract on the other path that answers without sending anything.
 void
-an_expired_budget_is_refused_on_the_io_context()
+an_expired_budget_is_refused_on_the_io_context([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -342,7 +342,7 @@ an_expired_budget_is_refused_on_the_io_context()
 // of time provably changed nothing, so reporting it as ambiguous would tell a caller that declines
 // to retry ambiguous operations to give up on one that is safe to repeat.
 void
-an_expired_deadline_is_unambiguous_for_a_read_only_query()
+an_expired_deadline_is_unambiguous_for_a_read_only_query([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -357,7 +357,7 @@ an_expired_deadline_is_unambiguous_for_a_read_only_query()
 }
 
 void
-an_expired_deadline_is_ambiguous_for_a_mutating_query()
+an_expired_deadline_is_ambiguous_for_a_mutating_query([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -381,72 +381,72 @@ tests() -> test_suite
     {
       { "a_constant_projection_round_trips",
         a_constant_projection_round_trips,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "a_positional_parameter_reaches_the_query_engine",
         a_positional_parameter_reaches_the_query_engine,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "a_named_parameter_reaches_the_query_engine",
         a_named_parameter_reaches_the_query_engine,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "a_result_larger_than_one_batch_arrives_complete_and_in_order",
         a_result_larger_than_one_batch_arrives_complete_and_in_order,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "an_empty_result_still_carries_metadata",
         an_empty_result_still_carries_metadata,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "metrics_are_absent_unless_requested",
         metrics_are_absent_unless_requested,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "metrics_are_returned_when_requested",
         metrics_are_returned_when_requested,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "a_profile_is_returned_when_requested",
         a_profile_is_returned_when_requested,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "a_syntax_error_is_reported_as_invalid_argument",
         a_syntax_error_is_reported_as_invalid_argument,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "a_write_in_a_read_only_query_is_rejected",
         a_write_in_a_read_only_query_is_rejected,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "dropping_a_missing_index_reports_index_not_found",
         dropping_a_missing_index_reports_index_not_found,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "conflicting_consistency_is_rejected",
         conflicting_consistency_is_rejected,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "named_and_positional_parameters_together_are_rejected",
         named_and_positional_parameters_together_are_rejected,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "an_unsupported_option_is_refused_without_a_round_trip",
         an_unsupported_option_is_refused_without_a_round_trip,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "an_expired_budget_is_refused_on_the_io_context",
         an_expired_budget_is_refused_on_the_io_context,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "an_expired_deadline_is_unambiguous_for_a_read_only_query",
         an_expired_deadline_is_unambiguous_for_a_read_only_query,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "an_expired_deadline_is_ambiguous_for_a_mutating_query",
         an_expired_deadline_is_ambiguous_for_a_mutating_query,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
     },
   };
 }

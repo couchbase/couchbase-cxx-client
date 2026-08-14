@@ -33,7 +33,7 @@ namespace ca = ::couchbase::core::protostellar::collection_admin;
 namespace v1 = ::couchbase::admin::collection::v1;
 
 void
-decode_manifest_maps_scopes_and_collections()
+decode_manifest_maps_scopes_and_collections([[maybe_unused]] context& ctx)
 {
   v1::ListCollectionsResponse proto;
   proto.set_manifest_uid(42);
@@ -67,7 +67,7 @@ decode_manifest_maps_scopes_and_collections()
 // max_expiry is the one collection field whose meaning is carried by a sign the wire cannot hold,
 // so the two halves of the mapping are pinned separately and then against each other.
 void
-encode_max_expiry_moves_the_sentinel_into_field_presence()
+encode_max_expiry_moves_the_sentinel_into_field_presence([[maybe_unused]] context& ctx)
 {
   const auto no_expiry = ca::encode_max_expiry(-1);
   assert_true(no_expiry.has_value(), "no-expiry is written to the wire");
@@ -81,7 +81,7 @@ encode_max_expiry_moves_the_sentinel_into_field_presence()
 }
 
 void
-decode_max_expiry_reads_field_presence_back_as_the_sentinel()
+decode_max_expiry_reads_field_presence_back_as_the_sentinel([[maybe_unused]] context& ctx)
 {
   v1::ListCollectionsResponse proto;
   auto* scope = proto.add_scopes();
@@ -106,7 +106,7 @@ decode_max_expiry_reads_field_presence_back_as_the_sentinel()
 // The encode and decode above are only correct together: reading a collection back has to return
 // the max_expiry it was created with, which is what a caller comparing the two ever sees.
 void
-max_expiry_round_trips_through_the_wire_form()
+max_expiry_round_trips_through_the_wire_form([[maybe_unused]] context& ctx)
 {
   for (const auto expected : { std::int32_t{ -1 }, std::int32_t{ 0 }, std::int32_t{ 900 } }) {
     v1::ListCollectionsResponse proto;
