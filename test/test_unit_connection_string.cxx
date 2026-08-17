@@ -590,6 +590,50 @@ TEST_CASE("unit: connection string", "[unit]")
   }
 }
 
+TEST_CASE("unit: connection string log_redaction", "[unit]")
+{
+  SECTION("defaults to disabled")
+  {
+    auto spec = couchbase::core::utils::parse_connection_string("couchbase://127.0.0.1");
+    CHECK(spec.options.log_redaction == false);
+  }
+
+  SECTION("accepts the truthy spellings")
+  {
+    for (const auto& value : { "true", "yes", "on" }) {
+      auto spec = couchbase::core::utils::parse_connection_string(
+        fmt::format("couchbase://127.0.0.1?log_redaction={}", value));
+      INFO("value: " << value);
+      CHECK(spec.warnings.empty());
+      CHECK(spec.options.log_redaction == true);
+    }
+  }
+
+  SECTION("accepts the falsy spellings")
+  {
+    for (const auto& value : { "false", "no", "off" }) {
+      auto spec = couchbase::core::utils::parse_connection_string(
+        fmt::format("couchbase://127.0.0.1?log_redaction={}", value));
+      INFO("value: " << value);
+      CHECK(spec.warnings.empty());
+      CHECK(spec.options.log_redaction == false);
+    }
+  }
+
+  SECTION("warns and leaves the default in place for an unparsable value")
+  {
+    // NOTE: unlike libcouchbase, this SDK's boolean parameters do not accept numeric values, so
+    // "log_redaction=1" is rejected here even though libcouchbase would have honoured it.
+    for (const auto& value : { "maybe", "1", "0" }) {
+      auto spec = couchbase::core::utils::parse_connection_string(
+        fmt::format("couchbase://127.0.0.1?log_redaction={}", value));
+      INFO("value: " << value);
+      CHECK(spec.options.log_redaction == false);
+      CHECK(spec.warnings.size() == 1);
+    }
+  }
+}
+
 TEST_CASE("unit: bootstrap nodes randomization", "[unit]")
 {
   std::vector<std::string> source_hostnames{

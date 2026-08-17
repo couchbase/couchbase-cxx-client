@@ -119,6 +119,7 @@ public:
   bool preserve_bootstrap_nodes_order{ false };
   bool allow_enterprise_analytics{ false };
   bool enable_lazy_connections{ false };
+  bool log_redaction{ false };
 
   // Tuning for the streaming query/analytics row engine. Internal-only for now (no public API);
   // sensible static defaults apply unless a core caller overrides them. idle_timeout is derived

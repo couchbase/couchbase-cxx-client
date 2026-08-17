@@ -555,6 +555,7 @@ public:
     }
 
     origin_ = std::move(origin);
+    apply_log_redaction();
     CB_LOG_DEBUG(R"(open cluster, id: "{}", core version: "{}", connection string: {}, {})",
                  id_,
                  couchbase::core::meta::sdk_semver(),
@@ -633,6 +634,7 @@ public:
     }
 
     origin_ = std::move(origin);
+    apply_log_redaction();
     CB_LOG_DEBUG(R"(open cluster in background, id: "{}", core version: "{}", {})",
                  id_,
                  couchbase::core::meta::sdk_semver(),
@@ -1884,6 +1886,20 @@ public:
   }
 
 private:
+  // Must be called from every open path, before the connection string is logged and before any
+  // session or bucket is constructed, so that connection-context prefixes built later carry their
+  // tags.
+  //
+  // Redaction state is process-wide while it is configured per cluster, so opening a cluster may
+  // only turn it on, never off: one cluster must not silently disable redaction for another, or
+  // for an application that enabled it directly.
+  void apply_log_redaction() const
+  {
+    if (origin_.options().log_redaction) {
+      logger::set_log_redaction(true);
+    }
+  }
+
   void setup_observability()
   {
     // ignore the enable_tracing flag if a tracer was passed in
