@@ -20,6 +20,7 @@
 #include <couchbase/logger.hxx>
 
 #include "core/logger/logger.hxx"
+#include "core/logger/redaction.hxx"
 
 #include <spdlog/fmt/bundled/format.h>
 
@@ -34,6 +35,31 @@ namespace
 // evaluated (formatted) its arguments at all.
 std::atomic<int> probe_format_count{ 0 };
 struct format_probe {
+};
+
+// Log redaction is process-wide state, so restore it even if an assertion fails part way through
+// a test, otherwise the leak shows up as an unrelated failure elsewhere in the suite.
+class scoped_log_redaction
+{
+public:
+  explicit scoped_log_redaction(bool enable)
+    : previous_{ couchbase::core::logger::is_log_redaction_enabled() }
+  {
+    couchbase::core::logger::set_log_redaction(enable);
+  }
+
+  scoped_log_redaction(const scoped_log_redaction&) = delete;
+  scoped_log_redaction(scoped_log_redaction&&) = delete;
+  auto operator=(const scoped_log_redaction&) -> scoped_log_redaction& = delete;
+  auto operator=(scoped_log_redaction&&) -> scoped_log_redaction& = delete;
+
+  ~scoped_log_redaction()
+  {
+    couchbase::core::logger::set_log_redaction(previous_);
+  }
+
+private:
+  bool previous_;
 };
 } // namespace
 
@@ -188,4 +214,92 @@ TEST_CASE("unit: arguments formatted and delivered when a callback is registered
   REQUIRE(probe_format_count.load() == 1);
   REQUIRE_FALSE(captured.empty());
   REQUIRE(captured.back().find("value=probe") != std::string::npos);
+}
+
+TEST_CASE("unit: redaction annotations are inert while redaction is disabled", "[unit]")
+{
+  const scoped_log_redaction redaction{ false };
+  namespace logger = couchbase::core::logger;
+
+  REQUIRE(fmt::format("key={}", logger::user_data("my_key")) == "key=my_key");
+  REQUIRE(fmt::format("bucket={}", logger::metadata("my_bucket")) == "bucket=my_bucket");
+  REQUIRE(fmt::format("host={}", logger::system_data("127.0.0.1")) == "host=127.0.0.1");
+}
+
+TEST_CASE("unit: redaction annotations wrap values while redaction is enabled", "[unit]")
+{
+  const scoped_log_redaction redaction{ true };
+  namespace logger = couchbase::core::logger;
+
+  REQUIRE(fmt::format("key={}", logger::user_data("my_key")) == "key=<ud>my_key</ud>");
+  REQUIRE(fmt::format("bucket={}", logger::metadata("my_bucket")) == "bucket=<md>my_bucket</md>");
+  REQUIRE(fmt::format("host={}", logger::system_data("127.0.0.1")) == "host=<sd>127.0.0.1</sd>");
+}
+
+TEST_CASE("unit: redaction annotations work for non-string values", "[unit]")
+{
+  const scoped_log_redaction redaction{ true };
+  namespace logger = couchbase::core::logger;
+
+  const std::string host{ "10.0.0.1" };
+  const std::string_view bucket{ "travel-sample" };
+
+  REQUIRE(fmt::format("{}", logger::system_data(11210)) == "<sd>11210</sd>");
+  REQUIRE(fmt::format("{}", logger::system_data(host)) == "<sd>10.0.0.1</sd>");
+  REQUIRE(fmt::format("{}", logger::metadata(bucket)) == "<md>travel-sample</md>");
+}
+
+TEST_CASE("unit: redaction annotations may be mixed in a single statement", "[unit]")
+{
+  const scoped_log_redaction redaction{ true };
+  namespace logger = couchbase::core::logger;
+
+  REQUIRE(fmt::format("[{}/{}] <{}:{}> key={}",
+                      "client-id",
+                      logger::metadata("travel-sample"),
+                      logger::system_data("10.0.0.1"),
+                      logger::system_data(11210),
+                      logger::user_data("airline_10")) ==
+          "[client-id/<md>travel-sample</md>] <<sd>10.0.0.1</sd>:<sd>11210</sd>> "
+          "key=<ud>airline_10</ud>");
+}
+
+TEST_CASE("unit: connection-context prefixes bake in their tags", "[unit]")
+{
+  namespace logger = couchbase::core::logger;
+
+  // Connection-context prefixes are formatted once, when a bucket or session is constructed, and
+  // reused for the lifetime of that object. Their tags are therefore fixed at construction time
+  // and do not follow later changes to the redaction setting. This is why redaction must be
+  // enabled before connecting; see couchbase::core::logger::set_log_redaction().
+  std::string prefix;
+  {
+    const scoped_log_redaction redaction{ true };
+    prefix = fmt::format("[{}/{}]", "client-id", logger::metadata("travel-sample"));
+    REQUIRE(prefix == "[client-id/<md>travel-sample</md>]");
+  }
+
+  REQUIRE_FALSE(logger::is_log_redaction_enabled());
+  REQUIRE(prefix == "[client-id/<md>travel-sample</md>]");
+
+  // Conversely, a prefix built while redaction was disabled stays untagged even once it is on.
+  std::string untagged_prefix;
+  {
+    const scoped_log_redaction redaction{ false };
+    untagged_prefix = fmt::format("[{}/{}]", "client-id", logger::metadata("travel-sample"));
+  }
+  const scoped_log_redaction redaction{ true };
+  REQUIRE(untagged_prefix == "[client-id/travel-sample]");
+}
+
+TEST_CASE("unit: enabling redaction is observable", "[unit]")
+{
+  namespace logger = couchbase::core::logger;
+
+  REQUIRE_FALSE(logger::is_log_redaction_enabled());
+  {
+    const scoped_log_redaction redaction{ true };
+    REQUIRE(logger::is_log_redaction_enabled());
+  }
+  REQUIRE_FALSE(logger::is_log_redaction_enabled());
 }
