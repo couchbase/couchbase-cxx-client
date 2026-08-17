@@ -17,9 +17,9 @@
 
 #pragma once
 
-#include "core/impl/get_replica.hxx"
 #include "core/impl/lookup_in_replica.hxx"
 #include "core/operations/document_get.hxx"
+#include "core/operations/document_get_replica.hxx"
 #include "core/operations/document_lookup_in.hxx"
 #include "core/operations/operation_traits.hxx"
 #include "core/utils/movable_function.hxx"
@@ -71,5 +71,13 @@ struct with_cancellation : public kv_operation {
 template<typename kv_operation>
 struct operations::is_cancellable_operation<impl::with_cancellation<kv_operation>>
   : public std::true_type {
+};
+
+// Wrapping must not change how a request is routed: the wrapper inherits the
+// operation, so a trait left behind here would silently drop the wrapped
+// request back onto plain vbucket-map routing.
+template<typename kv_operation>
+struct operations::resolves_own_route<impl::with_cancellation<kv_operation>>
+  : public operations::resolves_own_route<kv_operation> {
 };
 } // namespace couchbase::core

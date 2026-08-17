@@ -468,6 +468,12 @@ public:
     return { 0, std::nullopt };
   }
 
+  [[nodiscard]] auto config_snapshot() const -> std::shared_ptr<topology::configuration>
+  {
+    const std::scoped_lock lock(config_mutex_);
+    return config_;
+  }
+
   auto config_rev() const -> std::string
   {
     const std::scoped_lock lock(config_mutex_);
@@ -1542,6 +1548,12 @@ auto
 bucket::config_rev() const -> std::string
 {
   return impl_->config_rev();
+}
+
+auto
+bucket::config_snapshot() const -> std::shared_ptr<topology::configuration>
+{
+  return impl_->config_snapshot();
 }
 
 bucket_unit_test_api::bucket_unit_test_api(std::shared_ptr<bucket_impl> impl)

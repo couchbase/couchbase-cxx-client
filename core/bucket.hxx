@@ -142,21 +142,65 @@ public:
     }
     std::size_t index;
     if (cmd->request.id.use_any_session()) {
+      // An explicit "any node" request is not subject to routing rules of any
+      // kind.
       index = next_session_index();
     } else {
-      auto [partition, server] = map_id(cmd->request.id);
-      if (!server.has_value()) {
-        CB_LOG_TRACE(R"([{}] unable to map key="{}" to the node, id={}, partition={}, rev={})",
-                     log_prefix(),
-                     cmd->request.id,
-                     cmd->id(),
-                     partition,
-                     config_rev());
-        return io::retry_orchestrator::maybe_retry(
-          cmd->manager_, cmd, retry_reason::node_not_available, errc::common::request_canceled);
+      // A request that resolves its own route may still decline to, in which
+      // case it takes the vbucket-map routing below like every other request.
+      std::optional<std::size_t> self_routed;
+      if constexpr (operations::resolves_own_route_v<Request>) {
+        auto config = config_snapshot();
+        if (!config) {
+          return io::retry_orchestrator::maybe_retry(
+            cmd->manager_, cmd, retry_reason::node_not_available, errc::common::request_canceled);
+        }
+        // Resolution happens on every lap, so a topology that changed between
+        // attempts is honoured.
+        if (const auto decision = cmd->request.resolve_route(*config); decision.has_value()) {
+          // Keep the request's partition in step with the latest resolution on
+          // every path, not only the one that dispatches.
+          cmd->request.partition = decision->partition;
+          if (decision->ec) {
+            // Terminal, so the completion is invoked directly: the retry
+            // orchestrator consults the request's retry strategy first, and a
+            // strategy that retries do_not_retry would loop a condition that
+            // cannot resolve itself.
+            return cmd->invoke_handler(decision->ec);
+          }
+          if (!decision->server_index.has_value()) {
+            CB_LOG_TRACE(R"([{}] unable to map key="{}" to the node, id={}, partition={}, rev={})",
+                         log_prefix(),
+                         cmd->request.id,
+                         cmd->id(),
+                         decision->partition,
+                         // The snapshot's own revision, not config_rev(): that
+                         // reads config_ again and can name a configuration this
+                         // decision was not taken against.
+                         config->rev_str());
+            return io::retry_orchestrator::maybe_retry(
+              cmd->manager_, cmd, retry_reason::node_not_available, errc::common::request_canceled);
+          }
+          self_routed = decision->server_index;
+        }
       }
-      cmd->request.partition = partition;
-      index = server.value();
+      if (self_routed.has_value()) {
+        index = self_routed.value();
+      } else {
+        auto [partition, server] = map_id(cmd->request.id);
+        if (!server.has_value()) {
+          CB_LOG_TRACE(R"([{}] unable to map key="{}" to the node, id={}, partition={}, rev={})",
+                       log_prefix(),
+                       cmd->request.id,
+                       cmd->id(),
+                       partition,
+                       config_rev());
+          return io::retry_orchestrator::maybe_retry(
+            cmd->manager_, cmd, retry_reason::node_not_available, errc::common::request_canceled);
+        }
+        cmd->request.partition = partition;
+        index = server.value();
+      }
     }
     auto session = find_session_by_index(index);
     if (!session || !session->has_config()) {
@@ -270,6 +314,7 @@ private:
   [[nodiscard]] auto map_id(const document_id& id)
     -> std::pair<std::uint16_t, std::optional<std::size_t>>;
   [[nodiscard]] auto config_rev() const -> std::string;
+  [[nodiscard]] auto config_snapshot() const -> std::shared_ptr<topology::configuration>;
 
   asio::io_context& ctx_;
   std::shared_ptr<bucket_impl> impl_;

@@ -171,7 +171,12 @@ convert_error_code(const std::error_code ec, protocol::shared::Exception* except
           protocol::shared::CouchbaseExceptionType::SDK_XATTR_NO_ACCESS_EXCEPTION);
         break;
       default:
-        // key_value error_codes 131, 133 and 134 not represented in FIT
+        // No FIT exception type exists for cannot_revive_living_document,
+        // mutation_token_outdated or range_scan_completed, nor for the three
+        // replica-read codes -- document_not_found_on_replica,
+        // replica_index_out_of_bounds and replica_index_currently_unavailable --
+        // whose types arrive with SDKQE-3754, together with the GetReplica
+        // command that raises them.
         cb_exception->set_type(protocol::shared::CouchbaseExceptionType::SDK_COUCHBASE_EXCEPTION);
     }
   }

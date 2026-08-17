@@ -40,13 +40,13 @@
 #include "core/app_telemetry_reporter.hxx"
 #include "core/diagnostics.hxx"
 #include "core/error.hxx"
-#include "core/impl/get_replica.hxx"
 #include "core/impl/lookup_in_replica.hxx"
 #include "core/impl/observe_seqno.hxx"
 #include "core/io/http_command.hxx"
 #include "core/io/http_message.hxx"
 #include "core/io/http_session_manager.hxx"
 #include "core/io/mcbp_session.hxx"
+#include "core/operations/document_get_replica.hxx"
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
 #include "core/io/config_tracker.hxx"
 #endif
@@ -3068,8 +3068,8 @@ cluster::execute(
 }
 
 void
-cluster::execute(impl::get_replica_request request,
-                 utils::movable_function<void(impl::get_replica_response)>&& handler) const
+cluster::execute(operations::get_replica_request request,
+                 utils::movable_function<void(operations::get_replica_response)>&& handler) const
 {
   return impl_->execute(std::move(request), std::move(handler));
 }
@@ -3274,7 +3274,7 @@ cluster::execute(operations::lookup_in_request_with_cancellation request,
 
 void
 cluster::execute(operations::get_replica_request_with_cancellation request,
-                 utils::movable_function<void(impl::get_replica_response)>&& handler) const
+                 utils::movable_function<void(operations::get_replica_response)>&& handler) const
 {
   return impl_->execute(std::move(request), std::move(handler));
 }
