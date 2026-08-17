@@ -31,6 +31,7 @@
 
 #include <gsl/util>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <future>
@@ -398,6 +399,16 @@ public:
       return cb(errc::common::invalid_argument, {});
     }
 
+    // A scan needs an active copy for every vbucket, and every row of the map is
+    // indexed below to find one. A row that names no node at all leaves the scan
+    // unable to cover its vbucket, which is reported rather than served as a
+    // silently short result.
+    if (std::any_of(vbucket_map_.begin(), vbucket_map_.end(), [](const auto& chain) {
+          return chain.empty();
+        })) {
+      return cb(errc::network::configuration_not_available, {});
+    }
+
     const get_collection_id_options get_cid_options{ options_.retry_strategy,
                                                      options_.timeout,
                                                      options_.parent_span };
@@ -429,7 +440,8 @@ public:
           };
 
           // Get the active node for the vbucket (values in vbucket map are the active node id
-          // followed by the ids of the replicas)
+          // followed by the ids of the replicas). scan() has already established that every row
+          // names one.
           auto node_id = self->vbucket_map_[vbucket][0];
 
           auto stream = std::make_shared<range_scan_stream>(

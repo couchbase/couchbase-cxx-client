@@ -81,8 +81,15 @@ range_scan_load_balancer::range_scan_load_balancer(
 {
   std::map<std::int16_t, std::queue<std::uint16_t>> node_to_vbucket_map{};
   for (std::size_t vbucket_id = 0; vbucket_id < vbucket_map.size(); vbucket_id++) {
-    auto node_id = vbucket_map[vbucket_id][0];
-    node_to_vbucket_map[node_id].push(gsl::narrow_cast<std::uint16_t>(vbucket_id));
+    const auto& chain = vbucket_map[vbucket_id];
+    if (chain.empty()) {
+      // A row that names no node at all cannot be scanned, and there is no node
+      // to queue it against. range_scan_orchestrator refuses such a map before
+      // it starts any stream, so leaving the vbucket out here cannot silently
+      // shorten a scan.
+      continue;
+    }
+    node_to_vbucket_map[chain[0]].push(gsl::narrow_cast<std::uint16_t>(vbucket_id));
   }
   for (auto [node_id, vbucket_ids] : node_to_vbucket_map) {
     nodes_.emplace(node_id, std::move(vbucket_ids));

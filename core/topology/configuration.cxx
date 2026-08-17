@@ -302,7 +302,16 @@ configuration::server_by_vbucket(std::uint16_t vbucket, std::size_t index) const
   if (!vbmap.has_value() || vbucket >= vbmap->size()) {
     return {};
   }
-  if (auto server_index = vbmap->at(vbucket)[index]; server_index >= 0) {
+  // A chain row may be shorter than num_replicas + 1: the server publishes the
+  // new replica count as soon as the bucket is reconfigured, while the vbucket
+  // map keeps its old width until the rebalance that places the replicas.
+  // Callers derive the index from num_replicas, so a surplus index must read as
+  // "no server" rather than past the end of the row.
+  const auto& chain = vbmap->at(vbucket);
+  if (index >= chain.size()) {
+    return {};
+  }
+  if (auto server_index = chain[index]; server_index >= 0) {
     return static_cast<std::size_t>(server_index);
   }
   return {};
@@ -312,7 +321,9 @@ auto
 configuration::map_key(const std::string& key, std::size_t index) const
   -> std::pair<std::uint16_t, std::optional<std::size_t>>
 {
-  if (!vbmap.has_value()) {
+  // The number of vbuckets comes from the map itself, so a map without rows
+  // cannot be asked which vbucket a key belongs to.
+  if (!vbmap.has_value() || vbmap->empty()) {
     return { 0, {} };
   }
   const std::uint32_t crc = utils::hash_crc32(key.data(), key.size());
@@ -324,7 +335,9 @@ auto
 configuration::map_key(const std::vector<std::byte>& key, std::size_t index) const
   -> std::pair<std::uint16_t, std::optional<std::size_t>>
 {
-  if (!vbmap.has_value()) {
+  // The number of vbuckets comes from the map itself, so a map without rows
+  // cannot be asked which vbucket a key belongs to.
+  if (!vbmap.has_value() || vbmap->empty()) {
     return { 0, {} };
   }
   const std::uint32_t crc = utils::hash_crc32(key.data(), key.size());
