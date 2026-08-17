@@ -26,6 +26,29 @@
 namespace couchbase::core::impl
 {
 auto
+get_replica_request::resolve_route(const topology::configuration& config) -> replica_route_decision
+{
+  // Named vbucket rather than partition: the request carries a partition member,
+  // and MSVC rejects a local that hides it.
+  if (!strategy.has_value()) {
+    auto [vbucket, server] = config.map_key(id.key(), id.node_index());
+    return { {}, vbucket, id.node_index(), server };
+  }
+
+  const auto vbucket = config.map_key(id.key(), 0).first;
+  auto decision = resolve_replica_index(config, vbucket, strategy->replica_index, strategy->wrap);
+  if (!strategy->revalidate_on_retry && decision.server_index.has_value()) {
+    // Pin the resolved position and clear the strategy, so later attempts take
+    // the branch above: they route to whichever node holds that position and
+    // wait for it, rather than re-applying the rules — wrap included — to a
+    // chain that may have changed.
+    id.node_index(decision.replica_position);
+    strategy.reset();
+  }
+  return decision;
+}
+
+auto
 get_replica_request::encode_to(get_replica_request::encoded_request_type& encoded,
                                core::mcbp_context&& /* context */) const -> std::error_code
 {

@@ -72,4 +72,12 @@ template<typename kv_operation>
 struct operations::is_cancellable_operation<impl::with_cancellation<kv_operation>>
   : public std::true_type {
 };
+
+// Wrapping must not change how a request is routed: the wrapper inherits the
+// operation, so a trait left behind here would silently drop the wrapped
+// request back onto plain vbucket-map routing.
+template<typename kv_operation>
+struct operations::resolves_own_route<impl::with_cancellation<kv_operation>>
+  : public operations::resolves_own_route<kv_operation> {
+};
 } // namespace couchbase::core

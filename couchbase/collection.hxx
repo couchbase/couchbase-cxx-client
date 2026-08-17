@@ -28,6 +28,8 @@
 #include <couchbase/get_and_touch_options.hxx>
 #include <couchbase/get_any_replica_options.hxx>
 #include <couchbase/get_options.hxx>
+#include <couchbase/get_replica_options.hxx>
+#include <couchbase/get_replica_strategy.hxx>
 #include <couchbase/insert_options.hxx>
 #include <couchbase/lookup_in_all_replicas_options.hxx>
 #include <couchbase/lookup_in_any_replica_options.hxx>
@@ -383,6 +385,74 @@ public:
    */
   [[nodiscard]] auto get_any_replica(std::string document_id,
                                      const get_any_replica_options& options = {}) const
+    -> std::future<std::pair<error, get_replica_result>>;
+
+  /**
+   * Reads from the replica the strategy selects.
+   *
+   * @param document_id the document id which is used to uniquely identify it.
+   * @param strategy selects the replica to read from
+   * @param options the custom options
+   * @param handler the handler that implements @ref get_replica_handler
+   *
+   * @exception errc::key_value::document_not_found_on_replica
+   *    the replica responded, but does not hold the document. The @ref error::cause() is
+   *    @ref errc::key_value::document_not_found.
+   *
+   * @exception errc::key_value::replica_index_out_of_bounds
+   *    the requested index is at or beyond the smaller of the replica chain the vbucket map lists
+   *    for this document's vbucket and the bucket's configured replica count. Reported without a
+   *    network round trip.
+   *
+   * @exception errc::key_value::replica_index_currently_unavailable
+   *    the vbucket map does not place the requested replica on a node the topology lists.
+   *
+   * @exception errc::common::unambiguous_timeout
+   *
+   * @note Not served over the @ref couchbase2 "couchbase2" transport, which reports
+   * @ref errc::common::feature_not_available for replica reads.
+   *
+   * @since 1.5.0
+   * @volatile
+   */
+  void get_replica(std::string document_id,
+                   const get_replica_strategy& strategy,
+                   const get_replica_options& options,
+                   get_replica_handler&& handler) const;
+
+  /**
+   * Reads from the replica the strategy selects.
+   *
+   * @snippet{trimleft} test_integration_read_replica.cxx get_replica-from_index
+   *
+   * @param document_id the document id which is used to uniquely identify it.
+   * @param strategy selects the replica to read from
+   * @param options the custom options
+   * @return the future object with the result of the selected replica.
+   *
+   * @exception errc::key_value::document_not_found_on_replica
+   *    the replica responded, but does not hold the document. The @ref error::cause() is
+   *    @ref errc::key_value::document_not_found.
+   *
+   * @exception errc::key_value::replica_index_out_of_bounds
+   *    the requested index is at or beyond the smaller of the replica chain the vbucket map lists
+   *    for this document's vbucket and the bucket's configured replica count. Reported without a
+   *    network round trip.
+   *
+   * @exception errc::key_value::replica_index_currently_unavailable
+   *    the vbucket map does not place the requested replica on a node the topology lists.
+   *
+   * @exception errc::common::unambiguous_timeout
+   *
+   * @note Not served over the @ref couchbase2 "couchbase2" transport, which reports
+   * @ref errc::common::feature_not_available for replica reads.
+   *
+   * @since 1.5.0
+   * @volatile
+   */
+  [[nodiscard]] auto get_replica(std::string document_id,
+                                 const get_replica_strategy& strategy,
+                                 const get_replica_options& options = {}) const
     -> std::future<std::pair<error, get_replica_result>>;
 
   /**

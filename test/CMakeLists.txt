@@ -1,6 +1,8 @@
 # Migrated to the hand-rolled framework (CXXCBC-945). Registered here rather than with unit_test()
 # because it is no longer a Catch2 file.
 couchbase_add_test(unit/core/config_profiles LABEL unit LINK_CLIENT)
+couchbase_add_test(unit/core/bucket_routing LABEL unit LINK_CLIENT)
+couchbase_add_test(unit/core/get_replica LABEL unit LINK_CLIENT)
 
 # Registered here rather than in cmake/TestFramework.cmake beside the framework's own self-tests:
 # only a call from this file reaches build_unit_tests. It is pure computation over the tools helper

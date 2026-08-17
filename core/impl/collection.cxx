@@ -20,6 +20,7 @@
 #include "error.hxx"
 #include "get_all_replicas.hxx"
 #include "get_any_replica.hxx"
+#include "get_replica.hxx"
 #include "internal_scan_result.hxx"
 #include "invoke_with_node_id.hxx"
 #include "observability_recorder.hxx"
@@ -325,6 +326,44 @@ public:
                                                get_replica_result{
                                                  resp.cas,
                                                  resp.replica,
+                                                 { std::move(resp.value), resp.flags },
+                                                 std::move(crypto_manager),
+                                               });
+                         });
+  }
+
+  void get_replica(std::string document_key,
+                   const get_replica_strategy::built& strategy,
+                   const get_replica_options::built& options,
+                   core::impl::movable_get_replica_handler&& handler) const
+  {
+    auto obs_rec = create_observability_recorder(core::tracing::operation::mcbp_get_replica,
+                                                 options.parent_span);
+
+    core::impl::get_replica_request request{
+      core::document_id{
+        bucket_name_,
+        scope_name_,
+        name_,
+        std::move(document_key),
+      },
+      options.timeout,
+      {},
+      {},
+      { options.retry_strategy },
+      obs_rec->operation_span(),
+      strategy,
+    };
+    return core_.execute(std::move(request),
+                         [obs_rec = std::move(obs_rec),
+                          crypto_manager = crypto_manager_,
+                          handler = std::move(handler)](auto resp) mutable {
+                           obs_rec->finish(resp.ctx.retry_attempts(), resp.ctx.ec());
+                           invoke_with_node_id(std::move(handler),
+                                               core::impl::make_get_replica_error(resp.ctx),
+                                               get_replica_result{
+                                                 resp.cas,
+                                                 true,
                                                  { std::move(resp.value), resp.flags },
                                                  std::move(crypto_manager),
                                                });
@@ -1574,6 +1613,30 @@ collection::get_any_replica(std::string document_id, const get_any_replica_optio
   auto barrier = std::make_shared<std::promise<std::pair<error, get_replica_result>>>();
   auto future = barrier->get_future();
   get_any_replica(std::move(document_id), options, [barrier](auto err, auto result) {
+    barrier->set_value({ std::move(err), std::move(result) });
+  });
+  return future;
+}
+
+void
+collection::get_replica(std::string document_id,
+                        const get_replica_strategy& strategy,
+                        const get_replica_options& options,
+                        get_replica_handler&& handler) const
+{
+  return impl_->get_replica(
+    std::move(document_id), strategy.build(), options.build(), std::move(handler));
+}
+
+auto
+collection::get_replica(std::string document_id,
+                        const get_replica_strategy& strategy,
+                        const get_replica_options& options) const
+  -> std::future<std::pair<error, get_replica_result>>
+{
+  auto barrier = std::make_shared<std::promise<std::pair<error, get_replica_result>>>();
+  auto future = barrier->get_future();
+  get_replica(std::move(document_id), strategy, options, [barrier](auto err, auto result) {
     barrier->set_value({ std::move(err), std::move(result) });
   });
   return future;

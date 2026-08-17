@@ -16,6 +16,7 @@
  */
 
 #include "test_helper.hxx"
+#include "utils/topology_fixtures.hxx"
 
 #include "core/diagnostics.hxx"
 #include "core/impl/wait_until_ready.hxx"
@@ -35,7 +36,8 @@ namespace
 using couchbase::cluster_state;
 using couchbase::core::service_type;
 namespace diag = couchbase::core::diag;
-using vbucket_map = couchbase::core::topology::configuration::vbucket_map;
+using test::utils::config_with_vbmap;
+using test::utils::vbucket_map;
 
 auto
 endpoint(service_type type, diag::ping_state state) -> diag::endpoint_ping_info
@@ -55,15 +57,6 @@ ping_report(std::map<service_type, std::vector<diag::endpoint_ping_info>> servic
   return report;
 }
 
-auto
-config_with_vbmap(std::optional<vbucket_map> vbmap, std::optional<std::uint32_t> num_replicas)
-  -> couchbase::core::topology::configuration
-{
-  couchbase::core::topology::configuration config{};
-  config.vbmap = std::move(vbmap);
-  config.num_replicas = num_replicas;
-  return config;
-}
 } // namespace
 
 TEST_CASE("unit: wait_until_ready ping predicate (online)", "[unit]")

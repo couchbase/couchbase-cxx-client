@@ -18,10 +18,91 @@
 
 #include "replica_utils.hxx"
 
+#include "core/impl/error.hxx"
 #include "core/logger/logger.hxx"
+
+#include <couchbase/error_codes.hxx>
+
+#include <algorithm>
+#include <utility>
 
 namespace couchbase::core::impl
 {
+auto
+make_get_replica_error(const key_value_error_context& ctx) -> couchbase::error
+{
+  if (ctx.ec() != errc::key_value::document_not_found) {
+    return make_error(ctx);
+  }
+  auto cause = make_error(ctx);
+  auto error_context = cause.ctx();
+  return { errc::key_value::document_not_found_on_replica,
+           {},
+           std::move(error_context),
+           std::move(cause),
+           ctx.last_dispatched_to_node_id() };
+}
+
+auto
+resolve_replica_index(const topology::configuration& config,
+                      std::uint16_t vbucket,
+                      std::size_t requested_replica,
+                      bool wrap) -> replica_route_decision
+{
+  replica_route_decision decision{};
+  decision.partition = vbucket;
+
+  if (!config.vbmap.has_value() || vbucket >= config.vbmap->size()) {
+    return decision;
+  }
+
+  if (!config.num_replicas.has_value()) {
+    // The configured count and the map are parsed independently, so a map can
+    // arrive without a count. Bounds cannot be decided without it, and taking
+    // the row as the count would route to a copy the bucket may not advertise,
+    // so this is treated the same as a map that has not arrived.
+    return decision;
+  }
+
+  const auto& chain = config.vbmap->at(vbucket);
+  // RFC-0053 bounds the index on the replica chain the map lists, and wraps
+  // modulo that same length, so both come from the row rather than from
+  // num_replicas. The configured count only caps it further, keeping a request
+  // off a copy the bucket does not advertise when a row is wider than the
+  // setting.
+  const auto number_of_replicas =
+    std::min(chain.empty() ? 0 : chain.size() - 1, std::size_t{ *config.num_replicas });
+  if (number_of_replicas == 0) {
+    // Also what keeps the wrap modulo below from dividing by zero.
+    decision.ec = errc::key_value::replica_index_out_of_bounds;
+    return decision;
+  }
+
+  if (requested_replica >= number_of_replicas) {
+    if (!wrap) {
+      decision.ec = errc::key_value::replica_index_out_of_bounds;
+      return decision;
+    }
+    requested_replica %= number_of_replicas;
+  }
+
+  // The active copy occupies position 0, so replica N is at position N + 1.
+  for (std::size_t offset = 0; offset < number_of_replicas; ++offset) {
+    const auto position = ((requested_replica + offset) % number_of_replicas) + 1;
+    if (const auto server = config.server_by_vbucket(vbucket, position);
+        server.has_value() && server.value() < config.nodes.size()) {
+      decision.replica_position = position;
+      decision.server_index = server;
+      return decision;
+    }
+    if (!wrap) {
+      break;
+    }
+  }
+
+  decision.ec = errc::key_value::replica_index_currently_unavailable;
+  return decision;
+}
 
 auto
 effective_nodes(const document_id& id,
