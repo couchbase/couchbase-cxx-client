@@ -15,16 +15,34 @@
  *   limitations under the License.
  */
 
-#include "get_replica.hxx"
+#include "core/operations/document_get_replica.hxx"
 
 #include "core/error_context/key_value_error_context.hxx"
 #include "core/io/mcbp_context.hxx"
 
+#include <optional>
 #include <system_error>
 #include <utility>
 
-namespace couchbase::core::impl
+namespace couchbase::core::operations
 {
+auto
+get_replica_request::resolve_route(const topology::configuration& config) const
+  -> std::optional<impl::replica_route_decision>
+{
+  // The replica fan-out callers share this type but leave the strategy unset:
+  // they pin the replica through id.node_index() and want the vbucket-map
+  // routing the dispatch path already applies.
+  if (!selection.has_value()) {
+    return {};
+  }
+
+  // Named vbucket rather than partition: the request carries a partition member,
+  // and MSVC rejects a local that hides it.
+  const auto vbucket = config.map_key(id.key(), 0).first;
+  return impl::resolve_replica_index(config, vbucket, selection->replica_index, selection->wrap);
+}
+
 auto
 get_replica_request::encode_to(get_replica_request::encoded_request_type& encoded,
                                core::mcbp_context&& /* context */) const -> std::error_code
@@ -48,4 +66,4 @@ get_replica_request::make_response(key_value_error_context&& ctx,
   }
   return response;
 }
-} // namespace couchbase::core::impl
+} // namespace couchbase::core::operations

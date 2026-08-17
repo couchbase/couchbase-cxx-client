@@ -18,10 +18,111 @@
 
 #include "replica_utils.hxx"
 
+#include "core/impl/error.hxx"
 #include "core/logger/logger.hxx"
+
+#include <couchbase/error_codes.hxx>
+
+#include <cstddef>
+#include <optional>
+#include <utility>
 
 namespace couchbase::core::impl
 {
+auto
+make_get_replica_error(const key_value_error_context& ctx) -> couchbase::error
+{
+  if (ctx.ec() != errc::key_value::document_not_found) {
+    return make_error(ctx);
+  }
+  auto cause = make_error(ctx);
+  auto error_context = cause.ctx();
+  return { errc::key_value::document_not_found_on_replica,
+           {},
+           std::move(error_context),
+           std::move(cause),
+           ctx.last_dispatched_to_node_id() };
+}
+
+auto
+resolve_replica_index(const topology::configuration& config,
+                      std::uint16_t vbucket,
+                      std::size_t requested_replica,
+                      bool wrap) -> replica_route_decision
+{
+  replica_route_decision decision{};
+  decision.partition = vbucket;
+
+  if (!config.vbmap.has_value() || vbucket >= config.vbmap->size()) {
+    return decision;
+  }
+
+  if (!config.num_replicas.has_value()) {
+    // The configured count and the map are parsed independently, so a map can
+    // arrive without a count. Bounds cannot be decided without it, and taking
+    // the row as the count would route to a copy the bucket may not advertise,
+    // so this is treated the same as a map that has not arrived.
+    return decision;
+  }
+
+  // num_replicas bounds the index; the vbucket-map row bounds what is readable.
+  // A rebalance reshapes the rows after the new count is published, so a row
+  // can be shorter than the count. Such an index is valid and not yet readable,
+  // so it is not out of bounds.
+  const auto number_of_replicas = std::size_t{ *config.num_replicas };
+  if (number_of_replicas == 0) {
+    // This also keeps the wrap modulo below from dividing by zero.
+    decision.ec = errc::key_value::replica_index_out_of_bounds;
+    return decision;
+  }
+
+  // The row carries the active at position 0, so replica N is at N + 1 and the
+  // chain is one shorter than the row.
+  const auto& chain = config.vbmap->at(vbucket);
+  const auto chain_length = chain.empty() ? 0 : chain.size() - 1;
+
+  const auto readable = [&](std::size_t replica) -> std::optional<std::size_t> {
+    if (replica >= chain_length) {
+      return {};
+    }
+    // A -1 entry and a node index the topology does not list mean the same
+    // thing here: nothing to send to.
+    if (const auto server = config.server_by_vbucket(vbucket, replica + 1);
+        server.has_value() && server.value() < config.nodes.size()) {
+      return server;
+    }
+    return {};
+  };
+
+  if (!wrap) {
+    if (requested_replica >= number_of_replicas) {
+      decision.ec = errc::key_value::replica_index_out_of_bounds;
+      return decision;
+    }
+    if (const auto server = readable(requested_replica); server.has_value()) {
+      decision.replica_position = requested_replica + 1;
+      decision.server_index = server;
+      return decision;
+    }
+    decision.ec = errc::key_value::replica_index_currently_unavailable;
+    return decision;
+  }
+
+  // wrap walks num_replicas, not the row, so an index past a short row still
+  // reaches the replicas the row does list.
+  const auto start = requested_replica % number_of_replicas;
+  for (std::size_t offset = 0; offset < number_of_replicas; ++offset) {
+    const auto replica = (start + offset) % number_of_replicas;
+    if (const auto server = readable(replica); server.has_value()) {
+      decision.replica_position = replica + 1;
+      decision.server_index = server;
+      return decision;
+    }
+  }
+
+  decision.ec = errc::key_value::replica_index_currently_unavailable;
+  return decision;
+}
 
 auto
 effective_nodes(const document_id& id,

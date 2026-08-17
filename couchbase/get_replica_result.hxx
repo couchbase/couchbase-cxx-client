@@ -32,8 +32,8 @@ class manager;
 #endif
 
 /**
- * Represents result of @ref collection#get_any_replica operations, also returned by @ref
- * collection#get_all_replicas.
+ * Represents result of @ref collection#get_any_replica, @ref collection#get_all_replicas and
+ * @ref collection#get_replica operations
  *
  * @since 1.0.0
  * @committed
@@ -48,7 +48,8 @@ public:
   get_replica_result() = default;
 
   /**
-   * Constructs result for get_any_replica operation, or an entry for get_all_replicas operation.
+   * Constructs result for get_any_replica or get_replica operation, or an entry for
+   * get_all_replicas operation.
    *
    * @param cas
    * @param is_replica true if the document originates from replica node

@@ -210,6 +210,7 @@ set(couchbase_cxx_client_FILES
     core/impl/boolean_query.cxx
     core/impl/bucket_manager.cxx
     core/impl/collection.cxx
+    core/operations/document_get_replica.cxx
     core/impl/collection_manager.cxx
     core/impl/common_error_category.cxx
     core/impl/configuration_profiles_registry.cxx
@@ -232,7 +233,6 @@ set(couchbase_cxx_client_FILES
     core/impl/geo_bounding_box_query.cxx
     core/impl/geo_distance_query.cxx
     core/impl/geo_polygon_query.cxx
-    core/impl/get_replica.cxx
     core/impl/internal_date_range_facet_result.cxx
     core/impl/internal_error_context.cxx
     core/impl/internal_numeric_range_facet_result.cxx

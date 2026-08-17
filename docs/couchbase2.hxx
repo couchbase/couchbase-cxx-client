@@ -65,7 +65,8 @@
  *
  * * @ref couchbase::cluster#ping, @ref couchbase::bucket#ping and
  *   @ref couchbase::cluster#diagnostics -- there are no per-node or per-bucket sessions to probe.
- * * @ref couchbase::collection#get_all_replicas, @ref couchbase::collection#get_any_replica,
+ * * @ref couchbase::collection#get_replica, @ref couchbase::collection#get_all_replicas,
+ *   @ref couchbase::collection#get_any_replica,
  *   @ref couchbase::collection#lookup_in_all_replicas and
  *   @ref couchbase::collection#lookup_in_any_replica.
  * * Subdocument operations against the active node, @ref couchbase::collection#lookup_in and
