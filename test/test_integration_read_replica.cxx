@@ -40,12 +40,17 @@
 #include <couchbase/certificate_authenticator.hxx>
 #include <couchbase/get_all_replicas_options.hxx>
 #include <couchbase/get_any_replica_options.hxx>
+#include <couchbase/get_replica_options.hxx>
+#include <couchbase/get_replica_strategy.hxx>
 #include <couchbase/lookup_in_all_replicas_options.hxx>
 #include <couchbase/lookup_in_any_replica_options.hxx>
 #include <couchbase/password_authenticator.hxx>
 #include <couchbase/read_preference.hxx>
 
 #include <tao/json/value.hpp>
+
+#include <algorithm>
+#include <atomic>
 
 static const tao::json::value basic_doc = {
   { "a", 1.0 },
@@ -900,6 +905,198 @@ TEST_CASE("integration: zone-aware read replicas on unbalanced cluster", "[integ
                                   couchbase::read_preference::selected_server_group))
         .get();
     REQUIRE(err.ec() == couchbase::errc::key_value::document_irretrievable);
+  }
+
+  cluster.close().get();
+}
+
+namespace
+{
+class retry_everything : public couchbase::retry_strategy
+{
+public:
+  auto retry_after(const couchbase::retry_request& /* request */,
+                   couchbase::retry_reason /* reason */) -> couchbase::retry_action override
+  {
+    ++consultations_;
+    return couchbase::retry_action{ std::chrono::milliseconds{ 10 } };
+  }
+
+  [[nodiscard]] auto to_string() const -> std::string override
+  {
+    return "retry_everything";
+  }
+
+  [[nodiscard]] auto consultations() const -> std::size_t
+  {
+    return consultations_;
+  }
+
+private:
+  std::atomic<std::size_t> consultations_{ 0 };
+};
+} // namespace
+
+TEST_CASE("integration: get replica by index", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+
+  const auto number_of_replicas = integration.number_of_replicas();
+  if (number_of_replicas == 0) {
+    SKIP("bucket has zero replicas");
+  }
+  if (integration.number_of_nodes() <= number_of_replicas) {
+    SKIP(fmt::format("number of nodes ({}) is less or equal to number of replicas ({})",
+                     integration.number_of_nodes(),
+                     number_of_replicas));
+  }
+
+  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+  const std::string scope_name{ "_default" };
+  const std::string collection_name{ "_default" };
+  const auto key = test::utils::uniq_id("get_replica");
+
+  {
+    const couchbase::core::document_id id{
+      integration.ctx.bucket, scope_name, collection_name, key
+    };
+    couchbase::core::operations::insert_request req{ id, basic_doc_json };
+    req.durability_level = couchbase::durability_level::majority;
+    auto resp = test::utils::execute(integration.cluster, req);
+    REQUIRE_SUCCESS(resp.ctx.ec());
+  }
+
+  auto cluster = integration.public_cluster();
+  auto collection =
+    cluster.bucket(integration.ctx.bucket).scope(scope_name).collection(collection_name);
+
+  // majority durability commits to a quorum, which for two replicas is the
+  // active and one copy, so the other copy may not hold the document when the
+  // insert returns. Every section below reads a named copy and asserts success,
+  // so wait for each addressable one first; a copy that never answers fails
+  // here, where the cause is unambiguous, rather than as a not-found on a
+  // targeted read.
+  for (auto index = std::size_t{ 0 }; index < std::min(number_of_replicas, std::size_t{ 3 });
+       ++index) {
+    const auto replica = static_cast<couchbase::replica_index>(index);
+    REQUIRE(test::utils::wait_until([&collection, &key, replica]() {
+      return !collection.get_replica(key, couchbase::get_replica_strategy::from_index(replica))
+                .get()
+                .first.ec();
+    }));
+  }
+
+  SECTION("the first replica returns the document")
+  {
+    //! [get_replica-from_index]
+    auto [err, result] =
+      collection
+        .get_replica(key,
+                     couchbase::get_replica_strategy::from_index(couchbase::replica_index::first))
+        .get();
+    //! [get_replica-from_index]
+    REQUIRE_SUCCESS(err.ec());
+    REQUIRE(result.is_replica());
+    REQUIRE(result.content_as<smuggling_transcoder>().first == basic_doc_json);
+  }
+
+  SECTION("the callback overload returns the document")
+  {
+    auto barrier =
+      std::make_shared<std::promise<std::pair<couchbase::error, couchbase::get_replica_result>>>();
+    auto future = barrier->get_future();
+    collection.get_replica(
+      key,
+      couchbase::get_replica_strategy::from_index(couchbase::replica_index::first),
+      {},
+      [barrier](auto err, auto result) {
+        barrier->set_value({ std::move(err), std::move(result) });
+      });
+    auto [err, result] = future.get();
+    REQUIRE_SUCCESS(err.ec());
+    REQUIRE(result.is_replica());
+    REQUIRE(result.content_as<smuggling_transcoder>().first == basic_doc_json);
+  }
+
+  SECTION("the second replica returns the document")
+  {
+    if (number_of_replicas < 2) {
+      SKIP("bucket has fewer than two replicas");
+    }
+    auto [err, result] =
+      collection
+        .get_replica(key,
+                     couchbase::get_replica_strategy::from_index(couchbase::replica_index::second))
+        .get();
+    REQUIRE_SUCCESS(err.ec());
+    REQUIRE(result.is_replica());
+    REQUIRE(result.content_as<smuggling_transcoder>().first == basic_doc_json);
+  }
+
+  SECTION("an index the bucket does not have fails without a round trip")
+  {
+    if (number_of_replicas >= 3) {
+      SKIP("bucket has every replica the API can address");
+    }
+    const auto beyond = static_cast<couchbase::replica_index>(number_of_replicas);
+
+    auto [err, result] =
+      collection.get_replica(key, couchbase::get_replica_strategy::from_index(beyond)).get();
+    REQUIRE(err.ec() == couchbase::errc::key_value::replica_index_out_of_bounds);
+    REQUIRE_FALSE(err.node_id());
+  }
+
+  SECTION("wrap resolves an index the bucket does not have")
+  {
+    if (number_of_replicas >= 3) {
+      SKIP("bucket has every replica the API can address");
+    }
+    const auto beyond = static_cast<couchbase::replica_index>(number_of_replicas);
+
+    auto [err, result] =
+      collection
+        .get_replica(key,
+                     couchbase::get_replica_strategy::from_index(
+                       beyond, couchbase::get_replica_strategy_from_index_options{}.wrap(true)))
+        .get();
+    REQUIRE_SUCCESS(err.ec());
+    REQUIRE(result.is_replica());
+    REQUIRE(result.content_as<smuggling_transcoder>().first == basic_doc_json);
+  }
+
+  SECTION("a terminal index error is returned without consulting the retry strategy")
+  {
+    if (number_of_replicas >= 3) {
+      SKIP("bucket has every replica the API can address");
+    }
+    const auto beyond = static_cast<couchbase::replica_index>(number_of_replicas);
+    auto strategy = std::make_shared<retry_everything>();
+
+    auto [err, result] =
+      collection
+        .get_replica(key,
+                     couchbase::get_replica_strategy::from_index(beyond),
+                     couchbase::get_replica_options{}.retry_strategy(strategy).timeout(
+                       std::chrono::seconds{ 2 }))
+        .get();
+    // retry_reason::do_not_retry is not in always_retry(), so routing the terminal
+    // error through the retry orchestrator would still ask the strategy, and this
+    // one always says yes: the operation would then retry until it timed out.
+    REQUIRE(strategy->consultations() == 0);
+    REQUIRE(err.ec() == couchbase::errc::key_value::replica_index_out_of_bounds);
+  }
+
+  SECTION("a missing document keeps document_not_found as the cause")
+  {
+    auto [err, result] =
+      collection
+        .get_replica(test::utils::uniq_id("missing_get_replica"),
+                     couchbase::get_replica_strategy::from_index(couchbase::replica_index::first))
+        .get();
+    REQUIRE(err.ec() == couchbase::errc::key_value::document_not_found_on_replica);
+    REQUIRE(err.cause().has_value());
+    REQUIRE(err.cause()->ec() == couchbase::errc::key_value::document_not_found);
   }
 
   cluster.close().get();

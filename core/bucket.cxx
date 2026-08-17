@@ -277,8 +277,18 @@ public:
 
     req->dispatched_time_ = std::chrono::steady_clock::now();
 
-    auto session = route_request(req);
-    if (!session || !session->has_config()) {
+    auto routed = route_request(req);
+    if (!routed.session || !routed.session->has_config()) {
+      if (!routed.connect_pending) {
+        // Nothing was started for this node, and short of bucket close only a
+        // bootstrap completion drains the deferred queue, so parking would hold
+        // the request until its deadline. Retry, which re-routes against the
+        // current configuration.
+        if (backoff_and_retry(req, retry_reason::node_not_available)) {
+          return {};
+        }
+        return errc::common::service_not_available;
+      }
       return defer_command([self = shared_from_this(), req](std::error_code ec) {
         if (ec == errc::common::request_canceled) {
           return req->cancel(ec);
@@ -288,6 +298,7 @@ public:
         }
       });
     }
+    auto session = routed.session;
     if (session->is_stopped()) {
       if (backoff_and_retry(req, retry_reason::node_not_available)) {
         return {};
@@ -313,8 +324,19 @@ public:
 
     CB_LOG_DEBUG("request being re-queued. opaque={}, opcode={}", req->opaque_, req->command_);
 
-    auto session = route_request(req);
-    if (!session || !session->has_config()) {
+    auto routed = route_request(req);
+    if (!routed.session || !routed.session->has_config()) {
+      if (!routed.connect_pending) {
+        // As in direct_dispatch(): no bootstrap is pending for this node, so a
+        // parked request would wait for its deadline.
+        if (backoff_and_retry(req, retry_reason::node_not_available)) {
+          return {};
+        }
+        // A re-queue is driven by a backoff timer that ignores what this
+        // returns, so the request has to be completed here.
+        handle_error(errc::common::service_not_available);
+        return errc::common::service_not_available;
+      }
       return defer_command([self = shared_from_this(), req, handle_error](std::error_code ec) {
         if (ec == errc::common::request_canceled) {
           return req->cancel(ec);
@@ -324,6 +346,7 @@ public:
         }
       });
     }
+    auto session = routed.session;
     if (session->is_stopped()) {
       if (backoff_and_retry(req, retry_reason::node_not_available)) {
         return {};
@@ -397,8 +420,22 @@ public:
     return true;
   }
 
-  auto route_request(const std::shared_ptr<mcbp::queue_request>& req)
-    -> std::optional<io::mcbp_session>
+  struct routed_session {
+    std::optional<io::mcbp_session> session{};
+
+    /**
+     * False when no session exists and none was started, so nothing will drain
+     * the deferred queue for a request parked behind it. The caller must retry
+     * instead of parking; see connect_session().
+     *
+     * The default says "nothing pending" because a default-constructed value is
+     * what route_request() returns when the configuration names no server for
+     * the vbucket at all: a request parked on that has nothing to wait for.
+     */
+    bool connect_pending{ false };
+  };
+
+  auto route_request(const std::shared_ptr<mcbp::queue_request>& req) -> routed_session
   {
     if (req->key_.empty()) {
       if (auto server = server_by_vbucket(req->vbucket_, req->replica_index_); server) {
@@ -408,7 +445,7 @@ public:
       req->vbucket_ = partition;
       return find_or_connect_session_by_index(server.value());
     }
-    return std::nullopt;
+    return {};
   }
 
   [[nodiscard]] auto server_by_vbucket(std::uint16_t vbucket, std::size_t node_index)
@@ -431,6 +468,12 @@ public:
     return { 0, std::nullopt };
   }
 
+  [[nodiscard]] auto config_snapshot() const -> std::shared_ptr<topology::configuration>
+  {
+    const std::scoped_lock lock(config_mutex_);
+    return config_;
+  }
+
   auto config_rev() const -> std::string
   {
     const std::scoped_lock lock(config_mutex_);
@@ -450,18 +493,32 @@ public:
     return { 0, std::nullopt };
   }
 
-  void connect_session(std::size_t index)
+  /**
+   * @return true when a parked command will be woken: either a bootstrap is now
+   * pending for this index, and its completion drains the deferred queue, or the
+   * bucket is closed and defer_command() completes the command with a
+   * cancellation. False when nothing was started and nothing will wake it, so
+   * the caller must retry rather than park -- short of bucket close, only a
+   * bootstrap completion drains the deferred queue.
+   */
+  [[nodiscard]] auto connect_session(std::size_t index) -> bool
   {
     const std::scoped_lock lock(config_mutex_, sessions_mutex_);
     if (!config_) {
-      return;
+      return false;
     }
     if (closed_) {
       // Do not connect a session into a bucket that is being torn down: close() has already stopped
       // sessions_ and will not run again, so a session added here would never be stopped and would
       // strand the whole bucket/session graph as a pure cycle (see the closed_ guard in bootstrap()
       // and update_config()).
-      return;
+      return true;
+    }
+
+    if (index >= config_->nodes.size()) {
+      // The index was resolved against an earlier configuration and the node it
+      // named is no longer in the topology, so there is nothing to connect to.
+      return false;
     }
 
     const auto& node = config_->nodes[index];
@@ -470,7 +527,9 @@ public:
     auto port = node.port_or(
       origin_.options().network, service_type::key_value, origin_.options().enable_tls, 0);
     if (port == 0) {
-      return;
+      // The node is in the topology but advertises no key-value port, so there
+      // is no session to open for it either.
+      return false;
     }
 
     const couchbase::core::origin origin(origin_.credentials(), hostname, port, origin_.options());
@@ -502,6 +561,7 @@ public:
       },
       true);
     sessions_.insert_or_assign(index, std::move(session));
+    return true;
   }
 
   void restart_sessions()
@@ -1126,14 +1186,14 @@ public:
     return {};
   }
 
-  [[nodiscard]] auto find_or_connect_session_by_index(std::size_t index)
-    -> std::optional<io::mcbp_session>
+  [[nodiscard]] auto find_or_connect_session_by_index(std::size_t index) -> routed_session
   {
     if (auto session = find_session_by_index(index); session) {
-      return session;
+      // A session that exists but has not finished bootstrapping drains the
+      // deferred queue when it does, so parking behind it is safe.
+      return { session, true };
     }
-    connect_session(index);
-    return {};
+    return { {}, connect_session(index) };
   }
 
   [[nodiscard]] auto next_session_index() -> std::size_t
@@ -1483,6 +1543,12 @@ bucket::map_id(const document_id& id) -> std::pair<std::uint16_t, std::optional<
 }
 
 auto
+bucket::config_snapshot() const -> std::shared_ptr<topology::configuration>
+{
+  return impl_->config_snapshot();
+}
+
+auto
 bucket::config_rev() const -> std::string
 {
   return impl_->config_rev();
@@ -1522,8 +1588,8 @@ bucket::direct_re_queue(const std::shared_ptr<mcbp::queue_request>& req, bool is
   return impl_->direct_re_queue(req, is_retry);
 }
 
-void
-bucket::connect_session(std::size_t index)
+auto
+bucket::connect_session(std::size_t index) -> bool
 {
   return impl_->connect_session(index);
 }

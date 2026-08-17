@@ -646,6 +646,37 @@ enum class key_value {
    */
   // KV Code: 0xa7
   range_scan_completed = 134,
+
+  /**
+   * The document was not found on the replica that @ref collection#get_replica() read from. This is
+   * the code @ref error::ec() reports; a caller that wants to treat the general condition uniformly
+   * reads @ref error::cause(), which carries @ref errc::key_value::document_not_found.
+   *
+   * @since 1.5.0
+   * @volatile
+   */
+  document_not_found_on_replica = 135,
+
+  /**
+   * The requested index is past the replica chain the vbucket map lists for this document's
+   * vbucket, so no such replica exists to read. Reported without a network round trip. Use
+   * @ref get_replica_strategy_from_index_options#wrap() to resolve to an available replica
+   * instead.
+   *
+   * @since 1.5.0
+   * @volatile
+   */
+  replica_index_out_of_bounds = 136,
+
+  /**
+   * The replica at the requested index has no copy assigned to a node right now, which a rebalance
+   * eventually resolves. Use @ref get_replica_strategy_from_index_options#wrap() to read from
+   * another replica instead.
+   *
+   * @since 1.5.0
+   * @volatile
+   */
+  replica_index_currently_unavailable = 137,
 };
 
 /**
