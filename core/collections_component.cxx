@@ -475,6 +475,12 @@ collection_id_cache_entry_impl::refresh_collection_id(
   if (op) {
     return {};
   }
+  // The request was queued above so that the resolution could re-dispatch it. No
+  // resolution was started, so nothing will ever drain that queue: take the
+  // request back out and let the caller complete it with this error. Leaving it
+  // queued strands it behind the cache entry, and its callback holds the agent
+  // and the cluster graph behind it.
+  static_cast<void>(queue_->remove(req));
   return op.error();
 }
 
