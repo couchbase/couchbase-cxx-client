@@ -104,3 +104,28 @@ TEST_CASE("unit: range scan load balancer", "[unit]")
     REQUIRE_FALSE(balancer.select_vbucket().has_value());
   }
 }
+
+TEST_CASE("unit: range scan load balancer with a vbucket that has no active copy", "[unit]")
+{
+  // A row that names no node at all is left out rather than read past its end,
+  // and no node is invented to hold it. range_scan_orchestrator refuses a map
+  // in this state, so the vbucket cannot go missing from a scan that runs.
+  couchbase::core::range_scan_load_balancer balancer{ {
+    { 0 },
+    {},
+    { 1 },
+  } };
+
+  std::set<std::uint16_t> selection{};
+  for (auto i = 0; i < 2; i++) {
+    auto v = balancer.select_vbucket();
+
+    REQUIRE(v.has_value());
+
+    auto [_, inserted] = selection.insert(v.value());
+    REQUIRE(inserted);
+  }
+
+  REQUIRE(selection == std::set<std::uint16_t>{ 0, 2 });
+  REQUIRE_FALSE(balancer.select_vbucket().has_value());
+}
