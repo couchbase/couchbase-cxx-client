@@ -348,6 +348,14 @@ flag it when the answer is "nothing":
   not 100), because the file was never compiled, or because the claimed mechanism
   did not occur when run. A finding that names a rule should name where the rule is
   configured.
+- **A path that appears only as a deletion is usually a rename.** This repository
+  moves test files in bulk, so a diff frequently shows the old location removed
+  while the addition sits in a hunk the review did not read. Before reporting that
+  a build file names a source that does not exist, check the path against the
+  branch rather than against the diff. Eight findings in one series of pull
+  requests claimed a CMake target referenced missing framework sources; the files
+  were present, the old directory was gone, and every commit configured, built and
+  ran its tests.
 - **State a concrete failure**: the input or configuration, and what goes wrong.
   "This could be a problem" cannot be actioned or refuted. A finding that predicts
   a specific behaviour is valuable even when it turns out to be wrong, because it
