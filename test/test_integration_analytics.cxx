@@ -39,9 +39,9 @@
 
 TEST_CASE("integration: analytics query", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  if (integration.ctx.deployment == test::utils::deployment_type::elixir) {
+  if (integration.ctx.deployment == couchbase::test::deployment_type::elixir) {
     SKIP("elixir deployment does not support analytics");
   }
 
@@ -49,42 +49,42 @@ TEST_CASE("integration: analytics query", "[integration]")
     SKIP("cluster does not have analytics service");
   }
 
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
 
-  auto dataset_name = test::utils::uniq_id("dataset");
+  auto dataset_name = couchbase::test::uniq_id("dataset");
 
   {
     couchbase::core::operations::management::analytics_dataset_create_request req{};
     req.dataset_name = dataset_name;
     req.bucket_name = integration.ctx.bucket;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
   }
 
   {
     couchbase::core::operations::management::analytics_link_connect_request req{};
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
   }
 
-  auto key = test::utils::uniq_id("key");
-  auto test_value = test::utils::uniq_id("value");
+  auto key = couchbase::test::uniq_id("key");
+  auto test_value = couchbase::test::uniq_id("value");
   auto value = couchbase::core::utils::json::generate({ { "testkey", test_value } });
   {
     auto id = couchbase::core::document_id(integration.ctx.bucket, "_default", "_default", key);
     couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::to_binary(value) };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
   SECTION("simple query")
   {
     couchbase::core::operations::analytics_response resp{};
-    REQUIRE(test::utils::wait_until([&]() {
+    REQUIRE(couchbase::test::wait_until([&]() {
       couchbase::core::operations::analytics_request req{};
       req.statement = fmt::format(
         R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = "{}")", dataset_name, test_value);
-      resp = test::utils::execute(integration.cluster, req);
+      resp = couchbase::test::execute(integration.cluster, req);
       return resp.rows.size() == 1;
     }));
     REQUIRE_SUCCESS(resp.ctx.ec);
@@ -98,12 +98,12 @@ TEST_CASE("integration: analytics query", "[integration]")
   SECTION("positional params")
   {
     couchbase::core::operations::analytics_response resp{};
-    REQUIRE(test::utils::wait_until([&]() {
+    REQUIRE(couchbase::test::wait_until([&]() {
       couchbase::core::operations::analytics_request req{};
       req.statement =
         fmt::format(R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = ?)", dataset_name);
       req.positional_parameters.emplace_back(couchbase::core::utils::json::generate(test_value));
-      resp = test::utils::execute(integration.cluster, req);
+      resp = couchbase::test::execute(integration.cluster, req);
       return resp.rows.size() == 1;
     }));
     REQUIRE_SUCCESS(resp.ctx.ec);
@@ -113,13 +113,13 @@ TEST_CASE("integration: analytics query", "[integration]")
   SECTION("named params")
   {
     couchbase::core::operations::analytics_response resp{};
-    REQUIRE(test::utils::wait_until([&]() {
+    REQUIRE(couchbase::test::wait_until([&]() {
       couchbase::core::operations::analytics_request req{};
       req.statement =
         fmt::format(R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = $testkey)", dataset_name);
       req.named_parameters["testkey"] =
         couchbase::core::json_string(couchbase::core::utils::json::generate(test_value));
-      resp = test::utils::execute(integration.cluster, req);
+      resp = couchbase::test::execute(integration.cluster, req);
       return resp.rows.size() == 1;
     }));
     REQUIRE_SUCCESS(resp.ctx.ec);
@@ -129,13 +129,13 @@ TEST_CASE("integration: analytics query", "[integration]")
   SECTION("named params preformatted")
   {
     couchbase::core::operations::analytics_response resp{};
-    REQUIRE(test::utils::wait_until([&]() {
+    REQUIRE(couchbase::test::wait_until([&]() {
       couchbase::core::operations::analytics_request req{};
       req.statement =
         fmt::format(R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = $testkey)", dataset_name);
       req.named_parameters["$testkey"] =
         couchbase::core::json_string(couchbase::core::utils::json::generate(test_value));
-      resp = test::utils::execute(integration.cluster, req);
+      resp = couchbase::test::execute(integration.cluster, req);
       return resp.rows.size() == 1;
     }));
     REQUIRE_SUCCESS(resp.ctx.ec);
@@ -145,13 +145,13 @@ TEST_CASE("integration: analytics query", "[integration]")
   SECTION("raw")
   {
     couchbase::core::operations::analytics_response resp{};
-    REQUIRE(test::utils::wait_until([&]() {
+    REQUIRE(couchbase::test::wait_until([&]() {
       couchbase::core::operations::analytics_request req{};
       req.statement =
         fmt::format(R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = $testkey)", dataset_name);
       req.raw["$testkey"] =
         couchbase::core::json_string(couchbase::core::utils::json::generate(test_value));
-      resp = test::utils::execute(integration.cluster, req);
+      resp = couchbase::test::execute(integration.cluster, req);
       return resp.rows.size() == 1;
     }));
     REQUIRE_SUCCESS(resp.ctx.ec);
@@ -161,24 +161,24 @@ TEST_CASE("integration: analytics query", "[integration]")
   SECTION("consistency")
   {
     couchbase::core::operations::analytics_response resp{};
-    CHECK(test::utils::wait_until([&]() {
+    CHECK(couchbase::test::wait_until([&]() {
       /*
        * In consistency test, always do fresh mutation
        */
-      test_value = test::utils::uniq_id("value");
+      test_value = couchbase::test::uniq_id("value");
       value = couchbase::core::utils::json::generate({ { "testkey", test_value } });
       {
         auto id = couchbase::core::document_id(integration.ctx.bucket, "_default", "_default", key);
         couchbase::core::operations::upsert_request req{ id,
                                                          couchbase::core::utils::to_binary(value) };
-        REQUIRE_SUCCESS(test::utils::execute(integration.cluster, req).ctx.ec());
+        REQUIRE_SUCCESS(couchbase::test::execute(integration.cluster, req).ctx.ec());
       }
 
       couchbase::core::operations::analytics_request req{};
       req.statement = fmt::format(
         R"(SELECT testkey FROM `Default`.`{}` WHERE testkey = "{}")", dataset_name, test_value);
       req.scan_consistency = couchbase::core::analytics_scan_consistency::request_plus;
-      resp = test::utils::execute(integration.cluster, req);
+      resp = couchbase::test::execute(integration.cluster, req);
       /* Analytics might give us code 23027, ignore it here
        *
        * "errors": [{"code": 23027, "msg": "Bucket default on link Default.Local is not connected"}
@@ -197,7 +197,7 @@ TEST_CASE("integration: analytics query", "[integration]")
     couchbase::core::operations::analytics_request req{};
     req.statement = fmt::format("DROP DATASET Default.`{}`", dataset_name);
     req.readonly = true;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE(resp.ctx.ec == couchbase::errc::common::internal_server_failure);
     REQUIRE(resp.meta.status ==
             couchbase::core::operations::analytics_response::analytics_status::fatal);
@@ -205,14 +205,14 @@ TEST_CASE("integration: analytics query", "[integration]")
 
   SECTION("analytics management dataverse create with slash path")
   {
-    std::string custom_dataverse = fmt::format("Default/{}", test::utils::uniq_id("dataverse"));
-    std::string custom_dataset = test::utils::uniq_id("dataset");
+    std::string custom_dataverse = fmt::format("Default/{}", couchbase::test::uniq_id("dataverse"));
+    std::string custom_dataset = couchbase::test::uniq_id("dataset");
 
     {
       couchbase::core::operations::management::analytics_dataverse_create_request req{};
       req.dataverse_name = custom_dataverse;
       req.ignore_if_exists = true;
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec);
     }
 
@@ -222,7 +222,7 @@ TEST_CASE("integration: analytics query", "[integration]")
       req.dataset_name = custom_dataset;
       req.bucket_name = integration.ctx.bucket;
       req.ignore_if_exists = true;
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec);
     }
 
@@ -231,7 +231,7 @@ TEST_CASE("integration: analytics query", "[integration]")
       req.dataverse_name = custom_dataverse;
       req.dataset_name = custom_dataset;
       req.ignore_if_does_not_exist = true;
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec);
     }
 
@@ -239,7 +239,7 @@ TEST_CASE("integration: analytics query", "[integration]")
       couchbase::core::operations::management::analytics_dataverse_drop_request req{};
       req.dataverse_name = custom_dataverse;
       req.ignore_if_does_not_exist = true;
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec);
     }
   }
@@ -247,15 +247,15 @@ TEST_CASE("integration: analytics query", "[integration]")
   {
     couchbase::core::operations::management::analytics_dataset_drop_request req{};
     req.dataset_name = dataset_name;
-    test::utils::execute(integration.cluster, req);
+    couchbase::test::execute(integration.cluster, req);
   }
 }
 
 TEST_CASE("integration: analytics scope query", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  if (integration.ctx.deployment == test::utils::deployment_type::elixir) {
+  if (integration.ctx.deployment == couchbase::test::deployment_type::elixir) {
     SKIP("elixir deployment does not support analytics");
   }
 
@@ -266,17 +266,17 @@ TEST_CASE("integration: analytics scope query", "[integration]")
     SKIP("cluster does not support collections");
   }
 
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
 
-  auto scope_name = test::utils::uniq_id("scope");
-  auto collection_name = test::utils::uniq_id("collection");
+  auto scope_name = couchbase::test::uniq_id("scope");
+  auto collection_name = couchbase::test::uniq_id("collection");
 
   {
     couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket,
                                                                        scope_name };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
-    auto created = test::utils::wait_until_collection_manifest_propagated(
+    auto created = couchbase::test::wait_until_collection_manifest_propagated(
       integration.cluster, integration.ctx.bucket, resp.uid);
     REQUIRE(created);
   }
@@ -285,44 +285,44 @@ TEST_CASE("integration: analytics scope query", "[integration]")
     couchbase::core::operations::management::collection_create_request req{ integration.ctx.bucket,
                                                                             scope_name,
                                                                             collection_name };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
-    auto created = test::utils::wait_until_collection_manifest_propagated(
+    auto created = couchbase::test::wait_until_collection_manifest_propagated(
       integration.cluster, integration.ctx.bucket, resp.uid);
     REQUIRE(created);
   }
 
-  CHECK(test::utils::wait_until(
+  CHECK(couchbase::test::wait_until(
     [&]() {
       couchbase::core::operations::analytics_request req{};
       req.statement = fmt::format("ALTER COLLECTION `{}`.`{}`.`{}` ENABLE ANALYTICS",
                                   integration.ctx.bucket,
                                   scope_name,
                                   collection_name);
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       return !resp.ctx.ec;
     },
     std::chrono::minutes{ 5 }));
 
-  auto key = test::utils::uniq_id("key");
-  auto test_value = test::utils::uniq_id("value");
+  auto key = couchbase::test::uniq_id("key");
+  auto test_value = couchbase::test::uniq_id("value");
   auto value = couchbase::core::utils::json::generate({ { "testkey", test_value } });
   {
     auto id =
       couchbase::core::document_id(integration.ctx.bucket, scope_name, collection_name, key);
     couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::to_binary(value) };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
   couchbase::core::operations::analytics_response resp{};
-  REQUIRE(test::utils::wait_until([&]() {
+  REQUIRE(couchbase::test::wait_until([&]() {
     couchbase::core::operations::analytics_request req{};
     req.statement =
       fmt::format(R"(SELECT testkey FROM `{}` WHERE testkey = "{}")", collection_name, test_value);
     req.bucket_name = integration.ctx.bucket;
     req.scope_name = scope_name;
-    resp = test::utils::execute(integration.cluster, req);
+    resp = couchbase::test::execute(integration.cluster, req);
     return resp.rows.size() == 1;
   }));
   REQUIRE_SUCCESS(resp.ctx.ec);
@@ -331,7 +331,7 @@ TEST_CASE("integration: analytics scope query", "[integration]")
   {
     couchbase::core::operations::management::scope_drop_request req{ integration.ctx.bucket,
                                                                      scope_name };
-    test::utils::execute(integration.cluster, req);
+    couchbase::test::execute(integration.cluster, req);
   }
 }
 
@@ -380,9 +380,9 @@ TEST_CASE("unit: analytics query", "[unit]")
 
 TEST_CASE("integration: public API analytics query", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  if (integration.ctx.deployment == test::utils::deployment_type::elixir) {
+  if (integration.ctx.deployment == couchbase::test::deployment_type::elixir) {
     SKIP("elixir deployment does not support analytics");
   }
 
@@ -393,25 +393,25 @@ TEST_CASE("integration: public API analytics query", "[integration]")
   auto cluster = integration.public_cluster();
   auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
 
-  auto dataset_name = test::utils::uniq_id("dataset");
+  auto dataset_name = couchbase::test::uniq_id("dataset");
 
   {
     couchbase::core::operations::management::analytics_dataset_create_request req{};
     req.dataset_name = dataset_name;
     req.bucket_name = integration.ctx.bucket;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
   }
 
   {
     couchbase::core::operations::management::analytics_link_connect_request req{};
     req.force = true;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
   }
 
-  auto key = test::utils::uniq_id("key");
-  auto test_value = test::utils::uniq_id("value");
+  auto key = couchbase::test::uniq_id("key");
+  auto test_value = couchbase::test::uniq_id("value");
   tao::json::value document = {
     { "testkey", test_value },
   };
@@ -424,7 +424,7 @@ TEST_CASE("integration: public API analytics query", "[integration]")
   {
     couchbase::analytics_result resp{};
     couchbase::error error{};
-    CHECK(test::utils::wait_until([&, cluster = cluster]() {
+    CHECK(couchbase::test::wait_until([&, cluster = cluster]() {
       std::tie(error, resp) =
         cluster
           .analytics_query(fmt::format(
@@ -445,7 +445,7 @@ TEST_CASE("integration: public API analytics query", "[integration]")
   {
     couchbase::analytics_result resp{};
     couchbase::error error{};
-    CHECK(test::utils::wait_until([&, cluster = cluster]() {
+    CHECK(couchbase::test::wait_until([&, cluster = cluster]() {
       std::tie(error, resp) =
         cluster
           .analytics_query(
@@ -464,7 +464,7 @@ TEST_CASE("integration: public API analytics query", "[integration]")
   {
     couchbase::analytics_result resp{};
     couchbase::error error{};
-    CHECK(test::utils::wait_until([&, cluster = cluster]() {
+    CHECK(couchbase::test::wait_until([&, cluster = cluster]() {
       std::tie(error, resp) =
         cluster
           .analytics_query(
@@ -484,7 +484,7 @@ TEST_CASE("integration: public API analytics query", "[integration]")
   {
     couchbase::analytics_result resp{};
     couchbase::error error{};
-    CHECK(test::utils::wait_until([&, cluster = cluster]() {
+    CHECK(couchbase::test::wait_until([&, cluster = cluster]() {
       std::tie(error, resp) =
         cluster
           .analytics_query(
@@ -505,7 +505,7 @@ TEST_CASE("integration: public API analytics query", "[integration]")
   {
     couchbase::analytics_result resp{};
     couchbase::error error{};
-    CHECK(test::utils::wait_until([&, cluster = cluster]() {
+    CHECK(couchbase::test::wait_until([&, cluster = cluster]() {
       std::tie(error, resp) =
         cluster
           .analytics_query(
@@ -525,11 +525,11 @@ TEST_CASE("integration: public API analytics query", "[integration]")
   {
     couchbase::analytics_result resp{};
     couchbase::error error{};
-    CHECK(test::utils::wait_until([&, cluster = cluster]() {
+    CHECK(couchbase::test::wait_until([&, cluster = cluster]() {
       /*
        * In consistency test, always do fresh mutation
        */
-      test_value = test::utils::uniq_id("value");
+      test_value = couchbase::test::uniq_id("value");
       document = {
         { "testkey", test_value },
       };
@@ -579,15 +579,15 @@ TEST_CASE("integration: public API analytics query", "[integration]")
   {
     couchbase::core::operations::management::analytics_dataset_drop_request req{};
     req.dataset_name = dataset_name;
-    test::utils::execute(integration.cluster, req);
+    couchbase::test::execute(integration.cluster, req);
   }
 }
 
 TEST_CASE("integration: public API analytics scope query", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  if (integration.ctx.deployment == test::utils::deployment_type::elixir) {
+  if (integration.ctx.deployment == couchbase::test::deployment_type::elixir) {
     SKIP("elixir deployment does not support analytics");
   }
 
@@ -601,15 +601,15 @@ TEST_CASE("integration: public API analytics scope query", "[integration]")
   auto cluster = integration.public_cluster();
   auto bucket = cluster.bucket(integration.ctx.bucket);
 
-  auto scope_name = test::utils::uniq_id("scope");
-  auto collection_name = test::utils::uniq_id("collection");
+  auto scope_name = couchbase::test::uniq_id("scope");
+  auto collection_name = couchbase::test::uniq_id("collection");
 
   {
     const couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket,
                                                                              scope_name };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
-    auto created = test::utils::wait_until_collection_manifest_propagated(
+    auto created = couchbase::test::wait_until_collection_manifest_propagated(
       integration.cluster, integration.ctx.bucket, resp.uid);
     REQUIRE(created);
   }
@@ -618,14 +618,14 @@ TEST_CASE("integration: public API analytics scope query", "[integration]")
     const couchbase::core::operations::management::collection_create_request req{
       integration.ctx.bucket, scope_name, collection_name
     };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
-    auto created = test::utils::wait_until_collection_manifest_propagated(
+    auto created = couchbase::test::wait_until_collection_manifest_propagated(
       integration.cluster, integration.ctx.bucket, resp.uid);
     REQUIRE(created);
   }
 
-  CHECK(test::utils::wait_until(
+  CHECK(couchbase::test::wait_until(
     [&, cluster = cluster]() {
       auto [error, resp] =
         cluster
@@ -641,8 +641,8 @@ TEST_CASE("integration: public API analytics scope query", "[integration]")
   auto scope = bucket.scope(scope_name);
   auto collection = scope.collection(collection_name);
 
-  auto key = test::utils::uniq_id("key");
-  auto test_value = test::utils::uniq_id("value");
+  auto key = couchbase::test::uniq_id("key");
+  auto test_value = couchbase::test::uniq_id("value");
   const tao::json::value document = {
     { "testkey", test_value },
   };
@@ -653,7 +653,7 @@ TEST_CASE("integration: public API analytics scope query", "[integration]")
 
   couchbase::analytics_result resp{};
   couchbase::error error{};
-  CHECK(test::utils::wait_until([&]() {
+  CHECK(couchbase::test::wait_until([&]() {
     std::tie(error, resp) =
       scope
         .analytics_query(fmt::format(
@@ -670,14 +670,14 @@ TEST_CASE("integration: public API analytics scope query", "[integration]")
   {
     const couchbase::core::operations::management::scope_drop_request req{ integration.ctx.bucket,
                                                                            scope_name };
-    test::utils::execute(integration.cluster, req);
+    couchbase::test::execute(integration.cluster, req);
   }
 }
 
 TEST_CASE("integration: public API analytics query using both named and positional parameters",
           "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.has_analytics_service()) {
     SKIP("cluster does not have analytics service");
@@ -718,9 +718,9 @@ streaming_analytics_statement(std::size_t count) -> std::string
 
 TEST_CASE("integration: streaming analytics yields rows lazily", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  if (integration.ctx.deployment == test::utils::deployment_type::elixir) {
+  if (integration.ctx.deployment == couchbase::test::deployment_type::elixir) {
     SKIP("elixir deployment does not support analytics");
   }
   if (!integration.has_analytics_service()) {
@@ -752,9 +752,9 @@ TEST_CASE("integration: streaming analytics yields rows lazily", "[integration]"
 
 TEST_CASE("integration: streaming analytics matches buffered analytics", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  if (integration.ctx.deployment == test::utils::deployment_type::elixir) {
+  if (integration.ctx.deployment == couchbase::test::deployment_type::elixir) {
     SKIP("elixir deployment does not support analytics");
   }
   if (!integration.has_analytics_service()) {
@@ -806,8 +806,8 @@ TEST_CASE("integration: streaming analytics matches buffered analytics", "[integ
 TEST_CASE("integration: cancelling a streaming analytics query mid-stream is clean",
           "[integration]")
 {
-  test::utils::integration_test_guard integration;
-  if (integration.ctx.deployment == test::utils::deployment_type::elixir) {
+  couchbase::test::integration_test_guard integration;
+  if (integration.ctx.deployment == couchbase::test::deployment_type::elixir) {
     SKIP("elixir deployment does not support analytics");
   }
   if (!integration.has_analytics_service()) {
@@ -834,8 +834,8 @@ TEST_CASE(
   "integration: cancelling a streaming analytics query while a next() is in flight is clean",
   "[integration]")
 {
-  test::utils::integration_test_guard integration;
-  if (integration.ctx.deployment == test::utils::deployment_type::elixir) {
+  couchbase::test::integration_test_guard integration;
+  if (integration.ctx.deployment == couchbase::test::deployment_type::elixir) {
     SKIP("elixir deployment does not support analytics");
   }
   if (!integration.has_analytics_service()) {
@@ -863,8 +863,8 @@ TEST_CASE(
 
 TEST_CASE("integration: streaming analytics surfaces a query error", "[integration]")
 {
-  test::utils::integration_test_guard integration;
-  if (integration.ctx.deployment == test::utils::deployment_type::elixir) {
+  couchbase::test::integration_test_guard integration;
+  if (integration.ctx.deployment == couchbase::test::deployment_type::elixir) {
     SKIP("elixir deployment does not support analytics");
   }
   if (!integration.has_analytics_service()) {
@@ -900,16 +900,16 @@ TEST_CASE("integration: streaming analytics surfaces a query error", "[integrati
 
 TEST_CASE("integration: analytics management identifier encoding", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  if (integration.ctx.deployment == test::utils::deployment_type::elixir) {
+  if (integration.ctx.deployment == couchbase::test::deployment_type::elixir) {
     SKIP("elixir deployment does not support analytics");
   }
   if (!integration.has_analytics_service()) {
     SKIP("cluster does not have analytics service");
   }
 
-  const auto prefix = test::utils::uniq_id("enc");
+  const auto prefix = couchbase::test::uniq_id("enc");
 
   // A busy Analytics service answers a well-formed DDL request with HTTP 503 "Analytics Service is
   // temporarily unavailable", which recovers within seconds. Only that status is retried: any other
@@ -918,9 +918,9 @@ TEST_CASE("integration: analytics management identifier encoding", "[integration
   auto execute_ddl = [&integration](auto request) -> std::error_code {
     constexpr std::uint32_t service_unavailable{ 503 };
     std::error_code ec{};
-    test::utils::wait_until(
+    couchbase::test::wait_until(
       [&] {
-        auto resp = test::utils::execute(integration.cluster, request);
+        auto resp = couchbase::test::execute(integration.cluster, request);
         ec = resp.ctx.ec;
         return !ec || resp.ctx.http_status != service_unavailable;
       },
@@ -934,7 +934,7 @@ TEST_CASE("integration: analytics management identifier encoding", "[integration
   auto stored_dataverses = [&integration]() -> std::vector<std::string> {
     couchbase::core::operations::analytics_request req{};
     req.statement = "SELECT VALUE DataverseName FROM Metadata.`Dataverse`";
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
     std::vector<std::string> names;
     names.reserve(resp.rows.size());
@@ -981,7 +981,7 @@ TEST_CASE("integration: analytics management identifier encoding", "[integration
     // Each name must come back byte-for-byte. If the escaping regressed, the identifier would have
     // been cut short and the stored name would be a truncated prefix instead.
     for (const auto& name : names) {
-      REQUIRE(test::utils::wait_until([&]() {
+      REQUIRE(couchbase::test::wait_until([&]() {
         auto stored = stored_dataverses();
         return std::find(stored.begin(), stored.end(), name) != stored.end();
       }));
@@ -1023,7 +1023,7 @@ TEST_CASE("integration: analytics management identifier encoding", "[integration
     REQUIRE_SUCCESS(create_dataverse(compound));
 
     // Analytics stores a two-part dataverse under the literal "first/second" name.
-    REQUIRE(test::utils::wait_until([&]() {
+    REQUIRE(couchbase::test::wait_until([&]() {
       auto stored = stored_dataverses();
       return std::find(stored.begin(), stored.end(), compound) != stored.end();
     }));
@@ -1121,10 +1121,10 @@ TEST_CASE("integration: analytics management identifier encoding", "[integration
       REQUIRE_SUCCESS(execute_ddl(req));
     }
 
-    REQUIRE(test::utils::wait_until([&]() {
+    REQUIRE(couchbase::test::wait_until([&]() {
       couchbase::core::operations::analytics_request req{};
       req.statement = "SELECT VALUE {\"ds\": DatasetName, \"ix\": IndexName} FROM Metadata.`Index`";
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       if (resp.ctx.ec) {
         return false;
       }
@@ -1159,9 +1159,9 @@ TEST_CASE("integration: analytics management identifier encoding", "[integration
 TEST_CASE("integration: streaming analytics reports the same error context as buffered analytics",
           "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  if (integration.ctx.deployment == test::utils::deployment_type::elixir) {
+  if (integration.ctx.deployment == couchbase::test::deployment_type::elixir) {
     SKIP("elixir deployment does not support analytics");
   }
   if (!integration.has_analytics_service()) {

@@ -22,7 +22,7 @@
 #include <cstdint>
 #include <cstring>
 
-namespace test::utils
+namespace couchbase::test
 {
 auto
 test_context::load_from_environment() -> test_context
@@ -111,7 +111,7 @@ test_context::load_from_environment() -> test_context
 
   // Always use WAN profile for Capella or Elixir setups
   if (ctx.deployment == deployment_type::capella ||
-      ctx.deployment == test::utils::deployment_type::elixir) {
+      ctx.deployment == couchbase::test::deployment_type::elixir) {
     ctx.use_wan_development_profile = true;
   }
 
@@ -155,4 +155,4 @@ test_context::build_options() const -> couchbase::cluster_options
 
   return options;
 }
-} // namespace test::utils
+} // namespace couchbase::test

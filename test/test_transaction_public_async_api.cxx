@@ -38,9 +38,9 @@ async_options()
 
 TEST_CASE("transactions public async API: can async get", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
   auto [err, upsert_res] = coll.upsert(id, async_content, {}).get();
@@ -70,9 +70,9 @@ TEST_CASE("transactions public async API: can async get", "[transactions]")
 
 TEST_CASE("transactions public async API: can get fail as expected", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
 
@@ -97,9 +97,9 @@ TEST_CASE("transactions public async API: can get fail as expected", "[transacti
 }
 TEST_CASE("transactions public async API: can async remove", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
   auto [err, upsert_res] = coll.upsert(id, async_content, {}).get();
@@ -131,9 +131,9 @@ TEST_CASE("transactions public async API: can async remove", "[transactions]")
 TEST_CASE("transactions public async API: async remove with bad cas fails as expected",
           "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
   auto [err, upsert_res] = coll.upsert(id, async_content, {}).get();
@@ -166,9 +166,9 @@ TEST_CASE("transactions public async API: async remove with bad cas fails as exp
 
 TEST_CASE("transactions public async API: can async insert", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
 
@@ -196,9 +196,9 @@ TEST_CASE(
   "transactions public async API: async insert fails when doc already exists, but doesn't rollback",
   "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
   auto [err, upsert_res] = coll.upsert(id, async_content, {}).get();
@@ -226,9 +226,9 @@ TEST_CASE(
 
 TEST_CASE("transactions public async API: can async replace", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
   auto [err, upsert_res] = coll.upsert(id, async_content, {}).get();
@@ -260,9 +260,9 @@ TEST_CASE("transactions public async API: can async replace", "[transactions]")
 TEST_CASE("transactions public async API: async replace fails as expected with bad cas",
           "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
   auto [err, upsert_res] = coll.upsert(id, async_content, {}).get();
@@ -296,9 +296,9 @@ TEST_CASE("transactions public async API: async replace fails as expected with b
 
 TEST_CASE("transactions public async API: uncaught exception will rollback", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
   auto [err, upsert_res] = coll.upsert(id, async_content, {}).get();
@@ -332,9 +332,9 @@ TEST_CASE("transactions public async API: uncaught exception will rollback", "[t
 
 TEST_CASE("transactions public async API: rerturning error will rollback", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
   auto [err, upsert_res] = coll.upsert(id, async_content, {}).get();
@@ -367,9 +367,9 @@ TEST_CASE("transactions public async API: rerturning error will rollback", "[tra
 
 TEST_CASE("transactions public async API: can set transaction options", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
   auto [err, upsert_res] = coll.upsert(id, async_content, {}).get();
@@ -412,13 +412,13 @@ TEST_CASE("transactions public async API: can set transaction options", "[transa
 
 TEST_CASE("transactions public async API: can do mutating query", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().supports_queries_in_transactions()) {
     SKIP("the server does not support queries inside transactions");
   }
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
 
@@ -448,14 +448,14 @@ TEST_CASE("transactions public async API: can do mutating query", "[transactions
 
 TEST_CASE("transactions public async API: some query errors rollback", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().supports_queries_in_transactions()) {
     SKIP("the server does not support queries inside transactions");
   }
 
-  auto id = test::utils::uniq_id("txn");
-  auto id2 = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
+  auto id2 = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
   auto [err, upsert_res] = coll.upsert(id, async_content, {}).get();

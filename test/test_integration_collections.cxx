@@ -33,8 +33,8 @@
 
 TEST_CASE("integration: missing scope and collection", "[integration]")
 {
-  test::utils::integration_test_guard integration;
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::integration_test_guard integration;
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
 
   if (!integration.cluster_version().supports_collections()) {
     SKIP("cluster does not support collections");
@@ -44,7 +44,7 @@ TEST_CASE("integration: missing scope and collection", "[integration]")
   {
     couchbase::core::document_id id{ integration.ctx.bucket, "missing_scope", "_default", "key" };
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE(resp.ctx.ec() == couchbase::errc::common::scope_not_found);
   }
 
@@ -58,7 +58,7 @@ TEST_CASE("integration: missing scope and collection", "[integration]")
     couchbase::core::operations::insert_request req{
       id, couchbase::core::utils::json::generate_binary(value)
     };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE(resp.ctx.ec() == couchbase::errc::common::scope_not_found);
   }
 
@@ -68,7 +68,7 @@ TEST_CASE("integration: missing scope and collection", "[integration]")
       integration.ctx.bucket, "_default", "missing_collection", "key"
     };
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE(resp.ctx.ec() == couchbase::errc::common::unambiguous_timeout);
     REQUIRE(resp.ctx.retried_because_of(couchbase::retry_reason::key_value_collection_outdated));
   }
@@ -85,7 +85,7 @@ TEST_CASE("integration: missing scope and collection", "[integration]")
     couchbase::core::operations::insert_request req{
       id, couchbase::core::utils::json::generate_binary(value)
     };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE(resp.ctx.ec() == couchbase::errc::common::ambiguous_timeout);
     REQUIRE(resp.ctx.retried_because_of(couchbase::retry_reason::key_value_collection_outdated));
   }
@@ -93,25 +93,25 @@ TEST_CASE("integration: missing scope and collection", "[integration]")
 
 TEST_CASE("integration: get and insert non default scope and collection", "[integration]")
 {
-  test::utils::integration_test_guard integration;
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::integration_test_guard integration;
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
 
   if (!integration.cluster_version().supports_collections()) {
     SKIP("cluster does not support collections");
   }
 
-  auto scope_name = test::utils::uniq_id("scope");
-  auto collection_name = test::utils::uniq_id("scope");
-  auto key = test::utils::uniq_id("foo");
+  auto scope_name = couchbase::test::uniq_id("scope");
+  auto collection_name = couchbase::test::uniq_id("scope");
+  auto key = couchbase::test::uniq_id("foo");
   auto id =
     couchbase::core::document_id{ integration.ctx.bucket, scope_name, collection_name, key };
 
   {
     couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket,
                                                                        scope_name };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
-    auto created = test::utils::wait_until_collection_manifest_propagated(
+    auto created = couchbase::test::wait_until_collection_manifest_propagated(
       integration.cluster, integration.ctx.bucket, resp.uid);
     REQUIRE(created);
   }
@@ -120,22 +120,22 @@ TEST_CASE("integration: get and insert non default scope and collection", "[inte
     couchbase::core::operations::management::collection_create_request req{ integration.ctx.bucket,
                                                                             scope_name,
                                                                             collection_name };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
-    auto created = test::utils::wait_until_collection_manifest_propagated(
+    auto created = couchbase::test::wait_until_collection_manifest_propagated(
       integration.cluster, integration.ctx.bucket, resp.uid);
     REQUIRE(created);
   }
 
   {
     couchbase::core::operations::insert_request req{ id, couchbase::core::utils::to_binary(key) };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.value == couchbase::core::utils::to_binary(key));
   }
@@ -143,32 +143,32 @@ TEST_CASE("integration: get and insert non default scope and collection", "[inte
   {
     couchbase::core::operations::management::scope_drop_request req{ integration.ctx.bucket,
                                                                      scope_name };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
   }
 }
 
 TEST_CASE("integration: insert into dropped scope", "[integration]")
 {
-  test::utils::integration_test_guard integration;
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::integration_test_guard integration;
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
 
   if (!integration.cluster_version().supports_collections()) {
     SKIP("cluster does not support collections");
   }
 
-  auto scope_name = test::utils::uniq_id("scope");
-  auto collection_name = test::utils::uniq_id("scope");
-  auto key = test::utils::uniq_id("foo");
+  auto scope_name = couchbase::test::uniq_id("scope");
+  auto collection_name = couchbase::test::uniq_id("scope");
+  auto key = couchbase::test::uniq_id("foo");
   auto id =
     couchbase::core::document_id{ integration.ctx.bucket, scope_name, collection_name, key };
 
   {
     couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket,
                                                                        scope_name };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
-    auto created = test::utils::wait_until_collection_manifest_propagated(
+    auto created = couchbase::test::wait_until_collection_manifest_propagated(
       integration.cluster, integration.ctx.bucket, resp.uid);
     REQUIRE(created);
   }
@@ -177,22 +177,22 @@ TEST_CASE("integration: insert into dropped scope", "[integration]")
     couchbase::core::operations::management::collection_create_request req{ integration.ctx.bucket,
                                                                             scope_name,
                                                                             collection_name };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
-    auto created = test::utils::wait_until_collection_manifest_propagated(
+    auto created = couchbase::test::wait_until_collection_manifest_propagated(
       integration.cluster, integration.ctx.bucket, resp.uid);
     REQUIRE(created);
   }
 
   {
     couchbase::core::operations::insert_request req{ id, couchbase::core::utils::to_binary(key) };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.value == couchbase::core::utils::to_binary(key));
   }
@@ -200,9 +200,9 @@ TEST_CASE("integration: insert into dropped scope", "[integration]")
   {
     couchbase::core::operations::management::scope_drop_request req{ integration.ctx.bucket,
                                                                      scope_name };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
-    auto dropped = test::utils::wait_until_collection_manifest_propagated(
+    auto dropped = couchbase::test::wait_until_collection_manifest_propagated(
       integration.cluster, integration.ctx.bucket, resp.uid);
     REQUIRE(dropped);
   }
@@ -213,7 +213,7 @@ TEST_CASE("integration: insert into dropped scope", "[integration]")
   }
   {
     couchbase::core::operations::upsert_request req{ id, couchbase::core::utils::to_binary(key) };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE(resp.ctx.ec() == couchbase::errc::common::scope_not_found);
   }
 }

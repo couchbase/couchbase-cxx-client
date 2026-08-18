@@ -104,7 +104,7 @@ private:
 };
 
 void
-assert_kv_recorder_tags(test::utils::integration_test_guard& guard,
+assert_kv_recorder_tags(couchbase::test::integration_test_guard& guard,
                         std::list<std::shared_ptr<test_value_recorder>> recorders,
                         const std::string& op,
                         const std::optional<std::string>& expected_outcome = {})
@@ -137,7 +137,7 @@ assert_kv_recorder_tags(test::utils::integration_test_guard& guard,
 }
 
 void
-assert_http_recorder_tags(test::utils::integration_test_guard& guard,
+assert_http_recorder_tags(couchbase::test::integration_test_guard& guard,
                           std::list<std::shared_ptr<test_value_recorder>> recorders,
                           const std::string& op,
                           const std::string& service,
@@ -184,17 +184,17 @@ assert_http_recorder_tags(test::utils::integration_test_guard& guard,
 }
 
 couchbase::core::document_id
-make_id(const test::utils::test_context& ctx, std::string key = "")
+make_id(const couchbase::test::test_context& ctx, std::string key = "")
 {
   if (key.empty()) {
-    key = test::utils::uniq_id("tracer");
+    key = couchbase::test::uniq_id("tracer");
   }
   return couchbase::core::document_id{ ctx.bucket, "_default", "_default", key };
 }
 
 TEST_CASE("integration: use external meter", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   auto meter = std::make_shared<test_meter>();
   auto cluster = integration.public_cluster([meter](couchbase::cluster_options& opts) {
@@ -204,7 +204,7 @@ TEST_CASE("integration: use external meter", "[integration]")
   auto value = tao::json::value{
     { "some", "thing" },
   };
-  auto existing_key = test::utils::uniq_id("meter");
+  auto existing_key = couchbase::test::uniq_id("meter");
   auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
 
   {
@@ -239,7 +239,7 @@ TEST_CASE("integration: use external meter", "[integration]")
 
     SECTION("insert")
     {
-      auto new_key = test::utils::uniq_id("meter");
+      auto new_key = couchbase::test::uniq_id("meter");
       auto [err, res] = collection.insert(new_key, value, {}).get();
 
       auto recorders = meter->get_recorders("db.client.operation.duration");
@@ -272,7 +272,7 @@ TEST_CASE("integration: use external meter", "[integration]")
 
     SECTION("get non-existent-document")
     {
-      auto [err, res] = collection.get(test::utils::uniq_id("does-not-exist"), {}).get();
+      auto [err, res] = collection.get(couchbase::test::uniq_id("does-not-exist"), {}).get();
       REQUIRE(err.ec() == couchbase::errc::key_value::document_not_found);
 
       auto meters = meter->get_recorders("db.client.operation.duration");

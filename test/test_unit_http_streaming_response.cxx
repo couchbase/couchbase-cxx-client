@@ -31,7 +31,7 @@ TEST_CASE("unit: streaming body surfaces the terminal error after close, not cac
   asio::io_context io;
   // 10 bytes handed out 4 at a time, so the buffer parsed alongside the response headers is not
   // drained by a single pull — bytes remain cached when the body is closed below.
-  auto body = test::utils::make_chunked_response_body(io, "abcdefghij", 4);
+  auto body = couchbase::test::make_chunked_response_body(io, "abcdefghij", 4);
 
   std::string d1;
   bool more1 = false;
@@ -67,7 +67,7 @@ TEST_CASE("unit: streaming body surfaces the terminal error after close, not cac
 TEST_CASE("unit: streaming body close is idempotent", "[unit]")
 {
   asio::io_context io;
-  auto body = test::utils::make_cached_response_body(io, "abcdefghij");
+  auto body = couchbase::test::make_cached_response_body(io, "abcdefghij");
 
   // Close twice (cancel() closes the body). The second close must be a no-op — not a double
   // teardown — and the terminal error recorded by the first close must be preserved.

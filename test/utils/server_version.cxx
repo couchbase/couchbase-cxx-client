@@ -19,7 +19,7 @@
 
 #include <regex>
 
-namespace test::utils
+namespace couchbase::test
 {
 auto
 server_version::parse(const std::string& str, const deployment_type deployment) -> server_version
@@ -53,4 +53,4 @@ server_version::parse(const std::string& str, const deployment_type deployment) 
   }
   return ver;
 }
-} // namespace test::utils
+} // namespace couchbase::test

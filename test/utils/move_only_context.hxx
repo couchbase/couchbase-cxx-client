@@ -19,7 +19,7 @@
 
 #include <string>
 
-namespace test::utils
+namespace couchbase::test
 {
 
 struct move_only_context {
@@ -48,4 +48,4 @@ private:
   std::string payload_;
 };
 
-} // namespace test::utils
+} // namespace couchbase::test

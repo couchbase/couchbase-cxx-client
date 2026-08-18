@@ -31,7 +31,7 @@ namespace couchbase::core
 class cluster;
 } // namespace couchbase::core
 
-namespace test::utils
+namespace couchbase::test
 {
 template<class ConditionChecker>
 auto
@@ -131,7 +131,7 @@ drop_search_index(integration_test_guard& integration, const std::string& index_
 class collection_guard
 {
 public:
-  explicit collection_guard(test::utils::integration_test_guard& integration);
+  explicit collection_guard(couchbase::test::integration_test_guard& integration);
   ~collection_guard();
 
   collection_guard(const collection_guard&) = delete;
@@ -143,9 +143,9 @@ public:
   [[nodiscard]] auto collection_name() const -> const std::string&;
 
 private:
-  test::utils::integration_test_guard& integration_;
+  couchbase::test::integration_test_guard& integration_;
   std::string scope_name_;
   std::string collection_name_;
 };
 
-} // namespace test::utils
+} // namespace couchbase::test

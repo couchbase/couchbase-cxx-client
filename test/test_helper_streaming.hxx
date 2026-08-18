@@ -23,7 +23,7 @@
 
 #include <string>
 
-namespace test::utils
+namespace couchbase::test
 {
 inline auto
 make_cached_response_body(asio::io_context& io, std::string data)
@@ -40,4 +40,4 @@ make_chunked_response_body(asio::io_context& io, std::string data, std::size_t c
 {
   return couchbase::core::http_response_body::create_in_memory(io, std::move(data), chunk_size);
 }
-} // namespace test::utils
+} // namespace couchbase::test

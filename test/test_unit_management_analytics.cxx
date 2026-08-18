@@ -46,7 +46,7 @@ TEST_CASE("unit: analytics management rejects names that cannot be quoted", "[un
 {
   couchbase::core::io::http_request http_req{};
   http_req.type = couchbase::core::service_type::analytics;
-  auto ctx = test::utils::make_http_context();
+  auto ctx = couchbase::test::make_http_context();
 
   // No escape sequence in the Analytics grammar produces a backtick, so a name containing one
   // cannot be represented as a delimited identifier and has to be refused before it reaches the
@@ -151,7 +151,7 @@ TEST_CASE("unit: analytics management contains backslash escapes", "[unit][secur
 {
   couchbase::core::io::http_request http_req{};
   http_req.type = couchbase::core::service_type::analytics;
-  auto ctx = test::utils::make_http_context();
+  auto ctx = couchbase::test::make_http_context();
 
   SECTION("a unicode escape cannot close the identifier")
   {
@@ -200,7 +200,7 @@ TEST_CASE("unit: analytics management statement clauses", "[unit]")
 {
   couchbase::core::io::http_request http_req{};
   http_req.type = couchbase::core::service_type::analytics;
-  auto ctx = test::utils::make_http_context();
+  auto ctx = couchbase::test::make_http_context();
 
   SECTION("analytics_dataverse_create_request")
   {
@@ -337,7 +337,7 @@ TEST_CASE("unit: analytics_index_create_request validates the field type", "[uni
 {
   couchbase::core::io::http_request http_req{};
   http_req.type = couchbase::core::service_type::analytics;
-  auto ctx = test::utils::make_http_context();
+  auto ctx = couchbase::test::make_http_context();
 
   couchbase::core::operations::management::analytics_index_create_request req{};
   req.dataverse_name = "Default";

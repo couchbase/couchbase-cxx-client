@@ -39,9 +39,9 @@ txn_opts()
   return opts;
 }
 void
-with_new_guard(std::function<void(test::utils::integration_test_guard&)> fn)
+with_new_guard(std::function<void(couchbase::test::integration_test_guard&)> fn)
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   try {
     fn(integration);
   } catch (...) {
@@ -57,12 +57,12 @@ upsert_scope_and_collection(const couchbase::core::cluster& cluster,
 {
   {
     couchbase::core::operations::management::scope_create_request req{ bucket_name, scope_name };
-    auto resp = test::utils::execute(cluster, req);
+    auto resp = couchbase::test::execute(cluster, req);
     if (resp.ctx.ec) {
       REQUIRE(resp.ctx.ec == couchbase::errc::management::scope_exists);
     }
     auto created =
-      test::utils::wait_until_collection_manifest_propagated(cluster, bucket_name, resp.uid);
+      couchbase::test::wait_until_collection_manifest_propagated(cluster, bucket_name, resp.uid);
     REQUIRE(created);
   }
 
@@ -70,21 +70,21 @@ upsert_scope_and_collection(const couchbase::core::cluster& cluster,
     couchbase::core::operations::management::collection_create_request req{ bucket_name,
                                                                             scope_name,
                                                                             coll_name };
-    auto resp = test::utils::execute(cluster, req);
+    auto resp = couchbase::test::execute(cluster, req);
     if (resp.ctx.ec) {
       REQUIRE(resp.ctx.ec == couchbase::errc::management::collection_exists);
     }
     auto created =
-      test::utils::wait_until_collection_manifest_propagated(cluster, bucket_name, resp.uid);
+      couchbase::test::wait_until_collection_manifest_propagated(cluster, bucket_name, resp.uid);
     REQUIRE(created);
   }
 }
 
 TEST_CASE("transactions public blocking API: can get", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
   auto [err, upsert_res] = coll.upsert(id, content, {}).get();
@@ -107,9 +107,9 @@ TEST_CASE("transactions public blocking API: can get", "[transactions]")
 TEST_CASE("transactions public blocking API: get reads JSON stored with non-JSON common flags",
           "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
 
@@ -139,9 +139,9 @@ TEST_CASE("transactions public blocking API: get reads JSON stored with non-JSON
 TEST_CASE("transactions public blocking API: get returns error if doc doesn't exist",
           "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
 
@@ -159,9 +159,9 @@ TEST_CASE("transactions public blocking API: get returns error if doc doesn't ex
 
 TEST_CASE("transactions public blocking API: can insert", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
 
@@ -190,9 +190,9 @@ TEST_CASE("transactions public blocking API: insert has error when doc already e
           "[transactions]")
 {
 
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
   auto [err, upsert_res] = coll.upsert(id, content, {}).get();
@@ -219,9 +219,9 @@ TEST_CASE("transactions public blocking API: insert has error when doc already e
 
 TEST_CASE("transactions public blocking API: can replace", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
   auto [err, upsert_res] = coll.upsert(id, content, {}).get();
@@ -255,9 +255,9 @@ TEST_CASE("transactions public blocking API: can replace", "[transactions]")
 TEST_CASE("transactions public blocking API: replace fails as expected with bad cas",
           "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
   auto [err, upsert_res] = coll.upsert(id, content, {}).get();
@@ -286,9 +286,9 @@ TEST_CASE("transactions public blocking API: replace fails as expected with bad 
 
 TEST_CASE("transactions public blocking API: can remove", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
   auto [err, upsert_res] = coll.upsert(id, content, {}).get();
@@ -314,9 +314,9 @@ TEST_CASE("transactions public blocking API: remove fails as expected with bad c
           "[transactions]")
 {
 
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
   auto [err, upsert_res] = coll.upsert(id, content, {}).get();
@@ -342,9 +342,9 @@ TEST_CASE("transactions public blocking API: remove fails as expected with bad c
 TEST_CASE("transactions public blocking API: remove fails as expected with missing doc",
           "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
 
@@ -369,9 +369,9 @@ TEST_CASE("transactions public blocking API: remove fails as expected with missi
 TEST_CASE("transactions public blocking API: get doc not found and propagating error",
           "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
 
@@ -396,9 +396,9 @@ TEST_CASE(
   "transactions public blocking API: uncaught exception in lambda will rollback without retry",
   "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
 
@@ -418,9 +418,9 @@ TEST_CASE(
 
 TEST_CASE("transactions public blocking API: can pass per-transaction configs", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
   auto [err, upsert_res] = coll.upsert(id, content, {}).get();
@@ -453,13 +453,13 @@ TEST_CASE("transactions public blocking API: can pass per-transaction configs", 
 
 TEST_CASE("transactions public blocking API: can do simple query", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().supports_queries_in_transactions()) {
     SKIP("the server does not support queries inside transactions");
   }
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
   auto [err, upsert_res] = coll.upsert(id, content, {}).get();
@@ -481,13 +481,13 @@ TEST_CASE("transactions public blocking API: can do simple query", "[transaction
 
 TEST_CASE("transactions public blocking API: can do simple mutating query", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().supports_queries_in_transactions()) {
     SKIP("the server does not support queries inside transactions");
   }
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
   auto [err, upsert_res] = coll.upsert(id, content, {}).get();
@@ -512,13 +512,13 @@ TEST_CASE("transactions public blocking API: can do simple mutating query", "[tr
 TEST_CASE("transactions public blocking API: some query errors don't force rollback",
           "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().supports_queries_in_transactions()) {
     SKIP("the server does not support queries inside transactions");
   }
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
 
@@ -544,14 +544,14 @@ TEST_CASE("transactions public blocking API: some query errors don't force rollb
 
 TEST_CASE("transactions public blocking API: some query errors do rollback", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().supports_queries_in_transactions()) {
     SKIP("the server does not support queries inside transactions");
   }
 
-  auto id = test::utils::uniq_id("txn");
-  auto id2 = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
+  auto id2 = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
   auto coll = c.bucket(integration.ctx.bucket).default_collection();
   auto [err, upsert_res] = coll.upsert(id, content, {}).get();
@@ -583,7 +583,7 @@ TEST_CASE("transactions public blocking API: some query errors do rollback", "[t
 TEST_CASE("transactions public blocking API: some query errors are seen immediately",
           "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().supports_queries_in_transactions()) {
     SKIP("the server does not support queries inside transactions");
@@ -610,13 +610,13 @@ TEST_CASE("transactions public blocking API: can query from a scope", "[transact
 {
   const std::string new_scope_name("newscope");
   const std::string new_coll_name("newcoll");
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().supports_queries_in_transactions()) {
     SKIP("the server does not support queries inside transactions");
   }
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   auto c = integration.public_cluster();
 
   upsert_scope_and_collection(
@@ -642,7 +642,7 @@ TEST_CASE("transactions public blocking API: can query from a scope", "[transact
   {
     couchbase::core::operations::management::scope_drop_request req{ integration.ctx.bucket,
                                                                      new_scope_name };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
   }
 }
@@ -651,16 +651,16 @@ TEST_CASE("transactions public blocking API: can get doc from bucket not yet ope
           "[transactions]")
 {
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   {
-    test::utils::integration_test_guard integration;
+    couchbase::test::integration_test_guard integration;
     auto c = integration.public_cluster();
     auto coll = c.bucket(integration.ctx.bucket).default_collection();
     auto [err, upsert_res] = coll.upsert(id, content, {}).get();
     REQUIRE_SUCCESS(err.ec());
   }
 
-  with_new_guard([&](test::utils::integration_test_guard& integration) {
+  with_new_guard([&](couchbase::test::integration_test_guard& integration) {
     auto c = integration.public_cluster();
     auto coll = c.bucket(integration.ctx.bucket).default_collection();
     auto [tx_err, result] = c.transactions()->run(
@@ -681,11 +681,11 @@ TEST_CASE("transactions public blocking API: can get doc from bucket not yet ope
 TEST_CASE("transactions public blocking API: can insert doc into bucket not yet opened",
           "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
 
-  with_new_guard([&](test::utils::integration_test_guard& guard) {
+  with_new_guard([&](couchbase::test::integration_test_guard& guard) {
     auto c = guard.public_cluster();
     auto coll = c.bucket(integration.ctx.bucket).default_collection();
 
@@ -711,16 +711,16 @@ TEST_CASE("transactions public blocking API: can replace doc in bucket not yet o
           "[transactions]")
 {
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   {
-    test::utils::integration_test_guard integration;
+    couchbase::test::integration_test_guard integration;
     auto c = integration.public_cluster();
     auto coll = c.bucket(integration.ctx.bucket).default_collection();
     auto [err, upsert_res] = coll.upsert(id, content, {}).get();
     REQUIRE_SUCCESS(err.ec());
   }
 
-  with_new_guard([&](test::utils::integration_test_guard& guard) {
+  with_new_guard([&](couchbase::test::integration_test_guard& guard) {
     auto c = guard.public_cluster();
     auto coll = c.bucket(guard.ctx.bucket).default_collection();
     tao::json::value new_content = { { "some", "new content" } };
@@ -749,16 +749,16 @@ TEST_CASE("transactions public blocking API: can remove doc in bucket not yet op
           "[transactions]")
 {
 
-  auto id = test::utils::uniq_id("txn");
+  auto id = couchbase::test::uniq_id("txn");
   {
-    test::utils::integration_test_guard integration;
+    couchbase::test::integration_test_guard integration;
     auto c = integration.public_cluster();
     auto coll = c.bucket(integration.ctx.bucket).default_collection();
     auto [err, upsert_res] = coll.upsert(id, content, {}).get();
     REQUIRE_SUCCESS(err.ec());
   }
 
-  with_new_guard([&](test::utils::integration_test_guard& guard) {
+  with_new_guard([&](couchbase::test::integration_test_guard& guard) {
     auto c = guard.public_cluster();
     auto coll = c.bucket(guard.ctx.bucket).default_collection();
     tao::json::value new_content = { { "some", "new content" } };
@@ -784,7 +784,7 @@ TEST_CASE("transactions public blocking API: insert then replace with illegal do
           "modification in-between",
           "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().supports_replace_body_with_xattr()) {
     // If replace_body_with_xattr is not supported, we have the staged insert's content in memory,
@@ -793,7 +793,7 @@ TEST_CASE("transactions public blocking API: insert then replace with illegal do
     SKIP("the server does not support replace_body_with_xattr");
   }
 
-  auto doc_id = test::utils::uniq_id("txn");
+  auto doc_id = couchbase::test::uniq_id("txn");
   auto txn_content_initial = tao::json::value{ { "num", 12 } };
   auto txn_content_updated = tao::json::value{ { "num", 20 } };
   auto illegal_content = tao::json::value{ { "illegal", "content" } };

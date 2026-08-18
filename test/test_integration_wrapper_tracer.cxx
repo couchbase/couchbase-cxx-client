@@ -28,14 +28,14 @@ TEST_CASE("integration: wrappers can get dispatch spans using a parent wrapper s
   couchbase::core::cluster_options opts{};
   opts.tracer = std::make_shared<couchbase::core::tracing::wrapper_sdk_tracer>();
 
-  const test::utils::integration_test_guard integration(opts);
+  const couchbase::test::integration_test_guard integration(opts);
 
   const auto root_span = std::make_shared<couchbase::core::tracing::wrapper_sdk_span>();
   couchbase::core::operations::get_request request{ couchbase::core::document_id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("wrapper_tracer_test") } };
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("wrapper_tracer_test") } };
   request.parent_span = root_span;
 
-  auto resp = test::utils::execute(integration.cluster, request);
+  auto resp = couchbase::test::execute(integration.cluster, request);
   REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_found);
   REQUIRE(root_span->children().size() == 1);
   REQUIRE(root_span->children().front()->name() == "dispatch_to_server");
@@ -43,7 +43,7 @@ TEST_CASE("integration: wrappers can get dispatch spans using a parent wrapper s
 
 TEST_CASE("integration: cluster label listener can be used to get cluster labels", "[integration]")
 {
-  test::utils::integration_test_guard integration{};
+  couchbase::test::integration_test_guard integration{};
 
   const auto [cluster_name, cluster_uuid] =
     integration.cluster.cluster_label_listener()->cluster_labels();
@@ -57,7 +57,7 @@ TEST_CASE("integration: cluster label listener can be used to get cluster labels
       "GET",
       "/pools/default/b/" + integration.ctx.bucket,
     };
-    const auto bucket_cfg_resp = test::utils::execute(integration.cluster, bucket_cfg_req);
+    const auto bucket_cfg_resp = couchbase::test::execute(integration.cluster, bucket_cfg_req);
 
     REQUIRE_SUCCESS(bucket_cfg_resp.ctx.ec);
 

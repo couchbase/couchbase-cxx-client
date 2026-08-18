@@ -19,11 +19,11 @@
 
 #include <string>
 
-namespace test::utils
+namespace couchbase::test
 {
 auto
 uniq_id(const std::string& prefix) -> std::string;
 
 auto
 read_test_data(const std::string& file) -> std::string;
-} // namespace test::utils
+} // namespace couchbase::test

@@ -21,7 +21,7 @@
 #include <spdlog/details/os.h>
 #include <spdlog/spdlog.h>
 
-namespace test::utils
+namespace couchbase::test
 {
 void
 init_logger()
@@ -45,4 +45,4 @@ init_logger()
     initialized = true;
   }
 }
-} // namespace test::utils
+} // namespace couchbase::test

@@ -30,7 +30,7 @@
 #include <string>
 #include <vector>
 
-namespace test::utils
+namespace couchbase::test
 {
 
 struct pools_response {
@@ -152,4 +152,4 @@ public:
     cluster_info{};
   std::optional<pools_response> pools_info{};
 };
-} // namespace test::utils
+} // namespace couchbase::test

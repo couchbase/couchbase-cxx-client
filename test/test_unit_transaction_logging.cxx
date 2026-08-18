@@ -60,7 +60,7 @@ private:
 bool
 sink_has_output(std::shared_ptr<TrivialFileSink> sink)
 {
-  return test::utils::wait_until(
+  return couchbase::test::wait_until(
     [&]() {
       return !sink->output().empty();
     },

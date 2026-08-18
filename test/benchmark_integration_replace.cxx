@@ -23,7 +23,7 @@
 
 TEST_CASE("benchmark: replace a document", "[benchmark]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   auto cluster = integration.public_cluster();
   auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
@@ -38,7 +38,7 @@ TEST_CASE("benchmark: replace a document", "[benchmark]")
     { "b", 4.0 },
   };
 
-  auto key = test::utils::uniq_id("foo");
+  auto key = couchbase::test::uniq_id("foo");
   {
     const auto [err, _] = collection.upsert(key, initial_value).get();
     REQUIRE_SUCCESS(err.ec());

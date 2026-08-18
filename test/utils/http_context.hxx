@@ -25,7 +25,7 @@
 #include <cstdint>
 #include <string>
 
-namespace test::utils
+namespace couchbase::test
 {
 /**
  * Builds a minimal http_context for unit-testing request encoders that do not consult the cluster
@@ -49,4 +49,4 @@ make_http_context() -> couchbase::core::http_context
     config, cluster_options, query_cache, hostname, port, canonical_hostname, canonical_port,
   };
 }
-} // namespace test::utils
+} // namespace couchbase::test

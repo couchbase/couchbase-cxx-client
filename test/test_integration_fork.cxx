@@ -124,7 +124,7 @@ TEST_CASE("integration: cluster remains usable in a forked child", "[integration
   // IO threads -- is destroyed well before the fork; only the forking thread
   // survives into the child, so no guard may be live across it.
   {
-    test::utils::integration_test_guard integration;
+    couchbase::test::integration_test_guard integration;
     if (integration.cluster_version().is_mock()) {
       SKIP("the mock does not support the fork scenario");
     }
@@ -132,8 +132,8 @@ TEST_CASE("integration: cluster remains usable in a forked child", "[integration
 
   // Connection details come from the environment for the same reason: nothing
   // that owns a thread may straddle the fork.
-  const auto ctx = test::utils::test_context::load_from_environment();
-  test::utils::init_logger();
+  const auto ctx = couchbase::test::test_context::load_from_environment();
+  couchbase::test::init_logger();
 
   // The child inherits this process's stdout buffer; unbuffer it so anything the
   // child prints before _Exit() is not lost, which is the only diagnostic a
@@ -148,8 +148,8 @@ TEST_CASE("integration: cluster remains usable in a forked child", "[integration
   auto [connect_err, cluster] = couchbase::cluster::connect(ctx.connection_string, options).get();
   REQUIRE_SUCCESS(connect_err.ec());
 
-  const auto parent_id = test::utils::uniq_id("fork-parent");
-  const auto child_id = test::utils::uniq_id("fork-child");
+  const auto parent_id = couchbase::test::uniq_id("fork-parent");
+  const auto child_id = couchbase::test::uniq_id("fork-child");
 
   // Do real I/O before forking so the reactor actually has MCBP sockets
   // registered -- with no registered descriptors the child's reactor has

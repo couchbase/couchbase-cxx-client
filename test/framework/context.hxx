@@ -24,6 +24,8 @@
 // Every probe returns a plain type, so nothing here names a core or public SDK type, and a test
 // file that only needs to *describe* its requirements pays no compile cost for the client library.
 
+#include "utils/server_version.hxx"
+
 #include <chrono>
 #include <cstdint>
 #include <exception>
@@ -53,50 +55,10 @@ private:
   std::string message_;
 };
 
-enum class server_edition : std::uint8_t {
-  unknown,
-  enterprise,
-  community,
-  columnar,
-};
-
-enum class deployment_type : std::uint8_t {
-  on_prem,
-  capella,
-  elixir,
-};
-
-// The lean mirror of test::utils::server_version, carrying what a requirement can ask about and
-// nothing else. Ordered by (major, minor, micro) so a version range is a pair of comparisons.
-struct server_version {
-  std::uint32_t major{ 0 };
-  std::uint32_t minor{ 0 };
-  std::uint32_t micro{ 0 };
-  bool developer_preview{ false };
-  server_edition edition{ server_edition::unknown };
-  deployment_type deployment{ deployment_type::on_prem };
-
-  [[nodiscard]] auto to_string() const -> std::string
-  {
-    return std::to_string(major) + '.' + std::to_string(minor) + '.' + std::to_string(micro);
-  }
-
-  [[nodiscard]] friend auto operator<(const server_version& a, const server_version& b) -> bool
-  {
-    if (a.major != b.major) {
-      return a.major < b.major;
-    }
-    if (a.minor != b.minor) {
-      return a.minor < b.minor;
-    }
-    return a.micro < b.micro;
-  }
-  [[nodiscard]] friend auto operator>=(const server_version& a, const server_version& b) -> bool
-  {
-    return !(a < b);
-  }
-};
-
+// The suite's version type, shared with the helpers in test/utils. It carries more than a
+// requirement needs -- feature predicates, the build number, the config profile -- but adopting it
+// keeps one definition of a server version in the test tree, and its header pulls in nothing beyond
+// <cstdlib> and <string>, so declaring a requirement still costs no core or public SDK header.
 // Version constants the requirement vocabulary names, so a case says which release introduced the
 // behaviour it pins rather than repeating a number nobody can attribute later.
 inline constexpr server_version v6_5{ 6, 5, 0 };

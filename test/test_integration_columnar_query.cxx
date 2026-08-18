@@ -72,7 +72,7 @@ buffer_rows(couchbase::core::columnar::query_result& result)
 
 TEST_CASE("integration: columnar http component simple request", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (!integration.cluster_version().is_columnar()) {
     SKIP("Requires a columnar cluster");
   }
@@ -143,7 +143,7 @@ TEST_CASE("integration: columnar http component simple request", "[integration]"
 
 TEST_CASE("integration: columnar http component simple request buffered", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (!integration.cluster_version().is_columnar()) {
     SKIP("Requires a columnar cluster");
   }
@@ -194,7 +194,7 @@ TEST_CASE("integration: columnar http component simple request buffered", "[inte
 
 TEST_CASE("integration: columnar query component simple request", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (!integration.cluster_version().is_columnar()) {
     SKIP("Requires a columnar cluster");
   }
@@ -244,7 +244,7 @@ TEST_CASE("integration: columnar query component simple request", "[integration]
 TEST_CASE("integration: columnar query component simple request - single row response",
           "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (!integration.cluster_version().is_columnar()) {
     SKIP("Requires a columnar cluster");
   }
@@ -294,7 +294,7 @@ TEST_CASE("integration: columnar query component simple request - single row res
 TEST_CASE("integration: columnar query component request with database & scope names",
           "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (!integration.cluster_version().is_columnar()) {
     SKIP("Requires a columnar cluster");
   }
@@ -344,7 +344,7 @@ TEST_CASE("integration: columnar query component request with database & scope n
 
 TEST_CASE("integration: columnar query read some rows and cancel", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (!integration.cluster_version().is_columnar()) {
     SKIP("Requires a columnar cluster");
   }
@@ -395,7 +395,7 @@ TEST_CASE("integration: columnar query read some rows and cancel", "[integration
 
 TEST_CASE("integration: columnar query cancel operation", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (!integration.cluster_version().is_columnar()) {
     SKIP("Requires a columnar cluster");
   }
@@ -418,7 +418,7 @@ TEST_CASE("integration: columnar query cancel operation", "[integration]")
 
 TEST_CASE("integration: columnar query operation timeout", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (!integration.cluster_version().is_columnar()) {
     SKIP("Requires a columnar cluster");
   }
@@ -442,7 +442,7 @@ TEST_CASE("integration: columnar query operation timeout", "[integration]")
 
 TEST_CASE("integration: columnar query global timeout", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (!integration.cluster_version().is_columnar()) {
     SKIP("Requires a columnar cluster");
   }
@@ -467,7 +467,7 @@ TEST_CASE("integration: columnar query global timeout", "[integration]")
 
 TEST_CASE("integration: columnar query collection does not exist", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (!integration.cluster_version().is_columnar()) {
     SKIP("Requires a columnar cluster");
   }
@@ -503,7 +503,7 @@ TEST_CASE("integration: columnar query collection does not exist", "[integration
 
 TEST_CASE("integration: columnar query positional parameters", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (!integration.cluster_version().is_columnar()) {
     SKIP("Requires a columnar cluster");
   }
@@ -531,7 +531,7 @@ TEST_CASE("integration: columnar query positional parameters", "[integration]")
 
 TEST_CASE("integration: columnar query named parameters", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (!integration.cluster_version().is_columnar()) {
     SKIP("Requires a columnar cluster");
   }
@@ -559,7 +559,7 @@ TEST_CASE("integration: columnar query named parameters", "[integration]")
 
 TEST_CASE("integration: closing cluster before columnar query returns", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (!integration.cluster_version().is_columnar()) {
     SKIP("Requires a columnar cluster");
   }
@@ -590,7 +590,7 @@ TEST_CASE("integration: closing cluster before columnar query returns", "[integr
 
 TEST_CASE("integration: closing cluster while reading columnar query rows", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (!integration.cluster_version().is_columnar()) {
     SKIP("Requires a columnar cluster");
   }
@@ -624,7 +624,7 @@ TEST_CASE("integration: closing cluster while reading columnar query rows", "[in
 
 TEST_CASE("integration: columnar query component timeout in raw", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (!integration.cluster_version().is_columnar()) {
     SKIP("Requires a columnar cluster");
   }

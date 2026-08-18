@@ -17,11 +17,11 @@
 
 #include "binary.hxx"
 
-namespace test::utils
+namespace couchbase::test
 {
 [[nodiscard]] auto
 to_string(const std::vector<std::byte>& input) -> std::string
 {
   return { reinterpret_cast<const char*>(input.data()), input.size() };
 }
-} // namespace test::utils
+} // namespace couchbase::test

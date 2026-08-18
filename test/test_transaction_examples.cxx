@@ -203,12 +203,12 @@ main(int argc, const char* argv[]) -> int
 
 TEST_CASE("example: basic transaction", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (!integration.cluster_version().supports_collections()) {
     SKIP("cluster does not support collections");
   }
 
-  const auto env = test::utils::test_context::load_from_environment();
+  const auto env = couchbase::test::test_context::load_from_environment();
   const char* argv[] = {
     "blocking-txn", // name of the "executable"
     env.connection_string.c_str(),
@@ -336,7 +336,7 @@ main(int argc, const char* argv[]) -> int
 
 TEST_CASE("example: read from local server group in transaction", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (integration.cluster_version().is_mock()) {
     SKIP("GOCAVES does not support server groups");
   }
@@ -360,7 +360,7 @@ TEST_CASE("example: read from local server group in transaction", "[integration]
                      integration.server_groups().size()));
   }
 
-  const auto env = test::utils::test_context::load_from_environment();
+  const auto env = couchbase::test::test_context::load_from_environment();
   const char* argv[] = {
     "read-local-txn", // name of the "executable"
     env.connection_string.c_str(),
@@ -705,7 +705,7 @@ main(int argc, const char* argv[]) -> int
 } // namespace binary_objects_in_transactions
 TEST_CASE("example: binary objects in transactions", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (!integration.cluster_version().supports_collections()) {
     SKIP("cluster does not support collections");
   }
@@ -713,7 +713,7 @@ TEST_CASE("example: binary objects in transactions", "[integration]")
     SKIP("cluster does not support binary objects in transactions");
   }
 
-  const auto env = test::utils::test_context::load_from_environment();
+  const auto env = couchbase::test::test_context::load_from_environment();
   const char* argv[] = {
     "binary-objects-in-transactions", // name of the "executable"
     env.connection_string.c_str(),

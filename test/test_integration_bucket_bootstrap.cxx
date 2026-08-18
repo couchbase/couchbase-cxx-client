@@ -44,7 +44,7 @@ using namespace std::literals::chrono_literals;
 TEST_CASE("integration: closing a cluster while a bucket is still bootstrapping does not leak",
           "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   {
     auto cluster = integration.public_cluster();
@@ -55,7 +55,7 @@ TEST_CASE("integration: closing a cluster while a bucket is still bootstrapping 
     // we tear the cluster down while the bootstrap is still going.
     auto pending = cluster.bucket("this_bucket_does_not_exist")
                      .default_collection()
-                     .exists(test::utils::uniq_id("cxxcbc-852"));
+                     .exists(couchbase::test::uniq_id("cxxcbc-852"));
 
     // The regression requires the bucket bootstrap to still be in flight when the cluster is torn
     // down. If the operation has already completed (e.g. against a mock, or an unusually fast
@@ -89,7 +89,7 @@ TEST_CASE("integration: closing a cluster while a valid bucket is still bootstra
           "strand the operation",
           "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   std::future<std::pair<couchbase::error, couchbase::get_result>> pending;
   {
@@ -101,7 +101,7 @@ TEST_CASE("integration: closing a cluster while a valid bucket is still bootstra
     // fail nondeterministically.
     pending = cluster.bucket(integration.ctx.bucket)
                 .default_collection()
-                .get(test::utils::uniq_id("cxxcbc-852-valid"));
+                .get(couchbase::test::uniq_id("cxxcbc-852-valid"));
 
     if (pending.wait_for(0s) != std::future_status::timeout) {
       SUCCEED("operation completed too quickly to exercise an in-flight bucket bootstrap");

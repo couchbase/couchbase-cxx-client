@@ -26,20 +26,20 @@ using namespace std::literals::chrono_literals;
 
 TEST_CASE("integration: fetch diagnostics after N1QL query", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().supports_query() ||
-      integration.ctx.deployment == test::utils::deployment_type::elixir) {
+      integration.ctx.deployment == couchbase::test::deployment_type::elixir) {
     SKIP("cluster does not support query or cluster level query");
   }
 
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
 
   SECTION("Core API")
   {
     {
       couchbase::core::operations::query_request req{ "SELECT 'hello, couchbase' AS greetings" };
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec);
       INFO("rows.size() =" << resp.rows.size());
       REQUIRE(resp.rows.size() == 1);
@@ -91,9 +91,9 @@ TEST_CASE("integration: fetch diagnostics after N1QL query", "[integration]")
 
 TEST_CASE("integration: ping", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
 
   SECTION("Core API")
   {
@@ -112,7 +112,7 @@ TEST_CASE("integration: ping", "[integration]")
     REQUIRE(res.services.count(couchbase::core::service_type::management) > 0);
     REQUIRE(res.services[couchbase::core::service_type::management].size() > 0);
 
-    if (integration.ctx.deployment != test::utils::deployment_type::elixir) {
+    if (integration.ctx.deployment != couchbase::test::deployment_type::elixir) {
       REQUIRE(res.services.count(couchbase::core::service_type::view) > 0);
       REQUIRE(res.services[couchbase::core::service_type::view].size() > 0);
     }
@@ -151,7 +151,7 @@ TEST_CASE("integration: ping", "[integration]")
     REQUIRE(res.endpoints().count(couchbase::service_type::management) > 0);
     REQUIRE(res.endpoints()[couchbase::service_type::management].size() > 0);
 
-    if (integration.ctx.deployment != test::utils::deployment_type::elixir) {
+    if (integration.ctx.deployment != couchbase::test::deployment_type::elixir) {
       REQUIRE(res.endpoints().count(couchbase::service_type::view) > 0);
       REQUIRE(res.endpoints()[couchbase::service_type::view].size() > 0);
     }
@@ -180,9 +180,9 @@ TEST_CASE("integration: ping", "[integration]")
 
 TEST_CASE("integration: ping allows to select services", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
 
   SECTION("Core API")
   {
@@ -226,7 +226,7 @@ TEST_CASE("integration: ping allows to select services", "[integration]")
 
 TEST_CASE("integration: ping allows to select bucket and opens it automatically", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   SECTION("Core API")
   {
@@ -271,7 +271,7 @@ TEST_CASE("integration: ping allows to select bucket and opens it automatically"
 
 TEST_CASE("integration: ping allows setting timeout", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   SECTION("Core API")
   {
@@ -299,7 +299,7 @@ TEST_CASE("integration: ping allows setting timeout", "[integration]")
     REQUIRE(res.services[couchbase::core::service_type::management][0].state ==
             couchbase::core::diag::ping_state::timeout);
 
-    if (integration.ctx.deployment != test::utils::deployment_type::elixir) {
+    if (integration.ctx.deployment != couchbase::test::deployment_type::elixir) {
       REQUIRE(res.services.count(couchbase::core::service_type::view) > 0);
       REQUIRE(res.services[couchbase::core::service_type::view].size() > 0);
       REQUIRE(res.services[couchbase::core::service_type::view][0].error.has_value());
@@ -357,7 +357,7 @@ TEST_CASE("integration: ping allows setting timeout", "[integration]")
     REQUIRE(res.endpoints()[couchbase::service_type::management][0].state() ==
             couchbase::ping_state::timeout);
 
-    if (integration.ctx.deployment != test::utils::deployment_type::elixir) {
+    if (integration.ctx.deployment != couchbase::test::deployment_type::elixir) {
       REQUIRE(res.endpoints().count(couchbase::service_type::view) > 0);
       REQUIRE(res.endpoints()[couchbase::service_type::view].size() > 0);
       REQUIRE(res.endpoints()[couchbase::service_type::view][0].error().has_value());

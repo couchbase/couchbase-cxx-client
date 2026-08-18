@@ -46,7 +46,7 @@ TEST_CASE("unit: row_streamer fails a single row larger than the ceiling", "[uni
   // One row whose padding exceeds a deliberately tiny ceiling.
   std::string big(std::size_t{ 64 } * 1024, 'X');
   std::string doc = R"({"results":[{"p":")" + big + R"("}],"status":"success"})";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = couchbase::test::make_cached_response_body(io, doc);
   couchbase::core::row_streamer_options opts{};
   opts.max_row_bytes = std::size_t{ 4 } * 1024; // tiny ceiling
   couchbase::core::row_streamer streamer{ io, std::move(body), "/results/^", opts };
@@ -80,7 +80,7 @@ TEST_CASE("unit: row_streamer resolves start() on a non-object or empty response
   const std::vector<std::string> payloads{ "[]", "42", "", "   " };
   for (const auto& payload : payloads) {
     asio::io_context io;
-    auto body = test::utils::make_cached_response_body(io, payload);
+    auto body = couchbase::test::make_cached_response_body(io, payload);
     couchbase::core::row_streamer streamer{
       io, std::move(body), "/results/^", couchbase::core::row_streamer_options{}
     };
@@ -102,7 +102,7 @@ TEST_CASE("unit: row_streamer next_row after cancel reports request_canceled", "
 {
   asio::io_context io;
   std::string doc = R"({"results":[{"a":1},{"a":2}],"status":"success"})";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = couchbase::test::make_cached_response_body(io, doc);
   couchbase::core::row_streamer streamer{
     io, std::move(body), "/results/^", couchbase::core::row_streamer_options{}
   };
@@ -125,7 +125,7 @@ TEST_CASE("unit: row_streamer yields rows then clean end over cached body", "[un
   // A small N1QL-shaped document with two rows and a trailing status.
   std::string doc = R"({"requestID":"x","signature":{"a":"number"},)"
                     R"("results":[{"a":1},{"a":2}],"status":"success","metrics":{}})";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = couchbase::test::make_cached_response_body(io, doc);
   couchbase::core::row_streamer streamer{ io, std::move(body), "/results/^" };
 
   std::vector<std::string> rows;
@@ -157,7 +157,7 @@ TEST_CASE("unit: row_streamer surfaces a parsing error when the body ends mid-do
   // receive a terminal error rather than blocking forever waiting for a completion that never
   // arrives.
   std::string doc = R"({"requestID":"x","results":[{"a":1},{"a":2)";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = couchbase::test::make_cached_response_body(io, doc);
   couchbase::core::row_streamer streamer{ io, std::move(body), "/results/^" };
 
   std::error_code end_ec{};
@@ -201,7 +201,7 @@ TEST_CASE("unit: row_streamer bounds buffered bytes with byte watermarks", "[uni
   opts.low_water_bytes = std::size_t{ 1 } * 1024;
   // Dribble the body out in small slices so reads are demand-gated, as a real socket would be.
   constexpr std::size_t chunk_size = 256;
-  auto body = test::utils::make_chunked_response_body(io, doc, chunk_size);
+  auto body = couchbase::test::make_chunked_response_body(io, doc, chunk_size);
   couchbase::core::row_streamer streamer{ io, std::move(body), "/results/^", opts };
 
   streamer.start([](std::string, std::error_code) {
@@ -243,7 +243,7 @@ auto
 drain_rows(const std::string& doc) -> std::pair<std::vector<std::string>, std::error_code>
 {
   asio::io_context io;
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = couchbase::test::make_cached_response_body(io, doc);
   couchbase::core::row_streamer streamer{ io, std::move(body), "/results/^" };
 
   std::vector<std::string> rows;

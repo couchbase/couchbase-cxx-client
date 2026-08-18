@@ -38,14 +38,14 @@
 
 template<typename SubdocumentOperation>
 void
-assert_single_lookup_success(test::utils::integration_test_guard& integration,
+assert_single_lookup_success(couchbase::test::integration_test_guard& integration,
                              const couchbase::core::document_id& id,
                              const SubdocumentOperation& spec,
                              std::optional<std::string> expected_value = std::nullopt)
 {
   couchbase::core::operations::lookup_in_request req{ id };
   req.specs = couchbase::lookup_in_specs{ spec }.specs();
-  auto resp = test::utils::execute(integration.cluster, req);
+  auto resp = couchbase::test::execute(integration.cluster, req);
   INFO(fmt::format("assert_single_lookup_success(\"{}\", \"{}\")", id, req.specs[0].path_));
   REQUIRE_SUCCESS(resp.ctx.ec());
   REQUIRE_FALSE(resp.cas.empty());
@@ -61,7 +61,7 @@ assert_single_lookup_success(test::utils::integration_test_guard& integration,
 
 template<typename SubdocumentOperation>
 void
-assert_single_lookup_error(test::utils::integration_test_guard& integration,
+assert_single_lookup_error(couchbase::test::integration_test_guard& integration,
                            const couchbase::core::document_id& id,
                            const SubdocumentOperation& spec,
                            couchbase::core::key_value_status_code expected_status,
@@ -70,7 +70,7 @@ assert_single_lookup_error(test::utils::integration_test_guard& integration,
 {
   couchbase::core::operations::lookup_in_request req{ id };
   req.specs = couchbase::lookup_in_specs{ spec }.specs();
-  auto resp = test::utils::execute(integration.cluster, req);
+  auto resp = couchbase::test::execute(integration.cluster, req);
   INFO(fmt::format("assert_single_lookup_error(\"{}\", \"{}\")", id, req.specs[0].path_));
   REQUIRE_SUCCESS(resp.ctx.ec());
   REQUIRE_FALSE(resp.cas.empty());
@@ -88,14 +88,14 @@ assert_single_lookup_error(test::utils::integration_test_guard& integration,
 
 template<typename SubdocumentOperation>
 void
-assert_single_lookup_any_replica_success(test::utils::integration_test_guard& integration,
+assert_single_lookup_any_replica_success(couchbase::test::integration_test_guard& integration,
                                          const couchbase::core::document_id& id,
                                          const SubdocumentOperation& spec,
                                          std::optional<std::string> expected_value = std::nullopt)
 {
   couchbase::core::operations::lookup_in_any_replica_request req{ id };
   req.specs = couchbase::lookup_in_specs{ spec }.specs();
-  auto resp = test::utils::execute(integration.cluster, req);
+  auto resp = couchbase::test::execute(integration.cluster, req);
   INFO(fmt::format(
     "assert_single_lookup_all_replica_success(\"{}\", \"{}\")", id, req.specs[0].path_));
   REQUIRE_SUCCESS(resp.ctx.ec());
@@ -114,7 +114,7 @@ assert_single_lookup_any_replica_success(test::utils::integration_test_guard& in
 
 template<typename SubdocumentOperation>
 void
-assert_single_lookup_any_replica_error(test::utils::integration_test_guard& integration,
+assert_single_lookup_any_replica_error(couchbase::test::integration_test_guard& integration,
                                        const couchbase::core::document_id& id,
                                        const SubdocumentOperation& spec,
                                        couchbase::core::key_value_status_code expected_status,
@@ -123,7 +123,7 @@ assert_single_lookup_any_replica_error(test::utils::integration_test_guard& inte
 {
   couchbase::core::operations::lookup_in_any_replica_request req{ id };
   req.specs = couchbase::lookup_in_specs{ spec }.specs();
-  auto resp = test::utils::execute(integration.cluster, req);
+  auto resp = couchbase::test::execute(integration.cluster, req);
   INFO(
     fmt::format("assert_single_lookup_any_replica_error(\"{}\", \"{}\")", id, req.specs[0].path_));
   REQUIRE_SUCCESS(resp.ctx.ec());
@@ -142,7 +142,7 @@ assert_single_lookup_any_replica_error(test::utils::integration_test_guard& inte
 
 template<typename SubdocumentOperation>
 void
-assert_single_lookup_all_replica_success(test::utils::integration_test_guard& integration,
+assert_single_lookup_all_replica_success(couchbase::test::integration_test_guard& integration,
                                          const couchbase::core::document_id& id,
                                          const SubdocumentOperation& spec,
                                          std::optional<std::string> expected_value = std::nullopt)
@@ -157,8 +157,8 @@ assert_single_lookup_all_replica_success(test::utils::integration_test_guard& in
   // before asserting full coverage, so replication lag does not flake the test.
   const auto expected_entries = integration.number_of_replicas() + 1;
   couchbase::core::operations::lookup_in_all_replicas_response response;
-  auto replicated = test::utils::wait_until([&]() {
-    response = test::utils::execute(integration.cluster, req);
+  auto replicated = couchbase::test::wait_until([&]() {
+    response = couchbase::test::execute(integration.cluster, req);
     return !response.ctx.ec() && response.entries.size() == expected_entries;
   });
   REQUIRE(replicated);
@@ -184,7 +184,7 @@ assert_single_lookup_all_replica_success(test::utils::integration_test_guard& in
 
 template<typename SubdocumentOperation>
 void
-assert_single_lookup_all_replica_error(test::utils::integration_test_guard& integration,
+assert_single_lookup_all_replica_error(couchbase::test::integration_test_guard& integration,
                                        const couchbase::core::document_id& id,
                                        const SubdocumentOperation& spec,
                                        couchbase::core::key_value_status_code expected_status,
@@ -193,7 +193,7 @@ assert_single_lookup_all_replica_error(test::utils::integration_test_guard& inte
 {
   couchbase::core::operations::lookup_in_all_replicas_request req{ id };
   req.specs = couchbase::lookup_in_specs{ spec }.specs();
-  auto response = test::utils::execute(integration.cluster, req);
+  auto response = couchbase::test::execute(integration.cluster, req);
   INFO(
     fmt::format("assert_single_lookup_all_replica_error(\"{}\", \"{}\")", id, req.specs[0].path_));
   REQUIRE_SUCCESS(response.ctx.ec());
@@ -248,17 +248,17 @@ assert_single_mutate_error(couchbase::core::operations::mutate_in_response resp,
 
 TEST_CASE("integration: subdoc get & exists", "[integration]")
 {
-  test::utils::integration_test_guard integration;
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::integration_test_guard integration;
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("subdoc")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("subdoc")
   };
 
   {
     auto value_json = couchbase::core::utils::to_binary(
       R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
     couchbase::core::operations::insert_request req{ id, value_json };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
@@ -332,7 +332,7 @@ TEST_CASE("integration: subdoc get & exists", "[integration]")
           couchbase::lookup_in_specs::get("non-exist"),
         }
           .specs();
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_found);
       REQUIRE(resp.fields.empty());
     }
@@ -345,7 +345,7 @@ TEST_CASE("integration: subdoc get & exists", "[integration]")
           couchbase::lookup_in_specs::exists("non-exist"),
         }
           .specs();
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_found);
       REQUIRE(resp.fields.empty());
     }
@@ -354,13 +354,13 @@ TEST_CASE("integration: subdoc get & exists", "[integration]")
   SECTION("non json")
   {
     couchbase::core::document_id non_json_id{
-      integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("non_json")
+      integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("non_json")
     };
     auto non_json_doc = couchbase::core::utils::to_binary("string");
 
     {
       couchbase::core::operations::insert_request req{ non_json_id, non_json_doc };
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
@@ -435,10 +435,10 @@ TEST_CASE("integration: subdoc get & exists", "[integration]")
 
 TEST_CASE("integration: subdoc store", "[integration]")
 {
-  test::utils::integration_test_guard integration;
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::integration_test_guard integration;
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("subdoc")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("subdoc")
   };
 
   couchbase::cas cas{};
@@ -447,7 +447,7 @@ TEST_CASE("integration: subdoc store", "[integration]")
     auto value_json = couchbase::core::utils::to_binary(
       R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
     couchbase::core::operations::insert_request req{ id, value_json };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     cas = resp.cas;
   }
@@ -461,7 +461,7 @@ TEST_CASE("integration: subdoc store", "[integration]")
       couchbase::core::operations::mutate_in_request req{ id };
       req.specs =
         couchbase::mutate_in_specs{ couchbase::mutate_in_specs::insert(path, 123) }.specs();
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       assert_single_mutate_success(resp, path);
     }
 
@@ -469,7 +469,7 @@ TEST_CASE("integration: subdoc store", "[integration]")
       couchbase::core::operations::mutate_in_request req{ id };
       req.specs =
         couchbase::mutate_in_specs{ couchbase::mutate_in_specs::insert(path, 123) }.specs();
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       assert_single_mutate_error(resp,
                                  path,
                                  couchbase::core::key_value_status_code::subdoc_path_exists,
@@ -480,7 +480,7 @@ TEST_CASE("integration: subdoc store", "[integration]")
       couchbase::core::operations::mutate_in_request req{ id };
       req.specs =
         couchbase::mutate_in_specs{ couchbase::mutate_in_specs::upsert(path, 123) }.specs();
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       assert_single_mutate_success(resp, path);
     }
 
@@ -493,7 +493,7 @@ TEST_CASE("integration: subdoc store", "[integration]")
     req.cas = couchbase::cas{ cas.value() + 1 };
     req.specs =
       couchbase::mutate_in_specs{ couchbase::mutate_in_specs::upsert("newpath", 123) }.specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE(resp.ctx.ec() == couchbase::errc::common::cas_mismatch);
   }
 
@@ -507,7 +507,7 @@ TEST_CASE("integration: subdoc store", "[integration]")
     couchbase::core::operations::mutate_in_request req{ id };
     req.specs =
       couchbase::mutate_in_specs{ couchbase::mutate_in_specs::upsert(path, value) }.specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     assert_single_mutate_success(resp, "dict");
     assert_single_lookup_success(
       integration, id, couchbase::lookup_in_specs::get("dict.key"), R"("value")");
@@ -524,7 +524,7 @@ TEST_CASE("integration: subdoc store", "[integration]")
     couchbase::core::operations::mutate_in_request req{ id };
     req.specs =
       couchbase::mutate_in_specs{ couchbase::mutate_in_specs::upsert_raw(path, value) }.specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     assert_single_mutate_error(resp,
                                path,
                                couchbase::core::key_value_status_code::subdoc_value_cannot_insert,
@@ -538,7 +538,7 @@ TEST_CASE("integration: subdoc store", "[integration]")
     req.specs =
       couchbase::mutate_in_specs{ couchbase::mutate_in_specs::upsert(path, tao::json::null) }
         .specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     assert_single_mutate_error(resp,
                                path,
                                couchbase::core::key_value_status_code::subdoc_path_not_found,
@@ -554,7 +554,7 @@ TEST_CASE("integration: subdoc store", "[integration]")
         couchbase::mutate_in_specs::upsert(path, tao::json::null).create_path()
       }
         .specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     assert_single_mutate_success(resp, path);
     assert_single_lookup_success(integration, id, couchbase::lookup_in_specs::get(path), "null");
   }
@@ -567,7 +567,7 @@ TEST_CASE("integration: subdoc store", "[integration]")
       couchbase::core::operations::mutate_in_request req{ id };
       req.specs =
         couchbase::mutate_in_specs{ couchbase::mutate_in_specs::replace(path, 123) }.specs();
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       assert_single_mutate_success(resp, path);
       assert_single_lookup_success(integration, id, couchbase::lookup_in_specs::get(path), "123");
     }
@@ -578,7 +578,7 @@ TEST_CASE("integration: subdoc store", "[integration]")
       couchbase::core::operations::mutate_in_request req{ id };
       req.specs =
         couchbase::mutate_in_specs{ couchbase::mutate_in_specs::replace(path, 123) }.specs();
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       assert_single_mutate_error(resp,
                                  path,
                                  couchbase::core::key_value_status_code::subdoc_path_not_found,
@@ -592,7 +592,7 @@ TEST_CASE("integration: subdoc store", "[integration]")
       couchbase::core::operations::mutate_in_request req{ id };
       req.specs =
         couchbase::mutate_in_specs{ couchbase::mutate_in_specs::replace(path, true) }.specs();
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       assert_single_mutate_success(resp, path);
       assert_single_lookup_success(integration, id, couchbase::lookup_in_specs::get(path), value);
     }
@@ -606,7 +606,7 @@ TEST_CASE("integration: subdoc store", "[integration]")
       couchbase::core::operations::mutate_in_request req{ id };
       req.specs =
         couchbase::mutate_in_specs{ couchbase::mutate_in_specs::replace(path, value) }.specs();
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec());
     }
   }
@@ -614,39 +614,39 @@ TEST_CASE("integration: subdoc store", "[integration]")
 
 TEST_CASE("integration: subdoc mutate in store semantics", "[integration]")
 {
-  test::utils::integration_test_guard integration;
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::integration_test_guard integration;
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("subdoc")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("subdoc")
   };
 
   couchbase::core::operations::mutate_in_request req{ id };
   req.store_semantics = couchbase::store_semantics::upsert;
   req.specs = couchbase::mutate_in_specs{ couchbase::mutate_in_specs::upsert("pth", 123) }.specs();
-  auto resp = test::utils::execute(integration.cluster, req);
+  auto resp = couchbase::test::execute(integration.cluster, req);
   assert_single_mutate_success(resp, "pth");
   assert_single_lookup_success(integration, id, couchbase::lookup_in_specs::get("pth"), "123");
 }
 
 TEST_CASE("integration: subdoc unique", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (integration.cluster_version().is_mock()) {
     SKIP("GOCAVES does not support subdocument create_path feature. See "
          "https://github.com/couchbaselabs/gocaves/issues/17");
   }
 
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("subdoc")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("subdoc")
   };
 
   {
     auto value_json = couchbase::core::utils::to_binary(
       R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
     couchbase::core::operations::insert_request req{ id, value_json };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
@@ -658,7 +658,7 @@ TEST_CASE("integration: subdoc unique", "[integration]")
         couchbase::mutate_in_specs::array_add_unique("a", 1).create_path()
       }
         .specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     assert_single_mutate_success(resp, "a");
     assert_single_lookup_success(integration, id, couchbase::lookup_in_specs::get("a[0]"), "1");
   }
@@ -670,7 +670,7 @@ TEST_CASE("integration: subdoc unique", "[integration]")
         couchbase::mutate_in_specs::array_add_unique("a", 1).create_path()
       }
         .specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     assert_single_mutate_error(resp,
                                "a",
                                couchbase::core::key_value_status_code::subdoc_path_exists,
@@ -683,7 +683,7 @@ TEST_CASE("integration: subdoc unique", "[integration]")
     req.specs = couchbase::mutate_in_specs{ couchbase::mutate_in_specs::array_add_unique(
                                               "a", tao::json::empty_object) }
                   .specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     assert_single_mutate_error(resp,
                                "a",
                                couchbase::core::key_value_status_code::subdoc_value_cannot_insert,
@@ -697,7 +697,7 @@ TEST_CASE("integration: subdoc unique", "[integration]")
         couchbase::mutate_in_specs::array_append("a", tao::json::empty_object).create_path()
       }
         .specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     assert_single_mutate_success(resp, "a");
   }
 
@@ -708,7 +708,7 @@ TEST_CASE("integration: subdoc unique", "[integration]")
         couchbase::mutate_in_specs::array_add_unique("a", tao::json::null).create_path()
       }
         .specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     assert_single_mutate_error(resp,
                                "a",
                                couchbase::core::key_value_status_code::subdoc_path_mismatch,
@@ -718,10 +718,10 @@ TEST_CASE("integration: subdoc unique", "[integration]")
 
 TEST_CASE("integration: subdoc counter", "[integration]")
 {
-  test::utils::integration_test_guard integration;
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::integration_test_guard integration;
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("subdoc")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("subdoc")
   };
 
   {
@@ -732,7 +732,7 @@ TEST_CASE("integration: subdoc counter", "[integration]")
         : couchbase::core::utils::to_binary(
             R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
     couchbase::core::operations::insert_request req{ id, value_json };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
@@ -742,7 +742,7 @@ TEST_CASE("integration: subdoc counter", "[integration]")
       couchbase::core::operations::mutate_in_request req{ id };
       req.specs =
         couchbase::mutate_in_specs{ couchbase::mutate_in_specs::increment("counter", 42) }.specs();
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       assert_single_mutate_success(resp, "counter", "42");
     }
 
@@ -750,7 +750,7 @@ TEST_CASE("integration: subdoc counter", "[integration]")
       couchbase::core::operations::mutate_in_request req{ id };
       req.specs =
         couchbase::mutate_in_specs{ couchbase::mutate_in_specs::increment("counter", 42) }.specs();
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       assert_single_mutate_success(resp, "counter", "84");
     }
   }
@@ -767,7 +767,7 @@ TEST_CASE("integration: subdoc counter", "[integration]")
       req.specs =
         couchbase::mutate_in_specs{ couchbase::mutate_in_specs::increment("counter", max_value) }
           .specs();
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       assert_single_mutate_success(resp, "counter", std::to_string(max_value));
     }
 
@@ -775,7 +775,7 @@ TEST_CASE("integration: subdoc counter", "[integration]")
       couchbase::core::operations::mutate_in_request req{ id };
       req.specs =
         couchbase::mutate_in_specs{ couchbase::mutate_in_specs::increment("counter", 1) }.specs();
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       assert_single_mutate_error(resp,
                                  "counter",
                                  couchbase::core::key_value_status_code::subdoc_value_cannot_insert,
@@ -792,7 +792,7 @@ TEST_CASE("integration: subdoc counter", "[integration]")
     couchbase::core::operations::mutate_in_request req{ id };
     req.specs =
       couchbase::mutate_in_specs{ couchbase::mutate_in_specs::increment("counter", 0) }.specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     assert_single_mutate_error(resp,
                                "counter",
                                couchbase::core::key_value_status_code::subdoc_delta_invalid,
@@ -810,7 +810,7 @@ TEST_CASE("integration: subdoc counter", "[integration]")
                        "999999999999999999999999999999}";
       auto value_json = couchbase::core::utils::to_binary(big_value);
       couchbase::core::operations::upsert_request req{ id, value_json };
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
@@ -818,7 +818,7 @@ TEST_CASE("integration: subdoc counter", "[integration]")
       couchbase::core::operations::mutate_in_request req{ id };
       req.specs =
         couchbase::mutate_in_specs{ couchbase::mutate_in_specs::increment("counter", 1) }.specs();
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       assert_single_mutate_error(resp,
                                  "counter",
                                  couchbase::core::key_value_status_code::subdoc_num_range_error,
@@ -831,7 +831,7 @@ TEST_CASE("integration: subdoc counter", "[integration]")
     couchbase::core::operations::mutate_in_request req{ id };
     req.specs =
       couchbase::mutate_in_specs{ couchbase::mutate_in_specs::increment("dictkey", 1) }.specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     assert_single_mutate_error(resp,
                                "dictkey",
                                couchbase::core::key_value_status_code::subdoc_path_mismatch,
@@ -844,7 +844,7 @@ TEST_CASE("integration: subdoc counter", "[integration]")
       couchbase::core::operations::mutate_in_request req{ id };
       req.specs =
         couchbase::mutate_in_specs{ couchbase::mutate_in_specs::decrement("counter", 42) }.specs();
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       assert_single_mutate_success(resp, "counter", "-42");
     }
 
@@ -852,7 +852,7 @@ TEST_CASE("integration: subdoc counter", "[integration]")
       couchbase::core::operations::mutate_in_request req{ id };
       req.specs =
         couchbase::mutate_in_specs{ couchbase::mutate_in_specs::decrement("counter", 42) }.specs();
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       assert_single_mutate_success(resp, "counter", "-84");
     }
   }
@@ -860,10 +860,10 @@ TEST_CASE("integration: subdoc counter", "[integration]")
 
 TEST_CASE("integration: subdoc multi lookup", "[integration]")
 {
-  test::utils::integration_test_guard integration;
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::integration_test_guard integration;
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("subdoc")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("subdoc")
   };
 
   couchbase::cas inserted_cas{};
@@ -871,7 +871,7 @@ TEST_CASE("integration: subdoc multi lookup", "[integration]")
     auto value_json = couchbase::core::utils::to_binary(
       R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
     couchbase::core::operations::insert_request req{ id, value_json };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     inserted_cas = resp.cas;
   }
@@ -887,7 +887,7 @@ TEST_CASE("integration: subdoc multi lookup", "[integration]")
         couchbase::lookup_in_specs::get("array[1]"),
       }
         .specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.fields.size() == 4);
 
@@ -915,7 +915,7 @@ TEST_CASE("integration: subdoc multi lookup", "[integration]")
           couchbase::mutate_in_specs::remove("array[0]"),
         }
           .specs();
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       if (integration.cluster_version().is_mock()) {
         REQUIRE(resp.ctx.ec() == couchbase::errc::common::unsupported_operation);
       } else {
@@ -927,7 +927,7 @@ TEST_CASE("integration: subdoc multi lookup", "[integration]")
       req.specs = couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("foo"),
                                               couchbase::lookup_in_specs::get("foo") }
                     .specs();
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       if (integration.cluster_version().is_mock()) {
         REQUIRE(resp.ctx.ec() == couchbase::errc::common::unsupported_operation);
       } else {
@@ -948,7 +948,7 @@ TEST_CASE("integration: subdoc multi lookup", "[integration]")
         couchbase::lookup_in_specs::get("dictkey"),
       }
         .specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_found);
     REQUIRE(resp.fields.empty());
   }
@@ -966,7 +966,7 @@ TEST_CASE("integration: subdoc multi lookup", "[integration]")
         couchbase::lookup_in_specs::get("non-exist"), // [1] fails: path_not_found
       }
         .specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE(resp.cas == inserted_cas);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE_SUCCESS(resp.fields[0].ec);
@@ -1086,7 +1086,7 @@ TEST_CASE("integration: subdoc multi lookup", "[integration]")
         couchbase::lookup_in_specs::get("incorrectPath"), // [2] path_not_found
       }
         .specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.cas == inserted_cas);
     REQUIRE(resp.fields.size() == 3);
@@ -1110,10 +1110,10 @@ TEST_CASE("integration: subdoc multi lookup", "[integration]")
 
 TEST_CASE("integration: subdoc multi mutation", "[integration]")
 {
-  test::utils::integration_test_guard integration;
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::integration_test_guard integration;
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("subdoc")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("subdoc")
   };
 
   {
@@ -1124,7 +1124,7 @@ TEST_CASE("integration: subdoc multi mutation", "[integration]")
         : couchbase::core::utils::to_binary(
             R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
     couchbase::core::operations::insert_request req{ id, value_json };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
@@ -1138,7 +1138,7 @@ TEST_CASE("integration: subdoc multi mutation", "[integration]")
         couchbase::mutate_in_specs::increment("counter", 42),
       }
         .specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.fields.size() == 2);
 
@@ -1164,7 +1164,7 @@ TEST_CASE("integration: subdoc multi mutation", "[integration]")
         couchbase::mutate_in_specs::replace("bad..bad", tao::json::null),
       }
         .specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::path_not_found);
     REQUIRE(resp.fields.size() == 3);
     REQUIRE(resp.ctx.first_error_index() == 1);
@@ -1174,23 +1174,23 @@ TEST_CASE("integration: subdoc multi mutation", "[integration]")
 
 TEST_CASE("integration: subdoc expiry", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (integration.cluster_version().is_mock()) {
     SKIP("GOCAVES does not support subdoc mutations with expiry. See "
          "https://github.com/couchbaselabs/gocaves/issues/85");
   }
 
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("subdoc")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("subdoc")
   };
 
   {
     auto value_json = couchbase::core::utils::to_binary(
       R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
     couchbase::core::operations::insert_request req{ id, value_json };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
@@ -1200,24 +1200,24 @@ TEST_CASE("integration: subdoc expiry", "[integration]")
     req.specs =
       couchbase::mutate_in_specs{ couchbase::mutate_in_specs::insert("tmppath", tao::json::null) }
         .specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     assert_single_mutate_success(resp, "tmppath");
   }
 }
 
 TEST_CASE("integration: subdoc get count", "[integration]")
 {
-  test::utils::integration_test_guard integration;
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::integration_test_guard integration;
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("subdoc")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("subdoc")
   };
 
   {
     auto value_json = couchbase::core::utils::to_binary(
       R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
     couchbase::core::operations::insert_request req{ id, value_json };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
@@ -1235,7 +1235,7 @@ TEST_CASE("integration: subdoc get count", "[integration]")
         couchbase::lookup_in_specs::count("array"),
       }
         .specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.fields.size() == 2);
 
@@ -1249,16 +1249,16 @@ TEST_CASE("integration: subdoc get count", "[integration]")
 
 TEST_CASE("integration: subdoc insert error consistency", "[integration]")
 {
-  test::utils::integration_test_guard integration;
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::integration_test_guard integration;
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("sd_err")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("sd_err")
   };
 
   couchbase::cas cas{};
   {
     couchbase::core::operations::insert_request req{ id, couchbase::core::utils::to_binary("{}") };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     cas = resp.cas;
   }
@@ -1270,7 +1270,7 @@ TEST_CASE("integration: subdoc insert error consistency", "[integration]")
     couchbase::core::operations::mutate_in_request req{ id };
     req.specs = couchbase::mutate_in_specs{ couchbase::mutate_in_specs::upsert("foo", 42) }.specs();
     req.store_semantics = couchbase::store_semantics::insert;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_exists);
   }
 
@@ -1281,7 +1281,7 @@ TEST_CASE("integration: subdoc insert error consistency", "[integration]")
     req.specs = couchbase::mutate_in_specs{ couchbase::mutate_in_specs::upsert("foo", 42) }.specs();
     req.cas = couchbase::cas{ cas.value() + 1 };
     req.store_semantics = couchbase::store_semantics::upsert;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE(resp.ctx.ec() == couchbase::errc::common::invalid_argument);
   }
 
@@ -1292,17 +1292,17 @@ TEST_CASE("integration: subdoc insert error consistency", "[integration]")
     couchbase::core::operations::mutate_in_request req{ id };
     req.specs = couchbase::mutate_in_specs{ couchbase::mutate_in_specs::upsert("foo", 42) }.specs();
     req.cas = couchbase::cas{ cas.value() + 1 };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE(resp.ctx.ec() == couchbase::errc::common::cas_mismatch);
   }
 }
 
 TEST_CASE("integration: subdoc remove with empty path", "[integration]")
 {
-  test::utils::integration_test_guard integration;
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::integration_test_guard integration;
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("sd_err")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("sd_err")
   };
   std::string empty_path;
   tao::json::value value{
@@ -1313,7 +1313,7 @@ TEST_CASE("integration: subdoc remove with empty path", "[integration]")
   {
     auto initial_value = couchbase::core::utils::to_binary(R"({"bar":"foo"})");
     couchbase::core::operations::insert_request req{ id, initial_value };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
@@ -1322,13 +1322,13 @@ TEST_CASE("integration: subdoc remove with empty path", "[integration]")
     couchbase::core::operations::mutate_in_request req{ id };
     req.specs =
       couchbase::mutate_in_specs{ couchbase::mutate_in_specs::replace(empty_path, value) }.specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.value == couchbase::core::utils::json::generate_binary(value));
   }
@@ -1338,23 +1338,23 @@ TEST_CASE("integration: subdoc remove with empty path", "[integration]")
     couchbase::core::operations::mutate_in_request req{ id };
     req.specs =
       couchbase::mutate_in_specs{ couchbase::mutate_in_specs::remove(empty_path) }.specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_found);
   }
 }
 
 TEST_CASE("integration: subdoc top level array", "[integration]")
 {
-  test::utils::integration_test_guard integration;
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::integration_test_guard integration;
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("sd_tl_ary")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("sd_tl_ary")
   };
   std::string empty_path;
 
@@ -1365,12 +1365,12 @@ TEST_CASE("integration: subdoc top level array", "[integration]")
     req.specs =
       couchbase::mutate_in_specs{ couchbase::mutate_in_specs::array_prepend(empty_path, 1) }
         .specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.value == couchbase::core::utils::to_binary("[1]"));
   }
@@ -1381,7 +1381,7 @@ TEST_CASE("integration: subdoc top level array", "[integration]")
     req.specs =
       couchbase::mutate_in_specs{ couchbase::mutate_in_specs::array_add_unique(empty_path, 1) }
         .specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::path_exists);
   }
   {
@@ -1389,13 +1389,13 @@ TEST_CASE("integration: subdoc top level array", "[integration]")
     req.specs =
       couchbase::mutate_in_specs{ couchbase::mutate_in_specs::array_add_unique(empty_path, 42) }
         .specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.value == couchbase::core::utils::to_binary("[1,42]"));
   }
@@ -1405,13 +1405,13 @@ TEST_CASE("integration: subdoc top level array", "[integration]")
     couchbase::core::operations::mutate_in_request req{ id };
     req.specs =
       couchbase::mutate_in_specs{ couchbase::mutate_in_specs::array_append(empty_path, 2) }.specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.value == couchbase::core::utils::to_binary("[1,42,2]"));
   }
@@ -1424,7 +1424,7 @@ TEST_CASE("integration: subdoc top level array", "[integration]")
         couchbase::lookup_in_specs::count(empty_path),
       }
         .specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.fields.size() == 1);
     REQUIRE(resp.fields[0].value == couchbase::core::utils::to_binary("3"));
@@ -1434,7 +1434,7 @@ TEST_CASE("integration: subdoc top level array", "[integration]")
 TEST_CASE("integration: subdoc all replica reads", "[integration]")
 {
 
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.has_bucket_capability("subdoc.ReplicaRead")) {
     SKIP("bucket does not support replica_read");
@@ -1451,7 +1451,7 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
                      integration.number_of_replicas()));
   }
 
-  auto key = test::utils::uniq_id("lookup_in_any_replica");
+  auto key = couchbase::test::uniq_id("lookup_in_any_replica");
   couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", key };
 
   couchbase::cas inserted_cas{};
@@ -1460,7 +1460,7 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
       R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
     couchbase::core::operations::insert_request req{ id, value_json };
     req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     inserted_cas = resp.cas;
   }
@@ -1471,8 +1471,8 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
     couchbase::core::operations::lookup_in_all_replicas_request req{ id };
     req.specs = couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("dictkey") }.specs();
     const auto expected_entries = integration.number_of_replicas() + 1;
-    auto replicated = test::utils::wait_until([&]() {
-      auto response = test::utils::execute(integration.cluster, req);
+    auto replicated = couchbase::test::wait_until([&]() {
+      auto response = couchbase::test::execute(integration.cluster, req);
       return !response.ctx.ec() && response.entries.size() == expected_entries;
     });
     REQUIRE(replicated);
@@ -1551,7 +1551,7 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
           couchbase::lookup_in_specs::get("non-exist"),
         }
           .specs();
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_found);
       REQUIRE(resp.entries.empty());
     }
@@ -1564,7 +1564,7 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
           couchbase::lookup_in_specs::exists("non-exist"),
         }
           .specs();
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_found);
       REQUIRE(resp.entries.empty());
     }
@@ -1573,13 +1573,13 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
   SECTION("non json")
   {
     couchbase::core::document_id non_json_id{
-      integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("non_json")
+      integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("non_json")
     };
     auto non_json_doc = couchbase::core::utils::to_binary("string");
 
     {
       couchbase::core::operations::insert_request req{ non_json_id, non_json_doc };
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
@@ -1668,7 +1668,7 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
         couchbase::lookup_in_specs::get("array"),     // [2] succeeds
       }
         .specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.entries.size() == integration.number_of_replicas() + 1);
     for (const auto& entry : resp.entries) {
@@ -1702,7 +1702,7 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
         couchbase::lookup_in_specs::get("non-exist"), // [1] fails: path_not_found
       }
         .specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.entries.size() == integration.number_of_replicas() + 1);
     for (const auto& entry : resp.entries) {
@@ -1770,7 +1770,7 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
 
 TEST_CASE("integration: subdoc any replica reads", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.has_bucket_capability("subdoc.ReplicaRead")) {
     SKIP("bucket does not support replica_read");
@@ -1787,9 +1787,9 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
                      integration.number_of_replicas()));
   }
 
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
 
-  auto key = test::utils::uniq_id("lookup_in_any_replica");
+  auto key = couchbase::test::uniq_id("lookup_in_any_replica");
   couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", key };
 
   couchbase::cas inserted_cas{};
@@ -1798,7 +1798,7 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
       R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");
     couchbase::core::operations::insert_request req{ id, value_json };
     req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     inserted_cas = resp.cas;
   }
@@ -1809,8 +1809,8 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
     couchbase::core::operations::lookup_in_all_replicas_request req{ id };
     req.specs = couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("dictkey") }.specs();
     const auto expected_entries = integration.number_of_replicas() + 1;
-    auto replicated = test::utils::wait_until([&]() {
-      auto response = test::utils::execute(integration.cluster, req);
+    auto replicated = couchbase::test::wait_until([&]() {
+      auto response = couchbase::test::execute(integration.cluster, req);
       return !response.ctx.ec() && response.entries.size() == expected_entries;
     });
     REQUIRE(replicated);
@@ -1889,7 +1889,7 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
           couchbase::lookup_in_specs::get("non-exist"),
         }
           .specs();
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_irretrievable);
       REQUIRE(resp.fields.empty());
     }
@@ -1902,7 +1902,7 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
           couchbase::lookup_in_specs::exists("non-exist"),
         }
           .specs();
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_irretrievable);
       REQUIRE(resp.fields.empty());
     }
@@ -1911,13 +1911,13 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
   SECTION("non json")
   {
     couchbase::core::document_id non_json_id{
-      integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("non_json")
+      integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("non_json")
     };
     auto non_json_doc = couchbase::core::utils::to_binary("string");
 
     {
       couchbase::core::operations::insert_request req{ non_json_id, non_json_doc };
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
@@ -2007,7 +2007,7 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
         couchbase::lookup_in_specs::get("array"),     // [2] succeeds
       }
         .specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE(resp.fields.size() == 3);
     // field[0]: dictkey — should succeed with no error
     REQUIRE_SUCCESS(resp.fields[0].ec);
@@ -2059,7 +2059,7 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
           .xattr(), // [1] succeeds (XATTR — will be moved to front during encode)
       }
         .specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE(resp.fields.size() == 2);
     // field[0]: non-exist — fails (original caller position 0)
     REQUIRE(resp.fields[0].ec == couchbase::errc::key_value::path_not_found);
@@ -2089,7 +2089,7 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
         couchbase::lookup_in_specs::get("non-exist"), // [1] fails: path_not_found
       }
         .specs();
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE(resp.cas == inserted_cas);
     REQUIRE_SUCCESS(resp.fields[0].ec);
     REQUIRE(resp.fields[1].ec == couchbase::errc::key_value::path_not_found);
@@ -2105,7 +2105,7 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
     }
     req.specs = specs.specs();
 
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_irretrievable);
     REQUIRE(resp.fields.empty());
   }
@@ -2169,32 +2169,32 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
 
 TEST_CASE("integration: subdoc invalid_argument if empty specs", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   SECTION("core API")
   {
     couchbase::core::document_id id{
-      integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("empty_specs")
+      integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("empty_specs")
     };
 
     couchbase::core::operations::lookup_in_request lookupin_req{ id };
-    auto lookupin_resp = test::utils::execute(integration.cluster, lookupin_req);
+    auto lookupin_resp = couchbase::test::execute(integration.cluster, lookupin_req);
     REQUIRE(lookupin_resp.ctx.ec() == couchbase::errc::common::invalid_argument);
 
     if (integration.has_bucket_capability("subdoc.ReplicaRead")) {
       couchbase::core::operations::lookup_in_any_replica_request lookupin_any_replica_req{ id };
       auto lookupin_any_replica_resp =
-        test::utils::execute(integration.cluster, lookupin_any_replica_req);
+        couchbase::test::execute(integration.cluster, lookupin_any_replica_req);
       REQUIRE(lookupin_any_replica_resp.ctx.ec() == couchbase::errc::common::invalid_argument);
 
       couchbase::core::operations::lookup_in_all_replicas_request lookup_in_all_replicas_req{ id };
       auto lookup_in_all_replicas_resp =
-        test::utils::execute(integration.cluster, lookup_in_all_replicas_req);
+        couchbase::test::execute(integration.cluster, lookup_in_all_replicas_req);
       REQUIRE(lookup_in_all_replicas_resp.ctx.ec() == couchbase::errc::common::invalid_argument);
     }
 
     couchbase::core::operations::mutate_in_request mutatein_req{ id };
-    auto mutatein_resp = test::utils::execute(integration.cluster, mutatein_req);
+    auto mutatein_resp = couchbase::test::execute(integration.cluster, mutatein_req);
     REQUIRE(mutatein_resp.ctx.ec() == couchbase::errc::common::invalid_argument);
   }
 
@@ -2204,7 +2204,7 @@ TEST_CASE("integration: subdoc invalid_argument if empty specs", "[integration]"
 
     auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
 
-    auto key = test::utils::uniq_id("empty_specs");
+    auto key = couchbase::test::uniq_id("empty_specs");
     auto [lookupin_err, lookupin_resp] = collection.lookup_in(key, {}).get();
     REQUIRE(lookupin_err.ec() == couchbase::errc::common::invalid_argument);
 
@@ -2226,13 +2226,13 @@ TEST_CASE("integration: subdoc invalid_argument if empty specs", "[integration]"
 
 TEST_CASE("integration: public API lookup in per-spec errors", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   auto cluster = integration.public_cluster();
 
   auto collection = cluster.bucket(integration.ctx.bucket).scope("_default").collection("_default");
 
-  auto key = test::utils::uniq_id("lookup_in_path_invalid");
+  auto key = couchbase::test::uniq_id("lookup_in_path_invalid");
   {
     auto value_json = couchbase::core::utils::json::parse(
       R"({"dictkey":"dictval","array":[1,2,3,4,[10,20,30,[100,200,300]]]})");

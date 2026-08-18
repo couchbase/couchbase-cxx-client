@@ -826,12 +826,12 @@ $ ./query_stream_errors couchbase://127.0.0.1 Administrator password
 
 TEST_CASE("example: streaming query with next()", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (!integration.cluster_version().supports_query()) {
     SKIP("cluster does not support query");
   }
 
-  const auto env = test::utils::test_context::load_from_environment();
+  const auto env = couchbase::test::test_context::load_from_environment();
   seed_products(integration.public_cluster(), env.bucket);
 
   const char* argv[] = {
@@ -846,7 +846,7 @@ TEST_CASE("example: streaming query with next()", "[integration]")
 
 TEST_CASE("example: streaming query with the iterator", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (!integration.cluster_version().supports_query()) {
     SKIP("cluster does not support query");
   }
@@ -854,7 +854,7 @@ TEST_CASE("example: streaming query with the iterator", "[integration]")
     SKIP("cluster does not support collections");
   }
 
-  const auto env = test::utils::test_context::load_from_environment();
+  const auto env = couchbase::test::test_context::load_from_environment();
   seed_products(integration.public_cluster(), env.bucket);
 
   const char* argv[] = {
@@ -867,12 +867,12 @@ TEST_CASE("example: streaming query with the iterator", "[integration]")
 
 TEST_CASE("example: streaming query with a non-blocking pull loop", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (!integration.cluster_version().supports_query()) {
     SKIP("cluster does not support query");
   }
 
-  const auto env = test::utils::test_context::load_from_environment();
+  const auto env = couchbase::test::test_context::load_from_environment();
   const char* argv[] = {
     "query_stream_async",
     env.connection_string.c_str(),
@@ -884,12 +884,12 @@ TEST_CASE("example: streaming query with a non-blocking pull loop", "[integratio
 
 TEST_CASE("example: handling errors while streaming", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (!integration.cluster_version().supports_query()) {
     SKIP("cluster does not support query");
   }
 
-  const auto env = test::utils::test_context::load_from_environment();
+  const auto env = couchbase::test::test_context::load_from_environment();
   const char* argv[] = {
     "query_stream_errors",
     env.connection_string.c_str(),
@@ -901,15 +901,15 @@ TEST_CASE("example: handling errors while streaming", "[integration]")
 
 TEST_CASE("example: streaming analytics query", "[integration]")
 {
-  test::utils::integration_test_guard integration;
-  if (integration.ctx.deployment == test::utils::deployment_type::elixir) {
+  couchbase::test::integration_test_guard integration;
+  if (integration.ctx.deployment == couchbase::test::deployment_type::elixir) {
     SKIP("elixir deployment does not support analytics");
   }
   if (!integration.has_analytics_service()) {
     SKIP("cluster does not have analytics service");
   }
 
-  const auto env = test::utils::test_context::load_from_environment();
+  const auto env = couchbase::test::test_context::load_from_environment();
   const char* argv[] = {
     "analytics_stream",
     env.connection_string.c_str(),

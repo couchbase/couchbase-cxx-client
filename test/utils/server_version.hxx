@@ -20,7 +20,7 @@
 #include <cstdlib>
 #include <string>
 
-namespace test::utils
+namespace couchbase::test
 {
 
 enum class server_edition {
@@ -53,6 +53,30 @@ struct server_version {
   bool use_gocaves{ false };
 
   static auto parse(const std::string& str, deployment_type deployment) -> server_version;
+
+  // Rendering and ordering by (major, minor, micro), which is what the framework's requirement
+  // vocabulary compares a version range against. build and profile deliberately take no part: a
+  // requirement asks which release a feature arrived in, not which build produced it.
+  [[nodiscard]] auto to_string() const -> std::string
+  {
+    return std::to_string(major) + '.' + std::to_string(minor) + '.' + std::to_string(micro);
+  }
+
+  [[nodiscard]] friend auto operator<(const server_version& a, const server_version& b) -> bool
+  {
+    if (a.major != b.major) {
+      return a.major < b.major;
+    }
+    if (a.minor != b.minor) {
+      return a.minor < b.minor;
+    }
+    return a.micro < b.micro;
+  }
+
+  [[nodiscard]] friend auto operator>=(const server_version& a, const server_version& b) -> bool
+  {
+    return !(a < b);
+  }
 
   [[nodiscard]] auto is_mock() const -> bool
   {
@@ -333,4 +357,4 @@ struct server_version {
   }
 };
 
-} // namespace test::utils
+} // namespace couchbase::test

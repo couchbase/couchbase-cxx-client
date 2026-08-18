@@ -22,7 +22,7 @@
 
 TEST_CASE("integration: columnar database management", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (!integration.cluster_version().is_columnar()) {
     SKIP("Requires a columnar cluster");
   }

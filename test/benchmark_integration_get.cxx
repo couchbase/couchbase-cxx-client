@@ -32,12 +32,12 @@
 
 TEST_CASE("benchmark: get a document", "[benchmark]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
 
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("foo")
   };
 
   {
@@ -48,14 +48,14 @@ TEST_CASE("benchmark: get a document", "[benchmark]")
     couchbase::core::operations::upsert_request req{
       id, couchbase::core::utils::json::generate_binary(value)
     };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
   BENCHMARK("get")
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   };
 }

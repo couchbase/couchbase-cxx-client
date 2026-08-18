@@ -27,22 +27,22 @@ const std::string serverless_plan_params = R"({ "indexPartition": 1, "numReplica
 
 TEST_CASE("integration: search index management", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().supports_search()) {
     SKIP("cluster does not support search");
   }
 
   if (!integration.cluster_version().supports_gcccp()) {
-    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
   }
 
   SECTION("search indexes crud")
   {
-    auto index1_base_name = test::utils::uniq_id("index1");
+    auto index1_base_name = couchbase::test::uniq_id("index1");
     auto index1_name = index1_base_name;
-    auto index2_name = test::utils::uniq_id("index2");
-    auto alias_name = test::utils::uniq_id("alias");
+    auto index2_name = couchbase::test::uniq_id("index2");
+    auto alias_name = couchbase::test::uniq_id("alias");
 
     {
       couchbase::core::management::search::index index;
@@ -55,7 +55,7 @@ TEST_CASE("integration: search index management", "[integration]")
       }
       couchbase::core::operations::management::search_index_upsert_request req{};
       req.index = index;
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec);
       if (resp.name != index1_name) {
         index1_name = resp.name;
@@ -73,7 +73,7 @@ TEST_CASE("integration: search index management", "[integration]")
       }
       couchbase::core::operations::management::search_index_upsert_request req{};
       req.index = index;
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE(resp.ctx.ec == couchbase::errc::common::index_exists);
     }
 
@@ -90,7 +90,7 @@ TEST_CASE("integration: search index management", "[integration]")
       index.params_json = R"({ "store": { "kvStoreName": "moss" }})";
       couchbase::core::operations::management::search_index_upsert_request req{};
       req.index = index;
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec);
       if (resp.name != index2_name) {
         // FIXME: server 7.2 might automatically prepend "{scope}.{collection}." in front of the
@@ -118,7 +118,7 @@ TEST_CASE("integration: search index management", "[integration]")
       }
       couchbase::core::operations::management::search_index_upsert_request req{};
       req.index = index;
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec);
       if (resp.name != alias_name) {
         alias_name = resp.name;
@@ -128,7 +128,7 @@ TEST_CASE("integration: search index management", "[integration]")
     {
       couchbase::core::operations::management::search_index_get_request req{};
       req.index_name = index1_name;
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec);
       REQUIRE(resp.index.name == index1_name);
       REQUIRE(resp.index.type == "fulltext-index");
@@ -137,7 +137,7 @@ TEST_CASE("integration: search index management", "[integration]")
     {
       couchbase::core::operations::management::search_index_get_request req{};
       req.index_name = index2_name;
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec);
       REQUIRE(resp.index.name == index2_name);
       REQUIRE(resp.index.type == "fulltext-index");
@@ -146,7 +146,7 @@ TEST_CASE("integration: search index management", "[integration]")
     {
       couchbase::core::operations::management::search_index_get_request req{};
       req.index_name = alias_name;
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec);
       REQUIRE(resp.index.name == alias_name);
       REQUIRE(resp.index.type == "fulltext-alias");
@@ -155,13 +155,13 @@ TEST_CASE("integration: search index management", "[integration]")
     {
       couchbase::core::operations::management::search_index_get_request req{};
       req.index_name = "missing_index";
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE(resp.ctx.ec == couchbase::errc::common::index_not_found);
     }
 
     {
       couchbase::core::operations::management::search_index_get_all_request req{};
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec);
       REQUIRE_FALSE(resp.indexes.empty());
 
@@ -182,27 +182,27 @@ TEST_CASE("integration: search index management", "[integration]")
     {
       couchbase::core::operations::management::search_index_drop_request req{};
       req.index_name = index1_name;
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec);
     }
 
     {
       couchbase::core::operations::management::search_index_drop_request req{};
       req.index_name = index2_name;
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec);
     }
 
     {
       couchbase::core::operations::management::search_index_drop_request req{};
       req.index_name = alias_name;
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec);
     }
 
     couchbase::core::operations::management::search_index_drop_request req{};
     req.index_name = "missing_index";
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE(resp.ctx.ec == couchbase::errc::common::index_not_found);
   }
 
@@ -217,13 +217,13 @@ TEST_CASE("integration: search index management", "[integration]")
     }
     couchbase::core::operations::management::search_index_upsert_request req{};
     req.index = index;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE(resp.ctx.ec == couchbase::errc::common::invalid_argument);
   }
 
   SECTION("control")
   {
-    auto index_name = test::utils::uniq_id("index");
+    auto index_name = couchbase::test::uniq_id("index");
 
     {
       couchbase::core::management::search::index index;
@@ -236,7 +236,7 @@ TEST_CASE("integration: search index management", "[integration]")
       }
       couchbase::core::operations::management::search_index_upsert_request req{};
       req.index = index;
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec);
     }
 
@@ -246,7 +246,7 @@ TEST_CASE("integration: search index management", "[integration]")
         couchbase::core::operations::management::search_index_control_ingest_request req{};
         req.index_name = index_name;
         req.pause = true;
-        auto resp = test::utils::execute(integration.cluster, req);
+        auto resp = couchbase::test::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec);
       }
 
@@ -254,7 +254,7 @@ TEST_CASE("integration: search index management", "[integration]")
         couchbase::core::operations::management::search_index_control_ingest_request req{};
         req.index_name = index_name;
         req.pause = false;
-        auto resp = test::utils::execute(integration.cluster, req);
+        auto resp = couchbase::test::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec);
       }
     }
@@ -265,7 +265,7 @@ TEST_CASE("integration: search index management", "[integration]")
         couchbase::core::operations::management::search_index_control_query_request req{};
         req.index_name = index_name;
         req.allow = true;
-        auto resp = test::utils::execute(integration.cluster, req);
+        auto resp = couchbase::test::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec);
       }
 
@@ -273,7 +273,7 @@ TEST_CASE("integration: search index management", "[integration]")
         couchbase::core::operations::management::search_index_control_query_request req{};
         req.index_name = index_name;
         req.allow = false;
-        auto resp = test::utils::execute(integration.cluster, req);
+        auto resp = couchbase::test::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec);
       }
     }
@@ -284,7 +284,7 @@ TEST_CASE("integration: search index management", "[integration]")
         couchbase::core::operations::management::search_index_control_plan_freeze_request req{};
         req.index_name = index_name;
         req.freeze = true;
-        auto resp = test::utils::execute(integration.cluster, req);
+        auto resp = couchbase::test::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec);
       }
 
@@ -292,33 +292,33 @@ TEST_CASE("integration: search index management", "[integration]")
         couchbase::core::operations::management::search_index_control_plan_freeze_request req{};
         req.index_name = index_name;
         req.freeze = false;
-        auto resp = test::utils::execute(integration.cluster, req);
+        auto resp = couchbase::test::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec);
       }
     }
 
     couchbase::core::operations::management::search_index_drop_request req{};
     req.index_name = index_name;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
   }
 }
 
 TEST_CASE("integration: search index management public API", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().supports_search()) {
     SKIP("cluster does not support search");
   }
 
   if (!integration.cluster_version().supports_gcccp()) {
-    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
   }
 
   auto c = integration.public_cluster();
 
-  auto index_name = test::utils::uniq_id("index");
+  auto index_name = couchbase::test::uniq_id("index");
 
   SECTION("search indexes crud")
   {
@@ -405,7 +405,7 @@ TEST_CASE("integration: search index management public API", "[integration]")
 
 TEST_CASE("integration: search index management analyze document", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().supports_search()) {
     SKIP("cluster does not support search");
@@ -419,7 +419,7 @@ TEST_CASE("integration: search index management analyze document", "[integration
     SKIP("FIXME: this test on Capella is not very stable.");
   }
 
-  auto index_name = test::utils::uniq_id("index");
+  auto index_name = couchbase::test::uniq_id("index");
 
   {
     couchbase::core::management::search::index index;
@@ -432,22 +432,22 @@ TEST_CASE("integration: search index management analyze document", "[integration
     }
     couchbase::core::operations::management::search_index_upsert_request req{};
     req.index = index;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
     index_name = resp.name;
   }
 
-  REQUIRE(test::utils::wait_for_search_pindexes_ready(
+  REQUIRE(couchbase::test::wait_for_search_pindexes_ready(
     integration.cluster, integration.ctx.bucket, index_name));
 
   {
     couchbase::core::operations::management::search_index_analyze_document_response resp;
-    bool operation_completed = test::utils::wait_until(
+    bool operation_completed = couchbase::test::wait_until(
       [&integration, &index_name, &resp]() {
         couchbase::core::operations::management::search_index_analyze_document_request req{};
         req.index_name = index_name;
         req.encoded_document = R"({ "name": "hello world" })";
-        resp = test::utils::execute(integration.cluster, req);
+        resp = couchbase::test::execute(integration.cluster, req);
         return resp.ctx.ec != couchbase::errc::common::internal_server_failure;
       },
       std::chrono::minutes{ 5 },
@@ -460,14 +460,14 @@ TEST_CASE("integration: search index management analyze document", "[integration
   {
     couchbase::core::operations::management::search_index_drop_request req{};
     req.index_name = index_name;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
   }
 }
 
 TEST_CASE("integration: search index management analyze document public API", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().supports_search()) {
     SKIP("cluster does not support search");
@@ -481,7 +481,7 @@ TEST_CASE("integration: search index management analyze document public API", "[
     SKIP("FIXME: this test on Capella is not very stable.");
   }
 
-  auto index_name = test::utils::uniq_id("index");
+  auto index_name = couchbase::test::uniq_id("index");
 
   {
     auto c = integration.public_cluster();
@@ -493,13 +493,13 @@ TEST_CASE("integration: search index management analyze document public API", "[
       auto err = c.search_indexes().upsert_index(index).get();
       REQUIRE_SUCCESS(err.ec());
     }
-    REQUIRE(test::utils::wait_for_search_pindexes_ready(
+    REQUIRE(couchbase::test::wait_for_search_pindexes_ready(
       integration.cluster, integration.ctx.bucket, index_name));
 
     couchbase::error err;
     std::string analysis;
     std::pair<couchbase::error, std::vector<std::string>> result;
-    bool operation_completed = test::utils::wait_until([c = c, &index_name, &result]() {
+    bool operation_completed = couchbase::test::wait_until([c = c, &index_name, &result]() {
       tao::json::value basic_doc = {
         { "name", "hello world" },
       };
@@ -517,20 +517,20 @@ TEST_CASE("integration: search index management analyze document public API", "[
 
 TEST_CASE("integration: scope search index management public API", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().supports_scope_search()) {
     SKIP("cluster does not support scope search");
   }
 
   if (!integration.cluster_version().supports_gcccp()) {
-    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
   }
 
   auto c = integration.public_cluster();
 
   auto manager = c.bucket(integration.ctx.bucket).scope("_default").search_indexes();
-  auto index_name = test::utils::uniq_id("index");
+  auto index_name = couchbase::test::uniq_id("index");
 
   SECTION("search indexes crud")
   {
@@ -618,7 +618,7 @@ TEST_CASE("integration: scope search index management public API", "[integration
 
 TEST_CASE("integration: scope search index management analyze document public API", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().supports_scope_search_analyze()) {
     SKIP("cluster does not support scoped analyze_document");
@@ -631,7 +631,7 @@ TEST_CASE("integration: scope search index management analyze document public AP
   auto c = integration.public_cluster();
 
   auto manager = c.bucket(integration.ctx.bucket).scope("_default").search_indexes();
-  auto index_name = test::utils::uniq_id("index");
+  auto index_name = couchbase::test::uniq_id("index");
   {
     {
       couchbase::management::search::index index;
@@ -640,13 +640,13 @@ TEST_CASE("integration: scope search index management analyze document public AP
       auto err = manager.upsert_index(index).get();
       REQUIRE_SUCCESS(err.ec());
     }
-    REQUIRE(test::utils::wait_for_search_pindexes_ready(
+    REQUIRE(couchbase::test::wait_for_search_pindexes_ready(
       integration.cluster, integration.ctx.bucket, index_name));
 
     couchbase::error err;
     std::string analysis;
     std::pair<couchbase::error, std::vector<std::string>> result;
-    bool operation_completed = test::utils::wait_until([&manager, &index_name, &result]() {
+    bool operation_completed = couchbase::test::wait_until([&manager, &index_name, &result]() {
       tao::json::value basic_doc = {
         { "name", "hello world" },
       };
@@ -665,7 +665,7 @@ TEST_CASE("integration: scope search index management analyze document public AP
 
 TEST_CASE("integration: scope search returns feature not available", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (integration.cluster_version().supports_scope_search()) {
     SKIP("cluster supports scope search");
@@ -673,7 +673,7 @@ TEST_CASE("integration: scope search returns feature not available", "[integrati
   auto c = integration.public_cluster();
 
   auto manager = c.bucket(integration.ctx.bucket).scope("_default").search_indexes();
-  auto index_name = test::utils::uniq_id("index");
+  auto index_name = couchbase::test::uniq_id("index");
   {
     couchbase::management::search::index index;
     index.name = index_name;
@@ -685,7 +685,7 @@ TEST_CASE("integration: scope search returns feature not available", "[integrati
 
 TEST_CASE("integration: upsert vector index feature not available", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (integration.cluster_version().supports_vector_search()) {
     SKIP("cluster supports vector search");
@@ -695,10 +695,10 @@ TEST_CASE("integration: upsert vector index feature not available", "[integratio
 
   auto manager = c.search_indexes();
   {
-    auto index_name = test::utils::uniq_id("index");
+    auto index_name = couchbase::test::uniq_id("index");
     couchbase::management::search::index index;
     index.name = index_name;
-    index.params_json = test::utils::read_test_data("sample_vector_index_params.json");
+    index.params_json = couchbase::test::read_test_data("sample_vector_index_params.json");
     auto err = manager.upsert_index(index).get();
     REQUIRE(err.ec() == couchbase::errc::common::feature_not_available);
   }

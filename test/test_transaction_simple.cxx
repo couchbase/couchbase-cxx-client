@@ -52,18 +52,18 @@ get_conf()
 
 TEST_CASE("transactions: arbitrary runtime error", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   auto txn = integration.transactions();
 
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
   {
     couchbase::core::operations::upsert_request req{ id, content_json.data };
     req.flags = content_json.flags;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
@@ -86,13 +86,13 @@ TEST_CASE("transactions: arbitrary runtime error", "[transactions]")
 
 TEST_CASE("transactions: arbitrary exception", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   auto txn = integration.transactions();
 
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
 
   REQUIRE_THROWS_AS(
@@ -114,18 +114,18 @@ TEST_CASE("transactions: arbitrary exception", "[transactions]")
 
 TEST_CASE("transactions: can get replica", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   auto txn = integration.transactions();
 
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
   {
     couchbase::core::operations::upsert_request req{ id, content_json.data };
     req.flags = content_json.flags;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
@@ -143,7 +143,7 @@ TEST_CASE("transactions: can get replica", "[transactions]")
   };
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.value == couchbase::core::utils::json::generate_binary(expected));
   }
@@ -151,18 +151,18 @@ TEST_CASE("transactions: can get replica", "[transactions]")
 
 TEST_CASE("transactions: can use custom metadata collections per transactions", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   auto txn = integration.transactions();
 
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
   {
     couchbase::core::operations::upsert_request req{ id, content_json.data };
     req.flags = content_json.flags;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
   couchbase::transactions::transaction_options cfg;
@@ -182,7 +182,7 @@ TEST_CASE("transactions: can use custom metadata collections per transactions", 
   };
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.value == couchbase::core::utils::json::generate_binary(expected));
   }
@@ -190,10 +190,10 @@ TEST_CASE("transactions: can use custom metadata collections per transactions", 
 
 TEST_CASE("transactions: can use custom metadata collections", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   auto cluster = integration.cluster;
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
   auto cfg = get_conf().metadata_collection(
     couchbase::transactions::transaction_keyspace(integration.ctx.other_bucket));
@@ -204,7 +204,7 @@ TEST_CASE("transactions: can use custom metadata collections", "[transactions]")
   {
     couchbase::core::operations::upsert_request req{ id, content_json.data };
     req.flags = content_json.flags;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
   txn->run([&](std::shared_ptr<couchbase::core::transactions::attempt_context> ctx) {
@@ -221,7 +221,7 @@ TEST_CASE("transactions: can use custom metadata collections", "[transactions]")
   };
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.value == couchbase::core::utils::json::generate_binary(expected));
   }
@@ -229,7 +229,7 @@ TEST_CASE("transactions: can use custom metadata collections", "[transactions]")
 
 TEST_CASE("transactions: non existent bucket in custom metadata collections", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   auto cluster = integration.cluster;
   auto cfg = get_conf().metadata_collection(couchbase::transactions::transaction_keyspace{
     "i_dont_exist",
@@ -243,7 +243,7 @@ TEST_CASE("transactions: non existent bucket in custom metadata collections", "[
 
 TEST_CASE("transactions: non existent scope in custom metadata collections", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   auto cluster = integration.cluster;
   auto cfg = get_conf().metadata_collection(couchbase::transactions::transaction_keyspace{
     integration.ctx.bucket,
@@ -256,12 +256,12 @@ TEST_CASE("transactions: non existent scope in custom metadata collections", "[t
 
   // upsert initial doc
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
   {
     couchbase::core::operations::upsert_request req{ id, content_json.data };
     req.flags = content_json.flags;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
   try {
@@ -279,7 +279,7 @@ TEST_CASE("transactions: non existent scope in custom metadata collections", "[t
              e.type() == couchbase::core::transactions::failure_type::FAIL));
     {
       couchbase::core::operations::get_request req{ id };
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec());
       REQUIRE(resp.value == content_json.data);
     }
@@ -288,7 +288,7 @@ TEST_CASE("transactions: non existent scope in custom metadata collections", "[t
 
 TEST_CASE("transactions: non existent collection in custom metadata collections", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   auto cluster = integration.cluster;
   auto cfg =
     get_conf()
@@ -302,12 +302,12 @@ TEST_CASE("transactions: non existent collection in custom metadata collections"
 
   // upsert initial doc
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
   {
     couchbase::core::operations::upsert_request req{ id, content_json.data };
     req.flags = content_json.flags;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
   try {
@@ -323,7 +323,7 @@ TEST_CASE("transactions: non existent collection in custom metadata collections"
     REQUIRE((e.type() == couchbase::core::transactions::failure_type::EXPIRY ||
              e.type() == couchbase::core::transactions::failure_type::FAIL));
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.value == content_json.data);
   }
@@ -331,19 +331,19 @@ TEST_CASE("transactions: non existent collection in custom metadata collections"
 
 TEST_CASE("transactions: raw std::strings become json strings", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   auto cluster = integration.cluster;
 
   auto txn = integration.transactions();
   std::string new_content("I am an unquoted string");
   // upsert initial doc
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
   {
     couchbase::core::operations::upsert_request req{ id, content_json.data };
     req.flags = content_json.flags;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
   txn->run([id, new_content](std::shared_ptr<couchbase::core::transactions::attempt_context> ctx) {
@@ -352,7 +352,7 @@ TEST_CASE("transactions: raw std::strings become json strings", "[transactions]"
   });
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     auto parsed_as_json = couchbase::core::utils::json::parse_binary(resp.value);
     REQUIRE(parsed_as_json.get_string() == new_content);
@@ -361,13 +361,13 @@ TEST_CASE("transactions: raw std::strings become json strings", "[transactions]"
 
 TEST_CASE("transactions: quoted std::strings end up with 2 quotes (that's bad)", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   auto cluster = integration.cluster;
   auto txn = integration.transactions();
   std::string quoted_json_string = "\"imaquotedjsonstring\"";
   // insert the doc
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
 
   txn->run(
@@ -377,7 +377,7 @@ TEST_CASE("transactions: quoted std::strings end up with 2 quotes (that's bad)",
     });
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     auto parsed_as_json = couchbase::core::utils::json::parse_binary(resp.value);
     // here the _parsed_ json string will still have quotes in it.
@@ -387,7 +387,7 @@ TEST_CASE("transactions: quoted std::strings end up with 2 quotes (that's bad)",
 
 TEST_CASE("transactions: query error can be handled", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().supports_queries_in_transactions()) {
     SKIP("the server does not support queries inside transactions");
@@ -406,7 +406,7 @@ TEST_CASE("transactions: query error can be handled", "[transactions]")
 
 TEST_CASE("transactions: unhandled query error fails transaction", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().supports_queries_in_transactions()) {
     SKIP("the server does not support queries inside transactions");
@@ -426,7 +426,7 @@ TEST_CASE("transactions: unhandled query error fails transaction", "[transaction
 
 TEST_CASE("transactions: query mode get optional", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().supports_queries_in_transactions()) {
     SKIP("the server does not support queries inside transactions");
@@ -437,12 +437,12 @@ TEST_CASE("transactions: query mode get optional", "[transactions]")
   auto txn = integration.transactions();
   // upsert initial doc
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
   {
     couchbase::core::operations::upsert_request req{ id, content_json.data };
     req.flags = content_json.flags;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
   auto query = fmt::format("SELECT * FROM `{}` USE KEYS '{}'", id.bucket(), id.key());
@@ -455,7 +455,7 @@ TEST_CASE("transactions: query mode get optional", "[transactions]")
 
 TEST_CASE("transactions: can get replace objects", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   SimpleObject o{ "someone", 100 };
   SimpleObject o2{ "someone else", 200 };
   auto cluster = integration.cluster;
@@ -463,12 +463,12 @@ TEST_CASE("transactions: can get replace objects", "[transactions]")
   auto txn = integration.transactions();
   // upsert initial doc
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
   {
     couchbase::core::operations::upsert_request req{ id, content_json.data };
     req.flags = content_json.flags;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
@@ -478,7 +478,7 @@ TEST_CASE("transactions: can get replace objects", "[transactions]")
   });
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     auto final_val = couchbase::core::utils::json::parse_binary(resp.value);
     REQUIRE(final_val.as<SimpleObject>() == o2);
@@ -487,7 +487,7 @@ TEST_CASE("transactions: can get replace objects", "[transactions]")
 
 TEST_CASE("transactions: can get replace mixed object strings", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   SimpleObject o{ "someone", 100 };
   tao::json::value v2 = {
     { "name", "someone else" },
@@ -499,12 +499,12 @@ TEST_CASE("transactions: can get replace mixed object strings", "[transactions]"
   auto txn = integration.transactions();
   // upsert initial doc
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
   {
     couchbase::core::operations::upsert_request req{ id, content_json.data };
     req.flags = content_json.flags;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
@@ -514,7 +514,7 @@ TEST_CASE("transactions: can get replace mixed object strings", "[transactions]"
   });
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     auto final_val = couchbase::core::utils::json::parse_binary(resp.value);
     REQUIRE(final_val.as<SimpleObject>() == o2);
@@ -523,10 +523,10 @@ TEST_CASE("transactions: can get replace mixed object strings", "[transactions]"
 
 TEST_CASE("transactions: can rollback insert", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   auto cluster = integration.cluster;
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
 
   couchbase::transactions::transactions_config cfg;
@@ -543,26 +543,26 @@ TEST_CASE("transactions: can rollback insert", "[transactions]")
     couchbase::core::transactions::transaction_exception);
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_found);
   }
 }
 
 TEST_CASE("transactions: can rollback remove", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   auto cluster = integration.cluster;
 
   couchbase::transactions::transactions_config cfg;
   auto txn = integration.transactions();
   // upsert initial doc
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
   {
     couchbase::core::operations::upsert_request req{ id, content_json.data };
     req.flags = content_json.flags;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
@@ -577,25 +577,25 @@ TEST_CASE("transactions: can rollback remove", "[transactions]")
     couchbase::core::transactions::transaction_exception);
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 }
 
 TEST_CASE("transactions: can rollback replace", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   auto cluster = integration.cluster;
 
   auto txn = integration.transactions();
   // upsert initial doc
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
   {
     couchbase::core::operations::upsert_request req{ id, content_json.data };
     req.flags = content_json.flags;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
@@ -613,7 +613,7 @@ TEST_CASE("transactions: can rollback replace", "[transactions]")
     couchbase::core::transactions::transaction_exception);
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.value == content_json.data);
   }
@@ -621,7 +621,7 @@ TEST_CASE("transactions: can rollback replace", "[transactions]")
 
 TEST_CASE("transactions: can have trivial query in transaction", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().supports_queries_in_transactions()) {
     SKIP("the server does not support queries inside transactions");
@@ -632,12 +632,12 @@ TEST_CASE("transactions: can have trivial query in transaction", "[transactions]
   auto txn = integration.transactions();
   // upsert initial doc
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
   {
     couchbase::core::operations::upsert_request req{ id, content_json.data };
     req.flags = content_json.flags;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
@@ -653,7 +653,7 @@ TEST_CASE("transactions: can have trivial query in transaction", "[transactions]
 
 TEST_CASE("transactions: can modify doc in query", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().supports_queries_in_transactions()) {
     SKIP("the server does not support queries inside transactions");
@@ -664,12 +664,12 @@ TEST_CASE("transactions: can modify doc in query", "[transactions]")
   auto txn = integration.transactions();
   // upsert initial doc
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
   {
     couchbase::core::operations::upsert_request req{ id, content_json.data };
     req.flags = content_json.flags;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
@@ -683,7 +683,7 @@ TEST_CASE("transactions: can modify doc in query", "[transactions]")
 
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     auto value = couchbase::core::utils::json::parse_binary(resp.value);
     REQUIRE(10 == value["some_number"].as<int>());
@@ -692,18 +692,18 @@ TEST_CASE("transactions: can modify doc in query", "[transactions]")
 
 TEST_CASE("transactions: can rollback", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   auto cluster = integration.cluster;
 
   auto txn = integration.transactions();
   // upsert initial doc
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
   {
     couchbase::core::operations::upsert_request req{ id, content_json.data };
     req.flags = content_json.flags;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
@@ -721,7 +721,7 @@ TEST_CASE("transactions: can rollback", "[transactions]")
 
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.value == content_json.data);
   }
@@ -729,7 +729,7 @@ TEST_CASE("transactions: can rollback", "[transactions]")
 
 TEST_CASE("transactions: query updates insert", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().supports_queries_in_transactions()) {
     SKIP("the server does not support queries inside transactions");
@@ -739,7 +739,7 @@ TEST_CASE("transactions: query updates insert", "[transactions]")
 
   auto txn = integration.transactions();
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
   std::ostringstream stream;
   stream << "UPDATE `" << id.bucket() << "` USE KEYS '" << id.key() << "' SET `some_number` = 10";
@@ -751,7 +751,7 @@ TEST_CASE("transactions: query updates insert", "[transactions]")
 
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(10 == couchbase::core::utils::json::parse_binary(resp.value)["some_number"].as<int>());
   }
@@ -759,7 +759,7 @@ TEST_CASE("transactions: query updates insert", "[transactions]")
 
 TEST_CASE("transactions: can KV get", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().supports_queries_in_transactions()) {
     SKIP("the server does not support queries inside transactions");
@@ -769,7 +769,7 @@ TEST_CASE("transactions: can KV get", "[transactions]")
 
   auto txn = integration.transactions();
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
   std::ostringstream stream;
   stream << "UPDATE `" << id.bucket() << "` USE KEYS '" << id.key() << "' SET `some_number` = 10";
@@ -785,7 +785,7 @@ TEST_CASE("transactions: can KV get", "[transactions]")
   });
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(10 == couchbase::core::utils::json::parse_binary(resp.value)["some_number"].as<int>());
   }
@@ -793,7 +793,7 @@ TEST_CASE("transactions: can KV get", "[transactions]")
 
 TEST_CASE("transactions: can KV insert", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().supports_queries_in_transactions()) {
     SKIP("the server does not support queries inside transactions");
@@ -803,7 +803,7 @@ TEST_CASE("transactions: can KV insert", "[transactions]")
 
   auto txn = integration.transactions();
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
 
   std::ostringstream stream;
@@ -815,7 +815,7 @@ TEST_CASE("transactions: can KV insert", "[transactions]")
   });
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.value == content_json.data);
   }
@@ -823,7 +823,7 @@ TEST_CASE("transactions: can KV insert", "[transactions]")
 
 TEST_CASE("transactions: can rollback KV insert", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (!integration.cluster_version().supports_queries_in_transactions()) {
     SKIP("the server does not support queries inside transactions");
   }
@@ -832,7 +832,7 @@ TEST_CASE("transactions: can rollback KV insert", "[transactions]")
 
   auto txn = integration.transactions();
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
   std::ostringstream stream;
   stream << "SELECT * FROM `" << id.bucket() << "` USE KEYS '" << id.key() << "'";
@@ -847,14 +847,14 @@ TEST_CASE("transactions: can rollback KV insert", "[transactions]")
     couchbase::core::transactions::transaction_exception);
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_found);
   }
 }
 
 TEST_CASE("transactions: can KV replace", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().supports_queries_in_transactions()) {
     SKIP("the server does not support queries inside transactions");
@@ -865,12 +865,12 @@ TEST_CASE("transactions: can KV replace", "[transactions]")
   auto txn = integration.transactions();
   // upsert initial doc
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
   {
     couchbase::core::operations::upsert_request req{ id, content_json.data };
     req.flags = content_json.flags;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
@@ -890,7 +890,7 @@ TEST_CASE("transactions: can KV replace", "[transactions]")
   });
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(10 == couchbase::core::utils::json::parse_binary(resp.value)["some_number"].as<int>());
   }
@@ -898,7 +898,7 @@ TEST_CASE("transactions: can KV replace", "[transactions]")
 
 TEST_CASE("transactions: can rollback KV replace", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (!integration.cluster_version().supports_queries_in_transactions()) {
     SKIP("the server does not support queries inside transactions");
   }
@@ -908,12 +908,12 @@ TEST_CASE("transactions: can rollback KV replace", "[transactions]")
   auto txn = integration.transactions();
   // upsert initial doc
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
   {
     couchbase::core::operations::upsert_request req{ id, content_json.data };
     req.flags = content_json.flags;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
@@ -938,7 +938,7 @@ TEST_CASE("transactions: can rollback KV replace", "[transactions]")
     couchbase::core::transactions::transaction_exception);
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.value == content_json.data);
   }
@@ -946,7 +946,7 @@ TEST_CASE("transactions: can rollback KV replace", "[transactions]")
 
 TEST_CASE("transactions: can KV remove", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().supports_queries_in_transactions()) {
     SKIP("the server does not support queries inside transactions");
@@ -957,12 +957,12 @@ TEST_CASE("transactions: can KV remove", "[transactions]")
   auto txn = integration.transactions();
   // upsert initial doc
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
   {
     couchbase::core::operations::upsert_request req{ id, content_json.data };
     req.flags = content_json.flags;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
@@ -976,14 +976,14 @@ TEST_CASE("transactions: can KV remove", "[transactions]")
   });
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_found);
   }
 }
 
 TEST_CASE("transactions: can rollback KV remove", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (!integration.cluster_version().supports_queries_in_transactions()) {
     SKIP("the server does not support queries inside transactions");
   }
@@ -993,12 +993,12 @@ TEST_CASE("transactions: can rollback KV remove", "[transactions]")
   auto txn = integration.transactions();
   // upsert initial doc
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
   {
     couchbase::core::operations::upsert_request req{ id, content_json.data };
     req.flags = content_json.flags;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
@@ -1017,7 +1017,7 @@ TEST_CASE("transactions: can rollback KV remove", "[transactions]")
     couchbase::core::transactions::transaction_exception);
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.value == content_json.data);
   }
@@ -1025,7 +1025,7 @@ TEST_CASE("transactions: can rollback KV remove", "[transactions]")
 
 TEST_CASE("transactions: can rollback retry bad KV replace", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (!integration.cluster_version().supports_queries_in_transactions()) {
     SKIP("the server does not support queries inside transactions");
   }
@@ -1035,12 +1035,12 @@ TEST_CASE("transactions: can rollback retry bad KV replace", "[transactions]")
   auto txn = integration.transactions();
   // upsert initial doc
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
   {
     couchbase::core::operations::upsert_request req{ id, content_json.data };
     req.flags = content_json.flags;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
@@ -1058,7 +1058,7 @@ TEST_CASE("transactions: can rollback retry bad KV replace", "[transactions]")
     couchbase::core::transactions::transaction_exception);
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.value == content_json.data);
   }
@@ -1066,13 +1066,13 @@ TEST_CASE("transactions: can rollback retry bad KV replace", "[transactions]")
 
 TEST_CASE("transactions: atr and client_record are binary documents", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   auto cluster = integration.cluster;
 
   auto txn = integration.transactions();
   std::vector<std::byte> binary_null{ std::byte(0) };
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
 
   txn->run([id](std::shared_ptr<couchbase::core::transactions::attempt_context> ctx) {
@@ -1083,7 +1083,7 @@ TEST_CASE("transactions: atr and client_record are binary documents", "[transact
       integration.ctx.bucket, "_default", "_default", "_txn:client-record"
     };
     couchbase::core::operations::get_request req{ client_record_id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.value == binary_null);
   }
@@ -1092,18 +1092,18 @@ TEST_CASE("transactions: atr and client_record are binary documents", "[transact
       couchbase::core::transactions::atr_ids::vbucket_for_key(id.key()));
     couchbase::core::document_id atr_id{ integration.ctx.bucket, "_default", "_default", atr_key };
     couchbase::core::operations::get_request req{ atr_id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.value == binary_null);
   }
 }
 TEST_CASE("transactions: get non-existent doc fails txn", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   auto cluster = integration.cluster;
   auto txn = integration.transactions();
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
   REQUIRE_THROWS_AS(
     txn->run([id](std::shared_ptr<couchbase::core::transactions::attempt_context> ctx) {
@@ -1114,11 +1114,11 @@ TEST_CASE("transactions: get non-existent doc fails txn", "[transactions]")
 
 TEST_CASE("transactions: get_optional on non-existent doc doesn't fail txn", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   auto cluster = integration.cluster;
   auto txn = integration.transactions();
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
   REQUIRE_NOTHROW(
     txn->run([id](std::shared_ptr<couchbase::core::transactions::attempt_context> ctx) {
@@ -1127,11 +1127,11 @@ TEST_CASE("transactions: get_optional on non-existent doc doesn't fail txn", "[t
 }
 TEST_CASE("transactions: get after query behaves same as before a query", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   auto cluster = integration.cluster;
   auto txn = integration.transactions();
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
   REQUIRE_THROWS_AS(
     txn->run([id](std::shared_ptr<couchbase::core::transactions::attempt_context> ctx) {
@@ -1143,18 +1143,18 @@ TEST_CASE("transactions: get after query behaves same as before a query", "[tran
 
 TEST_CASE("transactions: get_optional after query behaves same as before a query", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().supports_queries_in_transactions()) {
     SKIP("the server does not support queries inside transactions");
   }
 
-  REQUIRE(test::utils::create_primary_index(integration.cluster, integration.ctx.bucket));
+  REQUIRE(couchbase::test::create_primary_index(integration.cluster, integration.ctx.bucket));
 
   auto cluster = integration.cluster;
   auto txn = integration.transactions();
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
   REQUIRE_NOTHROW(
     txn->run([id](std::shared_ptr<couchbase::core::transactions::attempt_context> ctx) {
@@ -1165,35 +1165,35 @@ TEST_CASE("transactions: get_optional after query behaves same as before a query
 
 TEST_CASE("transactions: sergey example", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().supports_queries_in_transactions()) {
     SKIP("the server does not support queries inside transactions");
   }
 
-  REQUIRE(test::utils::create_primary_index(integration.cluster, integration.ctx.bucket));
+  REQUIRE(couchbase::test::create_primary_index(integration.cluster, integration.ctx.bucket));
 
   auto cluster = integration.cluster;
   auto txn = integration.transactions();
   couchbase::core::document_id id_to_remove{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
   couchbase::core::document_id id_to_replace{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
   couchbase::core::document_id id_to_insert{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
   {
     couchbase::core::operations::upsert_request req{ id_to_remove, content_json.data };
     req.flags = content_json.flags;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
   {
     couchbase::core::operations::upsert_request req{ id_to_replace, content_json.data };
     req.flags = content_json.flags;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
@@ -1218,7 +1218,7 @@ TEST_CASE("transactions: sergey example", "[transactions]")
 
 TEST_CASE("transactions: extract core transactions from public API transactions", "[transactions]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   auto cluster = integration.public_cluster();
   const auto core_txns =
     couchbase::core::transactions::get_core_transactions(cluster.transactions());
@@ -1226,7 +1226,7 @@ TEST_CASE("transactions: extract core transactions from public API transactions"
   REQUIRE(core_txns != nullptr);
 
   const auto doc_id = couchbase::core::document_id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("txn")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("txn")
   };
 
   core_txns->run([doc_id](std::shared_ptr<couchbase::core::transactions::attempt_context> ctx) {

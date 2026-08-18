@@ -55,18 +55,18 @@ TEST_CASE("integration: connecting with empty bootstrap nodes list", "[integrati
   });
   auto rc = f.get();
   REQUIRE(rc == couchbase::errc::common::invalid_argument);
-  test::utils::close_cluster(cluster);
+  couchbase::test::close_cluster(cluster);
   io_thread.join();
 }
 
 TEST_CASE("integration: connecting with unresponsive first node in bootstrap nodes list",
           "[integration]")
 {
-  test::utils::init_logger();
+  couchbase::test::init_logger();
   asio::io_context io{};
-  auto ctx = test::utils::test_context::load_from_environment();
-  if (ctx.deployment == test::utils::deployment_type::capella ||
-      ctx.deployment == test::utils::deployment_type::elixir) {
+  auto ctx = couchbase::test::test_context::load_from_environment();
+  if (ctx.deployment == couchbase::test::deployment_type::capella ||
+      ctx.deployment == couchbase::test::deployment_type::elixir) {
     // This breaks SRV assumptions (only one host in connection string)
     SKIP("capella deployment uses single host in the connection string, which assumed to be "
          "reachable");
@@ -92,13 +92,13 @@ TEST_CASE("integration: connecting with unresponsive first node in bootstrap nod
   });
   auto rc = f.get();
   REQUIRE_SUCCESS(rc);
-  test::utils::close_cluster(cluster);
+  couchbase::test::close_cluster(cluster);
   io_thread.join();
 }
 
 TEST_CASE("integration: can connect with handler capturing non-copyable object", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   couchbase::core::cluster cluster(integration.io);
 
@@ -106,7 +106,7 @@ TEST_CASE("integration: can connect with handler capturing non-copyable object",
   {
     auto barrier = std::make_shared<std::promise<std::error_code>>();
     auto f = barrier->get_future();
-    test::utils::move_only_context ctx("foobar");
+    couchbase::test::move_only_context ctx("foobar");
     std::string output;
     cluster.open(integration.origin, [barrier, ctx = std::move(ctx), &output](std::error_code ec) {
       output = ctx.payload();
@@ -121,7 +121,7 @@ TEST_CASE("integration: can connect with handler capturing non-copyable object",
   {
     auto barrier = std::make_shared<std::promise<std::error_code>>();
     auto f = barrier->get_future();
-    test::utils::move_only_context ctx("foobar");
+    couchbase::test::move_only_context ctx("foobar");
     std::string output;
     cluster.open_bucket(integration.ctx.bucket,
                         [barrier, ctx = std::move(ctx), &output](std::error_code ec) {
@@ -137,7 +137,7 @@ TEST_CASE("integration: can connect with handler capturing non-copyable object",
   {
     auto barrier = std::make_shared<std::promise<bool>>();
     auto f = barrier->get_future();
-    test::utils::move_only_context ctx("foobar");
+    couchbase::test::move_only_context ctx("foobar");
     std::string output;
     cluster.close([barrier, ctx = std::move(ctx), &output]() mutable {
       output = ctx.payload();
@@ -152,10 +152,10 @@ TEST_CASE("integration: can connect with handler capturing non-copyable object",
 
 TEST_CASE("integration: destroy cluster without waiting for close completion", "[integration]")
 {
-  test::utils::init_logger();
-  auto ctx = test::utils::test_context::load_from_environment();
+  couchbase::test::init_logger();
+  auto ctx = couchbase::test::test_context::load_from_environment();
 
-  if (ctx.deployment == test::utils::deployment_type::elixir) {
+  if (ctx.deployment == couchbase::test::deployment_type::elixir) {
     SKIP("elixir deployment is incompatible with parts of this test, but it is probably bug in "
          "SDK. FIXME");
   }
@@ -173,24 +173,24 @@ TEST_CASE("integration: destroy cluster without waiting for close completion", "
     origin.options().apply_profile("wan_development");
   }
 
-  test::utils::open_cluster(cluster, origin);
-  test::utils::open_bucket(cluster, ctx.bucket);
+  couchbase::test::open_cluster(cluster, origin);
+  couchbase::test::open_bucket(cluster, ctx.bucket);
 
   // hit KV
   {
     couchbase::core::document_id id{
-      ctx.bucket, "_default", "_default", test::utils::uniq_id("foo")
+      ctx.bucket, "_default", "_default", couchbase::test::uniq_id("foo")
     };
     couchbase::core::operations::upsert_request req{ id,
                                                      couchbase::core::utils::to_binary("{{}}") };
-    auto resp = test::utils::execute(cluster, req);
+    auto resp = couchbase::test::execute(cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
   // hit Query
   if (ctx.version.supports_query()) {
     couchbase::core::operations::query_request req{ R"(SELECT 42 AS the_answer)" };
-    auto resp = test::utils::execute(cluster, req);
+    auto resp = couchbase::test::execute(cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
   }
 
@@ -207,8 +207,8 @@ TEST_CASE("integration: connecting with a custom transactions metadata collectio
           "bucket that does not exist - Public API",
           "[integration]")
 {
-  test::utils::init_logger();
-  auto ctx = test::utils::test_context::load_from_environment();
+  couchbase::test::init_logger();
+  auto ctx = couchbase::test::test_context::load_from_environment();
 
   auto opts = couchbase::cluster_options(ctx.username, ctx.password);
   if (ctx.use_wan_development_profile) {
@@ -230,8 +230,8 @@ TEST_CASE("integration: reopen bucket after changing to incorrect credentials", 
 {
   SKIP("Remove once CXXCBC-749 is fixed");
 
-  test::utils::integration_test_guard integration;
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::integration_test_guard integration;
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
 
   {
     auto err = integration.cluster.update_credentials(
@@ -239,7 +239,7 @@ TEST_CASE("integration: reopen bucket after changing to incorrect credentials", 
     REQUIRE_SUCCESS(err.ec);
   }
 
-  test::utils::close_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::close_bucket(integration.cluster, integration.ctx.bucket);
 
   auto barrier = std::make_shared<std::promise<std::error_code>>();
   auto f = barrier->get_future();
@@ -253,7 +253,7 @@ TEST_CASE("integration: reopen bucket after changing to incorrect credentials", 
 
 TEST_CASE("integration: query after changing to incorrect credentials", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().is_7_6()) {
     SKIP(
@@ -262,7 +262,7 @@ TEST_CASE("integration: query after changing to incorrect credentials", "[integr
 
   couchbase::core::operations::query_request req{ R"(SELECT 1=1)" };
   {
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
   }
   {
@@ -273,7 +273,7 @@ TEST_CASE("integration: query after changing to incorrect credentials", "[integr
   auto [mgr_ec, session_mgr] = integration.cluster.http_session_manager();
 
   session_mgr->close();
-  auto resp = test::utils::execute(integration.cluster, req);
+  auto resp = couchbase::test::execute(integration.cluster, req);
 
   REQUIRE(resp.ctx.ec == couchbase::errc::common::internal_server_failure);
 }
@@ -281,7 +281,7 @@ TEST_CASE("integration: query after changing to incorrect credentials", "[integr
 TEST_CASE("integration: cluster::find_bucket_by_name returns nullptr for unknown bucket",
           "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   // No bucket has been opened — the bucket map must be empty.
   auto bucket = integration.cluster.find_bucket_by_name("no_such_bucket");
@@ -291,8 +291,8 @@ TEST_CASE("integration: cluster::find_bucket_by_name returns nullptr for unknown
 TEST_CASE("integration: cluster::find_bucket_by_name returns non-null after open_bucket",
           "[integration]")
 {
-  test::utils::integration_test_guard integration;
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::integration_test_guard integration;
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
 
   auto bucket = integration.cluster.find_bucket_by_name(integration.ctx.bucket);
   CHECK(bucket != nullptr);
@@ -305,7 +305,7 @@ TEST_CASE("integration: cluster::find_bucket_by_name returns non-null after open
 TEST_CASE("integration: cluster::tracer and meter return non-null shared_ptr by value",
           "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   // tracer() and meter() return by value (std::shared_ptr) since CXXCBC-794;
   // verify they are non-null and that receiving them by value compiles.

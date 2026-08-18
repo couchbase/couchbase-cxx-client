@@ -126,7 +126,7 @@ make_binary_value(std::size_t number_of_bytes)
 }
 
 auto
-get_vbucket_map(const test::utils::integration_test_guard& integration)
+get_vbucket_map(const couchbase::test::integration_test_guard& integration)
   -> couchbase::core::topology::configuration::vbucket_map
 {
   auto barrier = std::make_shared<std::promise<
@@ -152,7 +152,7 @@ get_vbucket_map(const test::utils::integration_test_guard& integration)
 
 TEST_CASE("integration: range scan large values", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.has_bucket_capability("range_scan")) {
     SKIP("cluster does not support range_scan");
@@ -211,7 +211,7 @@ TEST_CASE("integration: range scan large values", "[integration]")
 
 TEST_CASE("integration: range scan small values", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.has_bucket_capability("range_scan")) {
     SKIP("cluster does not support range_scan");
@@ -275,13 +275,13 @@ TEST_CASE("integration: range scan small values", "[integration]")
 
 TEST_CASE("integration: range scan collection retry", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.has_bucket_capability("range_scan")) {
     SKIP("cluster does not support range_scan");
   }
 
-  const test::utils::collection_guard new_collection(integration);
+  const couchbase::test::collection_guard new_collection(integration);
 
   auto cluster = integration.public_cluster();
 
@@ -345,7 +345,7 @@ TEST_CASE("integration: range scan collection retry", "[integration]")
 
 TEST_CASE("integration: range scan only keys", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.has_bucket_capability("range_scan")) {
     SKIP("cluster does not support range_scan");
@@ -407,7 +407,7 @@ TEST_CASE("integration: range scan only keys", "[integration]")
 
 TEST_CASE("integration: range scan cancellation before continue", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.has_bucket_capability("range_scan")) {
     SKIP("cluster does not support range_scan");
@@ -519,7 +519,7 @@ TEST_CASE("integration: range scan cancellation before continue", "[integration]
 
 TEST_CASE("integration: range scan cancel during streaming using protocol cancel", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.has_bucket_capability("range_scan")) {
     SKIP("cluster does not support range_scan");
@@ -653,7 +653,7 @@ TEST_CASE("integration: range scan cancel during streaming using protocol cancel
 TEST_CASE("integration: range scan cancel during streaming using pending_operation cancel",
           "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.has_bucket_capability("range_scan")) {
     SKIP("cluster does not support range_scan");
@@ -767,7 +767,7 @@ TEST_CASE("integration: range scan cancel during streaming using pending_operati
 
 TEST_CASE("integration: sampling scan keys only", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.has_bucket_capability("range_scan")) {
     SKIP("cluster does not support range_scan");
@@ -841,7 +841,7 @@ mutations_to_mutation_state(const std::map<std::string, couchbase::mutation_toke
 
 TEST_CASE("integration: orchestrator scan range without content", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.has_bucket_capability("range_scan")) {
     SKIP("cluster does not support range_scan");
@@ -905,7 +905,7 @@ TEST_CASE("integration: orchestrator scan range without content", "[integration]
 
 TEST_CASE("integration: orchestrator scan range with content", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.has_bucket_capability("range_scan")) {
     SKIP("cluster does not support range_scan");
@@ -969,13 +969,13 @@ TEST_CASE("integration: orchestrator scan range with content", "[integration]")
 
 TEST_CASE("integration: orchestrator sampling scan with custom collection", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.has_bucket_capability("range_scan")) {
     SKIP("cluster does not support range_scan");
   }
 
-  const test::utils::collection_guard new_collection(integration);
+  const couchbase::test::collection_guard new_collection(integration);
 
   auto cluster = integration.public_cluster();
 
@@ -1036,13 +1036,13 @@ TEST_CASE("integration: orchestrator sampling scan with custom collection", "[in
 
 TEST_CASE("integration: orchestrator sampling scan with seed & custom collection", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.has_bucket_capability("range_scan")) {
     SKIP("cluster does not support range_scan");
   }
 
-  const test::utils::collection_guard new_collection(integration);
+  const couchbase::test::collection_guard new_collection(integration);
 
   auto cluster = integration.public_cluster();
 
@@ -1130,7 +1130,7 @@ TEST_CASE("integration: orchestrator sampling scan with seed & custom collection
 
 TEST_CASE("integration: orchestrator prefix scan without content", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.has_bucket_capability("range_scan")) {
     SKIP("cluster does not support range_scan");
@@ -1193,13 +1193,13 @@ TEST_CASE(
   "integration: orchestrator sampling scan with custom collection and up to 10 concurrent streams",
   "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.has_bucket_capability("range_scan")) {
     SKIP("cluster does not support range_scan");
   }
 
-  const test::utils::collection_guard new_collection(integration);
+  const couchbase::test::collection_guard new_collection(integration);
 
   auto cluster = integration.public_cluster();
 
@@ -1264,13 +1264,13 @@ TEST_CASE("integration: orchestrator sampling scan with custom collection and up
           "item limit 0",
           "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.has_bucket_capability("range_scan")) {
     SKIP("cluster does not support range_scan");
   }
 
-  const test::utils::collection_guard new_collection(integration);
+  const couchbase::test::collection_guard new_collection(integration);
 
   auto cluster = integration.public_cluster();
 
@@ -1334,7 +1334,7 @@ TEST_CASE("integration: orchestrator sampling scan with custom collection and up
 TEST_CASE("integration: orchestrator prefix scan without content and up to 5 concurrent streams",
           "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.has_bucket_capability("range_scan")) {
     SKIP("cluster does not support range_scan");
@@ -1396,7 +1396,7 @@ TEST_CASE("integration: orchestrator prefix scan without content and up to 5 con
 
 TEST_CASE("integration: orchestrator prefix scan, get 10 items and cancel", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.has_bucket_capability("range_scan")) {
     SKIP("cluster does not support range_scan");
@@ -1466,7 +1466,7 @@ TEST_CASE("integration: orchestrator prefix scan, get 10 items and cancel", "[in
 TEST_CASE("integration: orchestrator prefix scan with concurrency 0 (invalid argument)",
           "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.has_bucket_capability("range_scan")) {
     SKIP("cluster does not support range_scan");
@@ -1511,7 +1511,7 @@ TEST_CASE("integration: orchestrator prefix scan with concurrency 0 (invalid arg
 
 TEST_CASE("integration: range scan public API feature not available", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (integration.has_bucket_capability("range_scan")) {
     SKIP("cluster supports range scan");
@@ -1589,7 +1589,7 @@ next_item(couchbase::scan_result res,
 
 TEST_CASE("integration: range scan public API", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.has_bucket_capability("range_scan")) {
     SKIP("cluster does not support range scan");
@@ -1762,7 +1762,7 @@ TEST_CASE("integration: range scan re-resolves recreated collection id", "[integ
   // stale id, the server replies unknown_collection, and the on_unknown_collection_ hook must
   // invalidate the cache, re-resolve via GetCollectionID and retry — succeeding instead of failing
   // with collection_not_found. The seam itself is unit-tested in test_unit_mcbp_queue_request.cxx.
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.has_bucket_capability("range_scan")) {
     SKIP("cluster does not support range_scan");
@@ -1772,24 +1772,24 @@ TEST_CASE("integration: range scan re-resolves recreated collection id", "[integ
   }
 
   const auto scope_name = std::string{ couchbase::scope::default_name };
-  const auto collection_name = test::utils::uniq_id("recreate");
+  const auto collection_name = couchbase::test::uniq_id("recreate");
 
   auto create_collection = [&]() {
     couchbase::core::operations::management::collection_create_request req{ integration.ctx.bucket,
                                                                             scope_name,
                                                                             collection_name };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
-    REQUIRE(test::utils::wait_until_collection_manifest_propagated(
+    REQUIRE(couchbase::test::wait_until_collection_manifest_propagated(
       integration.cluster, integration.ctx.bucket, resp.uid));
   };
   auto drop_collection = [&]() {
     couchbase::core::operations::management::collection_drop_request req{ integration.ctx.bucket,
                                                                           scope_name,
                                                                           collection_name };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
-    REQUIRE(test::utils::wait_until_collection_manifest_propagated(
+    REQUIRE(couchbase::test::wait_until_collection_manifest_propagated(
       integration.cluster, integration.ctx.bucket, resp.uid));
   };
 

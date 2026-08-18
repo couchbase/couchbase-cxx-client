@@ -23,7 +23,7 @@
 
 TEST_CASE("integration: random node selection with analytics service", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (!integration.has_analytics_service()) {
     SKIP("Requires analytics service");
   }

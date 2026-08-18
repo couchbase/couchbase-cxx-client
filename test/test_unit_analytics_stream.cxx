@@ -50,7 +50,7 @@ TEST_CASE("unit: analytics_stream yields rows then exposes late metadata", "[uni
   asio::io_context io;
   std::string doc = R"({"requestID":"r1","signature":{"a":"number"},)"
                     R"("results":[{"a":1},{"a":2}],"status":"success"})";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = couchbase::test::make_cached_response_body(io, doc);
   couchbase::core::analytics_stream stream{ io, std::move(body) };
 
   std::vector<std::string> rows;
@@ -85,7 +85,7 @@ TEST_CASE("unit: analytics_stream surfaces a trailing analytics error after rows
   asio::io_context io;
   std::string doc = R"({"requestID":"r2","results":[{"a":1}],)"
                     R"("status":"fatal","errors":[{"code":24000,"msg":"boom"}]})";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = couchbase::test::make_cached_response_body(io, doc);
   couchbase::core::analytics_stream stream{ io, std::move(body) };
 
   int row_count = 0;
@@ -114,7 +114,7 @@ TEST_CASE("unit: analytics_stream reports a clean end for an empty result set", 
   asio::io_context io;
   std::string doc = R"({"requestID":"r3","signature":{"a":"number"},)"
                     R"("results":[],"status":"success"})";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = couchbase::test::make_cached_response_body(io, doc);
   couchbase::core::analytics_stream stream{ io, std::move(body) };
 
   int row_count = 0;
@@ -150,7 +150,7 @@ TEST_CASE("unit: analytics_stream normalizes a malformed body to parsing_failure
   // streaming_json_lexer::* code; analytics_stream must normalize it to parsing_failure to match
   // the buffered analytics_query() contract.
   std::string doc = R"({"requestID":"r","results":[{"a":1},xxx],"status":"success"})";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = couchbase::test::make_cached_response_body(io, doc);
   couchbase::core::analytics_stream stream{ io, std::move(body) };
 
   std::error_code end_ec{};
@@ -179,7 +179,7 @@ TEST_CASE("unit: analytics_stream normalizes an oversized row to parsing_failure
   asio::io_context io;
   std::string big(std::size_t{ 64 } * 1024, 'X');
   std::string doc = R"({"results":[{"p":")" + big + R"("}],"status":"success"})";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = couchbase::test::make_cached_response_body(io, doc);
   couchbase::core::row_streamer_options opts{};
   opts.max_row_bytes = std::size_t{ 4 } * 1024; // tiny ceiling so the row overflows it
   couchbase::core::analytics_stream stream{ io, std::move(body), opts };
@@ -211,7 +211,7 @@ TEST_CASE("unit: analytics_stream re-delivers the terminal on pulls after the en
   // terminal instead of parking forever on the drained channel.
   asio::io_context io;
   std::string doc = R"({"requestID":"r","results":[{"a":1}],"status":"success"})";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = couchbase::test::make_cached_response_body(io, doc);
   couchbase::core::analytics_stream stream{ io, std::move(body) };
 
   int terminals = 0;
@@ -238,7 +238,7 @@ TEST_CASE("unit: analytics_stream reports request_canceled after cancel", "[unit
 {
   asio::io_context io;
   std::string doc = R"({"results":[{"a":1},{"a":2}],"status":"success"})";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = couchbase::test::make_cached_response_body(io, doc);
   couchbase::core::analytics_stream stream{ io, std::move(body) };
 
   stream.start([](std::error_code) {
@@ -258,7 +258,7 @@ TEST_CASE("unit: analytics_stream reports no signature when absent", "[unit]")
 {
   asio::io_context io;
   std::string doc = R"({"requestID":"r5","results":[{"a":1}],"status":"success"})";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = couchbase::test::make_cached_response_body(io, doc);
   couchbase::core::analytics_stream stream{ io, std::move(body) };
 
   bool resolved = false;
@@ -287,7 +287,7 @@ TEST_CASE("unit: a mid-stream analytics terminal error is reported with the requ
   asio::io_context io;
   const std::string doc = R"({"requestID":"r-ctx","results":[{"a":1}],)"
                           R"("status":"fatal","errors":[{"code":24000,"msg":"boom"}]})";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = couchbase::test::make_cached_response_body(io, doc);
   couchbase::core::analytics_stream stream{ io, std::move(body) };
 
   std::error_code start_ec{ make_error_code(std::errc::operation_in_progress) };

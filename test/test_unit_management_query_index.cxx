@@ -33,7 +33,7 @@ TEST_CASE("unit: create query index key encoding", "[unit]")
     "bucket_name", "scope_name", "collection_name",
     "test_index",  {},           { "bucket_name", "scope_name" },
   };
-  auto ctx = test::utils::make_http_context();
+  auto ctx = couchbase::test::make_http_context();
   std::regex r{ "CREATE INDEX (.+) ON .*\\((.*)\\) .* USING GSI.*" };
 
   SECTION("single key")

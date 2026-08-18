@@ -40,7 +40,7 @@ public:
     : request_span(name, parent)
   {
     start_ = std::chrono::steady_clock::now();
-    id_ = test::utils::uniq_id("span");
+    id_ = couchbase::test::uniq_id("span");
   }
 
   void add_tag(const std::string& name, std::uint64_t value) override
@@ -157,16 +157,16 @@ private:
 };
 
 auto
-make_id(const test::utils::test_context& ctx, std::string key = "") -> couchbase::core::document_id
+make_id(const couchbase::test::test_context& ctx, std::string key = "") -> couchbase::core::document_id
 {
   if (key.empty()) {
-    key = test::utils::uniq_id("tracer");
+    key = couchbase::test::uniq_id("tracer");
   }
   return couchbase::core::document_id{ ctx.bucket, "_default", "_default", key };
 }
 
 void
-assert_span_ok(test::utils::integration_test_guard& guard,
+assert_span_ok(couchbase::test::integration_test_guard& guard,
                const std::shared_ptr<test_span>& span,
                bool is_top_level_op_span,
                const std::shared_ptr<test_span>& expected_parent = nullptr)
@@ -200,7 +200,7 @@ assert_span_ok(test::utils::integration_test_guard& guard,
 }
 
 void
-assert_dispatch_span_ok(test::utils::integration_test_guard& guard,
+assert_dispatch_span_ok(couchbase::test::integration_test_guard& guard,
                         const std::shared_ptr<test_span>& span,
                         std::shared_ptr<test_span> parent)
 {
@@ -218,7 +218,7 @@ assert_dispatch_span_ok(test::utils::integration_test_guard& guard,
 }
 
 void
-assert_kv_dispatch_span_ok(test::utils::integration_test_guard& guard,
+assert_kv_dispatch_span_ok(couchbase::test::integration_test_guard& guard,
                            const std::shared_ptr<test_span>& span,
                            const std::shared_ptr<test_span>& parent)
 {
@@ -233,7 +233,7 @@ assert_kv_dispatch_span_ok(test::utils::integration_test_guard& guard,
 }
 
 void
-assert_kv_op_span_ok(test::utils::integration_test_guard& guard,
+assert_kv_op_span_ok(couchbase::test::integration_test_guard& guard,
                      const std::shared_ptr<test_span>& span,
                      const std::string& op,
                      const std::shared_ptr<test_span>& parent = nullptr,
@@ -266,7 +266,7 @@ assert_kv_op_span_ok(test::utils::integration_test_guard& guard,
 }
 
 void
-assert_compound_kv_op_span_ok(test::utils::integration_test_guard& guard,
+assert_compound_kv_op_span_ok(couchbase::test::integration_test_guard& guard,
                               const std::shared_ptr<test_span>& span,
                               const std::string& op,
                               const std::map<std::string, std::size_t>& child_ops,
@@ -297,7 +297,7 @@ assert_compound_kv_op_span_ok(test::utils::integration_test_guard& guard,
 }
 
 void
-assert_kv_op_span_has_request_encoding(test::utils::integration_test_guard& guard,
+assert_kv_op_span_has_request_encoding(couchbase::test::integration_test_guard& guard,
                                        const std::shared_ptr<test_span>& op_span)
 {
   std::shared_ptr<test_span> request_encoding_span;
@@ -310,7 +310,7 @@ assert_kv_op_span_has_request_encoding(test::utils::integration_test_guard& guar
 }
 
 void
-assert_http_dispatch_span_ok(test::utils::integration_test_guard& guard,
+assert_http_dispatch_span_ok(couchbase::test::integration_test_guard& guard,
                              const std::shared_ptr<test_span>& span,
                              const std::shared_ptr<test_span>& parent)
 {
@@ -325,7 +325,7 @@ assert_http_dispatch_span_ok(test::utils::integration_test_guard& guard,
 }
 
 void
-assert_http_op_span_ok(test::utils::integration_test_guard& guard,
+assert_http_op_span_ok(couchbase::test::integration_test_guard& guard,
                        const std::shared_ptr<test_span>& span,
                        const std::string& op,
                        const std::optional<std::string>& expected_service,
@@ -373,7 +373,7 @@ assert_http_op_span_ok(test::utils::integration_test_guard& guard,
 
 void
 assert_compound_http_op_span_ok(
-  test::utils::integration_test_guard& guard,
+  couchbase::test::integration_test_guard& guard,
   const std::shared_ptr<test_span>& span,
   const std::string& op,
   const std::vector<std::pair<std::string, std::size_t>>& expected_sub_ops,
@@ -435,7 +435,7 @@ assert_compound_http_op_span_ok(
 
 TEST_CASE("integration: enable external tracer - KV operations", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   auto tracer = std::make_shared<test_tracer>();
   auto cluster = integration.public_cluster([tracer](couchbase::cluster_options& opts) {
@@ -446,7 +446,7 @@ TEST_CASE("integration: enable external tracer - KV operations", "[integration]"
     GENERATE(std::shared_ptr<test_span>{ nullptr }, std::make_shared<test_span>("parent"));
 
   auto value = couchbase::core::utils::json::parse(R"({"some":"thing"})");
-  auto existing_key = test::utils::uniq_id("tracer");
+  auto existing_key = couchbase::test::uniq_id("tracer");
   auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
 
   {
@@ -459,7 +459,7 @@ TEST_CASE("integration: enable external tracer - KV operations", "[integration]"
   SECTION("upsert")
   {
     auto [err, res] = collection
-                        .upsert(test::utils::uniq_id("tracer"),
+                        .upsert(couchbase::test::uniq_id("tracer"),
                                 value,
                                 couchbase::upsert_options().parent_span(parent_span))
                         .get();
@@ -473,7 +473,7 @@ TEST_CASE("integration: enable external tracer - KV operations", "[integration]"
   SECTION("insert")
   {
     auto [err, res] = collection
-                        .insert(test::utils::uniq_id("tracer"),
+                        .insert(couchbase::test::uniq_id("tracer"),
                                 value,
                                 couchbase::insert_options().parent_span(parent_span))
                         .get();
@@ -637,7 +637,7 @@ TEST_CASE("integration: enable external tracer - KV operations", "[integration]"
 
 TEST_CASE("integration: enable external tracer - HTTP operations", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   auto tracer = std::make_shared<test_tracer>();
   auto cluster = integration.public_cluster([tracer](couchbase::cluster_options& opts) {
@@ -961,7 +961,7 @@ TEST_CASE("integration: enable external tracer - HTTP operations", "[integration
     SECTION("collection query index management - create, watch and drop index")
     {
       const auto mgr = cluster.bucket(integration.ctx.bucket).default_collection().query_indexes();
-      const auto index_name = test::utils::uniq_id("tracer_idx");
+      const auto index_name = couchbase::test::uniq_id("tracer_idx");
 
       {
         auto err =

@@ -31,7 +31,7 @@ struct query_result {
 
 TEST_CASE("unit: json_streaming_lexer parse query result in single chunk", "[unit]")
 {
-  test::utils::init_logger();
+  couchbase::test::init_logger();
 
   std::string chunk = R"(
 {
@@ -80,7 +80,7 @@ null,1,false
 
 TEST_CASE("unit: json_streaming_lexer parse query result", "[unit]")
 {
-  test::utils::init_logger();
+  couchbase::test::init_logger();
 
   const std::vector<std::string> chunks{
     /* 0 */
@@ -117,7 +117,7 @@ TEST_CASE("unit: json_streaming_lexer parse query result", "[unit]")
 
 TEST_CASE("unit: json_streaming_lexer parse query result in multiple chunks", "[unit]")
 {
-  test::utils::init_logger();
+  couchbase::test::init_logger();
 
   const std::vector<std::string> chunks{
     /* 0 */
@@ -152,7 +152,7 @@ TEST_CASE("unit: json_streaming_lexer parse query result in multiple chunks", "[
 
 TEST_CASE("unit: json_streaming_lexer parse chunked metadata trailer", "[unit]")
 {
-  test::utils::init_logger();
+  couchbase::test::init_logger();
 
   const std::vector<std::string> chunks{
     /* 0 */
@@ -189,7 +189,7 @@ TEST_CASE("unit: json_streaming_lexer parse chunked metadata trailer", "[unit]")
 
 TEST_CASE("unit: json_streaming_lexer parse payload with missing results", "[unit]")
 {
-  test::utils::init_logger();
+  couchbase::test::init_logger();
 
   std::string chunk = R"(
 {

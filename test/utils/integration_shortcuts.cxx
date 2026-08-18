@@ -23,7 +23,7 @@
 #include "core/logger/logger.hxx"
 #include "core/utils/join_strings.hxx"
 
-namespace test::utils
+namespace couchbase::test
 {
 void
 open_cluster(const couchbase::core::cluster& cluster, const couchbase::core::origin& origin)
@@ -107,4 +107,4 @@ wait_until_ready(const couchbase::core::cluster& cluster,
                                           });
   return f.get();
 }
-} // namespace test::utils
+} // namespace couchbase::test

@@ -17,8 +17,8 @@
 
 #pragma once
 
-namespace test::utils
+namespace couchbase::test
 {
 void
 init_logger();
-} // namespace test::utils
+} // namespace couchbase::test

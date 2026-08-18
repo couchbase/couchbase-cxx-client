@@ -90,7 +90,7 @@ TEST_CASE("unit: get any replica result with custom coder", "[integration]")
 
 TEST_CASE("integration: get any replica", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (integration.number_of_replicas() == 0) {
     SKIP("bucket has zero replicas");
@@ -101,17 +101,17 @@ TEST_CASE("integration: get any replica", "[integration]")
                      integration.number_of_replicas()));
   }
 
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
 
   std::string scope_name{ "_default" };
   std::string collection_name{ "_default" };
-  std::string key = test::utils::uniq_id("get_any_replica");
+  std::string key = couchbase::test::uniq_id("get_any_replica");
 
   {
     couchbase::core::document_id id{ integration.ctx.bucket, scope_name, collection_name, key };
 
     couchbase::core::operations::insert_request req{ id, basic_doc_json };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
@@ -128,7 +128,7 @@ TEST_CASE("integration: get any replica", "[integration]")
 
 TEST_CASE("integration: get all replicas", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   auto number_of_replicas = integration.number_of_replicas();
   if (number_of_replicas == 0) {
@@ -140,18 +140,18 @@ TEST_CASE("integration: get all replicas", "[integration]")
                      number_of_replicas));
   }
 
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
 
   std::string scope_name{ "_default" };
   std::string collection_name{ "_default" };
-  std::string key = test::utils::uniq_id("get_all_replica");
+  std::string key = couchbase::test::uniq_id("get_all_replica");
 
   {
     couchbase::core::document_id id{ integration.ctx.bucket, scope_name, collection_name, key };
 
     couchbase::core::operations::insert_request req{ id, basic_doc_json };
     req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
@@ -178,7 +178,7 @@ TEST_CASE("integration: get all replicas", "[integration]")
 
 TEST_CASE("integration: get all replicas with missing key", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (integration.number_of_replicas() == 0) {
     SKIP("bucket has zero replicas");
@@ -189,7 +189,7 @@ TEST_CASE("integration: get all replicas with missing key", "[integration]")
                      integration.number_of_replicas()));
   }
 
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
 
   {
     auto cluster = integration.public_cluster();
@@ -199,7 +199,7 @@ TEST_CASE("integration: get all replicas with missing key", "[integration]")
     auto collection =
       cluster.bucket(integration.ctx.bucket).scope(scope_name).collection(collection_name);
 
-    const std::string key = test::utils::uniq_id("get_all_replica_missing_key");
+    const std::string key = couchbase::test::uniq_id("get_all_replica_missing_key");
     auto [err, result] = collection.get_all_replicas(key, {}).get();
     REQUIRE(err.ec() == couchbase::errc::key_value::document_not_found);
     REQUIRE(result.empty());
@@ -208,7 +208,7 @@ TEST_CASE("integration: get all replicas with missing key", "[integration]")
 
 TEST_CASE("integration: get any replica with missing key", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (integration.number_of_nodes() <= integration.number_of_replicas()) {
     SKIP(fmt::format("number of nodes ({}) is less or equal to number of replicas ({})",
@@ -216,11 +216,11 @@ TEST_CASE("integration: get any replica with missing key", "[integration]")
                      integration.number_of_replicas()));
   }
 
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
 
   std::string scope_name{ "_default" };
   std::string collection_name{ "_default" };
-  std::string key = test::utils::uniq_id("get_any_replica_missing_key");
+  std::string key = couchbase::test::uniq_id("get_any_replica_missing_key");
 
   {
     auto cluster = integration.public_cluster();
@@ -234,7 +234,7 @@ TEST_CASE("integration: get any replica with missing key", "[integration]")
 
 TEST_CASE("integration: get any replica low-level version", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (integration.number_of_replicas() == 0) {
     SKIP("bucket has zero replicas");
@@ -245,10 +245,10 @@ TEST_CASE("integration: get any replica low-level version", "[integration]")
                      integration.number_of_replicas()));
   }
 
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
 
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("foo")
   };
   {
     const tao::json::value value = {
@@ -258,13 +258,13 @@ TEST_CASE("integration: get any replica low-level version", "[integration]")
     couchbase::core::operations::upsert_request req{
       id, couchbase::core::utils::json::generate_binary(value)
     };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
   {
     couchbase::core::operations::get_any_replica_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(!resp.cas.empty());
     REQUIRE(resp.value == couchbase::core::utils::to_binary(R"({"a":1.0,"b":2.0})"));
@@ -273,7 +273,7 @@ TEST_CASE("integration: get any replica low-level version", "[integration]")
 
 TEST_CASE("integration: get all replicas low-level version", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   auto number_of_replicas = integration.number_of_replicas();
   if (number_of_replicas == 0) {
@@ -285,10 +285,10 @@ TEST_CASE("integration: get all replicas low-level version", "[integration]")
                      number_of_replicas));
   }
 
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
 
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("foo")
   };
   {
     const tao::json::value value = {
@@ -299,7 +299,7 @@ TEST_CASE("integration: get all replicas low-level version", "[integration]")
       id, couchbase::core::utils::json::generate_binary(value)
     };
     req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
@@ -311,7 +311,7 @@ TEST_CASE("integration: get all replicas low-level version", "[integration]")
 
   {
     couchbase::core::operations::get_all_replicas_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.entries.size() == number_of_replicas + 1);
     auto responses_from_active =
@@ -324,7 +324,7 @@ TEST_CASE("integration: get all replicas low-level version", "[integration]")
 
 TEST_CASE("integration: low-level zone-aware read replicas on balanced cluster", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (integration.cluster_version().is_mock()) {
     SKIP("GOCAVES does not support server groups");
@@ -358,11 +358,11 @@ TEST_CASE("integration: low-level zone-aware read replicas on balanced cluster",
   connection_string.options.server_group = server_groups.front();
 
   auto origin = couchbase::core::origin(integration.ctx.build_auth(), connection_string);
-  test::utils::open_cluster(cluster, origin);
-  test::utils::open_bucket(cluster, integration.ctx.bucket);
+  couchbase::test::open_cluster(cluster, origin);
+  couchbase::test::open_bucket(cluster, integration.ctx.bucket);
 
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("foo")
   };
   {
     const tao::json::value value = {
@@ -373,7 +373,7 @@ TEST_CASE("integration: low-level zone-aware read replicas on balanced cluster",
       id, couchbase::core::utils::json::generate_binary(value)
     };
     req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
-    auto resp = test::utils::execute(cluster, req);
+    auto resp = couchbase::test::execute(cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
@@ -381,7 +381,7 @@ TEST_CASE("integration: low-level zone-aware read replicas on balanced cluster",
     couchbase::core::operations::get_all_replicas_request req{
       id, {}, couchbase::read_preference::no_preference
     };
-    auto resp = test::utils::execute(cluster, req);
+    auto resp = couchbase::test::execute(cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.entries.size() == number_of_replicas + 1);
   }
@@ -390,7 +390,7 @@ TEST_CASE("integration: low-level zone-aware read replicas on balanced cluster",
     couchbase::core::operations::get_all_replicas_request req{
       id, {}, couchbase::read_preference::selected_server_group
     };
-    auto resp = test::utils::execute(cluster, req);
+    auto resp = couchbase::test::execute(cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.entries.size() <= number_of_replicas + 1);
     REQUIRE(resp.entries.size() > 0);
@@ -400,7 +400,7 @@ TEST_CASE("integration: low-level zone-aware read replicas on balanced cluster",
     couchbase::core::operations::get_any_replica_request req{
       id, {}, couchbase::read_preference::no_preference
     };
-    auto resp = test::utils::execute(cluster, req);
+    auto resp = couchbase::test::execute(cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE_FALSE(resp.value.empty());
   }
@@ -409,7 +409,7 @@ TEST_CASE("integration: low-level zone-aware read replicas on balanced cluster",
     couchbase::core::operations::get_any_replica_request req{
       id, {}, couchbase::read_preference::selected_server_group
     };
-    auto resp = test::utils::execute(cluster, req);
+    auto resp = couchbase::test::execute(cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE_FALSE(resp.value.empty());
   }
@@ -422,7 +422,7 @@ TEST_CASE("integration: low-level zone-aware read replicas on balanced cluster",
       {},
       couchbase::read_preference::no_preference,
     };
-    auto resp = test::utils::execute(cluster, req);
+    auto resp = couchbase::test::execute(cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE_FALSE(resp.fields.empty());
   }
@@ -435,7 +435,7 @@ TEST_CASE("integration: low-level zone-aware read replicas on balanced cluster",
       {},
       couchbase::read_preference::selected_server_group,
     };
-    auto resp = test::utils::execute(cluster, req);
+    auto resp = couchbase::test::execute(cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE_FALSE(resp.fields.empty());
   }
@@ -448,7 +448,7 @@ TEST_CASE("integration: low-level zone-aware read replicas on balanced cluster",
       {},
       couchbase::read_preference::no_preference,
     };
-    auto resp = test::utils::execute(cluster, req);
+    auto resp = couchbase::test::execute(cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.entries.size() <= number_of_replicas + 1);
     REQUIRE(resp.entries.size() > 0);
@@ -462,19 +462,19 @@ TEST_CASE("integration: low-level zone-aware read replicas on balanced cluster",
       {},
       couchbase::read_preference::selected_server_group,
     };
-    auto resp = test::utils::execute(cluster, req);
+    auto resp = couchbase::test::execute(cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.entries.size() <= number_of_replicas + 1);
     REQUIRE(resp.entries.size() > 0);
   }
 
-  test::utils::close_cluster(cluster);
+  couchbase::test::close_cluster(cluster);
   io_thread.join();
 }
 
 TEST_CASE("integration: low-level zone-aware read replicas on unbalanced cluster", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (integration.cluster_version().is_mock()) {
     SKIP("GOCAVES does not support server groups");
@@ -516,8 +516,8 @@ TEST_CASE("integration: low-level zone-aware read replicas on unbalanced cluster
   connection_string.options.server_group = selected_server_group;
 
   auto origin = couchbase::core::origin(integration.ctx.build_auth(), connection_string);
-  test::utils::open_cluster(cluster, origin);
-  test::utils::open_bucket(cluster, integration.ctx.bucket);
+  couchbase::test::open_cluster(cluster, origin);
+  couchbase::test::open_bucket(cluster, integration.ctx.bucket);
 
   couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", selected_key };
   {
@@ -529,7 +529,7 @@ TEST_CASE("integration: low-level zone-aware read replicas on unbalanced cluster
       id, couchbase::core::utils::json::generate_binary(value)
     };
     req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
-    auto resp = test::utils::execute(cluster, req);
+    auto resp = couchbase::test::execute(cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
@@ -537,7 +537,7 @@ TEST_CASE("integration: low-level zone-aware read replicas on unbalanced cluster
     couchbase::core::operations::get_all_replicas_request req{
       id, {}, couchbase::read_preference::no_preference
     };
-    auto resp = test::utils::execute(cluster, req);
+    auto resp = couchbase::test::execute(cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.entries.size() == number_of_replicas + 1);
   }
@@ -546,7 +546,7 @@ TEST_CASE("integration: low-level zone-aware read replicas on unbalanced cluster
     couchbase::core::operations::get_all_replicas_request req{
       id, {}, couchbase::read_preference::selected_server_group
     };
-    auto resp = test::utils::execute(cluster, req);
+    auto resp = couchbase::test::execute(cluster, req);
     REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_irretrievable);
   }
 
@@ -554,7 +554,7 @@ TEST_CASE("integration: low-level zone-aware read replicas on unbalanced cluster
     couchbase::core::operations::get_any_replica_request req{
       id, {}, couchbase::read_preference::no_preference
     };
-    auto resp = test::utils::execute(cluster, req);
+    auto resp = couchbase::test::execute(cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE_FALSE(resp.value.empty());
   }
@@ -563,7 +563,7 @@ TEST_CASE("integration: low-level zone-aware read replicas on unbalanced cluster
     couchbase::core::operations::get_any_replica_request req{
       id, {}, couchbase::read_preference::selected_server_group
     };
-    auto resp = test::utils::execute(cluster, req);
+    auto resp = couchbase::test::execute(cluster, req);
     REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_irretrievable);
   }
 
@@ -575,7 +575,7 @@ TEST_CASE("integration: low-level zone-aware read replicas on unbalanced cluster
       {},
       couchbase::read_preference::no_preference,
     };
-    auto resp = test::utils::execute(cluster, req);
+    auto resp = couchbase::test::execute(cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE_FALSE(resp.fields.empty());
   }
@@ -588,7 +588,7 @@ TEST_CASE("integration: low-level zone-aware read replicas on unbalanced cluster
       {},
       couchbase::read_preference::selected_server_group,
     };
-    auto resp = test::utils::execute(cluster, req);
+    auto resp = couchbase::test::execute(cluster, req);
     REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_irretrievable);
   }
 
@@ -600,7 +600,7 @@ TEST_CASE("integration: low-level zone-aware read replicas on unbalanced cluster
       {},
       couchbase::read_preference::no_preference,
     };
-    auto resp = test::utils::execute(cluster, req);
+    auto resp = couchbase::test::execute(cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.entries.size() == number_of_replicas + 1);
   }
@@ -613,17 +613,17 @@ TEST_CASE("integration: low-level zone-aware read replicas on unbalanced cluster
       {},
       couchbase::read_preference::selected_server_group,
     };
-    auto resp = test::utils::execute(cluster, req);
+    auto resp = couchbase::test::execute(cluster, req);
     REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_irretrievable);
   }
 
-  test::utils::close_cluster(cluster);
+  couchbase::test::close_cluster(cluster);
   io_thread.join();
 }
 
 TEST_CASE("integration: zone-aware read replicas on balanced cluster", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (integration.cluster_version().is_mock()) {
     SKIP("GOCAVES does not support server groups");
@@ -650,7 +650,7 @@ TEST_CASE("integration: zone-aware read replicas on balanced cluster", "[integra
     integration.ctx.bucket,
     couchbase::scope::default_name,
     couchbase::collection::default_name,
-    test::utils::uniq_id("foo"),
+    couchbase::test::uniq_id("foo"),
   };
   {
     const tao::json::value value = {
@@ -661,7 +661,7 @@ TEST_CASE("integration: zone-aware read replicas on balanced cluster", "[integra
       id, couchbase::core::utils::json::generate_binary(value)
     };
     req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 
@@ -761,7 +761,7 @@ TEST_CASE("integration: zone-aware read replicas on balanced cluster", "[integra
 
 TEST_CASE("integration: zone-aware read replicas on unbalanced cluster", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (integration.cluster_version().is_mock()) {
     SKIP("GOCAVES does not support server groups");
@@ -808,7 +808,7 @@ TEST_CASE("integration: zone-aware read replicas on unbalanced cluster", "[integ
       couchbase::core::utils::json::generate_binary(value),
     };
     req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
   }
 

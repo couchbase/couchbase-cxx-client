@@ -37,12 +37,12 @@ using Catch::Matchers::ContainsSubstring;
 
 TEST_CASE("integration: upsert/get with json transcoder", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   auto cluster = integration.public_cluster();
   auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
 
-  auto id = test::utils::uniq_id("foo");
+  auto id = couchbase::test::uniq_id("foo");
   profile albert{ "this_guy_again", "Albert Einstein", 1879 };
 
   {
@@ -62,12 +62,12 @@ TEST_CASE("integration: upsert/get with json transcoder", "[integration]")
 
 TEST_CASE("integration: insert/get with json transcoder", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   auto cluster = integration.public_cluster();
   auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
 
-  auto id = test::utils::uniq_id("foo");
+  auto id = couchbase::test::uniq_id("foo");
   profile albert{ "this_guy_again", "Albert Einstein", 1879 };
 
   {
@@ -87,12 +87,12 @@ TEST_CASE("integration: insert/get with json transcoder", "[integration]")
 
 TEST_CASE("integration: insert/replace with json transcoder", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   auto cluster = integration.public_cluster();
   auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
 
-  auto id = test::utils::uniq_id("foo");
+  auto id = couchbase::test::uniq_id("foo");
   profile albert{ "this_guy_again", "Albert Einstein", 1879 };
 
   couchbase::cas original_cas;
@@ -141,12 +141,12 @@ TEST_CASE("integration: insert/replace with json transcoder", "[integration]")
 
 TEST_CASE("integration: upsert/remove with json transcoder", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   auto cluster = integration.public_cluster();
   auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
 
-  auto id = test::utils::uniq_id("foo");
+  auto id = couchbase::test::uniq_id("foo");
   profile albert{ "this_guy_again", "Albert Einstein", 1879 };
 
   couchbase::cas original_cas;
@@ -174,12 +174,12 @@ TEST_CASE("integration: upsert/remove with json transcoder", "[integration]")
 
 TEST_CASE("integration: upsert/append/prepend with raw binary transcoder", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   auto cluster = integration.public_cluster();
   auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
 
-  auto id = test::utils::uniq_id("foo");
+  auto id = couchbase::test::uniq_id("foo");
   std::vector data{ std::byte{ 20 }, std::byte{ 21 } };
 
   {
@@ -238,12 +238,12 @@ TEST_CASE("integration: upsert/append/prepend with raw binary transcoder", "[int
 
 TEST_CASE("integration: get with expiry and json transcoder", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   auto cluster = integration.public_cluster();
   auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
 
-  auto id = test::utils::uniq_id("foo");
+  auto id = couchbase::test::uniq_id("foo");
   profile albert{ "this_guy_again", "Albert Einstein", 1879 };
   auto skynet_birthday =
     std::chrono::system_clock::time_point{ std::chrono::seconds{ 1807056000 } };
@@ -268,12 +268,12 @@ TEST_CASE("integration: get with expiry and json transcoder", "[integration]")
 
 TEST_CASE("integration: get with projections and json transcoder", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   auto cluster = integration.public_cluster();
   auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
 
-  auto id = test::utils::uniq_id("foo");
+  auto id = couchbase::test::uniq_id("foo");
   profile albert{ "this_guy_again", "Albert Einstein", 1879 };
 
   {
@@ -317,7 +317,7 @@ TEST_CASE("integration: get with projections and json transcoder", "[integration
 
 TEST_CASE("integration: get_and_touch and json transcoder", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   auto cluster = integration.public_cluster();
   auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
@@ -325,7 +325,7 @@ TEST_CASE("integration: get_and_touch and json transcoder", "[integration]")
   const auto skynet_birthday =
     std::chrono::system_clock::time_point{ std::chrono::seconds{ 1807056000 } };
 
-  auto id = test::utils::uniq_id("cecilia");
+  auto id = couchbase::test::uniq_id("cecilia");
   profile cecilia{ "cecilia", "Cecilia Payne-Gaposchkin", 1900 };
 
   {
@@ -368,7 +368,7 @@ TEST_CASE("integration: get_and_touch and json transcoder", "[integration]")
   {
     auto [err, resp] =
       collection
-        .get_and_touch(test::utils::uniq_id("unknown_profile"), asteroid_99942_apophis_passage, {})
+        .get_and_touch(couchbase::test::uniq_id("unknown_profile"), asteroid_99942_apophis_passage, {})
         .get();
     REQUIRE(err.ec() == couchbase::errc::key_value::document_not_found);
     REQUIRE(resp.cas().empty());
@@ -377,7 +377,7 @@ TEST_CASE("integration: get_and_touch and json transcoder", "[integration]")
 
 TEST_CASE("integration: touch with public API", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   auto cluster = integration.public_cluster();
   auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
@@ -385,7 +385,7 @@ TEST_CASE("integration: touch with public API", "[integration]")
   const auto skynet_birthday =
     std::chrono::system_clock::time_point{ std::chrono::seconds{ 1807056000 } };
 
-  auto id = test::utils::uniq_id("cecilia");
+  auto id = couchbase::test::uniq_id("cecilia");
   profile cecilia{ "cecilia", "Cecilia Payne-Gaposchkin", 1900 };
 
   {
@@ -425,7 +425,7 @@ TEST_CASE("integration: touch with public API", "[integration]")
 
   {
     auto [err, resp] =
-      collection.touch(test::utils::uniq_id("unknown_profile"), asteroid_99942_apophis_passage, {})
+      collection.touch(couchbase::test::uniq_id("unknown_profile"), asteroid_99942_apophis_passage, {})
         .get();
     REQUIRE(err.ec() == couchbase::errc::key_value::document_not_found);
     REQUIRE(resp.cas().empty());
@@ -434,7 +434,7 @@ TEST_CASE("integration: touch with public API", "[integration]")
 
 TEST_CASE("integration: subdoc with public API", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (integration.cluster_version().is_mock()) {
     SKIP("GOCAVES incorrectly uses error indexes for subdoc mutations. See "
@@ -444,7 +444,7 @@ TEST_CASE("integration: subdoc with public API", "[integration]")
   auto cluster = integration.public_cluster();
   auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
 
-  auto id = test::utils::uniq_id("liu_cixin");
+  auto id = couchbase::test::uniq_id("liu_cixin");
   profile cixin{ "liu_cixin", "刘慈欣", 1963 };
 
   couchbase::mutation_token token{};
@@ -611,12 +611,12 @@ TEST_CASE("integration: subdoc with public API", "[integration]")
 TEST_CASE("integration: upsert with raw json transcoder, get with json and raw json transcoders",
           "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   auto cluster = integration.public_cluster();
   auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
 
-  auto id = test::utils::uniq_id("foo");
+  auto id = couchbase::test::uniq_id("foo");
   profile albert{ "this_guy_again", "Albert Einstein", 1879 };
   auto data = couchbase::codec::tao_json_serializer::serialize(albert);
 
@@ -648,12 +648,12 @@ TEST_CASE("integration: upsert with raw json transcoder, get with json and raw j
 
 TEST_CASE("integration: upsert and get string with raw json transcoder", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   auto cluster = integration.public_cluster();
   auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
 
-  auto id = test::utils::uniq_id("foo");
+  auto id = couchbase::test::uniq_id("foo");
   std::string data{ R"({"foo": "bar"})" };
 
   // Upsert with raw_json_transcoder
@@ -687,12 +687,12 @@ TEST_CASE(
   "integration: upsert and get with raw string transcoder, attempt to get with json transcoder",
   "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   auto cluster = integration.public_cluster();
   auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
 
-  auto id = test::utils::uniq_id("foo");
+  auto id = couchbase::test::uniq_id("foo");
   std::string document{ "lorem ipsum dolor sit amet" };
 
   // Upsert with raw_string_transcoder

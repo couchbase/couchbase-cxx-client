@@ -198,7 +198,7 @@ hotel_25588     United States         4.44 San Francisco/Civic Center-Tenderloin
 
 TEST_CASE("example: start using", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (integration.cluster_version().is_capella()) {
     SKIP("Capella does not allow to use REST API to load sample buckets");
   }
@@ -218,7 +218,7 @@ TEST_CASE("example: start using", "[integration]")
     req.collection_name = "airline";
     req.is_primary = true;
     req.ignore_if_exists = true;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_FALSE(resp.ctx.ec);
   }
 
@@ -228,16 +228,16 @@ TEST_CASE("example: start using", "[integration]")
     req.bucket_name = "travel-sample";
     req.scope_name = "inventory";
     req.collection_name = "airline";
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_FALSE(resp.ctx.ec);
   }
 
-  CHECK(test::utils::wait_until(
+  CHECK(couchbase::test::wait_until(
     [&integration]() {
       couchbase::core::operations::management::query_index_get_all_request req{};
       req.bucket_name = "travel-sample";
       req.scope_name = "inventory";
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       if (resp.ctx.ec) {
         return false;
       }
@@ -247,7 +247,7 @@ TEST_CASE("example: start using", "[integration]")
     },
     std::chrono::minutes{ 5 }));
 
-  const auto env = test::utils::test_context::load_from_environment();
+  const auto env = couchbase::test::test_context::load_from_environment();
   const char* argv[] = {
     "start_using", // name of the "executable"
     env.connection_string.c_str(),
@@ -557,7 +557,7 @@ States","iata":"Q5","icao":"MLA","id":10,"name":"40-Mile Air","type":"airline"}}
 TEST_CASE("example: search", "[integration]")
 {
   {
-    test::utils::integration_test_guard integration;
+    couchbase::test::integration_test_guard integration;
 
     if (integration.cluster_version().is_capella()) {
       SKIP("Capella does not allow to use REST API to load sample buckets");
@@ -566,7 +566,7 @@ TEST_CASE("example: search", "[integration]")
       SKIP("cluster does not support collections");
     }
 
-    test::utils::create_search_index(integration,
+    couchbase::test::create_search_index(integration,
                                      "travel-sample",
                                      "travel-sample-index",
                                      integration.cluster_version().is_mad_hatter()
@@ -574,7 +574,7 @@ TEST_CASE("example: search", "[integration]")
                                        : "travel_sample_index_params.json");
   }
 
-  const auto env = test::utils::test_context::load_from_environment();
+  const auto env = couchbase::test::test_context::load_from_environment();
   const char* argv[] = {
     "example_search", // name of the "executable"
     env.connection_string.c_str(),
@@ -585,8 +585,8 @@ TEST_CASE("example: search", "[integration]")
   REQUIRE(example_search::main(4, argv) == 0);
 
   {
-    test::utils::integration_test_guard integration;
-    test::utils::drop_search_index(integration, "travel-sample-index");
+    couchbase::test::integration_test_guard integration;
+    couchbase::test::drop_search_index(integration, "travel-sample-index");
   }
 }
 
@@ -696,13 +696,13 @@ main(int argc, const char* argv[])
 
 TEST_CASE("example: bucket management", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (integration.cluster_version().is_capella()) {
     SKIP("Capella does not allow to use REST API to load sample buckets");
   }
 
-  const auto env = test::utils::test_context::load_from_environment();
+  const auto env = couchbase::test::test_context::load_from_environment();
 
   const char* argv[] = {
     "example_buckets", // name of the "executable"
@@ -888,7 +888,7 @@ States","iata":"Q5","icao":"MLA","id":10,"name":"40-Mile Air","type":"airline"}}
 TEST_CASE("example: using fork() for scaling", "[integration]")
 {
   {
-    test::utils::integration_test_guard integration;
+    couchbase::test::integration_test_guard integration;
     if (integration.cluster_version().is_capella()) {
       SKIP("Capella does not allow to use REST API to load sample buckets");
     }
@@ -898,9 +898,9 @@ TEST_CASE("example: using fork() for scaling", "[integration]")
   }
 
   setbuf(stdout, nullptr); // disable buffering for output
-  test::utils::init_logger();
+  couchbase::test::init_logger();
 
-  const auto env = test::utils::test_context::load_from_environment();
+  const auto env = couchbase::test::test_context::load_from_environment();
 
   const char* argv[] = {
     "example_fork", // name of the "executable"

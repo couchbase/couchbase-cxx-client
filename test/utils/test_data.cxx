@@ -25,7 +25,7 @@
 #include <fstream>
 #include <string>
 
-namespace test::utils
+namespace couchbase::test
 {
 auto
 uniq_id(const std::string& prefix) -> std::string
@@ -68,4 +68,4 @@ read_test_data(const std::string& file) -> std::string
                 std::filesystem::current_path().string(),
                 fmt::join(candidates, ",\n\t")));
 }
-} // namespace test::utils
+} // namespace couchbase::test

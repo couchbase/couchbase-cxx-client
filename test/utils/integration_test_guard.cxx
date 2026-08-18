@@ -27,7 +27,7 @@
 #include "logger.hxx"
 #include "test_data.hxx"
 
-namespace test::utils
+namespace couchbase::test
 {
 static void
 set_thread_name(const char* name)
@@ -414,4 +414,4 @@ integration_test_guard::public_cluster(
   }
   return c;
 }
-} // namespace test::utils
+} // namespace couchbase::test

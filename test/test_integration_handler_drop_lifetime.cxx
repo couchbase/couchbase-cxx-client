@@ -55,7 +55,7 @@ using namespace std::literals::chrono_literals;
 TEST_CASE("integration: a scan future completes when the cluster is closed mid-bootstrap",
           "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   std::future<std::pair<couchbase::error, couchbase::scan_result>> pending;
   {
@@ -98,7 +98,7 @@ TEST_CASE("integration: a scan future completes when the cluster is closed mid-b
 TEST_CASE("integration: a node_ids future completes when the cluster is closed mid-bootstrap",
           "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   std::future<std::pair<couchbase::error, std::vector<couchbase::node_id>>> pending;
   {
@@ -130,7 +130,7 @@ TEST_CASE("integration: a node_ids future completes when the cluster is closed m
 TEST_CASE("integration: a get future completes when the cluster is closed mid-bootstrap",
           "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   std::future<std::pair<couchbase::error, couchbase::get_result>> pending;
   {
@@ -138,7 +138,7 @@ TEST_CASE("integration: a get future completes when the cluster is closed mid-bo
 
     pending = cluster.bucket("this_bucket_does_not_exist")
                 .default_collection()
-                .get(test::utils::uniq_id("cxxcbc-853-get"));
+                .get(couchbase::test::uniq_id("cxxcbc-853-get"));
 
     if (pending.wait_for(0s) != std::future_status::timeout) {
       SUCCEED("get completed too quickly to exercise an in-flight bucket bootstrap");

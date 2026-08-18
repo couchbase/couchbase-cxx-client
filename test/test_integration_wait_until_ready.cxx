@@ -33,7 +33,7 @@ using namespace std::literals::chrono_literals;
 
 TEST_CASE("integration: cluster wait_until_ready", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   auto cluster = integration.public_cluster();
 
@@ -96,7 +96,7 @@ TEST_CASE("integration: cluster wait_until_ready", "[integration]")
 
 TEST_CASE("integration: bucket wait_until_ready", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   auto cluster = integration.public_cluster();
 
@@ -157,7 +157,7 @@ TEST_CASE("integration: bucket wait_until_ready", "[integration]")
 TEST_CASE("integration: freshly created bucket is durable-write ready after wait_until_ready",
           "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (integration.number_of_nodes() < 2) {
     SUCCEED("majority durability with a replica needs at least two data nodes");
@@ -165,7 +165,7 @@ TEST_CASE("integration: freshly created bucket is durable-write ready after wait
   }
 
   auto cluster = integration.public_cluster();
-  const auto bucket_name = test::utils::uniq_id("wait_until_ready");
+  const auto bucket_name = couchbase::test::uniq_id("wait_until_ready");
 
   couchbase::management::cluster::bucket_settings settings{};
   settings.name = bucket_name;
@@ -188,7 +188,7 @@ TEST_CASE("integration: freshly created bucket is durable-write ready after wait
   auto [upsert_err, result] =
     cluster.bucket(bucket_name)
       .default_collection()
-      .upsert(test::utils::uniq_id("key"), tao::json::value{ { "answer", 42 } }, upsert)
+      .upsert(couchbase::test::uniq_id("key"), tao::json::value{ { "answer", 42 } }, upsert)
       .get();
   REQUIRE_SUCCESS(upsert_err.ec());
 
@@ -199,7 +199,7 @@ TEST_CASE("integration: freshly created bucket is durable-write ready after wait
 TEST_CASE("integration: wait_until_ready completes when the cluster is torn down mid-wait",
           "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   // Keep the wait pending by targeting a service the cluster does not run, so it never reaches the
   // desired state. This is a cluster-level wait on purpose: it exercises the teardown path without

@@ -32,25 +32,25 @@
 
 TEST_CASE("integration: increment", "[integration]")
 {
-  test::utils::integration_test_guard integration;
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::integration_test_guard integration;
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
 
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("counter")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("counter")
   };
 
   SECTION("key exists")
   {
     {
       couchbase::core::operations::insert_request req{ id, couchbase::core::utils::to_binary("0") };
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     for (uint64_t expected = 2; expected <= 20; expected += 2) {
       couchbase::core::operations::increment_request req{ id };
       req.delta = 2;
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec());
       REQUIRE(resp.content == expected);
     }
@@ -61,7 +61,7 @@ TEST_CASE("integration: increment", "[integration]")
     couchbase::core::operations::increment_request req{ id };
     req.delta = 2;
     req.initial_value = 10;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.content == 10);
   }
@@ -72,7 +72,7 @@ TEST_CASE("integration: increment", "[integration]")
       couchbase::core::operations::increment_request req{ id };
       req.initial_value = 2;
       req.durability_level = couchbase::durability_level::persist_to_majority;
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec());
       REQUIRE(resp.content == 2);
     }
@@ -81,12 +81,12 @@ TEST_CASE("integration: increment", "[integration]")
 
 TEST_CASE("integration: increment with public API", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   auto cluster = integration.public_cluster();
   auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
 
-  auto id = test::utils::uniq_id("counter");
+  auto id = couchbase::test::uniq_id("counter");
 
   SECTION("key exists")
   {
@@ -130,11 +130,11 @@ TEST_CASE("integration: increment with public API", "[integration]")
 
 TEST_CASE("integration: decrement", "[integration]")
 {
-  test::utils::integration_test_guard integration;
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::integration_test_guard integration;
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
 
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("counter")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("counter")
   };
 
   SECTION("key exists")
@@ -142,14 +142,14 @@ TEST_CASE("integration: decrement", "[integration]")
     {
       couchbase::core::operations::insert_request req{ id,
                                                        couchbase::core::utils::to_binary("20") };
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec());
     }
 
     for (uint64_t expected = 18; expected > 0; expected -= 2) {
       couchbase::core::operations::decrement_request req{ id };
       req.delta = 2;
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec());
       REQUIRE(resp.content == expected);
     }
@@ -160,7 +160,7 @@ TEST_CASE("integration: decrement", "[integration]")
     couchbase::core::operations::decrement_request req{ id };
     req.delta = 2;
     req.initial_value = 10;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.content == 10);
   }
@@ -171,7 +171,7 @@ TEST_CASE("integration: decrement", "[integration]")
       couchbase::core::operations::decrement_request req{ id };
       req.initial_value = 2;
       req.durability_level = couchbase::durability_level::persist_to_majority;
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec());
       REQUIRE(resp.content == 2);
     }
@@ -180,12 +180,12 @@ TEST_CASE("integration: decrement", "[integration]")
 
 TEST_CASE("integration: decrement with public API", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   auto cluster = integration.public_cluster();
   auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
 
-  auto id = test::utils::uniq_id("counter");
+  auto id = couchbase::test::uniq_id("counter");
 
   SECTION("key exists")
   {

@@ -25,7 +25,7 @@
 
 #include <string>
 
-namespace test::utils
+namespace couchbase::test
 {
 struct test_context {
   std::string connection_string{ "couchbase://localhost" };
@@ -49,4 +49,4 @@ struct test_context {
   static auto load_from_environment() -> test_context;
 };
 
-} // namespace test::utils
+} // namespace couchbase::test

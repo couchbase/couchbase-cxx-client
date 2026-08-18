@@ -24,7 +24,7 @@ TEST_CASE("unit: can determine if an index is a vector index", "[unit]")
   SECTION("vector index")
   {
     couchbase::core::management::search::index search_index{};
-    search_index.params_json = test::utils::read_test_data("sample_vector_index_params.json");
+    search_index.params_json = couchbase::test::read_test_data("sample_vector_index_params.json");
 
     REQUIRE(search_index.is_vector_index());
   }
@@ -34,7 +34,7 @@ TEST_CASE("unit: can determine if an index is a vector index", "[unit]")
 
     couchbase::core::management::search::index search_index{};
     search_index.params_json =
-      test::utils::read_test_data("sample_vector_index_with_nested_properties_params.json");
+      couchbase::test::read_test_data("sample_vector_index_with_nested_properties_params.json");
 
     REQUIRE(search_index.is_vector_index());
   }
@@ -43,7 +43,7 @@ TEST_CASE("unit: can determine if an index is a vector index", "[unit]")
   {
 
     couchbase::core::management::search::index search_index{};
-    search_index.params_json = test::utils::read_test_data("travel_sample_index_params.json");
+    search_index.params_json = couchbase::test::read_test_data("travel_sample_index_params.json");
 
     REQUIRE_FALSE(search_index.is_vector_index());
   }

@@ -20,27 +20,27 @@
 #include "test_helper_integration.hxx"
 
 static couchbase::core::operations::management::bucket_get_response
-wait_for_bucket_created(test::utils::integration_test_guard& integration,
+wait_for_bucket_created(couchbase::test::integration_test_guard& integration,
                         const std::string& bucket_name)
 {
-  test::utils::wait_until_bucket_healthy(integration.cluster, bucket_name);
+  couchbase::test::wait_until_bucket_healthy(integration.cluster, bucket_name);
   couchbase::core::operations::management::bucket_get_request req{ bucket_name };
-  auto resp = test::utils::execute(integration.cluster, req);
+  auto resp = couchbase::test::execute(integration.cluster, req);
   return resp;
 }
 
 static bool
-wait_for_function_reach_status(test::utils::integration_test_guard& integration,
+wait_for_function_reach_status(couchbase::test::integration_test_guard& integration,
                                const std::string& function_name,
                                const std::optional<std::string>& bucket_name,
                                const std::optional<std::string>& scope_name,
                                couchbase::core::management::eventing::function_status status)
 {
-  return test::utils::wait_until(
+  return couchbase::test::wait_until(
     [&integration, function_name, bucket_name, scope_name, status]() {
       couchbase::core::operations::management::eventing_get_status_request req{ bucket_name,
                                                                                 scope_name };
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       if (resp.ctx.ec) {
         return false;
       }
@@ -58,17 +58,17 @@ wait_for_function_reach_status(test::utils::integration_test_guard& integration,
 }
 
 static void
-run_core_eventing_management_lifecycle_test(test::utils::integration_test_guard& integration,
+run_core_eventing_management_lifecycle_test(couchbase::test::integration_test_guard& integration,
                                             std::optional<std::string> bucket_name,
                                             std::optional<std::string> scope_name)
 {
-  auto function_name = test::utils::uniq_id("name");
+  auto function_name = couchbase::test::uniq_id("name");
 
   {
     couchbase::core::operations::management::eventing_drop_function_request req{ function_name,
                                                                                  bucket_name,
                                                                                  scope_name };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     if (integration.cluster_version().is_cheshire_cat()) {
       REQUIRE(resp.ctx.ec == couchbase::errc::management::eventing_function_not_deployed);
     } else {
@@ -80,11 +80,11 @@ run_core_eventing_management_lifecycle_test(test::utils::integration_test_guard&
     couchbase::core::operations::management::eventing_get_function_request req{ function_name,
                                                                                 bucket_name,
                                                                                 scope_name };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE(resp.ctx.ec == couchbase::errc::management::eventing_function_not_found);
   }
 
-  auto meta_bucket_name = test::utils::uniq_id("meta");
+  auto meta_bucket_name = couchbase::test::uniq_id("meta");
   {
 
     couchbase::core::management::cluster::bucket_settings bucket_settings;
@@ -94,7 +94,7 @@ run_core_eventing_management_lifecycle_test(test::utils::integration_test_guard&
     {
       couchbase::core::operations::management::bucket_create_request req;
       req.bucket = bucket_settings;
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec);
     }
   }
@@ -138,15 +138,15 @@ function OnDelete(meta, options) {
     req.function.url_bindings.emplace_back(
       couchbase::core::management::eventing::function_url_binding{ "home",
                                                                    "https://couchbase.com" });
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
   }
 
   {
-    REQUIRE(test::utils::wait_for_function_created(
+    REQUIRE(couchbase::test::wait_for_function_created(
       integration.cluster, function_name, bucket_name, scope_name));
     auto resp =
-      test::utils::execute(integration.cluster,
+      couchbase::test::execute(integration.cluster,
                            couchbase::core::operations::management::eventing_get_function_request{
                              function_name,
                              bucket_name,
@@ -158,7 +158,7 @@ function OnDelete(meta, options) {
   {
     couchbase::core::operations::management::eventing_get_all_functions_request req{ bucket_name,
                                                                                      scope_name };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
     auto function =
       std::find_if(resp.functions.begin(), resp.functions.end(), [&function_name](const auto& fun) {
@@ -192,7 +192,7 @@ function OnDelete(meta, options) {
   {
     couchbase::core::operations::management::eventing_get_status_request req{ bucket_name,
                                                                               scope_name };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
     REQUIRE(resp.status.num_eventing_nodes > 0);
     auto function = std::find_if(resp.status.functions.begin(),
@@ -212,7 +212,7 @@ function OnDelete(meta, options) {
     couchbase::core::operations::management::eventing_undeploy_function_request req{ function_name,
                                                                                      bucket_name,
                                                                                      scope_name };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     if (integration.cluster_version()
           .does_not_return_error_when_eventing_function_is_already_in_desired_state()) {
       REQUIRE_SUCCESS(resp.ctx.ec);
@@ -225,7 +225,7 @@ function OnDelete(meta, options) {
     couchbase::core::operations::management::eventing_deploy_function_request req{ function_name,
                                                                                    bucket_name,
                                                                                    scope_name };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
   }
 
@@ -240,7 +240,7 @@ function OnDelete(meta, options) {
     couchbase::core::operations::management::eventing_drop_function_request req{ function_name,
                                                                                  bucket_name,
                                                                                  scope_name };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE(resp.ctx.ec == couchbase::errc::management::eventing_function_deployed);
   }
 
@@ -248,7 +248,7 @@ function OnDelete(meta, options) {
     couchbase::core::operations::management::eventing_resume_function_request req{ function_name,
                                                                                    bucket_name,
                                                                                    scope_name };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     if (integration.cluster_version()
           .does_not_return_error_when_eventing_function_is_already_in_desired_state()) {
       REQUIRE_SUCCESS(resp.ctx.ec);
@@ -261,7 +261,7 @@ function OnDelete(meta, options) {
     couchbase::core::operations::management::eventing_pause_function_request req{ function_name,
                                                                                   bucket_name,
                                                                                   scope_name };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
   }
 
@@ -276,7 +276,7 @@ function OnDelete(meta, options) {
     couchbase::core::operations::management::eventing_pause_function_request req{ function_name,
                                                                                   bucket_name,
                                                                                   scope_name };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     if (integration.cluster_version()
           .does_not_return_error_when_eventing_function_is_already_in_desired_state()) {
       REQUIRE_SUCCESS(resp.ctx.ec);
@@ -289,7 +289,7 @@ function OnDelete(meta, options) {
     couchbase::core::operations::management::eventing_resume_function_request req{ function_name,
                                                                                    bucket_name,
                                                                                    scope_name };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
   }
 
@@ -304,7 +304,7 @@ function OnDelete(meta, options) {
     couchbase::core::operations::management::eventing_undeploy_function_request req{ function_name,
                                                                                      bucket_name,
                                                                                      scope_name };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
   }
 
@@ -319,14 +319,14 @@ function OnDelete(meta, options) {
     couchbase::core::operations::management::eventing_drop_function_request req{ function_name,
                                                                                  bucket_name,
                                                                                  scope_name };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
   }
 
   {
-    auto function_not_found = test::utils::wait_until([&]() {
+    auto function_not_found = couchbase::test::wait_until([&]() {
       auto resp =
-        test::utils::execute(integration.cluster,
+        couchbase::test::execute(integration.cluster,
                              couchbase::core::operations::management::eventing_get_function_request{
                                function_name,
                                bucket_name,
@@ -341,20 +341,20 @@ function OnDelete(meta, options) {
     couchbase::core::operations::management::eventing_get_function_request req{ function_name,
                                                                                 bucket_name,
                                                                                 scope_name };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE(resp.ctx.ec == couchbase::errc::management::eventing_function_not_found);
   }
 
   {
     couchbase::core::operations::management::bucket_drop_request req{ meta_bucket_name };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
   }
 }
 
 TEST_CASE("integration: eventing functions management", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().supports_eventing_functions()) {
     SKIP("cluster does not support eventing service");
@@ -364,7 +364,7 @@ TEST_CASE("integration: eventing functions management", "[integration]")
   }
 
   if (!integration.cluster_version().supports_gcccp()) {
-    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
   }
 
   SECTION("lifecycle")
@@ -375,7 +375,7 @@ TEST_CASE("integration: eventing functions management", "[integration]")
 
 TEST_CASE("integration: scoped eventing functions management", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
   if (!integration.cluster_version().supports_scoped_eventing_functions()) {
     SKIP("cluster does not support scoped eventing functions");
@@ -385,7 +385,7 @@ TEST_CASE("integration: scoped eventing functions management", "[integration]")
   }
 
   if (!integration.cluster_version().supports_gcccp()) {
-    test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+    couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
   }
 
   SECTION("lifecycle")
@@ -395,10 +395,10 @@ TEST_CASE("integration: scoped eventing functions management", "[integration]")
 
   SECTION("filtering for get_all_functions and get_status")
   {
-    auto admin_function_name = test::utils::uniq_id("admin");
-    auto scoped_function_name = test::utils::uniq_id("scoped");
+    auto admin_function_name = couchbase::test::uniq_id("admin");
+    auto scoped_function_name = couchbase::test::uniq_id("scoped");
 
-    auto meta_bucket_name = test::utils::uniq_id("meta");
+    auto meta_bucket_name = couchbase::test::uniq_id("meta");
     {
 
       couchbase::core::management::cluster::bucket_settings bucket_settings;
@@ -408,7 +408,7 @@ TEST_CASE("integration: scoped eventing functions management", "[integration]")
       {
         couchbase::core::operations::management::bucket_create_request req;
         req.bucket = bucket_settings;
-        auto resp = test::utils::execute(integration.cluster, req);
+        auto resp = couchbase::test::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec);
       }
     }
@@ -446,14 +446,14 @@ function OnDelete(meta, options) {
       req.function.url_bindings.emplace_back(
         couchbase::core::management::eventing::function_url_binding{ "home",
                                                                      "https://couchbase.com" });
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec);
     }
 
     {
-      REQUIRE(test::utils::wait_for_function_created(integration.cluster, admin_function_name));
+      REQUIRE(couchbase::test::wait_for_function_created(integration.cluster, admin_function_name));
       auto resp =
-        test::utils::execute(integration.cluster,
+        couchbase::test::execute(integration.cluster,
                              couchbase::core::operations::management::eventing_get_function_request{
                                admin_function_name,
                              });
@@ -481,15 +481,15 @@ function OnDelete(meta, options) {
       req.function.url_bindings.emplace_back(
         couchbase::core::management::eventing::function_url_binding{ "home",
                                                                      "https://couchbase.com" });
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec);
     }
 
     {
-      REQUIRE(test::utils::wait_for_function_created(
+      REQUIRE(couchbase::test::wait_for_function_created(
         integration.cluster, scoped_function_name, integration.ctx.bucket, "_default"));
       auto resp =
-        test::utils::execute(integration.cluster,
+        couchbase::test::execute(integration.cluster,
                              couchbase::core::operations::management::eventing_get_function_request{
                                scoped_function_name, integration.ctx.bucket, "_default" });
       REQUIRE_SUCCESS(resp.ctx.ec);
@@ -499,7 +499,7 @@ function OnDelete(meta, options) {
       couchbase::core::operations::management::eventing_get_all_functions_request req{
         integration.ctx.bucket, "_default"
       };
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec);
 
       // The scoped function should be in the results of a scoped get_all_functions
@@ -523,7 +523,7 @@ function OnDelete(meta, options) {
 
     {
       couchbase::core::operations::management::eventing_get_all_functions_request req{};
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec);
 
       // The scoped function should not be in the results of a non-scoped get_all_functions
@@ -549,7 +549,7 @@ function OnDelete(meta, options) {
       couchbase::core::operations::management::eventing_get_status_request req{
         integration.ctx.bucket, "_default"
       };
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec);
 
       // The scoped function should be in the results of a scoped get_status
@@ -575,7 +575,7 @@ function OnDelete(meta, options) {
 
     {
       couchbase::core::operations::management::eventing_get_status_request req{};
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec);
 
       // The scoped function should not be in the results of a non-scoped get_status
@@ -603,7 +603,7 @@ function OnDelete(meta, options) {
       couchbase::core::operations::management::eventing_drop_function_request req{
         scoped_function_name, integration.ctx.bucket, "_default"
       };
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec);
     }
 
@@ -611,13 +611,13 @@ function OnDelete(meta, options) {
       couchbase::core::operations::management::eventing_drop_function_request req{
         admin_function_name
       };
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec);
     }
 
     {
       couchbase::core::operations::management::bucket_drop_request req{ meta_bucket_name };
-      auto resp = test::utils::execute(integration.cluster, req);
+      auto resp = couchbase::test::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec);
     }
   }

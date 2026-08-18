@@ -37,7 +37,7 @@
 #include <spdlog/fmt/bundled/chrono.h>
 #include <tao/json/value.hpp>
 
-namespace test::utils
+namespace couchbase::test
 {
 auto
 wait_until_bucket_healthy(const couchbase::core::cluster& cluster,
@@ -479,4 +479,4 @@ collection_guard::collection_name() const -> const std::string&
 {
   return collection_name_;
 }
-} // namespace test::utils
+} // namespace couchbase::test

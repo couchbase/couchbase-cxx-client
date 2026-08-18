@@ -20,8 +20,8 @@
 #include <string>
 #include <vector>
 
-namespace test::utils
+namespace couchbase::test
 {
 [[nodiscard]] auto
 to_string(const std::vector<std::byte>& input) -> std::string;
-} // namespace test::utils
+} // namespace couchbase::test

@@ -76,7 +76,17 @@ public:
   [[nodiscard]] auto server_version() -> couchbase::test::server_version override
   {
     ++version_calls;
-    return { 7, 6, 2, false, server_edition::enterprise, deployment_type::on_prem };
+    // Fields named rather than positional: the shared type carries build, profile and
+    // use_gocaves between the members this cares about, so a positional list would set the wrong
+    // ones and C++17 has no designated initialisers to say which is which.
+    couchbase::test::server_version v;
+    v.major = 7;
+    v.minor = 6;
+    v.micro = 2;
+    v.developer_preview = false;
+    v.edition = server_edition::enterprise;
+    v.deployment = deployment_type::on_prem;
+    return v;
   }
   [[nodiscard]] auto has_service(const std::string& name) -> bool override
   {

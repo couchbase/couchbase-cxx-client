@@ -30,7 +30,7 @@
 #include <string>
 #include <system_error>
 
-namespace test::utils
+namespace couchbase::test
 {
 template<class Request>
 auto
@@ -66,4 +66,4 @@ wait_until_ready(const couchbase::core::cluster& cluster,
                  std::chrono::milliseconds timeout,
                  couchbase::cluster_state desired_state,
                  std::set<couchbase::core::service_type> services) -> std::error_code;
-} // namespace test::utils
+} // namespace couchbase::test

@@ -35,15 +35,15 @@
 
 TEST_CASE("integration: durable operations", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (!integration.cluster_version().supports_enhanced_durability()) {
     SKIP("cluster does not support enhanced durability");
   }
 
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
 
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("foo")
   };
   {
     const tao::json::value value = {
@@ -54,7 +54,7 @@ TEST_CASE("integration: durable operations", "[integration]")
       id, couchbase::core::utils::json::generate_binary(value)
     };
     req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(!resp.cas.empty());
     REQUIRE(resp.token.sequence_number() != 0);
@@ -67,7 +67,7 @@ TEST_CASE("integration: durable operations", "[integration]")
       id, couchbase::core::utils::json::generate_binary(value)
     };
     req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(!resp.cas.empty());
     REQUIRE(resp.token.sequence_number() != 0);
@@ -76,14 +76,14 @@ TEST_CASE("integration: durable operations", "[integration]")
     couchbase::core::operations::mutate_in_request req{ id };
     req.specs = couchbase::mutate_in_specs{ couchbase::mutate_in_specs::upsert("baz", 42) }.specs();
     req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(!resp.cas.empty());
     REQUIRE(resp.token.sequence_number() != 0);
   }
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(!resp.cas.empty());
     REQUIRE(couchbase::core::utils::json::parse_binary(resp.value) ==
@@ -92,7 +92,7 @@ TEST_CASE("integration: durable operations", "[integration]")
   {
     couchbase::core::operations::remove_request req{ id };
     req.durability_level = couchbase::durability_level::majority_and_persist_to_active;
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(!resp.cas.empty());
     REQUIRE(resp.token.sequence_number() != 0);
@@ -101,7 +101,7 @@ TEST_CASE("integration: durable operations", "[integration]")
 
 TEST_CASE("integration: legacy durability persist to active and replicate to one", "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
   if (integration.number_of_replicas() == 0) {
     SKIP("bucket has zero replicas");
   }
@@ -111,7 +111,7 @@ TEST_CASE("integration: legacy durability persist to active and replicate to one
                      integration.number_of_replicas()));
   }
 
-  std::string key = test::utils::uniq_id("upsert_legacy");
+  std::string key = couchbase::test::uniq_id("upsert_legacy");
 
   auto cluster = integration.public_cluster();
   auto collection = cluster.bucket(integration.ctx.bucket)
@@ -143,16 +143,16 @@ TEST_CASE("integration: legacy durability persist to active and replicate to one
 TEST_CASE("integration: low level legacy durability impossible if number of nodes too high",
           "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
 
   if (integration.number_of_replicas() == 3) {
     SKIP("bucket has three replicas configured, so the test will not be applicable");
   }
 
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("foo")
   };
   const tao::json::value value = {
     { "a", 1.0 },
@@ -164,7 +164,7 @@ TEST_CASE("integration: low level legacy durability impossible if number of node
       couchbase::persist_to::four,
       couchbase::replicate_to::one,
     };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::durability_impossible);
   }
   {
@@ -173,7 +173,7 @@ TEST_CASE("integration: low level legacy durability impossible if number of node
       couchbase::persist_to::active,
       couchbase::replicate_to::three,
     };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::durability_impossible);
   }
 }
@@ -181,16 +181,16 @@ TEST_CASE("integration: low level legacy durability impossible if number of node
 TEST_CASE("integration: low level legacy durability persist to active and replicate to one",
           "[integration]")
 {
-  test::utils::integration_test_guard integration;
+  couchbase::test::integration_test_guard integration;
 
-  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+  couchbase::test::open_bucket(integration.cluster, integration.ctx.bucket);
 
   if (integration.number_of_replicas() < 1) {
     SKIP("bucket does not have replicas configured");
   }
 
   couchbase::core::document_id id{
-    integration.ctx.bucket, "_default", "_default", test::utils::uniq_id("foo")
+    integration.ctx.bucket, "_default", "_default", couchbase::test::uniq_id("foo")
   };
   {
     const tao::json::value value = {
@@ -202,7 +202,7 @@ TEST_CASE("integration: low level legacy durability persist to active and replic
       couchbase::persist_to::active,
       couchbase::replicate_to::one,
     };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(!resp.cas.empty());
     REQUIRE(resp.token.sequence_number() != 0);
@@ -217,7 +217,7 @@ TEST_CASE("integration: low level legacy durability persist to active and replic
       couchbase::persist_to::active,
       couchbase::replicate_to::one,
     };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(!resp.cas.empty());
     REQUIRE(resp.token.sequence_number() != 0);
@@ -230,14 +230,14 @@ TEST_CASE("integration: low level legacy durability persist to active and replic
     };
     req.specs = couchbase::mutate_in_specs{ couchbase::mutate_in_specs::upsert("baz", 42) }.specs();
 
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(!resp.cas.empty());
     REQUIRE(resp.token.sequence_number() != 0);
   }
   {
     couchbase::core::operations::get_request req{ id };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(!resp.cas.empty());
     REQUIRE(couchbase::core::utils::json::parse_binary(resp.value) ==
@@ -249,7 +249,7 @@ TEST_CASE("integration: low level legacy durability persist to active and replic
       couchbase::persist_to::active,
       couchbase::replicate_to::one,
     };
-    auto resp = test::utils::execute(integration.cluster, req);
+    auto resp = couchbase::test::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(!resp.cas.empty());
     REQUIRE(resp.token.sequence_number() != 0);

@@ -42,7 +42,7 @@ TEST_CASE("unit: query_stream yields rows then exposes late metadata", "[unit]")
                     R"("results":[{"a":1},{"a":2}],"status":"success",)"
                     R"("metrics":{"resultCount":2,"resultSize":10,)"
                     R"("elapsedTime":"1ms","executionTime":"1ms"}})";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = couchbase::test::make_cached_response_body(io, doc);
   couchbase::core::query_stream stream{ io, std::move(body) };
 
   std::vector<std::string> rows;
@@ -77,7 +77,7 @@ TEST_CASE("unit: query_stream surfaces a trailing query error after rows", "[uni
   asio::io_context io;
   std::string doc = R"({"requestID":"r2","results":[{"a":1}],)"
                     R"("status":"fatal","errors":[{"code":5000,"msg":"boom"}]})";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = couchbase::test::make_cached_response_body(io, doc);
   couchbase::core::query_stream stream{ io, std::move(body) };
 
   int row_count = 0;
@@ -179,7 +179,7 @@ TEST_CASE("unit: query_stream reports a clean end for an empty result set", "[un
                     R"("results":[],"status":"success",)"
                     R"("metrics":{"resultCount":0,"resultSize":0,)"
                     R"("elapsedTime":"1ms","executionTime":"1ms"}})";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = couchbase::test::make_cached_response_body(io, doc);
   couchbase::core::query_stream stream{ io, std::move(body) };
 
   int row_count = 0;
@@ -213,7 +213,7 @@ TEST_CASE("unit: query_stream surfaces a trailing error with zero rows", "[unit]
   asio::io_context io;
   std::string doc = R"({"requestID":"r4","results":[],)"
                     R"("status":"fatal","errors":[{"code":5000,"msg":"boom"}]})";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = couchbase::test::make_cached_response_body(io, doc);
   couchbase::core::query_stream stream{ io, std::move(body) };
 
   int row_count = 0;
@@ -245,7 +245,7 @@ TEST_CASE("unit: query_stream normalizes a malformed body to parsing_failure", "
   // errc::common::parsing_failure so it matches the buffered query() contract (which reports
   // parsing_failure for any body-parse failure) instead of leaking the internal lexer code.
   std::string doc = R"({"requestID":"r","results":[{"a":1},xxx],"status":"success"})";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = couchbase::test::make_cached_response_body(io, doc);
   couchbase::core::query_stream stream{ io, std::move(body) };
 
   std::error_code end_ec{};
@@ -277,7 +277,7 @@ TEST_CASE("unit: query_stream normalizes an oversized row to parsing_failure", "
   // raw streaming_json_lexer code.
   std::string big(std::size_t{ 64 } * 1024, 'X');
   std::string doc = R"({"results":[{"p":")" + big + R"("}],"status":"success"})";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = couchbase::test::make_cached_response_body(io, doc);
   couchbase::core::row_streamer_options opts{};
   opts.max_row_bytes = std::size_t{ 4 } * 1024; // tiny ceiling so the row overflows it
   couchbase::core::query_stream stream{ io, std::move(body), opts };
@@ -309,7 +309,7 @@ TEST_CASE("unit: query_stream re-delivers the terminal on pulls after the end", 
   // same terminal instead of parking forever on the drained channel.
   asio::io_context io;
   std::string doc = R"({"requestID":"r","results":[{"a":1}],"status":"success"})";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = couchbase::test::make_cached_response_body(io, doc);
   couchbase::core::query_stream stream{ io, std::move(body) };
 
   int terminals = 0;
@@ -337,7 +337,7 @@ TEST_CASE("unit: query_stream reports no signature when absent", "[unit]")
 {
   asio::io_context io;
   std::string doc = R"({"requestID":"r5","results":[{"a":1}],"status":"success"})";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = couchbase::test::make_cached_response_body(io, doc);
   couchbase::core::query_stream stream{ io, std::move(body) };
 
   bool resolved = false;
@@ -367,7 +367,7 @@ TEST_CASE("unit: a mid-stream query terminal error is reported with the request 
   asio::io_context io;
   const std::string doc = R"({"requestID":"r-ctx","results":[{"a":1}],)"
                           R"("status":"fatal","errors":[{"code":5000,"msg":"boom"}]})";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = couchbase::test::make_cached_response_body(io, doc);
   couchbase::core::query_stream stream{ io, std::move(body) };
 
   std::error_code start_ec{ make_error_code(std::errc::operation_in_progress) };
