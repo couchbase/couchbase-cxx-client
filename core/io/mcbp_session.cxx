@@ -31,6 +31,7 @@
 #include "core/impl/bootstrap_error.hxx"
 #include "core/impl/bootstrap_state_listener.hxx"
 #include "core/logger/logger.hxx"
+#include "core/logger/redaction.hxx"
 #include "core/mcbp/codec.hxx"
 #include "core/mcbp/queue_request.hxx"
 #include "core/meta/version.hxx"
@@ -887,7 +888,7 @@ public:
     , codec_{ { supported_features_.begin(), supported_features_.end() } }
   {
     log_prefix_ = fmt::format(
-      "[{}/{}/{}/{}]", client_id_, id_, stream_->log_prefix(), bucket_name_.value_or("-"));
+      "[{}/{}/{}/{}]", client_id_, id_, stream_->log_prefix(), log_prefix_bucket_name());
   }
 
   mcbp_session_impl(std::string_view client_id,
@@ -917,7 +918,7 @@ public:
     , codec_{ { supported_features_.begin(), supported_features_.end() } }
   {
     log_prefix_ = fmt::format(
-      "[{}/{}/{}/{}]", client_id_, id_, stream_->log_prefix(), bucket_name_.value_or("-"));
+      "[{}/{}/{}/{}]", client_id_, id_, stream_->log_prefix(), log_prefix_bucket_name());
   }
 
   mcbp_session_impl(const mcbp_session_impl&) = delete;
@@ -1326,8 +1327,8 @@ public:
                                 client_id_,
                                 id_,
                                 stream_->log_prefix(),
-                                bucket_name_.value_or("-"),
-                                bootstrap_address_);
+                                log_prefix_bucket_name(),
+                                logger::system_data(bootstrap_address_));
     }
     CB_LOG_DEBUG("{} attempt to establish MCBP connection", log_prefix_);
 
@@ -1922,6 +1923,18 @@ public:
 #endif
 
 private:
+  /**
+   * The bucket name for the log prefix, or an untagged "-" when the session is not bound to a
+   * bucket.
+   */
+  [[nodiscard]] auto log_prefix_bucket_name() const -> std::string
+  {
+    if (!bucket_name_.has_value()) {
+      return "-";
+    }
+    return fmt::format("{}", logger::metadata(bucket_name_.value()));
+  }
+
   void invoke_bootstrap_handler(std::error_code ec)
   {
     connection_deadline_.cancel();
@@ -2123,15 +2136,17 @@ private:
                    connection_endpoints_.remote.port());
       {
         const std::scoped_lock lock(session_info_mutex_);
-        log_prefix_ = fmt::format("[{}/{}/{}/{}] <{}:{}/{}:{}>",
+        const auto endpoints = fmt::format("{}:{}/{}:{}",
+                                           connection_endpoints_.local.port(),
+                                           bootstrap_hostname_,
+                                           connection_endpoints_.remote_address,
+                                           connection_endpoints_.remote.port());
+        log_prefix_ = fmt::format("[{}/{}/{}/{}] <{}>",
                                   client_id_,
                                   id_,
                                   stream_->log_prefix(),
-                                  bucket_name_.value_or("-"),
-                                  connection_endpoints_.local.port(),
-                                  bootstrap_hostname_,
-                                  connection_endpoints_.remote_address,
-                                  connection_endpoints_.remote.port());
+                                  log_prefix_bucket_name(),
+                                  logger::system_data(endpoints));
       }
       parser_.reset();
       output_queue_.reset();

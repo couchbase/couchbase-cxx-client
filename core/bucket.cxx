@@ -28,6 +28,7 @@
 #include "core/error_context/key_value_status_code.hxx"
 #include "core/io/mcbp_message.hxx"
 #include "core/logger/logger.hxx"
+#include "core/logger/redaction.hxx"
 #include "core/mcbp/codec.hxx"
 #include "core/metrics/meter_wrapper.hxx"
 #include "core/protocol/client_opcode.hxx"
@@ -97,7 +98,7 @@ public:
               tls_context_provider& tls)
     : client_id_{ std::move(client_id) }
     , name_{ std::move(name) }
-    , log_prefix_{ fmt::format("[{}/{}]", client_id_, name_) }
+    , log_prefix_{ fmt::format("[{}/{}]", client_id_, logger::metadata(name_)) }
     , tracer_{ std::move(tracer) }
     , meter_{ std::move(meter) }
     , orphan_reporter_{ std::move(orphan_reporter) }
