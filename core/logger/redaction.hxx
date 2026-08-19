@@ -45,7 +45,9 @@
  *   auto tagged = logger::user_data(build_key());  // DANGLING - build_key() is destroyed here
  *
  * Note that CB_LOG_*_RAW bypasses fmt entirely and cannot carry annotations, and CB_LOG_PROTOCOL
- * is deliberately not redacted.
+ * is deliberately not redacted. The configuration dumps behind the dump_configuration option are
+ * left unannotated for the same reason: both exist to show exactly what crossed the wire, and both
+ * are opt-in debugging aids rather than something a deployment leaves on.
  *
  * `bin/check-log-annotations` reports log arguments that look sensitive but are not wrapped. It is
  * a heuristic over argument names, so it suggests rather than decides; a reviewed false positive is
