@@ -505,7 +505,7 @@ class mcbp_session_impl
               if (resp.status() == key_value_status_code::success) {
                 CB_LOG_DEBUG("{} selected bucket: {}",
                              session_->log_prefix_,
-                             session_->bucket_name_.value_or(""));
+                             logger::metadata(session_->bucket_name_.value_or("")));
                 session_->bucket_selected_ = true;
               } else if (resp.status() == key_value_status_code::not_found) {
                 auto error_msg =
@@ -553,11 +553,11 @@ class mcbp_session_impl
               if (session_->origin_.options().dump_configuration) {
                 if (const auto& text = resp.body().config_text(); text.has_value()) {
                   CB_LOG_TRACE("{} configuration from get_cluster_config request (bootstrap, "
-                               "size={}, endpoint=\"{}:{}\"), {}",
+                               "size={}, endpoint=\"{}\"), {}",
                                session_->log_prefix_,
                                text.value().size(),
-                               info.endpoint_address,
-                               info.endpoint_port,
+                               logger::system_data(
+                                 fmt::format("{}:{}", info.endpoint_address, info.endpoint_port)),
                                text.value());
                 }
               }
@@ -635,11 +635,11 @@ class mcbp_session_impl
               if (session_->origin_.options().dump_configuration) {
                 if (const auto& text = req.body().config_text(); text.has_value()) {
                   CB_LOG_TRACE("{} configuration from cluster_map_change_notification request "
-                               "(size={}, endpoint=\"{}:{}\"), {}",
+                               "(size={}, endpoint=\"{}\"), {}",
                                session_->log_prefix_,
                                text.value().size(),
-                               info.endpoint_address,
-                               info.endpoint_port,
+                               logger::system_data(
+                                 fmt::format("{}:{}", info.endpoint_address, info.endpoint_port)),
                                text.value());
                 }
               }
@@ -723,11 +723,11 @@ class mcbp_session_impl
               if (session_->origin_.options().dump_configuration) {
                 if (const auto& text = resp.body().config_text(); text.has_value()) {
                   CB_LOG_TRACE("{} configuration from get_cluster_config response (size={}, "
-                               "endpoint=\"{}:{}\"), {}",
+                               "endpoint=\"{}\"), {}",
                                session_->log_prefix_,
                                text.value().size(),
-                               info.endpoint_address,
-                               info.endpoint_port,
+                               logger::system_data(
+                                 fmt::format("{}:{}", info.endpoint_address, info.endpoint_port)),
                                text.value());
                 }
               }
@@ -821,11 +821,11 @@ class mcbp_session_impl
               if (session_->origin_.options().dump_configuration) {
                 if (const auto& text = req.body().config_text(); text.has_value()) {
                   CB_LOG_TRACE("{} configuration from cluster_map_change_notification request "
-                               "(size={}, endpoint=\"{}:{}\"), {}",
+                               "(size={}, endpoint=\"{}\"), {}",
                                session_->log_prefix_,
                                text.value().size(),
-                               info.endpoint_address,
-                               info.endpoint_port,
+                               logger::system_data(
+                                 fmt::format("{}:{}", info.endpoint_address, info.endpoint_port)),
                                text.value());
                 }
               }
@@ -1284,8 +1284,8 @@ public:
                      self->log_prefix_,
                      old_id,
                      self->stream_->id(),
-                     self->bootstrap_hostname_,
-                     self->bootstrap_port_);
+                     logger::system_data(self->bootstrap_hostname_),
+                     logger::system_data(self->bootstrap_port_));
         return self->initiate_bootstrap();
       });
     }
@@ -1397,8 +1397,8 @@ public:
               self->log_prefix_,
               old_id,
               self->stream_->id(),
-              self->bootstrap_hostname_,
-              self->bootstrap_port_);
+              logger::system_data(self->bootstrap_hostname_),
+              logger::system_data(self->bootstrap_port_));
             return self->initiate_bootstrap();
           });
         });
@@ -1880,11 +1880,10 @@ public:
                                       msg.body.size() - static_cast<std::size_t>(offset) };
         if (origin_.options().dump_configuration) {
           CB_LOG_TRACE(
-            "{} configuration from not_my_vbucket response (size={}, endpoint=\"{}:{}\"), {}",
+            "{} configuration from not_my_vbucket response (size={}, endpoint=\"{}\"), {}",
             log_prefix_,
             config_text.size(),
-            bootstrap_hostname_,
-            bootstrap_port_number_,
+            logger::system_data(fmt::format("{}:{}", bootstrap_hostname_, bootstrap_port_number_)),
             config_text);
         }
         auto config =
@@ -2023,10 +2022,9 @@ private:
       return initiate_bootstrap();
     }
     endpoints_ = endpoints;
-    CB_LOG_TRACE("{} resolved \"{}:{}\" to {} endpoint(s)",
+    CB_LOG_TRACE("{} resolved \"{}\" to {} endpoint(s)",
                  log_prefix_,
-                 bootstrap_hostname_,
-                 bootstrap_port_,
+                 logger::system_data(bootstrap_address_),
                  endpoints_.size());
     do_connect(endpoints_.begin());
   }
@@ -2040,12 +2038,10 @@ private:
     if (it != endpoints_.end()) {
       auto hostname = it->endpoint().address().to_string();
       auto port = it->endpoint().port();
-      CB_LOG_DEBUG("{} connecting to {}:{} (\"{}:{}\"), timeout={}ms",
+      CB_LOG_DEBUG("{} connecting to {} (\"{}\"), timeout={}ms",
                    log_prefix_,
-                   hostname,
-                   port,
-                   bootstrap_hostname_,
-                   bootstrap_port_,
+                   logger::system_data(fmt::format("{}:{}", hostname, port)),
+                   logger::system_data(bootstrap_address_),
                    origin_.options().connect_timeout.count());
       connection_deadline_.expires_after(origin_.options().connect_timeout);
       connection_deadline_.async_wait(
@@ -2053,12 +2049,10 @@ private:
           if (timer_ec == asio::error::operation_aborted || self->stopped_) {
             return;
           }
-          CB_LOG_DEBUG("{} unable to connect to {}:{} (\"{}:{}\") in time, reconnecting",
+          CB_LOG_DEBUG("{} unable to connect to {} (\"{}\") in time, reconnecting",
                        self->log_prefix_,
-                       hostname,
-                       port,
-                       self->bootstrap_hostname_,
-                       self->bootstrap_port_);
+                       logger::system_data(fmt::format("{}:{}", hostname, port)),
+                       logger::system_data(self->bootstrap_address_));
           self->initiate_bootstrap();
         });
       stream_->async_connect(
@@ -2100,10 +2094,10 @@ private:
                              ? ERR_error_string(static_cast<unsigned long>(ec.value()), nullptr)
                              : ec.message();
 #endif
-      CB_LOG_WARNING("{} unable to connect to {}:{}: {} ({}){}. is_open={}",
+      CB_LOG_WARNING("{} unable to connect to {}: {} ({}){}. is_open={}",
                      log_prefix_,
-                     it->endpoint().address().to_string(),
-                     it->endpoint().port(),
+                     logger::system_data(fmt::format(
+                       "{}:{}", it->endpoint().address().to_string(), it->endpoint().port())),
                      ec.value(),
                      error_message,
                      (ec == asio::error::connection_refused)
@@ -2114,10 +2108,11 @@ private:
         stream_->close([self = shared_from_this(), next_address = ++it](std::error_code ec) {
           if (ec) {
             CB_LOG_WARNING(
-              "{} unable to close socket, but continue connecting attempt to {}:{}: {}",
+              "{} unable to close socket, but continue connecting attempt to {}: {}",
               self->log_prefix_,
-              next_address->endpoint().address().to_string(),
-              next_address->endpoint().port(),
+              logger::system_data(fmt::format("{}:{}",
+                                              next_address->endpoint().address().to_string(),
+                                              next_address->endpoint().port())),
               ec.value());
           }
           self->do_connect(next_address);
@@ -2128,11 +2123,12 @@ private:
     } else {
       stream_->set_options();
       connection_endpoints_ = { it->endpoint(), stream_->local_endpoint() };
-      CB_LOG_DEBUG("{} connected to {}:{}:{}",
+      CB_LOG_DEBUG("{} connected to {}",
                    log_prefix_,
-                   connection_endpoints_.local.port(),
-                   connection_endpoints_.remote_address,
-                   connection_endpoints_.remote.port());
+                   logger::system_data(fmt::format("{}:{}:{}",
+                                                   connection_endpoints_.local.port(),
+                                                   connection_endpoints_.remote_address,
+                                                   connection_endpoints_.remote.port())));
       {
         const std::scoped_lock lock(session_info_mutex_);
         const auto endpoints = fmt::format("{}:{}/{}:{}",
@@ -2160,14 +2156,13 @@ private:
         if (timer_ec == asio::error::operation_aborted || self->stopped_) {
           return;
         }
-        CB_LOG_DEBUG(
-          "{} unable to boostrap single node at {}:{}:{} (\"{}:{}\") in time, reconnecting",
-          self->log_prefix_,
-          self->connection_endpoints_.local.port(),
-          self->connection_endpoints_.remote_address,
-          self->connection_endpoints_.remote.port(),
-          self->bootstrap_hostname_,
-          self->bootstrap_port_);
+        CB_LOG_DEBUG("{} unable to boostrap single node at {} (\"{}\") in time, reconnecting",
+                     self->log_prefix_,
+                     logger::system_data(fmt::format("{}:{}:{}",
+                                                     self->connection_endpoints_.local.port(),
+                                                     self->connection_endpoints_.remote_address,
+                                                     self->connection_endpoints_.remote.port())),
+                     logger::system_data(self->bootstrap_address_));
         return self->initiate_bootstrap();
       });
     }
