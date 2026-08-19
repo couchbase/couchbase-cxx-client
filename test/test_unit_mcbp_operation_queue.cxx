@@ -23,6 +23,7 @@
 #include <couchbase/error_codes.hxx>
 
 #include <memory>
+#include <vector>
 
 namespace
 {
@@ -74,6 +75,37 @@ TEST_CASE("unit: a removed request is released by the queue", "[unit]")
     REQUIRE(queue->remove(request));
   }
   REQUIRE(observer.expired());
+}
+
+TEST_CASE("unit: a closed queue refuses a push", "[unit]")
+{
+  // This is what keeps a request from being parked in a queue that has already
+  // been drained: the caller sees the error and completes the request itself.
+  auto queue = std::make_shared<operation_queue>();
+  queue->close();
+
+  auto request = make_request();
+  REQUIRE(queue->push(request, 0) == couchbase::errc::network::operation_queue_closed);
+}
+
+TEST_CASE("unit: draining a closed queue hands over its requests and releases them", "[unit]")
+{
+  auto queue = std::make_shared<operation_queue>();
+  auto request = make_request();
+  REQUIRE_SUCCESS(queue->push(request, 0));
+
+  queue->close();
+  std::vector<std::shared_ptr<queue_request>> drained;
+  queue->drain([&drained](auto r) {
+    drained.emplace_back(std::move(r));
+  });
+  REQUIRE(drained.size() == 1);
+  REQUIRE(drained.front() == request);
+
+  // Ownership is handed over, not shared: a drained request can be pushed into
+  // another queue, and the queue it came from no longer holds it.
+  auto other = std::make_shared<operation_queue>();
+  REQUIRE_SUCCESS(other->push(request, 0));
 }
 
 TEST_CASE("unit: cancelling a queued request takes it out of the queue", "[unit]")

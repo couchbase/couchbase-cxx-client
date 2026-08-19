@@ -364,19 +364,37 @@ public:
     -> bool
   {
     auto action = retry_orchestrator::should_retry(request, reason);
-    auto retried = action.need_to_retry();
-    if (retried) {
-      auto timer = std::make_shared<asio::steady_timer>(ctx_);
-      timer->expires_after(action.duration());
-      timer->async_wait([self = shared_from_this(), request](auto error) {
-        if (error == asio::error::operation_aborted) {
-          return;
-        }
-        self->direct_re_queue(request, true);
-      });
-      request->set_retry_backoff(timer);
+    if (!action.need_to_retry()) {
+      return false;
     }
-    return retried;
+
+    // Park the request where close() can reach it. The timer below is the only
+    // thing that would re-dispatch it, and asio abandons a pending wait when the
+    // io_context goes away rather than completing it, so a request reachable only
+    // from that handler is neither completed nor released. A queue also lets
+    // cancel() take it back out, since a request de-queues from whichever queue
+    // holds it.
+    if (auto ec = retry_backoff_queue_.push(request, 0); ec) {
+      // Nothing will retry it: the bucket has closed, or it is already cancelled.
+      request->try_callback({}, errc::common::request_canceled);
+      return true;
+    }
+
+    auto timer = std::make_shared<asio::steady_timer>(ctx_);
+    timer->expires_after(action.duration());
+    timer->async_wait([self = shared_from_this(), request](auto error) {
+      if (!self->retry_backoff_queue_.remove(request)) {
+        // close() completed it, or it was cancelled: either way it is done.
+        return;
+      }
+      if (error == asio::error::operation_aborted) {
+        request->try_callback({}, errc::common::request_canceled);
+        return;
+      }
+      self->direct_re_queue(request, true);
+    });
+    request->set_retry_backoff(timer);
+    return true;
   }
 
   auto route_request(const std::shared_ptr<mcbp::queue_request>& req)
@@ -835,6 +853,14 @@ public:
 
     drain_deferred_queue(errc::common::request_canceled);
 
+    // A request waiting for a retry backoff is only ever re-dispatched by its
+    // timer, which a closed bucket never fires. Complete them here, for the same
+    // reason the deferred queue is drained above.
+    retry_backoff_queue_.close();
+    retry_backoff_queue_.drain([](const auto& request) {
+      request->try_callback({}, errc::common::request_canceled);
+    });
+
     if (state_listener_ != nullptr) {
       state_listener_->unregister_config_listener(shared_from_this());
     }
@@ -1261,6 +1287,9 @@ private:
 
   std::queue<utils::movable_function<void(std::error_code)>> deferred_commands_{};
   std::mutex deferred_commands_mutex_{};
+
+  // Requests waiting for a retry backoff, so that close() can complete them.
+  mcbp::operation_queue retry_backoff_queue_{};
 
   std::map<size_t, io::mcbp_session> sessions_{};
   // The very first session is only moved into sessions_ once it finishes bootstrapping; until then
