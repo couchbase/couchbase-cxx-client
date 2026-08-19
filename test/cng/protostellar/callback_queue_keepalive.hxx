@@ -60,7 +60,7 @@
 #include <memory>
 #include <utility>
 
-namespace couchbase::cng::test
+namespace couchbase::test
 {
 
 // Minimal service so the keepalive channel has something to call. The reference on the callback
@@ -136,4 +136,4 @@ pin_callback_queue()
   static const callback_queue_keepalive keepalive{};
 }
 
-} // namespace couchbase::cng::test
+} // namespace couchbase::test

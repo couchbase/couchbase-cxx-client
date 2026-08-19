@@ -22,7 +22,7 @@
 // the round trip is pinned by the error the gateway returns for an index that does not exist:
 // that answer can only come from a gateway that ran the query.
 
-#include "framework/live_fixture.hxx"
+#include "fixtures/live_fixture.hxx"
 #include "framework/test_runner.hxx"
 
 #include "core/operations.hxx"
@@ -35,7 +35,7 @@
 #include <string>
 #include <thread>
 
-namespace couchbase::cng::test
+namespace couchbase::test
 {
 namespace
 {
@@ -161,4 +161,4 @@ tests() -> test_suite
   };
 }
 
-} // namespace couchbase::cng::test
+} // namespace couchbase::test

@@ -23,7 +23,7 @@
 
 #define COUCHBASE_CXX_CLIENT_IGNORE_CORE_DEPRECATIONS
 
-#include "framework/live_fixture.hxx"
+#include "fixtures/live_fixture.hxx"
 #include "framework/test_runner.hxx"
 
 // core/operations.hxx (complete operation types) must precede core/cluster.hxx, whose execute()
@@ -47,7 +47,7 @@
 #include <future>
 #include <string>
 
-namespace couchbase::cng::test
+namespace couchbase::test
 {
 namespace
 {
@@ -163,4 +163,4 @@ tests() -> test_suite
   };
 }
 
-} // namespace couchbase::cng::test
+} // namespace couchbase::test

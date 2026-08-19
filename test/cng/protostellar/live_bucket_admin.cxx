@@ -19,7 +19,7 @@
 // admin.bucket.v1: that the bucket list arrives, and that settings written by create() are the
 // settings read back by get().
 
-#include "framework/live_fixture.hxx"
+#include "fixtures/live_fixture.hxx"
 #include "framework/test_runner.hxx"
 
 #include "core/management/bucket_settings.hxx"
@@ -41,7 +41,7 @@
 #include <system_error>
 #include <thread>
 
-namespace couchbase::cng::test
+namespace couchbase::test
 {
 namespace
 {
@@ -441,4 +441,4 @@ tests() -> test_suite
   };
 }
 
-} // namespace couchbase::cng::test
+} // namespace couchbase::test

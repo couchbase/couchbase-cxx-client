@@ -63,7 +63,7 @@
 #include <thread>
 #include <utility>
 
-namespace couchbase::cng::test
+namespace couchbase::test
 {
 
 // safe_getenv, not std::getenv: MSVC deprecates getenv (C4996) and these builds are -Werror.
@@ -348,6 +348,6 @@ private:
   bool opened_{ false };
 };
 
-} // namespace couchbase::cng::test
+} // namespace couchbase::test
 
 #pragma pop_macro("COUCHBASE_CXX_CLIENT_IGNORE_CORE_DEPRECATIONS")

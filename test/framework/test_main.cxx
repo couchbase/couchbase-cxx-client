@@ -15,9 +15,10 @@
  *   limitations under the License.
  */
 
-// Shared entry point for every CNG test executable. A test file provides tests(); this main
-// gathers a name filter from argv, decides mock-vs-real mode from TEST_CONNECTION_STRING, runs
-// the suite, and maps the outcome to a process exit code (0 pass / 1 fail / 77 all-skipped).
+// Shared entry point for every test executable built on the framework. A test file provides
+// tests(); this main gathers a name filter from argv, decides mock-vs-real mode from
+// TEST_CONNECTION_STRING, runs the suite, and maps the outcome to a process exit code
+// (0 pass / 1 fail / 77 all-skipped).
 
 #include "test_runner.hxx"
 
@@ -31,7 +32,7 @@
 auto
 main(int argc, char* argv[]) -> int
 {
-  using namespace couchbase::cng::test;
+  using namespace couchbase::test;
 
   std::set<std::string> filter;
   for (int i = 1; i < argc; ++i) {

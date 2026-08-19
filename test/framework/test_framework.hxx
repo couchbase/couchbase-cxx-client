@@ -17,7 +17,7 @@
 
 #pragma once
 
-// A small hand-rolled test framework for the CNG (Protostellar) test tree.
+// A small hand-rolled test framework for this repository's test suites.
 //
 // This deliberately does NOT use Catch2 (the couchbase-cxx-client default). Its design is
 // ported from the author's stand-alone harness, adapted from C++23 to the C++17 that this
@@ -36,12 +36,12 @@
 #include <vector>
 
 // The wrapper (not <spdlog/fmt/bundled/format.h>) is required: it selects bundled fmt and derives
-// the header-only-vs-compiled mode from SPDLOG_COMPILED_LIB, which cng_test_main picks up by
+// the header-only-vs-compiled mode from SPDLOG_COMPILED_LIB, which test_framework_main picks up by
 // linking spdlog::spdlog. Including the bundled header directly would bypass that and reintroduce
-// the duplicate fmt definitions that MSVC rejects -- see the note in test/cng/CMakeLists.txt.
+// the duplicate fmt definitions that MSVC rejects -- see the note in cmake/TestFramework.cmake.
 #include <spdlog/fmt/fmt.h>
 
-namespace couchbase::cng::test
+namespace couchbase::test
 {
 
 // C++17 stand-in for std::source_location (C++20). Where __builtin_FILE/LINE/FUNCTION exist they
@@ -54,19 +54,19 @@ namespace couchbase::cng::test
 // 16.6-17.0 takes the "unknown" branch: correct, just less informative. Not special-cased because
 // no CI leg builds those versions, and an untested #if is worse than a documented limitation.
 #if defined(__has_builtin)
-#define COUCHBASE_CNG_HAS_LOCATION_BUILTINS                                                        \
+#define COUCHBASE_TEST_HAS_LOCATION_BUILTINS                                                       \
   (__has_builtin(__builtin_FILE) && __has_builtin(__builtin_LINE) &&                               \
    __has_builtin(__builtin_FUNCTION))
 #elif defined(__clang__)
-#define COUCHBASE_CNG_HAS_LOCATION_BUILTINS 1
+#define COUCHBASE_TEST_HAS_LOCATION_BUILTINS 1
 #else
-#define COUCHBASE_CNG_HAS_LOCATION_BUILTINS 0
+#define COUCHBASE_TEST_HAS_LOCATION_BUILTINS 0
 #endif
 
 class source_location
 {
 public:
-#if COUCHBASE_CNG_HAS_LOCATION_BUILTINS
+#if COUCHBASE_TEST_HAS_LOCATION_BUILTINS
   static constexpr auto current(const char* file = __builtin_FILE(),
                                 int line = __builtin_LINE(),
                                 const char* function = __builtin_FUNCTION()) noexcept
@@ -103,7 +103,7 @@ private:
   const char* function_{ "" };
 };
 
-#undef COUCHBASE_CNG_HAS_LOCATION_BUILTINS
+#undef COUCHBASE_TEST_HAS_LOCATION_BUILTINS
 
 // Timeout presets — use these instead of raw millisecond values so timing expectations are
 // explicit. Mirrors the presets in the source harness.
@@ -290,4 +290,4 @@ assert_throws(Fn&& fn,
   }
 }
 
-} // namespace couchbase::cng::test
+} // namespace couchbase::test

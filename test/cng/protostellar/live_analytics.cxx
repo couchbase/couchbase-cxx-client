@@ -30,7 +30,7 @@
 
 #define COUCHBASE_CXX_CLIENT_IGNORE_CORE_DEPRECATIONS
 
-#include "framework/live_fixture.hxx"
+#include "fixtures/live_fixture.hxx"
 #include "framework/test_runner.hxx"
 
 #include <couchbase/error_codes.hxx>
@@ -40,7 +40,7 @@
 #include <thread>
 #include <utility>
 
-namespace couchbase::cng::test
+namespace couchbase::test
 {
 namespace
 {
@@ -170,4 +170,4 @@ tests() -> test_suite
   };
 }
 
-} // namespace couchbase::cng::test
+} // namespace couchbase::test

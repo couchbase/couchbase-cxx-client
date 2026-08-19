@@ -1,7 +1,7 @@
 # CNG (`couchbase2://`) tests
 
 These tests exercise the Protostellar / Cloud Native Gateway (CNG) transport. They are built
-with the hand-rolled harness under `framework/` (not Catch2) and are enabled by the
+with the hand-rolled harness under `test/framework/` (not Catch2) and are enabled by the
 `COUCHBASE_CXX_CLIENT_BUILD_CNG_TESTS` CMake option.
 
 Each test declares an environment gate:

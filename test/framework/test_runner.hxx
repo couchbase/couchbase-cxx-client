@@ -25,7 +25,7 @@
 #include <set>
 #include <string>
 
-namespace couchbase::cng::test
+namespace couchbase::test
 {
 
 struct run_result {
@@ -56,9 +56,9 @@ exit_code(const run_result& result) -> int;
 
 // Portable std::getenv wrapper returning std::nullopt for unset *or* empty values, matching the
 // wrappers in tools/utils.cxx and examples/external_circuit_breaker. Needed because MSVC treats
-// plain getenv() as deprecated, and the CNG tree builds with /W4 /WX. Lives here so every CNG
-// test executable shares one implementation.
+// plain getenv() as deprecated, and the test tree builds with /W4 /WX. Lives here so every test
+// executable shares one implementation.
 [[nodiscard]] auto
 safe_getenv(const std::string& name) noexcept -> std::optional<std::string>;
 
-} // namespace couchbase::cng::test
+} // namespace couchbase::test
