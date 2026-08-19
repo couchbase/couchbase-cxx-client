@@ -1289,7 +1289,7 @@ TEST_CASE("integration: collection management", "[integration]")
         REQUIRE(test::utils::wait_until([&]() {
           collection = get_collection(
             integration.cluster, integration.ctx.bucket, scope_name, collection_name);
-          return collection.has_value();
+          return collection.has_value() && collection->max_expiry == max_expiry;
         }));
 
         REQUIRE(collection->max_expiry == max_expiry);
@@ -1383,37 +1383,31 @@ TEST_CASE("integration: collection management", "[integration]")
       }
       auto error = manager.create_collection(scope_name, collection_name, settings).get();
       REQUIRE_SUCCESS(error.ec());
-      auto created = test::utils::wait_until([&scope_name, &collection_name, &manager]() {
-        auto [get_ctx, result] = manager.get_all_scopes().get();
-        if (!get_ctx.ec()) {
-          for (auto& scope : result) {
-            if (scope.name == scope_name) {
-              for (auto& collection : scope.collections) {
-                if (collection.name == collection_name) {
-                  return true;
+      // Assert on the manifest this wait observed rather than on a second get_all_scopes(): the
+      // two calls need not reach the same node, and a node whose manifest has not caught up lists
+      // the collection with a maxTTL of 0. Waiting for the value here and reading it again there
+      // would leave that window open.
+      const auto expect_max_expiry = integration.cluster_version().is_enterprise();
+      couchbase::management::bucket::collection_spec spec;
+      auto created = test::utils::wait_until(
+        [&scope_name, &collection_name, &manager, &spec, max_expiry, expect_max_expiry]() {
+          auto [get_ctx, result] = manager.get_all_scopes().get();
+          if (!get_ctx.ec()) {
+            for (auto& scope : result) {
+              if (scope.name == scope_name) {
+                for (auto& collection : scope.collections) {
+                  if (collection.name == collection_name) {
+                    spec = collection;
+                    return !expect_max_expiry || spec.max_expiry == max_expiry;
+                  }
                 }
               }
             }
           }
-        }
-        return false;
-      });
+          return false;
+        });
       REQUIRE(created);
-    }
-    {
-      auto [error, scopes] = manager.get_all_scopes().get();
-      REQUIRE_SUCCESS(error.ec());
-      couchbase::management::bucket::collection_spec spec;
-      for (auto& scope : scopes) {
-        if (scope.name == scope_name) {
-          for (auto& collection : scope.collections) {
-            if (collection.name == collection_name) {
-              spec = collection;
-            }
-          }
-        }
-      }
-      if (integration.cluster_version().is_enterprise()) {
+      if (expect_max_expiry) {
         REQUIRE(spec.max_expiry == max_expiry);
       }
     }
@@ -1515,7 +1509,7 @@ TEST_CASE("integration: collection management create collection with max expiry"
     REQUIRE(test::utils::wait_until([&]() {
       collection =
         get_collection(integration.cluster, integration.ctx.bucket, scope_name, collection_name);
-      return collection.has_value();
+      return collection.has_value() && collection->max_expiry == 3600;
     }));
     REQUIRE(collection->max_expiry == 3600);
   }
@@ -1546,7 +1540,7 @@ TEST_CASE("integration: collection management create collection with max expiry"
       REQUIRE(test::utils::wait_until([&]() {
         collection =
           get_collection(integration.cluster, integration.ctx.bucket, scope_name, collection_name);
-        return collection.has_value();
+        return collection.has_value() && collection->max_expiry == -1;
       }));
       REQUIRE(collection->max_expiry == -1);
     } else {
