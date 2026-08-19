@@ -50,8 +50,10 @@ using namespace std::literals::chrono_literals;
 // a race; this case exercises the shared mechanism through the one deterministic entry point.
 //
 // Unlike a pure leak (which is only visible to the sanitizer), the fix here restores a
-// caller-visible contract, so the test asserts it directly: the future must complete with
-// errc::network::cluster_closed rather than be dropped.
+// caller-visible contract, so the test asserts it directly: the future must complete rather than be
+// dropped. It must not require one specific error. The bucket does not exist, so the server's
+// bucket_not_found and the teardown backstop's cluster_closed are both correct answers, and which
+// one arrives is a race between an HTTP round trip and the teardown; the assertion accepts either.
 TEST_CASE("integration: a scan future completes when the cluster is closed mid-bootstrap",
           "[integration]")
 {
@@ -88,13 +90,18 @@ TEST_CASE("integration: a scan future completes when the cluster is closed mid-b
     FAIL("scan future was not completed after the cluster was closed -- the handler was stranded");
   }
   auto result = pending.get();
-  REQUIRE(result.first.ec() == couchbase::errc::network::cluster_closed);
+  // Either answer is correct: the teardown backstop reports cluster_closed, and the server reports
+  // bucket_not_found for a bucket that does not exist. Which one arrives is a race between an HTTP
+  // round trip and the teardown, so the assertion names both rather than picking one.
+  REQUIRE((result.first.ec() == couchbase::errc::network::cluster_closed ||
+           result.first.ec() == couchbase::errc::common::bucket_not_found));
 }
 
 // node_ids() reaches the bucket configuration through the same with_bucket_config_or_timeout
 // scaffold as scan(), so it exercises the same parked-in-bootstrap-window teardown path through a
 // second public entry point. A bucket that never opens keeps the wait parked; tearing the cluster
-// down must complete the future with errc::network::cluster_closed rather than strand it.
+// down must complete the future rather than strand it, with either of the two errors the race
+// described above can produce.
 TEST_CASE("integration: a node_ids future completes when the cluster is closed mid-bootstrap",
           "[integration]")
 {
@@ -118,7 +125,9 @@ TEST_CASE("integration: a node_ids future completes when the cluster is closed m
       "node_ids future was not completed after the cluster was closed -- the handler was stranded");
   }
   auto result = pending.get();
-  REQUIRE(result.first.ec() == couchbase::errc::network::cluster_closed);
+  // Same two correct answers as the scan case, for the same reason.
+  REQUIRE((result.first.ec() == couchbase::errc::network::cluster_closed ||
+           result.first.ec() == couchbase::errc::common::bucket_not_found));
 }
 
 // A key/value get reaches the bucket through direct_dispatch/open_bucket rather than the
