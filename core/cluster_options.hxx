@@ -101,6 +101,11 @@ public:
   std::string server_group{};
   couchbase::transactions::transactions_config::built transactions{};
 
+  // Writes the whole cluster configuration to the log. It carries the same kinds of values that
+  // are annotated elsewhere in the log, but none of it is annotated here. A tag pair around
+  // multi-line JSON is not a shape the tooling handles, and hashing the blob would remove exactly
+  // what the dump exists to show. Enabling this together with log_redaction is warned about when
+  // the cluster opens.
   bool dump_configuration{ false };
   bool disable_mozilla_ca_certificates{ false };
   couchbase::core::columnar::security_options security_options{};
