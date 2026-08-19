@@ -17,6 +17,8 @@
 
 #include "bucket.hxx"
 
+#include "bucket_unit_test_api.hxx"
+
 #include "collection_id_cache_entry.hxx"
 #include "core/app_telemetry_meter.hxx"
 #include "core/cluster_options.hxx"
@@ -146,8 +148,13 @@ public:
         // self->span_->add_tag(tracing::attributes::orphan, "canceled");
         return req->try_callback(resp, ec);
       }
-      backoff_and_retry(
-        req, reason == retry_reason::do_not_retry ? retry_reason::node_not_available : reason);
+      if (!backoff_and_retry(req,
+                             reason == retry_reason::do_not_retry ? retry_reason::node_not_available
+                                                                  : reason)) {
+        // The retry was refused, so nothing else will carry this request: complete it here, as
+        // every other caller of backoff_and_retry() does.
+        req->try_callback(resp, ec);
+      }
       return;
     }
     key_value_status_code status{ key_value_status_code::unknown };
@@ -260,7 +267,11 @@ public:
         if (ec == errc::common::request_canceled) {
           return req->cancel(ec);
         }
-        self->direct_dispatch(req);
+        // This runs after direct_dispatch() returned, so its error code has nobody left to report
+        // to. Complete the request here rather than leave it to its deadline.
+        if (auto rc = self->direct_dispatch(req); rc) {
+          req->try_callback({}, rc);
+        }
       });
     }
 
@@ -268,11 +279,13 @@ public:
 
     auto session = route_request(req);
     if (!session || !session->has_config()) {
-      return defer_command([self = shared_from_this(), req](std::error_code ec) mutable {
+      return defer_command([self = shared_from_this(), req](std::error_code ec) {
         if (ec == errc::common::request_canceled) {
           return req->cancel(ec);
         }
-        self->direct_dispatch(std::move(req));
+        if (auto rc = self->direct_dispatch(req); rc) {
+          req->try_callback({}, rc);
+        }
       });
     }
     if (session->is_stopped()) {
@@ -302,11 +315,13 @@ public:
 
     auto session = route_request(req);
     if (!session || !session->has_config()) {
-      return defer_command([self = shared_from_this(), req](std::error_code ec) {
+      return defer_command([self = shared_from_this(), req, handle_error](std::error_code ec) {
         if (ec == errc::common::request_canceled) {
           return req->cancel(ec);
         }
-        self->direct_dispatch(req);
+        if (auto rc = self->direct_dispatch(req); rc) {
+          handle_error(rc);
+        }
       });
     }
     if (session->is_stopped()) {
@@ -1442,6 +1457,27 @@ auto
 bucket::config_rev() const -> std::string
 {
   return impl_->config_rev();
+}
+
+bucket_unit_test_api::bucket_unit_test_api(std::shared_ptr<bucket_impl> impl)
+  : impl_{ std::move(impl) }
+{
+}
+
+void
+bucket_unit_test_api::resolve_response(const std::shared_ptr<mcbp::queue_request>& request,
+                                       const std::shared_ptr<mcbp::queue_response>& response,
+                                       std::error_code ec,
+                                       retry_reason reason,
+                                       std::optional<key_value_error_map_info> error_info)
+{
+  impl_->resolve_response(request, response, ec, reason, std::move(error_info));
+}
+
+auto
+bucket::unit_test_api() -> bucket_unit_test_api
+{
+  return bucket_unit_test_api(impl_);
 }
 
 auto
