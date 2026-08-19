@@ -267,14 +267,12 @@ TEST_CASE("integration: cluster remains usable in a forked child", "[integration
   // SIGKILL makes sure the wedged child is gone rather than left running for the rest of
   // the suite. EINTR keeps the poll going; anything else is a real waitpid() failure.
   //
-  // The budget only has to be short enough to beat CTest's own timeout, and long enough
-  // never to fire on a child that is merely slow. The first version used four minutes,
-  // reasoning about the wan_development bootstrap timeout, and it fired in CI on a child
-  // that had already succeeded -- the real cost was valgrind's exit-time leak report, not
-  // anything the child was waiting for. That cause is removed above by closing the cluster
-  // before _Exit(); this stays as a backstop against an actual hang, with enough headroom
-  // that a loaded sanitizer box does not trip it.
-  constexpr int child_deadline_minutes{ 6 };
+  // The budget only has to stay under CTest's own per-test timeout -- its 1500 second
+  // default here -- and be long enough never to fire on a child that is merely slow.
+  // Memcheck's exit-time report over the child's still-reachable blocks, described at the
+  // top of this file, is what sets that floor. What this guards is an actual hang, which is
+  // unbounded, so the headroom costs nothing on a child that exits normally.
+  constexpr int child_deadline_minutes{ 15 };
   int status{};
   pid_t reaped{ -1 };
   const auto child_deadline =

@@ -41,7 +41,11 @@ TEST_CASE("integration: cluster wait_until_ready", "[integration]")
   {
     couchbase::wait_until_ready_options options{};
     options.service_types({ couchbase::service_type::key_value });
-    auto err = cluster.wait_until_ready(10s, options).get();
+    // Every wait in this file that has to succeed is given 60s, matching the readiness waits
+    // further down. The call returns as soon as the desired state is reached, so the budget is
+    // only a ceiling and costs nothing when the cluster is healthy -- but under memcheck ten
+    // seconds is not a ceiling, it is a deadline the ping cannot meet.
+    auto err = cluster.wait_until_ready(60s, options).get();
     REQUIRE_SUCCESS(err.ec());
   }
 
@@ -50,7 +54,7 @@ TEST_CASE("integration: cluster wait_until_ready", "[integration]")
     couchbase::wait_until_ready_options options{};
     options.desired_state(couchbase::cluster_state::degraded);
     options.service_types({ couchbase::service_type::key_value });
-    auto err = cluster.wait_until_ready(10s, options).get();
+    auto err = cluster.wait_until_ready(60s, options).get();
     REQUIRE_SUCCESS(err.ec());
   }
 
@@ -70,7 +74,7 @@ TEST_CASE("integration: cluster wait_until_ready", "[integration]")
     std::atomic<int> calls{ 0 };
     auto barrier = std::make_shared<std::promise<couchbase::error>>();
     auto future = barrier->get_future();
-    cluster.wait_until_ready(10s, options, [&calls, barrier](auto err) {
+    cluster.wait_until_ready(60s, options, [&calls, barrier](auto err) {
       ++calls;
       barrier->set_value(err);
     });
@@ -104,7 +108,7 @@ TEST_CASE("integration: bucket wait_until_ready", "[integration]")
   {
     couchbase::wait_until_ready_options options{};
     options.service_types({ couchbase::service_type::key_value });
-    auto err = cluster.bucket(integration.ctx.bucket).wait_until_ready(10s, options).get();
+    auto err = cluster.bucket(integration.ctx.bucket).wait_until_ready(60s, options).get();
     REQUIRE_SUCCESS(err.ec());
   }
 
@@ -113,7 +117,7 @@ TEST_CASE("integration: bucket wait_until_ready", "[integration]")
     couchbase::wait_until_ready_options options{};
     options.desired_state(couchbase::cluster_state::degraded);
     options.service_types({ couchbase::service_type::key_value });
-    auto err = cluster.bucket(integration.ctx.bucket).wait_until_ready(10s, options).get();
+    auto err = cluster.bucket(integration.ctx.bucket).wait_until_ready(60s, options).get();
     REQUIRE_SUCCESS(err.ec());
   }
 
@@ -127,7 +131,7 @@ TEST_CASE("integration: bucket wait_until_ready", "[integration]")
     }
     couchbase::wait_until_ready_options options{};
     options.service_types({ couchbase::service_type::query });
-    auto err = cluster.bucket(integration.ctx.bucket).wait_until_ready(10s, options).get();
+    auto err = cluster.bucket(integration.ctx.bucket).wait_until_ready(60s, options).get();
     REQUIRE_SUCCESS(err.ec());
   }
 
@@ -136,7 +140,7 @@ TEST_CASE("integration: bucket wait_until_ready", "[integration]")
     std::atomic<int> calls{ 0 };
     auto barrier = std::make_shared<std::promise<couchbase::error>>();
     auto future = barrier->get_future();
-    cluster.bucket(integration.ctx.bucket).wait_until_ready(10s, {}, [&calls, barrier](auto err) {
+    cluster.bucket(integration.ctx.bucket).wait_until_ready(60s, {}, [&calls, barrier](auto err) {
       ++calls;
       barrier->set_value(err);
     });
