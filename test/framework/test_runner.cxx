@@ -22,6 +22,7 @@
 #include <cstdlib>
 #include <exception>
 #include <future>
+#include <ostream>
 #include <thread>
 
 #include <spdlog/fmt/fmt.h>
@@ -91,6 +92,12 @@ run(const test_suite& suite,
     bool real_cluster,
     std::ostream& out) -> run_result
 {
+  // Flush each line as it is written. ctest runs these binaries with stdout on a pipe, where the
+  // stream is block-buffered, and a case that aborts the process discards the whole buffer: the log
+  // then shows neither the case that was running nor any that had already passed, only ctest's
+  // "Subprocess aborted". The cases that crash are exactly the ones whose output is needed.
+  out << std::unitbuf;
+
   run_result result;
   // Names the filter asked for that actually exist, so an unmatched name can be reported below.
   std::set<std::string> matched;

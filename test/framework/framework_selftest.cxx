@@ -24,6 +24,7 @@
 
 #include <chrono>
 #include <cstddef>
+#include <ios>
 #include <set>
 #include <sstream>
 #include <thread>
@@ -128,6 +129,20 @@ env_gating_skips_cluster_only_without_a_cluster()
 }
 
 void
+case_output_is_flushed_as_it_is_written()
+{
+  // ctest gives these binaries a pipe for stdout, where the stream is block-buffered, and a case
+  // that aborts the process discards whatever is still buffered -- so the log names neither the
+  // aborting case nor any that passed before it. The cases that crash are the ones whose output is
+  // most needed, so the runner must not leave its stream block-buffered.
+  std::ostringstream sink;
+  const test_suite s{ "inner", { { "p", body_pass } } };
+  static_cast<void>(run(s, {}, false, sink));
+  assert_true((sink.flags() & std::ios::unitbuf) != 0,
+              "the runner flushes its stream after every write");
+}
+
+void
 filter_selects_cases_by_name()
 {
   const test_suite s{ "inner", { { "a", body_pass }, { "b", body_pass } } };
@@ -202,6 +217,7 @@ tests() -> test_suite
       { "runner_detects_a_timeout", runner_detects_a_timeout, timeout::fast },
       { "env_gating_skips_cluster_only_without_a_cluster",
         env_gating_skips_cluster_only_without_a_cluster },
+      { "case_output_is_flushed_as_it_is_written", case_output_is_flushed_as_it_is_written },
       { "filter_selects_cases_by_name", filter_selects_cases_by_name },
       { "a_failing_case_does_not_suppress_later_cases",
         a_failing_case_does_not_suppress_later_cases },
