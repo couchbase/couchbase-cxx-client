@@ -66,8 +66,16 @@ jobs:
         timeout-minutes: 120
         env:
           CB_CACHE_OPTION: sccache
-          # CB_CMAKE_BUILD_TYPE: Release
-          CB_CMAKE_BUILD_TYPE: RelWithDebInfo
+          # Release rather than RelWithDebInfo: these legs link out of disk.
+          # RelWithDebInfo compiles /Zi and links /debug, giving every test
+          # binary a compiler PDB, a linker PDB and an .ilk beside it. The
+          # x86-64 runners absorb that on their D: work volume; windows-11-arm
+          # has only C:, where it takes the volume to 0 MB free and the link
+          # fails with LNK1318. Release emits none of the three. NDEBUG is set
+          # under both, so only the optimisation level changes; what is given
+          # up is symbols in the cdb backtrace bin/build-tests.rb prints when
+          # cbc crashes.
+          CB_CMAKE_BUILD_TYPE: Release
           # No BoringSSL assembly exists for the Windows ARM64 target, so build
           # the crypto sources in portable C-only mode on that leg.
           CB_OPENSSL_NO_ASM: ${{ matrix.os == 'windows-11-arm' && '1' || '' }}
