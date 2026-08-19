@@ -26,6 +26,7 @@ jobs:
         with:
           fetch-depth: 2
       - name: Install dependencies
+        timeout-minutes: 20
         run: |
           sudo apt-get update -y
           sudo apt-get install -y wget gnupg2 git
@@ -46,6 +47,7 @@ jobs:
         with:
           submodules: recursive
       - name: Install dependencies
+        timeout-minutes: 20
         run: |
           sudo apt-get update -y
           sudo apt-get install -y libssl-dev cmake curl wget gnupg2 libcurl4-openssl-dev libprotobuf-dev libgrpc-dev libgrpc++-dev gdb protobuf-compiler protobuf-compiler-grpc
@@ -73,6 +75,7 @@ jobs:
         with:
           submodules: recursive
       - name: Install dependencies
+        timeout-minutes: 20
         run: |
           sudo apt-get update -y
           sudo apt-get install -y libssl-dev cmake curl wget gnupg2 cppcheck libcurl4-openssl-dev libprotobuf-dev libgrpc-dev libgrpc++-dev gdb protobuf-compiler protobuf-compiler-grpc
@@ -95,6 +98,7 @@ jobs:
           # Need history back to the PR base so the diff-based run can find it.
           fetch-depth: 0
       - name: Install dependencies
+        timeout-minutes: 20
         run: |
           sudo apt-get update -y
           sudo apt-get install -y libssl-dev cmake curl wget gnupg2 libcurl4-openssl-dev libprotobuf-dev libgrpc-dev libgrpc++-dev gdb protobuf-compiler protobuf-compiler-grpc

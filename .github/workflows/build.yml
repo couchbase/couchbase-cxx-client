@@ -51,6 +51,7 @@ jobs:
       # BoringSSL's x86/x64 assembly is assembled with nasm; the ARM64 leg
       # builds with OPENSSL_NO_ASM and therefore does not need it.
       - name: Install dependencies
+        timeout-minutes: 20
         if: matrix.os != 'windows-11-arm'
         run: |
           choco install --no-progress nasm

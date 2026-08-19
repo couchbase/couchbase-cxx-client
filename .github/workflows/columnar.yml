@@ -21,6 +21,7 @@ jobs:
 
     steps:
       - name: Install build environment
+        timeout-minutes: 20
         run: |
           sudo apt-get update -y
           sudo apt-get install -y libssl-dev cmake curl wget gnupg2 libcurl4-openssl-dev libprotobuf-dev libgrpc-dev libgrpc++-dev protobuf-compiler-grpc gdb
