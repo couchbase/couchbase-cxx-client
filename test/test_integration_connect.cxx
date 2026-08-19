@@ -59,6 +59,22 @@ TEST_CASE("integration: connecting with empty bootstrap nodes list", "[integrati
   io_thread.join();
 }
 
+TEST_CASE("integration: a guard whose cluster cannot open reports it instead of aborting",
+          "[integration]")
+{
+  auto ctx = test::utils::test_context::load_from_environment();
+  // No bootstrap nodes, so open() reports invalid_argument without touching the network.
+  ctx.connection_string = "couchbase://";
+
+  REQUIRE_THROWS_AS(test::utils::integration_test_guard{ ctx }, std::system_error);
+
+  // Reaching this line is the assertion. The guard starts its io threads before opening the
+  // cluster, and a constructor that throws leaves the destructor unrun: unless the constructor
+  // joins them itself, the threads are still joinable when the members are destroyed and
+  // ~thread() takes the whole binary down with std::terminate.
+  SUCCEED();
+}
+
 TEST_CASE("integration: connecting with unresponsive first node in bootstrap nodes list",
           "[integration]")
 {

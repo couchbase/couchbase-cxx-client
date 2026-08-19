@@ -42,8 +42,15 @@ class integration_test_guard
 {
 public:
   integration_test_guard();
+  // Builds the guard against a context the caller supplies rather than the environment, so a test
+  // can point it at a cluster that will not open.
+  explicit integration_test_guard(test_context context);
   integration_test_guard(const couchbase::core::cluster_options& opts);
   ~integration_test_guard();
+
+  // Closes the cluster and joins the io threads. Also called when a constructor fails, so that a
+  // partially built guard leaves no joinable thread behind.
+  void tear_down();
 
   inline auto load_bucket_info(bool refresh = false)
     -> const couchbase::core::operations::management::bucket_describe_response::bucket_info&
