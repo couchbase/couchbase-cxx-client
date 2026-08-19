@@ -279,8 +279,9 @@ http_session::initiate_connect()
     return;
   }
   if (state_ != diag::endpoint_state::connecting) {
-    CB_LOG_DEBUG(
-      "{} {}:{} attempt to establish HTTP connection", info_.log_prefix(), hostname_, service_);
+    CB_LOG_DEBUG("{} {} attempt to establish HTTP connection",
+                 info_.log_prefix(),
+                 logger::system_data(fmt::format("{}:{}", hostname_, service_)));
     state_ = diag::endpoint_state::connecting;
     async_resolve(http_ctx_.options.use_ip_protocol,
                   resolver_,
@@ -476,10 +477,9 @@ http_session::set_idle(std::chrono::milliseconds timeout)
       if (ec == asio::error::operation_aborted) {
         return;
       }
-      CB_LOG_DEBUG("{} idle timeout expired, stopping session: \"{}:{}\"",
+      CB_LOG_DEBUG("{} idle timeout expired, stopping session: \"{}\"",
                    self->info_.log_prefix(),
-                   self->hostname_,
-                   self->service_);
+                   logger::system_data(fmt::format("{}:{}", self->hostname_, self->service_)));
       self->stop();
     }));
   // Keep a read armed while the connection is idle so that a peer-initiated
@@ -601,16 +601,17 @@ http_session::on_resolve(std::error_code ec, const asio::ip::tcp::resolver::resu
     return;
   }
   if (ec) {
-    CB_LOG_ERROR(
-      "{} error on resolve \"{}:{}\": {}", info_.log_prefix(), hostname_, service_, ec.message());
+    CB_LOG_ERROR("{} error on resolve \"{}\": {}",
+                 info_.log_prefix(),
+                 logger::system_data(fmt::format("{}:{}", hostname_, service_)),
+                 ec.message());
     return initiate_connect();
   }
   last_active_ = std::chrono::steady_clock::now();
   endpoints_ = endpoints;
-  CB_LOG_TRACE("{} resolved \"{}:{}\" to {} endpoint(s)",
+  CB_LOG_TRACE("{} resolved \"{}\" to {} endpoint(s)",
                info_.log_prefix(),
-               hostname_,
-               service_,
+               logger::system_data(fmt::format("{}:{}", hostname_, service_)),
                endpoints_.size());
   do_connect(endpoints_.begin());
 }
@@ -622,43 +623,42 @@ http_session::do_connect(asio::ip::tcp::resolver::results_type::iterator it)
     return;
   }
   if (it != endpoints_.end()) {
-    CB_LOG_DEBUG("{} connecting to {}:{} (\"{}:{}\"), timeout={}ms",
+    CB_LOG_DEBUG("{} connecting to {} (\"{}\"), timeout={}ms",
                  info_.log_prefix(),
-                 it->endpoint().address().to_string(),
-                 it->endpoint().port(),
-                 hostname_,
-                 service_,
+                 logger::system_data(fmt::format(
+                   "{}:{}", it->endpoint().address().to_string(), it->endpoint().port())),
+                 logger::system_data(fmt::format("{}:{}", hostname_, service_)),
                  http_ctx_.options.connect_timeout.count());
     connect_deadline_timer_.expires_after(http_ctx_.options.connect_timeout);
-    connect_deadline_timer_.async_wait([self = shared_from_this(),
-                                        it](const auto timer_ec) mutable {
-      if (timer_ec == asio::error::operation_aborted || self->stopped_) {
-        return;
-      }
-      CB_LOG_DEBUG("{} unable to connect to {}:{} in time, reconnecting",
-                   self->info_.log_prefix(),
-                   self->hostname_,
-                   self->service_);
-      return self->stream_->close([self, next_address = ++it](std::error_code ec) {
-        if (ec) {
-          CB_LOG_WARNING("{} unable to close socket, but continue connecting attempt to {}:{}: {}",
-                         self->info_.log_prefix(),
-                         next_address->endpoint().address().to_string(),
-                         next_address->endpoint().port(),
-                         ec.value());
+    connect_deadline_timer_.async_wait(
+      [self = shared_from_this(), it](const auto timer_ec) mutable {
+        if (timer_ec == asio::error::operation_aborted || self->stopped_) {
+          return;
         }
-        self->do_connect(next_address);
+        CB_LOG_DEBUG("{} unable to connect to {} in time, reconnecting",
+                     self->info_.log_prefix(),
+                     logger::system_data(fmt::format("{}:{}", self->hostname_, self->service_)));
+        return self->stream_->close([self, next_address = ++it](std::error_code ec) {
+          if (ec) {
+            CB_LOG_WARNING(
+              "{} unable to close socket, but continue connecting attempt to {}: {}",
+              self->info_.log_prefix(),
+              logger::system_data(fmt::format("{}:{}",
+                                              next_address->endpoint().address().to_string(),
+                                              next_address->endpoint().port())),
+              ec.value());
+          }
+          self->do_connect(next_address);
+        });
       });
-    });
 
     stream_->async_connect(it->endpoint(), hostname_, [self = shared_from_this(), it](auto&& ec) {
       self->on_connect(std::forward<decltype(ec)>(ec), it);
     });
   } else {
-    CB_LOG_ERROR("{} no more endpoints left to connect, \"{}:{}\" is not reachable",
+    CB_LOG_ERROR("{} no more endpoints left to connect, \"{}\" is not reachable",
                  info_.log_prefix(),
-                 hostname_,
-                 service_);
+                 logger::system_data(fmt::format("{}:{}", hostname_, service_)));
     return initiate_connect();
   }
 }
@@ -672,10 +672,10 @@ http_session::on_connect(const std::error_code& ec,
   }
   last_active_ = std::chrono::steady_clock::now();
   if (!stream_->is_open() || ec) {
-    CB_LOG_WARNING("{} unable to connect to {}:{}: {}{}",
+    CB_LOG_WARNING("{} unable to connect to {}: {}{}",
                    info_.log_prefix(),
-                   it->endpoint().address().to_string(),
-                   it->endpoint().port(),
+                   logger::system_data(fmt::format(
+                     "{}:{}", it->endpoint().address().to_string(), it->endpoint().port())),
                    ec.message(),
                    (ec == asio::error::connection_refused)
                      ? ", check server ports and cluster encryption setting"
@@ -683,11 +683,13 @@ http_session::on_connect(const std::error_code& ec,
     if (stream_->is_open()) {
       stream_->close([self = shared_from_this(), next_address = ++it](std::error_code ec) {
         if (ec) {
-          CB_LOG_WARNING("{} unable to close socket, but continue connecting attempt to {}:{}: {}",
-                         self->info_.log_prefix(),
-                         next_address->endpoint().address().to_string(),
-                         next_address->endpoint().port(),
-                         ec.value());
+          CB_LOG_WARNING(
+            "{} unable to close socket, but continue connecting attempt to {}: {}",
+            self->info_.log_prefix(),
+            logger::system_data(fmt::format("{}:{}",
+                                            next_address->endpoint().address().to_string(),
+                                            next_address->endpoint().port())),
+            ec.value());
         }
         self->do_connect(next_address);
       });
@@ -697,10 +699,10 @@ http_session::on_connect(const std::error_code& ec,
   } else {
     state_ = diag::endpoint_state::connected;
     connected_ = true;
-    CB_LOG_DEBUG("{} connected to {}:{}",
+    CB_LOG_DEBUG("{} connected to {}",
                  info_.log_prefix(),
-                 it->endpoint().address().to_string(),
-                 it->endpoint().port());
+                 logger::system_data(fmt::format(
+                   "{}:{}", it->endpoint().address().to_string(), it->endpoint().port())));
     {
       const std::scoped_lock lock(info_mutex_);
       info_ = http_session_info(client_id_, id_, stream_->local_endpoint(), it->endpoint());
