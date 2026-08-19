@@ -207,7 +207,7 @@ enable_sanitizers(couchbase_cxx_protostellar)
 if(MSVC)
   # /bigobj: the generated translation units are large -- search.pb.cc is 18k lines and yields a
   # 7.4 MB object -- and protobuf-generated code this size can exceed the COFF section limit
-  # (fatal error C1128). CI builds RelWithDebInfo, but a Debug MSVC build (the default for
+  # (fatal error C1128). CI builds Release, but a Debug MSVC build (the default for
   # bin/build-tests) produces markedly larger objects. tools/fit_performer gets this flag from
   # set_project_options() for the same class of file; this target does not call that function.
   #
