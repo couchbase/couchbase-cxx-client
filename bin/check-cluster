@@ -16,7 +16,7 @@
 
 HOST=${HOST:-localhost}
 USERNAME=${USERNAME:-Administrator}
-PASSWORD=${PASSWOWRD:-password}
+PASSWORD=${PASSWORD:-password}
 
 CREDS="${USERNAME}:${PASSWORD}"
 
@@ -28,4 +28,39 @@ curl -sS -w "\n" -u${CREDS} http://${HOST}:8091/pools
 curl -sS -w "\n" -u${CREDS} http://${HOST}:8091/pools/default
 curl -sS -w "\n" -u${CREDS} http://${HOST}:8091/pools/default/buckets/default
 curl -sS -w "\n" -u${CREDS} http://${HOST}:8091/pools/default/b/default
+
+set +x
+
+# A cluster whose rebalance failed answers every request above and is still unusable: the
+# services the rebalance would have activated cannot serve, so every analytics, search and
+# eventing test fails with service_not_available half an hour into the run, with nothing
+# pointing back at setup. Refuse to hand such a cluster to the suite.
+#
+# servicesNeedRebalance names the services that cannot serve, which is the harm itself. It is
+# the only field here that discriminates: `balanced` is false on a healthy 7.1.6 cluster whose
+# rebalance succeeded, and counters.rebalance_fail is cumulative and stays set after a
+# successful retry. A server that does not report servicesNeedRebalance at all -- 7.1.6 does
+# not -- reads as an empty list and passes, so this fails only on stated evidence. A rebalance
+# still in progress is not a failure, so wait for it.
+deadline=$((SECONDS + 300))
+while :
+do
+    pools_default=$(curl -sS -u"${CREDS}" "http://${HOST}:8091/pools/default" || true)
+    unbalanced=$(jq -c '.servicesNeedRebalance // []' <<<"${pools_default}" 2>/dev/null || echo '[]')
+    if [ "${unbalanced}" = "[]" ]
+    then
+        break
+    fi
+    if [ "$(jq -r '.rebalanceStatus // "none"' <<<"${pools_default}")" != "running" ]
+    then
+        echo "cluster needs a rebalance that is not running: ${unbalanced}"
+        exit 1
+    fi
+    if [ "${SECONDS}" -ge "${deadline}" ]
+    then
+        echo "rebalance did not complete within 5 minutes: ${unbalanced}"
+        exit 1
+    fi
+    sleep 5
+done
 
