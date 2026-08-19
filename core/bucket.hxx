@@ -60,6 +60,7 @@ class bootstrap_state_listener;
 class app_telemetry_meter;
 
 class bucket_impl;
+class bucket_unit_test_api;
 struct origin;
 
 class bucket
@@ -249,6 +250,8 @@ public:
   [[nodiscard]] auto default_retry_strategy() const -> std::shared_ptr<couchbase::retry_strategy>;
   [[nodiscard]] auto is_closed() const -> bool;
   [[nodiscard]] auto is_configured() const -> bool;
+
+  [[nodiscard]] auto unit_test_api() -> bucket_unit_test_api;
 
   auto direct_dispatch(std::shared_ptr<mcbp::queue_request> req) -> std::error_code;
   auto direct_re_queue(const std::shared_ptr<mcbp::queue_request>& req, bool is_retry)
