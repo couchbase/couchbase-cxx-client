@@ -1124,56 +1124,74 @@ public:
       *request,
       [self = shared_from_this(), request, handler = std::forward<Handler>(handler), deadline](
         auto response) mutable {
-        if (!self->stopped_) {
-          if (auto reason = protostellar::retry_reason_for(protostellar_response_ec(response.ctx));
-              reason.has_value()) {
-            auto strategy = request->retries.strategy()
-                              ? request->retries.strategy()
-                              : self->origin_.options().default_retry_strategy_;
-            if (strategy) {
-              const auto action = strategy->retry_after(request->retries, reason.value());
-              // The wait is capped at the deadline rather than the retry being refused for landing
-              // past it. Refusing would end the operation early on the last attempt's transport
-              // error -- temporary_failure for an unreachable gateway -- while the caller's budget
-              // was still running, so the same condition that times out over the classic transport
-              // would report a different code here. Capping lets the operation use its whole budget
-              // and end on the deadline: the attempt scheduled at it gets a non-positive remainder
-              // above, which the component answers as a timeout carrying the accumulated attempts
-              // and reasons. That is terminal, so the loop cannot spin on it -- retry_reason_for
-              // does not classify a timeout as retryable. Both other implementations of this loop
-              // cap the same way (io/retry_orchestrator.hxx cap_duration, and Java's
-              // RetryOrchestratorProtostellar.capDuration).
-              const auto when =
-                std::min(std::chrono::steady_clock::now() + action.duration(), deadline);
-              if (action.need_to_retry()) {
-                // Recorded before the re-issue, so the next attempt carries the accumulated count
-                // and the error context it builds reports the retries that preceded it.
-                request->retries.record_retry_attempt(reason.value());
-                auto timer = std::make_shared<asio::steady_timer>(self->ctx_);
-                timer->expires_at(when);
-                timer->async_wait([self,
-                                   request,
-                                   handler = std::move(handler),
-                                   deadline,
-                                   response = std::move(response),
-                                   timer](const std::error_code& timer_ec) mutable {
-                  if (timer_ec) {
-                    // Timer cancelled: deliver the last retryable response rather than dropping
-                    // the caller's completion, which would hang it.
-                    handler(std::move(response));
-                    return;
-                  }
-                  // A cluster closed during the backoff is answered by dispatch_protostellar,
-                  // which re-reads the component under the lock and reports cluster_closed. The
-                  // last retryable response would instead report a temporary failure, which reads
-                  // as "retry later" for a cluster that is gone.
-                  self->dispatch_protostellar(std::move(request), std::move(handler), deadline);
-                });
-                return;
+        if (auto reason = protostellar::retry_reason_for(protostellar_response_ec(response.ctx));
+            reason.has_value()) {
+          auto strategy = request->retries.strategy()
+                            ? request->retries.strategy()
+                            : self->origin_.options().default_retry_strategy_;
+          if (strategy) {
+            const auto action = strategy->retry_after(request->retries, reason.value());
+            // The wait is capped at the deadline rather than the retry being refused for landing
+            // past it. Refusing would end the operation early on the last attempt's transport
+            // error -- temporary_failure for an unreachable gateway -- while the caller's budget
+            // was still running, so the same condition that times out over the classic transport
+            // would report a different code here. Capping lets the operation use its whole budget
+            // and end on the deadline: the attempt scheduled at it gets a non-positive remainder
+            // above, which the component answers as a timeout carrying the accumulated attempts
+            // and reasons. That is terminal, so the loop cannot spin on it -- retry_reason_for
+            // does not classify a timeout as retryable. Both other implementations of this loop
+            // cap the same way (io/retry_orchestrator.hxx cap_duration, and Java's
+            // RetryOrchestratorProtostellar.capDuration).
+            const auto when =
+              std::min(std::chrono::steady_clock::now() + action.duration(), deadline);
+            if (action.need_to_retry()) {
+              if (self->stopped_) {
+                // A retry was due and will not happen: close() latches stopped_ before it clears
+                // the component, so this completion arrived after the close. The transport error
+                // the next attempt would have replaced is not the caller's answer -- reporting it
+                // says "try again" about a cluster that is gone -- so report the close, as the
+                // re-entry below does once the component is cleared. Gating on a due retry keeps a
+                // terminal response out of this: request_canceled in particular carries the
+                // CXXCBC-909 rule that the statement must not be replayed.
+                return handler(request->make_response(
+                  make_key_value_error_context(errc::network::cluster_closed,
+                                               request->id,
+                                               request->retries.retry_attempts(),
+                                               request->retries.retry_reasons()),
+                  typename Request::encoded_response_type{}));
               }
+              // Recorded before the re-issue, so the next attempt carries the accumulated count
+              // and the error context it builds reports the retries that preceded it.
+              request->retries.record_retry_attempt(reason.value());
+              auto timer = std::make_shared<asio::steady_timer>(self->ctx_);
+              timer->expires_at(when);
+              timer->async_wait([self,
+                                 request,
+                                 handler = std::move(handler),
+                                 deadline,
+                                 response = std::move(response),
+                                 timer](const std::error_code& timer_ec) mutable {
+                if (timer_ec) {
+                  // Timer cancelled: deliver the last retryable response rather than dropping
+                  // the caller's completion, which would hang it.
+                  handler(std::move(response));
+                  return;
+                }
+                // A cluster closed during the backoff is answered by dispatch_protostellar,
+                // which re-reads the component under the lock and reports cluster_closed. The
+                // last retryable response would instead report a temporary failure, which reads
+                // as "retry later" for a cluster that is gone.
+                self->dispatch_protostellar(std::move(request), std::move(handler), deadline);
+              });
+              return;
             }
           }
         }
+        // A declined retry reports the transport error even when the cluster is closing: the
+        // strategy, not the close, is what ended the operation, and the caller gets the answer a
+        // close-free run would have given. The close is reported only where it is the more specific
+        // answer -- above, where a retry was due and will not happen, and at the top of this
+        // function, where no attempt was made and there is no transport error to report.
         handler(std::move(response));
       });
   }
@@ -1250,13 +1268,22 @@ public:
        handler = std::forward<Handler>(handler),
        retries,
        deadline](auto response) mutable {
-        if (!self->stopped_ && retries->strategy()) {
-          if (auto reason = protostellar::retry_reason_for(protostellar_response_ec(response.ctx));
-              reason.has_value()) {
+        if (auto reason = protostellar::retry_reason_for(protostellar_response_ec(response.ctx));
+            reason.has_value()) {
+          if (retries->strategy()) {
             const auto action = retries->strategy()->retry_after(*retries, reason.value());
             const auto when =
               std::min(std::chrono::steady_clock::now() + action.duration(), deadline);
             if (action.need_to_retry()) {
+              if (self->stopped_) {
+                // See dispatch_protostellar(): a retry the close will not let happen reports the
+                // close, not the error the next attempt would have replaced.
+                auto closed = request_ptr->make_response({ errc::network::cluster_closed },
+                                                         typename Request::encoded_response_type{});
+                closed.ctx.retry_attempts = retries->retry_attempts();
+                closed.ctx.retry_reasons = retries->retry_reasons();
+                return handler(std::move(closed));
+              }
               retries->record_retry_attempt(reason.value());
               auto timer = std::make_shared<asio::steady_timer>(self->ctx_);
               timer->expires_at(when);
@@ -1288,6 +1315,8 @@ public:
             }
           }
         }
+        // As in dispatch_protostellar(): a declined retry reports the transport error, because the
+        // strategy rather than the close is what ended the operation.
         response.ctx.retry_attempts = retries->retry_attempts();
         response.ctx.retry_reasons = retries->retry_reasons();
         handler(std::move(response));

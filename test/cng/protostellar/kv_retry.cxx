@@ -456,12 +456,15 @@ a_retried_mutation_that_runs_out_of_budget_is_ambiguous()
                 terminal_ec.message());
 }
 
-// Closing the cluster while an operation sits in its backoff must still answer the caller. The
-// re-entry does not touch protostellar_ directly -- it re-reads through the locked accessor, which
-// returns an empty pointer once close() has run, and answers cluster_closed. Two properties are
-// pinned here: that the completion is delivered and not dropped, whichever side of the close the
-// timer lands on, and that the answer is cluster_closed rather than the last retryable response,
-// which would tell the caller to try again against a cluster that is gone.
+// Closing the cluster while an operation sits in its backoff must still answer the caller. Two
+// properties are pinned here: that the completion is delivered and not dropped, whichever side of
+// the close the attempt lands on, and that the answer is terminal rather than the last retryable
+// response, which would tell the caller to try again against a cluster that is gone.
+//
+// Both sides are reachable. close() latches stopped_ on the caller's thread but only posts the
+// teardown that clears the component, so the re-entry from the timer answers cluster_closed once
+// that has run, while a completion processed after the latch is answered by the retry loop itself.
+// A call the close's own drain cancelled answers request_canceled, which is terminal too.
 //
 // The bounded wait is what keeps a dropped completion a failing assertion rather than a hung suite.
 void
@@ -535,11 +538,14 @@ closing_the_cluster_during_a_backoff_still_answers()
   assert_true(reached_the_service,
               "the first attempt reached the service, so a backoff was entered");
   assert_true(arrived, "closing the cluster mid-backoff still answers the caller");
-  // Not merely "an answer arrived": the last retryable response would report temporary_failure,
-  // which tells a caller to try again against a cluster that is gone. Asserting the code is what
-  // makes this case able to see which of the two it got.
-  assert_true(answer_ec == errc::network::cluster_closed,
-              "closing mid-backoff answers cluster_closed, got: " + answer_ec.message());
+  // Not merely "an answer arrived". Two codes are correct and both are terminal: cluster_closed
+  // when the close was observed before the next attempt went out, and request_canceled when the
+  // close's own drain cancelled the call already in flight. temporary_failure is the one that must
+  // never arrive -- it tells a caller to try again against a cluster that is gone -- so naming the
+  // accepted pair is what lets this case see which of the three it got.
+  assert_true(answer_ec == errc::network::cluster_closed ||
+                answer_ec == errc::common::request_canceled,
+              "closing mid-backoff answers terminally, got: " + answer_ec.message());
 }
 
 } // namespace
