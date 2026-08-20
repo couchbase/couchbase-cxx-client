@@ -622,8 +622,9 @@ TEST_CASE("unit: connection string log_redaction", "[unit]")
 
   SECTION("warns and leaves the default in place for an unparsable value")
   {
-    // NOTE: unlike libcouchbase, this SDK's boolean parameters do not accept numeric values, so
-    // "log_redaction=1" is rejected here even though libcouchbase would have honoured it.
+    // NOTE: every boolean parameter in this SDK's connection string takes true/yes/on, never a
+    // numeric value, so "log_redaction=1" is rejected here. Some other SDKs do accept it, so this
+    // is the deliberate cost of internal consistency rather than an oversight.
     for (const auto& value : { "maybe", "1", "0" }) {
       auto spec = couchbase::core::utils::parse_connection_string(
         fmt::format("couchbase://127.0.0.1?log_redaction={}", value));
