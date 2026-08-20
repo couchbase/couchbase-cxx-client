@@ -133,7 +133,7 @@ module LogAnnotations
       endpoint endpoints
       port ports remote_port local_port
       ip ip_address node nodes get_nodes
-      dns srv srv_record nameserver nameservers
+      dns srv srv_record nameserver nameservers dns_server dns_servers
       connection_string config_text
     ].freeze,
   }.freeze

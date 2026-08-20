@@ -18,6 +18,7 @@
 #include "cmd_get_cluster_config.hxx"
 
 #include "core/logger/logger.hxx"
+#include "core/logger/redaction.hxx"
 #include "core/topology/configuration_json.hxx"
 #include "core/utils/json.hxx"
 
@@ -77,14 +78,15 @@ get_cluster_config_response_body::parse(key_value_status_code status,
   if (status == key_value_status_code::success) {
     const std::vector<std::uint8_t>::difference_type offset =
       framing_extras_size + key_size + extras_size;
-    std::string_view config_text{ reinterpret_cast<const char*>(body.data()) + offset,
-                                  body.size() - static_cast<std::size_t>(offset) };
+    const std::string_view config_text{ reinterpret_cast<const char*>(body.data()) + offset,
+                                        body.size() - static_cast<std::size_t>(offset) };
     try {
       config_ = parse_config(config_text, info.endpoint_address, info.endpoint_port);
       config_text_.emplace(config_text);
     } catch (const tao::pegtl::parse_error& e) {
-      CB_LOG_DEBUG(
-        "unable to parse cluster configuration as JSON: {}, {}", e.message(), config_text);
+      CB_LOG_DEBUG("unable to parse cluster configuration as JSON: {}, {}",
+                   e.message(),
+                   logger::system_data(config_text));
     }
     return true;
   }
