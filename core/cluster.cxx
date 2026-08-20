@@ -560,7 +560,7 @@ public:
                  id_,
                  couchbase::core::meta::sdk_semver(),
                  logger::system_data(origin_.connection_string()),
-                 origin_.to_json());
+                 origin_.to_json_for_log());
     // The scheme is recognised in every build; only the ability to serve it is conditional. The
     // parser stays identical either way, so no API or ABI depends on the build mode -- a build
     // without couchbase2 support answers with a named error instead of attempting an MCBP handshake
@@ -639,7 +639,7 @@ public:
     CB_LOG_DEBUG(R"(open cluster in background, id: "{}", core version: "{}", {})",
                  id_,
                  couchbase::core::meta::sdk_semver(),
-                 origin_.to_json());
+                 origin_.to_json_for_log());
     setup_observability();
     session_manager_->set_dispatch_timeout(origin_.options().dispatch_timeout);
     // at this point we will infinitely try to connect
