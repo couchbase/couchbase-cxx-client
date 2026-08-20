@@ -30,6 +30,13 @@
 #   couchbase::core::logger::document()           a document id, from core/document_id_redaction.hxx:
 #                                                 <md> bucket, scope and collection, <ud> key
 #
+# A container is tagged one entry at a time, so that an entry still matches the same value logged
+# on its own elsewhere, rather than the list hashing as a single token:
+#
+#   couchbase::core::logger::user_data_list()      one <ud> per entry, joined
+#   couchbase::core::logger::metadata_list()       one <md> per entry, joined
+#   couchbase::core::logger::system_data_list()    one <sd> per entry, joined
+#
 # Usage:
 #   bin/check-log-annotations              # check, non-zero exit if anything is unannotated
 #   bin/check-log-annotations --catalog    # inventory every log statement, for tracking drift
@@ -89,11 +96,17 @@ module LogAnnotations
   # They still mark their argument as annotated.
   COMPOSITE_WRAPPERS = %w[document].freeze
 
+  # Helpers that tag every entry of a container and join them. One tag per entry, so a list
+  # correlates entry by entry rather than hashing as a single token. They are wrappers, not
+  # exclusions: the argument inside really is annotated, just not at the position it appears in.
+  LIST_WRAPPERS = %w[user_data_list metadata_list system_data_list].freeze
+
   # Markers that record a reviewed exclusion rather than applying a tag. They annotate nothing,
   # but an argument inside one has been looked at, which is all this script can ask for.
   EXCLUSION_MARKERS = %w[not_sensitive not_redacted].freeze
 
-  WRAPPER_NAMES = (WRAPPERS.keys + COMPOSITE_WRAPPERS + EXCLUSION_MARKERS).freeze
+  WRAPPER_NAMES =
+    (WRAPPERS.keys + COMPOSITE_WRAPPERS + LIST_WRAPPERS + EXCLUSION_MARKERS).freeze
 
   SOURCE_EXTENSIONS = %w[.cxx .hxx .cpp .hpp].freeze
 
@@ -147,7 +160,7 @@ module LogAnnotations
       address addresses remote_address local_address bootstrap_address
       endpoint endpoints
       port ports remote_port local_port
-      ip ip_address node nodes get_nodes
+      ip ip_address node nodes get_nodes node_address node_addresses get_node_addresses
       dns srv srv_record nameserver nameservers dns_server dns_servers
       connection_string config_text
     ].freeze,
@@ -561,6 +574,8 @@ module LogAnnotations
       CB_LOG_PROTOCOL("dump {}", body);
       CB_LOG_DEBUG("json {}", tao::json::value{ { "x", 1 } });
       CB_LOG_DEBUG("n={}", origin.get_nodes().size() - 1);
+      CB_LOG_DEBUG("[{}]", logger::system_data_list(origin.get_node_addresses()));
+      CB_LOG_DEBUG("[{}], sel={}", logger::system_data_list(dns_servers), dns_servers[0]);
       /* CB_LOG_DEBUG("host={}", hostname); */
       // CB_LOG_DEBUG("host={}", hostname);
     }
@@ -585,6 +600,8 @@ module LogAnnotations
     17 => [],                              # CB_LOG_PROTOCOL is out of scope
     18 => [],                              # tao::json::value is a type, not a document body
     19 => [],                              # a count through an accessor is still a count
+    20 => [],                              # a list wrapper annotates, one tag per entry
+    21 => ["dns_servers<sd>"],             # ... and only its own argument, like every wrapper
   }.freeze
 
   # A suppression that matches more than it names removes coverage without saying so, which is the

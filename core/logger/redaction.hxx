@@ -32,6 +32,14 @@
  *   CB_LOG_INFO("connecting to {}", logger::system_data(host));
  *   CB_LOG_DEBUG("fetching {}", logger::user_data(key));
  *
+ * A list of values gets one tag per entry rather than one around the whole list, so that an entry
+ * still matches the same value logged on its own elsewhere. There is a list form of each category,
+ * and it also renders the double quotes some of these lines already carry, because a tag has to sit
+ * inside them:
+ *
+ *   CB_LOG_INFO("bootstrap nodes: [{}]",
+ *               logger::system_data_list(addresses, logger::list_entries::quoted));
+ *
  * Qualify the calls as above. In particular `metadata` is also a member function on several core
  * types (query_result, row_streamer, transaction_get_result), where an unqualified call would
  * resolve to the member instead. In a file whose enclosing namespace is `couchbase` rather than
@@ -52,8 +60,12 @@
  * are opt-in debugging aids rather than something a deployment leaves on.
  *
  * `bin/check-log-annotations` reports log arguments that look sensitive but are not wrapped. It is
- * a heuristic over argument names, so it suggests rather than decides. Two wrappers record a
- * reviewed exclusion:
+ * a heuristic over argument names, so it suggests rather than decides. It cannot see a value that
+ * was tagged anywhere other than the log site, which is why the list forms above exist as named
+ * wrappers rather than as a helper per file: the checker recognises the name and counts the
+ * argument as annotated, instead of having to be told to look away from it.
+ *
+ * Two wrappers record a reviewed exclusion:
  *
  *   logger::not_sensitive(value)  the identifier suggests a category the value does not belong to
  *   logger::not_redacted(value)   sensitive, and deliberately logged untagged anyway
@@ -67,6 +79,9 @@
 #include "logger.hxx"
 
 #include <spdlog/fmt/bundled/core.h>
+
+#include <string>
+#include <string_view>
 
 namespace couchbase::core::logger
 {
@@ -151,6 +166,92 @@ auto
 not_redacted(const T& value)
 {
   return not_redacted_value<T>{ value };
+}
+
+/**
+ * Whether the entries of a tagged list render inside double quotes. The tag sits inside the quotes,
+ * never around them: a span that swallows the punctuation hashes to something matching no other
+ * line in the log.
+ */
+enum class list_entries {
+  bare,
+  quoted,
+};
+
+namespace detail
+{
+template<typename Container, typename Wrap>
+auto
+tagged_list(const Container& values, list_entries entries, std::string_view separator, Wrap wrap)
+  -> std::string
+{
+  std::string result;
+  auto first = true;
+  for (const auto& value : values) {
+    if (!first) {
+      result.append(separator);
+    }
+    first = false;
+    if (entries == list_entries::quoted) {
+      result.append(fmt::format(R"("{}")", wrap(value)));
+    } else {
+      result.append(fmt::format("{}", wrap(value)));
+    }
+  }
+  return result;
+}
+} // namespace detail
+
+/*
+ * Tag every entry of a container and join them, so a list correlates entry by entry. One tag around
+ * the joined string would hash the whole list as a single token, matching nothing else in the log,
+ * not even the same value logged beside it in a span of its own.
+ *
+ * Unlike the wrappers above, these return a std::string rather than a view of the value, because
+ * there is nothing to view: the tagged entries do not exist until they are built. Call them inside
+ * the CB_LOG_* argument list, so they stay as lazy as the statement that needs them.
+ */
+
+/**
+ * Tag each entry of a container as user data (<ud>) and join them.
+ */
+template<typename Container>
+auto
+user_data_list(const Container& values,
+               list_entries entries = list_entries::bare,
+               std::string_view separator = ", ") -> std::string
+{
+  return detail::tagged_list(values, entries, separator, [](const auto& value) {
+    return user_data(value);
+  });
+}
+
+/**
+ * Tag each entry of a container as metadata (<md>) and join them.
+ */
+template<typename Container>
+auto
+metadata_list(const Container& values,
+              list_entries entries = list_entries::bare,
+              std::string_view separator = ", ") -> std::string
+{
+  return detail::tagged_list(values, entries, separator, [](const auto& value) {
+    return metadata(value);
+  });
+}
+
+/**
+ * Tag each entry of a container as system data (<sd>) and join them.
+ */
+template<typename Container>
+auto
+system_data_list(const Container& values,
+                 list_entries entries = list_entries::bare,
+                 std::string_view separator = ", ") -> std::string
+{
+  return detail::tagged_list(values, entries, separator, [](const auto& value) {
+    return system_data(value);
+  });
 }
 
 } // namespace couchbase::core::logger

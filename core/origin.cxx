@@ -493,13 +493,12 @@ couchbase::core::origin::get_nodes() const -> std::vector<std::string>
   return res;
 }
 auto
-couchbase::core::origin::get_nodes_for_log() const -> std::vector<std::string>
+couchbase::core::origin::get_node_addresses() const -> std::vector<std::string>
 {
   std::vector<std::string> res;
   res.reserve(nodes_.size());
   for (const auto& [hostname, port] : nodes_) {
-    res.emplace_back(
-      fmt::format("\"{}\"", logger::system_data(fmt::format("{}:{}", hostname, port))));
+    res.emplace_back(fmt::format("{}:{}", hostname, port));
   }
   return res;
 }

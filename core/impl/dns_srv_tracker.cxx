@@ -24,7 +24,6 @@
 #include "core/logger/redaction.hxx"
 #include "core/origin.hxx"
 #include "core/topology/configuration.hxx"
-#include "core/utils/join_strings.hxx"
 #include "core/utils/movable_function.hxx"
 
 #include <couchbase/error_codes.hxx>
@@ -52,6 +51,17 @@ nameserver_address(const io::dns::dns_config& config) -> std::string
 {
   return fmt::format(
     "{}:{}", config.nameserver().empty() ? "(system)" : config.nameserver(), config.port());
+}
+
+auto
+node_addresses(const origin::node_list& nodes) -> std::vector<std::string>
+{
+  std::vector<std::string> addresses;
+  addresses.reserve(nodes.size());
+  for (const auto& [host, port] : nodes) {
+    addresses.emplace_back(fmt::format("{}:{}", host, port));
+  }
+  return addresses;
 }
 } // namespace
 
@@ -137,16 +147,9 @@ dns_srv_tracker::do_dns_refresh()
 
       if (!listeners.empty()) {
         auto config = topology::make_blank_configuration(nodes, self->use_tls_, true);
-        std::vector<std::string> endpoints;
-        endpoints.reserve(nodes.size());
-        for (const auto& [host, port] : nodes) {
-          endpoints.emplace_back(
-            fmt::format("\"{}\"", logger::system_data(fmt::format("{}:{}", host, port))));
-        }
         CB_LOG_DEBUG("generated configuration from DNS-SRV response \"{}\": [{}]",
                      logger::system_data(self->address_),
-                     // each endpoint is tagged as it is built
-                     logger::not_sensitive(utils::join_strings(endpoints, ", ")));
+                     logger::system_data_list(node_addresses(nodes), logger::list_entries::quoted));
         for (const auto& listener : listeners) {
           listener->update_config(config);
         }

@@ -269,6 +269,62 @@ TEST_CASE("unit: redaction annotations may be mixed in a single statement", "[un
           "key=<ud>airline_10</ud>");
 }
 
+TEST_CASE("unit: a list is tagged one entry at a time", "[unit]")
+{
+  namespace logger = couchbase::core::logger;
+
+  // One tag around a joined list would hash the whole list as a single token, so an entry would
+  // match nothing else in the log, not even the same value logged beside it in a span of its own.
+  // Both of those shapes occur: dns_config.cxx logs the server list and the selected server on one
+  // line, and cluster.cxx logs bootstrap nodes that mcbp_session.cxx logs individually.
+  const std::vector<std::string> addresses{ "10.0.0.1:11210", "10.0.0.2:11210" };
+  const std::vector<std::string> buckets{ "travel-sample", "beer-sample" };
+
+  SECTION("inert while redaction is disabled")
+  {
+    const scoped_log_redaction redaction{ false };
+    REQUIRE(logger::system_data_list(addresses) == "10.0.0.1:11210, 10.0.0.2:11210");
+    REQUIRE(logger::system_data_list(addresses, logger::list_entries::quoted) ==
+            R"("10.0.0.1:11210", "10.0.0.2:11210")");
+  }
+
+  SECTION("one span per entry while redaction is enabled")
+  {
+    const scoped_log_redaction redaction{ true };
+    REQUIRE(logger::system_data_list(addresses) ==
+            "<sd>10.0.0.1:11210</sd>, <sd>10.0.0.2:11210</sd>");
+    REQUIRE(logger::metadata_list(buckets) == "<md>travel-sample</md>, <md>beer-sample</md>");
+    REQUIRE(logger::user_data_list(buckets) == "<ud>travel-sample</ud>, <ud>beer-sample</ud>");
+  }
+
+  SECTION("a tag sits inside the quotes an entry already renders, never around them")
+  {
+    // A span that swallowed the punctuation would hash to something matching no other line.
+    const scoped_log_redaction redaction{ true };
+    REQUIRE(logger::system_data_list(addresses, logger::list_entries::quoted) ==
+            R"("<sd>10.0.0.1:11210</sd>", "<sd>10.0.0.2:11210</sd>")");
+  }
+
+  SECTION("the separator is the caller's, since the existing lines disagree")
+  {
+    const scoped_log_redaction redaction{ true };
+    REQUIRE(logger::system_data_list(addresses, logger::list_entries::quoted, ",") ==
+            R"("<sd>10.0.0.1:11210</sd>","<sd>10.0.0.2:11210</sd>")");
+  }
+
+  SECTION("an empty container renders nothing, in either state")
+  {
+    const std::vector<std::string> empty{};
+    {
+      const scoped_log_redaction redaction{ false };
+      REQUIRE(logger::system_data_list(empty).empty());
+    }
+    const scoped_log_redaction redaction{ true };
+    REQUIRE(logger::system_data_list(empty).empty());
+    REQUIRE(logger::system_data_list(empty, logger::list_entries::quoted).empty());
+  }
+}
+
 TEST_CASE("unit: a document id splits its redaction categories", "[unit]")
 {
   namespace logger = couchbase::core::logger;

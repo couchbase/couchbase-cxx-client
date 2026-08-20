@@ -111,7 +111,11 @@ non-idempotent use `errc::common::ambiguous_timeout`. Determined via
 for document keys and bodies, usernames, query statements and xattrs, `logger::metadata()` for
 bucket, scope, collection, index and design document names, `logger::system_data()` for
 hostnames, addresses, ports and DNS topology. A document id uses `logger::document()`, which
-splits the categories itself. Wrapping never changes the output unless redaction is enabled.
+splits the categories itself, and a container uses `logger::user_data_list()`,
+`logger::metadata_list()` or `logger::system_data_list()`, which tag one entry at a time so an entry
+still matches the same value logged on its own elsewhere; pass `logger::list_entries::quoted` where
+the line already renders each entry in double quotes, because the tag belongs inside them. Wrapping
+never changes the output unless redaction is enabled.
 Compose a value into one tag only where the composed form is what appears in other log lines:
 host and port do, a scope and collection do not. `bin/check-log-annotations` reports arguments
 whose names look sensitive and are unwrapped; it reads names, not types, so when it is wrong the

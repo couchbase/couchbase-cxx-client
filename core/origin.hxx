@@ -71,9 +71,10 @@ struct origin {
 
   [[nodiscard]] auto get_hostnames() const -> std::vector<std::string>;
   [[nodiscard]] auto get_nodes() const -> std::vector<std::string>;
-  // The same addresses as get_nodes(), each wrapped in a redaction tag. For log statements only:
-  // when log redaction is enabled the entries carry markup, so nothing may read the values back.
-  [[nodiscard]] auto get_nodes_for_log() const -> std::vector<std::string>;
+  // The same addresses as get_nodes(), without the display quotes baked into each entry. Log
+  // statements want them bare so that logger::system_data_list() can put a tag inside the quotes it
+  // renders; a tag around a pre-quoted entry hashes the punctuation with the value.
+  [[nodiscard]] auto get_node_addresses() const -> std::vector<std::string>;
 
   void shuffle_nodes();
   void set_nodes(node_list nodes);
