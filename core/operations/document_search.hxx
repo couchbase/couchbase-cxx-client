@@ -26,6 +26,7 @@
 #include "core/public_fwd.hxx"
 #include "core/search_highlight_style.hxx"
 #include "core/search_scan_consistency.hxx"
+#include "core/search_scoring_strategy.hxx"
 #include "core/timeout_defaults.hxx"
 #include "core/vector_query_combination.hxx"
 
@@ -163,6 +164,10 @@ struct search_request {
    */
   std::optional<bool> log_request{ false };
   std::optional<bool> log_response{ false };
+
+  std::optional<couchbase::core::search_scoring_strategy> scoring{};
+  std::optional<std::uint32_t> score_rank_constant{};
+  std::optional<std::uint32_t> score_window_size{};
 
   [[nodiscard]] auto encode_to(encoded_request_type& encoded,
                                http_context& context) -> std::error_code;

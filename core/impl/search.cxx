@@ -125,6 +125,32 @@ map_vector_query_combination(const std::optional<couchbase::vector_query_combina
   return {};
 }
 
+auto
+map_scoring_strategy(couchbase::search_scoring_strategy strategy) -> core::search_scoring_strategy
+{
+  switch (strategy) {
+    case couchbase::search_scoring_strategy::reciprocal_rank_fusion:
+      return core::search_scoring_strategy::reciprocal_rank_fusion;
+    case couchbase::search_scoring_strategy::relative_score_fusion:
+      return core::search_scoring_strategy::relative_score_fusion;
+    case couchbase::search_scoring_strategy::none:
+      break;
+  }
+  return core::search_scoring_strategy::none;
+}
+
+void
+apply_scoring(core::operations::search_request& request,
+              const std::optional<search_scoring::built>& scoring)
+{
+  if (!scoring.has_value()) {
+    return;
+  }
+  request.scoring = map_scoring_strategy(scoring->strategy);
+  request.score_rank_constant = scoring->rank_constant;
+  request.score_window_size = scoring->window_size;
+}
+
 } // namespace
 
 auto
@@ -168,6 +194,7 @@ build_search_request(std::string index_name,
     options.timeout,
   };
   request.parent_span = std::move(op_span);
+  apply_scoring(request, options.scoring);
   return request;
 }
 
@@ -213,6 +240,7 @@ build_search_request(std::string index_name,
     options.timeout,
   };
   core_request.parent_span = std::move(op_span);
+  apply_scoring(core_request, options.scoring);
 
   if (auto vector_search = request.vector_search(); vector_search.has_value()) {
     core_request.vector_search = core::utils::json::generate_binary(vector_search->query);
