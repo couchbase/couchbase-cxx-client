@@ -267,16 +267,21 @@ non_kv_retry_budget_exhaustion()
 }
 
 // Closing the cluster while a non-KV operation sits in its backoff must answer the caller, and must
-// answer cluster_closed rather than the last retryable response -- a temporary_failure tells a
-// caller to try again against a cluster that is gone. The KV path pins the same property in
-// kv_retry.cxx; this is the non-KV half, and it is the only observer of the retry state carried
-// onto that answer.
+// not answer with the retryable transport error the next attempt would have replaced -- a
+// temporary_failure tells a caller to try again against a cluster that is gone. The KV path pins
+// the same property in kv_retry.cxx; this is the non-KV half, and it is the only observer of the
+// retry state carried onto that answer.
 //
 // "always-fail" answers UNAVAILABLE forever, so the loop cannot end on its own and any close before
-// the deadline lands inside a backoff. Determinism comes from close() clearing the component before
-// it reports completion: once the close future returns, the pending timer is guaranteed to re-enter
-// with no component. The bounded wait for the first attempt is what keeps a dropped completion a
-// failing assertion rather than a hung suite.
+// the deadline lands inside a backoff. Two orderings are reachable and the case accepts either,
+// because close() latches stopped_ on the caller's thread but only posts the teardown that clears
+// the component: the attempt's completion can be processed before the close, in which case the
+// timer re-enters, finds no component and answers cluster_closed, or after it, in which case the
+// retry loop answers the close itself. Where the close's own drain cancelled a call already in
+// flight the answer is request_canceled, terminal and equally not an invitation to retry.
+//
+// The wait for a second attempt is what establishes that a retry was recorded, and the bounded wait
+// for the answer is what keeps a dropped completion a failing assertion rather than a hung suite.
 void
 closing_the_cluster_during_a_non_kv_backoff_still_answers()
 {
@@ -318,14 +323,16 @@ closing_the_cluster_during_a_non_kv_backoff_still_answers()
     done.set_value(std::move(r));
   });
 
-  // Wait for the first attempt to have failed, so the operation is provably in a backoff when the
-  // cluster closes rather than still connecting.
-  const auto first_attempt_by = std::chrono::steady_clock::now() + 5s;
-  while (service.always_fail_calls.load() < 1 &&
-         std::chrono::steady_clock::now() < first_attempt_by) {
+  // Wait for a SECOND attempt to reach the service. One call proves only that the service was
+  // reached, which is a server-side fact: the client may not have processed that failure yet, so
+  // nothing has been recorded and the assertion on retry_attempts below has no ground. A second
+  // call cannot happen until the first failure came back and the retry loop acted on it, so it is
+  // the earliest point at which a retry attempt is known to be recorded.
+  const auto retried_by = std::chrono::steady_clock::now() + 5s;
+  while (service.always_fail_calls.load() < 2 && std::chrono::steady_clock::now() < retried_by) {
     std::this_thread::sleep_for(5ms);
   }
-  const auto reached_the_service = service.always_fail_calls.load() >= 1;
+  const auto retried = service.always_fail_calls.load() >= 2;
 
   std::promise<void> closed;
   cluster.close([&closed]() {
@@ -345,17 +352,21 @@ closing_the_cluster_during_a_non_kv_backoff_still_answers()
   server->Wait();
 
   assert_false(static_cast<bool>(open_ec), "open(couchbase2://) succeeds");
-  assert_true(reached_the_service,
-              "the first attempt reached the service, so a backoff was entered");
+  assert_true(retried, "a second attempt reached the service, so a retry was recorded");
   assert_true(arrived, "closing the cluster mid-backoff still answers the caller");
-  assert_true(res.ctx.ec == couchbase::errc::network::cluster_closed,
-              "closing mid-backoff answers cluster_closed, got: " + res.ctx.ec.message());
-  // The retry state is carried onto the cluster_closed answer rather than dropped: an operation
-  // that retried before the close must not be reported as never retried.
+  // Two answers are correct and both are terminal: cluster_closed when the close was observed
+  // before the next attempt went out, and request_canceled when the close's own drain cancelled the
+  // call already in flight. The one that must never arrive is temporary_failure -- it tells the
+  // caller to try again against a cluster that is gone, and it is what this case exists to exclude.
+  assert_true(res.ctx.ec == couchbase::errc::network::cluster_closed ||
+                res.ctx.ec == couchbase::errc::common::request_canceled,
+              "closing mid-backoff answers terminally, got: " + res.ctx.ec.message());
+  // The retry state is carried onto that answer rather than dropped: an operation that retried
+  // before the close must not be reported as never retried.
   assert_true(res.ctx.retry_attempts > 0,
-              "the cluster_closed answer still reports the attempts that preceded the close");
+              "the answer still reports the attempts that preceded the close");
   assert_true(res.ctx.retry_reasons.count(couchbase::retry_reason::service_not_available) > 0,
-              "the cluster_closed answer still reports service_not_available");
+              "the answer still reports service_not_available");
 }
 
 class fail_fast_retry_strategy final : public couchbase::retry_strategy
