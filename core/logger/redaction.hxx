@@ -34,7 +34,9 @@
  *
  * Qualify the calls as above. In particular `metadata` is also a member function on several core
  * types (query_result, row_streamer, transaction_get_result), where an unqualified call would
- * resolve to the member instead.
+ * resolve to the member instead. In a file whose enclosing namespace is `couchbase` rather than
+ * `couchbase::core`, write `core::logger::` instead: a plain `logger::` there finds the public
+ * `couchbase::logger` from <couchbase/logger.hxx>, which has none of these functions.
  *
  * When redaction is disabled the wrappers format exactly as the underlying value, so annotating a
  * log statement never changes its output for users who have not opted in.
