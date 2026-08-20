@@ -32,6 +32,7 @@
 
 #include <couchbase/tracing/request_tracer.hxx>
 
+#include <string_view>
 #include <utility>
 
 namespace couchbase::core::operations
@@ -307,7 +308,11 @@ private:
                      self->client_context_id_,
                      ec.message(),
                      msg.status_code,
-                     logger::user_data(msg.status_code == 200 ? "[hidden]" : msg.body.data()));
+                     // Views, not strings: the arms have different types, so a plain ternary
+                     // built a std::string and copied the whole body in on every non-200.
+                     logger::user_data(msg.status_code == 200
+                                         ? std::string_view{ "[hidden]" }
+                                         : std::string_view{ msg.body.data() }));
         if (auto parser_ec = msg.body.ec(); !ec && parser_ec) {
           ec = parser_ec;
         }
