@@ -24,8 +24,6 @@
 
 #include <iphlpapi.h>
 #include <winsock2.h>
-
-#include "core/utils/join_strings.hxx"
 #endif
 
 #include "core/logger/logger.hxx"
@@ -37,7 +35,9 @@
 #include <filesystem>
 #include <fstream>
 #include <mutex>
+#include <string>
 #include <utility>
+#include <vector>
 
 namespace couchbase::core::io::dns
 {
@@ -99,7 +99,7 @@ load_resolv_conf()
 
   if (dns_servers.size() > 0) {
     CB_LOG_DEBUG("Found DNS Servers: [{}], selected nameserver: \"{}\"",
-                 logger::system_data(couchbase::core::utils::join_strings(dns_servers, ", ")),
+                 logger::system_data_list(dns_servers),
                  logger::system_data(dns_servers[0]));
     return dns_servers[0];
   }

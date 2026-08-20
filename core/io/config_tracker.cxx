@@ -25,7 +25,6 @@
 #include "core/origin.hxx"
 #include "core/protocol/client_request.hxx"
 #include "core/protocol/cmd_get_cluster_config.hxx"
-#include "core/utils/join_strings.hxx"
 #include "http_session_manager.hxx"
 #include "mcbp_session.hxx"
 
@@ -125,7 +124,8 @@ public:
           CB_LOG_INFO(
             "replace list of bootstrap nodes with addresses of alternative network \"{}\": [{}]",
             self->origin_.options().network,
-            utils::join_strings(self->origin_.get_nodes_for_log(), ","));
+            logger::system_data_list(
+              self->origin_.get_node_addresses(), logger::list_entries::quoted, ","));
         }
 
         new_session.on_configuration_update(self);

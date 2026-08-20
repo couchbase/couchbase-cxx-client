@@ -171,7 +171,6 @@
 #include "core/tracing/noop_tracer.hxx"
 #include "core/tracing/threshold_logging_tracer.hxx"
 #include "core/tracing/tracer_wrapper.hxx"
-#include "core/utils/join_strings.hxx"
 #include "core/utils/movable_function.hxx"
 #include "crud_component.hxx"
 #include "dispatcher.hxx"
@@ -608,7 +607,8 @@ public:
                 CB_LOG_INFO(
                   "replace list of bootstrap nodes with addresses from DNS SRV of \"{}\": [{}]",
                   logger::system_data(hostname),
-                  utils::join_strings(self->origin_.get_nodes_for_log(), ", "));
+                  logger::system_data_list(self->origin_.get_node_addresses(),
+                                           logger::list_entries::quoted));
               }
               return self->do_open(std::move(handler));
             });
@@ -1399,7 +1399,8 @@ public:
           CB_LOG_INFO(
             "replace list of bootstrap nodes with addresses of alternative network \"{}\": [{}]",
             self->origin_.options().network,
-            utils::join_strings(self->origin_.get_nodes_for_log(), ","));
+            logger::system_data_list(
+              self->origin_.get_node_addresses(), logger::list_entries::quoted, ","));
         }
         // FIXME(SA): fix the session manager to receive initial configuration and cluster-wide
         // session to poll for updates like the bucket does. Or just subscribe before the bootstrap.
@@ -1565,7 +1566,8 @@ public:
                 "[{}] Replace list of bootstrap nodes with addresses from DNS SRV of \"{}\": [{}]",
                 self->id_,
                 logger::system_data(hostname),
-                utils::join_strings(self->origin_.get_nodes_for_log(), ", "));
+                logger::system_data_list(self->origin_.get_node_addresses(),
+                                         logger::list_entries::quoted));
             }
             return self->do_background_open();
           });

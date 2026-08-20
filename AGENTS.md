@@ -86,6 +86,8 @@ Always run linting and formatting checks before submitting changes:
 4.  **Log Redaction**: A sensitive value passed to `CB_LOG_*` is wrapped in one of the helpers from
     `core/logger/redaction.hxx`: `logger::user_data()` for document keys and bodies, usernames and
     query statements, `logger::metadata()` for bucket, scope, collection and index names, and
-    `logger::system_data()` for hostnames, addresses and ports. `bin/check-log-annotations` reports
-    what looks sensitive and is unwrapped. When it is wrong, mark the argument with
-    `logger::not_sensitive()` rather than silencing the statement.
+    `logger::system_data()` for hostnames, addresses and ports. A container gets one tag per entry
+    through `logger::system_data_list()` and its `user_data_list`/`metadata_list` siblings, never one
+    tag around the joined string. `bin/check-log-annotations` reports what looks sensitive and is
+    unwrapped. When it is wrong, mark the argument with `logger::not_sensitive()` rather than
+    silencing the statement.
