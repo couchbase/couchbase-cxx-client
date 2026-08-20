@@ -19,12 +19,16 @@
 
 #include <couchbase/logger.hxx>
 
+#include "core/document_id.hxx"
+#include "core/document_id_fmt.hxx"
 #include "core/logger/logger.hxx"
 #include "core/logger/redaction.hxx"
 
+#include <spdlog/fmt/bin_to_hex.h>
 #include <spdlog/fmt/bundled/format.h>
 
 #include <atomic>
+#include <cstddef>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -262,6 +266,86 @@ TEST_CASE("unit: redaction annotations may be mixed in a single statement", "[un
                       logger::user_data("airline_10")) ==
           "[client-id/<md>travel-sample</md>] <<sd>10.0.0.1</sd>:<sd>11210</sd>> "
           "key=<ud>airline_10</ud>");
+}
+
+TEST_CASE("unit: a document id splits its redaction categories", "[unit]")
+{
+  namespace logger = couchbase::core::logger;
+
+  // A document id renders as bucket/scope.collection/key, and those parts do not share a
+  // category: the names are metadata and only the key is user data. Wrapping the rendered form as
+  // a whole would put a bucket name inside a <ud> span.
+  const couchbase::core::document_id id{ "travel-sample", "inventory", "airline", "airline_10" };
+
+  {
+    const scoped_log_redaction redaction{ false };
+    REQUIRE(fmt::format("{}", logger::document(id)) ==
+            "travel-sample/inventory.airline/airline_10");
+
+    // The plain formatter is also used outside logging, so the two must agree while redaction is
+    // off. If they ever diverge, a log line changes text for users who never enabled anything.
+    REQUIRE(fmt::format("{}", logger::document(id)) == fmt::format("{}", id));
+  }
+
+  const scoped_log_redaction redaction{ true };
+  REQUIRE(fmt::format("{}", logger::document(id)) ==
+          "<md>travel-sample</md>/<md>inventory</md>.<md>airline</md>/<ud>airline_10</ud>");
+}
+
+TEST_CASE("unit: a document id built without a collection keeps its shape", "[unit]")
+{
+  namespace logger = couchbase::core::logger;
+
+  // This constructor leaves the collection path empty, so the id renders with an empty middle
+  // component. Keep that shape rather than joining an empty scope and collection into a ".".
+  const couchbase::core::document_id id{ "travel-sample", "airline_10" };
+
+  {
+    const scoped_log_redaction redaction{ false };
+    REQUIRE(fmt::format("{}", logger::document(id)) == "travel-sample//airline_10");
+    REQUIRE(fmt::format("{}", logger::document(id)) == fmt::format("{}", id));
+  }
+
+  const scoped_log_redaction redaction{ true };
+  REQUIRE(fmt::format("{}", logger::document(id)) == "<md>travel-sample</md>//<ud>airline_10</ud>");
+}
+
+TEST_CASE("unit: exclusion markers never change what is printed", "[unit]")
+{
+  namespace logger = couchbase::core::logger;
+
+  // Both markers record a reviewed decision for the annotation checker and for anyone reading the
+  // statement. Neither may alter the output, in either redaction state.
+  const std::string host{ "10.0.0.1" };
+
+  {
+    const scoped_log_redaction redaction{ false };
+    REQUIRE(fmt::format("host={}", logger::not_sensitive(host)) == "host=10.0.0.1");
+    REQUIRE(fmt::format("host={}", logger::not_redacted(host)) == "host=10.0.0.1");
+  }
+
+  const scoped_log_redaction redaction{ true };
+  REQUIRE(fmt::format("host={}", logger::not_sensitive(host)) == "host=10.0.0.1");
+  REQUIRE(fmt::format("host={}", logger::not_redacted(host)) == "host=10.0.0.1");
+}
+
+TEST_CASE("unit: format specifications survive the wrappers", "[unit]")
+{
+  namespace logger = couchbase::core::logger;
+
+  const std::string bucket{ "bucket" };
+  const std::vector<std::byte> body{ std::byte{ 0xde }, std::byte{ 0xad } };
+
+  const scoped_log_redaction redaction{ true };
+
+  // Every wrapper inherits parse() from the formatter of the value, so a specification keeps
+  // working. It applies to the value alone, which means padding lands inside the tags.
+  REQUIRE(fmt::format("{:>8}", logger::metadata(bucket)) == "<md>  bucket</md>");
+
+  // That inheritance is what lets a hex dump keep the "{:a}" it is logged with. The five hex
+  // dumps in mcbp_session.cxx are marked not_redacted(), so this pins the shape they rely on.
+  REQUIRE(fmt::format("{:a}", logger::not_redacted(spdlog::to_hex(body))) ==
+          fmt::format("{:a}", spdlog::to_hex(body)));
 }
 
 TEST_CASE("unit: connection-context prefixes bake in their tags", "[unit]")
