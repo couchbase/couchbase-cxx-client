@@ -27,7 +27,7 @@
 # A composite value whose parts do not share one category is wrapped by a helper that applies
 # several tags at once, and counts as annotated here without a category of its own:
 #
-#   couchbase::core::logger::document()           a document id, from core/document_id_fmt.hxx:
+#   couchbase::core::logger::document()           a document id, from core/document_id_redaction.hxx:
 #                                                 <md> bucket, scope and collection, <ud> key
 #
 # Usage:
