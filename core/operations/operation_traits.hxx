@@ -34,4 +34,20 @@ struct is_cancellable_operation : public std::false_type {
 
 template<typename T>
 inline constexpr bool is_cancellable_operation_v = is_cancellable_operation<T>::value;
+
+/**
+ * Operations that pick the node to dispatch to themselves, instead of being
+ * routed by the vbucket map alone.
+ *
+ * Specialize this only for a request that provides
+ * @c resolve_route(const topology::configuration&) returning an
+ * @c impl::replica_route_decision, and a writable @c partition member: that is
+ * the whole interface @c bucket::map_and_send() calls through this trait.
+ */
+template<typename T>
+struct resolves_own_route : public std::false_type {
+};
+
+template<typename T>
+inline constexpr bool resolves_own_route_v = resolves_own_route<T>::value;
 } // namespace couchbase::core::operations

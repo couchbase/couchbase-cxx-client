@@ -89,6 +89,8 @@ unit_test(management_analytics)
 unit_test(node_id)
 unit_test(wait_until_ready)
 unit_test(topology_configuration)
+unit_test(bucket_routing)
+unit_test(get_replica)
 target_link_libraries(test_unit_jsonsl PRIVATE jsonsl)
 
 integration_benchmark(get)

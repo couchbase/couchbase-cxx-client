@@ -22,6 +22,7 @@
 #include "core/error_context/query.hxx"
 #include "core/error_context/search.hxx"
 #include "core/error_context/view.hxx"
+#include "core/impl/get_replica.hxx"
 #include "core/operations/analytics_response_parsing.hxx"
 #include "core/operations/query_response_parsing.hxx"
 #include "core/protostellar/analytics_converter.hxx"
@@ -63,6 +64,15 @@
 
 namespace couchbase::core::protostellar
 {
+// The gateway carries no replica read, so cluster::execute() must answer
+// get_replica with feature_not_available instead of dispatching it. Asserted
+// here rather than in the Catch2 tree, which cannot compile this header, and
+// not in test/cng, which is absent from exactly the builds that ship the
+// library. Flips when CNG implements the RPC, and the rejection then becomes an
+// integration case.
+static_assert(!component_supports_v<impl::get_replica_request>,
+              "get_replica is routed over couchbase2 without a converter for it");
+
 namespace v1 = ::couchbase::kv::v1;
 namespace query_v1 = ::couchbase::query::v1;
 namespace analytics_v1 = ::couchbase::analytics::v1;

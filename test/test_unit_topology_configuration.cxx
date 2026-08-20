@@ -16,6 +16,7 @@
  */
 
 #include "test_helper.hxx"
+#include "utils/topology_fixtures.hxx"
 
 #include "core/document_id.hxx"
 #include "core/impl/replica_utils.hxx"
@@ -23,7 +24,6 @@
 
 #include <couchbase/read_preference.hxx>
 
-#include <cstdint>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -32,23 +32,8 @@ namespace
 {
 using couchbase::read_preference;
 using couchbase::core::topology::configuration;
-using vbucket_map = configuration::vbucket_map;
-
-auto
-config_with_vbmap(std::optional<vbucket_map> vbmap,
-                  std::optional<std::uint32_t> num_replicas,
-                  std::size_t number_of_nodes = 0) -> configuration
-{
-  configuration config{};
-  config.vbmap = std::move(vbmap);
-  config.num_replicas = num_replicas;
-  for (std::size_t index = 0; index < number_of_nodes; ++index) {
-    configuration::node node{};
-    node.index = index;
-    config.nodes.emplace_back(node);
-  }
-  return config;
-}
+using test::utils::config_with_vbmap;
+using test::utils::vbucket_map;
 } // namespace
 
 TEST_CASE("unit: server_by_vbucket bounds", "[unit]")
