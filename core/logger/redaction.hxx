@@ -52,8 +52,14 @@
  * are opt-in debugging aids rather than something a deployment leaves on.
  *
  * `bin/check-log-annotations` reports log arguments that look sensitive but are not wrapped. It is
- * a heuristic over argument names, so it suggests rather than decides; a reviewed false positive is
- * silenced with a `no-redact` comment on the log statement.
+ * a heuristic over argument names, so it suggests rather than decides. Two wrappers record a
+ * reviewed exclusion:
+ *
+ *   logger::not_sensitive(value)  the identifier suggests a category the value does not belong to
+ *   logger::not_redacted(value)   sensitive, and deliberately logged untagged anyway
+ *
+ * Neither changes what is printed. Prefer them to the `no-redact` comment the checker also honours,
+ * which silences a whole log statement and so also silences arguments added to it later.
  */
 
 #pragma once
@@ -77,6 +83,16 @@ struct redacted_meta_data {
 
 template<typename T>
 struct redacted_system_data {
+  const T& value;
+};
+
+template<typename T>
+struct not_sensitive_value {
+  const T& value;
+};
+
+template<typename T>
+struct not_redacted_value {
   const T& value;
 };
 
@@ -112,6 +128,31 @@ system_data(const T& value)
   return redacted_system_data<T>{ value };
 }
 
+/**
+ * Mark a value the annotation checker flags but that is not sensitive, because the identifier
+ * suggests a category the value does not belong to. Formats exactly as the value would unwrapped,
+ * so this is an assertion for the reader and for the checker rather than a change in behaviour.
+ */
+template<typename T>
+auto
+not_sensitive(const T& value)
+{
+  return not_sensitive_value<T>{ value };
+}
+
+/**
+ * Mark a sensitive value that is deliberately logged without a tag, because wrapping it here is
+ * either not possible or not wanted. Formats exactly as the value would unwrapped. Unlike
+ * not_sensitive() this asserts nothing about the content, so say at the call site why the value
+ * carries no tag, and reference a ticket when the answer is that it eventually should.
+ */
+template<typename T>
+auto
+not_redacted(const T& value)
+{
+  return not_redacted_value<T>{ value };
+}
+
 } // namespace couchbase::core::logger
 
 #ifndef COUCHBASE_CXX_CLIENT_DOXYGEN
@@ -139,4 +180,22 @@ COUCHBASE_LOGGER_REDACTION_FORMATTER(redacted_meta_data, "md");
 COUCHBASE_LOGGER_REDACTION_FORMATTER(redacted_system_data, "sd");
 
 #undef COUCHBASE_LOGGER_REDACTION_FORMATTER
+
+/*
+ * The exclusion markers print their value and nothing else, whether or not redaction is enabled.
+ */
+#define COUCHBASE_LOGGER_EXCLUSION_FORMATTER(wrapper)                                              \
+  template<typename T>                                                                             \
+  struct fmt::formatter<couchbase::core::logger::wrapper<T>> : fmt::formatter<T> {                 \
+    template<typename FormatContext>                                                               \
+    auto format(const couchbase::core::logger::wrapper<T>& marked, FormatContext& ctx) const       \
+    {                                                                                              \
+      return fmt::formatter<T>::format(marked.value, ctx);                                         \
+    }                                                                                              \
+  }
+
+COUCHBASE_LOGGER_EXCLUSION_FORMATTER(not_sensitive_value);
+COUCHBASE_LOGGER_EXCLUSION_FORMATTER(not_redacted_value);
+
+#undef COUCHBASE_LOGGER_EXCLUSION_FORMATTER
 #endif

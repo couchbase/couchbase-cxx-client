@@ -38,8 +38,19 @@
 #
 # This is a heuristic. It reads argument expressions, not types, so it can only guess at what a
 # value holds from what it is called -- it surfaces candidates for review, it does not decide.
-# Suppress a reviewed false positive either with a "no-redact" comment on the log statement, or
-# with an entry in the suppressions file (see SUPPRESSIONS_FILE below).
+#
+# A reviewed exclusion is recorded at the argument it applies to, with one of two markers that
+# print the value unchanged and differ only in what they claim:
+#
+#   couchbase::core::logger::not_sensitive()   the identifier suggests a category the value does
+#                                              not belong to
+#   couchbase::core::logger::not_redacted()    sensitive, and deliberately logged untagged; the
+#                                              call site says why, and names a ticket if it should
+#                                              eventually be tagged
+#
+# A "no-redact" comment on the statement also suppresses it, but covers every argument including
+# any added later, so prefer a marker. Whole files are excluded through the suppressions file
+# (see SUPPRESSIONS_FILE below).
 
 require "optparse"
 require "find"
@@ -78,7 +89,11 @@ module LogAnnotations
   # They still mark their argument as annotated.
   COMPOSITE_WRAPPERS = %w[document].freeze
 
-  WRAPPER_NAMES = (WRAPPERS.keys + COMPOSITE_WRAPPERS).freeze
+  # Markers that record a reviewed exclusion rather than applying a tag. They annotate nothing,
+  # but an argument inside one has been looked at, which is all this script can ask for.
+  EXCLUSION_MARKERS = %w[not_sensitive not_redacted].freeze
+
+  WRAPPER_NAMES = (WRAPPERS.keys + COMPOSITE_WRAPPERS + EXCLUSION_MARKERS).freeze
 
   SOURCE_EXTENSIONS = %w[.cxx .hxx .cpp .hpp].freeze
 
@@ -332,11 +347,12 @@ module LogAnnotations
   BENIGN_PROJECTIONS = %w[size length count empty capacity max_size index].freeze
 
   # True when the identifier is immediately narrowed by one of those projections, as in
-  # endpoints_.size() or node.index. Only the first hop is considered, so address_.hostname
-  # stays flagged.
+  # endpoints_.size(), node.index or get_nodes().size(). An empty argument list may intervene,
+  # so a count taken from an accessor reads the same as one taken from a member. Only the first
+  # hop is considered, so address_.hostname stays flagged.
   def self.projected?(expression, offset, identifier)
     rest = expression[(offset + identifier.length)..-1].to_s
-    match = rest.match(/\A\s*(?:\.|->)\s*([A-Za-z_][A-Za-z0-9_]*)/)
+    match = rest.match(/\A\s*(?:\(\s*\))?\s*(?:\.|->)\s*([A-Za-z_][A-Za-z0-9_]*)/)
     !match.nil? && BENIGN_PROJECTIONS.include?(normalise(match[1]))
   end
 
@@ -535,8 +551,11 @@ module LogAnnotations
       CB_LOG_DEBUG("k={}", request.id);
       CB_LOG_DEBUG("k={}", logger::document(request.id));
       CB_LOG_DEBUG("sid={}", session.id());
+      CB_LOG_DEBUG("f={}", logger::not_sensitive(hello.body().features()));
+      CB_LOG_DEBUG("hex={:a}, k={}", logger::not_redacted(msg.body), request.id);
       CB_LOG_PROTOCOL("dump {}", body);
       CB_LOG_DEBUG("json {}", tao::json::value{ { "x", 1 } });
+      CB_LOG_DEBUG("n={}", origin.get_nodes().size() - 1);
       /* CB_LOG_DEBUG("host={}", hostname); */
       // CB_LOG_DEBUG("host={}", hostname);
     }
@@ -556,8 +575,11 @@ module LogAnnotations
     12 => ["id<ud>"],                      # request.id is a document key
     13 => [],                              # ... and document() annotates it, despite no one tag
     14 => [],                              # session.id() is SDK-generated
-    15 => [],                              # CB_LOG_PROTOCOL is out of scope
-    16 => [],                              # tao::json::value is a type, not a document body
+    15 => [],                              # not_sensitive() records a reviewed false positive
+    16 => ["id<ud>"],                      # not_redacted() excuses its own argument, not the rest
+    17 => [],                              # CB_LOG_PROTOCOL is out of scope
+    18 => [],                              # tao::json::value is a type, not a document body
+    19 => [],                              # a count through an accessor is still a count
   }.freeze
 
   def self.self_test

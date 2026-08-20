@@ -1,0 +1,16 @@
+# Files and identifiers that bin/check-log-annotations should not report.
+#
+# A line with one field excludes a whole file or directory. A line with two excludes one
+# identifier within the matching paths. Everything after "#" is a comment.
+#
+# This file is for exclusions that have no single log statement to attach to. An exclusion that
+# does belong to a statement is recorded there instead, with logger::not_sensitive() when the
+# value is not what its name suggests, or logger::not_redacted() when it is sensitive and
+# deliberately logged untagged. Both are visible where the value is logged, and neither silences
+# the arguments around it, which an entry here cannot say.
+
+# CXXCBC-978: Application Telemetry logs 33 addresses and hostnames, and none of them are
+# annotated. This is not a false positive: the feature is newer than the rest of the SDK and how
+# its logging should be redacted has not been discussed with the team. Excluded so the check can
+# be enforced everywhere else, to be removed once that conversation happens.
+core/app_telemetry_reporter.cxx
