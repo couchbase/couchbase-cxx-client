@@ -114,7 +114,7 @@ module LogAnnotations
     # payloads here are called body, payload, content or document.
     "user_data" => %w[
       key document_key doc_key document_id doc_id
-      statement statements query query_string
+      statement statements stmt query query_string prepared
       body payload content document doc
       xattr xattrs
       username user_name user email e_mail
