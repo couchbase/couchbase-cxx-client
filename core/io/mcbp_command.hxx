@@ -20,6 +20,7 @@
 #include "core/app_telemetry_meter.hxx"
 #include "core/document_id_fmt.hxx"
 #include "core/error_context/key_value_error_map_info.hxx"
+#include "core/logger/redaction.hxx"
 #include "core/metrics/meter_wrapper.hxx"
 #include "core/operations/operation_traits.hxx"
 #include "core/protocol/client_request.hxx"
@@ -117,7 +118,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
           timeout_ < durability_timeout_floor) {
         CB_LOG_DEBUG(
           R"(Timeout is too low for operation with durability, increasing to sensible value. timeout={}ms, floor={}ms, id="{}")",
-          request.id,
+          logger::document(request.id),
           timeout_.count(),
           durability_timeout_floor.count(),
           id());
@@ -260,7 +261,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                      session_ ? session_->log_prefix() : manager_->log_prefix(),
                      id(),
                      encoded_request_type::body_type::opcode,
-                     request.id,
+                     logger::document(request.id),
                      request.partition,
                      time_left);
       } else if (ec == errc::common::request_canceled) {
@@ -321,7 +322,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     auto time_left = deadline.expiry() - std::chrono::steady_clock::now();
     CB_LOG_DEBUG(R"({} unknown collection response for "{}", time_left={}ms, id="{}")",
                  session_->log_prefix(),
-                 request.id,
+                 logger::document(request.id),
                  std::chrono::duration_cast<std::chrono::milliseconds>(time_left).count(),
                  id());
     request.retries.add_reason(retry_reason::key_value_collection_outdated);
@@ -352,7 +353,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
           CB_LOG_DEBUG(
             R"({} no cache entry for collection, resolve collection id for "{}", timeout={}ms, id="{}")",
             session_->log_prefix(),
-            request.id,
+            logger::document(request.id),
             timeout_.count(),
             id());
           return request_collection_id();

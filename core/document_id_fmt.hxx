@@ -18,6 +18,7 @@
 #pragma once
 
 #include "document_id.hxx"
+#include "logger/redaction.hxx"
 
 #include <spdlog/fmt/bundled/core.h>
 
@@ -33,5 +34,55 @@ struct fmt::formatter<couchbase::core::document_id> {
   auto format(const couchbase::core::document_id& id, FormatContext& ctx) const
   {
     return format_to(ctx.out(), "{}/{}/{}", id.bucket(), id.collection_path(), id.key());
+  }
+};
+
+namespace couchbase::core::logger
+{
+struct redacted_document_id {
+  const document_id& value;
+};
+
+/**
+ * Tag a document id for logging. It renders as bucket/scope.collection/key, and those parts do not
+ * share a redaction category: the names are metadata and only the key is user data. Wrapping the
+ * rendered form as a whole would put a bucket name inside a <ud> span, and the span would hash to
+ * something that matches no other log line.
+ *
+ * The plain formatter above is left alone on purpose, since it is also used outside logging.
+ */
+inline auto
+document(const document_id& value) -> redacted_document_id
+{
+  return { value };
+}
+} // namespace couchbase::core::logger
+
+template<>
+struct fmt::formatter<couchbase::core::logger::redacted_document_id> {
+  template<typename ParseContext>
+  constexpr auto parse(ParseContext& ctx)
+  {
+    return ctx.begin();
+  }
+
+  template<typename FormatContext>
+  auto format(const couchbase::core::logger::redacted_document_id& redacted,
+              FormatContext& ctx) const
+  {
+    namespace logger = couchbase::core::logger;
+    const auto& id = redacted.value;
+    // An id built without a collection carries an empty collection path, and renders with an empty
+    // middle component. Keep that shape rather than joining an empty scope and collection.
+    if (id.collection_path().empty()) {
+      return format_to(
+        ctx.out(), "{}//{}", logger::metadata(id.bucket()), logger::user_data(id.key()));
+    }
+    return format_to(ctx.out(),
+                     "{}/{}.{}/{}",
+                     logger::metadata(id.bucket()),
+                     logger::metadata(id.scope()),
+                     logger::metadata(id.collection()),
+                     logger::user_data(id.key()));
   }
 };

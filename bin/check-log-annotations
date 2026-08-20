@@ -24,6 +24,12 @@
 #                                                design document names, cluster names
 #   <sd> couchbase::core::logger::system_data()  hostnames, IP addresses, ports, DNS topology
 #
+# A composite value whose parts do not share one category is wrapped by a helper that applies
+# several tags at once, and counts as annotated here without a category of its own:
+#
+#   couchbase::core::logger::document()           a document id, from core/document_id_fmt.hxx:
+#                                                 <md> bucket, scope and collection, <ud> key
+#
 # Usage:
 #   bin/check-log-annotations              # check, non-zero exit if anything is unannotated
 #   bin/check-log-annotations --catalog    # inventory every log statement, for tracking drift
@@ -67,6 +73,12 @@ module LogAnnotations
     "metadata" => "md",
     "system_data" => "sd",
   }.freeze
+
+  # Helpers that tag a composite value with more than one category, so they map to no single tag.
+  # They still mark their argument as annotated.
+  COMPOSITE_WRAPPERS = %w[document].freeze
+
+  WRAPPER_NAMES = (WRAPPERS.keys + COMPOSITE_WRAPPERS).freeze
 
   SOURCE_EXTENSIONS = %w[.cxx .hxx .cpp .hpp].freeze
 
@@ -279,7 +291,7 @@ module LogAnnotations
   # through because it happens to mention a wrapper somewhere.
   def self.wrapped_ranges(shadowed)
     ranges = []
-    WRAPPERS.each_key do |wrapper|
+    WRAPPER_NAMES.each do |wrapper|
       shadowed.enum_for(:scan, /\b#{wrapper}\s*\(/).each do
         match_start = Regexp.last_match.begin(0)
         open = shadowed.index("(", match_start)
@@ -521,6 +533,7 @@ module LogAnnotations
       CB_LOG_DEBUG("chained {}", session->bootstrap_hostname());
       CB_LOG_DEBUG("n={}", endpoints_.size());
       CB_LOG_DEBUG("k={}", request.id);
+      CB_LOG_DEBUG("k={}", logger::document(request.id));
       CB_LOG_DEBUG("sid={}", session.id());
       CB_LOG_PROTOCOL("dump {}", body);
       CB_LOG_DEBUG("json {}", tao::json::value{ { "x", 1 } });
@@ -541,9 +554,10 @@ module LogAnnotations
     10 => ["bootstrap_hostname<sd>"],      # accessor on a session
     11 => [],                              # a count of endpoints is not an endpoint
     12 => ["id<ud>"],                      # request.id is a document key
-    13 => [],                              # session.id() is SDK-generated
-    14 => [],                              # CB_LOG_PROTOCOL is out of scope
-    15 => [],                              # tao::json::value is a type, not a document body
+    13 => [],                              # ... and document() annotates it, despite no one tag
+    14 => [],                              # session.id() is SDK-generated
+    15 => [],                              # CB_LOG_PROTOCOL is out of scope
+    16 => [],                              # tao::json::value is a type, not a document body
   }.freeze
 
   def self.self_test
