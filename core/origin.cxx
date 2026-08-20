@@ -18,6 +18,7 @@
 #include "origin.hxx"
 #include <couchbase/build_config.hxx>
 
+#include "core/logger/redaction.hxx"
 #include "core/utils/connection_string.hxx"
 #include "topology/configuration.hxx"
 
@@ -247,7 +248,7 @@ struct traits<couchbase::core::columnar::security_options> {
 namespace couchbase::core
 {
 auto
-origin::to_json() const -> std::string
+origin::to_json_for_log() const -> std::string
 {
   tao::json::value json = {
     {
@@ -267,6 +268,7 @@ origin::to_json() const -> std::string
         { "config_poll_floor", options_.config_poll_floor },
         { "user_agent_extra", options_.user_agent_extra },
         { "dump_configuration", options_.dump_configuration },
+        { "log_redaction", options_.log_redaction },
         { "disable_mozilla_ca_certificates", options_.disable_mozilla_ca_certificates },
         { "network", options_.network },
         { "tls_verify", options_.tls_verify },
@@ -305,12 +307,18 @@ origin::to_json() const -> std::string
     tao::json::value nodes = tao::json::empty_array;
     for (const auto& [hostname, port] : nodes_) {
       nodes.emplace_back(tao::json::value{
-        { "hostname", hostname },
+        { "hostname", fmt::format("{}", logger::system_data(hostname)) },
         { "port", port },
       });
     }
     json["bootstrap_nodes"] = nodes;
   }
+  // The dns_config traits are a plain serializer, so its nameserver arrives untagged, while the
+  // same value is <sd> everywhere else it is logged. Tag it here rather than in the traits, which
+  // anything serializing a dns_config would otherwise inherit. Port is left a bare number: these
+  // are named fields, so folding them into one span would rename a field, not only add a tag.
+  json["options"]["dns_config"]["nameserver"] =
+    fmt::format("{}", logger::system_data(options_.dns_config.nameserver()));
   return tao::json::to_string(json);
 }
 
@@ -488,6 +496,16 @@ couchbase::core::origin::get_nodes() const -> std::vector<std::string>
   res.reserve(nodes_.size());
   for (const auto& [hostname, port] : nodes_) {
     res.emplace_back(fmt::format("\"{}:{}\"", hostname, port));
+  }
+  return res;
+}
+auto
+couchbase::core::origin::get_node_addresses() const -> std::vector<std::string>
+{
+  std::vector<std::string> res;
+  res.reserve(nodes_.size());
+  for (const auto& [hostname, port] : nodes_) {
+    res.emplace_back(fmt::format("{}:{}", hostname, port));
   }
   return res;
 }

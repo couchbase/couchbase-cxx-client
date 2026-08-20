@@ -101,6 +101,11 @@ public:
   std::string server_group{};
   couchbase::transactions::transactions_config::built transactions{};
 
+  // Writes the whole cluster configuration to the log. It carries the same kinds of values that
+  // are annotated elsewhere in the log, but none of it is annotated here. A tag pair around
+  // multi-line JSON is not a shape the tooling handles, and hashing the blob would remove exactly
+  // what the dump exists to show. Enabling this together with log_redaction is warned about when
+  // the cluster opens.
   bool dump_configuration{ false };
   bool disable_mozilla_ca_certificates{ false };
   couchbase::core::columnar::security_options security_options{};
@@ -119,6 +124,7 @@ public:
   bool preserve_bootstrap_nodes_order{ false };
   bool allow_enterprise_analytics{ false };
   bool enable_lazy_connections{ false };
+  bool log_redaction{ false };
 
   // Tuning for the streaming query/analytics row engine. Internal-only for now (no public API);
   // sensible static defaults apply unless a core caller overrides them. idle_timeout is derived

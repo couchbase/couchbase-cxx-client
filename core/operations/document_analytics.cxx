@@ -19,6 +19,7 @@
 #include "analytics_response_parsing.hxx"
 #include "core/cluster_options.hxx"
 #include "core/logger/logger.hxx"
+#include "core/logger/redaction.hxx"
 #include "core/utils/json.hxx"
 #include "core/utils/name_codec.hxx"
 
@@ -97,11 +98,11 @@ analytics_request::encode_to(analytics_request::encoded_request_type& encoded,
   if (context.options.show_queries) {
     CB_LOG_INFO("ANALYTICS: client_context_id=\"{}\", {}",
                 encoded.client_context_id,
-                utils::json::generate(body["statement"]));
+                logger::user_data(utils::json::generate(body["statement"])));
   } else {
     CB_LOG_DEBUG("ANALYTICS: client_context_id=\"{}\", {}",
                  encoded.client_context_id,
-                 utils::json::generate(body["statement"]));
+                 logger::user_data(utils::json::generate(body["statement"])));
   }
   if (row_callback) {
     encoded.streaming.emplace(couchbase::core::io::streaming_settings{

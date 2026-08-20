@@ -16,6 +16,7 @@
  */
 
 #include "core/utils/binary.hxx"
+#include "core/utils/connection_string.hxx"
 #include "profile.hxx"
 #include "test_helper.hxx"
 
@@ -58,4 +59,25 @@ TEST_CASE("unit: query options can encode named parameters automatically", "[uni
   REQUIRE(options.named_parameters["user_param"] ==
           couchbase::core::utils::to_binary(
             "{\"birth_year\":1970,\"full_name\":\"John Doe\",\"username\":\"john\"}"));
+}
+
+TEST_CASE("unit: connection string does not clobber configured log redaction", "[unit]")
+{
+  // Regression guard: a connection string that says nothing about log_redaction must leave the
+  // value already set on core::cluster_options alone, otherwise whatever configured it (today the
+  // connection string, and the public behavior_options builder once CXXCBC-979 lands) is silently
+  // ineffective.
+  couchbase::core::cluster_options user_options{};
+  user_options.log_redaction = true;
+
+  auto spec =
+    couchbase::core::utils::parse_connection_string("couchbase://127.0.0.1", user_options);
+  REQUIRE(spec.options.log_redaction == true);
+
+  SECTION("but an explicit connection string value still wins")
+  {
+    auto override_spec = couchbase::core::utils::parse_connection_string(
+      "couchbase://127.0.0.1?log_redaction=off", user_options);
+    REQUIRE(override_spec.options.log_redaction == false);
+  }
 }

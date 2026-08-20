@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "core/logger/redaction.hxx"
 #include "error_map.hxx"
 
 #include <gsl/narrow>
@@ -86,7 +87,8 @@ struct traits<couchbase::core::error_map> {
             R"(skipping unknown attribute "{}" in error map for code={} and name="{}")",
             attr_val,
             code,
-            name);
+            // the name of an error in the error map, not a Couchbase resource name
+            couchbase::core::logger::not_sensitive(name));
         }
       }
       result.errors.emplace(

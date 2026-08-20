@@ -71,6 +71,10 @@ struct origin {
 
   [[nodiscard]] auto get_hostnames() const -> std::vector<std::string>;
   [[nodiscard]] auto get_nodes() const -> std::vector<std::string>;
+  // The same addresses as get_nodes(), without the display quotes baked into each entry. Log
+  // statements want them bare so that logger::system_data_list() can put a tag inside the quotes it
+  // renders; a tag around a pre-quoted entry hashes the punctuation with the value.
+  [[nodiscard]] auto get_node_addresses() const -> std::vector<std::string>;
 
   void shuffle_nodes();
   void set_nodes(node_list nodes);
@@ -87,7 +91,11 @@ struct origin {
   [[nodiscard]] auto options() const -> const couchbase::core::cluster_options&;
   [[nodiscard]] auto options() -> couchbase::core::cluster_options&;
   [[nodiscard]] auto credentials() const -> couchbase::core::cluster_credentials;
-  [[nodiscard]] auto to_json() const -> std::string;
+  // A JSON dump of the whole origin, for the log statement in every cluster open path. When log
+  // redaction is enabled the values inside carry markup, so nothing may read them back, and the
+  // name says so. The values cannot be tagged at the log site instead, the way a node list can,
+  // because this is a whole serialised document rather than a list of like-for-like entries.
+  [[nodiscard]] auto to_json_for_log() const -> std::string;
 
 private:
   couchbase::core::cluster_options options_{};
