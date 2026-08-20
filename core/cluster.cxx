@@ -55,6 +55,7 @@
 #include "core/core_sdk_shim.hxx"
 #include "core/http_component.hxx"
 #include "core/logger/logger.hxx"
+#include "core/logger/redaction.hxx"
 #include "core/management/analytics_link_azure_blob_external.hxx"
 #include "core/management/analytics_link_couchbase_remote.hxx"
 #include "core/management/analytics_link_s3_external.hxx"
@@ -559,7 +560,7 @@ public:
     CB_LOG_DEBUG(R"(open cluster, id: "{}", core version: "{}", connection string: {}, {})",
                  id_,
                  couchbase::core::meta::sdk_semver(),
-                 origin_.connection_string(),
+                 logger::system_data(origin_.connection_string()),
                  origin_.to_json());
     // The scheme is recognised in every build; only the ability to serve it is conditional. The
     // parser stays identical either way, so no API or ABI depends on the build mode -- a build
@@ -574,7 +575,7 @@ public:
         "(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 is off), so the couchbase2:// scheme cannot be "
         "served.",
         id_,
-        origin_.connection_string());
+        logger::system_data(origin_.connection_string()));
       stopped_ = true;
       work_.reset();
       return handler(errc::common::feature_not_available);
@@ -606,8 +607,8 @@ public:
                 self->origin_.set_nodes(std::move(nodes));
                 CB_LOG_INFO(
                   "replace list of bootstrap nodes with addresses from DNS SRV of \"{}\": [{}]",
-                  hostname,
-                  utils::join_strings(self->origin_.get_nodes(), ", "));
+                  logger::system_data(hostname),
+                  utils::join_strings(self->origin_.get_nodes_for_log(), ", "));
               }
               return self->do_open(std::move(handler));
             });
@@ -975,7 +976,7 @@ public:
       CB_LOG_INFO("[{}]: couchbase2 uses a single gateway endpoint (\"{}\"); the remaining {} "
                   "node(s) on this origin are ignored (the gateway fronts the cluster).",
                   id_,
-                  endpoint,
+                  logger::system_data(endpoint),
                   origin_.get_nodes().size() - 1);
     }
 
@@ -989,7 +990,7 @@ public:
       CB_LOG_WARNING(R"([{}]: tls_verify=none was requested but "{}" is a Capella endpoint; )"
                      "enforcing peer verification.",
                      id_,
-                     hostname);
+                     logger::system_data(hostname));
     }
     // The "verification is disabled" warning is not repeated here: make_channel_credentials() is
     // the one point every couchbase2 channel passes through and warns there, so it also covers
@@ -1021,7 +1022,8 @@ public:
                                         make_component_timeouts(options),
                                         make_compression_settings(options) });
     }
-    CB_LOG_INFO(R"(open couchbase2 cluster, id: "{}", endpoint: "{}")", id_, endpoint);
+    CB_LOG_INFO(
+      R"(open couchbase2 cluster, id: "{}", endpoint: "{}")", id_, logger::system_data(endpoint));
     return handler({});
   }
 #endif
@@ -1397,7 +1399,7 @@ public:
           CB_LOG_INFO(
             "replace list of bootstrap nodes with addresses of alternative network \"{}\": [{}]",
             self->origin_.options().network,
-            utils::join_strings(self->origin_.get_nodes(), ","));
+            utils::join_strings(self->origin_.get_nodes_for_log(), ","));
         }
         // FIXME(SA): fix the session manager to receive initial configuration and cluster-wide
         // session to poll for updates like the bucket does. Or just subscribe before the bootstrap.
@@ -1562,8 +1564,8 @@ public:
               CB_LOG_INFO(
                 "[{}] Replace list of bootstrap nodes with addresses from DNS SRV of \"{}\": [{}]",
                 self->id_,
-                hostname,
-                utils::join_strings(self->origin_.get_nodes(), ", "));
+                logger::system_data(hostname),
+                utils::join_strings(self->origin_.get_nodes_for_log(), ", "));
             }
             return self->do_background_open();
           });

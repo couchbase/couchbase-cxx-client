@@ -125,7 +125,7 @@ public:
           CB_LOG_INFO(
             "replace list of bootstrap nodes with addresses of alternative network \"{}\": [{}]",
             self->origin_.options().network,
-            utils::join_strings(self->origin_.get_nodes(), ","));
+            utils::join_strings(self->origin_.get_nodes_for_log(), ","));
         }
 
         new_session.on_configuration_update(self);
@@ -538,12 +538,11 @@ private:
     const std::scoped_lock lock(sessions_mutex_);
     for (auto ptr = sessions_.cbegin(); ptr != sessions_.cend();) {
       if (ptr->id() == id) {
-        CB_LOG_DEBUG(
-          R"({} removed cluster session id="{}", address="{}", bootstrap_address="{}")",
-          log_prefix_,
-          ptr->id(),
-          logger::system_data(ptr->remote_address()),
-          logger::system_data(session_address(*ptr)));
+        CB_LOG_DEBUG(R"({} removed cluster session id="{}", address="{}", bootstrap_address="{}")",
+                     log_prefix_,
+                     ptr->id(),
+                     logger::system_data(ptr->remote_address()),
+                     logger::system_data(session_address(*ptr)));
         ptr = sessions_.erase(ptr);
         found = true;
       } else {

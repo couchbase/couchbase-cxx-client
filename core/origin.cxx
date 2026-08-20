@@ -18,6 +18,7 @@
 #include "origin.hxx"
 #include <couchbase/build_config.hxx>
 
+#include "core/logger/redaction.hxx"
 #include "core/utils/connection_string.hxx"
 #include "topology/configuration.hxx"
 
@@ -305,7 +306,7 @@ origin::to_json() const -> std::string
     tao::json::value nodes = tao::json::empty_array;
     for (const auto& [hostname, port] : nodes_) {
       nodes.emplace_back(tao::json::value{
-        { "hostname", hostname },
+        { "hostname", fmt::format("{}", logger::system_data(hostname)) },
         { "port", port },
       });
     }
@@ -488,6 +489,17 @@ couchbase::core::origin::get_nodes() const -> std::vector<std::string>
   res.reserve(nodes_.size());
   for (const auto& [hostname, port] : nodes_) {
     res.emplace_back(fmt::format("\"{}:{}\"", hostname, port));
+  }
+  return res;
+}
+auto
+couchbase::core::origin::get_nodes_for_log() const -> std::vector<std::string>
+{
+  std::vector<std::string> res;
+  res.reserve(nodes_.size());
+  for (const auto& [hostname, port] : nodes_) {
+    res.emplace_back(
+      fmt::format("\"{}\"", logger::system_data(fmt::format("{}:{}", hostname, port))));
   }
   return res;
 }
