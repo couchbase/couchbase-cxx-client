@@ -153,15 +153,22 @@ jobs:
         tls:
           - plain
           - tls
-        # valgrind runs under memcheck and is far slower than the other
-        # sanitizers (~110-130 min for the full suite), leaving no headroom
-        # under the 120 min step budget. Shard it across two jobs (~1h each)
-        # via ctest -I stride; the other sanitizers are fast and run unsharded.
+        # valgrind runs the suite under memcheck, which costs about 213 minutes
+        # per TLS mode across 241 tests -- far more than the compile-time
+        # sanitizers, and long-tailed enough that one case alone takes ten
+        # minutes. Shard it three ways via ctest -I stride: striding does not
+        # balance that tail, so the shards run 52 to 80 minutes rather than an
+        # even third each, and it is the slowest that has to stay well inside
+        # the 120 min step budget set below. The union of the shards is the
+        # whole suite with no overlap. The other sanitizers are fast and run
+        # unsharded.
         include:
-          - { sanitizer: valgrind, server: 8.0.0, tls: plain, shard_index: 1, shard_total: 2 }
-          - { sanitizer: valgrind, server: 8.0.0, tls: plain, shard_index: 2, shard_total: 2 }
-          - { sanitizer: valgrind, server: 8.0.0, tls: tls, shard_index: 1, shard_total: 2 }
-          - { sanitizer: valgrind, server: 8.0.0, tls: tls, shard_index: 2, shard_total: 2 }
+          - { sanitizer: valgrind, server: 8.0.0, tls: plain, shard_index: 1, shard_total: 3 }
+          - { sanitizer: valgrind, server: 8.0.0, tls: plain, shard_index: 2, shard_total: 3 }
+          - { sanitizer: valgrind, server: 8.0.0, tls: plain, shard_index: 3, shard_total: 3 }
+          - { sanitizer: valgrind, server: 8.0.0, tls: tls, shard_index: 1, shard_total: 3 }
+          - { sanitizer: valgrind, server: 8.0.0, tls: tls, shard_index: 2, shard_total: 3 }
+          - { sanitizer: valgrind, server: 8.0.0, tls: tls, shard_index: 3, shard_total: 3 }
     runs-on: ubuntu-24.04
     steps:
       - name: Install dependencies
