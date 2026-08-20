@@ -21,6 +21,7 @@
 
 #include "core/app_telemetry_meter.hxx"
 #include "core/impl/bootstrap_error.hxx"
+#include "core/logger/redaction.hxx"
 #include "core/metrics/meter_wrapper.hxx"
 #include "core/service_type_fmt.hxx"
 #include "core/tracing/constants.hxx"
@@ -263,7 +264,7 @@ private:
       session_->log_prefix(),
       encoded.type,
       encoded.method,
-      encoded.path,
+      logger::user_data(encoded.path),
       client_context_id_,
       timeout_.count());
 
@@ -306,7 +307,7 @@ private:
                      self->client_context_id_,
                      ec.message(),
                      msg.status_code,
-                     msg.status_code == 200 ? "[hidden]" : msg.body.data());
+                     logger::user_data(msg.status_code == 200 ? "[hidden]" : msg.body.data()));
         if (auto parser_ec = msg.body.ec(); !ec && parser_ec) {
           ec = parser_ec;
         }
