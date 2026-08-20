@@ -145,7 +145,8 @@ dns_srv_tracker::do_dns_refresh()
         }
         CB_LOG_DEBUG("generated configuration from DNS-SRV response \"{}\": [{}]",
                      logger::system_data(self->address_),
-                     utils::join_strings(endpoints, ", "));
+                     // each endpoint is tagged as it is built
+                     logger::not_sensitive(utils::join_strings(endpoints, ", ")));
         for (const auto& listener : listeners) {
           listener->update_config(config);
         }

@@ -279,10 +279,12 @@ class mcbp_session_impl
       auto user_agent = meta::user_agent_for_mcbp(
         session_->client_id_, session_->id_, session_->origin_.options().user_agent_extra, 250);
       hello_req.body().user_agent(user_agent);
-      CB_LOG_DEBUG("{} user_agent={}, requested_features=[{}]",
-                   session_->log_prefix_,
-                   user_agent,
-                   utils::join_strings_fmt(hello_req.body().features(), ", "));
+      CB_LOG_DEBUG(
+        "{} user_agent={}, requested_features=[{}]",
+        session_->log_prefix_,
+        user_agent,
+        // protocol feature names, not a document body
+        logger::not_sensitive(utils::join_strings_fmt(hello_req.body().features(), ", ")));
       session_->write(hello_req.data());
 
       if (!session_->origin_.credentials().uses_certificate()) {
@@ -558,7 +560,8 @@ class mcbp_session_impl
                                text.value().size(),
                                logger::system_data(
                                  fmt::format("{}:{}", info.endpoint_address, info.endpoint_port)),
-                               text.value());
+                               // CXXCBC-978: an opt-in dump, it exists to show the exact bytes
+                               logger::not_redacted(text.value()));
                 }
               }
               if (resp.status() == key_value_status_code::success) {
@@ -640,7 +643,8 @@ class mcbp_session_impl
                                text.value().size(),
                                logger::system_data(
                                  fmt::format("{}:{}", info.endpoint_address, info.endpoint_port)),
-                               text.value());
+                               // CXXCBC-978: an opt-in dump, it exists to show the exact bytes
+                               logger::not_redacted(text.value()));
                 }
               }
               std::optional<topology::configuration> config = req.body().config();
@@ -655,7 +659,8 @@ class mcbp_session_impl
                              msg.header.opcode,
                              utils::byte_swap(msg.header.opaque),
                              spdlog::to_hex(msg.header_data()),
-                             spdlog::to_hex(msg.body));
+                             // CXXCBC-978: a tag would open and close on different lines here
+                             logger::not_redacted(spdlog::to_hex(msg.body)));
           }
           break;
         case protocol::magic::client_request:
@@ -668,7 +673,8 @@ class mcbp_session_impl
                          msg.header.opcode,
                          utils::byte_swap(msg.header.opaque),
                          spdlog::to_hex(msg.header_data()),
-                         spdlog::to_hex(msg.body));
+                         // CXXCBC-978: a tag would open and close on different lines here
+                         logger::not_redacted(spdlog::to_hex(msg.body)));
           break;
       }
     }
@@ -728,7 +734,8 @@ class mcbp_session_impl
                                text.value().size(),
                                logger::system_data(
                                  fmt::format("{}:{}", info.endpoint_address, info.endpoint_port)),
-                               text.value());
+                               // CXXCBC-978: an opt-in dump, it exists to show the exact bytes
+                               logger::not_redacted(text.value()));
                 }
               }
               if (resp.status() == key_value_status_code::success) {
@@ -807,7 +814,8 @@ class mcbp_session_impl
                              opcode,
                              msg.header.opaque,
                              spdlog::to_hex(msg.header_data()),
-                             spdlog::to_hex(msg.body));
+                             // CXXCBC-978: a tag would open and close on different lines here
+                             logger::not_redacted(spdlog::to_hex(msg.body)));
           }
           break;
         case protocol::magic::server_request:
@@ -826,7 +834,8 @@ class mcbp_session_impl
                                text.value().size(),
                                logger::system_data(
                                  fmt::format("{}:{}", info.endpoint_address, info.endpoint_port)),
-                               text.value());
+                               // CXXCBC-978: an opt-in dump, it exists to show the exact bytes
+                               logger::not_redacted(text.value()));
                 }
               }
               std::optional<topology::configuration> config = req.body().config();
@@ -841,7 +850,8 @@ class mcbp_session_impl
                              msg.header.opcode,
                              msg.header.opaque,
                              spdlog::to_hex(msg.header_data()),
-                             spdlog::to_hex(msg.body));
+                             // CXXCBC-978: a tag would open and close on different lines here
+                             logger::not_redacted(spdlog::to_hex(msg.body)));
           }
           break;
         case protocol::magic::client_request:
@@ -854,7 +864,8 @@ class mcbp_session_impl
                          msg.header.opcode,
                          msg.header.opaque,
                          spdlog::to_hex(msg.header_data()),
-                         spdlog::to_hex(msg.body));
+                         // CXXCBC-978: a tag would open and close on different lines here
+                         logger::not_redacted(spdlog::to_hex(msg.body)));
           break;
       }
     }
@@ -1884,7 +1895,8 @@ public:
             log_prefix_,
             config_text.size(),
             logger::system_data(fmt::format("{}:{}", bootstrap_hostname_, bootstrap_port_number_)),
-            config_text);
+            // CXXCBC-978: an opt-in dump, it exists to show the exact bytes
+            logger::not_redacted(config_text));
         }
         auto config =
           protocol::parse_config(config_text, bootstrap_hostname_, bootstrap_port_number_);
