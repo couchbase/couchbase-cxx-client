@@ -494,10 +494,15 @@ module LogAnnotations
     [files, identifiers]
   end
 
+  # A bare prefix stands for a whole subtree, but only on a path component boundary: "core/io"
+  # covers "core/io/dns_client.cxx" and not "core/iota.cxx". A raw string prefix would silently
+  # widen a suppression, and suppressions are the only way to opt out of the check.
   def self.matches_glob?(glob, path)
+    prefix = glob.chomp("/")
     File.fnmatch?(glob, path, File::FNM_PATHNAME) ||
       File.fnmatch?(glob, path) ||
-      path.start_with?(glob.chomp("/"))
+      path == prefix ||
+      path.start_with?("#{prefix}/")
   end
 
   def self.print_catalog(statements)
@@ -582,9 +587,32 @@ module LogAnnotations
     19 => [],                              # a count through an accessor is still a count
   }.freeze
 
+  # A suppression that matches more than it names removes coverage without saying so, which is the
+  # one failure of this script that leaves no trace in its output. Pinned here rather than trusted.
+  SELF_TEST_GLOBS = [
+    ["core/io", "core/io/dns_client.cxx", true],
+    ["core/io", "core/iota.cxx", false],
+    ["core/io/", "core/io/dns_client.cxx", true],
+    ["core", "core/origin.cxx", true],
+    ["core", "core_extra/origin.cxx", false],
+    ["core/io/dns_client.cxx", "core/io/dns_client.cxx", true],
+    ["core/io/dns_client.cxx", "core/io/dns_client_extra.cxx", false],
+    ["core/app_telemetry_reporter.cxx", "core/app_telemetry_meter.cxx", false],
+    # A "*" is deliberately not confined to one component, so "core/**" reads as "under core".
+    ["core/**", "core/io/dns_client.cxx", true],
+    ["core/*.cxx", "core/io/dns_client.cxx", true],
+  ].freeze
+
   def self.self_test
     parsed = statements("<self-test>", SELF_TEST_SOURCE)
     failures = []
+
+    SELF_TEST_GLOBS.each do |glob, path, expected|
+      actual = matches_glob?(glob, path)
+      next if actual == expected
+
+      failures << "glob #{glob.inspect} against #{path.inspect}: got #{actual}, expected #{expected}"
+    end
 
     expected_lines = SELF_TEST_EXPECTATIONS.keys.sort
     actual_lines = parsed.map(&:line).sort
@@ -605,7 +633,8 @@ module LogAnnotations
     end
 
     if failures.empty?
-      puts "self-test: #{parsed.size} statements, #{SELF_TEST_EXPECTATIONS.size} expectations, all pass"
+      puts "self-test: #{parsed.size} statements, #{SELF_TEST_EXPECTATIONS.size} expectations, " \
+           "#{SELF_TEST_GLOBS.size} suppression globs, all pass"
       return 0
     end
 
