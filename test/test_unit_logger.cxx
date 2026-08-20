@@ -21,6 +21,7 @@
 
 #include "core/document_id.hxx"
 #include "core/document_id_fmt.hxx"
+#include "core/document_id_redaction.hxx"
 #include "core/logger/logger.hxx"
 #include "core/logger/redaction.hxx"
 

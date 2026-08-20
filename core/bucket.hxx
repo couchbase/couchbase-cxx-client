@@ -18,7 +18,7 @@
 #pragma once
 
 #include "config_listener.hxx"
-#include "document_id_fmt.hxx"
+#include "document_id_redaction.hxx"
 #include "io/mcbp_command.hxx"
 #include "logger/redaction.hxx"
 #include "operations.hxx"

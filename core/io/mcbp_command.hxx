@@ -18,7 +18,7 @@
 #pragma once
 
 #include "core/app_telemetry_meter.hxx"
-#include "core/document_id_fmt.hxx"
+#include "core/document_id_redaction.hxx"
 #include "core/error_context/key_value_error_map_info.hxx"
 #include "core/logger/redaction.hxx"
 #include "core/metrics/meter_wrapper.hxx"

@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include "core/document_id_fmt.hxx"
+#include "core/document_id_redaction.hxx"
 #include "core/error_context/key_value.hxx"
 #include "core/impl/get_replica.hxx"
 #include "core/impl/replica_utils.hxx"
