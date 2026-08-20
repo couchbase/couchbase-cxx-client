@@ -21,6 +21,7 @@
 #include "core/free_form_http_request.hxx"
 #include "core/http_component.hxx"
 #include "core/logger/logger.hxx"
+#include "core/logger/redaction.hxx"
 #include "core/pending_operation_connection_info.hxx"
 #include "core/platform/uuid.h"
 #include "core/row_streamer.hxx"
@@ -232,7 +233,7 @@ private:
         self->client_context_id_,
         self->http_req_.timeout,
         self->retry_info_.retry_attempts,
-        utils::json::generate(self->retry_info_.last_error.ctx["errors"]));
+        logger::user_data(utils::json::generate(self->retry_info_.last_error.ctx["errors"])));
       auto err = self->dispatch();
       if (err) {
         self->invoke_callback({}, std::move(err));
@@ -315,7 +316,9 @@ private:
     if (options.read_only.has_value()) {
       req.is_read_only = options.read_only.value();
     }
-    CB_LOG_DEBUG("QUERY REQUEST: client_context_id={}, body={}.", client_context_id_, req.body);
+    CB_LOG_DEBUG("QUERY REQUEST: client_context_id={}, body={}.",
+                 client_context_id_,
+                 logger::user_data(req.body));
     return req;
   }
 
@@ -348,7 +351,7 @@ private:
     }
     CB_LOG_DEBUG("QUERY ERROR (client_context_id={}): {}.",
                  client_context_id_,
-                 utils::json::generate(errors_json));
+                 logger::user_data(utils::json::generate(errors_json)));
     if (!errors_json->is_array()) {
       return { { errc::generic,
                  "Could not parse errors from server response - expected JSON array" } };

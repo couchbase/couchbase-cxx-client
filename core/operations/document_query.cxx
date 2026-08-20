@@ -20,6 +20,7 @@
 
 #include "core/cluster_options.hxx"
 #include "core/logger/logger.hxx"
+#include "core/logger/redaction.hxx"
 #include "core/utils/json.hxx"
 
 #include <couchbase/error_codes.hxx>
@@ -191,15 +192,15 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
   if (ctx_->options.show_queries) {
     CB_LOG_INFO("QUERY: client_context_id=\"{}\", prep={}, {}, options={}",
                 encoded.client_context_id,
-                utils::json::generate(prep),
-                utils::json::generate(stmt),
-                utils::json::generate(body));
+                logger::user_data(utils::json::generate(prep)),
+                logger::user_data(utils::json::generate(stmt)),
+                logger::user_data(utils::json::generate(body)));
   } else {
     CB_LOG_DEBUG("QUERY: client_context_id=\"{}\", prep={}, {}, options={}",
                  encoded.client_context_id,
-                 utils::json::generate(prep),
-                 utils::json::generate(stmt),
-                 utils::json::generate(body));
+                 logger::user_data(utils::json::generate(prep)),
+                 logger::user_data(utils::json::generate(stmt)),
+                 logger::user_data(utils::json::generate(body)));
   }
   if (row_callback) {
     encoded.streaming.emplace(couchbase::core::io::streaming_settings{
@@ -313,7 +314,7 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
       if (!response.ctx.ec) {
         CB_LOG_TRACE("Unexpected error returned by query engine: client_context_id=\"{}\", body={}",
                      response.ctx.client_context_id,
-                     encoded.body.data());
+                     logger::user_data(encoded.body.data()));
         response.ctx.ec = errc::common::internal_server_failure;
       }
     }
