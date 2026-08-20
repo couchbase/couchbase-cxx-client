@@ -25,7 +25,8 @@ automatically by CMake (Asio, GSL, nlohmann/json, BoringSSL/OpenSSL).
 - File extensions: for new Couchbase C++ client code, prefer headers `.hxx` and sources `.cxx`. Existing C-style or third_party headers may use `.h`, and should not be renamed just to match this convention. Avoid `.cpp` for new sources.
 - `clang-format` with `IndentWidth: 2`, `ColumnLimit: 100`, `Standard: c++17`.
 - Run `bin/check-clang-format` to verify. Apply with `clang-format -i <file>`.
-- Run `bin/check-clang-tidy` for linting.
+- Run `bin/check-clang-tidy` for linting, and `bin/check-log-annotations` after touching any
+  `CB_LOG_*` statement.
 - All identifiers: `snake_case`. Template type parameters: `PascalCase`.
 - Internal headers use `"..."`, system/external headers use `<...>`.
 - No `#include <iostream>` or `#include <cstdio>` in non-test production code.
@@ -104,6 +105,18 @@ non-idempotent use `errc::common::ambiguous_timeout`. Determined via
 **Collection IDs**: On `unknown_collection` status, call
 `collections_component::handle_collection_unknown` before falling back to
 `retry_reason::key_value_collection_outdated`.
+
+**Log redaction**: A sensitive value passed to `CB_LOG_*` is wrapped in a helper from
+`core/logger/redaction.hxx`, so an external tool can strip or hash it: `logger::user_data()`
+for document keys and bodies, usernames, query statements and xattrs, `logger::metadata()` for
+bucket, scope, collection, index and design document names, `logger::system_data()` for
+hostnames, addresses, ports and DNS topology. A document id uses `logger::document()`, which
+splits the categories itself. Wrapping never changes the output unless redaction is enabled.
+Compose a value into one tag only where the composed form is what appears in other log lines:
+host and port do, a scope and collection do not. `bin/check-log-annotations` reports arguments
+whose names look sensitive and are unwrapped; it reads names, not types, so when it is wrong the
+argument gets `logger::not_sensitive()`, and a value that is sensitive but deliberately logged
+untagged gets `logger::not_redacted()` plus a comment saying why.
 
 ## Testing
 

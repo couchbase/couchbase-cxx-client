@@ -77,8 +77,15 @@ export TEST_BUCKET=default
 Always run linting and formatting checks before submitting changes:
 - `bin/check-clang-format`
 - `bin/check-clang-tidy`
+- `bin/check-log-annotations`
 
 ## Architecture Mandates
 1.  **Public/Private Separation**: Never expose internal `core/` headers in the `couchbase/` public API.
 2.  **Asynchronous First**: The core is built on Asio and utilizes asynchronous patterns extensively.
 3.  **Error Handling**: Uses `std::error_code` and custom error categories defined in `core/error.hxx`.
+4.  **Log Redaction**: A sensitive value passed to `CB_LOG_*` is wrapped in one of the helpers from
+    `core/logger/redaction.hxx`: `logger::user_data()` for document keys and bodies, usernames and
+    query statements, `logger::metadata()` for bucket, scope, collection and index names, and
+    `logger::system_data()` for hostnames, addresses and ports. `bin/check-log-annotations` reports
+    what looks sensitive and is unwrapped. When it is wrong, mark the argument with
+    `logger::not_sensitive()` rather than silencing the statement.
