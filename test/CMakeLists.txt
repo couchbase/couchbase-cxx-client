@@ -1,5 +1,3 @@
-add_subdirectory(utils)
-
 integration_test(connect)
 integration_test(crud)
 integration_test(query)
@@ -114,3 +112,10 @@ if(COUCHBASE_CXX_CLIENT_COLUMNAR)
   integration_test(columnar_management)
   unit_test(columnar_retry)
 endif()
+
+# The framework's cluster-probe selftest. Registered here rather than in cmake/TestFramework.cmake
+# because couchbase_add_test() appends the target to COUCHBASE_INTEGRATION_TESTS, and
+# cmake/Testing.cmake blanks that property after TestFramework.cmake has been read -- an append made
+# from there would be discarded, and build_integration_tests would omit the target. It links the
+# client, so it has no place in the CNG-only configuration that reads TestFramework.cmake alone.
+couchbase_add_test(framework/cluster_probes_selftest LABEL integration LINK_CLIENT)

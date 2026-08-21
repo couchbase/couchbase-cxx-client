@@ -30,7 +30,7 @@
 
 #define COUCHBASE_CXX_CLIENT_IGNORE_CORE_DEPRECATIONS
 
-#include "fixtures/live_fixture.hxx"
+#include "cng/fixtures/live_fixture.hxx"
 #include "framework/test_runner.hxx"
 
 #include <couchbase/error_codes.hxx>
@@ -55,7 +55,7 @@ analytics(const std::string& statement) -> ops::analytics_request
 }
 
 void
-analytics_round_trip_against_live_gateway()
+analytics_round_trip_against_live_gateway([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -79,7 +79,7 @@ analytics_round_trip_against_live_gateway()
 // from a gateway UNIMPLEMENTED, which carries a gRPC message -- and it is the same signal
 // skip_unless_service_implemented() relies on, so this case is what keeps that helper honest.
 void
-scope_qualified_analytics_is_refused_by_the_client()
+scope_qualified_analytics_is_refused_by_the_client([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -102,7 +102,7 @@ scope_qualified_analytics_is_refused_by_the_client()
 }
 
 void
-an_unsupported_option_is_refused_without_a_round_trip()
+an_unsupported_option_is_refused_without_a_round_trip([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -123,7 +123,7 @@ an_unsupported_option_is_refused_without_a_round_trip()
 // deadline at all. Nothing is sent, which is why the timeout is unambiguous even though analytics
 // statements can mutate.
 void
-an_expired_budget_is_refused_on_the_io_context()
+an_expired_budget_is_refused_on_the_io_context([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -152,20 +152,20 @@ tests() -> test_suite
     {
       { "analytics_round_trip_against_live_gateway",
         analytics_round_trip_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "scope_qualified_analytics_is_refused_by_the_client",
         scope_qualified_analytics_is_refused_by_the_client,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "an_unsupported_option_is_refused_without_a_round_trip",
         an_unsupported_option_is_refused_without_a_round_trip,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "an_expired_budget_is_refused_on_the_io_context",
         an_expired_budget_is_refused_on_the_io_context,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
     },
   };
 }

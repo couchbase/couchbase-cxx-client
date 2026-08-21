@@ -36,7 +36,7 @@
 // cluster map couchbase2 does not have -- so the request has to be sent and the server's answer
 // taken, and only a live case shows what that answer is.
 
-#include "fixtures/live_fixture.hxx"
+#include "cng/fixtures/live_fixture.hxx"
 #include "framework/test_runner.hxx"
 
 #include "core/management/bucket_settings.hxx"
@@ -291,7 +291,7 @@ create_scope(live_cluster_fixture& fixture, const std::string& scope_name)
 }
 
 void
-list_collections_against_live_gateway()
+list_collections_against_live_gateway([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -310,7 +310,7 @@ list_collections_against_live_gateway()
 // for the second stores the first. Either way the collection has an expiry policy its creator did
 // not ask for, and nothing fails.
 void
-collection_max_expiry_round_trips_against_live_gateway()
+collection_max_expiry_round_trips_against_live_gateway([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -347,7 +347,7 @@ collection_max_expiry_round_trips_against_live_gateway()
 // this collection back on the bucket default", and on UpdateCollection an unset field means "leave
 // it alone" instead. The component refuses it, and the collection has to be left as it was.
 void
-collection_update_max_expiry_against_live_gateway()
+collection_update_max_expiry_against_live_gateway([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -390,7 +390,8 @@ collection_update_max_expiry_against_live_gateway()
 // without the refusal -2 would create a never-expiring collection and report success. Both RPCs
 // carry the field, so both are checked.
 void
-collection_max_expiry_below_the_sentinel_is_refused_against_live_gateway()
+collection_max_expiry_below_the_sentinel_is_refused_against_live_gateway(
+  [[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -431,7 +432,7 @@ collection_max_expiry_below_the_sentinel_is_refused_against_live_gateway()
 // wire, so a collection read back carrying the bucket's TTL would mean the layers had been
 // flattened somewhere between the server and the core struct.
 void
-collection_max_expiry_is_layered_over_the_bucket_default()
+collection_max_expiry_is_layered_over_the_bucket_default([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -478,7 +479,7 @@ collection_max_expiry_is_layered_over_the_bucket_default()
 // did not say" arrive identically, and the manifest cannot report a collection as history-off. The
 // classic path reads ns_server's own `"history": false` and does report it.
 void
-collection_history_retention_round_trips_against_live_gateway()
+collection_history_retention_round_trips_against_live_gateway([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -554,7 +555,8 @@ collection_history_retention_round_trips_against_live_gateway()
 // These assertions record what the codes are, not what they should be. They fail if the gateway
 // starts mapping them alike, which is the point: the difference is worth noticing.
 void
-collection_history_retention_on_a_couchstore_bucket_against_live_gateway()
+collection_history_retention_on_a_couchstore_bucket_against_live_gateway(
+  [[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -608,32 +610,32 @@ tests() -> test_suite
     {
       { "list_collections_against_live_gateway",
         list_collections_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "collection_max_expiry_round_trips_against_live_gateway",
         collection_max_expiry_round_trips_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "collection_update_max_expiry_against_live_gateway",
         collection_update_max_expiry_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "collection_max_expiry_below_the_sentinel_is_refused_against_live_gateway",
         collection_max_expiry_below_the_sentinel_is_refused_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "collection_max_expiry_is_layered_over_the_bucket_default",
         collection_max_expiry_is_layered_over_the_bucket_default,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "collection_history_retention_round_trips_against_live_gateway",
         collection_history_retention_round_trips_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "collection_history_retention_on_a_couchstore_bucket_against_live_gateway",
         collection_history_retention_on_a_couchstore_bucket_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
     },
   };
 }

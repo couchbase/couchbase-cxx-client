@@ -83,7 +83,7 @@ sample_timeouts() -> ps::component_timeouts
 }
 
 void
-non_durable_uses_the_standard_kv_timeout()
+non_durable_uses_the_standard_kv_timeout([[maybe_unused]] context& ctx)
 {
   const auto t = sample_timeouts();
   assert_true(ps::resolve_kv_timeout(std::nullopt, couchbase::durability_level::none, t) == 2'500ms,
@@ -91,7 +91,7 @@ non_durable_uses_the_standard_kv_timeout()
 }
 
 void
-durable_uses_the_durable_timeout()
+durable_uses_the_durable_timeout([[maybe_unused]] context& ctx)
 {
   const auto t = sample_timeouts();
   assert_true(ps::resolve_kv_timeout(std::nullopt, couchbase::durability_level::majority, t) ==
@@ -107,7 +107,7 @@ durable_uses_the_durable_timeout()
 }
 
 void
-explicit_request_timeout_always_wins()
+explicit_request_timeout_always_wins([[maybe_unused]] context& ctx)
 {
   const auto t = sample_timeouts();
   assert_true(ps::resolve_kv_timeout(1'234ms, couchbase::durability_level::none, t) == 1'234ms,
@@ -126,7 +126,7 @@ explicit_request_timeout_always_wins()
 // a guard applied to only the persistence levels -- which is the shape of the disagreement between
 // SDKs here -- would slip past a majority-only case.
 void
-an_explicit_timeout_is_never_raised_to_a_floor()
+an_explicit_timeout_is_never_raised_to_a_floor([[maybe_unused]] context& ctx)
 {
   const auto t = sample_timeouts();
   const std::array<couchbase::durability_level, 3> durable_levels{
@@ -146,7 +146,7 @@ an_explicit_timeout_is_never_raised_to_a_floor()
 // for none. That is what keeps a read out of the durable budget: get_request has no
 // durability_level member at all, so there is no value it could supply that selects it.
 void
-a_request_that_cannot_be_durable_asks_for_no_durability()
+a_request_that_cannot_be_durable_asks_for_no_durability([[maybe_unused]] context& ctx)
 {
   const ops::get_request read;
   assert_true(ps::requested_durability(read) == couchbase::durability_level::none,
@@ -268,7 +268,8 @@ observed_budget_for(Request request) -> std::int64_t
 // upper one the durable budget came from the built-in default rather than the configured value,
 // which is what happens when key_value_durable is never populated from the cluster options.
 void
-a_durable_mutation_without_a_timeout_gets_the_configured_durable_budget()
+a_durable_mutation_without_a_timeout_gets_the_configured_durable_budget(
+  [[maybe_unused]] context& ctx)
 {
   ops::upsert_request mutation;
   mutation.id = document_id{ "b", "s", "c", "k" };
@@ -288,7 +289,7 @@ a_durable_mutation_without_a_timeout_gets_the_configured_durable_budget()
 // The negative half: resolving a durable default must not widen an operation that did not ask for
 // durability. A read cannot carry a level at all, so it keeps the standard budget.
 void
-a_read_is_never_given_the_durable_budget()
+a_read_is_never_given_the_durable_budget([[maybe_unused]] context& ctx)
 {
   ops::get_request read;
   read.id = document_id{ "b", "s", "c", "k" };
@@ -315,9 +316,11 @@ tests() -> test_suite
         a_request_that_cannot_be_durable_asks_for_no_durability },
       { "a_durable_mutation_without_a_timeout_gets_the_configured_durable_budget",
         a_durable_mutation_without_a_timeout_gets_the_configured_durable_budget,
+        {},
         timeout::slow },
       { "a_read_is_never_given_the_durable_budget",
         a_read_is_never_given_the_durable_budget,
+        {},
         timeout::slow },
     },
   };

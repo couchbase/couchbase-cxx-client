@@ -68,7 +68,7 @@ conditional_secondary_index() -> om::query_index_create_request
 }
 
 void
-a_refused_index_completes_on_the_io_context()
+a_refused_index_completes_on_the_io_context([[maybe_unused]] context& ctx)
 {
   asio::io_context io;
   component comp{

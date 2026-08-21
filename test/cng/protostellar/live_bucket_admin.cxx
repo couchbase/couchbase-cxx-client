@@ -19,7 +19,7 @@
 // admin.bucket.v1: that the bucket list arrives, and that settings written by create() are the
 // settings read back by get().
 
-#include "fixtures/live_fixture.hxx"
+#include "cng/fixtures/live_fixture.hxx"
 #include "framework/test_runner.hxx"
 
 #include "core/management/bucket_settings.hxx"
@@ -49,7 +49,7 @@ namespace ops = ::couchbase::core::operations;
 namespace mgmt = ::couchbase::core::management::cluster;
 
 void
-list_buckets_against_live_gateway()
+list_buckets_against_live_gateway([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -156,7 +156,7 @@ wait_for_bucket(live_cluster_fixture& fixture,
 }
 
 void
-bucket_settings_round_trip_against_live_gateway()
+bucket_settings_round_trip_against_live_gateway([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -201,7 +201,7 @@ bucket_settings_round_trip_against_live_gateway()
 // durability the cluster has too few data servers for, and a single-node cluster has too few for
 // any of them. Folding it in would make the whole round trip skip there instead of just this.
 void
-minimum_durability_round_trips_against_live_gateway()
+minimum_durability_round_trips_against_live_gateway([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -230,7 +230,7 @@ minimum_durability_round_trips_against_live_gateway()
 // update -> flush -> drop over one bucket, which is the shape gocbcoreps' bucket admin tests use.
 // Each step is checked through a subsequent read rather than on its own status alone.
 void
-bucket_lifecycle_against_live_gateway()
+bucket_lifecycle_against_live_gateway([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -313,7 +313,7 @@ bucket_lifecycle_against_live_gateway()
 // what turns a bare NOT_FOUND into bucket_not_found rather than document_not_found. None of them
 // needs spare quota: each is refused before anything is allocated.
 void
-bucket_errors_carry_the_bucket_specific_code()
+bucket_errors_carry_the_bucket_specific_code([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -383,7 +383,7 @@ bucket_errors_carry_the_bucket_specific_code()
 // memcached buckets have no couchbase2 representation, so the request is refused by the client
 // before anything is sent, on the io context like every other completion.
 void
-a_memcached_bucket_is_refused_by_the_client()
+a_memcached_bucket_is_refused_by_the_client([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -415,28 +415,28 @@ tests() -> test_suite
     {
       { "list_buckets_against_live_gateway",
         list_buckets_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "bucket_settings_round_trip_against_live_gateway",
         bucket_settings_round_trip_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "minimum_durability_round_trips_against_live_gateway",
         minimum_durability_round_trips_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "bucket_lifecycle_against_live_gateway",
         bucket_lifecycle_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "bucket_errors_carry_the_bucket_specific_code",
         bucket_errors_carry_the_bucket_specific_code,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "a_memcached_bucket_is_refused_by_the_client",
         a_memcached_bucket_is_refused_by_the_client,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
     },
   };
 }

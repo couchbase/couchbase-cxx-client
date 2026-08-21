@@ -23,7 +23,7 @@
 
 #define COUCHBASE_CXX_CLIENT_IGNORE_CORE_DEPRECATIONS
 
-#include "fixtures/live_fixture.hxx"
+#include "cng/fixtures/live_fixture.hxx"
 #include "framework/test_runner.hxx"
 
 // core/operations.hxx (complete operation types) must precede core/cluster.hxx, whose execute()
@@ -67,7 +67,7 @@ env_or(const char* name, const char* fallback) -> std::string
 }
 
 void
-connect_and_round_trip_kv()
+connect_and_round_trip_kv([[maybe_unused]] context& ctx)
 {
   const auto connstr = safe_getenv("TEST_CONNECTION_STRING"); // NOLINT(concurrency-mt-unsafe)
   if (!connstr) {
@@ -157,8 +157,8 @@ tests() -> test_suite
     {
       { "connect_and_round_trip_kv",
         connect_and_round_trip_kv,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
     },
   };
 }

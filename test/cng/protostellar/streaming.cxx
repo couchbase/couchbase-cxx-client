@@ -227,7 +227,7 @@ struct stream_fixture {
 // ── Delivery ──────────────────────────────────────────────────────────────────
 
 void
-server_stream_delivers_all_rows_on_the_io_thread()
+server_stream_delivers_all_rows_on_the_io_thread([[maybe_unused]] context& ctx)
 {
   in_process_query_server server{ metadata_plan() };
   asio::io_context io;
@@ -274,7 +274,7 @@ server_stream_delivers_all_rows_on_the_io_thread()
 // sample size of three. Enough messages here that the reactor has to re-issue StartRead many times,
 // and every row is checked rather than the first and last.
 void
-a_long_stream_preserves_order()
+a_long_stream_preserves_order([[maybe_unused]] context& ctx)
 {
   constexpr auto expected_rows = 500;
   in_process_query_server server{ streams_rows(expected_rows) };
@@ -319,7 +319,7 @@ a_long_stream_preserves_order()
 // row to force a read cycle this is the shortest path through the reactor, so it is the one most
 // likely to be broken by a change to the OnReadDone/OnDone handshake.
 void
-an_empty_stream_completes_without_rows()
+an_empty_stream_completes_without_rows([[maybe_unused]] context& ctx)
 {
   in_process_query_server server{ streams_rows(0) };
   asio::io_context io;
@@ -351,7 +351,7 @@ an_empty_stream_completes_without_rows()
 }
 
 void
-a_server_error_reaches_on_done()
+a_server_error_reaches_on_done([[maybe_unused]] context& ctx)
 {
   in_process_query_server server{ fails_with(
     grpc::Status{ grpc::StatusCode::INVALID_ARGUMENT, "syntax error" }) };
@@ -388,7 +388,7 @@ a_server_error_reaches_on_done()
 // rows already handed over stay handed over, and the failure arrives after them, not instead of
 // them.
 void
-rows_delivered_before_a_mid_stream_error_are_kept()
+rows_delivered_before_a_mid_stream_error_are_kept([[maybe_unused]] context& ctx)
 {
   in_process_query_server server{ fails_with(
     grpc::Status{ grpc::StatusCode::INTERNAL, "gateway gave up" }, 3) };
@@ -426,7 +426,7 @@ rows_delivered_before_a_mid_stream_error_are_kept()
 }
 
 void
-a_deadline_expires_a_parked_stream()
+a_deadline_expires_a_parked_stream([[maybe_unused]] context& ctx)
 {
   in_process_query_server server{ parks() };
   asio::io_context io;
@@ -457,7 +457,8 @@ a_deadline_expires_a_parked_stream()
 // of these park on the server, so if the deadline were absent the case would hang until the
 // runner's own timeout rather than fail cleanly.
 void
-a_non_positive_timeout_expires_the_call_rather_than_removing_the_deadline()
+a_non_positive_timeout_expires_the_call_rather_than_removing_the_deadline(
+  [[maybe_unused]] context& ctx)
 {
   in_process_query_server server{ parks() };
   const auto channel = server.channel();
@@ -487,7 +488,7 @@ a_non_positive_timeout_expires_the_call_rather_than_removing_the_deadline()
 }
 
 void
-cancelling_the_pending_call_ends_the_stream()
+cancelling_the_pending_call_ends_the_stream([[maybe_unused]] context& ctx)
 {
   in_process_query_server server{ parks() };
   asio::io_context io;
@@ -530,7 +531,7 @@ cancelling_the_pending_call_ends_the_stream()
 // is read only after the io_context has been destroyed, because until then the queued completion
 // legitimately owns the reactor -- reading it earlier reports 2 whether or not the reactor leaks.
 void
-tearing_down_with_an_unrun_completion_releases_the_reactor()
+tearing_down_with_an_unrun_completion_releases_the_reactor([[maybe_unused]] context& ctx)
 {
   in_process_query_server server{ parks() };
   const auto channel = server.channel();
@@ -559,7 +560,7 @@ tearing_down_with_an_unrun_completion_releases_the_reactor()
 // dispatcher's destructor would wait for a completion that can never arrive and the case would hang
 // rather than fail -- so reaching the assertion at all is most of what is being checked here.
 void
-an_invoker_that_throws_leaves_nothing_registered()
+an_invoker_that_throws_leaves_nothing_registered([[maybe_unused]] context& ctx)
 {
   in_process_query_server server;
   asio::io_context io;
@@ -601,7 +602,7 @@ an_invoker_that_throws_leaves_nothing_registered()
 // posted its completion and deregistered, so all of them are queued by the time the io_context is
 // allowed to finish.
 void
-concurrent_streams_are_all_drained_by_the_destructor()
+concurrent_streams_are_all_drained_by_the_destructor([[maybe_unused]] context& ctx)
 {
   constexpr auto concurrency = std::size_t{ 16 };
   in_process_query_server server{ parks() };
@@ -645,7 +646,7 @@ concurrent_streams_are_all_drained_by_the_destructor()
 // call_tracker::add() contends with itself as well as with the remove() calls arriving on gRPC's
 // threads -- the interleaving a single-threaded launcher cannot produce.
 void
-streams_launched_from_many_threads_all_complete()
+streams_launched_from_many_threads_all_complete([[maybe_unused]] context& ctx)
 {
   constexpr auto launchers = std::size_t{ 4 };
   constexpr auto per_launcher = std::size_t{ 4 };
@@ -709,7 +710,7 @@ streams_launched_from_many_threads_all_complete()
 // Without a cancel hook that releases that hold, ~dispatcher() waits for an OnDone that cannot
 // fire, so this case fails by timing out rather than by assertion.
 void
-destructor_drains_a_parked_stream()
+destructor_drains_a_parked_stream([[maybe_unused]] context& ctx)
 {
   std::promise<void> first_write_promise;
   auto first_write_future = first_write_promise.get_future();
@@ -761,7 +762,8 @@ destructor_drains_a_parked_stream()
 // must not block the drain, so a guard that held the lock across the consumer callback would hang
 // here rather than fail.
 void
-a_row_in_flight_when_the_drain_releases_the_hold_does_not_resume_the_read()
+a_row_in_flight_when_the_drain_releases_the_hold_does_not_resume_the_read(
+  [[maybe_unused]] context& ctx)
 {
   std::promise<void> row_delivered_promise;
   auto row_delivered = row_delivered_promise.get_future();
@@ -829,39 +831,53 @@ tests() -> test_suite
     {
       { "server_stream_delivers_all_rows_on_the_io_thread",
         server_stream_delivers_all_rows_on_the_io_thread,
+        {},
         timeout::network },
-      { "a_long_stream_preserves_order", a_long_stream_preserves_order, timeout::network },
+      { "a_long_stream_preserves_order", a_long_stream_preserves_order, {}, timeout::network },
       { "an_empty_stream_completes_without_rows",
         an_empty_stream_completes_without_rows,
+        {},
         timeout::network },
-      { "a_server_error_reaches_on_done", a_server_error_reaches_on_done, timeout::network },
+      { "a_server_error_reaches_on_done", a_server_error_reaches_on_done, {}, timeout::network },
       { "rows_delivered_before_a_mid_stream_error_are_kept",
         rows_delivered_before_a_mid_stream_error_are_kept,
+        {},
         timeout::network },
       { "a_deadline_expires_a_parked_stream",
         a_deadline_expires_a_parked_stream,
+        {},
         timeout::network },
       { "a_non_positive_timeout_expires_the_call_rather_than_removing_the_deadline",
         a_non_positive_timeout_expires_the_call_rather_than_removing_the_deadline,
+        {},
         timeout::network },
       { "cancelling_the_pending_call_ends_the_stream",
         cancelling_the_pending_call_ends_the_stream,
+        {},
         timeout::network },
       { "tearing_down_with_an_unrun_completion_releases_the_reactor",
         tearing_down_with_an_unrun_completion_releases_the_reactor,
+        {},
         timeout::network },
       { "an_invoker_that_throws_leaves_nothing_registered",
         an_invoker_that_throws_leaves_nothing_registered,
+        {},
         timeout::network },
-      { "destructor_drains_a_parked_stream", destructor_drains_a_parked_stream, timeout::network },
+      { "destructor_drains_a_parked_stream",
+        destructor_drains_a_parked_stream,
+        {},
+        timeout::network },
       { "a_row_in_flight_when_the_drain_releases_the_hold_does_not_resume_the_read",
         a_row_in_flight_when_the_drain_releases_the_hold_does_not_resume_the_read,
+        {},
         timeout::network },
       { "concurrent_streams_are_all_drained_by_the_destructor",
         concurrent_streams_are_all_drained_by_the_destructor,
+        {},
         timeout::network },
       { "streams_launched_from_many_threads_all_complete",
         streams_launched_from_many_threads_all_complete,
+        {},
         timeout::network },
     },
   };

@@ -165,7 +165,7 @@ run_get(std::chrono::milliseconds timeout, in_process_server& server, bool cance
 }
 
 void
-delivers_response_on_io_thread()
+delivers_response_on_io_thread([[maybe_unused]] context& ctx)
 {
   in_process_server server{ 0ms };
   const auto run_thread = std::this_thread::get_id();
@@ -180,7 +180,7 @@ delivers_response_on_io_thread()
 }
 
 void
-deadline_surfaces_as_deadline_exceeded()
+deadline_surfaces_as_deadline_exceeded([[maybe_unused]] context& ctx)
 {
   in_process_server server{ 2000ms }; // server delays well beyond the client deadline
   const auto outcome = run_get(100ms, server, /*cancel_immediately=*/false);
@@ -197,7 +197,8 @@ deadline_surfaces_as_deadline_exceeded()
 // Every caller in component.cxx already rejects a non-positive timeout before dispatch, so this
 // covers the primitive's own guarantee rather than a reachable production path.
 void
-a_non_positive_timeout_expires_the_call_rather_than_removing_the_deadline()
+a_non_positive_timeout_expires_the_call_rather_than_removing_the_deadline(
+  [[maybe_unused]] context& ctx)
 {
   in_process_server server{ 2000ms };
   for (const auto timeout : { 0ms, -1ms, -30'000ms }) {
@@ -211,7 +212,7 @@ a_non_positive_timeout_expires_the_call_rather_than_removing_the_deadline()
 }
 
 void
-cancellation_surfaces_as_cancelled()
+cancellation_surfaces_as_cancelled([[maybe_unused]] context& ctx)
 {
   in_process_server server{ 2000ms };
   const auto outcome = run_get(timeout::network, server, /*cancel_immediately=*/true);
@@ -228,7 +229,7 @@ cancellation_surfaces_as_cancelled()
 // still in flight when the block ends, so they have to outlive the dispatcher whose destructor
 // drains it.
 void
-destructor_cancels_and_drains_an_in_flight_call()
+destructor_cancels_and_drains_an_in_flight_call([[maybe_unused]] context& ctx)
 {
   in_process_server server{ 2000ms }; // the server outlasts the drain unless the call is cancelled
   const auto channel = server.channel();
@@ -270,18 +271,22 @@ tests() -> test_suite
   return {
     "protostellar_dispatcher",
     {
-      { "delivers_response_on_io_thread", delivers_response_on_io_thread, timeout::network },
+      { "delivers_response_on_io_thread", delivers_response_on_io_thread, {}, timeout::network },
       { "deadline_surfaces_as_deadline_exceeded",
         deadline_surfaces_as_deadline_exceeded,
+        {},
         timeout::network },
       { "a_non_positive_timeout_expires_the_call_rather_than_removing_the_deadline",
         a_non_positive_timeout_expires_the_call_rather_than_removing_the_deadline,
+        {},
         timeout::network },
       { "cancellation_surfaces_as_cancelled",
         cancellation_surfaces_as_cancelled,
+        {},
         timeout::network },
       { "destructor_cancels_and_drains_an_in_flight_call",
         destructor_cancels_and_drains_an_in_flight_call,
+        {},
         timeout::network },
     },
   };
