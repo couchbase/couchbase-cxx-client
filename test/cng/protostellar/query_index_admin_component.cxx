@@ -27,7 +27,7 @@
 // No server is needed: the refusal is decided before anything is dispatched, so the channel below
 // is never connected.
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/cluster_credentials.hxx"
 #include "core/operations/management/query_index_create.hxx"
@@ -68,7 +68,7 @@ conditional_secondary_index() -> om::query_index_create_request
 }
 
 void
-a_refused_index_completes_on_the_io_context()
+a_refused_index_completes_on_the_io_context([[maybe_unused]] context& ctx)
 {
   asio::io_context io;
   component comp{
@@ -109,10 +109,9 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_query_index_admin_component",
+    suite_name,
     {
-      { "a_refused_index_completes_on_the_io_context",
-        a_refused_index_completes_on_the_io_context },
+      { CASE(a_refused_index_completes_on_the_io_context) },
     },
   };
 }

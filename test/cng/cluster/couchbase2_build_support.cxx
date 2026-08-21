@@ -29,7 +29,7 @@
 
 #define COUCHBASE_CXX_CLIENT_IGNORE_CORE_DEPRECATIONS
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/operations.hxx"
 
@@ -60,7 +60,7 @@ using ::couchbase::core::utils::parse_connection_string;
 // Parsing is deliberately identical in both builds: it is the library's public behaviour and must
 // not depend on how the library was compiled. Only the open outcome differs.
 void
-couchbase2_parses_identically_regardless_of_build_support()
+couchbase2_parses_identically_regardless_of_build_support([[maybe_unused]] context& ctx)
 {
   const auto parsed = parse_connection_string("couchbase2://gateway.example.com");
   assert_true(parsed.error == std::nullopt, "couchbase2:// parses without error in any build");
@@ -70,7 +70,8 @@ couchbase2_parses_identically_regardless_of_build_support()
 }
 
 void
-opening_couchbase2_without_build_support_reports_feature_not_available()
+opening_couchbase2_without_build_support_reports_feature_not_available(
+  [[maybe_unused]] context& ctx)
 {
 #ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
   skip("this build has couchbase2 support, so the unsupported-build branch is not compiled");
@@ -123,12 +124,10 @@ auto
 tests() -> test_suite
 {
   return {
-    "cluster_couchbase2_build_support",
+    suite_name,
     {
-      { "couchbase2_parses_identically_regardless_of_build_support",
-        couchbase2_parses_identically_regardless_of_build_support },
-      { "opening_couchbase2_without_build_support_reports_feature_not_available",
-        opening_couchbase2_without_build_support_reports_feature_not_available },
+      { CASE(couchbase2_parses_identically_regardless_of_build_support) },
+      { CASE(opening_couchbase2_without_build_support_reports_feature_not_available) },
     },
   };
 }

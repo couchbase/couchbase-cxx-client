@@ -31,8 +31,8 @@
 // The case below drives the public manager rather than the core request, because the routing hole
 // it covers was invisible from the core request that was already wired.
 
-#include "fixtures/live_fixture.hxx"
-#include "framework/test_runner.hxx"
+#include "cng/fixtures/live_fixture.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/operations/management/query_index_create.hxx"
 #include "core/operations/management/query_index_drop.hxx"
@@ -159,7 +159,7 @@ drop_index(live_cluster_fixture& fixture,
 }
 
 void
-list_query_indexes_against_live_gateway()
+list_query_indexes_against_live_gateway([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -170,7 +170,7 @@ list_query_indexes_against_live_gateway()
 // them into the statement as they arrive. "two words" is the case the classic path's own
 // integration test pins, and it is a syntax error without the quoting.
 void
-an_index_key_that_needs_escaping_round_trips_against_live_gateway()
+an_index_key_that_needs_escaping_round_trips_against_live_gateway([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -201,7 +201,7 @@ an_index_key_that_needs_escaping_round_trips_against_live_gateway()
 // outcome here is a refusal rather than a one-key index. Both are asserted, because which one a
 // server gives is the server's business and neither is what broken escaping produces.
 void
-a_hostile_index_key_cannot_add_terms_against_live_gateway()
+a_hostile_index_key_cannot_add_terms_against_live_gateway([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -242,7 +242,7 @@ a_hostile_index_key_cannot_add_terms_against_live_gateway()
 // to be served by the time this runs, so feature_not_available here is the client declining to
 // send a request it cannot express -- which is the behaviour under test.
 void
-a_conditional_secondary_index_is_refused_over_couchbase2()
+a_conditional_secondary_index_is_refused_over_couchbase2([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -269,7 +269,7 @@ a_conditional_secondary_index_is_refused_over_couchbase2()
 // arrive is only visible against a server -- and the metadata below is the decode read back from a
 // real GetAllIndexes rather than a hand-built message.
 void
-the_secondary_index_lifecycle_round_trips_against_live_gateway()
+the_secondary_index_lifecycle_round_trips_against_live_gateway([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -311,7 +311,7 @@ the_secondary_index_lifecycle_round_trips_against_live_gateway()
 // succeeds against a server that has both -- it just manages a different index. Named rather than
 // unnamed so the case does not touch a #primary another test may be relying on.
 void
-the_primary_index_lifecycle_round_trips_against_live_gateway()
+the_primary_index_lifecycle_round_trips_against_live_gateway([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -371,7 +371,7 @@ the_primary_index_lifecycle_round_trips_against_live_gateway()
 // operation failed at its first step over couchbase2 while the RPC it needed sat unused. This
 // drives the public manager, which is the only place that hole was visible.
 void
-build_deferred_indexes_through_the_public_api_against_live_gateway()
+build_deferred_indexes_through_the_public_api_against_live_gateway([[maybe_unused]] context& ctx)
 {
   const auto connection_string = safe_getenv("TEST_CONNECTION_STRING");
   if (!connection_string.has_value()) {
@@ -427,7 +427,8 @@ build_deferred_indexes_through_the_public_api_against_live_gateway()
 // The assertion is therefore that the handler arrives at all. The bounded wait is what keeps a
 // dropped completion a failure instead of a hung suite.
 void
-build_deferred_indexes_on_a_closed_cluster_answers_on_the_calling_thread()
+build_deferred_indexes_on_a_closed_cluster_answers_on_the_calling_thread(
+  [[maybe_unused]] context& ctx)
 {
   const auto connection_string = safe_getenv("TEST_CONNECTION_STRING");
   if (!connection_string.has_value()) {
@@ -467,40 +468,32 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_live_query_index_admin",
+    suite_name,
     {
-      { "list_query_indexes_against_live_gateway",
-        list_query_indexes_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
-      { "the_secondary_index_lifecycle_round_trips_against_live_gateway",
-        the_secondary_index_lifecycle_round_trips_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
-      { "the_primary_index_lifecycle_round_trips_against_live_gateway",
-        the_primary_index_lifecycle_round_trips_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
-      { "an_index_key_that_needs_escaping_round_trips_against_live_gateway",
-        an_index_key_that_needs_escaping_round_trips_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
-      { "a_hostile_index_key_cannot_add_terms_against_live_gateway",
-        a_hostile_index_key_cannot_add_terms_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
-      { "a_conditional_secondary_index_is_refused_over_couchbase2",
-        a_conditional_secondary_index_is_refused_over_couchbase2,
-        timeout::integration,
-        test_env::cluster_only },
-      { "build_deferred_indexes_through_the_public_api_against_live_gateway",
-        build_deferred_indexes_through_the_public_api_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
-      { "build_deferred_indexes_on_a_closed_cluster_answers_on_the_calling_thread",
-        build_deferred_indexes_on_a_closed_cluster_answers_on_the_calling_thread,
-        timeout::integration,
-        test_env::cluster_only },
+      { CASE(list_query_indexes_against_live_gateway),
+        { needs::real_cluster() },
+        timeout::integration },
+      { CASE(the_secondary_index_lifecycle_round_trips_against_live_gateway),
+        { needs::real_cluster() },
+        timeout::integration },
+      { CASE(the_primary_index_lifecycle_round_trips_against_live_gateway),
+        { needs::real_cluster() },
+        timeout::integration },
+      { CASE(an_index_key_that_needs_escaping_round_trips_against_live_gateway),
+        { needs::real_cluster() },
+        timeout::integration },
+      { CASE(a_hostile_index_key_cannot_add_terms_against_live_gateway),
+        { needs::real_cluster() },
+        timeout::integration },
+      { CASE(a_conditional_secondary_index_is_refused_over_couchbase2),
+        { needs::real_cluster() },
+        timeout::integration },
+      { CASE(build_deferred_indexes_through_the_public_api_against_live_gateway),
+        { needs::real_cluster() },
+        timeout::integration },
+      { CASE(build_deferred_indexes_on_a_closed_cluster_answers_on_the_calling_thread),
+        { needs::real_cluster() },
+        timeout::integration },
     },
   };
 }

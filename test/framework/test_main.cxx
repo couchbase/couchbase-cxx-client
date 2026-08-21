@@ -16,16 +16,24 @@
  */
 
 // Shared entry point for every test executable built on the framework. A test file provides
-// tests(); this main gathers a name filter from argv, decides mock-vs-real mode from
-// TEST_CONNECTION_STRING, runs the suite, and maps the outcome to a process exit code
+// tests(); this main gathers a name filter from argv, resolves the configuration from the
+// environment, runs the suite, and maps the outcome to a process exit code
 // (0 pass / 1 fail / 77 all-skipped).
+//
+// `--list-tests` prints each case name and what it requires, then exits. cmake/TestFramework.cmake
+// runs it after linking to register one ctest entry per case.
+//
+// Every other argument is a case name to run. An argument that matches no case is a failure, not a
+// request to run nothing.
 
 #include "test_runner.hxx"
 
 #include <cstdlib> // std::_Exit
+#include <exception>
 #include <iostream>
 #include <set>
 #include <string>
+#include <string_view>
 
 #include <spdlog/fmt/fmt.h>
 
@@ -34,17 +42,52 @@ main(int argc, char* argv[]) -> int
 {
   using namespace couchbase::test;
 
+  bool list_only{ false };
   std::set<std::string> filter;
   for (int i = 1; i < argc; ++i) {
-    filter.insert(std::string{ argv[i] });
+    const std::string_view arg{ argv[i] };
+    if (arg == "--list-tests") {
+      list_only = true;
+    } else {
+      filter.emplace(arg);
+    }
   }
 
-  // Real-cluster mode iff TEST_CONNECTION_STRING is set and non-empty (the couchbase-cxx-client
-  // integration convention).
-  const bool real_cluster = safe_getenv("TEST_CONNECTION_STRING").has_value();
+  auto suite = tests();
 
-  const auto suite = tests();
-  const auto result = run(suite, filter, real_cluster, std::cout);
+  if (list_only) {
+    for (const auto& line : describe_cases(suite)) {
+      std::cout << line << '\n';
+    }
+    return 0;
+  }
+
+  auto config = configuration::from_environment();
+  try {
+    const auto factor = timeout_multiplier(safe_getenv(timeout_multiplier_variable));
+    scale_timeouts(suite, factor);
+    // The requirement phase runs under its own budget on the configuration, not on any case, so it
+    // has to be scaled by the same factor or the multiplier misses the phase that opens the
+    // cluster.
+    scale_timeouts(config, factor);
+  } catch (const std::exception& e) {
+    std::cerr << e.what() << '\n';
+    return 1;
+  }
+
+  context ctx{ std::move(config) };
+
+  const auto result = run(suite, filter, ctx, std::cout);
+
+  // Grouped, because the count alone is what lets a predicate that is permanently false in CI go
+  // unnoticed: 37 skipped reads the same whether the environment lacked one thing or everything.
+  if (!result.skipped_by_requirement.empty()) {
+    std::cout << "\nSkipped for want of:\n";
+    for (const auto& [requirement, count] : result.skipped_by_requirement) {
+      std::cout << fmt::format("  {} — {} case(s)\n", requirement, count);
+    }
+    std::cout << '\n';
+  }
 
   if (result.failed > 0) {
     std::cout << fmt::format("Suite \"{}\": {} passed, {} skipped, {} FAILED\n",
@@ -61,6 +104,12 @@ main(int argc, char* argv[]) -> int
   } else {
     std::cout << fmt::format(
       "Suite \"{}\": {} passed, {} skipped\n", suite.name, result.passed, result.skipped);
+  }
+
+  // Skipped after a timeout for the same reason main() leaves through _Exit below: a detached
+  // worker may still be inside the very library the teardown is about to unload.
+  if (suite.teardown != nullptr && result.timed_out == 0) {
+    suite.teardown();
   }
 
   // A timed-out case leaves its worker detached and still running. Returning from main would run
