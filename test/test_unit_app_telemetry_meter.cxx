@@ -17,12 +17,45 @@
 
 #include "core/app_telemetry_meter.hxx"
 
+#include <chrono>
 #include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <sstream>
+#include <string>
 #include <vector>
 
 using couchbase::core::app_telemetry_counter;
+using couchbase::core::app_telemetry_latency;
 using couchbase::core::app_telemetry_meter;
 using couchbase::core::app_telemetry_recorder_cache;
+
+namespace
+{
+auto
+generate_report_text(app_telemetry_meter& meter) -> std::string
+{
+  std::vector<std::byte> buffer{};
+  meter.generate_report(buffer);
+  return { reinterpret_cast<const char*>(buffer.data()), buffer.size() };
+}
+
+/**
+ * Value of the named series in a report, e.g. "sdk_query_duration_milliseconds_sum". Matches at the
+ * start of a line so that a series name which is a suffix of another cannot be picked up.
+ */
+auto
+series_value(const std::string& report, const std::string& series) -> std::optional<std::uint64_t>
+{
+  std::istringstream lines{ report };
+  for (std::string line; std::getline(lines, line);) {
+    if (line.rfind(series + "{", 0) == 0) {
+      return std::stoull(line.substr(line.find("} ") + 2));
+    }
+  }
+  return {};
+}
+} // namespace
 
 TEST_CASE("unit: app_telemetry_recorder_cache resolves once and stays valid within a generation",
           "[unit]")
@@ -80,4 +113,50 @@ TEST_CASE("unit: app_telemetry_recorder_cache re-resolves when the key changes",
 
   // Switching back re-resolves again (the single slot now holds node-2's recorder).
   REQUIRE(cache.value_recorder(meter, "node-1", "bucket-1") != node2);
+}
+
+TEST_CASE("unit: app_telemetry_meter reports histogram sums in milliseconds", "[unit]")
+{
+  struct sample {
+    app_telemetry_latency latency;
+    const char* metric;
+    std::uint64_t millis;
+  };
+
+  // One observation per histogram, each a distinct duration so that a sample routed to the wrong
+  // family shows up in both series checked below. 250ms and 1500ms straddle a second: reporting the
+  // sum in seconds would give 0 and 1.
+  const std::vector<sample> samples{
+    { app_telemetry_latency::kv_retrieval, "sdk_kv_retrieval_duration_milliseconds", 3 },
+    { app_telemetry_latency::kv_mutation_nondurable,
+      "sdk_kv_mutation_nondurable_duration_milliseconds",
+      7 },
+    { app_telemetry_latency::kv_mutation_durable,
+      "sdk_kv_mutation_durable_duration_milliseconds",
+      40 },
+    { app_telemetry_latency::query, "sdk_query_duration_milliseconds", 1500 },
+    { app_telemetry_latency::search, "sdk_search_duration_milliseconds", 250 },
+    { app_telemetry_latency::analytics, "sdk_analytics_duration_milliseconds", 30000 },
+    { app_telemetry_latency::management, "sdk_management_duration_milliseconds", 120 },
+    { app_telemetry_latency::eventing, "sdk_eventing_duration_milliseconds", 900 },
+  };
+
+  app_telemetry_meter meter;
+  const auto recorder = meter.value_recorder("node-1", "bucket-1");
+  for (const auto& s : samples) {
+    recorder->record_latency(s.latency, std::chrono::milliseconds{ s.millis });
+  }
+
+  const auto report = generate_report_text(meter);
+
+  for (const auto& s : samples) {
+    const std::string metric{ s.metric };
+    CAPTURE(metric);
+    const auto sum = series_value(report, metric + "_sum");
+    const auto count = series_value(report, metric + "_count");
+    REQUIRE(sum.has_value());
+    REQUIRE(count.has_value());
+    REQUIRE(*sum == s.millis);
+    REQUIRE(*count == std::uint64_t{ 1 });
+  }
 }
