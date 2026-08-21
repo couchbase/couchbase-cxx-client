@@ -36,7 +36,7 @@
 // cluster map couchbase2 does not have -- so the request has to be sent and the server's answer
 // taken, and only a live case shows what that answer is.
 
-#include "fixtures/live_fixture.hxx"
+#include "cng/fixtures/live_fixture.hxx"
 #include "framework/test_runner.hxx"
 
 #include "core/management/bucket_settings.hxx"

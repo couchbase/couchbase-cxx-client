@@ -1,4 +1,5 @@
-# The shared test framework: the runner, the common main(), and the framework's own self-test.
+# The shared test framework: the runner, the common main(), the registration helpers, and the
+# framework's own self-test.
 #
 # Hand-rolled (CXXCBC-885), deliberately NOT Catch2. It lives outside either test subdirectory
 # because both test trees link it. See test/cng/README.md to build and run the CNG tests.
@@ -6,8 +7,8 @@
 find_package(Threads REQUIRED)
 
 # Each test executable links this and provides its own tests(). fmt comes from spdlog's bundled
-# copy (header include dirs only). ${PROJECT_SOURCE_DIR}/test is PUBLIC so a test includes the
-# framework as "framework/test_runner.hxx" wherever in the test tree it sits.
+# copy (header include dirs only). ${PROJECT_SOURCE_DIR}/test is PUBLIC so every test spells its
+# includes from one root: "framework/test_runner.hxx", "cng/fixtures/live_fixture.hxx".
 add_library(
   test_framework_main STATIC
   ${PROJECT_SOURCE_DIR}/test/framework/test_runner.cxx
@@ -26,30 +27,157 @@ target_link_libraries(test_framework_main PUBLIC Threads::Threads spdlog::spdlog
 set_project_options(test_framework_main)
 set_project_warnings(test_framework_main)
 
-# The framework's own self-test: it drives run() with in-memory suites and asserts on the returned
-# run_result, so it links the framework and nothing else.
-add_executable(test_framework_selftest
-               ${PROJECT_SOURCE_DIR}/test/framework/framework_selftest.cxx)
-target_include_directories(
-  test_framework_selftest SYSTEM BEFORE
-  PRIVATE $<BUILD_INTERFACE:$<TARGET_PROPERTY:spdlog::spdlog,INTERFACE_INCLUDE_DIRECTORIES>>)
-target_link_libraries(test_framework_selftest PRIVATE test_framework_main Threads::Threads)
-set_project_options(test_framework_selftest)
-set_project_warnings(test_framework_selftest)
-add_test(NAME test_framework_selftest COMMAND $<TARGET_FILE:test_framework_selftest>)
-# The harness returns 77 when every case was skipped; map that to ctest's "Skipped".
+# couchbase_discover_tests(<target> PROPERTIES <prop> <value>...)
 #
-# The label must be one a CI leg actually selects, or these cases are compiled, linked and never
-# run. Only unit, integration, transaction, benchmark and cng are selected anywhere in bin/ or
-# .github/workflows/. cng is the one that fits: its steps deliberately do not apply --test-action
-# memcheck, and the inner suites here assert on absolute millisecond budgets that valgrind would
-# blow with no multiplier able to reach them.
-set_tests_properties(test_framework_selftest PROPERTIES SKIP_RETURN_CODE 77 LABELS "cng")
-if(DEFINED COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS AND EXISTS "${COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS}")
-  set_tests_properties(
-    test_framework_selftest
-    PROPERTIES
+# Registers one ctest entry per case, named <target>.<case>, the way catch_discover_tests does for
+# the Catch2 suites. Per-executable registration would be coarser than what the suite already
+# depends on: bin/run-integration-tests shards the valgrind leg with `ctest -I i,,n`, whose stride
+# runs over ctest entries, and --output-junit builds the CI report from one row per entry.
+#
+# The list is produced at post-build by running the executable with --list-tests, which reports
+# every case regardless of what the environment satisfies -- so the registered set does not depend
+# on the machine that built it.
+#
+# NAMING RULE, which the whole scheme relies on: a case name is the name of the function that
+# implements it, so it is a C++ identifier in lower_snake_case -- [A-Za-z_][A-Za-z0-9_]* and nothing
+# else. No spaces, no punctuation, no colons. A Catch2 case is converted to one ONCE, when it is
+# migrated: the category prefix is dropped because the target's ctest label already carries it, and
+# the remaining words are joined with underscores. So
+# "integration: cluster remains usable in a forked child" is migrated as the function
+# cluster_remains_usable_in_a_forked_child.
+#
+# Keep that rule and nothing here needs quoting or escaping: the name is safe as a CMake list
+# element, as a ctest -R pattern, and as an argv entry in bash, zsh, cmd and PowerShell alike. Break
+# it and the fix is the name, never an escaping scheme in this file.
+function(couchbase_discover_tests target)
+  cmake_parse_arguments(ARG "" "" "PROPERTIES" ${ARGN})
+
+  get_property(is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+  if(is_multi_config)
+    set(ctest_file "${CMAKE_CURRENT_BINARY_DIR}/${target}_tests_$<CONFIG>.cmake")
+    set(ctest_file_at_test_time "${CMAKE_CURRENT_BINARY_DIR}/${target}_tests_\${CTEST_CONFIGURATION_TYPE}.cmake")
+    # No BYPRODUCTS here. It accepts a generator expression only from CMake 3.20, and this project
+    # declares 3.19, so a multi-config generate would break on the minimum version this repository
+    # claims to support. The declaration only tells the build graph that the command writes this
+    # file -- it is a `clean` and dependency-tracking hint, not a correctness requirement, and the
+    # per-config file name is worth more than the hint. catch_discover_tests() avoids the question
+    # by keying its file on an argument hash rather than the configuration, which is why one file
+    # there serves every config.
+    set(byproducts "")
+  else()
+    set(ctest_file "${CMAKE_CURRENT_BINARY_DIR}/${target}_tests.cmake")
+    set(ctest_file_at_test_time "${ctest_file}")
+    set(byproducts BYPRODUCTS "${ctest_file}")
+  endif()
+
+  add_custom_command(
+    TARGET ${target}
+    POST_BUILD
+    ${byproducts}
+    COMMAND
+      "${CMAKE_COMMAND}" -D "TEST_TARGET=${target}" -D "TEST_EXECUTABLE=$<TARGET_FILE:${target}>" -D
+      "TEST_PROPERTIES=${ARG_PROPERTIES}" -D "CTEST_FILE=${ctest_file}" -P
+      "${PROJECT_SOURCE_DIR}/cmake/TestFrameworkAddTests.cmake"
+    COMMENT "Enumerating test cases in ${target}"
+    VERBATIM)
+
+  # ctest reads TEST_INCLUDE_FILES at the start of a run, when the generated file may not exist --
+  # a fresh configure, or a build that never got as far as linking this target. Registering a test
+  # that cannot pass is the point: an unbuilt binary must not read as a binary with no failures.
+  #
+  # The placeholder runs cmake -E false rather than a command named after the target: a missing
+  # command fails with a different message on every platform ("command not found", "file not
+  # found", a Windows error box), and one of them has to be recognisable as the intended failure.
+  set(include_file "${CMAKE_CURRENT_BINARY_DIR}/${target}_include.cmake")
+  file(
+    WRITE "${include_file}"
+    "if(EXISTS \"${ctest_file_at_test_time}\")\n"
+    "  include(\"${ctest_file_at_test_time}\")\n"
+    "else()\n"
+    # Positional, not add_test(NAME ... COMMAND ...): the keyword signature is a CMakeLists
+    # feature. Meeting one in an include file, ctest takes the first argument as the test name and
+    # the rest as the command, so it registers an entry literally called "NAME" that reports Not
+    # Run. The positional form is what makes the entry carry the target's name and fail for the
+    # reason it was registered.
+    "  add_test([==[${target}_NOT_BUILT]==] [==[${CMAKE_COMMAND}]==] -E false)\n"
+    # The placeholder carries the same labels as the real cases would. Without them a labelled run
+    # -- which is how CI runs everything -- would filter the placeholder out, and an unbuilt binary
+    # would once again read as a binary with no failures.
+    "  set(properties [==[${ARG_PROPERTIES}]==])\n"
+    "  set_tests_properties(${target}_NOT_BUILT PROPERTIES \${properties})\n"
+    "endif()\n")
+  set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES "${include_file}")
+endfunction()
+
+# Which client library a LINK_CLIENT test links. test/cng/CMakeLists.txt narrows this for the
+# couchbase2 tests, which also link the generated protobuf stubs directly.
+set(couchbase_cxx_client_test_library ${couchbase_cxx_client_DEFAULT_LIBRARY})
+
+# couchbase_add_test(<relpath> LABEL <label> [LINK_CLIENT] [LIBS <lib>...])
+#
+# relpath is under test/ without the extension (e.g. cng/protostellar/dispatcher). The target name
+# is that path with the separators flattened, which makes it unique by construction: keying on the
+# file stem instead would collide the moment two subsystems each have a parser.cxx. LINK_CLIENT
+# links the client library and its core header include set, for tests that exercise core code.
+function(couchbase_add_test relpath)
+  cmake_parse_arguments(ARG "LINK_CLIENT" "LABEL" "LIBS" ${ARGN})
+
+  # Every entry is a label some leg in bin/ or .github/workflows/ selects with --label-regex. A
+  # label no runner selects is worse than a typo: it configures, builds and links, and the cases
+  # are then never executed by anything. Do not add one here without the leg that runs it.
+  set(known_labels unit integration transaction benchmark cng)
+  if(NOT ARG_LABEL IN_LIST known_labels)
+    # A typo here is invisible at build time and then quietly drops the binary out of the CI leg
+    # that was supposed to run it.
+    message(FATAL_ERROR "couchbase_add_test(${relpath}): LABEL must be one of ${known_labels}, "
+                        "got \"${ARG_LABEL}\"")
+  endif()
+
+  string(REPLACE "/" "_" target "${relpath}")
+  add_executable(${target} ${PROJECT_SOURCE_DIR}/test/${relpath}.cxx)
+  target_include_directories(${target} PRIVATE ${PROJECT_SOURCE_DIR})
+  target_include_directories(
+    ${target} SYSTEM BEFORE
+    PRIVATE $<BUILD_INTERFACE:$<TARGET_PROPERTY:spdlog::spdlog,INTERFACE_INCLUDE_DIRECTORIES>>)
+  target_link_libraries(${target} PRIVATE test_framework_main Threads::Threads)
+  if(ARG_LINK_CLIENT)
+    target_include_directories(${target} PRIVATE ${PROJECT_BINARY_DIR}/generated
+                                                 ${PROJECT_BINARY_DIR}/generated_$<CONFIG>)
+    target_include_directories(
+      ${target} SYSTEM BEFORE
+      PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/expected/include>
+              $<BUILD_INTERFACE:$<TARGET_PROPERTY:asio,INTERFACE_INCLUDE_DIRECTORIES>>)
+    propagate_public_compile_definitions(${target} spdlog::spdlog asio)
+    target_link_libraries(
+      ${target} PRIVATE ${couchbase_cxx_client_test_library} $<BUILD_INTERFACE:Microsoft.GSL::GSL>
+                        $<BUILD_INTERFACE:taocpp::json>)
+  endif()
+  if(ARG_LIBS)
+    target_link_libraries(${target} PRIVATE ${ARG_LIBS})
+  endif()
+  set_project_options(${target})
+  set_project_warnings(${target})
+
+  # The harness returns 77 when every case was skipped; map that to ctest's "Skipped".
+  set(properties SKIP_RETURN_CODE 77 LABELS "${ARG_LABEL}")
+  # Sanitizers are applied per target (cmake/Sanitizers.cmake), so dependencies fetched and built
+  # as ordinary packages -- gRPC and abseil among them -- carry no instrumentation, and TSan cannot
+  # see the happens-before edges inside their event-engine and futex code. Without
+  # ignore_noninstrumented_modules it reports those as races: the dispatcher tests drive real gRPC
+  # threads and produced 54 such reports. Set on the test rather than in CI so a local `ctest` under
+  # TSan behaves the same way.
+  if(DEFINED COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS AND EXISTS "${COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS}")
+    list(
+      APPEND
+      properties
       ENVIRONMENT
       "TSAN_OPTIONS=halt_on_error=0,second_deadlock_stack=1,ignore_noninstrumented_modules=1,suppressions=${COUCHBASE_CXX_CLIENT_TSAN_SUPPRESSIONS}"
-  )
-endif()
+    )
+  endif()
+  couchbase_discover_tests(${target} PROPERTIES ${properties})
+endfunction()
+
+# cng, because that is the leg whose steps deliberately do not apply --test-action memcheck: the
+# inner suites here assert on absolute millisecond budgets, which valgrind would blow with no
+# multiplier able to reach them.
+couchbase_add_test(framework/selftest LABEL cng)
