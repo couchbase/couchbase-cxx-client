@@ -19,7 +19,7 @@
 // Two properties: a definition survives the round trip whole, and one that cannot be represented
 // is refused rather than truncated. Pure, no server.
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/protostellar/search_index_admin_converter.hxx"
 #include "core/utils/json.hxx"
@@ -61,7 +61,7 @@ full_index() -> couchbase::core::management::search::index
 }
 
 void
-apply_index_maps_fields_and_params()
+apply_index_maps_fields_and_params([[maybe_unused]] context& ctx)
 {
   auto index = full_index();
 
@@ -79,7 +79,7 @@ apply_index_maps_fields_and_params()
 }
 
 void
-a_create_carries_no_uuid()
+a_create_carries_no_uuid([[maybe_unused]] context& ctx)
 {
   auto index = full_index();
   index.uuid = "existing-uuid";
@@ -93,7 +93,7 @@ a_create_carries_no_uuid()
 }
 
 void
-an_update_carries_the_uuid()
+an_update_carries_the_uuid([[maybe_unused]] context& ctx)
 {
   auto index = full_index();
   index.uuid = "existing-uuid";
@@ -106,7 +106,7 @@ an_update_carries_the_uuid()
 }
 
 void
-all_three_parameter_blobs_survive_the_round_trip()
+all_three_parameter_blobs_survive_the_round_trip([[maybe_unused]] context& ctx)
 {
   const auto index = full_index();
 
@@ -128,7 +128,7 @@ all_three_parameter_blobs_survive_the_round_trip()
 }
 
 void
-an_unset_parameter_blob_stays_unset()
+an_unset_parameter_blob_stays_unset([[maybe_unused]] context& ctx)
 {
   couchbase::core::management::search::index index;
   index.name = "idx";
@@ -150,7 +150,7 @@ an_unset_parameter_blob_stays_unset()
 }
 
 void
-an_unparseable_parameter_blob_is_refused()
+an_unparseable_parameter_blob_is_refused([[maybe_unused]] context& ctx)
 {
   // Each position separately: a guard on one blob does not cover the other two.
   for (const auto* position : { "params", "plan_params", "source_params" }) {
@@ -173,7 +173,7 @@ an_unparseable_parameter_blob_is_refused()
 }
 
 void
-a_non_object_parameter_blob_is_refused()
+a_non_object_parameter_blob_is_refused([[maybe_unused]] context& ctx)
 {
   // Valid JSON, but the map is keyed by an object's members, so an array or a scalar has nowhere
   // to go. Dropping it is what loses a definition silently.
@@ -187,7 +187,7 @@ a_non_object_parameter_blob_is_refused()
 }
 
 void
-a_map_member_that_is_not_json_is_refused()
+a_map_member_that_is_not_json_is_refused([[maybe_unused]] context& ctx)
 {
   for (const auto* position : { "params", "plan_params", "source_params" }) {
     v1::Index proto;
@@ -205,7 +205,7 @@ a_map_member_that_is_not_json_is_refused()
 }
 
 void
-params_to_json_keeps_the_unset_convention_for_an_empty_map()
+params_to_json_keeps_the_unset_convention_for_an_empty_map([[maybe_unused]] context& ctx)
 {
   ::google::protobuf::Map<std::string, std::string> empty;
   const auto rebuilt = si::params_to_json(empty);
@@ -215,7 +215,7 @@ params_to_json_keeps_the_unset_convention_for_an_empty_map()
 }
 
 void
-decode_index_maps_fields()
+decode_index_maps_fields([[maybe_unused]] context& ctx)
 {
   v1::Index proto;
   proto.set_uuid("u1");
@@ -239,7 +239,7 @@ decode_index_maps_fields()
 }
 
 void
-a_definition_survives_the_full_encode_decode_cycle()
+a_definition_survives_the_full_encode_decode_cycle([[maybe_unused]] context& ctx)
 {
   // get_index -> edit -> upsert is the cycle that loses members when a conversion drops what it
   // cannot represent, so the whole definition is compared, not one blob.
@@ -270,22 +270,19 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_search_index_admin_converter",
+    suite_name,
     {
-      { "apply_index_maps_fields_and_params", apply_index_maps_fields_and_params },
-      { "a_create_carries_no_uuid", a_create_carries_no_uuid },
-      { "an_update_carries_the_uuid", an_update_carries_the_uuid },
-      { "all_three_parameter_blobs_survive_the_round_trip",
-        all_three_parameter_blobs_survive_the_round_trip },
-      { "an_unset_parameter_blob_stays_unset", an_unset_parameter_blob_stays_unset },
-      { "an_unparseable_parameter_blob_is_refused", an_unparseable_parameter_blob_is_refused },
-      { "a_non_object_parameter_blob_is_refused", a_non_object_parameter_blob_is_refused },
-      { "a_map_member_that_is_not_json_is_refused", a_map_member_that_is_not_json_is_refused },
-      { "params_to_json_keeps_the_unset_convention_for_an_empty_map",
-        params_to_json_keeps_the_unset_convention_for_an_empty_map },
-      { "decode_index_maps_fields", decode_index_maps_fields },
-      { "a_definition_survives_the_full_encode_decode_cycle",
-        a_definition_survives_the_full_encode_decode_cycle },
+      { CASE(apply_index_maps_fields_and_params) },
+      { CASE(a_create_carries_no_uuid) },
+      { CASE(an_update_carries_the_uuid) },
+      { CASE(all_three_parameter_blobs_survive_the_round_trip) },
+      { CASE(an_unset_parameter_blob_stays_unset) },
+      { CASE(an_unparseable_parameter_blob_is_refused) },
+      { CASE(a_non_object_parameter_blob_is_refused) },
+      { CASE(a_map_member_that_is_not_json_is_refused) },
+      { CASE(params_to_json_keeps_the_unset_convention_for_an_empty_map) },
+      { CASE(decode_index_maps_fields) },
+      { CASE(a_definition_survives_the_full_encode_decode_cycle) },
     },
   };
 }

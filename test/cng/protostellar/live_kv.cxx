@@ -22,7 +22,7 @@
 // real gateway. Extra env: TEST_CB2_USERNAME/TEST_CB2_PASSWORD (default Administrator/password),
 // TEST_CB2_BUCKET (default "default"). TLS verification is disabled (dev gateway cert).
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/cluster_credentials.hxx"
 #include "core/cluster_options.hxx"
@@ -71,7 +71,7 @@ env_or(const char* name, const char* fallback) -> std::string
 }
 
 void
-kv_crud_round_trip_against_live_gateway()
+kv_crud_round_trip_against_live_gateway([[maybe_unused]] context& ctx)
 {
   const auto connstr_opt = safe_getenv("TEST_CONNECTION_STRING");
   if (!connstr_opt.has_value()) {
@@ -171,7 +171,7 @@ kv_crud_round_trip_against_live_gateway()
 }
 
 void
-insert_and_replace_round_trip_against_live_gateway()
+insert_and_replace_round_trip_against_live_gateway([[maybe_unused]] context& ctx)
 {
   const auto connstr_opt = safe_getenv("TEST_CONNECTION_STRING");
   if (!connstr_opt.has_value()) {
@@ -322,7 +322,7 @@ insert_and_replace_round_trip_against_live_gateway()
 // Each level gets its own io_context and component so that a level which hangs or fails is
 // attributed to itself rather than to whichever one happens to run first.
 void
-durable_mutations_against_live_gateway()
+durable_mutations_against_live_gateway([[maybe_unused]] context& ctx)
 {
   const auto connstr_opt = safe_getenv("TEST_CONNECTION_STRING");
   if (!connstr_opt.has_value()) {
@@ -420,7 +420,7 @@ durable_mutations_against_live_gateway()
 // The projected read is the second half: it reaches the gateway's ordinary Get handler, so it
 // negotiates compression like any other read and has to complete rather than be refused.
 void
-compressed_values_round_trip_against_live_gateway()
+compressed_values_round_trip_against_live_gateway([[maybe_unused]] context& ctx)
 {
   const auto connstr_opt = safe_getenv("TEST_CONNECTION_STRING");
   if (!connstr_opt.has_value()) {
@@ -524,24 +524,20 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_live_kv",
+    suite_name,
     {
-      { "kv_crud_round_trip_against_live_gateway",
-        kv_crud_round_trip_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
-      { "insert_and_replace_round_trip_against_live_gateway",
-        insert_and_replace_round_trip_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
-      { "durable_mutations_against_live_gateway",
-        durable_mutations_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
-      { "compressed_values_round_trip_against_live_gateway",
-        compressed_values_round_trip_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
+      { CASE(kv_crud_round_trip_against_live_gateway),
+        { needs::real_cluster() },
+        timeout::integration },
+      { CASE(insert_and_replace_round_trip_against_live_gateway),
+        { needs::real_cluster() },
+        timeout::integration },
+      { CASE(durable_mutations_against_live_gateway),
+        { needs::real_cluster() },
+        timeout::integration },
+      { CASE(compressed_values_round_trip_against_live_gateway),
+        { needs::real_cluster() },
+        timeout::integration },
     },
   };
 }

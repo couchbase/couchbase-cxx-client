@@ -18,7 +18,7 @@
 // Unit tests for the FTS search <-> couchbase.search.v1 converter (CXXCBC-899). Pure, no
 // server. Only the trivial query forms are translated; everything else is reported as unmappable.
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/protostellar/search_converter.hxx"
 
@@ -45,7 +45,7 @@ base_request() -> ops::search_request
 }
 
 void
-encode_maps_envelope_and_query_string()
+encode_maps_envelope_and_query_string([[maybe_unused]] context& ctx)
 {
   auto request = base_request();
   request.limit = 10;
@@ -70,7 +70,7 @@ encode_maps_envelope_and_query_string()
 }
 
 void
-encode_maps_match_all_and_match_none()
+encode_maps_match_all_and_match_none([[maybe_unused]] context& ctx)
 {
   auto all = base_request();
   all.query = couchbase::core::json_string{ R"({"match_all":{}})" };
@@ -86,7 +86,7 @@ encode_maps_match_all_and_match_none()
 }
 
 void
-encode_returns_nullopt_for_unmappable_query()
+encode_returns_nullopt_for_unmappable_query([[maybe_unused]] context& ctx)
 {
   auto request = base_request();
   request.query = couchbase::core::json_string{ R"({"term":"x","field":"f"})" };
@@ -107,7 +107,7 @@ encode_returns_nullopt_for_unmappable_query()
 // A boost is serialized beside the query key, so rejecting every two-key object would make
 // query_string("foo").boost(2) -- an ordinary supported query -- unroutable.
 void
-encode_maps_a_boosted_query_string()
+encode_maps_a_boosted_query_string([[maybe_unused]] context& ctx)
 {
   auto request = base_request();
   request.query = couchbase::core::json_string{ R"({"query":"foo","boost":2.5})" };
@@ -123,7 +123,7 @@ encode_maps_a_boosted_query_string()
 // Reported as invalid_argument by the component rather than feature_not_available: a query the
 // caller failed to serialize is their own error, not a gap in couchbase2 support.
 void
-malformed_query_json_is_distinguished_from_an_unmappable_shape()
+malformed_query_json_is_distinguished_from_an_unmappable_shape([[maybe_unused]] context& ctx)
 {
   auto malformed = base_request();
   malformed.query = couchbase::core::json_string{ R"({"match_all":)" };
@@ -137,7 +137,7 @@ malformed_query_json_is_distinguished_from_an_unmappable_shape()
 }
 
 void
-can_encode_rejects_gated_features()
+can_encode_rejects_gated_features([[maybe_unused]] context& ctx)
 {
   assert_true(ps::can_encode(base_request()), "plain search passes the coarse gate");
 
@@ -159,7 +159,7 @@ can_encode_rejects_gated_features()
 }
 
 void
-decode_maps_hits_and_metrics()
+decode_maps_hits_and_metrics([[maybe_unused]] context& ctx)
 {
   v1::SearchQueryResponse message;
   auto* hit = message.add_hits();
@@ -199,7 +199,7 @@ decode_maps_hits_and_metrics()
 // and leaves ctx.ec unset, so mapping them to an error code here would make couchbase2 fail a query
 // that couchbase:// answers. Carrying them is what lets a caller notice the results are partial.
 void
-decode_carries_partial_partition_failures()
+decode_carries_partial_partition_failures([[maybe_unused]] context& ctx)
 {
   v1::SearchQueryResponse message;
   auto* metrics = message.mutable_meta_data()->mutable_metrics();
@@ -227,7 +227,7 @@ decode_carries_partial_partition_failures()
 // whose highlighting is silently empty -- an outcome the caller cannot distinguish from a document
 // that simply had no match in that field.
 void
-decode_maps_fragments_fields_and_array_positions()
+decode_maps_fragments_fields_and_array_positions([[maybe_unused]] context& ctx)
 {
   v1::SearchQueryResponse message;
   auto* hit = message.add_hits();
@@ -268,7 +268,7 @@ decode_maps_fragments_fields_and_array_positions()
 // A hit with no highlighting must leave the row's optional members unset rather than carrying an
 // empty object, so a caller can tell "no fragments were requested" from "the field did not match".
 void
-decode_leaves_absent_fragments_and_positions_unset()
+decode_leaves_absent_fragments_and_positions_unset([[maybe_unused]] context& ctx)
 {
   v1::SearchQueryResponse message;
   auto* hit = message.add_hits();
@@ -291,22 +291,18 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_search_converter",
+    suite_name,
     {
-      { "encode_maps_envelope_and_query_string", encode_maps_envelope_and_query_string },
-      { "encode_maps_match_all_and_match_none", encode_maps_match_all_and_match_none },
-      { "encode_returns_nullopt_for_unmappable_query",
-        encode_returns_nullopt_for_unmappable_query },
-      { "encode_maps_a_boosted_query_string", encode_maps_a_boosted_query_string },
-      { "malformed_query_json_is_distinguished_from_an_unmappable_shape",
-        malformed_query_json_is_distinguished_from_an_unmappable_shape },
-      { "can_encode_rejects_gated_features", can_encode_rejects_gated_features },
-      { "decode_maps_hits_and_metrics", decode_maps_hits_and_metrics },
-      { "decode_carries_partial_partition_failures", decode_carries_partial_partition_failures },
-      { "decode_maps_fragments_fields_and_array_positions",
-        decode_maps_fragments_fields_and_array_positions },
-      { "decode_leaves_absent_fragments_and_positions_unset",
-        decode_leaves_absent_fragments_and_positions_unset },
+      { CASE(encode_maps_envelope_and_query_string) },
+      { CASE(encode_maps_match_all_and_match_none) },
+      { CASE(encode_returns_nullopt_for_unmappable_query) },
+      { CASE(encode_maps_a_boosted_query_string) },
+      { CASE(malformed_query_json_is_distinguished_from_an_unmappable_shape) },
+      { CASE(can_encode_rejects_gated_features) },
+      { CASE(decode_maps_hits_and_metrics) },
+      { CASE(decode_carries_partial_partition_failures) },
+      { CASE(decode_maps_fragments_fields_and_array_positions) },
+      { CASE(decode_leaves_absent_fragments_and_positions_unset) },
     },
   };
 }

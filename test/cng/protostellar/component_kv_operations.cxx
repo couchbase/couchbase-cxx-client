@@ -39,7 +39,7 @@
 //
 // Env-agnostic: an in-process gRPC server, no cluster.
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/cluster_credentials.hxx"
 #include "core/document_id.hxx"
@@ -509,7 +509,7 @@ run(in_process_server& server, Request request)
 // --- touch --------------------------------------------------------------------------------------
 
 void
-touch_encodes_a_relative_expiry_and_returns_the_cas()
+touch_encodes_a_relative_expiry_and_returns_the_cas([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   ops::touch_request request;
@@ -527,7 +527,7 @@ touch_encodes_a_relative_expiry_and_returns_the_cas()
 }
 
 void
-touch_encodes_an_expiry_beyond_thirty_days_as_an_absolute_time()
+touch_encodes_an_expiry_beyond_thirty_days_as_an_absolute_time([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   ops::touch_request request;
@@ -546,7 +546,7 @@ touch_encodes_an_expiry_beyond_thirty_days_as_an_absolute_time()
 }
 
 void
-touch_maps_a_missing_document_into_the_error_context()
+touch_maps_a_missing_document_into_the_error_context([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   ops::touch_request request;
@@ -562,7 +562,7 @@ touch_maps_a_missing_document_into_the_error_context()
 // --- exists -------------------------------------------------------------------------------------
 
 void
-exists_reports_a_present_document()
+exists_reports_a_present_document([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   ops::exists_request request;
@@ -576,7 +576,7 @@ exists_reports_a_present_document()
 }
 
 void
-exists_reports_a_missing_document_as_a_success()
+exists_reports_a_missing_document_as_a_success([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   ops::exists_request request;
@@ -594,7 +594,7 @@ exists_reports_a_missing_document_as_a_success()
 // --- get_and_lock -------------------------------------------------------------------------------
 
 void
-get_and_lock_encodes_the_lock_time_and_returns_the_value()
+get_and_lock_encodes_the_lock_time_and_returns_the_value([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   ops::get_and_lock_request request;
@@ -610,7 +610,7 @@ get_and_lock_encodes_the_lock_time_and_returns_the_value()
 }
 
 void
-get_and_lock_maps_a_locked_document_into_document_locked()
+get_and_lock_maps_a_locked_document_into_document_locked([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   ops::get_and_lock_request request;
@@ -624,7 +624,7 @@ get_and_lock_maps_a_locked_document_into_document_locked()
 }
 
 void
-get_and_lock_decompresses_compressed_content()
+get_and_lock_decompresses_compressed_content([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   ops::get_and_lock_request request;
@@ -643,7 +643,7 @@ get_and_lock_decompresses_compressed_content()
 // --- unlock -------------------------------------------------------------------------------------
 
 void
-unlock_sends_the_cas_and_completes()
+unlock_sends_the_cas_and_completes([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   ops::unlock_request request;
@@ -657,7 +657,7 @@ unlock_sends_the_cas_and_completes()
 }
 
 void
-unlock_maps_a_cas_mismatch()
+unlock_maps_a_cas_mismatch([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   ops::unlock_request request;
@@ -671,7 +671,7 @@ unlock_maps_a_cas_mismatch()
 }
 
 void
-unlock_maps_a_document_that_is_not_locked()
+unlock_maps_a_document_that_is_not_locked([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   ops::unlock_request request;
@@ -687,7 +687,7 @@ unlock_maps_a_document_that_is_not_locked()
 // --- get_and_touch ------------------------------------------------------------------------------
 
 void
-get_and_touch_encodes_the_expiry_and_returns_the_value()
+get_and_touch_encodes_the_expiry_and_returns_the_value([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   ops::get_and_touch_request request;
@@ -704,7 +704,7 @@ get_and_touch_encodes_the_expiry_and_returns_the_value()
 }
 
 void
-get_and_touch_decompresses_compressed_content()
+get_and_touch_decompresses_compressed_content([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   ops::get_and_touch_request request;
@@ -721,7 +721,7 @@ get_and_touch_decompresses_compressed_content()
 // --- increment / decrement ----------------------------------------------------------------------
 
 void
-increment_encodes_the_delta_and_initial_and_returns_the_counter()
+increment_encodes_the_delta_and_initial_and_returns_the_counter([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   ops::increment_request request;
@@ -743,7 +743,7 @@ increment_encodes_the_delta_and_initial_and_returns_the_counter()
 }
 
 void
-increment_omits_the_initial_value_when_it_is_unset()
+increment_omits_the_initial_value_when_it_is_unset([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   ops::increment_request request;
@@ -760,7 +760,7 @@ increment_omits_the_initial_value_when_it_is_unset()
 }
 
 void
-decrement_encodes_the_delta_and_initial_and_returns_the_counter()
+decrement_encodes_the_delta_and_initial_and_returns_the_counter([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   ops::decrement_request request;
@@ -782,7 +782,7 @@ decrement_encodes_the_delta_and_initial_and_returns_the_counter()
 }
 
 void
-decrement_reaches_the_decrement_stub_and_not_increment()
+decrement_reaches_the_decrement_stub_and_not_increment([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   ops::decrement_request request;
@@ -801,7 +801,7 @@ decrement_reaches_the_decrement_stub_and_not_increment()
 // --- append / prepend ---------------------------------------------------------------------------
 
 void
-append_sends_the_content_and_returns_the_cas_and_token()
+append_sends_the_content_and_returns_the_cas_and_token([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   ops::append_request request;
@@ -818,7 +818,7 @@ append_sends_the_content_and_returns_the_cas_and_token()
 }
 
 void
-append_omits_the_cas_when_the_caller_did_not_set_one()
+append_omits_the_cas_when_the_caller_did_not_set_one([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   ops::append_request request;
@@ -834,7 +834,7 @@ append_omits_the_cas_when_the_caller_did_not_set_one()
 }
 
 void
-append_sends_the_cas_when_the_caller_set_one()
+append_sends_the_cas_when_the_caller_set_one([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   ops::append_request request;
@@ -850,7 +850,7 @@ append_sends_the_cas_when_the_caller_set_one()
 }
 
 void
-append_maps_a_cas_mismatch()
+append_maps_a_cas_mismatch([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   ops::append_request request;
@@ -865,7 +865,7 @@ append_maps_a_cas_mismatch()
 }
 
 void
-append_maps_a_missing_document()
+append_maps_a_missing_document([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   ops::append_request request;
@@ -881,7 +881,7 @@ append_maps_a_missing_document()
 }
 
 void
-prepend_sends_the_content_and_reaches_the_prepend_stub()
+prepend_sends_the_content_and_reaches_the_prepend_stub([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   ops::prepend_request request;
@@ -1090,7 +1090,7 @@ check_gateway_errors(std::initializer_list<gateway_error> applicable,
 }
 
 void
-touch_maps_every_status_the_gateway_can_return()
+touch_maps_every_status_the_gateway_can_return([[maybe_unused]] context& ctx)
 {
   // kvserver.go Touch: CollectionMissing, CollectionNoWriteAccess, DocLocked, DocMissing, Generic,
   // ScopeMissing. Touch takes the *write* access path even though it changes only the expiry.
@@ -1110,7 +1110,7 @@ touch_maps_every_status_the_gateway_can_return()
 }
 
 void
-exists_maps_every_status_the_gateway_can_return()
+exists_maps_every_status_the_gateway_can_return([[maybe_unused]] context& ctx)
 {
   // kvserver.go Exists: CollectionMissing, CollectionNoReadAccess, Generic, ScopeMissing -- and
   // notably NOT DocMissing. The server cannot report a missing document as an error here, which is
@@ -1128,7 +1128,7 @@ exists_maps_every_status_the_gateway_can_return()
 }
 
 void
-get_and_lock_maps_every_status_the_gateway_can_return()
+get_and_lock_maps_every_status_the_gateway_can_return([[maybe_unused]] context& ctx)
 {
   // kvserver.go GetAndLock: CollectionMissing, CollectionNoReadAccess, DocLocked, DocMissing,
   // Generic, ScopeMissing. DocLocked here is the double-lock case -- locking an already-locked
@@ -1149,7 +1149,7 @@ get_and_lock_maps_every_status_the_gateway_can_return()
 }
 
 void
-unlock_maps_every_status_the_gateway_can_return()
+unlock_maps_every_status_the_gateway_can_return([[maybe_unused]] context& ctx)
 {
   // kvserver.go Unlock: CollectionMissing, CollectionNoWriteAccess, DocCasMismatch, DocMissing,
   // DocNotLocked, Generic, ScopeMissing. There is deliberately no DocLocked in that set -- see
@@ -1171,7 +1171,7 @@ unlock_maps_every_status_the_gateway_can_return()
 }
 
 void
-get_and_touch_maps_every_status_the_gateway_can_return()
+get_and_touch_maps_every_status_the_gateway_can_return([[maybe_unused]] context& ctx)
 {
   check_gateway_errors({ gateway_error::collection_missing,
                          gateway_error::collection_no_read_access,
@@ -1189,7 +1189,7 @@ get_and_touch_maps_every_status_the_gateway_can_return()
 }
 
 void
-increment_maps_every_status_the_gateway_can_return()
+increment_maps_every_status_the_gateway_can_return([[maybe_unused]] context& ctx)
 {
   // kvserver.go Increment adds DocNotNumeric, DurabilityImpossible and SyncWriteAmbiguous, and has
   // no CasMismatch -- IncrementRequest carries no cas field to mismatch against.
@@ -1212,7 +1212,7 @@ increment_maps_every_status_the_gateway_can_return()
 }
 
 void
-decrement_maps_every_status_the_gateway_can_return()
+decrement_maps_every_status_the_gateway_can_return([[maybe_unused]] context& ctx)
 {
   check_gateway_errors({ gateway_error::collection_missing,
                          gateway_error::collection_no_write_access,
@@ -1233,7 +1233,7 @@ decrement_maps_every_status_the_gateway_can_return()
 }
 
 void
-append_maps_every_status_the_gateway_can_return()
+append_maps_every_status_the_gateway_can_return([[maybe_unused]] context& ctx)
 {
   // kvserver.go Append/Prepend are the only two of these nine that can return both CasMismatch and
   // ValueTooLarge, and neither can return DocNotNumeric.
@@ -1257,7 +1257,7 @@ append_maps_every_status_the_gateway_can_return()
 }
 
 void
-prepend_maps_every_status_the_gateway_can_return()
+prepend_maps_every_status_the_gateway_can_return([[maybe_unused]] context& ctx)
 {
   check_gateway_errors({ gateway_error::collection_missing,
                          gateway_error::collection_no_write_access,
@@ -1281,7 +1281,7 @@ prepend_maps_every_status_the_gateway_can_return()
 // --- the contested corners, each pinned with its source ---------------------------------------
 
 void
-unlock_reports_a_bad_cas_as_cas_mismatch_not_locked()
+unlock_reports_a_bad_cas_as_cas_mismatch_not_locked([[maybe_unused]] context& ctx)
 {
   // The classic protocol makes this opcode-dependent: core/protocol/status.cxx maps status
   // `locked` to cas_mismatch when the opcode is `unlock`, and to document_locked otherwise. The
@@ -1303,7 +1303,7 @@ unlock_reports_a_bad_cas_as_cas_mismatch_not_locked()
 }
 
 void
-a_cas_mismatch_arrives_as_error_info_not_precondition_failure()
+a_cas_mismatch_arrives_as_error_info_not_precondition_failure([[maybe_unused]] context& ctx)
 {
   // NewDocCasMismatchStatus packs ErrorInfo{Reason: "CAS_MISMATCH"}; every other contested KV
   // error packs PreconditionFailure. A mapping that only ever looked at PreconditionFailure would
@@ -1322,7 +1322,7 @@ a_cas_mismatch_arrives_as_error_info_not_precondition_failure()
 }
 
 void
-a_locked_document_is_reported_so_the_retry_layer_can_see_it()
+a_locked_document_is_reported_so_the_retry_layer_can_see_it([[maybe_unused]] context& ctx)
 {
   // The contested one. The classic transport does not surface a locked document to the caller at
   // all: core/bucket.cxx and core/io/mcbp_command.hxx raise retry_reason::key_value_locked, which
@@ -1348,7 +1348,7 @@ a_locked_document_is_reported_so_the_retry_layer_can_see_it()
 }
 
 void
-a_detail_free_deadline_is_ambiguous_for_a_mutation_and_not_for_a_read()
+a_detail_free_deadline_is_ambiguous_for_a_mutation_and_not_for_a_read([[maybe_unused]] context& ctx)
 {
   // NewSyncWriteAmbiguousStatus attaches no details at all, so the code is the only signal. A
   // mutation that timed out may already have been applied; a read cannot have changed anything, so
@@ -1372,7 +1372,7 @@ a_detail_free_deadline_is_ambiguous_for_a_mutation_and_not_for_a_read()
 }
 
 void
-an_unrecognised_server_error_is_reported_as_cancelled()
+an_unrecognised_server_error_is_reported_as_cancelled([[maybe_unused]] context& ctx)
 {
   // Surprising, and worth pinning precisely because it is surprising. NewGenericStatus is the
   // gateway's fallback for anything it cannot classify, and its context.Canceled arm returns
@@ -1393,7 +1393,7 @@ an_unrecognised_server_error_is_reported_as_cancelled()
 // --- resource-type routing ------------------------------------------------------------------
 
 void
-a_not_found_resource_type_selects_the_specific_error()
+a_not_found_resource_type_selects_the_specific_error([[maybe_unused]] context& ctx)
 {
   // NOT_FOUND alone cannot say what was missing. RFC 77 puts that in the ResourceInfo detail, and
   // collapsing all four onto document_not_found would tell an operator with a typo in a bucket name
@@ -1429,114 +1429,54 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_component_kv_operations",
+    suite_name,
     {
-      { "touch_encodes_a_relative_expiry_and_returns_the_cas",
-        touch_encodes_a_relative_expiry_and_returns_the_cas,
+      { CASE(touch_encodes_a_relative_expiry_and_returns_the_cas), {}, timeout::network },
+      { CASE(touch_encodes_an_expiry_beyond_thirty_days_as_an_absolute_time),
+        {},
         timeout::network },
-      { "touch_encodes_an_expiry_beyond_thirty_days_as_an_absolute_time",
-        touch_encodes_an_expiry_beyond_thirty_days_as_an_absolute_time,
+      { CASE(touch_maps_a_missing_document_into_the_error_context), {}, timeout::network },
+      { CASE(exists_reports_a_present_document), {}, timeout::network },
+      { CASE(exists_reports_a_missing_document_as_a_success), {}, timeout::network },
+      { CASE(get_and_lock_encodes_the_lock_time_and_returns_the_value), {}, timeout::network },
+      { CASE(get_and_lock_maps_a_locked_document_into_document_locked), {}, timeout::network },
+      { CASE(get_and_lock_decompresses_compressed_content), {}, timeout::network },
+      { CASE(unlock_sends_the_cas_and_completes), {}, timeout::network },
+      { CASE(unlock_maps_a_cas_mismatch), {}, timeout::network },
+      { CASE(unlock_maps_a_document_that_is_not_locked), {}, timeout::network },
+      { CASE(get_and_touch_encodes_the_expiry_and_returns_the_value), {}, timeout::network },
+      { CASE(get_and_touch_decompresses_compressed_content), {}, timeout::network },
+      { CASE(increment_encodes_the_delta_and_initial_and_returns_the_counter),
+        {},
         timeout::network },
-      { "touch_maps_a_missing_document_into_the_error_context",
-        touch_maps_a_missing_document_into_the_error_context,
+      { CASE(increment_omits_the_initial_value_when_it_is_unset), {}, timeout::network },
+      { CASE(decrement_encodes_the_delta_and_initial_and_returns_the_counter),
+        {},
         timeout::network },
-      { "exists_reports_a_present_document", exists_reports_a_present_document, timeout::network },
-      { "exists_reports_a_missing_document_as_a_success",
-        exists_reports_a_missing_document_as_a_success,
+      { CASE(decrement_reaches_the_decrement_stub_and_not_increment), {}, timeout::network },
+      { CASE(append_sends_the_content_and_returns_the_cas_and_token), {}, timeout::network },
+      { CASE(append_omits_the_cas_when_the_caller_did_not_set_one), {}, timeout::network },
+      { CASE(append_sends_the_cas_when_the_caller_set_one), {}, timeout::network },
+      { CASE(append_maps_a_cas_mismatch), {}, timeout::network },
+      { CASE(append_maps_a_missing_document), {}, timeout::network },
+      { CASE(prepend_sends_the_content_and_reaches_the_prepend_stub), {}, timeout::network },
+      { CASE(a_not_found_resource_type_selects_the_specific_error), {}, timeout::network },
+      { CASE(touch_maps_every_status_the_gateway_can_return), {}, timeout::network },
+      { CASE(exists_maps_every_status_the_gateway_can_return), {}, timeout::network },
+      { CASE(get_and_lock_maps_every_status_the_gateway_can_return), {}, timeout::network },
+      { CASE(unlock_maps_every_status_the_gateway_can_return), {}, timeout::network },
+      { CASE(get_and_touch_maps_every_status_the_gateway_can_return), {}, timeout::network },
+      { CASE(increment_maps_every_status_the_gateway_can_return), {}, timeout::network },
+      { CASE(decrement_maps_every_status_the_gateway_can_return), {}, timeout::network },
+      { CASE(append_maps_every_status_the_gateway_can_return), {}, timeout::network },
+      { CASE(prepend_maps_every_status_the_gateway_can_return), {}, timeout::network },
+      { CASE(unlock_reports_a_bad_cas_as_cas_mismatch_not_locked), {}, timeout::network },
+      { CASE(a_cas_mismatch_arrives_as_error_info_not_precondition_failure), {}, timeout::network },
+      { CASE(a_locked_document_is_reported_so_the_retry_layer_can_see_it), {}, timeout::network },
+      { CASE(a_detail_free_deadline_is_ambiguous_for_a_mutation_and_not_for_a_read),
+        {},
         timeout::network },
-      { "get_and_lock_encodes_the_lock_time_and_returns_the_value",
-        get_and_lock_encodes_the_lock_time_and_returns_the_value,
-        timeout::network },
-      { "get_and_lock_maps_a_locked_document_into_document_locked",
-        get_and_lock_maps_a_locked_document_into_document_locked,
-        timeout::network },
-      { "get_and_lock_decompresses_compressed_content",
-        get_and_lock_decompresses_compressed_content,
-        timeout::network },
-      { "unlock_sends_the_cas_and_completes",
-        unlock_sends_the_cas_and_completes,
-        timeout::network },
-      { "unlock_maps_a_cas_mismatch", unlock_maps_a_cas_mismatch, timeout::network },
-      { "unlock_maps_a_document_that_is_not_locked",
-        unlock_maps_a_document_that_is_not_locked,
-        timeout::network },
-      { "get_and_touch_encodes_the_expiry_and_returns_the_value",
-        get_and_touch_encodes_the_expiry_and_returns_the_value,
-        timeout::network },
-      { "get_and_touch_decompresses_compressed_content",
-        get_and_touch_decompresses_compressed_content,
-        timeout::network },
-      { "increment_encodes_the_delta_and_initial_and_returns_the_counter",
-        increment_encodes_the_delta_and_initial_and_returns_the_counter,
-        timeout::network },
-      { "increment_omits_the_initial_value_when_it_is_unset",
-        increment_omits_the_initial_value_when_it_is_unset,
-        timeout::network },
-      { "decrement_encodes_the_delta_and_initial_and_returns_the_counter",
-        decrement_encodes_the_delta_and_initial_and_returns_the_counter,
-        timeout::network },
-      { "decrement_reaches_the_decrement_stub_and_not_increment",
-        decrement_reaches_the_decrement_stub_and_not_increment,
-        timeout::network },
-      { "append_sends_the_content_and_returns_the_cas_and_token",
-        append_sends_the_content_and_returns_the_cas_and_token,
-        timeout::network },
-      { "append_omits_the_cas_when_the_caller_did_not_set_one",
-        append_omits_the_cas_when_the_caller_did_not_set_one,
-        timeout::network },
-      { "append_sends_the_cas_when_the_caller_set_one",
-        append_sends_the_cas_when_the_caller_set_one,
-        timeout::network },
-      { "append_maps_a_cas_mismatch", append_maps_a_cas_mismatch, timeout::network },
-      { "append_maps_a_missing_document", append_maps_a_missing_document, timeout::network },
-      { "prepend_sends_the_content_and_reaches_the_prepend_stub",
-        prepend_sends_the_content_and_reaches_the_prepend_stub,
-        timeout::network },
-      { "a_not_found_resource_type_selects_the_specific_error",
-        a_not_found_resource_type_selects_the_specific_error,
-        timeout::network },
-      { "touch_maps_every_status_the_gateway_can_return",
-        touch_maps_every_status_the_gateway_can_return,
-        timeout::network },
-      { "exists_maps_every_status_the_gateway_can_return",
-        exists_maps_every_status_the_gateway_can_return,
-        timeout::network },
-      { "get_and_lock_maps_every_status_the_gateway_can_return",
-        get_and_lock_maps_every_status_the_gateway_can_return,
-        timeout::network },
-      { "unlock_maps_every_status_the_gateway_can_return",
-        unlock_maps_every_status_the_gateway_can_return,
-        timeout::network },
-      { "get_and_touch_maps_every_status_the_gateway_can_return",
-        get_and_touch_maps_every_status_the_gateway_can_return,
-        timeout::network },
-      { "increment_maps_every_status_the_gateway_can_return",
-        increment_maps_every_status_the_gateway_can_return,
-        timeout::network },
-      { "decrement_maps_every_status_the_gateway_can_return",
-        decrement_maps_every_status_the_gateway_can_return,
-        timeout::network },
-      { "append_maps_every_status_the_gateway_can_return",
-        append_maps_every_status_the_gateway_can_return,
-        timeout::network },
-      { "prepend_maps_every_status_the_gateway_can_return",
-        prepend_maps_every_status_the_gateway_can_return,
-        timeout::network },
-      { "unlock_reports_a_bad_cas_as_cas_mismatch_not_locked",
-        unlock_reports_a_bad_cas_as_cas_mismatch_not_locked,
-        timeout::network },
-      { "a_cas_mismatch_arrives_as_error_info_not_precondition_failure",
-        a_cas_mismatch_arrives_as_error_info_not_precondition_failure,
-        timeout::network },
-      { "a_locked_document_is_reported_so_the_retry_layer_can_see_it",
-        a_locked_document_is_reported_so_the_retry_layer_can_see_it,
-        timeout::network },
-      { "a_detail_free_deadline_is_ambiguous_for_a_mutation_and_not_for_a_read",
-        a_detail_free_deadline_is_ambiguous_for_a_mutation_and_not_for_a_read,
-        timeout::network },
-      { "an_unrecognised_server_error_is_reported_as_cancelled",
-        an_unrecognised_server_error_is_reported_as_cancelled,
-        timeout::network },
+      { CASE(an_unrecognised_server_error_is_reported_as_cancelled), {}, timeout::network },
     },
   };
 }

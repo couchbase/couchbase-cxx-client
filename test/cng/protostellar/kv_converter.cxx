@@ -17,7 +17,7 @@
 
 // Unit tests for the KV converter (CXXCBC-892). Pure translation, no server (env-agnostic).
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/cluster_options.hxx"
 #include "core/protostellar/dispatcher.hxx"
@@ -51,7 +51,7 @@ test_id() -> document_id
 }
 
 void
-get_request_encodes_location()
+get_request_encodes_location([[maybe_unused]] context& ctx)
 {
   ops::get_request request;
   request.id = document_id{ "travel-sample", "inventory", "airline", "airline_10" };
@@ -63,7 +63,7 @@ get_request_encodes_location()
 }
 
 void
-get_response_decodes_value_cas_flags()
+get_response_decodes_value_cas_flags([[maybe_unused]] context& ctx)
 {
   v1::GetResponse proto;
   proto.set_content_uncompressed("{\"type\":\"airline\"}");
@@ -120,7 +120,7 @@ assert_expiry(const Proto& proto, const expiry_case& expected, const std::string
 
 // upsert, insert and replace all share set_expiry, so every branch is pinned on each of them.
 void
-expiry_encodes_every_branch_explicitly()
+expiry_encodes_every_branch_explicitly([[maybe_unused]] context& ctx)
 {
   for (const auto& expected : expiry_cases) {
     const auto label = "expiry=" + std::to_string(expected.expiry);
@@ -152,7 +152,7 @@ expiry_encodes_every_branch_explicitly()
 // (see a_counter_seed_above_int64_max_is_rejected_before_dispatch), because this converter returns
 // the request message by value and has no error channel of its own.
 void
-counter_initial_value_is_optional_and_encodes_its_upper_bound()
+counter_initial_value_is_optional_and_encodes_its_upper_bound([[maybe_unused]] context& ctx)
 {
   ops::increment_request without_seed;
   without_seed.id = test_id();
@@ -190,7 +190,7 @@ counter_initial_value_is_optional_and_encodes_its_upper_bound()
 // channel for the expiry and it must always be set. An omitted oneof would leave the gateway
 // nothing to act on, so get_and_touch(id, 0) would report success and leave the old TTL in place.
 void
-expiry_encodes_every_branch_for_get_and_touch_and_the_counters()
+expiry_encodes_every_branch_for_get_and_touch_and_the_counters([[maybe_unused]] context& ctx)
 {
   for (const auto& expected : expiry_cases) {
     const auto label = "expiry=" + std::to_string(expected.expiry);
@@ -216,7 +216,7 @@ expiry_encodes_every_branch_for_get_and_touch_and_the_counters()
 // preserve_expiry wins over expiry, which is what upsert_options and replace_options document, and
 // the gateway's encoding for it is an omitted oneof (kvserver.go:484 for upsert, :581 for replace).
 void
-preserve_expiry_omits_the_expiry_oneof()
+preserve_expiry_omits_the_expiry_oneof([[maybe_unused]] context& ctx)
 {
   ops::upsert_request upsert;
   upsert.id = test_id();
@@ -259,7 +259,7 @@ preserve_expiry_omits_the_expiry_oneof()
 // flag is only legal alongside a non-zero expiry, where it would mean the same thing, so it carries
 // no information this encoder needs.
 void
-upsert_never_emits_a_gateway_rejected_expiry_shape()
+upsert_never_emits_a_gateway_rejected_expiry_shape([[maybe_unused]] context& ctx)
 {
   for (const bool preserve : { false, true }) {
     for (const auto& expected : expiry_cases) {
@@ -290,7 +290,7 @@ upsert_never_emits_a_gateway_rejected_expiry_shape()
 // :131-137 for GetAndTouch). A zero expiry therefore has to be sent, not omitted; the gateway maps
 // it to never-expires (helpers.go:49-51), which is what touch(0) means on the classic path too.
 void
-touch_always_sends_an_expiry_arm()
+touch_always_sends_an_expiry_arm([[maybe_unused]] context& ctx)
 {
   for (const auto& expected : expiry_cases) {
     ops::touch_request touch;
@@ -301,7 +301,7 @@ touch_always_sends_an_expiry_arm()
 }
 
 void
-upsert_request_encodes_all_fields()
+upsert_request_encodes_all_fields([[maybe_unused]] context& ctx)
 {
   ops::upsert_request request;
   request.id = test_id();
@@ -321,7 +321,7 @@ upsert_request_encodes_all_fields()
 }
 
 void
-mutation_response_decodes_cas_and_token()
+mutation_response_decodes_cas_and_token([[maybe_unused]] context& ctx)
 {
   v1::UpsertResponse proto;
   proto.set_cas(0xaa55ULL);
@@ -340,7 +340,7 @@ mutation_response_decodes_cas_and_token()
 }
 
 void
-replace_and_remove_encode_cas()
+replace_and_remove_encode_cas([[maybe_unused]] context& ctx)
 {
   ops::replace_request replace;
   replace.id = test_id();
@@ -369,7 +369,7 @@ replace_and_remove_encode_cas()
 // order; a level shifted by one is still a value the gateway accepts, so the write succeeds and the
 // caller silently gets weaker or stronger guarantees than were asked for.
 void
-durability_levels_map_to_their_own_proto_levels()
+durability_levels_map_to_their_own_proto_levels([[maybe_unused]] context& ctx)
 {
   assert_true(pk::to_proto_durability(couchbase::durability_level::majority) ==
                 v1::DURABILITY_LEVEL_MAJORITY,
@@ -384,7 +384,7 @@ durability_levels_map_to_their_own_proto_levels()
 }
 
 void
-durability_none_is_left_unset()
+durability_none_is_left_unset([[maybe_unused]] context& ctx)
 {
   assert_false(pk::to_proto_durability(couchbase::durability_level::none).has_value(),
                "none -> unset");
@@ -398,7 +398,7 @@ durability_none_is_left_unset()
 }
 
 void
-lifecycle_ops_encode_expected_fields()
+lifecycle_ops_encode_expected_fields([[maybe_unused]] context& ctx)
 {
   ops::touch_request touch;
   touch.id = document_id{ "b", "s", "c", "k" };
@@ -422,7 +422,7 @@ lifecycle_ops_encode_expected_fields()
 }
 
 void
-exists_and_lock_responses_decode()
+exists_and_lock_responses_decode([[maybe_unused]] context& ctx)
 {
   v1::ExistsResponse exists_proto;
   exists_proto.set_result(true);
@@ -441,7 +441,7 @@ exists_and_lock_responses_decode()
 }
 
 void
-counter_encodes_and_decodes()
+counter_encodes_and_decodes([[maybe_unused]] context& ctx)
 {
   ops::increment_request inc;
   inc.id = document_id{ "b", "s", "c", "counter" };
@@ -465,7 +465,7 @@ counter_encodes_and_decodes()
 }
 
 void
-append_encodes_content_and_cas()
+append_encodes_content_and_cas([[maybe_unused]] context& ctx)
 {
   ops::append_request append;
   append.id = document_id{ "b", "s", "c", "k" };
@@ -482,7 +482,7 @@ append_encodes_content_and_cas()
 // would be the one path unable to accept a compressed body. gocb, the Java SDK and the .NET SDK all
 // put the projection paths and the compression mode on the same request.
 void
-read_compression_opt_in_follows_settings()
+read_compression_opt_in_follows_settings([[maybe_unused]] context& ctx)
 {
   ops::get_request get;
   get.id = test_id();
@@ -519,7 +519,7 @@ read_compression_opt_in_follows_settings()
 // inflate it. A path that read content_uncompressed directly would hand back the empty-string
 // singleton with a success status.
 void
-every_read_path_decodes_compressed_content()
+every_read_path_decodes_compressed_content([[maybe_unused]] context& ctx)
 {
   const std::string plain(256, 'x');
   const auto frame = pk::maybe_compress(cu::to_binary(plain), pk::compression_settings{});
@@ -548,7 +548,7 @@ every_read_path_decodes_compressed_content()
 }
 
 void
-compression_round_trips_large_values()
+compression_round_trips_large_values([[maybe_unused]] context& ctx)
 {
   const std::string big(1024, 'a'); // well over min_size and highly compressible
   ops::upsert_request request;
@@ -575,7 +575,7 @@ compression_round_trips_large_values()
 // data-loss trap the unguarded content oneof had before compression landed. decode_content returns
 // nullopt and the decoder reports the server-side fault instead of inventing a value.
 void
-malformed_compressed_content_fails_closed()
+malformed_compressed_content_fails_closed([[maybe_unused]] context& ctx)
 {
   v1::GetResponse proto;
   proto.set_content_compressed(std::string(64, '\xff')); // not a snappy frame
@@ -600,7 +600,7 @@ malformed_compressed_content_fails_closed()
 // maximum message size can have been carried here, and a std::bad_alloc raised inside a gRPC
 // completion would take the process down rather than fail the operation.
 void
-an_oversized_declared_length_is_refused()
+an_oversized_declared_length_is_refused([[maybe_unused]] context& ctx)
 {
   std::optional<std::string> frame;
   {
@@ -619,7 +619,7 @@ an_oversized_declared_length_is_refused()
 }
 
 void
-the_min_size_threshold_admits_a_value_of_exactly_min_size()
+the_min_size_threshold_admits_a_value_of_exactly_min_size([[maybe_unused]] context& ctx)
 {
   const pk::compression_settings settings{};
   const auto compresses = [&settings](std::size_t size) {
@@ -637,7 +637,7 @@ the_min_size_threshold_admits_a_value_of_exactly_min_size()
 // a power-of-two original, which makes both the division and the comparison exact in binary
 // floating point -- an approximate ratio would not tell the inclusive bound from the exclusive one.
 void
-the_min_ratio_threshold_is_inclusive()
+the_min_ratio_threshold_is_inclusive([[maybe_unused]] context& ctx)
 {
   const std::string original(1024, 'a');
   const auto value = cu::to_binary(original);
@@ -656,7 +656,7 @@ the_min_ratio_threshold_is_inclusive()
 // A value can clear min_size and still be worth sending raw. Without the ratio check every
 // incompressible payload would go out larger than it arrived.
 void
-an_incompressible_value_is_sent_uncompressed()
+an_incompressible_value_is_sent_uncompressed([[maybe_unused]] context& ctx)
 {
   // A fixed linear congruential sequence rather than <random>: the bytes have to be the same on
   // every platform for the ratio the assertion depends on to be the same.
@@ -677,7 +677,7 @@ an_incompressible_value_is_sent_uncompressed()
 }
 
 void
-cluster_options_maps_compression_settings()
+cluster_options_maps_compression_settings([[maybe_unused]] context& ctx)
 {
   couchbase::core::cluster_options options;
   options.enable_compression = false;
@@ -691,7 +691,7 @@ cluster_options_maps_compression_settings()
 }
 
 void
-custom_compression_thresholds_are_honoured()
+custom_compression_thresholds_are_honoured([[maybe_unused]] context& ctx)
 {
   const std::string text(256, 'a');
   ops::upsert_request request;
@@ -710,41 +710,35 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_kv_converter",
+    suite_name,
     {
-      { "get_request_encodes_location", get_request_encodes_location },
-      { "get_response_decodes_value_cas_flags", get_response_decodes_value_cas_flags },
-      { "expiry_encodes_every_branch_explicitly", expiry_encodes_every_branch_explicitly },
-      { "expiry_encodes_every_branch_for_get_and_touch_and_the_counters",
-        expiry_encodes_every_branch_for_get_and_touch_and_the_counters },
-      { "counter_initial_value_is_optional_and_encodes_its_upper_bound",
-        counter_initial_value_is_optional_and_encodes_its_upper_bound },
-      { "preserve_expiry_omits_the_expiry_oneof", preserve_expiry_omits_the_expiry_oneof },
-      { "touch_always_sends_an_expiry_arm", touch_always_sends_an_expiry_arm },
-      { "upsert_never_emits_a_gateway_rejected_expiry_shape",
-        upsert_never_emits_a_gateway_rejected_expiry_shape },
-      { "upsert_request_encodes_all_fields", upsert_request_encodes_all_fields },
-      { "mutation_response_decodes_cas_and_token", mutation_response_decodes_cas_and_token },
-      { "replace_and_remove_encode_cas", replace_and_remove_encode_cas },
-      { "durability_none_is_left_unset", durability_none_is_left_unset },
-      { "durability_levels_map_to_their_own_proto_levels",
-        durability_levels_map_to_their_own_proto_levels },
-      { "lifecycle_ops_encode_expected_fields", lifecycle_ops_encode_expected_fields },
-      { "exists_and_lock_responses_decode", exists_and_lock_responses_decode },
-      { "counter_encodes_and_decodes", counter_encodes_and_decodes },
-      { "append_encodes_content_and_cas", append_encodes_content_and_cas },
-      { "read_compression_opt_in_follows_settings", read_compression_opt_in_follows_settings },
-      { "every_read_path_decodes_compressed_content", every_read_path_decodes_compressed_content },
-      { "compression_round_trips_large_values", compression_round_trips_large_values },
-      { "the_min_size_threshold_admits_a_value_of_exactly_min_size",
-        the_min_size_threshold_admits_a_value_of_exactly_min_size },
-      { "the_min_ratio_threshold_is_inclusive", the_min_ratio_threshold_is_inclusive },
-      { "an_incompressible_value_is_sent_uncompressed",
-        an_incompressible_value_is_sent_uncompressed },
-      { "malformed_compressed_content_fails_closed", malformed_compressed_content_fails_closed },
-      { "an_oversized_declared_length_is_refused", an_oversized_declared_length_is_refused },
-      { "cluster_options_maps_compression_settings", cluster_options_maps_compression_settings },
-      { "custom_compression_thresholds_are_honoured", custom_compression_thresholds_are_honoured },
+      { CASE(get_request_encodes_location) },
+      { CASE(get_response_decodes_value_cas_flags) },
+      { CASE(expiry_encodes_every_branch_explicitly) },
+      { CASE(expiry_encodes_every_branch_for_get_and_touch_and_the_counters) },
+      { CASE(counter_initial_value_is_optional_and_encodes_its_upper_bound) },
+      { CASE(preserve_expiry_omits_the_expiry_oneof) },
+      { CASE(touch_always_sends_an_expiry_arm) },
+      { CASE(upsert_never_emits_a_gateway_rejected_expiry_shape) },
+      { CASE(upsert_request_encodes_all_fields) },
+      { CASE(mutation_response_decodes_cas_and_token) },
+      { CASE(replace_and_remove_encode_cas) },
+      { CASE(durability_none_is_left_unset) },
+      { CASE(durability_levels_map_to_their_own_proto_levels) },
+      { CASE(lifecycle_ops_encode_expected_fields) },
+      { CASE(exists_and_lock_responses_decode) },
+      { CASE(counter_encodes_and_decodes) },
+      { CASE(append_encodes_content_and_cas) },
+      { CASE(read_compression_opt_in_follows_settings) },
+      { CASE(every_read_path_decodes_compressed_content) },
+      { CASE(compression_round_trips_large_values) },
+      { CASE(the_min_size_threshold_admits_a_value_of_exactly_min_size) },
+      { CASE(the_min_ratio_threshold_is_inclusive) },
+      { CASE(an_incompressible_value_is_sent_uncompressed) },
+      { CASE(malformed_compressed_content_fails_closed) },
+      { CASE(an_oversized_declared_length_is_refused) },
+      { CASE(cluster_options_maps_compression_settings) },
+      { CASE(custom_compression_thresholds_are_honoured) },
     },
   };
 }

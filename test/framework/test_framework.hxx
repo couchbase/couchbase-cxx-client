@@ -27,6 +27,8 @@
 // A test file provides `tests()` returning a `test_suite`; the runner (see test_runner.hxx)
 // executes each `test_case` on a worker thread with a per-case timeout and reports the outcome.
 
+#include "requirement.hxx"
+
 #include <chrono>
 #include <cstdint>
 #include <exception>
@@ -122,42 +124,9 @@ inline constexpr auto slow = 30'000ms;        // intentional delays
 
 inline constexpr auto default_timeout = timeout::network;
 
-// Which server environment a case needs. `real_cluster` encodes exactly one thing -- whether
-// TEST_CONNECTION_STRING is set -- so its false branch means "no cluster configured", NOT "a mock
-// is running": there is no CNG mock gateway, and none is planned. Tests that need a server of
-// their own stand up an in-process gRPC server and are therefore `agnostic`.
-//
-// So today only `agnostic` and `cluster_only` are used. `any_server` and `mock_only` are carried
-// over from the harness this was ported from and are reserved for a mock that does not exist yet.
-// Note `any_server` would run with nothing to talk to if used now -- give it a third state
-// (no server at all) before adopting it.
-//
-//   * no cluster (unset): agnostic + any_server + mock_only; cluster_only is skipped
-//   * real cluster (set): agnostic + any_server + cluster_only; mock_only is skipped
-enum class test_env : std::uint8_t {
-  agnostic,     // no external server needed (pure unit, or brings its own in-process server)
-  any_server,   // reserved: basic ops against whichever server is active
-  mock_only,    // reserved: needs mock-specific behaviour (fault injection)
-  cluster_only, // needs a real Couchbase cluster / gateway.
-};
-
-[[nodiscard]] constexpr auto
-should_run(test_env env, bool real_cluster) noexcept -> bool
-{
-  switch (env) {
-    case test_env::agnostic:
-    case test_env::any_server:
-      return true;
-    case test_env::mock_only:
-      return !real_cluster;
-    case test_env::cluster_only:
-      return real_cluster;
-  }
-  return true;
-}
-
-// Thrown by skip() to mark a case skipped at runtime — for preconditions the coarse env field
-// cannot express. The runner reports it distinctly from a failure.
+// Thrown by skip() to mark a case skipped at runtime — for the rare precondition no requirement
+// can express. Prefer a requirement: a skip from inside the body is invisible until the case runs,
+// and cannot be reported by --list-tests. The runner reports it distinctly from a failure.
 class test_skip_exception : public std::exception
 {
 public:
@@ -198,15 +167,21 @@ private:
 
 struct test_case {
   std::string name;
-  void (*func)();
+  // An ordinary function, so it can be navigated to and called like one. What it needs from the
+  // environment is declared beside it rather than checked inside it.
+  void (*func)(context&);
+  std::vector<requirement_ptr> requirements{};
   std::chrono::milliseconds timeout{ default_timeout };
-  test_env env{ test_env::agnostic };
 };
 
 struct test_suite {
   std::string name;
   std::vector<test_case> test_cases;
   std::vector<test_case> slow_test_cases{};
+  // Run once after the last case, whatever the outcome. What test/main.cxx does with
+  // OPENSSL_cleanup() today: a process-wide teardown that belongs to the binary rather than to any
+  // case in it.
+  void (*teardown)(){ nullptr };
 };
 
 // Each test file defines this.
@@ -261,6 +236,111 @@ assert_eq(const A& actual,
     } else {
       throw test_assertion_failure(fmt::format("{}:{}: {}", loc.file_name(), loc.line(), message));
     }
+  }
+}
+
+template<typename A, typename B>
+inline void
+assert_ne(const A& actual,
+          const B& unexpected,
+          std::string_view message = "expected different",
+          source_location loc = source_location::current())
+{
+  if (actual == unexpected) {
+    if constexpr (fmt::is_formattable<A>::value) {
+      throw test_assertion_failure(
+        fmt::format("{}:{}: {} (both are: {})", loc.file_name(), loc.line(), message, actual));
+    } else {
+      throw test_assertion_failure(fmt::format("{}:{}: {}", loc.file_name(), loc.line(), message));
+    }
+  }
+}
+
+inline void
+assert_contains(std::string_view haystack,
+                std::string_view needle,
+                std::string_view message = "expected to contain",
+                source_location loc = source_location::current())
+{
+  if (haystack.find(needle) == std::string_view::npos) {
+    throw test_assertion_failure(fmt::format(R"({}:{}: {} ("{}" is not in "{}"))",
+                                             loc.file_name(),
+                                             loc.line(),
+                                             message,
+                                             needle,
+                                             haystack));
+  }
+}
+
+inline void
+assert_starts_with(std::string_view value,
+                   std::string_view prefix,
+                   std::string_view message = "expected prefix",
+                   source_location loc = source_location::current())
+{
+  if (value.size() < prefix.size() || value.compare(0, prefix.size(), prefix) != 0) {
+    throw test_assertion_failure(fmt::format(R"({}:{}: {} ("{}" does not start with "{}"))",
+                                             loc.file_name(),
+                                             loc.line(),
+                                             message,
+                                             value,
+                                             prefix));
+  }
+}
+
+// An absolute tolerance, not a relative one: the suite compares durations and byte counts, where
+// "within 50ms" is the statement being made and a ratio would mean something different at each
+// magnitude.
+inline void
+assert_near(double actual,
+            double expected,
+            double tolerance,
+            std::string_view message = "expected within tolerance",
+            source_location loc = source_location::current())
+{
+  const auto difference = actual > expected ? actual - expected : expected - actual;
+  if (!(difference <= tolerance)) {
+    throw test_assertion_failure(fmt::format("{}:{}: {} (actual: {}, expected: {} ± {})",
+                                             loc.file_name(),
+                                             loc.line(),
+                                             message,
+                                             actual,
+                                             expected,
+                                             tolerance));
+  }
+}
+
+// Fail here, unconditionally. For a branch that must not be reached, where an assertion would have
+// to invent a condition to state what the control flow already says.
+[[noreturn]] inline void
+fail(std::string_view message, source_location loc = source_location::current())
+{
+  throw test_assertion_failure(fmt::format("{}:{}: {}", loc.file_name(), loc.line(), message));
+}
+
+// Invoke `fn` and require it not to throw. The exception's own message is reported: a case that
+// merely says "threw" leaves the reader to reproduce the failure to find out what it was.
+template<typename Fn>
+inline void
+assert_no_throw(Fn&& fn,
+                std::string_view message = "expected no exception",
+                source_location loc = source_location::current())
+{
+  try {
+    std::forward<Fn>(fn)();
+  } catch (const test_skip_exception&) {
+    throw;
+  } catch (const test_assertion_failure&) {
+    throw;
+  } catch (const std::exception& e) {
+    throw test_assertion_failure(
+      fmt::format("{}:{}: {} ({})", loc.file_name(), loc.line(), message, e.what()));
+  } catch (...) {
+    throw test_assertion_failure(
+      fmt::format("{}:{}: {} (an exception not derived from std::exception)",
+                  loc.file_name(),
+                  loc.line(),
+                  message));
   }
 }
 
