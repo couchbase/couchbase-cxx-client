@@ -29,8 +29,8 @@
 // never byte-identical to what was sent. Whether the three parameter blobs stay separate can only
 // be checked against a real definition, by looking for each blob's own member in its own blob.
 
-#include "fixtures/live_fixture.hxx"
-#include "framework/test_runner.hxx"
+#include "cng/fixtures/live_fixture.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/operations/management/search_index_analyze_document.hxx"
 #include "core/operations/management/search_index_control_ingest.hxx"
@@ -180,7 +180,7 @@ get_index(live_cluster_fixture& fixture, const std::string& name)
 }
 
 void
-list_search_indexes_against_live_gateway()
+list_search_indexes_against_live_gateway([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -188,7 +188,7 @@ list_search_indexes_against_live_gateway()
 }
 
 void
-the_search_index_lifecycle_round_trips_against_live_gateway()
+the_search_index_lifecycle_round_trips_against_live_gateway([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -232,7 +232,7 @@ the_search_index_lifecycle_round_trips_against_live_gateway()
 }
 
 void
-an_existing_index_is_updated_through_upsert_against_live_gateway()
+an_existing_index_is_updated_through_upsert_against_live_gateway([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -273,7 +273,8 @@ an_existing_index_is_updated_through_upsert_against_live_gateway()
 }
 
 void
-an_upsert_without_a_uuid_for_an_existing_name_is_refused_against_live_gateway()
+an_upsert_without_a_uuid_for_an_existing_name_is_refused_against_live_gateway(
+  [[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -297,7 +298,7 @@ an_upsert_without_a_uuid_for_an_existing_name_is_refused_against_live_gateway()
 }
 
 void
-the_three_parameter_blobs_stay_separate_against_live_gateway()
+the_three_parameter_blobs_stay_separate_against_live_gateway([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -342,7 +343,7 @@ the_three_parameter_blobs_stay_separate_against_live_gateway()
 }
 
 void
-a_definition_that_cannot_be_represented_is_refused_before_it_is_sent()
+a_definition_that_cannot_be_represented_is_refused_before_it_is_sent([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -366,7 +367,8 @@ a_definition_that_cannot_be_represented_is_refused_before_it_is_sent()
 }
 
 void
-an_empty_index_name_is_reported_as_invalid_argument_against_live_gateway()
+an_empty_index_name_is_reported_as_invalid_argument_against_live_gateway(
+  [[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -423,7 +425,7 @@ an_empty_index_name_is_reported_as_invalid_argument_against_live_gateway()
 }
 
 void
-getting_a_missing_index_reports_index_not_found_against_live_gateway()
+getting_a_missing_index_reports_index_not_found_against_live_gateway([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -437,7 +439,7 @@ getting_a_missing_index_reports_index_not_found_against_live_gateway()
 }
 
 void
-the_control_operations_round_trip_against_live_gateway()
+the_control_operations_round_trip_against_live_gateway([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -484,7 +486,7 @@ the_control_operations_round_trip_against_live_gateway()
 }
 
 void
-get_stats_is_refused_over_couchbase2_against_live_gateway()
+get_stats_is_refused_over_couchbase2_against_live_gateway([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -503,7 +505,7 @@ get_stats_is_refused_over_couchbase2_against_live_gateway()
 }
 
 void
-analyze_document_against_live_gateway()
+analyze_document_against_live_gateway([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -547,52 +549,41 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_live_search_index_admin",
+    suite_name,
     {
-      { "list_search_indexes_against_live_gateway",
-        list_search_indexes_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
-      { "the_search_index_lifecycle_round_trips_against_live_gateway",
-        the_search_index_lifecycle_round_trips_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
-      { "an_existing_index_is_updated_through_upsert_against_live_gateway",
-        an_existing_index_is_updated_through_upsert_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
-      { "an_upsert_without_a_uuid_for_an_existing_name_is_refused_against_live_gateway",
-        an_upsert_without_a_uuid_for_an_existing_name_is_refused_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
-      { "the_three_parameter_blobs_stay_separate_against_live_gateway",
-        the_three_parameter_blobs_stay_separate_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
-      { "a_definition_that_cannot_be_represented_is_refused_before_it_is_sent",
-        a_definition_that_cannot_be_represented_is_refused_before_it_is_sent,
-        timeout::integration,
-        test_env::cluster_only },
-      { "an_empty_index_name_is_reported_as_invalid_argument_against_live_gateway",
-        an_empty_index_name_is_reported_as_invalid_argument_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
-      { "getting_a_missing_index_reports_index_not_found_against_live_gateway",
-        getting_a_missing_index_reports_index_not_found_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
-      { "the_control_operations_round_trip_against_live_gateway",
-        the_control_operations_round_trip_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
-      { "get_stats_is_refused_over_couchbase2_against_live_gateway",
-        get_stats_is_refused_over_couchbase2_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
-      { "analyze_document_against_live_gateway",
-        analyze_document_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
+      { CASE(list_search_indexes_against_live_gateway),
+        { needs::real_cluster() },
+        timeout::integration },
+      { CASE(the_search_index_lifecycle_round_trips_against_live_gateway),
+        { needs::real_cluster() },
+        timeout::integration },
+      { CASE(an_existing_index_is_updated_through_upsert_against_live_gateway),
+        { needs::real_cluster() },
+        timeout::integration },
+      { CASE(an_upsert_without_a_uuid_for_an_existing_name_is_refused_against_live_gateway),
+        { needs::real_cluster() },
+        timeout::integration },
+      { CASE(the_three_parameter_blobs_stay_separate_against_live_gateway),
+        { needs::real_cluster() },
+        timeout::integration },
+      { CASE(a_definition_that_cannot_be_represented_is_refused_before_it_is_sent),
+        { needs::real_cluster() },
+        timeout::integration },
+      { CASE(an_empty_index_name_is_reported_as_invalid_argument_against_live_gateway),
+        { needs::real_cluster() },
+        timeout::integration },
+      { CASE(getting_a_missing_index_reports_index_not_found_against_live_gateway),
+        { needs::real_cluster() },
+        timeout::integration },
+      { CASE(the_control_operations_round_trip_against_live_gateway),
+        { needs::real_cluster() },
+        timeout::integration },
+      { CASE(get_stats_is_refused_over_couchbase2_against_live_gateway),
+        { needs::real_cluster() },
+        timeout::integration },
+      { CASE(analyze_document_against_live_gateway),
+        { needs::real_cluster() },
+        timeout::integration },
     },
   };
 }

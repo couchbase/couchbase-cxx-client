@@ -25,8 +25,8 @@
 
 #define COUCHBASE_CXX_CLIENT_IGNORE_CORE_DEPRECATIONS
 
-#include "fixtures/live_fixture.hxx"
-#include "framework/test_runner.hxx"
+#include "cng/fixtures/live_fixture.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/operations.hxx"
 #include "core/operations/document_view.hxx"
@@ -54,7 +54,7 @@ view(const std::string& bucket) -> ops::document_view_request
 }
 
 void
-view_round_trip_against_live_gateway()
+view_round_trip_against_live_gateway([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -78,7 +78,7 @@ view_round_trip_against_live_gateway()
 // signal skip_unless_service_implemented() relies on, so this case keeps that helper honest for the
 // view suite. Without it the suite would consist of one case that always skips.
 void
-an_unsupported_option_is_refused_by_the_client()
+an_unsupported_option_is_refused_by_the_client([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -99,7 +99,7 @@ an_unsupported_option_is_refused_by_the_client()
 // A spent budget is refused before anything is dispatched, and the response still names the view:
 // the failure has to be attributable to a request that never reached the wire.
 void
-an_expired_budget_is_refused_on_the_io_context()
+an_expired_budget_is_refused_on_the_io_context([[maybe_unused]] context& ctx)
 {
   live_cluster_fixture fixture;
   fixture.require_open();
@@ -129,20 +129,17 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_live_view",
+    suite_name,
     {
-      { "an_expired_budget_is_refused_on_the_io_context",
-        an_expired_budget_is_refused_on_the_io_context,
-        timeout::integration,
-        test_env::cluster_only },
-      { "view_round_trip_against_live_gateway",
-        view_round_trip_against_live_gateway,
-        timeout::integration,
-        test_env::cluster_only },
-      { "an_unsupported_option_is_refused_by_the_client",
-        an_unsupported_option_is_refused_by_the_client,
-        timeout::integration,
-        test_env::cluster_only },
+      { CASE(an_expired_budget_is_refused_on_the_io_context),
+        { needs::real_cluster() },
+        timeout::integration },
+      { CASE(view_round_trip_against_live_gateway),
+        { needs::real_cluster() },
+        timeout::integration },
+      { CASE(an_unsupported_option_is_refused_by_the_client),
+        { needs::real_cluster() },
+        timeout::integration },
     },
   };
 }

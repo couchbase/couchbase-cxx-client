@@ -21,7 +21,7 @@
 // misleading success report. The error is returned before any I/O, so this is env-agnostic: a lazy
 // connect to an unroutable endpoint is enough (no gateway required).
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include <couchbase/cluster.hxx>
 
@@ -33,7 +33,7 @@ namespace couchbase::test
 namespace
 {
 void
-ping_and_diagnostics_are_feature_not_available_over_couchbase2()
+ping_and_diagnostics_are_feature_not_available_over_couchbase2([[maybe_unused]] context& ctx)
 {
   couchbase::cluster_options options{ "Administrator", "password" };
   // couchbase2:// is TLS; skip verification so the lazy connect does not depend on a real cert.
@@ -69,12 +69,11 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_ping_diagnostics",
+    suite_name,
     {
-      { "ping_and_diagnostics_are_feature_not_available_over_couchbase2",
-        ping_and_diagnostics_are_feature_not_available_over_couchbase2,
-        timeout::integration,
-        test_env::agnostic },
+      { CASE(ping_and_diagnostics_are_feature_not_available_over_couchbase2),
+        {},
+        timeout::integration },
     },
   };
 }

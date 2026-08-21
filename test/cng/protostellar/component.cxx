@@ -20,7 +20,7 @@
 // io_context, with the error context reflecting the gRPC status. Env-agnostic (in-process
 // server, no external cluster). The connect-time wiring into cluster_impl is a separate change.
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "callback_queue_keepalive.hxx"
 
@@ -242,7 +242,7 @@ make_id(std::string key) -> document_id
 }
 
 void
-get_round_trips_on_the_io_thread()
+get_round_trips_on_the_io_thread([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   asio::io_context io;
@@ -268,7 +268,7 @@ get_round_trips_on_the_io_thread()
 }
 
 void
-get_maps_not_found_into_the_error_context()
+get_maps_not_found_into_the_error_context([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   asio::io_context io;
@@ -290,7 +290,7 @@ get_maps_not_found_into_the_error_context()
 }
 
 void
-upsert_returns_cas_and_mutation_token()
+upsert_returns_cas_and_mutation_token([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   asio::io_context io;
@@ -315,7 +315,7 @@ upsert_returns_cas_and_mutation_token()
 }
 
 void
-get_decompresses_compressed_content()
+get_decompresses_compressed_content([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   asio::io_context io;
@@ -339,7 +339,7 @@ get_decompresses_compressed_content()
 }
 
 void
-upsert_compresses_large_payload_when_enabled()
+upsert_compresses_large_payload_when_enabled([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   asio::io_context io;
@@ -373,7 +373,7 @@ upsert_compresses_large_payload_when_enabled()
 }
 
 void
-insert_returns_cas_and_mutation_token()
+insert_returns_cas_and_mutation_token([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   asio::io_context io;
@@ -398,7 +398,7 @@ insert_returns_cas_and_mutation_token()
 }
 
 void
-insert_maps_already_exists_into_error_context()
+insert_maps_already_exists_into_error_context([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   asio::io_context io;
@@ -421,7 +421,7 @@ insert_maps_already_exists_into_error_context()
 }
 
 void
-replace_returns_cas_and_mutation_token()
+replace_returns_cas_and_mutation_token([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   asio::io_context io;
@@ -446,7 +446,7 @@ replace_returns_cas_and_mutation_token()
 }
 
 void
-replace_maps_not_found_into_error_context()
+replace_maps_not_found_into_error_context([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   asio::io_context io;
@@ -469,7 +469,7 @@ replace_maps_not_found_into_error_context()
 }
 
 void
-remove_returns_cas_and_mutation_token()
+remove_returns_cas_and_mutation_token([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   asio::io_context io;
@@ -493,7 +493,7 @@ remove_returns_cas_and_mutation_token()
 }
 
 void
-remove_maps_not_found_into_error_context()
+remove_maps_not_found_into_error_context([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   asio::io_context io;
@@ -515,7 +515,7 @@ remove_maps_not_found_into_error_context()
 }
 
 void
-authorization_header_passed_to_grpc_context()
+authorization_header_passed_to_grpc_context([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   asio::io_context io;
@@ -552,7 +552,7 @@ authorization_header_passed_to_grpc_context()
 // takes 400ms -- if the default were used the call would succeed instead), and that a timed-out
 // read reports unambiguous_timeout, since a get cannot have changed the document.
 void
-get_honours_the_request_timeout()
+get_honours_the_request_timeout([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   server.service().reply_delay.store(400ms);
@@ -582,7 +582,7 @@ get_honours_the_request_timeout()
 // The mutating arm of the same mapping. Kept as a separate case because a single shared
 // classification would satisfy the read-only assertion above by accident.
 void
-mutation_timeout_is_reported_as_ambiguous()
+mutation_timeout_is_reported_as_ambiguous([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   server.service().reply_delay.store(400ms);
@@ -614,7 +614,7 @@ mutation_timeout_is_reported_as_ambiguous()
 // calls_received is what makes this a real assertion rather than a restatement of the error code:
 // it proves the request was rejected before reaching the wire, not dispatched and then failed.
 void
-an_exhausted_budget_is_rejected_before_dispatch()
+an_exhausted_budget_is_rejected_before_dispatch([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   asio::io_context io;
@@ -649,7 +649,7 @@ an_exhausted_budget_is_rejected_before_dispatch()
 // the caller: request.timeout is unset here, so the component's own default is what resolves to
 // zero.
 void
-an_exhausted_default_timeout_is_also_rejected()
+an_exhausted_default_timeout_is_also_rejected([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   asio::io_context io;
@@ -680,7 +680,7 @@ an_exhausted_default_timeout_is_also_rejected()
 // and then rejected by the gateway" would both surface as invalid_argument, and only the counter
 // separates them.
 void
-a_counter_seed_above_int64_max_is_rejected_before_dispatch()
+a_counter_seed_above_int64_max_is_rejected_before_dispatch([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   asio::io_context io;
@@ -712,7 +712,7 @@ a_counter_seed_above_int64_max_is_rejected_before_dispatch()
 // Cancelling an in-flight call still completes the handler, exactly once. A cancellation that
 // dropped the completion would hang whatever is waiting on it, which is worse than the error.
 void
-cancellation_completes_the_handler_once()
+cancellation_completes_the_handler_once([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   server.service().reply_delay.store(400ms);
@@ -740,7 +740,7 @@ cancellation_completes_the_handler_once()
 }
 
 void
-get_projected_encodes_projections_and_decodes_response()
+get_projected_encodes_projections_and_decodes_response([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   asio::io_context io;
@@ -770,7 +770,7 @@ get_projected_encodes_projections_and_decodes_response()
 // the request's own field. Both halves are asserted on one call: what left the client, and what it
 // made of the compressed answer that opting in invites.
 void
-get_projected_negotiates_and_decodes_compression()
+get_projected_negotiates_and_decodes_compression([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   asio::io_context io;
@@ -806,64 +806,28 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_component",
+    suite_name,
     {
-      { "get_round_trips_on_the_io_thread", get_round_trips_on_the_io_thread, timeout::network },
-      { "get_projected_negotiates_and_decodes_compression",
-        get_projected_negotiates_and_decodes_compression,
-        timeout::network },
-      { "get_projected_encodes_projections_and_decodes_response",
-        get_projected_encodes_projections_and_decodes_response,
-        timeout::network },
-      { "get_maps_not_found_into_the_error_context",
-        get_maps_not_found_into_the_error_context,
-        timeout::network },
-      { "get_decompresses_compressed_content",
-        get_decompresses_compressed_content,
-        timeout::network },
-      { "upsert_compresses_large_payload_when_enabled",
-        upsert_compresses_large_payload_when_enabled,
-        timeout::network },
-      { "upsert_returns_cas_and_mutation_token",
-        upsert_returns_cas_and_mutation_token,
-        timeout::network },
-      { "insert_returns_cas_and_mutation_token",
-        insert_returns_cas_and_mutation_token,
-        timeout::network },
-      { "insert_maps_already_exists_into_error_context",
-        insert_maps_already_exists_into_error_context,
-        timeout::network },
-      { "replace_returns_cas_and_mutation_token",
-        replace_returns_cas_and_mutation_token,
-        timeout::network },
-      { "replace_maps_not_found_into_error_context",
-        replace_maps_not_found_into_error_context,
-        timeout::network },
-      { "remove_returns_cas_and_mutation_token",
-        remove_returns_cas_and_mutation_token,
-        timeout::network },
-      { "remove_maps_not_found_into_error_context",
-        remove_maps_not_found_into_error_context,
-        timeout::network },
-      { "get_honours_the_request_timeout", get_honours_the_request_timeout, timeout::network },
-      { "mutation_timeout_is_reported_as_ambiguous",
-        mutation_timeout_is_reported_as_ambiguous,
-        timeout::network },
-      { "a_counter_seed_above_int64_max_is_rejected_before_dispatch",
-        a_counter_seed_above_int64_max_is_rejected_before_dispatch,
-        timeout::network },
-      { "an_exhausted_budget_is_rejected_before_dispatch",
-        an_exhausted_budget_is_rejected_before_dispatch,
-        timeout::network },
-      { "an_exhausted_default_timeout_is_also_rejected",
-        an_exhausted_default_timeout_is_also_rejected,
-        timeout::network },
-      { "cancellation_completes_the_handler_once",
-        cancellation_completes_the_handler_once,
-        timeout::network },
-      { "authorization_header_passed_to_grpc_context",
-        authorization_header_passed_to_grpc_context,
-        timeout::network },
+      { CASE(get_round_trips_on_the_io_thread), {}, timeout::network },
+      { CASE(get_projected_negotiates_and_decodes_compression), {}, timeout::network },
+      { CASE(get_projected_encodes_projections_and_decodes_response), {}, timeout::network },
+      { CASE(get_maps_not_found_into_the_error_context), {}, timeout::network },
+      { CASE(get_decompresses_compressed_content), {}, timeout::network },
+      { CASE(upsert_compresses_large_payload_when_enabled), {}, timeout::network },
+      { CASE(upsert_returns_cas_and_mutation_token), {}, timeout::network },
+      { CASE(insert_returns_cas_and_mutation_token), {}, timeout::network },
+      { CASE(insert_maps_already_exists_into_error_context), {}, timeout::network },
+      { CASE(replace_returns_cas_and_mutation_token), {}, timeout::network },
+      { CASE(replace_maps_not_found_into_error_context), {}, timeout::network },
+      { CASE(remove_returns_cas_and_mutation_token), {}, timeout::network },
+      { CASE(remove_maps_not_found_into_error_context), {}, timeout::network },
+      { CASE(get_honours_the_request_timeout), {}, timeout::network },
+      { CASE(mutation_timeout_is_reported_as_ambiguous), {}, timeout::network },
+      { CASE(a_counter_seed_above_int64_max_is_rejected_before_dispatch), {}, timeout::network },
+      { CASE(an_exhausted_budget_is_rejected_before_dispatch), {}, timeout::network },
+      { CASE(an_exhausted_default_timeout_is_also_rejected), {}, timeout::network },
+      { CASE(cancellation_completes_the_handler_once), {}, timeout::network },
+      { CASE(authorization_header_passed_to_grpc_context), {}, timeout::network },
     },
   };
 }

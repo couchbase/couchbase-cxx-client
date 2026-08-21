@@ -64,7 +64,7 @@ jobs:
         run: |
           sudo apt-get update -y
           # libgrpc++-dev/libprotobuf-dev pull in the gRPC runtime needed to *run* the gRPC-linked
-          # binaries in the prebuilt artifact -- currently cng_codegen_smoke_test. (A later commit
+          # binaries in the prebuilt artifact -- currently cng_protostellar_codegen_smoke. (A later commit
           # links the transport into the client library itself, which extends this to every binary.)
           sudo apt-get install -y libssl-dev cmake gcc g++ curl gdb libprotobuf-dev libgrpc-dev libgrpc++-dev
       - uses: actions/checkout@v4
@@ -143,7 +143,7 @@ jobs:
         run: |
           sudo apt-get update -y
           # libgrpc++-dev/libprotobuf-dev pull in the gRPC runtime needed to *run* the gRPC-linked
-          # binaries in the prebuilt artifact -- currently cng_codegen_smoke_test. (A later commit
+          # binaries in the prebuilt artifact -- currently cng_protostellar_codegen_smoke. (A later commit
           # links the transport into the client library itself, which extends this to every binary.)
           sudo apt-get install -y libssl-dev cmake gcc g++ curl gdb libprotobuf-dev libgrpc-dev libgrpc++-dev
       - uses: actions/checkout@v4

@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include "framework/test_runner.hxx"
+#include "framework/test_framework.hxx"
 
 // Views are deprecated in the public API but still part of the core surface these fixtures reach,
 // so the core includes below are parsed with the deprecation suppressed -- the same convention
@@ -47,7 +47,7 @@
 
 // Inside the guarded region, not above it: this header reaches core/protostellar/dispatcher.hxx,
 // and a core header parsed before the #define above is what the comment there describes.
-#include "protostellar/callback_queue_keepalive.hxx"
+#include "cng/protostellar/callback_queue_keepalive.hxx"
 
 #include <couchbase/error_codes.hxx>
 
@@ -133,12 +133,15 @@ skip_unless_service_implemented(const Context& ctx,
   if (ctx.ec != errc::common::feature_not_available) {
     return;
   }
+  // Concatenated rather than formatted: ten CNG test files include this header, and a formatting
+  // library in it would put that cost on all of them for two messages.
   assert_false(ctx.first_error_message.empty(),
-               fmt::format("{} reported feature_not_available with no gateway message, so the "
-                           "request was refused by the client and never reached the gateway",
-                           service),
+               std::string{ service } +
+                 " reported feature_not_available with no gateway message, so the request was "
+                 "refused by the client and never reached the gateway",
                loc);
-  skip(fmt::format("gateway does not implement {} ({})", service, ctx.first_error_message));
+  skip("gateway does not implement " + std::string{ service } + " (" + ctx.first_error_message +
+       ")");
 }
 
 // A component wired to the gateway named by TEST_CONNECTION_STRING, with the io_context already

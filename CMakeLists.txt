@@ -701,9 +701,6 @@ if(COUCHBASE_CXX_CLIENT_BUILD_STATIC)
 endif()
 
 option(COUCHBASE_CXX_CLIENT_BUILD_TESTS "Build test programs" ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT})
-if(COUCHBASE_CXX_CLIENT_BUILD_TESTS)
-  include(cmake/Testing.cmake)
-endif()
 
 # CNG (Protostellar) tests use a hand-rolled framework (NOT Catch2), so they can be built
 # independently of the main (Catch2) test suite. The framework itself links no client code; each
@@ -711,12 +708,17 @@ endif()
 option(COUCHBASE_CXX_CLIENT_BUILD_CNG_TESTS "Build CNG (Protostellar) tests"
        ${COUCHBASE_CXX_CLIENT_BUILD_TESTS})
 
-# The hand-rolled framework both test trees build on, and its self-test. Testing is enabled at the
-# top level here so `ctest` from the build root discovers these even when the main (Catch2) suite
-# is disabled and cmake/Testing.cmake was not included.
+# The hand-rolled framework both test trees build on, and its self-test. It precedes
+# cmake/Testing.cmake so couchbase_add_test() is defined before test/CMakeLists.txt is read.
+# Testing is enabled at the top level here so `ctest` from the build root discovers these even when
+# the main (Catch2) suite is disabled and cmake/Testing.cmake was not included.
 if(COUCHBASE_CXX_CLIENT_BUILD_TESTS OR COUCHBASE_CXX_CLIENT_BUILD_CNG_TESTS)
   enable_testing()
   include(cmake/TestFramework.cmake)
+endif()
+
+if(COUCHBASE_CXX_CLIENT_BUILD_TESTS)
+  include(cmake/Testing.cmake)
 endif()
 
 if(COUCHBASE_CXX_CLIENT_BUILD_CNG_TESTS)

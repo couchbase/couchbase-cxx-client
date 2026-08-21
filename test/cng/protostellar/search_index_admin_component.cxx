@@ -29,7 +29,7 @@
 // InvalidArgument, so the error code alone does not say whether anything was sent. The recorded
 // call count does.
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "callback_queue_keepalive.hxx"
 
@@ -233,7 +233,7 @@ definition(std::string name) -> couchbase::core::management::search::index
 }
 
 void
-an_upsert_without_a_uuid_calls_create_index()
+an_upsert_without_a_uuid_calls_create_index([[maybe_unused]] context& ctx)
 {
   in_process_server server;
 
@@ -250,7 +250,7 @@ an_upsert_without_a_uuid_calls_create_index()
 }
 
 void
-an_upsert_with_a_uuid_calls_update_index()
+an_upsert_with_a_uuid_calls_update_index([[maybe_unused]] context& ctx)
 {
   in_process_server server;
 
@@ -273,7 +273,7 @@ an_upsert_with_a_uuid_calls_update_index()
 }
 
 void
-the_control_operations_select_their_paired_rpc()
+the_control_operations_select_their_paired_rpc([[maybe_unused]] context& ctx)
 {
   {
     in_process_server server;
@@ -338,7 +338,7 @@ the_control_operations_select_their_paired_rpc()
 }
 
 void
-an_empty_index_name_is_refused_without_a_round_trip()
+an_empty_index_name_is_refused_without_a_round_trip([[maybe_unused]] context& ctx)
 {
   // The gateway answers an empty name with InvalidArgument too, so the error code on its own does
   // not distinguish a local refusal from a round trip. The empty call list is what does.
@@ -394,7 +394,7 @@ an_empty_index_name_is_refused_without_a_round_trip()
 }
 
 void
-a_definition_that_cannot_be_represented_is_not_sent()
+a_definition_that_cannot_be_represented_is_not_sent([[maybe_unused]] context& ctx)
 {
   in_process_server server;
 
@@ -412,7 +412,7 @@ a_definition_that_cannot_be_represented_is_not_sent()
 }
 
 void
-a_get_response_without_an_index_reports_index_not_found()
+a_get_response_without_an_index_reports_index_not_found([[maybe_unused]] context& ctx)
 {
   in_process_server server;
 
@@ -427,7 +427,7 @@ a_get_response_without_an_index_reports_index_not_found()
 }
 
 void
-an_index_that_cannot_be_decoded_reports_parsing_failure()
+an_index_that_cannot_be_decoded_reports_parsing_failure([[maybe_unused]] context& ctx)
 {
   in_process_server server;
   (*server.service().get_response.mutable_index()->mutable_params())["mapping"] = "not json";
@@ -444,7 +444,7 @@ an_index_that_cannot_be_decoded_reports_parsing_failure()
 }
 
 void
-a_successful_call_reports_status_ok()
+a_successful_call_reports_status_ok([[maybe_unused]] context& ctx)
 {
   // The field the classic path fills from FTS's {"status":"ok"}; admin.search.v1 answers with
   // empty messages, so a successful RPC is what stands in for it.
@@ -478,7 +478,7 @@ a_successful_call_reports_status_ok()
 }
 
 void
-a_failed_call_reports_no_status()
+a_failed_call_reports_no_status([[maybe_unused]] context& ctx)
 {
   // A status the server never reported would say the operation succeeded; the error code is what
   // describes a failure.
@@ -496,23 +496,17 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_search_index_admin_component",
+    suite_name,
     {
-      { "an_upsert_without_a_uuid_calls_create_index",
-        an_upsert_without_a_uuid_calls_create_index },
-      { "an_upsert_with_a_uuid_calls_update_index", an_upsert_with_a_uuid_calls_update_index },
-      { "the_control_operations_select_their_paired_rpc",
-        the_control_operations_select_their_paired_rpc },
-      { "an_empty_index_name_is_refused_without_a_round_trip",
-        an_empty_index_name_is_refused_without_a_round_trip },
-      { "a_definition_that_cannot_be_represented_is_not_sent",
-        a_definition_that_cannot_be_represented_is_not_sent },
-      { "a_get_response_without_an_index_reports_index_not_found",
-        a_get_response_without_an_index_reports_index_not_found },
-      { "an_index_that_cannot_be_decoded_reports_parsing_failure",
-        an_index_that_cannot_be_decoded_reports_parsing_failure },
-      { "a_successful_call_reports_status_ok", a_successful_call_reports_status_ok },
-      { "a_failed_call_reports_no_status", a_failed_call_reports_no_status },
+      { CASE(an_upsert_without_a_uuid_calls_create_index) },
+      { CASE(an_upsert_with_a_uuid_calls_update_index) },
+      { CASE(the_control_operations_select_their_paired_rpc) },
+      { CASE(an_empty_index_name_is_refused_without_a_round_trip) },
+      { CASE(a_definition_that_cannot_be_represented_is_not_sent) },
+      { CASE(a_get_response_without_an_index_reports_index_not_found) },
+      { CASE(an_index_that_cannot_be_decoded_reports_parsing_failure) },
+      { CASE(a_successful_call_reports_status_ok) },
+      { CASE(a_failed_call_reports_no_status) },
     },
   };
 }
