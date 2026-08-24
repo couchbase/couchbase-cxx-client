@@ -191,7 +191,7 @@ The failure message already prints the operands — that is what `operand_printe
 
 ### Printing a type in a failure message
 
-`assert_eq` and `assert_ne` show both operands for any type with an `operand_printer`. Integers, `bool`, `char`, floating point, the string types and enums are built in; `framework/errors.hxx` adds `std::error_code` and `couchbase::error`. A type with none is not an error — the assertion still fires, it just omits the values. To teach the framework a type, specialise it next to the test that needs it:
+`assert_eq` and `assert_ne` show both operands for any type with an `operand_printer`. Integers, `bool`, `char`, floating point, the string types, enums and `std::error_code` are built in. `couchbase::error` is not one of them: `framework/errors.hxx` overloads the two assertions for it instead, because a printer for it would be visible only in the translation units that include that header, and the same comparison would then have two definitions in one binary. A type with no printer is not an error — the assertion still fires, it just omits the values. To teach the framework a type, specialise it in the translation unit that needs it, for the same reason:
 
 ```cpp
 template<>

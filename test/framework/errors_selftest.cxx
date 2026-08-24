@@ -114,8 +114,9 @@ assert_error_distinguishes_one_failure_from_another([[maybe_unused]] context& ct
 void
 error_codes_render_as_operands([[maybe_unused]] context& ctx)
 {
-  // assert_eq prints operands only for types with an operand_printer. Without the specialisations
-  // in errors.hxx, a mismatch between two error codes would say "expected equal" and nothing else.
+  // assert_eq prints operands only for types with an operand_printer, and std::error_code has one
+  // in test_framework.hxx; without it a mismatch between two error codes would say "expected
+  // equal" and nothing else.
   const auto message = message_of([]() {
     assert_eq(make_error_code(couchbase::errc::common::unambiguous_timeout),
               make_error_code(couchbase::errc::common::request_canceled));
@@ -124,10 +125,26 @@ error_codes_render_as_operands([[maybe_unused]] context& ctx)
   assert_contains(message, "request_canceled", "and so does the expected one");
 
   assert_true(operand_printer<std::error_code>::available, "error codes are printable");
-  assert_true(operand_printer<couchbase::error>::available, "and so are errors");
   assert_eq(operand_printer<std::error_code>::to_text(std::error_code{}),
             std::string{ "success" },
             "a default error code renders as success");
+
+  // couchbase::error takes the overloads this header adds rather than a printer, so what is worth
+  // pinning is that a mismatch between two of them still names both. The overload has to be picked
+  // over the template, which is the part a printer used to do.
+  const auto errors = message_of([]() {
+    assert_eq(couchbase::error{ make_error_code(couchbase::errc::common::unambiguous_timeout) },
+              couchbase::error{ make_error_code(couchbase::errc::key_value::document_not_found) });
+  });
+  assert_contains(errors, "unambiguous_timeout", "the error it saw renders");
+  assert_contains(errors, "document_not_found", "and so does the one it expected");
+
+  const auto same = message_of([]() {
+    const couchbase::error error{ make_error_code(couchbase::errc::common::request_canceled) };
+    assert_ne(error, error, "the two are the same error");
+  });
+  assert_contains(same, "both are:", "and assert_ne names the value they share");
+  assert_contains(same, "request_canceled", "by rendering it");
 }
 } // namespace
 

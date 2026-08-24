@@ -50,6 +50,7 @@
 #include <atomic>
 #include <future>
 #include <string>
+#include <system_error>
 #include <thread>
 
 namespace couchbase::test
@@ -256,8 +257,12 @@ non_kv_retry_budget_exhaustion([[maybe_unused]] context& ctx)
   server->Wait();
 
   assert_false(static_cast<bool>(open_ec), "open(couchbase2://) succeeds");
-  assert_true(res.ctx.ec == couchbase::errc::common::unambiguous_timeout,
-              "always-failing query fails with unambiguous_timeout when budget is exhausted");
+  // assert_eq rather than assert_true on a comparison: both operands are std::error_code so the
+  // failure names the code that came back. This case has failed intermittently under TSan, and the
+  // boolean form left nothing in the log to diagnose it with.
+  assert_eq(res.ctx.ec,
+            std::error_code{ couchbase::errc::common::unambiguous_timeout },
+            "always-failing query fails with unambiguous_timeout when budget is exhausted");
   assert_true(service.always_fail_calls.load() > 1,
               "multiple attempts occurred before budget exhaustion");
   assert_true(res.ctx.retry_attempts > 0,
