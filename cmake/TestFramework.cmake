@@ -181,3 +181,6 @@ endfunction()
 # inner suites here assert on absolute millisecond budgets, which valgrind would blow with no
 # multiplier able to reach them.
 couchbase_add_test(framework/selftest LABEL cng)
+
+# unit, because it is pure computation over the tools helper and needs no server.
+couchbase_add_test(tools/document_body_generator LABEL unit LINK_CLIENT)
