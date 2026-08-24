@@ -233,7 +233,7 @@ struct http_histogram {
       fmt::format_to(output, "{}_bucket{{le=\"30000\",{}}} {}\n", name, lbuf, le_30s.load());
       fmt::format_to(output, "{}_bucket{{le=\"75000\",{}}} {}\n", name, lbuf, le_75s.load());
       fmt::format_to(output, "{}_bucket{{le=\"+Inf\",{}}} {}\n", name, lbuf, inf.load());
-      fmt::format_to(output, "{}_sum{{{}}} {}\n", name, lbuf, sum.load() / 1000);
+      fmt::format_to(output, "{}_sum{{{}}} {}\n", name, lbuf, sum.load());
       fmt::format_to(output, "{}_count{{{}}} {}\n", name, lbuf, count.load());
     }
   }
