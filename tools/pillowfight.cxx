@@ -327,6 +327,18 @@ upsert_document(const couchbase::collection& collection,
 }
 
 auto
+insert_document(const couchbase::collection& collection,
+                const std::string& document_id,
+                const std::vector<std::byte>& body,
+                bool binary) -> std::future<std::pair<couchbase::error, couchbase::mutation_result>>
+{
+  if (binary) {
+    return collection.insert<couchbase::codec::raw_binary_transcoder>(document_id, body);
+  }
+  return collection.insert<raw_json_transcoder>(document_id, body);
+}
+
+auto
 replace_document(const couchbase::collection& collection,
                  const std::string& document_id,
                  const std::vector<std::byte>& body,
@@ -673,7 +685,7 @@ private:
             known_keys.push_back(document_id);
             futures.emplace_back(
               std::chrono::system_clock::now(),
-              replace_document(collection, document_id, body.next(), body.binary()));
+              insert_document(collection, document_id, body.next(), body.binary()));
             break;
           case operation::cmd_query:
             futures.emplace_back(std::chrono::system_clock::now(),
