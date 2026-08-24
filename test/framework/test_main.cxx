@@ -19,13 +19,18 @@
 // tests(); this main gathers a name filter from argv, decides mock-vs-real mode from
 // TEST_CONNECTION_STRING, runs the suite, and maps the outcome to a process exit code
 // (0 pass / 1 fail / 77 all-skipped).
+//
+// `--list-tests` prints the case names one per line and exits. cmake/TestFramework.cmake runs it
+// after linking to register one ctest entry per case.
 
 #include "test_runner.hxx"
 
 #include <cstdlib> // std::_Exit
+#include <exception>
 #include <iostream>
 #include <set>
 #include <string>
+#include <string_view>
 
 #include <spdlog/fmt/fmt.h>
 
@@ -34,16 +39,36 @@ main(int argc, char* argv[]) -> int
 {
   using namespace couchbase::test;
 
+  bool list_only{ false };
   std::set<std::string> filter;
   for (int i = 1; i < argc; ++i) {
-    filter.insert(std::string{ argv[i] });
+    if (const std::string_view arg{ argv[i] }; arg == "--list-tests") {
+      list_only = true;
+    } else {
+      filter.emplace(arg);
+    }
+  }
+
+  auto suite = tests();
+
+  if (list_only) {
+    for (const auto& name : case_names(suite)) {
+      std::cout << name << '\n';
+    }
+    return 0;
+  }
+
+  try {
+    scale_timeouts(suite, timeout_multiplier(safe_getenv(timeout_multiplier_variable)));
+  } catch (const std::exception& e) {
+    std::cerr << e.what() << '\n';
+    return 1;
   }
 
   // Real-cluster mode iff TEST_CONNECTION_STRING is set and non-empty (the couchbase-cxx-client
   // integration convention).
   const bool real_cluster = safe_getenv("TEST_CONNECTION_STRING").has_value();
 
-  const auto suite = tests();
   const auto result = run(suite, filter, real_cluster, std::cout);
 
   if (result.failed > 0) {

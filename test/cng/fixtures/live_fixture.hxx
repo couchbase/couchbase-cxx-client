@@ -47,7 +47,7 @@
 
 // Inside the guarded region, not above it: this header reaches core/protostellar/dispatcher.hxx,
 // and a core header parsed before the #define above is what the comment there describes.
-#include "protostellar/callback_queue_keepalive.hxx"
+#include "cng/protostellar/callback_queue_keepalive.hxx"
 
 #include <couchbase/error_codes.hxx>
 

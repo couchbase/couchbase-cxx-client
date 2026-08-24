@@ -22,7 +22,7 @@
 // the round trip is pinned by the error the gateway returns for an index that does not exist:
 // that answer can only come from a gateway that ran the query.
 
-#include "fixtures/live_fixture.hxx"
+#include "cng/fixtures/live_fixture.hxx"
 #include "framework/test_runner.hxx"
 
 #include "core/operations.hxx"

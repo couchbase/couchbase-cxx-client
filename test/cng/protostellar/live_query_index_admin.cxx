@@ -31,7 +31,7 @@
 // The case below drives the public manager rather than the core request, because the routing hole
 // it covers was invisible from the core request that was already wired.
 
-#include "fixtures/live_fixture.hxx"
+#include "cng/fixtures/live_fixture.hxx"
 #include "framework/test_runner.hxx"
 
 #include "core/operations/management/query_index_create.hxx"

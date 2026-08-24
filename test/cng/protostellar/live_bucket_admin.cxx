@@ -19,7 +19,7 @@
 // admin.bucket.v1: that the bucket list arrives, and that settings written by create() are the
 // settings read back by get().
 
-#include "fixtures/live_fixture.hxx"
+#include "cng/fixtures/live_fixture.hxx"
 #include "framework/test_runner.hxx"
 
 #include "core/management/bucket_settings.hxx"

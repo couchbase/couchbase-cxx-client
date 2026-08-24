@@ -43,6 +43,18 @@ if [ "x${CB_SANITIZER}" = "xlsan" ]; then
     export LSAN_OPTIONS="suppressions=${PROJECT_ROOT}/.lsan_suppressions"
 fi
 
+# The hand-rolled framework stops waiting on a case that exceeds an absolute millisecond budget and
+# reports it failed. It cannot kill the case: the worker is left detached and still running, which is
+# why main() leaves via _Exit rather than running static destructors underneath it. Valgrind runs
+# 20-50x slower than an uninstrumented build and the sanitizers a few times slower, so without a
+# multiplier those legs report timeouts instead of behaviour. Catch2 has no per-case budget and
+# ignores this.
+if [ "x${CB_SANITIZER}" = "xvalgrind" ]; then
+    export CB_TEST_TIMEOUT_MULTIPLIER="${CB_TEST_TIMEOUT_MULTIPLIER:-50}"
+elif [ "x${CB_SANITIZER}" != "x" ]; then
+    export CB_TEST_TIMEOUT_MULTIPLIER="${CB_TEST_TIMEOUT_MULTIPLIER:-5}"
+fi
+
 cd "${BUILD_DIR}"
 
 CB_USE_GOCAVES=${CB_USE_GOCAVES:-""}
