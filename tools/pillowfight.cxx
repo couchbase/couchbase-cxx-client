@@ -17,6 +17,8 @@
 
 #include "pillowfight.hxx"
 
+#include "document_body_generator.hxx"
+
 #include "core/utils/json.hxx"
 #include "utils.hxx"
 
@@ -39,10 +41,13 @@
 #include <couchbase/fmt/error.hxx>
 
 #include <csignal>
+#include <cstring>
 #include <deque>
 #include <memory>
 #include <numeric>
 #include <random>
+#include <stdexcept>
+#include <string_view>
 #include <thread>
 
 namespace cbc
@@ -155,6 +160,23 @@ constexpr const char* default_query_statement{
 };
 constexpr operation_weights default_operation_ratio{};
 constexpr std::size_t default_document_body_size{ 0 };
+constexpr const char* default_document_body_fill{ "constant" };
+constexpr const char* default_document_body_format{ "json" };
+constexpr std::size_t default_document_body_pool_size{ 0 };
+
+/*
+ * A pool smaller than the storage compressor's look-back distance puts the same
+ * body into one data block twice, which is the duplication a random fill exists
+ * to remove. Measured over a cycled pool of distinct bodies, snappy stops
+ * matching once the pool exceeds 16 KiB and lz4 once it exceeds 64 KiB; magma
+ * takes its algorithm from magma_data_compression_algo, which is dynamic and
+ * accepts zstd, and zstd still matches across roughly a megabyte.
+ */
+constexpr std::size_t minimum_document_body_pool_size{ 1024 * 1024 };
+constexpr std::size_t minimum_pooled_documents{ 2 };
+
+const std::vector<std::string> allowed_document_body_fills{ "constant", "random" };
+const std::vector<std::string> allowed_document_body_formats{ "json", "binary" };
 constexpr std::size_t default_operations_limit{ 0 };
 constexpr std::size_t default_operation_batch_size{ 100 };
 constexpr std::chrono::milliseconds default_batch_wait{ 0 };
@@ -293,16 +315,28 @@ uniq_id(const std::string& prefix) -> std::string
 }
 
 auto
-random_text(std::size_t length) -> std::string
+upsert_document(const couchbase::collection& collection,
+                const std::string& document_id,
+                const std::vector<std::byte>& body,
+                bool binary) -> std::future<std::pair<couchbase::error, couchbase::mutation_result>>
 {
-  std::string alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-  static thread_local std::mt19937_64 gen{ std::random_device()() };
-  std::uniform_int_distribution<std::size_t> dis(0, alphabet.size() - 1);
-  std::string text(length, '-');
-  for (std::size_t i = 0; i < length; ++i) {
-    text[i] = alphabet[dis(gen)];
+  if (binary) {
+    return collection.upsert<couchbase::codec::raw_binary_transcoder>(document_id, body);
   }
-  return text;
+  return collection.upsert<raw_json_transcoder>(document_id, body);
+}
+
+auto
+replace_document(const couchbase::collection& collection,
+                 const std::string& document_id,
+                 const std::vector<std::byte>& body,
+                 bool binary)
+  -> std::future<std::pair<couchbase::error, couchbase::mutation_result>>
+{
+  if (binary) {
+    return collection.replace<couchbase::codec::raw_binary_transcoder>(document_id, body);
+  }
+  return collection.replace<raw_json_transcoder>(document_id, body);
 }
 
 class pillowfight_app : public CLI::App
@@ -319,10 +353,33 @@ public:
                document_body_size_,
                "Size of the body (if zero, it will use predefined document).")
       ->default_val(default_document_body_size);
-    add_flag("--incompressible-body",
-             incompressible_body_,
-             "Use random characters to fill generated document value (by default uses 'x' to fill "
-             "the body).");
+    add_option("--document-body-fill",
+               document_body_fill_,
+               "How to fill a generated document body: \"constant\" repeats a single character, "
+               "\"random\" draws every document from a seeded pseudo-random generator. Only "
+               "\"random\" gives each document distinct bytes, which is what stops a loaded "
+               "bucket from compressing.")
+      ->default_val(default_document_body_fill)
+      ->transform(CLI::IsMember(allowed_document_body_fills));
+    add_option("--document-body-format",
+               document_body_format_,
+               "Format of a generated document: \"json\" wraps the body in a JSON object and "
+               "restricts it to a JSON-safe alphabet, \"binary\" stores the body as opaque bytes "
+               "of exactly --document-body-size.")
+      ->default_val(default_document_body_format)
+      ->transform(CLI::IsMember(allowed_document_body_formats));
+    add_option("--document-body-pool-size",
+               document_body_pool_size_,
+               "Pre-generate this many bytes of document bodies per worker thread and cycle "
+               "through them, instead of generating a fresh body for every document (zero). A "
+               "pool has to be larger than the storage compressor's look-back distance or its "
+               "documents compress again, so it is measured in bytes and not in documents.")
+      ->default_val(default_document_body_pool_size);
+    add_option("--document-body-seed",
+               document_body_seed_,
+               "Seed for --document-body-fill=random, so that a dataset can be reproduced. Each "
+               "worker thread offsets it by its index. Without it the generator is seeded from "
+               "the system entropy source.");
     add_option("--number-of-io-threads", number_of_io_threads_, "Number of the IO threads.")
       ->default_val(default_number_of_io_threads);
     add_option("--number-of-keys-to-populate",
@@ -362,13 +419,14 @@ public:
 
     add_common_options(this, common_options_);
     allow_extras(true);
+
+    parse_complete_callback([this]() {
+      validate_options();
+    });
   }
 
   [[nodiscard]] auto execute() const -> int
   {
-    if (operation_batch_size_ == 0) {
-      throw CLI::ValidationError("--operation-batch-size cannot be zero");
-    }
     apply_logger_options(common_options_.logger);
 
     const auto cluster_options = build_cluster_options(common_options_);
@@ -399,11 +457,15 @@ public:
                "| Version: {}\n"
                "| Connection String: {}\n"
                "| Ratio: {} (Get:Replace:Delete:Insert:Query)\n"
-               "| Batch size: {}\n",
+               "| Batch size: {}\n"
+               "| Document body: {} {}, {}\n",
                couchbase::core::meta::sdk_semver(),
                connection_string,
                operation_generator::parse(operation_ratio_string_).to_string(),
-               operation_batch_size_);
+               operation_batch_size_,
+               document_body_fill_,
+               document_body_format_,
+               describe_document_body_size());
 
     auto [connect_err, cluster] =
       couchbase::cluster::connect(connection_string, cluster_options).get();
@@ -429,8 +491,8 @@ public:
     std::vector<std::thread> worker_pool{};
     worker_pool.reserve(number_of_worker_threads_);
     for (std::size_t i = 0; i < number_of_worker_threads_; ++i) {
-      worker_pool.emplace_back([this, cluster = cluster, &keys = known_keys[i]]() {
-        worker(cluster, keys);
+      worker_pool.emplace_back([this, cluster = cluster, &keys = known_keys[i], i]() {
+        worker(cluster, keys, i);
       });
     }
     for (auto& thread : worker_pool) {
@@ -482,21 +544,90 @@ public:
     return 0;
   }
 
-  [[nodiscard]] auto generate_document_body() const -> std::vector<std::byte>
+private:
+  void validate_options() const
   {
-    if (document_body_size_ > 0) {
-      return couchbase::core::utils::json::generate_binary({
-        { "size", document_body_size_ },
-        { "text",
-          incompressible_body_ ? random_text(document_body_size_)
-                               : std::string(document_body_size_, 'x') },
-      });
+    if (operation_batch_size_ == 0) {
+      throw CLI::ValidationError("--operation-batch-size cannot be zero");
     }
-    return couchbase::core::utils::to_binary(default_json_doc);
+
+    const auto fill = parse_body_fill(document_body_fill_);
+
+    if (fill != body_fill::constant && document_body_size_ == 0) {
+      throw CLI::ValidationError("--document-body-fill=" + document_body_fill_ +
+                                 " requires a non-zero --document-body-size; without a size the "
+                                 "predefined document is used and nothing is generated");
+    }
+    if (parse_body_format(document_body_format_) == body_format::binary &&
+        document_body_size_ == 0) {
+      throw CLI::ValidationError("--document-body-format=binary requires a non-zero "
+                                 "--document-body-size, because the predefined document is JSON");
+    }
+    if (document_body_pool_size_ == 0) {
+      return;
+    }
+    if (fill == body_fill::constant) {
+      throw CLI::ValidationError("--document-body-pool-size applies only to "
+                                 "--document-body-fill=random, which generates a body per "
+                                 "document; a constant fill has only one body to pool");
+    }
+    // Refused rather than warned about: an undersized pool fails silently, by
+    // producing exactly the compressible dataset the caller asked to avoid.
+    if (document_body_pool_size_ < minimum_document_body_pool_size) {
+      throw CLI::ValidationError(
+        fmt::format("--document-body-pool-size must be at least {} bytes, or the pooled bodies "
+                    "repeat within one storage block and compress; {} was given",
+                    minimum_document_body_pool_size,
+                    document_body_pool_size_));
+    }
+    if (document_body_pool_size_ / document_body_size_ < minimum_pooled_documents) {
+      throw CLI::ValidationError(
+        fmt::format("--document-body-pool-size of {} bytes holds fewer than {} documents of {} "
+                    "bytes; raise the pool or lower --document-body-size",
+                    document_body_pool_size_,
+                    minimum_pooled_documents,
+                    document_body_size_));
+    }
   }
 
-private:
-  void worker(couchbase::cluster connected_cluster, std::vector<std::string>& known_keys) const
+  [[nodiscard]] auto describe_document_body_size() const -> std::string
+  {
+    if (document_body_size_ == 0) {
+      return "predefined document";
+    }
+    if (document_body_pool_size_ == 0) {
+      return fmt::format("{} bytes, generated per document", document_body_size_);
+    }
+    return fmt::format(
+      "{} bytes, cycling a {}-byte pool per worker", document_body_size_, document_body_pool_size_);
+  }
+
+  [[nodiscard]] auto make_body_generator(std::size_t worker_index) const -> document_body_generator
+  {
+    return { parse_body_fill(document_body_fill_),
+             parse_body_format(document_body_format_),
+             document_body_size_,
+             document_body_pool_size_,
+             seed_for_worker(worker_index),
+             couchbase::core::utils::to_binary(default_json_doc) };
+  }
+
+  /**
+   * Worker threads must not share a seed. Sharing one makes every thread emit
+   * the same sequence of bodies, and documents that differ only by which thread
+   * wrote them still meet in the same storage block.
+   */
+  [[nodiscard]] auto seed_for_worker(std::size_t worker_index) const -> std::uint64_t
+  {
+    if (count("--document-body-seed") > 0) {
+      return document_body_seed_ + worker_index;
+    }
+    return std::random_device{}();
+  }
+
+  void worker(couchbase::cluster connected_cluster,
+              std::vector<std::string>& known_keys,
+              std::size_t worker_index) const
   {
     auto cluster = std::move(connected_cluster);
 
@@ -505,7 +636,7 @@ private:
 
     auto collection = cluster.bucket(bucket_name_).scope(scope_name_).collection(collection_name_);
 
-    std::vector<std::byte> json_doc = generate_document_body();
+    auto body = make_body_generator(worker_index);
     auto query_statement{ fmt::format(query_statement_, fmt::arg("bucket_name", bucket_name_)) };
 
     bool stopping{ false };
@@ -531,16 +662,18 @@ private:
             futures.emplace_back(std::chrono::system_clock::now(), collection.get(document_id));
             break;
           case operation::cmd_replace:
-            futures.emplace_back(std::chrono::system_clock::now(),
-                                 collection.replace<raw_json_transcoder>(document_id, json_doc));
+            futures.emplace_back(
+              std::chrono::system_clock::now(),
+              replace_document(collection, document_id, body.next(), body.binary()));
             break;
           case operation::cmd_delete:
             futures.emplace_back(std::chrono::system_clock::now(), collection.remove(document_id));
             break;
           case operation::cmd_insert:
             known_keys.push_back(document_id);
-            futures.emplace_back(std::chrono::system_clock::now(),
-                                 collection.replace<raw_json_transcoder>(document_id, json_doc));
+            futures.emplace_back(
+              std::chrono::system_clock::now(),
+              replace_document(collection, document_id, body.next(), body.binary()));
             break;
           case operation::cmd_query:
             futures.emplace_back(std::chrono::system_clock::now(),
@@ -591,7 +724,6 @@ private:
 
     auto collection = cluster.bucket(bucket_name_).scope(scope_name_).collection(collection_name_);
 
-    const auto json_doc = generate_document_body();
     const auto start_time = std::chrono::system_clock::now();
 
     constexpr std::size_t minimum_batch_size{ 10 };
@@ -599,6 +731,7 @@ private:
     std::size_t retried_keys{ 0 };
     for (std::size_t i = 0; i < number_of_worker_threads_; ++i) {
       auto keys_left = number_of_keys_to_populate_;
+      auto body = make_body_generator(i);
 
       while (keys_left > 0) {
         fmt::print(stderr,
@@ -617,8 +750,8 @@ private:
         futures.reserve(batch_size);
         for (std::size_t k = 0; k < batch_size; ++k) {
           const std::string document_id = uniq_id("id");
-          futures.emplace_back(document_id,
-                               collection.upsert<raw_json_transcoder>(document_id, json_doc));
+          futures.emplace_back(
+            document_id, upsert_document(collection, document_id, body.next(), body.binary()));
         }
 
         for (auto&& [document_id, future] : futures) {
@@ -657,7 +790,10 @@ private:
   std::size_t number_of_keys_to_populate_{};
   std::string operation_ratio_string_{ default_operation_ratio.to_string() };
   std::string query_statement_;
-  bool incompressible_body_{};
+  std::string document_body_fill_{ default_document_body_fill };
+  std::string document_body_format_{ default_document_body_format };
+  std::size_t document_body_pool_size_{ default_document_body_pool_size };
+  std::uint64_t document_body_seed_{ 0 };
   std::size_t document_body_size_{};
   std::size_t operations_limit_{};
 };

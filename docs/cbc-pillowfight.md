@@ -27,12 +27,69 @@ Run simple workload generator that sends GET/UPSERT requests with optional N1QL 
 <dt>`--number-of-worker-threads=INTEGER`</dt><dd>Number of the IO threads. [default: `1`]</dd>
 <dt>`--operation-ratio=TEXT`</dt><dd>The ratio of the operations to generate in form "G:R:D:I:Q", where letters represent ratio of the operations in whole numbers: Get, Replace, Delete, Insert and Query respectively. (e.g. "5:0:0:1:0" would do on average 5 gets for every insert). [default: `1:1:0:0:0`]</dd>
 <dt>`--query-statement=STRING`</dt><dd>The N1QL query statement to use (`{bucket_name}`, `{scope_name}` and `{collection_name}` will be substituted). [default: <code>SELECT COUNT(*) FROM \`{bucket_name}\` WHERE type = "fake_profile"</code>]</dd>
-<dt>`--incompressible-body`</dt><dd>Use random characters to fill generated document value (by default uses 'x' to fill the body).</dd>
 <dt>`--document-body-size=INTEGER`</dt><dd>Size of the body (if zero, it will use predefined document). [default: `0`]</dd>
+<dt>`--document-body-fill=MODE`</dt><dd>How to fill a generated document body (allowed values: `constant`, `random`). `constant` repeats a single character; `random` draws every document from a seeded pseudo-random generator. Only `random` gives each document distinct bytes. [default: `constant`]</dd>
+<dt>`--document-body-format=FORMAT`</dt><dd>Format of a generated document (allowed values: `json`, `binary`). `json` wraps the body in a JSON object and restricts it to a JSON-safe alphabet; `binary` stores the body as opaque bytes of exactly `--document-body-size`. [default: `json`]</dd>
+<dt>`--document-body-pool-size=INTEGER`</dt><dd>Pre-generate this many bytes of document bodies per worker thread and cycle through them, instead of generating a fresh body for every document. Measured in bytes, with a floor of 1 MiB. [default: `0`]</dd>
+<dt>`--document-body-seed=INTEGER`</dt><dd>Seed for `--document-body-fill=random`, so that a dataset can be reproduced. Each worker thread offsets it by its index. Without it the generator is seeded from the system entropy source.</dd>
 <dt>`--number-of-keys-to-populate=INTEGER`</dt><dd>Preload keys before running workload, so that the worker will not generate new keys afterwards. [default: `1000`]</dd>
 <dt>`--operations-limit=INTEGER`</dt><dd>Stop and exit after the number of the operations reaches this limit. (zero for running indefinitely) [default: `0`]</dd>
 </dl>
 
+
+### LOADING INCOMPRESSIBLE DOCUMENTS
+
+Sizing a dataset to a target disk footprint needs documents that do not compress, so that the
+bytes written follow from the number of documents. Two compressors stand in the way, and they
+work at different scopes.
+
+Per document, the SDK and the Key/Value service compress with snappy, keeping the compressed form
+only when it is smaller by a configured margin — `--compression-minimum-ratio` here,
+`min_compression_ratio` on the server. Random bytes never clear that bar.
+
+Per data block, the storage engine compresses several documents together, with `lz4` by default.
+This is the one that matters: a body reused across documents is stored once and back-referenced
+for the rest of the block, so a load of a million identical documents occupies a fraction of
+their combined size no matter how random that single body looks. `--document-body-fill=random`
+gives every document its own bytes.
+
+Measured over the generator's own output, compressed in 4096-byte blocks:
+
+| `--document-body-fill` / `--document-body-format` | lz4 | snappy | zstd |
+|---|---|---|---|
+| `constant` / `json` | 67.79x | 18.29x | 80.72x |
+| `random` / `json` | 1.00x | 1.00x | 1.33x |
+| `random` / `binary` | 1.00x | 1.00x | 1.00x |
+
+A JSON body has to stay inside a JSON string, so it is drawn from a 62-character alphabet. That is
+invisible to `lz4` and `snappy`, neither of which entropy-codes, but not to `zstd`, which
+`magma_data_compression_algo` can be set to. Binary bodies are drawn from the full byte range and
+hold at 1.00x whichever algorithm is configured.
+
+To load 100 million documents of exactly 1024 bytes:
+
+```
+cbc pillowfight --bucket-name default \
+    --document-body-size 1024 \
+    --document-body-fill random \
+    --document-body-format binary \
+    --number-of-keys-to-populate 100000000 \
+    --operations-limit 1
+```
+
+`--operations-limit 1` ends the workload phase at the first completed batch, so the run is the
+load and little else. `--document-body-format=binary` makes `--document-body-size` the exact size
+of the stored document; under `json` the body is wrapped in an object and the document is larger
+than the value given. Binary documents are opaque to the Query service, so `--operation-ratio`
+should not ask for queries alongside it.
+
+`--document-body-pool-size` bounds the work spent per document by pre-generating bodies and
+cycling them. It is rarely worth setting: generating a fresh body costs a fraction of a
+microsecond, far less than the operation carrying it. When it is set, it is measured in **bytes**,
+not documents, because what has to be defeated is the compressor's look-back distance — a distance
+in bytes, which a document count does not describe. A pool smaller than that distance puts the
+same body into one block twice and the documents compress again, silently and by a large factor.
+That is why the option refuses a pool below 1 MiB rather than warning about it.
 
 ### LOGGER OPTIONS
 
