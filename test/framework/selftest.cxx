@@ -86,9 +86,31 @@ run_quiet(const test_suite& suite, const std::set<std::string>& filter, bool rea
   return run(suite, filter, real_cluster, sink);
 }
 
+// Comparable but not formattable, which is what selects assert_eq's value-free branch. It has no
+// operator<< either. That is not what makes it unformattable today -- fmt only consults operator<<
+// when fmt/ostream.h is included, and nothing here includes it -- but leaving one out keeps the
+// type unformattable if that support is ever switched on, rather than silently moving this case to
+// the other branch.
+struct opaque {
+  int value;
+};
+
+inline auto
+operator==(const opaque& lhs, const opaque& rhs) -> bool
+{
+  return lhs.value == rhs.value;
+}
+
 // The message an assertion produced, or empty if it did not fail. assert_throws cannot be used to
 // observe a test_assertion_failure: naming that type as the expected one leaves its own handler
 // unreachable, so the framework's own tests catch it directly.
+//
+// Only that type is caught, and the omission is the contract rather than an oversight. Anything
+// else
+// -- a skip(), or an exception from the code under test -- propagates to the runner, which is what
+// decides the case. A catch-all here would turn both into an empty string, and a caller reading
+// empty as "the assertion did not fail" would report passed for a case that skipped or threw.
+// message_of_passes_everything_else_to_the_runner holds that.
 template<typename Fn>
 auto
 message_of(Fn&& fn) -> std::string
@@ -99,6 +121,24 @@ message_of(Fn&& fn) -> std::string
     return e.what();
   }
   return {};
+}
+
+void
+body_skip_inside_message_of()
+{
+  static_cast<void>(message_of([]() {
+    skip("intentional skip from inside a callable");
+  }));
+  // Reached only if message_of swallowed the skip. Under the contract above this line is dead.
+  assert_true(false, "the skip did not reach the runner");
+}
+void
+body_throw_inside_message_of()
+{
+  static_cast<void>(message_of([]() {
+    throw std::runtime_error("not an assertion failure");
+  }));
+  assert_true(false, "the exception did not reach the runner");
 }
 
 // ── the self-test cases ──────────────────────────────────────────────────────
@@ -400,6 +440,103 @@ assert_throws_rejects_a_callable_that_throws_nothing()
               "and is distinguished from having thrown the wrong type");
 }
 
+void
+assert_eq_reports_both_values_when_it_can_format_them()
+{
+  const auto message = message_of([]() {
+    assert_eq(2 + 2, 5, "arithmetic");
+  });
+  assert_true(message.find("actual: 4") != std::string::npos, "the value it saw");
+  assert_true(message.find("expected: 5") != std::string::npos, "and the value it wanted");
+  // A report naming only the assertion sends the reader back to reproduce it before they can start.
+  assert_true(message.find("arithmetic") != std::string::npos, "alongside the caller's message");
+}
+
+void
+assert_eq_omits_values_it_cannot_format()
+{
+  // The fallback is correct -- there is nothing to print -- but which branch a type takes is a
+  // compile-time decision, so without this a change to the condition would silently move every
+  // comparison to the value-free message.
+  const auto message = message_of([]() {
+    assert_eq(opaque{ 1 }, opaque{ 2 }, "opaque values differ");
+  });
+  assert_true(message.find("opaque values differ") != std::string::npos, "the message survives");
+  assert_true(message.find("actual:") == std::string::npos,
+              "and no value is printed for a type fmt cannot format");
+}
+
+void
+assert_true_and_assert_false_report_what_was_asked()
+{
+  assert_true(message_of([]() {
+                assert_true(true);
+              }).empty(),
+              "a satisfied assertion says nothing");
+  assert_true(message_of([]() {
+                assert_false(false);
+              }).empty(),
+              "and so does its negation");
+
+  assert_true(message_of([]() {
+                assert_true(false, "the caller's words");
+              }).find("the caller's words") != std::string::npos,
+              "assert_true reports the message it was given");
+  assert_true(message_of([]() {
+                assert_false(true, "the caller's other words");
+              }).find("the caller's other words") != std::string::npos,
+              "and so does assert_false");
+
+  // The defaults have to differ, or a failure with no message cannot say which way it went.
+  assert_true(message_of([]() {
+                assert_true(false);
+              }).find("expected true") != std::string::npos,
+              "assert_true's default names what it wanted");
+  assert_true(message_of([]() {
+                assert_false(true);
+              }).find("expected false") != std::string::npos,
+              "and assert_false's default is not the same string");
+}
+
+void
+an_assertion_reports_the_location_of_its_call_site()
+{
+  // Every assertion defaults its source_location at the call site. Lose that -- a helper passing
+  // its own location, or the default dropped -- and every failure in the suite names the framework
+  // header instead of the test that failed, which reads as a framework bug in every report.
+  //
+  // The expected name is taken from a location captured here rather than written out. Where the
+  // toolchain has no location builtins the shim degrades to "unknown:0" by design, and a hard-coded
+  // "selftest.cxx" would report that documented behaviour as a defect.
+  const auto here = source_location::current();
+  const auto message = message_of([]() {
+    assert_true(false, "located");
+  });
+  assert_true(message.find(here.file_name()) != std::string::npos,
+              "the failure names the file that asserted");
+  assert_true(message.find("test_framework.hxx") == std::string::npos,
+              "and not the header the assertion is defined in");
+}
+
+void
+message_of_passes_everything_else_to_the_runner()
+{
+  // message_of catches test_assertion_failure and nothing else. A skip is the case that matters:
+  // swallowed, it becomes an empty string, the body carries on, and a case that declared it does
+  // not apply reports passed. Each body below asserts false after its message_of call, so reaching
+  // that line is itself the failure.
+  const test_suite skipping_suite{ "inner", { { "s", body_skip_inside_message_of } } };
+  const auto skipped = run_quiet(skipping_suite, {}, false);
+  assert_eq(skipped.skipped, std::size_t{ 1 }, "a skip reaches the runner");
+  assert_eq(skipped.passed, std::size_t{ 0 }, "and is not turned into an empty message");
+  assert_eq(skipped.failed, std::size_t{ 0 }, "so the line after the call never ran");
+
+  const test_suite throwing_suite{ "inner", { { "t", body_throw_inside_message_of } } };
+  const auto threw = run_quiet(throwing_suite, {}, false);
+  assert_eq(threw.failed, std::size_t{ 1 }, "an unrelated exception reaches the runner too");
+  assert_eq(threw.passed, std::size_t{ 0 }, "and does not read as a satisfied assertion");
+}
+
 auto
 tests() -> test_suite
 {
@@ -435,6 +572,15 @@ tests() -> test_suite
         assert_throws_rejects_an_unrelated_type_and_says_so },
       { "assert_throws_rejects_a_callable_that_throws_nothing",
         assert_throws_rejects_a_callable_that_throws_nothing },
+      { "assert_eq_reports_both_values_when_it_can_format_them",
+        assert_eq_reports_both_values_when_it_can_format_them },
+      { "assert_eq_omits_values_it_cannot_format", assert_eq_omits_values_it_cannot_format },
+      { "assert_true_and_assert_false_report_what_was_asked",
+        assert_true_and_assert_false_report_what_was_asked },
+      { "an_assertion_reports_the_location_of_its_call_site",
+        an_assertion_reports_the_location_of_its_call_site },
+      { "message_of_passes_everything_else_to_the_runner",
+        message_of_passes_everything_else_to_the_runner },
       { "a_scaled_budget_lets_a_case_outlive_its_original_one",
         a_scaled_budget_lets_a_case_outlive_its_original_one,
         timeout::fast },
