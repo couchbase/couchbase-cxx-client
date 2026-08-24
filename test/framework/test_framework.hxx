@@ -272,14 +272,26 @@ assert_throws(Fn&& fn,
               source_location loc = source_location::current())
 {
   bool threw_expected = false;
+  // The two control-flow types are matched ahead of `Exc`, and the order is the whole point:
+  // handlers are tried in order and both derive from std::exception, so with `Exc` naming any base
+  // of them -- std::exception itself, most obviously -- the expected-exception handler would claim
+  // them and the case would report passed. A swallowed skip is the failure this framework exists to
+  // make impossible: the case is counted as having verified something it had just declared it could
+  // not, and nothing in the report says otherwise.
+  //
+  // Neither type is assertable here as a consequence: a case that wants to observe a skip or a
+  // failure drives run() and asserts on the run_result, the way the self-tests do. Naming one as
+  // `Exc` leaves its handler below unreachable, which is a hard error in this project's default
+  // build: -Wexceptions under -Werror (cmake/CompilerWarnings.cmake). So the wrong order is caught
+  // at compile time here and only misreports where those warnings are not fatal.
   try {
     std::forward<Fn>(fn)();
+  } catch (const test_skip_exception&) {
+    throw; // skip() states that the case does not apply, whatever type was asked for
+  } catch (const test_assertion_failure&) {
+    throw; // a nested failure carries its own location and message; neither survives being counted
   } catch (const Exc&) {
     threw_expected = true;
-  } catch (const test_skip_exception&) {
-    throw; // a skip() inside the callable must reach the runner, not be reported as a wrong type
-  } catch (const test_assertion_failure&) {
-    throw; // ditto for a nested assertion failure, which carries its own location and message
   } catch (...) {
     throw test_assertion_failure(fmt::format(
       "{}:{}: {} (a different exception type was thrown)", loc.file_name(), loc.line(), message));

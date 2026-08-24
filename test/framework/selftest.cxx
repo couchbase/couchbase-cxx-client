@@ -31,6 +31,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <utility>
 
 namespace couchbase::test
 {
@@ -58,6 +59,24 @@ body_sleep()
   std::this_thread::sleep_for(std::chrono::milliseconds{ 200 });
 }
 
+// assert_throws asked for a base of the framework's own control-flow types. Both bodies exist to be
+// run through the runner rather than called directly: what is under test is the outcome the runner
+// reports, and a case body cannot observe its own verdict.
+void
+body_skip_inside_assert_throws()
+{
+  assert_throws<std::exception>([]() {
+    skip("intentional skip from inside a callable");
+  });
+}
+void
+body_failed_assertion_inside_assert_throws()
+{
+  assert_throws<std::exception>([]() {
+    assert_true(false, "intentional failure from inside a callable");
+  });
+}
+
 // A sink for the runner's progress output so the self-test stays quiet.
 auto
 run_quiet(const test_suite& suite, const std::set<std::string>& filter, bool real_cluster)
@@ -65,6 +84,21 @@ run_quiet(const test_suite& suite, const std::set<std::string>& filter, bool rea
 {
   std::ostringstream sink;
   return run(suite, filter, real_cluster, sink);
+}
+
+// The message an assertion produced, or empty if it did not fail. assert_throws cannot be used to
+// observe a test_assertion_failure: naming that type as the expected one leaves its own handler
+// unreachable, so the framework's own tests catch it directly.
+template<typename Fn>
+auto
+message_of(Fn&& fn) -> std::string
+{
+  try {
+    std::forward<Fn>(fn)();
+  } catch (const test_assertion_failure& e) {
+    return e.what();
+  }
+  return {};
 }
 
 // ── the self-test cases ──────────────────────────────────────────────────────
@@ -298,6 +332,74 @@ a_scaled_budget_lets_a_case_outlive_its_original_one()
 
 } // namespace
 
+void
+a_skip_inside_assert_throws_skips_its_case()
+{
+  // std::exception is a base of test_skip_exception, so an expected-exception handler matched ahead
+  // of the control-flow ones claims the skip. The body still runs to completion; what is lost is
+  // the skip itself -- assert_throws returns normally, nothing propagates, and the runner counts
+  // the case as passed. A case that declared it does not apply then reads as one that verified
+  // something.
+  //
+  // This guards it twice over. Under the default build the wrong order does not compile at all,
+  // because instantiating assert_throws<std::exception> leaves a handler unreachable and
+  // -Wexceptions is an error; with those warnings demoted it builds, and the counts below catch it.
+  const test_suite s{ "inner", { { "s", body_skip_inside_assert_throws } } };
+  const auto r = run_quiet(s, {}, false);
+  assert_eq(r.skipped, std::size_t{ 1 }, "the skip reached the runner");
+  assert_eq(r.passed, std::size_t{ 0 }, "and was not counted as the expected exception");
+  assert_eq(r.failed, std::size_t{ 0 }, "a skip is not a failure either");
+}
+
+void
+a_failed_assertion_inside_assert_throws_fails_its_case()
+{
+  // Same ordering, the other control-flow type. A nested failure carries its own location and
+  // message, and being counted as the expected exception discards both.
+  const test_suite s{ "inner", { { "s", body_failed_assertion_inside_assert_throws } } };
+  const auto r = run_quiet(s, {}, false);
+  assert_eq(r.failed, std::size_t{ 1 }, "the nested failure reached the runner");
+  assert_eq(r.passed, std::size_t{ 0 }, "and did not satisfy the expectation");
+}
+
+void
+assert_throws_accepts_a_base_of_the_thrown_type()
+{
+  // The legitimate use of a base type, which the ordering above must not have cost: asking for
+  // std::exception and getting something derived from it is a match.
+  assert_throws<std::exception>([]() {
+    throw std::invalid_argument("derived from std::exception");
+  });
+  assert_throws<std::logic_error>([]() {
+    throw std::invalid_argument("derived from std::logic_error");
+  });
+}
+
+void
+assert_throws_rejects_an_unrelated_type_and_says_so()
+{
+  const auto message = message_of([]() {
+    assert_throws<std::logic_error>([]() {
+      throw std::runtime_error("unrelated");
+    });
+  });
+  assert_false(message.empty(), "an unrelated type is not accepted");
+  assert_true(message.find("a different exception type was thrown") != std::string::npos,
+              "and the report says the type was wrong rather than that nothing was thrown");
+}
+
+void
+assert_throws_rejects_a_callable_that_throws_nothing()
+{
+  const auto message = message_of([]() {
+    assert_throws<std::exception>([]() {
+    });
+  });
+  assert_false(message.empty(), "a callable that throws nothing fails the assertion");
+  assert_true(message.find("nothing was thrown") != std::string::npos,
+              "and is distinguished from having thrown the wrong type");
+}
+
 auto
 tests() -> test_suite
 {
@@ -324,6 +426,15 @@ tests() -> test_suite
       { "timeout_multiplier_defaults_to_one_and_rejects_anything_but_a_number",
         timeout_multiplier_defaults_to_one_and_rejects_anything_but_a_number },
       { "scale_timeouts_multiplies_every_budget", scale_timeouts_multiplies_every_budget },
+      { "a_skip_inside_assert_throws_skips_its_case", a_skip_inside_assert_throws_skips_its_case },
+      { "a_failed_assertion_inside_assert_throws_fails_its_case",
+        a_failed_assertion_inside_assert_throws_fails_its_case },
+      { "assert_throws_accepts_a_base_of_the_thrown_type",
+        assert_throws_accepts_a_base_of_the_thrown_type },
+      { "assert_throws_rejects_an_unrelated_type_and_says_so",
+        assert_throws_rejects_an_unrelated_type_and_says_so },
+      { "assert_throws_rejects_a_callable_that_throws_nothing",
+        assert_throws_rejects_a_callable_that_throws_nothing },
       { "a_scaled_budget_lets_a_case_outlive_its_original_one",
         a_scaled_budget_lets_a_case_outlive_its_original_one,
         timeout::fast },
