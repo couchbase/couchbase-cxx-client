@@ -273,4 +273,48 @@ assert_throws(Fn&& fn,
   }
 }
 
+// Invoke `fn`, require it to throw `Exc`, and require that exception's message to contain
+// `substring`. `Exc` defaults to std::exception because the common use is to assert what went wrong
+// rather than which type carried it; a case that cares about the type names it.
+//
+// The substring leads. A callable is often several lines long, and with it first what is being
+// asserted is only readable after scrolling past the thing doing the asserting.
+//
+// The control-flow types are matched ahead of `Exc` for the reason given on assert_throws above,
+// and here the default makes it load-bearing rather than defensive: `Exc` is a base of both, so any
+// other order would record a skip() from inside the callable as the expected exception.
+template<typename Exc = std::exception, typename Fn>
+inline void
+assert_throws_with(std::string_view substring,
+                   Fn&& fn,
+                   std::string_view message = "expected exception",
+                   source_location loc = source_location::current())
+{
+  std::string what;
+  bool threw_expected = false;
+  try {
+    std::forward<Fn>(fn)();
+  } catch (const test_skip_exception&) {
+    throw;
+  } catch (const test_assertion_failure&) {
+    throw;
+  } catch (const Exc& e) {
+    threw_expected = true;
+    what = e.what();
+  } catch (...) {
+    throw test_assertion_failure(fmt::format(
+      "{}:{}: {} (a different exception type was thrown)", loc.file_name(), loc.line(), message));
+  }
+  if (!threw_expected) {
+    throw test_assertion_failure(
+      fmt::format("{}:{}: {} (nothing was thrown)", loc.file_name(), loc.line(), message));
+  }
+  // Both halves: the substring alone does not tell the reader what the exception actually said, and
+  // that is the thing they need in order to decide whether the code or the expectation is wrong.
+  if (what.find(substring) == std::string_view::npos) {
+    throw test_assertion_failure(fmt::format(
+      R"({}:{}: {} ("{}" is not in "{}"))", loc.file_name(), loc.line(), message, substring, what));
+  }
+}
+
 } // namespace couchbase::test

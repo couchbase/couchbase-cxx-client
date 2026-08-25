@@ -52,7 +52,7 @@ distinct(const std::vector<std::vector<std::byte>>& bodies) -> std::size_t
 }
 
 void
-random_document_bodies_are_distinct()
+random_document_bodies_are_distinct([[maybe_unused]] context& ctx)
 {
   // The defect this guards: a body generated once and reused makes every
   // document identical, and the storage engine then compresses a block of them
@@ -67,7 +67,7 @@ random_document_bodies_are_distinct()
 }
 
 void
-a_constant_fill_repeats_one_body()
+a_constant_fill_repeats_one_body([[maybe_unused]] context& ctx)
 {
   cbc::document_body_generator generator{
     cbc::body_fill::constant, cbc::body_format::binary, document_size, 0, seed,
@@ -77,7 +77,7 @@ a_constant_fill_repeats_one_body()
 }
 
 void
-a_binary_body_is_exactly_the_requested_size()
+a_binary_body_is_exactly_the_requested_size([[maybe_unused]] context& ctx)
 {
   for (auto fill : { cbc::body_fill::constant, cbc::body_fill::random }) {
     cbc::document_body_generator generator{
@@ -91,7 +91,7 @@ a_binary_body_is_exactly_the_requested_size()
 }
 
 void
-a_random_json_body_parses_and_keeps_its_requested_length()
+a_random_json_body_parses_and_keeps_its_requested_length([[maybe_unused]] context& ctx)
 {
   cbc::document_body_generator generator{
     cbc::body_fill::random, cbc::body_format::json, document_size, 0, seed,
@@ -110,7 +110,7 @@ a_random_json_body_parses_and_keeps_its_requested_length()
 }
 
 void
-a_seed_reproduces_a_dataset_and_a_different_seed_does_not()
+a_seed_reproduces_a_dataset_and_a_different_seed_does_not([[maybe_unused]] context& ctx)
 {
   const auto make = [](std::uint64_t value) {
     cbc::document_body_generator generator{
@@ -127,7 +127,7 @@ a_seed_reproduces_a_dataset_and_a_different_seed_does_not()
 }
 
 void
-a_pool_holds_distinct_bodies_and_cycles_through_them()
+a_pool_holds_distinct_bodies_and_cycles_through_them([[maybe_unused]] context& ctx)
 {
   constexpr std::size_t pooled{ 8 };
 
@@ -145,7 +145,7 @@ a_pool_holds_distinct_bodies_and_cycles_through_them()
 }
 
 void
-a_zero_document_size_yields_the_predefined_document()
+a_zero_document_size_yields_the_predefined_document([[maybe_unused]] context& ctx)
 {
   const auto predefined = couchbase::core::utils::to_binary(R"({"type":"fake_profile"})");
 
@@ -165,22 +165,33 @@ tests() -> test_suite
   return {
     "tools_document_body_generator",
     {
-      { "random_document_bodies_are_distinct", random_document_bodies_are_distinct, timeout::fast },
-      { "a_constant_fill_repeats_one_body", a_constant_fill_repeats_one_body, timeout::instant },
+      { "random_document_bodies_are_distinct",
+        random_document_bodies_are_distinct,
+        {},
+        timeout::fast },
+      { "a_constant_fill_repeats_one_body",
+        a_constant_fill_repeats_one_body,
+        {},
+        timeout::instant },
       { "a_binary_body_is_exactly_the_requested_size",
         a_binary_body_is_exactly_the_requested_size,
+        {},
         timeout::instant },
       { "a_random_json_body_parses_and_keeps_its_requested_length",
         a_random_json_body_parses_and_keeps_its_requested_length,
+        {},
         timeout::instant },
       { "a_seed_reproduces_a_dataset_and_a_different_seed_does_not",
         a_seed_reproduces_a_dataset_and_a_different_seed_does_not,
+        {},
         timeout::instant },
       { "a_pool_holds_distinct_bodies_and_cycles_through_them",
         a_pool_holds_distinct_bodies_and_cycles_through_them,
+        {},
         timeout::instant },
       { "a_zero_document_size_yields_the_predefined_document",
         a_zero_document_size_yields_the_predefined_document,
+        {},
         timeout::instant },
     },
   };

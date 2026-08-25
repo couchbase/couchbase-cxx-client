@@ -79,6 +79,26 @@ body_failed_assertion_inside_assert_throws([[maybe_unused]] context& ctx)
     assert_true(false, "intentional failure from inside a callable");
   });
 }
+void
+body_skip_inside_assert_throws_with([[maybe_unused]] context& ctx)
+{
+  // The substring deliberately matches the skip's own text. Were the skip swallowed, it would also
+  // satisfy the message check, so the case would report passed rather than fail on the substring --
+  // the silent outcome, which is the one worth pinning.
+  assert_throws_with("intentional", []() {
+    skip("intentional skip from inside a callable");
+  });
+}
+void
+body_failed_assertion_inside_assert_throws_with([[maybe_unused]] context& ctx)
+{
+  // The other control-flow type, and the substring matches for the same reason: a nested failure
+  // claimed as the expected exception leaves its own message in `what`, which then satisfies the
+  // check and reports the case passed.
+  assert_throws_with("intentional", []() {
+    assert_true(false, "intentional failure from inside a callable");
+  });
+}
 
 // A backend that answers from fixed values and counts the calls, so the claim that probes are
 // cached can be checked with a number instead of by reading context.cxx.
@@ -311,7 +331,7 @@ message_of(Fn&& fn) -> std::string
 }
 
 void
-body_skip_inside_message_of()
+body_skip_inside_message_of([[maybe_unused]] context& ctx)
 {
   static_cast<void>(message_of([]() {
     skip("intentional skip from inside a callable");
@@ -320,7 +340,7 @@ body_skip_inside_message_of()
   assert_true(false, "the skip did not reach the runner");
 }
 void
-body_throw_inside_message_of()
+body_throw_inside_message_of([[maybe_unused]] context& ctx)
 {
   static_cast<void>(message_of([]() {
     throw std::runtime_error("not an assertion failure");
@@ -898,7 +918,7 @@ assert_throws_rejects_a_callable_that_throws_nothing([[maybe_unused]] context& c
 }
 
 void
-assert_eq_reports_both_values_when_it_can_format_them()
+assert_eq_reports_both_values_when_it_can_format_them([[maybe_unused]] context& ctx)
 {
   const auto message = message_of([]() {
     assert_eq(2 + 2, 5, "arithmetic");
@@ -910,7 +930,7 @@ assert_eq_reports_both_values_when_it_can_format_them()
 }
 
 void
-assert_eq_omits_values_it_cannot_format()
+assert_eq_omits_values_it_cannot_format([[maybe_unused]] context& ctx)
 {
   // The fallback is correct -- there is nothing to print -- but which branch a type takes is a
   // compile-time decision, so without this a change to the condition would silently move every
@@ -924,7 +944,7 @@ assert_eq_omits_values_it_cannot_format()
 }
 
 void
-assert_true_and_assert_false_report_what_was_asked()
+assert_true_and_assert_false_report_what_was_asked([[maybe_unused]] context& ctx)
 {
   assert_true(message_of([]() {
                 assert_true(true);
@@ -956,7 +976,7 @@ assert_true_and_assert_false_report_what_was_asked()
 }
 
 void
-an_assertion_reports_the_location_of_its_call_site()
+an_assertion_reports_the_location_of_its_call_site([[maybe_unused]] context& ctx)
 {
   // Every assertion defaults its source_location at the call site. Lose that -- a helper passing
   // its own location, or the default dropped -- and every failure in the suite names the framework
@@ -976,22 +996,92 @@ an_assertion_reports_the_location_of_its_call_site()
 }
 
 void
-message_of_passes_everything_else_to_the_runner()
+message_of_passes_everything_else_to_the_runner([[maybe_unused]] context& ctx)
 {
   // message_of catches test_assertion_failure and nothing else. A skip is the case that matters:
   // swallowed, it becomes an empty string, the body carries on, and a case that declared it does
   // not apply reports passed. Each body below asserts false after its message_of call, so reaching
   // that line is itself the failure.
   const test_suite skipping_suite{ "inner", { { "s", body_skip_inside_message_of } } };
-  const auto skipped = run_quiet(skipping_suite, {}, false);
+  const auto skipped = run_bare(skipping_suite);
   assert_eq(skipped.skipped, std::size_t{ 1 }, "a skip reaches the runner");
   assert_eq(skipped.passed, std::size_t{ 0 }, "and is not turned into an empty message");
   assert_eq(skipped.failed, std::size_t{ 0 }, "so the line after the call never ran");
 
   const test_suite throwing_suite{ "inner", { { "t", body_throw_inside_message_of } } };
-  const auto threw = run_quiet(throwing_suite, {}, false);
+  const auto threw = run_bare(throwing_suite);
   assert_eq(threw.failed, std::size_t{ 1 }, "an unrelated exception reaches the runner too");
   assert_eq(threw.passed, std::size_t{ 0 }, "and does not read as a satisfied assertion");
+}
+
+void
+assert_throws_with_matches_a_substring_of_the_message([[maybe_unused]] context& ctx)
+{
+  assert_throws_with<std::invalid_argument>("path_invalid", []() {
+    throw std::invalid_argument("the path path_invalid was rejected");
+  });
+  // The type is optional; without it the default accepts anything derived from std::exception,
+  // which is what the Catch2 form being replaced did.
+  assert_throws_with("common flags", []() {
+    throw std::runtime_error("expected the document to have JSON common flags");
+  });
+}
+
+void
+assert_throws_with_reports_both_the_substring_and_the_message([[maybe_unused]] context& ctx)
+{
+  const auto message = message_of([]() {
+    assert_throws_with<std::runtime_error>("wanted", []() {
+      throw std::runtime_error("what it actually said");
+    });
+  });
+  assert_false(message.empty(), "a message that does not contain the substring fails");
+  assert_true(message.find("wanted") != std::string::npos, "the report names what was wanted");
+  assert_true(message.find("what it actually said") != std::string::npos,
+              "and what the exception actually said, which is what decides who is wrong");
+}
+
+void
+assert_throws_with_rejects_a_different_type_and_a_silent_callable([[maybe_unused]] context& ctx)
+{
+  const auto wrong_type = message_of([]() {
+    assert_throws_with<std::logic_error>("anything", []() {
+      throw std::runtime_error("unrelated");
+    });
+  });
+  assert_true(wrong_type.find("a different exception type was thrown") != std::string::npos,
+              "a constrained type still rejects the wrong one, before any message matching");
+
+  const auto nothing = message_of([]() {
+    assert_throws_with("anything", []() {
+    });
+  });
+  assert_true(nothing.find("nothing was thrown") != std::string::npos,
+              "and a callable that throws nothing stays distinct from a wrong message");
+}
+
+void
+a_skip_inside_assert_throws_with_skips_its_case([[maybe_unused]] context& ctx)
+{
+  // The default Exc is std::exception, a base of test_skip_exception, so the control-flow handlers
+  // being matched first is what this depends on rather than a precaution: any other order records
+  // the skip as the expected exception and the case reports passed.
+  const test_suite s{ "inner", { { "s", body_skip_inside_assert_throws_with } } };
+  const auto r = run_bare(s);
+  assert_eq(r.skipped, std::size_t{ 1 }, "the skip reached the runner");
+  assert_eq(r.passed, std::size_t{ 0 }, "and was not counted as the expected exception");
+}
+
+void
+a_failed_assertion_inside_assert_throws_with_fails_its_case([[maybe_unused]] context& ctx)
+{
+  // The same ordering, the other type. A nested failure carries its own location and message, and
+  // being claimed as the expected exception discards both -- then the substring is checked against
+  // the assertion's text instead of an exception's, which is how this reports passed.
+  const test_suite s{ "inner", { { "f", body_failed_assertion_inside_assert_throws_with } } };
+  const auto r = run_bare(s);
+  assert_eq(r.failed, std::size_t{ 1 }, "the nested failure reached the runner");
+  assert_eq(r.passed, std::size_t{ 0 }, "and was not counted as the expected exception");
 }
 
 auto
@@ -1060,6 +1150,16 @@ tests() -> test_suite
         an_assertion_reports_the_location_of_its_call_site },
       { "message_of_passes_everything_else_to_the_runner",
         message_of_passes_everything_else_to_the_runner },
+      { "assert_throws_with_matches_a_substring_of_the_message",
+        assert_throws_with_matches_a_substring_of_the_message },
+      { "assert_throws_with_reports_both_the_substring_and_the_message",
+        assert_throws_with_reports_both_the_substring_and_the_message },
+      { "assert_throws_with_rejects_a_different_type_and_a_silent_callable",
+        assert_throws_with_rejects_a_different_type_and_a_silent_callable },
+      { "a_skip_inside_assert_throws_with_skips_its_case",
+        a_skip_inside_assert_throws_with_skips_its_case },
+      { "a_failed_assertion_inside_assert_throws_with_fails_its_case",
+        a_failed_assertion_inside_assert_throws_with_fails_its_case },
       { "a_scaled_budget_lets_a_case_outlive_its_original_one",
         a_scaled_budget_lets_a_case_outlive_its_original_one,
         {},
