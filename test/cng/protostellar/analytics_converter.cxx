@@ -18,7 +18,7 @@
 // Unit tests for the analytics <-> couchbase.analytics.v1 converter (CXXCBC-898). Pure, no
 // server.
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/protostellar/analytics_converter.hxx"
 
@@ -231,20 +231,16 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_analytics_converter",
+    suite_name,
     {
-      { "encode_maps_core_fields", encode_maps_core_fields },
-      { "parameters_from_the_binary_arm_carry_their_payload",
-        parameters_from_the_binary_arm_carry_their_payload },
-      { "an_empty_parameter_encodes_as_empty", an_empty_parameter_encodes_as_empty },
-      { "can_encode_rejects_unsupported_features", can_encode_rejects_unsupported_features },
-      { "can_encode_rejects_every_scope_qualification",
-        can_encode_rejects_every_scope_qualification },
-      { "decode_meta_data_maps_status_metrics_warnings",
-        decode_meta_data_maps_status_metrics_warnings },
-      { "warnings_are_replaced_when_metadata_is_decoded_again",
-        warnings_are_replaced_when_metadata_is_decoded_again },
-      { "status_strings_map_to_the_core_enum", status_strings_map_to_the_core_enum },
+      { CASE(encode_maps_core_fields) },
+      { CASE(parameters_from_the_binary_arm_carry_their_payload) },
+      { CASE(an_empty_parameter_encodes_as_empty) },
+      { CASE(can_encode_rejects_unsupported_features) },
+      { CASE(can_encode_rejects_every_scope_qualification) },
+      { CASE(decode_meta_data_maps_status_metrics_warnings) },
+      { CASE(warnings_are_replaced_when_metadata_is_decoded_again) },
+      { CASE(status_strings_map_to_the_core_enum) },
     },
   };
 }

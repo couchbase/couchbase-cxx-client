@@ -21,7 +21,7 @@
 // misleading success report. The error is returned before any I/O, so this is env-agnostic: a lazy
 // connect to an unroutable endpoint is enough (no gateway required).
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include <couchbase/cluster.hxx>
 
@@ -69,10 +69,9 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_ping_diagnostics",
+    suite_name,
     {
-      { "ping_and_diagnostics_are_feature_not_available_over_couchbase2",
-        ping_and_diagnostics_are_feature_not_available_over_couchbase2,
+      { CASE(ping_and_diagnostics_are_feature_not_available_over_couchbase2),
         {},
         timeout::integration },
     },

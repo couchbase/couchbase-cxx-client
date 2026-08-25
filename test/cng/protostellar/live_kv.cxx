@@ -22,7 +22,7 @@
 // real gateway. Extra env: TEST_CB2_USERNAME/TEST_CB2_PASSWORD (default Administrator/password),
 // TEST_CB2_BUCKET (default "default"). TLS verification is disabled (dev gateway cert).
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/cluster_credentials.hxx"
 #include "core/cluster_options.hxx"
@@ -524,22 +524,18 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_live_kv",
+    suite_name,
     {
-      { "kv_crud_round_trip_against_live_gateway",
-        kv_crud_round_trip_against_live_gateway,
+      { CASE(kv_crud_round_trip_against_live_gateway),
         { needs::real_cluster() },
         timeout::integration },
-      { "insert_and_replace_round_trip_against_live_gateway",
-        insert_and_replace_round_trip_against_live_gateway,
+      { CASE(insert_and_replace_round_trip_against_live_gateway),
         { needs::real_cluster() },
         timeout::integration },
-      { "durable_mutations_against_live_gateway",
-        durable_mutations_against_live_gateway,
+      { CASE(durable_mutations_against_live_gateway),
         { needs::real_cluster() },
         timeout::integration },
-      { "compressed_values_round_trip_against_live_gateway",
-        compressed_values_round_trip_against_live_gateway,
+      { CASE(compressed_values_round_trip_against_live_gateway),
         { needs::real_cluster() },
         timeout::integration },
     },

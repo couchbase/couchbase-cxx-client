@@ -18,7 +18,7 @@
 // Unit tests for the FTS search <-> couchbase.search.v1 converter (CXXCBC-899). Pure, no
 // server. Only the trivial query forms are translated; everything else is reported as unmappable.
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/protostellar/search_converter.hxx"
 
@@ -291,22 +291,18 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_search_converter",
+    suite_name,
     {
-      { "encode_maps_envelope_and_query_string", encode_maps_envelope_and_query_string },
-      { "encode_maps_match_all_and_match_none", encode_maps_match_all_and_match_none },
-      { "encode_returns_nullopt_for_unmappable_query",
-        encode_returns_nullopt_for_unmappable_query },
-      { "encode_maps_a_boosted_query_string", encode_maps_a_boosted_query_string },
-      { "malformed_query_json_is_distinguished_from_an_unmappable_shape",
-        malformed_query_json_is_distinguished_from_an_unmappable_shape },
-      { "can_encode_rejects_gated_features", can_encode_rejects_gated_features },
-      { "decode_maps_hits_and_metrics", decode_maps_hits_and_metrics },
-      { "decode_carries_partial_partition_failures", decode_carries_partial_partition_failures },
-      { "decode_maps_fragments_fields_and_array_positions",
-        decode_maps_fragments_fields_and_array_positions },
-      { "decode_leaves_absent_fragments_and_positions_unset",
-        decode_leaves_absent_fragments_and_positions_unset },
+      { CASE(encode_maps_envelope_and_query_string) },
+      { CASE(encode_maps_match_all_and_match_none) },
+      { CASE(encode_returns_nullopt_for_unmappable_query) },
+      { CASE(encode_maps_a_boosted_query_string) },
+      { CASE(malformed_query_json_is_distinguished_from_an_unmappable_shape) },
+      { CASE(can_encode_rejects_gated_features) },
+      { CASE(decode_maps_hits_and_metrics) },
+      { CASE(decode_carries_partial_partition_failures) },
+      { CASE(decode_maps_fragments_fields_and_array_positions) },
+      { CASE(decode_leaves_absent_fragments_and_positions_unset) },
     },
   };
 }

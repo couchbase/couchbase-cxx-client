@@ -18,7 +18,7 @@
 // Unit tests for the bucket-admin <-> couchbase.admin.bucket.v1 converter (CXXCBC-900). Pure,
 // no server.
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/protostellar/bucket_admin_converter.hxx"
 
@@ -175,18 +175,15 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_bucket_admin_converter",
+    suite_name,
     {
-      { "apply_settings_maps_fields", apply_settings_maps_fields },
-      { "apply_settings_omits_unset_ram_quota", apply_settings_omits_unset_ram_quota },
-      { "apply_settings_rejects_memcached", apply_settings_rejects_memcached },
-      { "decode_bucket_maps_fields", decode_bucket_maps_fields },
-      { "decode_bucket_reads_the_settings_update_would_resend",
-        decode_bucket_reads_the_settings_update_would_resend },
-      { "decode_bucket_leaves_absent_optional_settings_unset",
-        decode_bucket_leaves_absent_optional_settings_unset },
-      { "decode_bucket_drops_a_history_retention_the_core_field_cannot_hold",
-        decode_bucket_drops_a_history_retention_the_core_field_cannot_hold },
+      { CASE(apply_settings_maps_fields) },
+      { CASE(apply_settings_omits_unset_ram_quota) },
+      { CASE(apply_settings_rejects_memcached) },
+      { CASE(decode_bucket_maps_fields) },
+      { CASE(decode_bucket_reads_the_settings_update_would_resend) },
+      { CASE(decode_bucket_leaves_absent_optional_settings_unset) },
+      { CASE(decode_bucket_drops_a_history_retention_the_core_field_cannot_hold) },
     },
   };
 }

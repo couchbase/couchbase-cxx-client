@@ -29,7 +29,7 @@
 
 #define COUCHBASE_CXX_CLIENT_IGNORE_CORE_DEPRECATIONS
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/operations.hxx"
 
@@ -124,12 +124,10 @@ auto
 tests() -> test_suite
 {
   return {
-    "cluster_couchbase2_build_support",
+    suite_name,
     {
-      { "couchbase2_parses_identically_regardless_of_build_support",
-        couchbase2_parses_identically_regardless_of_build_support },
-      { "opening_couchbase2_without_build_support_reports_feature_not_available",
-        opening_couchbase2_without_build_support_reports_feature_not_available },
+      { CASE(couchbase2_parses_identically_regardless_of_build_support) },
+      { CASE(opening_couchbase2_without_build_support_reports_feature_not_available) },
     },
   };
 }

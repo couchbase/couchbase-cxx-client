@@ -32,7 +32,7 @@
 // it covers was invisible from the core request that was already wired.
 
 #include "cng/fixtures/live_fixture.hxx"
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/operations/management/query_index_create.hxx"
 #include "core/operations/management/query_index_drop.hxx"
@@ -468,38 +468,30 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_live_query_index_admin",
+    suite_name,
     {
-      { "list_query_indexes_against_live_gateway",
-        list_query_indexes_against_live_gateway,
+      { CASE(list_query_indexes_against_live_gateway),
         { needs::real_cluster() },
         timeout::integration },
-      { "the_secondary_index_lifecycle_round_trips_against_live_gateway",
-        the_secondary_index_lifecycle_round_trips_against_live_gateway,
+      { CASE(the_secondary_index_lifecycle_round_trips_against_live_gateway),
         { needs::real_cluster() },
         timeout::integration },
-      { "the_primary_index_lifecycle_round_trips_against_live_gateway",
-        the_primary_index_lifecycle_round_trips_against_live_gateway,
+      { CASE(the_primary_index_lifecycle_round_trips_against_live_gateway),
         { needs::real_cluster() },
         timeout::integration },
-      { "an_index_key_that_needs_escaping_round_trips_against_live_gateway",
-        an_index_key_that_needs_escaping_round_trips_against_live_gateway,
+      { CASE(an_index_key_that_needs_escaping_round_trips_against_live_gateway),
         { needs::real_cluster() },
         timeout::integration },
-      { "a_hostile_index_key_cannot_add_terms_against_live_gateway",
-        a_hostile_index_key_cannot_add_terms_against_live_gateway,
+      { CASE(a_hostile_index_key_cannot_add_terms_against_live_gateway),
         { needs::real_cluster() },
         timeout::integration },
-      { "a_conditional_secondary_index_is_refused_over_couchbase2",
-        a_conditional_secondary_index_is_refused_over_couchbase2,
+      { CASE(a_conditional_secondary_index_is_refused_over_couchbase2),
         { needs::real_cluster() },
         timeout::integration },
-      { "build_deferred_indexes_through_the_public_api_against_live_gateway",
-        build_deferred_indexes_through_the_public_api_against_live_gateway,
+      { CASE(build_deferred_indexes_through_the_public_api_against_live_gateway),
         { needs::real_cluster() },
         timeout::integration },
-      { "build_deferred_indexes_on_a_closed_cluster_answers_on_the_calling_thread",
-        build_deferred_indexes_on_a_closed_cluster_answers_on_the_calling_thread,
+      { CASE(build_deferred_indexes_on_a_closed_cluster_answers_on_the_calling_thread),
         { needs::real_cluster() },
         timeout::integration },
     },

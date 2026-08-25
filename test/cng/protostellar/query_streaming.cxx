@@ -20,7 +20,7 @@
 // stream_control::stop draining to the terminal metadata, and a mid-stream error surfacing as
 // request_canceled once rows have reached the consumer. Env-agnostic (in-process server).
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/cluster_credentials.hxx"
 #include "core/operations/document_analytics.hxx"
@@ -506,46 +506,18 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_query_streaming",
+    suite_name,
     {
-      { "an_exhausted_budget_is_rejected_before_dispatch",
-        an_exhausted_budget_is_rejected_before_dispatch,
-        {},
-        timeout::network },
-      { "row_callback_delivers_rows_incrementally",
-        row_callback_delivers_rows_incrementally,
-        {},
-        timeout::network },
-      { "row_callback_stop_drains_to_metadata",
-        row_callback_stop_drains_to_metadata,
-        {},
-        timeout::network },
-      { "a_buffered_mid_stream_error_maps_to_request_canceled",
-        a_buffered_mid_stream_error_maps_to_request_canceled,
-        {},
-        timeout::network },
-      { "metadata_only_stream_error_maps_to_request_canceled",
-        metadata_only_stream_error_maps_to_request_canceled,
-        {},
-        timeout::network },
-      { "mid_stream_error_after_delivery_maps_to_request_canceled",
-        mid_stream_error_after_delivery_maps_to_request_canceled,
-        {},
-        timeout::network },
-      { "a_non_retryable_mid_stream_error_preserves_its_error_code",
-        a_non_retryable_mid_stream_error_preserves_its_error_code,
-        {},
-        timeout::network },
-      { "analytics_streaming_incremental_delivery_and_stop",
-        analytics_streaming_incremental_delivery_and_stop,
-        {},
-        timeout::network },
-      { "analytics_mid_stream_error_maps_to_request_canceled",
-        analytics_mid_stream_error_maps_to_request_canceled,
-        {},
-        timeout::network },
-      { "analytics_non_retryable_mid_stream_error_preserves_its_error_code",
-        analytics_non_retryable_mid_stream_error_preserves_its_error_code,
+      { CASE(an_exhausted_budget_is_rejected_before_dispatch), {}, timeout::network },
+      { CASE(row_callback_delivers_rows_incrementally), {}, timeout::network },
+      { CASE(row_callback_stop_drains_to_metadata), {}, timeout::network },
+      { CASE(a_buffered_mid_stream_error_maps_to_request_canceled), {}, timeout::network },
+      { CASE(metadata_only_stream_error_maps_to_request_canceled), {}, timeout::network },
+      { CASE(mid_stream_error_after_delivery_maps_to_request_canceled), {}, timeout::network },
+      { CASE(a_non_retryable_mid_stream_error_preserves_its_error_code), {}, timeout::network },
+      { CASE(analytics_streaming_incremental_delivery_and_stop), {}, timeout::network },
+      { CASE(analytics_mid_stream_error_maps_to_request_canceled), {}, timeout::network },
+      { CASE(analytics_non_retryable_mid_stream_error_preserves_its_error_code),
         {},
         timeout::network },
     },

@@ -19,7 +19,7 @@
 // the connection string must reach the origin and survive copy/move. Pure construction, no
 // server (env-agnostic).
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/cluster_credentials.hxx"
 #include "core/origin.hxx"
@@ -143,13 +143,12 @@ auto
 tests() -> test_suite
 {
   return {
-    "origin_protocol",
+    suite_name,
     {
-      { "couchbase2_origin_is_protostellar", couchbase2_origin_is_protostellar },
-      { "classic_origin_is_not_protostellar", classic_origin_is_not_protostellar },
-      { "protocol_survives_copy_and_move", protocol_survives_copy_and_move },
-      { "rotation_state_resets_on_copy_and_travels_on_move",
-        rotation_state_resets_on_copy_and_travels_on_move },
+      { CASE(couchbase2_origin_is_protostellar) },
+      { CASE(classic_origin_is_not_protostellar) },
+      { CASE(protocol_survives_copy_and_move) },
+      { CASE(rotation_state_resets_on_copy_and_travels_on_move) },
     },
   };
 }

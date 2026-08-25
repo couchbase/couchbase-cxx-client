@@ -106,6 +106,12 @@ main(int argc, char* argv[]) -> int
       "Suite \"{}\": {} passed, {} skipped\n", suite.name, result.passed, result.skipped);
   }
 
+  // Skipped after a timeout for the same reason main() leaves through _Exit below: a detached
+  // worker may still be inside the very library the teardown is about to unload.
+  if (suite.teardown != nullptr && result.timed_out == 0) {
+    suite.teardown();
+  }
+
   // A timed-out case leaves its worker detached and still running. Returning from main would run
   // static destructors underneath it -- tearing down spdlog's registry, std::cout and any gRPC
   // channel the body still holds -- which surfaces as a nondeterministic abort at exit, exactly

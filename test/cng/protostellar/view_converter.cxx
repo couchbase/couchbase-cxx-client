@@ -17,7 +17,7 @@
 
 // Unit tests for the view <-> couchbase.view.v1 converter (CXXCBC-899). Pure, no server.
 
-#include "framework/test_runner.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/protostellar/view_converter.hxx"
 
@@ -126,11 +126,11 @@ auto
 tests() -> test_suite
 {
   return {
-    "protostellar_view_converter",
+    suite_name,
     {
-      { "encode_maps_core_fields", encode_maps_core_fields },
-      { "can_encode_rejects_unsupported_features", can_encode_rejects_unsupported_features },
-      { "decode_rows_maps_rows_and_meta", decode_rows_maps_rows_and_meta },
+      { CASE(encode_maps_core_fields) },
+      { CASE(can_encode_rejects_unsupported_features) },
+      { CASE(decode_rows_maps_rows_and_meta) },
     },
   };
 }
