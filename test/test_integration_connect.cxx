@@ -291,7 +291,7 @@ TEST_CASE("integration: query after changing to incorrect credentials", "[integr
   session_mgr->close();
   auto resp = test::utils::execute(integration.cluster, req);
 
-  REQUIRE(resp.ctx.ec == couchbase::errc::common::internal_server_failure);
+  REQUIRE(resp.ctx.ec == couchbase::errc::common::authentication_failure);
 }
 
 TEST_CASE("integration: cluster::find_bucket_by_name returns nullptr for unknown bucket",

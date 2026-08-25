@@ -78,6 +78,8 @@ TEST_CASE("unit: map_query_error classifies N1QL error codes", "[unit]")
   REQUIRE(ops::map_query_error(make("fatal", 3000)) == couchbase::errc::common::parsing_failure);
   REQUIRE(ops::map_query_error(make("fatal", 4040)) ==
           couchbase::errc::query::prepared_statement_failure);
+  REQUIRE(ops::map_query_error(make("fatal", 2120)) ==
+          couchbase::errc::common::authentication_failure);
   // Non-success status without an errors block falls back to internal_server_failure.
   REQUIRE(ops::map_query_error(make("fatal", 0)) ==
           couchbase::errc::common::internal_server_failure);
