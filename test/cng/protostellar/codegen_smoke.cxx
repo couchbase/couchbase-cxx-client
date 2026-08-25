@@ -32,7 +32,7 @@ namespace couchbase::test
 namespace
 {
 void
-kv_message_roundtrips()
+kv_message_roundtrips([[maybe_unused]] context& ctx)
 {
   ::couchbase::kv::v1::GetRequest req;
   req.set_bucket_name("travel-sample");
@@ -52,7 +52,7 @@ kv_message_roundtrips()
 }
 
 void
-googleapis_status_message_is_available()
+googleapis_status_message_is_available([[maybe_unused]] context& ctx)
 {
   // Proves google/rpc/status.proto (the sole googleapis import) was fetched and compiled.
   ::google::rpc::Status status;
@@ -62,7 +62,7 @@ googleapis_status_message_is_available()
 }
 
 void
-grpc_service_stub_is_generated()
+grpc_service_stub_is_generated([[maybe_unused]] context& ctx)
 {
   // Proves the gRPC plugin ran and its output linked: the generated service exposes its full
   // name, and the Stub type is a complete type.
@@ -84,11 +84,12 @@ tests() -> test_suite
     {
       // All three are in-memory message/stub checks with no I/O, so they get the tightest preset
       // rather than the 5 s network default.
-      { "kv_message_roundtrips", kv_message_roundtrips, timeout::instant },
+      { "kv_message_roundtrips", kv_message_roundtrips, {}, timeout::instant },
       { "googleapis_status_message_is_available",
         googleapis_status_message_is_available,
+        {},
         timeout::instant },
-      { "grpc_service_stub_is_generated", grpc_service_stub_is_generated, timeout::instant },
+      { "grpc_service_stub_is_generated", grpc_service_stub_is_generated, {}, timeout::instant },
     },
   };
 }

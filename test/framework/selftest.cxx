@@ -16,15 +16,17 @@
  */
 
 // Self-test for the test framework. It exercises the runner's pass / fail / skip / timeout /
-// env-gating / filter behaviour by driving run() with in-memory sub-suites and asserting on the
+// requirement / filter behaviour by driving run() with in-memory sub-suites and asserting on the
 // returned run_result. Because it asserts on the runner's *return value* (rather than letting an
 // inner failure propagate), every case here passes and this binary exits 0.
 
 #include "test_runner.hxx"
 
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <ios>
+#include <limits>
 #include <optional>
 #include <set>
 #include <sstream>
@@ -37,24 +39,25 @@ namespace couchbase::test
 {
 namespace
 {
-// Case bodies used to build the in-memory sub-suites the runner is tested against.
+// ── stand-ins the runner is driven with ──────────────────────────────────────
+
 void
-body_pass()
+body_pass([[maybe_unused]] context& ctx)
 {
   assert_true(true);
 }
 void
-body_fail()
+body_fail([[maybe_unused]] context& ctx)
 {
   assert_true(false, "intentional failure");
 }
 void
-body_skip()
+body_skip([[maybe_unused]] context& ctx)
 {
   skip("intentional skip");
 }
 void
-body_sleep()
+body_sleep([[maybe_unused]] context& ctx)
 {
   std::this_thread::sleep_for(std::chrono::milliseconds{ 200 });
 }
@@ -63,27 +66,211 @@ body_sleep()
 // run through the runner rather than called directly: what is under test is the outcome the runner
 // reports, and a case body cannot observe its own verdict.
 void
-body_skip_inside_assert_throws()
+body_skip_inside_assert_throws([[maybe_unused]] context& ctx)
 {
   assert_throws<std::exception>([]() {
     skip("intentional skip from inside a callable");
   });
 }
 void
-body_failed_assertion_inside_assert_throws()
+body_failed_assertion_inside_assert_throws([[maybe_unused]] context& ctx)
 {
   assert_throws<std::exception>([]() {
     assert_true(false, "intentional failure from inside a callable");
   });
 }
 
+// A backend that answers from fixed values and counts the calls, so the claim that probes are
+// cached can be checked with a number instead of by reading context.cxx.
+class counting_probes : public probe_backend
+{
+public:
+  std::size_t version_calls{ 0 };
+  std::size_t service_calls{ 0 };
+
+  [[nodiscard]] auto server_version() -> couchbase::test::server_version override
+  {
+    ++version_calls;
+    return { 7, 6, 2, false, server_edition::enterprise, deployment_type::on_prem };
+  }
+  [[nodiscard]] auto has_service(const std::string& name) -> bool override
+  {
+    ++service_calls;
+    return name == "kv";
+  }
+  [[nodiscard]] auto has_bucket_capability(const std::string& capability) -> bool override
+  {
+    return capability == "durableWrite";
+  }
+  [[nodiscard]] auto number_of_replicas() -> std::size_t override
+  {
+    return 1;
+  }
+  [[nodiscard]] auto number_of_nodes() -> std::size_t override
+  {
+    return 3;
+  }
+  [[nodiscard]] auto server_groups() -> std::vector<std::string> override
+  {
+    return { "group_1" };
+  }
+  [[nodiscard]] auto storage_backend() -> std::string override
+  {
+    return "couchstore";
+  }
+};
+
+// counting_probes, but slow enough that a caller which passed the cache check is still inside the
+// probe when the next one arrives. Without that overlap a concurrency test proves nothing: the
+// first caller finishes, and everyone after it reads a warm cache whether the cache is guarded or
+// not.
+class slow_counting_probes : public counting_probes
+{
+public:
+  [[nodiscard]] auto has_service(const std::string& name) -> bool override
+  {
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    return counting_probes::has_service(name);
+  }
+};
+
+// Answers every probe, but reports no storage backend -- what a release predating the setting
+// looks like. "unknown" is the SDK's spelling for "the server did not say", not a backend.
+class silent_backend_probes : public counting_probes
+{
+public:
+  [[nodiscard]] auto storage_backend() -> std::string override
+  {
+    return "unknown";
+  }
+};
+
+// A backend that cannot answer, standing in for a configured endpoint that does not respond.
+class unreachable_probes : public probe_backend
+{
+public:
+  std::size_t calls{ 0 };
+
+  [[nodiscard]] auto server_version() -> couchbase::test::server_version override
+  {
+    ++calls;
+    throw probe_failure("connection refused");
+  }
+  [[nodiscard]] auto has_service(const std::string& /* name */) -> bool override
+  {
+    ++calls;
+    throw probe_failure("connection refused");
+  }
+  [[nodiscard]] auto has_bucket_capability(const std::string& /* capability */) -> bool override
+  {
+    throw probe_failure("connection refused");
+  }
+  [[nodiscard]] auto number_of_replicas() -> std::size_t override
+  {
+    throw probe_failure("connection refused");
+  }
+  [[nodiscard]] auto number_of_nodes() -> std::size_t override
+  {
+    throw probe_failure("connection refused");
+  }
+  [[nodiscard]] auto server_groups() -> std::vector<std::string> override
+  {
+    throw probe_failure("connection refused");
+  }
+  [[nodiscard]] auto storage_backend() -> std::string override
+  {
+    throw probe_failure("connection refused");
+  }
+};
+
+// A file-local requirement: what a translation unit writes when it needs something the built-in
+// vocabulary does not cover. Kept here because "a custom requirement is short" is a claim about
+// the interface, and the only honest way to hold it is to write one.
+class needs_even_replicas : public requirement
+{
+public:
+  [[nodiscard]] auto describe() const -> std::string override
+  {
+    return "an even number of replicas";
+  }
+  [[nodiscard]] auto check(context& ctx) const -> check_result override
+  {
+    return ctx.number_of_replicas() % 2 == 0 ? check_result::ok()
+                                             : check_result::missing("the count is odd");
+  }
+};
+
+// A requirement that never answers, and one that answers with an exception of its own.
+class blocking : public requirement
+{
+public:
+  [[nodiscard]] auto describe() const -> std::string override
+  {
+    return "something that never answers";
+  }
+  [[nodiscard]] auto check(context& /* ctx */) const -> check_result override
+  {
+    std::this_thread::sleep_for(std::chrono::seconds{ 30 });
+    return check_result::ok();
+  }
+};
+
+class skipping : public requirement
+{
+public:
+  [[nodiscard]] auto describe() const -> std::string override
+  {
+    return "something that gives up";
+  }
+  [[nodiscard]] auto check(context& /* ctx */) const -> check_result override
+  {
+    skip("the environment cannot provide it");
+    return check_result::ok();
+  }
+};
+
+class throwing : public requirement
+{
+public:
+  [[nodiscard]] auto describe() const -> std::string override
+  {
+    return "something that throws";
+  }
+  [[nodiscard]] auto check(context& /* ctx */) const -> check_result override
+  {
+    throw std::runtime_error("the requirement itself is broken");
+  }
+};
+
+auto
+no_cluster() -> configuration
+{
+  return {}; // cluster_configured defaults to false
+}
+
+auto
+with_cluster() -> configuration
+{
+  configuration config;
+  config.connection_string = "couchbase://localhost";
+  config.cluster_configured = true;
+  return config;
+}
+
 // A sink for the runner's progress output so the self-test stays quiet.
 auto
-run_quiet(const test_suite& suite, const std::set<std::string>& filter, bool real_cluster)
-  -> run_result
+run_quiet(const test_suite& suite, const std::set<std::string>& filter, context& ctx) -> run_result
 {
   std::ostringstream sink;
-  return run(suite, filter, real_cluster, sink);
+  return run(suite, filter, ctx, sink);
+}
+
+// The common case: no cluster, no requirements, nothing to probe.
+auto
+run_bare(const test_suite& suite, const std::set<std::string>& filter = {}) -> run_result
+{
+  context ctx{ no_cluster(), std::make_unique<counting_probes>() };
+  return run_quiet(suite, filter, ctx);
 }
 
 // Comparable but not formattable, which is what selects assert_eq's value-free branch. It has no
@@ -144,42 +331,29 @@ body_throw_inside_message_of()
 // ── the self-test cases ──────────────────────────────────────────────────────
 
 void
-should_run_gating_is_correct()
-{
-  assert_true(should_run(test_env::agnostic, false), "agnostic runs in mock mode");
-  assert_true(should_run(test_env::agnostic, true), "agnostic runs in real mode");
-  assert_true(should_run(test_env::any_server, false), "any_server runs in mock mode");
-  assert_true(should_run(test_env::any_server, true), "any_server runs in real mode");
-  assert_true(should_run(test_env::mock_only, false), "mock_only runs in mock mode");
-  assert_false(should_run(test_env::mock_only, true), "mock_only skipped in real mode");
-  assert_false(should_run(test_env::cluster_only, false), "cluster_only skipped in mock mode");
-  assert_true(should_run(test_env::cluster_only, true), "cluster_only runs in real mode");
-}
-
-void
-runner_reports_a_passing_case()
+runner_reports_a_passing_case([[maybe_unused]] context& ctx)
 {
   const test_suite s{ "inner", { { "p", body_pass } } };
-  const auto r = run_quiet(s, {}, false);
+  const auto r = run_bare(s);
   assert_eq(r.passed, std::size_t{ 1 }, "one pass counted");
   assert_eq(r.failed, std::size_t{ 0 }, "no failures");
   assert_eq(exit_code(r), 0, "exit code 0 on success");
 }
 
 void
-runner_detects_a_failing_case()
+runner_detects_a_failing_case([[maybe_unused]] context& ctx)
 {
   const test_suite s{ "inner", { { "f", body_fail } } };
-  const auto r = run_quiet(s, {}, false);
+  const auto r = run_bare(s);
   assert_eq(r.failed, std::size_t{ 1 }, "one failure counted");
   assert_eq(exit_code(r), 1, "exit code 1 on failure");
 }
 
 void
-runner_reports_a_skipped_case()
+runner_reports_a_skipped_case([[maybe_unused]] context& ctx)
 {
   const test_suite s{ "inner", { { "s", body_skip } } };
-  const auto r = run_quiet(s, {}, false);
+  const auto r = run_bare(s);
   assert_eq(r.skipped, std::size_t{ 1 }, "one skip counted");
   assert_eq(r.failed, std::size_t{ 0 }, "skip is not a failure");
   // The other half of the contract couchbase_add_test() wires up as SKIP_RETURN_CODE: a binary that
@@ -188,28 +362,16 @@ runner_reports_a_skipped_case()
 }
 
 void
-runner_detects_a_timeout()
+runner_detects_a_timeout([[maybe_unused]] context& ctx)
 {
   // 200ms body against a 20ms budget must be reported as a failure.
-  const test_suite s{ "inner", { { "t", body_sleep, std::chrono::milliseconds{ 20 } } } };
-  const auto r = run_quiet(s, {}, false);
+  const test_suite s{ "inner", { { "t", body_sleep, {}, std::chrono::milliseconds{ 20 } } } };
+  const auto r = run_bare(s);
   assert_eq(r.failed, std::size_t{ 1 }, "timeout counted as a failure");
 }
 
 void
-env_gating_skips_cluster_only_without_a_cluster()
-{
-  const test_suite s{ "inner", { { "c", body_pass, default_timeout, test_env::cluster_only } } };
-  const auto without = run_quiet(s, {}, /*real_cluster=*/false);
-  assert_eq(without.skipped, std::size_t{ 1 }, "cluster_only skipped without a cluster");
-  assert_eq(without.passed, std::size_t{ 0 }, "cluster_only did not run without a cluster");
-
-  const auto with = run_quiet(s, {}, /*real_cluster=*/true);
-  assert_eq(with.passed, std::size_t{ 1 }, "cluster_only runs with a cluster");
-}
-
-void
-case_output_is_flushed_as_it_is_written()
+case_output_is_flushed_as_it_is_written(context& ctx)
 {
   // ctest gives these binaries a pipe for stdout, where the stream is block-buffered, and a case
   // that aborts the process discards whatever is still buffered -- so the log names neither the
@@ -217,78 +379,329 @@ case_output_is_flushed_as_it_is_written()
   // most needed, so the runner must not leave its stream block-buffered.
   std::ostringstream sink;
   const test_suite s{ "inner", { { "p", body_pass } } };
-  static_cast<void>(run(s, {}, false, sink));
+  static_cast<void>(run(s, {}, ctx, sink));
   assert_true((sink.flags() & std::ios::unitbuf) != 0,
               "the runner flushes its stream after every write");
 }
 
 void
-filter_selects_cases_by_name()
+an_unconfigured_cluster_skips_and_an_unreachable_one_fails([[maybe_unused]] context& ctx)
+{
+  // The distinction the whole three-valued scheme exists for. A boolean predicate has to answer
+  // both of these the same way, and the answer it picks is the one that does not fail the build --
+  // which is how an unreachable endpoint turns a whole leg green.
+  const test_suite s{ "inner", { { "c", body_pass, { needs::service("kv") } } } };
+
+  context unconfigured{ no_cluster(), std::make_unique<unreachable_probes>() };
+  const auto skipped = run_quiet(s, {}, unconfigured);
+  assert_eq(skipped.skipped, std::size_t{ 1 }, "no cluster configured is a skip");
+  assert_eq(skipped.failed, std::size_t{ 0 }, "and not a failure");
+  assert_eq(skipped.skipped_by_requirement.count("the kv service"),
+            std::size_t{ 1 },
+            "the requirement that turned it away is named");
+
+  context unreachable{ with_cluster(), std::make_unique<unreachable_probes>() };
+  const auto failed = run_quiet(s, {}, unreachable);
+  assert_eq(
+    failed.failed, std::size_t{ 1 }, "a configured cluster that cannot answer is a failure");
+  assert_eq(failed.skipped, std::size_t{ 0 }, "and never a skip");
+  assert_eq(failed.passed, std::size_t{ 0 }, "and the body did not run");
+}
+
+void
+a_satisfied_requirement_lets_the_case_run([[maybe_unused]] context& ctx)
+{
+  const test_suite s{
+    "inner",
+    { { "kv", body_pass, { needs::service("kv"), needs::cluster_version(v7_0, v8_0) } },
+      { "n1ql", body_pass, { needs::service("n1ql") } } },
+  };
+  context probed{ with_cluster(), std::make_unique<counting_probes>() };
+  const auto r = run_quiet(s, {}, probed);
+  assert_eq(r.passed, std::size_t{ 1 }, "the case whose requirements hold runs");
+  assert_eq(r.skipped, std::size_t{ 1 }, "the one whose service is absent is skipped");
+  assert_eq(r.failed, std::size_t{ 0 }, "neither is a failure");
+}
+
+void
+a_version_range_is_half_open([[maybe_unused]] context& ctx)
+{
+  // counting_probes reports 7.6.2.
+  const test_suite s{
+    "inner",
+    { { "in_range", body_pass, { needs::cluster_version(v7_6, v8_0) } },
+      { "below", body_pass, { needs::cluster_version(v8_0) } },
+      { "at_upper_bound", body_pass, { needs::cluster_version(v7_0, v7_6) } } },
+  };
+  context probed{ with_cluster(), std::make_unique<counting_probes>() };
+  const auto r = run_quiet(s, {}, probed);
+  assert_eq(r.passed, std::size_t{ 1 }, "only the case whose range contains 7.6.2 runs");
+  assert_eq(
+    r.skipped, std::size_t{ 2 }, "below the floor and at the exclusive ceiling are skipped");
+}
+
+void
+probes_are_cached_across_every_case_in_the_binary([[maybe_unused]] context& ctx)
+{
+  // 20 cases, each asking the same two questions. Reconnecting or re-asking per case is what turns
+  // a suite into a denial-of-service against its own cluster.
+  auto probes = std::make_unique<counting_probes>();
+  auto* counters = probes.get();
+  context probed{ with_cluster(), std::move(probes) };
+
+  std::vector<test_case> cases;
+  cases.reserve(20);
+  for (std::size_t i = 0; i < 20; ++i) {
+    cases.push_back({ fmt::format("case_{}", i),
+                      body_pass,
+                      { needs::service("kv"), needs::cluster_version(v7_0) } });
+  }
+  const test_suite s{ "inner", cases };
+  const auto r = run_quiet(s, {}, probed);
+
+  assert_eq(r.passed, std::size_t{ 20 }, "every case ran");
+  assert_eq(counters->service_calls, std::size_t{ 1 }, "the service was asked about once");
+  assert_eq(counters->version_calls, std::size_t{ 1 }, "and so was the version");
+  assert_eq(probed.backends_created(), std::size_t{ 1 }, "one backend for the whole binary");
+}
+
+void
+one_probe_answers_every_caller_that_arrives_at_once([[maybe_unused]] context& ctx)
+{
+  // run_bounded detaches a worker whose budget expired, and that worker is normally still inside a
+  // probe -- that is why it ran out of budget. The next case then reaches the same context before
+  // the previous one has left it. Unguarded, every arrival passes the empty-cache check, calls the
+  // backend and writes the same std::map entry, which is a data race on the cache rather than a
+  // wrong answer: this asserts the count the guard makes true.
+  auto probes = std::make_unique<slow_counting_probes>();
+  auto* counters = probes.get();
+  context probed{ with_cluster(), std::move(probes) };
+
+  constexpr std::size_t askers = 8;
+  std::atomic<std::size_t> arrived{ 0 };
+  std::vector<std::thread> threads;
+  threads.reserve(askers);
+  for (std::size_t i = 0; i < askers; ++i) {
+    threads.emplace_back([&probed, &arrived]() {
+      ++arrived;
+      while (arrived.load() < askers) {
+        std::this_thread::yield();
+      }
+      (void)probed.has_service("kv");
+    });
+  }
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  assert_eq(
+    counters->service_calls, std::size_t{ 1 }, "the backend was asked once, not once per caller");
+}
+
+void
+a_failed_probe_is_not_retried_per_case([[maybe_unused]] context& ctx)
+{
+  // The failure has to be cached too: an unreachable cluster otherwise costs one connection
+  // attempt per case, which is how a broken endpoint turns a fast leg into a timeout.
+  auto probes = std::make_unique<unreachable_probes>();
+  auto* counters = probes.get();
+  context probed{ with_cluster(), std::move(probes) };
+
+  const test_suite s{ "inner",
+                      { { "a", body_pass, { needs::cluster_version(v7_0) } },
+                        { "b", body_pass, { needs::cluster_version(v7_0) } },
+                        { "c", body_pass, { needs::cluster_version(v7_0) } } } };
+  const auto r = run_quiet(s, {}, probed);
+  assert_eq(r.failed, std::size_t{ 3 }, "each case fails on its own account");
+  assert_eq(counters->calls, std::size_t{ 1 }, "but the cluster was asked exactly once");
+}
+
+void
+a_requirement_that_blocks_fails_its_case_rather_than_the_run([[maybe_unused]] context& ctx)
+{
+  // A requirement runs before every case, so one that hangs would stall the leg rather than report
+  // anything. The budget belongs to the framework, not to the requirement, which is why it is on
+  // the configuration and can be shortened here.
+  const test_suite s{ "inner",
+                      { { "blocked", body_pass, { std::make_shared<const blocking>() } } } };
+
+  auto config = no_cluster();
+  config.requirement_budget = std::chrono::milliseconds{ 50 };
+  context bounded{ config, std::make_unique<counting_probes>() };
+
+  const auto r = run_quiet(s, {}, bounded);
+  assert_eq(r.failed, std::size_t{ 1 }, "the case fails");
+  assert_eq(r.passed, std::size_t{ 0 }, "the body never ran");
+  assert_eq(r.skipped, std::size_t{ 0 }, "and it is not reported as inapplicable");
+  assert_eq(r.timed_out,
+            std::size_t{ 1 },
+            "flagged as a timeout, because the abandoned worker dictates how the process exits");
+}
+
+void
+a_requirement_that_throws_fails_its_case([[maybe_unused]] context& ctx)
+{
+  // probe_failure is turned into `undetermined` by design; anything else escaping check() is a bug
+  // in the requirement, and must still land on the case that declared it rather than on the run.
+  const test_suite s{ "inner",
+                      { { "broken", body_pass, { std::make_shared<const throwing>() } } } };
+  const auto r = run_bare(s);
+  assert_eq(r.failed, std::size_t{ 1 }, "a requirement that throws fails its case");
+  assert_eq(r.passed, std::size_t{ 0 }, "and the body did not run");
+  assert_eq(r.skipped, std::size_t{ 0 }, "and it is not reported as inapplicable");
+}
+
+void
+a_requirement_that_skips_does_not_run_its_case([[maybe_unused]] context& ctx)
+{
+  // skip() from inside check() is the fourth thing a requirement can do, alongside the three
+  // check_result statuses. Handling only the statuses left this one falling through to a default
+  // gate that said "run", so the body executed and the case reported passed behind a precondition
+  // that had just declared itself unmet -- a pass with nothing verified, and no output line.
+  const test_suite s{ "inner", { { "gated", body_fail, { std::make_shared<const skipping>() } } } };
+  const auto r = run_bare(s);
+  assert_eq(r.skipped, std::size_t{ 1 }, "a requirement that skips skips its case");
+  assert_eq(r.passed, std::size_t{ 0 }, "the body did not run");
+  // body_fail would have failed had it run, so this pins that the body was never entered rather
+  // than merely that the tally came out even.
+  assert_eq(r.failed, std::size_t{ 0 }, "and it is not a failure");
+}
+
+void
+a_phase_level_verdict_is_not_reported_as_a_requirement_name(context& ctx)
+{
+  // Where the phase itself decides -- a check() that called skip(), or a blown budget -- there is
+  // no requirement to name, and the runner substitutes a sentinel. Interpolated into the ordinary
+  // "needs <what>" line it produced "needs (requirement phase)", which names nothing a reader can
+  // act on. The report has to say what happened instead.
+  std::ostringstream sink;
+  const test_suite s{ "inner", { { "gated", body_fail, { std::make_shared<const skipping>() } } } };
+  const auto r = run(s, {}, ctx, sink);
+  const auto output = sink.str();
+  assert_true(output.find("a requirement check skipped it") != std::string::npos,
+              "the line says the phase skipped the case");
+  assert_true(output.find("needs (requirement phase)") == std::string::npos,
+              "and does not offer the sentinel as something the case needs");
+  // The end-of-run report groups the cases a requirement turned away, so every key in it is
+  // something an environment can be given. The sentinel there prints as "(requirement phase) -- 1
+  // case(s)" under "Skipped for want of:", which reads as a requirement by that name.
+  assert_true(r.skipped_by_requirement.empty(),
+              "the sentinel is not offered as a requirement the environment lacked");
+  assert_eq(r.skipped, std::size_t{ 1 }, "though the case is still counted among the skips");
+}
+
+void
+every_edition_describes_itself_by_name([[maybe_unused]] context& ctx)
+{
+  // The description is the key the skip report groups by, so an edition labelled as another one
+  // makes the run report cases turned away for a requirement nobody declared.
+  assert_eq(needs::edition(server_edition::enterprise)->describe(),
+            std::string{ "the enterprise edition" },
+            "enterprise");
+  assert_eq(needs::edition(server_edition::community)->describe(),
+            std::string{ "the community edition" },
+            "community");
+  assert_eq(needs::edition(server_edition::columnar)->describe(),
+            std::string{ "the columnar edition" },
+            "columnar is not folded in with community");
+}
+
+void
+a_storage_backend_the_cluster_would_not_name_is_undetermined([[maybe_unused]] context& ctx)
+{
+  // Not knowing must fail, not skip. Reported as a mismatch this reads "the bucket is unknown, not
+  // magma" -- a backend no bucket has -- and turns a cluster that could not answer into an
+  // inapplicable case, which is the conflation this framework exists to remove.
+  context probed{ with_cluster(), std::make_unique<silent_backend_probes>() };
+  const test_suite s{ "inner", { { "gated", body_pass, { needs::storage_backend("magma") } } } };
+  const auto r = run_quiet(s, {}, probed);
+  assert_eq(r.failed, std::size_t{ 1 }, "an unreported backend fails its case");
+  assert_eq(r.skipped, std::size_t{ 0 }, "rather than skipping it as inapplicable");
+  assert_eq(r.passed, std::size_t{ 0 }, "and the body did not run");
+}
+
+void
+a_file_local_requirement_needs_no_framework_change([[maybe_unused]] context& ctx)
+{
+  // counting_probes reports one replica, so an even-replica requirement turns the case away.
+  const test_suite s{
+    "inner", { { "even", body_pass, { std::make_shared<const needs_even_replicas>() } } }
+  };
+  context probed{ with_cluster(), std::make_unique<counting_probes>() };
+  const auto r = run_quiet(s, {}, probed);
+  assert_eq(r.skipped, std::size_t{ 1 }, "the custom requirement gates the case");
+  assert_eq(r.skipped_by_requirement.count("an even number of replicas"),
+            std::size_t{ 1 },
+            "and its own description is what the report groups by");
+}
+
+void
+filter_selects_cases_by_name([[maybe_unused]] context& ctx)
 {
   const test_suite s{ "inner", { { "a", body_pass }, { "b", body_pass } } };
-  const auto r = run_quiet(s, { "a" }, false);
+  const auto r = run_bare(s, { "a" });
   assert_eq(r.passed, std::size_t{ 1 }, "only the filtered case runs");
 }
 
 void
-a_failing_case_does_not_suppress_later_cases()
+a_failing_case_does_not_suppress_later_cases([[maybe_unused]] context& ctx)
 {
-  // One ctest test is registered per executable, so abandoning the suite on the first failure
-  // would hide every later regression in the same binary until the first one is fixed.
+  // Abandoning the suite on the first failure would hide every later regression in the same
+  // binary until the first one is fixed.
   const test_suite s{ "inner", { { "f", body_fail }, { "p", body_pass }, { "s", body_skip } } };
-  const auto r = run_quiet(s, {}, false);
+  const auto r = run_bare(s);
   assert_eq(r.failed, std::size_t{ 1 }, "the failure is counted");
   assert_eq(r.passed, std::size_t{ 1 }, "a later case still runs after a failure");
   assert_eq(r.skipped, std::size_t{ 1 }, "a later skip is still reported after a failure");
 }
 
 void
-slow_cases_run_after_a_failure()
+slow_cases_run_after_a_failure([[maybe_unused]] context& ctx)
 {
   test_suite s{ "inner", { { "f", body_fail } } };
   s.slow_test_cases = { { "p", body_pass } };
-  const auto r = run_quiet(s, {}, false);
+  const auto r = run_bare(s);
   assert_eq(r.passed, std::size_t{ 1 }, "slow cases are not abandoned by an earlier failure");
 }
 
 void
-a_filter_name_matching_nothing_fails()
+a_filter_name_matching_nothing_fails([[maybe_unused]] context& ctx)
 {
   const test_suite s{ "inner", { { "a", body_pass } } };
-  const auto r = run_quiet(s, { "typo" }, false);
+  const auto r = run_bare(s, { "typo" });
   assert_eq(r.passed, std::size_t{ 0 }, "nothing ran");
   assert_eq(r.failed, std::size_t{ 1 }, "an unmatched filter name is a failure");
   assert_eq(exit_code(r), 1, "exit code 1, not a silent pass");
 }
 
 void
-a_suite_that_runs_nothing_does_not_pass()
+a_suite_that_runs_nothing_does_not_pass([[maybe_unused]] context& ctx)
 {
   const test_suite empty{ "inner", {} };
-  const auto r = run_quiet(empty, {}, false);
+  const auto r = run_bare(empty);
   assert_eq(r.passed, std::size_t{ 0 }, "nothing ran");
   assert_eq(r.skipped, std::size_t{ 0 }, "nothing skipped");
   assert_eq(exit_code(r), 1, "an empty suite must not report success");
 }
 
 void
-a_timeout_is_reported_as_such()
+a_timeout_is_reported_as_such([[maybe_unused]] context& ctx)
 {
   // main() needs to distinguish a timeout from an ordinary failure: only a timeout leaves a
   // detached worker thread, which dictates how the process exits.
-  const test_suite s{ "inner", { { "t", body_sleep, std::chrono::milliseconds{ 20 } } } };
-  const auto r = run_quiet(s, {}, false);
+  const test_suite s{ "inner", { { "t", body_sleep, {}, std::chrono::milliseconds{ 20 } } } };
+  const auto r = run_bare(s);
   assert_eq(r.timed_out, std::size_t{ 1 }, "the timeout is flagged separately");
   assert_eq(r.failed, std::size_t{ 1 }, "and still counted as a failure");
 }
 
 void
-case_names_covers_slow_cases_and_ignores_the_environment()
+case_names_covers_slow_cases_and_ignores_the_environment([[maybe_unused]] context& ctx)
 {
   const test_suite suite{
     "listing",
-    { { "regular", body_pass, timeout::instant, test_env::cluster_only } },
-    { { "deliberately_slow", body_pass, timeout::slow } },
+    { { "regular", body_pass, { needs::real_cluster() }, timeout::instant } },
+    { { "deliberately_slow", body_pass, {}, timeout::slow } },
   };
 
   const auto names = case_names(suite);
@@ -298,7 +711,26 @@ case_names_covers_slow_cases_and_ignores_the_environment()
 }
 
 void
-timeout_multiplier_defaults_to_one_and_rejects_anything_but_a_number()
+list_output_carries_the_requirements_after_a_tab([[maybe_unused]] context& ctx)
+{
+  // cmake/TestFrameworkAddTests.cmake registers the part before the tab, so the same output has to
+  // serve the build and a person asking why a case never runs.
+  const test_suite suite{
+    "listing",
+    { { "gated", body_pass, { needs::real_cluster(), needs::service("n1ql") } },
+      { "ungated", body_pass } },
+  };
+
+  const auto lines = describe_cases(suite);
+  assert_eq(lines.size(), std::size_t{ 2 }, "one line per case");
+  assert_eq(lines[0],
+            std::string{ "gated\ta real cluster; the n1ql service" },
+            "requirements follow the name, separated by a tab");
+  assert_eq(lines[1], std::string{ "ungated\tno requirements" }, "and a case with none says so");
+}
+
+void
+timeout_multiplier_defaults_to_one_and_rejects_anything_but_a_number([[maybe_unused]] context& ctx)
 {
   assert_eq(timeout_multiplier(std::nullopt), 1.0, "unset means unscaled");
   assert_eq(timeout_multiplier(std::optional<std::string>{ "10" }), 10.0, "an integer is read");
@@ -331,12 +763,12 @@ timeout_multiplier_defaults_to_one_and_rejects_anything_but_a_number()
 }
 
 void
-scale_timeouts_multiplies_every_budget()
+scale_timeouts_multiplies_every_budget([[maybe_unused]] context& ctx)
 {
   test_suite suite{
     "budgets",
-    { { "fast", body_pass, std::chrono::milliseconds{ 100 } } },
-    { { "slow", body_pass, std::chrono::milliseconds{ 1'000 } } },
+    { { "fast", body_pass, {}, std::chrono::milliseconds{ 100 } } },
+    { { "slow", body_pass, {}, std::chrono::milliseconds{ 1'000 } } },
   };
 
   scale_timeouts(suite, 10.0);
@@ -346,34 +778,59 @@ scale_timeouts_multiplies_every_budget()
   // Ceiling, not nearest and not truncation. Only a product whose fraction falls below .5 tells
   // the three apart: 100 x 1.004 is 101 under ceil and 100 under both floor and llround.
   test_suite fractional{ "fractional",
-                         { { "case", body_pass, std::chrono::milliseconds{ 100 } } } };
+                         { { "case", body_pass, {}, std::chrono::milliseconds{ 100 } } } };
   scale_timeouts(fractional, 1.004);
   assert_eq(fractional.test_cases[0].timeout.count(), 101, "a fraction below .5 still rounds up");
 
   // Rounding must not produce a zero budget, which would fail every case before it started.
   scale_timeouts(suite, 0.0001);
   assert_true(suite.test_cases[0].timeout.count() >= 1, "a budget never rounds down to nothing");
+
+  // A product past the representation saturates rather than wrapping. Casting it would be
+  // undefined, and the value it produces in practice is negative, which the floor above then
+  // clamps to 1ms -- so the multiplier asking for the most room would hand out the least. The
+  // bound is the duration's own rep, which is what makes the ceiling the cast is checked against
+  // the same one the cast has to fit.
+  test_suite enormous{ "enormous",
+                       { { "case", body_pass, {}, std::chrono::milliseconds{ 100 } } } };
+  scale_timeouts(enormous, 1e300);
+  assert_eq(enormous.test_cases[0].timeout.count(),
+            std::numeric_limits<std::chrono::milliseconds::rep>::max(),
+            "an unrepresentable budget saturates instead of wrapping negative");
 }
 
 void
-a_scaled_budget_lets_a_case_outlive_its_original_one()
+a_scaled_budget_lets_a_case_outlive_its_original_one([[maybe_unused]] context& ctx)
 {
   // body_sleep runs for 200ms; 50ms is not enough and 50ms x 10 is.
-  test_suite suite{ "scaled", { { "sleeper", body_sleep, std::chrono::milliseconds{ 50 } } } };
+  test_suite suite{ "scaled", { { "sleeper", body_sleep, {}, std::chrono::milliseconds{ 50 } } } };
 
-  const auto unscaled = run_quiet(suite, {}, false);
+  const auto unscaled = run_bare(suite);
   assert_eq(unscaled.timed_out, std::size_t{ 1 }, "the original budget kills the case");
 
   scale_timeouts(suite, 10.0);
-  const auto scaled = run_quiet(suite, {}, false);
+  const auto scaled = run_bare(suite);
   assert_eq(scaled.timed_out, std::size_t{ 0 }, "the scaled budget does not");
   assert_eq(scaled.passed, std::size_t{ 1 }, "and the case reports its own outcome");
+}
+
+void
+the_configuration_reads_the_environment_it_documents(context& ctx)
+{
+  // The context the runner handed this case is the one main() built from the environment, so this
+  // is also the check that a case reaches its own configuration without calling getenv.
+  const auto& config = ctx.config();
+  assert_eq(config.cluster_configured,
+            ctx.env("TEST_CONNECTION_STRING").has_value(),
+            "cluster_configured tracks TEST_CONNECTION_STRING and nothing else");
+  assert_true(!config.bucket.empty(), "a bucket name is always resolved");
+  assert_true(!config.username.empty(), "and so are credentials");
 }
 
 } // namespace
 
 void
-a_skip_inside_assert_throws_skips_its_case()
+a_skip_inside_assert_throws_skips_its_case([[maybe_unused]] context& ctx)
 {
   // std::exception is a base of test_skip_exception, so an expected-exception handler matched ahead
   // of the control-flow ones claims the skip. The body still runs to completion; what is lost is
@@ -385,25 +842,25 @@ a_skip_inside_assert_throws_skips_its_case()
   // because instantiating assert_throws<std::exception> leaves a handler unreachable and
   // -Wexceptions is an error; with those warnings demoted it builds, and the counts below catch it.
   const test_suite s{ "inner", { { "s", body_skip_inside_assert_throws } } };
-  const auto r = run_quiet(s, {}, false);
+  const auto r = run_bare(s);
   assert_eq(r.skipped, std::size_t{ 1 }, "the skip reached the runner");
   assert_eq(r.passed, std::size_t{ 0 }, "and was not counted as the expected exception");
   assert_eq(r.failed, std::size_t{ 0 }, "a skip is not a failure either");
 }
 
 void
-a_failed_assertion_inside_assert_throws_fails_its_case()
+a_failed_assertion_inside_assert_throws_fails_its_case([[maybe_unused]] context& ctx)
 {
   // Same ordering, the other control-flow type. A nested failure carries its own location and
   // message, and being counted as the expected exception discards both.
   const test_suite s{ "inner", { { "s", body_failed_assertion_inside_assert_throws } } };
-  const auto r = run_quiet(s, {}, false);
+  const auto r = run_bare(s);
   assert_eq(r.failed, std::size_t{ 1 }, "the nested failure reached the runner");
   assert_eq(r.passed, std::size_t{ 0 }, "and did not satisfy the expectation");
 }
 
 void
-assert_throws_accepts_a_base_of_the_thrown_type()
+assert_throws_accepts_a_base_of_the_thrown_type([[maybe_unused]] context& ctx)
 {
   // The legitimate use of a base type, which the ordering above must not have cost: asking for
   // std::exception and getting something derived from it is a match.
@@ -416,7 +873,7 @@ assert_throws_accepts_a_base_of_the_thrown_type()
 }
 
 void
-assert_throws_rejects_an_unrelated_type_and_says_so()
+assert_throws_rejects_an_unrelated_type_and_says_so([[maybe_unused]] context& ctx)
 {
   const auto message = message_of([]() {
     assert_throws<std::logic_error>([]() {
@@ -429,7 +886,7 @@ assert_throws_rejects_an_unrelated_type_and_says_so()
 }
 
 void
-assert_throws_rejects_a_callable_that_throws_nothing()
+assert_throws_rejects_a_callable_that_throws_nothing([[maybe_unused]] context& ctx)
 {
   const auto message = message_of([]() {
     assert_throws<std::exception>([]() {
@@ -543,23 +1000,45 @@ tests() -> test_suite
   return {
     "framework_selftest",
     {
-      { "should_run_gating_is_correct", should_run_gating_is_correct },
       { "runner_reports_a_passing_case", runner_reports_a_passing_case },
       { "runner_detects_a_failing_case", runner_detects_a_failing_case },
       { "runner_reports_a_skipped_case", runner_reports_a_skipped_case },
-      { "runner_detects_a_timeout", runner_detects_a_timeout, timeout::fast },
-      { "env_gating_skips_cluster_only_without_a_cluster",
-        env_gating_skips_cluster_only_without_a_cluster },
+      { "runner_detects_a_timeout", runner_detects_a_timeout, {}, timeout::fast },
       { "case_output_is_flushed_as_it_is_written", case_output_is_flushed_as_it_is_written },
+      { "an_unconfigured_cluster_skips_and_an_unreachable_one_fails",
+        an_unconfigured_cluster_skips_and_an_unreachable_one_fails },
+      { "a_satisfied_requirement_lets_the_case_run", a_satisfied_requirement_lets_the_case_run },
+      { "a_version_range_is_half_open", a_version_range_is_half_open },
+      { "probes_are_cached_across_every_case_in_the_binary",
+        probes_are_cached_across_every_case_in_the_binary },
+      { "one_probe_answers_every_caller_that_arrives_at_once",
+        one_probe_answers_every_caller_that_arrives_at_once },
+      { "a_failed_probe_is_not_retried_per_case", a_failed_probe_is_not_retried_per_case },
+      { "a_requirement_that_blocks_fails_its_case_rather_than_the_run",
+        a_requirement_that_blocks_fails_its_case_rather_than_the_run,
+        {},
+        timeout::fast },
+      { "a_requirement_that_throws_fails_its_case", a_requirement_that_throws_fails_its_case },
+      { "a_requirement_that_skips_does_not_run_its_case",
+        a_requirement_that_skips_does_not_run_its_case },
+      { "a_phase_level_verdict_is_not_reported_as_a_requirement_name",
+        a_phase_level_verdict_is_not_reported_as_a_requirement_name },
+      { "every_edition_describes_itself_by_name", every_edition_describes_itself_by_name },
+      { "a_storage_backend_the_cluster_would_not_name_is_undetermined",
+        a_storage_backend_the_cluster_would_not_name_is_undetermined },
+      { "a_file_local_requirement_needs_no_framework_change",
+        a_file_local_requirement_needs_no_framework_change },
       { "filter_selects_cases_by_name", filter_selects_cases_by_name },
       { "a_failing_case_does_not_suppress_later_cases",
         a_failing_case_does_not_suppress_later_cases },
       { "slow_cases_run_after_a_failure", slow_cases_run_after_a_failure },
       { "a_filter_name_matching_nothing_fails", a_filter_name_matching_nothing_fails },
       { "a_suite_that_runs_nothing_does_not_pass", a_suite_that_runs_nothing_does_not_pass },
-      { "a_timeout_is_reported_as_such", a_timeout_is_reported_as_such, timeout::fast },
+      { "a_timeout_is_reported_as_such", a_timeout_is_reported_as_such, {}, timeout::fast },
       { "case_names_covers_slow_cases_and_ignores_the_environment",
         case_names_covers_slow_cases_and_ignores_the_environment },
+      { "list_output_carries_the_requirements_after_a_tab",
+        list_output_carries_the_requirements_after_a_tab },
       { "timeout_multiplier_defaults_to_one_and_rejects_anything_but_a_number",
         timeout_multiplier_defaults_to_one_and_rejects_anything_but_a_number },
       { "scale_timeouts_multiplies_every_budget", scale_timeouts_multiplies_every_budget },
@@ -583,7 +1062,10 @@ tests() -> test_suite
         message_of_passes_everything_else_to_the_runner },
       { "a_scaled_budget_lets_a_case_outlive_its_original_one",
         a_scaled_budget_lets_a_case_outlive_its_original_one,
+        {},
         timeout::fast },
+      { "the_configuration_reads_the_environment_it_documents",
+        the_configuration_reads_the_environment_it_documents },
     },
   };
 }

@@ -163,7 +163,7 @@ private:
 };
 
 void
-exists_distinguishes_a_present_document_from_a_missing_one()
+exists_distinguishes_a_present_document_from_a_missing_one([[maybe_unused]] context& ctx)
 {
   live_kv_fixture fixture;
   const std::string key{ "cng-live-exists" };
@@ -192,7 +192,7 @@ exists_distinguishes_a_present_document_from_a_missing_one()
 }
 
 void
-touch_expires_a_document()
+touch_expires_a_document([[maybe_unused]] context& ctx)
 {
   live_kv_fixture fixture;
   const std::string key{ "cng-live-touch" };
@@ -221,7 +221,7 @@ touch_expires_a_document()
 }
 
 void
-get_and_lock_blocks_a_write_and_unlock_releases_it()
+get_and_lock_blocks_a_write_and_unlock_releases_it([[maybe_unused]] context& ctx)
 {
   live_kv_fixture fixture;
   const std::string key{ "cng-live-lock" };
@@ -263,7 +263,7 @@ get_and_lock_blocks_a_write_and_unlock_releases_it()
 }
 
 void
-unlock_with_the_wrong_cas_is_refused()
+unlock_with_the_wrong_cas_is_refused([[maybe_unused]] context& ctx)
 {
   live_kv_fixture fixture;
   const std::string key{ "cng-live-unlock-cas" };
@@ -295,7 +295,7 @@ unlock_with_the_wrong_cas_is_refused()
 }
 
 void
-get_and_touch_returns_the_value_and_applies_the_expiry()
+get_and_touch_returns_the_value_and_applies_the_expiry([[maybe_unused]] context& ctx)
 {
   live_kv_fixture fixture;
   const std::string key{ "cng-live-gat" };
@@ -319,7 +319,7 @@ get_and_touch_returns_the_value_and_applies_the_expiry()
 }
 
 void
-counters_increment_and_decrement_a_live_value()
+counters_increment_and_decrement_a_live_value([[maybe_unused]] context& ctx)
 {
   live_kv_fixture fixture;
   const std::string key{ "cng-live-counter" };
@@ -361,7 +361,7 @@ counters_increment_and_decrement_a_live_value()
 }
 
 void
-append_and_prepend_extend_a_live_value()
+append_and_prepend_extend_a_live_value([[maybe_unused]] context& ctx)
 {
   live_kv_fixture fixture;
   const std::string key{ "cng-live-append" };
@@ -393,7 +393,7 @@ append_and_prepend_extend_a_live_value()
 }
 
 void
-incrementing_a_non_numeric_document_is_reported_as_delta_invalid()
+incrementing_a_non_numeric_document_is_reported_as_delta_invalid([[maybe_unused]] context& ctx)
 {
   live_kv_fixture fixture;
   const std::string key{ "cng-live-not-numeric" };
@@ -417,7 +417,7 @@ incrementing_a_non_numeric_document_is_reported_as_delta_invalid()
 }
 
 void
-append_to_a_missing_document_is_reported_as_not_found()
+append_to_a_missing_document_is_reported_as_not_found([[maybe_unused]] context& ctx)
 {
   live_kv_fixture fixture;
   const std::string key{ "cng-live-append-missing" };
@@ -445,40 +445,40 @@ tests() -> test_suite
     {
       { "exists_distinguishes_a_present_document_from_a_missing_one",
         exists_distinguishes_a_present_document_from_a_missing_one,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "touch_expires_a_document",
         touch_expires_a_document,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "get_and_lock_blocks_a_write_and_unlock_releases_it",
         get_and_lock_blocks_a_write_and_unlock_releases_it,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "unlock_with_the_wrong_cas_is_refused",
         unlock_with_the_wrong_cas_is_refused,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "get_and_touch_returns_the_value_and_applies_the_expiry",
         get_and_touch_returns_the_value_and_applies_the_expiry,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "counters_increment_and_decrement_a_live_value",
         counters_increment_and_decrement_a_live_value,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "append_and_prepend_extend_a_live_value",
         append_and_prepend_extend_a_live_value,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "incrementing_a_non_numeric_document_is_reported_as_delta_invalid",
         incrementing_a_non_numeric_document_is_reported_as_delta_invalid,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
       { "append_to_a_missing_document_is_reported_as_not_found",
         append_to_a_missing_document_is_reported_as_not_found,
-        timeout::integration,
-        test_env::cluster_only },
+        { needs::real_cluster() },
+        timeout::integration },
     },
   };
 }
