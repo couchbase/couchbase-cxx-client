@@ -270,6 +270,35 @@ public:
   }
 };
 
+// What the teardown hook is watched with. A hook is a plain function pointer with nowhere to carry
+// state, and the question is whether the context is already gone when one runs, so the two facts
+// live out here.
+std::atomic<bool> backend_alive{ false };
+std::atomic<bool> backend_alive_at_teardown{ false };
+std::atomic<std::size_t> teardowns{ 0 };
+
+// counting_probes, reporting its own lifetime. The context owns the backend, so this destructor is
+// where a real suite closes the connection its probes opened.
+class lifetime_tracking_probes : public counting_probes
+{
+public:
+  lifetime_tracking_probes()
+  {
+    backend_alive = true;
+  }
+  ~lifetime_tracking_probes() override
+  {
+    backend_alive = false;
+  }
+};
+
+void
+record_teardown()
+{
+  ++teardowns;
+  backend_alive_at_teardown = backend_alive.load();
+}
+
 // A file-local requirement: what a translation unit writes when it needs something the built-in
 // vocabulary does not cover. Kept here because "a custom requirement is short" is a claim about
 // the interface, and the only honest way to hold it is to write one.
@@ -657,6 +686,41 @@ one_unanswerable_question_does_not_speak_for_the_others([[maybe_unused]] context
   assert_eq(counters->capability_calls,
             std::size_t{ 1 },
             "and the question that failed is still remembered under its own kind");
+}
+
+void
+the_context_is_released_before_the_suite_teardown_runs([[maybe_unused]] context& ctx)
+{
+  // The hook is where a suite unloads a library it used, so whatever holds a resource of that
+  // library -- the cluster connection the probes opened, above all -- has to be destroyed before it
+  // runs. The other order is a crash at process exit, in the least diagnosable moment of a run.
+  teardowns = 0;
+  backend_alive_at_teardown = true;
+
+  auto owned =
+    std::make_unique<context>(with_cluster(), std::make_unique<lifetime_tracking_probes>());
+  assert_true(backend_alive.load(), "the backend is alive to begin with");
+
+  tear_down(std::move(owned), record_teardown);
+
+  assert_eq(teardowns.load(), std::size_t{ 1 }, "the hook ran");
+  assert_false(backend_alive_at_teardown.load(), "the backend was destroyed before it ran");
+  assert_false(backend_alive.load(), "and stayed destroyed");
+}
+
+void
+a_suite_with_no_teardown_still_releases_its_context([[maybe_unused]] context& ctx)
+{
+  // The path every binary takes today, since nothing registers a hook: the context is released
+  // either way, and a hook that is not there is not called.
+  teardowns = 0;
+  auto owned =
+    std::make_unique<context>(with_cluster(), std::make_unique<lifetime_tracking_probes>());
+
+  tear_down(std::move(owned), nullptr);
+
+  assert_false(backend_alive.load(), "the context was released");
+  assert_eq(teardowns.load(), std::size_t{ 0 }, "and nothing was called in its place");
 }
 
 void
@@ -1473,6 +1537,8 @@ tests() -> test_suite
       { CASE(a_failed_probe_is_not_retried_per_case) },
       { CASE(a_backend_that_cannot_be_opened_is_asked_once) },
       { CASE(one_unanswerable_question_does_not_speak_for_the_others) },
+      { CASE(the_context_is_released_before_the_suite_teardown_runs) },
+      { CASE(a_suite_with_no_teardown_still_releases_its_context) },
       { CASE(a_requirement_that_blocks_fails_its_case_rather_than_the_run), {}, timeout::fast },
       { CASE(a_requirement_that_throws_fails_its_case) },
       { CASE(a_requirement_that_skips_does_not_run_its_case) },

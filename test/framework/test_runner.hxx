@@ -21,6 +21,7 @@
 
 #include <cstddef>
 #include <map>
+#include <memory>
 #include <optional>
 #include <ostream>
 #include <set>
@@ -55,6 +56,19 @@ struct run_result {
 auto
 run(const test_suite& suite, const std::set<std::string>& filter, context& ctx, std::ostream& out)
   -> run_result;
+
+// Close a run down: release the context, then call the suite's teardown hook if it has one. The
+// order is the whole of it. The context owns the probe backend and, through it, whatever connection
+// the probes opened, while the hook is where a suite unloads a library it used -- the use it
+// documents is the OPENSSL_cleanup() that test/main.cxx performs for the Catch2 suites -- so
+// anything whose destructor calls into such a library has to be gone before the hook runs. The
+// context is taken by value so the caller cannot hold one back, and this lives here rather than
+// inline in main() so a self-test can observe the order.
+//
+// Not for the timeout path: a case that exceeded its budget leaves a worker detached, possibly
+// still inside the context, so main() leaves through _Exit there and destroys nothing.
+void
+tear_down(std::unique_ptr<context> ctx, void (*teardown)());
 
 // Process exit code for a result: any failure => 1; nothing ran but something skipped => 77
 // (the GNU/ctest "skipped" convention); otherwise 0.

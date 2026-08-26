@@ -176,10 +176,13 @@ struct test_suite {
   std::string name;
   std::vector<test_case> test_cases;
   std::vector<test_case> slow_test_cases{};
-  // Run once after the last case, unless one of them timed out. A timed-out case leaves a worker
-  // detached and possibly still inside the very library the teardown would unload, so test_main.cxx
-  // skips it and leaves through _Exit instead. What test/main.cxx does with OPENSSL_cleanup()
-  // today: a process-wide teardown that belongs to the binary rather than to any case in it.
+  // Run once after the last case and after the context has been released, unless a case timed out.
+  // A timed-out case leaves a worker detached and possibly still inside the very library the
+  // teardown would unload, so test_main.cxx skips it and leaves through _Exit instead. What
+  // test/main.cxx does with OPENSSL_cleanup() today: a process-wide teardown that belongs to the
+  // binary rather than to any case in it. Anything holding a resource of the library it unloads --
+  // the cluster connection the probes opened, above all -- is destroyed with the context first; see
+  // tear_down() in test_runner.hxx.
   void (*teardown)() = nullptr;
 };
 
