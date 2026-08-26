@@ -32,7 +32,10 @@
 #include <couchbase/fmt/transaction_keyspace.hxx>
 
 #include <functional>
+#include <future>
+#include <list>
 #include <memory>
+#include <thread>
 #include <utility>
 
 namespace couchbase::core::transactions
@@ -586,10 +589,17 @@ transactions_cleanup::add_collection(const couchbase::transactions::transaction_
     auto it = std::find(collections_.begin(), collections_.end(), keyspace);
     if (it == collections_.end()) {
       collections_.emplace_back(keyspace);
-      // start cleaning right away
-      lost_attempt_cleanup_workers_.emplace_back([this, keyspace = collections_.back()]() {
-        this->clean_collection(keyspace);
-      });
+      // Spawn only while running. stop() takes the worker handles out and joins them, so a
+      // handle appended after that point is one nothing has agreed to join -- and a joinable
+      // std::thread reaching its destructor terminates. Registering the keyspace is still
+      // right: start() spawns a worker for everything in collections_, so cleanup resumes for
+      // it on the next start.
+      if (running_) {
+        // start cleaning right away
+        lost_attempt_cleanup_workers_.emplace_back([this, keyspace = collections_.back()]() {
+          this->clean_collection(keyspace);
+        });
+      }
     }
     lock.unlock();
     CB_ATTEMPT_CLEANUP_LOG_DEBUG("added {} to lost transaction cleanup", keyspace);
@@ -599,8 +609,24 @@ transactions_cleanup::add_collection(const couchbase::transactions::transaction_
 void
 transactions_cleanup::start()
 {
-  running_ =
-    config_.cleanup_config.cleanup_client_attempts || config_.cleanup_config.cleanup_lost_attempts;
+  {
+    const std::unique_lock<std::mutex> lock(mutex_);
+    running_ = config_.cleanup_config.cleanup_client_attempts ||
+               config_.cleanup_config.cleanup_lost_attempts;
+
+    if (config_.cleanup_config.cleanup_lost_attempts) {
+      // Re-spawn a worker for every keyspace still registered from before a previous stop().
+      // add_collection() below cannot do this: it dedupes on collections_, so an
+      // already-registered keyspace is skipped and its lost-attempt cleanup stays dead for the
+      // rest of the process. notify_fork(prepare) calls stop() and notify_fork(parent) calls
+      // start() again, so every fork leaves exactly that state behind unless it's undone here.
+      for (const auto& keyspace : collections_) {
+        lost_attempt_cleanup_workers_.emplace_back([this, keyspace]() {
+          this->clean_collection(keyspace);
+        });
+      }
+    }
+  }
   if (config_.cleanup_config.cleanup_client_attempts) {
     cleanup_thr_ = std::thread([this] {
       attempts_loop();
@@ -628,7 +654,16 @@ transactions_cleanup::stop()
     cleanup_thr_.join();
     CB_ATTEMPT_CLEANUP_LOG_DEBUG("cleanup attempt thread closed");
   }
-  for (auto& t : lost_attempt_cleanup_workers_) {
+  // Take the handles out under mutex_, then join with the lock released: add_collection() and
+  // start() append to this list while holding mutex_, so walking it live would race with them;
+  // and the workers themselves take mutex_ (is_running(), interruptable_wait()), so joining
+  // while still holding it would deadlock.
+  std::list<std::thread> workers;
+  {
+    const std::unique_lock<std::mutex> lock(mutex_);
+    workers.swap(lost_attempt_cleanup_workers_);
+  }
+  for (auto& t : workers) {
     CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("shutting down all lost attempt threads...");
     if (t.joinable()) {
       t.join();

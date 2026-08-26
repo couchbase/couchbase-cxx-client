@@ -65,6 +65,12 @@ protected:
   asio::strand<asio::io_context::executor_type> strand_;
   bool tls_;
   std::string id_{};
+  // Identifies the process that opened this socket. close() compares it against
+  // the process running at that moment to tell a socket inherited across fork(2)
+  // apart from one this process opened itself, because an inherited socket must not
+  // be shut down: shutdown(2) acts on the open file description, which fork(2)
+  // shares, so it would tear down a connection the parent is still using.
+  long long owner_pid_;
 
 public:
   stream_impl(asio::io_context& ctx, bool is_tls);

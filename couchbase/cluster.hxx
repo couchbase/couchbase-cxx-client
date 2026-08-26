@@ -97,6 +97,39 @@ public:
   auto operator=(const cluster& other) -> cluster& = default;
   auto operator=(cluster&& other) -> cluster& = default;
 
+  /**
+   * Notify the cluster of a fork-related event, so it can keep its I/O usable
+   * across @c fork().
+   *
+   * Call it three times, in this order: @ref fork_event::prepare in the parent
+   * before forking, then @ref fork_event::child in the child and @ref
+   * fork_event::parent in the parent.
+   *
+   * NOTE: @ref fork_event::child reconnects this cluster on a fresh set of
+   * sockets, because the inherited ones belong to the parent. Any @ref bucket,
+   * @ref scope or @ref collection handle obtained before the fork still refers to
+   * the pre-fork connections, so in the child those handles must be re-acquired
+   * from the cluster -- using a stale one fails with @ref
+   * errc::network::cluster_closed. Handles held in the parent stay valid.
+   *
+   * This function must not be called while operations are in flight on this
+   * cluster from another thread.
+   *
+   * On platforms without @c fork(), Windows in particular, this function does
+   * nothing. It remains callable everywhere so that portable code does not have to
+   * guard the calls, but nothing about the cluster changes.
+   *
+   * @param event the fork-related event that is about to happen, or just happened.
+   *
+   * @throws std::system_error if the I/O backend cannot be carried across the fork.
+   * There is no recovery for this: the cluster's io_context is unusable afterwards
+   * and the only thing left to do with the cluster is destroy it. It is reported
+   * rather than swallowed because a caller that went on using such a cluster would
+   * be operating on a reactor that no longer tracks its sockets.
+   *
+   * @since 1.0.0
+   * @uncommitted
+   */
   void notify_fork(fork_event event);
 
   void close(std::function<void()>&& handler);
