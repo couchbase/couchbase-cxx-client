@@ -17,9 +17,9 @@
 
 #include "context.hxx"
 
-#include "test_runner.hxx"
-
+#include <cstdlib>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <utility>
 
@@ -228,6 +228,44 @@ context::backends_created() const -> std::size_t
 {
   const std::lock_guard<std::mutex> guard{ impl_->mutex };
   return impl_->backends_created;
+}
+
+auto
+safe_getenv(const std::string& name) noexcept -> std::optional<std::string>
+{
+  if (name.empty()) {
+    return std::nullopt;
+  }
+
+  // noexcept, and it builds a std::string: an allocation failure would otherwise terminate rather
+  // than report. Every caller treats "no value" as "unset", which is the honest answer when the
+  // environment could not be read.
+  try {
+#if defined(_WIN32)
+    char* buf = nullptr;
+    std::size_t len = 0;
+    if (_dupenv_s(&buf, &len, name.c_str()) == 0 && buf != nullptr) {
+      // Ownership is taken before the string is built. Building it can throw, and the catch below
+      // would then swallow the exception and lose the buffer with it -- a leak no test would ever
+      // see, because it happens only on the allocation failure the catch exists to absorb.
+      const std::unique_ptr<char, decltype(&std::free)> owned{
+        buf, &std::free // NOLINT(cppcoreguidelines-no-malloc) — _dupenv_s allocates with malloc
+      };
+      if (owned.get()[0] != '\0') {
+        return std::string{ owned.get() };
+      }
+    }
+    return std::nullopt;
+#else
+    if (const char* value = std::getenv(name.c_str()); // NOLINT(concurrency-mt-unsafe)
+        value != nullptr && value[0] != '\0') {
+      return std::string{ value };
+    }
+    return std::nullopt;
+#endif
+  } catch (...) {
+    return std::nullopt;
+  }
 }
 
 } // namespace couchbase::test
