@@ -1570,6 +1570,7 @@ TxnService::performerCapsFetch(grpc::ServerContext* /*context*/,
   response->add_sdk_implementation_caps(protocol::sdk::Caps::WAIT_UNTIL_READY);
   response->add_sdk_implementation_caps(protocol::sdk::Caps::SDK_KV);
   response->add_sdk_implementation_caps(protocol::sdk::Caps::SDK_QUERY);
+  response->add_sdk_implementation_caps(protocol::sdk::Caps::SDK_QUERY_2120);
   response->add_sdk_implementation_caps(protocol::sdk::Caps::SDK_LOOKUP_IN);
   response->add_sdk_implementation_caps(protocol::sdk::Caps::SDK_QUERY_INDEX_MANAGEMENT);
   response->add_sdk_implementation_caps(protocol::sdk::Caps::SDK_BUCKET_MANAGEMENT);

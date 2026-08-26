@@ -59,6 +59,7 @@ extract_common_query_error_code(std::uint64_t code, const std::string& message)
 
     case 13014: /* ICode: E_DATASTORE_INSUFFICIENT_CREDENTIALS, IKey:
                    "datastore.couchbase.insufficient_credentials" */
+    case 2120:  /* ICode: E_ADMIN_AUTH, IKey: "admin.clustering.authorize" */
       return errc::common::authentication_failure;
 
     case 5000:
