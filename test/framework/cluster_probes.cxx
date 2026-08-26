@@ -150,16 +150,27 @@ public:
 
 private:
   // The guard opens the connection in its constructor, so it is built on the first probe and not
-  // before. Anything it throws -- a refused connection, a management endpoint that answered with
-  // an error -- becomes probe_failure, which the runner reports as undetermined and therefore as a
-  // failed case. An unreachable cluster must not read as an inapplicable one.
+  // before. Anything either step throws -- a refused connection, a management endpoint that
+  // answered with an error -- becomes probe_failure, which the runner reports as undetermined and
+  // therefore as a failed case. An unreachable cluster must not read as an inapplicable one.
+  //
+  // The two steps are told apart in what they throw. A constructor that failed reports
+  // probe_backend_unavailable, which the context remembers for every probe kind: there is no
+  // second endpoint to try, and its answer caches are per kind, so a suite asking two different
+  // things would otherwise wait out the same connection attempt once for each. A probe that threw
+  // on an open connection is that one question failing and stays a plain probe_failure.
   template<typename Fn>
   auto guarded(Fn&& fn) -> decltype(fn(std::declval<utils::integration_test_guard&>()))
   {
-    try {
-      if (!guard_) {
+    if (!guard_) {
+      try {
         guard_ = std::make_unique<utils::integration_test_guard>();
+      } catch (const std::exception& e) {
+        throw probe_backend_unavailable(
+          fmt::format("the cluster could not be reached: {}", e.what()));
       }
+    }
+    try {
       return std::forward<Fn>(fn)(*guard_);
     } catch (const std::system_error& e) {
       throw probe_failure(fmt::format("the cluster could not answer: {}", e.what()));

@@ -210,6 +210,66 @@ public:
   }
 };
 
+// A backend that cannot be opened at all, standing in for an endpoint that refuses the connection
+// rather than one that answers a question badly. Counting every probe is the point: the connection
+// behind them is attempted once for the process, and a count is the only way to hold that claim to
+// account.
+class unopenable_probes : public probe_backend
+{
+public:
+  std::size_t calls{ 0 };
+
+  [[nodiscard]] auto server_version() -> couchbase::test::server_version override
+  {
+    refuse();
+  }
+  [[nodiscard]] auto has_service(const std::string& /* name */) -> bool override
+  {
+    refuse();
+  }
+  [[nodiscard]] auto has_bucket_capability(const std::string& /* capability */) -> bool override
+  {
+    refuse();
+  }
+  [[nodiscard]] auto number_of_replicas() -> std::size_t override
+  {
+    refuse();
+  }
+  [[nodiscard]] auto number_of_nodes() -> std::size_t override
+  {
+    refuse();
+  }
+  [[nodiscard]] auto server_groups() -> std::vector<std::string> override
+  {
+    refuse();
+  }
+  [[nodiscard]] auto storage_backend() -> std::string override
+  {
+    refuse();
+  }
+
+private:
+  [[noreturn]] void refuse()
+  {
+    ++calls;
+    throw probe_backend_unavailable("connection refused");
+  }
+};
+
+// The other side of that distinction: a backend that opened and answers everything except one
+// question, which is what a cluster looks like when a single management endpoint is unhappy.
+class one_broken_probe : public counting_probes
+{
+public:
+  std::size_t capability_calls{ 0 };
+
+  [[nodiscard]] auto has_bucket_capability(const std::string& /* capability */) -> bool override
+  {
+    ++capability_calls;
+    throw probe_failure("the bucket could not be described");
+  }
+};
+
 // A file-local requirement: what a translation unit writes when it needs something the built-in
 // vocabulary does not cover. Kept here because "a custom requirement is short" is a claim about
 // the interface, and the only honest way to hold it is to write one.
@@ -541,6 +601,62 @@ a_failed_probe_is_not_retried_per_case([[maybe_unused]] context& ctx)
   const auto r = run_quiet(s, {}, probed);
   assert_eq(r.failed, std::size_t{ 3 }, "each case fails on its own account");
   assert_eq(counters->calls, std::size_t{ 1 }, "but the cluster was asked exactly once");
+}
+
+void
+a_backend_that_cannot_be_opened_is_asked_once([[maybe_unused]] context& ctx)
+{
+  // Answers are cached per probe kind, so a refused connection remembered only there costs one
+  // attempt per kind: three questions, three waits on an endpoint that will not accept any of them.
+  auto probes = std::make_unique<unopenable_probes>();
+  auto* counters = probes.get();
+  context probed{ with_cluster(), std::move(probes) };
+
+  const test_suite s{ "inner",
+                      { { "version", body_pass, { needs::cluster_version(v7_0) } },
+                        { "service", body_pass, { needs::service("kv") } },
+                        { "replicas", body_pass, { needs::replicas(1) } } } };
+  std::ostringstream sink;
+  const auto r = run(s, {}, probed, sink);
+  assert_eq(r.failed, std::size_t{ 3 }, "each case fails on its own account");
+  assert_eq(r.skipped, std::size_t{ 0 }, "and none of them is a skip");
+  assert_eq(counters->calls, std::size_t{ 1 }, "the backend was asked once, not once per kind");
+
+  // Asking once must not cost the other two their reason: what the one attempt found is what every
+  // case reports.
+  const auto report = sink.str();
+  std::size_t mentions = 0;
+  for (auto at = report.find("connection refused"); at != std::string::npos;
+       at = report.find("connection refused", at + 1)) {
+    ++mentions;
+  }
+  assert_eq(mentions, std::size_t{ 3 }, "and every case still says why it failed");
+}
+
+void
+one_unanswerable_question_does_not_speak_for_the_others([[maybe_unused]] context& ctx)
+{
+  // The failure that must not spread. A backend that opened and could not answer one question is
+  // not an unreachable cluster, and treating it as one turns a single missing answer into a binary
+  // of failures.
+  auto probes = std::make_unique<one_broken_probe>();
+  auto* counters = probes.get();
+  context probed{ with_cluster(), std::move(probes) };
+
+  const test_suite s{
+    "inner",
+    { { "capability", body_pass, { needs::bucket_capability("durableWrite") } },
+      { "version", body_pass, { needs::cluster_version(v7_0) } },
+      { "capability_again", body_pass, { needs::bucket_capability("durableWrite") } } },
+  };
+  const auto r = run_quiet(s, {}, probed);
+  assert_eq(r.failed, std::size_t{ 2 }, "both cases asking the broken question fail");
+  assert_eq(r.passed, std::size_t{ 1 }, "and the one asking something else still runs");
+  assert_eq(
+    counters->version_calls, std::size_t{ 1 }, "the version was asked for after the failure");
+  assert_eq(counters->capability_calls,
+            std::size_t{ 1 },
+            "and the question that failed is still remembered under its own kind");
 }
 
 void
@@ -1312,6 +1428,8 @@ tests() -> test_suite
       { CASE(probes_are_cached_across_every_case_in_the_binary) },
       { CASE(one_probe_answers_every_caller_that_arrives_at_once) },
       { CASE(a_failed_probe_is_not_retried_per_case) },
+      { CASE(a_backend_that_cannot_be_opened_is_asked_once) },
+      { CASE(one_unanswerable_question_does_not_speak_for_the_others) },
       { CASE(a_requirement_that_blocks_fails_its_case_rather_than_the_run), {}, timeout::fast },
       { CASE(a_requirement_that_throws_fails_its_case) },
       { CASE(a_requirement_that_skips_does_not_run_its_case) },

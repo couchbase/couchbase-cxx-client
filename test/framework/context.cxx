@@ -39,6 +39,10 @@ public:
     if (!value_.has_value() && failure_.empty()) {
       try {
         value_ = std::forward<Fn>(compute)();
+      } catch (const probe_backend_unavailable&) {
+        // Not remembered here: it says nothing about this question, and a memory keyed to one probe
+        // kind is the wrong place for a connection that was never made. The caller keeps it.
+        throw;
       } catch (const probe_failure& e) {
         failure_ = e.what();
       }
@@ -120,6 +124,29 @@ struct context::impl {
   std::map<std::string, cached<bool>, std::less<>> services{};
   std::map<std::string, cached<bool>, std::less<>> capabilities{};
 
+  // The message from the first probe that reported the backend could not be opened. Every probe
+  // after it reports the same thing without asking again: the caches above are per probe kind,
+  // which is the right memory for a question this cluster cannot answer and the wrong one for a
+  // connection that was refused, so without a slot covering all of them a suite asking two
+  // different things waits out the same connection attempt twice.
+  std::string unavailable{};
+
+  // Every probe goes through here, so the two memories stay distinct in one place rather than in
+  // each accessor.
+  template<typename T, typename Fn>
+  auto ask(cached<T>& answer, Fn&& compute) -> T
+  {
+    if (!unavailable.empty()) {
+      throw probe_backend_unavailable(unavailable);
+    }
+    try {
+      return answer.get(std::forward<Fn>(compute));
+    } catch (const probe_backend_unavailable& e) {
+      unavailable = e.what();
+      throw;
+    }
+  }
+
   auto probes() -> probe_backend&
   {
     if (backend == nullptr) {
@@ -164,7 +191,7 @@ auto
 context::server_version() -> couchbase::test::server_version
 {
   const std::lock_guard<std::mutex> guard{ impl_->mutex };
-  return impl_->version.get([this]() {
+  return impl_->ask(impl_->version, [this]() {
     return impl_->probes().server_version();
   });
 }
@@ -173,7 +200,7 @@ auto
 context::has_service(const std::string& name) -> bool
 {
   const std::lock_guard<std::mutex> guard{ impl_->mutex };
-  return impl_->services[name].get([this, &name]() {
+  return impl_->ask(impl_->services[name], [this, &name]() {
     return impl_->probes().has_service(name);
   });
 }
@@ -182,7 +209,7 @@ auto
 context::has_bucket_capability(const std::string& capability) -> bool
 {
   const std::lock_guard<std::mutex> guard{ impl_->mutex };
-  return impl_->capabilities[capability].get([this, &capability]() {
+  return impl_->ask(impl_->capabilities[capability], [this, &capability]() {
     return impl_->probes().has_bucket_capability(capability);
   });
 }
@@ -191,7 +218,7 @@ auto
 context::number_of_replicas() -> std::size_t
 {
   const std::lock_guard<std::mutex> guard{ impl_->mutex };
-  return impl_->replicas.get([this]() {
+  return impl_->ask(impl_->replicas, [this]() {
     return impl_->probes().number_of_replicas();
   });
 }
@@ -200,7 +227,7 @@ auto
 context::number_of_nodes() -> std::size_t
 {
   const std::lock_guard<std::mutex> guard{ impl_->mutex };
-  return impl_->nodes.get([this]() {
+  return impl_->ask(impl_->nodes, [this]() {
     return impl_->probes().number_of_nodes();
   });
 }
@@ -209,7 +236,7 @@ auto
 context::server_groups() -> std::vector<std::string>
 {
   const std::lock_guard<std::mutex> guard{ impl_->mutex };
-  return impl_->groups.get([this]() {
+  return impl_->ask(impl_->groups, [this]() {
     return impl_->probes().server_groups();
   });
 }
@@ -218,7 +245,7 @@ auto
 context::storage_backend() -> std::string
 {
   const std::lock_guard<std::mutex> guard{ impl_->mutex };
-  return impl_->storage.get([this]() {
+  return impl_->ask(impl_->storage, [this]() {
     return impl_->probes().storage_backend();
   });
 }
