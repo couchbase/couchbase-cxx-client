@@ -55,7 +55,8 @@ inline const std::string suite_name{ COUCHBASE_TEST_SUITE_NAME };
 // ordinary functions that go-to-definition finds and a debugger shows by name.
 //
 // NAMING RULE. Because the name IS the function's identifier, a case name is always
-// [A-Za-z_][A-Za-z0-9_]* in lower_snake_case -- no spaces, no punctuation, no colons -- and the
+// [A-Za-z_][A-Za-z0-9_]* -- no spaces, no punctuation, no colons, and lower_snake_case by
+// convention rather than by enforcement -- and the
 // rest of the toolchain is built on that: cmake/TestFrameworkAddTests.cmake registers the name in a
 // CMake list, ctest -R takes it as a pattern, and a developer types it as an argv entry in bash,
 // zsh, cmd or PowerShell. None of those needs quoting or escaping while the rule holds.
