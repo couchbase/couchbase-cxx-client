@@ -9,8 +9,12 @@
 # deliberately logged untagged. Both are visible where the value is logged, and neither silences
 # the arguments around it, which an entry here cannot say.
 
-# CXXCBC-978: Application Telemetry logs 33 addresses and hostnames, and none of them are
-# annotated. This is not a false positive: the feature is newer than the rest of the SDK and how
-# its logging should be redacted has not been discussed with the team. Excluded so the check can
-# be enforced everywhere else, to be removed once that conversation happens.
+# Application Telemetry is out of scope for log redaction. Decided by the SDK team on 2026-08-26,
+# so this is a settled exclusion rather than a false positive or a deferred decision.
+#
+# What this file logs is the SDK's own telemetry channel: the endpoint it connects to and the
+# hostnames it reports for. Those addresses are the cluster's, the payload is SDK metrics bound
+# for Couchbase Server, and the server republishes the same metrics on /metrics to anything that
+# can reach it. So the values here are not the deployment's to hide in the first place, and none
+# of them is application data.
 core/app_telemetry_reporter.cxx
