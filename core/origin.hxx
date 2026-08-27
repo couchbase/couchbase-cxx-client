@@ -91,11 +91,11 @@ struct origin {
   [[nodiscard]] auto options() const -> const couchbase::core::cluster_options&;
   [[nodiscard]] auto options() -> couchbase::core::cluster_options&;
   [[nodiscard]] auto credentials() const -> couchbase::core::cluster_credentials;
-  // A JSON dump of the whole origin, for the log statement in every cluster open path. When log
-  // redaction is enabled the values inside carry markup, so nothing may read them back, and the
-  // name says so. The values cannot be tagged at the log site instead, the way a node list can,
-  // because this is a whole serialised document rather than a list of like-for-like entries.
-  [[nodiscard]] auto to_json_for_log() const -> std::string;
+  // A JSON dump of the whole origin, less the credentials. Its only callers are the log
+  // statements in the cluster open paths, and they annotate the whole document: a tag written
+  // into one of these values instead would be read back as part of that value by anything that
+  // parses the line as JSON. So nothing in here is annotated.
+  [[nodiscard]] auto to_json() const -> std::string;
 
 private:
   couchbase::core::cluster_options options_{};

@@ -24,6 +24,8 @@
 #include "core/document_id_redaction.hxx"
 #include "core/logger/logger.hxx"
 #include "core/logger/redaction.hxx"
+#include "core/origin.hxx"
+#include "core/utils/connection_string.hxx"
 
 #include <spdlog/fmt/bin_to_hex.h>
 #include <spdlog/fmt/bundled/format.h>
@@ -239,6 +241,21 @@ TEST_CASE("unit: redaction annotations wrap values while redaction is enabled", 
   REQUIRE(fmt::format("key={}", logger::user_data("my_key")) == "key=<ud>my_key</ud>");
   REQUIRE(fmt::format("bucket={}", logger::metadata("my_bucket")) == "bucket=<md>my_bucket</md>");
   REQUIRE(fmt::format("host={}", logger::system_data("127.0.0.1")) == "host=<sd>127.0.0.1</sd>");
+}
+
+TEST_CASE("unit: a serialised document carries no annotations of its own", "[unit]")
+{
+  const scoped_log_redaction redaction{ true };
+
+  // The origin dump is annotated as a whole, by the cluster open paths that log it. A tag written
+  // into one of its values instead would be read back as part of that value by anything that
+  // parses the line as JSON, so the document has to come out of here clean even with redaction on.
+  const auto connstr =
+    couchbase::core::utils::parse_connection_string("couchbase://10.0.0.1,10.0.0.2");
+  const auto dump = couchbase::core::origin({}, connstr).to_json();
+
+  REQUIRE(dump.find("10.0.0.1") != std::string::npos);
+  REQUIRE(dump.find('<') == std::string::npos);
 }
 
 TEST_CASE("unit: redaction annotations work for non-string values", "[unit]")
