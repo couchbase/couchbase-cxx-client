@@ -53,6 +53,17 @@ private:
   std::string message_;
 };
 
+// Thrown by a probe whose backend could not be opened at all, as against one the cluster could not
+// answer. Every probe in the process shares that outcome: the connection lives in the backend, so
+// an endpoint that refused one refuses the next, and the answer caches are keyed per probe kind. A
+// backend that opened and then could not answer one question throws plain probe_failure, or that
+// one question would speak for the rest.
+class probe_backend_unavailable : public probe_failure
+{
+public:
+  using probe_failure::probe_failure;
+};
+
 enum class server_edition : std::uint8_t {
   unknown,
   enterprise,
@@ -181,7 +192,8 @@ public:
   [[nodiscard]] auto env(const std::string& name) const -> std::optional<std::string>;
 
   // Probes. Each is cached for the lifetime of the process -- a binary with 300 cases must not
-  // open 300 connections -- and each throws probe_failure when it cannot answer.
+  // open 300 connections -- and each throws probe_failure when it cannot answer. A backend that
+  // reports it could not be opened is asked nothing further, by any of them.
   [[nodiscard]] auto server_version() -> couchbase::test::server_version;
   [[nodiscard]] auto has_service(const std::string& name) -> bool;
   [[nodiscard]] auto has_bucket_capability(const std::string& capability) -> bool;
