@@ -37,6 +37,14 @@
 #   couchbase::core::logger::metadata_list()       one <md> per entry, joined
 #   couchbase::core::logger::system_data_list()    one <sd> per entry, joined
 #
+# A serialised document goes the other way: one tag around the whole argument, or none at all, and
+# never a tag inside it, because a tag written into a JSON string value is read back as part of
+# that value by anything that parses the line. So a log argument that serialises a document is
+# reported as one finding for the call rather than one per value inside it, and the values inside
+# are left alone -- "wrap the hostname" is the wrong advice there. Which of the three tags a
+# document needs depends on what is in it: it takes the strictest category any value inside could
+# belong to, which is a judgement this script does not make for you.
+#
 # Usage:
 #   bin/check-log-annotations              # check, non-zero exit if anything is unannotated
 #   bin/check-log-annotations --catalog    # inventory every log statement, for tracking drift
@@ -45,6 +53,12 @@
 #
 # This is a heuristic. It reads argument expressions, not types, so it can only guess at what a
 # value holds from what it is called -- it surfaces candidates for review, it does not decide.
+#
+# It also only reads CB_LOG_* statements, so a value composed before it reaches one is invisible:
+# a connection-context prefix built with fmt::format, and a document serialised into a string by
+# some accessor and logged as that string, are both out of reach. The document rule above catches
+# the serialiser call where it is written in the log argument, which is most of them, not the ones
+# assembled a function away.
 #
 # A reviewed exclusion is recorded at the argument it applies to, with one of two markers that
 # print the value unchanged and differ only in what they claim:
@@ -92,6 +106,13 @@ module LogAnnotations
     "system_data" => "sd",
   }.freeze
 
+  # Reported like a category, but it names a missing decision rather than a tag: a document needs
+  # one of the three above, and which one depends on its contents.
+  DOCUMENT = "document"
+
+  # How a category prints in a finding. Only the three real categories name a tag.
+  CATEGORY_LABELS = WRAPPERS.merge(DOCUMENT => DOCUMENT).freeze
+
   # Helpers that tag a composite value with more than one category, so they map to no single tag.
   # They still mark their argument as annotated.
   COMPOSITE_WRAPPERS = %w[document].freeze
@@ -107,6 +128,14 @@ module LogAnnotations
 
   WRAPPER_NAMES =
     (WRAPPERS.keys + COMPOSITE_WRAPPERS + LIST_WRAPPERS + EXCLUSION_MARKERS).freeze
+
+  # Calls that serialise a document into a log argument. Anchored on "json::" so that
+  # std::to_string() and every other to_string() stay out of it, and open-ended after "to_json"
+  # so an accessor named for the log is caught too. Leading namespace qualifiers are matched so
+  # that a finding names the call as it is written.
+  SERIALIZER_PATTERN =
+    /\b(?:[A-Za-z_][A-Za-z0-9_]*::)*(?:json::generate(?:_binary)?|json::to_string|to_json[A-Za-z0-9_]*)\s*\(/
+    .freeze
 
   SOURCE_EXTENSIONS = %w[.cxx .hxx .cpp .hpp].freeze
 
@@ -330,6 +359,22 @@ module LogAnnotations
     ranges
   end
 
+  # Serialiser calls in an expression, as [range, name] with the range spanning the whole call.
+  # The range is used twice: to report the call, and to keep the identifiers inside it from being
+  # reported on their own.
+  def self.serialised_documents(shadowed)
+    documents = []
+    shadowed.enum_for(:scan, SERIALIZER_PATTERN).each do
+      match_start = Regexp.last_match.begin(0)
+      open = shadowed.index("(", match_start)
+      close = open && matching_paren(shadowed, open)
+      next if close.nil?
+
+      documents << [(match_start..close), shadowed[match_start...open].strip]
+    end
+    documents
+  end
+
   # Identifier tokens of an expression, paired with their offsets. Member accesses are broken
   # apart, so req->key_ yields both "req" and "key_" and the sensitive half is still seen.
   def self.identifiers(expression)
@@ -441,15 +486,9 @@ module LogAnnotations
       # "hostname={}" -- is not mistaken for the value being logged.
       expression = shadow(argument.text)
       ranges = wrapped_ranges(expression)
-      identifiers(expression).filter_map do |identifier, offset|
-        next if ranges.any? { |range| range.cover?(offset) }
-        next if qualified?(expression, offset)
-        next if projected?(expression, offset, identifier)
-        next if suppressed_identifiers.include?(normalise(identifier))
+      documents = serialised_documents(expression)
 
-        category = category_for(identifier, expression, offset)
-        next if category.nil?
-
+      finding = lambda do |identifier, category|
         Finding.new(
           file: statement.file,
           line: statement.line,
@@ -460,6 +499,29 @@ module LogAnnotations
           format_string: collapse(statement.format_string.to_s),
         )
       end
+
+      document_findings = documents.filter_map do |range, name|
+        next if ranges.any? { |wrapped| wrapped.cover?(range.first) }
+
+        finding.call(name, DOCUMENT)
+      end
+
+      value_findings = identifiers(expression).filter_map do |identifier, offset|
+        next if ranges.any? { |range| range.cover?(offset) }
+        # A value inside a serialised document is not annotated where it sits, so reporting it
+        # would ask for the one thing the rule forbids. The call carries the finding instead.
+        next if documents.any? { |range, _| range.cover?(offset) }
+        next if qualified?(expression, offset)
+        next if projected?(expression, offset, identifier)
+        next if suppressed_identifiers.include?(normalise(identifier))
+
+        category = category_for(identifier, expression, offset)
+        next if category.nil?
+
+        finding.call(identifier, category)
+      end
+
+      document_findings + value_findings
     end
   end
 
@@ -535,17 +597,25 @@ module LogAnnotations
     findings.group_by(&:file).sort.each do |file, in_file|
       puts file
       in_file.sort_by { |finding| [finding.line, finding.identifier] }.each do |finding|
-        wrapper = "couchbase::core::logger::#{finding.category}"
+        suggestion =
+          if finding.category == DOCUMENT
+            "wrap the whole argument in the strictest category any value inside it could " \
+              "belong to, or record the exclusion with not_redacted()"
+          else
+            "wrap in couchbase::core::logger::#{finding.category}()"
+          end
         puts format("  %s:%d  %s  <%s>",
-                    file, finding.line, finding.identifier, WRAPPERS[finding.category])
+                    file, finding.line, finding.identifier, CATEGORY_LABELS[finding.category])
         puts format("    argument: %s", finding.argument)
         puts format("    format:   \"%s\"", finding.format_string)
-        puts format("    suggest:  wrap in %s()", wrapper)
+        puts format("    suggest:  %s", suggestion)
       end
       puts
     end
 
-    by_category = findings.group_by(&:category).map { |category, group| "#{group.size} <#{WRAPPERS[category]}>" }
+    by_category = findings.group_by(&:category).map do |category, group|
+      "#{group.size} <#{CATEGORY_LABELS[category]}>"
+    end
     puts "#{findings.size} unannotated arguments (#{by_category.sort.join(', ')}) " \
          "in #{findings.map(&:file).uniq.size} files"
   end
@@ -576,6 +646,12 @@ module LogAnnotations
       CB_LOG_DEBUG("n={}", origin.get_nodes().size() - 1);
       CB_LOG_DEBUG("[{}]", logger::system_data_list(origin.get_node_addresses()));
       CB_LOG_DEBUG("[{}], sel={}", logger::system_data_list(dns_servers), dns_servers[0]);
+      CB_LOG_DEBUG("report {}", utils::json::generate(report));
+      CB_LOG_DEBUG("report {}", logger::system_data(utils::json::generate(report)));
+      CB_LOG_DEBUG("dump {}", tao::json::to_string(tao::json::value{ { "hostname", address.hostname } }));
+      CB_LOG_DEBUG("origin {}", logger::user_data(origin_.to_json()));
+      CB_LOG_DEBUG("h={}, r={}", hostname, json::generate(report));
+      CB_LOG_DEBUG("n={}", std::to_string(counter));
       /* CB_LOG_DEBUG("host={}", hostname); */
       // CB_LOG_DEBUG("host={}", hostname);
     }
@@ -602,6 +678,13 @@ module LogAnnotations
     19 => [],                              # a count through an accessor is still a count
     20 => [],                              # a list wrapper annotates, one tag per entry
     21 => ["dns_servers<sd>"],             # ... and only its own argument, like every wrapper
+    22 => ["utils::json::generate<document>"],   # a serialised document, reported as the call
+    23 => [],                              # ... and annotated as a whole, which is the rule
+    24 => ["tao::json::to_string<document>"],    # the hostname inside it is NOT reported: the
+                                           # document is what carries the tag, not the value
+    25 => [],                              # an accessor that serialises, wrapped at the log site
+    26 => ["hostname<sd>", "json::generate<document>"], # per-argument, as everywhere else
+    27 => [],                              # std::to_string is not a serialiser
   }.freeze
 
   # A suppression that matches more than it names removes coverage without saying so, which is the
@@ -615,6 +698,10 @@ module LogAnnotations
     ["core/io/dns_client.cxx", "core/io/dns_client.cxx", true],
     ["core/io/dns_client.cxx", "core/io/dns_client_extra.cxx", false],
     ["core/app_telemetry_reporter.cxx", "core/app_telemetry_meter.cxx", false],
+    # ... and a glob that names the feature does cover both, which is how it is written.
+    ["core/app_telemetry_*.cxx", "core/app_telemetry_meter.cxx", true],
+    ["core/app_telemetry_*.cxx", "core/app_telemetry_reporter.cxx", true],
+    ["core/app_telemetry_*.cxx", "core/orphan_reporter.cxx", false],
     # A "*" is deliberately not confined to one component, so "core/**" reads as "under core".
     ["core/**", "core/io/dns_client.cxx", true],
     ["core/*.cxx", "core/io/dns_client.cxx", true],
@@ -642,7 +729,7 @@ module LogAnnotations
       next if expected.nil?
 
       actual = findings_for(statement, []).map do |finding|
-        "#{finding.identifier}<#{WRAPPERS[finding.category]}>"
+        "#{finding.identifier}<#{CATEGORY_LABELS[finding.category]}>"
       end
       next if actual.sort == expected.sort
 

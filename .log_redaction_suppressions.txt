@@ -17,4 +17,8 @@
 # for Couchbase Server, and the server republishes the same metrics on /metrics to anything that
 # can reach it. So the values here are not the deployment's to hide in the first place, and none
 # of them is application data.
-core/app_telemetry_reporter.cxx
+#
+# The glob covers the feature rather than one file, which is the shape of the decision. Today that
+# is app_telemetry_reporter.cxx, 33 arguments across 15 statements, and app_telemetry_meter.cxx,
+# whose one document holds a boolean.
+core/app_telemetry_*.cxx
