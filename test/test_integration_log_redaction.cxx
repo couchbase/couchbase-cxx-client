@@ -172,7 +172,9 @@ TEST_CASE("integration: enabling log_redaction and dump_configuration together i
   REQUIRE_SUCCESS(err.ec());
 
   REQUIRE(couchbase::core::logger::is_log_redaction_enabled());
-  REQUIRE(log.contains("dump_configuration"));
+  // Match text only the warning carries. The name of the option on its own also appears in
+  // the cluster-open dump of the origin, so a looser needle would pass with the warning removed.
+  REQUIRE(log.contains("log redaction is enabled, but so is dump_configuration"));
 
   cluster.close().get();
 }
