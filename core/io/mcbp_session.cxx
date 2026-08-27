@@ -562,7 +562,8 @@ class mcbp_session_impl
                                text.value().size(),
                                logger::system_data(
                                  fmt::format("{}:{}", info.endpoint_address, info.endpoint_port)),
-                               // CXXCBC-978: an opt-in dump, it exists to show the exact bytes
+                               // an opt-in dump, it exists to show the exact bytes. That is the
+                               // "none at all" case of the rule in redaction.hxx.
                                logger::not_redacted(text.value()));
                 }
               }
@@ -645,7 +646,8 @@ class mcbp_session_impl
                                text.value().size(),
                                logger::system_data(
                                  fmt::format("{}:{}", info.endpoint_address, info.endpoint_port)),
-                               // CXXCBC-978: an opt-in dump, it exists to show the exact bytes
+                               // an opt-in dump, it exists to show the exact bytes. That is the
+                               // "none at all" case of the rule in redaction.hxx.
                                logger::not_redacted(text.value()));
                 }
               }
@@ -736,7 +738,8 @@ class mcbp_session_impl
                                text.value().size(),
                                logger::system_data(
                                  fmt::format("{}:{}", info.endpoint_address, info.endpoint_port)),
-                               // CXXCBC-978: an opt-in dump, it exists to show the exact bytes
+                               // an opt-in dump, it exists to show the exact bytes. That is the
+                               // "none at all" case of the rule in redaction.hxx.
                                logger::not_redacted(text.value()));
                 }
               }
@@ -836,7 +839,8 @@ class mcbp_session_impl
                                text.value().size(),
                                logger::system_data(
                                  fmt::format("{}:{}", info.endpoint_address, info.endpoint_port)),
-                               // CXXCBC-978: an opt-in dump, it exists to show the exact bytes
+                               // an opt-in dump, it exists to show the exact bytes. That is the
+                               // "none at all" case of the rule in redaction.hxx.
                                logger::not_redacted(text.value()));
                 }
               }
@@ -1898,7 +1902,8 @@ public:
             log_prefix_,
             config_text.size(),
             logger::system_data(fmt::format("{}:{}", bootstrap_hostname_, bootstrap_port_number_)),
-            // CXXCBC-978: an opt-in dump, it exists to show the exact bytes
+            // an opt-in dump, it exists to show the exact bytes. That is the
+            // "none at all" case of the rule in redaction.hxx.
             logger::not_redacted(config_text));
         }
         auto config =
