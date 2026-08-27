@@ -40,6 +40,20 @@
  *   CB_LOG_INFO("bootstrap nodes: [{}]",
  *               logger::system_data_list(addresses, logger::list_entries::quoted));
  *
+ * A serialized document goes the other way: annotate the whole argument, or none of it, but never
+ * a value inside it. A tag written into a JSON string value is read back as part of that value by
+ * anything that parses the line, and some of what this SDK logs has a shape other tools consume --
+ * SDK RFC 0067 fixes the threshold and orphan reports field by field. So the tag sits outside the
+ * document, which leaves the document itself byte-identical:
+ *
+ *   CB_LOG_WARNING("Operations over threshold: {}",
+ *                  logger::system_data(utils::json::generate(report)));
+ *
+ * One tag then has to carry values that may span categories, so pick the strictest category any
+ * value inside the document could belong to. The whole document hashes as a single token either
+ * way, so what a coarse span costs is diagnosability, not protection. "None of it" is the other
+ * legitimate answer, and it is the one the configuration dumps below take.
+ *
  * Qualify the calls as above. In particular `metadata` is also a member function on several core
  * types (query_result, row_streamer, transaction_get_result), where an unqualified call would
  * resolve to the member instead. In a file whose enclosing namespace is `couchbase` rather than
@@ -57,7 +71,8 @@
  * Note that CB_LOG_*_RAW bypasses fmt entirely and cannot carry annotations, and CB_LOG_PROTOCOL
  * is deliberately not redacted. The configuration dumps behind the dump_configuration option are
  * left unannotated for the same reason: both exist to show exactly what crossed the wire, and both
- * are opt-in debugging aids rather than something a deployment leaves on.
+ * are opt-in debugging aids rather than something a deployment leaves on. Each of those sites says
+ * so with logger::not_redacted(), so the choice is visible where the dump is written.
  *
  * `bin/check-log-annotations` reports log arguments that look sensitive but are not wrapped. It is
  * a heuristic over argument names, so it suggests rather than decides. It cannot see a value that

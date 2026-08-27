@@ -21,6 +21,7 @@
 
 #include "constants.hxx"
 #include "core/logger/logger.hxx"
+#include "core/logger/redaction.hxx"
 #include "core/meta/version.hxx"
 #include "core/platform/uuid.h"
 #include "core/service_type_fmt.hxx"
@@ -381,7 +382,8 @@ private:
         queue.pop();
       }
       report["top"] = entries;
-      CB_LOG_WARNING("Operations over threshold: {}", utils::json::generate(report));
+      CB_LOG_WARNING("Operations over threshold: {}",
+                     logger::system_data(utils::json::generate(report)));
     }
   }
 

@@ -20,6 +20,7 @@
 #include <couchbase/build_info.hxx>
 
 #include "logger/logger.hxx"
+#include "logger/redaction.hxx"
 #include "utils/concurrent_fixed_priority_queue.hxx"
 #include "utils/json.hxx"
 
@@ -120,7 +121,7 @@ private:
       }
 
       if (auto report = self->flush_and_create_output(); report.has_value()) {
-        CB_LOG_WARNING("Orphan responses observed: {}", report.value());
+        CB_LOG_WARNING("Orphan responses observed: {}", logger::system_data(report.value()));
       }
 
       self->rearm();
