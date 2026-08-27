@@ -31,6 +31,7 @@
 #include <cstdlib> // std::_Exit
 #include <exception>
 #include <iostream>
+#include <memory>
 #include <set>
 #include <string>
 #include <string_view>
@@ -75,9 +76,12 @@ main(int argc, char* argv[]) -> int
     return 1;
   }
 
-  context ctx{ std::move(config) };
+  // Owned rather than scoped, because when the run ends decides what may still be alive: the
+  // context has to outlive a detached worker on the timeout path below, and be gone before the
+  // suite's teardown hook on every other one.
+  auto ctx = std::make_unique<context>(std::move(config));
 
-  const auto result = run(suite, filter, ctx, std::cout);
+  const auto result = run(suite, filter, *ctx, std::cout);
 
   // Grouped, because the count alone is what lets a predicate that is permanently false in CI go
   // unnoticed: 37 skipped reads the same whether the environment lacked one thing or everything.
@@ -106,21 +110,18 @@ main(int argc, char* argv[]) -> int
       "Suite \"{}\": {} passed, {} skipped\n", suite.name, result.passed, result.skipped);
   }
 
-  // Skipped after a timeout for the same reason main() leaves through _Exit below: a detached
-  // worker may still be inside the very library the teardown is about to unload.
-  if (suite.teardown != nullptr && result.timed_out == 0) {
-    suite.teardown();
-  }
-
   // A timed-out case leaves its worker detached and still running. Returning from main would run
   // static destructors underneath it -- tearing down spdlog's registry, std::cout and any gRPC
   // channel the body still holds -- which surfaces as a nondeterministic abort at exit, exactly
-  // what the timeout runner exists to prevent. Leave immediately instead. Conditional on purpose:
-  // an unconditional _Exit would also suppress LeakSanitizer's atexit report.
+  // what the timeout runner exists to prevent. Leave immediately instead, destroying nothing and
+  // calling no hook: that worker may still be inside either. Conditional on purpose: an
+  // unconditional _Exit would also suppress LeakSanitizer's atexit report.
   if (result.timed_out > 0) {
     std::cout.flush();
     std::_Exit(exit_code(result));
   }
+
+  tear_down(std::move(ctx), suite.teardown);
 
   return exit_code(result);
 }

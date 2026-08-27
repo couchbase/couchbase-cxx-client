@@ -400,6 +400,17 @@ scale_timeouts(test_suite& suite, double factor)
 }
 
 void
+tear_down(std::unique_ptr<context> ctx, void (*teardown)())
+{
+  // Before the hook, never after: whatever the context holds would otherwise be destroyed against a
+  // library the hook has already unloaded.
+  ctx.reset();
+  if (teardown != nullptr) {
+    teardown();
+  }
+}
+
+void
 scale_timeouts(configuration& config, double factor)
 {
   // The requirement phase is where the cluster is opened, so it is the phase a slow runner is most
