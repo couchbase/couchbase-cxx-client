@@ -36,6 +36,7 @@
 #include <exception>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -329,6 +330,22 @@ struct operand_printer<std::string> {
   [[nodiscard]] static auto to_text(const std::string& value) -> std::string
   {
     return detail::quoted(value);
+  }
+};
+
+template<>
+struct operand_printer<std::error_code> {
+  static constexpr bool available = true;
+  // category:value (message). The category matters: two codes with the same value mean different
+  // things in different categories, and a failure that prints only the number sends the reader to
+  // look one up in the wrong table. errors.hxx renders through this so there is one spelling.
+  [[nodiscard]] static auto to_text(const std::error_code& value) -> std::string
+  {
+    if (!value) {
+      return "success";
+    }
+    return std::string{ value.category().name() } + ':' + std::to_string(value.value()) + " (" +
+           value.message() + ")";
   }
 };
 

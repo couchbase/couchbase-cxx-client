@@ -32,19 +32,18 @@
 #include <couchbase/error.hxx>
 
 #include <string>
+#include <string_view>
 #include <system_error>
 
 namespace couchbase::test
 {
 
+// One spelling for an error code, shared with the one assert_eq prints, so a failure and a message
+// built by hand cannot describe the same code differently.
 [[nodiscard]] inline auto
 describe(const std::error_code& ec) -> std::string
 {
-  if (!ec) {
-    return "success";
-  }
-  return std::string{ ec.category().name() } + ':' + std::to_string(ec.value()) + " (" +
-         ec.message() + ")";
+  return operand_printer<std::error_code>::to_text(ec);
 }
 
 [[nodiscard]] inline auto
@@ -63,26 +62,43 @@ describe(const couchbase::error& error) -> std::string
   return result;
 }
 
-// So assert_eq and assert_ne on error values print operands rather than nothing. A class template
-// specialisation is found at the point of instantiation, so it works from a header included after
-// test_framework.hxx -- which a free function overload would not.
-template<>
-struct operand_printer<std::error_code> {
-  static constexpr bool available = true;
-  [[nodiscard]] static auto to_text(const std::error_code& ec) -> std::string
-  {
-    return describe(ec);
+// So assert_eq and assert_ne on a couchbase::error print operands rather than nothing.
+//
+// Overloads, not an operand_printer specialisation. The template is declared in
+// test_framework.hxx, which every test includes, while this header is included only where a test
+// asserts on an error -- so a specialisation here is visible in some translation units of a binary
+// and not others, and assert_eq<couchbase::error, ...> then has two definitions in one program.
+// That is the same hazard that keeps the std::error_code printer in test_framework.hxx, and it
+// applies to every type this header could add: `couchbase::error` reaches a test through
+// <couchbase/error.hxx>, with its own operator==, whether or not this header came with it.
+//
+// An overload is resolved by ordinary lookup at the call, so a case body finds it however late this
+// header is included. What it would not reach is a dependent call from a template defined above
+// the include, because argument-dependent lookup from couchbase::error searches namespace
+// couchbase and not couchbase::test. No test compares errors from a template.
+inline void
+assert_eq(const couchbase::error& actual,
+          const couchbase::error& expected,
+          std::string_view message = "expected equal",
+          source_location loc = source_location::current())
+{
+  if (!(actual == expected)) {
+    throw test_assertion_failure(detail::at(loc, message) + " (actual: " + describe(actual) +
+                                 ", expected: " + describe(expected) + ")");
   }
-};
+}
 
-template<>
-struct operand_printer<couchbase::error> {
-  static constexpr bool available = true;
-  [[nodiscard]] static auto to_text(const couchbase::error& error) -> std::string
-  {
-    return describe(error);
+inline void
+assert_ne(const couchbase::error& actual,
+          const couchbase::error& unexpected,
+          std::string_view message = "expected different",
+          source_location loc = source_location::current())
+{
+  if (actual == unexpected) {
+    throw test_assertion_failure(detail::at(loc, message) + " (both are: " + describe(actual) +
+                                 ")");
   }
-};
+}
 
 inline void
 assert_success(const std::error_code& ec,

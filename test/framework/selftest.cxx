@@ -842,6 +842,49 @@ a_scaled_budget_lets_a_case_outlive_its_original_one([[maybe_unused]] context& c
 }
 
 void
+an_error_code_assertion_names_the_code_it_saw([[maybe_unused]] context& ctx)
+{
+  const auto message_of = [](auto&& fn) -> std::string {
+    try {
+      fn();
+    } catch (const test_assertion_failure& e) {
+      return e.what();
+    }
+    return {};
+  };
+
+  // Without a printer for std::error_code, assert_eq takes its value-free branch and reports no
+  // more than assert_true on the same comparison would: the expectation, and nothing about what
+  // came back. A failure in CI is then undiagnosable without reproducing it.
+  const auto mismatch = message_of([]() {
+    assert_eq(std::make_error_code(std::errc::timed_out),
+              std::make_error_code(std::errc::permission_denied),
+              "the operation timed out");
+  });
+  assert_contains(mismatch, "actual:", "the failure prints the code it saw");
+  // The value inside the delimiters the printer puts around it, never bare. The message opens with
+  // a location, and a line number contains the value on any platform where the two coincide --
+  // errc::timed_out is 60 on macOS, which "selftest.cxx:860" satisfies whatever the printer did.
+  assert_contains(mismatch,
+                  ":" + std::to_string(static_cast<int>(std::errc::timed_out)) + " (",
+                  "including its value");
+  assert_contains(mismatch, "expected:", "and the one it wanted");
+
+  // The category is part of the identity: the same number means different things in different
+  // categories, so a report carrying only the value points at the wrong table.
+  assert_contains(mismatch,
+                  std::make_error_code(std::errc::timed_out).category().name(),
+                  "and the category the value belongs to");
+
+  // A success prints as a word rather than as "generic:0", which reads as a code that was returned.
+  // Through the printer directly: errors.hxx would pull in the public SDK header, and this binary
+  // links no client library.
+  assert_eq(operand_printer<std::error_code>::to_text(std::error_code{}),
+            std::string{ "success" },
+            "a clear code says so");
+}
+
+void
 the_added_assertions_report_what_they_saw([[maybe_unused]] context& ctx)
 {
   const auto message_of = [](auto&& fn) -> std::string {
@@ -1348,6 +1391,7 @@ tests() -> test_suite
       { CASE(a_failure_names_the_file_and_line_it_came_from) },
       { CASE(operands_render_without_a_formatting_library) },
       { CASE(a_type_with_no_printer_still_fails_its_assertion) },
+      { CASE(an_error_code_assertion_names_the_code_it_saw) },
       { CASE(the_added_assertions_report_what_they_saw) },
       { CASE(the_configuration_reads_the_environment_it_documents) },
     },
