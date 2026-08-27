@@ -21,6 +21,7 @@
 #include "core/operations/document_append.hxx"
 #include "core/operations/document_decrement.hxx"
 #include "core/operations/document_get.hxx"
+#include "core/operations/document_get_all_replicas.hxx"
 #include "core/operations/document_increment.hxx"
 #include "core/operations/document_insert.hxx"
 #include "core/operations/document_lookup_in.hxx"
@@ -35,6 +36,37 @@
 #include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/lookup_in_specs.hxx>
 #include <couchbase/mutate_in_specs.hxx>
+
+#include <algorithm>
+
+// Blocks until every copy of the document answers a full read with the CAS that was written.
+//
+// The precondition the replica cases need, and the one the subdocument fan-out cannot express.
+// lookup_in_all_replicas keeps one entry per node the topology can address, synthesising error
+// fields for a node that answered at the document level, and reports an error only when no node
+// answered at all -- so neither its entry count nor its error code moves while a replica has yet
+// to receive the document. get_all_replicas drops such a node instead, so its count does move, and
+// being a full read it carries a CAS for a body that is not JSON, where every subdocument path
+// fails and there is no successful path to poll on.
+inline void
+wait_until_document_on_every_copy(test::utils::integration_test_guard& integration,
+                                  const couchbase::core::document_id& id,
+                                  couchbase::cas expected_cas)
+{
+  const couchbase::core::operations::get_all_replicas_request req{ id };
+  const auto expected_entries = integration.number_of_replicas() + 1;
+  const auto replicated = test::utils::wait_until([&]() {
+    const auto response = test::utils::execute(integration.cluster, req);
+    if (response.ctx.ec() || response.entries.size() != expected_entries) {
+      return false;
+    }
+    return std::all_of(
+      response.entries.begin(), response.entries.end(), [expected_cas](const auto& entry) {
+        return entry.cas == expected_cas;
+      });
+  });
+  REQUIRE(replicated);
+}
 
 template<typename SubdocumentOperation>
 void
@@ -151,17 +183,8 @@ assert_single_lookup_all_replica_success(test::utils::integration_test_guard& in
   req.specs = couchbase::lookup_in_specs{ spec }.specs();
   INFO(fmt::format(
     "assert_single_lookup_all_replica_success(\"{}\", \"{}\")", id, req.specs[0].path_));
-  // A freshly written document, even one written durably, may not be readable from every
-  // replica the instant the write returns; an all-replica lookup then comes back with fewer
-  // entries (a replica answers not_found). Poll until every replica reports the document
-  // before asserting full coverage, so replication lag does not flake the test.
   const auto expected_entries = integration.number_of_replicas() + 1;
-  couchbase::core::operations::lookup_in_all_replicas_response response;
-  auto replicated = test::utils::wait_until([&]() {
-    response = test::utils::execute(integration.cluster, req);
-    return !response.ctx.ec() && response.entries.size() == expected_entries;
-  });
-  REQUIRE(replicated);
+  const auto response = test::utils::execute(integration.cluster, req);
   REQUIRE_SUCCESS(response.ctx.ec());
   REQUIRE(response.entries.size() == expected_entries);
   auto responses_from_active =
@@ -1465,18 +1488,7 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
     inserted_cas = resp.cas;
   }
 
-  {
-    // Wait until the document has replicated to all replica nodes to prevent eventual-consistency
-    // races in subsequent sections
-    couchbase::core::operations::lookup_in_all_replicas_request req{ id };
-    req.specs = couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("dictkey") }.specs();
-    const auto expected_entries = integration.number_of_replicas() + 1;
-    auto replicated = test::utils::wait_until([&]() {
-      auto response = test::utils::execute(integration.cluster, req);
-      return !response.ctx.ec() && response.entries.size() == expected_entries;
-    });
-    REQUIRE(replicated);
-  }
+  wait_until_document_on_every_copy(integration, id, inserted_cas);
 
   SECTION("dict get")
   {
@@ -1581,6 +1593,7 @@ TEST_CASE("integration: subdoc all replica reads", "[integration]")
       couchbase::core::operations::insert_request req{ non_json_id, non_json_doc };
       auto resp = test::utils::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec());
+      wait_until_document_on_every_copy(integration, non_json_id, resp.cas);
     }
 
     SECTION("non json get")
@@ -1803,18 +1816,7 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
     inserted_cas = resp.cas;
   }
 
-  {
-    // Wait until the document has replicated to all replica nodes to prevent eventual-consistency
-    // races in subsequent sections
-    couchbase::core::operations::lookup_in_all_replicas_request req{ id };
-    req.specs = couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("dictkey") }.specs();
-    const auto expected_entries = integration.number_of_replicas() + 1;
-    auto replicated = test::utils::wait_until([&]() {
-      auto response = test::utils::execute(integration.cluster, req);
-      return !response.ctx.ec() && response.entries.size() == expected_entries;
-    });
-    REQUIRE(replicated);
-  }
+  wait_until_document_on_every_copy(integration, id, inserted_cas);
 
   SECTION("dict get")
   {
@@ -1919,6 +1921,7 @@ TEST_CASE("integration: subdoc any replica reads", "[integration]")
       couchbase::core::operations::insert_request req{ non_json_id, non_json_doc };
       auto resp = test::utils::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec());
+      wait_until_document_on_every_copy(integration, non_json_id, resp.cas);
     }
 
     SECTION("non json get")
