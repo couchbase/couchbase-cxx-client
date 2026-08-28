@@ -16,23 +16,66 @@
  */
 
 #pragma once
+
+#include "shared.bounds.pb.h"
+
+#include <atomic>
 #include <cstdint>
 #include <map>
-#include <mutex>
+#include <memory>
+#include <shared_mutex>
 #include <string>
 
-class Counters
+namespace fit_cxx
 {
-private:
-  std::mutex mutex_;
-  std::map<std::string, std::uint32_t> counters_;
-
+class counter
+{
 public:
-  // Returns the current value of the counter and then increments it, so the
-  // first call for a given id returns 0, the next returns 1, and so on.
-  std::uint32_t get_and_increment_counter(const std::string& counter_id)
-  {
-    const std::scoped_lock<std::mutex> lock(mutex_);
-    return counters_[counter_id]++;
-  }
+  explicit counter(std::int32_t initial_value);
+
+  /**
+   * Increments the counter and returns the resulting value
+   */
+  [[nodiscard]] auto increment() -> std::int32_t;
+
+  /**
+   * Decrements the counter and returns the resulting value
+   */
+  [[nodiscard]] auto decrement() -> std::int32_t;
+
+  void set(std::int32_t value);
+
+  [[nodiscard]] auto get() const -> std::int32_t;
+
+  [[nodiscard]] static auto create(std::int32_t initial_value) -> std::shared_ptr<counter>;
+
+private:
+  std::atomic<std::int32_t> value_;
 };
+
+class counters
+{
+public:
+  counters() = default;
+
+  void clear();
+
+  /**
+   * Returns the counter with the provided counter_id. If the counter does not exist,
+   * the counter is created with the provided initial_value and returned.
+   */
+  [[nodiscard]] auto get_counter(const std::string& counter_id, std::int32_t initial_value)
+    -> std::shared_ptr<counter>;
+
+  [[nodiscard]] auto get_counter(const protocol::shared::Counter& proto_counter)
+    -> std::shared_ptr<counter>;
+
+  void set_counter_value(const std::string& counter_id, std::int32_t value);
+
+  void set_counter_value(const protocol::shared::Counter& proto_counter);
+
+private:
+  std::shared_mutex mutex_;
+  std::map<std::string, std::shared_ptr<counter>> counters_{};
+};
+} // namespace fit_cxx

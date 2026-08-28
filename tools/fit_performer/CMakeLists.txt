@@ -52,6 +52,7 @@ endif()
 
 set(FIT_PERFORMER_SOURCES
     src/batcher.hxx
+    src/bounds.cxx
     src/bounds.hxx
     src/commands/bucket_management.cxx
     src/commands/bucket_management.hxx
@@ -71,6 +72,7 @@ set(FIT_PERFORMER_SOURCES
     src/commands/search_index_management.hxx
     src/connection.cxx
     src/connection.hxx
+    src/counters.cxx
     src/counters.hxx
     src/exceptions.hxx
     src/fit.cxx
