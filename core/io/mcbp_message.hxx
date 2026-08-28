@@ -18,6 +18,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -42,7 +43,20 @@ struct binary_header {
   std::uint32_t opaque;
   std::uint64_t cas;
 
+  /**
+   * Sizes of the framing extras and key regions of a flexible-framing ("alt") frame.
+   *
+   * Bytes 2 and 3 of an alt frame header are two independent 1-byte fields, not one 16-bit
+   * value. Reinterpreting `keylen` as an integer and shifting the two halves apart puts each
+   * byte into the wrong variable on one host order or the other, so read them out as bytes.
+   */
+  struct alt_frame_sizes {
+    std::uint8_t framing_extras;
+    std::uint8_t key;
+  };
+
   [[nodiscard]] auto status() const -> std::uint16_t;
+  [[nodiscard]] auto alt_sizes() const -> alt_frame_sizes;
 };
 
 struct mcbp_message {

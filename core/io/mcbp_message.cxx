@@ -30,6 +30,14 @@ binary_header::status() const -> std::uint16_t
 }
 
 auto
+binary_header::alt_sizes() const -> binary_header::alt_frame_sizes
+{
+  std::array<std::byte, sizeof(keylen)> bytes{};
+  std::memcpy(bytes.data(), &keylen, sizeof(keylen));
+  return { std::to_integer<std::uint8_t>(bytes[0]), std::to_integer<std::uint8_t>(bytes[1]) };
+}
+
+auto
 mcbp_message::header_data() const -> protocol::header_buffer
 {
   protocol::header_buffer buf;
