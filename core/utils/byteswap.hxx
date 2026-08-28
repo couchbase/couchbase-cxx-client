@@ -24,6 +24,26 @@ namespace couchbase::core::utils
 {
 namespace detail
 {
+/**
+ * Byte order of a host.
+ *
+ * Kept as a value that the conversions below take as a parameter, rather than as a preprocessor
+ * branch around them, so that both orders stay compilable and testable whatever host this is
+ * built on. Without that, the big-endian path could only ever be verified by running on a
+ * big-endian host, and nothing in CI does.
+ */
+enum class host_order {
+  little,
+  big,
+};
+
+#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                    \
+  __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+inline constexpr host_order native_order = host_order::big;
+#else
+inline constexpr host_order native_order = host_order::little;
+#endif
+
 static constexpr auto
 swap_bytes(std::uint16_t value) -> std::uint16_t
 {
@@ -48,6 +68,46 @@ swap_bytes(std::uint64_t value) -> std::uint64_t
   std::uint64_t hi = swap_bytes(static_cast<std::uint32_t>(value));
   std::uint32_t lo = swap_bytes(static_cast<std::uint32_t>(value >> 32));
   return (hi << 32) | lo;
+}
+/**
+ * Convert a value between host order and network (big-endian) order, for a host whose byte order
+ * is Order.
+ *
+ * The two directions are the same operation, so one function serves both. On a big-endian host
+ * the value is already in network order and this is the identity; the callers pair it with a
+ * memcpy of the native integer, which on such a host already lays the bytes down big-endian.
+ */
+template<host_order Order>
+static constexpr auto
+convert(std::uint16_t value) -> std::uint16_t
+{
+  if constexpr (Order == host_order::big) {
+    return value;
+  } else {
+    return swap_bytes(value);
+  }
+}
+
+template<host_order Order>
+static constexpr auto
+convert(std::uint32_t value) -> std::uint32_t
+{
+  if constexpr (Order == host_order::big) {
+    return value;
+  } else {
+    return swap_bytes(value);
+  }
+}
+
+template<host_order Order>
+static constexpr auto
+convert(std::uint64_t value) -> std::uint64_t
+{
+  if constexpr (Order == host_order::big) {
+    return value;
+  } else {
+    return swap_bytes(value);
+  }
 }
 } // namespace detail
 
@@ -96,19 +156,19 @@ reverse_bytes(
 static constexpr auto
 host_to_network(std::uint16_t value) -> std::uint16_t
 {
-  return detail::swap_bytes(value);
+  return detail::convert<detail::native_order>(value);
 }
 
 static constexpr auto
 host_to_network(std::uint32_t value) -> std::uint32_t
 {
-  return detail::swap_bytes(value);
+  return detail::convert<detail::native_order>(value);
 }
 
 static constexpr auto
 host_to_network(std::uint64_t value) -> std::uint64_t
 {
-  return detail::swap_bytes(value);
+  return detail::convert<detail::native_order>(value);
 }
 
 // when 'unsigned long long' is not the same as 'std::uint64_t'
@@ -129,19 +189,19 @@ host_to_network(
 static constexpr auto
 network_to_host(std::uint16_t value) -> std::uint16_t
 {
-  return detail::swap_bytes(value);
+  return detail::convert<detail::native_order>(value);
 }
 
 static constexpr auto
 network_to_host(std::uint32_t value) -> std::uint32_t
 {
-  return detail::swap_bytes(value);
+  return detail::convert<detail::native_order>(value);
 }
 
 static constexpr auto
 network_to_host(std::uint64_t value) -> std::uint64_t
 {
-  return detail::swap_bytes(value);
+  return detail::convert<detail::native_order>(value);
 }
 
 // when 'unsigned long long' is not the same as 'std::uint64_t'
