@@ -21,10 +21,12 @@
 #include "core/protocol/magic.hxx"
 
 #include <array>
+#include <cstring>
 #include <vector>
 
 namespace
 {
+using couchbase::core::io::binary_header;
 using couchbase::core::io::mcbp_message;
 using couchbase::core::io::mcbp_parser;
 using couchbase::core::protocol::magic;
@@ -135,4 +137,31 @@ TEST_CASE("unit: mcbp_parser accepts a well-formed frame (positive control)", "[
   mcbp_message msg;
   CHECK(parser.next(msg) == mcbp_parser::result::ok);
   CHECK(msg.body.size() == 7);
+}
+
+TEST_CASE("unit: binary_header::alt_sizes splits the two 1-byte header fields", "[unit]")
+{
+  // Bytes 2 and 3 of a flexible-framing header are two independent 1-byte fields, not one
+  // 16-bit value. The two must be distinct here for the test to mean anything: with equal
+  // values every wrong way of splitting them still passes.
+  //
+  // Both readers of these fields consume them only through a sum, so swapping them is not
+  // observable through either one. Asserting on the split directly is what pins it, and what
+  // would catch a return to shifting a native integer apart, which lands each byte in the wrong
+  // variable on one host order or the other.
+  auto frame = frame_builder{}
+                 .magic_byte(magic::alt_client_response)
+                 .opcode(0x00)
+                 .set(2, 3) // framing extras size
+                 .set(3, 5) // key size
+                 .extlen(2)
+                 .bodylen(10)
+                 .bytes;
+
+  binary_header header{};
+  std::memcpy(&header, frame.data(), frame.size());
+
+  const auto sizes = header.alt_sizes();
+  CHECK(sizes.framing_extras == 3);
+  CHECK(sizes.key == 5);
 }

@@ -365,3 +365,20 @@ TEST_CASE("transaction_get_result: can convert core transaction_get_result to "
     REQUIRE(final_public_res.id().empty());
   }
 }
+
+TEST_CASE("unit: parse_mutation_cas decodes the kvengine CAS macro", "[unit]")
+{
+  using couchbase::core::transactions::parse_mutation_cas;
+
+  // ${Mutation.CAS} is written by kvengine as 'macroToString(htonll(info.cas))', so the eight
+  // bytes inside the string are reversed relative to the CAS value, and they are reversed by the
+  // server rather than by this host. Recovering the value therefore needs an unconditional
+  // reversal, not a network-to-host conversion: the two are the same on a little-endian host and
+  // differ on a big-endian one, where a conversion would return the string's value unchanged.
+  //
+  // 0x000058a71dd25c15 reversed is 0x155cd21da7580000, or 1539336197457313792 nanoseconds,
+  // which the function reports as milliseconds.
+  REQUIRE(parse_mutation_cas("0x000058a71dd25c15") == 1539336197457U);
+
+  REQUIRE(parse_mutation_cas("") == 0U);
+}
