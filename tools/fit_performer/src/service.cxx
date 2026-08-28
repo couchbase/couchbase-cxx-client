@@ -129,10 +129,10 @@ TxnService::startTxn(ConnectionPtr conn,
   // streaming path, before the worker signals "created"), so that incoming set-latch broadcasts can
   // be delivered while this transaction runs.
 
-  auto expiry =
-    couchbase::core::transactions::get_core_transactions(conn->cluster()->transactions())
-      ->config()
-      .timeout;
+  auto expiry = std::static_pointer_cast<couchbase::core::transactions::transactions>(
+                  conn->cluster()->transactions())
+                  ->config()
+                  .timeout;
   auto limit = expiry + std::chrono::seconds(1);
   if (opts.timeout()) {
     limit = std::chrono::duration_cast<std::chrono::nanoseconds>(1.1 * opts.timeout().value());
@@ -189,7 +189,8 @@ TxnService::startTxn(ConnectionPtr conn,
   TxnSvcUtils::create_transaction_result(
     err,
     res,
-    couchbase::core::transactions::get_core_transactions(conn->cluster()->transactions()),
+    std::static_pointer_cast<couchbase::core::transactions::transactions>(
+      conn->cluster()->transactions()),
     response);
   spdlog::trace("startTxn responding with {}", response->DebugString());
   return grpc::Status::OK;
@@ -369,8 +370,8 @@ TxnService::transactionCleanup(grpc::ServerContext* /*context*/,
 
   auto hook_pair = fit_cxx::TxnSvcHook::convert_hooks(request->hook(), hooks, conn);
   try {
-    auto txn =
-      couchbase::core::transactions::get_core_transactions(conn->cluster()->transactions());
+    auto txn = std::static_pointer_cast<couchbase::core::transactions::transactions>(
+      conn->cluster()->transactions());
     txn->cleanup().config().cleanup_hooks = std::move(hook_pair.second);
     auto id = to_couchbase_docid(request->atr());
     couchbase::core::transactions::atr_cleanup_entry entry(
@@ -402,8 +403,8 @@ TxnService::transactionCleanupATR(
   }
   auto hook_pair = fit_cxx::TxnSvcHook::convert_hooks(request->hook(), hooks, conn);
   try {
-    auto txn =
-      couchbase::core::transactions::get_core_transactions(conn->cluster()->transactions());
+    auto txn = std::static_pointer_cast<couchbase::core::transactions::transactions>(
+      conn->cluster()->transactions());
     txn->config().attempt_context_hooks = std::move(hook_pair.first);
     txn->cleanup().config().cleanup_hooks = std::move(hook_pair.second);
 
@@ -720,22 +721,21 @@ TxnService::execute_command(ConnectionPtr conn,
   }
   if (cmd.has_get_multi()) {
     if (cmd.get_multi().get_multi_replicas_from_preferred_server_group()) {
-      return execute_op(
-        cmd.get_multi(),
-        ctx,
-        cmd.do_not_propagate_error(),
-        logger_prefix,
-        false,
-        false,
-        [&](std::shared_ptr<couchbase::transactions::attempt_context> c) {
-          auto [err, result] = c->get_multi_replicas_from_preferred_server_group(
-            to_get_multi_replicas_from_preferred_server_group_specs(conn, cmd),
-            to_get_multi_replicas_from_preferred_server_group_options(cmd));
-          spdlog::debug("get_multi_replicas: err.message: {}, err.ec.message: {}",
-                        err.message(),
-                        err.ec().message());
-          return std::pair{ err, result };
-        });
+      return execute_op(cmd.get_multi(),
+                        ctx,
+                        cmd.do_not_propagate_error(),
+                        logger_prefix,
+                        false,
+                        false,
+                        [&](std::shared_ptr<couchbase::transactions::attempt_context> c) {
+                          auto [err, result] = c->get_multi_replicas_from_preferred_server_group(
+                            to_get_multi_replicas_from_preferred_server_group_specs(conn, cmd),
+                            to_get_multi_replicas_from_preferred_server_group_options(cmd));
+                          spdlog::debug("get_multi_replicas: err.message: {}, err.ec.message: {}",
+                                        err.message(),
+                                        err.ec().message());
+                          return std::pair{ err, result };
+                        });
     }
     return execute_op(cmd.get_multi(),
                       ctx,
@@ -1222,7 +1222,8 @@ TxnService::clientRecordProcess(grpc::ServerContext* /*context*/,
   }
 
   auto hook_pair = fit_cxx::TxnSvcHook::convert_hooks(request->hook(), hooks, conn);
-  auto txn = couchbase::core::transactions::get_core_transactions(conn->cluster()->transactions());
+  auto txn = std::static_pointer_cast<couchbase::core::transactions::transactions>(
+    conn->cluster()->transactions());
   txn->config().attempt_context_hooks = std::move(hook_pair.first);
   txn->cleanup().config().cleanup_hooks = std::move(hook_pair.second);
   return conn->run_with_timeout<grpc::Status>(
@@ -1630,8 +1631,8 @@ TxnService::cleanupSetFetch(grpc::ServerContext* /*context*/,
   // lock). Guard them so the exception is mapped to a status instead of escaping this gRPC handler
   // and terminating the server, consistent with the other cleanup-family handlers.
   try {
-    auto txn =
-      couchbase::core::transactions::get_core_transactions(conn->cluster()->transactions());
+    auto txn = std::static_pointer_cast<couchbase::core::transactions::transactions>(
+      conn->cluster()->transactions());
     auto collections = txn->cleanup().collections();
     for (auto& c : collections) {
       auto set = response->mutable_cleanup_set()->add_cleanup_set();
