@@ -1,0 +1,83 @@
+name: big-endian
+
+# Manually triggered only, and deliberately not part of any gating suite.
+#
+# No supported platform is big-endian, and the SDK team has not taken on testing against one, so
+# this must never become a required check. It exists so that the byte-order handling in
+# core/utils/byteswap.hxx and the codecs that depend on it can be exercised on a real big-endian
+# CPU on demand, when someone needs evidence rather than an argument.
+#
+# The unit tests already prove both host-order branches at compile time on an ordinary
+# little-endian runner (test/test_unit_byteswap.cxx). What this workflow adds is the one thing
+# those cannot cover: that the compiler's own __BYTE_ORDER__ detection, the native integer stores
+# the codecs pair with each conversion, and the struct layouts underneath them all behave as
+# assumed on a host that is actually big-endian.
+#
+# s390x is used because it is the big-endian target QEMU emulates most reliably. Note that
+# BoringSSL has no s390x port, so this builds against the distro's OpenSSL; that is the C++ SDK
+# default, but a wrapper SDK that forces BoringSSL cannot be built for this platform at all.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: s390x
+      - name: Build and run the unit tests under s390x emulation
+        # Emulated, so slow. Only the unit tests are built and run: they need no cluster, and they
+        # are where the byte-order contract is asserted.
+        #
+        # This configures CMake directly instead of calling bin/build-tests, which cannot be used
+        # here. That script leaves COUCHBASE_CXX_CLIENT_BUILD_TOOLS on, which brings in the FIT
+        # performer and with it a source build of gRPC, protobuf and abseil, and it finishes by
+        # building cbc, which links OpenTelemetry's OTLP exporter and libcurl. None of that is
+        # reachable from a unit test, and under emulation it is most of the wall clock -- gRPC
+        # alone also wants a system zlib, so the configure step failed before compiling anything.
+        # Turning both options off leaves only what the byte-order assertions actually need.
+        #
+        # The CNG tests are off for the same reason and cost nothing: they carry the "cng" label,
+        # so bin/run-unit-tests never selects them. Only the shared library is built, since that is
+        # the one the test binaries link; both are on by default, which compiles the core twice.
+        timeout-minutes: 180
+        run: |
+          docker run --rm --platform linux/s390x \
+            -v "${GITHUB_WORKSPACE}:/src" -w /src \
+            s390x/ubuntu:24.04 \
+            bash -c '
+              set -eux
+              apt-get update -y
+              apt-get install -y --no-install-recommends \
+                build-essential cmake git ca-certificates libssl-dev
+              git config --global --add safe.directory /src
+              # Fail if the image is not what we asked for: the whole point of the job is that
+              # this compiler targets a big-endian host. The first line is for the log only.
+              # The second is the assertion, and it has to match the definition of __BYTE_ORDER__
+              # exactly -- __ORDER_BIG_ENDIAN__ is predefined on every target, little-endian ones
+              # included, so finding that name proves nothing at all.
+              cc -dM -E -x c /dev/null | grep -E "__BYTE_ORDER__|__ORDER_(BIG|LITTLE)_ENDIAN__"
+              cc -dM -E -x c /dev/null | grep -qx "#define __BYTE_ORDER__ __ORDER_BIG_ENDIAN__"
+              cmake -S /src -B /src/cmake-build-tests \
+                -DCMAKE_BUILD_TYPE=Debug \
+                -DCOUCHBASE_CXX_CLIENT_BUILD_TESTS=ON \
+                -DCOUCHBASE_CXX_CLIENT_BUILD_SHARED=ON \
+                -DCOUCHBASE_CXX_CLIENT_BUILD_STATIC=OFF \
+                -DCOUCHBASE_CXX_CLIENT_BUILD_CNG_TESTS=OFF \
+                -DCOUCHBASE_CXX_CLIENT_BUILD_DOCS=OFF \
+                -DCOUCHBASE_CXX_CLIENT_BUILD_TOOLS=OFF \
+                -DCOUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY=OFF \
+                -DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=OFF \
+                -DCACHE_OPTION=none
+              cmake --build /src/cmake-build-tests --parallel 4 --target build_unit_tests
+              ./bin/run-unit-tests
+            '
