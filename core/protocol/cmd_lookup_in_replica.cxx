@@ -47,14 +47,14 @@ lookup_in_replica_response_body::parse(key_value_status_code status,
 
       std::uint16_t entry_status = 0;
       memcpy(&entry_status, body.data() + offset, sizeof(entry_status));
-      entry_status = utils::byte_swap(entry_status);
+      entry_status = utils::network_to_host(entry_status);
       Expects(is_valid_status(entry_status));
       field.status = static_cast<key_value_status_code>(entry_status);
       offset += static_cast<offset_type>(sizeof(entry_status));
 
       std::uint32_t entry_size = 0;
       memcpy(&entry_size, body.data() + offset, sizeof(entry_size));
-      entry_size = utils::byte_swap(entry_size);
+      entry_size = utils::network_to_host(entry_size);
       Expects(entry_size < 20 * 1024 * 1024);
       offset += static_cast<offset_type>(sizeof(entry_size));
 
@@ -100,7 +100,8 @@ lookup_in_replica_request_body::fill_value()
     ++offset;
     value_[offset] = spec.flags_;
     ++offset;
-    std::uint16_t path_size = utils::byte_swap(gsl::narrow_cast<std::uint16_t>(spec.path_.size()));
+    std::uint16_t path_size =
+      utils::host_to_network(gsl::narrow_cast<std::uint16_t>(spec.path_.size()));
     std::memcpy(value_.data() + offset, &path_size, sizeof(path_size));
     offset += sizeof(path_size);
     std::memcpy(value_.data() + offset, spec.path_.data(), spec.path_.size());

@@ -41,12 +41,12 @@ prepend_response_body::parse(key_value_status_code status,
     if (extras_size == 16) {
       std::uint64_t partition_uuid{};
       memcpy(&partition_uuid, body.data() + offset, sizeof(partition_uuid));
-      partition_uuid = utils::byte_swap(partition_uuid);
+      partition_uuid = utils::network_to_host(partition_uuid);
       offset += 8;
 
       std::uint64_t sequence_number{};
       memcpy(&sequence_number, body.data() + offset, sizeof(sequence_number));
-      sequence_number = utils::byte_swap(sequence_number);
+      sequence_number = utils::network_to_host(sequence_number);
 
       token_ = couchbase::utils::build_mutation_token(partition_uuid, sequence_number);
       return true;

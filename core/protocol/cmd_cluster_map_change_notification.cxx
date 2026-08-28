@@ -40,11 +40,11 @@ cluster_map_change_notification_request_body::parse(const header_buffer& header,
   offset_type offset = ext_size;
   if (ext_size == 4) {
     memcpy(&protocol_revision_, body.data(), sizeof(protocol_revision_));
-    protocol_revision_ = utils::byte_swap(protocol_revision_);
+    protocol_revision_ = utils::network_to_host(protocol_revision_);
   }
   std::uint16_t key_size = 0;
   memcpy(&key_size, header.data() + 2, sizeof(key_size));
-  key_size = utils::byte_swap(key_size);
+  key_size = utils::network_to_host(key_size);
   const auto* data_ptr = reinterpret_cast<const char*>(body.data());
   bucket_.assign(data_ptr + offset, data_ptr + offset + key_size);
   offset += key_size;

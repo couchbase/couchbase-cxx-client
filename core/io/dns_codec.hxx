@@ -36,28 +36,28 @@ public:
 
     std::memcpy(&message.header.id, payload.data() + offset, sizeof(std::uint16_t));
     offset += sizeof(std::uint16_t);
-    message.header.id = utils::byte_swap(message.header.id);
+    message.header.id = utils::network_to_host(message.header.id);
 
     std::uint16_t flags = 0;
     std::memcpy(&flags, payload.data() + offset, sizeof(std::uint16_t));
     offset += sizeof(std::uint16_t);
-    message.header.flags.decode(utils::byte_swap(flags));
+    message.header.flags.decode(utils::network_to_host(flags));
 
     std::memcpy(&message.header.question_records, payload.data() + offset, sizeof(std::uint16_t));
     offset += sizeof(std::uint16_t);
-    message.header.question_records = utils::byte_swap(message.header.question_records);
+    message.header.question_records = utils::network_to_host(message.header.question_records);
 
     std::memcpy(&message.header.answer_records, payload.data() + offset, sizeof(std::uint16_t));
     offset += sizeof(std::uint16_t);
-    message.header.answer_records = utils::byte_swap(message.header.answer_records);
+    message.header.answer_records = utils::network_to_host(message.header.answer_records);
 
     std::memcpy(&message.header.authority_records, payload.data() + offset, sizeof(std::uint16_t));
     offset += sizeof(std::uint16_t);
-    message.header.authority_records = utils::byte_swap(message.header.authority_records);
+    message.header.authority_records = utils::network_to_host(message.header.authority_records);
 
     std::memcpy(&message.header.additional_records, payload.data() + offset, sizeof(std::uint16_t));
     offset += sizeof(std::uint16_t);
-    message.header.additional_records = utils::byte_swap(message.header.additional_records);
+    message.header.additional_records = utils::network_to_host(message.header.additional_records);
 
     for (std::uint16_t idx = 0; idx < message.header.question_records; ++idx) {
       question_record qr;
@@ -66,12 +66,12 @@ public:
       std::uint16_t val = 0;
       std::memcpy(&val, payload.data() + offset, sizeof(std::uint16_t));
       offset += sizeof(std::uint16_t);
-      val = utils::byte_swap(val);
+      val = utils::network_to_host(val);
       qr.type = resource_type(val);
 
       std::memcpy(&val, payload.data() + offset, sizeof(std::uint16_t));
       offset += sizeof(std::uint16_t);
-      val = utils::byte_swap(val);
+      val = utils::network_to_host(val);
       qr.klass = static_cast<resource_class>(val);
 
       message.questions.emplace_back(qr);
@@ -85,22 +85,22 @@ public:
       std::uint16_t val = 0;
       std::memcpy(&val, payload.data() + offset, sizeof(std::uint16_t));
       offset += sizeof(std::uint16_t);
-      val = utils::byte_swap(val);
+      val = utils::network_to_host(val);
       ar.type = resource_type(val);
 
       std::memcpy(&val, payload.data() + offset, sizeof(std::uint16_t));
       offset += sizeof(std::uint16_t);
-      val = utils::byte_swap(val);
+      val = utils::network_to_host(val);
       ar.klass = resource_class(val);
 
       std::memcpy(&ar.ttl, payload.data() + offset, sizeof(std::uint32_t));
       offset += static_cast<std::uint16_t>(4U);
-      ar.ttl = utils::byte_swap(ar.ttl);
+      ar.ttl = utils::network_to_host(ar.ttl);
 
       std::uint16_t size = 0;
       std::memcpy(&size, payload.data() + offset, sizeof(std::uint16_t));
       offset += sizeof(std::uint16_t);
-      size = utils::byte_swap(size);
+      size = utils::network_to_host(size);
 
       if (ar.klass != resource_class::in || ar.type != resource_type::srv) {
         // ignore everything except SRV answers
@@ -110,15 +110,15 @@ public:
 
       std::memcpy(&val, payload.data() + offset, sizeof(std::uint16_t));
       offset += sizeof(std::uint16_t);
-      ar.priority = utils::byte_swap(val);
+      ar.priority = utils::network_to_host(val);
 
       std::memcpy(&val, payload.data() + offset, sizeof(std::uint16_t));
       offset += sizeof(std::uint16_t);
-      ar.weight = utils::byte_swap(val);
+      ar.weight = utils::network_to_host(val);
 
       std::memcpy(&val, payload.data() + offset, sizeof(std::uint16_t));
       offset += sizeof(std::uint16_t);
-      ar.port = utils::byte_swap(val);
+      ar.port = utils::network_to_host(val);
 
       ar.target = get_name(payload, offset);
 
@@ -137,15 +137,15 @@ public:
     {
       std::uint16_t val;
 
-      val = utils::byte_swap(message.header.id);
+      val = utils::host_to_network(message.header.id);
       std::memcpy(payload.data() + offset, &val, sizeof(std::uint16_t));
       offset += sizeof(std::uint16_t);
 
-      val = utils::byte_swap(message.header.flags.encode());
+      val = utils::host_to_network(message.header.flags.encode());
       std::memcpy(payload.data() + offset, &val, sizeof(std::uint16_t));
       offset += sizeof(std::uint16_t);
 
-      val = utils::byte_swap(static_cast<std::uint16_t>(message.questions.size()));
+      val = utils::host_to_network(static_cast<std::uint16_t>(message.questions.size()));
       std::memcpy(payload.data() + offset, &val, sizeof(std::uint16_t));
       offset += sizeof(std::uint16_t) +
                 3 * sizeof(std::uint16_t); // answer, authority, additional are all zeros
@@ -164,11 +164,11 @@ public:
 
       std::uint16_t val;
 
-      val = utils::byte_swap(static_cast<std::uint16_t>(question.type));
+      val = utils::host_to_network(static_cast<std::uint16_t>(question.type));
       std::memcpy(payload.data() + offset, &val, sizeof(std::uint16_t));
       offset += sizeof(std::uint16_t);
 
-      val = utils::byte_swap(static_cast<std::uint16_t>(question.klass));
+      val = utils::host_to_network(static_cast<std::uint16_t>(question.klass));
       std::memcpy(payload.data() + offset, &val, sizeof(std::uint16_t));
       offset += sizeof(std::uint16_t);
     }
@@ -194,7 +194,7 @@ private:
       if ((len & 0b1100'0000U) != 0) {
         std::uint16_t ptr = 0;
         std::memcpy(&ptr, payload.data() + offset, sizeof(std::uint16_t));
-        ptr = utils::byte_swap(ptr);
+        ptr = utils::network_to_host(ptr);
         ptr &= 0b0011'1111'1111'1111U;
         // store old offset and jump to pointer
         save_offset = offset + sizeof(std::uint16_t);

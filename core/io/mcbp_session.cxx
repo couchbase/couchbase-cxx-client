@@ -115,7 +115,7 @@ struct mcbp_header_layout {
     if (magic == 0x18 || magic == 0x08) {
       return keylen.alt.key;
     }
-    return couchbase::core::utils::byte_swap(keylen.normal);
+    return couchbase::core::utils::network_to_host(keylen.normal);
   }
 
   [[nodiscard]] constexpr auto framing_extras_length() const -> std::uint8_t
@@ -155,10 +155,10 @@ struct fmt::formatter<mcbp_header_view<Container>> {
                      header->extlen,
                      header->datatype,
                      header->specific_name(),
-                     couchbase::core::utils::byte_swap(header->specific),
-                     couchbase::core::utils::byte_swap(header->bodylen),
-                     couchbase::core::utils::byte_swap(header->opaque),
-                     couchbase::core::utils::byte_swap(header->cas));
+                     couchbase::core::utils::network_to_host(header->specific),
+                     couchbase::core::utils::network_to_host(header->bodylen),
+                     couchbase::core::utils::network_to_host(header->opaque),
+                     couchbase::core::utils::network_to_host(header->cas));
   }
 };
 
@@ -652,7 +652,7 @@ class mcbp_session_impl
               CB_LOG_WARNING("{} unexpected server request: opcode={:x}, opaque={}{:a}{:a}",
                              session_->log_prefix_,
                              msg.header.opcode,
-                             utils::byte_swap(msg.header.opaque),
+                             utils::network_to_host(msg.header.opaque),
                              spdlog::to_hex(msg.header_data()),
                              spdlog::to_hex(msg.body));
           }
@@ -665,7 +665,7 @@ class mcbp_session_impl
                          session_->log_prefix_,
                          magic,
                          msg.header.opcode,
-                         utils::byte_swap(msg.header.opaque),
+                         utils::network_to_host(msg.header.opaque),
                          spdlog::to_hex(msg.header_data()),
                          spdlog::to_hex(msg.body));
           break;
@@ -772,7 +772,7 @@ class mcbp_session_impl
             case protocol::client_opcode::subdoc_multi_lookup:
             case protocol::client_opcode::subdoc_multi_mutation:
             case protocol::client_opcode::sasl_auth: {
-              const std::uint16_t status = utils::byte_swap(msg.header.specific);
+              const std::uint16_t status = utils::network_to_host(msg.header.specific);
               if (status == static_cast<std::uint16_t>(key_value_status_code::not_my_vbucket)) {
                 session_->handle_not_my_vbucket(msg);
               }
@@ -780,12 +780,12 @@ class mcbp_session_impl
                 CB_LOG_WARNING("{} received auth stale status for {}, opaque={}",
                                session_->log_prefix_,
                                protocol::client_opcode(msg.header.opcode),
-                               utils::byte_swap(msg.header.opaque));
+                               utils::network_to_host(msg.header.opaque));
                 session_->stop(retry_reason::do_not_retry);
                 return;
               }
 
-              std::uint32_t opaque = utils::byte_swap(msg.header.opaque);
+              std::uint32_t opaque = utils::network_to_host(msg.header.opaque);
               if (session_->handle_request(opcode, status, opaque, std::move(msg))) {
                 CB_LOG_TRACE("{} MCBP invoked operation handler: opcode={}, opaque={}, status={}",
                              session_->log_prefix_,
@@ -1866,7 +1866,7 @@ public:
       auto magic = static_cast<protocol::magic>(msg.header.magic);
       const std::uint8_t extras_size = msg.header.extlen;
       std::uint8_t framing_extras_size = 0;
-      std::uint16_t key_size = utils::byte_swap(msg.header.keylen);
+      std::uint16_t key_size = utils::network_to_host(msg.header.keylen);
       if (magic == protocol::magic::alt_client_response) {
         framing_extras_size = static_cast<std::uint8_t>(msg.header.keylen >> 8U);
         key_size = msg.header.keylen & 0xffU;
@@ -1874,7 +1874,7 @@ public:
 
       const std::vector<std::uint8_t>::difference_type offset =
         framing_extras_size + key_size + extras_size;
-      if (utils::byte_swap(msg.header.bodylen) - offset > 0) {
+      if (utils::network_to_host(msg.header.bodylen) - offset > 0) {
         std::string_view config_text{ reinterpret_cast<const char*>(msg.body.data()) + offset,
                                       msg.body.size() - static_cast<std::size_t>(offset) };
         if (origin_.options().dump_configuration) {
@@ -1892,7 +1892,7 @@ public:
           "{} received not_my_vbucket status for {}, opaque={} with config rev={} in the payload",
           log_prefix_,
           protocol::client_opcode(msg.header.opcode),
-          utils::byte_swap(msg.header.opaque),
+          utils::network_to_host(msg.header.opaque),
           config.rev_str());
         update_configuration(std::move(config));
       }

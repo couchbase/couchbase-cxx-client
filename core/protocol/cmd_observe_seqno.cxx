@@ -45,32 +45,32 @@ observe_seqno_response_body::parse(key_value_status_code status,
     ++offset;
 
     memcpy(&partition_id_, body.data() + offset, sizeof(partition_id_));
-    partition_id_ = utils::byte_swap(partition_id_);
+    partition_id_ = utils::network_to_host(partition_id_);
     offset += static_cast<offset_type>(sizeof(partition_id_));
 
     memcpy(&partition_uuid_, body.data() + offset, sizeof(partition_uuid_));
-    partition_uuid_ = utils::byte_swap(partition_uuid_);
+    partition_uuid_ = utils::network_to_host(partition_uuid_);
     offset += static_cast<offset_type>(sizeof(partition_uuid_));
 
     memcpy(&last_persisted_sequence_number_,
            body.data() + offset,
            sizeof(last_persisted_sequence_number_));
-    last_persisted_sequence_number_ = utils::byte_swap(last_persisted_sequence_number_);
+    last_persisted_sequence_number_ = utils::network_to_host(last_persisted_sequence_number_);
     offset += static_cast<offset_type>(sizeof(last_persisted_sequence_number_));
 
     memcpy(&current_sequence_number_, body.data() + offset, sizeof(current_sequence_number_));
-    current_sequence_number_ = utils::byte_swap(current_sequence_number_);
+    current_sequence_number_ = utils::network_to_host(current_sequence_number_);
     offset += static_cast<offset_type>(sizeof(current_sequence_number_));
 
     if (failover) {
       std::uint64_t field{};
 
       memcpy(&field, body.data() + offset, sizeof(field));
-      old_partition_uuid_.emplace(utils::byte_swap(field));
+      old_partition_uuid_.emplace(utils::network_to_host(field));
       offset += static_cast<offset_type>(sizeof(field));
 
       memcpy(&field, body.data() + offset, sizeof(field));
-      last_received_sequence_number_.emplace(utils::byte_swap(field));
+      last_received_sequence_number_.emplace(utils::network_to_host(field));
     }
   }
   return false;
@@ -89,7 +89,7 @@ observe_seqno_request_body::fill_body()
 
   value_.resize(sizeof(std::uint64_t));
 
-  std::uint64_t field = utils::byte_swap(partition_uuid_);
+  std::uint64_t field = utils::host_to_network(partition_uuid_);
   memcpy(value_.data() + offset, &field, sizeof(field));
 }
 } // namespace couchbase::core::protocol

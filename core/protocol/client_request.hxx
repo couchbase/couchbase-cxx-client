@@ -63,7 +63,7 @@ public:
 
   void opaque(std::uint32_t val)
   {
-    opaque_ = utils::byte_swap(val);
+    opaque_ = utils::host_to_network(val);
   }
 
   void datatype(protocol::datatype val)
@@ -73,12 +73,12 @@ public:
 
   void cas(couchbase::cas val)
   {
-    cas_ = utils::byte_swap(val.value());
+    cas_ = utils::host_to_network(val.value());
   }
 
   [[nodiscard]] auto opaque() const -> std::uint32_t
   {
-    return utils::byte_swap(opaque_);
+    return utils::network_to_host(opaque_);
   }
 
   void opcode(client_opcode val)
@@ -148,7 +148,7 @@ private:
 
     std::uint16_t key_size = gsl::narrow_cast<std::uint16_t>(key.size());
     if (framing_extras.size() == 0) {
-      key_size = utils::byte_swap(key_size);
+      key_size = utils::host_to_network(key_size);
       memcpy(payload.data() + 2, &key_size, sizeof(key_size));
     } else {
       magic_ = protocol::magic::alt_client_request;
@@ -162,10 +162,11 @@ private:
 
     payload[5] = static_cast<std::byte>(datatype_);
 
-    std::uint16_t vbucket = utils::byte_swap(gsl::narrow_cast<std::uint16_t>(partition_));
+    std::uint16_t vbucket = utils::host_to_network(gsl::narrow_cast<std::uint16_t>(partition_));
     memcpy(payload.data() + 6, &vbucket, sizeof(vbucket));
 
-    std::uint32_t body_size = utils::byte_swap(gsl::narrow_cast<std::uint32_t>(body_size_bytes));
+    std::uint32_t body_size =
+      utils::host_to_network(gsl::narrow_cast<std::uint32_t>(body_size_bytes));
     memcpy(payload.data() + 8, &body_size, sizeof(body_size));
 
     memcpy(payload.data() + 12, &opaque_, sizeof(opaque_));
@@ -183,11 +184,11 @@ private:
       if (auto [compressed, new_value_size] = compress_value(value, body_itr); compressed) {
         /* the compressed value meets requirements and was copied to the payload */
         protocol::set_flag(payload[5], protocol::datatype::snappy);
-        std::uint32_t new_body_size = utils::byte_swap(body_size) -
+        std::uint32_t new_body_size = utils::network_to_host(body_size) -
                                       gsl::narrow_cast<std::uint32_t>(value.size()) +
                                       new_value_size;
         payload.resize(header_size + new_body_size);
-        new_body_size = utils::byte_swap(new_body_size);
+        new_body_size = utils::host_to_network(new_body_size);
         memcpy(payload.data() + 8, &new_body_size, sizeof(new_body_size));
         return payload;
       }

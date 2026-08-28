@@ -571,9 +571,9 @@ TEST_CASE("integration: subdoc with public API", "[integration]")
     REQUIRE(resp.exists(0));
     REQUIRE(resp.exists("my_cas"));
     REQUIRE(resp.content_as<std::string>(0) ==
-            fmt::format("0x{:016x}", couchbase::core::utils::byte_swap(cas.value())));
+            fmt::format("0x{:016x}", couchbase::core::utils::reverse_bytes(cas.value())));
     REQUIRE(resp.content_as<std::string>("my_cas") ==
-            fmt::format("0x{:016x}", couchbase::core::utils::byte_swap(cas.value())));
+            fmt::format("0x{:016x}", couchbase::core::utils::reverse_bytes(cas.value())));
 
     REQUIRE_FALSE(resp.exists(1));
     REQUIRE_FALSE(resp.exists("birth_year"));

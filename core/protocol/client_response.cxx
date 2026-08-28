@@ -44,7 +44,7 @@ parse_server_duration_us(const io::mcbp_message& msg) -> double
       if (frame_size == 2 && framing_extras_size - offset >= frame_size) {
         std::uint16_t encoded_duration{};
         std::memcpy(&encoded_duration, msg.body.data() + offset, sizeof(encoded_duration));
-        encoded_duration = utils::byte_swap(encoded_duration);
+        encoded_duration = utils::network_to_host(encoded_duration);
         return std::pow(encoded_duration, 1.74) / 2;
       }
     }

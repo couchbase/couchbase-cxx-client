@@ -27,7 +27,6 @@
 #include "internal/utils.hxx"
 
 #include "core/operations.hxx"
-#include "core/utils/byteswap.hxx"
 
 #include <couchbase/fmt/transaction_keyspace.hxx>
 
@@ -64,28 +63,6 @@ transactions_cleanup::transactions_cleanup(
 
 namespace
 {
-/**
- * ${Mutation.CAS} is written by kvengine with
- * 'macroToString(htonll(info.cas))'.  Discussed this with KV team and, though
- * there is consensus that this is off (htonll is definitely wrong, and a string
- * is an odd choice), there are clients (SyncGateway) that consume the current
- * string, so it can't be changed.  Note that only little-endian servers are
- * supported for Couchbase, so the 8 byte long inside the string will always be
- * little-endian ordered.
- *
- * Looks like: "0x000058a71dd25c15"
- * Want:        0x155CD21DA7580000   (1539336197457313792 in base10, an epoch
- * time in millionths of a second)
- */
-auto
-parse_mutation_cas(const std::string& cas) -> std::uint64_t
-{
-  if (cas.empty()) {
-    return 0;
-  }
-  return core::utils::byte_swap(std::stoull(cas, nullptr, 16)) / 1000000;
-}
-
 // TODO(CXXCBC-549)
 const std::string CLIENT_RECORD_DOC_ID = "_txn:client-record"; // NOLINT(cert-err58-cpp)
 } // namespace

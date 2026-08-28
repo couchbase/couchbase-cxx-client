@@ -30,40 +30,6 @@
 
 namespace couchbase::core::transactions
 {
-/**
- * ${Mutation.CAS} is written by kvengine with
- * 'macroToString(htonll(info.cas))'.  Discussed this with KV team and, though
- * there is consensus that this is off (htonll is definitely wrong, and a string
- * is an odd choice), there are clients (SyncGateway) that consume the current
- * string, so it can't be changed.  Note that only little-endian servers are
- * supported for Couchbase, so the 8 byte long inside the string will always be
- * little-endian ordered.
- *
- * Looks like: "0x000058a71dd25c15"
- * Want:        0x155CD21DA7580000   (1539336197457313792 in base10, an epoch
- * time in millionths of a second)
- *
- * returns epoch time in ms
- */
-auto
-parse_mutation_cas(const std::string& cas) -> std::uint64_t
-{
-  if (cas.empty()) {
-    return 0;
-  }
-
-  std::uint64_t val = stoull(cas, nullptr, 16);
-  /* byteswap */
-  std::size_t ii = 0;
-  std::uint64_t ret = 0;
-  for (ii = 0; ii < sizeof(std::uint64_t); ii++) {
-    ret <<= 8ULL;
-    ret |= val & 0xffULL;
-    val >>= 8ULL;
-  }
-  return ret / 1000000;
-}
-
 auto
 process_document_ids(const tao::json::value& entry,
                      const std::string& key) -> std::optional<std::vector<doc_record>>
