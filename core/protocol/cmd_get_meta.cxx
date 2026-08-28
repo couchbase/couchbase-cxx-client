@@ -40,19 +40,19 @@ get_meta_response_body::parse(key_value_status_code status,
     if (extras_size == sizeof(deleted_) + sizeof(flags_) + sizeof(expiry_) +
                          sizeof(sequence_number_) + sizeof(datatype_)) {
       memcpy(&deleted_, body.data() + offset, sizeof(deleted_));
-      deleted_ = utils::byte_swap(deleted_);
+      deleted_ = utils::network_to_host(deleted_);
       offset += 4;
 
       memcpy(&flags_, body.data() + offset, sizeof(flags_));
-      flags_ = utils::byte_swap(flags_);
+      flags_ = utils::network_to_host(flags_);
       offset += 4;
 
       memcpy(&expiry_, body.data() + offset, sizeof(expiry_));
-      expiry_ = utils::byte_swap(expiry_);
+      expiry_ = utils::network_to_host(expiry_);
       offset += 4;
 
       memcpy(&sequence_number_, body.data() + offset, sizeof(sequence_number_));
-      sequence_number_ = utils::byte_swap(sequence_number_);
+      sequence_number_ = utils::network_to_host(sequence_number_);
       offset += 8;
 
       datatype_ = std::to_integer<std::uint8_t>(body[static_cast<std::size_t>(offset)]);

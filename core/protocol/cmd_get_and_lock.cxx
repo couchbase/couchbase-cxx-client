@@ -38,7 +38,7 @@ get_and_lock_response_body::parse(key_value_status_code status,
     std::vector<std::uint8_t>::difference_type offset = framing_extras_size;
     if (extras_size == 4) {
       memcpy(&flags_, body.data() + offset, sizeof(flags_));
-      flags_ = utils::byte_swap(flags_);
+      flags_ = utils::network_to_host(flags_);
       offset += 4;
     } else {
       offset += extras_size;
@@ -60,7 +60,7 @@ void
 get_and_lock_request_body::fill_extras()
 {
   extras_.resize(sizeof(lock_time_));
-  std::uint32_t field = utils::byte_swap(lock_time_);
+  std::uint32_t field = utils::host_to_network(lock_time_);
   memcpy(extras_.data(), &field, sizeof(field));
 }
 } // namespace couchbase::core::protocol

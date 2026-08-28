@@ -47,7 +47,7 @@ void
 touch_request_body::expiry(std::uint32_t seconds)
 {
   extras_.resize(sizeof(seconds));
-  seconds = utils::byte_swap(seconds);
+  seconds = utils::host_to_network(seconds);
   memcpy(extras_.data(), &seconds, sizeof(seconds));
 }
 } // namespace couchbase::core::protocol

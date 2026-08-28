@@ -152,7 +152,7 @@ public:
 
     std::uint16_t status = 0;
     memcpy(&status, header_.data() + 6, sizeof(status));
-    status = utils::byte_swap(status);
+    status = utils::network_to_host(status);
     status_ = static_cast<key_value_status_code>(status);
 
     extras_size_ = std::to_integer<std::uint8_t>(header_[4]);
@@ -161,19 +161,19 @@ public:
       key_size_ = std::to_integer<std::uint8_t>(header_[3]);
     } else {
       memcpy(&key_size_, header_.data() + 2, sizeof(key_size_));
-      key_size_ = utils::byte_swap(key_size_);
+      key_size_ = utils::network_to_host(key_size_);
     }
 
     std::uint32_t field = 0;
     memcpy(&field, header_.data() + 8, sizeof(field));
-    body_size_ = utils::byte_swap(field);
+    body_size_ = utils::network_to_host(field);
     data_.resize(body_size_);
 
     memcpy(&opaque_, header_.data() + 12, sizeof(opaque_));
-    opaque_ = utils::byte_swap(opaque_);
+    opaque_ = utils::network_to_host(opaque_);
 
     memcpy(&cas_, header_.data() + 16, sizeof(cas_));
-    cas_ = utils::byte_swap(cas_);
+    cas_ = utils::network_to_host(cas_);
   }
 
   [[nodiscard]] auto error_info() const -> std::optional<key_value_extended_error_info>
@@ -221,7 +221,7 @@ public:
           frame_size == 2 && framing_extras_size_ - offset >= frame_size) {
         std::uint16_t encoded_duration{};
         std::memcpy(&encoded_duration, data_.data() + offset, sizeof(encoded_duration));
-        encoded_duration = utils::byte_swap(encoded_duration);
+        encoded_duration = utils::network_to_host(encoded_duration);
         info_.server_duration_us = std::pow(encoded_duration, 1.74) / 2;
       }
       offset += frame_size;

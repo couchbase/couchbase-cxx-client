@@ -294,7 +294,7 @@ private:
                 self->deadline_.cancel();
                 return self->handler_({ ec3 });
               }
-              self->recv_buf_size_ = utils::byte_swap(self->recv_buf_size_);
+              self->recv_buf_size_ = utils::network_to_host(self->recv_buf_size_);
               self->recv_buf_.resize(self->recv_buf_size_);
               CB_LOG_DEBUG("DNS TCP schedule read of {} bytes", self->recv_buf_size_);
               asio::async_read(

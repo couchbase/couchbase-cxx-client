@@ -26,7 +26,7 @@ namespace couchbase::core::io
 auto
 binary_header::status() const -> std::uint16_t
 {
-  return utils::byte_swap(specific);
+  return utils::network_to_host(specific);
 }
 
 auto

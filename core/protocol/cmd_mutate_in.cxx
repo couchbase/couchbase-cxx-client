@@ -44,12 +44,12 @@ mutate_in_response_body::parse(key_value_status_code status,
     if (extras_size == 16) {
       std::uint64_t partition_uuid{};
       memcpy(&partition_uuid, body.data() + offset, sizeof(partition_uuid));
-      partition_uuid = utils::byte_swap(partition_uuid);
+      partition_uuid = utils::network_to_host(partition_uuid);
       offset += 8;
 
       std::uint64_t sequence_number{};
       memcpy(&sequence_number, body.data() + offset, sizeof(sequence_number));
-      sequence_number = utils::byte_swap(sequence_number);
+      sequence_number = utils::network_to_host(sequence_number);
 
       token_ = couchbase::utils::build_mutation_token(partition_uuid, sequence_number);
       offset += 8;
@@ -66,7 +66,7 @@ mutate_in_response_body::parse(key_value_status_code status,
 
       std::uint16_t entry_status = 0;
       memcpy(&entry_status, body.data() + offset, sizeof(entry_status));
-      entry_status = utils::byte_swap(entry_status);
+      entry_status = utils::network_to_host(entry_status);
       Expects(is_valid_status(entry_status));
       field.status = static_cast<key_value_status_code>(entry_status);
       offset += static_cast<offset_type>(sizeof(entry_status));
@@ -74,7 +74,7 @@ mutate_in_response_body::parse(key_value_status_code status,
       if (field.status == key_value_status_code::success) {
         std::uint32_t entry_size = 0;
         memcpy(&entry_size, body.data() + offset, sizeof(entry_size));
-        entry_size = utils::byte_swap(entry_size);
+        entry_size = utils::network_to_host(entry_size);
         Expects(entry_size < 20 * 1024 * 1024);
         offset += static_cast<offset_type>(sizeof(entry_size));
 
@@ -117,13 +117,13 @@ mutate_in_request_body::fill_extras()
 {
   if (expiry_ != 0 || user_flags_) {
     extras_.resize(sizeof(expiry_));
-    std::uint32_t field = utils::byte_swap(expiry_);
+    std::uint32_t field = utils::host_to_network(expiry_);
     memcpy(extras_.data(), &field, sizeof(field));
   }
   if (user_flags_) {
     const std::size_t offset = extras_.size();
     extras_.resize(offset + sizeof(std::uint32_t));
-    std::uint32_t field = utils::byte_swap(user_flags_.value());
+    std::uint32_t field = utils::host_to_network(user_flags_.value());
     memcpy(extras_.data() + offset, &field, sizeof(field));
   }
   if (flags_ != std::uint8_t{ 0U }) {
@@ -150,12 +150,13 @@ mutate_in_request_body::fill_value()
     value_[offset] = spec.flags_;
     ++offset;
 
-    std::uint16_t path_size = utils::byte_swap(gsl::narrow_cast<std::uint16_t>(spec.path_.size()));
+    std::uint16_t path_size =
+      utils::host_to_network(gsl::narrow_cast<std::uint16_t>(spec.path_.size()));
     std::memcpy(value_.data() + offset, &path_size, sizeof(path_size));
     offset += sizeof(path_size);
 
     std::uint32_t param_size =
-      utils::byte_swap(gsl::narrow_cast<std::uint32_t>(spec.value_.size()));
+      utils::host_to_network(gsl::narrow_cast<std::uint32_t>(spec.value_.size()));
     std::memcpy(value_.data() + offset, &param_size, sizeof(param_size));
     offset += sizeof(param_size);
 

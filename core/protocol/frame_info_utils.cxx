@@ -39,7 +39,7 @@ add_durability_frame_info(std::vector<std::byte>& framing_extras,
     framing_extras.resize(extras_old_size + 1 + static_cast<std::size_t>(frame_size));
     framing_extras[extras_old_size + 0] = (frame_id << 4U) | frame_size;
     framing_extras[extras_old_size + 1] = static_cast<std::byte>(level);
-    std::uint16_t val = utils::byte_swap(*timeout);
+    std::uint16_t val = utils::host_to_network(*timeout);
     memcpy(framing_extras.data() + extras_old_size + 2, &val, sizeof(val));
   } else {
     const std::byte frame_size{ 1 /* 1 for level */ };

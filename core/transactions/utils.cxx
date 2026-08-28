@@ -20,6 +20,7 @@
 #include "core/operations/document_lookup_in.hxx"
 #include "core/operations/management/bucket_get_all.hxx"
 #include "core/transactions/error_class.hxx"
+#include "core/utils/byteswap.hxx"
 
 #include <couchbase/collection.hxx>
 #include <couchbase/scope.hxx>
@@ -51,6 +52,15 @@ now_ns_from_vbucket(const tao::json::value& vbucket) -> std::uint64_t
 {
   const std::string now_str = vbucket.at("HLC").at("now").get_string();
   return stoull(now_str, nullptr, 10) * 1000000000;
+}
+
+auto
+parse_mutation_cas(const std::string& cas) -> std::uint64_t
+{
+  if (cas.empty()) {
+    return 0;
+  }
+  return core::utils::reverse_bytes(std::stoull(cas, nullptr, 16)) / 1000000;
 }
 
 void

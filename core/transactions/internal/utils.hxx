@@ -47,6 +47,25 @@ namespace transactions
 std::uint64_t
 now_ns_from_vbucket(const tao::json::value& vbucket);
 
+/**
+ * ${Mutation.CAS} is written by kvengine with 'macroToString(htonll(info.cas))'. Discussed this
+ * with the KV team and, though there is consensus that this is off (htonll is definitely wrong,
+ * and a string is an odd choice), there are clients (SyncGateway) that consume the current
+ * string, so it can't be changed.
+ *
+ * The byte order inside that string is therefore fixed by the server, whatever host reads it,
+ * so recovering the value needs an unconditional reversal rather than a network-to-host
+ * conversion. See core::utils::reverse_bytes.
+ *
+ * Looks like: "0x000058a71dd25c15"
+ * Want:        0x155CD21DA7580000  (1539336197457313792 in base10, an epoch time in
+ *                                   nanoseconds)
+ *
+ * @return epoch time in milliseconds, or 0 for an empty string
+ */
+std::uint64_t
+parse_mutation_cas(const std::string& cas);
+
 std::string
 jsonify(const tao::json::value& obj);
 

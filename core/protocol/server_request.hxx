@@ -104,7 +104,7 @@ public:
 
     std::uint32_t field = 0;
     memcpy(&field, header_.data() + 8, sizeof(field));
-    body_size_ = utils::byte_swap(field);
+    body_size_ = utils::network_to_host(field);
     data_.resize(body_size_);
 
     memcpy(&opaque_, header_.data() + 12, sizeof(opaque_));

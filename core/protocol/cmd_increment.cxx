@@ -43,19 +43,19 @@ increment_response_body::parse(key_value_status_code status,
     if (extras_size == 16) {
       std::uint64_t partition_uuid{};
       memcpy(&partition_uuid, body.data() + offset, sizeof(partition_uuid));
-      partition_uuid = utils::byte_swap(partition_uuid);
+      partition_uuid = utils::network_to_host(partition_uuid);
       offset += 8;
 
       std::uint64_t sequence_number{};
       memcpy(&sequence_number, body.data() + offset, sizeof(sequence_number));
-      sequence_number = utils::byte_swap(sequence_number);
+      sequence_number = utils::network_to_host(sequence_number);
 
       token_ = couchbase::utils::build_mutation_token(partition_uuid, sequence_number);
       offset += 8;
     }
     offset += key_size;
     memcpy(&content_, body.data() + offset, sizeof(content_));
-    content_ = utils::byte_swap(content_);
+    content_ = utils::network_to_host(content_);
     return true;
   }
   return false;
@@ -84,15 +84,15 @@ increment_request_body::fill_extras()
   using offset_type = std::vector<std::byte>::difference_type;
   offset_type offset = 0;
 
-  std::uint64_t num = utils::byte_swap(delta_);
+  std::uint64_t num = utils::host_to_network(delta_);
   memcpy(extras_.data() + offset, &num, sizeof(num));
   offset += static_cast<offset_type>(sizeof(delta_));
 
-  num = utils::byte_swap(initial_value_);
+  num = utils::host_to_network(initial_value_);
   memcpy(extras_.data() + offset, &num, sizeof(num));
   offset += static_cast<offset_type>(sizeof(initial_value_));
 
-  std::uint32_t ttl = utils::byte_swap(expiry_);
+  std::uint32_t ttl = utils::host_to_network(expiry_);
   memcpy(extras_.data() + offset, &ttl, sizeof(ttl));
 }
 } // namespace couchbase::core::protocol

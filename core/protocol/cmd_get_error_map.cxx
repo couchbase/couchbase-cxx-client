@@ -56,7 +56,7 @@ get_error_map_response_body::parse(key_value_status_code status,
 void
 get_error_map_request_body::fill_body()
 {
-  std::uint16_t version = utils::byte_swap(version_);
+  std::uint16_t version = utils::host_to_network(version_);
   value_.resize(sizeof(version));
   std::memcpy(value_.data(), &version, sizeof(version));
 }

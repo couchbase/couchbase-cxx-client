@@ -42,12 +42,12 @@ insert_response_body::parse(key_value_status_code status,
     if (extras_size == 16) {
       std::uint64_t partition_uuid{};
       memcpy(&partition_uuid, body.data() + offset, sizeof(partition_uuid));
-      partition_uuid = utils::byte_swap(partition_uuid);
+      partition_uuid = utils::network_to_host(partition_uuid);
       offset += 8;
 
       std::uint64_t sequence_number{};
       memcpy(&sequence_number, body.data() + offset, sizeof(sequence_number));
-      sequence_number = utils::byte_swap(sequence_number);
+      sequence_number = utils::network_to_host(sequence_number);
 
       token_ = couchbase::utils::build_mutation_token(partition_uuid, sequence_number);
       return true;
@@ -74,10 +74,10 @@ insert_request_body::fill_extras()
 {
   extras_.resize(sizeof(flags_) + sizeof(expiry_));
 
-  std::uint32_t field = utils::byte_swap(flags_);
+  std::uint32_t field = utils::host_to_network(flags_);
   memcpy(extras_.data(), &field, sizeof(field));
 
-  field = utils::byte_swap(expiry_);
+  field = utils::host_to_network(expiry_);
   memcpy(extras_.data() + sizeof(flags_), &field, sizeof(field));
 }
 } // namespace couchbase::core::protocol
