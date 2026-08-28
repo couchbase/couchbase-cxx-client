@@ -1868,8 +1868,9 @@ public:
       std::uint8_t framing_extras_size = 0;
       std::uint16_t key_size = utils::network_to_host(msg.header.keylen);
       if (magic == protocol::magic::alt_client_response) {
-        framing_extras_size = static_cast<std::uint8_t>(msg.header.keylen >> 8U);
-        key_size = msg.header.keylen & 0xffU;
+        const auto sizes = msg.header.alt_sizes();
+        framing_extras_size = sizes.framing_extras;
+        key_size = sizes.key;
       }
 
       const std::vector<std::uint8_t>::difference_type offset =

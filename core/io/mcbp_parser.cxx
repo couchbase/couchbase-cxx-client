@@ -47,9 +47,9 @@ mcbp_parser::next(mcbp_message& msg) -> mcbp_parser::result
   std::uint32_t key_size = utils::network_to_host(msg.header.keylen);
   std::uint32_t prefix_size = static_cast<std::uint32_t>(msg.header.extlen) + key_size;
   if (msg.header.magic == static_cast<std::uint8_t>(protocol::magic::alt_client_response)) {
-    const std::uint8_t framing_extras_size = msg.header.keylen & 0xffU;
-    key_size = static_cast<std::uint32_t>(msg.header.keylen >> 8U);
-    prefix_size = static_cast<std::uint32_t>(framing_extras_size) +
+    const auto sizes = msg.header.alt_sizes();
+    key_size = sizes.key;
+    prefix_size = static_cast<std::uint32_t>(sizes.framing_extras) +
                   static_cast<std::uint32_t>(msg.header.extlen) + key_size;
   }
   // The prefix (framing extras + extras + key) must lie within the body that

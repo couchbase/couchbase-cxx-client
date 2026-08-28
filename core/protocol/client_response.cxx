@@ -19,6 +19,7 @@
 
 #include "core/utils/json.hxx"
 
+#include <cstddef>
 #include <cstring>
 #include <gsl/assert>
 #include <tao/json/value.hpp>
@@ -31,8 +32,15 @@ parse_server_duration_us(const io::mcbp_message& msg) -> double
   if (msg.header.magic != static_cast<std::uint8_t>(magic::alt_client_response)) {
     return 0;
   }
-  auto framing_extras_size = static_cast<std::uint8_t>(msg.header.keylen & 0xfU);
-  if (framing_extras_size == 0) {
+  // Byte 2 of the header, read as a byte. `keylen` holds the wire bytes untouched, so masking it
+  // as a native integer reads byte 2 on a little-endian host and byte 3 -- the key length -- on a
+  // big-endian one. The mask also truncated the field to its low nibble: four bits is the length
+  // of one frame inside the region, not the length of the region, which may exceed 15 bytes.
+  const auto framing_extras_size = msg.header.alt_sizes().framing_extras;
+  // A region the body cannot hold is a malformed response, not a duration: the loop below walks
+  // to framing_extras_size without consulting the body again, and the nibble mask was the only
+  // thing that had been keeping it near the front of the buffer.
+  if (framing_extras_size == 0 || std::size_t{ framing_extras_size } > msg.body.size()) {
     return 0;
   }
   std::size_t offset = 0;
