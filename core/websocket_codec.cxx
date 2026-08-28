@@ -16,6 +16,7 @@
 #include "websocket_codec.hxx"
 
 #include "core/crypto/cbcrypto.h"
+#include "core/mcbp/big_endian.hxx"
 #include "core/platform/base64.h"
 #include "core/platform/random.h"
 
@@ -25,7 +26,6 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
-#include <cstring>
 #include <map>
 #include <optional>
 #include <random>
@@ -457,32 +457,6 @@ encode_payload_length(std::size_t length) -> std::vector<std::byte>
 }
 
 auto
-decode_uint64(gsl::span<std::byte> data) -> std::uint64_t
-{
-  std::uint64_t result{};
-  std::memcpy(&result, data.data(), sizeof(result));
-
-  return                                  //
-    (result & 0x00000000000000FF) << 56 | //
-    (result & 0x000000000000FF00) << 40 | //
-    (result & 0x0000000000FF0000) << 24 | //
-    (result & 0x00000000FF000000) << 8 |  //
-    (result & 0x000000FF00000000) >> 8 |  //
-    (result & 0x0000FF0000000000) >> 24 | //
-    (result & 0x00FF000000000000) >> 40 | //
-    (result & 0xFF00000000000000) >> 56;
-}
-
-auto
-decode_uint16(gsl::span<std::byte> data) -> std::uint16_t
-{
-  std::uint16_t result{};
-  std::memcpy(&result, data.data(), sizeof(result));
-
-  return static_cast<std::uint16_t>(result << 8 | result >> 8);
-}
-
-auto
 decode_frame(gsl::span<std::byte> data, bool expected_continuation) -> decode_status
 {
   auto first_byte = static_cast<std::uint8_t>(data[0]);
@@ -519,7 +493,7 @@ decode_frame(gsl::span<std::byte> data, bool expected_continuation) -> decode_st
         return need_more_data{};
       }
       header_length = 10;
-      payload_length = decode_uint64(data.subspan(2, sizeof(std::uint64_t)));
+      payload_length = mcbp::big_endian::read_uint64(data, 2);
       break;
 
     case 126:
@@ -527,7 +501,7 @@ decode_frame(gsl::span<std::byte> data, bool expected_continuation) -> decode_st
         return need_more_data{};
       }
       header_length = 4;
-      payload_length = decode_uint16(data.subspan(2, sizeof(std::uint16_t)));
+      payload_length = mcbp::big_endian::read_uint16(data, 2);
       break;
 
     default:

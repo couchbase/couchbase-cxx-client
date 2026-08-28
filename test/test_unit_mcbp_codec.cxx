@@ -166,6 +166,11 @@ TEST_CASE("unit: codec encode/decode round-trip for get request with collection 
   packet orig = make_request(client_opcode::get, 0x08);
   orig.key_ = { std::byte{ 'd' }, std::byte{ 'o' }, std::byte{ 'c' } };
   orig.vbucket_ = 7;
+  // Every byte distinct, so that a reordering of either field is visible rather than being
+  // masked by a symmetric value. These two are what carry read_uint32 and read_uint64 through
+  // the decode side; vbucket_ above does the same for read_uint16.
+  orig.opaque_ = 0x01020304;
+  orig.cas_ = 0x0102030405060708;
 
   auto encoded = c.encode_packet(orig);
   REQUIRE(encoded.has_value());
@@ -176,5 +181,7 @@ TEST_CASE("unit: codec encode/decode round-trip for get request with collection 
   CHECK(decoded.command_ == client_opcode::get);
   CHECK(decoded.collection_id_ == 0x08);
   CHECK(decoded.vbucket_ == 7);
+  CHECK(decoded.opaque_ == 0x01020304);
+  CHECK(decoded.cas_ == 0x0102030405060708);
   CHECK(decoded.key_ == orig.key_);
 }
