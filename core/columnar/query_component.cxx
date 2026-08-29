@@ -78,6 +78,12 @@ public:
     }
   }
 
+  auto clear_callback()
+  {
+    const std::scoped_lock lock{ callback_mutex_ };
+    callback_ = nullptr;
+  }
+
   auto dispatch() -> error
   {
     auto op = http_.do_http_request(
@@ -158,7 +164,9 @@ public:
 #else
     return_error.ec = op.error();
 #endif
-    invoke_callback({}, return_error);
+
+    clear_callback();
+
     return return_error;
   }
 
