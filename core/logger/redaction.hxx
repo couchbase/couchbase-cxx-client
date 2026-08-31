@@ -44,7 +44,11 @@
  * a value inside it. A tag written into a JSON string value is read back as part of that value by
  * anything that parses the line, and some of what this SDK logs has a shape other tools consume --
  * SDK RFC 0067 fixes the threshold and orphan reports field by field. So the tag sits outside the
- * document, which leaves the document itself byte-identical:
+ * document. Note that the values inside are still escaped as described below, so this is no longer
+ * byte-identical. It is still safe for a consumer that parses the line, because both escapes are
+ * JSON's own: "\n" is how JSON spells a newline inside a string, where a literal one is illegal,
+ * and "\u003c" is a legal escape for "<". A parser therefore reconstructs the original value
+ * exactly, which is what SDK RFC 0067 consumers depend on:
  *
  *   CB_LOG_WARNING("Operations over threshold: {}",
  *                  logger::system_data(utils::json::generate(report)));
@@ -54,14 +58,24 @@
  * way, so what a coarse span costs is diagnosability, not protection. "None of it" is the other
  * legitimate answer, and it is the one the configuration dumps below take.
  *
- * A tagged value must never contain a newline. The tool that consumes these tags is line-oriented,
- * so a value that spans lines leaves its opening tag and its closing tag on different lines; the
- * tool reports an unmatched tag and passes the value through in clear text, which is the one
- * failure mode this whole mechanism exists to prevent. The wrappers escape newlines and carriage
- * returns to "\n" and "\r" while redaction is enabled, so no call site has to remember: the
- * values most likely to span lines are HTTP bodies and serialized documents, which is to say
- * exactly the ones that must not leak. The exclusion markers below escape nothing, because the
- * whole point of not_redacted() is to show the bytes as they are.
+ * Two things must never appear inside a tagged value, and the wrappers remove both while redaction
+ * is enabled, so that no call site has to remember.
+ *
+ * A newline. The tool that consumes these tags is line-oriented, so a value that spans lines leaves
+ * its opening tag and its closing tag on different lines; the tool reports an unmatched tag and
+ * passes the value through in clear text, which is the one failure mode this whole mechanism exists
+ * to prevent. Newlines and carriage returns become "\n" and "\r". The values most likely to span
+ * lines are HTTP bodies and serialized documents, which is to say exactly the ones that must not
+ * leak.
+ *
+ * A tag sequence. A value containing "</ud>" closes its own span early, and the rest of it is then
+ * outside any tag. This is not an attack -- whoever controls the value already knows it -- but it
+ * is a silent failure: an application whose document happens to contain one of these sequences
+ * hands out a log it believes was redacted. Only the "<" of such a sequence is escaped, and only
+ * when it really begins one, so ordinary markup in a logged body stays readable.
+ *
+ * The exclusion markers below escape neither, because the whole point of not_redacted() is to show
+ * the bytes as they are.
  *
  * One shape stays untagged for the opposite reason. A hex dump written with the "{:a}" spec
  * renders as a multi-line grid, so escaping would keep the tag intact but flatten the dump into a
@@ -113,7 +127,6 @@
 #include <spdlog/fmt/bundled/core.h>
 #include <spdlog/fmt/bundled/format.h>
 
-#include <algorithm>
 #include <cstddef>
 #include <string>
 #include <string_view>
@@ -238,14 +251,42 @@ enum class list_entries {
 namespace detail
 {
 /*
- * Replace the characters that would split a tagged value across log lines. The consumer of these
- * tags is line-oriented: an embedded newline leaves the opening tag and the closing tag on
- * different lines, and the value is then passed through untouched instead of being redacted.
+ * The tag sequences themselves, which must not survive inside a tagged value: a value carrying one
+ * would close its own span early, and whatever followed would sit outside any tag.
+ */
+inline constexpr std::string_view tag_sequences[]{
+  "<ud>", "</ud>", "<md>", "</md>", "<sd>", "</sd>",
+};
+
+constexpr auto
+opens_tag_sequence(std::string_view value) -> bool
+{
+  for (const auto sequence : tag_sequences) {
+    if (value.substr(0, sequence.size()) == sequence) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/*
+ * Replace what would otherwise break the span around a value.
+ *
+ * A newline splits it: the consumer of these tags is line-oriented, so an embedded newline leaves
+ * the opening tag and the closing tag on different lines, and the value is then passed through
+ * untouched instead of being redacted. A tag sequence inside the value closes the span early, with
+ * the same result for whatever follows it. Only the "<" of such a sequence is escaped, which is
+ * enough to break it; escaping it to "\<" would not be, because "\</ud>" still contains "</ud>".
+ *
+ * A "<" that does not begin a tag sequence is left alone, so ordinary markup in a logged body is
+ * still readable.
  */
 template<typename OutputIt>
 auto
 write_escaped(OutputIt out, std::string_view value) -> OutputIt
 {
+  // std::copy is deliberately not used here. fmt's appender does not satisfy MSVC's
+  // iterator_traits requirements, so std::copy over it fails to compile on Windows.
   std::size_t copied = 0;
   for (std::size_t index = 0; index < value.size(); ++index) {
     std::string_view replacement{};
@@ -256,15 +297,19 @@ write_escaped(OutputIt out, std::string_view value) -> OutputIt
       case '\r':
         replacement = "\\r";
         break;
+      case '<':
+        if (!opens_tag_sequence(value.substr(index))) {
+          continue;
+        }
+        replacement = "\\u003c";
+        break;
       default:
         continue;
     }
-    const auto begin = value.begin() + static_cast<std::ptrdiff_t>(copied);
-    out = std::copy(begin, value.begin() + static_cast<std::ptrdiff_t>(index), out);
-    out = std::copy(replacement.begin(), replacement.end(), out);
+    out = fmt::format_to(out, "{}{}", value.substr(copied, index - copied), replacement);
     copied = index + 1;
   }
-  return std::copy(value.begin() + static_cast<std::ptrdiff_t>(copied), value.end(), out);
+  return fmt::format_to(out, "{}", value.substr(copied));
 }
 
 template<typename Container, typename Wrap>
@@ -358,7 +403,12 @@ system_data_list(const Container& values,
         return fmt::formatter<T>::format(redacted.value, ctx);                                     \
       }                                                                                            \
       fmt::memory_buffer buffer;                                                                   \
-      fmt::basic_format_context<fmt::appender, char> buffered{ fmt::appender(buffer), {} };        \
+      /* The caller's arguments come along: a dynamic specification such as "{:{}}" resolves its   \
+       * width through the context, so an empty argument store would throw here while the          \
+       * unredacted branch worked. */                                                              \
+      fmt::basic_format_context<fmt::appender, char> buffered{ fmt::appender(buffer),              \
+                                                               ctx.args(),                         \
+                                                               ctx.locale() };                     \
       fmt::formatter<T>::format(redacted.value, buffered);                                         \
       ctx.advance_to(fmt::format_to(ctx.out(), "<" tag ">"));                                      \
       ctx.advance_to(couchbase::core::logger::detail::write_escaped(                               \

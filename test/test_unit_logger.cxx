@@ -300,12 +300,73 @@ TEST_CASE("unit: a conditionally tagged value is only tagged on the sensitive br
 
   // Tagging a constant hashes it to a fixed digest, which protects nothing and leaves a reader
   // unable to tell a value the SDK withheld from one the redaction tool replaced.
-  REQUIRE(fmt::format("body={}", logger::user_data_if(false, "[hidden]")) == "body=[hidden]");
-  REQUIRE(fmt::format("body={}", logger::user_data_if(true, "{\"a\":1}")) ==
-          R"(body=<ud>{"a":1}</ud>)");
+  //
+  // The values are typed rather than bare literals, matching what the call sites pass: cppcheck
+  // reads a string literal beside a bool parameter as a boolean conversion and reports it.
+  const std::string_view hidden{ "[hidden]" };
+  const std::string_view body{ R"({"a":1})" };
+  const std::string_view multi{ "one\ntwo" };
+
+  REQUIRE(fmt::format("body={}", logger::user_data_if(false, hidden)) == "body=[hidden]");
+  REQUIRE(fmt::format("body={}", logger::user_data_if(true, body)) == R"(body=<ud>{"a":1}</ud>)");
 
   // The tagged branch goes through the same formatter as user_data(), so it escapes identically.
-  REQUIRE(fmt::format("{}", logger::user_data_if(true, "one\ntwo")) == R"(<ud>one\ntwo</ud>)");
+  REQUIRE(fmt::format("{}", logger::user_data_if(true, multi)) == R"(<ud>one\ntwo</ud>)");
+}
+
+TEST_CASE("unit: a tagged value cannot close its own span", "[unit]")
+{
+  const scoped_log_redaction redaction{ true };
+  namespace logger = couchbase::core::logger;
+
+  // A value carrying a tag sequence would end its span early and leave the rest of itself outside
+  // any tag. Not an attack, since whoever controls the value already knows it, but a silent
+  // failure: an application whose document happens to contain one of these hands out a log it
+  // believes was redacted.
+  const std::string_view injected{ "</ud>secret<ud>" };
+
+  const auto tagged = fmt::format("key={}", logger::user_data(injected));
+  REQUIRE(tagged == R"(key=<ud>\u003c/ud>secret\u003cud></ud>)");
+
+  // The span has to be the only one, and it has to close exactly once, at the end.
+  REQUIRE(tagged.find("</ud>") == tagged.size() - 5);
+  REQUIRE(tagged.find("<ud>") == tagged.find("key=") + 4);
+
+  SECTION("markup that is not a tag sequence is left alone")
+  {
+    // Escaping every "<" would buy nothing here and would mangle any logged body carrying markup.
+    REQUIRE(fmt::format("{}", logger::user_data("<html><body>")) == "<ud><html><body></ud>");
+  }
+
+  SECTION("every category, and every entry of a list")
+  {
+    REQUIRE(fmt::format("{}", logger::metadata(injected)).find("</md>") ==
+            fmt::format("{}", logger::metadata(injected)).size() - 5);
+    REQUIRE(logger::user_data_list(std::vector<std::string_view>{ injected }) ==
+            R"(<ud>\u003c/ud>secret\u003cud></ud>)");
+  }
+}
+
+TEST_CASE("unit: a dynamic format specification still resolves inside a tag", "[unit]")
+{
+  namespace logger = couchbase::core::logger;
+
+  // The tagged branch formats through a second context, which has to carry the caller's arguments:
+  // a width given as "{:{}}" is looked up through the context, so without them this threw while
+  // the unredacted branch worked. Annotating a statement must not depend on the redaction level.
+  SECTION("while redaction is disabled")
+  {
+    const scoped_log_redaction redaction{ false };
+
+    REQUIRE(fmt::format("[{:{}}]", logger::metadata("ab"), 6) == "[ab    ]");
+  }
+
+  SECTION("while redaction is enabled")
+  {
+    const scoped_log_redaction redaction{ true };
+
+    REQUIRE(fmt::format("[{:{}}]", logger::metadata("ab"), 6) == "[<md>ab    </md>]");
+  }
 }
 
 TEST_CASE("unit: a serialised document carries no annotations of its own", "[unit]")

@@ -1899,11 +1899,14 @@ private:
   // for an application that enabled it directly.
   void apply_log_redaction() const
   {
-    if (!origin_.options().log_redaction) {
-      return;
+    if (origin_.options().log_redaction) {
+      logger::set_log_redaction(true);
     }
-    logger::set_log_redaction(true);
-    if (origin_.options().dump_configuration) {
+    // The warning has to test the state that is in effect rather than what this cluster asked for.
+    // Redaction is process-wide, so another cluster or a direct set_log_redaction() call may have
+    // turned it on, and a cluster opened with only dump_configuration would then write
+    // unannotated dumps into a redacted log without saying so.
+    if (origin_.options().dump_configuration && logger::is_log_redaction_enabled()) {
       CB_LOG_WARNING("log redaction is enabled, but so is dump_configuration: configuration dumps "
                      "are not annotated for redaction and may contain values that are annotated "
                      "elsewhere in the log");

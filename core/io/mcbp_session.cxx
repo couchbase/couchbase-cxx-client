@@ -276,15 +276,19 @@ class mcbp_session_impl
         hello_req.body().enable_mutation_tokens();
       }
       hello_req.opaque(session_->next_opaque());
-      auto user_agent = meta::user_agent_for_mcbp(
-        session_->client_id_, session_->id_, session_->origin_.options().user_agent_extra, 250);
+      const auto& user_agent_extra = session_->origin_.options().user_agent_extra;
+      auto user_agent =
+        meta::user_agent_for_mcbp(session_->client_id_, session_->id_, user_agent_extra, 250);
       hello_req.body().user_agent(user_agent);
       CB_LOG_DEBUG(
         "{} user_agent={}, requested_features=[{}]",
         session_->log_prefix_,
-        // a serialised JSON blob that folds in the application's user_agent_extra, so it is
-        // annotated as one span at the strictest category anything inside it could be.
-        logger::user_data(user_agent),
+        // The blob folds in the application's user_agent_extra, and that is the only user data it
+        // can hold: the rest is SDK, platform and TLS identity, and its "i" field is the client
+        // and session id that log_prefix_ already prints in the clear on this same line. So it is
+        // tagged only when there is an extra to protect, which keeps the version block readable in
+        // the logs support actually receives.
+        logger::user_data_if(!user_agent_extra.empty(), user_agent),
         // protocol feature names, not a document body
         logger::not_sensitive(utils::join_strings_fmt(hello_req.body().features(), ", ")));
       session_->write(hello_req.data());
