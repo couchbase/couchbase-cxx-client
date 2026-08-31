@@ -19,7 +19,8 @@
 # redaction helpers from core/logger/redaction.hxx, so an external tool can strip or hash them:
 #
 #   <ud> couchbase::core::logger::user_data()    document keys and bodies, query statements,
-#                                                usernames, e-mail addresses, xattrs
+#                                                usernames, e-mail addresses, xattrs, HTTP request
+#                                                paths, connection strings and user agents
 #   <md> couchbase::core::logger::metadata()     bucket / scope / collection names, index and
 #                                                design document names, cluster names
 #   <sd> couchbase::core::logger::system_data()  hostnames, IP addresses, ports, DNS topology
@@ -175,6 +176,9 @@ module LogAnnotations
       body payload content document doc
       xattr xattrs
       username user_name user email e_mail
+      user_agent user_agent_extra
+      connection_string
+      path
     ].freeze,
     "metadata" => %w[
       bucket bucket_name buckets
@@ -182,7 +186,7 @@ module LogAnnotations
       cluster_name server_group
       index_name design_document design_document_name ddoc ddoc_name view view_name
       replication_stream
-      name path
+      name
     ].freeze,
     "system_data" => %w[
       host hostname hosts hostnames
@@ -191,7 +195,7 @@ module LogAnnotations
       port ports remote_port local_port
       ip ip_address node nodes get_nodes node_address node_addresses get_node_addresses
       dns srv srv_record nameserver nameservers dns_server dns_servers
-      connection_string config_text
+      config_text
     ].freeze,
   }.freeze
 
@@ -652,6 +656,9 @@ module LogAnnotations
       CB_LOG_DEBUG("origin {}", logger::user_data(origin_.to_json()));
       CB_LOG_DEBUG("h={}, r={}", hostname, json::generate(report));
       CB_LOG_DEBUG("n={}", std::to_string(counter));
+      CB_LOG_DEBUG("path={}", encoded.path);
+      CB_LOG_DEBUG("cs={}", origin.connection_string());
+      CB_LOG_DEBUG("ua={}", user_agent);
       /* CB_LOG_DEBUG("host={}", hostname); */
       // CB_LOG_DEBUG("host={}", hostname);
     }
@@ -685,6 +692,9 @@ module LogAnnotations
     25 => [],                              # an accessor that serialises, wrapped at the log site
     26 => ["hostname<sd>", "json::generate<document>"], # per-argument, as everywhere else
     27 => [],                              # std::to_string is not a serialiser
+    28 => ["path<ud>"],                    # an HTTP path carries usernames and query values
+    29 => ["connection_string<ud>"],       # ... and a connection string carries user_agent_extra
+    30 => ["user_agent<ud>"],              # ... which the user agent folds in as well
   }.freeze
 
   # A suppression that matches more than it names removes coverage without saying so, which is the
