@@ -54,6 +54,23 @@
  * way, so what a coarse span costs is diagnosability, not protection. "None of it" is the other
  * legitimate answer, and it is the one the configuration dumps below take.
  *
+ * A tagged value must never contain a newline. The tool that consumes these tags is line-oriented,
+ * so a value that spans lines leaves its opening tag and its closing tag on different lines; the
+ * tool reports an unmatched tag and passes the value through in clear text, which is the one
+ * failure mode this whole mechanism exists to prevent. The wrappers escape newlines and carriage
+ * returns to "\n" and "\r" while redaction is enabled, so no call site has to remember: the
+ * values most likely to span lines are HTTP bodies and serialized documents, which is to say
+ * exactly the ones that must not leak. The exclusion markers below escape nothing, because the
+ * whole point of not_redacted() is to show the bytes as they are.
+ *
+ * One shape stays untagged for the opposite reason. A hex dump written with the "{:a}" spec
+ * renders as a multi-line grid, so escaping would keep the tag intact but flatten the dump into a
+ * single line of "\n" literals, and a flattened hex dump is not a hex dump. Those sites say so and
+ * use not_redacted(); the checker rejects a tag around one.
+ *
+ * `bin/check-log-annotations` cannot help with the general case. Whether a value contains a
+ * newline is a property of the value at run time, not of the source.
+ *
  * Qualify the calls as above. In particular `metadata` is also a member function on several core
  * types (query_result, row_streamer, transaction_get_result), where an unqualified call would
  * resolve to the member instead. In a file whose enclosing namespace is `couchbase` rather than
@@ -94,7 +111,10 @@
 #include "logger.hxx"
 
 #include <spdlog/fmt/bundled/core.h>
+#include <spdlog/fmt/bundled/format.h>
 
+#include <algorithm>
+#include <cstddef>
 #include <string>
 #include <string_view>
 
@@ -114,6 +134,12 @@ struct redacted_meta_data {
 template<typename T>
 struct redacted_system_data {
   const T& value;
+};
+
+template<typename T>
+struct conditionally_redacted_user_data {
+  const T& value;
+  bool sensitive;
 };
 
 template<typename T>
@@ -159,6 +185,22 @@ system_data(const T& value)
 }
 
 /**
+ * Tag a value as user data (<ud>) only when `sensitive` holds, and print it unchanged otherwise.
+ *
+ * For an argument that is sensitive on one branch of a log statement and a constant on another.
+ * Tagging the constant hashes it to a fixed digest, which protects nothing -- the domain is one
+ * value, so anyone holding the salt recovers it immediately -- and costs the reader the diagnostic
+ * the constant was there to give. A body the SDK elided to "[hidden]" and a body it redacted are
+ * then indistinguishable in the output.
+ */
+template<typename T>
+auto
+user_data_if(bool sensitive, const T& value)
+{
+  return conditionally_redacted_user_data<T>{ value, sensitive };
+}
+
+/**
  * Mark a value the annotation checker flags but that is not sensitive, because the identifier
  * suggests a category the value does not belong to. Formats exactly as the value would unwrapped,
  * so this is an assertion for the reader and for the checker rather than a change in behaviour.
@@ -195,6 +237,36 @@ enum class list_entries {
 
 namespace detail
 {
+/*
+ * Replace the characters that would split a tagged value across log lines. The consumer of these
+ * tags is line-oriented: an embedded newline leaves the opening tag and the closing tag on
+ * different lines, and the value is then passed through untouched instead of being redacted.
+ */
+template<typename OutputIt>
+auto
+write_escaped(OutputIt out, std::string_view value) -> OutputIt
+{
+  std::size_t copied = 0;
+  for (std::size_t index = 0; index < value.size(); ++index) {
+    std::string_view replacement{};
+    switch (value[index]) {
+      case '\n':
+        replacement = "\\n";
+        break;
+      case '\r':
+        replacement = "\\r";
+        break;
+      default:
+        continue;
+    }
+    const auto begin = value.begin() + static_cast<std::ptrdiff_t>(copied);
+    out = std::copy(begin, value.begin() + static_cast<std::ptrdiff_t>(index), out);
+    out = std::copy(replacement.begin(), replacement.end(), out);
+    copied = index + 1;
+  }
+  return std::copy(value.begin() + static_cast<std::ptrdiff_t>(copied), value.end(), out);
+}
+
 template<typename Container, typename Wrap>
 auto
 tagged_list(const Container& values, list_entries entries, std::string_view separator, Wrap wrap)
@@ -285,8 +357,12 @@ system_data_list(const Container& values,
       if (!couchbase::core::logger::is_log_redaction_enabled()) {                                  \
         return fmt::formatter<T>::format(redacted.value, ctx);                                     \
       }                                                                                            \
+      fmt::memory_buffer buffer;                                                                   \
+      fmt::basic_format_context<fmt::appender, char> buffered{ fmt::appender(buffer), {} };        \
+      fmt::formatter<T>::format(redacted.value, buffered);                                         \
       ctx.advance_to(fmt::format_to(ctx.out(), "<" tag ">"));                                      \
-      ctx.advance_to(fmt::formatter<T>::format(redacted.value, ctx));                              \
+      ctx.advance_to(couchbase::core::logger::detail::write_escaped(                               \
+        ctx.out(), std::string_view{ buffer.data(), buffer.size() }));                             \
       return fmt::format_to(ctx.out(), "</" tag ">");                                              \
     }                                                                                              \
   }
@@ -296,6 +372,25 @@ COUCHBASE_LOGGER_REDACTION_FORMATTER(redacted_meta_data, "md");
 COUCHBASE_LOGGER_REDACTION_FORMATTER(redacted_system_data, "sd");
 
 #undef COUCHBASE_LOGGER_REDACTION_FORMATTER
+
+/*
+ * Reuses the <ud> formatter for the tagged branch rather than repeating it, so the two cannot
+ * drift apart on escaping or on what a disabled redaction level prints.
+ */
+template<typename T>
+struct fmt::formatter<couchbase::core::logger::conditionally_redacted_user_data<T>>
+  : fmt::formatter<couchbase::core::logger::redacted_user_data<T>> {
+  template<typename FormatContext>
+  auto format(const couchbase::core::logger::conditionally_redacted_user_data<T>& redacted,
+              FormatContext& ctx) const
+  {
+    if (!redacted.sensitive) {
+      return fmt::formatter<T>::format(redacted.value, ctx);
+    }
+    return fmt::formatter<couchbase::core::logger::redacted_user_data<T>>::format(
+      couchbase::core::logger::redacted_user_data<T>{ redacted.value }, ctx);
+  }
+};
 
 /*
  * The exclusion markers print their value and nothing else, whether or not redaction is enabled.

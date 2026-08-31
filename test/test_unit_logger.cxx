@@ -243,6 +243,71 @@ TEST_CASE("unit: redaction annotations wrap values while redaction is enabled", 
   REQUIRE(fmt::format("host={}", logger::system_data("127.0.0.1")) == "host=<sd>127.0.0.1</sd>");
 }
 
+TEST_CASE("unit: a tagged value never spans log lines", "[unit]")
+{
+  namespace logger = couchbase::core::logger;
+
+  // The tool that consumes these tags is line-oriented. A value carrying a newline puts the
+  // opening tag and the closing tag on different lines, and the tool then reports an unmatched
+  // tag and emits the value in clear text -- the one outcome the annotations exist to prevent.
+  // Observed against cblogredaction: an HTTP error body spanning lines came through the redacted
+  // log fully readable.
+  const std::string body{ "<html><head>\n<title>301</title></head>\r\n</html>" };
+
+  SECTION("escaped in every category while redaction is enabled")
+  {
+    const scoped_log_redaction redaction{ true };
+
+    const auto tagged = fmt::format("body={}", logger::user_data(body));
+    REQUIRE(tagged == R"(body=<ud><html><head>\n<title>301</title></head>\r\n</html></ud>)");
+    REQUIRE(tagged.find('\n') == std::string::npos);
+    REQUIRE(tagged.find('\r') == std::string::npos);
+
+    REQUIRE(fmt::format("{}", logger::metadata(body)).find('\n') == std::string::npos);
+    REQUIRE(fmt::format("{}", logger::system_data(body)).find('\n') == std::string::npos);
+  }
+
+  SECTION("escaped for each entry of a tagged list")
+  {
+    const scoped_log_redaction redaction{ true };
+
+    const std::vector<std::string> values{ "one\ntwo", "three" };
+    REQUIRE(logger::user_data_list(values) == R"(<ud>one\ntwo</ud>, <ud>three</ud>)");
+  }
+
+  SECTION("left alone while redaction is disabled")
+  {
+    const scoped_log_redaction redaction{ false };
+
+    // Annotating a statement must not change what it prints for anyone who has not opted in.
+    REQUIRE(fmt::format("body={}", logger::user_data(body)) == "body=" + body);
+  }
+
+  SECTION("left alone by the exclusion markers")
+  {
+    const scoped_log_redaction redaction{ true };
+
+    // not_redacted() exists so a configuration dump shows the exact bytes that crossed the wire.
+    REQUIRE(fmt::format("{}", logger::not_redacted(body)) == body);
+    REQUIRE(fmt::format("{}", logger::not_sensitive(body)) == body);
+  }
+}
+
+TEST_CASE("unit: a conditionally tagged value is only tagged on the sensitive branch", "[unit]")
+{
+  const scoped_log_redaction redaction{ true };
+  namespace logger = couchbase::core::logger;
+
+  // Tagging a constant hashes it to a fixed digest, which protects nothing and leaves a reader
+  // unable to tell a value the SDK withheld from one the redaction tool replaced.
+  REQUIRE(fmt::format("body={}", logger::user_data_if(false, "[hidden]")) == "body=[hidden]");
+  REQUIRE(fmt::format("body={}", logger::user_data_if(true, "{\"a\":1}")) ==
+          R"(body=<ud>{"a":1}</ud>)");
+
+  // The tagged branch goes through the same formatter as user_data(), so it escapes identically.
+  REQUIRE(fmt::format("{}", logger::user_data_if(true, "one\ntwo")) == R"(<ud>one\ntwo</ud>)");
+}
+
 TEST_CASE("unit: a serialised document carries no annotations of its own", "[unit]")
 {
   const scoped_log_redaction redaction{ true };
