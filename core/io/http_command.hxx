@@ -310,9 +310,13 @@ private:
                      msg.status_code,
                      // Views, not strings: the arms have different types, so a plain ternary
                      // built a std::string and copied the whole body in on every non-200.
-                     logger::user_data(msg.status_code == 200
-                                         ? std::string_view{ "[hidden]" }
-                                         : std::string_view{ msg.body.data() }));
+                     // Only the arm that carries a body is tagged. "[hidden]" is a constant the
+                     // SDK substituted, and hashing it would leave a reader unable to tell a body
+                     // the SDK withheld from one the redaction tool replaced.
+                     logger::user_data_if(msg.status_code != 200,
+                                          msg.status_code == 200
+                                            ? std::string_view{ "[hidden]" }
+                                            : std::string_view{ msg.body.data() }));
         if (auto parser_ec = msg.body.ec(); !ec && parser_ec) {
           ec = parser_ec;
         }

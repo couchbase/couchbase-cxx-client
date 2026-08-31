@@ -189,16 +189,19 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
   }
   body.erase("statement");
   body.erase("prepared");
+  // prep is either the prepared statement name or the boolean false, and only the name is user
+  // data. Tagging the boolean hashes a two-value domain to a fixed digest, which hides nothing
+  // and destroys the answer to "was this query prepared?" in a redacted log.
   if (ctx_->options.show_queries) {
     CB_LOG_INFO("QUERY: client_context_id=\"{}\", prep={}, {}, options={}",
                 encoded.client_context_id,
-                logger::user_data(utils::json::generate(prep)),
+                logger::user_data_if(prep.is_string(), utils::json::generate(prep)),
                 logger::user_data(utils::json::generate(stmt)),
                 logger::user_data(utils::json::generate(body)));
   } else {
     CB_LOG_DEBUG("QUERY: client_context_id=\"{}\", prep={}, {}, options={}",
                  encoded.client_context_id,
-                 logger::user_data(utils::json::generate(prep)),
+                 logger::user_data_if(prep.is_string(), utils::json::generate(prep)),
                  logger::user_data(utils::json::generate(stmt)),
                  logger::user_data(utils::json::generate(body)));
   }
