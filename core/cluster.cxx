@@ -559,7 +559,7 @@ public:
     CB_LOG_DEBUG(R"(open cluster, id: "{}", core version: "{}", connection string: {}, {})",
                  id_,
                  couchbase::core::meta::sdk_semver(),
-                 logger::system_data(origin_.connection_string()),
+                 logger::user_data(origin_.connection_string()),
                  logger::user_data(origin_.to_json()));
     // The scheme is recognised in every build; only the ability to serve it is conditional. The
     // parser stays identical either way, so no API or ABI depends on the build mode -- a build
@@ -574,7 +574,7 @@ public:
         "(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 is off), so the couchbase2:// scheme cannot be "
         "served.",
         id_,
-        logger::system_data(origin_.connection_string()));
+        logger::user_data(origin_.connection_string()));
       stopped_ = true;
       work_.reset();
       return handler(errc::common::feature_not_available);
