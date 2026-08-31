@@ -178,3 +178,43 @@ TEST_CASE("integration: enabling log_redaction and dump_configuration together i
 
   cluster.close().get();
 }
+
+TEST_CASE("integration: dump_configuration is warned about against redaction enabled elsewhere",
+          "[integration]")
+{
+  test::utils::init_logger();
+  const auto ctx = test::utils::test_context::load_from_environment();
+  const scoped_log_redaction redaction{ true };
+
+  // This cluster never asks for redaction, so the warning can only fire if the check reads the
+  // process-wide state rather than this cluster's own option. That is the case the option pair
+  // exists for: an application that enabled redaction directly, or another cluster that turned it
+  // on, would otherwise get unannotated dumps in a redacted log with nothing said about it.
+  const captured_log log{};
+
+  auto [err, cluster] = connect_to_cluster(ctx, "dump_configuration=true");
+  REQUIRE_SUCCESS(err.ec());
+
+  REQUIRE(log.contains("log redaction is enabled, but so is dump_configuration"));
+
+  cluster.close().get();
+}
+
+TEST_CASE("integration: dump_configuration alone is not warned about", "[integration]")
+{
+  test::utils::init_logger();
+  const auto ctx = test::utils::test_context::load_from_environment();
+  const scoped_log_redaction redaction{ false };
+
+  // The other half of the pair. Without it, a warning that fired on dump_configuration alone
+  // would satisfy every other case here, and the option would be unusable on its own.
+  const captured_log log{};
+
+  auto [err, cluster] = connect_to_cluster(ctx, "dump_configuration=true");
+  REQUIRE_SUCCESS(err.ec());
+
+  REQUIRE_FALSE(couchbase::core::logger::is_log_redaction_enabled());
+  REQUIRE_FALSE(log.contains("log redaction is enabled, but so is dump_configuration"));
+
+  cluster.close().get();
+}
