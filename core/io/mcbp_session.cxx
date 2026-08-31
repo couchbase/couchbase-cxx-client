@@ -663,7 +663,8 @@ class mcbp_session_impl
                              msg.header.opcode,
                              utils::network_to_host(msg.header.opaque),
                              spdlog::to_hex(msg.header_data()),
-                             // CXXCBC-978: a tag would open and close on different lines here
+                             // A hex dump renders across several lines, so tagging it would
+                             // either break the tag pair or flatten the dump. See redaction.hxx.
                              logger::not_redacted(spdlog::to_hex(msg.body)));
           }
           break;
@@ -677,7 +678,8 @@ class mcbp_session_impl
                          msg.header.opcode,
                          utils::network_to_host(msg.header.opaque),
                          spdlog::to_hex(msg.header_data()),
-                         // CXXCBC-978: a tag would open and close on different lines here
+                         // A hex dump renders across several lines, so tagging it would
+                         // either break the tag pair or flatten the dump. See redaction.hxx.
                          logger::not_redacted(spdlog::to_hex(msg.body)));
           break;
       }
@@ -819,7 +821,8 @@ class mcbp_session_impl
                              opcode,
                              msg.header.opaque,
                              spdlog::to_hex(msg.header_data()),
-                             // CXXCBC-978: a tag would open and close on different lines here
+                             // A hex dump renders across several lines, so tagging it would
+                             // either break the tag pair or flatten the dump. See redaction.hxx.
                              logger::not_redacted(spdlog::to_hex(msg.body)));
           }
           break;
@@ -856,7 +859,8 @@ class mcbp_session_impl
                              msg.header.opcode,
                              msg.header.opaque,
                              spdlog::to_hex(msg.header_data()),
-                             // CXXCBC-978: a tag would open and close on different lines here
+                             // A hex dump renders across several lines, so tagging it would
+                             // either break the tag pair or flatten the dump. See redaction.hxx.
                              logger::not_redacted(spdlog::to_hex(msg.body)));
           }
           break;
@@ -870,7 +874,8 @@ class mcbp_session_impl
                          msg.header.opcode,
                          msg.header.opaque,
                          spdlog::to_hex(msg.header_data()),
-                         // CXXCBC-978: a tag would open and close on different lines here
+                         // A hex dump renders across several lines, so tagging it would
+                         // either break the tag pair or flatten the dump. See redaction.hxx.
                          logger::not_redacted(spdlog::to_hex(msg.body)));
           break;
       }
