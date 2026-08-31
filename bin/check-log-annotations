@@ -46,6 +46,13 @@
 # document needs depends on what is in it: it takes the strictest category any value inside could
 # belong to, which is a judgement this script does not make for you.
 #
+# The check runs in the other direction once. A hex dump written with the "{:a}" spec renders as a
+# multi-line grid; the wrappers escape newlines, so a tag around one would hold, but the dump comes
+# out flattened onto a single line and a flattened hex dump is not a hex dump. So a tag around a
+# to_hex() call is reported as <multiline>, meaning take the tag off, and not_redacted() is how the
+# decision gets recorded. This is the only over-annotation the script looks for, because it is the
+# only shape where escaping is the wrong answer.
+#
 # Usage:
 #   bin/check-log-annotations              # check, non-zero exit if anything is unannotated
 #   bin/check-log-annotations --catalog    # inventory every log statement, for tracking drift
@@ -111,8 +118,11 @@ module LogAnnotations
   # one of the three above, and which one depends on its contents.
   DOCUMENT = "document"
 
+  # Reported like a category, but it names a tag that has to come off rather than one to add.
+  MULTILINE = "multiline"
+
   # How a category prints in a finding. Only the three real categories name a tag.
-  CATEGORY_LABELS = WRAPPERS.merge(DOCUMENT => DOCUMENT).freeze
+  CATEGORY_LABELS = WRAPPERS.merge(DOCUMENT => DOCUMENT, MULTILINE => MULTILINE).freeze
 
   # Helpers that tag a composite value with more than one category, so they map to no single tag.
   # They still mark their argument as annotated.
@@ -123,12 +133,29 @@ module LogAnnotations
   # exclusions: the argument inside really is annotated, just not at the position it appears in.
   LIST_WRAPPERS = %w[user_data_list metadata_list system_data_list].freeze
 
+  # Helpers that tag on one branch and print the value in the clear on another, for an argument
+  # that is sensitive only some of the time. The branch is a run-time condition this script cannot
+  # evaluate, so it counts the argument as annotated and leaves the choice to review.
+  CONDITIONAL_WRAPPERS = %w[user_data_if].freeze
+
   # Markers that record a reviewed exclusion rather than applying a tag. They annotate nothing,
   # but an argument inside one has been looked at, which is all this script can ask for.
   EXCLUSION_MARKERS = %w[not_sensitive not_redacted].freeze
 
-  WRAPPER_NAMES =
-    (WRAPPERS.keys + COMPOSITE_WRAPPERS + LIST_WRAPPERS + EXCLUSION_MARKERS).freeze
+  WRAPPER_NAMES = (WRAPPERS.keys + COMPOSITE_WRAPPERS + LIST_WRAPPERS + CONDITIONAL_WRAPPERS +
+                   EXCLUSION_MARKERS).freeze
+
+  # The wrappers that apply a tag, as against the markers that record an exclusion. Only these can
+  # put a tag around a value that cannot carry one.
+  TAG_WRAPPERS =
+    (WRAPPERS.keys + COMPOSITE_WRAPPERS + LIST_WRAPPERS + CONDITIONAL_WRAPPERS).freeze
+
+  # Calls whose output spans several log lines. The wrappers escape newlines, so a tag around one
+  # would hold, but a hex dump collapsed onto a single line of "\n" literals is no longer a hex
+  # dump and that is the only reason to print one. These stay untagged, with not_redacted() at the
+  # call site to record the decision. Deliberately narrow: this is the one shape where escaping is
+  # the wrong answer, and it has one spelling in this codebase.
+  MULTILINE_CALL = /\bto_hex\s*\(/.freeze
 
   # Calls that serialise a document into a log argument. Anchored on "json::" so that
   # std::to_string() and every other to_string() stay out of it, and open-ended after "to_json"
@@ -350,9 +377,9 @@ module LogAnnotations
   # Byte ranges covered by a redaction wrapper call within an expression, so that an
   # identifier can be tested for membership rather than the whole argument being waved
   # through because it happens to mention a wrapper somewhere.
-  def self.wrapped_ranges(shadowed)
+  def self.wrapped_ranges(shadowed, wrappers = WRAPPER_NAMES)
     ranges = []
-    WRAPPER_NAMES.each do |wrapper|
+    wrappers.each do |wrapper|
       shadowed.enum_for(:scan, /\b#{wrapper}\s*\(/).each do
         match_start = Regexp.last_match.begin(0)
         open = shadowed.index("(", match_start)
@@ -490,6 +517,7 @@ module LogAnnotations
       # "hostname={}" -- is not mistaken for the value being logged.
       expression = shadow(argument.text)
       ranges = wrapped_ranges(expression)
+      tagged = wrapped_ranges(expression, TAG_WRAPPERS)
       documents = serialised_documents(expression)
 
       finding = lambda do |identifier, category|
@@ -525,7 +553,16 @@ module LogAnnotations
         finding.call(identifier, category)
       end
 
-      document_findings + value_findings
+      # A tag that cannot survive the value it wraps. Reported against the call rather than an
+      # identifier, because the call is what renders across lines.
+      multiline_findings = expression.enum_for(:scan, MULTILINE_CALL).filter_map do
+        offset = Regexp.last_match.begin(0)
+        next unless tagged.any? { |range| range.cover?(offset) }
+
+        finding.call("to_hex", MULTILINE)
+      end
+
+      document_findings + value_findings + multiline_findings
     end
   end
 
@@ -605,6 +642,9 @@ module LogAnnotations
           if finding.category == DOCUMENT
             "wrap the whole argument in the strictest category any value inside it could " \
               "belong to, or record the exclusion with not_redacted()"
+          elsif finding.category == MULTILINE
+            "remove the tag and record the exclusion with not_redacted(): escaping would keep " \
+              "the tag intact but flatten the dump onto one line"
           else
             "wrap in couchbase::core::logger::#{finding.category}()"
           end
@@ -620,7 +660,7 @@ module LogAnnotations
     by_category = findings.group_by(&:category).map do |category, group|
       "#{group.size} <#{CATEGORY_LABELS[category]}>"
     end
-    puts "#{findings.size} unannotated arguments (#{by_category.sort.join(', ')}) " \
+    puts "#{findings.size} findings (#{by_category.sort.join(', ')}) " \
          "in #{findings.map(&:file).uniq.size} files"
   end
 
@@ -659,6 +699,9 @@ module LogAnnotations
       CB_LOG_DEBUG("path={}", encoded.path);
       CB_LOG_DEBUG("cs={}", origin.connection_string());
       CB_LOG_DEBUG("ua={}", user_agent);
+      CB_LOG_DEBUG("prep={}", logger::user_data_if(prep.is_string(), generate(prep)));
+      CB_LOG_DEBUG("hex={:a}", logger::user_data(spdlog::to_hex(msg.body)));
+      CB_LOG_DEBUG("hex={:a}", logger::not_redacted(spdlog::to_hex(msg.body)));
       /* CB_LOG_DEBUG("host={}", hostname); */
       // CB_LOG_DEBUG("host={}", hostname);
     }
@@ -695,6 +738,9 @@ module LogAnnotations
     28 => ["path<ud>"],                    # an HTTP path carries usernames and query values
     29 => ["connection_string<ud>"],       # ... and a connection string carries user_agent_extra
     30 => ["user_agent<ud>"],              # ... which the user agent folds in as well
+    31 => [],                              # a conditional wrapper annotates, like every other
+    32 => ["to_hex<multiline>"],           # a tag cannot survive a value that renders as a grid
+    33 => [],                              # ... and not_redacted() is how that is recorded
   }.freeze
 
   # A suppression that matches more than it names removes coverage without saying so, which is the
