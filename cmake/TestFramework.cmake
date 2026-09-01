@@ -257,9 +257,6 @@ endfunction()
 # multiplier able to reach them.
 couchbase_add_test(framework/selftest LABEL cng)
 
-# unit, because it is pure computation over the tools helper and needs no server.
-couchbase_add_test(tools/document_body_generator LABEL unit LINK_CLIENT)
-
 # What assert_success prints. It needs couchbase::error, and therefore the client library, but no
 # server: every value it asserts on is constructed by hand. cng for the same reason as above.
 couchbase_add_test(framework/errors_selftest LABEL cng LINK_CLIENT)

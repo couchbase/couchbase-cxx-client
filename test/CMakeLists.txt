@@ -2,6 +2,11 @@
 # because it is no longer a Catch2 file.
 couchbase_add_test(unit/core/config_profiles LABEL unit LINK_CLIENT)
 
+# Registered here rather than in cmake/TestFramework.cmake beside the framework's own self-tests:
+# only a call from this file reaches build_unit_tests. It is pure computation over the tools helper
+# and needs no server, so unit is the label, and unit is a label with an aggregate.
+couchbase_add_test(tools/document_body_generator LABEL unit LINK_CLIENT)
+
 integration_test(connect)
 integration_test(crud)
 integration_test(query)
