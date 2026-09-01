@@ -201,10 +201,16 @@ function(couchbase_add_test relpath)
       PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/expected/include>
               $<BUILD_INTERFACE:$<TARGET_PROPERTY:asio,INTERFACE_INCLUDE_DIRECTORIES>>)
     propagate_public_compile_definitions(${target} spdlog::spdlog asio)
+    # OpenSSL::SSL for its include directories, not for the linkage: a header of the client's that
+    # reaches asio/ssl.hpp needs openssl/*.h on the include path, and Homebrew's openssl is keg-only,
+    # so on macOS that path is nowhere a compiler looks by default. Linux happens to work without it
+    # because the headers sit in /usr/include. The Catch2 targets inherit it from test_main, which
+    # links OpenSSL::SSL PUBLIC (cmake/Testing.cmake).
     target_link_libraries(
       ${target}
       PRIVATE ${couchbase_cxx_client_test_library} test_framework_cluster_probes test_utils
-              $<BUILD_INTERFACE:Microsoft.GSL::GSL> $<BUILD_INTERFACE:taocpp::json>)
+              OpenSSL::SSL $<BUILD_INTERFACE:Microsoft.GSL::GSL>
+              $<BUILD_INTERFACE:taocpp::json>)
   else()
     target_link_libraries(${target} PRIVATE test_framework_null_probes)
   endif()

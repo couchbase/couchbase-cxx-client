@@ -121,7 +121,7 @@ public:
     });
   }
 
-  void connect_session(std::size_t index);
+  [[nodiscard]] auto connect_session(std::size_t index) -> bool;
 
   template<typename Request>
   void map_and_send(std::shared_ptr<operations::mcbp_command<bucket, Request>> cmd)
@@ -142,7 +142,42 @@ public:
     }
     std::size_t index;
     if (cmd->request.id.use_any_session()) {
+      // An explicit "any node" request is not subject to routing rules of any
+      // kind.
       index = next_session_index();
+    } else if constexpr (operations::resolves_own_route_v<Request>) {
+      auto config = config_snapshot();
+      if (!config) {
+        return io::retry_orchestrator::maybe_retry(
+          cmd->manager_, cmd, retry_reason::node_not_available, errc::common::request_canceled);
+      }
+      // Resolution happens on every lap, so a topology that changed between
+      // attempts is honoured.
+      auto decision = cmd->request.resolve_route(*config);
+      // Keep the request's partition in step with the latest resolution on
+      // every path, not only the one that dispatches.
+      cmd->request.partition = decision.partition;
+      if (decision.ec) {
+        // Terminal, so the completion is invoked directly: the retry
+        // orchestrator consults the request's retry strategy first, and a
+        // strategy that retries do_not_retry would loop a condition that
+        // cannot resolve itself.
+        return cmd->invoke_handler(decision.ec);
+      }
+      if (!decision.server_index.has_value()) {
+        CB_LOG_TRACE(R"([{}] unable to map key="{}" to the node, id={}, partition={}, rev={})",
+                     log_prefix(),
+                     cmd->request.id,
+                     cmd->id(),
+                     decision.partition,
+                     // The snapshot's own revision, not config_rev(): that reads
+                     // config_ again and can name a configuration this decision
+                     // was not taken against.
+                     config->rev_str());
+        return io::retry_orchestrator::maybe_retry(
+          cmd->manager_, cmd, retry_reason::node_not_available, errc::common::request_canceled);
+      }
+      index = decision.server_index.value();
     } else {
       auto [partition, server] = map_id(cmd->request.id);
       if (!server.has_value()) {
@@ -171,8 +206,13 @@ public:
         session.has_value() ? session->bootstrap_address() : "",
         session.has_value() && session->has_config(),
         config_rev());
-      if (!session) {
-        connect_session(index);
+      if (!session && !connect_session(index)) {
+        // No session was started, and short of bucket close only a bootstrap
+        // completion drains the deferred queue, so parking the command here
+        // would hold it until its deadline. Retry instead, which re-routes
+        // against the current configuration.
+        return io::retry_orchestrator::maybe_retry(
+          cmd->manager_, cmd, retry_reason::node_not_available, errc::common::request_canceled);
       }
       return defer_command([self = shared_from_this(), cmd](std::error_code ec) {
         if (ec == errc::common::request_canceled) {
@@ -264,6 +304,7 @@ private:
     -> std::optional<io::mcbp_session>;
   [[nodiscard]] auto map_id(const document_id& id)
     -> std::pair<std::uint16_t, std::optional<std::size_t>>;
+  [[nodiscard]] auto config_snapshot() const -> std::shared_ptr<topology::configuration>;
   [[nodiscard]] auto config_rev() const -> std::string;
 
   asio::io_context& ctx_;
