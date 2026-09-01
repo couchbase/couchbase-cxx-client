@@ -19,8 +19,10 @@
 
 #include "core/io/mcbp_message.hxx"
 #include "core/protocol/client_response.hxx"
+#include "core/protocol/cmd_cluster_map_change_notification.hxx"
 #include "core/protocol/cmd_noop.hxx"
 #include "core/protocol/magic.hxx"
+#include "core/protocol/server_request.hxx"
 #include "core/protocol/status.hxx"
 
 #include <catch2/catch_approx.hpp>
@@ -29,6 +31,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -45,6 +48,32 @@ wire_header(std::uint16_t status, std::uint32_t opaque, std::uint64_t cas)
   bytes[1] = static_cast<std::byte>(couchbase::core::protocol::client_opcode::noop);
   bytes[6] = static_cast<std::byte>(status >> 8U);
   bytes[7] = static_cast<std::byte>(status);
+  for (std::size_t i = 0; i < 4; ++i) {
+    bytes[12 + i] = static_cast<std::byte>(opaque >> ((3U - i) * 8U));
+  }
+  for (std::size_t i = 0; i < 8; ++i) {
+    bytes[16 + i] = static_cast<std::byte>(cas >> ((7U - i) * 8U));
+  }
+  return bytes;
+}
+
+// A 24-byte server request header, written the same way. The server request and client response
+// headers share this layout, so the two decode paths have the same contract to meet.
+auto
+server_request_wire_header(std::uint32_t opaque, std::uint64_t cas, std::uint16_t key_size)
+  -> std::array<std::byte, 24>
+{
+  std::array<std::byte, 24> bytes{};
+  bytes[0] = static_cast<std::byte>(couchbase::core::protocol::magic::server_request);
+  bytes[1] = static_cast<std::byte>(
+    couchbase::core::protocol::server_opcode::cluster_map_change_notification);
+  bytes[2] = static_cast<std::byte>(key_size >> 8U);
+  bytes[3] = static_cast<std::byte>(key_size);
+  // No extras, and a body that is the key alone: parse() then reads the bucket name and stops
+  // short of the config text, so no cluster map has to be built to reach the header assertions.
+  for (std::size_t i = 0; i < 4; ++i) {
+    bytes[8 + i] = static_cast<std::byte>(std::uint32_t{ key_size } >> ((3U - i) * 8U));
+  }
   for (std::size_t i = 0; i < 4; ++i) {
     bytes[12 + i] = static_cast<std::byte>(opaque >> ((3U - i) * 8U));
   }
@@ -126,6 +155,36 @@ TEST_CASE("unit: client_response decodes its header from network byte order", "[
   CHECK(response.cas().value() == cas);
   CHECK(response.opaque() == opaque);
   CHECK(response.status() == static_cast<key_value_status_code>(0x0002));
+}
+
+TEST_CASE("unit: server_request decodes its header from network byte order", "[unit]")
+{
+  using couchbase::core::protocol::cluster_map_change_notification_request_body;
+  using couchbase::core::protocol::server_request;
+
+  // server_request converted its body length and left opaque and CAS as raw wire bytes, the one
+  // remaining site in core/ of the shape this series removes elsewhere: a memcpy of a native
+  // integer out of a wire buffer with no conversion after it.
+  //
+  // Nothing observes the reversal today, because the only body this class is instantiated with
+  // is the one below and no caller reads either accessor. The assertions here are what keeps the
+  // next caller from inheriting it.
+  constexpr std::uint64_t cas{ 0x0102030405060708 };
+  constexpr std::uint32_t opaque{ 0x01020304 };
+  const std::string bucket{ "default" };
+
+  auto header = server_request_wire_header(opaque, cas, static_cast<std::uint16_t>(bucket.size()));
+  std::vector<std::byte> body{};
+  for (const auto c : bucket) {
+    body.push_back(static_cast<std::byte>(c));
+  }
+
+  auto msg = message_with(header, std::move(body));
+  server_request<cluster_map_change_notification_request_body> request{ std::move(msg) };
+
+  CHECK(request.opaque() == opaque);
+  CHECK(request.cas().value() == cas);
+  CHECK(request.body().bucket() == bucket);
 }
 
 TEST_CASE("unit: parse_server_duration_us reads the framing extras length as a byte", "[unit]")

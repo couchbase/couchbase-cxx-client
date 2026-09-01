@@ -108,8 +108,10 @@ public:
     data_.resize(body_size_);
 
     memcpy(&opaque_, header_.data() + 12, sizeof(opaque_));
+    opaque_ = utils::network_to_host(opaque_);
 
     memcpy(&cas_, header_.data() + 16, sizeof(cas_));
+    cas_ = utils::network_to_host(cas_);
   }
 
   void parse_body()
