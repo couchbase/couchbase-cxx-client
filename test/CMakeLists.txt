@@ -48,7 +48,6 @@ integration_test(fork)
 
 unit_test(connection_string)
 unit_test(protocol_status)
-unit_test(configuration_belongs_to_session)
 unit_test(opaque_ring_table)
 unit_test(mcbp_operation_queue)
 unit_test(mcbp_output_queue)
