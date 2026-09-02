@@ -162,4 +162,7 @@ if(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
   add_cng_test(protostellar/query_streaming LINK_CLIENT LIBS couchbase_cxx_protostellar)
   # Transport retry (CXXCBC-896 / CXXCBC-906).
   add_cng_test(protostellar/retry LINK_CLIENT LIBS couchbase_cxx_protostellar)
+
+  # Live wait_until_ready (CXXCBC-908).
+  add_cng_test(protostellar/live_wait_until_ready LINK_CLIENT LIBS couchbase_cxx_protostellar)
 endif()
