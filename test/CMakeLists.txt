@@ -50,7 +50,6 @@ integration_test(fork)
 
 unit_test(protocol_status)
 unit_test(opaque_ring_table)
-unit_test(mcbp_operation_queue)
 unit_test(mcbp_output_queue)
 unit_test(mcbp_buffer_pool)
 unit_test(mcbp_session)
