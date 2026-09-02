@@ -913,10 +913,9 @@ TEST_CASE("integration: streaming query surfaces a query error", "[integration]"
   // This verifies that query_stream() propagates query-level errors to the
   // caller rather than silently swallowing them.
   //
-  // NOTE: The rows-THEN-trailing-error path (rows emitted before the error
-  // JSON key) is additionally covered by the unit test in
-  // test_unit_query_stream.cxx:
-  //   "query_stream surfaces a trailing query error after rows"
+  // The rows-THEN-trailing-error path (rows emitted before the error JSON key)
+  // is additionally covered by surfaces_a_trailing_query_error_after_rows in
+  // test/unit/streaming/query_stream.cxx.
   const std::string error_query =
     "SELECT * FROM `nonexistent_bucket_that_does_not_exist_xyz` LIMIT 1";
 
