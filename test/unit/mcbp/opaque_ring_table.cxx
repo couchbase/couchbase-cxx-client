@@ -15,31 +15,22 @@
  *   limitations under the License.
  */
 
-#include "test_helper.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/io/opaque_ring_table.hxx"
 #include "core/utils/movable_function.hxx"
 
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <new>
 #include <set>
 
-namespace
-{
-using handler = couchbase::core::utils::movable_function<void(int)>;
-using table = couchbase::core::io::opaque_ring_table<handler>;
-
-// Mirrors opaque_ring_table::ring_size; opaques that differ by this value map to the same ring
-// slot.
-constexpr std::uint32_t ring_size = 512;
-} // namespace
-
 // Sanitizer builds intercept allocation and provide their own operator new/delete, so defining them
 // here would be a multiple-definition link error. Compile the allocation counter, the overrides,
-// and the allocation-count test out under sanitizers (COUCHBASE_CXX_CLIENT_BUILD_SANITIZED); the
-// functional tests still run.
+// and the allocation-count case out under sanitizers (COUCHBASE_CXX_CLIENT_BUILD_SANITIZED); the
+// functional cases still run.
 #ifndef COUCHBASE_CXX_CLIENT_BUILD_SANITIZED
 namespace
 {
@@ -70,7 +61,19 @@ operator delete(void* p, std::size_t /* n */) noexcept
 }
 #endif
 
-TEST_CASE("unit: opaque_ring_table stores and takes a handler once", "[unit]")
+namespace couchbase::test
+{
+namespace
+{
+using handler = couchbase::core::utils::movable_function<void(int)>;
+using table = couchbase::core::io::opaque_ring_table<handler>;
+
+// Mirrors opaque_ring_table::ring_size; opaques that differ by this value map to the same ring
+// slot.
+constexpr std::uint32_t ring_size = 512;
+
+void
+a_stored_handler_is_taken_once_and_then_gone([[maybe_unused]] context& ctx)
 {
   table t;
   int seen = 0;
@@ -79,21 +82,22 @@ TEST_CASE("unit: opaque_ring_table stores and takes a handler once", "[unit]")
   });
 
   auto h = t.take(42);
-  REQUIRE(static_cast<bool>(h));
+  assert_true(static_cast<bool>(h), "the handler registered for the opaque comes back");
   h(7);
-  REQUIRE(seen == 7);
+  assert_eq(seen, 7, "the handler that came back is the one that was stored");
 
-  // taken entries are gone
-  REQUIRE_FALSE(static_cast<bool>(t.take(42)));
+  assert_false(static_cast<bool>(t.take(42)), "a taken opaque is no longer registered");
 }
 
-TEST_CASE("unit: opaque_ring_table returns empty for an absent opaque", "[unit]")
+void
+an_absent_opaque_yields_no_handler([[maybe_unused]] context& ctx)
 {
   table t;
-  REQUIRE_FALSE(static_cast<bool>(t.take(99)));
+  assert_false(static_cast<bool>(t.take(99)), "an opaque that was never inserted");
 }
 
-TEST_CASE("unit: opaque_ring_table routes ring-colliding opaques independently", "[unit]")
+void
+ring_colliding_opaques_keep_their_own_handlers([[maybe_unused]] context& ctx)
 {
   table t;
   int a = 0;
@@ -108,12 +112,12 @@ TEST_CASE("unit: opaque_ring_table routes ring-colliding opaques independently",
 
   t.take(5 + ring_size)(2);
   t.take(5)(1);
-  REQUIRE(a == 1);
-  REQUIRE(b == 2);
+  assert_eq(a, 1, "the handler held in the ring slot");
+  assert_eq(b, 2, "the handler displaced into the overflow map");
 }
 
-TEST_CASE("unit: opaque_ring_table same-slot guard keeps the first handler for a duplicate opaque",
-          "[unit]")
+void
+a_duplicate_opaque_in_the_same_slot_keeps_the_first_handler([[maybe_unused]] context& ctx)
 {
   // Re-registering an in-flight opaque violates the unique-in-flight precondition; this exercises
   // the cheap same-slot guard, which keeps the first handler when the duplicate lands on the ring
@@ -126,14 +130,15 @@ TEST_CASE("unit: opaque_ring_table same-slot guard keeps the first handler for a
   });
   t.insert(3, [&seen](int) {
     seen = 2;
-  }); // ignored: the first handler for an opaque in the same ring slot is kept
+  });
 
   t.take(3)(0);
-  REQUIRE(seen == 1);
+  assert_eq(seen, 1, "the first handler registered for the opaque survives the duplicate");
 }
 
 #ifndef COUCHBASE_CXX_CLIENT_BUILD_SANITIZED
-TEST_CASE("unit: opaque_ring_table insert and take within the ring do not allocate", "[unit]")
+void
+insert_and_take_within_the_ring_do_not_allocate([[maybe_unused]] context& ctx)
 {
   table t;
   // Handlers capture only a reference (fits the movable_function small buffer), and the ring is
@@ -149,11 +154,12 @@ TEST_CASE("unit: opaque_ring_table insert and take within the ring do not alloca
     static_cast<void>(t.take(i));
   }
   const long after = g_alloc_count.load(std::memory_order_relaxed);
-  REQUIRE(after - before == 0);
+  assert_eq(after - before, 0L, "allocations performed by a full cycle within the ring");
 }
 #endif
 
-TEST_CASE("unit: opaque_ring_table drains every registered handler and clears", "[unit]")
+void
+drain_yields_every_registered_handler_and_empties_the_table([[maybe_unused]] context& ctx)
 {
   table t;
   std::set<std::uint32_t> opaques;
@@ -168,14 +174,36 @@ TEST_CASE("unit: opaque_ring_table drains every registered handler and clears", 
   auto drained = t.drain();
   for (auto& [opaque, h] : drained) {
     opaques.insert(opaque);
-    REQUIRE(static_cast<bool>(h));
+    assert_true(static_cast<bool>(h), "every drained entry carries its handler");
   }
-  REQUIRE(drained.size() == 6);
-  REQUIRE(opaques == std::set<std::uint32_t>{ 1, 2, 3, 4, 5, 1 + ring_size });
+  assert_eq(drained.size(), std::size_t{ 6 }, "the number of entries drained");
+  assert_eq(
+    opaques, (std::set<std::uint32_t>{ 1, 2, 3, 4, 5, 1 + ring_size }), "the opaques drained");
 
-  // everything is gone after draining
   for (std::uint32_t i = 1; i <= 5; ++i) {
-    REQUIRE_FALSE(static_cast<bool>(t.take(i)));
+    assert_false(static_cast<bool>(t.take(i)), "a drained opaque is no longer registered");
   }
-  REQUIRE_FALSE(static_cast<bool>(t.take(1 + ring_size)));
+  assert_false(static_cast<bool>(t.take(1 + ring_size)),
+               "a drained overflow opaque is no longer registered");
 }
+} // namespace
+
+auto
+tests() -> test_suite
+{
+  return {
+    suite_name,
+    {
+      { CASE(a_stored_handler_is_taken_once_and_then_gone) },
+      { CASE(an_absent_opaque_yields_no_handler) },
+      { CASE(ring_colliding_opaques_keep_their_own_handlers) },
+      { CASE(a_duplicate_opaque_in_the_same_slot_keeps_the_first_handler) },
+#ifndef COUCHBASE_CXX_CLIENT_BUILD_SANITIZED
+      { CASE(insert_and_take_within_the_ring_do_not_allocate) },
+#endif
+      { CASE(drain_yields_every_registered_handler_and_empties_the_table) },
+    },
+  };
+}
+
+} // namespace couchbase::test
