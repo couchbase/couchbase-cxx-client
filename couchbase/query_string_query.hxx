@@ -31,15 +31,15 @@ namespace couchbase
  * parameter with the number to boost the search. For example perform
  * @ref match_query for pool in both the name and description fields, but documents having the term
  * in the name field score higher.
- * @snippet{trimleft} test_unit_search.cxx search-query-string-boosting
+ * @snippet{trimleft} unit/management/search.cxx search-query-string-boosting
  *
  * 2. You can perform date or numeric range searches by using the `>`, `>=`, `<`, and `<=`
  * operators, followed by a date value in quotes. For example, perform a @ref date_range_query on
  * the created field for values after September 21, 2016.
- * @snippet{trimleft} test_unit_search.cxx search-query-string-date-range
+ * @snippet{trimleft} unit/management/search.cxx search-query-string-date-range
  * Or, perform a @ref numeric_range_query  on the `reviews.ratings.Cleanliness` field, for values
  * greater than 4.
- * @snippet{trimleft} test_unit_search.cxx search-query-string-numeric-range
+ * @snippet{trimleft} unit/management/search.cxx search-query-string-numeric-range
  *
  * @see https://docs.couchbase.com/server/current/fts/fts-query-string-syntax.html definition of
  * query syntax
