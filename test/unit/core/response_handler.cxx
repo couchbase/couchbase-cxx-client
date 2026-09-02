@@ -15,25 +15,21 @@
  *   limitations under the License.
  */
 
-// Tests for core/response_handler.hxx
-//
 // The response_handler interface is the callback boundary between io::mcbp_session and
 // higher-level components (bucket_impl, and in CXXCBC-798, crud_component).
 //
-// Key design point tested here: handle_response() receives an optional<mcbp_session>
-// snapshot so that implementors can extract connection metadata (remote/local address
-// and port) without retaining a long-lived reference to the live session.  This is
-// particularly important for crud_component (CXXCBC-798), which builds
-// key_value_error_context from that metadata after the response has been decoded.
+// handle_response() receives an optional<mcbp_session> snapshot so that implementors can extract
+// connection metadata (remote/local address and port) without retaining a long-lived reference to
+// the live session. crud_component (CXXCBC-798) builds key_value_error_context from that metadata
+// after the response has been decoded.
 //
-// Two call sites exist in io::mcbp_session:
-//   1. Normal response path — session is present (non-nullopt).
-//   2. Session shutdown path — session is present for address tracking but the error
-//      code signals cancellation (e.g. socket_closed_while_in_flight).
-//
-// Because io::mcbp_session requires an Asio io_context and a live network connection
-// to construct fully, unit tests use std::nullopt for the session parameter and focus
-// on verifying the interface contract and argument forwarding.
+// Two call sites exist in io::mcbp_session: the normal response path, where the session is
+// present, and the shutdown path, where it is present for address tracking but the error code
+// signals cancellation. io::mcbp_session needs an io_context and a live connection to construct,
+// so these cases pass std::nullopt for the session and pin argument forwarding alone.
+
+#include "framework/errors.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/error_context/key_value_error_map_info.hxx"
 #include "core/io/mcbp_message.hxx"
@@ -46,22 +42,21 @@
 // definition so that std::optional<io::mcbp_session> is a complete type in tests.
 #include "core/io/mcbp_session.hxx"
 
-#include <catch2/catch_test_macros.hpp>
 #include <couchbase/error_codes.hxx>
 #include <couchbase/retry_reason.hxx>
 
+#include <cstdint>
 #include <memory>
 #include <optional>
-#include <set>
 #include <string>
 #include <system_error>
+#include <utility>
 
+namespace couchbase::test
+{
 namespace
 {
-
-// ---------------------------------------------------------------------------
-// Captures every argument passed to handle_response for later inspection
-// ---------------------------------------------------------------------------
+// Captures every argument passed to handle_response for later inspection.
 struct captured_call {
   std::shared_ptr<couchbase::core::mcbp::queue_request> request{};
   std::optional<couchbase::core::io::mcbp_session> session{};
@@ -112,41 +107,34 @@ make_request() -> std::shared_ptr<couchbase::core::mcbp::queue_request>
     });
 }
 
-} // namespace
-
-// ---------------------------------------------------------------------------
-// Interface contract: default constructibility via derived type
-// ---------------------------------------------------------------------------
-
-TEST_CASE("unit: response_handler is default-constructible via derived type", "[unit]")
+void
+a_derived_handler_is_constructible_without_a_base_argument([[maybe_unused]] context& ctx)
 {
   // response_handler must be default-constructible so that derived classes
   // (e.g. bucket_impl, crud_component's inner handler) can be constructed
   // without supplying an explicit base-class argument.
   captured_call out;
-  REQUIRE_NOTHROW(recording_handler{ out });
+  assert_no_throw(
+    [&out]() {
+      recording_handler handler{ out };
+      static_cast<void>(handler);
+    },
+    "a derived handler constructs from its own arguments alone");
 }
 
-// ---------------------------------------------------------------------------
-// Interface contract: copy construction and assignment are allowed
-// ---------------------------------------------------------------------------
-
-TEST_CASE("unit: response_handler supports shared_ptr copy semantics", "[unit]")
+void
+a_handler_can_be_held_through_a_base_shared_pointer([[maybe_unused]] context& ctx)
 {
   // Copying a shared_ptr<response_handler> is the standard pattern used by
   // io::mcbp_session, which holds and passes the handler around.
   captured_call out;
-  auto h1 = std::make_shared<recording_handler>(out);
-  std::shared_ptr<couchbase::core::response_handler> h2 = h1;
-  REQUIRE(h2 != nullptr);
+  auto derived = std::make_shared<recording_handler>(out);
+  std::shared_ptr<couchbase::core::response_handler> base = derived;
+  assert_true(base != nullptr, "the base pointer holds the handler");
 }
 
-// ---------------------------------------------------------------------------
-// Session shutdown path: error signals cancellation, no live session
-// ---------------------------------------------------------------------------
-
-TEST_CASE("unit: handle_response session-shutdown path: nullopt session with cancellation error",
-          "[unit]")
+void
+a_cancellation_reaches_the_handler_without_a_session([[maybe_unused]] context& ctx)
 {
   // When the session is shutting down it cancels all in-flight operations by
   // calling handle_response with std::nullopt for session AND a non-empty error
@@ -163,18 +151,17 @@ TEST_CASE("unit: handle_response session-shutdown path: nullopt session with can
                           {},
                           std::nullopt);
 
-  REQUIRE(out.called);
-  CHECK(out.request == req);
-  CHECK_FALSE(out.session.has_value());
-  CHECK(out.error == couchbase::errc::common::request_canceled);
-  CHECK(out.reason == couchbase::retry_reason::socket_closed_while_in_flight);
+  assert_true(out.called, "the handler was invoked");
+  assert_true(out.request == req, "the request is forwarded unchanged");
+  assert_false(out.session.has_value(), "no session snapshot is forwarded");
+  assert_eq(out.error, couchbase::errc::common::request_canceled, "the cancellation is forwarded");
+  assert_eq(out.reason,
+            couchbase::retry_reason::socket_closed_while_in_flight,
+            "the retry reason is forwarded");
 }
 
-// ---------------------------------------------------------------------------
-// Normal response path: success, no error, no session
-// ---------------------------------------------------------------------------
-
-TEST_CASE("unit: handle_response success path with nullopt session", "[unit]")
+void
+a_successful_response_reaches_the_handler_without_a_session([[maybe_unused]] context& ctx)
 {
   // Successful response with no session (e.g. synthetic completion in tests or
   // implementations that do not yet supply a session snapshot).
@@ -185,18 +172,15 @@ TEST_CASE("unit: handle_response success path with nullopt session", "[unit]")
   handler.handle_response(
     req, std::nullopt, {}, couchbase::retry_reason::do_not_retry, {}, std::nullopt);
 
-  REQUIRE(out.called);
-  CHECK(out.request == req);
-  CHECK_FALSE(out.session.has_value());
-  CHECK_FALSE(out.error);
-  CHECK(out.reason == couchbase::retry_reason::do_not_retry);
+  assert_true(out.called, "the handler was invoked");
+  assert_true(out.request == req, "the request is forwarded unchanged");
+  assert_false(out.session.has_value(), "no session snapshot is forwarded");
+  assert_success(out.error, "no error is invented on the success path");
+  assert_eq(out.reason, couchbase::retry_reason::do_not_retry, "the retry reason is forwarded");
 }
 
-// ---------------------------------------------------------------------------
-// Null request: session drain may pass empty request during shutdown
-// ---------------------------------------------------------------------------
-
-TEST_CASE("unit: handle_response tolerates null request pointer", "[unit]")
+void
+a_null_request_reaches_the_handler([[maybe_unused]] context& ctx)
 {
   // The shutdown drain path may produce a null request if the operation slot
   // is already empty.  Handlers must cope gracefully.
@@ -210,16 +194,13 @@ TEST_CASE("unit: handle_response tolerates null request pointer", "[unit]")
                           {},
                           std::nullopt);
 
-  REQUIRE(out.called);
-  CHECK(out.request == nullptr);
-  CHECK(out.error == couchbase::errc::network::cluster_closed);
+  assert_true(out.called, "the handler was invoked");
+  assert_true(out.request == nullptr, "the absent request is forwarded as absent");
+  assert_eq(out.error, couchbase::errc::network::cluster_closed, "the error is forwarded");
 }
 
-// ---------------------------------------------------------------------------
-// Extended error info path
-// ---------------------------------------------------------------------------
-
-TEST_CASE("unit: handle_response forwards optional error_map_info to the handler", "[unit]")
+void
+the_error_map_info_reaches_the_handler_intact([[maybe_unused]] context& ctx)
 {
   // The server may attach extended error information from its error map.
   // The handler must receive it intact so it can be stored in the error context.
@@ -236,20 +217,17 @@ TEST_CASE("unit: handle_response forwards optional error_map_info to the handler
                           {},
                           info);
 
-  REQUIRE(out.called);
-  REQUIRE(out.error_info.has_value());
-  CHECK(out.error_info->code() == 0x0001);
-  CHECK(out.error_info->name() == "KEY_ENOENT");
+  assert_true(out.called, "the handler was invoked");
+  assert_true(out.error_info.has_value(), "the error map entry is forwarded");
+  assert_eq(out.error_info->code(), std::uint16_t{ 0x0001 }, "the error map entry's code");
+  assert_eq(out.error_info->name(), std::string{ "KEY_ENOENT" }, "the error map entry's name");
 }
 
-// ---------------------------------------------------------------------------
-// Polymorphic dispatch via base pointer (the real caller pattern)
-// ---------------------------------------------------------------------------
-
-TEST_CASE("unit: handle_response dispatches correctly through base pointer", "[unit]")
+void
+a_response_dispatches_through_the_base_pointer([[maybe_unused]] context& ctx)
 {
   // io::mcbp_session and collections_component hold a shared_ptr<response_handler>
-  // and call through the virtual interface.  Verify vtable dispatch works correctly.
+  // and call through the virtual interface.
   captured_call out;
   std::shared_ptr<couchbase::core::response_handler> handler =
     std::make_shared<recording_handler>(out);
@@ -258,6 +236,26 @@ TEST_CASE("unit: handle_response dispatches correctly through base pointer", "[u
   handler->handle_response(
     req, std::nullopt, {}, couchbase::retry_reason::do_not_retry, {}, std::nullopt);
 
-  REQUIRE(out.called);
-  CHECK(out.request == req);
+  assert_true(out.called, "the call reaches the derived handler");
+  assert_true(out.request == req, "the request is forwarded unchanged");
 }
+} // namespace
+
+auto
+tests() -> test_suite
+{
+  return {
+    suite_name,
+    {
+      { CASE(a_derived_handler_is_constructible_without_a_base_argument), {}, timeout::instant },
+      { CASE(a_handler_can_be_held_through_a_base_shared_pointer), {}, timeout::instant },
+      { CASE(a_cancellation_reaches_the_handler_without_a_session), {}, timeout::instant },
+      { CASE(a_successful_response_reaches_the_handler_without_a_session), {}, timeout::instant },
+      { CASE(a_null_request_reaches_the_handler), {}, timeout::instant },
+      { CASE(the_error_map_info_reaches_the_handler_intact), {}, timeout::instant },
+      { CASE(a_response_dispatches_through_the_base_pointer), {}, timeout::instant },
+    },
+  };
+}
+
+} // namespace couchbase::test
