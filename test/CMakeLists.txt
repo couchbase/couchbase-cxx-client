@@ -10,6 +10,8 @@ add_subdirectory(unit/http)
 
 add_subdirectory(unit/core)
 
+add_subdirectory(unit/mcbp)
+
 add_subdirectory(unit/management)
 
 add_subdirectory(unit/transactions)
@@ -57,7 +59,6 @@ unit_test(mcbp_parser)
 unit_test(client_request)
 unit_test(client_response)
 unit_test(mcbp_queue_request)
-unit_test(mcbp_command_id)
 
 integration_benchmark(get)
 integration_benchmark(replace)
