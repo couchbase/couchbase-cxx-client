@@ -1,0 +1,5 @@
+couchbase_add_test(unit/core/config_profiles LABEL unit LINK_CLIENT)
+
+if(COUCHBASE_CXX_CLIENT_COLUMNAR)
+  couchbase_add_test(unit/core/columnar_retry LABEL unit LINK_CLIENT)
+endif()

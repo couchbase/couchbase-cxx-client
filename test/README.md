@@ -253,11 +253,16 @@ tests() -> test_suite
 
 `CASE(fn)` expands to the case name and the function pointer. Never write the name out separately — a typo in the string compiles, and that string is both the ctest entry and the filter key. `suite_name` comes from the path CMake registered the file under.
 
-Register the file in `test/CMakeLists.txt`:
+Register the file in the `CMakeLists.txt` of the directory it lives in, which `test/CMakeLists.txt`
+pulls in with `add_subdirectory`. A file in `test/unit/core/` is registered in
+`test/unit/core/CMakeLists.txt`:
 
 ```cmake
 couchbase_add_test(unit/core/config_profiles LABEL unit LINK_CLIENT)
 ```
+
+The per-directory file exists because `test/CMakeLists.txt` is the most contended file in the tree:
+one undivided list puts every migration in conflict with the others.
 
 `LABEL` is one of `unit`, `integration`, `transaction`, `benchmark`, `cng`, and decides which CI leg runs it. Every one of them is selected by a leg in `bin/` or `.github/workflows/`; a label no leg selects would build and link its cases and never run them. The framework's own selftests carry `cng`. `LINK_CLIENT` links the client library and the cluster-backed probes; omit it for a test that needs neither. `LIBS` adds anything further.
 
