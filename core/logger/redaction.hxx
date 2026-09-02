@@ -32,6 +32,38 @@
  *   CB_LOG_INFO("connecting to {}", logger::system_data(host));
  *   CB_LOG_DEBUG("fetching {}", logger::user_data(key));
  *
+ * Choosing a category, in order:
+ *
+ *   A literal from this source takes no tag: an opcode name, a status enum, an error code, a
+ *   duration, a retry count. It reads the same for every deployment and identifies nobody.
+ *
+ *   A secret takes no tag either, because it must not be logged at all: a password, a bearer
+ *   token, a TLS private key, a SASL payload, a session cookie. A tag would be no protection
+ *   here, since redaction is off by default and a credential that reaches a log file has already
+ *   left the process. There is deliberately no wrapper for this case.
+ *
+ *   Otherwise the origin of the value decides. Something the application supplied is user data, a
+ *   Couchbase resource name is metadata, a host or the network path to it is system data. A value
+ *   that came from outside the SDK and fits none of the three is user data, because the fallback
+ *   has to be the strictest category rather than no tag at all.
+ *
+ * A tag belongs to a log line and nowhere else, so it goes on in the log statement rather than in
+ * the code that produced the value. Nothing headed for the wire, into a config, or back to the
+ * caller may carry one, which means no getter, no to_json() and no fmt formatter for a core type
+ * returns a tagged value: those same functions are reached from places a tag would corrupt.
+ * key_value_error_context::to_json() is the case to keep in mind, since couchbase/fmt/error.hxx
+ * puts its output into any fmt::format("{}", error) an application writes, with no log statement
+ * involved. Leaving the tag to the statement also keeps a bucket name rendering the same way
+ * whether the statement got it from config parsing or from a user call. An accessor added to serve
+ * a log statement therefore returns its value bare: get_node_addresses() hands back "host:port"
+ * and each of the four call sites wraps it.
+ *
+ * The categories are the ones Couchbase Server's log redaction specification defines, and are not
+ * ours to reinterpret. The tool that consumes these tags removes only user data today; removing
+ * metadata and system data as well is specified but unreleased. Tagging all three regardless is
+ * what makes that a change in the tool rather than an audit of every log statement in the SDK, so
+ * a tag being inert today is not a reason to leave it off.
+ *
  * A list of values gets one tag per entry rather than one around the whole list, so that an entry
  * still matches the same value logged on its own elsewhere. There is a list form of each category,
  * and it also renders the double quotes some of these lines already carry, because a tag has to sit
@@ -57,6 +89,13 @@
  * value inside the document could belong to. The whole document hashes as a single token either
  * way, so what a coarse span costs is diagnosability, not protection. "None of it" is the other
  * legitimate answer, and it is the one the configuration dumps below take.
+ *
+ * The same holds outside a serialized document: a value that mixes categories takes one tag,
+ * around the whole value, at the strictest category it contains. A connection string carries a
+ * hostname, a bucket name and a username at once, and an HTTP request path can carry a view's
+ * start_key, so both are tagged whole as user data. Reaching inside a value to tag only the part
+ * of it that is sensitive is where this feature gets implemented wrong: the boundaries move with
+ * the format, and a miss is silent.
  *
  * Two things must never appear inside a tagged value, and the wrappers remove both while redaction
  * is enabled, so that no call site has to remember.
