@@ -39,12 +39,66 @@ if(NOT TARGET spdlog::spdlog)
     "SPDLOG_FMT_EXTERNAL OFF")
 endif()
 
+if(COUCHBASE_CXX_CLIENT_BUILD_TOOLS)
+  include(cmake/GrpcProtobuf.cmake)
+endif()
+
 if(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
   if(NOT TARGET opentelemetry)
-    # Disable curl HTTP client to avoid curl downloading and linking to BoringSSL
-    # OpenTelemetry will fall back to using its own HTTP client implementation
-    # This avoids CMake export errors when curl tries to reference ssl/crypto targets
-    
+    # When OpenTelemetry's WITH_OTLP_HTTP is enabled it unconditionally pulls
+    # curl (via cmake/curl.cmake). If find_package(CURL) fails on the build
+    # host, OTel fetches curl from source and curl's CMakeLists.txt calls
+    # install(TARGETS libcurl_static EXPORT ...). When curl is linked against
+    # our statically built BoringSSL, the export fails because the ssl/crypto
+    # targets are not part of any install set:
+    #
+    #   export called with target "libcurl_static" which requires target "ssl"
+    #   that is not in any export set.
+    #
+    # We never install or consume curl's export files, so skip the export
+    # target entirely by setting CURL_ENABLE_EXPORT_TARGET=OFF before the
+    # cpmaddpackage call. The variable is a no-op when system curl is used.
+    set(CURL_ENABLE_EXPORT_TARGET OFF CACHE BOOL "" FORCE)
+
+    # Same scenario, second symptom: curl's configure probes for
+    # SSL_CTX_set_srp_username via check_symbol_exists against
+    # <openssl/ssl.h>. On Linux hosts with system OpenSSL installed the
+    # probe succeeds (OpenSSL has SRP) and curl sets USE_TLS_SRP=1. At
+    # compile time the include search order resolves <openssl/ssl.h> to
+    # our BoringSSL headers, which deliberately omit SRP, and curl's
+    # lib/vtls/openssl.c then fails with:
+    #
+    #   error: implicit declaration of function 'SSL_CTX_set_srp_username'
+    #   error: implicit declaration of function 'SSL_CTX_set_srp_password'
+    #
+    # We do not use TLS-SRP. Disable it in curl's configure to skip the
+    # probe entirely; this gates the #ifdef USE_OPENSSL_SRP block in
+    # openssl.c and removes the BoringSSL/OpenSSL header mismatch.
+    set(CURL_DISABLE_SRP ON CACHE BOOL "" FORCE)
+
+    if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
+      # Third symptom of the same curl-vs-BoringSSL clash: curl probes
+      # for OPENSSL_IS_AWSLC and OPENSSL_IS_BORINGSSL via
+      # check_symbol_exists, which lists OpenSSL::SSL in
+      # CMAKE_REQUIRED_LIBRARIES. check_symbol_exists generates a
+      # TryCompile sub-project that does NOT inherit ALIAS targets
+      # from the parent scope; cmake/OpenSSL.cmake aliases
+      # OpenSSL::SSL -> BoringSSL's `ssl` OBJECT library, which works
+      # for the main project but resolves to "target not found" in
+      # TryCompile. On hosts whose system OpenSSL has libcrypto but
+      # not libssl (e.g. alpine3.21 without openssl-dev), curl's
+      # find_package(OpenSSL) returns OpenSSL::Crypto without
+      # OpenSSL::SSL either, so the fallback path doesn't save us
+      # and configure dies at curl's CMakeLists.txt:839
+      # (check_symbol_exists for OPENSSL_IS_AWSLC).
+      #
+      # We are building against BoringSSL, so pre-populate the probe
+      # outputs in the cache. check_symbol_exists skips the check
+      # entirely when the output variable is already cached.
+      set(HAVE_OPENSSL_IS_BORINGSSL 1 CACHE INTERNAL "")
+      set(HAVE_OPENSSL_IS_AWSLC 0 CACHE INTERNAL "")
+    endif()
+
     # https://github.com/open-telemetry/opentelemetry-cpp/releases
     cpmaddpackage(
       NAME
@@ -64,7 +118,6 @@ if(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
       "WITH_FUNC_TESTS OFF"
       "WITH_OTLP_GRPC OFF"
       "WITH_OTLP_HTTP ON"
-      "WITH_HTTP_CLIENT_CURL OFF"
       "WITH_PROMETHEUS OFF"
       "WITH_OPENTRACING OFF"
       "WITH_STL CXX17"

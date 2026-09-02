@@ -68,3 +68,5 @@ add_subdirectory(system_metrics)
 target_link_libraries(
   cbc
   PRIVATE system_metrics_cxx)
+
+add_subdirectory(fit_performer)
