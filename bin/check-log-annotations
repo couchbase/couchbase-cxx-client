@@ -1,0 +1,874 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+#  Copyright 2020-Present Couchbase, Inc.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+
+# Checks that potentially sensitive values passed to the CB_LOG_* macros are wrapped in the
+# redaction helpers from core/logger/redaction.hxx, so an external tool can strip or hash them:
+#
+#   <ud> couchbase::core::logger::user_data()    document keys and bodies, query statements,
+#                                                usernames, e-mail addresses, xattrs, HTTP request
+#                                                paths, connection strings and user agents
+#   <md> couchbase::core::logger::metadata()     bucket / scope / collection names, index and
+#                                                design document names, cluster names, and a
+#                                                cluster configuration payload, which carries them
+#   <sd> couchbase::core::logger::system_data()  hostnames, IP addresses, ports, DNS topology
+#
+# A composite value whose parts do not share one category is wrapped by a helper that applies
+# several tags at once, and counts as annotated here without a category of its own:
+#
+#   couchbase::core::logger::document()           a document id, from core/document_id_redaction.hxx:
+#                                                 <md> bucket, scope and collection, <ud> key
+#
+# A container is tagged one entry at a time, so that an entry still matches the same value logged
+# on its own elsewhere, rather than the list hashing as a single token:
+#
+#   couchbase::core::logger::user_data_list()      one <ud> per entry, joined
+#   couchbase::core::logger::metadata_list()       one <md> per entry, joined
+#   couchbase::core::logger::system_data_list()    one <sd> per entry, joined
+#
+# A serialised document goes the other way: one tag around the whole argument, or none at all, and
+# never a tag inside it, because a tag written into a JSON string value is read back as part of
+# that value by anything that parses the line. So a log argument that serialises a document is
+# reported as one finding for the call rather than one per value inside it, and the values inside
+# are left alone -- "wrap the hostname" is the wrong advice there. Which of the three tags a
+# document needs depends on what is in it: it takes the strictest category any value inside could
+# belong to, which is a judgement this script does not make for you.
+#
+# The check runs in the other direction once. A hex dump written with the "{:a}" spec renders as a
+# multi-line grid; the wrappers escape newlines, so a tag around one would hold, but the dump comes
+# out flattened onto a single line and a flattened hex dump is not a hex dump. So a tag around a
+# to_hex() call is reported as <multiline>, meaning take the tag off, and not_redacted() is how the
+# decision gets recorded. This is the only over-annotation the script looks for, because it is the
+# only shape where escaping is the wrong answer.
+#
+# Usage:
+#   bin/check-log-annotations              # check, non-zero exit if anything is unannotated
+#   bin/check-log-annotations --catalog    # inventory every log statement, for tracking drift
+#   bin/check-log-annotations --self-test  # check the analysis itself against a fixture
+#   bin/check-log-annotations core/io      # restrict the scan to some paths
+#
+# This is a heuristic. It reads argument expressions, not types, so it can only guess at what a
+# value holds from what it is called -- it surfaces candidates for review, it does not decide.
+#
+# It also only reads CB_LOG_* statements, so a value composed before it reaches one is invisible:
+# a connection-context prefix built with fmt::format, and a document serialised into a string by
+# some accessor and logged as that string, are both out of reach. The document rule above catches
+# the serialiser call where it is written in the log argument, which is most of them, not the ones
+# assembled a function away.
+#
+# A reviewed exclusion is recorded at the argument it applies to, with one of two markers that
+# print the value unchanged and differ only in what they claim:
+#
+#   couchbase::core::logger::not_sensitive()   the identifier suggests a category the value does
+#                                              not belong to
+#   couchbase::core::logger::not_redacted()    sensitive, and deliberately logged untagged; the
+#                                              call site says why, and names a ticket if it should
+#                                              eventually be tagged
+#
+# A "no-redact" comment on the statement also suppresses it, but covers every argument including
+# any added later, so prefer a marker. Whole files are excluded through the suppressions file
+# (see SUPPRESSIONS_FILE below).
+
+require "optparse"
+require "find"
+
+module LogAnnotations
+  SUPPRESSIONS_FILE = ".log_redaction_suppressions.txt"
+
+  # Identifiers are compared in a canonical form: leading and trailing underscores stripped
+  # (the member convention is noise here), downcased. Defined before the tables below because
+  # they are normalised as they are built.
+  def self.normalise(identifier)
+    identifier.gsub(/\A_+|_+\z/, "").downcase
+  end
+
+  # Macros that format their arguments through fmt, and can therefore carry annotations.
+  FORMATTING_MACROS = %w[
+    CB_LOG_TRACE CB_LOG_DEBUG CB_LOG_INFO CB_LOG_WARNING CB_LOG_ERROR CB_LOG_CRITICAL
+  ].freeze
+
+  # COUCHBASE_LOG_RAW deliberately skips fmt ("msg is already a string; deliver it directly"),
+  # so the redaction wrappers cannot be used there. CB_LOG_PROTOCOL dumps raw protocol traffic
+  # and is out of scope by design. Both are catalogued, neither is checked.
+  UNCHECKED_MACROS = (FORMATTING_MACROS.map { |m| "#{m}_RAW" } + %w[CB_LOG_PROTOCOL]).freeze
+
+  ALL_MACROS = (FORMATTING_MACROS + UNCHECKED_MACROS).freeze
+
+  MACRO_PATTERN = /\b(#{ALL_MACROS.join('|')})\b/.freeze
+
+  WRAPPERS = {
+    "user_data" => "ud",
+    "metadata" => "md",
+    "system_data" => "sd",
+  }.freeze
+
+  # Reported like a category, but it names a missing decision rather than a tag: a document needs
+  # one of the three above, and which one depends on its contents.
+  DOCUMENT = "document"
+
+  # Reported like a category, but it names a tag that has to come off rather than one to add.
+  MULTILINE = "multiline"
+
+  # How a category prints in a finding. Only the three real categories name a tag.
+  CATEGORY_LABELS = WRAPPERS.merge(DOCUMENT => DOCUMENT, MULTILINE => MULTILINE).freeze
+
+  # Helpers that tag a composite value with more than one category, so they map to no single tag.
+  # They still mark their argument as annotated.
+  COMPOSITE_WRAPPERS = %w[document].freeze
+
+  # Helpers that tag every entry of a container and join them. One tag per entry, so a list
+  # correlates entry by entry rather than hashing as a single token. They are wrappers, not
+  # exclusions: the argument inside really is annotated, just not at the position it appears in.
+  LIST_WRAPPERS = %w[user_data_list metadata_list system_data_list].freeze
+
+  # Helpers that tag on one branch and print the value in the clear on another, for an argument
+  # that is sensitive only some of the time. The branch is a run-time condition this script cannot
+  # evaluate, so it counts the argument as annotated and leaves the choice to review.
+  CONDITIONAL_WRAPPERS = %w[user_data_if].freeze
+
+  # Markers that record a reviewed exclusion rather than applying a tag. They annotate nothing,
+  # but an argument inside one has been looked at, which is all this script can ask for.
+  EXCLUSION_MARKERS = %w[not_sensitive not_redacted].freeze
+
+  WRAPPER_NAMES = (WRAPPERS.keys + COMPOSITE_WRAPPERS + LIST_WRAPPERS + CONDITIONAL_WRAPPERS +
+                   EXCLUSION_MARKERS).freeze
+
+  # The wrappers that apply a tag, as against the markers that record an exclusion. Only these can
+  # put a tag around a value that cannot carry one.
+  TAG_WRAPPERS =
+    (WRAPPERS.keys + COMPOSITE_WRAPPERS + LIST_WRAPPERS + CONDITIONAL_WRAPPERS).freeze
+
+  # Calls whose output spans several log lines. The wrappers escape newlines, so a tag around one
+  # would hold, but a hex dump collapsed onto a single line of "\n" literals is no longer a hex
+  # dump and that is the only reason to print one. These stay untagged, with not_redacted() at the
+  # call site to record the decision. Deliberately narrow: this is the one shape where escaping is
+  # the wrong answer, and it has one spelling in this codebase.
+  MULTILINE_CALL = /\bto_hex\s*\(/.freeze
+
+  # Calls that serialise a document into a log argument. Anchored on "json::" so that
+  # std::to_string() and every other to_string() stay out of it, and open-ended after "to_json"
+  # so an accessor named for the log is caught too. Leading namespace qualifiers are matched so
+  # that a finding names the call as it is written.
+  SERIALIZER_PATTERN =
+    /\b(?:[A-Za-z_][A-Za-z0-9_]*::)*(?:json::generate(?:_binary)?|json::to_string|to_json[A-Za-z0-9_]*)\s*\(/
+    .freeze
+
+  SOURCE_EXTENSIONS = %w[.cxx .hxx .cpp .hpp].freeze
+
+  # Directories that never ship to a customer, or that we do not own.
+  EXCLUDED_DIRS = %w[build third_party test cmake-build-debug cmake-build-release].freeze
+
+  # Identifiers that are pre-tagged, SDK-generated, or otherwise known not to carry customer
+  # data. Checked before the sensitive rules, so an entry here always wins. Compared after
+  # normalisation, so trailing underscores need not be spelled out.
+  #
+  # The log_prefix family is pre-tagged rather than harmless: connection-context prefixes are
+  # formatted once, at construction, by the sites listed in section 4a of
+  # .ai_discussions/log_redaction/PLAN.md, and already carry their own <md>/<sd> tags by the
+  # time they reach a log statement.
+  #
+  # "id" is absent on purpose -- see contextual_category.
+  NEVER_SENSITIVE = %w[
+    log_prefix prefix
+    client_id session_id sdk_id opaque client_context_id operation_id
+    key_value kv
+    ec error error_code errc status status_code error_message message reason
+    size length count offset seqno vbucket vbucket_id partition rev_str config_rev
+    timeout duration elapsed backoff interval attempt attempts retries
+    service service_type level network
+  ].map { |token| normalise(token) }.freeze
+
+  # Rules are matched against the normalised identifier tokens of an argument expression:
+  # trailing/leading underscores stripped, downcased. Exact matches only -- prefix matching
+  # turns key_value into a document key and keyspace into a document key too.
+  SENSITIVE_TOKENS = {
+    # "value" is deliberately absent. Every occurrence in this codebase is std::optional::value(),
+    # std::error_code::value() or tao::json::value -- not one of them a document body. Document
+    # payloads here are called body, payload, content or document.
+    "user_data" => %w[
+      key document_key doc_key document_id doc_id
+      statement statements stmt query query_string prepared
+      body payload content document doc
+      xattr xattrs
+      username user_name user email e_mail
+      user_agent user_agent_extra
+      connection_string
+      path
+    ].freeze,
+    "metadata" => %w[
+      bucket bucket_name buckets
+      scope scope_name collection collection_name collection_path keyspace
+      cluster_name server_group
+      index_name design_document design_document_name ddoc ddoc_name view view_name
+      replication_stream
+      name
+      config_text
+    ].freeze,
+    "system_data" => %w[
+      host hostname hosts hostnames
+      address addresses remote_address local_address bootstrap_address
+      endpoint endpoints
+      port ports remote_port local_port
+      ip ip_address node nodes get_nodes node_address node_addresses get_node_addresses
+      dns srv srv_record nameserver nameservers dns_server dns_servers
+    ].freeze,
+  }.freeze
+
+  # Identifier suffixes, applied after the exact-match tables. "*_hostname" is a hostname
+  # regardless of what precedes it; "*_key" is not necessarily a document key, so it is absent.
+  SENSITIVE_SUFFIXES = {
+    "metadata" => %w[_bucket_name _scope_name _collection_name _index_name _ddoc_name].freeze,
+    "system_data" => %w[_hostname _host _address _endpoint _port].freeze,
+  }.freeze
+
+  CPP_KEYWORDS = %w[
+    static_cast dynamic_cast const_cast reinterpret_cast sizeof alignof decltype typeid
+    true false nullptr this auto const static inline template typename operator return
+    if else for while do switch case break continue new delete throw try catch
+    int long short char bool float double void unsigned signed size_t std fmt
+  ].freeze
+
+  # A single argument of a single log statement.
+  Argument = Struct.new(:text, :offset, keyword_init: true)
+
+  # A single CB_LOG_* invocation.
+  Statement = Struct.new(:file, :line, :macro, :format_string, :arguments, :source,
+                         :suppressed, keyword_init: true)
+
+  Finding = Struct.new(:file, :line, :macro, :identifier, :category, :argument,
+                       :format_string, keyword_init: true)
+
+  # Replaces the contents of comments and string/character literals with spaces, keeping every
+  # byte offset and newline intact. Structural scanning (paren matching, argument splitting)
+  # runs over this shadow copy, while reported text is sliced out of the original source. That
+  # is what keeps a comma inside a format string from splitting an argument list.
+  def self.shadow(source)
+    out = source.dup
+    i = 0
+    length = source.length
+    while i < length
+      char = source[i]
+      case char
+      when "/"
+        if source[i + 1] == "/"
+          i = blank_until(out, source, i, "\n", inclusive: false)
+          next
+        elsif source[i + 1] == "*"
+          i = blank_until(out, source, i + 2, "*/", inclusive: true)
+          next
+        end
+      when '"'
+        i = blank_string(out, source, i)
+        next
+      when "'"
+        # Not a character literal when it is a C++14 digit separator, as in 1'000'000.
+        unless i.positive? && source[i - 1].match?(/[0-9a-zA-Z_]/)
+          i = blank_char_literal(out, source, i)
+          next
+        end
+      end
+      i += 1
+    end
+    out
+  end
+
+  # Blanks everything from `from` up to `terminator`, preserving newlines. Returns the offset
+  # just past the terminator when `inclusive`, otherwise the offset of the terminator.
+  def self.blank_until(out, source, from, terminator, inclusive:)
+    stop = source.index(terminator, from) || source.length
+    (from...stop).each do |j|
+      out[j] = " " unless source[j] == "\n"
+    end
+    return stop unless inclusive
+
+    (stop...[stop + terminator.length, source.length].min).each { |j| out[j] = " " }
+    stop + terminator.length
+  end
+
+  # Handles both ordinary "..." literals and raw R"delim( ... )delim" literals.
+  def self.blank_string(out, source, start)
+    if start.positive? && source[start - 1] == "R"
+      close_paren = source.index("(", start + 1)
+      if close_paren
+        delimiter = source[(start + 1)...close_paren]
+        terminator = ")#{delimiter}\""
+        stop = source.index(terminator, close_paren) || source.length
+        ((start + 1)..[stop + terminator.length - 1, source.length - 1].min).each do |j|
+          out[j] = " " unless source[j] == "\n"
+        end
+        return stop + terminator.length
+      end
+    end
+
+    i = start + 1
+    while i < source.length
+      break if source[i] == '"'
+
+      i += (source[i] == "\\" ? 2 : 1)
+    end
+    ((start + 1)...[i, source.length].min).each do |j|
+      out[j] = " " unless source[j] == "\n"
+    end
+    i + 1
+  end
+
+  def self.blank_char_literal(out, source, start)
+    i = start + 1
+    while i < source.length
+      break if source[i] == "'"
+
+      i += (source[i] == "\\" ? 2 : 1)
+    end
+    ((start + 1)...[i, source.length].min).each { |j| out[j] = " " }
+    i + 1
+  end
+
+  # Finds the offset of the parenthesis matching the one at `open`, over a shadow copy.
+  def self.matching_paren(shadowed, open)
+    depth = 0
+    i = open
+    while i < shadowed.length
+      case shadowed[i]
+      when "(" then depth += 1
+      when ")"
+        depth -= 1
+        return i if depth.zero?
+      end
+      i += 1
+    end
+    nil
+  end
+
+  # Splits an argument list at top-level commas. Angle brackets are deliberately not tracked:
+  # telling a template argument list from a comparison needs a real parser, and template
+  # arguments are vanishingly rare inside log statements.
+  def self.split_arguments(source, shadowed, from, to)
+    arguments = []
+    depth = 0
+    start = from
+    (from...to).each do |i|
+      case shadowed[i]
+      when "(", "[", "{" then depth += 1
+      when ")", "]", "}" then depth -= 1
+      when ","
+        if depth.zero?
+          arguments << Argument.new(text: source[start...i], offset: start)
+          start = i + 1
+        end
+      end
+    end
+    arguments << Argument.new(text: source[start...to], offset: start) if start < to
+    arguments.each { |argument| argument.text = argument.text.strip }
+    arguments.reject { |argument| argument.text.empty? }
+  end
+
+  # Byte ranges covered by a redaction wrapper call within an expression, so that an
+  # identifier can be tested for membership rather than the whole argument being waved
+  # through because it happens to mention a wrapper somewhere.
+  def self.wrapped_ranges(shadowed, wrappers = WRAPPER_NAMES)
+    ranges = []
+    wrappers.each do |wrapper|
+      shadowed.enum_for(:scan, /\b#{wrapper}\s*\(/).each do
+        match_start = Regexp.last_match.begin(0)
+        open = shadowed.index("(", match_start)
+        close = open && matching_paren(shadowed, open)
+        ranges << (match_start..close) if close
+      end
+    end
+    ranges
+  end
+
+  # Serialiser calls in an expression, as [range, name] with the range spanning the whole call.
+  # The range is used twice: to report the call, and to keep the identifiers inside it from being
+  # reported on their own.
+  def self.serialised_documents(shadowed)
+    documents = []
+    shadowed.enum_for(:scan, SERIALIZER_PATTERN).each do
+      match_start = Regexp.last_match.begin(0)
+      open = shadowed.index("(", match_start)
+      close = open && matching_paren(shadowed, open)
+      next if close.nil?
+
+      documents << [(match_start..close), shadowed[match_start...open].strip]
+    end
+    documents
+  end
+
+  # Identifier tokens of an expression, paired with their offsets. Member accesses are broken
+  # apart, so req->key_ yields both "req" and "key_" and the sensitive half is still seen.
+  def self.identifiers(expression)
+    tokens = []
+    expression.enum_for(:scan, /[A-Za-z_][A-Za-z0-9_]*/).each do
+      tokens << [Regexp.last_match[0], Regexp.last_match.begin(0)]
+    end
+    tokens
+  end
+
+  # "id" names two unrelated things here, and only one of them is a document key:
+  #
+  #   session.id()  stream_->id()  cmd->id()   accessor on an SDK object, a generated identifier
+  #   id_                                      private member of a cluster or session, likewise
+  #   request.id    cmd->request.id    id      the document_id of a KV operation -- <ud>
+  #
+  # The call parentheses and the trailing underscore are what tell them apart, so this cannot be
+  # decided from the identifier alone.
+  def self.contextual_category(identifier, expression, offset)
+    return nil unless identifier == "id"
+    return nil if expression[(offset + identifier.length)..-1].to_s.lstrip.start_with?("(")
+
+    "user_data"
+  end
+
+  # Members and accessors that project a sensitive object onto something harmless: the number
+  # of endpoints is not an endpoint, and a node's position in the node list is not an address.
+  BENIGN_PROJECTIONS = %w[size length count empty capacity max_size index].freeze
+
+  # True when the identifier is immediately narrowed by one of those projections, as in
+  # endpoints_.size(), node.index or get_nodes().size(). An empty argument list may intervene,
+  # so a count taken from an accessor reads the same as one taken from a member. Only the first
+  # hop is considered, so address_.hostname stays flagged.
+  def self.projected?(expression, offset, identifier)
+    rest = expression[(offset + identifier.length)..-1].to_s
+    match = rest.match(/\A\s*(?:\(\s*\))?\s*(?:\.|->)\s*([A-Za-z_][A-Za-z0-9_]*)/)
+    !match.nil? && BENIGN_PROJECTIONS.include?(normalise(match[1]))
+  end
+
+  # True when an identifier is preceded by "::", i.e. it names a type or a namespace member
+  # rather than a value in hand -- tao::json::value is the JSON library's node type, not a
+  # document body. Member access through "." or "->" is not qualification in this sense:
+  # session->hostname() really does log a hostname.
+  def self.qualified?(expression, offset)
+    expression[0...offset].rstrip.end_with?("::")
+  end
+
+  # Returns the wrapper an identifier ought to be passed through, or nil.
+  def self.category_for(identifier, expression = "", offset = 0)
+    contextual = contextual_category(identifier, expression, offset)
+    return contextual unless contextual.nil?
+
+    normalised = normalise(identifier)
+    return nil if normalised.empty?
+    return nil if CPP_KEYWORDS.include?(normalised)
+    return nil if NEVER_SENSITIVE.include?(normalised)
+
+    SENSITIVE_TOKENS.each do |wrapper, tokens|
+      return wrapper if tokens.include?(normalised)
+    end
+    SENSITIVE_SUFFIXES.each do |wrapper, suffixes|
+      return wrapper if suffixes.any? { |suffix| normalised.end_with?(suffix) }
+    end
+    nil
+  end
+
+  def self.line_of(source, offset)
+    source[0...offset].count("\n") + 1
+  end
+
+  # Extracts every CB_LOG_* statement from one translation unit.
+  def self.statements(path, source)
+    shadowed = shadow(source)
+    found = []
+    shadowed.enum_for(:scan, MACRO_PATTERN).each do
+      match = Regexp.last_match
+      macro = match[1]
+      start = match.begin(0)
+      open = shadowed.index("(", start)
+      next if open.nil? || !shadowed[(start + macro.length)...open].match?(/\A\s*\z/)
+
+      close = matching_paren(shadowed, open)
+      next if close.nil?
+
+      arguments = split_arguments(source, shadowed, open + 1, close)
+      format_string = arguments.first&.text
+      found << Statement.new(
+        file: path,
+        line: line_of(source, start),
+        macro: macro,
+        format_string: format_string,
+        arguments: arguments.drop(1),
+        source: source[start..close],
+        # The suppressing comment is usually written after the closing parenthesis, so the
+        # window runs to the end of that line rather than to the parenthesis itself.
+        suppressed: source[start..(source.index("\n", close) || source.length)]
+          .match?(/\bno-redact\b/),
+      )
+    end
+    found
+  end
+
+  def self.findings_for(statement, suppressed_identifiers)
+    return [] if UNCHECKED_MACROS.include?(statement.macro)
+    return [] if statement.suppressed
+
+    statement.arguments.flat_map do |argument|
+      # Analysed over a shadow copy, so that an identifier spelled inside a format string --
+      # "hostname={}" -- is not mistaken for the value being logged.
+      expression = shadow(argument.text)
+      ranges = wrapped_ranges(expression)
+      tagged = wrapped_ranges(expression, TAG_WRAPPERS)
+      documents = serialised_documents(expression)
+
+      finding = lambda do |identifier, category|
+        Finding.new(
+          file: statement.file,
+          line: statement.line,
+          macro: statement.macro,
+          identifier: identifier,
+          category: category,
+          argument: collapse(argument.text),
+          format_string: collapse(statement.format_string.to_s),
+        )
+      end
+
+      document_findings = documents.filter_map do |range, name|
+        next if ranges.any? { |wrapped| wrapped.cover?(range.first) }
+
+        finding.call(name, DOCUMENT)
+      end
+
+      value_findings = identifiers(expression).filter_map do |identifier, offset|
+        next if ranges.any? { |range| range.cover?(offset) }
+        # A value inside a serialised document is not annotated where it sits, so reporting it
+        # would ask for the one thing the rule forbids. The call carries the finding instead.
+        next if documents.any? { |range, _| range.cover?(offset) }
+        next if qualified?(expression, offset)
+        next if projected?(expression, offset, identifier)
+        next if suppressed_identifiers.include?(normalise(identifier))
+
+        category = category_for(identifier, expression, offset)
+        next if category.nil?
+
+        finding.call(identifier, category)
+      end
+
+      # A tag that cannot survive the value it wraps. Reported against the call rather than an
+      # identifier, because the call is what renders across lines.
+      multiline_findings = expression.enum_for(:scan, MULTILINE_CALL).filter_map do
+        offset = Regexp.last_match.begin(0)
+        next unless tagged.any? { |range| range.cover?(offset) }
+
+        finding.call("to_hex", MULTILINE)
+      end
+
+      document_findings + value_findings + multiline_findings
+    end
+  end
+
+  def self.collapse(text)
+    text.gsub(/\s+/, " ").strip
+  end
+
+  def self.source_files(roots)
+    files = []
+    roots.each do |root|
+      Find.find(root) do |path|
+        if File.directory?(path)
+          Find.prune if EXCLUDED_DIRS.include?(File.basename(path)) || File.basename(path).start_with?(".")
+          next
+        end
+        files << path if SOURCE_EXTENSIONS.include?(File.extname(path))
+      end
+    end
+    files.sort
+  end
+
+  # Suppressions file format, one entry per line, "#" starts a comment:
+  #
+  #   core/io/dns_client.cxx                 # skip the file entirely
+  #   core/io/dns_client.cxx  port           # "port" is not sensitive in this file
+  #   core/**                 service_name   # ... in every file under core/
+  #
+  # Identifiers are matched after normalisation, so trailing underscores are optional.
+  def self.load_suppressions(path)
+    files = []
+    identifiers = []
+    return [files, identifiers] unless File.file?(path)
+
+    File.readlines(path).each do |line|
+      line = line.sub(/#.*\z/, "").strip
+      next if line.empty?
+
+      glob, identifier = line.split(/\s+/, 2)
+      if identifier.nil?
+        files << glob
+      else
+        identifiers << [glob, normalise(identifier.strip)]
+      end
+    end
+    [files, identifiers]
+  end
+
+  # A bare prefix stands for a whole subtree, but only on a path component boundary: "core/io"
+  # covers "core/io/dns_client.cxx" and not "core/iota.cxx". A raw string prefix would silently
+  # widen a suppression, and suppressions are the only way to opt out of the check.
+  def self.matches_glob?(glob, path)
+    prefix = glob.chomp("/")
+    File.fnmatch?(glob, path, File::FNM_PATHNAME) ||
+      File.fnmatch?(glob, path) ||
+      path == prefix ||
+      path.start_with?("#{prefix}/")
+  end
+
+  def self.print_catalog(statements)
+    statements.each do |statement|
+      arguments = statement.arguments.map { |argument| collapse(argument.text) }
+      puts format("%s:%d\t%s\t%s\t%s",
+                  statement.file,
+                  statement.line,
+                  statement.macro,
+                  collapse(statement.format_string.to_s),
+                  arguments.join(" | "))
+    end
+    warn "\n#{statements.size} log statements"
+  end
+
+  def self.print_findings(findings)
+    findings.group_by(&:file).sort.each do |file, in_file|
+      puts file
+      in_file.sort_by { |finding| [finding.line, finding.identifier] }.each do |finding|
+        suggestion =
+          if finding.category == DOCUMENT
+            "wrap the whole argument in the strictest category any value inside it could " \
+              "belong to, or record the exclusion with not_redacted()"
+          elsif finding.category == MULTILINE
+            "remove the tag and record the exclusion with not_redacted(): escaping would keep " \
+              "the tag intact but flatten the dump onto one line"
+          else
+            "wrap in couchbase::core::logger::#{finding.category}()"
+          end
+        puts format("  %s:%d  %s  <%s>",
+                    file, finding.line, finding.identifier, CATEGORY_LABELS[finding.category])
+        puts format("    argument: %s", finding.argument)
+        puts format("    format:   \"%s\"", finding.format_string)
+        puts format("    suggest:  %s", suggestion)
+      end
+      puts
+    end
+
+    by_category = findings.group_by(&:category).map do |category, group|
+      "#{group.size} <#{CATEGORY_LABELS[category]}>"
+    end
+    puts "#{findings.size} findings (#{by_category.sort.join(', ')}) " \
+         "in #{findings.map(&:file).uniq.size} files"
+  end
+
+  # Exercises the analysis against a fixture covering each way the previous prototype went
+  # wrong. Kept in the script itself because there is no Ruby test harness in this repository,
+  # and a parser this fiddly should not be the only thing standing between us and a silently
+  # empty report.
+  SELF_TEST_SOURCE = <<~CPP
+    void f() {
+      CB_LOG_DEBUG("host={}", hostname);
+      CB_LOG_DEBUG("host={}", hostname); // no-redact: explained here
+      CB_LOG_DEBUG("host={}", logger::system_data(hostname));
+      CB_LOG_DEBUG_RAW("hostname literal");
+      CB_LOG_DEBUG("a={}, b={}", logger::system_data(host), port);
+      CB_LOG_DEBUG("s={}", "hostname in a string literal, and a comma");
+      CB_LOG_DEBUG("hostname={}, port={}", h, p);
+      CB_LOG_DEBUG(R"(raw "hostname" {})", bucket_name);
+      CB_LOG_DEBUG("chained {}", session->bootstrap_hostname());
+      CB_LOG_DEBUG("n={}", endpoints_.size());
+      CB_LOG_DEBUG("k={}", request.id);
+      CB_LOG_DEBUG("k={}", logger::document(request.id));
+      CB_LOG_DEBUG("sid={}", session.id());
+      CB_LOG_DEBUG("f={}", logger::not_sensitive(hello.body().features()));
+      CB_LOG_DEBUG("hex={:a}, k={}", logger::not_redacted(msg.body), request.id);
+      CB_LOG_PROTOCOL("dump {}", body);
+      CB_LOG_DEBUG("json {}", tao::json::value{ { "x", 1 } });
+      CB_LOG_DEBUG("n={}", origin.get_nodes().size() - 1);
+      CB_LOG_DEBUG("[{}]", logger::system_data_list(origin.get_node_addresses()));
+      CB_LOG_DEBUG("[{}], sel={}", logger::system_data_list(dns_servers), dns_servers[0]);
+      CB_LOG_DEBUG("report {}", utils::json::generate(report));
+      CB_LOG_DEBUG("report {}", logger::system_data(utils::json::generate(report)));
+      CB_LOG_DEBUG("dump {}", tao::json::to_string(tao::json::value{ { "hostname", address.hostname } }));
+      CB_LOG_DEBUG("origin {}", logger::user_data(origin_.to_json()));
+      CB_LOG_DEBUG("h={}, r={}", hostname, json::generate(report));
+      CB_LOG_DEBUG("n={}", std::to_string(counter));
+      CB_LOG_DEBUG("path={}", encoded.path);
+      CB_LOG_DEBUG("cs={}", origin.connection_string());
+      CB_LOG_DEBUG("ua={}", user_agent);
+      CB_LOG_DEBUG("prep={}", logger::user_data_if(prep.is_string(), generate(prep)));
+      CB_LOG_DEBUG("hex={:a}", logger::user_data(spdlog::to_hex(msg.body)));
+      CB_LOG_DEBUG("hex={:a}", logger::not_redacted(spdlog::to_hex(msg.body)));
+      /* CB_LOG_DEBUG("host={}", hostname); */
+      // CB_LOG_DEBUG("host={}", hostname);
+    }
+  CPP
+
+  SELF_TEST_EXPECTATIONS = {
+    2 => ["hostname<sd>"],                 # plain unannotated argument
+    3 => [],                               # suppressed by a trailing no-redact comment
+    4 => [],                               # already annotated
+    5 => [],                               # _RAW cannot carry annotations
+    6 => ["port<sd>"],                     # per-argument, not per-call: one wrapped, one not
+    7 => [],                               # identifiers inside a string literal are not values
+    8 => [],                               # ... including the format string itself
+    9 => ["bucket_name<md>"],              # raw string literals delimit correctly
+    10 => ["bootstrap_hostname<sd>"],      # accessor on a session
+    11 => [],                              # a count of endpoints is not an endpoint
+    12 => ["id<ud>"],                      # request.id is a document key
+    13 => [],                              # ... and document() annotates it, despite no one tag
+    14 => [],                              # session.id() is SDK-generated
+    15 => [],                              # not_sensitive() records a reviewed false positive
+    16 => ["id<ud>"],                      # not_redacted() excuses its own argument, not the rest
+    17 => [],                              # CB_LOG_PROTOCOL is out of scope
+    18 => [],                              # tao::json::value is a type, not a document body
+    19 => [],                              # a count through an accessor is still a count
+    20 => [],                              # a list wrapper annotates, one tag per entry
+    21 => ["dns_servers<sd>"],             # ... and only its own argument, like every wrapper
+    22 => ["utils::json::generate<document>"],   # a serialised document, reported as the call
+    23 => [],                              # ... and annotated as a whole, which is the rule
+    24 => ["tao::json::to_string<document>"],    # the hostname inside it is NOT reported: the
+                                           # document is what carries the tag, not the value
+    25 => [],                              # an accessor that serialises, wrapped at the log site
+    26 => ["hostname<sd>", "json::generate<document>"], # per-argument, as everywhere else
+    27 => [],                              # std::to_string is not a serialiser
+    28 => ["path<ud>"],                    # an HTTP path carries usernames and query values
+    29 => ["connection_string<ud>"],       # ... and a connection string carries user_agent_extra
+    30 => ["user_agent<ud>"],              # ... which the user agent folds in as well
+    31 => [],                              # a conditional wrapper annotates, like every other
+    32 => ["to_hex<multiline>"],           # a tag cannot survive a value that renders as a grid
+    33 => [],                              # ... and not_redacted() is how that is recorded
+  }.freeze
+
+  # A suppression that matches more than it names removes coverage without saying so, which is the
+  # one failure of this script that leaves no trace in its output. Pinned here rather than trusted.
+  SELF_TEST_GLOBS = [
+    ["core/io", "core/io/dns_client.cxx", true],
+    ["core/io", "core/iota.cxx", false],
+    ["core/io/", "core/io/dns_client.cxx", true],
+    ["core", "core/origin.cxx", true],
+    ["core", "core_extra/origin.cxx", false],
+    ["core/io/dns_client.cxx", "core/io/dns_client.cxx", true],
+    ["core/io/dns_client.cxx", "core/io/dns_client_extra.cxx", false],
+    ["core/app_telemetry_reporter.cxx", "core/app_telemetry_meter.cxx", false],
+    # ... and a glob that names the feature does cover both, which is how it is written.
+    ["core/app_telemetry_*.cxx", "core/app_telemetry_meter.cxx", true],
+    ["core/app_telemetry_*.cxx", "core/app_telemetry_reporter.cxx", true],
+    ["core/app_telemetry_*.cxx", "core/orphan_reporter.cxx", false],
+    # A "*" is deliberately not confined to one component, so "core/**" reads as "under core".
+    ["core/**", "core/io/dns_client.cxx", true],
+    ["core/*.cxx", "core/io/dns_client.cxx", true],
+  ].freeze
+
+  def self.self_test
+    parsed = statements("<self-test>", SELF_TEST_SOURCE)
+    failures = []
+
+    SELF_TEST_GLOBS.each do |glob, path, expected|
+      actual = matches_glob?(glob, path)
+      next if actual == expected
+
+      failures << "glob #{glob.inspect} against #{path.inspect}: got #{actual}, expected #{expected}"
+    end
+
+    expected_lines = SELF_TEST_EXPECTATIONS.keys.sort
+    actual_lines = parsed.map(&:line).sort
+    if expected_lines != actual_lines
+      failures << "extracted statements on lines #{actual_lines.inspect}, expected #{expected_lines.inspect}"
+    end
+
+    parsed.each do |statement|
+      expected = SELF_TEST_EXPECTATIONS[statement.line]
+      next if expected.nil?
+
+      actual = findings_for(statement, []).map do |finding|
+        "#{finding.identifier}<#{CATEGORY_LABELS[finding.category]}>"
+      end
+      next if actual.sort == expected.sort
+
+      failures << "line #{statement.line}: got #{actual.inspect}, expected #{expected.inspect}"
+    end
+
+    if failures.empty?
+      puts "self-test: #{parsed.size} statements, #{SELF_TEST_EXPECTATIONS.size} expectations, " \
+           "#{SELF_TEST_GLOBS.size} suppression globs, all pass"
+      return 0
+    end
+
+    failures.each { |failure| warn "self-test FAILED: #{failure}" }
+    1
+  end
+
+  def self.run(argv)
+    options = { mode: :check, roots: [] }
+    parser = OptionParser.new do |opts|
+      opts.banner = "Usage: bin/check-log-annotations [options] [paths...]"
+      opts.on("--catalog", "Print an inventory of every log statement instead of checking") do
+        options[:mode] = :catalog
+      end
+      opts.on("--check", "Report log arguments that look sensitive but are not annotated") do
+        options[:mode] = :check
+      end
+      opts.on("--self-test", "Check the analysis itself against a built-in fixture") do
+        options[:mode] = :self_test
+      end
+      opts.on("-h", "--help", "Show this message") do
+        puts opts
+        exit 0
+      end
+    end
+    parser.parse!(argv)
+
+    repository = File.expand_path("..", __dir__)
+    Dir.chdir(repository)
+
+    return self_test if options[:mode] == :self_test
+
+    roots = argv.empty? ? %w[core couchbase] : argv
+    roots = roots.select do |root|
+      next true if File.exist?(root)
+
+      warn "skipping #{root}: no such file or directory"
+      false
+    end
+    if roots.empty?
+      warn "nothing to scan"
+      return 1
+    end
+
+    suppressed_files, suppressed_identifiers = load_suppressions(SUPPRESSIONS_FILE)
+
+    all_statements = []
+    source_files(roots).each do |path|
+      next if suppressed_files.any? { |glob| matches_glob?(glob, path) }
+
+      all_statements << [path, statements(path, File.read(path))]
+    end
+
+    if options[:mode] == :catalog
+      print_catalog(all_statements.flat_map(&:last))
+      return 0
+    end
+
+    findings = all_statements.flat_map do |path, in_file|
+      here = suppressed_identifiers.filter_map do |glob, identifier|
+        identifier if matches_glob?(glob, path)
+      end
+      in_file.flat_map { |statement| findings_for(statement, here) }
+    end
+
+    if findings.empty?
+      puts "No unannotated sensitive arguments found in #{all_statements.size} files."
+      return 0
+    end
+
+    print_findings(findings)
+    1
+  end
+end
+
+exit LogAnnotations.run(ARGV) if $PROGRAM_NAME == __FILE__

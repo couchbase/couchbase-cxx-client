@@ -71,6 +71,10 @@ struct origin {
 
   [[nodiscard]] auto get_hostnames() const -> std::vector<std::string>;
   [[nodiscard]] auto get_nodes() const -> std::vector<std::string>;
+  // The same addresses as get_nodes(), without the display quotes baked into each entry. Log
+  // statements want them bare so that logger::system_data_list() can put a tag inside the quotes it
+  // renders; a tag around a pre-quoted entry hashes the punctuation with the value.
+  [[nodiscard]] auto get_node_addresses() const -> std::vector<std::string>;
 
   void shuffle_nodes();
   void set_nodes(node_list nodes);
@@ -87,6 +91,10 @@ struct origin {
   [[nodiscard]] auto options() const -> const couchbase::core::cluster_options&;
   [[nodiscard]] auto options() -> couchbase::core::cluster_options&;
   [[nodiscard]] auto credentials() const -> couchbase::core::cluster_credentials;
+  // A JSON dump of the whole origin, less the credentials. Its only callers are the log
+  // statements in the cluster open paths, and they annotate the whole document: a tag written
+  // into one of these values instead would be read back as part of that value by anything that
+  // parses the line as JSON. So nothing in here is annotated.
   [[nodiscard]] auto to_json() const -> std::string;
 
 private:

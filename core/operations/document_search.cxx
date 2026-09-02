@@ -19,6 +19,7 @@
 
 #include "core/cluster_options.hxx"
 #include "core/logger/logger.hxx"
+#include "core/logger/redaction.hxx"
 #include "core/utils/json.hxx"
 
 #include <couchbase/error_codes.hxx>
@@ -139,9 +140,9 @@ search_request::encode_to(search_request::encoded_request_type& encoded,
   body_str = utils::json::generate(body);
   encoded.body = body_str;
   if (context.options.show_queries || (log_request.has_value() && log_request.value())) {
-    CB_LOG_INFO("SEARCH: {}", utils::json::generate(body));
+    CB_LOG_INFO("SEARCH: {}", logger::user_data(utils::json::generate(body)));
   } else {
-    CB_LOG_DEBUG("SEARCH: {}", utils::json::generate(body));
+    CB_LOG_DEBUG("SEARCH: {}", logger::user_data(utils::json::generate(body)));
   }
   if (row_callback) {
     encoded.streaming.emplace(couchbase::core::io::streaming_settings{
@@ -172,7 +173,7 @@ search_request::make_response(error_context::search&& ctx,
         return response;
       }
       if (log_response.has_value() && log_response.value()) {
-        CB_LOG_INFO("SEARCH RESPONSE: {}", utils::json::generate(payload));
+        CB_LOG_INFO("SEARCH RESPONSE: {}", logger::user_data(utils::json::generate(payload)));
       }
       response.meta.metrics.took = std::chrono::nanoseconds(payload.at("took").get_unsigned());
       response.meta.metrics.max_score = payload.at("max_score").as<double>();

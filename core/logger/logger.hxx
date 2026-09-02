@@ -273,6 +273,29 @@ shutdown();
  */
 auto
 is_initialized() -> bool;
+
+/**
+ * Enable or disable log redaction.
+ *
+ * Redaction state is process-wide. When enabled, values wrapped by the helpers in
+ * `core/logger/redaction.hxx` are surrounded by `<ud>`/`<md>`/`<sd>` tags so that an external tool
+ * can strip or hash them; the SDK never removes or obscures anything itself.
+ *
+ * Connection-context log prefixes bake their tags in at construction, so redaction must be enabled
+ * *before* connecting for those prefixes to be tagged. Enabling it later affects only prefixes
+ * built afterwards.
+ *
+ * Enabling emits a one-time breadcrumb recording that the log carries redaction tags and still
+ * needs processing. That breadcrumb is dropped if no logger has been initialized yet.
+ */
+void
+set_log_redaction(bool enable);
+
+/**
+ * @return whether log redaction is currently enabled
+ */
+auto
+is_log_redaction_enabled() -> bool;
 } // namespace couchbase::core::logger
 
 #if defined(__GNUC__) || defined(__clang__)

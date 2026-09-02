@@ -267,6 +267,7 @@ origin::to_json() const -> std::string
         { "config_poll_floor", options_.config_poll_floor },
         { "user_agent_extra", options_.user_agent_extra },
         { "dump_configuration", options_.dump_configuration },
+        { "log_redaction", options_.log_redaction },
         { "disable_mozilla_ca_certificates", options_.disable_mozilla_ca_certificates },
         { "network", options_.network },
         { "tls_verify", options_.tls_verify },
@@ -311,6 +312,9 @@ origin::to_json() const -> std::string
     }
     json["bootstrap_nodes"] = nodes;
   }
+  // Every value in here is left as it is. The document this returns is annotated as a whole at
+  // the log site, because a tag written into one of its string values would be read back as part
+  // of that value by anything that parses the line as JSON.
   return tao::json::to_string(json);
 }
 
@@ -488,6 +492,16 @@ couchbase::core::origin::get_nodes() const -> std::vector<std::string>
   res.reserve(nodes_.size());
   for (const auto& [hostname, port] : nodes_) {
     res.emplace_back(fmt::format("\"{}:{}\"", hostname, port));
+  }
+  return res;
+}
+auto
+couchbase::core::origin::get_node_addresses() const -> std::vector<std::string>
+{
+  std::vector<std::string> res;
+  res.reserve(nodes_.size());
+  for (const auto& [hostname, port] : nodes_) {
+    res.emplace_back(fmt::format("{}:{}", hostname, port));
   }
   return res;
 }

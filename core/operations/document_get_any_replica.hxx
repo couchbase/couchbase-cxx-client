@@ -17,10 +17,12 @@
 
 #pragma once
 
+#include "core/document_id_redaction.hxx"
 #include "core/error_context/key_value.hxx"
 #include "core/impl/get_replica.hxx"
 #include "core/impl/replica_utils.hxx"
 #include "core/impl/with_cancellation.hxx"
+#include "core/logger/redaction.hxx"
 #include "core/operations/document_get.hxx"
 #include "core/operations/operation_traits.hxx"
 #include "core/utils/movable_function.hxx"
@@ -76,8 +78,8 @@ struct get_any_replica_request {
         if (nodes.empty()) {
           CB_LOG_DEBUG(
             "Unable to retrieve replicas for \"{}\", server_group={}, number_of_replicas={}",
-            id,
-            origin.options().server_group,
+            logger::document(id),
+            logger::metadata(origin.options().server_group),
             config->num_replicas.value_or(0));
           ec = errc::key_value::document_irretrievable;
         }

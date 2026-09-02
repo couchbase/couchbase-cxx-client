@@ -25,6 +25,7 @@
 #include "core/columnar/bootstrap_notification_subscriber.hxx"
 #endif
 #include "core/logger/logger.hxx"
+#include "core/logger/redaction.hxx"
 #include "core/metrics/meter_wrapper.hxx"
 #include "core/operations/http_noop.hxx"
 #include "core/service_type.hxx"
@@ -388,11 +389,9 @@ public:
           break;
         }
       }
-      CB_LOG_TRACE(
-        "{} Idle timer has expired for \"{}:{}\".  Attempting to select another session.",
-        session->log_prefix(),
-        session->hostname(),
-        session->port());
+      CB_LOG_TRACE("{} Idle timer has expired for \"{}\".  Attempting to select another session.",
+                   session->log_prefix(),
+                   logger::system_data(fmt::format("{}:{}", session->hostname(), session->port())));
       session.reset();
     }
     if (!session) {

@@ -28,6 +28,7 @@
 #include "core/error_context/key_value_status_code.hxx"
 #include "core/io/mcbp_message.hxx"
 #include "core/logger/logger.hxx"
+#include "core/logger/redaction.hxx"
 #include "core/mcbp/codec.hxx"
 #include "core/metrics/meter_wrapper.hxx"
 #include "core/protocol/client_opcode.hxx"
@@ -97,7 +98,7 @@ public:
               tls_context_provider& tls)
     : client_id_{ std::move(client_id) }
     , name_{ std::move(name) }
-    , log_prefix_{ fmt::format("[{}/{}]", client_id_, name_) }
+    , log_prefix_{ fmt::format("[{}/{}]", client_id_, logger::metadata(name_)) }
     , tracer_{ std::move(tracer) }
     , meter_{ std::move(meter) }
     , orphan_reporter_{ std::move(orphan_reporter) }
@@ -480,13 +481,12 @@ public:
             client_id_, node.node_uuid, ctx_, tls_, origin, state_listener_, name_, known_features_)
         : io::mcbp_session(
             client_id_, node.node_uuid, ctx_, origin, state_listener_, name_, known_features_);
-    CB_LOG_DEBUG(R"({} rev={}, connect idx={}, session="{}", address="{}:{}")",
+    CB_LOG_DEBUG(R"({} rev={}, connect idx={}, session="{}", address="{}")",
                  log_prefix_,
                  config_->rev_str(),
                  node.index,
                  session.id(),
-                 hostname,
-                 port);
+                 logger::system_data(fmt::format("{}:{}", hostname, port)));
     session.bootstrap(
       [self = shared_from_this(), session](std::error_code err,
                                            topology::configuration cfg) mutable -> void {
@@ -539,12 +539,11 @@ public:
         if (auto found_kv_node_index = ptr->first; found_kv_node_index != kv_node_index) {
           if (auto current = sessions_.find(kv_node_index); current == sessions_.end()) {
             CB_LOG_WARNING(
-              R"({} KV node index mismatch: config rev={} states that address="{}:{}" should be at idx={}, )"
+              R"({} KV node index mismatch: config rev={} states that address="{}" should be at idx={}, )"
               R"(but it is at idx={} ("{}"). Moving session to idx={}.)",
               log_prefix_,
               config_->rev_str(),
-              hostname,
-              port,
+              logger::system_data(fmt::format("{}:{}", hostname, port)),
               kv_node_index,
               found_kv_node_index,
               ptr->second.id(),
@@ -553,17 +552,16 @@ public:
             sessions_.erase(ptr);
           } else {
             CB_LOG_WARNING(
-              R"({} KV node index mismatch: config rev={} states that address="{}:{}" should be at idx={}, )"
+              R"({} KV node index mismatch: config rev={} states that address="{}" should be at idx={}, )"
               R"(but it is at idx={} ("{}"). Slot with idx={} is holds session with address="{}" ("{}"), swapping them.)",
               log_prefix_,
               config_->rev_str(),
-              hostname,
-              port,
+              logger::system_data(fmt::format("{}:{}", hostname, port)),
               kv_node_index,
               found_kv_node_index,
               ptr->second.id(),
               kv_node_index,
-              current->second.bootstrap_address(),
+              logger::system_data(current->second.bootstrap_address()),
               current->second.id());
             std::swap(current->second, ptr->second);
           }
@@ -585,13 +583,12 @@ public:
                              known_features_)
           : io::mcbp_session(
               client_id_, node.node_uuid, ctx_, origin, state_listener_, name_, known_features_);
-      CB_LOG_DEBUG(R"({} rev={}, restart idx={}, session="{}", address="{}:{}")",
+      CB_LOG_DEBUG(R"({} rev={}, restart idx={}, session="{}", address="{}")",
                    log_prefix_,
                    config_->rev_str(),
                    node.index,
                    session.id(),
-                   hostname,
-                   port);
+                   logger::system_data(fmt::format("{}:{}", hostname, port)));
       session.bootstrap(
         [self = shared_from_this(), session](std::error_code err,
                                              topology::configuration cfg) mutable {
@@ -617,12 +614,11 @@ public:
     const std::scoped_lock lock(sessions_mutex_);
     for (auto ptr = sessions_.cbegin(); ptr != sessions_.cend();) {
       if (ptr->second.id() == id) {
-        CB_LOG_DEBUG(R"({} removed session id="{}", address="{}", bootstrap_address="{}:{}")",
+        CB_LOG_DEBUG(R"({} removed session id="{}", address="{}", bootstrap_address="{}")",
                      log_prefix_,
                      ptr->second.id(),
-                     ptr->second.remote_address(),
-                     ptr->second.bootstrap_hostname(),
-                     ptr->second.bootstrap_port());
+                     logger::system_data(ptr->second.remote_address()),
+                     logger::system_data(ptr->second.bootstrap_address()));
         ptr = sessions_.erase(ptr);
         found = true;
       } else {
@@ -678,7 +674,7 @@ public:
         CB_LOG_WARNING(R"({} failed to bootstrap session ec={}, bucket="{}")",
                        new_session.log_prefix(),
                        ec.message(),
-                       self->name_);
+                       logger::metadata(self->name_));
         self->remove_session(new_session.id());
         {
           const std::scoped_lock lock(self->sessions_mutex_);
@@ -1023,12 +1019,11 @@ public:
         for (auto it = sessions_.begin(); it != sessions_.end(); ++it) {
           if (it->second.bootstrap_hostname() == hostname &&
               it->second.bootstrap_port_number() == port) {
-            CB_LOG_DEBUG(R"({} rev={}, preserve session="{}", address="{}:{}", index={}->{})",
+            CB_LOG_DEBUG(R"({} rev={}, preserve session="{}", address="{}", index={}->{})",
                          log_prefix_,
                          config.rev_str(),
                          it->second.id(),
-                         it->second.bootstrap_hostname(),
-                         it->second.bootstrap_port(),
+                         logger::system_data(it->second.bootstrap_address()),
                          it->first,
                          next_index);
             new_sessions.insert_or_assign(next_index, std::move(it->second));
@@ -1060,23 +1055,21 @@ public:
                                known_features_)
             : io::mcbp_session(
                 client_id_, node.node_uuid, ctx_, origin, state_listener_, name_, known_features_);
-        CB_LOG_DEBUG(R"({} rev={}, add session="{}", address="{}:{}", index={})",
+        CB_LOG_DEBUG(R"({} rev={}, add session="{}", address="{}", index={})",
                      log_prefix_,
                      config.rev_str(),
                      session.id(),
-                     hostname,
-                     port,
+                     logger::system_data(fmt::format("{}:{}", hostname, port)),
                      node.index);
         session.bootstrap(
           [self = shared_from_this(), session, idx = next_index](
             std::error_code err, topology::configuration cfg) mutable {
             if (err) {
               CB_LOG_WARNING(
-                R"({} failed to bootstrap session="{}", address="{}:{}", index={}, ec={})",
+                R"({} failed to bootstrap session="{}", address="{}", index={}, ec={})",
                 session.log_prefix(),
                 session.id(),
-                session.bootstrap_hostname(),
-                session.bootstrap_port(),
+                logger::system_data(session.bootstrap_address()),
                 idx,
                 err.message());
               return self->remove_session(session.id());
@@ -1095,12 +1088,11 @@ public:
       std::swap(sessions_, new_sessions);
 
       for (auto it = new_sessions.begin(); it != new_sessions.end(); ++it) {
-        CB_LOG_DEBUG(R"({} rev={}, drop session="{}", address="{}:{}", index={})",
+        CB_LOG_DEBUG(R"({} rev={}, drop session="{}", address="{}", index={})",
                      log_prefix_,
                      config.rev_str(),
                      it->second.id(),
-                     it->second.bootstrap_hostname(),
-                     it->second.bootstrap_port(),
+                     logger::system_data(it->second.bootstrap_address()),
                      it->first);
         dropped_sessions.push_back(std::move(it->second));
       }

@@ -18,6 +18,7 @@
 #pragma once
 
 #include "core/logger/logger.hxx"
+#include "core/logger/redaction.hxx"
 #include "core/protocol/client_opcode_fmt.hxx"
 
 #include <couchbase/best_effort_retry_strategy.hxx>
@@ -67,7 +68,7 @@ retry_with_duration(std::shared_ptr<Manager> manager,
     command->request.partition,
     reason,
     command->request.retries.retry_attempts(),
-    command->session_ ? command->session_->remote_address() : "");
+    logger::system_data(command->session_ ? command->session_->remote_address() : ""));
   manager->schedule_for_retry(command, duration);
 }
 

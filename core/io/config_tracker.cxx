@@ -21,10 +21,10 @@
 
 #include "core/impl/bootstrap_state_listener.hxx"
 #include "core/logger/logger.hxx"
+#include "core/logger/redaction.hxx"
 #include "core/origin.hxx"
 #include "core/protocol/client_request.hxx"
 #include "core/protocol/cmd_get_cluster_config.hxx"
-#include "core/utils/join_strings.hxx"
 #include "http_session_manager.hxx"
 #include "mcbp_session.hxx"
 
@@ -124,7 +124,8 @@ public:
           CB_LOG_INFO(
             "replace list of bootstrap nodes with addresses of alternative network \"{}\": [{}]",
             self->origin_.options().network,
-            utils::join_strings(self->origin_.get_nodes(), ","));
+            logger::system_data_list(
+              self->origin_.get_node_addresses(), logger::list_entries::quoted, ","));
         }
 
         new_session.on_configuration_update(self);
@@ -252,6 +253,15 @@ public:
   }
 
 private:
+  /**
+   * The bootstrap endpoint of a session, composed so that it can be tagged as one <sd> span rather
+   * than one per component.
+   */
+  [[nodiscard]] static auto session_address(const mcbp_session& session) -> std::string
+  {
+    return fmt::format("{}:{}", session.bootstrap_hostname(), session.bootstrap_port());
+  }
+
   void diff_nodes(const std::vector<topology::configuration::node>& lhs,
                   const std::vector<topology::configuration::node>& rhs,
                   std::vector<topology::configuration::node>& output)
@@ -368,19 +378,17 @@ private:
 
       bool reused_session{ false };
       for (auto it = sessions_.begin(); it != sessions_.end(); ++it) {
-        CB_LOG_DEBUG(R"({} rev={}, checking cluster session="{}", address="{}:{}")",
+        CB_LOG_DEBUG(R"({} rev={}, checking cluster session="{}", address="{}")",
                      log_prefix_,
                      config.rev_str(),
                      it->id(),
-                     it->bootstrap_hostname(),
-                     it->bootstrap_port());
+                     logger::system_data(session_address(*it)));
         if (it->bootstrap_hostname() == hostname && it->bootstrap_port_number() == port) {
-          CB_LOG_DEBUG(R"({} rev={}, preserve cluster session="{}", address="{}:{}")",
+          CB_LOG_DEBUG(R"({} rev={}, preserve cluster session="{}", address="{}")",
                        log_prefix_,
                        config.rev_str(),
                        it->id(),
-                       it->bootstrap_hostname(),
-                       it->bootstrap_port());
+                       logger::system_data(session_address(*it)));
           new_sessions.emplace_back(std::move(*it));
           reused_session = true;
           sessions_.erase(it);
@@ -397,23 +405,21 @@ private:
         origin_.options().enable_tls
           ? io::mcbp_session(client_id_, node.node_uuid, ctx_, tls_, origin, state_listener_)
           : io::mcbp_session(client_id_, node.node_uuid, ctx_, origin, state_listener_);
-      CB_LOG_DEBUG(R"({} rev={}, add cluster session="{}", address="{}:{}")",
+      CB_LOG_DEBUG(R"({} rev={}, add cluster session="{}", address="{}")",
                    log_prefix_,
                    config.rev_str(),
                    session.id(),
-                   hostname,
-                   port);
+                   logger::system_data(fmt::format("{}:{}", hostname, port)));
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
       session.add_background_bootstrap_listener(shared_from_this());
 #endif
       session.bootstrap([self = shared_from_this(), session](std::error_code err,
                                                              topology::configuration cfg) mutable {
         if (err) {
-          CB_LOG_WARNING(R"({} failed to bootstrap cluster session="{}", address="{}:{}", ec={})",
+          CB_LOG_WARNING(R"({} failed to bootstrap cluster session="{}", address="{}", ec={})",
                          session.log_prefix(),
                          session.id(),
-                         session.bootstrap_hostname(),
-                         session.bootstrap_port(),
+                         logger::system_data(session_address(session)),
                          err.message());
           return self->remove_session(session.id());
         }
@@ -428,12 +434,11 @@ private:
     std::swap(sessions_, new_sessions);
 
     for (auto it = new_sessions.begin(); it != new_sessions.end(); ++it) {
-      CB_LOG_DEBUG(R"({} rev={}, drop cluster session="{}", address="{}:{}")",
+      CB_LOG_DEBUG(R"({} rev={}, drop cluster session="{}", address="{}")",
                    log_prefix_,
                    config.rev_str(),
                    it->id(),
-                   it->bootstrap_hostname(),
-                   it->bootstrap_port());
+                   logger::system_data(session_address(*it)));
       asio::post(asio::bind_executor(ctx_, [session = std::move(*it)]() mutable {
         return session.stop(retry_reason::do_not_retry);
       }));
@@ -504,12 +509,11 @@ private:
         origin_.options().enable_tls
           ? io::mcbp_session(client_id_, node.node_uuid, ctx_, tls_, origin, state_listener_)
           : io::mcbp_session(client_id_, node.node_uuid, ctx_, origin, state_listener_);
-      CB_LOG_DEBUG(R"({} rev={}, restart cluster session="{}", address="{}:{}")",
+      CB_LOG_DEBUG(R"({} rev={}, restart cluster session="{}", address="{}")",
                    log_prefix_,
                    current_config->rev_str(),
                    session.id(),
-                   hostname,
-                   port);
+                   logger::system_data(fmt::format("{}:{}", hostname, port)));
 #ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
       session.add_background_bootstrap_listener(shared_from_this());
 #endif
@@ -534,13 +538,11 @@ private:
     const std::scoped_lock lock(sessions_mutex_);
     for (auto ptr = sessions_.cbegin(); ptr != sessions_.cend();) {
       if (ptr->id() == id) {
-        CB_LOG_DEBUG(
-          R"({} removed cluster session id="{}", address="{}", bootstrap_address="{}:{}")",
-          log_prefix_,
-          ptr->id(),
-          ptr->remote_address(),
-          ptr->bootstrap_hostname(),
-          ptr->bootstrap_port());
+        CB_LOG_DEBUG(R"({} removed cluster session id="{}", address="{}", bootstrap_address="{}")",
+                     log_prefix_,
+                     ptr->id(),
+                     logger::system_data(ptr->remote_address()),
+                     logger::system_data(session_address(*ptr)));
         ptr = sessions_.erase(ptr);
         found = true;
       } else {

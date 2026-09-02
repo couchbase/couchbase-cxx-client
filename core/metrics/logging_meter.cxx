@@ -21,6 +21,7 @@
 
 #include "constants.hxx"
 #include "core/logger/logger.hxx"
+#include "core/logger/redaction.hxx"
 #include "core/tracing/constants.hxx"
 #include "core/utils/json.hxx"
 #include "noop_meter.hxx"
@@ -161,7 +162,7 @@ logging_meter::log_report() const
     }
   }
   if (report.find("operations") != nullptr) {
-    CB_LOG_INFO("Metrics: {}", utils::json::generate(report));
+    CB_LOG_INFO("Metrics: {}", logger::metadata(utils::json::generate(report)));
   }
 }
 

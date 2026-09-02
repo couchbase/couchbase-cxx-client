@@ -19,6 +19,7 @@
 
 #include "free_form_http_request.hxx"
 #include "io/http_session_manager.hxx"
+#include "logger/redaction.hxx"
 #include "pending_operation.hxx"
 #include "pending_operation_connection_info.hxx"
 
@@ -90,7 +91,7 @@ public:
         R"(HTTP request timed out (dispatch): {}, method={}, path="{}", dispatch_timeout={}, client_context_id={})",
         self->encoded_.type,
         self->encoded_.method,
-        self->encoded_.path,
+        logger::user_data(self->encoded_.path),
         self->dispatch_timeout_,
         self->encoded_.client_context_id);
       self->trigger_timeout();
@@ -108,7 +109,7 @@ public:
         R"(HTTP request timed out: {}, method={}, path="{}", timeout={}, client_context_id={})",
         self->encoded_.type,
         self->encoded_.method,
-        self->encoded_.path,
+        logger::user_data(self->encoded_.path),
         self->request_.timeout,
         self->encoded_.client_context_id);
       self->trigger_timeout();
@@ -290,7 +291,7 @@ public:
         R"(HTTP request timed out (dispatch): {}, method={}, path="{}", dispatch_timeout={}, client_context_id={})",
         self->encoded_.type,
         self->encoded_.method,
-        self->encoded_.path,
+        logger::user_data(self->encoded_.path),
         self->dispatch_timeout_,
         self->encoded_.client_context_id);
       self->trigger_timeout();
@@ -308,7 +309,7 @@ public:
         R"(HTTP request timed out: {}, method={}, path="{}", timeout={}, client_context_id={})",
         self->encoded_.type,
         self->encoded_.method,
-        self->encoded_.path,
+        logger::user_data(self->encoded_.path),
         self->request_.timeout,
         self->encoded_.client_context_id);
       self->trigger_timeout();

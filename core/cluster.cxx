@@ -55,6 +55,7 @@
 #include "core/core_sdk_shim.hxx"
 #include "core/http_component.hxx"
 #include "core/logger/logger.hxx"
+#include "core/logger/redaction.hxx"
 #include "core/management/analytics_link_azure_blob_external.hxx"
 #include "core/management/analytics_link_couchbase_remote.hxx"
 #include "core/management/analytics_link_s3_external.hxx"
@@ -170,7 +171,6 @@
 #include "core/tracing/noop_tracer.hxx"
 #include "core/tracing/threshold_logging_tracer.hxx"
 #include "core/tracing/tracer_wrapper.hxx"
-#include "core/utils/join_strings.hxx"
 #include "core/utils/movable_function.hxx"
 #include "crud_component.hxx"
 #include "dispatcher.hxx"
@@ -555,11 +555,12 @@ public:
     }
 
     origin_ = std::move(origin);
+    apply_log_redaction();
     CB_LOG_DEBUG(R"(open cluster, id: "{}", core version: "{}", connection string: {}, {})",
                  id_,
                  couchbase::core::meta::sdk_semver(),
-                 origin_.connection_string(),
-                 origin_.to_json());
+                 logger::user_data(origin_.connection_string()),
+                 logger::user_data(origin_.to_json()));
     // The scheme is recognised in every build; only the ability to serve it is conditional. The
     // parser stays identical either way, so no API or ABI depends on the build mode -- a build
     // without couchbase2 support answers with a named error instead of attempting an MCBP handshake
@@ -573,7 +574,7 @@ public:
         "(COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2 is off), so the couchbase2:// scheme cannot be "
         "served.",
         id_,
-        origin_.connection_string());
+        logger::user_data(origin_.connection_string()));
       stopped_ = true;
       work_.reset();
       return handler(errc::common::feature_not_available);
@@ -605,8 +606,9 @@ public:
                 self->origin_.set_nodes(std::move(nodes));
                 CB_LOG_INFO(
                   "replace list of bootstrap nodes with addresses from DNS SRV of \"{}\": [{}]",
-                  hostname,
-                  utils::join_strings(self->origin_.get_nodes(), ", "));
+                  logger::system_data(hostname),
+                  logger::system_data_list(self->origin_.get_node_addresses(),
+                                           logger::list_entries::quoted));
               }
               return self->do_open(std::move(handler));
             });
@@ -633,10 +635,11 @@ public:
     }
 
     origin_ = std::move(origin);
+    apply_log_redaction();
     CB_LOG_DEBUG(R"(open cluster in background, id: "{}", core version: "{}", {})",
                  id_,
                  couchbase::core::meta::sdk_semver(),
-                 origin_.to_json());
+                 logger::user_data(origin_.to_json()));
     setup_observability();
     session_manager_->set_dispatch_timeout(origin_.options().dispatch_timeout);
     // at this point we will infinitely try to connect
@@ -973,7 +976,7 @@ public:
       CB_LOG_INFO("[{}]: couchbase2 uses a single gateway endpoint (\"{}\"); the remaining {} "
                   "node(s) on this origin are ignored (the gateway fronts the cluster).",
                   id_,
-                  endpoint,
+                  logger::system_data(endpoint),
                   origin_.get_nodes().size() - 1);
     }
 
@@ -987,7 +990,7 @@ public:
       CB_LOG_WARNING(R"([{}]: tls_verify=none was requested but "{}" is a Capella endpoint; )"
                      "enforcing peer verification.",
                      id_,
-                     hostname);
+                     logger::system_data(hostname));
     }
     // The "verification is disabled" warning is not repeated here: make_channel_credentials() is
     // the one point every couchbase2 channel passes through and warns there, so it also covers
@@ -1019,7 +1022,8 @@ public:
                                         make_component_timeouts(options),
                                         make_compression_settings(options) });
     }
-    CB_LOG_INFO(R"(open couchbase2 cluster, id: "{}", endpoint: "{}")", id_, endpoint);
+    CB_LOG_INFO(
+      R"(open couchbase2 cluster, id: "{}", endpoint: "{}")", id_, logger::system_data(endpoint));
     return handler({});
   }
 #endif
@@ -1395,7 +1399,8 @@ public:
           CB_LOG_INFO(
             "replace list of bootstrap nodes with addresses of alternative network \"{}\": [{}]",
             self->origin_.options().network,
-            utils::join_strings(self->origin_.get_nodes(), ","));
+            logger::system_data_list(
+              self->origin_.get_node_addresses(), logger::list_entries::quoted, ","));
         }
         // FIXME(SA): fix the session manager to receive initial configuration and cluster-wide
         // session to poll for updates like the bucket does. Or just subscribe before the bootstrap.
@@ -1560,8 +1565,9 @@ public:
               CB_LOG_INFO(
                 "[{}] Replace list of bootstrap nodes with addresses from DNS SRV of \"{}\": [{}]",
                 self->id_,
-                hostname,
-                utils::join_strings(self->origin_.get_nodes(), ", "));
+                logger::system_data(hostname),
+                logger::system_data_list(self->origin_.get_node_addresses(),
+                                         logger::list_entries::quoted));
             }
             return self->do_background_open();
           });
@@ -1884,6 +1890,29 @@ public:
   }
 
 private:
+  // Must be called from every open path, before the connection string is logged and before any
+  // session or bucket is constructed, so that connection-context prefixes built later carry their
+  // tags.
+  //
+  // Redaction state is process-wide while it is configured per cluster, so opening a cluster may
+  // only turn it on, never off: one cluster must not silently disable redaction for another, or
+  // for an application that enabled it directly.
+  void apply_log_redaction() const
+  {
+    if (origin_.options().log_redaction) {
+      logger::set_log_redaction(true);
+    }
+    // The warning has to test the state that is in effect rather than what this cluster asked for.
+    // Redaction is process-wide, so another cluster or a direct set_log_redaction() call may have
+    // turned it on, and a cluster opened with only dump_configuration would then write
+    // unannotated dumps into a redacted log without saying so.
+    if (origin_.options().dump_configuration && logger::is_log_redaction_enabled()) {
+      CB_LOG_WARNING("log redaction is enabled, but so is dump_configuration: configuration dumps "
+                     "are not annotated for redaction and may contain values that are annotated "
+                     "elsewhere in the log");
+    }
+  }
+
   void setup_observability()
   {
     // ignore the enable_tracing flag if a tracer was passed in
