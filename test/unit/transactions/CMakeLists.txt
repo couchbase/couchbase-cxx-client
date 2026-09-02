@@ -5,3 +5,4 @@ couchbase_add_test(unit/transactions/get_multi_transaction_id LABEL unit LINK_CL
 couchbase_add_test(unit/transactions/get_result LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/transactions/logging LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/transactions/staged_mutation LABEL unit LINK_CLIENT)
+couchbase_add_test(unit/transactions/utils LABEL unit LINK_CLIENT)

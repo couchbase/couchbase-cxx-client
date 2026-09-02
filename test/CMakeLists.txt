@@ -71,8 +71,6 @@ transaction_test(simple_async)
 transaction_test(public_blocking_api)
 transaction_test(public_async_api)
 
-unit_test(transaction_utils)
-
 integration_test(examples)
 integration_test(examples_streaming)
 transaction_test(examples)
