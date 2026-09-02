@@ -1,3 +1,5 @@
+add_subdirectory(unit/streaming)
+
 # Migrated to the hand-rolled framework (CXXCBC-945). Registered here rather than with unit_test()
 # because it is no longer a Catch2 file.
 couchbase_add_test(unit/core/config_profiles LABEL unit LINK_CLIENT)
@@ -58,8 +60,6 @@ unit_test(options)
 unit_test(search)
 unit_test(query)
 unit_test(response_parsing)
-unit_test(query_stream)
-unit_test(analytics_stream)
 unit_test(http_streaming_response)
 unit_test(observability_recorder)
 unit_test(diagnostics)
@@ -111,8 +111,6 @@ transaction_test(public_async_api)
 
 unit_test(transaction_logging)
 unit_test(transaction_utils)
-unit_test(waitable_op_list)
-unit_test(row_streamer)
 
 integration_test(examples)
 integration_test(examples_streaming)
