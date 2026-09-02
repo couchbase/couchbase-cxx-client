@@ -1,5 +1,6 @@
 couchbase_add_test(unit/core/bucket_deferred_queue LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/core/bucket_request_completion LABEL unit LINK_CLIENT)
+couchbase_add_test(unit/core/byteswap LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/core/collections_component LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/core/config_profiles LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/core/crypto LABEL unit LINK_CLIENT)

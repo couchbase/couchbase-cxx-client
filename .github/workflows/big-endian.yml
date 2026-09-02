@@ -8,7 +8,7 @@ name: big-endian
 # CPU on demand, when someone needs evidence rather than an argument.
 #
 # The unit tests already prove both host-order branches at compile time on an ordinary
-# little-endian runner (test/test_unit_byteswap.cxx). What this workflow adds is the one thing
+# little-endian runner (test/unit/core/byteswap.cxx). What this workflow adds is the one thing
 # those cannot cover: that the compiler's own __BYTE_ORDER__ detection, the native integer stores
 # the codecs pair with each conversion, and the struct layouts underneath them all behave as
 # assumed on a host that is actually big-endian.
