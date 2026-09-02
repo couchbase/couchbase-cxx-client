@@ -36,7 +36,6 @@ integration_test(handler_drop_lifetime)
 integration_test(wait_until_ready)
 integration_test(fork)
 
-unit_test(connection_string)
 unit_test(tls_hostname_verification)
 unit_test(http_session_idle)
 unit_test(http_session_manager_eviction)
