@@ -39,7 +39,7 @@ auto
 read_all(const std::string& path) -> std::string
 {
   const auto file_size = std::filesystem::file_size(path);
-  std::ifstream input_file(path);
+  std::ifstream input_file(path, std::ios::binary);
   std::string content;
   content.resize(file_size);
   input_file.read(content.data(), static_cast<std::streamsize>(file_size));
