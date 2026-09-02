@@ -1,6 +1,7 @@
 # Migrated to the hand-rolled framework (CXXCBC-945). Registered here rather than with unit_test()
 # because it is no longer a Catch2 file.
 couchbase_add_test(unit/core/config_profiles LABEL unit LINK_CLIENT)
+add_subdirectory(unit/json)
 
 # Registered here rather than in cmake/TestFramework.cmake beside the framework's own self-tests:
 # only a call from this file reaches build_unit_tests. It is pure computation over the tools helper
@@ -44,7 +45,6 @@ unit_test(contains_string)
 unit_test(protocol_status)
 unit_test(configuration_belongs_to_session)
 unit_test(utils)
-unit_test(binary_transcoder)
 unit_test(json_transcoder)
 unit_test(transaction_content_as)
 unit_test(transaction_get_result)
