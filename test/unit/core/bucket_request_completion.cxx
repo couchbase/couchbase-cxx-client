@@ -25,6 +25,8 @@
  * no I/O, so these tests never call io_context::run().
  */
 
+#include "framework/test_registry.hxx"
+
 #include "core/bucket.hxx"
 #include "core/bucket_unit_test_api.hxx"
 #include "core/mcbp/queue_request.hxx"
@@ -32,7 +34,6 @@
 #include "core/protocol/hello_feature.hxx"
 #include "core/tls_context_provider.hxx"
 
-#include <catch2/catch_test_macros.hpp>
 #include <couchbase/error_codes.hxx>
 #include <couchbase/retry_reason.hxx>
 #include <couchbase/retry_strategy.hxx>
@@ -46,19 +47,21 @@
 #include <system_error>
 #include <vector>
 
+namespace couchbase::test
+{
 namespace
 {
 using couchbase::core::mcbp::queue_request;
 
 // Minimal, network-free bucket: the response path only stores the observability wrappers, so
-// nullptr is sufficient. Mirrors the fixture in test_unit_bucket_deferred_queue.cxx.
+// nullptr is sufficient. Mirrors the fixture in unit/core/bucket_deferred_queue.cxx.
 auto
-make_detached_bucket(asio::io_context& ctx, couchbase::core::tls_context_provider& tls)
+make_detached_bucket(asio::io_context& io, couchbase::core::tls_context_provider& tls)
   -> std::shared_ptr<couchbase::core::bucket>
 {
   return std::make_shared<couchbase::core::bucket>(
     "test-client-id",
-    ctx,
+    io,
     tls,
     nullptr, // tracer_wrapper
     nullptr, // meter_wrapper
@@ -84,13 +87,13 @@ public:
     return "retry_everything";
   }
 };
-} // namespace
 
-TEST_CASE("unit: a cancelled request whose retry is refused is completed", "[unit]")
+void
+a_cancelled_request_whose_retry_is_refused_is_completed([[maybe_unused]] context& ctx)
 {
-  asio::io_context ctx;
+  asio::io_context io;
   couchbase::core::tls_context_provider tls{};
-  auto bucket = make_detached_bucket(ctx, tls);
+  auto bucket = make_detached_bucket(io, tls);
 
   std::atomic_bool invoked{ false };
   std::error_code observed{};
@@ -104,7 +107,7 @@ TEST_CASE("unit: a cancelled request whose retry is refused is completed", "[uni
 
   // No retry strategy, so retry_orchestrator::should_retry() refuses any reason that is not
   // always-retry, and node_not_available -- what do_not_retry is mapped to below -- is not one.
-  REQUIRE(request->retry_strategy() == nullptr);
+  assert_true(request->retry_strategy() == nullptr, "the request carries no retry strategy");
 
   bucket->unit_test_api().resolve_response(request,
                                            {},
@@ -115,17 +118,18 @@ TEST_CASE("unit: a cancelled request whose retry is refused is completed", "[uni
   // Before the fix the refused retry ended the function with nobody having answered the request:
   // the caller of the operation waited on its own deadline, or forever once the io_context was
   // gone.
-  REQUIRE(invoked.load());
-  REQUIRE(observed == couchbase::errc::common::request_canceled);
+  assert_true(invoked.load(), "the refused retry answers the caller");
+  assert_eq(observed, couchbase::errc::common::request_canceled, "the cancellation is the answer");
 }
 
-TEST_CASE("unit: a cancelled request that is retried is not completed", "[unit]")
+void
+a_cancelled_request_that_is_retried_is_not_completed([[maybe_unused]] context& ctx)
 {
   // The other half of the contract: completing a request whose retry was accepted would answer the
   // caller twice, once here and once when the retry finishes.
-  asio::io_context ctx;
+  asio::io_context io;
   couchbase::core::tls_context_provider tls{};
-  auto bucket = make_detached_bucket(ctx, tls);
+  auto bucket = make_detached_bucket(io, tls);
 
   std::atomic_bool invoked{ false };
   auto request = std::make_shared<queue_request>(
@@ -142,18 +146,19 @@ TEST_CASE("unit: a cancelled request that is retried is not completed", "[unit]"
                                            couchbase::retry_reason::do_not_retry,
                                            {});
 
-  REQUIRE_FALSE(invoked.load());
+  assert_false(invoked.load(), "an accepted retry leaves the caller unanswered");
 
   // The retry is waiting on a timer this test never runs; cancelling releases it.
   request->cancel(couchbase::errc::common::request_canceled);
 }
 
-TEST_CASE("unit: a cancelled non-idempotent request is completed without consulting a retry",
-          "[unit]")
+void
+a_cancelled_non_idempotent_request_is_completed_without_consulting_a_retry(
+  [[maybe_unused]] context& ctx)
 {
-  asio::io_context ctx;
+  asio::io_context io;
   couchbase::core::tls_context_provider tls{};
-  auto bucket = make_detached_bucket(ctx, tls);
+  auto bucket = make_detached_bucket(io, tls);
 
   std::atomic_bool invoked{ false };
   std::error_code observed{};
@@ -173,6 +178,24 @@ TEST_CASE("unit: a cancelled non-idempotent request is completed without consult
                                            couchbase::retry_reason::do_not_retry,
                                            {});
 
-  REQUIRE(invoked.load());
-  REQUIRE(observed == couchbase::errc::common::request_canceled);
+  assert_true(invoked.load(), "the caller is answered rather than parked on a retry");
+  assert_eq(observed, couchbase::errc::common::request_canceled, "the cancellation is the answer");
 }
+} // namespace
+
+auto
+tests() -> test_suite
+{
+  return {
+    suite_name,
+    {
+      { CASE(a_cancelled_request_whose_retry_is_refused_is_completed), {}, timeout::fast },
+      { CASE(a_cancelled_request_that_is_retried_is_not_completed), {}, timeout::fast },
+      { CASE(a_cancelled_non_idempotent_request_is_completed_without_consulting_a_retry),
+        {},
+        timeout::fast },
+    },
+  };
+}
+
+} // namespace couchbase::test
