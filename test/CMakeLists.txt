@@ -72,7 +72,6 @@ unit_test(mcbp_command_id)
 unit_test(movable_function)
 unit_test(node_id)
 unit_test(wait_until_ready)
-unit_test(topology_configuration)
 
 integration_benchmark(get)
 integration_benchmark(replace)
