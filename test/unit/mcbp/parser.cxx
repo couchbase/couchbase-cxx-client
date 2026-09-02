@@ -15,15 +15,19 @@
  *   limitations under the License.
  */
 
-#include "test_helper.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/io/mcbp_parser.hxx"
 #include "core/protocol/magic.hxx"
 
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <vector>
 
+namespace couchbase::test
+{
 namespace
 {
 using couchbase::core::io::binary_header;
@@ -65,9 +69,9 @@ struct frame_builder {
       .set(11, static_cast<std::uint8_t>(v));
   }
 };
-} // namespace
 
-TEST_CASE("unit: mcbp_parser rejects frame whose prefix exceeds the body", "[unit]")
+void
+a_frame_whose_prefix_exceeds_the_body_is_rejected([[maybe_unused]] context& ctx)
 {
   // A response whose extras/key lengths claim far more bytes than the body
   // actually contains. extlen and keylen are separate header fields from
@@ -76,10 +80,9 @@ TEST_CASE("unit: mcbp_parser rejects frame whose prefix exceeds the body", "[uni
   // magic=client_response, keylen=0xFFFF, extlen=0xFF, bodylen=0
   //   => prefix_size = 0xFF + 0xFFFF = 65790, against a 24-byte buffer.
   //
-  // Before the fix this drove an out-of-bounds read (and, on the snappy path,
-  // an unsigned underflow of "body_size - prefix_size"); under AddressSanitizer
-  // it aborts with a heap-buffer-overflow read of 65790 bytes. The parser must
-  // instead reject the frame.
+  // Accepting it drives an out-of-bounds read (and, on the snappy path, an
+  // unsigned underflow of "body_size - prefix_size"); under AddressSanitizer
+  // it aborts with a heap-buffer-overflow read of 65790 bytes.
   auto frame = frame_builder{}
                  .magic_byte(magic::client_response)
                  .opcode(0x00)
@@ -92,10 +95,11 @@ TEST_CASE("unit: mcbp_parser rejects frame whose prefix exceeds the body", "[uni
   parser.feed(frame.begin(), frame.end());
 
   mcbp_message msg;
-  CHECK(parser.next(msg) == mcbp_parser::result::failure);
+  assert_eq(parser.next(msg), mcbp_parser::result::failure, "a prefix larger than the buffer");
 }
 
-TEST_CASE("unit: mcbp_parser rejects prefix overflow with a non-empty body", "[unit]")
+void
+a_prefix_larger_than_a_non_empty_body_is_rejected([[maybe_unused]] context& ctx)
 {
   // body_size > 0 path: bodylen=4 (and the 4 body bytes supplied), but
   // extlen=0xFF claims a 255-byte prefix => prefix_size (255) > body_size (4).
@@ -114,10 +118,11 @@ TEST_CASE("unit: mcbp_parser rejects prefix overflow with a non-empty body", "[u
   parser.feed(wire.begin(), wire.end());
 
   mcbp_message msg;
-  CHECK(parser.next(msg) == mcbp_parser::result::failure);
+  assert_eq(parser.next(msg), mcbp_parser::result::failure, "a prefix larger than the body");
 }
 
-TEST_CASE("unit: mcbp_parser accepts a well-formed frame (positive control)", "[unit]")
+void
+a_well_formed_frame_is_accepted([[maybe_unused]] context& ctx)
 {
   // extras(4) + key(3) = prefix 7, body 7: prefix_size == body_size, valid.
   auto header = frame_builder{}
@@ -135,11 +140,12 @@ TEST_CASE("unit: mcbp_parser accepts a well-formed frame (positive control)", "[
   parser.feed(wire.begin(), wire.end());
 
   mcbp_message msg;
-  CHECK(parser.next(msg) == mcbp_parser::result::ok);
-  CHECK(msg.body.size() == 7);
+  assert_eq(parser.next(msg), mcbp_parser::result::ok, "a prefix that exactly fills the body");
+  assert_eq(msg.body.size(), std::size_t{ 7 }, "the body the header declared");
 }
 
-TEST_CASE("unit: binary_header::alt_sizes splits the two 1-byte header fields", "[unit]")
+void
+alt_sizes_splits_the_two_one_byte_header_fields([[maybe_unused]] context& ctx)
 {
   // Bytes 2 and 3 of a flexible-framing header are two independent 1-byte fields, not one
   // 16-bit value. The two must be distinct here for the test to mean anything: with equal
@@ -162,6 +168,23 @@ TEST_CASE("unit: binary_header::alt_sizes splits the two 1-byte header fields", 
   std::memcpy(&header, frame.data(), frame.size());
 
   const auto sizes = header.alt_sizes();
-  CHECK(sizes.framing_extras == 3);
-  CHECK(sizes.key == 5);
+  assert_eq(sizes.framing_extras, std::uint8_t{ 3 }, "byte 2 is the framing extras size");
+  assert_eq(sizes.key, std::uint8_t{ 5 }, "byte 3 is the key size");
 }
+} // namespace
+
+auto
+tests() -> test_suite
+{
+  return {
+    suite_name,
+    {
+      { CASE(a_frame_whose_prefix_exceeds_the_body_is_rejected) },
+      { CASE(a_prefix_larger_than_a_non_empty_body_is_rejected) },
+      { CASE(a_well_formed_frame_is_accepted) },
+      { CASE(alt_sizes_splits_the_two_one_byte_header_fields) },
+    },
+  };
+}
+
+} // namespace couchbase::test
