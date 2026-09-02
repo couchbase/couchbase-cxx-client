@@ -15,7 +15,7 @@
  *   limitations under the License.
  */
 
-#include <catch2/catch_test_macros.hpp>
+#include "framework/test_registry.hxx"
 
 #include "core/cluster.hxx"
 #include "core/collections_component.hxx"
@@ -29,6 +29,8 @@
 
 #include <memory>
 
+namespace couchbase::test
+{
 namespace
 {
 using couchbase::core::mcbp::queue_request;
@@ -68,21 +70,24 @@ make_component(asio::io_context& io, const couchbase::core::cluster& cluster)
            couchbase::core::dispatcher{ "a-bucket", couchbase::core::core_sdk_shim{ cluster } },
            couchbase::core::collections_component_options{ 1024, nullptr } };
 }
-} // namespace
 
-TEST_CASE("unit: a collection id refresh that cannot be dispatched surfaces the error", "[unit]")
+void
+a_collection_id_refresh_that_cannot_be_dispatched_surfaces_the_error([[maybe_unused]] context& ctx)
 {
   asio::io_context io;
   auto cluster = make_closed_cluster(io);
   auto component = make_component(io, cluster);
 
   auto op = component.dispatch(make_request());
-  REQUIRE_FALSE(op.has_value());
-  REQUIRE(op.error() == couchbase::errc::network::cluster_closed);
+  assert_false(op.has_value(), "a dispatch onto a closed cluster does not yield an operation");
+  assert_eq(op.error(),
+            couchbase::errc::network::cluster_closed,
+            "the closed cluster is named as the reason");
 }
 
-TEST_CASE("unit: a request is released when its collection id refresh cannot be dispatched",
-          "[unit]")
+void
+a_request_is_released_when_its_collection_id_refresh_cannot_be_dispatched(
+  [[maybe_unused]] context& ctx)
 {
   // The regression this catches is a leak rather than a wrong answer. dispatch()
   // pushes the request into the cache entry's queue before it asks the server for
@@ -97,7 +102,27 @@ TEST_CASE("unit: a request is released when its collection id refresh cannot be 
   {
     auto request = make_request();
     observer = request;
-    REQUIRE_FALSE(component.dispatch(request).has_value());
+    assert_false(component.dispatch(request).has_value(),
+                 "a dispatch onto a closed cluster does not yield an operation");
   }
-  REQUIRE(observer.expired());
+  assert_true(observer.expired(), "the failed dispatch holds no reference to the request");
 }
+} // namespace
+
+auto
+tests() -> test_suite
+{
+  return {
+    suite_name,
+    {
+      { CASE(a_collection_id_refresh_that_cannot_be_dispatched_surfaces_the_error),
+        {},
+        timeout::fast },
+      { CASE(a_request_is_released_when_its_collection_id_refresh_cannot_be_dispatched),
+        {},
+        timeout::fast },
+    },
+  };
+}
+
+} // namespace couchbase::test

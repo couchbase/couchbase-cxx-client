@@ -1,3 +1,4 @@
+couchbase_add_test(unit/core/collections_component LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/core/config_profiles LABEL unit LINK_CLIENT)
 
 if(COUCHBASE_CXX_CLIENT_COLUMNAR)
