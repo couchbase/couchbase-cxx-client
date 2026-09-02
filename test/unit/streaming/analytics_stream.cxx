@@ -15,10 +15,10 @@
  *   limitations under the License.
  */
 
-// Deterministic unit coverage for core::analytics_stream, mirroring test_unit_query_stream.cxx.
-// analytics_stream previously had no unit test — its logic was exercised only by integration tests
-// that SKIP without an analytics service, so a CI lane without one covered none of it. These tests
-// drive the state machine over in-memory bodies (no server, no analytics service required).
+// The counterpart of the query cases in the sibling query_stream.cxx. The state machine is driven
+// over in-memory bodies, so neither a server nor an analytics service takes part.
+
+#include "framework/test_registry.hxx"
 
 #include "core/analytics_stream.hxx"
 #include "core/impl/internal_analytics_stream_result.hxx"
@@ -29,7 +29,6 @@
 #include <couchbase/error_codes.hxx>
 
 #include <asio/io_context.hpp>
-#include <catch2/catch_test_macros.hpp>
 #include <tao/json/from_string.hpp>
 
 #include <cstdint>
@@ -40,17 +39,21 @@
 #include <system_error>
 #include <vector>
 
+namespace couchbase::test
+{
 namespace
 {
-using analytics_status = couchbase::core::operations::analytics_response::analytics_status;
-} // namespace
+namespace utils = ::test::utils;
 
-TEST_CASE("unit: analytics_stream yields rows then exposes late metadata", "[unit]")
+using analytics_status = couchbase::core::operations::analytics_response::analytics_status;
+
+void
+yields_rows_then_exposes_late_metadata([[maybe_unused]] context& ctx)
 {
   asio::io_context io;
   std::string doc = R"({"requestID":"r1","signature":{"a":"number"},)"
                     R"("results":[{"a":1},{"a":2}],"status":"success"})";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = utils::make_cached_response_body(io, doc);
   couchbase::core::analytics_stream stream{ io, std::move(body) };
 
   std::vector<std::string> rows;
@@ -72,20 +75,22 @@ TEST_CASE("unit: analytics_stream yields rows then exposes late metadata", "[uni
   });
   io.run();
 
-  REQUIRE(!early);
-  REQUIRE(rows.size() == 2);
-  REQUIRE(!end_ec); // clean success end
-  REQUIRE(stream.signature().has_value());
-  REQUIRE(stream.meta_data().has_value());
-  REQUIRE(stream.meta_data()->status == analytics_status::success);
+  assert_eq(early, std::error_code{}, "starting the stream succeeds");
+  assert_eq(rows.size(), std::size_t{ 2 }, "every row in the result set is delivered");
+  assert_eq(end_ec, std::error_code{}, "the stream ends cleanly");
+  assert_true(stream.signature().has_value(),
+              "the signature is available once the body is drained");
+  assert_true(stream.meta_data().has_value(), "the metadata is available once the body is drained");
+  assert_eq(stream.meta_data()->status, analytics_status::success, "the reported status");
 }
 
-TEST_CASE("unit: analytics_stream surfaces a trailing analytics error after rows", "[unit]")
+void
+surfaces_a_trailing_analytics_error_after_rows([[maybe_unused]] context& ctx)
 {
   asio::io_context io;
   std::string doc = R"({"requestID":"r2","results":[{"a":1}],)"
                     R"("status":"fatal","errors":[{"code":24000,"msg":"boom"}]})";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = utils::make_cached_response_body(io, doc);
   couchbase::core::analytics_stream stream{ io, std::move(body) };
 
   int row_count = 0;
@@ -105,16 +110,17 @@ TEST_CASE("unit: analytics_stream surfaces a trailing analytics error after rows
   });
   io.run();
 
-  REQUIRE(row_count == 1);
-  REQUIRE(end_ec); // trailing error delivered as the terminal next_row result
+  assert_eq(row_count, 1, "the row delivered ahead of the trailer is still seen");
+  assert_ne(end_ec, std::error_code{}, "the trailing error is the terminal next_row result");
 }
 
-TEST_CASE("unit: analytics_stream reports a clean end for an empty result set", "[unit]")
+void
+reports_a_clean_end_for_an_empty_result_set([[maybe_unused]] context& ctx)
 {
   asio::io_context io;
   std::string doc = R"({"requestID":"r3","signature":{"a":"number"},)"
                     R"("results":[],"status":"success"})";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = utils::make_cached_response_body(io, doc);
   couchbase::core::analytics_stream stream{ io, std::move(body) };
 
   int row_count = 0;
@@ -136,21 +142,22 @@ TEST_CASE("unit: analytics_stream reports a clean end for an empty result set", 
   });
   io.run();
 
-  REQUIRE(ended);
-  REQUIRE(row_count == 0);
-  REQUIRE(!end_ec); // clean success end with zero rows
-  REQUIRE(stream.meta_data().has_value());
-  REQUIRE(stream.meta_data()->status == analytics_status::success);
+  assert_true(ended, "the stream terminates rather than parking the consumer");
+  assert_eq(row_count, 0, "an empty result set yields no rows");
+  assert_eq(end_ec, std::error_code{}, "the stream ends cleanly");
+  assert_true(stream.meta_data().has_value(), "the metadata is available once the body is drained");
+  assert_eq(stream.meta_data()->status, analytics_status::success, "the reported status");
 }
 
-TEST_CASE("unit: analytics_stream normalizes a malformed body to parsing_failure", "[unit]")
+void
+normalizes_a_malformed_body_to_parsing_failure([[maybe_unused]] context& ctx)
 {
   asio::io_context io;
   // A bare unquoted token where a value is expected makes the streaming lexer abort with a
   // streaming_json_lexer::* code; analytics_stream must normalize it to parsing_failure to match
   // the buffered analytics_query() contract.
   std::string doc = R"({"requestID":"r","results":[{"a":1},xxx],"status":"success"})";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = utils::make_cached_response_body(io, doc);
   couchbase::core::analytics_stream stream{ io, std::move(body) };
 
   std::error_code end_ec{};
@@ -170,16 +177,17 @@ TEST_CASE("unit: analytics_stream normalizes a malformed body to parsing_failure
   });
   io.run();
 
-  REQUIRE(ended);
-  REQUIRE(end_ec == couchbase::errc::common::parsing_failure);
+  assert_true(ended, "the stream terminates rather than parking the consumer");
+  assert_eq(end_ec, couchbase::errc::common::parsing_failure, "the reported terminal");
 }
 
-TEST_CASE("unit: analytics_stream normalizes an oversized row to parsing_failure", "[unit]")
+void
+normalizes_an_oversized_row_to_parsing_failure([[maybe_unused]] context& ctx)
 {
   asio::io_context io;
   std::string big(std::size_t{ 64 } * 1024, 'X');
   std::string doc = R"({"results":[{"p":")" + big + R"("}],"status":"success"})";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = utils::make_cached_response_body(io, doc);
   couchbase::core::row_streamer_options opts{};
   opts.max_row_bytes = std::size_t{ 4 } * 1024; // tiny ceiling so the row overflows it
   couchbase::core::analytics_stream stream{ io, std::move(body), opts };
@@ -201,17 +209,18 @@ TEST_CASE("unit: analytics_stream normalizes an oversized row to parsing_failure
   });
   io.run();
 
-  REQUIRE(ended);
-  REQUIRE(end_ec == couchbase::errc::common::parsing_failure);
+  assert_true(ended, "the stream terminates rather than parking the consumer");
+  assert_eq(end_ec, couchbase::errc::common::parsing_failure, "the reported terminal");
 }
 
-TEST_CASE("unit: analytics_stream re-delivers the terminal on pulls after the end", "[unit]")
+void
+re_delivers_the_terminal_on_pulls_after_the_end([[maybe_unused]] context& ctx)
 {
   // Terminal-sticky contract: once the stream has ended, every later next_row re-delivers the
   // terminal instead of parking forever on the drained channel.
   asio::io_context io;
   std::string doc = R"({"requestID":"r","results":[{"a":1}],"status":"success"})";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = utils::make_cached_response_body(io, doc);
   couchbase::core::analytics_stream stream{ io, std::move(body) };
 
   int terminals = 0;
@@ -231,14 +240,15 @@ TEST_CASE("unit: analytics_stream re-delivers the terminal on pulls after the en
   });
   io.run();
 
-  REQUIRE(terminals == 4);
+  assert_eq(terminals, 4, "every pull after the end resolves with the terminal");
 }
 
-TEST_CASE("unit: analytics_stream reports request_canceled after cancel", "[unit]")
+void
+reports_request_canceled_after_cancel([[maybe_unused]] context& ctx)
 {
   asio::io_context io;
   std::string doc = R"({"results":[{"a":1},{"a":2}],"status":"success"})";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = utils::make_cached_response_body(io, doc);
   couchbase::core::analytics_stream stream{ io, std::move(body) };
 
   stream.start([](std::error_code) {
@@ -251,14 +261,15 @@ TEST_CASE("unit: analytics_stream reports request_canceled after cancel", "[unit
   });
   io.run();
 
-  REQUIRE(seen == couchbase::errc::common::request_canceled);
+  assert_eq(seen, couchbase::errc::common::request_canceled, "the reported terminal");
 }
 
-TEST_CASE("unit: analytics_stream reports no signature when absent", "[unit]")
+void
+reports_no_signature_when_absent([[maybe_unused]] context& ctx)
 {
   asio::io_context io;
   std::string doc = R"({"requestID":"r5","results":[{"a":1}],"status":"success"})";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = utils::make_cached_response_body(io, doc);
   couchbase::core::analytics_stream stream{ io, std::move(body) };
 
   bool resolved = false;
@@ -275,19 +286,20 @@ TEST_CASE("unit: analytics_stream reports no signature when absent", "[unit]")
   });
   io.run();
 
-  REQUIRE(resolved);
-  REQUIRE_FALSE(stream.signature().has_value());
+  assert_true(resolved, "the start handler is resolved");
+  assert_false(stream.signature().has_value(), "a response with no signature key reports none");
 }
 
-TEST_CASE("unit: a mid-stream analytics terminal error is reported with the request context",
-          "[unit]")
+void
+a_mid_stream_analytics_terminal_error_is_reported_with_the_request_context(
+  [[maybe_unused]] context& ctx)
 {
-  // Counterpart of the query case in test_unit_query_stream.cxx: rows followed by a trailing error,
-  // so the terminal arrives from the stream and reaches the first observing next().
+  // Rows followed by a trailing error, so the terminal arrives from the stream and reaches the
+  // first observing next().
   asio::io_context io;
   const std::string doc = R"({"requestID":"r-ctx","results":[{"a":1}],)"
                           R"("status":"fatal","errors":[{"code":24000,"msg":"boom"}]})";
-  auto body = test::utils::make_cached_response_body(io, doc);
+  auto body = utils::make_cached_response_body(io, doc);
   couchbase::core::analytics_stream stream{ io, std::move(body) };
 
   std::error_code start_ec{ make_error_code(std::errc::operation_in_progress) };
@@ -295,17 +307,17 @@ TEST_CASE("unit: a mid-stream analytics terminal error is reported with the requ
     start_ec = ec;
   });
   io.run();
-  REQUIRE_FALSE(start_ec); // the error is in the trailer, so starting succeeds
+  assert_eq(start_ec, std::error_code{}, "the error is in the trailer, so starting succeeds");
 
-  couchbase::core::error_context::analytics ctx{};
-  ctx.statement = "SELECT a FROM x";
-  ctx.client_context_id = "cid-1";
-  ctx.method = "POST";
-  ctx.path = "/analytics/service";
-  ctx.hostname = "node.example";
-  ctx.port = 8095;
+  couchbase::core::error_context::analytics error_ctx{};
+  error_ctx.statement = "SELECT a FROM x";
+  error_ctx.client_context_id = "cid-1";
+  error_ctx.method = "POST";
+  error_ctx.path = "/analytics/service";
+  error_ctx.hostname = "node.example";
+  error_ctx.port = 8095;
   auto internal = std::make_shared<couchbase::internal_analytics_stream_result>(
-    std::move(stream), nullptr, std::move(ctx));
+    std::move(stream), nullptr, std::move(error_ctx));
 
   io.restart();
   int rows = 0;
@@ -323,14 +335,41 @@ TEST_CASE("unit: a mid-stream analytics terminal error is reported with the requ
   pump();
   io.run();
 
-  REQUIRE(rows == 1);
-  REQUIRE(terminal.has_value());
-  REQUIRE(terminal->ec());
+  assert_eq(rows, 1, "the row delivered ahead of the trailer is still seen");
+  assert_true(terminal.has_value(), "the consumer observes a terminal");
+  assert_ne(terminal->ec(), std::error_code{}, "the terminal carries an error");
+  // The request-side fields come from the context the handle was built with, and the service-side
+  // ones from the trailer. A bare error built at the delivery site would carry neither.
   const auto reported = tao::json::from_string(terminal->ctx().to_json());
-  REQUIRE(reported.at("statement").as<std::string>() == "SELECT a FROM x");
-  REQUIRE(reported.at("client_context_id").as<std::string>() == "cid-1");
-  REQUIRE(reported.at("hostname").as<std::string>() == "node.example");
-  REQUIRE(reported.at("port").as<std::uint16_t>() == 8095);
-  REQUIRE(reported.at("first_error_code").as<std::uint64_t>() == 24000);
-  REQUIRE(reported.at("first_error_message").as<std::string>() == "boom");
+  assert_eq(reported.at("statement").as<std::string>(), "SELECT a FROM x", "the statement");
+  assert_eq(reported.at("client_context_id").as<std::string>(), "cid-1", "the context id");
+  assert_eq(reported.at("hostname").as<std::string>(), "node.example", "the endpoint hostname");
+  assert_eq(reported.at("port").as<std::uint16_t>(), std::uint16_t{ 8095 }, "the endpoint port");
+  assert_eq(reported.at("first_error_code").as<std::uint64_t>(),
+            std::uint64_t{ 24000 },
+            "the service error code");
+  assert_eq(
+    reported.at("first_error_message").as<std::string>(), "boom", "the service error message");
 }
+} // namespace
+
+auto
+tests() -> test_suite
+{
+  return {
+    suite_name,
+    {
+      { CASE(yields_rows_then_exposes_late_metadata) },
+      { CASE(surfaces_a_trailing_analytics_error_after_rows) },
+      { CASE(reports_a_clean_end_for_an_empty_result_set) },
+      { CASE(normalizes_a_malformed_body_to_parsing_failure) },
+      { CASE(normalizes_an_oversized_row_to_parsing_failure) },
+      { CASE(re_delivers_the_terminal_on_pulls_after_the_end) },
+      { CASE(reports_request_canceled_after_cancel) },
+      { CASE(reports_no_signature_when_absent) },
+      { CASE(a_mid_stream_analytics_terminal_error_is_reported_with_the_request_context) },
+    },
+  };
+}
+
+} // namespace couchbase::test
