@@ -15,38 +15,24 @@
  *   limitations under the License.
  */
 
-#include "test_helper.hxx"
+#include "framework/errors.hxx"
+#include "framework/test_registry.hxx"
 
-#include "core/cluster_options.hxx"
-#include "core/io/http_context.hxx"
+#include "utils/http_context.hxx"
+
 #include "core/io/http_message.hxx"
-#include "core/io/query_cache.hxx"
 #include "core/operations/management/bucket_create.hxx"
 #include "core/operations/management/bucket_update.hxx"
-#include "core/topology/configuration.hxx"
 
 #include <couchbase/durability_level.hxx>
 
 #include <map>
 #include <string>
 
+namespace couchbase::test
+{
 namespace
 {
-auto
-make_http_context() -> couchbase::core::http_context
-{
-  static couchbase::core::topology::configuration config{};
-  static couchbase::core::query_cache query_cache{};
-  static couchbase::core::cluster_options cluster_options{};
-  std::string hostname{};
-  std::uint16_t port{};
-  std::string canonical_hostname{};
-  std::uint16_t canonical_port{};
-  return {
-    config, cluster_options, query_cache, hostname, port, canonical_hostname, canonical_port
-  };
-}
-
 /**
  * Parse an application/x-www-form-urlencoded body into a key->value map. Values used in these
  * tests do not require percent-decoding, so the raw value is kept as-is.
@@ -70,12 +56,24 @@ parse_form_body(const std::string& body) -> std::map<std::string, std::string>
   }
   return values;
 }
-} // namespace
 
-TEST_CASE("unit: bucket_update::encode_to form body", "[unit]")
+// Couchbase Server 8.1 and later reject an empty form parameter (MB-61655), so the body has to be
+// non-empty and must not open with, close with, or run through a bare separator, whatever the
+// values around it say.
+void
+assert_well_formed_form_body(const std::string& body)
+{
+  assert_false(body.empty(), "the encoder produced a body");
+  assert_ne(body.front(), '&', "the body does not open with a separator");
+  assert_eq(body.find("&&"), std::string::npos, "the body carries no empty parameter");
+  assert_ne(body.back(), '&', "the body does not close with a separator");
+}
+
+void
+bucket_update_encodes_the_settings_it_was_given([[maybe_unused]] context& ctx)
 {
   couchbase::core::io::http_request http_req;
-  auto ctx = make_http_context();
+  auto http_ctx = ::test::utils::make_http_context();
 
   couchbase::core::operations::management::bucket_update_request req{};
   req.bucket.name = "my_bucket";
@@ -84,29 +82,22 @@ TEST_CASE("unit: bucket_update::encode_to form body", "[unit]")
   req.bucket.flush_enabled = true;
   req.bucket.minimum_durability_level = couchbase::durability_level::majority;
 
-  auto ec = req.encode_to(http_req, ctx);
-  REQUIRE_SUCCESS(ec);
-
-  // The body must be a well-formed form-urlencoded string: no leading '&' (which Couchbase
-  // Server 8.1+ via MB-61655 rejects as an empty parameter) and no empty tokens.
-  REQUIRE_FALSE(http_req.body.empty());
-  REQUIRE(http_req.body.front() != '&');
-  REQUIRE(http_req.body.find("&&") == std::string::npos);
-  REQUIRE(http_req.body.back() != '&');
+  assert_success(req.encode_to(http_req, http_ctx), "the request is encoded");
+  assert_well_formed_form_body(http_req.body);
 
   auto values = parse_form_body(http_req.body);
-  CHECK(values["ramQuotaMB"] == "256");
-  CHECK(values["replicaNumber"] == "2");
-  CHECK(values["flushEnabled"] == "1");
-  CHECK(values["durabilityMinLevel"] == "majority");
-  // bucket name is carried in the path, not the body
-  CHECK(values.count("name") == 0);
+  assert_eq(values["ramQuotaMB"], "256", "RAM quota");
+  assert_eq(values["replicaNumber"], "2", "replica count");
+  assert_eq(values["flushEnabled"], "1", "flush");
+  assert_eq(values["durabilityMinLevel"], "majority", "minimum durability level");
+  assert_eq(values.count("name"), 0U, "the bucket name is carried in the path, not the body");
 }
 
-TEST_CASE("unit: bucket_create::encode_to form body", "[unit]")
+void
+bucket_create_encodes_the_settings_it_was_given([[maybe_unused]] context& ctx)
 {
   couchbase::core::io::http_request http_req;
-  auto ctx = make_http_context();
+  auto http_ctx = ::test::utils::make_http_context();
 
   couchbase::core::operations::management::bucket_create_request req{};
   req.bucket.name = "my_bucket";
@@ -114,32 +105,43 @@ TEST_CASE("unit: bucket_create::encode_to form body", "[unit]")
   req.bucket.bucket_type = couchbase::core::management::cluster::bucket_type::couchbase;
   req.bucket.num_replicas = 1;
 
-  auto ec = req.encode_to(http_req, ctx);
-  REQUIRE_SUCCESS(ec);
-
-  REQUIRE_FALSE(http_req.body.empty());
-  REQUIRE(http_req.body.front() != '&');
-  REQUIRE(http_req.body.find("&&") == std::string::npos);
-  REQUIRE(http_req.body.back() != '&');
+  assert_success(req.encode_to(http_req, http_ctx), "the request is encoded");
+  assert_well_formed_form_body(http_req.body);
 
   auto values = parse_form_body(http_req.body);
-  CHECK(values["name"] == "my_bucket");
-  CHECK(values["bucketType"] == "couchbase");
-  CHECK(values["ramQuotaMB"] == "512");
-  CHECK(values["replicaNumber"] == "1");
+  assert_eq(values["name"], "my_bucket", "bucket name");
+  assert_eq(values["bucketType"], "couchbase", "bucket type");
+  assert_eq(values["ramQuotaMB"], "512", "RAM quota");
+  assert_eq(values["replicaNumber"], "1", "replica count");
 }
 
-TEST_CASE("unit: bucket_create::encode_to defaults ram quota to 100", "[unit]")
+void
+bucket_create_defaults_the_ram_quota([[maybe_unused]] context& ctx)
 {
   couchbase::core::io::http_request http_req;
-  auto ctx = make_http_context();
+  auto http_ctx = ::test::utils::make_http_context();
 
   couchbase::core::operations::management::bucket_create_request req{};
   req.bucket.name = "my_bucket";
 
-  auto ec = req.encode_to(http_req, ctx);
-  REQUIRE_SUCCESS(ec);
+  assert_success(req.encode_to(http_req, http_ctx), "the request is encoded");
 
   auto values = parse_form_body(http_req.body);
-  CHECK(values["ramQuotaMB"] == "100");
+  assert_eq(values["ramQuotaMB"], "100", "the RAM quota a request that names none is given");
 }
+} // namespace
+
+auto
+tests() -> test_suite
+{
+  return {
+    suite_name,
+    {
+      { CASE(bucket_update_encodes_the_settings_it_was_given) },
+      { CASE(bucket_create_encodes_the_settings_it_was_given) },
+      { CASE(bucket_create_defaults_the_ram_quota) },
+    },
+  };
+}
+
+} // namespace couchbase::test
