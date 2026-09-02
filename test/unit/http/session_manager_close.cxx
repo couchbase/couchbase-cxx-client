@@ -15,7 +15,9 @@
  *   limitations under the License.
  */
 
-#include "test_helper.hxx"
+#include "framework/test_registry.hxx"
+
+#include "framework/errors.hxx"
 
 #include "core/app_telemetry_meter.hxx"
 #include "core/cluster_credentials.hxx"
@@ -35,56 +37,75 @@
 
 #include <asio/io_context.hpp>
 #include <asio/ip/tcp.hpp>
+#include <asio/post.hpp>
 #include <asio/ssl.hpp>
-#include <asio/steady_timer.hpp>
 #include <asio/write.hpp>
 
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <functional>
 #include <future>
 #include <memory>
 #include <set>
 #include <string>
+#include <system_error>
 #include <thread>
+#include <utility>
 
+namespace couchbase::test
+{
 namespace
 {
-class noop_ping_reporter : public couchbase::core::diag::ping_reporter
+// The ping is the only way this case learns that the pooled session exists, so the reporter is
+// what tells it the session is there.
+class notifying_ping_reporter : public couchbase::core::diag::ping_reporter
 {
 public:
-  void report(couchbase::core::diag::endpoint_ping_info&& /* info */) override
+  explicit notifying_ping_reporter(std::function<void()> on_report)
+    : on_report_{ std::move(on_report) }
   {
   }
+
+  void report(couchbase::core::diag::endpoint_ping_info&& /* info */) override
+  {
+    on_report_();
+  }
+
+private:
+  std::function<void()> on_report_;
 };
 
-class noop_ping_collector : public couchbase::core::diag::ping_collector
+class notifying_ping_collector : public couchbase::core::diag::ping_collector
 {
 public:
+  explicit notifying_ping_collector(std::function<void()> on_report)
+    : reporter_{ std::make_shared<notifying_ping_reporter>(std::move(on_report)) }
+  {
+  }
+
   auto build_reporter() -> std::shared_ptr<couchbase::core::diag::ping_reporter> override
   {
     return reporter_;
   }
 
 private:
-  std::shared_ptr<noop_ping_reporter> reporter_{ std::make_shared<noop_ping_reporter>() };
+  std::shared_ptr<notifying_ping_reporter> reporter_;
 };
-} // namespace
 
-// A pooled idle HTTP session keeps a read armed so a peer-initiated close is
-// noticed promptly (see http_session::set_idle / do_read).  That armed read
-// holds a shared_ptr to the session and counts as outstanding io_context work,
-// so http_session_manager::close() must tear the session down (stop()), not
-// merely cancel its idle timer (reset_idle()).  If it only cancels the timer the
-// read stays pending forever and io_context::run() never returns -- which is how
-// "destroy cluster without waiting for close completion" hangs on shutdown.
+// A pooled idle HTTP session keeps a read armed so a peer-initiated close is noticed promptly (see
+// http_session::set_idle / do_read). That armed read holds a shared_ptr to the session and counts
+// as outstanding io_context work, so http_session_manager::close() must tear the session down
+// (stop()), not merely cancel its idle timer (reset_idle()). If it only cancels the timer the read
+// stays pending forever and io_context::run() never returns -- which is how "destroy cluster
+// without waiting for close completion" hangs on shutdown.
 //
-// The loopback server below answers the ping with a keep-alive 200 so the SDK
-// parks the session idle, then deliberately keeps the connection open without
-// arming a further read of its own.  After close(), the only thing that could
-// keep the io_context alive is the leaked idle read, so io.run() returning on
-// its own is exactly the property under test.
-TEST_CASE("unit: http_session_manager close lets the io_context drain", "[unit]")
+// The loopback server below answers the ping with a keep-alive 200 so the SDK parks the session
+// idle, then deliberately keeps the connection open without arming a further read of its own.
+// After close(), the only thing that could keep the io_context alive is the leaked idle read, so
+// io.run() returning on its own is exactly the property under test.
+void
+closing_the_manager_lets_the_io_context_drain([[maybe_unused]] context& ctx)
 {
   asio::io_context io;
 
@@ -97,7 +118,7 @@ TEST_CASE("unit: http_session_manager close lets the io_context drain", "[unit]"
   asio::ip::tcp::socket server{ io };
   auto rbuf = std::make_shared<std::array<char, 4096>>();
   acceptor.async_accept(server, [&, rbuf](std::error_code accept_ec) {
-    REQUIRE_FALSE(accept_ec);
+    assert_success(accept_ec, "the loopback endpoint accepts the manager's connection");
     server.async_read_some(asio::buffer(*rbuf), [&, rbuf](std::error_code read_ec, std::size_t) {
       if (read_ec) {
         return;
@@ -107,9 +128,9 @@ TEST_CASE("unit: http_session_manager close lets the io_context drain", "[unit]"
         if (w_ec) {
           return;
         }
-        // Intentionally do NOT arm another read here: the connection stays
-        // open but contributes no outstanding work to the io_context, so the
-        // only pending operation left is the SDK's idle liveness read.
+        // Intentionally do NOT arm another read here: the connection stays open but contributes no
+        // outstanding work to the io_context, so the only pending operation left is the SDK's idle
+        // liveness read.
         server_responded = true;
       });
     });
@@ -124,8 +145,8 @@ TEST_CASE("unit: http_session_manager close lets the io_context drain", "[unit]"
   couchbase::core::cluster_options options{};
   options.enable_tls = false;
   options.network = "default";
-  // Well beyond the test window: the idle timer must not be what closes the
-  // connection, otherwise the leaked read would be papered over.
+  // Well beyond the case's window: the idle timer must not be what closes the connection,
+  // otherwise the leaked read would be papered over.
   options.idle_http_connection_timeout = std::chrono::seconds(30);
   couchbase::core::origin origin{ creds, "127.0.0.1", port, options };
 
@@ -145,25 +166,28 @@ TEST_CASE("unit: http_session_manager close lets the io_context drain", "[unit]"
   config.nodes.push_back(node);
   manager->set_configuration(config, options);
 
+  // Phase 1 runs until the session is parked idle, then stops so the close path can be driven
+  // deterministically. The ping's completion handler reports to the collector and only then checks
+  // the session back in, so the stop is posted from the report: the posted handler runs once that
+  // completion has returned and the session is idle.
+  auto collector = std::make_shared<notifying_ping_collector>([&]() {
+    asio::post(io, [&]() {
+      io.stop();
+    });
+  });
+
   // Open a pooled management session to the node (the noop response parks it idle).
   manager->ping(
     std::set<couchbase::core::service_type>{ couchbase::core::service_type::management },
     std::chrono::seconds(10),
-    std::make_shared<noop_ping_collector>());
+    collector);
 
-  // Phase 1: pump the loop long enough for the session to be parked idle, then
-  // stop so we can drive the close path deterministically.
-  asio::steady_timer settle{ io };
-  settle.expires_after(std::chrono::seconds(1));
-  settle.async_wait([&](std::error_code) {
-    io.stop();
-  });
   io.run();
-  REQUIRE(server_responded.load());
+  assert_true(server_responded.load(), "the loopback endpoint answered the ping before it parked");
 
-  // Phase 2: close the manager and assert the io_context drains on its own.  We
-  // run io.run() on a worker and bound the wait with a future so a regression
-  // (leaked idle read) surfaces as a failed assertion instead of a hung suite.
+  // Phase 2: close the manager and assert the io_context drains on its own. io.run() goes on a
+  // worker and the wait is bounded by a future, so a leaked idle read surfaces as a failed
+  // assertion instead of a hung suite.
   io.restart();
   manager->close();
 
@@ -181,5 +205,21 @@ TEST_CASE("unit: http_session_manager close lets the io_context drain", "[unit]"
   }
   runner.join();
 
-  CHECK(drained);
+  assert_true(drained, "the io_context drains once the manager is closed");
 }
+} // namespace
+
+auto
+tests() -> test_suite
+{
+  return {
+    suite_name,
+    {
+      // timeout::slow, not network: the case bounds the drain at five seconds of its own, and the
+      // budget has to outlast that bound for the failure to be reported as one.
+      { CASE(closing_the_manager_lets_the_io_context_drain), {}, timeout::slow },
+    },
+  };
+}
+
+} // namespace couchbase::test
