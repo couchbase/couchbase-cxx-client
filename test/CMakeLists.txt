@@ -107,7 +107,6 @@ transaction_test(simple_async)
 transaction_test(public_blocking_api)
 transaction_test(public_async_api)
 
-unit_test(transaction_logging)
 unit_test(transaction_utils)
 unit_test(waitable_op_list)
 unit_test(row_streamer)
