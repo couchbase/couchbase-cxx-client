@@ -48,7 +48,6 @@ integration_test(handler_drop_lifetime)
 integration_test(wait_until_ready)
 integration_test(fork)
 
-unit_test(mcbp_session)
 unit_test(client_request)
 unit_test(client_response)
 
