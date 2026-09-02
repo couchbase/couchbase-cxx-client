@@ -2,6 +2,8 @@
 # because it is no longer a Catch2 file.
 couchbase_add_test(unit/core/config_profiles LABEL unit LINK_CLIENT)
 
+add_subdirectory(unit/management)
+
 # Registered here rather than in cmake/TestFramework.cmake beside the framework's own self-tests:
 # only a call from this file reaches build_unit_tests. It is pure computation over the tools helper
 # and needs no server, so unit is the label, and unit is a label with an aggregate.
@@ -55,16 +57,12 @@ unit_test(get_multi_fetch)
 unit_test(json_streaming_lexer)
 unit_test(jsonsl)
 unit_test(options)
-unit_test(search)
-unit_test(query)
 unit_test(response_parsing)
 unit_test(query_stream)
 unit_test(analytics_stream)
 unit_test(http_streaming_response)
 unit_test(observability_recorder)
 unit_test(diagnostics)
-unit_test(management_query_index)
-unit_test(management_search_index)
 unit_test(metrics)
 unit_test(bucket_deferred_queue)
 unit_test(bucket_request_completion)
@@ -92,9 +90,6 @@ unit_test(mcbp_queue_request)
 unit_test(mcbp_command_id)
 unit_test(movable_function)
 unit_test(key_value_error_context)
-unit_test(management_collection)
-unit_test(management_bucket)
-unit_test(management_analytics)
 unit_test(node_id)
 unit_test(wait_until_ready)
 unit_test(topology_configuration)
