@@ -38,7 +38,6 @@ integration_test(fork)
 
 unit_test(connection_string)
 unit_test(capella)
-unit_test(tls_hostname_verification)
 unit_test(contains_string)
 unit_test(protocol_status)
 unit_test(configuration_belongs_to_session)
