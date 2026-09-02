@@ -34,7 +34,7 @@ namespace couchbase
  *
  * Match documents where field `id` contains numbers in the range `(100, 1000)`:
  *
- * @snippet{trimleft} test_unit_search.cxx search-numeric-range
+ * @snippet{trimleft} unit/management/search.cxx search-numeric-range
  *
  * @since 1.0.0
  * @committed
