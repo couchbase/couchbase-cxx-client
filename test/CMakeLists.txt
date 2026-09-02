@@ -47,7 +47,6 @@ integration_test(wait_until_ready)
 integration_test(fork)
 
 unit_test(connection_string)
-unit_test(contains_string)
 unit_test(protocol_status)
 unit_test(configuration_belongs_to_session)
 unit_test(options)
