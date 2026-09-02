@@ -1,6 +1,4 @@
-# Migrated to the hand-rolled framework (CXXCBC-945). Registered here rather than with unit_test()
-# because it is no longer a Catch2 file.
-couchbase_add_test(unit/core/config_profiles LABEL unit LINK_CLIENT)
+add_subdirectory(unit/core)
 
 # Registered here rather than in cmake/TestFramework.cmake beside the framework's own self-tests:
 # only a call from this file reaches build_unit_tests. It is pure computation over the tools helper
@@ -121,7 +119,6 @@ transaction_test(examples)
 if(COUCHBASE_CXX_CLIENT_COLUMNAR)
   integration_test(columnar_query)
   integration_test(columnar_management)
-  unit_test(columnar_retry)
 endif()
 
 # The framework's cluster-probe selftest. Registered here rather than in cmake/TestFramework.cmake

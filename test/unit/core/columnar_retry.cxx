@@ -15,24 +15,46 @@
  *   limitations under the License.
  */
 
-#include "test_helper.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/columnar/backoff_calculator.hxx"
 
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 
-TEST_CASE("unit: backoff calculator gives backoff values within expected range", "[unit]")
+namespace couchbase::test
+{
+namespace
+{
+void
+backoff_stays_within_the_full_jitter_bounds([[maybe_unused]] context& ctx)
 {
   const auto calculator{ couchbase::core::columnar::default_backoff_calculator };
   const auto base = std::chrono::milliseconds(100);
   const auto cap = std::chrono::minutes(1);
   const double factor = 2;
 
+  // Full Jitter draws uniformly below the exponential bound, so a single draw says nothing about
+  // the bound. Repeat.
   for (std::size_t i = 0; i < 10; ++i) {
-    // Repeat a few times as the backoff is random with Full Jitter
-    REQUIRE(calculator(0) <= base);
-    REQUIRE(calculator(2) <= base * std::pow(factor, 2));
-    REQUIRE(calculator(1000) <= cap);
+    assert_true(calculator(0) <= base, "the first retry waits at most the base delay");
+    assert_true(calculator(2) <= base * std::pow(factor, 2),
+                "the third retry waits at most the base delay grown by the factor");
+    assert_true(calculator(1000) <= cap, "an unbounded retry count is still capped");
   }
 }
+} // namespace
+
+auto
+tests() -> test_suite
+{
+  return {
+    suite_name,
+    {
+      { CASE(backoff_stays_within_the_full_jitter_bounds), {}, timeout::instant },
+    },
+  };
+}
+
+} // namespace couchbase::test
