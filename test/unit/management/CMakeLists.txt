@@ -1,2 +1,3 @@
+couchbase_add_test(unit/management/bucket LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/management/query_index LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/management/search_index LABEL unit LINK_CLIENT)
