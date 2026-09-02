@@ -3,6 +3,8 @@
 couchbase_add_test(unit/core/config_profiles LABEL unit LINK_CLIENT)
 add_subdirectory(unit/json)
 
+add_subdirectory(unit/observability)
+
 # Registered here rather than in cmake/TestFramework.cmake beside the framework's own self-tests:
 # only a call from this file reaches build_unit_tests. It is pure computation over the tools helper
 # and needs no server, so unit is the label, and unit is a label with an aggregate.
@@ -61,7 +63,6 @@ unit_test(observability_recorder)
 unit_test(diagnostics)
 unit_test(management_query_index)
 unit_test(management_search_index)
-unit_test(metrics)
 unit_test(bucket_deferred_queue)
 unit_test(bucket_request_completion)
 unit_test(meter_wrapper)
