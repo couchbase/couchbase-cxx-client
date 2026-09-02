@@ -15,7 +15,7 @@
  *   limitations under the License.
  */
 
-#include "test_helper.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/utils/movable_function.hxx"
 
@@ -28,6 +28,9 @@
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
+
+namespace couchbase::test
+{
 
 namespace
 {
@@ -90,7 +93,7 @@ int heap_counted::allocations = 0;
 int heap_counted::frees = 0;
 } // namespace
 
-using couchbase::core::utils::movable_function;
+using ::couchbase::core::utils::movable_function;
 
 namespace
 {
@@ -296,15 +299,19 @@ static_assert(!std::is_constructible_v<movable_function<void()>, non_movable_cal
               "a non-movable callable must be rejected by SFINAE, not hard-error in emplace()");
 } // namespace
 
-TEST_CASE("unit: movable_function invokes and returns", "[unit]")
+namespace
+{
+void
+a_target_is_invoked_and_its_result_returned([[maybe_unused]] context& ctx)
 {
   movable_function<int(int)> f = [](int x) {
     return x + 1;
   };
-  REQUIRE(f(41) == 42);
+  assert_eq(f(41), 42, "the argument reaches the target and its result comes back");
 }
 
-TEST_CASE("unit: movable_function invokes a capturing void functor repeatedly", "[unit]")
+void
+a_capturing_void_target_is_invoked_each_time([[maybe_unused]] context& ctx)
 {
   int calls = 0;
   movable_function<void()> f = [&calls]() {
@@ -312,257 +319,301 @@ TEST_CASE("unit: movable_function invokes a capturing void functor repeatedly", 
   };
   f();
   f();
-  REQUIRE(calls == 2);
+  assert_eq(calls, 2, "every call reaches the target");
 }
 
-TEST_CASE("unit: movable_function holds a move-only functor", "[unit]")
+void
+a_move_only_target_is_held([[maybe_unused]] context& ctx)
 {
   auto p = std::make_unique<int>(7);
   movable_function<int()> f = [p = std::move(p)]() {
     return *p;
   };
-  REQUIRE(f() == 7);
+  assert_eq(f(), 7, "the moved-in capture survives into the call");
 }
 
-TEST_CASE("unit: movable_function forwards a move-only argument", "[unit]")
+void
+a_move_only_argument_is_forwarded([[maybe_unused]] context& ctx)
 {
   movable_function<int(std::unique_ptr<int>&&)> f = [](std::unique_ptr<int>&& p) {
     return *p;
   };
-  REQUIRE(f(std::make_unique<int>(9)) == 9);
+  assert_eq(f(std::make_unique<int>(9)), 9, "the argument is forwarded, not copied");
 }
 
-TEST_CASE("unit: movable_function move constructor transfers and empties the source", "[unit]")
+void
+move_construction_transfers_the_target_and_empties_the_source([[maybe_unused]] context& ctx)
 {
   movable_function<int()> a = []() {
     return 5;
   };
   movable_function<int()> b = std::move(a);
-  REQUIRE(static_cast<bool>(b));
-  REQUIRE(b() == 5);
-  REQUIRE_FALSE(static_cast<bool>(a));
+  assert_true(static_cast<bool>(b), "the destination holds the target");
+  assert_eq(b(), 5, "the target still answers");
+  // A moved-from movable_function is required to be empty; reading it here is
+  // that specification, not a use-after-move.
+  // cppcheck-suppress accessMoved
+  assert_false(static_cast<bool>(a), "the source is left empty");
 }
 
-TEST_CASE("unit: movable_function move assignment transfers and empties the source", "[unit]")
+void
+move_assignment_transfers_the_target_and_empties_the_source([[maybe_unused]] context& ctx)
 {
   movable_function<int()> a = []() {
     return 5;
   };
   movable_function<int()> b;
   b = std::move(a);
-  REQUIRE(static_cast<bool>(b));
-  REQUIRE(b() == 5);
-  REQUIRE_FALSE(static_cast<bool>(a));
+  assert_true(static_cast<bool>(b), "the destination holds the target");
+  assert_eq(b(), 5, "the target still answers");
+  // A moved-from movable_function is required to be empty; reading it here is
+  // that specification, not a use-after-move.
+  // cppcheck-suppress accessMoved
+  assert_false(static_cast<bool>(a), "the source is left empty");
 }
 
-TEST_CASE("unit: movable_function bool and nullptr semantics", "[unit]")
+void
+assigning_nullptr_empties_the_function([[maybe_unused]] context& ctx)
 {
   movable_function<void()> f;
-  REQUIRE_FALSE(static_cast<bool>(f));
+  assert_false(static_cast<bool>(f), "a default-constructed function is empty");
   f = []() {
   };
-  REQUIRE(static_cast<bool>(f));
+  assert_true(static_cast<bool>(f), "an assigned target makes it non-empty");
   f = nullptr;
-  REQUIRE_FALSE(static_cast<bool>(f));
+  assert_false(static_cast<bool>(f), "assigning nullptr releases the target");
 }
 
-TEST_CASE("unit: movable_function compares against nullptr", "[unit]")
+void
+emptiness_is_visible_through_comparison_with_nullptr([[maybe_unused]] context& ctx)
 {
   movable_function<void()> f;
-  REQUIRE(f == nullptr);
-  REQUIRE(nullptr == f);
-  REQUIRE_FALSE(f != nullptr);
+  assert_true(f == nullptr, "an empty function equals nullptr");
+  assert_true(nullptr == f, "the comparison is symmetric");
+  assert_false(f != nullptr, "and its negation agrees");
   f = []() {
   };
-  REQUIRE(f != nullptr);
-  REQUIRE(nullptr != f);
-  REQUIRE_FALSE(f == nullptr);
+  assert_true(f != nullptr, "a populated function differs from nullptr");
+  assert_true(nullptr != f, "the comparison is symmetric");
+  assert_false(f == nullptr, "and its negation agrees");
 }
 
-TEST_CASE("unit: movable_function stores a small copyable functor without heap allocation",
-          "[unit]")
+void
+a_small_copyable_functor_is_stored_inline([[maybe_unused]] context& ctx)
 {
   heap_counted::reset();
   movable_function<int()> f =
     small_copyable_functor{ {}, std::make_shared<int>(1), std::make_shared<int>(2) };
-  REQUIRE(heap_counted::allocations == 0); // stored inline: the functor is not heap-allocated
-  REQUIRE(f() == 3);
+  assert_eq(heap_counted::allocations, 0, "the functor is not heap-allocated");
+  assert_eq(f(), 3, "the inline target answers");
 }
 
-TEST_CASE("unit: movable_function stores a small move-only functor without heap allocation",
-          "[unit]")
+void
+a_small_move_only_functor_is_stored_inline([[maybe_unused]] context& ctx)
 {
   heap_counted::reset();
   movable_function<int()> f = small_move_only_functor{ {}, std::make_unique<int>(3) };
-  REQUIRE(heap_counted::allocations == 0); // stored inline: the functor is not heap-allocated
-  REQUIRE(f() == 3);
+  assert_eq(heap_counted::allocations, 0, "the functor is not heap-allocated");
+  assert_eq(f(), 3, "the inline target answers");
 }
 
-TEST_CASE("unit: movable_function falls back to the heap for a large functor", "[unit]")
+void
+a_large_functor_falls_back_to_the_heap([[maybe_unused]] context& ctx)
 {
   heap_counted::reset();
   movable_function<std::size_t()> f = large_functor{};
-  REQUIRE(heap_counted::allocations == 1); // too large for the inline buffer: one heap allocation
-  REQUIRE(f() == 256);
+  assert_eq(heap_counted::allocations, 1, "too large for the inline buffer: one heap allocation");
+  assert_eq(f(), std::size_t{ 256 }, "the heap-held target answers");
 }
 
-TEST_CASE("unit: invoking an empty movable_function throws", "[unit]")
+void
+invoking_a_default_constructed_function_throws([[maybe_unused]] context& ctx)
 {
-  SECTION("default-constructed")
-  {
-    movable_function<int()> f;
-    REQUIRE_THROWS_AS(f(), std::bad_function_call);
-  }
-  SECTION("assigned nullptr")
-  {
-    movable_function<int()> f = []() {
-      return 1;
-    };
-    f = nullptr;
-    REQUIRE_THROWS_AS(f(), std::bad_function_call);
-  }
-  SECTION("moved-from")
-  {
-    movable_function<int()> f = []() {
-      return 1;
-    };
-    movable_function<int()> g = std::move(f);
-    // Invoking the moved-from source is exactly the contract under test: a moved-from
-    // movable_function is empty and throws bad_function_call. The static analyzer flags this as a
-    // use-after-move regardless, so suppress it there only.
+  movable_function<int()> f;
+  assert_throws<std::bad_function_call>(
+    [&f]() {
+      static_cast<void>(f());
+    },
+    "an empty function refuses the call rather than dispatching through nothing");
+}
+
+void
+invoking_a_function_assigned_nullptr_throws([[maybe_unused]] context& ctx)
+{
+  movable_function<int()> f = []() {
+    return 1;
+  };
+  // The premise of this case, as distinct from the default-constructed one: the function held a
+  // target, and assigning nullptr is what took it away.
+  assert_true(static_cast<bool>(f), "the function starts out holding a target");
+  f = nullptr;
+  assert_throws<std::bad_function_call>(
+    [&f]() {
+      static_cast<void>(f());
+    },
+    "an emptied function refuses the call rather than dispatching through nothing");
+}
+
+void
+invoking_a_moved_from_function_throws([[maybe_unused]] context& ctx)
+{
+  movable_function<int()> f = []() {
+    return 1;
+  };
+  movable_function<int()> g = std::move(f);
+  // Invoking the moved-from source is exactly the contract under test: a moved-from
+  // movable_function is empty and throws bad_function_call. The static analyzer flags the call as
+  // a use-after-move regardless, so it is suppressed on the call itself: scan-build reports the
+  // lambda body, which an attribute on the enclosing statement does not always cover.
+  assert_throws<std::bad_function_call>(
+    [&f]() {
 #if defined(__clang__) && defined(__clang_analyzer__)
-    [[clang::suppress]]
+      [[clang::suppress]]
 #endif
-    REQUIRE_THROWS_AS(f(), std::bad_function_call);
-  }
+      static_cast<void>(f());
+    },
+    "a moved-from function refuses the call rather than dispatching through nothing");
 }
 
-TEST_CASE("unit: movable_function moving a heap-held functor transfers ownership exactly once",
-          "[unit]")
+void
+moving_a_heap_held_target_transfers_ownership_exactly_once([[maybe_unused]] context& ctx)
 {
-  REQUIRE(tracked_callable::live_instances == 0);
+  assert_eq(tracked_callable::live_instances, 0, "no target is live before the case starts");
   heap_counted::reset();
   {
     movable_function<int()> a{ tracked_callable{ 42 } };
-    REQUIRE(tracked_callable::live_instances == 1); // one live instance owned on the heap
+    assert_eq(tracked_callable::live_instances, 1, "one live instance owned on the heap");
 
     // Move-construction steals the heap pointer; it must not construct or destroy a target.
     movable_function<int()> b = std::move(a);
-    REQUIRE(tracked_callable::live_instances == 1);
-    REQUIRE_FALSE(static_cast<bool>(a));
-    REQUIRE(b() == 42);
+    assert_eq(tracked_callable::live_instances, 1, "the move neither copies nor destroys");
+    // A moved-from movable_function is required to be empty; reading it here is
+    // that specification, not a use-after-move.
+    // cppcheck-suppress accessMoved
+    assert_false(static_cast<bool>(a), "the source is left empty");
+    assert_eq(b(), 42, "the destination holds the same target");
   }
   // Destroying the sole owner runs the target's destructor and frees the heap block.
-  REQUIRE(tracked_callable::live_instances == 0);
-  REQUIRE(heap_counted::allocations == 1); // exactly one heap block taken for the target
-  REQUIRE(heap_counted::frees ==
-          heap_counted::allocations); // released once: not leaked, not double-freed
+  assert_eq(tracked_callable::live_instances, 0, "the survivor's destructor ran");
+  assert_eq(heap_counted::allocations, 1, "exactly one heap block taken for the target");
+  assert_eq(
+    heap_counted::frees, heap_counted::allocations, "released once: not leaked, not double-freed");
 }
 
-TEST_CASE("unit: move-assigning over a populated movable_function destroys the old target once",
-          "[unit]")
+void
+move_assignment_destroys_the_old_heap_target_once([[maybe_unused]] context& ctx)
 {
-  REQUIRE(tracked_callable::live_instances == 0);
+  assert_eq(tracked_callable::live_instances, 0, "no target is live before the case starts");
   {
     movable_function<int()> b{ tracked_callable{ 1 } };
     movable_function<int()> a{ tracked_callable{ 2 } };
-    REQUIRE(tracked_callable::live_instances == 2);
+    assert_eq(tracked_callable::live_instances, 2, "both targets are live");
 
     b = std::move(a); // must destroy b's current target before taking a's
-    REQUIRE(tracked_callable::live_instances == 1);
-    REQUIRE(b() == 2);
-    REQUIRE_FALSE(static_cast<bool>(a));
+    assert_eq(tracked_callable::live_instances, 1, "the overwritten target is destroyed once");
+    assert_eq(b(), 2, "the destination holds the assigned target");
+    // A moved-from movable_function is required to be empty; reading it here is
+    // that specification, not a use-after-move.
+    // cppcheck-suppress accessMoved
+    assert_false(static_cast<bool>(a), "the source is left empty");
   }
-  REQUIRE(tracked_callable::live_instances == 0);
+  assert_eq(tracked_callable::live_instances, 0, "the survivor's destructor ran");
 }
 
-TEST_CASE("unit: movable_function self-move-assignment leaves it valid", "[unit]")
+void
+self_move_assignment_leaves_the_target_intact([[maybe_unused]] context& ctx)
 {
   movable_function<int()> f = []() {
     return 7;
   };
   auto& ref = f;
   f = std::move(ref); // guarded no-op; must not destroy the held target
-  REQUIRE(static_cast<bool>(f));
-  REQUIRE(f() == 7);
+  assert_true(static_cast<bool>(f), "the function still holds a target");
+  assert_eq(f(), 7, "and it is the target it held before");
 }
 
-TEST_CASE("unit: movable_function<void()> discards a value-returning target", "[unit]")
+// std::is_invocable_r_v<void, F&> admits a callable whose result is discardable, matching
+// std::function / std::move_only_function. Binding one to a void signature must compile -- the
+// invoke thunk drops the result rather than emitting `return <non-void>;` in a void thunk -- and
+// ignore the value. Exercises the common asio tail-return idiom (e.g. `return self->do_next();`
+// in a void handler). Both storage paths route through their own thunk.
+void
+an_inline_value_returning_target_binds_to_a_void_signature([[maybe_unused]] context& ctx)
 {
-  // std::is_invocable_r_v<void, F&> admits a callable whose result is discardable, matching
-  // std::function / std::move_only_function. Binding one to a void signature must compile -- the
-  // invoke thunk drops the result rather than emitting `return <non-void>;` in a void thunk -- and
-  // ignore the value. Exercises the common asio tail-return idiom (e.g. `return self->do_next();`
-  // in a void handler). Both storage paths route through their own thunk.
-  SECTION("inline path")
-  {
-    int calls = 0;
-    movable_function<void()> f = [&calls]() {
-      ++calls;
-      return 42; // discarded
-    };
-    f();
-    REQUIRE(calls == 1);
-  }
-  SECTION("heap path")
-  {
-    std::array<char, 256> payload{};
-    movable_function<void()> f = [payload]() {
-      return payload.size(); // discarded
-    };
-    f(); // must compile and run without returning the value through the void thunk
-  }
+  int calls = 0;
+  movable_function<void()> f = [&calls]() {
+    ++calls;
+    return 42; // discarded
+  };
+  f();
+  assert_eq(calls, 1, "the call reaches the target and its result is dropped");
 }
 
-TEST_CASE("unit: movable_function moving an inline-held functor transfers ownership exactly once",
-          "[unit]")
+void
+a_heap_held_value_returning_target_binds_to_a_void_signature([[maybe_unused]] context& ctx)
 {
-  REQUIRE(small_tracked_functor::live_instances == 0);
+  std::array<char, 256> payload{};
+  movable_function<void()> f = [payload]() {
+    return payload.size(); // discarded
+  };
+  f(); // must compile and run without returning the value through the void thunk
+}
+
+void
+moving_an_inline_held_target_transfers_ownership_exactly_once([[maybe_unused]] context& ctx)
+{
+  assert_eq(small_tracked_functor::live_instances, 0, "no target is live before the case starts");
   heap_counted::reset();
   {
     movable_function<int()> a{ small_tracked_functor{ 42 } };
-    REQUIRE(small_tracked_functor::live_instances == 1); // stored inline...
-    REQUIRE(heap_counted::allocations == 0);             // ...so no heap block
+    assert_eq(small_tracked_functor::live_instances, 1, "one live instance stored inline...");
+    assert_eq(heap_counted::allocations, 0, "...so no heap block");
 
     // Inline move-construction: construct into dst, destroy src -> still exactly one live instance.
     movable_function<int()> b = std::move(a);
-    REQUIRE(small_tracked_functor::live_instances == 1);
-    REQUIRE_FALSE(static_cast<bool>(a));
-    REQUIRE(b() == 42);
+    assert_eq(small_tracked_functor::live_instances, 1, "the move neither copies nor leaks");
+    // A moved-from movable_function is required to be empty; reading it here is
+    // that specification, not a use-after-move.
+    // cppcheck-suppress accessMoved
+    assert_false(static_cast<bool>(a), "the source is left empty");
+    assert_eq(b(), 42, "the destination holds the same target");
 
     // Move-assignment over a populated target destroys the old target before taking the new one.
     movable_function<int()> c{ small_tracked_functor{ 7 } };
-    REQUIRE(small_tracked_functor::live_instances == 2);
+    assert_eq(small_tracked_functor::live_instances, 2, "both targets are live");
     b = std::move(c);
-    REQUIRE(small_tracked_functor::live_instances == 1);
-    REQUIRE(b() == 7);
+    assert_eq(small_tracked_functor::live_instances, 1, "the overwritten target is destroyed once");
+    assert_eq(b(), 7, "the destination holds the assigned target");
   }
   // The inline destroy thunk ran for the survivor: no leak, no double-destroy on the SBO path.
-  REQUIRE(small_tracked_functor::live_instances == 0);
-  REQUIRE(heap_counted::allocations == 0); // never touched the heap
+  assert_eq(small_tracked_functor::live_instances, 0, "the survivor's destructor ran");
+  assert_eq(heap_counted::allocations, 0, "the inline path never touched the heap");
 }
 
-TEST_CASE("unit: movable_function heap-routes a small functor whose move can throw", "[unit]")
+void
+a_small_functor_whose_move_can_throw_is_routed_to_the_heap([[maybe_unused]] context& ctx)
 {
   heap_counted::reset();
   movable_function<int()> f = throwing_move_functor{ 5 };
   // Small and well-aligned, but the inline buffer requires a nothrow move; this one can throw, so
   // the nothrow-move gate -- not size -- forces the heap.
-  REQUIRE(heap_counted::allocations == 1);
-  REQUIRE(f() == 5);
+  assert_eq(heap_counted::allocations, 1, "the nothrow-move gate forces the heap");
+  assert_eq(f(), 5, "the heap-held target answers");
 }
 
-TEST_CASE("unit: movable_function heap-routes an over-aligned functor", "[unit]")
+void
+an_over_aligned_functor_is_routed_to_the_heap([[maybe_unused]] context& ctx)
 {
   heap_counted::reset();
   movable_function<int()> f = over_aligned_functor{ 9 };
   // Fits by size but over-aligned, so the alignment gate forces the heap; heap_counted's aligned
   // operator new records the block that the plain overload would have missed.
-  REQUIRE(heap_counted::allocations == 1);
-  REQUIRE(f() == 9);
+  assert_eq(heap_counted::allocations, 1, "the alignment gate forces the heap");
+  assert_eq(f(), 9, "the heap-held target answers");
 }
 
-TEST_CASE("unit: assigning a throwing-to-construct callable preserves the current target", "[unit]")
+void
+an_assignment_whose_target_throws_preserves_the_current_one([[maybe_unused]] context& ctx)
 {
   // Strong exception guarantee: if constructing the new target throws (here, a throwing copy of an
   // lvalue functor), assignment leaves the existing target intact rather than empty. A bare
@@ -571,14 +622,52 @@ TEST_CASE("unit: assigning a throwing-to-construct callable preserves the curren
     return 7;
   };
   throwing_copy_functor bomb{};
-  REQUIRE_THROWS_AS(f = bomb, std::runtime_error); // lvalue: copied into the target, which throws
-  REQUIRE(static_cast<bool>(f));
-  REQUIRE(f() == 7);
+  assert_throws<std::runtime_error>(
+    [&f, &bomb]() {
+      f = bomb; // lvalue: copied into the target, which throws
+    },
+    "the failed copy propagates");
+  assert_true(static_cast<bool>(f), "the function still holds a target");
+  assert_eq(f(), 7, "and it is the target it held before");
+}
+} // namespace
+
+auto
+tests() -> test_suite
+{
+  return {
+    suite_name,
+    {
+      { CASE(a_target_is_invoked_and_its_result_returned), {}, timeout::instant },
+      { CASE(a_capturing_void_target_is_invoked_each_time), {}, timeout::instant },
+      { CASE(a_move_only_target_is_held), {}, timeout::instant },
+      { CASE(a_move_only_argument_is_forwarded), {}, timeout::instant },
+      { CASE(move_construction_transfers_the_target_and_empties_the_source), {}, timeout::instant },
+      { CASE(move_assignment_transfers_the_target_and_empties_the_source), {}, timeout::instant },
+      { CASE(assigning_nullptr_empties_the_function), {}, timeout::instant },
+      { CASE(emptiness_is_visible_through_comparison_with_nullptr), {}, timeout::instant },
+      { CASE(a_small_copyable_functor_is_stored_inline), {}, timeout::instant },
+      { CASE(a_small_move_only_functor_is_stored_inline), {}, timeout::instant },
+      { CASE(a_large_functor_falls_back_to_the_heap), {}, timeout::instant },
+      { CASE(invoking_a_default_constructed_function_throws), {}, timeout::instant },
+      { CASE(invoking_a_function_assigned_nullptr_throws), {}, timeout::instant },
+      { CASE(invoking_a_moved_from_function_throws), {}, timeout::instant },
+      { CASE(moving_a_heap_held_target_transfers_ownership_exactly_once), {}, timeout::instant },
+      { CASE(move_assignment_destroys_the_old_heap_target_once), {}, timeout::instant },
+      { CASE(self_move_assignment_leaves_the_target_intact), {}, timeout::instant },
+      { CASE(an_inline_value_returning_target_binds_to_a_void_signature), {}, timeout::instant },
+      { CASE(a_heap_held_value_returning_target_binds_to_a_void_signature), {}, timeout::instant },
+      { CASE(moving_an_inline_held_target_transfers_ownership_exactly_once), {}, timeout::instant },
+      { CASE(a_small_functor_whose_move_can_throw_is_routed_to_the_heap), {}, timeout::instant },
+      { CASE(an_over_aligned_functor_is_routed_to_the_heap), {}, timeout::instant },
+      { CASE(an_assignment_whose_target_throws_preserves_the_current_one), {}, timeout::instant },
+    },
+  };
 }
 
 namespace
 {
-using callback = couchbase::core::utils::movable_function<void(int)>;
+using callback = ::couchbase::core::utils::movable_function<void(int)>;
 
 struct matching_callable {
   void operator()(int) const
@@ -614,3 +703,5 @@ static_assert(std::is_constructible_v<callback, matching_callable>);
 static_assert(!std::is_constructible_v<callback, wrong_signature>);
 static_assert(!std::is_constructible_v<callback, int>);
 } // namespace
+
+} // namespace couchbase::test

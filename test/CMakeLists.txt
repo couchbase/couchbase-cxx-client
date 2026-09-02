@@ -66,7 +66,6 @@ unit_test(client_request)
 unit_test(client_response)
 unit_test(mcbp_queue_request)
 unit_test(mcbp_command_id)
-unit_test(movable_function)
 unit_test(node_id)
 
 integration_benchmark(get)
