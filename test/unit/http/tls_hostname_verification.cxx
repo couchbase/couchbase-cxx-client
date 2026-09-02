@@ -15,7 +15,9 @@
  *   limitations under the License.
  */
 
-#include "test_helper.hxx"
+#include "framework/test_registry.hxx"
+
+#include "framework/errors.hxx"
 
 #include "core/io/streams.hxx"
 #include "core/tls_context_provider.hxx"
@@ -28,7 +30,10 @@
 #include <cstring>
 #include <memory>
 #include <string>
+#include <system_error>
 
+namespace couchbase::test
+{
 namespace
 {
 // Self-signed certificate (also acts as its own trust anchor) whose only
@@ -99,11 +104,6 @@ struct handshake_outcome {
 // SNI and server-identity (SAN/CN) verification before handshaking.
 //
 // The server side is plain Asio because the SDK only implements the TLS client.
-//
-// With tls_verify_mode::peer, a `request_hostname` that does not match the
-// certificate SAN (DNS:correct.example) MUST cause the client handshake to fail
-// (and, as a consequence, the server handshake too). With tls_verify_mode::none,
-// verification is disabled and even a mismatched hostname MUST complete.
 auto
 handshake_with_hostname(const std::string& request_hostname,
                         couchbase::core::tls_verify_mode verify_mode =
@@ -137,7 +137,7 @@ handshake_with_hostname(const std::string& request_hostname,
   acceptor.async_accept(server_stream.lowest_layer(), [&](std::error_code accept_ec) {
     // A failing accept would make the client result meaningless, so surface it
     // here rather than letting it masquerade as a client handshake failure.
-    REQUIRE_FALSE(accept_ec);
+    assert_success(accept_ec, "the loopback TLS server accepts the client connection");
     server_stream.async_handshake(asio::ssl::stream_base::server, [&](std::error_code ec) {
       server_ec = ec;
     });
@@ -156,56 +156,73 @@ handshake_with_hostname(const std::string& request_hostname,
   io.run();
   return { client_ec, server_ec };
 }
-} // namespace
 
-TEST_CASE("unit: TLS handshake verifies the server hostname against the certificate", "[unit]")
+void
+a_hostname_matching_the_certificate_san_is_accepted([[maybe_unused]] context& ctx)
 {
-  SECTION("hostname that matches the certificate SAN is accepted")
-  {
-    const auto outcome = handshake_with_hostname("correct.example");
-    CHECK_FALSE(outcome.client);
-    CHECK_FALSE(outcome.server); // both sides complete the handshake
-  }
-
-  SECTION("hostname that does NOT match the certificate SAN is rejected (CWE-297)")
-  {
-    const auto outcome = handshake_with_hostname("not-the-real-node.example");
-    CHECK(outcome.client); // a name-mismatched certificate must not be accepted
-  }
+  const auto outcome = handshake_with_hostname("correct.example");
+  assert_success(outcome.client, "the client accepts a certificate naming the requested host");
+  assert_success(outcome.server, "the server side of the handshake completes too");
 }
 
-TEST_CASE("unit: tls_verify=none disables server-identity verification", "[unit]")
+void
+a_hostname_not_matching_the_certificate_san_is_rejected([[maybe_unused]] context& ctx)
 {
-  // tls_verify=none maps to asio::ssl::verify_none. This is the documented
-  // (insecure) escape hatch: certificate and hostname verification are switched
-  // off, so even a hostname that does NOT match the certificate SAN must still
-  // complete the handshake. This complements the verify_peer cases above and
-  // guards against the verify-none branch silently breaking.
-  SECTION("a mismatched hostname is accepted when verification is disabled")
-  {
-    const auto outcome =
-      handshake_with_hostname("not-the-real-node.example", couchbase::core::tls_verify_mode::none);
-    CHECK_FALSE(outcome.client); // verification disabled => handshake succeeds
-    CHECK_FALSE(outcome.server);
-  }
-
-  SECTION("a matching hostname is also accepted when verification is disabled")
-  {
-    const auto outcome =
-      handshake_with_hostname("correct.example", couchbase::core::tls_verify_mode::none);
-    CHECK_FALSE(outcome.client);
-    CHECK_FALSE(outcome.server);
-  }
+  const auto outcome = handshake_with_hostname("not-the-real-node.example");
+  assert_true(static_cast<bool>(outcome.client),
+              "a name-mismatched certificate is not accepted (CWE-297)");
 }
 
-TEST_CASE("unit: TLS handshake configuration rejects an empty hostname", "[unit]")
+// tls_verify=none maps to asio::ssl::verify_none. This is the documented (insecure) escape hatch:
+// certificate and hostname verification are switched off, so even a hostname that does not match
+// the certificate SAN must still complete the handshake.
+void
+a_mismatched_hostname_is_accepted_when_verification_is_disabled([[maybe_unused]] context& ctx)
 {
-  // An empty hostname must fail closed rather than silently skipping SNI and
-  // hostname verification (which would regress to CA-only validation, CWE-297).
+  const auto outcome =
+    handshake_with_hostname("not-the-real-node.example", couchbase::core::tls_verify_mode::none);
+  assert_success(outcome.client, "verification disabled accepts a mismatched hostname");
+  assert_success(outcome.server, "the server side of the handshake completes too");
+}
+
+void
+a_matching_hostname_is_accepted_when_verification_is_disabled([[maybe_unused]] context& ctx)
+{
+  const auto outcome =
+    handshake_with_hostname("correct.example", couchbase::core::tls_verify_mode::none);
+  assert_success(outcome.client, "verification disabled accepts a matching hostname");
+  assert_success(outcome.server, "the server side of the handshake completes too");
+}
+
+// An empty hostname must fail closed rather than silently skipping SNI and hostname verification,
+// which would regress to CA-only validation (CWE-297).
+void
+an_empty_hostname_is_rejected([[maybe_unused]] context& ctx)
+{
   asio::io_context io;
   asio::ssl::context client_ctx{ asio::ssl::context::tls_client };
   asio::ssl::stream<asio::ip::tcp::socket> client_stream{ io, client_ctx };
 
   const auto ec = couchbase::core::io::configure_tls_handshake(client_stream, "");
-  CHECK(ec);
+  assert_true(static_cast<bool>(ec), "handshake configuration refuses an empty hostname");
 }
+} // namespace
+
+auto
+tests() -> test_suite
+{
+  return {
+    suite_name,
+    {
+      // A loopback TLS handshake and nothing else, so minimal I/O rather than the network default.
+      { CASE(a_hostname_matching_the_certificate_san_is_accepted), {}, timeout::fast },
+      { CASE(a_hostname_not_matching_the_certificate_san_is_rejected), {}, timeout::fast },
+      { CASE(a_mismatched_hostname_is_accepted_when_verification_is_disabled), {}, timeout::fast },
+      { CASE(a_matching_hostname_is_accepted_when_verification_is_disabled), {}, timeout::fast },
+      // No socket at all: configure_tls_handshake() is asked about a name and answers.
+      { CASE(an_empty_hostname_is_rejected), {}, timeout::instant },
+    },
+  };
+}
+
+} // namespace couchbase::test
