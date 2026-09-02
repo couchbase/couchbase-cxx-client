@@ -204,7 +204,8 @@ function(couchbase_add_test relpath)
     target_link_libraries(
       ${target}
       PRIVATE ${couchbase_cxx_client_test_library} test_framework_cluster_probes test_utils
-              $<BUILD_INTERFACE:Microsoft.GSL::GSL> $<BUILD_INTERFACE:taocpp::json>)
+              OpenSSL::SSL $<BUILD_INTERFACE:Microsoft.GSL::GSL>
+              $<BUILD_INTERFACE:taocpp::json>)
   else()
     target_link_libraries(${target} PRIVATE test_framework_null_probes)
   endif()

@@ -15,7 +15,9 @@
  *   limitations under the License.
  */
 
-#include "test_helper.hxx"
+#include "framework/test_registry.hxx"
+
+#include "framework/errors.hxx"
 
 #include "core/app_telemetry_meter.hxx"
 #include "core/cluster_credentials.hxx"
@@ -35,6 +37,7 @@
 
 #include <asio/io_context.hpp>
 #include <asio/ip/tcp.hpp>
+#include <asio/post.hpp>
 #include <asio/ssl.hpp>
 #include <asio/steady_timer.hpp>
 #include <asio/write.hpp>
@@ -42,40 +45,59 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <functional>
 #include <memory>
 #include <set>
 #include <string>
+#include <system_error>
+#include <utility>
 
+namespace couchbase::test
+{
 namespace
 {
-class noop_ping_reporter : public couchbase::core::diag::ping_reporter
+// The ping is the only way this case learns that the pooled session exists, so the reporter is
+// what tells it the session is there.
+class notifying_ping_reporter : public couchbase::core::diag::ping_reporter
 {
 public:
-  void report(couchbase::core::diag::endpoint_ping_info&& /* info */) override
+  explicit notifying_ping_reporter(std::function<void()> on_report)
+    : on_report_{ std::move(on_report) }
   {
   }
+
+  void report(couchbase::core::diag::endpoint_ping_info&& /* info */) override
+  {
+    on_report_();
+  }
+
+private:
+  std::function<void()> on_report_;
 };
 
-class noop_ping_collector : public couchbase::core::diag::ping_collector
+class notifying_ping_collector : public couchbase::core::diag::ping_collector
 {
 public:
+  explicit notifying_ping_collector(std::function<void()> on_report)
+    : reporter_{ std::make_shared<notifying_ping_reporter>(std::move(on_report)) }
+  {
+  }
+
   auto build_reporter() -> std::shared_ptr<couchbase::core::diag::ping_reporter> override
   {
     return reporter_;
   }
 
 private:
-  std::shared_ptr<noop_ping_reporter> reporter_{ std::make_shared<noop_ping_reporter>() };
+  std::shared_ptr<notifying_ping_reporter> reporter_;
 };
-} // namespace
 
-// When a node leaves the cluster configuration, the session manager must close
-// its pooled idle HTTP connections to that node promptly, rather than leaving
-// them open until the idle timer fires (idle_http_connection_timeout).  The
-// timeout here is set well beyond the test window so the only thing that can
-// close the connection in time is update_config() tearing it down.
-TEST_CASE("unit: http_session_manager closes idle connections to nodes removed from the config",
-          "[unit]")
+// When a node leaves the cluster configuration, the session manager must close its pooled idle
+// HTTP connections to that node promptly, rather than leaving them open until the idle timer fires
+// (idle_http_connection_timeout). The timeout here is set well beyond the case's window so the
+// only thing that can close the connection in time is update_config() tearing it down.
+void
+idle_connections_to_a_removed_node_are_closed([[maybe_unused]] context& ctx)
 {
   asio::io_context io;
 
@@ -84,14 +106,14 @@ TEST_CASE("unit: http_session_manager closes idle connections to nodes removed f
   };
   const auto port = acceptor.local_endpoint().port();
 
-  // Minimal management endpoint: accept the connection, answer the noop ping
-  // with a keep-alive 200 (so the SDK parks the session as idle), then read
-  // again -- the next completion is the SDK closing the connection.
+  // Minimal management endpoint: accept the connection, answer the noop ping with a keep-alive 200
+  // (so the SDK parks the session as idle), then read again -- the next completion is the SDK
+  // closing the connection.
   std::atomic_bool server_saw_close{ false };
   asio::ip::tcp::socket server{ io };
   auto rbuf = std::make_shared<std::array<char, 4096>>();
   acceptor.async_accept(server, [&, rbuf](std::error_code accept_ec) {
-    REQUIRE_FALSE(accept_ec);
+    assert_success(accept_ec, "the loopback endpoint accepts the manager's connection");
     server.async_read_some(asio::buffer(*rbuf), [&, rbuf](std::error_code read_ec, std::size_t) {
       if (read_ec) {
         return;
@@ -106,6 +128,7 @@ TEST_CASE("unit: http_session_manager closes idle connections to nodes removed f
                                  [&, rbuf](std::error_code r2_ec, std::size_t) {
                                    if (r2_ec) { // EOF/reset => the SDK closed its end
                                      server_saw_close = true;
+                                     io.stop();
                                    }
                                  });
         });
@@ -140,19 +163,23 @@ TEST_CASE("unit: http_session_manager closes idle connections to nodes removed f
   config.nodes.push_back(node);
   manager->set_configuration(config, options);
 
+  // The ping's completion handler reports to the collector and only then checks the session back
+  // into the pool, so the node is dropped from a posted handler rather than after a wait long
+  // enough to cover both steps: the post runs once that handler has returned and the session is
+  // idle.
+  auto collector = std::make_shared<notifying_ping_collector>([&]() {
+    asio::post(io, [&]() {
+      manager->update_config(couchbase::core::topology::configuration{});
+    });
+  });
+
   // Open a pooled management session to the node (the noop response parks it idle).
   manager->ping(
     std::set<couchbase::core::service_type>{ couchbase::core::service_type::management },
     std::chrono::seconds(10),
-    std::make_shared<noop_ping_collector>());
+    collector);
 
-  // Once the session is idle, drop the node from the configuration.
-  asio::steady_timer evict_timer{ io };
-  evict_timer.expires_after(std::chrono::milliseconds(700));
-  evict_timer.async_wait([&](std::error_code) {
-    manager->update_config(couchbase::core::topology::configuration{});
-  });
-
+  // Bound the case so a connection left open fails here rather than running to the harness budget.
   asio::steady_timer deadline{ io };
   deadline.expires_after(std::chrono::seconds(2));
   deadline.async_wait([&](std::error_code) {
@@ -161,6 +188,22 @@ TEST_CASE("unit: http_session_manager closes idle connections to nodes removed f
 
   io.run();
 
-  CHECK(server_saw_close.load());
+  assert_true(server_saw_close.load(), "the manager closes the connection to the evicted node");
   manager->close();
 }
+} // namespace
+
+auto
+tests() -> test_suite
+{
+  return {
+    suite_name,
+    {
+      // A loopback connect, one HTTP round trip and one close, bounded at two seconds inside the
+      // case.
+      { CASE(idle_connections_to_a_removed_node_are_closed), {}, timeout::network },
+    },
+  };
+}
+
+} // namespace couchbase::test

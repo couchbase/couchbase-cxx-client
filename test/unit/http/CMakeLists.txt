@@ -1,0 +1,5 @@
+couchbase_add_test(unit/http/session_idle LABEL unit LINK_CLIENT)
+couchbase_add_test(unit/http/session_manager_close LABEL unit LINK_CLIENT)
+couchbase_add_test(unit/http/session_manager_eviction LABEL unit LINK_CLIENT)
+couchbase_add_test(unit/http/streaming_response LABEL unit LINK_CLIENT)
+couchbase_add_test(unit/http/tls_hostname_verification LABEL unit LINK_CLIENT)

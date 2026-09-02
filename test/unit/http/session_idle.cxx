@@ -15,7 +15,9 @@
  *   limitations under the License.
  */
 
-#include "test_helper.hxx"
+#include "framework/test_registry.hxx"
+
+#include "framework/errors.hxx"
 
 #include "core/cluster_credentials.hxx"
 #include "core/cluster_options.hxx"
@@ -33,36 +35,49 @@
 #include <atomic>
 #include <chrono>
 #include <memory>
+#include <string>
+#include <system_error>
 
-// A pooled (idle) HTTP service connection must notice when the peer closes it,
-// rather than lingering in the pool until the idle timer fires and then being
-// handed to the next request as a dead socket (which stalls that request).
-// Reference SDKs get this for free from their HTTP stacks (Netty channelInactive,
-// Go net/http / Rust hyper liveness checks); the C++ SDK hand-rolls its pool and
-// must arm a read while idle to detect the peer FIN/RST.
-TEST_CASE("unit: idle HTTP session detects a peer-initiated close", "[unit]")
+namespace couchbase::test
+{
+namespace
+{
+// A pooled (idle) HTTP service connection must notice when the peer closes it, rather than
+// lingering in the pool until the idle timer fires and then being handed to the next request as a
+// dead socket (which stalls that request). Reference SDKs get this for free from their HTTP stacks
+// (Netty channelInactive, Go net/http / Rust hyper liveness checks); the C++ SDK hand-rolls its
+// pool and must arm a read while idle to detect the peer FIN/RST.
+void
+an_idle_session_detects_a_peer_initiated_close([[maybe_unused]] context& ctx)
 {
   asio::io_context io;
 
-  // Minimal loopback "server": accept one connection and hold the socket so we
-  // can close it on demand to simulate the peer dropping an idle connection.
+  // Minimal loopback "server": accept one connection and hold the socket so it can be closed on
+  // demand to simulate the peer dropping an idle connection.
   asio::ip::tcp::acceptor acceptor{
     io, asio::ip::tcp::endpoint{ asio::ip::make_address("127.0.0.1"), 0 }
   };
   const auto port = acceptor.local_endpoint().port();
   asio::ip::tcp::socket server_socket{ io };
-  asio::steady_timer drop_timer{ io };
+
+  // The peer-initiated close the session must notice, driven by whichever of the accept and the
+  // connect completes second rather than by a delay long enough to cover both. Every handler here
+  // runs on the single thread that calls io.run() below, so the two flags need no synchronisation.
+  bool accepted{ false };
+  bool parked_idle{ false };
+  auto drop_the_connection_once_idle = [&]() {
+    if (!accepted || !parked_idle) {
+      return;
+    }
+    std::error_code ignored;
+    server_socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignored);
+    server_socket.close(ignored);
+  };
+
   acceptor.async_accept(server_socket, [&](std::error_code accept_ec) {
-    REQUIRE_FALSE(accept_ec);
-    // The connection is now established on the server side.  Drop it shortly so
-    // the client has parked it in the pool (set_idle, below) first; this is the
-    // peer-initiated close the session must notice.
-    drop_timer.expires_after(std::chrono::milliseconds(200));
-    drop_timer.async_wait([&](std::error_code) {
-      std::error_code ignored;
-      server_socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignored);
-      server_socket.close(ignored);
-    });
+    assert_success(accept_ec, "the loopback server accepts the session's connection");
+    accepted = true;
+    drop_the_connection_once_idle();
   });
 
   // Build the SDK-side http_session pointing at the loopback server.
@@ -93,13 +108,15 @@ TEST_CASE("unit: idle HTTP session detects a peer-initiated close", "[unit]")
   });
 
   session->connect([&]() {
-    // Connection established: park it in the pool (idle).  The server will drop
-    // it ~200ms later; a healthy SDK observes the close while the connection is
-    // idle and tears the session down.
+    // Connection established: park it in the pool. The idle timeout is set well beyond the case's
+    // own deadline so that nothing but the peer's close can tear the session down.
     session->set_idle(std::chrono::seconds(30));
+    parked_idle = true;
+    drop_the_connection_once_idle();
   });
 
-  // Bound the test so a missing-feature run cannot hang.
+  // Bound the case so a session that never notices the close fails here rather than running to the
+  // harness budget.
   asio::steady_timer deadline{ io };
   deadline.expires_after(std::chrono::seconds(3));
   deadline.async_wait([&](std::error_code) {
@@ -108,6 +125,21 @@ TEST_CASE("unit: idle HTTP session detects a peer-initiated close", "[unit]")
 
   io.run();
 
-  CHECK(stopped.load());
+  assert_true(stopped.load(), "the idle session tears itself down when the peer closes it");
   session->stop();
 }
+} // namespace
+
+auto
+tests() -> test_suite
+{
+  return {
+    suite_name,
+    {
+      // A loopback connect and one close, bounded at three seconds inside the case.
+      { CASE(an_idle_session_detects_a_peer_initiated_close), {}, timeout::network },
+    },
+  };
+}
+
+} // namespace couchbase::test
