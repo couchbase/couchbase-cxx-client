@@ -30,13 +30,14 @@
  * which perform network I/O.
  */
 
+#include "framework/test_registry.hxx"
+
 #include "core/bucket.hxx"
 #include "core/origin.hxx"
 #include "core/protocol/hello_feature.hxx"
 #include "core/tls_context_provider.hxx"
 #include "core/topology/configuration.hxx"
 
-#include <catch2/catch_test_macros.hpp>
 #include <couchbase/error_codes.hxx>
 
 #include <asio/io_context.hpp>
@@ -47,17 +48,19 @@
 #include <thread>
 #include <vector>
 
+namespace couchbase::test
+{
 namespace
 {
 // Minimal, network-free bucket: the observability wrappers are only stored (never dereferenced)
 // by the deferred-queue / close paths, so nullptr is sufficient.
 auto
-make_detached_bucket(asio::io_context& ctx, couchbase::core::tls_context_provider& tls)
+make_detached_bucket(asio::io_context& io, couchbase::core::tls_context_provider& tls)
   -> std::shared_ptr<couchbase::core::bucket>
 {
   return std::make_shared<couchbase::core::bucket>(
     "test-client-id",
-    ctx,
+    io,
     tls,
     nullptr, // tracer_wrapper
     nullptr, // meter_wrapper
@@ -68,14 +71,13 @@ make_detached_bucket(asio::io_context& ctx, couchbase::core::tls_context_provide
     std::vector<couchbase::core::protocol::hello_feature>{},
     nullptr); // bootstrap_state_listener
 }
-} // namespace
 
-TEST_CASE("defer_command on a closed bucket completes the command instead of stranding it",
-          "[unit]")
+void
+defer_command_on_a_closed_bucket_completes_the_command([[maybe_unused]] context& ctx)
 {
-  asio::io_context ctx;
+  asio::io_context io;
   couchbase::core::tls_context_provider tls{};
-  auto bucket = make_detached_bucket(ctx, tls);
+  auto bucket = make_detached_bucket(io, tls);
 
   // Marks the bucket closed and drains its (empty) deferred queue.
   bucket->close();
@@ -90,18 +92,20 @@ TEST_CASE("defer_command on a closed bucket completes the command instead of str
   // Before the fix defer_command emplaced unconditionally, so a command deferred after the drain
   // sat in the queue forever and its handler never ran. The fix rejects enqueues into a closed
   // bucket and completes the command with request_canceled.
-  REQUIRE(invoked.load());
-  REQUIRE(observed == couchbase::errc::common::request_canceled);
+  assert_true(invoked.load(), "the command is answered rather than parked");
+  assert_eq(
+    observed, couchbase::errc::common::request_canceled, "the closed bucket cancels the command");
 }
 
-TEST_CASE("a closed bucket does not retain a self-referential deferred command", "[unit]")
+void
+a_closed_bucket_does_not_retain_a_self_referential_deferred_command([[maybe_unused]] context& ctx)
 {
-  asio::io_context ctx;
+  asio::io_context io;
   couchbase::core::tls_context_provider tls{};
 
   std::weak_ptr<couchbase::core::bucket> weak;
   {
-    auto bucket = make_detached_bucket(ctx, tls);
+    auto bucket = make_detached_bucket(io, tls);
     weak = bucket;
     bucket->close();
 
@@ -115,10 +119,11 @@ TEST_CASE("a closed bucket does not retain a self-referential deferred command",
 
   // The local strong reference is gone. If the command was stranded, the cycle keeps the bucket
   // alive (weak not expired); if it was completed and destroyed, the bucket is freed.
-  REQUIRE(weak.expired());
+  assert_true(weak.expired(), "no deferred command holds the bucket alive");
 }
 
-TEST_CASE("with_configuration does not strand a continuation while racing close", "[unit]")
+void
+with_configuration_does_not_strand_a_continuation_while_racing_close([[maybe_unused]] context& ctx)
 {
   // The reported leak parks its continuation via with_configuration() when the bucket is not yet
   // configured. with_configuration() reads closed_ before taking deferred_commands_mutex_, so it
@@ -134,9 +139,9 @@ TEST_CASE("with_configuration does not strand a continuation while racing close"
   constexpr int parkers_per_round = 16;
 
   for (int round = 0; round < rounds; ++round) {
-    asio::io_context ctx;
+    asio::io_context io;
     couchbase::core::tls_context_provider tls{};
-    auto bucket = make_detached_bucket(ctx, tls);
+    auto bucket = make_detached_bucket(io, tls);
 
     std::vector<std::shared_ptr<std::atomic_bool>> flags;
     std::vector<std::thread> parkers;
@@ -172,17 +177,15 @@ TEST_CASE("with_configuration does not strand a continuation while racing close"
     // rejected by the fix, it must have been invoked. A continuation enqueued after the drain is
     // never invoked before the fix.
     for (const auto& invoked : flags) {
-      REQUIRE(invoked->load());
+      assert_true(invoked->load(), "every continuation is answered whichever way the race went");
     }
   }
 }
 
-TEST_CASE(
-  "with_configuration on an already-closed bucket completes with configuration_not_available "
-  "and breaks reference cycles",
-  "[unit]")
+void
+with_configuration_on_a_closed_bucket_completes_and_breaks_the_cycle([[maybe_unused]] context& ctx)
 {
-  asio::io_context ctx;
+  asio::io_context io;
   couchbase::core::tls_context_provider tls{};
 
   std::weak_ptr<couchbase::core::bucket> weak;
@@ -190,7 +193,7 @@ TEST_CASE(
   std::error_code observed{};
 
   {
-    auto bucket = make_detached_bucket(ctx, tls);
+    auto bucket = make_detached_bucket(io, tls);
     weak = bucket;
     bucket->close();
 
@@ -205,11 +208,35 @@ TEST_CASE(
       });
   }
 
-  // Verify that the handler was immediately invoked on the closed bucket
-  REQUIRE(invoked.load());
-  REQUIRE(observed == couchbase::errc::network::configuration_not_available);
+  assert_true(invoked.load(), "the continuation runs rather than being parked");
+  assert_eq(observed,
+            couchbase::errc::network::configuration_not_available,
+            "the closed bucket has no configuration to give");
 
   // Since the callback completed immediately, its captured state is freed, meaning the reference
   // cycle is broken. Verify that the bucket's resource is fully cleaned up.
-  REQUIRE(weak.expired());
+  assert_true(weak.expired(), "no continuation holds the bucket alive");
 }
+} // namespace
+
+auto
+tests() -> test_suite
+{
+  return {
+    suite_name,
+    {
+      { CASE(defer_command_on_a_closed_bucket_completes_the_command), {}, timeout::fast },
+      { CASE(a_closed_bucket_does_not_retain_a_self_referential_deferred_command),
+        {},
+        timeout::fast },
+      { CASE(with_configuration_does_not_strand_a_continuation_while_racing_close),
+        {},
+        timeout::slow },
+      { CASE(with_configuration_on_a_closed_bucket_completes_and_breaks_the_cycle),
+        {},
+        timeout::fast },
+    },
+  };
+}
+
+} // namespace couchbase::test
