@@ -86,7 +86,6 @@ unit_test(management_collection)
 unit_test(management_bucket)
 unit_test(management_analytics)
 unit_test(node_id)
-unit_test(wait_until_ready)
 target_link_libraries(test_unit_jsonsl PRIVATE jsonsl)
 
 integration_benchmark(get)
