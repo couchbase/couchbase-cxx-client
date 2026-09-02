@@ -22,7 +22,8 @@
 #                                                usernames, e-mail addresses, xattrs, HTTP request
 #                                                paths, connection strings and user agents
 #   <md> couchbase::core::logger::metadata()     bucket / scope / collection names, index and
-#                                                design document names, cluster names
+#                                                design document names, cluster names, and a
+#                                                cluster configuration payload, which carries them
 #   <sd> couchbase::core::logger::system_data()  hostnames, IP addresses, ports, DNS topology
 #
 # A composite value whose parts do not share one category is wrapped by a helper that applies
@@ -214,6 +215,7 @@ module LogAnnotations
       index_name design_document design_document_name ddoc ddoc_name view view_name
       replication_stream
       name
+      config_text
     ].freeze,
     "system_data" => %w[
       host hostname hosts hostnames
@@ -222,7 +224,6 @@ module LogAnnotations
       port ports remote_port local_port
       ip ip_address node nodes get_nodes node_address node_addresses get_node_addresses
       dns srv srv_record nameserver nameservers dns_server dns_servers
-      config_text
     ].freeze,
   }.freeze
 
