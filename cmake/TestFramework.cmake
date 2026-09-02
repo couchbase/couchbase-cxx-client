@@ -205,6 +205,23 @@ function(couchbase_add_test relpath)
       ${target}
       PRIVATE ${couchbase_cxx_client_test_library} test_framework_cluster_probes test_utils
               $<BUILD_INTERFACE:Microsoft.GSL::GSL> $<BUILD_INTERFACE:taocpp::json>)
+    # The TLS backend the tree settled on, named the way test/utils/CMakeLists.txt names it:
+    # cmake/OpenSSL.cmake switches to the pkg-config target where find_package(OpenSSL) is absent
+    # or fails its usability probe, and creates neither under
+    # COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL, where the application supplies the symbols.
+    # Naming OpenSSL::SSL unconditionally fails to generate in both of those configurations.
+    if(TARGET PkgConfig::PKG_CONFIG_OPENSSL)
+      target_link_libraries(${target} PRIVATE PkgConfig::PKG_CONFIG_OPENSSL)
+    elseif(TARGET OpenSSL::SSL)
+      target_link_libraries(${target} PRIVATE OpenSSL::SSL)
+    endif()
+    if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND WIN32)
+      # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings: the BoringSSL
+      # build's *.PDB files are not kept. bin/build-tests.rb configures every Windows test build
+      # with STATIC_BORINGSSL, and cmake/Testing.cmake carries the same line for each Catch2
+      # target, so without this a migrated test is the only executable in the tree that reports it.
+      set_target_properties(${target} PROPERTIES LINK_FLAGS "/ignore:4099")
+    endif()
   else()
     target_link_libraries(${target} PRIVATE test_framework_null_probes)
   endif()
