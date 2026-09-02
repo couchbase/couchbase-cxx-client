@@ -1,5 +1,7 @@
 add_subdirectory(unit/streaming)
 
+add_subdirectory(unit/connection)
+
 add_subdirectory(unit/json)
 
 add_subdirectory(unit/observability)
@@ -45,7 +47,6 @@ integration_test(wait_until_ready)
 integration_test(fork)
 
 unit_test(connection_string)
-unit_test(capella)
 unit_test(contains_string)
 unit_test(protocol_status)
 unit_test(configuration_belongs_to_session)
