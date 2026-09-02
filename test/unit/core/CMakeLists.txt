@@ -8,6 +8,7 @@ couchbase_add_test(unit/core/mutate_in_doc_flags LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/core/range_scan LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/core/response_handler LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/core/topology_configuration LABEL unit LINK_CLIENT)
+couchbase_add_test(unit/core/utils LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/core/wait_until_ready LABEL unit LINK_CLIENT)
 
 if(COUCHBASE_CXX_CLIENT_COLUMNAR)
