@@ -1761,7 +1761,7 @@ TEST_CASE("integration: range scan re-resolves recreated collection id", "[integ
   // it a new collection id, so the id cached by the first scan is stale. The second scan sends the
   // stale id, the server replies unknown_collection, and the on_unknown_collection_ hook must
   // invalidate the cache, re-resolve via GetCollectionID and retry — succeeding instead of failing
-  // with collection_not_found. The seam itself is unit-tested in test_unit_mcbp_queue_request.cxx.
+  // with collection_not_found. The seam itself is unit-tested in test/unit/mcbp/queue_request.cxx.
   test::utils::integration_test_guard integration;
 
   if (!integration.has_bucket_capability("range_scan")) {
