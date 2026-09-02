@@ -1,4 +1,5 @@
 couchbase_add_test(unit/observability/app_telemetry_meter LABEL unit LINK_CLIENT)
+couchbase_add_test(unit/observability/diagnostics LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/observability/logger LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/observability/meter_wrapper LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/observability/metrics LABEL unit LINK_CLIENT)
