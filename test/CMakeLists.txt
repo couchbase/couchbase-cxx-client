@@ -7,6 +7,8 @@ add_subdirectory(unit/json)
 
 add_subdirectory(unit/observability)
 
+add_subdirectory(unit/http)
+
 # Registered here rather than in cmake/TestFramework.cmake beside the framework's own self-tests:
 # only a call from this file reaches build_unit_tests. It is pure computation over the tools helper
 # and needs no server, so unit is the label, and unit is a label with an aggregate.
@@ -58,7 +60,6 @@ unit_test(get_multi_fetch)
 unit_test(options)
 unit_test(search)
 unit_test(query)
-unit_test(http_streaming_response)
 unit_test(management_query_index)
 unit_test(management_search_index)
 unit_test(bucket_deferred_queue)
