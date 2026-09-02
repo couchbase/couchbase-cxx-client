@@ -15,7 +15,7 @@
  *   limitations under the License.
  */
 
-#include "test_helper.hxx"
+#include "framework/test_registry.hxx"
 
 #include <couchbase/codec/raw_binary_transcoder.hxx>
 #include <couchbase/codec/tao_json_serializer.hxx>
@@ -37,11 +37,8 @@
 // optional itself. The transcoder-only overload once passed the optional
 // (CXXCBC-847); it compiled only because nothing instantiated it, so the type
 // error stayed dormant.
-//
-// The results have private constructors (only attempt_context_impl builds one),
-// so this cannot construct an instance. It does not need to: instantiating every
-// overload is enough to type-check its body. The regression was a compile error,
-// so if it returns, this test binary simply fails to build.
+namespace couchbase::test
+{
 namespace
 {
 template<typename Result>
@@ -59,13 +56,30 @@ instantiate_content_as_overloads(Result* result)
     (void)result->template content_as<couchbase::codec::raw_binary_transcoder>(0);
   }
 }
-} // namespace
 
-TEST_CASE("unit: transaction get-multi results instantiate both content_as overloads", "[unit]")
+// Checked at compile time, so this case asserts nothing: the binary failing to build IS the
+// failure. The results have private constructors -- only attempt_context_impl builds one -- so
+// there is no instance to assert against, and none is needed. Type-checking the body of every
+// overload is the whole of what the regression demands.
+void
+get_multi_results_instantiate_every_content_as_overload([[maybe_unused]] context& ctx)
 {
   instantiate_content_as_overloads<couchbase::transactions::transaction_get_multi_result>(nullptr);
   instantiate_content_as_overloads<
     couchbase::transactions::transaction_get_multi_replicas_from_preferred_server_group_result>(
     nullptr);
-  SUCCEED("both content_as overloads instantiate for the transaction get-multi results");
 }
+} // namespace
+
+auto
+tests() -> test_suite
+{
+  return {
+    suite_name,
+    {
+      { CASE(get_multi_results_instantiate_every_content_as_overload), {}, timeout::instant },
+    },
+  };
+}
+
+} // namespace couchbase::test
