@@ -35,6 +35,17 @@ if [ "x${CB_SANITIZER}" = "xlsan" ]; then
     export LSAN_OPTIONS="suppressions=${PROJECT_ROOT}/.lsan_suppressions"
 fi
 
+# The framework stops waiting on a case that exceeds its absolute millisecond budget and reports it
+# failed. Valgrind runs 20-50x slower than an uninstrumented build and the sanitizers a few times
+# slower, so without a multiplier those legs report timeouts instead of behaviour.
+# bin/run-integration-tests scales the same way; Catch2 has no per-case budget, which is why the
+# unit legs did not need this before.
+if [ "x${CB_SANITIZER}" = "xvalgrind" ]; then
+    export CB_TEST_TIMEOUT_MULTIPLIER="${CB_TEST_TIMEOUT_MULTIPLIER:-50}"
+elif [ "x${CB_SANITIZER}" != "x" ]; then
+    export CB_TEST_TIMEOUT_MULTIPLIER="${CB_TEST_TIMEOUT_MULTIPLIER:-5}"
+fi
+
 cd "${BUILD_DIR}"
 
 ${CB_CTEST} ${CB_CTEST_EXTRAS} --output-on-failure --label-regex 'unit' --output-junit results.xml
