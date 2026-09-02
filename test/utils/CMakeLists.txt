@@ -17,6 +17,7 @@ target_include_directories(
 propagate_public_compile_definitions(test_utils spdlog::spdlog asio)
 target_link_libraries(test_utils PRIVATE Microsoft.GSL::GSL taocpp::json)
 target_include_directories(test_utils PRIVATE ${PROJECT_SOURCE_DIR} ${PROJECT_BINARY_DIR}/generated)
+target_compile_definitions(test_utils PRIVATE COUCHBASE_TEST_DATA_DIR="${PROJECT_SOURCE_DIR}/test/data")
 
 if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
   target_include_directories(

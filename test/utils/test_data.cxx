@@ -50,8 +50,14 @@ read_all(const std::string& path) -> std::string
 auto
 read_test_data(const std::string& file) -> std::string
 {
+  // The caller's path as given comes first, so one that is already absolute or already correct
+  // for the working directory is honoured, then the configured data directory, then the relative
+  // candidates. Which of those relative candidates reaches test/data depends on how deep in the
+  // build tree the calling binary's target was registered, so a test that moves between
+  // directories would otherwise stop finding its own data.
   std::vector candidates{
     file,
+    fmt::format("{}/{}", COUCHBASE_TEST_DATA_DIR, file),
     fmt::format("data/{}", file),
     fmt::format("test/data/{}", file),
     fmt::format("../test/data/{}", file),

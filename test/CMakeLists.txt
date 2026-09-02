@@ -9,6 +9,8 @@ add_subdirectory(unit/observability)
 
 add_subdirectory(unit/http)
 
+add_subdirectory(unit/management)
+
 # Registered here rather than in cmake/TestFramework.cmake beside the framework's own self-tests:
 # only a call from this file reaches build_unit_tests. It is pure computation over the tools helper
 # and needs no server, so unit is the label, and unit is a label with an aggregate.
@@ -57,7 +59,6 @@ unit_test(options)
 unit_test(search)
 unit_test(query)
 unit_test(management_query_index)
-unit_test(management_search_index)
 unit_test(bucket_deferred_queue)
 unit_test(bucket_request_completion)
 unit_test(opaque_ring_table)
