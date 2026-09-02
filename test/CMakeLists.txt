@@ -1,3 +1,5 @@
+add_subdirectory(unit/connection)
+
 # Migrated to the hand-rolled framework (CXXCBC-945). Registered here rather than with unit_test()
 # because it is no longer a Catch2 file.
 couchbase_add_test(unit/core/config_profiles LABEL unit LINK_CLIENT)
@@ -35,7 +37,6 @@ integration_test(wait_until_ready)
 integration_test(fork)
 
 unit_test(connection_string)
-unit_test(capella)
 unit_test(tls_hostname_verification)
 unit_test(http_session_idle)
 unit_test(http_session_manager_eviction)
