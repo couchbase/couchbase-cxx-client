@@ -13,7 +13,11 @@
  * permissions and limitations under the License.
  */
 
-#include "test_helper.hxx"
+#include "framework/test_registry.hxx"
+
+// The per-sample messages below name the metric family, which no operand can say; the framework
+// headers deliberately carry no formatting library.
+#include <spdlog/fmt/fmt.h>
 
 #include "core/app_telemetry_meter.hxx"
 
@@ -25,13 +29,15 @@
 #include <string>
 #include <vector>
 
+namespace couchbase::test
+{
+namespace
+{
 using couchbase::core::app_telemetry_counter;
 using couchbase::core::app_telemetry_latency;
 using couchbase::core::app_telemetry_meter;
 using couchbase::core::app_telemetry_recorder_cache;
 
-namespace
-{
 auto
 generate_report_text(app_telemetry_meter& meter) -> std::string
 {
@@ -55,36 +61,37 @@ series_value(const std::string& report, const std::string& series) -> std::optio
   }
   return {};
 }
-} // namespace
 
-TEST_CASE("unit: app_telemetry_recorder_cache resolves once and stays valid within a generation",
-          "[unit]")
+void
+recorder_cache_resolves_once_and_stays_valid_within_a_generation([[maybe_unused]] context& ctx)
 {
   app_telemetry_meter meter;
   app_telemetry_recorder_cache cache;
 
   const auto generation = meter.generation();
   const auto recorder = cache.value_recorder(meter, "node-1", "bucket-1");
-  REQUIRE(recorder != nullptr);
+  assert_true(recorder != nullptr, "the first resolve yields a recorder");
 
-  // valid for the same key and generation -> no re-resolution
-  REQUIRE(cache.is_valid_for(generation, "node-1", "bucket-1"));
-  // invalidated by a different node, bucket, or generation
-  REQUIRE_FALSE(cache.is_valid_for(generation, "node-2", "bucket-1"));
-  REQUIRE_FALSE(cache.is_valid_for(generation, "node-1", "bucket-2"));
-  REQUIRE_FALSE(cache.is_valid_for(generation + 1, "node-1", "bucket-1"));
+  assert_true(cache.is_valid_for(generation, "node-1", "bucket-1"),
+              "the same key in the same generation needs no re-resolution");
+  assert_false(cache.is_valid_for(generation, "node-2", "bucket-1"), "a different node");
+  assert_false(cache.is_valid_for(generation, "node-1", "bucket-2"), "a different bucket");
+  assert_false(cache.is_valid_for(generation + 1, "node-1", "bucket-1"), "a later generation");
 
-  // a second resolve for the same key returns the same recorder
-  REQUIRE(cache.value_recorder(meter, "node-1", "bucket-1") == recorder);
+  assert_true(cache.value_recorder(meter, "node-1", "bucket-1") == recorder,
+              "a second resolve of the same key returns the cached recorder");
 }
 
-TEST_CASE("unit: app_telemetry_recorder_cache is never valid before first use", "[unit]")
+void
+recorder_cache_is_never_valid_before_first_use([[maybe_unused]] context& ctx)
 {
   const app_telemetry_recorder_cache cache;
-  REQUIRE_FALSE(cache.is_valid_for(0, "node-1", "bucket-1"));
+  assert_false(cache.is_valid_for(0, "node-1", "bucket-1"),
+               "an unused cache holds no recorder to reuse");
 }
 
-TEST_CASE("unit: app_telemetry_recorder_cache re-resolves after a report swaps recorders", "[unit]")
+void
+recorder_cache_re_resolves_after_a_report_swaps_recorders([[maybe_unused]] context& ctx)
 {
   app_telemetry_meter meter;
   app_telemetry_recorder_cache cache;
@@ -97,25 +104,27 @@ TEST_CASE("unit: app_telemetry_recorder_cache re-resolves after a report swaps r
   std::vector<std::byte> buffer{};
   meter.generate_report(buffer);
 
-  REQUIRE(cache.value_recorder(meter, "node-1", "bucket-1") != recorder);
+  assert_true(cache.value_recorder(meter, "node-1", "bucket-1") != recorder,
+              "a recorder from a superseded generation is not handed out again");
 }
 
-TEST_CASE("unit: app_telemetry_recorder_cache re-resolves when the key changes", "[unit]")
+void
+recorder_cache_re_resolves_when_the_key_changes([[maybe_unused]] context& ctx)
 {
   app_telemetry_meter meter;
   app_telemetry_recorder_cache cache;
 
   const auto node1 = cache.value_recorder(meter, "node-1", "bucket-1");
-  // A different node (or bucket) within the same generation must resolve a distinct recorder rather
-  // than return the cached one.
   const auto node2 = cache.value_recorder(meter, "node-2", "bucket-1");
-  REQUIRE(node2 != node1);
+  assert_true(node2 != node1, "a different node within one generation resolves its own recorder");
 
-  // Switching back re-resolves again (the single slot now holds node-2's recorder).
-  REQUIRE(cache.value_recorder(meter, "node-1", "bucket-1") != node2);
+  // The single slot now holds node-2's recorder.
+  assert_true(cache.value_recorder(meter, "node-1", "bucket-1") != node2,
+              "switching back re-resolves rather than returning the cached recorder");
 }
 
-TEST_CASE("unit: app_telemetry_meter reports histogram sums in milliseconds", "[unit]")
+void
+histogram_sums_are_reported_in_milliseconds([[maybe_unused]] context& ctx)
 {
   struct sample {
     app_telemetry_latency latency;
@@ -151,12 +160,29 @@ TEST_CASE("unit: app_telemetry_meter reports histogram sums in milliseconds", "[
 
   for (const auto& s : samples) {
     const std::string metric{ s.metric };
-    CAPTURE(metric);
     const auto sum = series_value(report, metric + "_sum");
     const auto count = series_value(report, metric + "_count");
-    REQUIRE(sum.has_value());
-    REQUIRE(count.has_value());
-    REQUIRE(*sum == s.millis);
-    REQUIRE(*count == std::uint64_t{ 1 });
+    assert_true(sum.has_value(), fmt::format("{} reports a sum", metric));
+    assert_true(count.has_value(), fmt::format("{} reports a count", metric));
+    assert_eq(*sum, s.millis, fmt::format("{} sums the observation in milliseconds", metric));
+    assert_eq(*count, std::uint64_t{ 1 }, fmt::format("{} counts one observation", metric));
   }
 }
+} // namespace
+
+auto
+tests() -> test_suite
+{
+  return {
+    suite_name,
+    {
+      { CASE(recorder_cache_resolves_once_and_stays_valid_within_a_generation) },
+      { CASE(recorder_cache_is_never_valid_before_first_use) },
+      { CASE(recorder_cache_re_resolves_after_a_report_swaps_recorders) },
+      { CASE(recorder_cache_re_resolves_when_the_key_changes) },
+      { CASE(histogram_sums_are_reported_in_milliseconds) },
+    },
+  };
+}
+
+} // namespace couchbase::test
