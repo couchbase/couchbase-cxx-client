@@ -2,6 +2,8 @@
 # because it is no longer a Catch2 file.
 couchbase_add_test(unit/core/config_profiles LABEL unit LINK_CLIENT)
 
+add_subdirectory(unit/mcbp)
+
 # Registered here rather than in cmake/TestFramework.cmake beside the framework's own self-tests:
 # only a call from this file reaches build_unit_tests. It is pure computation over the tools helper
 # and needs no server, so unit is the label, and unit is a label with an aggregate.
@@ -89,7 +91,6 @@ unit_test(byteswap)
 unit_test(client_request)
 unit_test(client_response)
 unit_test(mcbp_queue_request)
-unit_test(mcbp_command_id)
 unit_test(movable_function)
 unit_test(key_value_error_context)
 unit_test(management_collection)
