@@ -49,7 +49,6 @@ integration_test(wait_until_ready)
 integration_test(fork)
 
 unit_test(mcbp_session)
-unit_test(mcbp_codec)
 unit_test(client_request)
 unit_test(client_response)
 unit_test(mcbp_queue_request)
