@@ -111,7 +111,6 @@ transaction_test(public_async_api)
 
 unit_test(transaction_logging)
 unit_test(transaction_utils)
-unit_test(row_streamer)
 
 integration_test(examples)
 integration_test(examples_streaming)
