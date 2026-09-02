@@ -1,3 +1,4 @@
+couchbase_add_test(unit/management/analytics LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/management/bucket LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/management/collection LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/management/query LABEL unit LINK_CLIENT)
