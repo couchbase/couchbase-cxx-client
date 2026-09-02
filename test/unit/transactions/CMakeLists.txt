@@ -1,5 +1,6 @@
 couchbase_add_test(unit/transactions/atr_entry LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/transactions/content_as LABEL unit LINK_CLIENT)
+couchbase_add_test(unit/transactions/get_multi_fetch LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/transactions/get_multi_transaction_id LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/transactions/get_result LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/transactions/logging LABEL unit LINK_CLIENT)
