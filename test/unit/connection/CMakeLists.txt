@@ -1,4 +1,5 @@
 couchbase_add_test(unit/connection/capella LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/connection/configuration_belongs_to_session LABEL unit LINK_CLIENT)
+couchbase_add_test(unit/connection/connection_string LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/connection/contains_string LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/connection/options LABEL unit LINK_CLIENT)

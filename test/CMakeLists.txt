@@ -46,7 +46,6 @@ integration_test(handler_drop_lifetime)
 integration_test(wait_until_ready)
 integration_test(fork)
 
-unit_test(connection_string)
 unit_test(protocol_status)
 unit_test(opaque_ring_table)
 unit_test(mcbp_operation_queue)
