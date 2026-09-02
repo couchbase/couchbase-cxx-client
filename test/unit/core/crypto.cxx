@@ -15,13 +15,19 @@
  *   limitations under the License.
  */
 
-#include "test_helper.hxx"
+#include "framework/errors.hxx"
+#include "framework/test_registry.hxx"
 
 #include <couchbase/crypto/internal.hxx>
 
 #include <algorithm>
+#include <cstddef>
 #include <vector>
 
+namespace couchbase::test
+{
+namespace
+{
 auto
 make_bytes(std::vector<unsigned char> v) -> std::vector<std::byte>
 {
@@ -32,29 +38,34 @@ make_bytes(std::vector<unsigned char> v) -> std::vector<std::byte>
   return out;
 }
 
-TEST_CASE("unit: can generate initialization vector", "[unit]")
+// The known-answer vector the algorithm is pinned to.
+auto
+key() -> std::vector<std::byte>
 {
-  auto [err, iv] = couchbase::crypto::internal::generate_initialization_vector();
-  REQUIRE_SUCCESS(err.ec());
-  REQUIRE(iv.size() == 16);
-}
-
-TEST_CASE("unit: aead_aes_256_cbc_hmac_sha512", "[unit]")
-{
-  const auto key = make_bytes({
+  return make_bytes({
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
     0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
     0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f,
     0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x3b, 0x3c, 0x3d, 0x3e, 0x3f,
   });
+}
 
-  const auto associated_data = make_bytes({
+auto
+associated_data() -> std::vector<std::byte>
+{
+  return make_bytes({
     0x54, 0x68, 0x65, 0x20, 0x73, 0x65, 0x63, 0x6f, 0x6e, 0x64, 0x20, 0x70, 0x72, 0x69,
     0x6e, 0x63, 0x69, 0x70, 0x6c, 0x65, 0x20, 0x6f, 0x66, 0x20, 0x41, 0x75, 0x67, 0x75,
     0x73, 0x74, 0x65, 0x20, 0x4b, 0x65, 0x72, 0x63, 0x6b, 0x68, 0x6f, 0x66, 0x66, 0x73,
   });
+}
 
-  const auto iv = make_bytes({
+// Repeats the ciphertext's leading 16 bytes: decrypt() takes no separate initialization vector
+// because the algorithm carries it as the first block of the ciphertext.
+auto
+initialization_vector() -> std::vector<std::byte>
+{
+  return make_bytes({
     0x1a,
     0xf3,
     0x8c,
@@ -72,8 +83,12 @@ TEST_CASE("unit: aead_aes_256_cbc_hmac_sha512", "[unit]")
     0xbc,
     0x04,
   });
+}
 
-  const auto plaintext = make_bytes({
+auto
+plaintext() -> std::vector<std::byte>
+{
+  return make_bytes({
     0x41, 0x20, 0x63, 0x69, 0x70, 0x68, 0x65, 0x72, 0x20, 0x73, 0x79, 0x73, 0x74, 0x65, 0x6d, 0x20,
     0x6d, 0x75, 0x73, 0x74, 0x20, 0x6e, 0x6f, 0x74, 0x20, 0x62, 0x65, 0x20, 0x72, 0x65, 0x71, 0x75,
     0x69, 0x72, 0x65, 0x64, 0x20, 0x74, 0x6f, 0x20, 0x62, 0x65, 0x20, 0x73, 0x65, 0x63, 0x72, 0x65,
@@ -83,8 +98,12 @@ TEST_CASE("unit: aead_aes_256_cbc_hmac_sha512", "[unit]")
     0x20, 0x74, 0x68, 0x65, 0x20, 0x65, 0x6e, 0x65, 0x6d, 0x79, 0x20, 0x77, 0x69, 0x74, 0x68, 0x6f,
     0x75, 0x74, 0x20, 0x69, 0x6e, 0x63, 0x6f, 0x6e, 0x76, 0x65, 0x6e, 0x69, 0x65, 0x6e, 0x63, 0x65,
   });
+}
 
-  const auto ciphertext = make_bytes({
+auto
+ciphertext() -> std::vector<std::byte>
+{
+  return make_bytes({
     0x1a, 0xf3, 0x8c, 0x2d, 0xc2, 0xb9, 0x6f, 0xfd, 0xd8, 0x66, 0x94, 0x09, 0x23, 0x41, 0xbc, 0x04,
     0x4a, 0xff, 0xaa, 0xad, 0xb7, 0x8c, 0x31, 0xc5, 0xda, 0x4b, 0x1b, 0x59, 0x0d, 0x10, 0xff, 0xbd,
     0x3d, 0xd8, 0xd5, 0xd3, 0x02, 0x42, 0x35, 0x26, 0x91, 0x2d, 0xa0, 0x37, 0xec, 0xbc, 0xc7, 0xbd,
@@ -98,20 +117,50 @@ TEST_CASE("unit: aead_aes_256_cbc_hmac_sha512", "[unit]")
     0x4d, 0xd3, 0xb4, 0xc0, 0x88, 0xa7, 0xf4, 0x5c, 0x21, 0x68, 0x39, 0x64, 0x5b, 0x20, 0x12, 0xbf,
     0x2e, 0x62, 0x69, 0xa8, 0xc5, 0x6a, 0x81, 0x6d, 0xbc, 0x1b, 0x26, 0x77, 0x61, 0x95, 0x5b, 0xc5,
   });
-
-  SECTION("encryption")
-  {
-    auto [err, encrypted] = couchbase::crypto::internal::aead_aes_256_cbc_hmac_sha512::encrypt(
-      key, iv, plaintext, associated_data);
-    REQUIRE_SUCCESS(err.ec());
-    REQUIRE(ciphertext == encrypted);
-  }
-
-  SECTION("decryption")
-  {
-    auto [err, decrypted] = couchbase::crypto::internal::aead_aes_256_cbc_hmac_sha512::decrypt(
-      key, ciphertext, associated_data);
-    REQUIRE_SUCCESS(err.ec());
-    REQUIRE(plaintext == decrypted);
-  }
 }
+
+void
+a_generated_initialization_vector_is_one_aes_block([[maybe_unused]] context& ctx)
+{
+  auto [err, iv] = couchbase::crypto::internal::generate_initialization_vector();
+  assert_success(err.ec(), "the platform supplies random bytes");
+  assert_eq(iv.size(), std::size_t{ 16 }, "the vector is one AES block wide");
+}
+
+void
+aead_aes_256_cbc_hmac_sha512_encrypts_to_the_expected_ciphertext([[maybe_unused]] context& ctx)
+{
+  auto [err, encrypted] = couchbase::crypto::internal::aead_aes_256_cbc_hmac_sha512::encrypt(
+    key(), initialization_vector(), plaintext(), associated_data());
+  assert_success(err.ec(), "encryption of the test vector succeeds");
+  assert_true(ciphertext() == encrypted, "the ciphertext matches the test vector");
+}
+
+void
+aead_aes_256_cbc_hmac_sha512_decrypts_to_the_expected_plaintext([[maybe_unused]] context& ctx)
+{
+  auto [err, decrypted] = couchbase::crypto::internal::aead_aes_256_cbc_hmac_sha512::decrypt(
+    key(), ciphertext(), associated_data());
+  assert_success(err.ec(), "decryption of the test vector succeeds");
+  assert_true(plaintext() == decrypted, "the plaintext matches the test vector");
+}
+} // namespace
+
+auto
+tests() -> test_suite
+{
+  return {
+    suite_name,
+    {
+      { CASE(a_generated_initialization_vector_is_one_aes_block), {}, timeout::instant },
+      { CASE(aead_aes_256_cbc_hmac_sha512_encrypts_to_the_expected_ciphertext),
+        {},
+        timeout::instant },
+      { CASE(aead_aes_256_cbc_hmac_sha512_decrypts_to_the_expected_plaintext),
+        {},
+        timeout::instant },
+    },
+  };
+}
+
+} // namespace couchbase::test
