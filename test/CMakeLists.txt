@@ -5,6 +5,8 @@ add_subdirectory(unit/json)
 
 add_subdirectory(unit/observability)
 
+add_subdirectory(unit/transactions)
+
 # Registered here rather than in cmake/TestFramework.cmake beside the framework's own self-tests:
 # only a call from this file reaches build_unit_tests. It is pure computation over the tools helper
 # and needs no server, so unit is the label, and unit is a label with an aggregate.
@@ -47,6 +49,10 @@ unit_test(contains_string)
 unit_test(protocol_status)
 unit_test(configuration_belongs_to_session)
 unit_test(utils)
+unit_test(binary_transcoder)
+unit_test(json_transcoder)
+unit_test(json_streaming_lexer)
+unit_test(jsonsl)
 unit_test(transaction_content_as)
 unit_test(transaction_get_result)
 unit_test(staged_mutation)
@@ -98,8 +104,6 @@ transaction_test(simple_async)
 transaction_test(public_blocking_api)
 transaction_test(public_async_api)
 
-unit_test(transaction_logging)
-unit_test(transaction_utils)
 unit_test(waitable_op_list)
 unit_test(row_streamer)
 

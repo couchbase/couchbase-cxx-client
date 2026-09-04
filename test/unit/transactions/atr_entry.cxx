@@ -15,7 +15,7 @@
  *   limitations under the License.
  */
 
-#include "test_helper.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/transactions/internal/atr_entry.hxx"
 
@@ -23,10 +23,13 @@
 #include <limits>
 #include <optional>
 
-using namespace couchbase::core::transactions;
-
+namespace couchbase::test
+{
 namespace
 {
+using couchbase::core::transactions::atr_entry;
+using couchbase::core::transactions::attempt_state;
+
 /**
  * Build an atr_entry with CAS and optional start/expiry values.
  * The CAS encodes "current time" in nanoseconds; the entry start is in milliseconds.
@@ -57,69 +60,76 @@ make_atr_entry(std::uint64_t cas_ns,
   };
 }
 
-} // namespace
-
-TEST_CASE("transactions: atr_entry::has_expired: clearly expired entry", "[unit]")
+void
+an_entry_past_its_ttl_has_expired([[maybe_unused]] context& ctx)
 {
   // start=1000ms, ttl=500ms, cas encodes 2000ms → elapsed=1000ms > 500ms → expired
   const std::uint64_t start_ms = 1000ULL;
   const std::uint32_t ttl_ms = 500U;
   const std::uint64_t cas_ns = 2000ULL * 1'000'000ULL; // 2000ms as nanoseconds
   const auto entry = make_atr_entry(cas_ns, start_ms, ttl_ms);
-  REQUIRE(entry.has_expired());
+
+  assert_true(entry.has_expired(), "elapsed time beyond the TTL is expiry");
 }
 
-TEST_CASE("transactions: atr_entry::has_expired: entry not yet expired", "[unit]")
+void
+an_entry_within_its_ttl_has_not_expired([[maybe_unused]] context& ctx)
 {
   // start=1000ms, ttl=5000ms, cas encodes 1100ms → elapsed=100ms < 5000ms → not expired
   const std::uint64_t start_ms = 1000ULL;
   const std::uint32_t ttl_ms = 5000U;
   const std::uint64_t cas_ns = 1100ULL * 1'000'000ULL;
   const auto entry = make_atr_entry(cas_ns, start_ms, ttl_ms);
-  REQUIRE_FALSE(entry.has_expired());
+
+  assert_false(entry.has_expired(), "elapsed time inside the TTL is not expiry");
 }
 
-TEST_CASE("transactions: atr_entry::has_expired: returns false when expires_after_ms is absent",
-          "[unit]")
+// An entry carrying no expiry cannot be judged against one: expiry is reported only where both the
+// start timestamp and the TTL are present, so the answer is conservatively false rather than
+// derived from an absent value.
+void
+an_entry_without_an_expiry_has_not_expired([[maybe_unused]] context& ctx)
 {
-  // Before the fix this could lead to UB or incorrect expiry detection.
-  // Now it must conservatively return false.
   const std::uint64_t start_ms = 1000ULL;
   const std::uint64_t cas_ns = 9999ULL * 1'000'000ULL; // far in the future
   const auto entry = make_atr_entry(cas_ns, start_ms, /*expires_after_ms=*/std::nullopt);
-  REQUIRE_FALSE(entry.has_expired());
+
+  assert_false(entry.has_expired(), "no TTL means no expiry, however old the entry looks");
 }
 
-TEST_CASE("transactions: atr_entry::has_expired: returns false when timestamp_start_ms is absent",
-          "[unit]")
+void
+an_entry_without_a_start_timestamp_has_not_expired([[maybe_unused]] context& ctx)
 {
   const std::uint32_t ttl_ms = 100U;
   const std::uint64_t cas_ns = 9999ULL * 1'000'000ULL;
   const auto entry = make_atr_entry(cas_ns, /*start_ms=*/std::nullopt, ttl_ms);
-  REQUIRE_FALSE(entry.has_expired());
+
+  assert_false(entry.has_expired(), "no start timestamp means no elapsed time to compare");
 }
 
-TEST_CASE("transactions: atr_entry::has_expired: returns false when both timestamps absent",
-          "[unit]")
+void
+an_entry_without_either_timestamp_has_not_expired([[maybe_unused]] context& ctx)
 {
   const std::uint64_t cas_ns = 9999ULL * 1'000'000ULL;
   const auto entry = make_atr_entry(cas_ns, std::nullopt, std::nullopt);
-  REQUIRE_FALSE(entry.has_expired());
+
+  assert_false(entry.has_expired(), "neither bound present means no expiry");
 }
 
-TEST_CASE(
-  "transactions: atr_entry::has_expired: returns false when cas has not advanced past start",
-  "[unit]")
+void
+an_entry_whose_cas_precedes_its_start_has_not_expired([[maybe_unused]] context& ctx)
 {
   // cas_ms <= start_ms — the guard (cas_ms > start_ms) is false → returns false
   const std::uint64_t start_ms = 2000ULL;
   const std::uint32_t ttl_ms = 100U;
   const std::uint64_t cas_ns = 1500ULL * 1'000'000ULL; // cas_ms=1500 < start_ms=2000
   const auto entry = make_atr_entry(cas_ns, start_ms, ttl_ms);
-  REQUIRE_FALSE(entry.has_expired());
+
+  assert_false(entry.has_expired(), "a CAS behind the start yields no elapsed time");
 }
 
-TEST_CASE("transactions: atr_entry::has_expired: safety_margin extends effective TTL", "[unit]")
+void
+the_safety_margin_extends_the_effective_ttl([[maybe_unused]] context& ctx)
 {
   // start=1000ms, ttl=500ms, cas encodes 1600ms → elapsed=600ms
   // Without margin: 600 > 500 → expired
@@ -128,21 +138,26 @@ TEST_CASE("transactions: atr_entry::has_expired: safety_margin extends effective
   const std::uint32_t ttl_ms = 500U;
   const std::uint64_t cas_ns = 1600ULL * 1'000'000ULL;
   const auto entry = make_atr_entry(cas_ns, start_ms, ttl_ms);
-  REQUIRE(entry.has_expired(/*safety_margin=*/0));
-  REQUIRE_FALSE(entry.has_expired(/*safety_margin=*/200));
+
+  assert_true(entry.has_expired(/*safety_margin=*/0), "no margin leaves the TTL as written");
+  assert_false(entry.has_expired(/*safety_margin=*/200),
+               "the margin is added to the TTL, not subtracted from the elapsed time");
 }
 
-TEST_CASE("transactions: atr_entry::has_expired: exactly at boundary is not expired", "[unit]")
+void
+an_entry_exactly_at_its_ttl_has_not_expired([[maybe_unused]] context& ctx)
 {
   // elapsed == ttl (not strictly greater) → not expired
   const std::uint64_t start_ms = 1000ULL;
   const std::uint32_t ttl_ms = 500U;
   const std::uint64_t cas_ns = 1500ULL * 1'000'000ULL; // elapsed == ttl
   const auto entry = make_atr_entry(cas_ns, start_ms, ttl_ms);
-  REQUIRE_FALSE(entry.has_expired());
+
+  assert_false(entry.has_expired(), "the comparison is strict, so the boundary is not expiry");
 }
 
-TEST_CASE("transactions: atr_entry::has_expired: large ttl plus margin does not overflow", "[unit]")
+void
+a_large_ttl_plus_the_safety_margin_does_not_overflow([[maybe_unused]] context& ctx)
 {
   // expires_after_ms near UINT32_MAX: (expires_after_ms + safety_margin) must be computed in
   // 64-bit.  In 32-bit it wraps (e.g. (UINT32_MAX - 10) + 100 == 89), so the small elapsed time
@@ -151,5 +166,29 @@ TEST_CASE("transactions: atr_entry::has_expired: large ttl plus margin does not 
   const std::uint32_t ttl_ms = std::numeric_limits<std::uint32_t>::max() - 10U;
   const std::uint64_t cas_ns = 3000ULL * 1'000'000ULL; // cas_ms=3000, elapsed=2000ms
   const auto entry = make_atr_entry(cas_ns, start_ms, ttl_ms);
-  REQUIRE_FALSE(entry.has_expired(/*safety_margin=*/100));
+
+  assert_false(entry.has_expired(/*safety_margin=*/100),
+               "the effective TTL is computed in 64-bit and does not wrap");
 }
+} // namespace
+
+auto
+tests() -> test_suite
+{
+  return {
+    suite_name,
+    {
+      { CASE(an_entry_past_its_ttl_has_expired), {}, timeout::instant },
+      { CASE(an_entry_within_its_ttl_has_not_expired), {}, timeout::instant },
+      { CASE(an_entry_without_an_expiry_has_not_expired), {}, timeout::instant },
+      { CASE(an_entry_without_a_start_timestamp_has_not_expired), {}, timeout::instant },
+      { CASE(an_entry_without_either_timestamp_has_not_expired), {}, timeout::instant },
+      { CASE(an_entry_whose_cas_precedes_its_start_has_not_expired), {}, timeout::instant },
+      { CASE(the_safety_margin_extends_the_effective_ttl), {}, timeout::instant },
+      { CASE(an_entry_exactly_at_its_ttl_has_not_expired), {}, timeout::instant },
+      { CASE(a_large_ttl_plus_the_safety_margin_does_not_overflow), {}, timeout::instant },
+    },
+  };
+}
+
+} // namespace couchbase::test
