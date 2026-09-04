@@ -286,6 +286,10 @@ is_feature_supported(const operations::search_request& request,
   if (request.vector_search && !capabilities.supports_vector_search()) {
     return false;
   }
+  // "none" is not behind the score fusion capability
+  if (is_score_fusion(request.scoring) && !capabilities.supports_score_fusion()) {
+    return false;
+  }
 
   return true;
 }

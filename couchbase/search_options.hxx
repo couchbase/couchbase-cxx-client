@@ -24,12 +24,15 @@
 #include <couchbase/search_facet.hxx>
 #include <couchbase/search_result.hxx>
 #include <couchbase/search_scan_consistency.hxx>
+#include <couchbase/search_scoring.hxx>
 #include <couchbase/search_sort.hxx>
 
 #include <chrono>
 #include <functional>
 #include <memory>
 #include <optional>
+#include <stdexcept>
+#include <type_traits>
 
 namespace couchbase
 {
@@ -68,6 +71,7 @@ struct search_options : public common_options<search_options> {
     std::map<std::string, std::shared_ptr<search_facet>, std::less<>> facets{};
     std::vector<std::shared_ptr<search_sort>> sort{};
     std::vector<std::string> sort_string{};
+    std::optional<search_scoring::built> scoring{};
   };
 
   /**
@@ -101,6 +105,7 @@ struct search_options : public common_options<search_options> {
       facets_,
       sort_,
       sort_string_,
+      scoring_,
     };
   }
 
@@ -250,12 +255,55 @@ struct search_options : public common_options<search_options> {
    * @param disable
    * @return this options builder for chaining purposes.
    *
+   * @deprecated Use scoring(search_scoring_none{}) instead; see
+   * <couchbase/search_scoring_none.hxx>.
+   *
+   * @throws std::invalid_argument if @ref scoring() has already been set and @p disable is true:
+   * both would write the same field, so they cannot be used together. Turning this back off with
+   * `disable_scoring(false)` after `scoring()` is not a conflict.
+   *
    * @since 1.0.0
-   * @committed
    */
+  [[deprecated("Use search_options::scoring(search_scoring_none{}) instead.")]]
   auto disable_scoring(bool disable) -> search_options&
   {
+    if (disable && scoring_.has_value()) {
+      throw std::invalid_argument("disable_scoring() cannot be used together with scoring()");
+    }
     disable_scoring_ = disable;
+    return self();
+  }
+
+  /**
+   * Selects how the server scores the hits, and how it merges the FTS and vector result sets of a
+   * hybrid request into a single ranked list.
+   *
+   * @tparam Scoring type of the scoring mode, that derives from @ref search_scoring
+   * @param scoring the scoring mode, see @ref search_scoring
+   * @return this options builder for chaining purposes.
+   *
+   * @note the score fusion strategies require Couchbase Server 8.1 or above. Setting one on an
+   * older cluster fails the operation with @ref errc::common::feature_not_available.
+   *
+   * @note this writes the request's top-level "score" and "params" fields. A @ref raw() call for
+   * either of those names is applied after this option is encoded and silently wins.
+   *
+   * @throws std::invalid_argument if @ref disable_scoring() is currently set to true: both write
+   * the same field, so they cannot be used together, even when they agree (scoring @ref
+   * search_scoring_none with disable_scoring(true)). Calling `disable_scoring(false)` first clears
+   * the conflict.
+   *
+   * @since 1.5.0
+   * @volatile
+   */
+  template<typename Scoring,
+           std::enable_if_t<std::is_base_of_v<search_scoring, Scoring>, bool> = true>
+  auto scoring(const Scoring& scoring) -> search_options&
+  {
+    if (disable_scoring_) {
+      throw std::invalid_argument("scoring() cannot be used together with disable_scoring()");
+    }
+    scoring_ = scoring.build();
     return self();
   }
 
@@ -518,6 +566,7 @@ private:
   std::map<std::string, std::shared_ptr<search_facet>, std::less<>> facets_{};
   std::vector<std::shared_ptr<search_sort>> sort_{};
   std::vector<std::string> sort_string_{};
+  std::optional<search_scoring::built> scoring_{};
 };
 
 /**
