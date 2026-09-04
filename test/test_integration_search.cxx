@@ -37,6 +37,8 @@
 
 #include <couchbase/match_none_query.hxx>
 #include <couchbase/query_string_query.hxx>
+#include <couchbase/search_scoring_none.hxx>
+#include <couchbase/search_scoring_reciprocal_rank_fusion.hxx>
 
 #include <tao/json/value.hpp>
 
@@ -668,4 +670,56 @@ TEST_CASE("integration: scope search returns feature not available", "[integrati
     c.bucket(integration.ctx.bucket).default_scope().search("does-not-exist", search_request).get();
 
   REQUIRE(error.ec() == couchbase::errc::common::feature_not_available);
+}
+
+TEST_CASE("integration: score fusion is refused when the cluster does not advertise it",
+          "[integration]")
+{
+  test::utils::integration_test_guard integration;
+
+  if (!integration.cluster_version().supports_search()) {
+    SKIP("cluster does not support search");
+  }
+  if (integration.cluster_version().supports_score_fusion()) {
+    SKIP("cluster supports score fusion");
+  }
+
+  auto c = integration.public_cluster();
+  const couchbase::search_request request{ couchbase::match_none_query{} };
+
+  auto [error, result] =
+    c.search("does-not-exist",
+             request,
+             couchbase::search_options{}.scoring(
+               couchbase::search_scoring_reciprocal_rank_fusion{}.rank_constant(60)))
+      .get();
+
+  REQUIRE(error.ec() == couchbase::errc::common::feature_not_available);
+}
+
+TEST_CASE("integration: disabled scoring is not behind the score fusion capability",
+          "[integration]")
+{
+  test::utils::integration_test_guard integration;
+
+  if (!integration.cluster_version().supports_search()) {
+    SKIP("cluster does not support search");
+  }
+  if (integration.cluster_version().supports_score_fusion()) {
+    SKIP("cluster supports score fusion, so the gate would not turn anything away");
+  }
+
+  auto c = integration.public_cluster();
+  const couchbase::search_request request{ couchbase::match_none_query{} };
+
+  auto [error, result] =
+    c.search("does-not-exist",
+             request,
+             couchbase::search_options{}.scoring(couchbase::search_scoring_none{}))
+      .get();
+
+  // The index does not exist, so this must fail -- but on the server's terms. A capability refusal
+  // here would mean "none" had been gated behind score fusion, which it must never be.
+  REQUIRE(error.ec());
+  REQUIRE(error.ec() != couchbase::errc::common::feature_not_available);
 }

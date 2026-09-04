@@ -31,6 +31,10 @@ auto
 search_request::encode_to(search_request::encoded_request_type& encoded,
                           http_context& context) -> std::error_code
 {
+  if (disable_scoring && !std::holds_alternative<std::monostate>(scoring)) {
+    return errc::common::invalid_argument;
+  }
+
   auto body = tao::json::value{
     { "query", utils::json::parse(query) },
     { "ctl", { { "timeout", encoded.timeout.count() } } },
@@ -65,6 +69,39 @@ search_request::encode_to(search_request::encoded_request_type& encoded,
   }
   if (disable_scoring) {
     body["score"] = "none";
+  }
+  if (!std::holds_alternative<std::monostate>(scoring)) {
+    std::optional<std::uint32_t> score_rank_constant{};
+    std::optional<std::uint32_t> score_window_size{};
+    std::visit(
+      [&body, &score_rank_constant, &score_window_size](const auto& value) {
+        using T = std::decay_t<decltype(value)>;
+        if constexpr (std::is_same_v<T, couchbase::core::search_scoring_none>) {
+          body["score"] = "none";
+        } else if constexpr (std::is_same_v<
+                               T,
+                               couchbase::core::search_scoring_reciprocal_rank_fusion>) {
+          body["score"] = "rrf";
+          score_rank_constant = value.rank_constant;
+          score_window_size = value.window_size;
+        } else if constexpr (std::is_same_v<
+                               T,
+                               couchbase::core::search_scoring_relative_score_fusion>) {
+          body["score"] = "rsf";
+          score_window_size = value.window_size;
+        }
+      },
+      scoring);
+    tao::json::value params = tao::json::empty_object;
+    if (score_rank_constant.has_value()) {
+      params["score_rank_constant"] = score_rank_constant.value();
+    }
+    if (score_window_size.has_value()) {
+      params["score_window_size"] = score_window_size.value();
+    }
+    if (!params.get_object().empty()) {
+      body["params"] = params;
+    }
   }
   if (include_locations) {
     body["includeLocations"] = true;

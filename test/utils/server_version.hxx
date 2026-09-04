@@ -269,6 +269,13 @@ struct server_version {
     return supports_search() && (is_mad_hatter() || is_cheshire_cat() || is_neo());
   }
 
+  [[nodiscard]] auto supports_score_fusion() const -> bool
+  {
+    // Hybrid search score fusion lands in 8.1; the "scoreFusion" cluster capability is
+    // advertised only from that release.
+    return supports_search() && ((major == 8 && minor >= 1) || major > 8);
+  }
+
   [[nodiscard]] auto supports_document_not_locked_status() const -> bool
   {
     return !use_gocaves && (major > 7 || (major == 7 && minor >= 6));
