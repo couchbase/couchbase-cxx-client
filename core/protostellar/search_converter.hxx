@@ -25,10 +25,11 @@
 // whereas the core request carries an opaque pre-serialized JSON `query`. This converter translates
 // the trivial forms -- query_string (optionally boosted), match_all and match_none -- and reports
 // every other shape as unmappable so the component surfaces feature_not_available. Structured
-// facets, structured sort specs, vector search, mutation-token consistency, and the `raw`
-// passthrough have no couchbase2 home and are likewise gated. Translating the remaining eighteen
-// query arms is a follow-up; the gate is what keeps an untranslated one from being dropped in
-// silence in the meantime.
+// facets, structured sort specs, vector search, mutation-token consistency, the `raw`
+// passthrough, and score fusion (rrf/rsf) have no couchbase2 home and are likewise gated;
+// `scoring(none())` predates fusion and maps onto the protocol's existing disable_scoring field, so
+// it is not gated. Translating the remaining eighteen query arms is a follow-up; the gate is what
+// keeps an untranslated one from being dropped in silence in the meantime.
 
 #include "core/operations/document_search.hxx"
 #include "core/utils/json.hxx"
@@ -56,7 +57,8 @@ can_encode(const operations::search_request& request) -> bool
 {
   return request.raw.empty() && request.facets.empty() && request.sort_specs.empty() &&
          request.mutation_state.empty() && !request.vector_search.has_value() &&
-         !request.vector_query_combination.has_value() && !request.row_callback.has_value();
+         !request.vector_query_combination.has_value() && !request.row_callback.has_value() &&
+         !couchbase::core::is_score_fusion(request.scoring);
 }
 
 // True when request.query does not parse as JSON at all, as opposed to parsing into a shape this
@@ -154,7 +156,9 @@ encode(const operations::search_request& request) -> std::optional<v1::SearchQue
   if (request.explain.value_or(false)) {
     proto.set_include_explanation(true);
   }
-  proto.set_disable_scoring(request.disable_scoring);
+  proto.set_disable_scoring(
+    request.disable_scoring ||
+    std::holds_alternative<couchbase::core::search_scoring_none>(request.scoring));
   proto.set_include_locations(request.include_locations);
   proto.set_scan_consistency(v1::SearchQueryRequest_ScanConsistency_SCAN_CONSISTENCY_NOT_BOUNDED);
   if (request.highlight_style.has_value()) {

@@ -324,6 +324,9 @@ struct traits<couchbase::core::topology::configuration> {
           } else if (name == "scopedSearchIndex") {
             result.capabilities.cluster.insert(
               couchbase::core::cluster_capability::search_scoped_search_index);
+          } else if (name == "scoreFusion") {
+            result.capabilities.cluster.insert(
+              couchbase::core::cluster_capability::search_score_fusion);
           }
         }
       }

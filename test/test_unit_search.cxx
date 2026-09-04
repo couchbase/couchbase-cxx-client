@@ -17,8 +17,14 @@
 
 #include "test_helper.hxx"
 
+#include "core/cluster_options.hxx"
 #include "core/impl/encoded_search_query.hxx"
 #include "core/impl/encoded_search_sort.hxx"
+#include "core/io/http_context.hxx"
+#include "core/io/query_cache.hxx"
+#include "core/operations/document_search.hxx"
+#include "core/topology/configuration_json.hxx"
+#include "core/utils/json.hxx"
 
 #include <couchbase/boolean_field_query.hxx>
 #include <couchbase/boolean_query.hxx>
@@ -26,6 +32,7 @@
 #include <couchbase/date_range_query.hxx>
 #include <couchbase/disjunction_query.hxx>
 #include <couchbase/doc_id_query.hxx>
+#include <couchbase/error_codes.hxx>
 #include <couchbase/geo_bounding_box_query.hxx>
 #include <couchbase/geo_distance_query.hxx>
 #include <couchbase/geo_polygon_query.hxx>
@@ -36,6 +43,10 @@
 #include <couchbase/prefix_query.hxx>
 #include <couchbase/query_string_query.hxx>
 #include <couchbase/regexp_query.hxx>
+#include <couchbase/search_options.hxx>
+#include <couchbase/search_scoring_none.hxx>
+#include <couchbase/search_scoring_reciprocal_rank_fusion.hxx>
+#include <couchbase/search_scoring_relative_score_fusion.hxx>
 #include <couchbase/term_query.hxx>
 #include <couchbase/term_range_query.hxx>
 #include <couchbase/vector_search.hxx>
@@ -467,4 +478,206 @@ TEST_CASE("unit: base64 vector query", "[unit]")
     "vector_base64": "RWFzdGVyIGVnZyE="
 }
 )"_json);
+}
+
+namespace
+{
+auto
+make_search_http_context(couchbase::core::topology::configuration& config)
+  -> couchbase::core::http_context
+{
+  static couchbase::core::query_cache query_cache{};
+  static couchbase::core::cluster_options cluster_options{};
+  std::string hostname{};
+  std::uint16_t port{};
+  std::string canonical_hostname{};
+  std::uint16_t canonical_port{};
+  return couchbase::core::http_context{
+    config, cluster_options, query_cache, hostname, port, canonical_hostname, canonical_port,
+  };
+}
+
+auto
+encode_scoring(const couchbase::core::search_scoring_mode& scoring, bool disable_scoring)
+  -> std::pair<std::error_code, tao::json::value>
+{
+  couchbase::core::topology::configuration config{};
+  auto ctx = make_search_http_context(config);
+
+  couchbase::core::operations::search_request request{};
+  request.index_name = "idx";
+  request.query = couchbase::core::json_string{ R"({"match":"wireless headphones"})" };
+  request.scoring = scoring;
+  request.disable_scoring = disable_scoring;
+
+  couchbase::core::io::http_request encoded;
+  auto ec = request.encode_to(encoded, ctx);
+  if (ec) {
+    return { ec, {} };
+  }
+  return { ec, couchbase::core::utils::json::parse(encoded.body) };
+}
+} // namespace
+
+TEST_CASE("unit: search request encodes the scoring mode", "[unit]")
+{
+  SECTION("no scoring option sends no score and no params")
+  {
+    auto [ec, body] = encode_scoring({}, false);
+    REQUIRE_SUCCESS(ec);
+    REQUIRE_FALSE(body.get_object().count("score"));
+    REQUIRE_FALSE(body.get_object().count("params"));
+  }
+
+  SECTION("reciprocal rank fusion carries both tuning parameters")
+  {
+    auto [ec, body] =
+      encode_scoring(couchbase::core::search_scoring_reciprocal_rank_fusion{ 60U, 200U }, false);
+    REQUIRE_SUCCESS(ec);
+    REQUIRE(body.at("score").get_string() == "rrf");
+    REQUIRE(body.at("params").at("score_rank_constant").get_unsigned() == 60);
+    REQUIRE(body.at("params").at("score_window_size").get_unsigned() == 200);
+  }
+
+  SECTION("reciprocal rank fusion drops params entirely when neither is set")
+  {
+    auto [ec, body] =
+      encode_scoring(couchbase::core::search_scoring_reciprocal_rank_fusion{}, false);
+    REQUIRE_SUCCESS(ec);
+    REQUIRE(body.at("score").get_string() == "rrf");
+    REQUIRE_FALSE(body.get_object().count("params"));
+  }
+
+  SECTION("reciprocal rank fusion omits the parameter that is unset")
+  {
+    auto [ec, body] =
+      encode_scoring(couchbase::core::search_scoring_reciprocal_rank_fusion{ 17U, {} }, false);
+    REQUIRE_SUCCESS(ec);
+    REQUIRE(body.at("params").at("score_rank_constant").get_unsigned() == 17);
+    REQUIRE_FALSE(body.at("params").get_object().count("score_window_size"));
+  }
+
+  SECTION("relative score fusion has no rank constant to send")
+  {
+    auto [ec, body] =
+      encode_scoring(couchbase::core::search_scoring_relative_score_fusion{ 50U }, false);
+    REQUIRE_SUCCESS(ec);
+    REQUIRE(body.at("score").get_string() == "rsf");
+    REQUIRE(body.at("params").at("score_window_size").get_unsigned() == 50);
+    REQUIRE_FALSE(body.at("params").get_object().count("score_rank_constant"));
+  }
+
+  SECTION("search_scoring_none sends the same score the deprecated option sends")
+  {
+    auto [none_ec, none_body] = encode_scoring(couchbase::core::search_scoring_none{}, false);
+    REQUIRE_SUCCESS(none_ec);
+    auto [legacy_ec, legacy_body] = encode_scoring({}, true);
+    REQUIRE_SUCCESS(legacy_ec);
+    REQUIRE(none_body.at("score").get_string() == "none");
+    REQUIRE(none_body.at("score") == legacy_body.at("score"));
+    REQUIRE_FALSE(none_body.get_object().count("params"));
+  }
+
+  SECTION("disable_scoring together with a scoring mode is rejected before sending")
+  {
+    auto [ec, body] =
+      encode_scoring(couchbase::core::search_scoring_reciprocal_rank_fusion{}, true);
+    REQUIRE(ec == couchbase::errc::common::invalid_argument);
+  }
+}
+
+// disable_scoring() is deprecated in favour of scoring(search_scoring_none{}), but the conflict it
+// guards against is still load-bearing until it is removed, so this test calls it deliberately.
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4996)
+#endif
+TEST_CASE("unit: search options reject scoring and disable_scoring together", "[unit]")
+{
+  SECTION("scoring after disable_scoring(true)")
+  {
+    couchbase::search_options options{};
+    options.disable_scoring(true);
+    REQUIRE_THROWS_AS(options.scoring(couchbase::search_scoring_none{}), std::invalid_argument);
+  }
+
+  SECTION("disable_scoring(true) after scoring")
+  {
+    couchbase::search_options options{};
+    options.scoring(couchbase::search_scoring_reciprocal_rank_fusion{});
+    REQUIRE_THROWS_AS(options.disable_scoring(true), std::invalid_argument);
+  }
+
+  SECTION("disable_scoring(false) does not conflict with scoring")
+  {
+    couchbase::search_options options{};
+    options.scoring(couchbase::search_scoring_reciprocal_rank_fusion{});
+    REQUIRE_NOTHROW(options.disable_scoring(false));
+    REQUIRE(options.build().scoring.has_value());
+  }
+
+  SECTION("scoring is accepted once disable_scoring has been turned back off")
+  {
+    couchbase::search_options options{};
+    options.disable_scoring(true);
+    options.disable_scoring(false);
+    REQUIRE_NOTHROW(options.scoring(couchbase::search_scoring_relative_score_fusion{}));
+  }
+}
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#elif defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+
+TEST_CASE("unit: search options carry the scoring parameters through build()", "[unit]")
+{
+  auto built =
+    couchbase::search_options{}
+      .scoring(
+        couchbase::search_scoring_reciprocal_rank_fusion{}.rank_constant(60).window_size(200))
+      .build();
+  REQUIRE(built.scoring.has_value());
+  const auto* fusion =
+    std::get_if<couchbase::search_scoring::built::reciprocal_rank_fusion>(&built.scoring->mode);
+  REQUIRE(fusion != nullptr);
+  REQUIRE(fusion->rank_constant == 60);
+  REQUIRE(fusion->window_size == 200);
+}
+
+TEST_CASE("unit: scoreFusion is parsed from the search cluster capabilities", "[unit]")
+{
+  const auto without = couchbase::core::utils::json::parse(
+    R"({"nodes":[],"clusterCapabilities":{"search":["vectorSearch","scopedSearchIndex"]}})");
+  REQUIRE_FALSE(
+    without.as<couchbase::core::topology::configuration>().capabilities.supports_score_fusion());
+
+  const auto with = couchbase::core::utils::json::parse(
+    R"({"nodes":[],"clusterCapabilities":{"search":["vectorSearch","scoreFusion"]}})");
+  REQUIRE(with.as<couchbase::core::topology::configuration>().capabilities.supports_score_fusion());
+
+  // The capability lives under "search"; the same name elsewhere must not enable it.
+  const auto elsewhere = couchbase::core::utils::json::parse(
+    R"({"nodes":[],"clusterCapabilities":{"n1ql":["scoreFusion"]}})");
+  REQUIRE_FALSE(
+    elsewhere.as<couchbase::core::topology::configuration>().capabilities.supports_score_fusion());
+}
+
+TEST_CASE("unit: score fusion is behind the cluster capability but disabled scoring is not",
+          "[unit]")
+{
+  couchbase::core::configuration_capabilities capabilities{};
+  REQUIRE_FALSE(capabilities.supports_score_fusion());
+  capabilities.cluster.insert(couchbase::core::cluster_capability::search_score_fusion);
+  REQUIRE(capabilities.supports_score_fusion());
+
+  REQUIRE(
+    couchbase::core::is_score_fusion(couchbase::core::search_scoring_reciprocal_rank_fusion{}));
+  REQUIRE(
+    couchbase::core::is_score_fusion(couchbase::core::search_scoring_relative_score_fusion{}));
+  REQUIRE_FALSE(couchbase::core::is_score_fusion(couchbase::core::search_scoring_none{}));
+  REQUIRE_FALSE(couchbase::core::is_score_fusion(couchbase::core::search_scoring_mode{}));
 }

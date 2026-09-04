@@ -142,6 +142,9 @@ struct fmt::formatter<couchbase::core::cluster_capability> {
       case couchbase::core::cluster_capability::search_scoped_search_index:
         name = "search_scoped_search_index";
         break;
+      case couchbase::core::cluster_capability::search_score_fusion:
+        name = "search_score_fusion";
+        break;
     }
     return format_to(ctx.out(), "{}", name);
   }

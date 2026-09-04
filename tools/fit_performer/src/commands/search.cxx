@@ -25,6 +25,9 @@
 #include <couchbase/date_range_facet.hxx>
 #include <couchbase/numeric_range_facet.hxx>
 #include <couchbase/search_row_location.hxx>
+#include <couchbase/search_scoring_none.hxx>
+#include <couchbase/search_scoring_reciprocal_rank_fusion.hxx>
+#include <couchbase/search_scoring_relative_score_fusion.hxx>
 #include <couchbase/search_sort_field.hxx>
 #include <couchbase/search_sort_geo_distance.hxx>
 #include <couchbase/search_sort_id.hxx>
@@ -107,6 +110,39 @@ to_scan_consistency(couchbase::search_options& opts,
   if (consistency == protocol::sdk::search::SEARCH_SCAN_CONSISTENCY_NOT_BOUNDED) {
     opts.scan_consistency(couchbase::search_scan_consistency::not_bounded);
   }
+}
+
+void
+to_scoring(couchbase::search_options& opts, const protocol::sdk::search::SearchScoring& scoring)
+{
+  switch (scoring.mode_case()) {
+    case protocol::sdk::search::SearchScoring::kReciprocalRankFusion: {
+      couchbase::search_scoring_reciprocal_rank_fusion fusion{};
+      const auto& rrf = scoring.reciprocal_rank_fusion();
+      if (rrf.has_rank_constant()) {
+        fusion.rank_constant(rrf.rank_constant());
+      }
+      if (rrf.has_window_size()) {
+        fusion.window_size(rrf.window_size());
+      }
+      opts.scoring(fusion);
+      return;
+    }
+    case protocol::sdk::search::SearchScoring::kRelativeScoreFusion: {
+      couchbase::search_scoring_relative_score_fusion fusion{};
+      if (const auto& rsf = scoring.relative_score_fusion(); rsf.has_window_size()) {
+        fusion.window_size(rsf.window_size());
+      }
+      opts.scoring(fusion);
+      return;
+    }
+    case protocol::sdk::search::SearchScoring::kNone:
+      opts.scoring(couchbase::search_scoring_none{});
+      return;
+    case protocol::sdk::search::SearchScoring::MODE_NOT_SET:
+      break;
+  }
+  throw performer_exception::invalid_argument("Search scoring mode is not set");
 }
 
 void
@@ -431,6 +467,22 @@ to_search_options(const SearchCommand cmd, observability::span_owner* spans)
   }
   if (cmd.options().has_include_locations()) {
     opts.include_locations(cmd.options().include_locations());
+  }
+  if (cmd.options().has_scoring()) {
+    to_scoring(opts, cmd.options().scoring());
+  }
+
+  if (cmd.options().has_disable_scoring()) {
+    // fit-protocol still exercises the deprecated flag directly (it predates scoring()); silence
+    // the warning locally rather than at the declaration, so a real caller still sees it.
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+    opts.disable_scoring(cmd.options().disable_scoring());
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
   }
 #ifdef COUCHBASE_CXX_CLIENT_PUBLIC_API_PARENT_SPAN
   if (cmd.options().has_parent_span_id()) {

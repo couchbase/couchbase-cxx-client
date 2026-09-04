@@ -17,6 +17,7 @@
 
 #include "core/cluster.hxx"
 #include "core/operations/document_search.hxx"
+#include "core/search_scoring.hxx"
 #include "core/utils/json.hxx"
 #include "encoded_search_facet.hxx"
 #include "encoded_search_query.hxx"
@@ -125,6 +126,33 @@ map_vector_query_combination(const std::optional<couchbase::vector_query_combina
   return {};
 }
 
+auto
+map_scoring(const search_scoring::built& scoring) -> core::search_scoring_mode
+{
+  return std::visit(
+    [](const auto& mode) -> core::search_scoring_mode {
+      using T = std::decay_t<decltype(mode)>;
+      if constexpr (std::is_same_v<T, search_scoring::built::none>) {
+        return core::search_scoring_none{};
+      } else if constexpr (std::is_same_v<T, search_scoring::built::reciprocal_rank_fusion>) {
+        return core::search_scoring_reciprocal_rank_fusion{ mode.rank_constant, mode.window_size };
+      } else if constexpr (std::is_same_v<T, search_scoring::built::relative_score_fusion>) {
+        return core::search_scoring_relative_score_fusion{ mode.window_size };
+      }
+    },
+    scoring.mode);
+}
+
+void
+apply_scoring(core::operations::search_request& request,
+              const std::optional<search_scoring::built>& scoring)
+{
+  if (!scoring.has_value()) {
+    return;
+  }
+  request.scoring = map_scoring(scoring.value());
+}
+
 } // namespace
 
 auto
@@ -168,6 +196,7 @@ build_search_request(std::string index_name,
     options.timeout,
   };
   request.parent_span = std::move(op_span);
+  apply_scoring(request, options.scoring);
   return request;
 }
 
@@ -213,6 +242,7 @@ build_search_request(std::string index_name,
     options.timeout,
   };
   core_request.parent_span = std::move(op_span);
+  apply_scoring(core_request, options.scoring);
 
   if (auto vector_search = request.vector_search(); vector_search.has_value()) {
     core_request.vector_search = core::utils::json::generate_binary(vector_search->query);

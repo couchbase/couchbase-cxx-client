@@ -156,6 +156,41 @@ can_encode_rejects_gated_features([[maybe_unused]] context& ctx)
   auto with_combo = base_request();
   with_combo.vector_query_combination = couchbase::core::vector_query_combination::combination_and;
   assert_false(ps::can_encode(with_combo), "vector query combination is gated");
+
+  auto with_rrf = base_request();
+  with_rrf.scoring = couchbase::core::search_scoring_reciprocal_rank_fusion{};
+  assert_false(ps::can_encode(with_rrf), "reciprocal rank fusion is gated");
+
+  auto with_rsf = base_request();
+  with_rsf.scoring = couchbase::core::search_scoring_relative_score_fusion{};
+  assert_false(ps::can_encode(with_rsf), "relative score fusion is gated");
+
+  // "none" predates fusion and maps onto a field the protocol already has, so it is not gated.
+  auto with_none = base_request();
+  with_none.scoring = couchbase::core::search_scoring_none{};
+  assert_true(ps::can_encode(with_none), "disabled scoring is not gated");
+}
+
+void
+scoring_none_maps_onto_the_protocol_disable_scoring_field([[maybe_unused]] context& ctx)
+{
+  auto request = base_request();
+  request.scoring = couchbase::core::search_scoring_none{};
+
+  const auto encoded = ps::encode(request);
+  assert_true(encoded.has_value(), "a request scoring none encodes");
+  assert_true(encoded->disable_scoring(), "scoring(none) reaches the protocol as disable_scoring");
+}
+
+void
+the_deprecated_disable_scoring_flag_still_reaches_the_protocol([[maybe_unused]] context& ctx)
+{
+  auto request = base_request();
+  request.disable_scoring = true;
+
+  const auto encoded = ps::encode(request);
+  assert_true(encoded.has_value(), "a request disabling scoring encodes");
+  assert_true(encoded->disable_scoring(), "disable_scoring reaches the protocol");
 }
 
 void
@@ -299,6 +334,8 @@ tests() -> test_suite
       { CASE(encode_maps_a_boosted_query_string) },
       { CASE(malformed_query_json_is_distinguished_from_an_unmappable_shape) },
       { CASE(can_encode_rejects_gated_features) },
+      { CASE(scoring_none_maps_onto_the_protocol_disable_scoring_field) },
+      { CASE(the_deprecated_disable_scoring_flag_still_reaches_the_protocol) },
       { CASE(decode_maps_hits_and_metrics) },
       { CASE(decode_carries_partial_partition_failures) },
       { CASE(decode_maps_fragments_fields_and_array_positions) },

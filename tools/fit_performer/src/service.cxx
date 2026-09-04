@@ -1588,6 +1588,7 @@ TxnService::performerCapsFetch(grpc::ServerContext* /*context*/,
   response->add_sdk_implementation_caps(protocol::sdk::Caps::SDK_SCOPE_SEARCH);
   response->add_sdk_implementation_caps(protocol::sdk::Caps::SDK_INDEX_MANAGEMENT_RFC_REVISION_25);
   response->add_sdk_implementation_caps(protocol::sdk::Caps::SDK_VECTOR_SEARCH_BASE64);
+  response->add_sdk_implementation_caps(protocol::sdk::Caps::SDK_SEARCH_SCORE_FUSION);
   response->add_sdk_implementation_caps(protocol::sdk::Caps::SDK_ZONE_AWARE_READ_FROM_REPLICA);
   response->add_sdk_implementation_caps(protocol::sdk::Caps::SUPPORTS_AUTHENTICATOR);
 #ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2

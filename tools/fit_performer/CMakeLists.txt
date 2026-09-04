@@ -37,7 +37,7 @@ cpmaddpackage(
   GITHUB_REPOSITORY
   "couchbaselabs/fit-protocol"
   GIT_TAG
-  3d5daf4b01a53be0d31bff96353755973401fe51
+  8e706b73ce47c9c99c5689de57dac8e8d2319c4b
   DOWNLOAD_ONLY
   YES)
 
