@@ -15,7 +15,7 @@
  *   limitations under the License.
  */
 
-#include "test_helper.hxx"
+#include "framework/test_registry.hxx"
 
 #include "core/cluster_label_listener.hxx"
 #include "core/metrics/meter_wrapper.hxx"
@@ -24,12 +24,16 @@
 #include <couchbase/metrics/meter.hxx>
 
 #include <chrono>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <string>
 #include <system_error>
+#include <utility>
 #include <vector>
 
+namespace couchbase::test
+{
 namespace
 {
 class counting_value_recorder : public couchbase::metrics::value_recorder
@@ -93,9 +97,9 @@ public:
   }
 };
 const foreign_category g_foreign_category{};
-} // namespace
 
-TEST_CASE("unit: meter_wrapper resolves a recorder once per attribute set", "[unit]")
+void
+meter_wrapper_resolves_a_recorder_once_per_attribute_set([[maybe_unused]] context& ctx)
 {
   auto meter = std::make_shared<counting_meter>();
   couchbase::core::metrics::meter_wrapper wrapper{ meter, nullptr };
@@ -105,21 +109,26 @@ TEST_CASE("unit: meter_wrapper resolves a recorder once per attribute set", "[un
     wrapper.value_recorder_for(attrs)->record_value(i);
   }
 
-  REQUIRE(meter->get_value_recorder_calls == 1);
-  REQUIRE(meter->recorders.size() == 1);
-  REQUIRE(meter->recorders.begin()->second->values == std::vector<std::int64_t>{ 0, 1, 2, 3, 4 });
+  assert_eq(meter->get_value_recorder_calls, 1, "the meter is asked to resolve exactly once");
+  assert_eq(meter->recorders.size(), std::size_t{ 1 }, "one recorder for one attribute set");
+  assert_true(meter->recorders.begin()->second->values ==
+                std::vector<std::int64_t>{ 0, 1, 2, 3, 4 },
+              "every recorded value lands on the memoized recorder, in order");
 }
 
-TEST_CASE("unit: meter_wrapper returns the same recorder instance for equal attributes", "[unit]")
+void
+meter_wrapper_returns_the_same_recorder_instance_for_equal_attributes([[maybe_unused]] context& ctx)
 {
   auto meter = std::make_shared<counting_meter>();
   couchbase::core::metrics::meter_wrapper wrapper{ meter, nullptr };
 
   const auto attrs = kv_attributes("get");
-  REQUIRE(wrapper.value_recorder_for(attrs).get() == wrapper.value_recorder_for(attrs).get());
+  assert_true(wrapper.value_recorder_for(attrs).get() == wrapper.value_recorder_for(attrs).get(),
+              "equal attributes resolve to one recorder instance");
 }
 
-TEST_CASE("unit: meter_wrapper resolves distinct recorders for distinct attributes", "[unit]")
+void
+meter_wrapper_resolves_distinct_recorders_for_distinct_attributes([[maybe_unused]] context& ctx)
 {
   auto meter = std::make_shared<counting_meter>();
   couchbase::core::metrics::meter_wrapper wrapper{ meter, nullptr };
@@ -128,12 +137,13 @@ TEST_CASE("unit: meter_wrapper resolves distinct recorders for distinct attribut
   wrapper.value_recorder_for(kv_attributes("upsert"))->record_value(2);
   wrapper.value_recorder_for(kv_attributes("get"))->record_value(3);
 
-  REQUIRE(meter->get_value_recorder_calls == 2);
-  REQUIRE(meter->recorders.size() == 2);
+  assert_eq(meter->get_value_recorder_calls, 2, "one resolve per distinct attribute set");
+  assert_eq(meter->recorders.size(), std::size_t{ 2 }, "one recorder per distinct attribute set");
 }
 
-TEST_CASE("unit: meter_wrapper keys the cache by standardized error type, not raw error code",
-          "[unit]")
+void
+meter_wrapper_keys_the_cache_by_standardized_error_type_not_raw_error_code(
+  [[maybe_unused]] context& ctx)
 {
   auto meter = std::make_shared<counting_meter>();
   couchbase::core::metrics::meter_wrapper wrapper{ meter, nullptr };
@@ -148,14 +158,16 @@ TEST_CASE("unit: meter_wrapper keys the cache by standardized error type, not ra
   attrs_conn_refused.error_type =
     standardized_error_type(std::make_error_code(std::errc::connection_refused));
 
-  REQUIRE(wrapper.value_recorder_for(attrs_timed_out).get() ==
-          wrapper.value_recorder_for(attrs_conn_refused).get());
-  REQUIRE(meter->get_value_recorder_calls == 1);
-  REQUIRE(meter->recorders.size() == 1);
+  assert_true(wrapper.value_recorder_for(attrs_timed_out).get() ==
+                wrapper.value_recorder_for(attrs_conn_refused).get(),
+              "two raw codes with one standardized type share a recorder");
+  assert_eq(meter->get_value_recorder_calls, 1, "the meter is asked to resolve exactly once");
+  assert_eq(meter->recorders.size(), std::size_t{ 1 }, "one recorder for one standardized type");
 }
 
-TEST_CASE("unit: meter_wrapper record_value routes every value through one cached recorder",
-          "[unit]")
+void
+meter_wrapper_record_value_routes_every_value_through_one_cached_recorder(
+  [[maybe_unused]] context& ctx)
 {
   auto meter = std::make_shared<counting_meter>();
   // A real (unconfigured) listener yields empty cluster labels, which is all this path needs.
@@ -167,28 +179,34 @@ TEST_CASE("unit: meter_wrapper record_value routes every value through one cache
     wrapper.record_value(attrs, std::chrono::steady_clock::now());
   }
 
-  // The recorder is resolved once and reused; every recorded value lands on that one recorder.
-  REQUIRE(meter->get_value_recorder_calls == 1);
-  REQUIRE(meter->recorders.size() == 1);
-  REQUIRE(meter->recorders.begin()->second->values.size() == 4);
+  assert_eq(meter->get_value_recorder_calls, 1, "the meter is asked to resolve exactly once");
+  assert_eq(meter->recorders.size(), std::size_t{ 1 }, "one recorder for one attribute set");
+  assert_eq(meter->recorders.begin()->second->values.size(),
+            std::size_t{ 4 },
+            "every recorded value lands on that one recorder");
 }
 
-TEST_CASE("unit: standardized_error_type classifies by category, not raw value", "[unit]")
+void
+standardized_error_type_classifies_by_category_not_raw_value([[maybe_unused]] context& ctx)
 {
   using couchbase::core::metrics::standardized_error_type;
 
-  // No error yields no error_type tag at all.
-  REQUIRE(standardized_error_type({}).empty());
+  assert_true(standardized_error_type({}).empty(), "no error carries no error type at all");
 
   // The SDK's network errors (values >= 1000, network category) are bucketed generically.
-  REQUIRE(standardized_error_type(couchbase::errc::network::resolve_failure) == "CouchbaseError");
+  assert_eq(standardized_error_type(couchbase::errc::network::resolve_failure),
+            "CouchbaseError",
+            "an SDK network error");
 
   // A foreign error whose value is also >= 1000 must not be misclassified as a Couchbase error just
   // because of the numeric range; it belongs to no Couchbase category.
-  REQUIRE(standardized_error_type(std::error_code(1001, g_foreign_category)) == "_OTHER");
+  assert_eq(standardized_error_type(std::error_code(1001, g_foreign_category)),
+            "_OTHER",
+            "an error from a category the SDK does not own");
 }
 
-TEST_CASE("unit: meter_wrapper record_value tolerates a null cluster-label listener", "[unit]")
+void
+meter_wrapper_record_value_tolerates_a_null_cluster_label_listener([[maybe_unused]] context& ctx)
 {
   auto meter = std::make_shared<counting_meter>();
   // The listener is optional; record_value() must not dereference it when absent.
@@ -196,7 +214,29 @@ TEST_CASE("unit: meter_wrapper record_value tolerates a null cluster-label liste
 
   wrapper.record_value(kv_attributes("get"), std::chrono::steady_clock::now());
 
-  REQUIRE(meter->get_value_recorder_calls == 1);
-  REQUIRE(meter->recorders.size() == 1);
-  REQUIRE(meter->recorders.begin()->second->values.size() == 1);
+  assert_eq(meter->get_value_recorder_calls, 1, "the meter is asked to resolve exactly once");
+  assert_eq(meter->recorders.size(), std::size_t{ 1 }, "one recorder for one attribute set");
+  assert_eq(meter->recorders.begin()->second->values.size(),
+            std::size_t{ 1 },
+            "the recorded value lands on that recorder");
 }
+} // namespace
+
+auto
+tests() -> test_suite
+{
+  return {
+    suite_name,
+    {
+      { CASE(meter_wrapper_resolves_a_recorder_once_per_attribute_set) },
+      { CASE(meter_wrapper_returns_the_same_recorder_instance_for_equal_attributes) },
+      { CASE(meter_wrapper_resolves_distinct_recorders_for_distinct_attributes) },
+      { CASE(meter_wrapper_keys_the_cache_by_standardized_error_type_not_raw_error_code) },
+      { CASE(meter_wrapper_record_value_routes_every_value_through_one_cached_recorder) },
+      { CASE(standardized_error_type_classifies_by_category_not_raw_value) },
+      { CASE(meter_wrapper_record_value_tolerates_a_null_cluster_label_listener) },
+    },
+  };
+}
+
+} // namespace couchbase::test

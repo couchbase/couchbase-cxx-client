@@ -15,6 +15,8 @@
  *   limitations under the License.
  */
 
+#include "framework/test_registry.hxx"
+
 #include "core/impl/observability_recorder.hxx"
 #include "core/metrics/meter_wrapper.hxx"
 #include "core/tracing/noop_tracer.hxx"
@@ -23,12 +25,12 @@
 #include <couchbase/error_codes.hxx>
 #include <couchbase/metrics/meter.hxx>
 
-#include <catch2/catch_test_macros.hpp>
-
 #include <map>
 #include <memory>
 #include <string>
 
+namespace couchbase::test
+{
 namespace
 {
 class noop_meter : public couchbase::metrics::meter
@@ -41,13 +43,12 @@ public:
     return nullptr;
   }
 };
-} // namespace
 
-TEST_CASE("unit: observability_recorder::finish tolerates an expired meter", "[unit]")
+void
+finish_tolerates_an_expired_meter([[maybe_unused]] context& ctx)
 {
   // The streaming path defers finish() to a user-controlled terminal (a stream handle's
   // destructor/cancel()), which can run after the owning cluster — and the meter it owns — is gone.
-  // finish() must record nothing rather than dereferencing the expired meter weak_ptr.
   auto tracer = couchbase::core::tracing::tracer_wrapper::create(
     std::make_shared<couchbase::core::tracing::noop_tracer>(), nullptr);
   auto meter =
@@ -55,11 +56,27 @@ TEST_CASE("unit: observability_recorder::finish tolerates an expired meter", "[u
 
   auto rec = couchbase::core::impl::observability_recorder::create(
     "query", /* parent_span */ nullptr, tracer, meter);
-  REQUIRE(rec != nullptr);
+  assert_true(rec != nullptr, "a recorder is created for an operation with no parent span");
 
   // Expire the meter's weak_ptr before finish() runs, as a cluster teardown would.
   meter.reset();
-  rec->finish(couchbase::errc::common::request_canceled);
-
-  SUCCEED("finish() did not dereference the expired meter weak_ptr");
+  assert_no_throw(
+    [&]() {
+      rec->finish(couchbase::errc::common::request_canceled);
+    },
+    "finish() records nothing rather than dereferencing the expired meter");
 }
+} // namespace
+
+auto
+tests() -> test_suite
+{
+  return {
+    suite_name,
+    {
+      { CASE(finish_tolerates_an_expired_meter) },
+    },
+  };
+}
+
+} // namespace couchbase::test
