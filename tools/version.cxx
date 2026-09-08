@@ -43,9 +43,10 @@ public:
         if (name == "version_major" || name == "version_minor" || name == "version_patch" ||
             name == "version_build" || name == "mozilla_ca_bundle_size") {
           info[name] = std::stoi(value);
-        } else if (name == "snapshot" || name == "static_stdlib" || name == "static_openssl" ||
-                   name == "static_target" || name == "static_boringssl" || name == "columnar" ||
-                   name == "couchbase2" || name == "mozilla_ca_bundle_embedded") {
+        } else if (value == "true" || value == "false") {
+          // Keyed on the value, not on a list of field names: a name list falls out of step
+          // with a rename without saying so. Every field whose value is exactly "true" or
+          // "false" is therefore a JSON boolean.
           info[name] = value == "true";
         } else {
           info[name] = value;

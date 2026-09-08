@@ -2079,7 +2079,7 @@ private:
     connection_deadline_.cancel();
     last_active_ = std::chrono::steady_clock::now();
     if (!stream_->is_open() || ec) {
-#ifdef COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL
+#ifdef COUCHBASE_CXX_CLIENT_STATIC_AWSLC
       auto error_message = (ec.category() == asio::error::ssl_category)
                              ? ERR_error_string(static_cast<std::uint32_t>(ec.value()), nullptr)
                              : ec.message();

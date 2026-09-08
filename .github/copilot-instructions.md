@@ -8,17 +8,17 @@ code review and Copilot coding agent.
 CMake 3.19+ is required. Standard build:
 
 ```bash
-cmake -S . -B build -DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON
+cmake -S . -B build -DCOUCHBASE_CXX_CLIENT_STATIC_AWSLC=ON
 cmake --build build -j$(nproc)
 ```
 
 Key CMake options:
-- `COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON` — use bundled BoringSSL (preferred)
+- `COUCHBASE_CXX_CLIENT_STATIC_AWSLC=ON` — use bundled AWS-LC (preferred)
 - `COUCHBASE_CXX_CLIENT_BUILD_TESTS=ON` — build test binaries
 - `COUCHBASE_CXX_CLIENT_BUILD_EXAMPLES=ON` — build examples
 
 Dependencies are managed via `cmake/ThirdPartyDependencies.cmake` and fetched
-automatically by CMake (Asio, GSL, nlohmann/json, BoringSSL/OpenSSL).
+automatically by CMake (Asio, GSL, nlohmann/json, AWS-LC/OpenSSL).
 
 ## Code style and formatting
 
@@ -74,7 +74,7 @@ CPPLINT.cfg                     cpplint configuration.
 ## Architecture rules
 
 **Public/private separation**: `couchbase/` headers must never include `core/`
-headers or expose Asio/BoringSSL/tl::expected types that are not part of the
+headers or expose Asio/AWS-LC/tl::expected types that are not part of the
 intentional public API.
 
 **Pimpl pattern**: `cluster`, `bucket`, and similar heavyweight objects own a
@@ -264,7 +264,7 @@ Not every lens applies to every change; skip the ones that do not, and spend the
 effort on those that do.
 
 **API and ABI steward.** Does a public header in `couchbase/` leak a `core/`
-type, Asio, BoringSSL or `tl::expected` beyond the intentional surface? Does new
+type, Asio, AWS-LC or `tl::expected` beyond the intentional surface? Does new
 state belong in `*_impl` rather than the outer class? Does a signature, a virtual
 method, or a struct layout change break users who compiled against the previous
 release?

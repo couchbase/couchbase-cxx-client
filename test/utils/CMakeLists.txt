@@ -19,7 +19,7 @@ target_link_libraries(test_utils PRIVATE Microsoft.GSL::GSL taocpp::json)
 target_include_directories(test_utils PRIVATE ${PROJECT_SOURCE_DIR} ${PROJECT_BINARY_DIR}/generated)
 target_compile_definitions(test_utils PRIVATE COUCHBASE_TEST_DATA_DIR="${PROJECT_SOURCE_DIR}/test/data")
 
-if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
+if(COUCHBASE_CXX_CLIENT_STATIC_AWSLC)
   target_include_directories(
     test_utils SYSTEM PRIVATE $<BUILD_INTERFACE:$<TARGET_PROPERTY:ssl,INTERFACE_INCLUDE_DIRECTORIES>>
                               $<BUILD_INTERFACE:$<TARGET_PROPERTY:crypto,INTERFACE_INCLUDE_DIRECTORIES>>)
@@ -29,7 +29,7 @@ else()
   target_link_libraries(test_utils PUBLIC OpenSSL::SSL)
 endif()
 
-if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND COUCHBASE_CXX_CLIENT_USE_BORINGSSL_PREFIX)
+if(COUCHBASE_CXX_CLIENT_STATIC_AWSLC AND COUCHBASE_CXX_CLIENT_USE_BORINGSSL_PREFIX)
   target_compile_definitions(test_utils PUBLIC BORINGSSL_PREFIX=${COUCHBASE_CXX_CLIENT_BORINGSSL_PREFIX})
 endif()
 

@@ -13,7 +13,7 @@
 #
 # gRPC, Protobuf, Abseil, re2 and c-ares are built from source (cmake/GrpcProtobuf.cmake) and
 # embedded statically, so this gate no longer tracks what the distribution packages. Linking the
-# platform's gRPC would pull in the platform's OpenSSL alongside the BoringSSL this package already
+# platform's gRPC would pull in the platform's OpenSSL alongside the AWS-LC this package already
 # links statically -- two TLS stacks in one address space -- and would couple the build to the
 # distribution's protobuf version. Neither is acceptable for a redistributable binary, so the
 # packages are not installed and the from-source path is the only one taken.
@@ -43,7 +43,7 @@ BuildRequires: gcc, gcc-c++
 BuildRequires: cmake >= 3.19
 # OpenTelemetry's OTLP/HTTP exporter -- linked by cbc, not by the SDK library, which uses only the
 # header-only opentelemetry_api -- needs libcurl and nlohmann-json. curl is built from source here
-# and linked against this package's BoringSSL, so the platform's libcurl (and the OpenSSL behind it)
+# and linked against this package's AWS-LC, so the platform's libcurl (and the OpenSSL behind it)
 # stays out of the picture entirely; only nlohmann-json, which is header-only and therefore
 # duplicates nothing, is taken from the distribution. Protobuf is deliberately absent: OpenTelemetry
 # reuses the protobuf that the from-source gRPC builds.
@@ -105,7 +105,7 @@ demand to run integration verification against the production SDK packages.
 %endif
     -DBUILD_SHARED_LIBS=OFF \
     -DCOUCHBASE_CXX_CLIENT_INSTALL=ON \
-    -DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON \
+    -DCOUCHBASE_CXX_CLIENT_STATIC_AWSLC=ON \
     -DCOUCHBASE_CXX_CLIENT_PACKAGE_BUILD=ON \
     -DCOUCHBASE_CXX_CLIENT_BUILD_EXAMPLES=OFF \
     -DCOUCHBASE_CXX_CLIENT_BUILD_TESTS=OFF \

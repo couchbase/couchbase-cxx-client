@@ -215,10 +215,10 @@ function(couchbase_add_test relpath)
     elseif(TARGET OpenSSL::SSL)
       target_link_libraries(${target} PRIVATE OpenSSL::SSL)
     endif()
-    if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND WIN32)
-      # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings: the BoringSSL
+    if(COUCHBASE_CXX_CLIENT_STATIC_AWSLC AND WIN32)
+      # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings: the AWS-LC
       # build's *.PDB files are not kept. bin/build-tests.rb configures every Windows test build
-      # with STATIC_BORINGSSL, and cmake/Testing.cmake carries the same line for each Catch2
+      # with STATIC_AWSLC, and cmake/Testing.cmake carries the same line for each Catch2
       # target, so without this a migrated test is the only executable in the tree that reports it.
       set_target_properties(${target} PROPERTIES LINK_FLAGS "/ignore:4099")
     endif()

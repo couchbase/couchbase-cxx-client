@@ -8,41 +8,63 @@ set(COUCHBASE_CXX_CLIENT_OPENSSL_PKGCONFIG_MODULE
     CACHE STRING "pkg-config module used when find_package(OpenSSL) is unusable")
 option(COUCHBASE_CXX_CLIENT_USE_HOMEBREW_TO_DETECT_OPENSSL "Use homebrew to determine OpenSSL root directory" TRUE)
 option(COUCHBASE_CXX_CLIENT_USE_SCOOP_TO_DETECT_OPENSSL "Use scoop to determine OpenSSL root directory" TRUE)
-option(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL "Build and statically link BoringSSL library" FALSE)
+# COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL is what this option was called before 1.4.0. Forward it
+# rather than ignore it: the new option defaults FALSE, so a configuration still passing the old
+# name would fall through to the platform OpenSSL and link a TLS stack it did not ask for, with no
+# diagnostic. An explicit COUCHBASE_CXX_CLIENT_STATIC_AWSLC wins, because set(... CACHE) does not
+# overwrite a value already in the cache.
+if(DEFINED COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
+  # WARNING, not DEPRECATION: a deprecation warning is silenced by -Wno-deprecated and turned
+  # fatal by CMAKE_ERROR_DEPRECATED. A forwarded option must be neither.
+  message(
+    WARNING
+      "DEPRECATED: COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=${COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL}. "
+      "The statically linked TLS library is AWS-LC, and the option is renamed to "
+      "COUCHBASE_CXX_CLIENT_STATIC_AWSLC. The value is forwarded to the new name for the whole "
+      "1.4.x series, so this is a notice, not an error. Builds that set the old name must move off "
+      "it before upgrading to 1.5.0.")
+  set(COUCHBASE_CXX_CLIENT_STATIC_AWSLC
+      ${COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL}
+      CACHE BOOL "Build and statically link AWS-LC library")
+endif()
+option(COUCHBASE_CXX_CLIENT_STATIC_AWSLC "Build and statically link AWS-LC library" FALSE)
 
 if(COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL)
   message(
     STATUS "COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL is set, assuming OpenSSL headers and symbols are available already"
   )
-elseif(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
-  # gRPC uses it since 2023-08-21: https://github.com/grpc/grpc/commit/650c2ea4928dc221747738ecbcf7db7f81dc7496
-  set(COUCHBASE_CXX_CLIENT_BORINGSSL_SHA "2ff4b968a7e0cfee66d9f151cb95635b43dc1d5b")
-  set(COUCHBASE_CXX_CLIENT_BORINGSSL_VERSION "202308211007")
+elseif(COUCHBASE_CXX_CLIENT_STATIC_AWSLC)
+  # AWS-LC declares cmake_minimum_required(VERSION 3.5..3.31), which CMake 4 refuses outright.
+  # CMAKE_POLICY_VERSION_MINIMUM arrived in 4.0 and is the documented way to lower the floor for
+  # a dependency; it applies to every cmake_minimum_required that follows, not only AWS-LC's.
+  if(CMAKE_VERSION VERSION_GREATER_EQUAL "4.0")
+    set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
+  endif()
+
+  set(COUCHBASE_CXX_CLIENT_AWSLC_VERSION "5.8.0")
   cpmaddpackage(
     NAME
-    boringssl
-    GIT_TAG
-    ${COUCHBASE_CXX_CLIENT_BORINGSSL_SHA}
+    awslc
     VERSION
-    ${COUCHBASE_CXX_CLIENT_BORINGSSL_VERSION}
+    ${COUCHBASE_CXX_CLIENT_AWSLC_VERSION}
     GITHUB_REPOSITORY
-    "google/boringssl"
+    "aws/aws-lc"
+    GIT_TAG
+    "v${COUCHBASE_CXX_CLIENT_AWSLC_VERSION}"
     OPTIONS
+    "BUILD_TESTING OFF"
+    # Drops AWS-LC's bssl and openssl command-line tools, which this project does not link or
+    # ship, and leaves ssl as its only C++ target, so the C4577 suppression covers all of its
+    # C++.
+    "BUILD_TOOL OFF"
+    # AWS-LC treats a missing Go toolchain as a hard error, and the macOS runners carry none.
+    # With tests off and FIPS unset, Go only regenerates sources it also ships under
+    # generated-src.
+    "DISABLE_GO ON"
     "BUILD_SHARED_LIBS OFF"
     "CMAKE_C_VISIBILITY_PRESET hidden"
     "CMAKE_CXX_VISIBILITY_PRESET hidden"
     "CMAKE_POSITION_INDEPENDENT_CODE ON")
-  if(MINGW)
-    set(boringssl_PATCH "${PROJECT_SOURCE_DIR}/cmake/0001-fix-build-for-mingw-w64-ucrt-x86_64-toolchain.patch")
-    message("Applying ${boringssl_PATCH} in ${boringssl_SOURCE_DIR} for MinGW gcc")
-    execute_process(
-      COMMAND patch --input ${boringssl_PATCH} --ignore-whitespace --strip=1 --forward
-      WORKING_DIRECTORY ${boringssl_SOURCE_DIR}
-      RESULT_VARIABLE PATCH_RESULT)
-    if(PATCH_RESULT GREATER 1)
-      message(FATAL_ERROR "Failed to apply patch to BoringSSL. Failed with: ${PATCH_RESULT}.")
-    endif()
-  endif()
   if(APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
     include(CheckCXXSourceCompiles)
     check_cxx_source_compiles(
@@ -57,9 +79,37 @@ elseif(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
     if(NOT HAVE_ARM_FEATURE_SHA2)
       message(
         WARNING
-          "The compiler ${CMAKE_CXX_COMPILER} (${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}) does not support BoringSSL, use OpenSSL or different compiler"
+          "The compiler ${CMAKE_CXX_COMPILER} (${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}) does not support AWS-LC, use OpenSSL or different compiler"
       )
     endif()
+  endif()
+  # AWS-LC puts a symbol_prefix_include directory on ssl's and crypto's include paths, but only a
+  # BORINGSSL_PREFIX build creates it. CMake rejects a non-existent include directory on an
+  # imported target, so a couchbase2 build that reaches these through the imported gRPC targets
+  # fails to generate. Nothing reads prefixed headers, so an empty directory is enough.
+  file(MAKE_DIRECTORY "${awslc_BINARY_DIR}/symbol_prefix_include")
+
+  if(APPLE)
+    # The Apple linker has no --exclude-libs, and -load_hidden would have to precede each archive
+    # on the link line and would link it a second time. An unexported_symbols_list is
+    # order-independent. Mach-O prefixes every C symbol with an underscore.
+    file(STRINGS "${PROJECT_SOURCE_DIR}/cmake/tls_symbol_prefixes.txt" _tls_prefixes REGEX "^[^#]")
+    list(TRANSFORM _tls_prefixes REPLACE "^(.+)$" "_\\1*")
+    string(JOIN "\n" _tls_patterns ${_tls_prefixes})
+    set(COUCHBASE_CXX_CLIENT_UNEXPORTED_TLS_SYMBOLS "${PROJECT_BINARY_DIR}/unexported_tls_symbols.txt")
+    file(WRITE "${COUCHBASE_CXX_CLIENT_UNEXPORTED_TLS_SYMBOLS}" "${_tls_patterns}\n")
+  endif()
+
+  # AWS-LC's install rules put its own openssl/*.h and pkg-config files into this project's
+  # prefix, where they would collide with the platform OpenSSL's. Excluding the directory drops
+  # them; its targets are still built, because this project links them.
+  set_property(DIRECTORY "${awslc_SOURCE_DIR}" PROPERTY EXCLUDE_FROM_ALL YES)
+
+  if(MSVC)
+    # AWS-LC compiles ssl with -WX under _HAS_EXCEPTIONS=0 and no /EHsc. MSVC then reports every
+    # noexcept in the standard headers as C4577, which -WX makes fatal. The warning describes
+    # AWS-LC's own flags, not this project's code.
+    target_compile_options(ssl PRIVATE /wd4577)
   endif()
   add_library(OpenSSL::SSL ALIAS ssl)
   add_library(OpenSSL::Crypto ALIAS crypto)
