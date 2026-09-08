@@ -22,7 +22,6 @@
 
 #include <couchbase/tracing/request_span.hxx>
 
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -35,8 +34,13 @@ namespace
 // Sanitizer builds intercept allocation and provide their own operator new/delete, so this counter
 // and the overrides below are compiled out under sanitizers (COUCHBASE_CXX_CLIENT_BUILD_SANITIZED),
 // along with the two allocation-count cases; the functional capture behaviour is covered elsewhere.
+//
+// Per thread, not process-wide: the framework runs each case on its own worker thread while other
+// threads -- the runner, and any worker detached by an earlier case that blew its budget -- are
+// free to allocate. A shared counter would attribute those to the case and fail an assertion that
+// nothing was allocated. Constant-initialised, so reading it inside operator new allocates nothing.
 #ifndef COUCHBASE_CXX_CLIENT_BUILD_SANITIZED
-std::atomic<long> g_alloc_count{ 0 };
+thread_local long g_alloc_count{ 0 };
 #endif
 } // namespace
 
@@ -44,7 +48,7 @@ std::atomic<long> g_alloc_count{ 0 };
 void*
 operator new(std::size_t n)
 {
-  g_alloc_count.fetch_add(1, std::memory_order_relaxed);
+  ++g_alloc_count;
   void* p = std::malloc(n != 0 ? n : 1);
   if (p == nullptr) {
     throw std::bad_alloc{};
@@ -210,13 +214,13 @@ the_typed_local_id_setter_avoids_the_tag_name_allocation([[maybe_unused]] contex
   // than the tag path -- rather than an absolute tag-path count: whether "couchbase.local_id"
   // heap-allocates depends on the standard library's SSO capacity (libc++'s larger SSO keeps it
   // inline) and on allocation instrumentation being active, so a fixed ">= 1" is not portable.
-  const long before_tag = g_alloc_count.load(std::memory_order_relaxed);
+  const long before_tag = g_alloc_count;
   span.add_tag(couchbase::core::tracing::attributes::dispatch::local_id, "x");
-  const long tag_allocs = g_alloc_count.load(std::memory_order_relaxed) - before_tag;
+  const long tag_allocs = g_alloc_count - before_tag;
 
-  const long before_typed = g_alloc_count.load(std::memory_order_relaxed);
+  const long before_typed = g_alloc_count;
   const bool captured = span.try_set_dispatch_local_id("x");
-  const long typed_allocs = g_alloc_count.load(std::memory_order_relaxed) - before_typed;
+  const long typed_allocs = g_alloc_count - before_typed;
 
   assert_true(captured, "the typed setter is the path taken");
   assert_eq(typed_allocs, 0L, "the typed local id setter allocates nothing");
@@ -233,17 +237,17 @@ the_typed_result_setter_avoids_the_tag_name_allocations([[maybe_unused]] context
   // temporaries. As above, assert the invariant (typed path allocates nothing and is never worse
   // than the tag path) rather than an absolute count, since how many of the three names exceed the
   // SSO limit depends on the standard library and instrumentation.
-  const long before_tags = g_alloc_count.load(std::memory_order_relaxed);
+  const long before_tags = g_alloc_count;
   span.add_tag(couchbase::core::tracing::attributes::dispatch::server_duration,
                static_cast<std::uint64_t>(120));
   span.add_tag(couchbase::core::tracing::attributes::dispatch::peer_address, "p");
   span.add_tag(couchbase::core::tracing::attributes::dispatch::peer_port,
                static_cast<std::uint64_t>(11210));
-  const long tag_allocs = g_alloc_count.load(std::memory_order_relaxed) - before_tags;
+  const long tag_allocs = g_alloc_count - before_tags;
 
-  const long before_typed = g_alloc_count.load(std::memory_order_relaxed);
+  const long before_typed = g_alloc_count;
   const bool captured = span.try_set_dispatch_result(120, "p", 11210);
-  const long typed_allocs = g_alloc_count.load(std::memory_order_relaxed) - before_typed;
+  const long typed_allocs = g_alloc_count - before_typed;
 
   assert_true(captured, "the typed setter is the path taken");
   assert_eq(typed_allocs, 0L, "the typed result setter allocates nothing");
