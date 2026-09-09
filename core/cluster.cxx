@@ -1887,7 +1887,11 @@ public:
         if (ec) {
           return req->cancel(ec);
         }
-        self->direct_dispatch(bucket_name, std::move(req));
+        // open_bucket()'s caller has already returned, so nothing reads this
+        // error code and nothing else completes the request.
+        if (const auto rc = self->direct_dispatch(bucket_name, req); rc) {
+          req->try_callback({}, rc);
+        }
       });
     return {};
   }
@@ -1912,7 +1916,13 @@ public:
                   if (ec) {
                     return req->cancel(ec);
                   }
-                  self->direct_re_queue(bucket_name, std::move(req), is_retry);
+                  // As in direct_dispatch(): this error code has no other
+                  // reader. Every error the bucket-level re-queue returns has
+                  // already completed the request, so this is a backstop for a
+                  // future path that does not -- try_callback() is idempotent.
+                  if (const auto rc = self->direct_re_queue(bucket_name, req, is_retry); rc) {
+                    req->try_callback({}, rc);
+                  }
                 });
     return {};
   }

@@ -22,8 +22,17 @@
 #include <couchbase/get_options.hxx>
 #include <couchbase/get_result.hxx>
 
+#include "core/mcbp/queue_request.hxx"
+#include "core/mcbp/queue_response.hxx"
+#include "core/protocol/client_opcode.hxx"
+#include "core/utils/binary.hxx"
+#include <asio/executor_work_guard.hpp>
+
 #include <chrono>
+#include <couchbase/error_codes.hxx>
+#include <couchbase/fail_fast_retry_strategy.hxx>
 #include <future>
+#include <thread>
 #include <utility>
 
 using namespace std::literals::chrono_literals;
@@ -117,4 +126,112 @@ TEST_CASE("integration: closing a cluster while a valid bucket is still bootstra
     FAIL("get future was not completed after the cluster was closed -- the operation was stranded");
   }
   SUCCEED("cluster torn down mid-bootstrap of a valid bucket without stranding the operation");
+}
+
+namespace
+{
+// Runs an io_context on its own thread and joins it on every exit path, including an
+// exception thrown by open_cluster() or by a failing REQUIRE. Unwinding past a joinable
+// std::thread calls std::terminate, which would abort the run instead of reporting.
+//
+// The work guard is declared before the thread so it is constructed first: an io_context
+// with nothing to do returns from run() at once, and the cluster queues its work later.
+class io_runner
+{
+public:
+  explicit io_runner(asio::io_context& io)
+    : io_{ io }
+    , work_{ asio::make_work_guard(io) }
+    , thread_{ [&io]() {
+      io.run();
+    } }
+  {
+  }
+
+  io_runner(const io_runner&) = delete;
+  io_runner(io_runner&&) = delete;
+  auto operator=(const io_runner&) -> io_runner& = delete;
+  auto operator=(io_runner&&) -> io_runner& = delete;
+
+  ~io_runner()
+  {
+    work_.reset();
+    io_.stop();
+    if (thread_.joinable()) {
+      thread_.join();
+    }
+  }
+
+private:
+  asio::io_context& io_;
+  asio::executor_work_guard<asio::io_context::executor_type> work_;
+  std::thread thread_;
+};
+} // namespace
+
+// Regression test for CXXCBC-1023, at the cluster level.
+//
+// cluster_impl::direct_dispatch() dispatches a second time from the open_bucket()
+// continuation. Nothing reads the error that second dispatch returns, because
+// open_bucket()'s caller has already returned. The continuation therefore has to
+// complete the request itself; without that, a request the second dispatch refuses is
+// never completed and fails at its deadline.
+//
+// Reaching that continuation takes two things.
+//
+// The bucket must not be open when the dispatch starts, or the bucket is found directly
+// and open_bucket() is never called. So the test connects a cluster of its own: the
+// guard's cluster already has it open.
+//
+// The second dispatch must then refuse. Asking for a replica index the bucket does not
+// have makes that certain: routing names no server for it, no session is started, and a
+// fail-fast strategy declines the retry.
+TEST_CASE("integration: a request refused after its bucket opens is completed", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+  if (!integration.cluster_version().supports_collections()) {
+    SKIP("the server does not support collections");
+  }
+
+  asio::io_context io{ 1 };
+  const io_runner runner{ io };
+  const couchbase::core::cluster cluster{ io };
+  test::utils::open_cluster(cluster, integration.origin);
+
+  // The callback runs on the I/O thread; the promise carries its error code back here.
+  std::promise<std::error_code> callback_result{};
+  auto callback_result_future = callback_result.get_future();
+  auto request = std::make_shared<couchbase::core::mcbp::queue_request>(
+    couchbase::core::protocol::magic::client_request,
+    couchbase::core::protocol::client_opcode::get,
+    [&callback_result](std::shared_ptr<couchbase::core::mcbp::queue_response> /* response */,
+                       std::shared_ptr<couchbase::core::mcbp::queue_request> /* request */,
+                       std::error_code error) mutable {
+      callback_result.set_value(error);
+    });
+  const auto key = test::utils::uniq_id("cxxcbc-1023");
+  request->key_ = couchbase::core::utils::to_binary(key);
+  // Beyond any replica the bucket can have, so routing names no server for it.
+  request->replica_index_ = 8;
+  request->retry_strategy_ = std::make_shared<couchbase::fail_fast_retry_strategy>();
+
+  // The bucket is not open on this cluster, so the dispatch goes through open_bucket().
+  const auto rc = cluster.direct_dispatch(integration.ctx.bucket, request);
+
+  const auto callback_ran =
+    callback_result_future.wait_for(std::chrono::seconds{ 30 }) == std::future_status::ready;
+  const auto callback_ec = callback_ran ? callback_result_future.get() : std::error_code{};
+
+  test::utils::close_cluster(cluster);
+
+  // The callback ran, so the request was completed rather than left to its deadline.
+  REQUIRE(callback_ran);
+
+  // The specific code matters. Any error would also be satisfied by open_bucket() failing,
+  // which never reaches the continuation under test; service_not_available is what the
+  // second dispatch returns when it declines the retry.
+  REQUIRE(callback_ec == couchbase::errc::common::service_not_available);
+
+  // direct_dispatch() itself returns success: the refusal happens later, in the continuation.
+  REQUIRE_FALSE(rc);
 }

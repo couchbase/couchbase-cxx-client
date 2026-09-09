@@ -16,6 +16,7 @@
  */
 
 #include "framework/test_registry.hxx"
+#include "utils/topology_fixtures.hxx"
 
 #include "core/diagnostics.hxx"
 #include "core/impl/wait_until_ready.hxx"
@@ -24,9 +25,7 @@
 
 #include <couchbase/cluster_state.hxx>
 
-#include <cstdint>
 #include <map>
-#include <optional>
 #include <utility>
 #include <vector>
 
@@ -39,7 +38,8 @@ using couchbase::core::service_type;
 using couchbase::core::impl::ping_predicate_satisfied;
 using couchbase::core::impl::vbucket_map_ready;
 namespace diag = couchbase::core::diag;
-using vbucket_map = couchbase::core::topology::configuration::vbucket_map;
+using ::test::utils::config_with_vbmap;
+using ::test::utils::vbucket_map;
 
 auto
 endpoint(service_type type, diag::ping_state state) -> diag::endpoint_ping_info
@@ -57,16 +57,6 @@ ping_report(std::map<service_type, std::vector<diag::endpoint_ping_info>> servic
   diag::ping_result report{};
   report.services = std::move(services);
   return report;
-}
-
-auto
-config_with_vbmap(std::optional<vbucket_map> vbmap, std::optional<std::uint32_t> num_replicas)
-  -> couchbase::core::topology::configuration
-{
-  couchbase::core::topology::configuration config{};
-  config.vbmap = std::move(vbmap);
-  config.num_replicas = num_replicas;
-  return config;
 }
 
 void
