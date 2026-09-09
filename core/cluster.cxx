@@ -218,6 +218,32 @@ class ping_collector_impl
   std::mutex mutex_{};
 
 public:
+  /**
+   * Counted like a reporter, so the ping cannot complete while pings are still being dispatched.
+   * This prevents erroneously returning early when the in-flight pings momentarily drop to 0.
+   */
+  class dispatch_scope
+  {
+  public:
+    explicit dispatch_scope(std::shared_ptr<ping_collector_impl> collector)
+      : collector_{ std::move(collector) }
+    {
+    }
+
+    dispatch_scope(const dispatch_scope&) = delete;
+    dispatch_scope(dispatch_scope&&) = delete;
+    auto operator=(const dispatch_scope&) -> dispatch_scope& = delete;
+    auto operator=(dispatch_scope&&) -> dispatch_scope& = delete;
+
+    ~dispatch_scope()
+    {
+      collector_->release();
+    }
+
+  private:
+    std::shared_ptr<ping_collector_impl> collector_;
+  };
+
   ping_collector_impl(std::string report_id,
                       utils::movable_function<void(diag::ping_result)>&& handler)
     : res_{ std::move(report_id), meta::sdk_id() }
@@ -242,11 +268,11 @@ public:
 
   void report(diag::endpoint_ping_info&& info) override
   {
-    const std::scoped_lock lock(mutex_);
-    res_.services[info.type].emplace_back(std::move(info));
-    if (--expected_ == 0) {
-      invoke_handler();
+    {
+      const std::scoped_lock lock(mutex_);
+      res_.services[info.type].emplace_back(std::move(info));
     }
+    release();
   }
 
   auto build_reporter() -> std::shared_ptr<diag::ping_reporter> override
@@ -255,12 +281,34 @@ public:
     return shared_from_this();
   }
 
+  [[nodiscard]] auto begin_dispatch() -> std::shared_ptr<dispatch_scope>
+  {
+    ++expected_;
+    return std::make_shared<dispatch_scope>(shared_from_this());
+  }
+
+private:
+  void release()
+  {
+    if (--expected_ == 0) {
+      invoke_handler();
+    }
+  }
+
   void invoke_handler()
   {
-    if (handler_ != nullptr) {
-      handler_(std::move(res_));
+    utils::movable_function<void(diag::ping_result)> handler{};
+    diag::ping_result res{};
+    {
+      const std::scoped_lock lock(mutex_);
+      if (handler_ == nullptr) {
+        return;
+      }
+      handler = std::move(handler_);
       handler_ = nullptr;
+      res = std::move(res_);
     }
+    handler(std::move(res));
   }
 };
 
@@ -1658,6 +1706,9 @@ public:
        handler = std::move(handler)]() mutable {
         auto collector =
           std::make_shared<ping_collector_impl>(report_id.value(), std::move(handler));
+        // Held until every endpoint this ping covers has taken a reporter. This prevents returning
+        // early when the number of in-flight pings momentarily drops to 0.
+        auto dispatch = collector->begin_dispatch();
         if (bucket_name) {
           if (services.find(service_type::key_value) != services.end()) {
             if (auto bucket = cluster->find_bucket_by_name(bucket_name.value()); bucket) {
@@ -1670,9 +1721,12 @@ public:
               // never run and the caller would hang. With a weak capture the callback is released
               // when the cluster is torn down, the collector is destroyed, and its destructor
               // delivers the report.
+              //
+              // The dispatch scope rides along so that the KV sessions this callback adds are
+              // still covered by it.
               cluster->open_bucket(
                 bucket_name.value(),
-                [collector, weak = std::weak_ptr(cluster), bucket_name, timeout](
+                [collector, dispatch, weak = std::weak_ptr(cluster), bucket_name, timeout](
                   std::error_code ec) {
                   if (!ec) {
                     if (auto cluster = weak.lock()) {

@@ -269,6 +269,103 @@ TEST_CASE("integration: ping allows to select bucket and opens it automatically"
   }
 }
 
+/*
+ * Regression test CXXCBC-845, verifying that the ping report includes all available HTTP services
+ */
+TEST_CASE("integration: bucket ping reports the cluster-level services", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+
+  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+  SECTION("Core API")
+  {
+    auto barrier = std::make_shared<std::promise<couchbase::core::diag::ping_result>>();
+    auto f = barrier->get_future();
+    integration.cluster.ping({},
+                             integration.ctx.bucket,
+                             {},
+                             {},
+                             [barrier](couchbase::core::diag::ping_result&& resp) mutable {
+                               barrier->set_value(std::move(resp));
+                             });
+    auto res = f.get();
+
+    REQUIRE(res.services.count(couchbase::core::service_type::key_value) > 0);
+    REQUIRE(res.services[couchbase::core::service_type::key_value].size() > 0);
+    for (const auto& endpoint : res.services[couchbase::core::service_type::key_value]) {
+      REQUIRE(endpoint.bucket.has_value());
+      REQUIRE(endpoint.bucket.value() == integration.ctx.bucket);
+    }
+
+    REQUIRE(res.services.count(couchbase::core::service_type::management) > 0);
+    REQUIRE(res.services[couchbase::core::service_type::management].size() > 0);
+
+    if (integration.ctx.deployment != test::utils::deployment_type::elixir) {
+      REQUIRE(res.services.count(couchbase::core::service_type::view) > 0);
+      REQUIRE(res.services[couchbase::core::service_type::view].size() > 0);
+    }
+
+    REQUIRE(res.services.count(couchbase::core::service_type::query) > 0);
+    REQUIRE(res.services[couchbase::core::service_type::query].size() > 0);
+
+    REQUIRE(res.services.count(couchbase::core::service_type::search) > 0);
+    REQUIRE(res.services[couchbase::core::service_type::search].size() > 0);
+
+    if (integration.ctx.version.supports_analytics()) {
+      REQUIRE(res.services.count(couchbase::core::service_type::analytics) > 0);
+      REQUIRE(res.services[couchbase::core::service_type::analytics].size() > 0);
+    }
+
+    if (integration.ctx.version.supports_eventing_functions()) {
+      REQUIRE(res.services.count(couchbase::core::service_type::eventing) > 0);
+      REQUIRE(res.services[couchbase::core::service_type::eventing].size() > 0);
+    }
+  }
+
+  SECTION("Public API")
+  {
+    auto cluster = integration.public_cluster();
+    auto bucket = cluster.bucket(integration.ctx.bucket);
+
+    auto [err, res] = bucket.ping().get();
+    REQUIRE_SUCCESS(err.ec());
+
+    REQUIRE(res.endpoints().count(couchbase::service_type::key_value) > 0);
+    REQUIRE(res.endpoints()[couchbase::service_type::key_value].size() > 0);
+
+    const auto kv_endpoints = res.endpoints()[couchbase::service_type::key_value];
+    for (const auto& endpoint : kv_endpoints) {
+      REQUIRE(endpoint.endpoint_namespace().has_value());
+      REQUIRE(endpoint.endpoint_namespace().value() == integration.ctx.bucket);
+    }
+
+    REQUIRE(res.endpoints().count(couchbase::service_type::management) > 0);
+    REQUIRE(res.endpoints()[couchbase::service_type::management].size() > 0);
+
+    if (integration.ctx.deployment != test::utils::deployment_type::elixir) {
+      REQUIRE(res.endpoints().count(couchbase::service_type::view) > 0);
+      REQUIRE(res.endpoints()[couchbase::service_type::view].size() > 0);
+    }
+
+    REQUIRE(res.endpoints().count(couchbase::service_type::query) > 0);
+    REQUIRE(res.endpoints()[couchbase::service_type::query].size() > 0);
+
+    REQUIRE(res.endpoints().count(couchbase::service_type::search) > 0);
+    REQUIRE(res.endpoints()[couchbase::service_type::search].size() > 0);
+
+    if (integration.ctx.version.supports_analytics()) {
+      REQUIRE(res.endpoints().count(couchbase::service_type::analytics) > 0);
+      REQUIRE(res.endpoints()[couchbase::service_type::analytics].size() > 0);
+    }
+
+    if (integration.ctx.version.supports_eventing_functions()) {
+      REQUIRE(res.endpoints().count(couchbase::service_type::eventing) > 0);
+      REQUIRE(res.endpoints()[couchbase::service_type::eventing].size() > 0);
+    }
+  }
+}
+
 TEST_CASE("integration: ping allows setting timeout", "[integration]")
 {
   test::utils::integration_test_guard integration;
