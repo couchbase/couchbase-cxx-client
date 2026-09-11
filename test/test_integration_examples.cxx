@@ -41,6 +41,19 @@
 
 #ifndef _WIN32
 #include <sys/wait.h>
+#include <unistd.h>
+
+#include <cerrno>
+#include <chrono>
+#include <csignal>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <exception>
+#include <string>
+#include <thread>
+#include <utility>
+#include <vector>
 #endif
 
 //! [start-using-hotel]
@@ -719,25 +732,69 @@ namespace example_fork
 {
 //! [fork-for-scaling]
 #include <couchbase/cluster.hxx>
+
+#include <spdlog/fmt/bundled/ranges.h>
+
+// The formatters come after the fmt declaration they extend.
 #include <couchbase/fmt/cas.hxx>
+#include <couchbase/fmt/error.hxx>
 #include <couchbase/fmt/mutation_token.hxx>
 
 #include <tao/json.hpp>
 
 #include <sys/wait.h>
+#include <unistd.h>
+
+#include <cerrno>
+#include <chrono>
+#include <csignal>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <exception>
+#include <string>
+#include <thread>
+#include <utility>
+#include <vector>
+
+// A forked child leaves through this rather than returning: only the forking thread survives
+// fork(2), so re-entering the program that forked us would run its remaining control flow --
+// its exit handlers, its static destructors -- against state the other threads left locked or
+// half-built. _Exit runs none of that, and skips the stdio flush with it, so flush first.
+[[noreturn]] void
+leave_child(int status)
+{
+  std::fflush(stdout);
+  std::_Exit(status);
+}
+
+// A diagnostic on a path that must not throw. fmt reports a failed write to stdout as an
+// exception, and these calls sit where an exception would take the process somewhere it must not
+// go: out of a forked child, or past a child this process still has to reap. Nothing can be done
+// about a message that cannot be written, so the failure is dropped and the path continues.
+template<typename... Args>
+void
+report(fmt::format_string<Args...> spec, Args&&... args) noexcept
+{
+  try {
+    fmt::print(spec, std::forward<Args>(args)...);
+  } catch (...) {
+  }
+}
 
 int
 main(int argc, const char* argv[])
 {
-  if (argc != 4) {
-    fmt::print("USAGE: ./example_fork couchbase://127.0.0.1 Administrator password\n");
+  if (argc != 5) {
+    fmt::print(
+      "USAGE: ./example_fork couchbase://127.0.0.1 Administrator password travel-sample\n");
     return 1;
   }
 
   std::string connection_string{ argv[1] }; // "couchbase://127.0.0.1"
   std::string username{ argv[2] };          // "Administrator"
   std::string password{ argv[3] };          // "password"
-  std::string bucket_name{ "travel-sample" };
+  std::string bucket_name{ argv[4] };       // "travel-sample"
 
   auto options = couchbase::cluster_options(username, password);
   options.apply_profile("wan_development");
@@ -750,119 +807,277 @@ main(int argc, const char* argv[])
 
   auto bucket = cluster.bucket(bucket_name);
 
+  // Flushed before the fork, not only inside the child. fork(2) copies whatever stdout still
+  // holds, so on a block-buffered stream anything written before this point would be emitted
+  // twice: once by the child's flush on its way out, and once by the parent. Leaving the buffer
+  // empty here makes the child's flush write the child's own output and nothing else.
+  std::fflush(stdout);
+
   cluster.notify_fork(couchbase::fork_event::prepare);
   auto child_pid = fork();
-  if (child_pid == 0) {
-    cluster.notify_fork(couchbase::fork_event::child);
-
-    fmt::print("CHILD(pid={}): continue after fork()\n", getpid());
-
-    // Re-acquire the handles in the child. notify_fork(child) reconnects the
-    // cluster on a fresh set of sockets, so bucket/scope/collection handles
-    // obtained before the fork still refer to the pre-fork connections; using one
-    // here fails with errc::network::cluster_closed. Handles are cheap value
-    // types, so ask the cluster for them again. The parent does not need this --
-    // notify_fork(parent) leaves its connections in place.
-    auto collection = cluster.bucket(bucket_name).scope("tenant_agent_00").collection("users");
-
-    {
-      fmt::print("CHILD(pid={}): upsert into collection\n", getpid());
-      std::string doc_id = "child-document";
-      auto [err, upsert_result] =
-        collection.upsert(doc_id, tao::json::value{ { "name", "mike" } }).get();
-      if (err.ec()) {
-        fmt::print(
-          "CHILD(pid={}): unable to upsert the document \"{}\": {}\n", getpid(), doc_id, err);
-        return 1;
-      }
-      fmt::print("CHILD(pid={}): saved document \"{}\", cas={}, token={}\n",
-                 getpid(),
-                 doc_id,
-                 upsert_result.cas(),
-                 upsert_result.mutation_token().value());
-    }
-
-    {
-      fmt::print("CHILD(pid={}): get from collection\n", getpid());
-      std::string doc_id = "child-document";
-      auto [err, get_result] = collection.get(doc_id).get();
-      if (err.ec()) {
-        fmt::print("CHILD(pid={}): unable to get the document \"{}\": {}\n", getpid(), doc_id, err);
-        return 1;
-      }
-      auto name = get_result.content_as<tao::json::value>()["name"].get_string();
-      fmt::print("CHILD(pid={}): retrieved document \"{}\", name=\"{}\"\n", getpid(), doc_id, name);
-    }
-
-  } else {
-    cluster.notify_fork(couchbase::fork_event::parent);
-    fmt::print("PARENT(pid={}): continue after fork() child_pid={}\n", getpid(), child_pid);
-
-    {
-      auto collection = bucket.scope("tenant_agent_00").collection("users");
-      std::string doc_id = "tenant_agent_00";
-      auto [err, upsert_result] =
-        collection.upsert(doc_id, tao::json::value{ { "name", "mike" } }).get();
-      if (err.ec()) {
-        fmt::print("unable to upsert the document \"{}\": {}\n", doc_id, err);
-        return 1;
-      }
-      fmt::print("saved document \"{}\", cas={}, token={}\n",
-                 doc_id,
-                 upsert_result.cas(),
-                 upsert_result.mutation_token().value());
-    }
-    {
-      auto inventory_scope = bucket.scope("inventory");
-      auto [error, query_result] =
-        inventory_scope.query("SELECT * FROM airline WHERE id = 10").get();
-      if (error) {
-        fmt::print(
-          "PARENT(pid={}): unable to perform query: {}\n", getpid(), error.ctx().to_json());
-        return 1;
-      }
-      for (const auto& row : query_result.rows_as()) {
-        fmt::print("PARENT(pid={}): row: {}\n", getpid(), tao::json::to_string(row));
-      }
-    }
-
-    int status{};
-    fmt::print("PARENT(pid={}): waiting for child pid={}...\n", getpid(), child_pid);
-    const auto rc = waitpid(child_pid, &status, 0);
-
-    if (rc == -1) {
-      fmt::print(
-        "PARENT(pid={}): unable to wait for child pid={} (rc={})\n", getpid(), child_pid, rc);
+  if (child_pid < 0) {
+    // notify_fork(parent) first, and the diagnostic second. Between prepare and parent the
+    // cluster has no I/O thread, so a close() against it can hang rather than return; a
+    // diagnostic that throws on a broken stdout would leave it in exactly that state. errno is
+    // saved because notify_fork() is free to set its own.
+    //
+    // The restoration is a throwing call as well, and this branch is outside the try below, so
+    // an exception here would leave main() without printing either failure or returning one.
+    // Both are reported together instead, and the close is skipped: a cluster that could not be
+    // restored is the one case where close() has nothing to run on.
+    const int fork_errno = errno;
+    try {
+      cluster.notify_fork(couchbase::fork_event::parent);
+    } catch (const std::exception& e) {
+      report("PARENT(pid={}): fork() failed: {}, and restoring the cluster failed too: {}\n",
+             getpid(),
+             std::strerror(fork_errno),
+             e.what());
       return 1;
     }
-    auto pretty_status = [](int status) {
-      std::vector<std::string> flags{};
-      if (WIFCONTINUED(status)) {
-        flags.emplace_back("continued");
-      }
-      // Each W*() accessor is only defined once its own predicate holds, so each is
-      // reported from inside the matching branch. Unguarded they decode the wrong bits and
-      // invent events: glibc's WSTOPSIG is (status & 0xff00) >> 8, the same bits as the
-      // exit status, so a child that exited with code 3 was reported as "stopsig=3".
-      if (WIFSTOPPED(status)) {
-        flags.emplace_back(fmt::format("stopped, stopsig={}", WSTOPSIG(status)));
-      }
-      if (WIFEXITED(status)) {
-        flags.emplace_back(fmt::format("exited, exitstatus={}", WEXITSTATUS(status)));
-      }
-      if (WIFSIGNALED(status)) {
-        flags.emplace_back(fmt::format("signaled, termsig={}", WTERMSIG(status)));
-      }
-      return fmt::format("status=0x{:02x} ({})", status, fmt::join(flags, ", "));
-    };
-    fmt::print(
-      "PARENT(pid={}): Child pid={} returned {}\n", getpid(), child_pid, pretty_status(status));
+    report("PARENT(pid={}): fork() failed: {}\n", getpid(), std::strerror(fork_errno));
+    cluster.close().get();
+    return 1;
+  }
+  if (child_pid == 0) {
+    // Nothing may leave this block: not a return, not an exception. A forked child must not
+    // re-enter the program that forked it, because only the forking thread survives fork(2) and
+    // anything the others held is locked or half-built in this copy -- so the parent's remaining
+    // control flow, its exit handlers and its static destructors would all run a second time
+    // against that. notify_fork(child) is itself a throwing call: asio reports a failure to
+    // re-register a descriptor with the child's new epoll instance as an exception.
+    try {
+      cluster.notify_fork(couchbase::fork_event::child);
 
-    // The child does the post-fork half of this example, so its outcome has to
-    // propagate: without this the parent returns 0 even when the child could not
-    // use the cluster at all.
-    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-      fmt::print("PARENT(pid={}): child pid={} did not exit cleanly\n", getpid(), child_pid);
+      fmt::print("CHILD(pid={}): continue after fork()\n", getpid());
+
+      // Re-acquire the handles in the child. notify_fork(child) reconnects the
+      // cluster on a fresh set of sockets, so bucket/scope/collection handles
+      // obtained before the fork still refer to the pre-fork connections; using one
+      // here fails with errc::network::cluster_closed. Handles are cheap value
+      // types, so ask the cluster for them again. The parent does not need this --
+      // notify_fork(parent) leaves its connections in place.
+      auto collection = cluster.bucket(bucket_name).scope("tenant_agent_00").collection("users");
+
+      {
+        fmt::print("CHILD(pid={}): upsert into collection\n", getpid());
+        std::string doc_id = "child-document";
+        auto [err, upsert_result] =
+          collection.upsert(doc_id, tao::json::value{ { "name", "mike" } }).get();
+        if (err.ec()) {
+          fmt::print(
+            "CHILD(pid={}): unable to upsert the document \"{}\": {}\n", getpid(), doc_id, err);
+          leave_child(1);
+        }
+        fmt::print("CHILD(pid={}): saved document \"{}\", cas={}, token={}\n",
+                   getpid(),
+                   doc_id,
+                   upsert_result.cas(),
+                   upsert_result.mutation_token().value());
+      }
+
+      {
+        fmt::print("CHILD(pid={}): get from collection\n", getpid());
+        std::string doc_id = "child-document";
+        auto [err, get_result] = collection.get(doc_id).get();
+        if (err.ec()) {
+          fmt::print(
+            "CHILD(pid={}): unable to get the document \"{}\": {}\n", getpid(), doc_id, err);
+          leave_child(1);
+        }
+        auto name = get_result.content_as<tao::json::value>()["name"].get_string();
+        fmt::print(
+          "CHILD(pid={}): retrieved document \"{}\", name=\"{}\"\n", getpid(), doc_id, name);
+      }
+    } catch (const std::exception& e) {
+      // A throw from inside a handler is not caught by its siblings: it would leave this block,
+      // which is the one thing the child must never do. The diagnostics here are best-effort for
+      // that reason.
+      report("CHILD(pid={}): threw after the fork: {}\n", getpid(), e.what());
+      leave_child(1);
+    } catch (...) {
+      report("CHILD(pid={}): threw an unknown exception after the fork\n", getpid());
+      leave_child(1);
+    }
+    leave_child(0);
+  } else {
+    // The child is ours to reap from here, so every exit has to do it: a parent that returns
+    // early leaves a process behind and nothing else is going to wait for it. Ours to reap, not
+    // necessarily running -- a child that exited on its own a moment ago still has to be
+    // collected, and that is the state every branch below is written against. An exit taken by a
+    // throw counts -- the diagnostics below write to stdout and fmt reports a failed write as an
+    // exception, and an exception that leaves main() is not required to unwind anything -- so
+    // the whole branch is one try, and its handler kills and reaps before reporting, because the
+    // reporting is the part that can throw again. Every kill below is gated on still owning the
+    // pid: once the child is reaped, or once ECHILD says it is not ours to wait for, the number
+    // can already belong to somebody else.
+    bool child_is_ours{ true };
+    try {
+      // The parent's own work yields a message rather than returning, so a failure on this side
+      // is reported after the wait rather than in place of it. notify_fork(parent) is inside the
+      // lambda because it throws on a failure to re-register a descriptor. The cluster arrives as
+      // a parameter because it is a structured binding, and C++17 does not allow a lambda to
+      // capture one.
+      auto parent_work = [&bucket, child_pid](couchbase::cluster& cluster) -> std::string {
+        cluster.notify_fork(couchbase::fork_event::parent);
+        fmt::print("PARENT(pid={}): continue after fork() child_pid={}\n", getpid(), child_pid);
+
+        {
+          auto collection = bucket.scope("tenant_agent_00").collection("users");
+          std::string doc_id = "tenant_agent_00";
+          auto [err, upsert_result] =
+            collection.upsert(doc_id, tao::json::value{ { "name", "mike" } }).get();
+          if (err.ec()) {
+            return fmt::format("unable to upsert the document \"{}\": {}", doc_id, err);
+          }
+          fmt::print("saved document \"{}\", cas={}, token={}\n",
+                     doc_id,
+                     upsert_result.cas(),
+                     upsert_result.mutation_token().value());
+        }
+        {
+          auto inventory_scope = bucket.scope("inventory");
+          auto [error, query_result] =
+            inventory_scope.query("SELECT * FROM airline WHERE id = 10").get();
+          if (error) {
+            return fmt::format("unable to perform query: {}", error.ctx().to_json());
+          }
+          for (const auto& row : query_result.rows_as()) {
+            fmt::print("PARENT(pid={}): row: {}\n", getpid(), tao::json::to_string(row));
+          }
+        }
+        return {};
+      };
+
+      std::string parent_error{};
+      try {
+        parent_error = parent_work(cluster);
+      } catch (const std::exception& e) {
+        parent_error = e.what();
+      } catch (...) {
+        parent_error = "threw an unknown exception";
+      }
+
+      int status{};
+
+      // Reported on every path out of here, not only the one where the child was collected
+      // cleanly. A parent-side failure and a child that had to be killed are two separate facts,
+      // and a reader who is told only the second is left to guess at the first.
+      auto report_parent_error = [&parent_error]() {
+        if (!parent_error.empty()) {
+          fmt::print("PARENT(pid={}): {}\n", getpid(), parent_error);
+        }
+      };
+
+      fmt::print("PARENT(pid={}): waiting for child pid={}...\n", getpid(), child_pid);
+
+      // Wait with a deadline rather than blocking. A child that never exits would otherwise keep
+      // this process here for as long as it lives, and whatever supervises this program would have
+      // to time the whole thing out -- reporting that, and nothing about the child. Polling turns
+      // it into a failure this program can name, and the kill makes sure the child is gone rather
+      // than left running afterwards. EINTR keeps the poll going; anything else is a real failure.
+      constexpr int child_deadline_minutes{ 15 };
+      const auto child_deadline =
+        std::chrono::steady_clock::now() + std::chrono::minutes{ child_deadline_minutes };
+      pid_t rc{ 0 };
+      int wait_errno{ 0 };
+      do {
+        rc = waitpid(child_pid, &status, WNOHANG);
+        // Captured next to the call: the sleep below may set errno on its own account, and the
+        // deadline can end the loop after it rather than after the wait.
+        wait_errno = rc < 0 ? errno : 0;
+        if (rc == child_pid || (rc < 0 && wait_errno != EINTR)) {
+          break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds{ 100 });
+      } while (std::chrono::steady_clock::now() < child_deadline);
+
+      // A wait that failed is not a child that is late, and the two must not share a branch.
+      // ECHILD says this pid is not ours to wait for any more, so it may already have been reused
+      // and a kill would land on a stranger. Report it; there is nothing safe left to do.
+      if (rc < 0 && wait_errno != EINTR) {
+        child_is_ours = false;
+        fmt::print("PARENT(pid={}): cannot wait for child pid={}: {}\n",
+                   getpid(),
+                   child_pid,
+                   std::strerror(wait_errno));
+        report_parent_error();
+        return 1;
+      }
+
+      // Left the loop without reaping: the deadline passed, or the last poll was interrupted as it
+      // did. Either way this child is still ours to reap, which is what makes the kill safe --
+      // not that it is still running, which the last non-blocking wait cannot promise.
+      if (rc != child_pid) {
+        fmt::print(
+          "PARENT(pid={}): child pid={} did not exit within {} minutes (rc={}); killing it\n",
+          getpid(),
+          child_pid,
+          child_deadline_minutes,
+          rc);
+        kill(child_pid, SIGKILL);
+        while (waitpid(child_pid, &status, 0) < 0 && errno == EINTR) {
+          // reap the killed child so it cannot outlive this process
+        }
+        child_is_ours = false;
+        report_parent_error();
+        return 1;
+      }
+      // Reaped, so nothing below may signal this pid any more.
+      child_is_ours = false;
+      auto pretty_status = [](int status) {
+        std::vector<std::string> flags{};
+        if (WIFCONTINUED(status)) {
+          flags.emplace_back("continued");
+        }
+        // Each W*() accessor is only defined once its own predicate holds, so each is
+        // reported from inside the matching branch. Unguarded they decode the wrong bits and
+        // invent events: glibc's WSTOPSIG is (status & 0xff00) >> 8, the same bits as the
+        // exit status, so a child that exited with code 3 was reported as "stopsig=3".
+        if (WIFSTOPPED(status)) {
+          flags.emplace_back(fmt::format("stopped, stopsig={}", WSTOPSIG(status)));
+        }
+        if (WIFEXITED(status)) {
+          flags.emplace_back(fmt::format("exited, exitstatus={}", WEXITSTATUS(status)));
+        }
+        if (WIFSIGNALED(status)) {
+          flags.emplace_back(fmt::format("signaled, termsig={}", WTERMSIG(status)));
+        }
+        return fmt::format("status=0x{:02x} ({})", status, fmt::join(flags, ", "));
+      };
+      fmt::print(
+        "PARENT(pid={}): Child pid={} returned {}\n", getpid(), child_pid, pretty_status(status));
+
+      // The child is collected by now, so a parent-side failure decides the exit code.
+      report_parent_error();
+      if (!parent_error.empty()) {
+        return 1;
+      }
+
+      // The child does the post-fork half of this example, so its outcome has to
+      // propagate: without this the parent returns 0 even when the child could not
+      // use the cluster at all.
+      if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+        fmt::print("PARENT(pid={}): child pid={} did not exit cleanly\n", getpid(), child_pid);
+        return 1;
+      }
+    } catch (...) {
+      // Which of the two it is matters to whoever reads the output, and the distinction the
+      // process can actually make is whether the child had been collected -- not whether it was
+      // still running, since a child that exited on its own moments earlier is killed and reaped
+      // here just the same.
+      if (child_is_ours) {
+        kill(child_pid, SIGKILL);
+        int status{};
+        while (waitpid(child_pid, &status, 0) < 0 && errno == EINTR) {
+          // reap the killed child so it cannot outlive this process
+        }
+        report("PARENT(pid={}): threw with child pid={} not yet collected; killed and reaped it\n",
+               getpid(),
+               child_pid);
+      } else {
+        report("PARENT(pid={}): threw after child pid={} was reaped\n", getpid(), child_pid);
+      }
       return 1;
     }
   }
@@ -884,6 +1099,18 @@ States","iata":"Q5","icao":"MLA","id":10,"name":"40-Mile Air","type":"airline"}}
 //! [fork-for-scaling]
 
 } // namespace example_fork
+
+// Whether this process has any child left, reaped or not. waitpid(-1) reports ECHILD only when
+// there is none at all: a child still running answers 0, and one that exited without being
+// collected answers with its pid. Both are the defect CXXCBC-1026 and CXXCBC-1028 are about, so
+// the case asserts on this after every call rather than on the return code alone.
+[[nodiscard]] auto
+no_children_left() -> bool
+{
+  int status{};
+  errno = 0;
+  return waitpid(-1, &status, WNOHANG) == -1 && errno == ECHILD;
+}
 
 TEST_CASE("example: using fork() for scaling", "[integration]")
 {
@@ -907,8 +1134,36 @@ TEST_CASE("example: using fork() for scaling", "[integration]")
     env.connection_string.c_str(),
     env.username.c_str(),
     env.password.c_str(),
+    "travel-sample",
   };
 
-  REQUIRE(example_fork::main(4, argv) == 0);
+  // The child leaves through _Exit(), so it never arrives here. Were that to become a return,
+  // it would: a second process running the rest of this binary, evaluating the same successful
+  // assertion and exiting cleanly, which the parent would see as a child that exited 0 and this
+  // case would pass. The pid taken before the call is what tells the two processes apart, and
+  // the status below is one the parent turns into a failed case.
+  const auto harness_pid = getpid();
+  const auto rc = example_fork::main(5, argv);
+  if (getpid() != harness_pid) {
+    std::_Exit(111);
+  }
+  REQUIRE(rc == 0);
+  REQUIRE(no_children_left());
+
+  // Again with a bucket that does not exist, which fails the parent's own work while leaving the
+  // fork itself intact. That is the path where the parent has something to report and a child to
+  // collect at the same time, and it is the one an unconditional reap exists for: with the reap
+  // moved back onto the success path, the parent returns while the child is still its own, which
+  // no_children_left() detects here rather than leaving to a later case to trip over.
+  const char* failing_argv[] = {
+    "example_fork",       env.connection_string.c_str(),         env.username.c_str(),
+    env.password.c_str(), "no-such-bucket-for-the-fork-example",
+  };
+  const auto failing_rc = example_fork::main(5, failing_argv);
+  if (getpid() != harness_pid) {
+    std::_Exit(111);
+  }
+  REQUIRE(failing_rc == 1);
+  REQUIRE(no_children_left());
 }
 #endif
