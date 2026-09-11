@@ -43,6 +43,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <fstream>
+#include <optional>
+#include <sstream>
 #include <string>
 #include <thread>
 
@@ -114,7 +117,55 @@ namespace
 [[noreturn]] void
 leave_child(int status)
 {
+  // The parent cannot otherwise tell a child that never reached this call from one that
+  // reached it and is still inside memcheck's exit-time report: both are silent and alive.
+  //
+  // write(2) rather than stdio: only the forking thread survives fork(2), so a stdio lock held
+  // by another thread at the fork is held forever in this copy, and fputs would deadlock on it.
+  // A marker that never appears is exactly the false diagnosis this probe exists to prevent.
+  static constexpr char marker[] = "CHILD: reached _Exit\n";
+  [[maybe_unused]] const auto written = ::write(STDOUT_FILENO, marker, sizeof(marker) - 1);
   std::_Exit(status);
+}
+
+// Total CPU the process has burned, in clock ticks. Fields 14 and 15 of /proc/<pid>/stat are
+// utime and stime. The comm field ahead of them is parenthesised and may itself hold spaces and
+// parentheses, so the scan starts after its last ')' rather than at a fixed offset.
+//
+// Linux only, by consequence rather than by guard: this file is already POSIX-only, and macOS
+// has no /proc, so the open fails and this reports nothing. The caller then says the CPU time
+// was unavailable and the rest of the diagnosis still works. Nothing here is worth a
+// platform-specific implementation -- the failure this probes has only ever been seen on the
+// Linux valgrind legs.
+auto
+cpu_ticks(pid_t pid) noexcept -> std::optional<unsigned long long>
+try {
+  std::ifstream stat{ "/proc/" + std::to_string(pid) + "/stat" };
+  std::string line;
+  if (!std::getline(stat, line)) {
+    return {};
+  }
+  const auto comm_end = line.rfind(')');
+  if (comm_end == std::string::npos) {
+    return {};
+  }
+  std::istringstream fields{ line.substr(comm_end + 1) };
+  // The field after ')' is state, which is field 3.
+  std::string ignored;
+  for (int index = 3; index < 14; ++index) {
+    if (!(fields >> ignored)) {
+      return {};
+    }
+  }
+  unsigned long long utime{};
+  unsigned long long stime{};
+  if (!(fields >> utime >> stime)) {
+    return {};
+  }
+  return utime + stime;
+} catch (...) {
+  // A diagnostic, read while a wedged child is still unreaped: it may not throw past here.
+  return {};
 }
 } // namespace
 
@@ -286,20 +337,43 @@ TEST_CASE("integration: cluster remains usable in a forked child", "[integration
   } while (std::chrono::steady_clock::now() < child_deadline);
 
   const auto child_wedged = reaped != child_pid;
+  std::string child_cpu{};
   if (child_wedged) {
+    // A child inside memcheck's exit-time report and a child blocked on something look identical
+    // from here -- both silent, both alive. They differ in whether they are burning CPU, which no
+    // single total can show, so sample twice and report the interval as well.
+    const auto before = cpu_ticks(child_pid);
+    const auto sampled_at = std::chrono::steady_clock::now();
+    std::this_thread::sleep_for(std::chrono::seconds{ 2 });
+    // sleep_for guarantees a minimum, and this runs on a loaded valgrind runner, so the gap is
+    // measured rather than assumed: a rate quoted against the wrong interval is a wrong rate.
+    const auto sampled_over = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - sampled_at);
+    const auto after = cpu_ticks(child_pid);
     kill(child_pid, SIGKILL);
     while ((reaped = waitpid(child_pid, &status, 0)) < 0 && errno == EINTR) {
       // reap the killed child so it cannot outlive this test
     }
+    // Only now, because this allocates: until the reap above, an exception would have unwound
+    // with the child still running.
+    child_cpu = (before.has_value() && after.has_value())
+                  ? fmt::format(" (child CPU {} ticks, {} of them in the last {}ms)",
+                                after.value(),
+                                after.value() - before.value(),
+                                sampled_over.count())
+                  : " (child CPU time unavailable)";
   }
 
   if (child_wedged) {
     // Deliberately does not claim a cause. The first time this fired, the child had already
     // completed every operation and was sitting in valgrind's exit-time leak report; saying
     // "wedged in the post-fork reconnect" would have sent the reader in the wrong direction.
-    // Check the child's own output above before concluding anything.
+    // Two things narrow it without guessing: "CHILD: reached _Exit" in the child's output says it
+    // got as far as the exit call, and a CPU figure still rising says it is working rather than
+    // blocked. Check both before concluding anything.
     FAIL("child did not exit within the deadline and was killed after "
-         << child_deadline_minutes << " minutes; see the child's output above for how far it got");
+         << child_deadline_minutes << " minutes" << child_cpu
+         << "; see the child's output above for how far it got");
   }
   if (!parent_side_error.empty()) {
     FAIL("parent threw after the fork: " << parent_side_error);
