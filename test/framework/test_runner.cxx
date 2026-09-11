@@ -88,7 +88,8 @@ run_bounded(std::function<void()> body, std::chrono::milliseconds timeout) -> ca
   const auto duration = std::chrono::steady_clock::now() - start;
   return { case_result::status::failed,
            duration,
-           fmt::format("timed out after {}", human(timeout)),
+           fmt::format("timed out after {}; its worker was abandoned and may still be running",
+                       human(timeout)),
            /*timed_out=*/true };
 }
 
@@ -116,20 +117,28 @@ struct gate_result {
 // hold. The whole phase runs on the bounded worker: a requirement that blocks must cost this case
 // its budget, not the run.
 auto
-check_requirements(const test_case& tc, context& ctx) -> gate_result
+check_requirements(const test_case& tc, const std::shared_ptr<context>& ctx) -> gate_result
 {
   if (tc.requirements.empty()) {
     return {};
   }
 
   // On the heap, and captured by value: run_bounded detaches the worker when the budget is blown,
-  // so a stack local here would be written to by that worker after this function returned. `tc` and
-  // `ctx` are captured by reference because both outlive the run, and `ctx` is safe to reach from a
-  // worker that outlived its budget because it serialises its own probes -- outliving the run is
-  // what makes the reference valid, not what makes the access race-free.
+  // so a stack local here would be written to by that worker after this function returned.
+  //
+  // `tc` is copied for the same reason. It is a plain aggregate -- a name, a function pointer, a
+  // vector of shared requirements and a duration -- so the worker owns everything it needs and
+  // the suite holding the original may be destroyed while it still runs. A nested run, which is
+  // what the framework's own tests do, destroys exactly that.
+  //
+  // `ctx` is a share of the context, not a borrow of it. run_bounded may detach this worker, and
+  // nothing can then join it, so a worker can still be inside requirement::check() after run()
+  // returned: the context has to be kept alive by whoever is still using it rather than by
+  // whoever started the run. It is safe to reach from such a worker because it serialises its own
+  // probes; holding a share is what makes the pointer valid, not what makes the access race-free.
   auto gate = std::make_shared<gate_result>();
   const auto bounded = run_bounded(
-    [&tc, &ctx, gate]() {
+    [tc, ctx, gate]() {
       for (const auto& req : tc.requirements) {
         if (req == nullptr) {
           *gate = { gate_result::verdict::fail, "(null)", "a null requirement was registered" };
@@ -137,7 +146,7 @@ check_requirements(const test_case& tc, context& ctx) -> gate_result
         }
         check_result checked;
         try {
-          checked = req->check(ctx);
+          checked = req->check(*ctx);
         } catch (const probe_failure& e) {
           // The probe could not answer. Not knowing whether a case applies is not the same as
           // knowing it does not, and only one of the two may pass silently.
@@ -155,14 +164,16 @@ check_requirements(const test_case& tc, context& ctx) -> gate_result
         }
       }
     },
-    ctx.config().requirement_budget);
+    ctx->config().requirement_budget);
 
   if (bounded.outcome == case_result::status::failed) {
     return { gate_result::verdict::fail,
              requirement_phase,
-             bounded.timed_out ? fmt::format("checking requirements exceeded {}",
-                                             human(ctx.config().requirement_budget))
-                               : bounded.message,
+             bounded.timed_out
+               ? fmt::format("checking requirements exceeded {}; its worker was abandoned and may "
+                             "still be running",
+                             human(ctx->config().requirement_budget))
+               : bounded.message,
              bounded.timed_out };
   }
   // A requirement whose check() called skip() rather than returning a status. Falling through to
@@ -178,8 +189,10 @@ check_requirements(const test_case& tc, context& ctx) -> gate_result
 } // namespace
 
 auto
-run(const test_suite& suite, const std::set<std::string>& filter, context& ctx, std::ostream& out)
-  -> run_result
+run(const test_suite& suite,
+    const std::set<std::string>& filter,
+    std::shared_ptr<context> ctx,
+    std::ostream& out) -> run_result
 {
   // Flush each line as it is written. ctest runs these binaries with stdout on a pipe, where the
   // stream is block-buffered, and a case that aborts the process discards the whole buffer: the log
@@ -241,8 +254,8 @@ run(const test_suite& suite, const std::set<std::string>& filter, context& ctx, 
 
       out << fmt::format("Running \"{}\" (budget: {})...\n", tc.name, human(tc.timeout));
       const auto r = run_bounded(
-        [&tc, &ctx]() {
-          tc.func(ctx);
+        [tc, ctx]() {
+          tc.func(*ctx);
         },
         tc.timeout);
       switch (r.outcome) {
@@ -280,6 +293,18 @@ run(const test_suite& suite, const std::set<std::string>& filter, context& ctx, 
     }
   }
   return result;
+}
+
+auto
+abandoned_workers_note(const run_result& result) -> std::string
+{
+  if (result.timed_out == 0) {
+    return {};
+  }
+  return fmt::format("abandoned workers: {} (a case that exceeds its budget leaves its worker "
+                     "detached, not killed), so this process leaves through _Exit and destroys "
+                     "nothing\n",
+                     result.timed_out);
 }
 
 auto
@@ -400,10 +425,18 @@ scale_timeouts(test_suite& suite, double factor)
 }
 
 void
-tear_down(std::unique_ptr<context> ctx, void (*teardown)())
+tear_down(std::shared_ptr<context> ctx, void (*teardown)())
 {
   // Before the hook, never after: whatever the context holds would otherwise be destroyed against a
-  // library the hook has already unloaded.
+  // library the hook has already unloaded. That ordering only holds if this share is the last one,
+  // which is true on every path reaching teardown -- a run that detached a worker leaves through
+  // _Exit and never gets here. What the count can say is that somebody else still owns it, not who:
+  // an abandoned worker is the only way the framework produces that today, and the message says
+  // owner rather than worker for that reason. Checked rather than assumed, because the failure is a
+  // connection torn down under an unloaded library and would not look like this line.
+  if (ctx.use_count() > 1) {
+    throw std::logic_error{ "tear_down() called while another owner still holds the context" };
+  }
   ctx.reset();
   if (teardown != nullptr) {
     teardown();

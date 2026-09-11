@@ -41,9 +41,13 @@ struct run_result {
   // so a skip the requirement phase itself decided -- a check() that called skip() -- appears in
   // `skipped` alone; it has no requirement to name.
   std::map<std::string, std::size_t> skipped_by_requirement{};
-  // Cases that exceeded their budget. Counted in `failed` too; tracked separately because a
-  // timeout leaves a detached worker thread running, which changes how the process must exit
-  // (see main()).
+  // Cases that exceeded their budget. Counted in `failed` too, and tracked separately for two
+  // reasons. Whether it is zero decides how the process exits, because a timeout leaves a
+  // detached worker thread running and main() must not destroy anything underneath it. How
+  // large it is goes into the report, because that many workers were abandoned still holding
+  // whatever their cases held. Nothing joins them, so an abandoned worker may or may not still
+  // be running by the time the report is produced. The second reason is why this is a count
+  // rather than a flag.
   std::size_t timed_out{ 0 };
 };
 
@@ -54,26 +58,36 @@ struct run_result {
 // regression in the binary. Exposed (rather than buried in main) so a self-test can drive it with
 // in-memory suites.
 auto
-run(const test_suite& suite, const std::set<std::string>& filter, context& ctx, std::ostream& out)
-  -> run_result;
+run(const test_suite& suite,
+    const std::set<std::string>& filter,
+    std::shared_ptr<context> ctx,
+    std::ostream& out) -> run_result;
 
 // Close a run down: release the context, then call the suite's teardown hook if it has one. The
 // order is the whole of it. The context owns the probe backend and, through it, whatever connection
 // the probes opened, while the hook is where a suite unloads a library it used -- the use it
 // documents is the OPENSSL_cleanup() that test/main.cxx performs for the Catch2 suites -- so
-// anything whose destructor calls into such a library has to be gone before the hook runs. The
-// context is taken by value so the caller cannot hold one back, and this lives here rather than
-// inline in main() so a self-test can observe the order.
+// anything whose destructor calls into such a library has to be gone before the hook runs.
+// Ownership transfers here: the share passed in has to be the last one, and a caller that kept
+// another -- or an abandoned worker still holding one -- gets a std::logic_error instead. This
+// lives here rather than inline in main() so a self-test can observe the order.
 //
 // Not for the timeout path: a case that exceeded its budget leaves a worker detached, possibly
 // still inside the context, so main() leaves through _Exit there and destroys nothing.
 void
-tear_down(std::unique_ptr<context> ctx, void (*teardown)());
+tear_down(std::shared_ptr<context> ctx, void (*teardown)());
 
 // Process exit code for a result: any failure => 1; nothing ran but something skipped => 77
 // (the GNU/ctest "skipped" convention); otherwise 0.
 [[nodiscard]] auto
 exit_code(const run_result& result) -> int;
+
+// What to print about workers a run abandoned, or empty when it abandoned none. A timed-out case
+// leaves its worker detached rather than killing it, so for the rest of the binary it may still be
+// running and competing for whatever the body held -- and that is invisible in a report that says
+// only "FAILED". Separate from main() so a test can assert on it.
+[[nodiscard]] auto
+abandoned_workers_note(const run_result& result) -> std::string;
 
 // Every case name in `suite`, in registration order, including cases this environment would not
 // run. CMake enumerates the ctest entries from this list at build time, so a name must be present

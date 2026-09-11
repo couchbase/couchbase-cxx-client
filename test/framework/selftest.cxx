@@ -31,9 +31,12 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstddef>
 #include <ios>
 #include <limits>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <set>
 #include <sstream>
@@ -67,6 +70,73 @@ void
 body_sleep([[maybe_unused]] context& ctx)
 {
   std::this_thread::sleep_for(std::chrono::milliseconds{ 200 });
+}
+
+// Holds an abandoned worker where the test can see it. The worker blocks here until the test
+// releases it, so it is provably still inside its body while the test inspects what it holds. Both
+// waits are bounded: an assertion that fails before the release would otherwise park a worker on
+// this condition for the rest of the process, holding a lock a later case could want.
+//
+// Namespace scope, because a case body is a plain function pointer and a requirement is a class
+// with no state of the test's own -- neither can be handed a gate, so each of the two lifetime
+// cases below owns one out here.
+class worker_gate
+{
+public:
+  static constexpr auto budget = std::chrono::seconds{ 2 };
+
+  // On the worker.
+  void wait_for_release()
+  {
+    std::unique_lock<std::mutex> lock{ mutex_ };
+    condition_.wait_for(lock, budget, [this] {
+      return released_;
+    });
+  }
+  void mark_finished()
+  {
+    {
+      const std::lock_guard<std::mutex> lock{ mutex_ };
+      finished_ = true;
+    }
+    condition_.notify_all();
+  }
+
+  // On the test.
+  void release()
+  {
+    {
+      const std::lock_guard<std::mutex> lock{ mutex_ };
+      released_ = true;
+    }
+    condition_.notify_all();
+  }
+  [[nodiscard]] auto await_finished() -> bool
+  {
+    std::unique_lock<std::mutex> lock{ mutex_ };
+    return condition_.wait_for(lock, budget, [this] {
+      return finished_;
+    });
+  }
+
+private:
+  std::mutex mutex_{};
+  std::condition_variable condition_{};
+  bool released_{ false };
+  bool finished_{ false };
+};
+
+worker_gate body_worker_gate;
+worker_gate requirement_worker_gate;
+
+void
+body_blocks_until_released([[maybe_unused]] context& ctx)
+{
+  // Blocks and reports, and touches nothing else. The context is deliberately not used: on the
+  // regression this case exists to catch it is already destroyed by the time the wait ends, and a
+  // test that reads it there would trade a failed assertion for undefined behaviour.
+  body_worker_gate.wait_for_release();
+  body_worker_gate.mark_finished();
 }
 
 // assert_throws asked for a base of the framework's own control-flow types. Both bodies exist to be
@@ -159,6 +229,26 @@ public:
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     return counting_probes::has_service(name);
   }
+};
+
+// Reports, through a flag that outlives it, when the context owning it is destroyed. That is what
+// lets a test observe a lifetime without a sanitizer: the flag is still readable after the context
+// it belonged to is gone.
+class witnessed_probes : public counting_probes
+{
+public:
+  explicit witnessed_probes(std::shared_ptr<std::atomic<bool>> destroyed)
+    : destroyed_{ std::move(destroyed) }
+  {
+  }
+
+  ~witnessed_probes() override
+  {
+    destroyed_->store(true);
+  }
+
+private:
+  std::shared_ptr<std::atomic<bool>> destroyed_;
 };
 
 // Answers every probe, but reports no storage backend -- what a release predating the setting
@@ -331,6 +421,41 @@ public:
   }
 };
 
+// The requirement-phase twin of body_blocks_until_released: the runner detaches a separate worker
+// for the requirement phase, with its own capture of the case and the context.
+//
+// It reports its own destruction through the flag it is handed. The case is copied into the
+// worker, and the copy is what keeps the shared_ptr in tc.requirements -- and so this object --
+// alive after the suite that registered it is gone. A worker holding the case by reference would
+// destroy this object as run() returns, while the check() below is still executing on it.
+class blocks_until_released : public requirement
+{
+public:
+  explicit blocks_until_released(std::shared_ptr<std::atomic<bool>> destroyed)
+    : destroyed_{ std::move(destroyed) }
+  {
+  }
+
+  ~blocks_until_released() override
+  {
+    destroyed_->store(true);
+  }
+
+  [[nodiscard]] auto describe() const -> std::string override
+  {
+    return "something the test releases";
+  }
+  [[nodiscard]] auto check(context& /* ctx */) const -> check_result override
+  {
+    requirement_worker_gate.wait_for_release();
+    requirement_worker_gate.mark_finished();
+    return check_result::ok();
+  }
+
+private:
+  std::shared_ptr<std::atomic<bool>> destroyed_;
+};
+
 class skipping : public requirement
 {
 public:
@@ -375,18 +500,22 @@ with_cluster() -> configuration
 
 // A sink for the runner's progress output so the self-test stays quiet.
 auto
-run_quiet(const test_suite& suite, const std::set<std::string>& filter, context& ctx) -> run_result
+run_quiet(const test_suite& suite,
+          const std::set<std::string>& filter,
+          std::shared_ptr<context> ctx) -> run_result
 {
   std::ostringstream sink;
-  return run(suite, filter, ctx, sink);
+  return run(suite, filter, std::move(ctx), sink);
 }
 
-// The common case: no cluster, no requirements, nothing to probe.
+// The common case: no cluster, no requirements, nothing to probe. The context is shared because
+// a timed-out case leaves a worker holding it, which is why nothing here has to outlive this
+// scope by hand.
 auto
 run_bare(const test_suite& suite, const std::set<std::string>& filter = {}) -> run_result
 {
-  context ctx{ no_cluster(), std::make_unique<counting_probes>() };
-  return run_quiet(suite, filter, ctx);
+  return run_quiet(
+    suite, filter, std::make_shared<context>(no_cluster(), std::make_unique<counting_probes>()));
 }
 
 // Comparable but not formattable, which is what selects assert_eq's value-free branch. It has no
@@ -487,7 +616,7 @@ runner_detects_a_timeout([[maybe_unused]] context& ctx)
 }
 
 void
-case_output_is_flushed_as_it_is_written(context& ctx)
+case_output_is_flushed_as_it_is_written([[maybe_unused]] context& ctx)
 {
   // ctest gives these binaries a pipe for stdout, where the stream is block-buffered, and a case
   // that aborts the process discards whatever is still buffered -- so the log names neither the
@@ -495,7 +624,8 @@ case_output_is_flushed_as_it_is_written(context& ctx)
   // most needed, so the runner must not leave its stream block-buffered.
   std::ostringstream sink;
   const test_suite s{ "inner", { { "p", body_pass } } };
-  static_cast<void>(run(s, {}, ctx, sink));
+  static_cast<void>(
+    run(s, {}, std::make_shared<context>(no_cluster(), std::make_unique<counting_probes>()), sink));
   assert_true((sink.flags() & std::ios::unitbuf) != 0,
               "the runner flushes its stream after every write");
 }
@@ -508,7 +638,8 @@ an_unconfigured_cluster_skips_and_an_unreachable_one_fails([[maybe_unused]] cont
   // which is how an unreachable endpoint turns a whole leg green.
   const test_suite s{ "inner", { { "c", body_pass, { needs::service("kv") } } } };
 
-  context unconfigured{ no_cluster(), std::make_unique<unreachable_probes>() };
+  auto unconfigured =
+    std::make_shared<context>(no_cluster(), std::make_unique<unreachable_probes>());
   const auto skipped = run_quiet(s, {}, unconfigured);
   assert_eq(skipped.skipped, std::size_t{ 1 }, "no cluster configured is a skip");
   assert_eq(skipped.failed, std::size_t{ 0 }, "and not a failure");
@@ -516,7 +647,8 @@ an_unconfigured_cluster_skips_and_an_unreachable_one_fails([[maybe_unused]] cont
             std::size_t{ 1 },
             "the requirement that turned it away is named");
 
-  context unreachable{ with_cluster(), std::make_unique<unreachable_probes>() };
+  auto unreachable =
+    std::make_shared<context>(with_cluster(), std::make_unique<unreachable_probes>());
   const auto failed = run_quiet(s, {}, unreachable);
   assert_eq(
     failed.failed, std::size_t{ 1 }, "a configured cluster that cannot answer is a failure");
@@ -532,7 +664,7 @@ a_satisfied_requirement_lets_the_case_run([[maybe_unused]] context& ctx)
     { { "kv", body_pass, { needs::service("kv"), needs::cluster_version(v7_0, v8_0) } },
       { "n1ql", body_pass, { needs::service("n1ql") } } },
   };
-  context probed{ with_cluster(), std::make_unique<counting_probes>() };
+  auto probed = std::make_shared<context>(with_cluster(), std::make_unique<counting_probes>());
   const auto r = run_quiet(s, {}, probed);
   assert_eq(r.passed, std::size_t{ 1 }, "the case whose requirements hold runs");
   assert_eq(r.skipped, std::size_t{ 1 }, "the one whose service is absent is skipped");
@@ -549,7 +681,7 @@ a_version_range_is_half_open([[maybe_unused]] context& ctx)
       { "below", body_pass, { needs::cluster_version(v8_0) } },
       { "at_upper_bound", body_pass, { needs::cluster_version(v7_0, v7_6) } } },
   };
-  context probed{ with_cluster(), std::make_unique<counting_probes>() };
+  auto probed = std::make_shared<context>(with_cluster(), std::make_unique<counting_probes>());
   const auto r = run_quiet(s, {}, probed);
   assert_eq(r.passed, std::size_t{ 1 }, "only the case whose range contains 7.6.2 runs");
   assert_eq(
@@ -563,7 +695,7 @@ probes_are_cached_across_every_case_in_the_binary([[maybe_unused]] context& ctx)
   // a suite into a denial-of-service against its own cluster.
   auto probes = std::make_unique<counting_probes>();
   auto* counters = probes.get();
-  context probed{ with_cluster(), std::move(probes) };
+  auto probed = std::make_shared<context>(with_cluster(), std::move(probes));
 
   std::vector<test_case> cases;
   cases.reserve(20);
@@ -578,7 +710,7 @@ probes_are_cached_across_every_case_in_the_binary([[maybe_unused]] context& ctx)
   assert_eq(r.passed, std::size_t{ 20 }, "every case ran");
   assert_eq(counters->service_calls, std::size_t{ 1 }, "the service was asked about once");
   assert_eq(counters->version_calls, std::size_t{ 1 }, "and so was the version");
-  assert_eq(probed.backends_created(), std::size_t{ 1 }, "one backend for the whole binary");
+  assert_eq(probed->backends_created(), std::size_t{ 1 }, "one backend for the whole binary");
 }
 
 void
@@ -591,7 +723,7 @@ one_probe_answers_every_caller_that_arrives_at_once([[maybe_unused]] context& ct
   // wrong answer: this asserts the count the guard makes true.
   auto probes = std::make_unique<slow_counting_probes>();
   auto* counters = probes.get();
-  context probed{ with_cluster(), std::move(probes) };
+  auto probed = std::make_shared<context>(with_cluster(), std::move(probes));
 
   constexpr std::size_t askers = 8;
   std::atomic<std::size_t> arrived{ 0 };
@@ -603,7 +735,7 @@ one_probe_answers_every_caller_that_arrives_at_once([[maybe_unused]] context& ct
       while (arrived.load() < askers) {
         std::this_thread::yield();
       }
-      (void)probed.has_service("kv");
+      (void)probed->has_service("kv");
     });
   }
   for (auto& thread : threads) {
@@ -621,7 +753,7 @@ a_failed_probe_is_not_retried_per_case([[maybe_unused]] context& ctx)
   // attempt per case, which is how a broken endpoint turns a fast leg into a timeout.
   auto probes = std::make_unique<unreachable_probes>();
   auto* counters = probes.get();
-  context probed{ with_cluster(), std::move(probes) };
+  auto probed = std::make_shared<context>(with_cluster(), std::move(probes));
 
   const test_suite s{ "inner",
                       { { "a", body_pass, { needs::cluster_version(v7_0) } },
@@ -639,7 +771,7 @@ a_backend_that_cannot_be_opened_is_asked_once([[maybe_unused]] context& ctx)
   // attempt per kind: three questions, three waits on an endpoint that will not accept any of them.
   auto probes = std::make_unique<unopenable_probes>();
   auto* counters = probes.get();
-  context probed{ with_cluster(), std::move(probes) };
+  auto probed = std::make_shared<context>(with_cluster(), std::move(probes));
 
   const test_suite s{ "inner",
                       { { "version", body_pass, { needs::cluster_version(v7_0) } },
@@ -670,7 +802,7 @@ one_unanswerable_question_does_not_speak_for_the_others([[maybe_unused]] context
   // of failures.
   auto probes = std::make_unique<one_broken_probe>();
   auto* counters = probes.get();
-  context probed{ with_cluster(), std::move(probes) };
+  auto probed = std::make_shared<context>(with_cluster(), std::move(probes));
 
   const test_suite s{
     "inner",
@@ -698,7 +830,7 @@ the_context_is_released_before_the_suite_teardown_runs([[maybe_unused]] context&
   backend_alive_at_teardown = true;
 
   auto owned =
-    std::make_unique<context>(with_cluster(), std::make_unique<lifetime_tracking_probes>());
+    std::make_shared<context>(with_cluster(), std::make_unique<lifetime_tracking_probes>());
   assert_true(backend_alive.load(), "the backend is alive to begin with");
 
   tear_down(std::move(owned), record_teardown);
@@ -709,13 +841,37 @@ the_context_is_released_before_the_suite_teardown_runs([[maybe_unused]] context&
 }
 
 void
+teardown_refuses_to_release_a_context_something_else_still_owns([[maybe_unused]] context& ctx)
+{
+  // tear_down() destroys the context before the suite hook so that nothing of the hook's library
+  // is torn down after it unloads. That ordering holds only while the caller is the last owner.
+  // A run that abandoned a worker leaves that worker owning a share, and such a run leaves
+  // through _Exit rather than reaching teardown -- so this is a state the framework must never
+  // be in, which is why it is refused rather than assumed away. The second share here stands in
+  // for the worker's: constructed directly, so the check is tested without racing one.
+  //
+  // The caller's share is moved in rather than copied, which is what puts the count on the
+  // boundary: inside tear_down() there are exactly two owners, the one it was given and the
+  // stand-in. Passing an lvalue would leave three, and a check that wrongly allowed two would
+  // still throw.
+  auto owned =
+    std::make_shared<context>(with_cluster(), std::make_unique<lifetime_tracking_probes>());
+  auto still_in_use = owned;
+
+  assert_throws_with("still holds the context", [&owned]() {
+    tear_down(std::move(owned), nullptr);
+  });
+  assert_true(backend_alive.load(), "and the context it refused to release is intact");
+}
+
+void
 a_suite_with_no_teardown_still_releases_its_context([[maybe_unused]] context& ctx)
 {
   // The path every binary takes today, since nothing registers a hook: the context is released
   // either way, and a hook that is not there is not called.
   teardowns = 0;
   auto owned =
-    std::make_unique<context>(with_cluster(), std::make_unique<lifetime_tracking_probes>());
+    std::make_shared<context>(with_cluster(), std::make_unique<lifetime_tracking_probes>());
 
   tear_down(std::move(owned), nullptr);
 
@@ -734,15 +890,17 @@ a_requirement_that_blocks_fails_its_case_rather_than_the_run([[maybe_unused]] co
 
   auto config = no_cluster();
   config.requirement_budget = std::chrono::milliseconds{ 50 };
-  context bounded{ config, std::make_unique<counting_probes>() };
+  auto bounded = std::make_shared<context>(config, std::make_unique<counting_probes>());
 
-  const auto r = run_quiet(s, {}, bounded);
+  std::ostringstream out;
+  const auto r = run(s, {}, bounded, out);
   assert_eq(r.failed, std::size_t{ 1 }, "the case fails");
   assert_eq(r.passed, std::size_t{ 0 }, "the body never ran");
   assert_eq(r.skipped, std::size_t{ 0 }, "and it is not reported as inapplicable");
   assert_eq(r.timed_out,
             std::size_t{ 1 },
             "flagged as a timeout, because the abandoned worker dictates how the process exits");
+  assert_contains(out.str(), "abandoned", "and the report says the worker was abandoned");
 }
 
 void
@@ -775,7 +933,7 @@ a_requirement_that_skips_does_not_run_its_case([[maybe_unused]] context& ctx)
 }
 
 void
-a_phase_level_verdict_is_not_reported_as_a_requirement_name(context& ctx)
+a_phase_level_verdict_is_not_reported_as_a_requirement_name([[maybe_unused]] context& ctx)
 {
   // Where the phase itself decides -- a check() that called skip(), or a blown budget -- there is
   // no requirement to name, and the runner substitutes a sentinel. Interpolated into the ordinary
@@ -783,7 +941,8 @@ a_phase_level_verdict_is_not_reported_as_a_requirement_name(context& ctx)
   // act on. The report has to say what happened instead.
   std::ostringstream sink;
   const test_suite s{ "inner", { { "gated", body_fail, { std::make_shared<const skipping>() } } } };
-  const auto r = run(s, {}, ctx, sink);
+  const auto r =
+    run(s, {}, std::make_shared<context>(no_cluster(), std::make_unique<counting_probes>()), sink);
   const auto output = sink.str();
   assert_true(output.find("a requirement check skipped it") != std::string::npos,
               "the line says the phase skipped the case");
@@ -819,7 +978,8 @@ a_storage_backend_the_cluster_would_not_name_is_undetermined([[maybe_unused]] co
   // Not knowing must fail, not skip. Reported as a mismatch this reads "the bucket is unknown, not
   // magma" -- a backend no bucket has -- and turns a cluster that could not answer into an
   // inapplicable case, which is the conflation this framework exists to remove.
-  context probed{ with_cluster(), std::make_unique<silent_backend_probes>() };
+  auto probed =
+    std::make_shared<context>(with_cluster(), std::make_unique<silent_backend_probes>());
   const test_suite s{ "inner", { { "gated", body_pass, { needs::storage_backend("magma") } } } };
   const auto r = run_quiet(s, {}, probed);
   assert_eq(r.failed, std::size_t{ 1 }, "an unreported backend fails its case");
@@ -834,7 +994,7 @@ a_file_local_requirement_needs_no_framework_change([[maybe_unused]] context& ctx
   const test_suite s{
     "inner", { { "even", body_pass, { std::make_shared<const needs_even_replicas>() } } }
   };
-  context probed{ with_cluster(), std::make_unique<counting_probes>() };
+  auto probed = std::make_shared<context>(with_cluster(), std::make_unique<counting_probes>());
   const auto r = run_quiet(s, {}, probed);
   assert_eq(r.skipped, std::size_t{ 1 }, "the custom requirement gates the case");
   assert_eq(r.skipped_by_requirement.count("an even number of replicas"),
@@ -900,6 +1060,137 @@ a_timeout_is_reported_as_such([[maybe_unused]] context& ctx)
   const auto r = run_bare(s);
   assert_eq(r.timed_out, std::size_t{ 1 }, "the timeout is flagged separately");
   assert_eq(r.failed, std::size_t{ 1 }, "and still counted as a failure");
+}
+
+void
+an_abandoned_worker_is_named_in_the_report([[maybe_unused]] context& ctx)
+{
+  // A detached worker is never killed or joined, so for the rest of the binary it may still be
+  // running and still holding whatever the body held. Reported as a bare "FAILED" it is
+  // indistinguishable from a case that stopped cleanly, and every case after it then competes
+  // with a thread nothing mentions. The requirement budget
+  // abandons a worker the same way, and says so on the case that already exercises it.
+  //
+  // Both of these are ordinary locals, which is the point. The worker this case abandons owns a
+  // share of the context and its own copy of the case, so neither has to outlive this scope by
+  // hand.
+  const test_suite suite{ "inner", { { "t", body_sleep, {}, std::chrono::milliseconds{ 20 } } } };
+  std::ostringstream out;
+  const auto r = run(
+    suite, {}, std::make_shared<context>(no_cluster(), std::make_unique<counting_probes>()), out);
+  assert_contains(out.str(), "abandoned", "a case that blows its budget says so");
+  assert_contains(abandoned_workers_note(r), "abandoned workers: 1", "the summary counts them");
+  assert_contains(
+    abandoned_workers_note(r), "_Exit", "and says why the process cannot destroy anything");
+}
+
+// Shared by the two cases below, which differ only in which worker they abandon -- one blocked in
+// a case body, the other in requirement::check(). Called while that worker is still blocked: the
+// context it was given has to be alive, because nothing else owns one. Releasing the worker and
+// waiting for it to finish is then what destroys the context, since the share it holds is the
+// last.
+void
+assert_the_worker_owns_its_context(worker_gate& gate,
+                                   const std::shared_ptr<std::atomic<bool>>& context_destroyed)
+{
+  // Observed, released and drained before anything is asserted. An assertion throws, and throwing
+  // here would leave the worker blocked on a gate nothing will release: the case would end with a
+  // thread parked on a namespace-scope condition variable, which the process is free to destroy
+  // underneath it. The regression path is exactly the path that assertion takes, so it is the one
+  // that must not be left in that state.
+  const auto owned_after_run = !context_destroyed->load();
+
+  gate.release();
+  const auto worker_finished = gate.await_finished();
+
+  // The worker reports that it finished from inside its body, and the share it holds goes only
+  // when it returns, so the release of the context is polled rather than read once.
+  const auto deadline = std::chrono::steady_clock::now() + worker_gate::budget;
+  while (!context_destroyed->load() && std::chrono::steady_clock::now() < deadline) {
+    std::this_thread::sleep_for(std::chrono::milliseconds{ 1 });
+  }
+  const auto released_at_the_end = context_destroyed->load();
+
+  assert_true(owned_after_run,
+              "an abandoned worker still owns its context after run() has returned");
+  assert_true(worker_finished, "the worker reaches the end of its body once it is released");
+  assert_true(released_at_the_end, "and releases it when it finishes, holding nothing after");
+}
+
+void
+an_abandoned_worker_owns_what_it_was_given([[maybe_unused]] context& ctx)
+{
+  // A worker the runner abandons outlives the call that started it, so it cannot borrow what the
+  // caller owns. Here the caller keeps nothing: the context is a temporary argument, and a runner
+  // that handed it to the worker by reference would destroy it as run() returns, with the worker
+  // still inside the body. The flag the probes carry is what makes that observable on a build
+  // without a sanitizer.
+  auto context_destroyed = std::make_shared<std::atomic<bool>>(false);
+  std::size_t timed_out{ 0 };
+  {
+    const test_suite suite{
+      "inner", { { "t", body_blocks_until_released, {}, std::chrono::milliseconds{ 20 } } }
+    };
+    std::ostringstream out;
+    const auto r = run(suite,
+                       {},
+                       std::make_shared<context>(
+                         no_cluster(), std::make_unique<witnessed_probes>(context_destroyed)),
+                       out);
+    timed_out = r.timed_out;
+  }
+  // Nothing is asserted while a worker is still blocked: the helper releases and drains it, and
+  // every assertion, this one included, comes after that.
+  assert_the_worker_owns_its_context(body_worker_gate, context_destroyed);
+  assert_eq(timed_out, std::size_t{ 1 }, "the blocked case blew its budget");
+}
+
+void
+an_abandoned_requirement_worker_owns_what_it_was_given([[maybe_unused]] context& ctx)
+{
+  // The requirement phase runs on a worker of its own, detached on its own budget, and captures
+  // the case and the context separately from the one above. A case that only blocks in a body
+  // leaves this capture untested, so it gets its own.
+  auto context_destroyed = std::make_shared<std::atomic<bool>>(false);
+  auto requirement_destroyed = std::make_shared<std::atomic<bool>>(false);
+  std::size_t timed_out{ 0 };
+  {
+    auto config = no_cluster();
+    config.requirement_budget = std::chrono::milliseconds{ 20 };
+    const test_suite suite{
+      "inner",
+      { { "blocked",
+          body_pass,
+          { std::make_shared<const blocks_until_released>(requirement_destroyed) } } }
+    };
+    std::ostringstream out;
+    const auto r =
+      run(suite,
+          {},
+          std::make_shared<context>(config, std::make_unique<witnessed_probes>(context_destroyed)),
+          out);
+    timed_out = r.timed_out;
+  }
+  // Read before the worker is released, for the same reason the helper reads its own observation
+  // first: the assertions come after the drain.
+  const auto requirement_alive_after_run = !requirement_destroyed->load();
+
+  assert_the_worker_owns_its_context(requirement_worker_gate, context_destroyed);
+  assert_true(requirement_alive_after_run,
+              "and the requirement it is still executing, which only the copied case keeps alive");
+  assert_eq(timed_out, std::size_t{ 1 }, "the blocked requirement blew its budget");
+}
+
+void
+a_run_without_a_timeout_says_nothing_about_abandoned_workers([[maybe_unused]] context& ctx)
+{
+  // main() prints the note inside the timed_out guard that decides the _Exit, so a run that
+  // abandoned nothing must produce none. The guard is what keeps a clean run on the normal
+  // exit path: an unconditional _Exit would also suppress LeakSanitizer's atexit report.
+  const test_suite s{ "inner", { { "t", body_pass, {}, timeout::fast } } };
+  const auto r = run_bare(s);
+  assert_eq(r.timed_out, std::size_t{ 0 }, "nothing timed out");
+  assert_true(abandoned_workers_note(r).empty(), "so there is no note to print");
 }
 
 void
@@ -1539,6 +1830,7 @@ tests() -> test_suite
       { CASE(one_unanswerable_question_does_not_speak_for_the_others) },
       { CASE(the_context_is_released_before_the_suite_teardown_runs) },
       { CASE(a_suite_with_no_teardown_still_releases_its_context) },
+      { CASE(teardown_refuses_to_release_a_context_something_else_still_owns) },
       { CASE(a_requirement_that_blocks_fails_its_case_rather_than_the_run), {}, timeout::fast },
       { CASE(a_requirement_that_throws_fails_its_case) },
       { CASE(a_requirement_that_skips_does_not_run_its_case) },
@@ -1552,6 +1844,10 @@ tests() -> test_suite
       { CASE(a_filter_name_matching_nothing_fails) },
       { CASE(a_suite_that_runs_nothing_does_not_pass) },
       { CASE(a_timeout_is_reported_as_such), {}, timeout::fast },
+      { CASE(an_abandoned_worker_is_named_in_the_report), {}, timeout::fast },
+      { CASE(an_abandoned_worker_owns_what_it_was_given), {}, timeout::slow },
+      { CASE(an_abandoned_requirement_worker_owns_what_it_was_given), {}, timeout::slow },
+      { CASE(a_run_without_a_timeout_says_nothing_about_abandoned_workers), {}, timeout::fast },
       { CASE(case_names_covers_slow_cases_and_ignores_the_environment) },
       { CASE(list_output_carries_the_requirements_after_a_tab) },
       { CASE(timeout_multiplier_defaults_to_one_and_rejects_anything_but_a_number) },

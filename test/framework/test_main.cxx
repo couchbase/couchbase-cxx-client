@@ -76,12 +76,14 @@ main(int argc, char* argv[]) -> int
     return 1;
   }
 
-  // Owned rather than scoped, because when the run ends decides what may still be alive: the
-  // context has to outlive a detached worker on the timeout path below, and be gone before the
-  // suite's teardown hook on every other one.
-  auto ctx = std::make_unique<context>(std::move(config));
+  // Shared, because a worker the run detached owns the context for as long as it is still inside
+  // the phase it was detached from -- a case body, or requirement::check(), which the runner
+  // detaches separately -- and nothing can join either to find out when that is. This share is
+  // the last one on every path that reaches the teardown below; tear_down() checks that rather
+  // than trusting it.
+  auto ctx = std::make_shared<context>(std::move(config));
 
-  const auto result = run(suite, filter, *ctx, std::cout);
+  const auto result = run(suite, filter, ctx, std::cout);
 
   // Grouped, because the count alone is what lets a predicate that is permanently false in CI go
   // unnoticed: 37 skipped reads the same whether the environment lacked one thing or everything.
@@ -110,13 +112,15 @@ main(int argc, char* argv[]) -> int
       "Suite \"{}\": {} passed, {} skipped\n", suite.name, result.passed, result.skipped);
   }
 
-  // A timed-out case leaves its worker detached and still running. Returning from main would run
+  // A timed-out case leaves its worker detached, and nothing joins it, so it may still be
+  // running. Returning from main would run
   // static destructors underneath it -- tearing down spdlog's registry, std::cout and any gRPC
   // channel the body still holds -- which surfaces as a nondeterministic abort at exit, exactly
   // what the timeout runner exists to prevent. Leave immediately instead, destroying nothing and
   // calling no hook: that worker may still be inside either. Conditional on purpose: an
   // unconditional _Exit would also suppress LeakSanitizer's atexit report.
   if (result.timed_out > 0) {
+    std::cout << abandoned_workers_note(result);
     std::cout.flush();
     std::_Exit(exit_code(result));
   }
