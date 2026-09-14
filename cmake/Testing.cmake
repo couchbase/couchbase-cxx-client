@@ -57,9 +57,9 @@ macro(integration_test name)
             $<BUILD_INTERFACE:Microsoft.GSL::GSL>
             $<BUILD_INTERFACE:taocpp::json>
             test_utils)
-  if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND WIN32)
+  if(COUCHBASE_CXX_CLIENT_STATIC_AWSLC AND WIN32)
     # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings, as we don't (atm) keep track fo the
-    # *.PDB from the BoringSSL build
+    # *.PDB from the AWS-LC build
     set_target_properties(test_integration_${name} PROPERTIES LINK_FLAGS "/ignore:4099")
   endif()
   set(_catch_extra_args "")
@@ -105,9 +105,9 @@ macro(transaction_test name)
             $<BUILD_INTERFACE:taocpp::json>
             ${couchbase_cxx_client_DEFAULT_LIBRARY}
             test_utils)
-  if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND WIN32)
+  if(COUCHBASE_CXX_CLIENT_STATIC_AWSLC AND WIN32)
     # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings, as we don't (atm) keep track fo the
-    # *.PDB from the BoringSSL build
+    # *.PDB from the AWS-LC build
     set_target_properties(test_transaction_${name} PROPERTIES LINK_FLAGS "/ignore:4099")
   endif()
   set(_catch_extra_args "")
@@ -152,9 +152,9 @@ macro(unit_test name)
             $<BUILD_INTERFACE:taocpp::json>
             ${couchbase_cxx_client_DEFAULT_LIBRARY}
             test_utils)
-  if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND WIN32)
+  if(COUCHBASE_CXX_CLIENT_STATIC_AWSLC AND WIN32)
     # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings, as we don't (atm) keep track fo the
-    # *.PDB from the BoringSSL build
+    # *.PDB from the AWS-LC build
     set_target_properties(test_unit_${name} PROPERTIES LINK_FLAGS "/ignore:4099")
   endif()
   set(_catch_extra_args "")
@@ -200,9 +200,9 @@ macro(integration_benchmark name)
             $<BUILD_INTERFACE:taocpp::json>
             ${couchbase_cxx_client_DEFAULT_LIBRARY}
             test_utils)
-  if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND WIN32)
+  if(COUCHBASE_CXX_CLIENT_STATIC_AWSLC AND WIN32)
     # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings, as we don't (atm) keep track fo the
-    # *.PDB from the BoringSSL build
+    # *.PDB from the AWS-LC build
     set_target_properties(benchmark_integration_${name} PROPERTIES LINK_FLAGS "/ignore:4099")
   endif()
   catch_discover_tests(
@@ -220,7 +220,7 @@ target_link_libraries(test_main PUBLIC Catch2::Catch2 OpenSSL::SSL)
 target_include_directories(test_main PRIVATE ${PROJECT_SOURCE_DIR} ${PROJECT_BINARY_DIR}/generated
                                              ${PROJECT_BINARY_DIR}/generated_$<CONFIG>)
 
-if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND WIN32)
+if(COUCHBASE_CXX_CLIENT_STATIC_AWSLC AND WIN32)
   set_target_properties(test_main PROPERTIES LINK_FLAGS "/ignore:4099")
 endif()
 

@@ -11,8 +11,8 @@
 # error under AUTO too, for the reason given at the protobuf floor below.
 #
 # The packages need OFF, which COUCHBASE_CXX_CLIENT_PACKAGE_BUILD selects: the platform's gRPC is
-# linked against the platform's OpenSSL, while this project links BoringSSL statically
-# (COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL), so shipping it would put two TLS stacks in one address
+# linked against the platform's OpenSSL, while this project links AWS-LC statically
+# (COUCHBASE_CXX_CLIENT_STATIC_AWSLC), so shipping it would put two TLS stacks in one address
 # space. A source build also decouples the artefact from the distribution's protobuf version: the
 # .proto schemas use proto3 "optional", whose has_*() accessors protobuf only emits from 3.15.
 #
@@ -197,7 +197,7 @@ if(NOT gRPC_FOUND)
     "third_party/zlib"
   )
 
-  # If the project already has BoringSSL targets (from cmake/OpenSSL.cmake),
+  # If the project already has AWS-LC targets (from cmake/OpenSSL.cmake),
   # reuse them instead of letting gRPC build a second copy.
   if(TARGET ssl AND TARGET crypto)
     # Pre-set gRPC's internal SSL variables so ssl.cmake can be skipped
@@ -215,7 +215,7 @@ if(NOT gRPC_FOUND)
     set(_gRPC_SSL_LIBRARIES PkgConfig::PKG_CONFIG_OPENSSL CACHE INTERNAL "")
     set(gRPC_SSL_PROVIDER "" CACHE STRING "" FORCE)
   else()
-    # No project-provided BoringSSL or pkg-config OpenSSL; point gRPC at the OpenSSL package.
+    # No project-provided AWS-LC or pkg-config OpenSSL; point gRPC at the OpenSSL package.
     find_package(OpenSSL REQUIRED)
     set(gRPC_SSL_PROVIDER "package" CACHE STRING "" FORCE)
   endif()
@@ -459,7 +459,7 @@ endif()
 # core/protostellar/*.cxx and must keep full warnings on its own code, so the fix belongs on the
 # dependency: mark the interface include directories SYSTEM, exactly as is done for spdlog.
 #
-# Marking gRPC::grpc++ is sufficient and abseil/protobuf/boringssl need no separate handling --
+# Marking gRPC::grpc++ is sufficient and abseil/protobuf/awslc need no separate handling --
 # both clang and gcc propagate system-ness down the include stack, so a header reached from a system
 # header is itself treated as one. Verified: with grpc-src/include as -I, <grpcpp/grpcpp.h> emits 26
 # errors across grpcpp and abseil-cpp; with it as -isystem and every other third-party directory

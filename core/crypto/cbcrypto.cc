@@ -21,6 +21,16 @@
 #include <memory>
 #include <stdexcept>
 
+// openssl/evp.h reaches <algorithm> through openssl/span.h, and a standard library header
+// cannot be included inside a namespace. Only the non-MSVC, non-Apple branch of namespace
+// internal below uses these headers; they are included here, at file scope, for that branch.
+#if !defined(_MSC_VER) && !defined(__APPLE__)
+#include "include_ssl/evp.h"
+#include "include_ssl/hmac.h"
+#include "include_ssl/md5.h"
+#include "include_ssl/sha.h"
+#endif
+
 namespace internal
 {
 
@@ -589,11 +599,6 @@ decrypt(const couchbase::core::crypto::Cipher cipher,
 
 #else
 
-#include "include_ssl/evp.h"
-#include "include_ssl/hmac.h"
-#include "include_ssl/md5.h"
-#include "include_ssl/sha.h"
-
 // OpenSSL
 
 auto
@@ -602,7 +607,7 @@ HMAC_SHA1(std::string_view key, std::string_view data) -> std::string
   std::string ret;
   ret.resize(couchbase::core::crypto::SHA1_DIGEST_SIZE);
 
-#ifdef COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL
+#ifdef COUCHBASE_CXX_CLIENT_STATIC_AWSLC
   auto key_size = key.size();
 #else
   auto key_size = static_cast<int>(key.size());
@@ -625,7 +630,7 @@ HMAC_SHA256(std::string_view key, std::string_view data) -> std::string
 {
   std::string ret;
   ret.resize(couchbase::core::crypto::SHA256_DIGEST_SIZE);
-#ifdef COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL
+#ifdef COUCHBASE_CXX_CLIENT_STATIC_AWSLC
   auto key_size = key.size();
 #else
   auto key_size = static_cast<int>(key.size());
@@ -647,7 +652,7 @@ HMAC_SHA512(std::string_view key, std::string_view data) -> std::string
 {
   std::string ret;
   ret.resize(couchbase::core::crypto::SHA512_DIGEST_SIZE);
-#ifdef COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL
+#ifdef COUCHBASE_CXX_CLIENT_STATIC_AWSLC
   auto key_size = key.size();
 #else
   auto key_size = static_cast<int>(key.size());
@@ -671,7 +676,7 @@ PBKDF2_HMAC_SHA1(const std::string& pass,
 {
   std::string ret;
   ret.resize(couchbase::core::crypto::SHA1_DIGEST_SIZE);
-#ifdef COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL
+#ifdef COUCHBASE_CXX_CLIENT_STATIC_AWSLC
   auto pw_size = pass.size();
   auto salt_size = salt.size();
   auto iteration_count = iterationCount;
@@ -705,7 +710,7 @@ PBKDF2_HMAC_SHA256(const std::string& pass,
 {
   std::string ret;
   ret.resize(couchbase::core::crypto::SHA256_DIGEST_SIZE);
-#ifdef COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL
+#ifdef COUCHBASE_CXX_CLIENT_STATIC_AWSLC
   auto pw_size = pass.size();
   auto salt_size = salt.size();
   auto iteration_count = iterationCount;
@@ -738,7 +743,7 @@ PBKDF2_HMAC_SHA512(const std::string& pass,
 {
   std::string ret;
   ret.resize(couchbase::core::crypto::SHA512_DIGEST_SIZE);
-#ifdef COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL
+#ifdef COUCHBASE_CXX_CLIENT_STATIC_AWSLC
   auto pw_size = pass.size();
   auto salt_size = salt.size();
   auto iteration_count = iterationCount;
@@ -830,7 +835,7 @@ getCipher(const couchbase::core::crypto::Cipher cipher,
     throw std::invalid_argument("couchbase::core::crypto::getCipher: Unknown Cipher " +
                                 std::to_string(static_cast<int>(cipher)));
   }
-#ifdef COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL
+#ifdef COUCHBASE_CXX_CLIENT_STATIC_AWSLC
   auto key_size = key.size();
   auto iv_size = iv.size();
 #else

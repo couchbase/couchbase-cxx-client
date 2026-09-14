@@ -1,0 +1,123 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+#  Copyright 2026. Couchbase, Inc.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+
+# Reports TLS symbols that the shared library exports under their C names.
+#
+# A statically linked TLS library must not reach the shared library's dynamic symbol table. AWS-LC
+# annotates every public function OPENSSL_EXPORT, and in a static build that expands to
+# visibility("default") on every platform except Windows (include/openssl/base.h), which
+# CMAKE_C_VISIBILITY_PRESET cannot override. The whole OpenSSL name set is then exported, and a
+# process that also loads a gRPC or libcurl bound to the platform OpenSSL holds two implementations
+# under one set of names: calls bind across them and crash on first use. BoringSSL defined the macro
+# empty for a static build, so nothing here needed the guard before.
+#
+#   ./bin/check-exported-symbols [build-dir]
+#
+# Exit 0 when the library exports no TLS name, or when the configuration builds no shared library.
+# Exit 1 when names are exported -- CMakeLists.txt hides them per platform at the link step.
+# Exit 2 when the answer could not be determined, which is not the same as a clean result.
+
+BUILD = ARGV[0] || "cmake-build-tests"
+
+# Anchored to this script rather than to the caller's cwd, and shared with cmake/OpenSSL.cmake so
+# the Apple linker hides exactly the names this reports.
+PREFIX_FILE = File.expand_path("../cmake/tls_symbol_prefixes.txt", __dir__)
+
+def bail(message)
+  warn "check-exported-symbols: #{message}"
+  exit 2
+end
+
+def which(name)
+  ENV.fetch("PATH", "").split(File::PATH_SEPARATOR).each do |dir|
+    path = File.join(dir, name)
+    return path if File.executable?(path) && !File.directory?(path)
+  end
+  nil
+end
+
+bail("build directory #{BUILD.inspect} does not exist") unless File.directory?(BUILD)
+bail("#{PREFIX_FILE} is missing") unless File.file?(PREFIX_FILE)
+
+# An empty list would report every library clean, so it is an error rather than a pass.
+TLS_PREFIXES = File.readlines(PREFIX_FILE, chomp: true)
+                   .reject { |line| line.empty? || line.start_with?("#") }
+                   .freeze
+bail("#{PREFIX_FILE} lists no prefixes") if TLS_PREFIXES.empty?
+
+# The extension, not the platform: a cross build names the object format, and Ruby's host does not.
+patterns = ["libcouchbase_cxx_client.so.*", "libcouchbase_cxx_client.*.dylib",
+            "couchbase_cxx_client.dll", "libcouchbase_cxx_client.dll"]
+# Resolved and deduplicated rather than filtered on File.symlink?: which of the three names is the
+# real file and which are links to it differs between platforms and generators.
+library = patterns
+          .flat_map { |glob| Dir.glob(File.join(BUILD, "**", glob)) }
+          .map { |path| File.realpath(path) }
+          .uniq
+          .min_by { |path| [path.count(File::SEPARATOR), path.length] }
+
+if library.nil?
+  # Not a failure: COUCHBASE_CXX_CLIENT_BUILD_SHARED=OFF builds only the archive, and an archive is
+  # meant to carry these symbols -- whoever links it resolves them once.
+  puts "skip: no shared library under #{BUILD}, nothing to check"
+  exit 0
+end
+
+if library.end_with?(".dll")
+  # Windows exports only what __declspec(dllexport) or a .def file names, and AWS-LC's static path
+  # defines OPENSSL_EXPORT empty there, so the hazard cannot arise.
+  puts "skip: #{library} is a PE image, which exports nothing by visibility attribute"
+  exit 0
+end
+
+nm = ENV["NM"] || which("nm") || which("llvm-nm")
+bail("no nm on PATH; set NM to one that reads this object format") if nm.nil?
+
+mach_o = library.end_with?(".dylib")
+# -D reads the dynamic table an ELF consumer actually binds against; Mach-O has no equivalent, so
+# external+defined is the closest question there.
+args = mach_o ? ["-g", "--defined-only"] : ["-D", "--defined-only"]
+output = IO.popen([nm, *args, library], err: File::NULL, &:read)
+bail("#{nm} #{args.join(' ')} #{library} failed") unless $?.success?
+
+exported = output.lines.filter_map do |line|
+  # "<addr> <type> <name>" or " <type> <name>" when the address is absent.
+  name = line.split(/\s+/).reject(&:empty?)[-1]
+  next if name.nil?
+
+  # Mach-O prefixes every C symbol with an underscore; ELF does not.
+  mach_o && name.start_with?("_") ? name[1..] : name
+end
+
+bail("#{nm} reported no exported symbols at all for #{library}") if exported.empty?
+
+leaked = exported.select { |name| TLS_PREFIXES.any? { |prefix| name.start_with?(prefix) } }.sort
+
+if leaked.empty?
+  # The total is part of the result: "no TLS names" means nothing without evidence that the table
+  # was read.
+  puts "ok: #{library} exports #{exported.size} symbol(s), none of them a TLS name"
+  exit 0
+end
+
+puts "#{library} exports #{leaked.size} TLS symbol(s) of #{exported.size}:"
+leaked.first(20).each { |name| puts "  #{name}" }
+puts "  ... and #{leaked.size - 20} more" if leaked.size > 20
+puts
+puts "A statically linked TLS library is reaching the dynamic symbol table. Hide it at the link"
+puts "step for this platform in CMakeLists.txt, next to the --exclude-libs already there for ELF."
+exit 1

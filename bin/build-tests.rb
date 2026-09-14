@@ -99,9 +99,9 @@ when /msan|memory/
   CB_CMAKE_EXTRAS << "-DENABLE_SANITIZER_MEMORY=ON"
 end
 
-# BoringSSL ships no hand-written assembly for the Windows ARM64 target, so
-# the crypto sources must be built in the portable C-only mode. The Windows
-# ARM64 CI leg sets CB_OPENSSL_NO_ASM=1 (see .github/workflows/build.yml).
+# CB_OPENSSL_NO_ASM=1, which the Windows ARM64 CI leg sets (see
+# .github/workflows/build.yml), builds the crypto sources in portable C rather
+# than assembly.
 if ENV["CB_OPENSSL_NO_ASM"] == "1"
   CB_CMAKE_EXTRAS << "-DOPENSSL_NO_ASM=1"
 end
@@ -127,7 +127,7 @@ Dir.chdir(BUILD_DIR) do
     # https://cmake.org/cmake/help/latest/variable/CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION.html
     # https://github.com/actions/runner-images/blob/main/images/win/Windows2019-Readme.md#installed-windows-sdks
     # https://github.com/actions/runner-images/blob/main/images/win/Windows2022-Readme.md#installed-windows-sdks
-    CB_CMAKE_EXTRAS << "-DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON" << "-DCMAKE_SYSTEM_VERSION=10.0.20348.0"
+    CB_CMAKE_EXTRAS << "-DCOUCHBASE_CXX_CLIENT_STATIC_AWSLC=ON" << "-DCMAKE_SYSTEM_VERSION=10.0.20348.0"
   else
     CB_CMAKE_EXTRAS << "-DCMAKE_C_COMPILER=#{CB_CC}" << "-DCMAKE_CXX_COMPILER=#{CB_CXX}"
   end

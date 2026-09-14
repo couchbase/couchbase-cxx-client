@@ -56,7 +56,7 @@ namespace couchbase::test
 namespace
 {
 constexpr const char* ssl_lib_id =
-#if defined(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
+#if defined(COUCHBASE_CXX_CLIENT_STATIC_AWSLC)
   "bssl"
 #else
   "ssl"

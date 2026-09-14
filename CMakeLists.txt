@@ -45,7 +45,7 @@ endif()
 
 # On Windows ARM64, MSVC's <winbase.h> defines C++ overloads for the
 # _Interlocked* intrinsics that clash with the intrinsic declarations pulled
-# in transitively (e.g. via asio/BoringSSL), breaking the build. Disabling
+# in transitively (e.g. via asio/AWS-LC), breaking the build. Disabling
 # the C++ overloads restores the plain intrinsic declarations. Match both the
 # native case (CMAKE_SYSTEM_PROCESSOR) and the cross-compile case
 # (-A ARM64 sets CMAKE_GENERATOR_PLATFORM).
@@ -61,9 +61,9 @@ endif()
 # parallelism) this lets a Windows agent saturate its cores. Must be
 # applied at directory scope before ThirdPartyDependencies.cmake so
 # the FetchContent-built dependencies (gRPC, protobuf, abseil, curl,
-# boringssl, ...) inherit it — they are the bulk of the Windows build.
+# awslc, ...) inherit it — they are the bulk of the Windows build.
 #
-# Scoped to C and CXX via COMPILE_LANGUAGE: NASM (used by BoringSSL's
+# Scoped to C and CXX via COMPILE_LANGUAGE: NASM (used by AWS-LC's
 # x86 assembly) and other ASM dialects do not understand /MP and would
 # abort with `nasm.exe ... /MP ... exited with code 1`.
 if(MSVC)
@@ -659,12 +659,12 @@ foreach(TARGET ${couchbase_cxx_client_LIBRARIES})
   endif()
 
   if(NOT COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL)
-    if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
+    if(COUCHBASE_CXX_CLIENT_STATIC_AWSLC)
       if(COUCHBASE_CXX_CLIENT_USE_BORINGSSL_PREFIX)
         target_compile_definitions(${TARGET} PUBLIC BORINGSSL_PREFIX=${COUCHBASE_CXX_CLIENT_BORINGSSL_PREFIX})
       endif()
       if(WIN32 AND NOT CMAKE_MSVC_RUNTIME_LIBRARY)
-        # BoringSSL uses the /MD compile flag, so we need to do the same
+        # AWS-LC uses the /MD compile flag, so we need to do the same
         set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
         message(STATUS "CMAKE_MSVC_RUNTIME_LIBRARY=${CMAKE_MSVC_RUNTIME_LIBRARY}")
       endif()
@@ -672,6 +672,23 @@ foreach(TARGET ${couchbase_cxx_client_LIBRARIES})
         target_link_libraries(${TARGET} PUBLIC ws2_32)
       endif()
       target_link_libraries(${TARGET} PRIVATE $<BUILD_INTERFACE:ssl> $<BUILD_INTERFACE:crypto>)
+      # AWS-LC annotates every public function OPENSSL_EXPORT, and in a static build that expands
+      # to visibility("default") on everything but Windows (include/openssl/base.h), which
+      # CMAKE_C_VISIBILITY_PRESET cannot override. A shared library linking these archives would
+      # re-export the whole OpenSSL name set, and a process that also loads a gRPC linked against
+      # the platform OpenSSL would then hold two implementations under one set of names.
+      # --exclude-libs marks the archives' symbols hidden in the output.
+      get_target_property(_couchbase_target_type ${TARGET} TYPE)
+      if(_couchbase_target_type STREQUAL "SHARED_LIBRARY")
+        if(APPLE)
+          target_link_options(
+            ${TARGET} PRIVATE
+            "LINKER:-unexported_symbols_list,${COUCHBASE_CXX_CLIENT_UNEXPORTED_TLS_SYMBOLS}")
+        elseif(NOT MSVC)
+          target_link_options(${TARGET} PRIVATE "LINKER:--exclude-libs=libssl.a"
+                              "LINKER:--exclude-libs=libcrypto.a")
+        endif()
+      endif()
       target_include_directories(
         ${TARGET} PRIVATE $<BUILD_INTERFACE:$<TARGET_PROPERTY:ssl,INTERFACE_INCLUDE_DIRECTORIES>>
                           $<BUILD_INTERFACE:$<TARGET_PROPERTY:crypto,INTERFACE_INCLUDE_DIRECTORIES>>)
