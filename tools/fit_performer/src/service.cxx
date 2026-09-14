@@ -1590,6 +1590,7 @@ TxnService::performerCapsFetch(grpc::ServerContext* /*context*/,
   response->add_sdk_implementation_caps(protocol::sdk::Caps::SDK_VECTOR_SEARCH_BASE64);
   response->add_sdk_implementation_caps(protocol::sdk::Caps::SDK_SEARCH_SCORE_FUSION);
   response->add_sdk_implementation_caps(protocol::sdk::Caps::SDK_ZONE_AWARE_READ_FROM_REPLICA);
+  response->add_sdk_implementation_caps(protocol::sdk::Caps::SDK_GET_REPLICA);
   response->add_sdk_implementation_caps(protocol::sdk::Caps::SUPPORTS_AUTHENTICATOR);
 #ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
   // Only a build that actually compiled the couchbase2 transport may claim
@@ -2297,6 +2298,16 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
       };
       auto res =
         fit_cxx::commands::key_value::execute_command(collection_cmd.get_any_replica(), cmd_args);
+      batcher->send_result(res);
+    } else if (collection_cmd.has_get_replica()) {
+      auto cmd_args = fit_cxx::commands::key_value::command_args{
+        /* .collection = */ to_collection(conn, collection_cmd.get_replica().location()),
+        /* .key = */ to_key(collection_cmd.get_replica().location()),
+        /* .spans = */ &spans_,
+        /* .return_result = */ return_result,
+      };
+      auto res =
+        fit_cxx::commands::key_value::execute_command(collection_cmd.get_replica(), cmd_args);
       batcher->send_result(res);
     } else if (collection_cmd.has_get_all_replicas()) {
       auto cmd_args = fit_cxx::commands::key_value::command_args{

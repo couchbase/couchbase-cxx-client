@@ -92,6 +92,9 @@ execute_command(const protocol::sdk::kv::Touch& cmd, const command_args& args);
 protocol::run::Result
 execute_command(const protocol::sdk::kv::GetAnyReplica& cmd, const command_args& args);
 
+protocol::run::Result
+execute_command(const protocol::sdk::kv::GetReplica& cmd, const command_args& args);
+
 std::variant<protocol::run::Result, fit_cxx::next_function>
 execute_streaming_command(const protocol::sdk::kv::GetAllReplicas& cmd, const command_args& args);
 
