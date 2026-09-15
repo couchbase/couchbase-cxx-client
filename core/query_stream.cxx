@@ -82,6 +82,8 @@ public:
   [[nodiscard]] virtual auto meta_data() const
     -> std::optional<operations::query_response::query_meta_data> = 0;
   [[nodiscard]] virtual auto error_details() const -> stream_error_details = 0;
+  virtual auto set_deadline(std::chrono::time_point<std::chrono::steady_clock> deadline_tp)
+    -> io::deadline_state = 0;
   virtual void cancel() = 0;
 };
 
@@ -237,6 +239,12 @@ public:
     return error_details_;
   }
 
+  auto set_deadline(std::chrono::time_point<std::chrono::steady_clock> deadline_tp)
+    -> io::deadline_state override
+  {
+    return streamer_.set_deadline(deadline_tp);
+  }
+
   void cancel() override
   {
     streamer_.cancel();
@@ -316,6 +324,14 @@ public:
     return extract_error_details(meta_, {});
   }
 
+  auto set_deadline(std::chrono::time_point<std::chrono::steady_clock> /* deadline_tp */)
+    -> io::deadline_state override
+  {
+    // The prepared-statement path replays a buffered response. There is no socket to reclaim and
+    // next_row() always completes, so a deadline has nothing to bound.
+    return io::deadline_state::body_already_ended;
+  }
+
   void cancel() override
   {
     cancelled_ = true;
@@ -375,6 +391,13 @@ auto
 query_stream::meta_data() const -> std::optional<operations::query_response::query_meta_data>
 {
   return impl_->meta_data();
+}
+
+auto
+query_stream::set_deadline(std::chrono::time_point<std::chrono::steady_clock> deadline_tp)
+  -> io::deadline_state
+{
+  return impl_->set_deadline(deadline_tp);
 }
 
 void

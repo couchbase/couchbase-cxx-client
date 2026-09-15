@@ -382,6 +382,18 @@ http_session::is_stopped() const -> bool
 }
 
 void
+http_session::mark_stopping()
+{
+  stopping_ = true;
+}
+
+auto
+http_session::is_stopping() const -> bool
+{
+  return stopping_;
+}
+
+void
 http_session::write(const std::vector<std::uint8_t>& buf)
 {
   if (stopped_) {
@@ -571,21 +583,27 @@ http_session::read_some(
         std::swap(data, self->current_streaming_response_.parser.body_chunk);
       }
 
+      streaming_response_context ctx{};
       if (res.complete) {
-        streaming_response_context ctx{};
         {
           const std::scoped_lock lock(self->current_response_mutex_);
           std::swap(self->current_streaming_response_, ctx);
-        }
-        if (ctx.stream_end_handler) {
-          ctx.stream_end_handler();
         }
         if (ctx.resp->must_close_connection()) {
           self->keep_alive_ = false;
         }
       }
       lck.unlock();
+      // The stream-end handler checks this connection back into the keep-alive pool, and must not
+      // run until the body has observed the end of its response. Until it does,
+      // http_streaming_response_body_impl still holds this session with reading_complete_ false,
+      // and treats it as a response abandoned mid-body: a deadline expiry reaching close_impl in
+      // that state stops the session. Checking in first publishes the connection while that is
+      // still true, so the stop lands on whichever request took it out of the pool next.
       callback(std::move(data), !res.complete, {});
+      if (ctx.stream_end_handler) {
+        ctx.stream_end_handler();
+      }
     });
 }
 
