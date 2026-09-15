@@ -45,11 +45,20 @@ public:
                                bool reading_complete = false,
                                std::size_t cached_chunk_size = 0);
 
-  void set_deadline(std::chrono::time_point<std::chrono::steady_clock> deadline_tp);
+  // Closes the body with `on_expiry` at `deadline_tp`, whether or not a read is in flight. The
+  // only other timer on the streaming path is the row streamer's inter-read idle timer, and it is
+  // armed only around a pull. A deadline already in the past fires as soon as the io_context runs
+  // it. Re-arming replaces the previous deadline; the body ending first cancels it.
+  void set_deadline(std::chrono::time_point<std::chrono::steady_clock> deadline_tp,
+                    std::error_code on_expiry = couchbase::errc::common::ambiguous_timeout);
   // Delivers the next body chunk. The bool argument is `has_more`: true while the response is
   // still in progress (an empty chunk with has_more==true simply carried no body bytes, e.g. a
   // read consumed by HTTP chunk framing), false once the stream has ended. Consumers must key
   // end-of-stream off this flag, never off an empty data string.
+  //
+  // A truthy error_code is the reason the body was closed, not the error the read itself returned.
+  // read_some reports request_canceled for any aborted read, so a pull outstanding when something
+  // else closes the body would otherwise hide a deadline behind a cancel.
   void next(utils::movable_function<void(std::string, bool, std::error_code)>&& callback);
   void close(std::error_code ec = couchbase::errc::common::request_canceled);
 
