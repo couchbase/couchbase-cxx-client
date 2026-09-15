@@ -31,7 +31,9 @@
 #include <asio/experimental/concurrent_channel.hpp>
 #include <asio/io_context.hpp>
 #include <asio/post.hpp>
+
 #include <asio/steady_timer.hpp>
+#include <chrono>
 
 #include <atomic>
 #include <memory>
@@ -169,6 +171,26 @@ public:
         }
         return;
       });
+  }
+
+  void set_deadline(std::chrono::time_point<std::chrono::steady_clock> deadline_tp)
+  {
+    // The body's timer is not thread-safe and set_deadline is callable from any thread, so arm on
+    // the io_context, where the other body operations run.
+    //
+    // asio::post on a raw io_context does not order handlers across runner threads: with more than
+    // one, two arms can run in either order and the older deadline could win. Take the sequence on
+    // the calling thread and drop an arm that a later call has already superseded.
+    const auto on_expiry = options_.is_read_only
+                             ? std::error_code{ errc::common::unambiguous_timeout }
+                             : std::error_code{ errc::common::ambiguous_timeout };
+    const auto sequence = arm_sequence_.fetch_add(1, std::memory_order_relaxed) + 1;
+    asio::post(io_, [self = shared_from_this(), deadline_tp, on_expiry, sequence]() {
+      if (self->arm_sequence_.load(std::memory_order_relaxed) != sequence) {
+        return;
+      }
+      self->body_.set_deadline(deadline_tp, on_expiry);
+    });
   }
 
   void cancel()
@@ -385,6 +407,8 @@ private:
   utils::movable_function<void(std::string, std::error_code)> metadata_header_handler_{};
   // Bumped on every arm/cancel of the idle timer so a superseded timer completion is ignored.
   std::atomic_uint64_t idle_generation_{ 0 };
+  // Orders concurrent set_deadline calls; see set_deadline.
+  std::atomic_uint64_t arm_sequence_{ 0 };
   std::optional<std::string> metadata_;
   utils::json::streaming_lexer lexer_;
   std::mutex data_feed_mutex_{};
@@ -409,6 +433,12 @@ void
 row_streamer::next_row(utils::movable_function<void(std::string, std::error_code)>&& handler)
 {
   impl_->next_row(std::move(handler));
+}
+
+void
+row_streamer::set_deadline(std::chrono::time_point<std::chrono::steady_clock> deadline_tp)
+{
+  impl_->set_deadline(deadline_tp);
 }
 
 void

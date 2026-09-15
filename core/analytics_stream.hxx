@@ -22,6 +22,7 @@
 #include "stream_error_details.hxx"
 #include "utils/movable_function.hxx"
 
+#include <chrono>
 #include <memory>
 #include <optional>
 #include <string>
@@ -89,6 +90,17 @@ public:
    */
   [[nodiscard]] auto meta_data() const
     -> std::optional<operations::analytics_response::analytics_meta_data>;
+
+  /**
+   * Closes the HTTP body at `deadline_tp` and terminates the stream with a timeout, whether or
+   * not a row is being pulled. The inter-read idle timer is armed only around a pull, so it does
+   * not cover a consumer stopped above the high-water mark.
+   *
+   * Optional: with no deadline set, no timeout is raised. The terminal is unambiguous_timeout for
+   * a read-only request and ambiguous_timeout otherwise. Re-arming replaces the deadline; any
+   * ending of the stream disarms it.
+   */
+  void set_deadline(std::chrono::time_point<std::chrono::steady_clock> deadline_tp);
 
   /**
    * Cancels the stream & closes the HTTP connection.

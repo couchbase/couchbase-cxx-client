@@ -109,6 +109,12 @@ public:
   void next(utils::movable_function<void(std::string, bool, std::error_code)> callback);
   void cancel();
 
+  // Closes the body with `on_expiry` at `deadline_tp`, whether or not a pull is outstanding.
+  // Optional. Without it a consumer that stops pulling holds the socket until the handle is
+  // dropped: row_streamer's idle timer is armed only around a pull.
+  void set_deadline(std::chrono::time_point<std::chrono::steady_clock> deadline_tp,
+                    std::error_code on_expiry = couchbase::errc::common::ambiguous_timeout);
+
 private:
   std::shared_ptr<http_response_impl> impl_;
 };
