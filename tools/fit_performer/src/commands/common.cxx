@@ -170,8 +170,21 @@ convert_error_code(const std::error_code ec, protocol::shared::Exception* except
         cb_exception->set_type(
           protocol::shared::CouchbaseExceptionType::SDK_XATTR_NO_ACCESS_EXCEPTION);
         break;
+      case static_cast<int>(couchbase::errc::key_value::document_not_found_on_replica):
+        cb_exception->set_type(
+          protocol::shared::CouchbaseExceptionType::SDK_DOCUMENT_NOT_FOUND_ON_REPLICA_EXCEPTION);
+        break;
+      case static_cast<int>(couchbase::errc::key_value::replica_index_out_of_bounds):
+        cb_exception->set_type(
+          protocol::shared::CouchbaseExceptionType::SDK_REPLICA_INDEX_OUT_OF_BOUNDS_EXCEPTION);
+        break;
+      case static_cast<int>(couchbase::errc::key_value::replica_index_currently_unavailable):
+        cb_exception->set_type(protocol::shared::CouchbaseExceptionType::
+                                 SDK_REPLICA_INDEX_CURRENTLY_UNAVAILABLE_EXCEPTION);
+        break;
       default:
-        // key_value error_codes 131, 133 and 134 not represented in FIT
+        // No FIT exception type exists for cannot_revive_living_document,
+        // mutation_token_outdated or range_scan_completed.
         cb_exception->set_type(protocol::shared::CouchbaseExceptionType::SDK_COUCHBASE_EXCEPTION);
     }
   }

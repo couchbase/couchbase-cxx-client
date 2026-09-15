@@ -28,8 +28,6 @@ struct s3_external_link;
 
 namespace impl
 {
-struct get_replica_request;
-struct get_replica_response;
 struct lookup_in_replica_request;
 struct lookup_in_replica_response;
 struct observe_seqno_request;
@@ -51,6 +49,8 @@ struct decrement_response;
 struct exists_request;
 struct exists_response;
 struct get_request;
+struct get_replica_request;
+struct get_replica_response;
 struct get_response;
 struct get_all_replicas_request;
 struct get_all_replicas_response;
@@ -106,7 +106,7 @@ using replace_request_with_legacy_durability = impl::with_legacy_durability<repl
 using upsert_request_with_legacy_durability = impl::with_legacy_durability<upsert_request>;
 
 using get_request_with_cancellation = impl::with_cancellation<get_request>;
-using get_replica_request_with_cancellation = impl::with_cancellation<impl::get_replica_request>;
+using get_replica_request_with_cancellation = impl::with_cancellation<get_replica_request>;
 using lookup_in_request_with_cancellation = impl::with_cancellation<lookup_in_request>;
 using lookup_in_replica_request_with_cancellation =
   impl::with_cancellation<impl::lookup_in_replica_request>;

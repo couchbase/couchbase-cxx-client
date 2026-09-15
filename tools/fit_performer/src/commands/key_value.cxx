@@ -378,6 +378,63 @@ to_get_any_replica_options(const protocol::sdk::kv::GetAnyReplica& cmd,
   return opts;
 }
 
+couchbase::get_replica_options
+to_get_replica_options(const protocol::sdk::kv::GetReplica& cmd, observability::span_owner* spans)
+{
+  couchbase::get_replica_options opts{};
+
+  if (!cmd.has_options()) {
+    return opts;
+  }
+
+  if (cmd.options().has_timeout_msecs()) {
+    opts.timeout(std::chrono::milliseconds(cmd.options().timeout_msecs()));
+  }
+#ifdef COUCHBASE_CXX_CLIENT_PUBLIC_API_PARENT_SPAN
+  if (cmd.options().has_parent_span_id()) {
+    opts.parent_span(spans->get_span(cmd.options().parent_span_id()));
+  }
+#else
+  (void)spans;
+#endif
+  return opts;
+}
+
+couchbase::replica_index
+to_replica_index(protocol::sdk::kv::replicas::ReplicaIndex index)
+{
+  switch (index) {
+    case protocol::sdk::kv::replicas::ReplicaIndex::FIRST:
+      return couchbase::replica_index::first;
+    case protocol::sdk::kv::replicas::ReplicaIndex::SECOND:
+      return couchbase::replica_index::second;
+    case protocol::sdk::kv::replicas::ReplicaIndex::THIRD:
+      return couchbase::replica_index::third;
+    default:
+      throw performer_exception::unimplemented(
+        fmt::format("replica index not supported: {}", static_cast<int>(index)));
+  }
+}
+
+couchbase::get_replica_strategy
+to_get_replica_strategy(const protocol::sdk::kv::replicas::GetReplicaStrategy& strategy)
+{
+  switch (strategy.strategy_case()) {
+    case protocol::sdk::kv::replicas::GetReplicaStrategy::kFromIndex: {
+      const auto& from_index = strategy.from_index();
+      couchbase::get_replica_strategy_from_index_options options{};
+      if (from_index.has_options() && from_index.options().has_wrap()) {
+        options.wrap(from_index.options().wrap());
+      }
+      return couchbase::get_replica_strategy::from_index(to_replica_index(from_index.index()),
+                                                         options);
+    }
+    default:
+      throw performer_exception::unimplemented(
+        fmt::format("get replica strategy not supported: {}", strategy.DebugString()));
+  }
+}
+
 couchbase::get_all_replicas_options
 to_get_all_replicas_options(const protocol::sdk::kv::GetAllReplicas& cmd,
                             observability::span_owner* spans)
@@ -1692,6 +1749,35 @@ execute_command(const protocol::sdk::kv::GetAnyReplica& cmd, const command_args&
 
   auto start = std::chrono::high_resolution_clock::now();
   auto [err, res] = collection.get_any_replica(key, options).get();
+  auto end = std::chrono::high_resolution_clock::now();
+  proto_res.set_elapsednanos(std::chrono::nanoseconds(end - start).count());
+
+  if (err.ec()) {
+    common::convert_error(err, proto_res.mutable_sdk()->mutable_exception());
+  } else {
+    if (args.return_result) {
+      from_get_replica_result(
+        res, transcoder, cmd.content_as(), proto_res.mutable_sdk()->mutable_get_replica_result());
+    } else {
+      proto_res.mutable_sdk()->set_success(!res.cas().empty());
+    }
+  }
+  return proto_res;
+}
+
+protocol::run::Result
+execute_command(const protocol::sdk::kv::GetReplica& cmd, const command_args& args)
+{
+  auto proto_res = common::create_new_result();
+
+  auto collection = args.collection;
+  auto key = args.key;
+  auto strategy = to_get_replica_strategy(cmd.strategy());
+  auto options = to_get_replica_options(cmd, args.spans);
+  auto transcoder = common::to_transcoder(cmd);
+
+  auto start = std::chrono::high_resolution_clock::now();
+  auto [err, res] = collection.get_replica(key, strategy, options).get();
   auto end = std::chrono::high_resolution_clock::now();
   proto_res.set_elapsednanos(std::chrono::nanoseconds(end - start).count());
 
