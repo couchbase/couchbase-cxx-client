@@ -31,7 +31,9 @@
 #include <asio/experimental/concurrent_channel.hpp>
 #include <asio/io_context.hpp>
 #include <asio/post.hpp>
+
 #include <asio/steady_timer.hpp>
+#include <chrono>
 
 #include <atomic>
 #include <memory>
@@ -171,19 +173,55 @@ public:
       });
   }
 
+  auto set_deadline(std::chrono::time_point<std::chrono::steady_clock> deadline_tp)
+    -> io::deadline_state
+  {
+    // Held across the check and the arm. Testing the flag and then arming as two steps leaves a
+    // window in which cancel() can run to completion in between, so this thread would install a
+    // deadline on a stream already cancelled and an expiry could report a timeout after it.
+    // cancel() takes the same lock around its own state change and its cancel_deadline(), so the
+    // two orderings are the only ones: arm-then-cancel, which the cancel supersedes, or
+    // cancel-then-arm, which this refuses.
+    const std::scoped_lock<std::mutex> lock{ cancel_mutex_ };
+    if (cancelled_) {
+      return io::deadline_state::body_already_ended;
+    }
+    // Arms on the calling thread: the body serialises arming, cancelling and the terminal
+    // transition under one lock and supersedes an expiry already queued. Not posted, which would
+    // leave the previous deadline installed until the post ran.
+    const auto on_expiry =
+      options_.is_read_only ? io::deadline_terminal::unambiguous : io::deadline_terminal::ambiguous;
+    return body_.set_deadline(deadline_tp, on_expiry);
+  }
+
   void cancel()
   {
-    // Tear the HTTP body (and the socket + timers it owns on the session) down on the io_context
-    // thread, where every other body operation runs. Calling body_.cancel() directly from an
-    // arbitrary caller thread — e.g. the thread dropping the public handle — races the io thread
-    // that may be mid-read and corrupts non-thread-safe session state. The channel is
-    // thread-safe, so cancel/close it synchronously to unblock a waiting consumer immediately.
+    {
+      // The state change and the supersession are one step, against set_deadline() holding the
+      // same lock across its check and its arm. Recorded on this thread rather than in the posted
+      // teardown: the flag refuses later arms, and cancel_deadline() supersedes one already armed,
+      // which would otherwise stay live until the post ran and could take the body's terminal --
+      // reporting a timeout for a stream the caller had already cancelled. The teardown itself
+      // stays posted because it reaches http_session::stop(), which must not run on a thread that
+      // never runs the io_context.
+      const std::scoped_lock<std::mutex> lock{ cancel_mutex_ };
+      cancelled_ = true;
+      body_.cancel_deadline();
+    }
+    // Tear the HTTP body (and the socket and timers the session owns) down from the io_context
+    // rather than the caller's thread: the public handle may be dropped on any thread, and the
+    // session's state is not safe to touch from one that never runs the io_context. This does not
+    // serialise against a read in flight when more than one thread runs the io_context, which is
+    // a property of http_session rather than of this call. The channel is thread-safe, so
+    // cancel/close it synchronously to unblock a waiting consumer immediately.
     asio::post(io_, [self = shared_from_this()]() {
       // An explicit cancel must win over a racing inter-read idle timer. Cancel the timer,
       // supersede its generation so a completion that is already queued is ignored, and clear
       // timed_out_ so the read abort below is reported as request_canceled rather than being
-      // misclassified as an (un)ambiguous timeout by the read-completion path. Done here, on the io
-      // thread, because the timer is not thread-safe.
+      // misclassified as an (un)ambiguous timeout by the read-completion path. Posted so it runs
+      // on the io_context rather than on the thread dropping the handle; that reaches the session,
+      // which a thread never running the io_context may not touch. It does not serialise against
+      // the other two sites that touch idle_timer_ when more than one thread runs the context.
       self->idle_timer_.cancel();
       self->idle_generation_.fetch_add(1, std::memory_order_relaxed);
       self->timed_out_ = false;
@@ -378,6 +416,10 @@ private:
   std::atomic_bool feeding_{ false };
   std::atomic_bool lexer_completed_{ false };
   std::atomic_bool timed_out_{ false };
+  // Guards the pair below against set_deadline(): the check and the arm, and the state change and
+  // the supersession, each have to be one step or an arm can land on a cancelled stream.
+  std::mutex cancel_mutex_{};
+  bool cancelled_{ false };
   // Guards the one-shot delivery of the preamble handler (see deliver_metadata_header): the stream
   // must resolve start()'s handler on every terminal, even when the lexer never fires its metadata
   // callback (empty body, or a valid-JSON-but-not-an-object root).
@@ -409,6 +451,13 @@ void
 row_streamer::next_row(utils::movable_function<void(std::string, std::error_code)>&& handler)
 {
   impl_->next_row(std::move(handler));
+}
+
+auto
+row_streamer::set_deadline(std::chrono::time_point<std::chrono::steady_clock> deadline_tp)
+  -> io::deadline_state
+{
+  return impl_->set_deadline(deadline_tp);
 }
 
 void

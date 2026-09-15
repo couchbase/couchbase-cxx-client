@@ -94,9 +94,10 @@ public:
 
   // Test-only fault-injection seam extending create_in_memory. The body first hands out `data` (in
   // cached_chunk_size-byte slices, 0 = all at once), then once that is drained:
-  //   * if `stall` is true, the next pull never completes until cancel() is called, at which point
-  //     it delivers request_canceled — this is how the row_streamer idle timer (and its
-  //     read-only-aware timeout classification) is exercised deterministically; otherwise
+  //   * if `stall` is true, the next pull never completes until cancel() or an expired deadline
+  //     fires it, delivering request_canceled or the deadline's error respectively — this is how
+  //     the row_streamer idle timer (and its read-only-aware timeout classification) is exercised
+  //     deterministically; otherwise
   //   * the next pull's terminal carries `terminal_ec` (a simulated mid-stream transport error).
   static auto create_in_memory_faulty(asio::io_context& io,
                                       std::string data,
@@ -108,6 +109,14 @@ public:
   // An empty data string with has_more==true is a valid mid-stream chunk, not the terminal.
   void next(utils::movable_function<void(std::string, bool, std::error_code)> callback);
   void cancel();
+
+  // Closes the body with `on_expiry` at `deadline_tp`, whether or not a pull is outstanding.
+  // Optional.
+  [[nodiscard]] auto set_deadline(std::chrono::time_point<std::chrono::steady_clock> deadline_tp,
+                                  io::deadline_terminal on_expiry) -> io::deadline_state;
+  // See io::http_streaming_response_body::cancel_deadline: supersedes an armed deadline without
+  // ending the body.
+  void cancel_deadline();
 
 private:
   std::shared_ptr<http_response_impl> impl_;

@@ -26,12 +26,25 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <system_error>
 #include <utility>
 
 namespace couchbase::core::io
 {
+auto
+terminal_error_code(deadline_terminal terminal) -> std::error_code
+{
+  switch (terminal) {
+    case deadline_terminal::unambiguous:
+      return errc::common::unambiguous_timeout;
+    case deadline_terminal::ambiguous:
+      break;
+  }
+  return errc::common::ambiguous_timeout;
+}
+
 class http_streaming_response_body_impl
   : public std::enable_shared_from_this<http_streaming_response_body_impl>
 {
@@ -47,21 +60,49 @@ public:
     , reading_complete_{ reading_complete }
     , cached_chunk_size_{ cached_chunk_size }
   {
+    // A response complete before a single read_some is constructed with the session still held:
+    // http_session hands it to the keep-alive pool through its stream-end handler and passes it
+    // here regardless. Nothing further belongs to this message, so a read from that session would
+    // park on a connection serving someone else. Release it here, which also establishes the
+    // invariant next(), close_impl() and set_deadline() each assume: reading_complete_ means no
+    // live session.
+    if (reading_complete_) {
+      session_ = nullptr;
+    }
   }
 
   void close(std::error_code ec)
   {
+    close_impl(ec, std::nullopt);
+  }
+
+  // Closes only if `generation` is still current. The check and the terminal transition share one
+  // lock, so a re-arm or a clean completion cannot land between them.
+  void close_at_deadline(deadline_terminal on_expiry, std::uint64_t generation)
+  {
+    close_impl(terminal_error_code(on_expiry), generation);
+  }
+
+  void close_impl(std::error_code ec, std::optional<std::uint64_t> expect_generation)
+  {
     // session_ and final_ec_ are written here and also mutated on the session's read completion.
     // Those paths can run on different executors once a consumer drives the io_context with more
-    // than one thread: close() is reached off-strand from row_streamer::cancel()'s asio::post and
-    // from the idle-timer completion, while the read completion runs on the session strand. Guard
-    // the shared teardown state with a mutex, and make close() idempotent so a second teardown (a
-    // cancel racing a transport error, say) neither double-stops the session nor overwrites the
-    // first terminal error with a later, less meaningful one.
+    // than one thread: close() is reached off-strand from row_streamer::cancel()'s asio::post, from
+    // the idle-timer completion and from the deadline completion, while the read completion runs on
+    // the session strand. Guard the shared teardown state with a mutex, and make close() idempotent
+    // so a second teardown (a cancel racing a transport error, say) neither double-stops the
+    // session nor overwrites the first terminal error with a later, less meaningful one.
     std::shared_ptr<http_session> to_stop;
     {
       const std::scoped_lock lock{ mutex_ };
-      if (closed_) {
+      if (expect_generation.has_value() && *expect_generation != deadline_generation_) {
+        return;
+      }
+      if (closed_ || (reading_complete_ && cached_data_.empty())) {
+        // Drained is terminal too, the state set_deadline() also refuses. A clean end leaves
+        // closed_ false, so without this a later close() overwrites final_ec_ and a pull after
+        // end-of-stream reports request_canceled. Both clean-end paths disarm the timer, so
+        // returning here leaves none armed.
         return;
       }
       closed_ = true;
@@ -72,10 +113,10 @@ public:
       // (http_session_manager::check_in) — stopping it here would evict a live pooled connection
       // and make the *next* unrelated request on it fail with request_canceled.
       //
-      // The response can be complete before a single read_some: a small body (notably an error
-      // response, whose preamble carries the error and which a consumer therefore cancels rather
-      // than drains) arrives whole in the initial parse, so reading_complete_ is set at
-      // construction while session_ is still held.
+      // The implication holds one way only. http_session::read_some runs that stream-end handler
+      // before it invokes this body's completion, so between those two points the connection is
+      // already pooled while reading_complete_ is still false. A terminal taken in that window
+      // stops a connection that is back in the pool.
       //
       // Hand the session out to be stopped below, then drop our reference. Written as two
       // statements rather than std::exchange because cppcheck's flow analysis mis-models the
@@ -85,6 +126,10 @@ public:
       }
       session_ = nullptr;
       final_ec_ = ec;
+      // Disarm: the wait holds a strong self and would keep this body alive until deadline_tp.
+      // cancel() does not stop a completion already queued, hence the generation bump.
+      deadline_.cancel();
+      ++deadline_generation_;
       // close() is only reached on error/cancel (a clean end sets reading_complete_ instead), so
       // any bytes still buffered from the initial parse belong to an aborted response and must not
       // be handed out as data — drop them so next() surfaces the terminal error, not stale body
@@ -102,7 +147,8 @@ public:
   {
     // Decide what to do under the lock (the state it reads is mutated by close() and by the read
     // completion below), then invoke the callback / start the read outside the lock so neither can
-    // re-enter next() while the mutex is held.
+    // re-enter next() while the mutex is held. deadline_ is touched under the lock: an asio timer
+    // is not thread-safe.
     std::string data;
     bool has_more = false;
     std::error_code deliver_ec;
@@ -130,10 +176,13 @@ public:
         }
         has_more = !reading_complete_ || !cached_data_.empty();
         deliver_now = true;
+        if (!has_more) {
+          deadline_.cancel();
+          ++deadline_generation_;
+        }
       } else if (session_) {
-        // A read is needed. session_ is non-null here: it is cleared only alongside closed_
-        // (handled above) or reading_complete_ (the clean-end case below), so a live session means
-        // the body is still streaming.
+        // A read is needed. session_ is non-null here: it is cleared alongside closed_ and
+        // alongside reading_complete_, so a live session means the body is still streaming.
         to_read = session_;
       } else {
         // No cached data and no live session, and not closed: the body drained cleanly
@@ -149,44 +198,110 @@ public:
                          std::string data, bool has_more, std::error_code ec) mutable {
       if (ec) {
         // Error or cancellation: the connection is left mid-response and is not reusable, so stop
-        // it. close() also records ec in final_ec_ so a later next() (or an upper layer reading
-        // final_ec_) reports the real failure rather than a clean end-of-stream.
+        // it. close() records the terminal in final_ec_, which this callback and any later
+        // next() both report.
         self->close(ec);
-      } else if (!has_more) {
-        // Clean end-of-stream. http_session::read_some has already handed the session back to the
-        // keep-alive pool via its stream-end handler (http_session_manager::check_in), which stops
-        // the connection only when it is not reusable (Connection: close, node gone, etc.). Calling
-        // stop() here would evict an otherwise-reusable connection and defeat keep-alive, adding
-        // avoidable connection churn, so just release our reference and mark the body drained;
-        // subsequent next() calls report end-of-stream via reading_complete_.
+      } else {
         const std::scoped_lock lock{ self->mutex_ };
-        self->reading_complete_ = true;
-        self->session_ = nullptr;
+        if (!has_more) {
+          // Clean end-of-stream. http_session::read_some has already handed the session back to
+          // the keep-alive pool via its stream-end handler (http_session_manager::check_in), which
+          // stops the connection only when it is not reusable (Connection: close, node gone,
+          // etc.). Calling stop() here would evict an otherwise-reusable connection and defeat
+          // keep-alive, adding avoidable connection churn, so just release our reference and mark
+          // the body drained; subsequent next() calls report end-of-stream via reading_complete_.
+          //
+          // Tested ahead of closed_, so a response whose last read succeeded is delivered even
+          // when a terminal was recorded while that read was in flight. This is the rule
+          // close_impl already applies, refusing a close once the body is drained; the read
+          // completion is where drained is established, so the two orders disagree only over the
+          // instant that establishes it. The bytes are the whole remainder of a response the
+          // server completed, and reporting a timeout for one held in hand tells a retry layer
+          // the request may not have applied when it did.
+          self->reading_complete_ = true;
+          self->session_ = nullptr;
+          self->deadline_.cancel();
+          ++self->deadline_generation_;
+          // Drop the terminal a close recorded while this read was in flight. Delivering the read
+          // as a clean end and leaving that terminal in place would contradict it on the next
+          // pull, which tests closed_ first and would report the timeout the body has just
+          // decided against. The body is drained either way -- reading_complete_ with no cached
+          // bytes is the state close_impl and set_deadline already refuse -- so clearing this
+          // reopens nothing.
+          self->closed_ = false;
+          self->final_ec_ = {};
+        } else if (self->closed_) {
+          // Closed while a read that has more to come was completing. Report the recorded terminal
+          // and drop the bytes: they are a fragment of a response that has already ended, and
+          // handing them over with a falsy error_code would report a closed body as still
+          // producing data. row_streamer::cancel closes the row channel itself, so it is a
+          // deadline expiry that reaches here with a consumer still able to receive. The close
+          // has to land between the read completing and this lock, which needs a second thread
+          // running the io_context.
+          ec = self->final_ec_;
+          data.clear();
+          has_more = false;
+        }
+      }
+      if (ec) {
+        // A failed read reports why the body closed, not what the read returned: an abort reports
+        // request_canceled whatever ended the body, and a transport error arriving after a close
+        // would otherwise mask the terminal.
+        ec = self->terminal_error();
       }
       cb(std::move(data), has_more, ec);
     });
   }
 
-  void set_deadline(std::chrono::time_point<std::chrono::steady_clock> deadline_tp)
+  // Supersedes any armed deadline without ending the body. Taken under the same lock as arming
+  // and the terminal transition, so an expiry already queued when the lock is taken is discarded
+  // by the generation check rather than delivered. Lets a caller whose own teardown must be
+  // posted stop the deadline on the calling thread first, so a cancel cannot lose to an expiry
+  // landing in the gap.
+  void cancel_deadline()
   {
+    const std::scoped_lock lock{ mutex_ };
+    deadline_.cancel();
+    ++deadline_generation_;
+  }
+
+  auto set_deadline(std::chrono::time_point<std::chrono::steady_clock> deadline_tp,
+                    deadline_terminal on_expiry) -> deadline_state
+  {
+    const std::scoped_lock lock{ mutex_ };
+    if (closed_ || (reading_complete_ && cached_data_.empty())) {
+      // Drained: nothing left to reclaim. reading_complete_ with cached_data_ still buffered is
+      // not drained, and does take a deadline.
+      return deadline_state::body_already_ended;
+    }
+    const auto generation = ++deadline_generation_;
     deadline_.expires_at(deadline_tp);
-    deadline_.async_wait([self = shared_from_this()](auto ec) {
+    deadline_.async_wait([self = shared_from_this(), on_expiry, generation](auto ec) {
       if (ec == asio::error::operation_aborted) {
         return;
       }
-      self->close(errc::common::ambiguous_timeout);
+      self->close_at_deadline(on_expiry, generation);
     });
+    return deadline_state::armed;
+  }
+
+  [[nodiscard]] auto terminal_error() -> std::error_code
+  {
+    const std::scoped_lock lock{ mutex_ };
+    return final_ec_;
   }
 
 private:
   std::mutex mutex_{};
   // Guarded by mutex_: written from the read completion (session strand) and from close()
   // (off-strand). cached_data_/cached_chunk_size_ are logically single-consumer but are read under
-  // the same lock for uniformity.
+  // the same lock for uniformity. deadline_ is guarded because an asio timer may not be armed and
+  // cancelled concurrently; deadline_generation_ supersedes a queued completion.
   std::shared_ptr<http_session> session_;
   std::string cached_data_;
   std::error_code final_ec_;
   asio::steady_timer deadline_;
+  std::uint64_t deadline_generation_{ 0 };
   bool reading_complete_{ false };
   bool closed_{ false };
   std::size_t cached_chunk_size_{ 0 };
@@ -218,11 +333,18 @@ http_streaming_response_body::close(std::error_code ec)
   impl_->close(ec);
 }
 
-void
+auto
 http_streaming_response_body::set_deadline(
-  std::chrono::time_point<std::chrono::steady_clock> deadline_tp)
+  std::chrono::time_point<std::chrono::steady_clock> deadline_tp,
+  deadline_terminal on_expiry) -> deadline_state
 {
-  impl_->set_deadline(deadline_tp);
+  return impl_->set_deadline(deadline_tp, on_expiry);
+}
+
+void
+http_streaming_response_body::cancel_deadline()
+{
+  return impl_->cancel_deadline();
 }
 
 class http_streaming_response_impl

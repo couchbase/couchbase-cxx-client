@@ -44,10 +44,11 @@ struct row_streamer_options {
   // disables the timer.
   std::chrono::milliseconds idle_timeout{ 0 };
   // Whether the request being streamed is read-only (idempotent). Mirrors the buffered path's
-  // http_command branch: an idle-timeout terminal is reported as unambiguous_timeout for a
-  // read-only request (definitely not applied, safe to retry) and as ambiguous_timeout otherwise
-  // (a mutating query such as UPDATE ... RETURNING may have partially executed, so a retry layer
-  // must not treat it as safe to replay).
+  // http_command branch. It classifies both timeout terminals, the inter-read idle timeout and
+  // the whole-stream deadline: unambiguous_timeout for a read-only request (definitely not
+  // applied, safe to retry) and ambiguous_timeout otherwise (a mutating query such as
+  // UPDATE ... RETURNING may have partially executed, so a retry layer must not treat it as safe
+  // to replay).
   bool is_read_only{ false };
 };
 } // namespace couchbase::core
