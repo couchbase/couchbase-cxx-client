@@ -90,6 +90,12 @@ struct key_value_error_category : std::error_category {
         return "mutation_token_outdated (133)";
       case errc::key_value::range_scan_completed:
         return "range_scan_completed (134)";
+      case errc::key_value::document_not_found_on_replica:
+        return "document_not_found_on_replica (135)";
+      case errc::key_value::replica_index_out_of_bounds:
+        return "replica_index_out_of_bounds (136)";
+      case errc::key_value::replica_index_currently_unavailable:
+        return "replica_index_currently_unavailable (137)";
     }
     return "FIXME: unknown error code (recompile with newer library): couchbase.key_value." +
            std::to_string(ev);

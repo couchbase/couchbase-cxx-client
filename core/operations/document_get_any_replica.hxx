@@ -18,10 +18,10 @@
 #pragma once
 
 #include "core/error_context/key_value.hxx"
-#include "core/impl/get_replica.hxx"
 #include "core/impl/replica_utils.hxx"
 #include "core/impl/with_cancellation.hxx"
 #include "core/operations/document_get.hxx"
+#include "core/operations/document_get_replica.hxx"
 #include "core/operations/operation_traits.hxx"
 #include "core/utils/movable_function.hxx"
 #include "couchbase/error_codes.hxx"
@@ -137,7 +137,7 @@ struct get_any_replica_request {
           if (node.is_replica) {
             document_id replica_id{ id };
             replica_id.node_index(node.index);
-            impl::with_cancellation<impl::get_replica_request> req{
+            impl::with_cancellation<operations::get_replica_request> req{
               {
                 std::move(replica_id),
                 timeout,

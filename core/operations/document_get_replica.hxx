@@ -19,14 +19,19 @@
 
 #include "core/error_context/key_value_error_context.hxx"
 
+#include "core/impl/replica_utils.hxx"
 #include "core/io/mcbp_context.hxx"
 #include "core/io/retry_context.hxx"
+#include "core/operations/operation_traits.hxx"
 #include "core/protocol/client_request.hxx"
 #include "core/protocol/cmd_get_replica.hxx"
 #include "core/public_fwd.hxx"
 #include "core/timeout_defaults.hxx"
+#include "core/utils/movable_function.hxx"
 
-namespace couchbase::core::impl
+#include <couchbase/get_replica_result.hxx>
+
+namespace couchbase::core::operations
 {
 struct get_replica_response {
   key_value_error_context ctx{};
@@ -50,12 +55,34 @@ struct get_replica_request {
   std::uint32_t opaque{};
   io::retry_context<true> retries{};
   std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };
+  /**
+   * Absent for the replica fan-out callers, which pin the replica through
+   * @c id.node_index(). When this is unset resolve_route() returns an empty
+   * optional, declining to route, and the dispatch path falls back to the
+   * vbucket-map routing that honours @c id.node_index().
+   */
+  std::optional<impl::replica_selection> selection{};
 
-  [[nodiscard]] auto encode_to(encoded_request_type& encoded,
-                               core::mcbp_context&& context) const -> std::error_code;
+  /**
+   * Selects the node this request should be sent to, against the topology of
+   * the current attempt. Empty when the request wants the vbucket-map routing
+   * the dispatch path applies to every other request.
+   */
+  [[nodiscard]] auto resolve_route(const topology::configuration& config) const
+    -> std::optional<impl::replica_route_decision>;
+
+  [[nodiscard]] auto encode_to(encoded_request_type& encoded, core::mcbp_context&& context) const
+    -> std::error_code;
 
   [[nodiscard]] auto make_response(key_value_error_context&& ctx,
                                    const encoded_response_type& encoded) const
     -> get_replica_response;
 };
-} // namespace couchbase::core::impl
+
+using movable_get_replica_handler =
+  utils::movable_function<void(couchbase::error, get_replica_result)>;
+
+template<>
+struct resolves_own_route<get_replica_request> : public std::true_type {
+};
+} // namespace couchbase::core::operations
