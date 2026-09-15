@@ -369,6 +369,13 @@ public:
 
   [[nodiscard]] auto channel() const -> const std::shared_ptr<grpc::Channel>&;
 
+  // The io_context this dispatcher bridges gRPC completions onto. Exposed so transport-level
+  // helpers (e.g. the wait_until_ready channel-state poll) can schedule work on the SDK thread.
+  [[nodiscard]] auto io_context() const -> asio::io_context&
+  {
+    return io_;
+  }
+
   // Issue a unary RPC.
   //   invoker(grpc::ClientContext&, Response&, callback) launches the async call, e.g.
   //     stub->async()->Get(&ctx, &request, &response, std::move(callback));
