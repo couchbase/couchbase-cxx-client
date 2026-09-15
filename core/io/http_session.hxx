@@ -112,6 +112,15 @@ public:
   auto keep_alive() const -> bool;
   auto is_stopped() const -> bool;
 
+  // A stop that another object has decided on but not yet executed. It is claimed while that
+  // object holds its own lock and executed after the lock is released, so between the two the
+  // session is still running and still reusable-looking. http_session_manager::check_in tests this
+  // as well as is_stopped(), so a connection already owed a stop is never published to the pool.
+  // A separate flag rather than stopped_: stop() returns early when stopped_ is set, so claiming
+  // through that member would turn the teardown into a no-op.
+  void mark_stopping();
+  [[nodiscard]] auto is_stopping() const -> bool;
+
   template<typename Handler>
   void write_and_subscribe(io::http_request& request, Handler&& handler)
   {
@@ -214,6 +223,7 @@ private:
   std::string user_agent_;
 
   std::atomic_bool stopped_{ false };
+  std::atomic_bool stopping_{ false };
   std::atomic_bool connected_{ false };
   std::atomic_bool keep_alive_{ false };
   std::atomic_bool reading_{ false };
