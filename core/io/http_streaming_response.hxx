@@ -18,6 +18,7 @@
 
 #include <couchbase/error_codes.hxx>
 
+#include "core/io/stream_deadline.hxx"
 #include "core/utils/movable_function.hxx"
 
 #include <asio/steady_timer.hpp>
@@ -31,6 +32,7 @@
 
 namespace couchbase::core::io
 {
+
 class http_session;
 struct http_streaming_parser;
 class http_streaming_response_body_impl;
@@ -45,11 +47,26 @@ public:
                                bool reading_complete = false,
                                std::size_t cached_chunk_size = 0);
 
-  void set_deadline(std::chrono::time_point<std::chrono::steady_clock> deadline_tp);
+  // Closes the body with `on_expiry` at `deadline_tp`, whether or not a read is in flight. A
+  // deadline already in the past fires as soon as the io_context runs it. Re-arming before expiry
+  // replaces the previous deadline. Once the body has ended, by expiry or otherwise, a further
+  // call arms nothing and reports body_already_ended.
+  //
+  // Callable from any thread. Arming, cancelling and the terminal transition share one lock. An
+  // expiry already queued when that lock is taken is superseded, not delivered.
+  [[nodiscard]] auto set_deadline(std::chrono::time_point<std::chrono::steady_clock> deadline_tp,
+                                  deadline_terminal on_expiry) -> deadline_state;
+  // Supersedes an armed deadline without ending the body, under the same lock as set_deadline.
+  // For a caller that must post its own teardown: stopping the deadline here first keeps a cancel
+  // from losing to an expiry that lands before the posted work runs.
+  void cancel_deadline();
   // Delivers the next body chunk. The bool argument is `has_more`: true while the response is
   // still in progress (an empty chunk with has_more==true simply carried no body bytes, e.g. a
   // read consumed by HTTP chunk framing), false once the stream has ended. Consumers must key
   // end-of-stream off this flag, never off an empty data string.
+  //
+  // The error_code next() reports is the reason the body was closed, not the error the read
+  // returned: read_some reports request_canceled for every aborted read.
   void next(utils::movable_function<void(std::string, bool, std::error_code)>&& callback);
   void close(std::error_code ec = couchbase::errc::common::request_canceled);
 

@@ -381,13 +381,25 @@ public:
         session->stop();
       });
     }
-    if (!session->is_stopped()) {
-      // set_idle() arms the idle timer via async_wait — it never calls stop() inline,
-      // so on_stop cannot re-enter sessions_mutex_ here. It must precede publication to
-      // idle_sessions_ so a concurrent check_out's reset_idle() finds a pending timer.
-      session->set_idle(idle_timeout);
-      CB_LOG_DEBUG("{} put HTTP session back to idle connections", session->log_prefix());
+    {
       std::scoped_lock lock(sessions_mutex_);
+      // Both flags are read under sessions_mutex_, the lock on_stop's cleanup also takes. That is
+      // what orders publication against teardown. A stop whose cleanup ran before this acquire
+      // would otherwise leave the session in idle_sessions_ with nothing left to remove it; one
+      // committed after it runs its cleanup behind the publication and removes it there.
+      //
+      // is_stopping() covers a stop decided but not yet executed: a streaming body claims the
+      // session under its own lock and calls stop() after releasing it, so is_stopped() is still
+      // false for the width of that gap. Publishing there would hand a connection to the next
+      // request and stop it underneath that request.
+      if (session->is_stopped() || session->is_stopping()) {
+        return;
+      }
+      // set_idle() arms the idle timer via async_wait and binds the completion to the session
+      // strand — it never calls stop() inline, so on_stop cannot re-enter sessions_mutex_ here.
+      // It must precede publication to idle_sessions_ so a concurrent check_out's reset_idle()
+      // finds a pending timer.
+      session->set_idle(idle_timeout);
       idle_sessions_[type].push_back(session);
       if (auto busy_it = busy_sessions_.find(type); busy_it != busy_sessions_.end()) {
         busy_it->second.remove_if([id = session->id()](const auto& s) -> bool {
@@ -400,6 +412,7 @@ public:
         });
       }
     }
+    CB_LOG_DEBUG("{} put HTTP session back to idle connections", session->log_prefix());
   }
 
   void close()

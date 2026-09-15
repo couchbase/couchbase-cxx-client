@@ -28,6 +28,7 @@
 
 #include <tao/json/value.hpp>
 
+#include <chrono>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -197,6 +198,12 @@ public:
     return error_details_;
   }
 
+  auto set_deadline(std::chrono::time_point<std::chrono::steady_clock> deadline_tp)
+    -> io::deadline_state
+  {
+    return streamer_.set_deadline(deadline_tp);
+  }
+
   void cancel()
   {
     streamer_.cancel();
@@ -251,6 +258,13 @@ analytics_stream::meta_data() const
   -> std::optional<operations::analytics_response::analytics_meta_data>
 {
   return impl_->meta_data();
+}
+
+auto
+analytics_stream::set_deadline(std::chrono::time_point<std::chrono::steady_clock> deadline_tp)
+  -> io::deadline_state
+{
+  return impl_->set_deadline(deadline_tp);
 }
 
 void
