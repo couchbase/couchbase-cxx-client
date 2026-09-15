@@ -41,6 +41,8 @@
 
 #include "framework/test_registry.hxx"
 
+#include "callback_queue_keepalive.hxx"
+
 #include "core/cluster_credentials.hxx"
 #include "core/document_id.hxx"
 #include "core/error_context/key_value.hxx"
@@ -429,7 +431,7 @@ private:
 //
 // The pair is deliberately leaked rather than held in a destructible static: letting it be torn
 // down at exit would run exactly the teardown this avoids, at the least debuggable moment there is.
-class in_process_server
+class in_process_server : private pins_callback_queue
 {
 public:
   in_process_server()

@@ -22,6 +22,30 @@ Getting the cluster-only tests to run means standing up a Couchbase cluster whos
 Gateway is deployed, and pointing the tests at its `couchbase2://` endpoint. The rest of this
 document shows how to do that locally with `cbdinocluster` and `k3d`.
 
+## In-process servers must pin gRPC's callback queue
+
+A case that stands up its own gRPC server creates a `couchbase2://` channel and destroys it when the
+case ends. gRPC serves the C++ callback API from a process-global completion queue whose reference
+count follows the live channels, and destroying the last one shuts that queue down and deletes it
+while its own polling threads are still using it. The process aborts after the case has already
+passed, so `ctest` reports `Subprocess aborted` with no failed assertion:
+
+```
+ref_counted.h:183]  assertion failed: prior > 0
+```
+
+Keeping one channel alive for the whole binary keeps the count above zero and the teardown out of
+the way. So:
+
+- **A class that owns an in-process server derives from `pins_callback_queue`**
+  (`protostellar/callback_queue_keepalive.hxx`). A base subobject is constructed before the derived
+  constructor body, so the queue is pinned before the server is built.
+- **A case that builds a server without such a class calls `pin_callback_queue()` first.**
+
+Either way the file that names `grpc::ServerBuilder` also names one of the two. The race is gRPC's,
+not ours, and is tracked in CXXCBC-1024; pinning keeps it away from tests that exist to cover our
+own transport.
+
 ## Prerequisites
 
 Linux with:

@@ -161,18 +161,12 @@ private:
   service_plan plan_;
 };
 
-class in_process_query_server
+class in_process_query_server : private pins_callback_queue
 {
 public:
   explicit in_process_query_server(service_plan plan = {})
     : service_{ std::move(plan) }
   {
-    // Pin gRPC's process-global callback completion queue for the lifetime of this binary.
-    // Without it, destroying the last channel between cases drives a teardown that races gRPC's
-    // own polling threads and aborts the process (CXXCBC-919). This binary cycles a channel per
-    // case, so it is exactly the shape that trips it.
-    pin_callback_queue();
-
     grpc::ServerBuilder builder;
     builder.RegisterService(&service_);
     server_ = builder.BuildAndStart();

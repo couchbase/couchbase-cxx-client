@@ -28,6 +28,8 @@
 
 #include "framework/test_registry.hxx"
 
+#include "callback_queue_keepalive.hxx"
+
 #include "core/operations.hxx"
 
 #include "core/cluster.hxx"
@@ -116,6 +118,8 @@ non_kv_retry_dispatch_semantics([[maybe_unused]] context& ctx)
 {
   int port = 0;
   retry_query_service service;
+  pin_callback_queue(); // CXXCBC-919: a channel per case cycles gRPC's callback queue
+
   grpc::ServerBuilder builder;
   builder.RegisterService(&service);
   builder.AddListeningPort("127.0.0.1:0", grpc::InsecureServerCredentials(), &port);
@@ -210,6 +214,8 @@ non_kv_retry_budget_exhaustion([[maybe_unused]] context& ctx)
 {
   int port = 0;
   retry_query_service service;
+  pin_callback_queue();
+
   grpc::ServerBuilder builder;
   builder.RegisterService(&service);
   builder.AddListeningPort("127.0.0.1:0", grpc::InsecureServerCredentials(), &port);
@@ -292,6 +298,8 @@ closing_the_cluster_during_a_non_kv_backoff_still_answers([[maybe_unused]] conte
 {
   int port = 0;
   retry_query_service service;
+  pin_callback_queue();
+
   grpc::ServerBuilder builder;
   builder.RegisterService(&service);
   builder.AddListeningPort("127.0.0.1:0", grpc::InsecureServerCredentials(), &port);
@@ -393,6 +401,8 @@ custom_retry_strategy_rejects_non_kv([[maybe_unused]] context& ctx)
 {
   int port = 0;
   retry_query_service service;
+  pin_callback_queue();
+
   grpc::ServerBuilder builder;
   builder.RegisterService(&service);
   builder.AddListeningPort("127.0.0.1:0", grpc::InsecureServerCredentials(), &port);

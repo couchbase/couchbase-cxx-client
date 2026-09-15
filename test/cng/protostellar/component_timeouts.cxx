@@ -29,6 +29,8 @@
 
 #include "framework/test_registry.hxx"
 
+#include "callback_queue_keepalive.hxx"
+
 #include "core/operations.hxx"
 
 #include "core/cluster.hxx"
@@ -209,6 +211,8 @@ observed_budget_for(Request request) -> std::int64_t
 {
   int port = 0;
   deadline_recording_kv_service service;
+  pin_callback_queue(); // CXXCBC-919: a channel per case cycles gRPC's callback queue
+
   grpc::ServerBuilder builder;
   builder.RegisterService(&service);
   builder.AddListeningPort("127.0.0.1:0", grpc::InsecureServerCredentials(), &port);

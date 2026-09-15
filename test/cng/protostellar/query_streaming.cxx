@@ -22,6 +22,8 @@
 
 #include "framework/test_registry.hxx"
 
+#include "callback_queue_keepalive.hxx"
+
 #include "core/cluster_credentials.hxx"
 #include "core/operations/document_analytics.hxx"
 #include "core/operations/document_query.hxx"
@@ -109,7 +111,7 @@ public:
   }
 };
 
-class in_process_query_server
+class in_process_query_server : private pins_callback_queue
 {
 public:
   in_process_query_server()
@@ -385,7 +387,7 @@ public:
   }
 };
 
-class in_process_analytics_server
+class in_process_analytics_server : private pins_callback_queue
 {
 public:
   in_process_analytics_server()

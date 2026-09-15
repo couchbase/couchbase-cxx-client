@@ -136,4 +136,17 @@ pin_callback_queue()
   static const callback_queue_keepalive keepalive{};
 }
 
+// Base for a holder that stands up an in-process gRPC server. A base subobject is constructed
+// before the derived constructor body runs, so deriving from this pins the queue before the server
+// is built -- the ordering does not depend on where a call is written, or on remembering to write
+// one. Every such holder in these tests derives from it; see test/cng/README.md.
+class pins_callback_queue
+{
+protected:
+  pins_callback_queue()
+  {
+    pin_callback_queue();
+  }
+};
+
 } // namespace couchbase::test

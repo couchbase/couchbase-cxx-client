@@ -25,6 +25,8 @@
 
 #include "framework/test_registry.hxx"
 
+#include "callback_queue_keepalive.hxx"
+
 #include "core/operations.hxx"
 
 #include "core/cluster.hxx"
@@ -161,6 +163,8 @@ a_retried_kv_operation_stays_within_its_budget([[maybe_unused]] context& ctx)
 {
   int port = 0;
   stalling_kv_service service;
+  pin_callback_queue(); // CXXCBC-919: a channel per case cycles gRPC's callback queue
+
   grpc::ServerBuilder builder;
   builder.RegisterService(&service);
   builder.AddListeningPort("127.0.0.1:0", grpc::InsecureServerCredentials(), &port);
@@ -255,6 +259,8 @@ an_operation_without_a_timeout_is_bounded_by_the_cluster_default([[maybe_unused]
 {
   int port = 0;
   unavailable_kv_service service;
+  pin_callback_queue();
+
   grpc::ServerBuilder builder;
   builder.RegisterService(&service);
   builder.AddListeningPort("127.0.0.1:0", grpc::InsecureServerCredentials(), &port);
@@ -332,6 +338,8 @@ a_retried_operation_reports_its_attempts_and_reasons([[maybe_unused]] context& c
 {
   int port = 0;
   flaky_kv_service service{ 2 };
+  pin_callback_queue();
+
   grpc::ServerBuilder builder;
   builder.RegisterService(&service);
   builder.AddListeningPort("127.0.0.1:0", grpc::InsecureServerCredentials(), &port);
@@ -399,6 +407,8 @@ a_retried_mutation_that_runs_out_of_budget_is_ambiguous([[maybe_unused]] context
 {
   int port = 0;
   unavailable_kv_service service;
+  pin_callback_queue();
+
   grpc::ServerBuilder builder;
   builder.RegisterService(&service);
   builder.AddListeningPort("127.0.0.1:0", grpc::InsecureServerCredentials(), &port);
@@ -472,6 +482,8 @@ closing_the_cluster_during_a_backoff_still_answers([[maybe_unused]] context& ctx
 {
   int port = 0;
   unavailable_kv_service service;
+  pin_callback_queue();
+
   grpc::ServerBuilder builder;
   builder.RegisterService(&service);
   builder.AddListeningPort("127.0.0.1:0", grpc::InsecureServerCredentials(), &port);

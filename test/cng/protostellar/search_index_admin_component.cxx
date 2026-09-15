@@ -167,16 +167,11 @@ public:
   }
 };
 
-class in_process_server
+class in_process_server : private pins_callback_queue
 {
 public:
   in_process_server()
   {
-    // Pin gRPC's process-global callback completion queue for the lifetime of this binary, for the
-    // reason component.cxx gives: destroying the last channel between cases otherwise races
-    // gRPC's polling threads and aborts the process (CXXCBC-919).
-    pin_callback_queue();
-
     grpc::ServerBuilder builder;
     builder.RegisterService(&service_);
     server_ = builder.BuildAndStart();

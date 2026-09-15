@@ -81,17 +81,12 @@ private:
 };
 
 // Owns an in-process gRPC server and hands out channels to it.
-class in_process_server
+class in_process_server : private pins_callback_queue
 {
 public:
   explicit in_process_server(std::chrono::milliseconds delay)
     : service_{ delay }
   {
-    // Pin gRPC's process-global callback completion queue for the lifetime of this binary.
-    // Without it, destroying the last channel between cases drives a teardown that races
-    // gRPC's own polling threads and aborts the process (CXXCBC-919).
-    pin_callback_queue();
-
     grpc::ServerBuilder builder;
     builder.RegisterService(&service_);
     server_ = builder.BuildAndStart();
