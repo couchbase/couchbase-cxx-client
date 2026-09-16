@@ -265,6 +265,29 @@ is_initialized() -> bool
   return get_file_logger() != nullptr;
 }
 
+namespace
+{
+std::atomic<bool> log_redaction_enabled{ false };
+} // namespace
+
+void
+set_log_redaction(bool enable)
+{
+  const auto was_enabled = log_redaction_enabled.exchange(enable, std::memory_order_relaxed);
+  if (enable && !was_enabled) {
+    CB_LOG_INFO_RAW(
+      "Log redaction enabled: sensitive values are wrapped in redaction tags. This log still "
+      "contains identifying information until those tags are processed. Once redacted, diagnosis "
+      "and support of issues may be challenging or not possible");
+  }
+}
+
+auto
+is_log_redaction_enabled() -> bool
+{
+  return log_redaction_enabled.load(std::memory_order_relaxed);
+}
+
 auto
 create_file_logger_impl(const std::string& logger_name, const configuration& logger_settings)
   -> std::pair<std::optional<std::string>, std::shared_ptr<spdlog::logger>>
