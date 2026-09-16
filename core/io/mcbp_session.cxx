@@ -662,29 +662,25 @@ class mcbp_session_impl
               }
             } break;
             default:
-              CB_LOG_WARNING("{} unexpected server request: opcode={:x}, opaque={}{:a}{:a}",
+              CB_LOG_WARNING("{} unexpected server request: opcode={:x}, opaque={}{:a}",
                              session_->log_prefix_,
                              msg.header.opcode,
                              utils::network_to_host(msg.header.opaque),
-                             spdlog::to_hex(msg.header_data()),
-                             // A hex dump renders across several lines, so tagging it would
-                             // either break the tag pair or flatten the dump. See redaction.hxx.
-                             logger::not_redacted(spdlog::to_hex(msg.body)));
+                             // No need to dump the body here, CB_LOG_PROTOCOL has the raw bytes.
+                             spdlog::to_hex(msg.header_data()));
           }
           break;
         case protocol::magic::client_request:
         case protocol::magic::alt_client_request:
         case protocol::magic::server_response:
         case protocol::magic::invalid:
-          CB_LOG_WARNING("{} unexpected magic: {} (opcode={:x}, opaque={}){:a}{:a}",
+          CB_LOG_WARNING("{} unexpected magic: {} (opcode={:x}, opaque={}){:a}",
                          session_->log_prefix_,
                          magic,
                          msg.header.opcode,
                          utils::network_to_host(msg.header.opaque),
-                         spdlog::to_hex(msg.header_data()),
-                         // A hex dump renders across several lines, so tagging it would
-                         // either break the tag pair or flatten the dump. See redaction.hxx.
-                         logger::not_redacted(spdlog::to_hex(msg.body)));
+                         // No need to dump the body here, CB_LOG_PROTOCOL has the raw bytes.
+                         spdlog::to_hex(msg.header_data()));
           break;
       }
     }
@@ -820,14 +816,12 @@ class mcbp_session_impl
               }
             } break;
             default:
-              CB_LOG_WARNING("{} unexpected client response: opcode={}, opaque={}{:a}{:a})",
+              CB_LOG_WARNING("{} unexpected client response: opcode={}, opaque={}{:a})",
                              session_->log_prefix_,
                              opcode,
                              msg.header.opaque,
-                             spdlog::to_hex(msg.header_data()),
-                             // A hex dump renders across several lines, so tagging it would
-                             // either break the tag pair or flatten the dump. See redaction.hxx.
-                             logger::not_redacted(spdlog::to_hex(msg.body)));
+                             // No need to dump the body here, CB_LOG_PROTOCOL has the raw bytes.
+                             spdlog::to_hex(msg.header_data()));
           }
           break;
         case protocol::magic::server_request:
@@ -858,29 +852,25 @@ class mcbp_session_impl
               }
             } break;
             default:
-              CB_LOG_WARNING("{} unexpected server request: opcode={:x}, opaque={}{:a}{:a}",
+              CB_LOG_WARNING("{} unexpected server request: opcode={:x}, opaque={}{:a}",
                              session_->log_prefix_,
                              msg.header.opcode,
                              msg.header.opaque,
-                             spdlog::to_hex(msg.header_data()),
-                             // A hex dump renders across several lines, so tagging it would
-                             // either break the tag pair or flatten the dump. See redaction.hxx.
-                             logger::not_redacted(spdlog::to_hex(msg.body)));
+                             // No need to dump the body here, CB_LOG_PROTOCOL has the raw bytes.
+                             spdlog::to_hex(msg.header_data()));
           }
           break;
         case protocol::magic::client_request:
         case protocol::magic::alt_client_request:
         case protocol::magic::server_response:
         case protocol::magic::invalid:
-          CB_LOG_WARNING("{} unexpected magic: {} (opcode={:x}, opaque={}){:a}{:a}",
+          CB_LOG_WARNING("{} unexpected magic: {} (opcode={:x}, opaque={}){:a}",
                          session_->log_prefix_,
                          magic,
                          msg.header.opcode,
                          msg.header.opaque,
-                         spdlog::to_hex(msg.header_data()),
-                         // A hex dump renders across several lines, so tagging it would
-                         // either break the tag pair or flatten the dump. See redaction.hxx.
-                         logger::not_redacted(spdlog::to_hex(msg.body)));
+                         // No need to dump the body here, CB_LOG_PROTOCOL has the raw bytes.
+                         spdlog::to_hex(msg.header_data()));
           break;
       }
     }

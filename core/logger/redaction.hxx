@@ -118,8 +118,10 @@
  *
  * One shape stays untagged for the opposite reason. A hex dump written with the "{:a}" spec
  * renders as a multi-line grid, so escaping would keep the tag intact but flatten the dump into a
- * single line of "\n" literals, and a flattened hex dump is not a hex dump. Those sites say so and
- * use not_redacted(); the checker rejects a tag around one.
+ * single line of "\n" literals, and a flattened hex dump is not a hex dump. So a hex dump is never
+ * tagged, and the checker rejects a tag around one. The dumps left in the tree are frame headers
+ * and raw socket reads, neither of which carries application data, so they are passed bare rather
+ * than marked; the one that could have carried a document body was removed instead of annotated.
  *
  * `bin/check-log-annotations` cannot help with the general case. Whether a value contains a
  * newline is a property of the value at run time, not of the source.

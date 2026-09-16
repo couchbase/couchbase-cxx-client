@@ -684,8 +684,9 @@ format_specifications_survive_the_wrappers([[maybe_unused]] context& ctx)
             "<md>  bucket</md>",
             "the padding lands inside the span");
 
-  // That inheritance is what lets a hex dump keep the "{:a}" it is logged with. The five hex dumps
-  // in mcbp_session.cxx are marked not_redacted(), so this pins the shape they rely on.
+  // That inheritance is what lets a value keep a spec as unusual as the "{:a}" of a hex dump. No
+  // site pairs the two today, since a hex dump is never tagged and never marked, but the wrappers
+  // have to be spec-transparent in general and this is the strongest spec to pin that with.
   assert_eq(fmt::format("{:a}", core_logger::not_redacted(spdlog::to_hex(body))),
             fmt::format("{:a}", spdlog::to_hex(body)),
             "a hex dump renders identically through the marker");
