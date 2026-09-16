@@ -21,10 +21,10 @@
 #include <couchbase/node_id.hxx>
 
 #include "core/error_context/key_value.hxx"
-#include "core/impl/get_replica.hxx"
 #include "core/impl/replica_utils.hxx"
 #include "core/logger/logger.hxx"
 #include "core/operations/document_get.hxx"
+#include "core/operations/document_get_replica.hxx"
 #include "core/operations/operation_traits.hxx"
 #include "core/public_fwd.hxx"
 #include "core/tracing/constants.hxx"
@@ -129,7 +129,7 @@ struct get_all_replicas_request {
             document_id replica_id{ id };
             replica_id.node_index(node.index);
             core->execute(
-              impl::get_replica_request{
+              operations::get_replica_request{
                 std::move(replica_id),
                 timeout,
                 {},

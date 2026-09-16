@@ -646,6 +646,38 @@ enum class key_value {
    */
   // KV Code: 0xa7
   range_scan_completed = 134,
+
+  /**
+   * The document was not found on the replica that @ref collection#get_replica() read from. This is
+   * the code @ref error::ec() reports; a caller that wants to treat the general condition uniformly
+   * reads @ref error::cause(), which carries @ref errc::key_value::document_not_found.
+   *
+   * @since 1.5.0
+   * @committed
+   */
+  document_not_found_on_replica = 135,
+
+  /**
+   * The bucket has no replica at the requested index: the index is at or beyond its configured
+   * replica count, or that count is zero. Reported without a network round trip, and retrying
+   * cannot help. Use @ref get_replica_strategy_from_index_options::wrap() to read a different
+   * replica instead.
+   *
+   * @since 1.5.0
+   * @committed
+   */
+  replica_index_out_of_bounds = 136,
+
+  /**
+   * The replica exists for this bucket, but cannot be read now. Either the vbucket map's row for
+   * this document is shorter than the configured replica count, or it does not place that replica
+   * on a node the topology lists. A rebalance resolves both. Use
+   * @ref get_replica_strategy_from_index_options::wrap() to read another replica instead.
+   *
+   * @since 1.5.0
+   * @committed
+   */
+  replica_index_currently_unavailable = 137,
 };
 
 /**

@@ -27,6 +27,7 @@
 #include "core/mcbp/queue_response.hxx"
 #include "core/metrics/meter_wrapper.hxx"
 #include "core/operations/document_get.hxx"
+#include "core/operations/document_get_replica.hxx"
 #include "core/origin.hxx"
 #include "core/orphan_reporter.hxx"
 #include "core/protocol/client_opcode.hxx"
@@ -303,6 +304,31 @@ a_re_queued_request_is_not_deferred_behind_a_session_that_cannot_start(
   assert_error(ec, errc::common::service_not_available, "the code it was completed with");
 }
 
+void
+an_expired_deadline_on_a_replica_read_is_unambiguous([[maybe_unused]] context& ctx)
+{
+  bucket_fixture fixture{};
+  // The routed node advertises no key-value port, so the operation retries for
+  // as long as its deadline allows and never dispatches. A read cannot have
+  // mutated anything, so the deadline must classify as unambiguous.
+  fixture.install_config(1, /* rev = */ 1, /* with_key_value_port = */ false);
+
+  const couchbase::core::operations::get_replica_request request{
+    couchbase::core::document_id{ "default", "_default", "_default", "key" },
+    /* timeout = */ std::chrono::milliseconds{ 200 },
+  };
+
+  std::error_code ec{};
+  auto completed{ false };
+  fixture.get()->execute(request, [&ec, &completed](const auto& response) {
+    completed = true;
+    ec = response.ctx.ec();
+  });
+  fixture.run();
+
+  assert_true(completed, "the request was completed");
+  assert_error(ec, errc::common::unambiguous_timeout, "a read that never dispatched");
+}
 } // namespace
 
 auto
@@ -329,6 +355,7 @@ tests() -> test_suite
       { CASE(a_re_queued_request_is_not_deferred_behind_a_session_that_cannot_start),
         {},
         timeout::fast },
+      { CASE(an_expired_deadline_on_a_replica_read_is_unambiguous), {}, timeout::fast },
     },
   };
 }
