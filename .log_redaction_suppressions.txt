@@ -1,0 +1,24 @@
+# Files and identifiers that bin/check-log-annotations should not report.
+#
+# A line with one field excludes a whole file or directory. A line with two excludes one
+# identifier within the matching paths. Everything after "#" is a comment.
+#
+# This file is for exclusions that have no single log statement to attach to. An exclusion that
+# does belong to a statement is recorded there instead, with logger::not_sensitive() when the
+# value is not what its name suggests, or logger::not_redacted() when it is sensitive and
+# deliberately logged untagged. Both are visible where the value is logged, and neither silences
+# the arguments around it, which an entry here cannot say.
+
+# Application Telemetry is out of scope for log redaction. Decided by the SDK team on 2026-08-26,
+# so this is a settled exclusion rather than a false positive or a deferred decision.
+#
+# What this file logs is the SDK's own telemetry channel: the endpoint it connects to and the
+# hostnames it reports for. Those addresses are the cluster's, the payload is SDK metrics bound
+# for Couchbase Server, and the server republishes the same metrics on /metrics to anything that
+# can reach it. So the values here are not the deployment's to hide in the first place, and none
+# of them is application data.
+#
+# The glob covers the feature rather than one file, which is the shape of the decision. Today that
+# is app_telemetry_reporter.cxx, 33 arguments across 15 statements, and app_telemetry_meter.cxx,
+# whose one document holds a boolean.
+core/app_telemetry_*.cxx
