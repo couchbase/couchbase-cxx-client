@@ -19,6 +19,7 @@
 
 #include "core/http_component.hxx"
 #include "core/logger/logger.hxx"
+#include "core/logger/redaction.hxx"
 #include "core/platform/uuid.h"
 #include "core/utils/json.hxx"
 #include "core/utils/movable_function.hxx"
@@ -70,7 +71,7 @@ public:
     CB_LOG_DEBUG("MANAGEMENT OPERATION ERROR (client_context_id={}, http_status={}): {}.",
                  req_.client_context_id,
                  http_status,
-                 utils::json::generate(errors_json));
+                 logger::user_data(utils::json::generate(errors_json)));
 
     error err{ errc::generic };
     err.ctx["http_status"] = std::to_string(http_status);
