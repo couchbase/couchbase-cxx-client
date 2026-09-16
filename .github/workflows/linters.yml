@@ -19,6 +19,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  log_annotations:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      # The checker is a heuristic over argument names, so it can only report what looks
+      # sensitive and is not wrapped. A pass is not proof that the logs are correctly redacted.
+      # Its own fixture runs first: the analysis is fiddly enough that a silently empty report is
+      # a realistic failure, and that would look exactly like a clean tree.
+      - name: Verify the annotation checker against its fixture
+        run: ./bin/check-log-annotations --self-test
+      - name: Check log annotations
+        run: ./bin/check-log-annotations
+
   clang_format:
     runs-on: ubuntu-24.04
     steps:
