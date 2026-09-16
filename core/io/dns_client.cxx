@@ -18,6 +18,7 @@
 #include "dns_client.hxx"
 
 #include "core/logger/logger.hxx"
+#include "core/logger/redaction.hxx"
 #include "core/utils/join_strings.hxx"
 #include "dns_codec.hxx"
 #include "dns_config.hxx"
@@ -96,9 +97,8 @@ public:
 
   void execute(std::chrono::milliseconds total_timeout, std::chrono::milliseconds udp_timeout)
   {
-    CB_LOG_TRACE("Query DNS-SRV (UDP) address=\"{}:{}\", udp_timeout={}, total_timeout={}",
-                 address_.to_string(),
-                 port_,
+    CB_LOG_TRACE("Query DNS-SRV (UDP) address=\"{}\", udp_timeout={}, total_timeout={}",
+                 logger::system_data(nameserver_address()),
                  udp_timeout,
                  total_timeout);
     const asio::ip::udp::endpoint endpoint(address_, port_);
@@ -123,9 +123,8 @@ public:
             return;
           }
           CB_LOG_DEBUG(
-            "DNS UDP write operation has got error, retrying with TCP, address=\"{}:{}\", ec={}",
-            self->address_.to_string(),
-            self->port_,
+            "DNS UDP write operation has got error, retrying with TCP, address=\"{}\", ec={}",
+            logger::system_data(self->nameserver_address()),
             ec1.message());
           return self->retry_with_tcp();
         }
@@ -149,9 +148,8 @@ public:
                 return;
               }
               CB_LOG_DEBUG(
-                "DNS UDP read operation has got error, retrying with TCP, address=\"{}:{}\", ec={}",
-                self->address_.to_string(),
-                self->port_,
+                "DNS UDP read operation has got error, retrying with TCP, address=\"{}\", ec={}",
+                logger::system_data(self->nameserver_address()),
                 ec2.message());
               return self->retry_with_tcp();
             }
@@ -164,9 +162,8 @@ public:
             }
             self->deadline_.cancel();
             if (message.header.flags.rcode != response_code::no_error) {
-              CB_LOG_WARNING("DNS UDP response for \"{}:{}\" returned non-zero RCODE: {} ({})",
-                             self->address_.to_string(),
-                             self->port_,
+              CB_LOG_WARNING("DNS UDP response for \"{}\" returned non-zero RCODE: {} ({})",
+                             logger::system_data(self->nameserver_address()),
                              static_cast<int>(message.header.flags.rcode),
                              rcode_description(message.header.flags.rcode));
             }
@@ -187,9 +184,8 @@ public:
       }
       self->udp_.cancel();
       CB_LOG_DEBUG("DNS UDP deadline has been reached, cancelling UDP operation and fall back to "
-                   "TCP, address=\"{}:{}\"",
-                   self->address_.to_string(),
-                   self->port_);
+                   "TCP, address=\"{}\"",
+                   logger::system_data(self->nameserver_address()));
       return self->retry_with_tcp();
     });
 
@@ -199,10 +195,9 @@ public:
         return;
       }
       CB_LOG_DEBUG("DNS deadline has been reached, cancelling in-flight operations "
-                   "(tcp.is_open={}, address=\"{}:{}\")",
+                   "(tcp.is_open={}, address=\"{}\")",
                    self->tcp_.is_open(),
-                   self->address_.to_string(),
-                   self->port_);
+                   logger::system_data(self->nameserver_address()));
       self->udp_.cancel();
       if (self->tcp_.is_open()) {
         self->tcp_.cancel();
@@ -212,6 +207,11 @@ public:
   }
 
 private:
+  [[nodiscard]] auto nameserver_address() const -> std::string
+  {
+    return fmt::format("{}:{}", address_.to_string(), port_);
+  }
+
   void retry_with_tcp()
   {
     if (bool expected_state{ false };
@@ -219,9 +219,8 @@ private:
       return;
     }
 
-    CB_LOG_TRACE("Query DNS-SRV (TCP) address=\"{}:{}\", time_left={}",
-                 address_.to_string(),
-                 port_,
+    CB_LOG_TRACE("Query DNS-SRV (TCP) address=\"{}\", time_left={}",
+                 logger::system_data(nameserver_address()),
                  std::chrono::duration_cast<std::chrono::milliseconds>(
                    deadline_.expiry() - std::chrono::steady_clock::now()));
 
@@ -235,9 +234,8 @@ private:
           return;
         }
         self->deadline_.cancel();
-        CB_LOG_DEBUG("DNS TCP connection has been aborted, address=\"{}:{}\", ec={}",
-                     self->address_.to_string(),
-                     self->port_,
+        CB_LOG_DEBUG("DNS TCP connection has been aborted, address=\"{}\", ec={}",
+                     logger::system_data(self->nameserver_address()),
                      ec1.message());
         return self->handler_({ ec1 });
       }
@@ -262,9 +260,8 @@ private:
             if (ec2 == asio::error::operation_aborted) {
               return;
             }
-            CB_LOG_DEBUG("DNS TCP write operation has been aborted, address=\"{}:{}\", ec={}",
-                         self->address_.to_string(),
-                         self->port_,
+            CB_LOG_DEBUG("DNS TCP write operation has been aborted, address=\"{}\", ec={}",
+                         logger::system_data(self->nameserver_address()),
                          ec2.message());
             self->deadline_.cancel();
             return self->handler_({ ec2 });
@@ -287,9 +284,8 @@ private:
                   return;
                 }
                 CB_LOG_DEBUG(
-                  "DNS TCP buf size read operation has been aborted, address=\"{}:{}\", ec={}",
-                  self->address_.to_string(),
-                  self->port_,
+                  "DNS TCP buf size read operation has been aborted, address=\"{}\", ec={}",
+                  logger::system_data(self->nameserver_address()),
                   ec3.message());
                 self->deadline_.cancel();
                 return self->handler_({ ec3 });
@@ -315,22 +311,18 @@ private:
                   }
                   self->deadline_.cancel();
                   if (ec4) {
-                    CB_LOG_DEBUG(
-                      "DNS TCP read operation has been aborted, address=\"{}:{}\", ec={}",
-                      self->address_.to_string(),
-                      self->port_,
-                      ec4.message());
+                    CB_LOG_DEBUG("DNS TCP read operation has been aborted, address=\"{}\", ec={}",
+                                 logger::system_data(self->nameserver_address()),
+                                 ec4.message());
                     return self->handler_({ ec4 });
                   }
                   self->recv_buf_.resize(bytes_transferred4);
                   const dns_message message = dns_codec::decode(self->recv_buf_);
                   if (message.header.flags.rcode != response_code::no_error) {
-                    CB_LOG_WARNING(
-                      "DNS TCP response for \"{}:{}\" returned non-zero RCODE: {} ({})",
-                      self->address_.to_string(),
-                      self->port_,
-                      static_cast<int>(message.header.flags.rcode),
-                      rcode_description(message.header.flags.rcode));
+                    CB_LOG_WARNING("DNS TCP response for \"{}\" returned non-zero RCODE: {} ({})",
+                                   logger::system_data(self->nameserver_address()),
+                                   static_cast<int>(message.header.flags.rcode),
+                                   rcode_description(message.header.flags.rcode));
                   }
                   dns_srv_response resp{ ec4 };
                   resp.targets.reserve(message.answers.size());
@@ -374,7 +366,7 @@ dns_client::query_srv(const std::string& name,
       "DNS-SRV query for \"{}/{}\" skipped: no nameserver configured (DNS-SRV bootstrap is "
       "disabled). Check that /etc/resolv.conf contains a valid IP address on a \"nameserver\" "
       "line, or set the nameserver explicitly in the cluster options.",
-      name,
+      logger::system_data(name),
       service);
     return handler({ {} });
   }
@@ -385,9 +377,9 @@ dns_client::query_srv(const std::string& name,
     CB_LOG_WARNING(
       "DNS-SRV query for \"{}/{}\" skipped: configured nameserver \"{}\" could not be parsed as "
       "an IP address ({}). Only numeric IP addresses are supported as nameserver values.",
-      name,
+      logger::system_data(name),
       service,
-      config.nameserver(),
+      logger::system_data(config.nameserver()),
       ec.message());
     return handler({ ec });
   }
