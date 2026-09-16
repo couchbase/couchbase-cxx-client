@@ -117,7 +117,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
       if (request.durability_level != durability_level::none &&
           timeout_ < durability_timeout_floor) {
         CB_LOG_DEBUG(
-          R"(Timeout is too low for operation with durability, increasing to sensible value. timeout={}ms, floor={}ms, id="{}")",
+          R"(Timeout is too low for operation with durability, increasing to sensible value. key="{}", timeout={}ms, floor={}ms, id="{}")",
           logger::document(request.id),
           timeout_.count(),
           durability_timeout_floor.count(),
