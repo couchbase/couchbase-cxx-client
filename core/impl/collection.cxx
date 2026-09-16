@@ -32,6 +32,7 @@
 #include "core/cluster.hxx"
 #include "core/impl/subdoc/command.hxx"
 #include "core/logger/logger.hxx"
+#include "core/logger/redaction.hxx"
 #include "core/metrics/meter_wrapper.hxx"
 #include "core/operations/document_append.hxx"
 #include "core/operations/document_decrement.hxx"
@@ -1257,7 +1258,7 @@ public:
         }
         if (!config->vbmap.has_value() || config->vbmap->empty()) {
           CB_LOG_WARNING("Unable to get vbucket map for `{}` - cannot perform scan operation",
-                         bucket_name);
+                         core::logger::metadata(bucket_name));
           obs_rec->finish(errc::common::request_canceled);
           return handler(error(errc::common::request_canceled,
                                "No vbucket map included with the bucket config."),

@@ -24,11 +24,10 @@
 
 #include <iphlpapi.h>
 #include <winsock2.h>
-
-#include "core/utils/join_strings.hxx"
 #endif
 
 #include "core/logger/logger.hxx"
+#include "core/logger/redaction.hxx"
 #include "dns_config.hxx"
 
 #include <asio/ip/address.hpp>
@@ -36,7 +35,9 @@
 #include <filesystem>
 #include <fstream>
 #include <mutex>
+#include <string>
 #include <utility>
+#include <vector>
 
 namespace couchbase::core::io::dns
 {
@@ -98,8 +99,8 @@ load_resolv_conf()
 
   if (dns_servers.size() > 0) {
     CB_LOG_DEBUG("Found DNS Servers: [{}], selected nameserver: \"{}\"",
-                 couchbase::core::utils::join_strings(dns_servers, ", "),
-                 dns_servers[0]);
+                 logger::system_data_list(dns_servers),
+                 logger::system_data(dns_servers[0]));
     return dns_servers[0];
   }
   CB_LOG_WARNING("Unable to find DNS nameserver");
@@ -137,7 +138,8 @@ load_resolv_conf(const char* conf_path) -> std::string
       space = line.find(' ', offset);
       auto nameserver =
         (space == std::string::npos) ? line.substr(offset) : line.substr(offset, space - offset);
-      CB_LOG_DEBUG("Selected nameserver: \"{}\" from \"{}\"", nameserver, conf_path);
+      CB_LOG_DEBUG(
+        "Selected nameserver: \"{}\" from \"{}\"", logger::system_data(nameserver), conf_path);
       return nameserver;
     }
   }
@@ -181,7 +183,7 @@ dns_config::system_config() -> const dns_config&
       CB_LOG_WARNING("System DNS detection failed: unable to parse \"{}\" as a network address{}. "
                      "DNS-SRV will not work "
                      "unless nameserver is specified explicitly in the options.",
-                     nameserver,
+                     logger::system_data(nameserver),
                      extra_info);
     } else {
       instance.nameserver_ = nameserver;
