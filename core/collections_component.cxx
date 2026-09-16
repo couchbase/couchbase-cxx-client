@@ -367,7 +367,7 @@ collection_id_cache_entry_impl::dispatch(std::shared_ptr<mcbp::queue_request> re
     case unknown_collection_id:
       CB_LOG_DEBUG("collection {}.{} unknown. refreshing id",
                    logger::metadata(req->scope_name_),
-                   req->collection_id_);
+                   logger::metadata(req->collection_name_));
       id_ = pending_collection_id;
 
       if (auto ec = refresh_collection_id(req); ec) {
@@ -379,7 +379,7 @@ collection_id_cache_entry_impl::dispatch(std::shared_ptr<mcbp::queue_request> re
     case pending_collection_id:
       CB_LOG_DEBUG("collection {}.{} pending. queueing request OP={}",
                    logger::metadata(req->scope_name_),
-                   req->collection_id_,
+                   logger::metadata(req->collection_name_),
                    req->command_);
       return queue_->push(req, max_queue_size_);
 

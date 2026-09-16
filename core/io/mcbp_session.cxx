@@ -2175,7 +2175,7 @@ private:
         if (timer_ec == asio::error::operation_aborted || self->stopped_) {
           return;
         }
-        CB_LOG_DEBUG("{} unable to boostrap single node at {} (\"{}\") in time, reconnecting",
+        CB_LOG_DEBUG("{} unable to bootstrap single node at {} (\"{}\") in time, reconnecting",
                      self->log_prefix_,
                      logger::system_data(fmt::format("{}:{}:{}",
                                                      self->connection_endpoints_.local.port(),
