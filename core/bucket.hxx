@@ -18,7 +18,9 @@
 #pragma once
 
 #include "config_listener.hxx"
+#include "document_id_redaction.hxx"
 #include "io/mcbp_command.hxx"
+#include "logger/redaction.hxx"
 #include "operations.hxx"
 #include "tls_context_provider.hxx"
 
@@ -171,7 +173,7 @@ public:
           if (!decision->server_index.has_value()) {
             CB_LOG_TRACE(R"([{}] unable to map key="{}" to the node, id={}, partition={}, rev={})",
                          log_prefix(),
-                         cmd->request.id,
+                         logger::document(cmd->request.id),
                          cmd->id(),
                          decision->partition,
                          // The snapshot's own revision, not config_rev(): that
@@ -191,7 +193,7 @@ public:
         if (!server.has_value()) {
           CB_LOG_TRACE(R"([{}] unable to map key="{}" to the node, id={}, partition={}, rev={})",
                        log_prefix(),
-                       cmd->request.id,
+                       logger::document(cmd->request.id),
                        cmd->id(),
                        partition,
                        config_rev());
@@ -208,11 +210,11 @@ public:
         R"([{}] defer operation id="{}", key="{}", partition={}, index={}, session={}, address="{}", has_config={}, rev={})",
         log_prefix(),
         cmd->id(),
-        cmd->request.id,
+        logger::document(cmd->request.id),
         cmd->request.partition,
         index,
         session.has_value(),
-        session.has_value() ? session->bootstrap_address() : "",
+        logger::system_data(session.has_value() ? session->bootstrap_address() : ""),
         session.has_value() && session->has_config(),
         config_rev());
       if (!session && !connect_session(index)) {
@@ -236,10 +238,10 @@ public:
         log_prefix(),
         index,
         cmd->id(),
-        cmd->request.id,
+        logger::document(cmd->request.id),
         cmd->request.partition,
         session->id(),
-        session->bootstrap_address(),
+        logger::system_data(session->bootstrap_address()),
         config_rev());
       return io::retry_orchestrator::maybe_retry(
         cmd->manager_, cmd, retry_reason::node_not_available, errc::common::request_canceled);
@@ -250,10 +252,10 @@ public:
       R"({} send operation id="{}", key="{}", partition={}, index={}, address="{}", rev={})",
       session->log_prefix(),
       cmd->id(),
-      cmd->request.id,
+      logger::document(cmd->request.id),
       cmd->request.partition,
       index,
-      session->bootstrap_address(),
+      logger::system_data(session->bootstrap_address()),
       config_rev());
     cmd->send_to(session.value());
   }
