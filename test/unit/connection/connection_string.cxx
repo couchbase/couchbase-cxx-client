@@ -17,6 +17,7 @@
 
 #include "framework/test_registry.hxx"
 
+#include "core/cluster_options.hxx"
 #include "core/origin.hxx"
 #include "core/utils/connection_string.hxx"
 
@@ -535,6 +536,75 @@ preserve_bootstrap_nodes_order_keeps_the_given_order([[maybe_unused]] context& c
   assert_eq(bootstrap.size(), hostnames.size(), "no node is lost");
   assert_eq(bootstrap, hostnames, "the origin keeps the order it was given");
 }
+
+// Log redaction is configured through the connection string as well as through cluster_options,
+// and these pin the parsing end of that. Whether opening a cluster then applies it is process-wide
+// state and is covered by the integration suite.
+void
+log_redaction_defaults_to_disabled([[maybe_unused]] context& ctx)
+{
+  const auto connstr = parse_connection_string("couchbase://127.0.0.1");
+
+  assert_false(connstr.options.log_redaction, "nothing asked for redaction");
+}
+
+void
+log_redaction_accepts_the_truthy_spellings([[maybe_unused]] context& ctx)
+{
+  for (const auto* value : { "true", "yes", "on" }) {
+    const auto spelling = std::string{ "log_redaction=" } + value;
+    const auto connstr = parse_connection_string("couchbase://127.0.0.1?" + spelling);
+
+    assert_true(connstr.warnings.empty(), spelling + " is understood");
+    assert_true(connstr.options.log_redaction, spelling + " enables redaction");
+  }
+}
+
+void
+log_redaction_accepts_the_falsy_spellings([[maybe_unused]] context& ctx)
+{
+  for (const auto* value : { "false", "no", "off" }) {
+    const auto spelling = std::string{ "log_redaction=" } + value;
+    const auto connstr = parse_connection_string("couchbase://127.0.0.1?" + spelling);
+
+    assert_true(connstr.warnings.empty(), spelling + " is understood");
+    assert_false(connstr.options.log_redaction, spelling + " leaves redaction off");
+  }
+}
+
+void
+an_unparsable_log_redaction_value_warns_and_keeps_the_default([[maybe_unused]] context& ctx)
+{
+  // Every boolean parameter in this SDK's connection string takes true/yes/on, never a numeric
+  // value, so "log_redaction=1" is rejected here. Some other SDKs do accept it, so this is the
+  // deliberate cost of internal consistency rather than an oversight.
+  for (const auto* value : { "maybe", "1", "0" }) {
+    const auto spelling = std::string{ "log_redaction=" } + value;
+    const auto connstr = parse_connection_string("couchbase://127.0.0.1?" + spelling);
+
+    assert_false(connstr.options.log_redaction, spelling + " leaves the default in place");
+    assert_eq(connstr.warnings.size(), std::size_t{ 1 }, spelling + " is reported as a warning");
+  }
+}
+
+void
+a_connection_string_silent_on_log_redaction_keeps_the_configured_value(
+  [[maybe_unused]] context& ctx)
+{
+  // Regression guard: a connection string that says nothing about log_redaction must leave the
+  // value already set on core::cluster_options alone, otherwise whatever configured it (today the
+  // connection string, and the public behavior_options builder once CXXCBC-979 lands) is silently
+  // ineffective.
+  couchbase::core::cluster_options configured{};
+  configured.log_redaction = true;
+
+  const auto connstr = parse_connection_string("couchbase://127.0.0.1", configured);
+  assert_true(connstr.options.log_redaction, "the already-configured value survives");
+
+  const auto overridden =
+    parse_connection_string("couchbase://127.0.0.1?log_redaction=off", configured);
+  assert_false(overridden.options.log_redaction, "an explicit value in the string still wins");
+}
 } // namespace
 
 auto
@@ -559,6 +629,11 @@ tests() -> test_suite
       { CASE(a_malformed_connection_string_is_rejected_with_a_located_error) },
       { CASE(bootstrap_nodes_are_shuffled_by_default) },
       { CASE(preserve_bootstrap_nodes_order_keeps_the_given_order) },
+      { CASE(log_redaction_defaults_to_disabled) },
+      { CASE(log_redaction_accepts_the_truthy_spellings) },
+      { CASE(log_redaction_accepts_the_falsy_spellings) },
+      { CASE(an_unparsable_log_redaction_value_warns_and_keeps_the_default) },
+      { CASE(a_connection_string_silent_on_log_redaction_keeps_the_configured_value) },
     },
   };
 }
