@@ -31,6 +31,7 @@
 #include "core/impl/bootstrap_error.hxx"
 #include "core/impl/bootstrap_state_listener.hxx"
 #include "core/logger/logger.hxx"
+#include "core/logger/redaction.hxx"
 #include "core/mcbp/codec.hxx"
 #include "core/mcbp/queue_request.hxx"
 #include "core/meta/version.hxx"
@@ -275,13 +276,21 @@ class mcbp_session_impl
         hello_req.body().enable_mutation_tokens();
       }
       hello_req.opaque(session_->next_opaque());
-      auto user_agent = meta::user_agent_for_mcbp(
-        session_->client_id_, session_->id_, session_->origin_.options().user_agent_extra, 250);
+      const auto& user_agent_extra = session_->origin_.options().user_agent_extra;
+      auto user_agent =
+        meta::user_agent_for_mcbp(session_->client_id_, session_->id_, user_agent_extra, 250);
       hello_req.body().user_agent(user_agent);
-      CB_LOG_DEBUG("{} user_agent={}, requested_features=[{}]",
-                   session_->log_prefix_,
-                   user_agent,
-                   utils::join_strings_fmt(hello_req.body().features(), ", "));
+      CB_LOG_DEBUG(
+        "{} user_agent={}, requested_features=[{}]",
+        session_->log_prefix_,
+        // The blob folds in the application's user_agent_extra, and that is the only user data it
+        // can hold: the rest is SDK, platform and TLS identity, and its "i" field is the client
+        // and session id that log_prefix_ already prints in the clear on this same line. So it is
+        // tagged only when there is an extra to protect, which keeps the version block readable in
+        // the logs support actually receives.
+        logger::user_data_if(!user_agent_extra.empty(), user_agent),
+        // protocol feature names, not a document body
+        logger::not_sensitive(utils::join_strings_fmt(hello_req.body().features(), ", ")));
       session_->write(hello_req.data());
 
       if (!session_->origin_.credentials().uses_certificate()) {
@@ -504,7 +513,7 @@ class mcbp_session_impl
               if (resp.status() == key_value_status_code::success) {
                 CB_LOG_DEBUG("{} selected bucket: {}",
                              session_->log_prefix_,
-                             session_->bucket_name_.value_or(""));
+                             logger::metadata(session_->bucket_name_.value_or("")));
                 session_->bucket_selected_ = true;
               } else if (resp.status() == key_value_status_code::not_found) {
                 auto error_msg =
@@ -552,12 +561,14 @@ class mcbp_session_impl
               if (session_->origin_.options().dump_configuration) {
                 if (const auto& text = resp.body().config_text(); text.has_value()) {
                   CB_LOG_TRACE("{} configuration from get_cluster_config request (bootstrap, "
-                               "size={}, endpoint=\"{}:{}\"), {}",
+                               "size={}, endpoint=\"{}\"), {}",
                                session_->log_prefix_,
                                text.value().size(),
-                               info.endpoint_address,
-                               info.endpoint_port,
-                               text.value());
+                               logger::system_data(
+                                 fmt::format("{}:{}", info.endpoint_address, info.endpoint_port)),
+                               // an opt-in dump, it exists to show the exact bytes. That is the
+                               // "none at all" case of the rule in redaction.hxx.
+                               logger::not_redacted(text.value()));
                 }
               }
               if (resp.status() == key_value_status_code::success) {
@@ -634,12 +645,14 @@ class mcbp_session_impl
               if (session_->origin_.options().dump_configuration) {
                 if (const auto& text = req.body().config_text(); text.has_value()) {
                   CB_LOG_TRACE("{} configuration from cluster_map_change_notification request "
-                               "(size={}, endpoint=\"{}:{}\"), {}",
+                               "(size={}, endpoint=\"{}\"), {}",
                                session_->log_prefix_,
                                text.value().size(),
-                               info.endpoint_address,
-                               info.endpoint_port,
-                               text.value());
+                               logger::system_data(
+                                 fmt::format("{}:{}", info.endpoint_address, info.endpoint_port)),
+                               // an opt-in dump, it exists to show the exact bytes. That is the
+                               // "none at all" case of the rule in redaction.hxx.
+                               logger::not_redacted(text.value()));
                 }
               }
               std::optional<topology::configuration> config = req.body().config();
@@ -654,7 +667,9 @@ class mcbp_session_impl
                              msg.header.opcode,
                              utils::network_to_host(msg.header.opaque),
                              spdlog::to_hex(msg.header_data()),
-                             spdlog::to_hex(msg.body));
+                             // A hex dump renders across several lines, so tagging it would
+                             // either break the tag pair or flatten the dump. See redaction.hxx.
+                             logger::not_redacted(spdlog::to_hex(msg.body)));
           }
           break;
         case protocol::magic::client_request:
@@ -667,7 +682,9 @@ class mcbp_session_impl
                          msg.header.opcode,
                          utils::network_to_host(msg.header.opaque),
                          spdlog::to_hex(msg.header_data()),
-                         spdlog::to_hex(msg.body));
+                         // A hex dump renders across several lines, so tagging it would
+                         // either break the tag pair or flatten the dump. See redaction.hxx.
+                         logger::not_redacted(spdlog::to_hex(msg.body)));
           break;
       }
     }
@@ -722,12 +739,14 @@ class mcbp_session_impl
               if (session_->origin_.options().dump_configuration) {
                 if (const auto& text = resp.body().config_text(); text.has_value()) {
                   CB_LOG_TRACE("{} configuration from get_cluster_config response (size={}, "
-                               "endpoint=\"{}:{}\"), {}",
+                               "endpoint=\"{}\"), {}",
                                session_->log_prefix_,
                                text.value().size(),
-                               info.endpoint_address,
-                               info.endpoint_port,
-                               text.value());
+                               logger::system_data(
+                                 fmt::format("{}:{}", info.endpoint_address, info.endpoint_port)),
+                               // an opt-in dump, it exists to show the exact bytes. That is the
+                               // "none at all" case of the rule in redaction.hxx.
+                               logger::not_redacted(text.value()));
                 }
               }
               if (resp.status() == key_value_status_code::success) {
@@ -806,7 +825,9 @@ class mcbp_session_impl
                              opcode,
                              msg.header.opaque,
                              spdlog::to_hex(msg.header_data()),
-                             spdlog::to_hex(msg.body));
+                             // A hex dump renders across several lines, so tagging it would
+                             // either break the tag pair or flatten the dump. See redaction.hxx.
+                             logger::not_redacted(spdlog::to_hex(msg.body)));
           }
           break;
         case protocol::magic::server_request:
@@ -820,12 +841,14 @@ class mcbp_session_impl
               if (session_->origin_.options().dump_configuration) {
                 if (const auto& text = req.body().config_text(); text.has_value()) {
                   CB_LOG_TRACE("{} configuration from cluster_map_change_notification request "
-                               "(size={}, endpoint=\"{}:{}\"), {}",
+                               "(size={}, endpoint=\"{}\"), {}",
                                session_->log_prefix_,
                                text.value().size(),
-                               info.endpoint_address,
-                               info.endpoint_port,
-                               text.value());
+                               logger::system_data(
+                                 fmt::format("{}:{}", info.endpoint_address, info.endpoint_port)),
+                               // an opt-in dump, it exists to show the exact bytes. That is the
+                               // "none at all" case of the rule in redaction.hxx.
+                               logger::not_redacted(text.value()));
                 }
               }
               std::optional<topology::configuration> config = req.body().config();
@@ -840,7 +863,9 @@ class mcbp_session_impl
                              msg.header.opcode,
                              msg.header.opaque,
                              spdlog::to_hex(msg.header_data()),
-                             spdlog::to_hex(msg.body));
+                             // A hex dump renders across several lines, so tagging it would
+                             // either break the tag pair or flatten the dump. See redaction.hxx.
+                             logger::not_redacted(spdlog::to_hex(msg.body)));
           }
           break;
         case protocol::magic::client_request:
@@ -853,7 +878,9 @@ class mcbp_session_impl
                          msg.header.opcode,
                          msg.header.opaque,
                          spdlog::to_hex(msg.header_data()),
-                         spdlog::to_hex(msg.body));
+                         // A hex dump renders across several lines, so tagging it would
+                         // either break the tag pair or flatten the dump. See redaction.hxx.
+                         logger::not_redacted(spdlog::to_hex(msg.body)));
           break;
       }
     }
@@ -887,7 +914,7 @@ public:
     , codec_{ { supported_features_.begin(), supported_features_.end() } }
   {
     log_prefix_ = fmt::format(
-      "[{}/{}/{}/{}]", client_id_, id_, stream_->log_prefix(), bucket_name_.value_or("-"));
+      "[{}/{}/{}/{}]", client_id_, id_, stream_->log_prefix(), log_prefix_bucket_name());
   }
 
   mcbp_session_impl(std::string_view client_id,
@@ -917,7 +944,7 @@ public:
     , codec_{ { supported_features_.begin(), supported_features_.end() } }
   {
     log_prefix_ = fmt::format(
-      "[{}/{}/{}/{}]", client_id_, id_, stream_->log_prefix(), bucket_name_.value_or("-"));
+      "[{}/{}/{}/{}]", client_id_, id_, stream_->log_prefix(), log_prefix_bucket_name());
   }
 
   mcbp_session_impl(const mcbp_session_impl&) = delete;
@@ -1283,8 +1310,8 @@ public:
                      self->log_prefix_,
                      old_id,
                      self->stream_->id(),
-                     self->bootstrap_hostname_,
-                     self->bootstrap_port_);
+                     logger::system_data(self->bootstrap_hostname_),
+                     logger::system_data(self->bootstrap_port_));
         return self->initiate_bootstrap();
       });
     }
@@ -1326,8 +1353,8 @@ public:
                                 client_id_,
                                 id_,
                                 stream_->log_prefix(),
-                                bucket_name_.value_or("-"),
-                                bootstrap_address_);
+                                log_prefix_bucket_name(),
+                                logger::system_data(bootstrap_address_));
     }
     CB_LOG_DEBUG("{} attempt to establish MCBP connection", log_prefix_);
 
@@ -1396,8 +1423,8 @@ public:
               self->log_prefix_,
               old_id,
               self->stream_->id(),
-              self->bootstrap_hostname_,
-              self->bootstrap_port_);
+              logger::system_data(self->bootstrap_hostname_),
+              logger::system_data(self->bootstrap_port_));
             return self->initiate_bootstrap();
           });
         });
@@ -1876,16 +1903,17 @@ public:
       const std::vector<std::uint8_t>::difference_type offset =
         framing_extras_size + key_size + extras_size;
       if (utils::network_to_host(msg.header.bodylen) - offset > 0) {
-        std::string_view config_text{ reinterpret_cast<const char*>(msg.body.data()) + offset,
-                                      msg.body.size() - static_cast<std::size_t>(offset) };
+        const std::string_view config_text{ reinterpret_cast<const char*>(msg.body.data()) + offset,
+                                            msg.body.size() - static_cast<std::size_t>(offset) };
         if (origin_.options().dump_configuration) {
           CB_LOG_TRACE(
-            "{} configuration from not_my_vbucket response (size={}, endpoint=\"{}:{}\"), {}",
+            "{} configuration from not_my_vbucket response (size={}, endpoint=\"{}\"), {}",
             log_prefix_,
             config_text.size(),
-            bootstrap_hostname_,
-            bootstrap_port_number_,
-            config_text);
+            logger::system_data(fmt::format("{}:{}", bootstrap_hostname_, bootstrap_port_number_)),
+            // an opt-in dump, it exists to show the exact bytes. That is the
+            // "none at all" case of the rule in redaction.hxx.
+            logger::not_redacted(config_text));
         }
         auto config =
           protocol::parse_config(config_text, bootstrap_hostname_, bootstrap_port_number_);
@@ -1922,6 +1950,18 @@ public:
 #endif
 
 private:
+  /**
+   * The bucket name for the log prefix, or an untagged "-" when the session is not bound to a
+   * bucket.
+   */
+  [[nodiscard]] auto log_prefix_bucket_name() const -> std::string
+  {
+    if (!bucket_name_.has_value()) {
+      return "-";
+    }
+    return fmt::format("{}", logger::metadata(bucket_name_.value()));
+  }
+
   void invoke_bootstrap_handler(std::error_code ec)
   {
     connection_deadline_.cancel();
@@ -2011,10 +2051,9 @@ private:
       return initiate_bootstrap();
     }
     endpoints_ = endpoints;
-    CB_LOG_TRACE("{} resolved \"{}:{}\" to {} endpoint(s)",
+    CB_LOG_TRACE("{} resolved \"{}\" to {} endpoint(s)",
                  log_prefix_,
-                 bootstrap_hostname_,
-                 bootstrap_port_,
+                 logger::system_data(bootstrap_address_),
                  endpoints_.size());
     do_connect(endpoints_.begin());
   }
@@ -2028,12 +2067,10 @@ private:
     if (it != endpoints_.end()) {
       auto hostname = it->endpoint().address().to_string();
       auto port = it->endpoint().port();
-      CB_LOG_DEBUG("{} connecting to {}:{} (\"{}:{}\"), timeout={}ms",
+      CB_LOG_DEBUG("{} connecting to {} (\"{}\"), timeout={}ms",
                    log_prefix_,
-                   hostname,
-                   port,
-                   bootstrap_hostname_,
-                   bootstrap_port_,
+                   logger::system_data(fmt::format("{}:{}", hostname, port)),
+                   logger::system_data(bootstrap_address_),
                    origin_.options().connect_timeout.count());
       connection_deadline_.expires_after(origin_.options().connect_timeout);
       connection_deadline_.async_wait(
@@ -2041,12 +2078,10 @@ private:
           if (timer_ec == asio::error::operation_aborted || self->stopped_) {
             return;
           }
-          CB_LOG_DEBUG("{} unable to connect to {}:{} (\"{}:{}\") in time, reconnecting",
+          CB_LOG_DEBUG("{} unable to connect to {} (\"{}\") in time, reconnecting",
                        self->log_prefix_,
-                       hostname,
-                       port,
-                       self->bootstrap_hostname_,
-                       self->bootstrap_port_);
+                       logger::system_data(fmt::format("{}:{}", hostname, port)),
+                       logger::system_data(self->bootstrap_address_));
           self->initiate_bootstrap();
         });
       stream_->async_connect(
@@ -2088,10 +2123,10 @@ private:
                              ? ERR_error_string(static_cast<unsigned long>(ec.value()), nullptr)
                              : ec.message();
 #endif
-      CB_LOG_WARNING("{} unable to connect to {}:{}: {} ({}){}. is_open={}",
+      CB_LOG_WARNING("{} unable to connect to {}: {} ({}){}. is_open={}",
                      log_prefix_,
-                     it->endpoint().address().to_string(),
-                     it->endpoint().port(),
+                     logger::system_data(fmt::format(
+                       "{}:{}", it->endpoint().address().to_string(), it->endpoint().port())),
                      ec.value(),
                      error_message,
                      (ec == asio::error::connection_refused)
@@ -2102,10 +2137,11 @@ private:
         stream_->close([self = shared_from_this(), next_address = ++it](std::error_code ec) {
           if (ec) {
             CB_LOG_WARNING(
-              "{} unable to close socket, but continue connecting attempt to {}:{}: {}",
+              "{} unable to close socket, but continue connecting attempt to {}: {}",
               self->log_prefix_,
-              next_address->endpoint().address().to_string(),
-              next_address->endpoint().port(),
+              logger::system_data(fmt::format("{}:{}",
+                                              next_address->endpoint().address().to_string(),
+                                              next_address->endpoint().port())),
               ec.value());
           }
           self->do_connect(next_address);
@@ -2116,22 +2152,25 @@ private:
     } else {
       stream_->set_options();
       connection_endpoints_ = { it->endpoint(), stream_->local_endpoint() };
-      CB_LOG_DEBUG("{} connected to {}:{}:{}",
+      CB_LOG_DEBUG("{} connected to {}",
                    log_prefix_,
-                   connection_endpoints_.local.port(),
-                   connection_endpoints_.remote_address,
-                   connection_endpoints_.remote.port());
+                   logger::system_data(fmt::format("{}:{}:{}",
+                                                   connection_endpoints_.local.port(),
+                                                   connection_endpoints_.remote_address,
+                                                   connection_endpoints_.remote.port())));
       {
         const std::scoped_lock lock(session_info_mutex_);
-        log_prefix_ = fmt::format("[{}/{}/{}/{}] <{}:{}/{}:{}>",
+        const auto endpoints = fmt::format("{}:{}/{}:{}",
+                                           connection_endpoints_.local.port(),
+                                           bootstrap_hostname_,
+                                           connection_endpoints_.remote_address,
+                                           connection_endpoints_.remote.port());
+        log_prefix_ = fmt::format("[{}/{}/{}/{}] <{}>",
                                   client_id_,
                                   id_,
                                   stream_->log_prefix(),
-                                  bucket_name_.value_or("-"),
-                                  connection_endpoints_.local.port(),
-                                  bootstrap_hostname_,
-                                  connection_endpoints_.remote_address,
-                                  connection_endpoints_.remote.port());
+                                  log_prefix_bucket_name(),
+                                  logger::system_data(endpoints));
       }
       parser_.reset();
       output_queue_.reset();
@@ -2146,14 +2185,13 @@ private:
         if (timer_ec == asio::error::operation_aborted || self->stopped_) {
           return;
         }
-        CB_LOG_DEBUG(
-          "{} unable to boostrap single node at {}:{}:{} (\"{}:{}\") in time, reconnecting",
-          self->log_prefix_,
-          self->connection_endpoints_.local.port(),
-          self->connection_endpoints_.remote_address,
-          self->connection_endpoints_.remote.port(),
-          self->bootstrap_hostname_,
-          self->bootstrap_port_);
+        CB_LOG_DEBUG("{} unable to boostrap single node at {} (\"{}\") in time, reconnecting",
+                     self->log_prefix_,
+                     logger::system_data(fmt::format("{}:{}:{}",
+                                                     self->connection_endpoints_.local.port(),
+                                                     self->connection_endpoints_.remote_address,
+                                                     self->connection_endpoints_.remote.port())),
+                     logger::system_data(self->bootstrap_address_));
         return self->initiate_bootstrap();
       });
     }
