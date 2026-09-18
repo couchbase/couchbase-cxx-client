@@ -31,7 +31,8 @@ namespace couchbase::core
 struct row_streamer_options {
   // JSONPointer nesting depth the lexer descends before treating a value as a row.
   std::uint32_t lexer_depth{ 4 };
-  // Buffered row bytes above which socket reads pause, and below which they resume (hysteresis).
+  // Buffered row bytes above which socket reads pause, and at or below which they resume
+  // (hysteresis). A zero low-water mark is honoured: reading resumes once the buffer is empty.
   std::size_t high_water_bytes{ std::size_t{ 2 } * 1024 * 1024 };
   std::size_t low_water_bytes{ std::size_t{ 512 } * 1024 };
   // Hard ceiling on a single row (or the trailing metadata) before a synthetic error is raised.

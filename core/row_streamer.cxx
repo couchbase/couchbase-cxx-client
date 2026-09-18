@@ -162,7 +162,7 @@ public:
         const auto row_bytes = row_content.size();
         handler(std::move(row_content), {});
 
-        // Release the row's budget and resume feeding if below the low-water mark.
+        // Release the row's budget and resume feeding at or below the low-water mark.
         self->release_buffered_bytes(row_bytes);
         if (self->should_resume()) {
           self->maybe_feed_lexer();
@@ -224,9 +224,13 @@ private:
     }
   }
 
+  // At or below the mark, not strictly below it: buffered_bytes_ is unsigned, so a strict
+  // comparison against a zero low-water mark can never hold and the consumer would never ask the
+  // producer to resume. Reading would stop for good at the first pause. An empty buffer resumes
+  // reading whatever the mark is set to.
   [[nodiscard]] auto should_resume() const -> bool
   {
-    return buffered_bytes_.load(std::memory_order_relaxed) < options_.low_water_bytes;
+    return buffered_bytes_.load(std::memory_order_relaxed) <= options_.low_water_bytes;
   }
 
   // Release a row's byte budget, clamping at zero. Uses an atomic compare-exchange loop so the
