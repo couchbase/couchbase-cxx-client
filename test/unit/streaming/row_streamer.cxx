@@ -24,12 +24,15 @@
 
 #include <asio/io_context.hpp>
 
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <future>
 #include <string>
 #include <system_error>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -261,21 +264,29 @@ surfaces_a_parsing_error_when_the_body_ends_mid_document([[maybe_unused]] contex
   assert_ne(end_ec, std::error_code{}, "a truncated document is a terminal parsing error");
 }
 
-void
-bounds_buffered_bytes_with_byte_watermarks([[maybe_unused]] context& ctx)
+// Builds a result set of row_count small rows. Against the deliberately tiny watermarks the cases
+// below configure, the payload runs to several times the high-water mark, so the streamer has to
+// pause and resume reading to deliver it.
+auto
+watermark_exercising_document(int row_count) -> std::string
 {
-  asio::io_context io;
-  // A document whose total row payload (~16 KB) is several times the high-water mark, so a working
-  // back-pressure implementation must stop reading long before the whole body is buffered.
-  constexpr int row_count = 2000;
   std::string doc = R"({"results":[)";
   for (int i = 0; i < row_count; ++i) {
     if (i != 0) {
-      doc += ",";
+      doc += ',';
     }
     doc += R"({"n":)" + std::to_string(i) + "}";
   }
   doc += R"(],"status":"success"})";
+  return doc;
+}
+
+void
+bounds_buffered_bytes_with_byte_watermarks([[maybe_unused]] context& ctx)
+{
+  asio::io_context io;
+  constexpr int row_count = 2000;
+  const std::string doc = watermark_exercising_document(row_count);
 
   couchbase::core::row_streamer_options opts{};
   opts.high_water_bytes = std::size_t{ 4 } * 1024;
@@ -289,8 +300,8 @@ bounds_buffered_bytes_with_byte_watermarks([[maybe_unused]] context& ctx)
   });
   // Consume nothing and let the streamer read as far as back-pressure permits.
   io.poll();
-  // A poll() that runs out of work leaves the io_context stopped, and the run() below would then
-  // return without draining a single row.
+  // The context stops for good if its last outstanding operation ever completes, and a stopped
+  // context runs no handler until it is restarted.
   io.restart();
 
   // Without watermarks the entire ~16 KB body would be buffered; with them, reads pause soon after
@@ -320,6 +331,138 @@ bounds_buffered_bytes_with_byte_watermarks([[maybe_unused]] context& ctx)
   assert_true(ended, "the stream terminates rather than parking the consumer");
   assert_eq(seen, row_count, "every row is yielded exactly once");
   assert_eq(streamer.buffered_bytes(), std::size_t{ 0 }, "draining releases the whole budget");
+}
+
+void
+refills_the_buffer_after_a_drain_below_the_low_water_mark([[maybe_unused]] context& ctx)
+{
+  asio::io_context io;
+  constexpr int row_count = 2000;
+  const std::string doc = watermark_exercising_document(row_count);
+
+  couchbase::core::row_streamer_options opts{};
+  opts.high_water_bytes = std::size_t{ 4 } * 1024;
+  opts.low_water_bytes = std::size_t{ 1 } * 1024;
+  constexpr std::size_t chunk_size = 256;
+  auto body = utils::make_chunked_response_body(io, doc, chunk_size);
+  couchbase::core::row_streamer streamer{ io, std::move(body), "/results/^", opts };
+
+  streamer.start([](std::string, std::error_code) {
+  });
+  io.poll();
+  const auto paused = streamer.buffered_bytes();
+  assert_true(paused > opts.high_water_bytes,
+              "reading pauses once the buffered budget passes the high-water mark");
+
+  // Drain more bytes than the budget held at the pause, one pull at a time. Reading stays stopped
+  // until a release drops the budget under the low-water mark, so passing that total is possible
+  // only if the resume refilled: a lost resume leaves the budget falling to zero and the pull past
+  // that point unanswered.
+  //
+  // Polled rather than run: a row handed to a full channel stays queued as a pending send, which
+  // is outstanding work that only a receiver completes, and this loop supplies one at a time. A
+  // run() would never return. restart() precedes each poll because the context stops for good if
+  // its last outstanding operation ever completes.
+  std::size_t released = 0;
+  int seen = 0;
+  while (released <= paused && seen < row_count) {
+    bool delivered = false;
+    std::error_code pull_ec{};
+    streamer.next_row([&](std::string row, std::error_code ec) {
+      pull_ec = ec;
+      released += row.size();
+      delivered = !row.empty();
+      ++seen;
+    });
+    for (int spin = 0; spin < 20 && !delivered; ++spin) {
+      io.restart();
+      io.poll();
+    }
+    assert_eq(pull_ec, std::error_code{}, "the stream is still mid-body while rows remain");
+    assert_true(delivered, "every pull is answered while rows remain");
+  }
+  assert_true(released > paused, "the drain released more than the budget held at the pause");
+  assert_ne(streamer.buffered_bytes(),
+            std::size_t{ 0 },
+            "the producer resumed reading rather than leaving the buffer drained");
+}
+
+void
+resumes_reading_when_a_drain_races_the_closing_read_window([[maybe_unused]] context& ctx)
+{
+  // The back-pressure handshake driven from more than one thread. The consumer releases a row's
+  // budget and then tries to claim the feed gate; the producer closes its read window and then
+  // re-checks the same budget. A side that decides on a stale view of the other declines a resume
+  // the other has already declined, leaving the stream with no read outstanding and the consumer
+  // parked in next_row. The watermarks force repeated pause/resume cycles, and no idle timeout is
+  // configured, so nothing exists that would end such a stall.
+  //
+  // On x86-TSO both sides are ordered whatever the accesses declare, so this cannot distinguish
+  // the handshake's memory ordering. What it pins is that a drain below the low-water mark is
+  // followed by a resume, which a lost resume fails on any target.
+  constexpr int row_count = 512;
+  constexpr int iterations = 4;
+  constexpr int io_threads = 4;
+  const std::string doc = watermark_exercising_document(row_count);
+
+  for (int iteration = 0; iteration < iterations; ++iteration) {
+    asio::io_context io;
+    couchbase::core::row_streamer_options opts{};
+    opts.high_water_bytes = std::size_t{ 2 } * 1024;
+    opts.low_water_bytes = std::size_t{ 512 };
+    auto body = utils::make_chunked_response_body(io, doc, 128);
+    couchbase::core::row_streamer streamer{ io, std::move(body), "/results/^", opts };
+
+    std::atomic_int seen{ 0 };
+    std::promise<std::error_code> terminal;
+    auto terminal_reached = terminal.get_future();
+    std::function<void()> pump = [&]() {
+      streamer.next_row([&](std::string row, std::error_code ec) {
+        if (ec || row.empty()) {
+          terminal.set_value(ec);
+          return;
+        }
+        seen.fetch_add(1);
+        pump();
+      });
+    };
+    streamer.start([&](std::string, std::error_code) {
+      pump();
+    });
+
+    std::vector<std::thread> runners;
+    // Declared after the thread vector, so it runs first on the way out and leaves no joinable
+    // thread for the vector's destructor to terminate the process over -- including when a later
+    // thread construction throws.
+    struct stop_and_join {
+      asio::io_context& io;
+      std::vector<std::thread>& threads;
+      ~stop_and_join()
+      {
+        io.stop();
+        for (auto& thread : threads) {
+          if (thread.joinable()) {
+            thread.join();
+          }
+        }
+      }
+    } const joiner{ io, runners };
+    runners.reserve(io_threads);
+    for (int i = 0; i < io_threads; ++i) {
+      runners.emplace_back([&io]() {
+        io.run();
+      });
+    }
+
+    // Bounded so a stall is reported by the assertion below rather than as an expired case. The
+    // case is registered with a budget that outlasts every iteration waiting this long.
+    const auto reached =
+      terminal_reached.wait_for(std::chrono::seconds{ 3 }) == std::future_status::ready;
+    assert_true(reached,
+                "the stream reaches its terminal rather than stalling with no read outstanding");
+    assert_eq(terminal_reached.get(), std::error_code{}, "the stream ends cleanly");
+    assert_eq(seen.load(), row_count, "every row is yielded exactly once");
+  }
 }
 
 void
@@ -459,6 +602,10 @@ tests() -> test_suite
       { CASE(yields_rows_then_clean_end_over_cached_body) },
       { CASE(surfaces_a_parsing_error_when_the_body_ends_mid_document) },
       { CASE(bounds_buffered_bytes_with_byte_watermarks) },
+      { CASE(refills_the_buffer_after_a_drain_below_the_low_water_mark) },
+      // timeout::slow, not network: the case bounds each stall at three seconds of its own, and
+      // the budget has to outlast those bounds for the failure to be reported as one.
+      { CASE(resumes_reading_when_a_drain_races_the_closing_read_window), {}, timeout::slow },
       { CASE(handles_an_empty_result_set) },
       { CASE(yields_scalar_and_null_row_values) },
       { CASE(preserves_embedded_brackets_and_unicode_in_a_row) },
