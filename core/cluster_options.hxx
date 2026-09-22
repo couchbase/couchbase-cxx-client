@@ -47,7 +47,6 @@ public:
   [[nodiscard]] std::chrono::milliseconds default_timeout_for(service_type type) const;
 
   std::chrono::milliseconds bootstrap_timeout = timeout_defaults::bootstrap_timeout;
-  std::chrono::milliseconds dispatch_timeout = timeout_defaults::dispatch_timeout;
   std::chrono::milliseconds resolve_timeout = timeout_defaults::resolve_timeout;
   std::chrono::milliseconds connect_timeout = timeout_defaults::connect_timeout;
   std::chrono::milliseconds key_value_timeout = timeout_defaults::key_value_timeout;
