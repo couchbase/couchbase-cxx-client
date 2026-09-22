@@ -19,9 +19,6 @@
 
 #include <couchbase/build_config.hxx>
 
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-#include "core/columnar/background_bootstrap_listener.hxx"
-#endif
 #include "configuration_belongs_to_session.hxx"
 #include "opaque_ring_table.hxx"
 
@@ -1230,45 +1227,6 @@ public:
           self->state_listener_->report_bootstrap_error(
             fmt::format("{}:{}", self->bootstrap_hostname_, self->bootstrap_port_), ec);
         }
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-        // an existing background bootstrap listener means we want to infinitely
-        // attempt to connect.
-        if (self->background_bootstrap_listener_) {
-          if (self->last_bootstrap_error_.has_value()) {
-            self->background_bootstrap_listener_->notify_bootstrap_error(
-              self->last_bootstrap_error_.value());
-          } else {
-            self->background_bootstrap_listener_->notify_bootstrap_error(
-              { make_error_code(errc::common::unambiguous_timeout),
-                "Unable to connect in time.",
-                self->bootstrap_hostname_,
-                self->bootstrap_port_ });
-          }
-          auto backoff = std::chrono::milliseconds(500);
-          CB_LOG_DEBUG("{} unable to connect in time, waiting for {}ms before retry",
-                       self->log_prefix_,
-                       backoff.count());
-          self->retry_backoff_.expires_after(backoff);
-          self->retry_backoff_.async_wait([self](std::error_code ec) mutable {
-            if (ec == asio::error::operation_aborted || self->stopped_) {
-              return;
-            }
-            self->origin_.restart();
-            self->initiate_bootstrap();
-          });
-        } else {
-          if (!ec) {
-            ec = errc::common::unambiguous_timeout;
-          }
-          CB_LOG_WARNING("{} unable to bootstrap in time, bootstrap_timeout: {}",
-                         self->log_prefix_,
-                         bootstrap_timeout);
-          if (auto h = std::move(self->bootstrap_callback_); h) {
-            h(ec, {});
-          }
-          self->stop(retry_reason::do_not_retry);
-        }
-#else
         if (!ec) {
           ec = errc::common::unambiguous_timeout;
         }
@@ -1279,7 +1237,6 @@ public:
           h(ec, {});
         }
         self->stop(retry_reason::do_not_retry);
-#endif
       });
     initiate_bootstrap();
   }
@@ -1306,19 +1263,6 @@ public:
       });
     }
     if (origin_.exhausted()) {
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-      if (background_bootstrap_listener_) {
-        if (last_bootstrap_error_.has_value()) {
-          background_bootstrap_listener_->notify_bootstrap_error(last_bootstrap_error_.value());
-        } else {
-          background_bootstrap_listener_->notify_bootstrap_error(
-            { errc::network::no_endpoints_left,
-              "Reached end of list of bootstrap nodes.",
-              bootstrap_hostname_,
-              bootstrap_port_ });
-        }
-      }
-#endif
       auto backoff = std::chrono::milliseconds(500);
       CB_LOG_DEBUG("{} reached the end of list of bootstrap nodes, waiting for {}ms before restart",
                    log_prefix_,
@@ -1496,11 +1440,6 @@ public:
     if (auto on_stop = std::move(on_stop_handler_); on_stop) {
       on_stop();
     }
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-    if (background_bootstrap_listener_) {
-      background_bootstrap_listener_ = nullptr;
-    }
-#endif
   }
 
   void write(std::vector<std::byte>&& buf)
@@ -1930,14 +1869,6 @@ public:
     }
     collection_cache_.update(path, uid);
   }
-
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-  void add_background_bootstrap_listener(
-    std::shared_ptr<columnar::background_bootstrap_listener> listener)
-  {
-    background_bootstrap_listener_ = std::move(listener);
-  }
-#endif
 
 private:
   /**
@@ -2406,11 +2337,6 @@ private:
   std::string log_prefix_{};
   std::chrono::time_point<std::chrono::steady_clock> last_active_{};
   std::atomic<diag::endpoint_state> state_{ diag::endpoint_state::disconnected };
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-  std::shared_ptr<columnar::background_bootstrap_listener> background_bootstrap_listener_{
-    nullptr
-  };
-#endif
 };
 
 mcbp_session::mcbp_session(const std::string& client_id,
@@ -2713,14 +2639,5 @@ mcbp_session::write_and_flush(std::vector<std::byte>&& buffer)
 {
   return impl_->write_and_flush(std::move(buffer));
 }
-
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-void
-mcbp_session::add_background_bootstrap_listener(
-  std::shared_ptr<columnar::background_bootstrap_listener> listener)
-{
-  return impl_->add_background_bootstrap_listener(std::move(listener));
-}
-#endif
 
 } // namespace couchbase::core::io

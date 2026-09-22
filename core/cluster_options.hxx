@@ -17,7 +17,6 @@
 
 #pragma once
 
-#include "core/columnar/security_options.hxx"
 #include "core/io/dns_config.hxx"
 #include "core/io/ip_protocol.hxx"
 #include "core/metrics/logging_meter_options.hxx"
@@ -108,7 +107,6 @@ public:
   // the cluster opens.
   bool dump_configuration{ false };
   bool disable_mozilla_ca_certificates{ false };
-  couchbase::core::columnar::security_options security_options{};
 
   bool enable_app_telemetry{ true };
   std::string app_telemetry_endpoint{};

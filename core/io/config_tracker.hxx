@@ -17,10 +17,6 @@
 
 #pragma once
 
-#include <couchbase/build_config.hxx>
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-#include "core/columnar/background_bootstrap_listener.hxx"
-#endif
 #include "core/config_listener.hxx"
 #include "core/protocol/hello_feature.hxx"
 #include "core/tls_context_provider.hxx"
@@ -75,18 +71,10 @@ class mcbp_session;
 class cluster_config_tracker_impl;
 class bucket_config_tracker_impl;
 
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-class cluster_config_tracker
-  : public std::enable_shared_from_this<cluster_config_tracker>
-  , public config_listener
-  , public columnar::background_bootstrap_listener
-{
-#else
 class cluster_config_tracker
   : public std::enable_shared_from_this<cluster_config_tracker>
   , public config_listener
 {
-#endif
 public:
   cluster_config_tracker(std::string client_id,
                          couchbase::core::origin origin,
@@ -103,14 +91,6 @@ public:
   void close();
   void register_state_listener();
   void update_config(topology::configuration config) override;
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-  void notify_bootstrap_error(const impl::bootstrap_error& error) override;
-  void notify_bootstrap_success(const std::string& session_id) override;
-  void register_bootstrap_notification_subscriber(
-    std::shared_ptr<columnar::bootstrap_notification_subscriber> subscriber) override;
-  void unregister_bootstrap_notification_subscriber(
-    std::shared_ptr<columnar::bootstrap_notification_subscriber> subscriber) override;
-#endif
   [[nodiscard]] auto has_config() const -> bool;
   [[nodiscard]] auto config() const -> std::optional<topology::configuration>;
   [[nodiscard]] auto supported_features() const -> std::vector<protocol::hello_feature>;

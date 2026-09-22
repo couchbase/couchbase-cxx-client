@@ -168,14 +168,6 @@ set(couchbase_cxx_client_FILES
     core/cluster_credentials.cxx
     core/cluster_options.cxx
     core/collections_component.cxx
-    core/columnar/backoff_calculator.cxx
-    core/columnar/columnar_agent.cxx
-    core/columnar/columnar_agent_config.cxx
-    core/columnar/columnar_error.cxx
-    core/columnar/error_codes.cxx
-    core/columnar/management_component.cxx
-    core/columnar/query_component.cxx
-    core/columnar/query_result.cxx
     core/config_profiles.cxx
     core/core_sdk_shim.cxx
     core/crud_component.cxx
