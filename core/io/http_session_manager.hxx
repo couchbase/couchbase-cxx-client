@@ -264,9 +264,8 @@ public:
     node_details preferred_node{};
 
     if (preferred_node_address.empty() && !undesired_node_address.empty()) {
-      // This is currently only used by Columnar to avoid the node
-      // that was last used and to satisfy the requirement for retrying on a different randomly
-      // selected node (as opposed to any node we have an idle session to).
+      // No sticky node, but one to avoid. Retrying elsewhere requires a different node chosen
+      // at random, not merely any node this manager happens to hold an idle session to.
       if (auto n = pick_random_node(type, undesired_node_address); n.port != 0) {
         preferred_node_address = fmt::format("{}:{}", n.hostname, n.port);
         preferred_node = std::move(n);

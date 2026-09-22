@@ -83,9 +83,6 @@ public:
 
   void open(core::origin origin, utils::movable_function<void(std::error_code)>&& handler) const;
 
-  void open_in_background(const couchbase::core::origin& origin,
-                          utils::movable_function<void(std::error_code)>&& handler) const;
-
   void close(utils::movable_function<void()>&& handler) const;
 
   void open_bucket(const std::string& bucket_name,

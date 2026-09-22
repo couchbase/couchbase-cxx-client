@@ -143,8 +143,6 @@ public:
   [[nodiscard]] auto bootstrap_hostname() const -> const std::string&;
   [[nodiscard]] auto bootstrap_port() const -> const std::string&;
   [[nodiscard]] auto bootstrap_port_number() const -> std::uint16_t;
-  [[nodiscard]] auto last_bootstrap_error() && -> std::optional<impl::bootstrap_error>;
-  [[nodiscard]] auto last_bootstrap_error() const& -> const std::optional<impl::bootstrap_error>&;
   [[nodiscard]] auto canonical_hostname() const -> const std::string&;
   [[nodiscard]] auto canonical_port_number() const -> std::uint16_t;
   void write_and_flush(std::vector<std::byte>&& buffer);

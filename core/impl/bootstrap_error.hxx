@@ -20,7 +20,6 @@
 #include <optional>
 #include <string>
 #include <system_error>
-#include <variant>
 
 namespace couchbase::core
 {
@@ -36,7 +35,5 @@ struct bootstrap_error {
 };
 
 } // namespace impl
-
-using error_union = std::variant<std::monostate, std::error_code, impl::bootstrap_error>;
 
 } // namespace couchbase::core

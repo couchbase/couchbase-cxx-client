@@ -42,7 +42,7 @@ core/                           Internal implementation (.hxx + .cxx). Selected 
   protocol/                     MCBP wire types.
   protostellar/                 couchbase2:// (gRPC) transport and generated stubs.
   operations/ management/       Request/response types; management operations.
-  transactions/ columnar/       Distributed transactions; columnar/analytics.
+  transactions/                 Distributed transactions.
   topology/ sasl/ crypto/       Cluster map, authentication, TLS/crypto helpers.
   tracing/ metrics/ logger/     Observability.
   impl/                         Misc internal helpers (DNS SRV, retry, etc.).

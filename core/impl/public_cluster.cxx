@@ -899,7 +899,7 @@ cluster::notify_fork(fork_event event) -> void
 
     new_impl->open([this, barrier, new_impl](const auto& err, const auto& /* c */) {
       if (err.ec()) {
-        // TODO(SA): we should fall to background reconnect loop similar to Columnar build
+        // TODO(SA): we should fall back to a background reconnect loop
         CB_LOG_ERROR("Unable to reconnect instance after fork: {}", err.ec().message());
       }
       // Adopt the new impl either way. Leaving impl_ null on failure turned the

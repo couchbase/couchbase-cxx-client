@@ -39,10 +39,9 @@ class http_component;
  * Dispatches a classic N1QL query as a streaming HTTP request and resolves to a query_stream
  * handle once the response preamble (signature + upfront errors) has been parsed.
  *
- * Unlike the buffered query() path this never materialises the full response body, and unlike the
- * columnar query_component it performs no client-side retry or prepared-statement caching: the
- * streaming path is only taken for adhoc requests (the public layer routes prepared statements to
- * the buffered path).
+ * Unlike the buffered query() path this never materialises the full response body. It performs no
+ * client-side retry or prepared-statement caching: the streaming path is only taken for adhoc
+ * requests (the public layer routes prepared statements to the buffered path).
  */
 class query_stream_component
 {
