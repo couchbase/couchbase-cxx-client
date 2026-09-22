@@ -91,12 +91,6 @@ case "${CB_SANITIZER}" in
         ;;
 esac
 
-CB_COLUMNAR=${CB_COLUMNAR:-""}
-if [ ! -z "$CB_COLUMNAR" ] ; then
-    CB_CMAKE_EXTRAS="${CB_CMAKE_EXTRAS} -DCOUCHBASE_CXX_CLIENT_COLUMNAR=ON"
-fi
-echo "CB_COLUMNAR=${CB_COLUMNAR}"
-
 # couchbase2:// (Protostellar/gRPC) support is opt-in because it needs gRPC and protobuf >= 3.15.
 CB_COUCHBASE2=${CB_COUCHBASE2:-""}
 if [ ! -z "$CB_COUCHBASE2" ] ; then
