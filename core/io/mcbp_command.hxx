@@ -35,6 +35,7 @@
 #include "mcbp_traits.hxx"
 #include "retry_orchestrator.hxx"
 
+#include <couchbase/build_config.hxx>
 #include <couchbase/durability_level.hxx>
 #include <couchbase/error_codes.hxx>
 

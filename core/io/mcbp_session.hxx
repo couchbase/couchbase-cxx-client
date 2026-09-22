@@ -17,8 +17,6 @@
 
 #pragma once
 
-#include <couchbase/build_config.hxx>
-
 #include "core/cluster_credentials.hxx"
 #include "core/protocol/hello_feature.hxx"
 #include "core/response_handler.hxx"
@@ -54,13 +52,6 @@ namespace couchbase::core
 {
 struct origin;
 class config_listener;
-
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-namespace columnar
-{
-class background_bootstrap_listener;
-} // namespace columnar
-#endif
 
 namespace topology
 {
@@ -180,10 +171,6 @@ public:
     -> std::optional<key_value_error_map_info>;
   void handle_not_my_vbucket(const io::mcbp_message& msg) const;
   void update_collection_uid(const std::string& path, std::uint32_t uid);
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-  void add_background_bootstrap_listener(
-    std::shared_ptr<columnar::background_bootstrap_listener> listener);
-#endif
 
 private:
   std::shared_ptr<mcbp_session_impl> impl_{ nullptr };

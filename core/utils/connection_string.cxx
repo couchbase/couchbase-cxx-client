@@ -15,8 +15,6 @@
  *   limitations under the License.
  */
 
-#include <couchbase/build_config.hxx>
-
 #include "connection_string.hxx"
 #include "core/logger/logger.hxx"
 #include "core/meta/version.hxx"
@@ -262,37 +260,6 @@ parse_option(io::ip_protocol& receiver,
   }
 }
 
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-void
-parse_option(std::chrono::milliseconds& receiver,
-             const std::string& name,
-             const std::string& value,
-             std::vector<std::string>& warnings)
-{
-  try {
-    receiver = std::chrono::duration_cast<std::chrono::milliseconds>(
-      parse_duration(string_codec::url_decode(value)));
-  } catch (const duration_parse_error& dpe) {
-    warnings.push_back(
-      fmt::format(R"(unable to parse "{}" parameter in connection string (value: "{}"): {})",
-                  name,
-                  value,
-                  dpe.what()));
-  } catch (const std::invalid_argument& ex1) {
-    warnings.push_back(fmt::format(
-      R"(unable to parse "{}" parameter in connection string (value "{}" is not a number): {})",
-      name,
-      value,
-      ex1.what()));
-  } catch (const std::out_of_range& ex2) {
-    warnings.push_back(fmt::format(
-      R"(unable to parse "{}" parameter in connection string (value "{}" is out of range): {})",
-      name,
-      value,
-      ex2.what()));
-  }
-}
-#else
 void
 parse_option(tls_verify_mode& receiver,
              const std::string& name,
@@ -360,7 +327,6 @@ parse_option(std::chrono::milliseconds& receiver,
     }
   }
 }
-#endif
 
 void
 extract_options(connection_string& connstr)
@@ -384,54 +350,6 @@ extract_options(connection_string& connstr)
     connstr.options.enable_dns_srv = false;
   }
   for (const auto& [name, value] : connstr.params) {
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-    if (name == "security.trust_only_pem_file") {
-      /**
-       * Set the trust cert path
-       */
-      parse_option(connstr.options.trust_certificate, name, value, connstr.warnings);
-    } else if (name == "security.disable_server_certificate_verification") {
-      /**
-       * Disable TLS server cert verification if set to true.
-       */
-      if (value == "true" || value == "yes" || value == "on" || value == "1") {
-        connstr.options.tls_verify = tls_verify_mode::none;
-      } else if (value == "false" || value == "no" || value == "off" || value == "0") {
-        connstr.options.tls_verify = tls_verify_mode::peer;
-      } else {
-        connstr.warnings.push_back(fmt::format(
-          R"(unable to parse "{}" parameter in connection string (value "{}" cannot be interpreted as a boolean))",
-          name,
-          value));
-      }
-
-    } else if (name == "timeout.connect_timeout") {
-      /**
-       * The period of time allocated to complete bootstrap
-       */
-      parse_option(connstr.options.bootstrap_timeout, name, value, connstr.warnings);
-    } else if (name == "timeout.dispatch_timeout") {
-      /**
-       * Number of seconds to wait before timing out a Query or N1QL request by the client.
-       */
-      parse_option(connstr.options.dispatch_timeout, name, value, connstr.warnings);
-    } else if (name == "timeout.query_timeout") {
-      /**
-       * Number of seconds to wait before timing out a Query or N1QL request by the client.
-       */
-      parse_option(connstr.options.query_timeout, name, value, connstr.warnings);
-    } else if (name == "timeout.resolve_timeout") {
-      /**
-       * The period of time to resolve DNS name of the node to IP address
-       */
-      parse_option(connstr.options.resolve_timeout, name, value, connstr.warnings);
-    } else if (name == "timeout.socket_connect_timeout") {
-      /**
-       * Number of seconds the client should wait while attempting to connect to a node’s KV service
-       * via a socket. Initial connection, reconnecting, node added, etc.
-       */
-      parse_option(connstr.options.connect_timeout, name, value, connstr.warnings);
-#else
     if (name == "kv_connect_timeout") {
       /**
        * Number of seconds the client should wait while attempting to connect to a node’s KV service
@@ -503,7 +421,6 @@ extract_options(connection_string& connstr)
       if (force_ipv4) {
         connstr.options.use_ip_protocol = io::ip_protocol::force_ipv4;
       }
-#endif
     } else if (name == "ip_protocol") {
       /**
        * Controls preference of IP protocol for name resolution
@@ -543,7 +460,6 @@ extract_options(connection_string& connstr)
       parse_option(connstr.options.enable_clustermap_notification, name, value, connstr.warnings);
     } else if (name == "disable_mozilla_ca_certificates") {
       parse_option(connstr.options.disable_mozilla_ca_certificates, name, value, connstr.warnings);
-#ifndef COUCHBASE_CXX_CLIENT_COLUMNAR
     } else if (name == "max_http_connections") {
       /**
        * The maximum number of HTTP connections allowed on a per-host and per-port basis.  0
@@ -600,7 +516,6 @@ extract_options(connection_string& connstr)
       parse_option(connstr.options.tls_disable_v1_2, name, value, connstr.warnings);
     } else if (name == "server_group") {
       parse_option(connstr.options.server_group, name, value, connstr.warnings);
-#endif
     } else if (name == "enable_app_telemetry") {
       parse_option(connstr.options.enable_app_telemetry, name, value, connstr.warnings);
     } else if (name == "app_telemetry_endpoint") {

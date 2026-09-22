@@ -21,8 +21,6 @@
 #include "core/origin.hxx"
 #include "core/utils/connection_string.hxx"
 
-#include <couchbase/build_config.hxx>
-
 #include <chrono>
 #include <cstddef>
 #include <map>
@@ -279,92 +277,6 @@ the_path_component_names_the_default_bucket([[maybe_unused]] context& ctx)
                "no path means no default bucket");
 }
 
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-void
-known_parameters_are_applied_to_the_options([[maybe_unused]] context& ctx)
-{
-  assert_true(parse_connection_string("couchbase://127.0.0.1").options.trust_certificate.empty(),
-              "no certificate by default");
-  assert_eq(parse_connection_string(
-              "couchbase://127.0.0.1?security.trust_only_pem_file=/etc/tls/example.cert")
-              .options.trust_certificate,
-            "/etc/tls/example.cert",
-            "the trusted certificate path");
-
-  auto spec = parse_connection_string(
-    "couchbase://127.0.0.1?timeout.connect_timeout=42ms&timeout.query_timeout=123ms");
-  assert_eq(spec.options.bootstrap_timeout.count(), 42, "bootstrap timeout");
-  assert_eq(spec.options.query_timeout.count(), 123, "query timeout");
-}
-
-void
-parameters_are_recorded_verbatim_alongside_the_options_they_set([[maybe_unused]] context& ctx)
-{
-  auto spec = parse_connection_string(
-    "couchbase://127.0.0.1?timeout.connect_timeout=42ms&timeout.query_timeout=123ms");
-  assert_eq(spec.params,
-            params{ { "timeout.connect_timeout", "42ms" }, { "timeout.query_timeout", "123ms" } },
-            "every recognised parameter");
-
-  spec = parse_connection_string("couchbase://127.0.0.1?timeout.connect_timeout=42ms&foo=bar");
-  assert_eq(spec.params,
-            params{ { "timeout.connect_timeout", "42ms" }, { "foo", "bar" } },
-            "an unrecognised parameter is recorded too");
-  assert_eq(spec.options.bootstrap_timeout.count(), 42, "the recognised one still applies");
-
-  spec = parse_connection_string("couchbase://127.0.0.1?timeout.resolve_timeout=4s2ms");
-  assert_eq(spec.params, params{ { "timeout.resolve_timeout", "4s2ms" } }, "a compound duration");
-  assert_eq(spec.options.resolve_timeout.count(), 4002, "the compound duration is summed");
-
-  spec = parse_connection_string("couchbase://"
-                                 "127.0.0.1?user_agent_extra=couchnode%2F4.1.1%20(node%2F12.11."
-                                 "1%3B%20v8%2F7.7.299.11-node.12%3B%20ssl%2F1.1.1c)");
-  assert_eq(spec.options.user_agent_extra,
-            "couchnode/4.1.1 (node/12.11.1; v8/7.7.299.11-node.12; ssl/1.1.1c)",
-            "a percent-encoded value is decoded");
-}
-
-void
-unusable_parameters_are_reported_as_warnings([[maybe_unused]] context& ctx)
-{
-  auto spec = parse_connection_string("couchbase://127.0.0.1?timeout.connect_timeout=42ms&foo=bar");
-  assert_eq(spec.warnings,
-            std::vector<std::string>{
-              R"(unknown parameter "foo" in connection string (value "bar"))",
-            },
-            "an unknown parameter");
-
-  spec = parse_connection_string("couchbase://127.0.0.1?enable_dns_srv=maybe&ip_protocol=yes");
-  assert_eq(spec.warnings,
-            std::vector<std::string>{
-              R"(unable to parse "enable_dns_srv" parameter in connection string )"
-              R"((value "maybe" cannot be interpreted as a boolean))",
-              R"(unable to parse "ip_protocol" parameter in connection string )"
-              R"((value "yes" is not a valid IP protocol preference))",
-            },
-            "values of the wrong type");
-
-  spec = parse_connection_string(
-    "couchbase://localhost:8091=http;127.0.0.1=mcd/default?enable_dns_srv=true");
-  assert_eq(spec.warnings,
-            std::vector<std::string>{
-              R"(parameter "enable_dns_srv" requires single entry in bootstrap nodes list of the )"
-              R"(connection string, ignoring (value "true"))",
-            },
-            "a parameter that contradicts the node list");
-
-  spec = parse_connection_string(
-    "couchbase://"
-    "localhost?timeout.query_timeout=10000ms&timeout.dispatch_timeout=true&timeout.resolve_"
-    "timeout=11000ms");
-  assert_starts_with(spec.warnings.at(0),
-                     R"(unable to parse "timeout.dispatch_timeout" parameter in connection string )"
-                     R"((value: "true"): invalid duration: true)",
-                     "the unparsable parameter is named");
-  assert_eq(spec.options.query_timeout.count(), 10000, "a parameter before the bad one applies");
-  assert_eq(spec.options.resolve_timeout.count(), 11000, "a parameter after the bad one applies");
-}
-#else
 void
 known_parameters_are_applied_to_the_options([[maybe_unused]] context& ctx)
 {
@@ -447,7 +359,6 @@ unusable_parameters_are_reported_as_warnings([[maybe_unused]] context& ctx)
   assert_eq(
     spec.options.management_timeout.count(), 11000, "a parameter after the bad one applies");
 }
-#endif
 
 void
 a_malformed_connection_string_is_rejected_with_a_located_error([[maybe_unused]] context& ctx)

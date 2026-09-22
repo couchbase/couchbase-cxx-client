@@ -224,24 +224,6 @@ struct traits<couchbase::transactions::transactions_config::built> {
   }
 };
 
-template<>
-struct traits<couchbase::core::columnar::security_options> {
-  template<template<typename...> class Traits>
-  static void assign(tao::json::basic_value<Traits>& v,
-                     const couchbase::core::columnar::security_options& o)
-  {
-    v = {
-      { "trust_only_capella", o.trust_only_capella },
-      { "trust_only_pem_file", o.trust_only_pem_file },
-      { "trust_only_pem_string", o.trust_only_pem_string },
-      { "trust_only_platform", o.trust_only_platform },
-      { "trust_only_certificates", o.trust_only_certificates.size() },
-      // TODO(JC): add if/when we support the cipher_suites option
-      // { "cipher_suites", utils::join_strings(o.cipher_suites, ":") },
-    };
-  }
-};
-
 } // namespace tao::json
 
 namespace couchbase::core
@@ -271,10 +253,6 @@ origin::to_json() const -> std::string
         { "disable_mozilla_ca_certificates", options_.disable_mozilla_ca_certificates },
         { "network", options_.network },
         { "tls_verify", options_.tls_verify },
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-        { "dispatch_timeout", options_.dispatch_timeout },
-        { "security_options", options_.security_options },
-#else
         { "key_value_timeout", options_.key_value_timeout },
         { "key_value_durable_timeout", options_.key_value_durable_timeout },
         { "view_timeout", options_.view_timeout },
@@ -298,7 +276,6 @@ origin::to_json() const -> std::string
         { "orphan_reporter_options", options_.orphan_options },
         { "transactions_options", options_.transactions },
         { "server_group", options_.server_group },
-#endif
       },
     },
   };

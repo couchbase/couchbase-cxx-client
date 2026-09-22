@@ -132,11 +132,7 @@ public:
 
   auto free_form_http_request(const http_request& request,
                               free_form_http_request_callback&& callback)
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-    -> tl::expected<std::shared_ptr<pending_operation>, error_union>
-#else
     -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
-#endif
   {
     return cluster_agent_.free_form_http_request(request, std::move(callback));
   }
@@ -225,11 +221,7 @@ agent_group::search_query(const search_query_options& options, search_query_call
 auto
 agent_group::free_form_http_request(const http_request& request,
                                     free_form_http_request_callback&& callback)
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-  -> tl::expected<std::shared_ptr<pending_operation>, error_union>
-#else
   -> tl::expected<std::shared_ptr<pending_operation>, std::error_code>
-#endif
 {
   return impl_->free_form_http_request(request, std::move(callback));
 }

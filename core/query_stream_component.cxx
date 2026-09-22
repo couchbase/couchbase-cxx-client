@@ -43,25 +43,11 @@ namespace couchbase::core
 {
 namespace
 {
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-auto
-to_error_code(const error_union& err) -> std::error_code
-{
-  if (std::holds_alternative<std::error_code>(err)) {
-    return std::get<std::error_code>(err);
-  }
-  if (std::holds_alternative<impl::bootstrap_error>(err)) {
-    return std::get<impl::bootstrap_error>(err).ec;
-  }
-  return {};
-}
-#else
 auto
 to_error_code(std::error_code err) -> std::error_code
 {
   return err;
 }
-#endif
 
 auto
 build_streaming_query_body(const operations::query_request& request,
@@ -145,11 +131,7 @@ public:
 
     auto callback_state = std::make_shared<callback_state_type>(std::move(handler));
 
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-    using dispatch_error = error_union;
-#else
     using dispatch_error = std::error_code;
-#endif
 
     const bool read_only = request.readonly;
     auto op = http_.do_http_request(

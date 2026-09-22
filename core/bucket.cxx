@@ -49,6 +49,7 @@
 #include "protocol/cmd_get_cluster_config.hxx"
 #include "retry_orchestrator.hxx"
 
+#include <couchbase/build_config.hxx>
 #include <couchbase/error_codes.hxx>
 #include <couchbase/retry_reason.hxx>
 #include <couchbase/retry_strategy.hxx>

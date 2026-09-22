@@ -17,8 +17,6 @@
 
 #include "config_tracker.hxx"
 
-#include <couchbase/build_config.hxx>
-
 #include "core/impl/bootstrap_state_listener.hxx"
 #include "core/logger/logger.hxx"
 #include "core/logger/redaction.hxx"
@@ -34,18 +32,10 @@
 namespace couchbase::core::io
 {
 
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-class cluster_config_tracker_impl
-  : public std::enable_shared_from_this<cluster_config_tracker_impl>
-  , public config_listener
-  , public columnar::background_bootstrap_listener
-{
-#else
 class cluster_config_tracker_impl
   : public std::enable_shared_from_this<cluster_config_tracker_impl>
   , public config_listener
 {
-#endif
 public:
   cluster_config_tracker_impl(std::string client_id,
                               couchbase::core::origin origin,
@@ -101,9 +91,6 @@ public:
       origin_.options().enable_tls
         ? io::mcbp_session(client_id_, {}, ctx_, tls_, origin_, state_listener_)
         : io::mcbp_session(client_id_, {}, ctx_, origin_, state_listener_);
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-    new_session.add_background_bootstrap_listener(shared_from_this());
-#endif
     new_session.bootstrap([self = shared_from_this(), new_session, h = std::move(handler)](
                             std::error_code ec, const topology::configuration& cfg) mutable {
       if (!ec) {
@@ -129,9 +116,6 @@ public:
         }
 
         new_session.on_configuration_update(self);
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-        self->notify_bootstrap_success(new_session.id());
-#endif
         new_session.on_stop([id = new_session.id(), self]() {
           self->remove_session(id);
         });
@@ -146,14 +130,6 @@ public:
         CB_LOG_WARNING(R"({} failed to bootstrap cluster session ec={}")",
                        new_session.log_prefix(),
                        ec.message());
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-        if (new_session.last_bootstrap_error().has_value()) {
-          self->notify_bootstrap_error(std::move(new_session).last_bootstrap_error().value());
-        } else {
-          self->notify_bootstrap_error(
-            { ec, ec.message(), new_session.bootstrap_hostname(), new_session.bootstrap_port() });
-        }
-#endif
       }
       h(ec, cfg, self->origin_.options());
     });
@@ -200,46 +176,6 @@ public:
   {
     update_cluster_config(config);
   }
-
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-  void notify_bootstrap_error(const impl::bootstrap_error& error) override
-  {
-    std::set<std::shared_ptr<columnar::bootstrap_notification_subscriber>> subscribers;
-    {
-      const std::scoped_lock lock(bootstrap_notification_subscribers_mutex_);
-      subscribers = bootstrap_notification_subscribers_;
-    }
-    for (const auto& subscriber : subscribers) {
-      subscriber->notify_bootstrap_error(error);
-    }
-  }
-
-  void notify_bootstrap_success(const std::string& session_id) override
-  {
-    std::set<std::shared_ptr<columnar::bootstrap_notification_subscriber>> subscribers;
-    {
-      const std::scoped_lock lock(bootstrap_notification_subscribers_mutex_);
-      subscribers = bootstrap_notification_subscribers_;
-    }
-    for (const auto& subscriber : subscribers) {
-      subscriber->notify_bootstrap_success(session_id);
-    }
-  }
-
-  void register_bootstrap_notification_subscriber(
-    std::shared_ptr<columnar::bootstrap_notification_subscriber> subscriber) override
-  {
-    const std::scoped_lock lock(bootstrap_notification_subscribers_mutex_);
-    bootstrap_notification_subscribers_.insert(subscriber);
-  }
-
-  void unregister_bootstrap_notification_subscriber(
-    std::shared_ptr<columnar::bootstrap_notification_subscriber> subscriber) override
-  {
-    const std::scoped_lock lock(bootstrap_notification_subscribers_mutex_);
-    bootstrap_notification_subscribers_.erase(subscriber);
-  }
-#endif
 
   [[nodiscard]] auto has_config() const -> bool
   {
@@ -410,9 +346,6 @@ private:
                    config.rev_str(),
                    session.id(),
                    logger::system_data(fmt::format("{}:{}", hostname, port)));
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-      session.add_background_bootstrap_listener(shared_from_this());
-#endif
       session.bootstrap([self = shared_from_this(), session](std::error_code err,
                                                              topology::configuration cfg) mutable {
         if (err) {
@@ -514,9 +447,6 @@ private:
                    current_config->rev_str(),
                    session.id(),
                    logger::system_data(fmt::format("{}:{}", hostname, port)));
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-      session.add_background_bootstrap_listener(shared_from_this());
-#endif
       session.bootstrap([self = shared_from_this(), session](std::error_code err,
                                                              topology::configuration cfg) mutable {
         if (err) {
@@ -581,12 +511,6 @@ private:
 
   std::vector<io::mcbp_session> sessions_{};
   mutable std::mutex sessions_mutex_{};
-
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-  std::set<std::shared_ptr<columnar::bootstrap_notification_subscriber>>
-    bootstrap_notification_subscribers_{};
-  std::mutex bootstrap_notification_subscribers_mutex_;
-#endif
 };
 
 cluster_config_tracker::cluster_config_tracker(
@@ -639,34 +563,6 @@ cluster_config_tracker::update_config(topology::configuration config)
 {
   return impl_->update_config(std::move(config));
 }
-
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-void
-cluster_config_tracker::notify_bootstrap_error(const impl::bootstrap_error& error)
-{
-  return impl_->notify_bootstrap_error(error);
-}
-
-void
-cluster_config_tracker::notify_bootstrap_success(const std::string& session_id)
-{
-  return impl_->notify_bootstrap_success(session_id);
-}
-
-void
-cluster_config_tracker::register_bootstrap_notification_subscriber(
-  std::shared_ptr<columnar::bootstrap_notification_subscriber> subscriber)
-{
-  return impl_->register_bootstrap_notification_subscriber(std::move(subscriber));
-}
-
-void
-cluster_config_tracker::unregister_bootstrap_notification_subscriber(
-  std::shared_ptr<columnar::bootstrap_notification_subscriber> subscriber)
-{
-  return impl_->unregister_bootstrap_notification_subscriber(std::move(subscriber));
-}
-#endif
 
 auto
 cluster_config_tracker::has_config() const -> bool

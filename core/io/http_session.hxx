@@ -17,7 +17,6 @@
 
 #pragma once
 
-#include <couchbase/build_config.hxx>
 #include <couchbase/error_codes.hxx>
 
 #include "core/diagnostics.hxx"
@@ -30,9 +29,6 @@
 #include "http_streaming_parser.hxx"
 #include "http_streaming_response.hxx"
 #include "streams.hxx"
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-#include "core/impl/bootstrap_error.hxx"
-#endif
 
 #include "core/tls_context_provider.hxx"
 
@@ -162,15 +158,10 @@ public:
     flush();
   }
 
-  void write_and_stream(io::http_request& request,
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-                        utils::movable_function<void(couchbase::core::error_union,
-                                                     io::http_streaming_response)> resp_handler,
-#else
-                        utils::movable_function<void(std::error_code, io::http_streaming_response)>
-                          resp_handler,
-#endif
-                        utils::movable_function<void()> stream_end_handler);
+  void write_and_stream(
+    io::http_request& request,
+    utils::movable_function<void(std::error_code, io::http_streaming_response)> resp_handler,
+    utils::movable_function<void()> stream_end_handler);
 
   void set_idle(std::chrono::milliseconds timeout);
   auto reset_idle() -> bool;
@@ -182,12 +173,7 @@ public:
 
 private:
   struct streaming_response_context {
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-    utils::movable_function<void(couchbase::core::error_union, io::http_streaming_response)>
-      resp_handler{};
-#else
     utils::movable_function<void(std::error_code, io::http_streaming_response)> resp_handler{};
-#endif
     utils::movable_function<void()> stream_end_handler{};
     std::optional<io::http_streaming_response> resp{};
     http_streaming_parser parser{};
