@@ -1898,14 +1898,6 @@ cluster::open(couchbase::core::origin origin,
 }
 
 void
-cluster::open_in_background(
-  [[maybe_unused]] const couchbase::core::origin& origin,
-  [[maybe_unused]] utils::movable_function<void(std::error_code)>&& handler) const
-{
-  CB_LOG_ERROR("Background open only available for Columnar builds.");
-}
-
-void
 cluster::diagnostics(std::optional<std::string> report_id,
                      utils::movable_function<void(diag::diagnostics_result)>&& handler) const
 {

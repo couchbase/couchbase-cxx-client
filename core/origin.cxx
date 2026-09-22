@@ -16,7 +16,6 @@
  */
 
 #include "origin.hxx"
-#include <couchbase/build_config.hxx>
 
 #include "core/utils/connection_string.hxx"
 #include "topology/configuration.hxx"
@@ -336,7 +335,7 @@ couchbase::core::origin::operator=(origin&& other) noexcept -> origin&
 // bucket and on into every session, and mcbp_session::initiate_bootstrap() tests exhausted()
 // before it ever calls next_address() -- so carrying the flag would send a session that has tried
 // nothing down the "reached the end of the list of bootstrap nodes" path: an unconditional 500 ms
-// backoff, plus a spurious no_endpoints_left notification under COUCHBASE_CXX_CLIENT_COLUMNAR.
+// backoff.
 //
 // Moving, by contrast, does carry it: a move transfers identity rather than producing an
 // independent origin.

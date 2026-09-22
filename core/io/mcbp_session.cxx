@@ -1714,16 +1714,6 @@ public:
     return ++opaque_;
   }
 
-  [[nodiscard]] auto last_bootstrap_error() && -> std::optional<impl::bootstrap_error>
-  {
-    return std::move(last_bootstrap_error_);
-  }
-
-  [[nodiscard]] auto last_bootstrap_error() const& -> const std::optional<impl::bootstrap_error>&
-  {
-    return last_bootstrap_error_;
-  }
-
   auto decode_error_code(std::uint16_t code) -> std::optional<key_value_error_map_info>
   {
     if (error_map_) {
@@ -2494,18 +2484,6 @@ auto
 mcbp_session::bootstrap_port_number() const -> std::uint16_t
 {
   return impl_->bootstrap_port_number();
-}
-
-auto
-mcbp_session::last_bootstrap_error() && -> std::optional<impl::bootstrap_error>
-{
-  return std::move(impl_)->last_bootstrap_error();
-}
-
-auto
-mcbp_session::last_bootstrap_error() const& -> const std::optional<impl::bootstrap_error>&
-{
-  return impl_->last_bootstrap_error();
 }
 
 auto
