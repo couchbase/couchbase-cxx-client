@@ -527,8 +527,8 @@ couchbase::core::origin::set_nodes_from_config(const topology::configuration& co
   next_node_ = nodes_.begin();
   // Matches set_nodes(): the node list has just been replaced, so any exhaustion recorded against
   // the previous list is meaningless. Without this an origin that was exhausted stays exhausted
-  // across every config update -- cluster.cxx and io/config_tracker.cxx both call this on
-  // long-lived origins that next_address() will have marked exhausted.
+  // across every config update -- cluster.cxx calls this on a long-lived origin that
+  // next_address() will have marked exhausted.
   exhausted_ = false;
 }
 void

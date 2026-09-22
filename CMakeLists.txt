@@ -301,7 +301,6 @@ set(couchbase_cxx_client_FILES
     core/impl/crypto.cxx
     core/impl/observability_recorder.cxx
     core/impl/transactions.cxx
-    core/io/config_tracker.cxx
     core/io/dns_client.cxx
     core/io/dns_config.cxx
     core/io/http_parser.cxx
