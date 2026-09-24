@@ -16,7 +16,6 @@
  */
 
 #include "origin.hxx"
-#include <couchbase/build_config.hxx>
 
 #include "core/utils/connection_string.hxx"
 #include "topology/configuration.hxx"
@@ -224,24 +223,6 @@ struct traits<couchbase::transactions::transactions_config::built> {
   }
 };
 
-template<>
-struct traits<couchbase::core::columnar::security_options> {
-  template<template<typename...> class Traits>
-  static void assign(tao::json::basic_value<Traits>& v,
-                     const couchbase::core::columnar::security_options& o)
-  {
-    v = {
-      { "trust_only_capella", o.trust_only_capella },
-      { "trust_only_pem_file", o.trust_only_pem_file },
-      { "trust_only_pem_string", o.trust_only_pem_string },
-      { "trust_only_platform", o.trust_only_platform },
-      { "trust_only_certificates", o.trust_only_certificates.size() },
-      // TODO(JC): add if/when we support the cipher_suites option
-      // { "cipher_suites", utils::join_strings(o.cipher_suites, ":") },
-    };
-  }
-};
-
 } // namespace tao::json
 
 namespace couchbase::core
@@ -271,10 +252,6 @@ origin::to_json() const -> std::string
         { "disable_mozilla_ca_certificates", options_.disable_mozilla_ca_certificates },
         { "network", options_.network },
         { "tls_verify", options_.tls_verify },
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-        { "dispatch_timeout", options_.dispatch_timeout },
-        { "security_options", options_.security_options },
-#else
         { "key_value_timeout", options_.key_value_timeout },
         { "key_value_durable_timeout", options_.key_value_durable_timeout },
         { "view_timeout", options_.view_timeout },
@@ -298,7 +275,6 @@ origin::to_json() const -> std::string
         { "orphan_reporter_options", options_.orphan_options },
         { "transactions_options", options_.transactions },
         { "server_group", options_.server_group },
-#endif
       },
     },
   };
@@ -359,7 +335,7 @@ couchbase::core::origin::operator=(origin&& other) noexcept -> origin&
 // bucket and on into every session, and mcbp_session::initiate_bootstrap() tests exhausted()
 // before it ever calls next_address() -- so carrying the flag would send a session that has tried
 // nothing down the "reached the end of the list of bootstrap nodes" path: an unconditional 500 ms
-// backoff, plus a spurious no_endpoints_left notification under COUCHBASE_CXX_CLIENT_COLUMNAR.
+// backoff.
 //
 // Moving, by contrast, does carry it: a move transfers identity rather than producing an
 // independent origin.
@@ -551,8 +527,8 @@ couchbase::core::origin::set_nodes_from_config(const topology::configuration& co
   next_node_ = nodes_.begin();
   // Matches set_nodes(): the node list has just been replaced, so any exhaustion recorded against
   // the previous list is meaningless. Without this an origin that was exhausted stays exhausted
-  // across every config update -- cluster.cxx and io/config_tracker.cxx both call this on
-  // long-lived origins that next_address() will have marked exhausted.
+  // across every config update -- cluster.cxx calls this on a long-lived origin that
+  // next_address() will have marked exhausted.
   exhausted_ = false;
 }
 void

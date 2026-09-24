@@ -19,8 +19,6 @@
 
 #include "core/io/http_session_manager.hxx"
 
-#include <couchbase/build_config.hxx>
-
 TEST_CASE("integration: random node selection with analytics service", "[integration]")
 {
   test::utils::integration_test_guard integration;
@@ -30,16 +28,6 @@ TEST_CASE("integration: random node selection with analytics service", "[integra
 
   auto [mgr_ec, session_mgr] = integration.cluster.http_session_manager();
   REQUIRE_SUCCESS(mgr_ec);
-
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-  auto barrier = std::make_shared<std::promise<bool>>();
-  session_mgr->add_to_deferred_queue([barrier](couchbase::core::error_union err) mutable {
-    REQUIRE(std::holds_alternative<std::monostate>(err));
-    barrier->set_value(true);
-  });
-  auto fut = barrier->get_future();
-  fut.get();
-#endif
 
   auto [origin_ec, origin] = integration.cluster.origin();
   REQUIRE_SUCCESS(origin_ec);

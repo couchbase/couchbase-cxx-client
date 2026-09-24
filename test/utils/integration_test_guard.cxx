@@ -88,7 +88,6 @@ spawn_io_threads(asio::io_context& io, std::size_t number_of_threads) -> std::ve
 static void
 gate_on_readiness(const couchbase::core::cluster& cluster, const std::string& bucket_name)
 {
-#ifndef COUCHBASE_CXX_CLIENT_COLUMNAR
   if (bucket_name.empty()) {
     return;
   }
@@ -101,10 +100,6 @@ gate_on_readiness(const couchbase::core::cluster& cluster, const std::string& bu
     CB_LOG_WARNING(
       "integration guard: bucket \"{}\" did not reach online state: {}", bucket_name, ec.message());
   }
-#else
-  (void)cluster;
-  (void)bucket_name;
-#endif
 }
 
 static auto

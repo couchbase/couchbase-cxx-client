@@ -89,13 +89,6 @@ sdk_build_info() -> std::map<std::string, std::string>
     "false"
 #endif
     ;
-  info["columnar"] =
-#if defined(COUCHBASE_CXX_CLIENT_COLUMNAR)
-    "true"
-#else
-    "false"
-#endif
-    ;
   // Whether this build can serve couchbase2:// connection strings, i.e. whether it was compiled
   // with Cloud Native Gateway support. A build without it rejects the scheme at connect time, so
   // the answer is worth reporting next to the other build-time switches.

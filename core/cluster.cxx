@@ -36,24 +36,20 @@
 #include "bucket.hxx"
 #include "capella.hxx"
 #include "capella_ca.hxx"
+#include "cluster_label_listener.hxx"
+#include "core/analytics_stream_component.hxx"
 #include "core/app_telemetry_meter.hxx"
 #include "core/app_telemetry_reporter.hxx"
+#include "core/core_sdk_shim.hxx"
 #include "core/diagnostics.hxx"
 #include "core/error.hxx"
+#include "core/http_component.hxx"
 #include "core/impl/lookup_in_replica.hxx"
 #include "core/impl/observe_seqno.hxx"
 #include "core/io/http_command.hxx"
 #include "core/io/http_message.hxx"
 #include "core/io/http_session_manager.hxx"
 #include "core/io/mcbp_session.hxx"
-#include "core/operations/document_get_replica.hxx"
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-#include "core/io/config_tracker.hxx"
-#endif
-#include "cluster_label_listener.hxx"
-#include "core/analytics_stream_component.hxx"
-#include "core/core_sdk_shim.hxx"
-#include "core/http_component.hxx"
 #include "core/logger/logger.hxx"
 #include "core/logger/redaction.hxx"
 #include "core/management/analytics_link_azure_blob_external.hxx"
@@ -74,6 +70,7 @@
 #include "core/operations/document_get_and_touch.hxx"
 #include "core/operations/document_get_any_replica.hxx"
 #include "core/operations/document_get_projected.hxx"
+#include "core/operations/document_get_replica.hxx"
 #include "core/operations/document_increment.hxx"
 #include "core/operations/document_insert.hxx"
 #include "core/operations/document_lookup_in.hxx"
@@ -424,22 +421,12 @@ struct component_routes<
 class cluster_impl : public std::enable_shared_from_this<cluster_impl>
 {
 public:
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-  explicit cluster_impl(asio::io_context& ctx)
-    : ctx_(ctx)
-    , work_(asio::make_work_guard(ctx_))
-    , session_manager_(std::make_shared<io::http_session_manager>(id_, ctx_, tls_, origin_))
-    , retry_backoff_(ctx_)
-  {
-  }
-#else
   explicit cluster_impl(asio::io_context& ctx)
     : ctx_(ctx)
     , work_(asio::make_work_guard(ctx_))
     , session_manager_(std::make_shared<io::http_session_manager>(id_, ctx_, tls_, origin_))
   {
   }
-#endif
 
   auto io_context() -> asio::io_context&
   {
@@ -668,42 +655,6 @@ public:
     }
     do_open(std::move(handler));
   }
-
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-  void open_in_background(couchbase::core::origin origin,
-                          utils::movable_function<void(std::error_code)>&& handler)
-  {
-    if (stopped_) {
-      return handler(errc::network::cluster_closed);
-    }
-    if (background_open_started_) {
-      CB_LOG_DEBUG("Background open already started for cluster, id: \"{}\"", id_);
-      return handler({});
-    }
-    if (origin.get_nodes().empty()) {
-      stopped_ = true;
-      work_.reset();
-      return handler(errc::common::invalid_argument);
-    }
-
-    origin_ = std::move(origin);
-    apply_log_redaction();
-    CB_LOG_DEBUG(R"(open cluster in background, id: "{}", core version: "{}", {})",
-                 id_,
-                 couchbase::core::meta::sdk_semver(),
-                 logger::user_data(origin_.to_json()));
-    setup_observability();
-    session_manager_->set_dispatch_timeout(origin_.options().dispatch_timeout);
-    // at this point we will infinitely try to connect
-    if (origin_.options().enable_dns_srv) {
-      do_background_dns_srv_open();
-    } else {
-      do_background_open();
-    }
-    background_open_started_ = true;
-    return handler({});
-  }
-#endif
 
   void open_bucket(const std::string& bucket_name,
                    utils::movable_function<void(std::error_code)>&& handler)
@@ -1481,176 +1432,6 @@ public:
     });
   }
 
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-  void do_background_open()
-  {
-    // TODO(JC): retries on more failures?  Right now only retry if load_verify_file() fails...
-
-    // Disables TLS v1.2 which should be okay cloud/columnar default.
-    auto ctx = tls_.get_ctx();
-    configure_tls_options(true, ctx);
-    if (origin_.options().security_options.trust_only_capella) {
-      std::error_code ec{};
-      CB_LOG_DEBUG(R"([{}]: use Capella CA for TLS verify)", id_);
-      ctx->add_certificate_authority(
-        asio::const_buffer(couchbase::core::default_ca::capellaCaCert,
-                           strlen(couchbase::core::default_ca::capellaCaCert)),
-        ec);
-      if (ec) {
-        CB_LOG_WARNING("[{}]: unable to load Capella CAs: {}", id_, ec.message());
-        // we don't consider this fatal and try to continue without it
-      }
-    } else if (origin_.options().security_options.trust_only_pem_file ||
-               origin_.options().security_options.trust_only_pem_string) {
-      if (origin_.options().trust_certificate.empty() /* No CA certificate (or other SDK-specific
-                                                         trust source) is specified */
-          && origin_.options()
-               .trust_certificate_value.empty() /* and certificate value has not been specified */
-          && origin_.options().tls_verify !=
-               tls_verify_mode::none /* The user did not disable all TLS verification */) {
-        CB_LOG_WARNING("[{}] When TLS is enabled, the cluster options must specify certificate(s) "
-                       "to trust or ensure that they are "
-                       "available in system CA store.",
-                       id_);
-      }
-      std::error_code ec{};
-      // load only the explicit certificate
-      // system and default capella certificates are not loaded
-      if (!origin_.options().trust_certificate_value.empty()) {
-        CB_LOG_DEBUG(R"([{}]: use TLS certificate passed through via options object)", id_);
-        ctx->add_certificate_authority(
-          asio::const_buffer(origin_.options().trust_certificate_value.data(),
-                             origin_.options().trust_certificate_value.size()),
-          ec);
-        if (ec) {
-          CB_LOG_WARNING(
-            "[{}]: unable to load CA passed via options object: {}", id_, ec.message());
-        }
-      }
-      if (!origin_.options().trust_certificate.empty()) {
-        CB_LOG_DEBUG(
-          R"([{}]: use TLS verify file: "{}")", id_, origin_.options().trust_certificate);
-        ctx->load_verify_file(origin_.options().trust_certificate, ec);
-        if (ec) {
-          CB_LOG_ERROR("[{}]: unable to load verify file \"{}\": {}",
-                       id_,
-                       origin_.options().trust_certificate,
-                       ec.message());
-          auto backoff = std::chrono::milliseconds(500);
-          CB_LOG_DEBUG(
-            "[{}] waiting for {}ms before retrying TLS verify file.", id_, backoff.count());
-          backoff_then_retry(backoff, [self = shared_from_this()]() {
-            self->do_background_open();
-          });
-        }
-      }
-    } else if (origin_.options().security_options.trust_only_platform) {
-      // TODO(CXXCBC-548): security_options updates (use Mozilla certs?)
-      CB_LOG_DEBUG(R"([{}]: use default CA for TLS verify)", id_);
-      std::error_code ec{};
-      // load system certificates
-      ctx->set_default_verify_paths(ec);
-      if (ec) {
-        CB_LOG_WARNING(R"([{}]: failed to load system CAs: {})", id_, ec.message());
-      }
-    } else if (!origin_.options().security_options.trust_only_certificates.empty()) {
-      std::error_code ec{};
-      CB_LOG_DEBUG("[{}]: loading {} user provided CA certificates.",
-                   id_,
-                   origin_.options().security_options.trust_only_certificates.size());
-      for (const auto& cert : origin_.options().security_options.trust_only_certificates) {
-        ctx->add_certificate_authority(asio::const_buffer(cert.data(), cert.size()), ec);
-        if (ec) {
-          CB_LOG_WARNING("[{}]: unable to load CA: {}", id_, ec.message());
-        }
-      }
-    }
-    // TODO(CXXCBC-548): security_options updates (support cipher suites)
-    // if (!origin_.options().security_options.cipher_suites.empty()) {
-    // }
-    config_tracker_ = std::make_shared<couchbase::core::io::cluster_config_tracker>(
-      id_, origin_, ctx_, tls_, dns_srv_tracker_);
-    config_tracker_->register_bootstrap_notification_subscriber(session_manager_);
-    create_cluster_sessions();
-  }
-
-  void backoff_then_retry(std::chrono::milliseconds backoff,
-                          utils::movable_function<void()> callback)
-  {
-    retry_backoff_.expires_after(backoff);
-    retry_backoff_.async_wait(
-      [self = shared_from_this(), cb = std::move(callback)](std::error_code ec) {
-        if (ec == asio::error::operation_aborted || self->stopped_) {
-          return;
-        }
-        if (ec) {
-          CB_LOG_WARNING("[{}] Retry callback received error ec={}.", self->id_, ec.message());
-        }
-        cb();
-      });
-  }
-
-  void do_background_dns_srv_open()
-  {
-    std::string hostname;
-    std::string port;
-    std::tie(hostname, port) = origin_.next_address();
-    dns_srv_tracker_ = std::make_shared<impl::dns_srv_tracker>(
-      ctx_, hostname, origin_.options().dns_config, origin_.options().enable_tls);
-    return asio::post(asio::bind_executor(
-      ctx_, [self = shared_from_this(), hostname = std::move(hostname)]() mutable {
-        return self->dns_srv_tracker_->get_srv_nodes(
-          [self, hostname = std::move(hostname)](origin::node_list nodes,
-                                                 std::error_code ec) mutable {
-            if (ec) {
-              auto backoff = std::chrono::milliseconds(500);
-              self->session_manager_->notify_bootstrap_error({ ec, ec.message(), hostname, {} });
-              CB_LOG_DEBUG(
-                "[{}] waiting for {}ms before retrying DNS query.", self->id_, backoff.count());
-              self->backoff_then_retry(backoff, [self]() {
-                self->do_background_dns_srv_open();
-              });
-              return;
-            }
-            if (!nodes.empty()) {
-              self->origin_.set_nodes(std::move(nodes));
-              CB_LOG_INFO(
-                "[{}] Replace list of bootstrap nodes with addresses from DNS SRV of \"{}\": [{}]",
-                self->id_,
-                logger::system_data(hostname),
-                logger::system_data_list(self->origin_.get_node_addresses(),
-                                         logger::list_entries::quoted));
-            }
-            return self->do_background_open();
-          });
-      }));
-  }
-
-  void create_cluster_sessions()
-  {
-    config_tracker_->create_sessions(
-      [self = shared_from_this()](std::error_code ec,
-                                  const topology::configuration& cfg,
-                                  const cluster_options& options) mutable {
-        if (ec) {
-          auto backoff = std::chrono::milliseconds(500);
-          CB_LOG_DEBUG("[{}] Waiting for {}ms before retrying to create cluster sessions.",
-                       self->id_,
-                       backoff.count());
-          self->backoff_then_retry(backoff, [self]() {
-            self->create_cluster_sessions();
-          });
-        } else {
-          self->session_manager_->set_configuration(cfg, options);
-          self->config_tracker_->on_configuration_update(self->session_manager_);
-          self->config_tracker_->on_configuration_update(self->app_telemetry_reporter_);
-          self->app_telemetry_reporter_->update_config(cfg);
-          self->config_tracker_->register_state_listener();
-        }
-      });
-  }
-#endif
-
   void with_bucket_configuration(
     const std::string& bucket_name,
     utils::movable_function<void(std::error_code, std::shared_ptr<topology::configuration>)>&&
@@ -1819,14 +1600,6 @@ public:
         if (auto session = std::move(self->session_); session) {
           session->stop(retry_reason::do_not_retry);
         }
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-        if (self->config_tracker_) {
-          self->config_tracker_->close();
-          self->config_tracker_->unregister_bootstrap_notification_subscriber(
-            self->session_manager_);
-        }
-        self->retry_backoff_.cancel();
-#endif
 
         std::map<std::string, std::shared_ptr<bucket>> buckets{};
         {
@@ -2064,12 +1837,6 @@ private:
   std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter_{
     std::make_shared<core::app_telemetry_meter>()
   };
-
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-  std::shared_ptr<couchbase::core::io::cluster_config_tracker> config_tracker_{};
-  asio::steady_timer retry_backoff_;
-  std::atomic_bool background_open_started_{ false };
-#endif
 };
 
 cluster::cluster(asio::io_context& ctx)
@@ -2128,20 +1895,6 @@ cluster::open(couchbase::core::origin origin,
   if (impl_) {
     impl_->open(std::move(origin), std::move(handler));
   }
-}
-
-void
-cluster::open_in_background(
-  [[maybe_unused]] const couchbase::core::origin& origin,
-  [[maybe_unused]] utils::movable_function<void(std::error_code)>&& handler) const
-{
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-  if (impl_) {
-    impl_->open_in_background(origin, std::move(handler));
-  }
-#else
-  CB_LOG_ERROR("Background open only available for Columnar builds.");
-#endif
 }
 
 void

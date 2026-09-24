@@ -59,30 +59,6 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
   std::chrono::milliseconds timeout_{};
   std::string client_context_id_;
   std::shared_ptr<couchbase::tracing::request_span> parent_span_{ nullptr };
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-  std::chrono::milliseconds dispatch_timeout_{};
-  asio::steady_timer dispatch_deadline_;
-
-  http_command(asio::io_context& ctx,
-               Request req,
-               std::shared_ptr<tracing::tracer_wrapper> tracer,
-               std::shared_ptr<metrics::meter_wrapper> meter,
-               std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter,
-               std::chrono::milliseconds default_timeout,
-               std::chrono::milliseconds dispatch_timeout)
-    : deadline(ctx)
-    , request(req)
-    , tracer_(std::move(tracer))
-    , meter_(std::move(meter))
-    , app_telemetry_meter_(std::move(app_telemetry_meter))
-    , timeout_(request.timeout.value_or(default_timeout))
-    , client_context_id_(request.client_context_id.value_or(uuid::to_string(uuid::random())))
-    , parent_span_(request.parent_span)
-    , dispatch_timeout_(dispatch_timeout)
-    , dispatch_deadline_(ctx)
-  {
-  }
-#else
   http_command(asio::io_context& ctx,
                Request req,
                std::shared_ptr<tracing::tracer_wrapper> tracer,
@@ -99,7 +75,6 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
     , parent_span_(request.parent_span)
   {
   }
-#endif
 
   void start(handler_type&& handler)
   {
@@ -112,18 +87,6 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
 #endif
 
     handler_ = std::move(handler);
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-    dispatch_deadline_.expires_after(dispatch_timeout_);
-    dispatch_deadline_.async_wait([self = this->shared_from_this()](std::error_code ec) {
-      if (ec == asio::error::operation_aborted) {
-        return;
-      }
-      CB_LOG_DEBUG(R"(HTTP request timed out before dispatch: {}, client_context_id="{}")",
-                   self->request.type,
-                   self->client_context_id_);
-      self->cancel(errc::common::unambiguous_timeout);
-    });
-#endif
     deadline.expires_after(timeout_);
     deadline.async_wait([self = this->shared_from_this()](std::error_code ec) {
       if (ec == asio::error::operation_aborted) {
@@ -150,24 +113,12 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
     }
   }
 
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-  void invoke_handler(error_union error, io::http_response&& msg)
-#else
   void invoke_handler(std::error_code ec, io::http_response&& msg)
-#endif
   {
     if (handler_type handler = std::move(handler_); handler) {
       const auto& node_uuid = session_ ? session_->node_uuid() : "";
       auto telemetry_recorder = app_telemetry_meter_->value_recorder(node_uuid, {});
       telemetry_recorder->update_counter(total_counter_for_service_type(request.type));
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-      std::error_code ec{};
-      if (std::holds_alternative<std::error_code>(error)) {
-        ec = std::get<std::error_code>(error);
-      } else if (std::holds_alternative<impl::bootstrap_error>(error)) {
-        ec = std::get<impl::bootstrap_error>(error).ec;
-      }
-#endif
       if (ec == errc::common::ambiguous_timeout || ec == errc::common::unambiguous_timeout) {
         telemetry_recorder->update_counter(timedout_counter_for_service_type(request.type));
       } else if (ec == errc::common::request_canceled) {
@@ -175,24 +126,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
       }
       encoded_response_type encoded_resp{ std::move(msg) };
       error_context_type ctx{};
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-      if (!std::holds_alternative<std::monostate>(error)) {
-        if (std::holds_alternative<impl::bootstrap_error>(error)) {
-          auto bootstrap_error = std::get<impl::bootstrap_error>(error);
-          if (bootstrap_error.ec == errc::common::unambiguous_timeout) {
-            CB_LOG_DEBUG("Timeout caused by bootstrap error. code={}, ec_message={}, message={}.",
-                         bootstrap_error.ec.value(),
-                         bootstrap_error.ec.message(),
-                         bootstrap_error.error_message);
-          }
-          ctx.ec = bootstrap_error.ec;
-        } else {
-          ctx.ec = std::get<std::error_code>(error);
-        }
-      }
-#else
       ctx.ec = ec;
-#endif
       ctx.client_context_id = client_context_id_;
       ctx.method = encoded.method;
       ctx.path = encoded.path;
@@ -213,17 +147,11 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
 
       handler(std::move(resp));
     }
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-    dispatch_deadline_.cancel();
-#endif
     deadline.cancel();
   }
 
   void send_to()
   {
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-    dispatch_deadline_.cancel();
-#endif
     if (!handler_) {
       return;
     }
@@ -240,14 +168,6 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
   {
     return deadline.expiry();
   }
-
-#ifdef COUCHBASE_CXX_CLIENT_COLUMNAR
-  [[nodiscard]] auto dispatch_deadline_expiry() const
-    -> std::chrono::time_point<std::chrono::steady_clock>
-  {
-    return dispatch_deadline_.expiry();
-  }
-#endif
 
 private:
   void send()

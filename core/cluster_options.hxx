@@ -17,7 +17,6 @@
 
 #pragma once
 
-#include "core/columnar/security_options.hxx"
 #include "core/io/dns_config.hxx"
 #include "core/io/ip_protocol.hxx"
 #include "core/metrics/logging_meter_options.hxx"
@@ -48,7 +47,6 @@ public:
   [[nodiscard]] std::chrono::milliseconds default_timeout_for(service_type type) const;
 
   std::chrono::milliseconds bootstrap_timeout = timeout_defaults::bootstrap_timeout;
-  std::chrono::milliseconds dispatch_timeout = timeout_defaults::dispatch_timeout;
   std::chrono::milliseconds resolve_timeout = timeout_defaults::resolve_timeout;
   std::chrono::milliseconds connect_timeout = timeout_defaults::connect_timeout;
   std::chrono::milliseconds key_value_timeout = timeout_defaults::key_value_timeout;
@@ -108,7 +106,6 @@ public:
   // the cluster opens.
   bool dump_configuration{ false };
   bool disable_mozilla_ca_certificates{ false };
-  couchbase::core::columnar::security_options security_options{};
 
   bool enable_app_telemetry{ true };
   std::string app_telemetry_endpoint{};

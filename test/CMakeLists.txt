@@ -62,11 +62,6 @@ integration_test(examples)
 integration_test(examples_streaming)
 transaction_test(examples)
 
-if(COUCHBASE_CXX_CLIENT_COLUMNAR)
-  integration_test(columnar_query)
-  integration_test(columnar_management)
-endif()
-
 # The framework's cluster-probe selftest. Registered here rather than in cmake/TestFramework.cmake
 # because couchbase_add_test() appends the target to COUCHBASE_INTEGRATION_TESTS, and
 # cmake/Testing.cmake blanks that property after TestFramework.cmake has been read -- an append made
