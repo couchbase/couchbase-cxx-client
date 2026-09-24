@@ -17,9 +17,11 @@
 
 #pragma once
 
+#include "core/io/stream_deadline.hxx"
 #include "row_streamer_options.hxx"
 #include "utils/movable_function.hxx"
 
+#include <chrono>
 #include <memory>
 #include <optional>
 #include <string>
@@ -53,6 +55,26 @@ public:
    * Retrieves the next row
    */
   void next_row(utils::movable_function<void(std::string, std::error_code)>&& handler);
+
+  /**
+   * Closes the HTTP body at `deadline_tp`, whether or not a row is being pulled, releasing the
+   * connection where one is still held. A response received in full holds none: once its bytes
+   * have also been parsed the call arms nothing and reports body_already_ended, and while bytes
+   * remain unparsed it ends the body, dropping those and reporting the timeout. Rows already
+   * parsed stay consumable either way. The inter-read idle timer is armed only while a socket
+   * read is in flight, and a consumer stopped above the high-water mark has none.
+   *
+   * The terminal reaches the consumer through a pull. A pull outstanding at expiry completes
+   * with the timeout. A read that completes the response is the exception: the whole response
+   * arrived, so those bytes are delivered as a clean end. Otherwise the next pull reports the
+   * terminal, after any rows already buffered.
+   *
+   * Optional. The terminal is unambiguous_timeout for a read-only request, ambiguous_timeout
+   * otherwise. Re-arming before expiry replaces the deadline. Once the stream has ended a
+   * further call arms nothing and reports body_already_ended. Callable from any thread.
+   */
+  [[nodiscard]] auto set_deadline(std::chrono::time_point<std::chrono::steady_clock> deadline_tp)
+    -> io::deadline_state;
 
   /**
    * Cancels the row stream & closes the HTTP connection

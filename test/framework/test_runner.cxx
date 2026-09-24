@@ -17,6 +17,8 @@
 
 #include "test_runner.hxx"
 
+#include "context.hxx"
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -387,8 +389,6 @@ timeout_multiplier(const std::optional<std::string>& raw) -> double
   return factor;
 }
 
-namespace
-{
 auto
 scale_budget(std::chrono::milliseconds budget, double factor) -> std::chrono::milliseconds
 {
@@ -408,7 +408,6 @@ scale_budget(std::chrono::milliseconds budget, double factor) -> std::chrono::mi
     product >= ceiling ? std::numeric_limits<rep>::max() : static_cast<rep>(product);
   return std::chrono::milliseconds{ std::max<rep>(scaled, 1) };
 }
-} // namespace
 
 void
 scale_timeouts(test_suite& suite, double factor)

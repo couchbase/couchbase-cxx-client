@@ -102,17 +102,6 @@ case_names(const test_suite& suite) -> std::vector<std::string>;
 [[nodiscard]] auto
 describe_cases(const test_suite& suite) -> std::vector<std::string>;
 
-// Environment variable holding a factor applied to every case's timeout budget.
-inline constexpr auto timeout_multiplier_variable = "CB_TEST_TIMEOUT_MULTIPLIER";
-
-// Interpret the value of timeout_multiplier_variable; std::nullopt yields 1.0. Budgets are
-// absolute milliseconds and a run under valgrind or a sanitizer is an order of magnitude slower,
-// so without a multiplier such a leg reports timeouts rather than behaviour. A value that is not
-// wholly a positive number throws std::invalid_argument: it is a broken invocation, not a request
-// for the default.
-[[nodiscard]] auto
-timeout_multiplier(const std::optional<std::string>& raw) -> double;
-
 // Multiply every budget in `suite` by `factor`, rounding up, to at least one millisecond.
 void
 scale_timeouts(test_suite& suite, double factor);

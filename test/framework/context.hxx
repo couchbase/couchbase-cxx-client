@@ -175,6 +175,24 @@ make_probe_backend(const configuration& config) -> std::unique_ptr<probe_backend
 [[nodiscard]] auto
 safe_getenv(const std::string& name) noexcept -> std::optional<std::string>;
 
+// Environment variable holding a factor applied to every case's timeout budget.
+inline constexpr auto timeout_multiplier_variable = "CB_TEST_TIMEOUT_MULTIPLIER";
+
+// Interpret the value of timeout_multiplier_variable; std::nullopt yields 1.0. Budgets are
+// absolute milliseconds and a run under valgrind or a sanitizer is an order of magnitude slower,
+// so without a multiplier such a run reports timeouts rather than behaviour. A value that is not
+// wholly a positive number throws std::invalid_argument: it is a broken invocation, not a request
+// for the default.
+[[nodiscard]] auto
+timeout_multiplier(const std::optional<std::string>& raw) -> double;
+
+// Scale a duration by that factor the way every case budget is scaled: ceiling rather than
+// nearest, saturating before the narrowing cast, and never below one millisecond. A test deriving
+// its own duration from the multiplier uses this rather than repeating the arithmetic, where an
+// accepted factor like 0.0001 would truncate to zero and a large one would overflow the cast.
+[[nodiscard]] auto
+scale_budget(std::chrono::milliseconds budget, double factor) -> std::chrono::milliseconds;
+
 class context
 {
 public:

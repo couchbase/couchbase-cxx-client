@@ -32,6 +32,27 @@
 
 namespace couchbase::core::io
 {
+namespace
+{
+// Runs a stream-end handler when the enclosing scope exits, so that check-in cannot be skipped by
+// an exception escaping the completion it must follow.
+struct stream_end_on_exit {
+  utils::movable_function<void()>& handler;
+
+  ~stream_end_on_exit()
+  {
+    if (handler) {
+      handler();
+    }
+  }
+
+  stream_end_on_exit(const stream_end_on_exit&) = delete;
+  stream_end_on_exit(stream_end_on_exit&&) = delete;
+  auto operator=(const stream_end_on_exit&) -> stream_end_on_exit& = delete;
+  auto operator=(stream_end_on_exit&&) -> stream_end_on_exit& = delete;
+};
+} // namespace
+
 http_session_info::http_session_info(const std::string& client_id, const std::string& session_id)
   : log_prefix_(fmt::format("[{}/{}]", client_id, session_id))
 {
@@ -576,20 +597,24 @@ http_session::read_some(
         std::swap(data, self->current_streaming_response_.parser.body_chunk);
       }
 
+      streaming_response_context ctx{};
       if (res.complete) {
-        streaming_response_context ctx{};
         {
           const std::scoped_lock lock(self->current_response_mutex_);
           std::swap(self->current_streaming_response_, ctx);
-        }
-        if (ctx.stream_end_handler) {
-          ctx.stream_end_handler();
         }
         if (ctx.resp->must_close_connection()) {
           self->keep_alive_ = false;
         }
       }
       lck.unlock();
+      // The stream-end handler checks this connection back into the keep-alive pool, and must not
+      // run until the body has observed the end of its response. Until it does,
+      // http_streaming_response_body_impl still holds this session with reading_complete_ false,
+      // and treats it as a response abandoned mid-body: a deadline expiry reaching close_impl in
+      // that state stops the session. Checking in first publishes the connection while that is
+      // still true, so the stop lands on whichever request took it out of the pool next.
+      const stream_end_on_exit check_in{ ctx.stream_end_handler };
       callback(std::move(data), !res.complete, {});
     });
 }
