@@ -162,7 +162,7 @@ public:
         const auto row_bytes = row_content.size();
         handler(std::move(row_content), {});
 
-        // Release the row's budget and resume feeding if below the low-water mark.
+        // Release the row's budget and resume feeding at or below the low-water mark.
         self->release_buffered_bytes(row_bytes);
         if (self->should_resume()) {
           self->maybe_feed_lexer();
@@ -224,21 +224,35 @@ private:
     }
   }
 
+  // At or below the mark, not strictly below it: buffered_bytes_ is unsigned, so a strict
+  // comparison against a zero low-water mark can never hold and the consumer would never ask the
+  // producer to resume. Reading would stop for good at the first pause. An empty buffer resumes
+  // reading whatever the mark is set to.
   [[nodiscard]] auto should_resume() const -> bool
   {
-    return buffered_bytes_.load(std::memory_order_relaxed) < options_.low_water_bytes;
+    return buffered_bytes_.load(std::memory_order_relaxed) <= options_.low_water_bytes;
   }
 
   // Release a row's byte budget, clamping at zero. Uses an atomic compare-exchange loop so the
   // subtract is a single read-modify-write: even if the io_context is driven by more than one
   // thread, a concurrent update to buffered_bytes_ cannot be lost (as it could with a separate
-  // load + store). Relaxed ordering is sufficient because the channel handoff already provides the
-  // ordering between producer and consumer.
+  // load + store).
+  //
+  // Sequentially consistent, as is the gating load in maybe_feed_lexer(). The handshake needs
+  // visibility from consumer to producer, the opposite direction from the channel handoff, which
+  // therefore supplies nothing here. A consumer that drains below the low-water mark and then
+  // loses the feeding_ compare-exchange leaves the resume to the producer's gate; a gate reading a
+  // pre-drain value declines it too, and the stream stalls with no read outstanding and the
+  // consumer parked in next_row. Relaxed on both ends leaves that store-buffering shape open, and
+  // release/acquire does not forbid it either. Only a total order covering all four accesses --
+  // these two and the feeding_ gate's -- rules the stall out.
   void release_buffered_bytes(std::size_t n)
   {
     auto current = buffered_bytes_.load(std::memory_order_relaxed);
-    while (!buffered_bytes_.compare_exchange_weak(
-      current, current >= n ? current - n : 0, std::memory_order_relaxed)) {
+    while (!buffered_bytes_.compare_exchange_weak(current,
+                                                  current >= n ? current - n : 0,
+                                                  std::memory_order_seq_cst,
+                                                  std::memory_order_relaxed)) {
     }
   }
 
@@ -276,8 +290,11 @@ private:
 
   void maybe_feed_lexer()
   {
+    // Sequentially consistent, as is the releasing read-modify-write in release_buffered_bytes().
+    // A consumer that has drained below the low-water mark and lost the gate below leaves the
+    // resume to this load, which has to observe its release.
     if (received_all_data_ ||
-        buffered_bytes_.load(std::memory_order_relaxed) > options_.high_water_bytes) {
+        buffered_bytes_.load(std::memory_order_seq_cst) > options_.high_water_bytes) {
       return;
     }
 
