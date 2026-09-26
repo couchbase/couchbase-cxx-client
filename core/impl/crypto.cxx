@@ -33,7 +33,7 @@ generate_initialization_vector() -> std::pair<error, std::vector<std::byte>>
 {
 
   std::vector<std::byte> iv{ 16 };
-#ifdef COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL
+#ifdef COUCHBASE_CXX_CLIENT_STATIC_AWSLC
   auto iv_size = iv.size();
 #else
   auto iv_size = static_cast<int>(iv.size());

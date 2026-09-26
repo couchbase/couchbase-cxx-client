@@ -7,14 +7,14 @@
 # system gRPC/protobuf/OpenSSL development packages: their absence makes the
 # project's find_package() calls fail, so gRPC, protobuf, abseil, c-ares,
 # OpenTelemetry and curl are fetched and built statically from source, and
-# COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON statically links BoringSSL. The
+# COUCHBASE_CXX_CLIENT_STATIC_AWSLC=ON statically links AWS-LC. The
 # resulting executable depends only on the C/C++ runtime and zlib, all of which
 # the ubuntu:24.04 runtime base already provides.
 #
 # Build context MUST be the repository root, e.g.:
 #   docker build -f tools/fit_performer/Dockerfile -t cxx-fit-performer .
 #
-# Everything (BoringSSL, the Mozilla CA bundle, gRPC, OpenTelemetry, ...) is
+# Everything (AWS-LC, the Mozilla CA bundle, gRPC, OpenTelemetry, ...) is
 # downloaded at CMake configure time, so the build needs network access.
 
 ARG UBUNTU_VERSION=24.04
@@ -31,7 +31,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # of the Mozilla CA bundle over TLS, zlib1g-dev -> system zlib that gRPC links
 # against on Linux, pkg-config -> dependency probing. libssl-dev is required by
 # OpenTelemetry's bundled curl, which runs its own find_package(OpenSSL); the
-# SDK core itself still uses static BoringSSL (forced by STATIC_BORINGSSL=ON),
+# SDK core itself still uses static AWS-LC (forced by STATIC_AWSLC=ON),
 # so only curl links the system OpenSSL.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -55,7 +55,7 @@ COPY . .
 # Configure a Release build of only the performer and its dependencies.
 # Tools are required (fit_performer lives under tools/); tests, examples and
 # docs are disabled to avoid building anything we will not ship. Static client
-# library + static BoringSSL + (implicitly) source-built gRPC/protobuf/curl
+# library + static AWS-LC + (implicitly) source-built gRPC/protobuf/curl
 # yield a self-contained binary.
 RUN cmake -S . -B build -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
@@ -66,7 +66,7 @@ RUN cmake -S . -B build -G Ninja \
         -DCOUCHBASE_CXX_CLIENT_BUILD_SHARED=OFF \
         -DCOUCHBASE_CXX_CLIENT_BUILD_STATIC=ON \
         -DCOUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY=ON \
-        -DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON \
+        -DCOUCHBASE_CXX_CLIENT_STATIC_AWSLC=ON \
     && cmake --build build --target fit_performer -j"$(nproc)" \
     && strip build/tools/fit_performer/fit_performer
 

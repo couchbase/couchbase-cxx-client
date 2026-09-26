@@ -114,16 +114,17 @@ sdk_build_info() -> std::map<std::string, std::string>
     "false"
 #endif
     ;
-  info["static_boringssl"] =
-#if defined(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
+  info["static_awslc"] =
+#ifdef COUCHBASE_CXX_CLIENT_STATIC_AWSLC
     "true"
 #else
     "false"
 #endif
     ;
-#if defined(COUCHBASE_CXX_CLIENT_BORINGSSL_SHA)
-  info["boringssl_sha"] = COUCHBASE_CXX_CLIENT_BORINGSSL_SHA;
+#if defined(COUCHBASE_CXX_CLIENT_AWSLC_VERSION)
+  info["awslc_version"] = COUCHBASE_CXX_CLIENT_AWSLC_VERSION;
 #endif
+
   info["spdlog"] = fmt::format("{}.{}.{}", SPDLOG_VER_MAJOR, SPDLOG_VER_MINOR, SPDLOG_VER_PATCH);
   info["fmt"] =
     fmt::format("{}.{}.{}", FMT_VERSION / 10'000, FMT_VERSION / 100 % 1000, FMT_VERSION % 100);
@@ -362,7 +363,7 @@ cxx_sdk_id() -> std::string
 } // namespace
 
 constexpr const char* ssl_lib_id =
-#if defined(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
+#if defined(COUCHBASE_CXX_CLIENT_STATIC_AWSLC)
   "bssl"
 #else
   "ssl"

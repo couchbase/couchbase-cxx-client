@@ -54,7 +54,7 @@ endif()
 if(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
   # OpenTelemetry's OTLP/HTTP exporter needs libcurl, and its cmake/curl.cmake takes the platform's
   # copy when find_package(CURL) succeeds. That copy is linked against the platform's OpenSSL, so it
-  # puts a second TLS implementation into every process loading the SDK next to the BoringSSL linked
+  # puts a second TLS implementation into every process loading the SDK next to the AWS-LC linked
   # here -- visible as libssl/libcrypto among cbc's dependencies.
   #
   # Declaring curl first is what avoids it. OpenTelemetry declares curl under the name "curl" and
@@ -65,7 +65,7 @@ if(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
   #
   # CMAKE_DISABLE_FIND_PACKAGE_CURL stops it preferring a system libcurl over this one; both of its
   # call sites are QUIET and not REQUIRED, so disabling the search is safe.
-  if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND NOT TARGET CURL::libcurl)
+  if(COUCHBASE_CXX_CLIENT_STATIC_AWSLC AND NOT TARGET CURL::libcurl)
     set(CMAKE_DISABLE_FIND_PACKAGE_CURL ON)
 
     # Keep the tag in step with the one OpenTelemetry pins in its third_party_release, so the
@@ -79,29 +79,28 @@ if(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
       curl-8_12_0
       OPTIONS
       # curl asks find_package(OpenSSL REQUIRED) and then links OpenSSL::SSL and OpenSSL::Crypto by
-      # target. Those targets are already BoringSSL aliases, so the only thing missing is a
+      # target. Those targets are already AWS-LC aliases, so the only thing missing is a
       # find_package that succeeds without an OpenSSL installation: see
       # cmake/vendored_openssl/FindOpenSSL.cmake. curl appends its own CMake directory to
       # CMAKE_MODULE_PATH, so replacing it here costs nothing.
       "CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/vendored_openssl"
-      "COUCHBASE_CXX_CLIENT_BORINGSSL_INCLUDE_DIR ${boringssl_SOURCE_DIR}/src/include"
+      "COUCHBASE_CXX_CLIENT_AWSLC_INCLUDE_DIR ${awslc_SOURCE_DIR}/include"
       "CURL_USE_OPENSSL ON"
       # curl identifies the TLS library, and probes for a few functions, with check_symbol_exists.
       # Those compile a TryCompile project which does NOT inherit ALIAS targets, so the probes
-      # cannot resolve OpenSSL::SSL -> BoringSSL and fail outright ("Target links to OpenSSL::SSL
-      # but the target was not found"). Every one of them is guarded by if(NOT DEFINED ...), so
-      # answering in advance skips them. The answers describe BoringSSL: it is not AWS-LC or
-      # LibreSSL, and it does provide SSL_set0_wbio. SRP is not probed at all because
+      # cannot resolve OpenSSL::SSL -> AWS-LC and fail outright. Every one of them is guarded by
+      # if(NOT DEFINED ...), so answering in advance skips them. The answers say it is AWS-LC, not
+      # BoringSSL or LibreSSL, and that it provides SSL_set0_wbio. SRP is not probed at all because
       # CURL_DISABLE_SRP is on below.
-      "HAVE_BORINGSSL 1"
-      "HAVE_AWSLC 0"
+      "HAVE_BORINGSSL 0"
+      "HAVE_AWSLC 1"
       "HAVE_LIBRESSL 0"
       "HAVE_SSL_SET0_WBIO 1"
       # TLS-SRP probes against <openssl/ssl.h> and would find the platform OpenSSL's declarations
-      # while compiling against BoringSSL headers, which omit SRP: curl then fails on implicit
+      # while compiling against AWS-LC headers, which omit SRP: curl then fails on implicit
       # declarations of SSL_CTX_set_srp_username. Nothing here uses TLS-SRP.
       "CURL_DISABLE_SRP ON"
-      # curl's install(TARGETS libcurl_static EXPORT ...) fails because the BoringSSL targets it
+      # curl's install(TARGETS libcurl_static EXPORT ...) fails because the AWS-LC targets it
       # links belong to no export set, and nothing here consumes curl's export files.
       "CURL_ENABLE_EXPORT_TARGET OFF"
       # CURL_ENABLE_EXPORT_TARGET only suppresses the CMake export file: curl still installs its
@@ -146,7 +145,7 @@ if(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
   if(NOT TARGET opentelemetry)
     # These curl settings apply to the configuration that does NOT vendor curl above, where
     # OpenTelemetry resolves the platform's libcurl: they are no-ops against a system package, and
-    # they keep the from-source path working for a build that does not use BoringSSL.
+    # they keep the from-source path working for a build that does not use AWS-LC.
     set(CURL_ENABLE_EXPORT_TARGET OFF CACHE BOOL "" FORCE)
     set(CURL_DISABLE_SRP ON CACHE BOOL "" FORCE)
 
@@ -327,9 +326,12 @@ if(asio_ADDED)
   target_include_directories(asio SYSTEM PUBLIC ${asio_SOURCE_DIR}/asio/include)
   target_compile_definitions(asio PUBLIC ASIO_STANDALONE=1 ASIO_NO_DEPRECATED=1 ASIO_SEPARATE_COMPILATION=1)
   target_link_libraries(asio PRIVATE Threads::Threads)
-  if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
-    target_link_libraries(asio PUBLIC $<TARGET_OBJECTS:ssl> $<TARGET_OBJECTS:crypto>)
-    # Add BoringSSL include directories before asio's own include directories.
+  if(COUCHBASE_CXX_CLIENT_STATIC_AWSLC)
+    # Not $<TARGET_OBJECTS:crypto>: AWS-LC's crypto target owns no sources, only objects built by
+    # other targets, so that expands to nothing and leaves every symbol the ssl objects need
+    # undefined.
+    target_link_libraries(asio PUBLIC ssl crypto)
+    # Add AWS-LC include directories before asio's own include directories.
     target_include_directories(
       asio BEFORE PRIVATE $<BUILD_INTERFACE:$<TARGET_PROPERTY:ssl,INTERFACE_INCLUDE_DIRECTORIES>>
                           $<BUILD_INTERFACE:$<TARGET_PROPERTY:crypto,INTERFACE_INCLUDE_DIRECTORIES>>)

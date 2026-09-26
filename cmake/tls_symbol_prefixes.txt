@@ -1,0 +1,68 @@
+# Public symbol prefixes of OpenSSL, BoringSSL and AWS-LC, one per line.
+#
+# Read by two consumers, which is why the list lives in a file rather than in either of them:
+# cmake/OpenSSL.cmake turns it into an -unexported_symbols_list for the Apple linker, and
+# bin/check-exported-symbols fails a build whose shared library exports any of them. A prefix
+# missing here is a symbol that leaks on Apple and is not reported anywhere.
+#
+# C linkage only. Anything this project defines itself arrives mangled and namespaced, so it cannot
+# collide with these.
+SSL_
+SSLv2_
+SSLv3_
+SSLv23_
+TLS_
+TLSv1_
+DTLS_
+DTLSv1_
+OPENSSL_
+OpenSSL_
+CRYPTO_
+EVP_
+BIO_
+ERR_
+X509_
+X509V3_
+X509at_
+X509_NAME_
+RAND_
+RSA_
+DSA_
+DH_
+EC_
+ECDSA_
+ECDH_
+AES_
+DES_
+RC4_
+MD4_
+MD5_
+SHA1_
+SHA224_
+SHA256_
+SHA384_
+SHA512_
+HMAC_
+HKDF
+PEM_
+PKCS5_
+PKCS7_
+PKCS8_
+PKCS12_
+ASN1_
+CBS_
+CBB_
+BN_
+CONF_
+NCONF_
+OBJ_
+OCSP_
+CMAC_
+CMS_
+ENGINE_
+BUF_
+ChaCha20_
+AWSLC_
+bssl_
+i2d_
+d2i_

@@ -8,7 +8,7 @@ The Couchbase C++ Client is a high-performance, modern C++ library (C++17) for i
 ## Technical Stack
 - **Language**: C++17
 - **Build System**: CMake 3.19+
-- **Key Dependencies**: Asio, GSL, nlohmann/json, OpenSSL/BoringSSL (managed via `cmake/ThirdPartyDependencies.cmake`).
+- **Key Dependencies**: Asio, GSL, nlohmann/json, OpenSSL/AWS-LC (managed via `cmake/ThirdPartyDependencies.cmake`).
 
 ## Project Structure
 - `couchbase/`: **Public API**. Contains only header files (`.hxx`). This is what users of the library include.
@@ -38,7 +38,7 @@ The Couchbase C++ Client is a high-performance, modern C++ library (C++17) for i
 ### Building
 The standard build process uses CMake:
 ```bash
-cmake -S . -B build -DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON
+cmake -S . -B build -DCOUCHBASE_CXX_CLIENT_STATIC_AWSLC=ON
 cmake --build build -j$(nproc)
 ```
 

@@ -10,7 +10,7 @@ install(FILES LICENSE.txt DESTINATION ${CMAKE_INSTALL_DOCDIR})
 # Vendoring moved these dependencies from distribution packages -- each of which carried its own
 # licence -- into our own artefacts, so the obligation to ship their terms moved with them. Apache
 # 2.0 requires the NOTICE file to travel with any distribution of the work (gRPC, Protobuf, Abseil),
-# and the BSD/MIT projects require their copyright notice to be reproduced (BoringSSL, re2, c-ares,
+# and the BSD/MIT projects require their copyright notice to be reproduced (AWS-LC, re2, c-ares,
 # zlib, curl, utf8_range).
 #
 # Installed only when the dependency was actually built from source: a build that links the
@@ -32,8 +32,8 @@ function(couchbase_install_third_party_licence name)
   endif()
 endfunction()
 
-if(boringssl_SOURCE_DIR)
-  couchbase_install_third_party_licence(boringssl "${boringssl_SOURCE_DIR}/LICENSE")
+if(awslc_SOURCE_DIR)
+  couchbase_install_third_party_licence(awslc "${awslc_SOURCE_DIR}/LICENSE" "${awslc_SOURCE_DIR}/NOTICE")
 endif()
 if(curl_SOURCE_DIR)
   couchbase_install_third_party_licence(curl "${curl_SOURCE_DIR}/COPYING")
@@ -142,8 +142,8 @@ if(COUCHBASE_CXX_CLIENT_BUILD_STATIC)
     string(APPEND _static_pc " -lz")
   endif()
 
-  # Without COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL the client links the platform's OpenSSL, PUBLIC and
-  # shared. BoringSSL itself is a pair of STATIC_LIBRARY targets and is archived, so it needs nothing
+  # Without COUCHBASE_CXX_CLIENT_STATIC_AWSLC the client links the platform's OpenSSL, PUBLIC and
+  # shared. AWS-LC itself is a pair of STATIC_LIBRARY targets and is archived, so it needs nothing
   # here, and COUCHBASE_CXX_CLIENT_POST_LINKED_OPENSSL links no TLS at all -- both of which the graph
   # states directly rather than by inference.
   #
@@ -431,7 +431,7 @@ add_custom_command(
     # PACKAGE_BUILD for the same reason: without it gRPC resolves from the platform's packages on a
     # host that has them, and its sources never enter the cache the packages build from.
     -DCOUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2=ON -DCOUCHBASE_CXX_CLIENT_PACKAGE_BUILD=ON
-    -DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON -DCPM_DOWNLOAD_ALL=ON -DCPM_USE_NAMED_CACHE_DIRECTORIES=ON
+    -DCOUCHBASE_CXX_CLIENT_STATIC_AWSLC=ON -DCPM_DOWNLOAD_ALL=ON -DCPM_USE_NAMED_CACHE_DIRECTORIES=ON
     -DCPM_USE_LOCAL_PACKAGES=OFF -DCOUCHBASE_CXX_CLIENT_BUILD_STATIC=ON -DCOUCHBASE_CXX_CLIENT_BUILD_SHARED=ON
     -DCOUCHBASE_CXX_CLIENT_INSTALL=ON -DCOUCHBASE_CXX_RECORD_BUILD_INFO_FOR_TARBALL=ON
     # Pass the frozen instant explicitly: this inner configure runs at build time against a

@@ -7,7 +7,7 @@
 # reveals it -- but which binary carries which component, and whether it is
 # built at all, depends on the options a given package uses:
 #
-#   BoringSSL       every configuration, in the library and in the tools
+#   AWS-LC          every configuration, in the library and in the tools
 #   gRPC and its    only where couchbase2:// or the FIT performer is enabled;
 #   submodules      in the library when couchbase2:// is on (the Linux
 #                   packages), otherwise only in fit_performer (Alpine)
@@ -31,9 +31,9 @@
 # upstreams with their own advisories.
 ---
 components:
-  boringssl:
-    bd-id: 1e303b15-b82b-4a4d-8cd6-a2048fb2c73d
-    versions: [202308211007]
+  aws-lc:
+    bd-id: ee331899-23d5-44a9-8191-2bd72c8f0959
+    versions: [v5.8.0]
   spdlog:
     bd-id: 7785114c-5b78-4aad-8771-72a739a1f06e
     versions: [v1.15.0]
@@ -66,7 +66,7 @@ components:
     bd-id: 11ad39bd-fc26-45d9-b4a3-41fa96f715a1
     versions: [v1.23.0]
   # Linked by cbc and the FIT performer for OpenTelemetry's OTLP/HTTP exporter,
-  # and built against this package's BoringSSL rather than the platform's
+  # and built against this package's AWS-LC rather than the platform's
   # OpenSSL.
   curl:
     bd-id: 5495fd92-f4e5-4099-aa40-bd0f22b2f602
