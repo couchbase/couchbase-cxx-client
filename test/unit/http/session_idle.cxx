@@ -99,7 +99,8 @@ an_idle_session_detects_a_peer_initiated_close([[maybe_unused]] context& ctx)
                                                         origin,
                                                         "127.0.0.1",
                                                         std::to_string(port),
-                                                        http_ctx);
+                                                        http_ctx,
+                                                        /* pool_generation */ 0);
 
   std::atomic_bool stopped{ false };
   session->on_stop([&]() {

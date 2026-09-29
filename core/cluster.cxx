@@ -1609,42 +1609,53 @@ public:
         for (const auto& [_, bucket] : buckets) {
           bucket->close();
         }
+        // The rest of the teardown waits until every HTTP session is stopped and holds no
+        // read_some() call. The caller may stop the io_context as soon as `handler` runs, and an
+        // HTTP session whose stop is still queued then is never torn down.
         if (const auto session_manager = std::move(self->session_manager_); session_manager) {
-          session_manager->close();
+          return session_manager->close([self, handler = std::move(handler)]() mutable {
+            self->finish_close(std::move(handler));
+          });
         }
-#ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
-        {
-          // Drop the reference under the lock, but destroy the component outside it: ~component
-          // drains in-flight gRPC calls, and holding protostellar_mutex_ across that would block
-          // every concurrent execute() on the io thread for the duration of the drain.
-          std::shared_ptr<protostellar::component> component;
-          {
-            const std::scoped_lock lock(self->protostellar_mutex_);
-            component = std::move(self->protostellar_);
-            self->protostellar_.reset();
-          }
-        }
-#endif
-        self->work_.reset();
-        // Observability members: stop in place, do NOT std::move. See the
-        // comment above close() for why this matters across fork(child).
-        if (self->tracer_) {
-          self->tracer_->stop();
-        }
-        if (self->meter_) {
-          self->meter_->stop();
-        }
-        if (self->app_telemetry_meter_) {
-          self->app_telemetry_meter_->disable();
-        }
-        if (self->app_telemetry_reporter_) {
-          self->app_telemetry_reporter_->stop();
-        }
-        if (self->orphan_reporter_) {
-          self->orphan_reporter_->stop();
-        }
-        handler();
+        self->finish_close(std::move(handler));
       }));
+  }
+
+  // The part of close() that runs once every HTTP session is stopped and holds no read_some() call.
+  void finish_close(utils::movable_function<void()>&& handler)
+  {
+#ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
+    {
+      // Drop the reference under the lock, but destroy the component outside it: ~component
+      // drains in-flight gRPC calls, and holding protostellar_mutex_ across that would block
+      // every concurrent execute() on the io thread for the duration of the drain.
+      std::shared_ptr<protostellar::component> component;
+      {
+        const std::scoped_lock lock(protostellar_mutex_);
+        component = std::move(protostellar_);
+        protostellar_.reset();
+      }
+    }
+#endif
+    work_.reset();
+    // Observability members: stop in place, do NOT std::move. See the
+    // comment above close() for why this matters across fork(child).
+    if (tracer_) {
+      tracer_->stop();
+    }
+    if (meter_) {
+      meter_->stop();
+    }
+    if (app_telemetry_meter_) {
+      app_telemetry_meter_->disable();
+    }
+    if (app_telemetry_reporter_) {
+      app_telemetry_reporter_->stop();
+    }
+    if (orphan_reporter_) {
+      orphan_reporter_->stop();
+    }
+    handler();
   }
 
   auto direct_dispatch(const std::string& bucket_name,

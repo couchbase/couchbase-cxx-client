@@ -28,6 +28,8 @@ target_include_directories(test_framework_main PUBLIC ${PROJECT_SOURCE_DIR}/test
 target_link_libraries(test_framework_main PUBLIC Threads::Threads spdlog::spdlog)
 set_project_options(test_framework_main)
 set_project_warnings(test_framework_main)
+# Sanitized like test_utils, for the reason test/utils/CMakeLists.txt gives.
+enable_sanitizers(test_framework_main)
 
 # The shared cluster helpers. Promoted out of test/CMakeLists.txt because the framework's cluster
 # probes are built on them, so they have to exist whenever either suite is built rather than only
@@ -52,6 +54,7 @@ target_include_directories(
 set_target_properties(test_framework_null_probes PROPERTIES POSITION_INDEPENDENT_CODE ON)
 set_project_options(test_framework_null_probes)
 set_project_warnings(test_framework_null_probes)
+enable_sanitizers(test_framework_null_probes)
 
 # The real one drives a connection through test::utils::integration_test_guard, so it is the only
 # part of the framework that includes core headers -- and it is a .cxx, which is what keeps
@@ -73,6 +76,7 @@ target_link_libraries(test_framework_cluster_probes PRIVATE $<BUILD_INTERFACE:Mi
 set_target_properties(test_framework_cluster_probes PROPERTIES POSITION_INDEPENDENT_CODE ON)
 set_project_options(test_framework_cluster_probes)
 set_project_warnings(test_framework_cluster_probes)
+enable_sanitizers(test_framework_cluster_probes)
 
 # couchbase_discover_tests(<target> PROPERTIES <prop> <value>...)
 #

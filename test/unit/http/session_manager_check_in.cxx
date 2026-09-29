@@ -15,6 +15,7 @@
  *   limitations under the License.
  */
 
+#include "framework/context.hxx"
 #include "framework/test_registry.hxx"
 
 #include "framework/errors.hxx"
@@ -42,6 +43,7 @@
 #include <asio/steady_timer.hpp>
 #include <asio/write.hpp>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -100,9 +102,9 @@ private:
 // mark_stopping() records the decision at the point it is made, and check_in refuses a connection
 // carrying one.
 //
-// The two assertions are a pair: the first establishes that this pool does reuse a session at all,
-// so the second one failing to reuse is attributable to the claim rather than to the pool never
-// reusing anything.
+// The control establishes that this pool reuses a session at all, so a claimed session failing to
+// come back is attributable to the claim rather than to the pool never reusing anything. check_in's
+// refusal is probed before the next checkout, because check_out skips a claimed session too.
 void
 a_session_claimed_for_teardown_is_not_returned_to_the_pool([[maybe_unused]] context& ctx)
 {
@@ -117,8 +119,14 @@ a_session_claimed_for_teardown_is_not_returned_to_the_pool([[maybe_unused]] cont
   // parks the session as idle, and leave the socket open.
   asio::ip::tcp::socket server{ io };
   auto rbuf = std::make_shared<std::array<char, 4096>>();
+  // Recorded in the handlers and asserted after io.run(): a failure thrown from a handler unwinds
+  // out of run() past a live acceptor and server socket.
+  std::error_code accept_error{};
   acceptor.async_accept(server, [&, rbuf](std::error_code accept_ec) {
-    assert_success(accept_ec, "the loopback endpoint accepts the manager's connection");
+    if (accept_ec) {
+      accept_error = accept_ec;
+      return;
+    }
     server.async_read_some(asio::buffer(*rbuf), [&, rbuf](std::error_code read_ec, std::size_t) {
       if (read_ec) {
         return;
@@ -160,6 +168,10 @@ a_session_claimed_for_teardown_is_not_returned_to_the_pool([[maybe_unused]] cont
   std::string pooled_id;
   std::string reused_id;
   std::string after_claim_id;
+  bool claimed_published = true;
+  std::error_code checkout_error{};
+  std::error_code reuse_error{};
+  std::error_code after_claim_error{};
 
   // The ping's completion handler reports to the collector and only then checks the session back
   // in, so the sequence runs from a posted handler: by the time the post executes, the session is
@@ -172,21 +184,32 @@ a_session_claimed_for_teardown_is_not_returned_to_the_pool([[maybe_unused]] cont
         const auto type = couchbase::core::service_type::management;
 
         auto [checkout_ec, pooled] = manager->check_out(type, {});
-        assert_success(checkout_ec, "the pooled session is available for checkout");
+        checkout_error = checkout_ec;
+        if (checkout_ec) {
+          return io.stop();
+        }
         pooled_id = pooled->id();
 
         // Control: an unclaimed session goes back to the pool and comes out again.
         manager->check_in(type, pooled);
         auto [reuse_ec, reused] = manager->check_out(type, {});
-        assert_success(reuse_ec, "the unclaimed session is available again");
+        reuse_error = reuse_ec;
+        if (reuse_ec) {
+          return io.stop();
+        }
         reused_id = reused->id();
 
         // A body that stops the connection claims it before releasing its own lock.
         reused->mark_stopping();
         manager->check_in(type, reused);
+        // check_in arms the idle timer of a session it publishes, and the checkout above cancelled
+        // the one armed before. Probed before check_out, which also skips a claimed session.
+        claimed_published = reused->reset_idle();
         auto [after_ec, after_claim] = manager->check_out(type, {});
-        assert_success(after_ec, "a checkout still succeeds once the pool is empty");
-        after_claim_id = after_claim->id();
+        after_claim_error = after_ec;
+        if (!after_ec) {
+          after_claim_id = after_claim->id();
+        }
 
         io.stop();
       });
@@ -199,17 +222,26 @@ a_session_claimed_for_teardown_is_not_returned_to_the_pool([[maybe_unused]] cont
 
   // Bound the case so a connection left open fails here rather than running to the harness budget.
   asio::steady_timer deadline{ io };
-  deadline.expires_after(std::chrono::seconds(2));
+  // Clamped: expires_after adds to now(), which overflows for a bound saturated at
+  // milliseconds::max().
+  deadline.expires_after(std::min<std::chrono::milliseconds>(scaled_budget(std::chrono::seconds(2)),
+                                                             std::chrono::hours(1)));
   deadline.async_wait([&](std::error_code) {
     io.stop();
   });
 
   io.run();
 
+  assert_success(accept_error, "the loopback endpoint accepts the manager's connection");
   assert_true(reported_state == couchbase::core::diag::ping_state::ok,
               "the ping succeeds, so the session it opened is checked back in as idle");
+  assert_success(checkout_error, "the pooled session is available for checkout");
   assert_true(!pooled_id.empty(), "the ping leaves a session in the pool");
+  assert_success(reuse_error, "the unclaimed session is available again");
   assert_eq(reused_id, pooled_id, "an unclaimed session is republished and checked out again");
+  assert_false(claimed_published,
+               "check_in does not publish a session claimed with mark_stopping()");
+  assert_success(after_claim_error, "a checkout still succeeds once the pool is empty");
   assert_true(after_claim_id != reused_id,
               "a session claimed with mark_stopping() is not republished, so the next checkout "
               "opens a new one");
@@ -224,8 +256,8 @@ tests() -> test_suite
   return {
     suite_name,
     {
-      // A loopback connect, one HTTP round trip and three checkouts, bounded at two seconds
-      // inside the case.
+      // A loopback connect, one HTTP round trip and three checkouts, bounded at two scaled
+      // seconds inside the case.
       { CASE(a_session_claimed_for_teardown_is_not_returned_to_the_pool), {}, timeout::network },
     },
   };
