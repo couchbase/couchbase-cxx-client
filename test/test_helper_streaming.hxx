@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include "framework/context.hxx"
+
 #include "core/cluster_credentials.hxx"
 #include "core/cluster_options.hxx"
 #include "core/free_form_http_request.hxx"
@@ -24,15 +26,20 @@
 #include "core/io/http_session.hxx"
 #include "core/io/query_cache.hxx"
 #include "core/origin.hxx"
+#include "core/row_streamer_options.hxx"
 #include "core/service_type.hxx"
 #include "core/topology/configuration.hxx"
 
 #include <asio/io_context.hpp>
 
 #include <asio/ip/tcp.hpp>
+#include <asio/post.hpp>
 #include <asio/write.hpp>
 
+#include <atomic>
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -63,6 +70,75 @@ make_chunked_response_body(asio::io_context& io, std::string data, std::size_t c
 dispatch_failed(const std::error_code& ec) -> bool
 {
   return static_cast<bool>(ec);
+}
+
+// Short enough to keep a suite quick. Scaled by CB_TEST_TIMEOUT_MULTIPLIER: a fixed 50ms is reached
+// by a loaded or instrumented run before the case has set its scenario up, and the deadline then
+// fires on correct behaviour.
+inline constexpr auto short_deadline_unscaled = std::chrono::milliseconds{ 50 };
+
+inline auto
+short_deadline() -> std::chrono::milliseconds
+{
+  static const auto scaled = couchbase::test::scaled_budget(
+    std::chrono::duration_cast<std::chrono::milliseconds>(short_deadline_unscaled));
+  return scaled;
+}
+
+// Keeps a wait strictly past the expiry it follows: equal expiries are unordered. Not scaled:
+// asio orders timers by expiry, so any positive offset gives the ordering this needs, at any
+// multiplier.
+inline constexpr auto marker_offset = std::chrono::milliseconds{ 5 };
+
+// Saturating add on a time point. Any deadline here may already be time_point::max() under a
+// large accepted multiplier, and adding to that wraps into the past -- turning a deadline that
+// should never fire into one that fires at once. The deadline cases add to a time point only
+// through this.
+inline auto
+past(std::chrono::steady_clock::time_point tp, std::chrono::milliseconds d)
+  -> std::chrono::steady_clock::time_point
+{
+  const auto limit = std::chrono::steady_clock::time_point::max();
+  // Compared in milliseconds. `limit - tp` is the clock's own duration, finer than milliseconds on
+  // every platform here, so comparing the two directly converts `d` to that unit -- and a `d` of
+  // milliseconds::max(), which scale_budget returns for a saturating multiplier, overflows in that
+  // conversion. The guard then reads false and the addition below wraps into the past, firing at
+  // once the deadline that was meant never to fire. duration_cast to the coarser unit truncates
+  // towards zero, cannot overflow, and only ever understates the headroom.
+  const auto headroom = std::chrono::duration_cast<std::chrono::milliseconds>(limit - tp);
+  return d > headroom ? limit : tp + d;
+}
+
+inline auto
+deadline_in(std::chrono::milliseconds d) -> std::chrono::steady_clock::time_point
+{
+  return past(std::chrono::steady_clock::now(), d);
+}
+
+// A query-shaped result document of `row_count` small rows.
+inline auto
+result_document(int row_count) -> std::string
+{
+  std::string doc = R"({"results":[)";
+  for (int i = 0; i < row_count; ++i) {
+    if (i != 0) {
+      doc += ',';
+    }
+    doc += R"({"n":)" + std::to_string(i) + "}";
+  }
+  doc += R"(],"status":"success"})";
+  return doc;
+}
+
+// Small watermarks, so a consumer that stops after a handful of rows leaves the streamer parked
+// above the high-water mark.
+inline auto
+back_pressured_options() -> couchbase::core::row_streamer_options
+{
+  couchbase::core::row_streamer_options opts{};
+  opts.high_water_bytes = std::size_t{ 4 } * 1024;
+  opts.low_water_bytes = std::size_t{ 1 } * 1024;
+  return opts;
 }
 
 // Joins a thread on every path out of the scope, including one taken while unwinding. A
@@ -170,18 +246,18 @@ public:
     state_->acceptor.close(ignored);
   }
 
-  // Whether the session behind this stream has been torn down. The deadline reclaiming an
-  // abandoned connection is the point of the feature, and only this distinguishes it from a
-  // consumer merely being handed a timeout.
+  // Whether stop() has been called on the session behind this stream. A body's close() posts
+  // stop() to the session strand, so this can lag the close.
   [[nodiscard]] auto session_stopped() const -> bool
   {
     return session_ != nullptr && session_->is_stopped();
   }
 
-  // The same question for a teardown posted onto the session strand: the io thread runs it, so a
-  // read taken straight afterwards on the calling thread can precede it. Bounded, so a stop that
-  // never runs fails the case instead of hanging it.
-  [[nodiscard]] auto wait_session_stopped(std::chrono::milliseconds budget) const -> bool
+  // Whether the connection has been released: stop() was called and its teardown closed the
+  // socket, so the server side reads end of file. The deadline reclaiming an abandoned connection
+  // is the point of the feature, and only this distinguishes it from a consumer merely being
+  // handed a timeout. Bounded, so a teardown that never runs fails the case instead of hanging it.
+  [[nodiscard]] auto wait_connection_released(std::chrono::milliseconds budget) const -> bool
   {
     // Elapsed against the budget, never now() + budget. scale_budget() saturates at
     // milliseconds::max() for a large accepted multiplier, and adding that to a steady_clock time
@@ -189,7 +265,10 @@ public:
     // is narrowed to milliseconds before the comparison for the same reason: comparing it as
     // nanoseconds converts the budget and overflows there instead.
     const auto started = std::chrono::steady_clock::now();
-    while (!session_stopped()) {
+    asio::post(io_, [st = state_]() {
+      await_peer_close(st);
+    });
+    while (!session_stopped() || !state_->peer_closed.load()) {
       const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - started);
       if (elapsed >= budget) {
@@ -206,6 +285,26 @@ public:
   {
     std::error_code ignored;
     asio::write(state_->server_socket, asio::buffer(state_->tail), ignored);
+  }
+
+  [[nodiscard]] auto port() const -> std::uint16_t
+  {
+    return state_->acceptor.local_endpoint().port();
+  }
+
+  // The session connect() created, or null before it.
+  [[nodiscard]] auto session() const -> std::shared_ptr<couchbase::core::io::http_session>
+  {
+    return session_;
+  }
+
+  // Closes the server's end of the connection, so the client's next read reports end of file
+  // mid-body. Called on the io thread, or while it is not running: the server socket's handlers
+  // run there.
+  void close_peer()
+  {
+    std::error_code ignored;
+    state_->server_socket.close(ignored);
   }
 
   // Resolves with a body backed by the live session once the response headers have been parsed.
@@ -233,7 +332,8 @@ public:
       "127.0.0.1",
       std::to_string(port),
       couchbase::core::http_context{
-        config_, options_, cache_, "127.0.0.1", port, "127.0.0.1", port });
+        config_, options_, cache_, "127.0.0.1", port, "127.0.0.1", port },
+      /* pool_generation */ 0);
 
     couchbase::core::io::http_request request{};
     request.type = couchbase::core::service_type::query;
@@ -290,7 +390,21 @@ private:
     std::string response;
     std::string tail;
     std::string request_buffer = std::string(4096, '\0');
+    std::atomic_bool peer_closed{ false };
   };
+
+  // Nothing else reads the server socket once the response is written.
+  static void await_peer_close(const std::shared_ptr<state>& st)
+  {
+    st->server_socket.async_read_some(asio::buffer(st->request_buffer),
+                                      [st](std::error_code ec, std::size_t) {
+                                        if (ec) {
+                                          st->peer_closed = true;
+                                          return;
+                                        }
+                                        await_peer_close(st);
+                                      });
+  }
 
   asio::io_context& io_;
   std::shared_ptr<state> state_;

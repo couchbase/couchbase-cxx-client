@@ -170,11 +170,15 @@ public:
   {
     if (fault_enabled_) {
       const std::scoped_lock lock{ fault_mutex_ };
-      // fault_finished_ is set by the drain branch of next_body(), so a seam whose terminal is
-      // reached without any bytes to hand out first is terminal before that branch has ever run.
-      // The real body answers body_already_ended in the same state -- reading_complete_ with an
-      // empty cache -- and a seam that armed instead would hold the io_context open until it fired.
-      if (fault_cancelled_ || fault_finished_ || (fault_data_.empty() && !fault_stall_)) {
+      // A seam with no bytes left and no stall is terminal before the drain branch of next_body()
+      // has run. The real body answers body_already_ended in the same state -- reading_complete_
+      // with an empty cache -- and a seam that armed instead would hold the io_context open until
+      // it fired. fault_finished_ is recorded here, so a close_body() after this refusal keeps the
+      // configured terminal, as the real body refuses a close once drained.
+      if (fault_data_.empty() && !fault_stall_) {
+        fault_finished_ = true;
+      }
+      if (fault_cancelled_ || fault_finished_) {
         return io::deadline_state::body_already_ended;
       }
       const auto generation = ++fault_generation_;

@@ -104,7 +104,7 @@ jobs:
           name: build-${{ matrix.sanitizer }}
           path: ./cmake-build-tests-${{ matrix.sanitizer }}
       - name: Run unit tests (${{ matrix.sanitizer }})
-        timeout-minutes: 60
+        timeout-minutes: 90
         env:
           CB_SANITIZER: ${{ matrix.sanitizer }}
           TEST_LOG_LEVEL: trace

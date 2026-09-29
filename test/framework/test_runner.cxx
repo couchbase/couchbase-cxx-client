@@ -379,12 +379,16 @@ timeout_multiplier(const std::optional<std::string>& raw) -> double
   // The whole value has to be a number: "10x" must not be read as 10, because the run would then
   // silently use a budget nobody asked for.
   //
-  // isfinite rejects "inf", which passes a bare `> 0.0` test and then makes every scaled budget
+  // isfinite rejects "inf", which passes a bare `>= 1.0` test and then makes every scaled budget
   // undefined at the cast in scale_timeouts. NaN is already rejected: any comparison against it is
   // false.
-  if (consumed != raw->size() || !std::isfinite(factor) || !(factor > 0.0)) {
-    throw std::invalid_argument(
-      fmt::format("{} must be a positive number, got \"{}\"", timeout_multiplier_variable, *raw));
+  //
+  // At least one: the variable gives a slower run more room. Below one, a bound a case keeps under
+  // its own budget shrinks toward the same one-millisecond floor as that budget, and the ordering
+  // the case relies on is gone.
+  if (consumed != raw->size() || !std::isfinite(factor) || !(factor >= 1.0)) {
+    throw std::invalid_argument(fmt::format(
+      "{} must be a number of at least 1, got \"{}\"", timeout_multiplier_variable, *raw));
   }
   return factor;
 }
@@ -407,6 +411,12 @@ scale_budget(std::chrono::milliseconds budget, double factor) -> std::chrono::mi
   const auto scaled =
     product >= ceiling ? std::numeric_limits<rep>::max() : static_cast<rep>(product);
   return std::chrono::milliseconds{ std::max<rep>(scaled, 1) };
+}
+
+auto
+scaled_budget(std::chrono::milliseconds unscaled) -> std::chrono::milliseconds
+{
+  return scale_budget(unscaled, timeout_multiplier(safe_getenv(timeout_multiplier_variable)));
 }
 
 void

@@ -60,21 +60,15 @@ namespace utils = ::test::utils;
 
 using namespace std::chrono_literals;
 
-constexpr auto short_deadline_unscaled = 50ms;
+using utils::back_pressured_options;
+using utils::deadline_in;
+using utils::marker_offset;
+using utils::past;
+using utils::result_document;
+using utils::short_deadline;
+
 // Any wait that reaches this has failed. Under the case budget, so the failure names the step.
 constexpr auto patience_unscaled = 2s;
-
-// The harness scales each case budget by CB_TEST_TIMEOUT_MULTIPLIER but does not reach constants
-// inside a case. Scaling here by the same factor keeps every wait under the budget it is meant to
-// sit under, instead of failing inside an instrumented case that still has budget left.
-// Scale an unscaled duration by the suite multiplier. Multiples are taken of the unscaled value
-// and scaled once: scale_budget() saturates at milliseconds::max() for a large accepted factor,
-// and multiplying a saturated result again is meaningless.
-auto
-scaled_budget(std::chrono::milliseconds unscaled) -> std::chrono::milliseconds
-{
-  return scale_budget(unscaled, timeout_multiplier(safe_getenv(timeout_multiplier_variable)));
-}
 
 auto
 patience() -> std::chrono::milliseconds
@@ -82,70 +76,6 @@ patience() -> std::chrono::milliseconds
   static const auto scaled =
     scaled_budget(std::chrono::duration_cast<std::chrono::milliseconds>(patience_unscaled));
   return scaled;
-}
-// Scaled for the same reason as patience(): a fixed 50ms is reached by a loaded or instrumented
-// run before the case has set its scenario up, and the deadline then fires on correct behaviour.
-auto
-short_deadline() -> std::chrono::milliseconds
-{
-  static const auto scaled =
-    scaled_budget(std::chrono::duration_cast<std::chrono::milliseconds>(short_deadline_unscaled));
-  return scaled;
-}
-
-// Keeps a marker's expiry strictly after the deadline it follows: equal expiries are unordered.
-// Not scaled, unlike the durations above: asio orders timers by expiry, so any positive offset
-// gives the ordering this needs, at any multiplier.
-constexpr auto marker_offset = 5ms;
-
-// Saturating add on a time point. Any deadline here may already be time_point::max() under a
-// large accepted multiplier, and adding to that wraps into the past -- turning a deadline that
-// should never fire into one that fires at once. Nothing in this file adds to a time point
-// directly; every site goes through this.
-auto
-past(std::chrono::steady_clock::time_point tp, std::chrono::milliseconds d)
-  -> std::chrono::steady_clock::time_point
-{
-  const auto limit = std::chrono::steady_clock::time_point::max();
-  // Compared in milliseconds. `limit - tp` is the clock's own duration, finer than milliseconds on
-  // every platform here, so comparing the two directly converts `d` to that unit -- and a `d` of
-  // milliseconds::max(), which scale_budget returns for a saturating multiplier, overflows in that
-  // conversion. The guard then reads false and the addition below wraps into the past, firing at
-  // once the deadline that was meant never to fire. duration_cast to the coarser unit truncates
-  // towards zero, cannot overflow, and only ever understates the headroom.
-  const auto headroom = std::chrono::duration_cast<std::chrono::milliseconds>(limit - tp);
-  return d > headroom ? limit : tp + d;
-}
-
-auto
-deadline_in(std::chrono::milliseconds d) -> std::chrono::steady_clock::time_point
-{
-  return past(std::chrono::steady_clock::now(), d);
-}
-
-auto
-result_document(int row_count) -> std::string
-{
-  std::string doc = R"({"results":[)";
-  for (int i = 0; i < row_count; ++i) {
-    if (i != 0) {
-      doc += ",";
-    }
-    doc += R"({"n":)" + std::to_string(i) + "}";
-  }
-  doc += R"(],"status":"success"})";
-  return doc;
-}
-
-// Small watermarks so a consumer that stops after a handful of rows leaves the streamer parked
-// above the high-water mark.
-auto
-back_pressured_options() -> couchbase::core::row_streamer_options
-{
-  couchbase::core::row_streamer_options opts{};
-  opts.high_water_bytes = std::size_t{ 4 } * 1024;
-  opts.low_water_bytes = std::size_t{ 1 } * 1024;
-  return opts;
 }
 
 // The io_context a binding owns: run on its own thread, held open by a work guard so it does not
@@ -680,8 +610,9 @@ concurrent_arming_from_two_threads_is_safe([[maybe_unused]] context& ctx)
 {
   asio::io_context io;
   auto work = asio::make_work_guard(io);
-  // More than one runner thread: arming, expiry and the read completion can then be in flight at
-  // once.
+  // More than one runner thread, so two arms and the read completion can be in flight at once. No
+  // deadline here fires: an expiry racing a read is covered by
+  // a_deadline_racing_the_tail_either_stops_or_pools_the_session in the pool suite.
   // The server is built before any runner, and the joiner before the loop that starts them: a
   // throw part way through would otherwise unwind past threads already running.
   utils::loopback_stream server{ io };
@@ -841,7 +772,7 @@ rows_past_the_high_water_mark() -> std::string
   std::string prefix = R"({"requestID":"r1","signature":{},"results":[)";
   for (int i = 0; i < 2000; ++i) {
     if (i != 0) {
-      prefix += ",";
+      prefix += ',';
     }
     prefix += R"({"n":)" + std::to_string(i) + "}";
   }
@@ -895,7 +826,7 @@ a_socket_stream_abandoned_above_the_high_water_mark_releases_its_session(
   assert_ne(buffered, 0, "rows buffered before the deadline are still handed over");
   // The point of the feature. A consumer that stops pulling holds the socket, and only the
   // deadline hands it back; asserting the error code alone would pass with the connection leaked.
-  assert_true(server.wait_session_stopped(patience()), "the deadline released the connection");
+  assert_true(server.wait_connection_released(patience()), "the deadline released the connection");
 }
 } // namespace
 

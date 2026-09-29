@@ -1251,6 +1251,12 @@ timeout_multiplier_defaults_to_one_and_rejects_anything_but_a_number([[maybe_unu
       (void)timeout_multiplier(std::optional<std::string>{ "-1" });
     },
     "a negative factor is rejected");
+  // Below one, a bound a case keeps under its budget collapses onto the same floor as the budget.
+  assert_throws<std::invalid_argument>(
+    []() {
+      (void)timeout_multiplier(std::optional<std::string>{ "0.5" });
+    },
+    "a factor below one is rejected");
   // "inf" parses, and satisfies a bare positivity test. Accepting it makes every scaled budget
   // undefined at the narrowing cast in scale_timeouts.
   assert_throws<std::invalid_argument>(
