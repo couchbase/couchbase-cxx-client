@@ -22,6 +22,8 @@
 #include "logger/redaction.hxx"
 #include "pending_operation.hxx"
 #include "pending_operation_connection_info.hxx"
+#include "tracing/constants.hxx"
+#include "tracing/tracer_wrapper.hxx"
 
 #include <asio/error.hpp>
 #include <spdlog/fmt/bundled/chrono.h>
@@ -90,6 +92,11 @@ public:
     stream_end_callback_ = std::move(stream_end_callback);
   }
 
+  void set_tracer(std::shared_ptr<tracing::tracer_wrapper> tracer)
+  {
+    tracer_ = std::move(tracer);
+  }
+
   void cancel() override
   {
     if (session_) {
@@ -102,9 +109,15 @@ public:
   {
     deadline_.cancel();
     free_form_http_request_callback callback{};
+    std::shared_ptr<couchbase::tracing::request_span> dispatch_span{};
     {
       const std::scoped_lock lock(callback_mutex_);
       std::swap(callback, callback_);
+      std::swap(dispatch_span, dispatch_span_);
+    }
+    // The dispatch span covers the request up to the response headers, not the streamed body.
+    if (dispatch_span) {
+      dispatch_span->end();
     }
     if (callback) {
       callback(http_response{ std::move(resp) }, err);
@@ -113,10 +126,17 @@ public:
 
   void send_to(std::shared_ptr<io::http_session> session)
   {
-    if (!callback_) {
-      return;
+    {
+      // The deadline or a cancel can complete the operation concurrently. Checking the callback and
+      // storing the span under the lock that invoke_response_handler takes means the span is either
+      // stored before the handler runs, and ended by it, or never created.
+      const std::scoped_lock lock(callback_mutex_);
+      if (!callback_) {
+        return;
+      }
+      session_ = std::move(session);
+      dispatch_span_ = create_dispatch_span();
     }
-    session_ = std::move(session);
 
     auto start_op = [self = shared_from_this()]() {
       self->session_->write_and_stream(
@@ -170,10 +190,41 @@ private:
     invoke_response_handler(ec, {});
   }
 
+  // Carries the same tags as http_command::create_dispatch_span, so a streamed request reports the
+  // same dispatch_to_server span as a buffered one. It is parented to the caller's span because no
+  // operation span exists in core for a streamed request.
+  [[nodiscard]] auto create_dispatch_span() const
+    -> std::shared_ptr<couchbase::tracing::request_span>
+  {
+    if (!tracer_) {
+      return {};
+    }
+    auto dispatch_span =
+      tracer_->create_span(tracing::operation::step_dispatch, request_.parent_span);
+    if (dispatch_span->uses_tags()) {
+      dispatch_span->add_tag(tracing::attributes::dispatch::network_transport, "tcp");
+      dispatch_span->add_tag(tracing::attributes::dispatch::operation_id,
+                             request_.client_context_id);
+      dispatch_span->add_tag(tracing::attributes::dispatch::local_id, session_->id());
+      dispatch_span->add_tag(tracing::attributes::dispatch::server_address,
+                             session_->http_context().canonical_hostname);
+      dispatch_span->add_tag(tracing::attributes::dispatch::server_port,
+                             session_->http_context().canonical_port);
+
+      const auto& peer_endpoint = session_->remote_endpoint();
+      dispatch_span->add_tag(tracing::attributes::dispatch::peer_address,
+                             peer_endpoint.address().to_string());
+      dispatch_span->add_tag(tracing::attributes::dispatch::peer_port, peer_endpoint.port());
+    }
+    return dispatch_span;
+  }
+
   asio::steady_timer deadline_;
   http_request request_;
   io::http_request encoded_;
   free_form_http_request_callback callback_;
+  std::shared_ptr<tracing::tracer_wrapper> tracer_{};
+  std::shared_ptr<couchbase::tracing::request_span> dispatch_span_{};
   utils::movable_function<void()> stream_end_callback_;
   std::shared_ptr<io::http_session> session_;
   std::mutex callback_mutex_;
@@ -371,6 +422,7 @@ private:
       [session_manager, session, service = op->request().service]() mutable {
         session_manager->check_in(service, session);
       });
+    op->set_tracer(session_manager->tracer());
     if (!session->is_connected()) {
       session_manager->connect_then_send_pending_op(
         session,
