@@ -19,8 +19,13 @@
 
 #include "core/cluster_label_listener.hxx"
 #include "core/operations/document_get.hxx"
+#include "core/operations/document_query.hxx"
 #include "core/operations/management/freeform.hxx"
+#include "core/query_stream.hxx"
 #include "core/tracing/wrapper_sdk_tracer.hxx"
+
+#include <chrono>
+#include <future>
 
 TEST_CASE("integration: wrappers can get dispatch spans using a parent wrapper span",
           "[integration]")
@@ -39,6 +44,45 @@ TEST_CASE("integration: wrappers can get dispatch spans using a parent wrapper s
   REQUIRE(resp.ctx.ec() == couchbase::errc::key_value::document_not_found);
   REQUIRE(root_span->children().size() == 1);
   REQUIRE(root_span->children().front()->name() == "dispatch_to_server");
+}
+
+TEST_CASE("integration: wrappers can get dispatch spans for a streaming query", "[integration]")
+{
+  couchbase::core::cluster_options opts{};
+  opts.tracer = std::make_shared<couchbase::core::tracing::wrapper_sdk_tracer>();
+
+  test::utils::integration_test_guard integration(opts);
+
+  if (!integration.cluster_version().supports_query()) {
+    SKIP("cluster does not support query");
+  }
+
+  const auto root_span = std::make_shared<couchbase::core::tracing::wrapper_sdk_span>();
+  couchbase::core::operations::query_request request{ R"(SELECT "wrapper tracer" AS greeting)" };
+  request.parent_span = root_span;
+  request.client_context_id = test::utils::uniq_id("wrapper_tracer");
+
+  auto barrier = std::make_shared<std::promise<std::error_code>>();
+  auto f = barrier->get_future();
+  integration.cluster.query_stream(
+    request,
+    [barrier](couchbase::core::query_stream stream, couchbase::core::error_context::query ctx) {
+      if (!ctx.ec) {
+        stream.cancel();
+      }
+      barrier->set_value(ctx.ec);
+    });
+  REQUIRE_SUCCESS(f.get());
+
+  // The dispatch span ends once the response headers arrive, before the rows are read.
+  const auto children = root_span->children();
+  REQUIRE(children.size() == 1);
+  const auto& dispatch_span = children.front();
+  REQUIRE(dispatch_span->name() == "dispatch_to_server");
+  // A child is registered when it is created, so check the end time to prove it was ended.
+  REQUIRE(dispatch_span->end_time() != std::chrono::system_clock::time_point{});
+  REQUIRE(dispatch_span->string_tags().at("couchbase.operation_id") ==
+          request.client_context_id.value());
 }
 
 TEST_CASE("integration: cluster label listener can be used to get cluster labels", "[integration]")

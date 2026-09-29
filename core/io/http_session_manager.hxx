@@ -63,6 +63,11 @@ public:
     tracer_ = std::move(tracer);
   }
 
+  [[nodiscard]] auto tracer() const -> std::shared_ptr<tracing::tracer_wrapper>
+  {
+    return tracer_;
+  }
+
   void set_meter(std::shared_ptr<metrics::meter_wrapper> meter)
   {
     meter_ = std::move(meter);
