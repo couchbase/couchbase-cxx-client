@@ -331,7 +331,7 @@ Each case is a separate ctest entry, so `-R` selects one, `-I i,,n` shards the s
 
 Exit codes: **0** pass, **1** failure, **77** every case was skipped (ctest reports *Skipped*). A binary that ran nothing at all exits 1 — a suite that verified nothing must not read as green.
 
-`CB_TEST_TIMEOUT_MULTIPLIER` scales every case budget, for a run under valgrind or a sanitizer. `bin/run-integration-tests` sets it for those legs.
+`CB_TEST_TIMEOUT_MULTIPLIER` scales every case budget, for a run under valgrind or a sanitizer. It must be a number of at least 1. `bin/run-integration-tests` sets it for those legs.
 
 ### Environment
 

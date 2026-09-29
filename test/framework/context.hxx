@@ -181,17 +181,25 @@ inline constexpr auto timeout_multiplier_variable = "CB_TEST_TIMEOUT_MULTIPLIER"
 // Interpret the value of timeout_multiplier_variable; std::nullopt yields 1.0. Budgets are
 // absolute milliseconds and a run under valgrind or a sanitizer is an order of magnitude slower,
 // so without a multiplier such a run reports timeouts rather than behaviour. A value that is not
-// wholly a positive number throws std::invalid_argument: it is a broken invocation, not a request
-// for the default.
+// wholly a number of at least 1 throws std::invalid_argument: it is a broken invocation, not a
+// request for the default.
 [[nodiscard]] auto
 timeout_multiplier(const std::optional<std::string>& raw) -> double;
 
 // Scale a duration by that factor the way every case budget is scaled: ceiling rather than
 // nearest, saturating before the narrowing cast, and never below one millisecond. A test deriving
-// its own duration from the multiplier uses this rather than repeating the arithmetic, where an
-// accepted factor like 0.0001 would truncate to zero and a large one would overflow the cast.
+// its own duration from the multiplier uses this rather than repeating the arithmetic, where a
+// fractional product would truncate toward zero and a large one would overflow the cast.
 [[nodiscard]] auto
 scale_budget(std::chrono::milliseconds budget, double factor) -> std::chrono::milliseconds;
+
+// scale_budget() by the factor timeout_multiplier_variable holds. The harness scales each case
+// budget but does not reach durations inside a case; a case bounding its own waits scales them
+// with this, so each wait stays under the budget it sits under. Multiples are taken of the
+// unscaled value and scaled once: the result saturates at milliseconds::max() for a large
+// accepted factor, and multiplying a saturated result again is meaningless.
+[[nodiscard]] auto
+scaled_budget(std::chrono::milliseconds unscaled) -> std::chrono::milliseconds;
 
 class context
 {

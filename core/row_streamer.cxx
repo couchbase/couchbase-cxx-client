@@ -201,30 +201,28 @@ public:
       // same lock across its check and its arm. Recorded on this thread rather than in the posted
       // teardown: the flag refuses later arms, and cancel_deadline() supersedes one already armed,
       // which would otherwise stay live until the post ran and could take the body's terminal --
-      // reporting a timeout for a stream the caller had already cancelled. The teardown itself
-      // stays posted because it reaches http_session::stop(), which must not run on a thread that
-      // never runs the io_context.
+      // reporting a timeout for a stream the caller had already cancelled.
       const std::scoped_lock<std::mutex> lock{ cancel_mutex_ };
       cancelled_ = true;
       body_.cancel_deadline();
     }
-    // Tear the HTTP body (and the socket and timers the session owns) down from the io_context
-    // rather than the caller's thread: the public handle may be dropped on any thread, and the
-    // session's state is not safe to touch from one that never runs the io_context. This does not
-    // serialise against a read in flight when more than one thread runs the io_context, which is
-    // a property of http_session rather than of this call. The channel is thread-safe, so
-    // cancel/close it synchronously to unblock a waiting consumer immediately.
+    // An explicit cancel must win over a racing inter-read idle timer, so it is disarmed here
+    // rather than in the posted teardown: a timer completion running before that post would set
+    // timed_out_ and the read abort would be reported as a timeout. The completion holds this lock
+    // across its generation test and its store, so it either sees the bump and returns, or its
+    // store precedes the clear. idle_disarmed_ refuses a timer armed by a read completing before
+    // the teardown.
+    {
+      const std::scoped_lock<std::mutex> lock{ idle_timer_mutex_ };
+      idle_disarmed_ = true;
+      idle_timer_.cancel();
+      idle_generation_.fetch_add(1, std::memory_order_relaxed);
+      timed_out_ = false;
+    }
+    // Tear the body down from the io_context rather than the caller's thread, which may never run
+    // it. The channel is thread-safe, so cancel/close it synchronously to unblock a waiting
+    // consumer immediately.
     asio::post(io_, [self = shared_from_this()]() {
-      // An explicit cancel must win over a racing inter-read idle timer. Cancel the timer,
-      // supersede its generation so a completion that is already queued is ignored, and clear
-      // timed_out_ so the read abort below is reported as request_canceled rather than being
-      // misclassified as an (un)ambiguous timeout by the read-completion path. Posted so it runs
-      // on the io_context rather than on the thread dropping the handle; that reaches the session,
-      // which a thread never running the io_context may not touch. It does not serialise against
-      // the other two sites that touch idle_timer_ when more than one thread runs the context.
-      self->idle_timer_.cancel();
-      self->idle_generation_.fetch_add(1, std::memory_order_relaxed);
-      self->timed_out_ = false;
       self->body_.cancel();
     });
     rows_.cancel();
@@ -302,6 +300,10 @@ private:
     if (options_.idle_timeout.count() <= 0) {
       return;
     }
+    const std::scoped_lock<std::mutex> lock{ idle_timer_mutex_ };
+    if (idle_disarmed_) {
+      return;
+    }
     const auto generation = idle_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
     idle_timer_.expires_after(options_.idle_timeout);
     idle_timer_.async_wait([weak = weak_from_this(), generation](std::error_code ec) {
@@ -316,14 +318,29 @@ private:
       // cancels and bumps the generation, but a timer that fired at almost the same instant may
       // already be queued. Acting on such a stale fire would abort the healthy next read and
       // misreport it as a timeout.
-      if (self->idle_generation_.load(std::memory_order_relaxed) != generation) {
-        return;
+      {
+        // Under the lock cancel_idle_timer() bumps the generation in: on another thread, cancel()
+        // could otherwise bump and clear timed_out_ between this test and the store, and the
+        // cancelled read would be reported as a timeout.
+        const std::scoped_lock<std::mutex> lock{ self->idle_timer_mutex_ };
+        if (self->idle_generation_.load(std::memory_order_relaxed) != generation) {
+          return;
+        }
+        // Server stalled while a read was in flight: abort it; the read completion delivers the
+        // terminal with a timeout error (steered by timed_out_).
+        self->timed_out_ = true;
       }
-      // Server stalled while a read was in flight: abort it; the read completion delivers the
-      // terminal with a timeout error (steered by timed_out_).
-      self->timed_out_ = true;
       self->body_.cancel();
     });
+  }
+
+  // Cancels the idle timer and supersedes its generation, so a completion already queued is
+  // ignored.
+  void cancel_idle_timer()
+  {
+    const std::scoped_lock<std::mutex> lock{ idle_timer_mutex_ };
+    idle_timer_.cancel();
+    idle_generation_.fetch_add(1, std::memory_order_relaxed);
   }
 
   void maybe_feed_lexer()
@@ -348,8 +365,7 @@ private:
     body_.next([self = shared_from_this()](const auto& data, bool has_more, auto ec) mutable {
       // A read completed (or was aborted); the idle timer only guards an in-flight read. Cancel it
       // and bump the generation so a timer that fired at the same instant is treated as stale.
-      self->idle_timer_.cancel();
-      self->idle_generation_.fetch_add(1, std::memory_order_relaxed);
+      self->cancel_idle_timer();
       if (ec) {
         self->received_all_data_ = true;
         // If the idle timer aborted the read, report a timeout rather than the raw cancel error.
@@ -428,6 +444,13 @@ private:
     rows_;
   row_streamer_options options_;
   asio::steady_timer idle_timer_;
+  // Armed from the read path and cancelled from the read completion and from cancel() on its
+  // caller's thread, which differ once more than one thread runs the io_context or cancel() is
+  // called off it. Also held across the timer completion's generation test and its timed_out_
+  // store.
+  std::mutex idle_timer_mutex_{};
+  // Set by cancel(); guarded by idle_timer_mutex_.
+  bool idle_disarmed_{ false };
   std::atomic_size_t buffered_bytes_{ 0 };
   std::atomic_bool received_all_data_{ false };
   std::atomic_bool feeding_{ false };

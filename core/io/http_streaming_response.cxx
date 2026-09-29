@@ -17,6 +17,8 @@
 
 #include "http_streaming_response.hxx"
 
+#include "core/logger/logger.hxx"
+#include "core/logger/redaction.hxx"
 #include "core/utils/movable_function.hxx"
 #include "http_session.hxx"
 
@@ -57,6 +59,7 @@ public:
                                     bool reading_complete,
                                     std::size_t cached_chunk_size)
     : session_{ std::move(session) }
+    , endpoint_{ session_ ? session_->hostname() + ":" + session_->port() : std::string{} }
     , cached_data_{ std::move(cached_data) }
     , deadline_{ io }
     , reading_complete_{ reading_complete }
@@ -81,10 +84,18 @@ public:
   // lock, so a re-arm or a clean completion cannot land between them.
   void close_at_deadline(deadline_terminal on_expiry, std::uint64_t generation)
   {
-    close_impl(terminal_error_code(on_expiry), generation);
+    const auto ec = terminal_error_code(on_expiry);
+    if (close_impl(ec, generation)) {
+      CB_LOG_DEBUG("streaming response deadline expired, closing the body: terminal={}, "
+                   "endpoint=\"{}\"",
+                   ec.message(),
+                   logger::system_data(endpoint_));
+    }
   }
 
-  void close_impl(std::error_code ec, std::optional<std::uint64_t> expect_generation)
+  // Returns whether this call closed the body; false when it was already closed, drained, or the
+  // generation was superseded.
+  auto close_impl(std::error_code ec, std::optional<std::uint64_t> expect_generation) -> bool
   {
     // session_ and final_ec_ are written here and also mutated on the session's read completion.
     // Those paths can run on different executors once a consumer drives the io_context with more
@@ -97,14 +108,14 @@ public:
     {
       const std::scoped_lock lock{ mutex_ };
       if (expect_generation.has_value() && *expect_generation != deadline_generation_) {
-        return;
+        return false;
       }
       if (closed_ || (reading_complete_ && cached_data_.empty())) {
         // Drained is terminal too, the state set_deadline() also refuses. A clean end leaves
         // closed_ false, so without this a later close() overwrites final_ec_ and a pull after
         // end-of-stream reports request_canceled. Both clean-end paths disarm the timer, so
         // returning here leaves none armed.
-        return;
+        return false;
       }
       closed_ = true;
       // Only stop the session when the response was abandoned mid-body: such a connection is left
@@ -128,8 +139,10 @@ public:
         // Claim the stop while this lock is held. The clean-end branch of the read completion
         // clears closed_ and hands the connection to check_in, and it can run between the claim
         // and the stop that executes it; the claim is what check_in tests, so the pool refuses a
-        // connection this body is about to stop.
-        to_stop->mark_stopping();
+        // connection this body is about to stop. session_ is null for a body built without one.
+        if (to_stop) {
+          to_stop->mark_stopping();
+        }
       }
       session_ = nullptr;
       final_ec_ = ec;
@@ -145,18 +158,18 @@ public:
     }
     // stop() runs inline -- it closes the stream, cancels the timers, cancels the current
     // response and invokes on_stop_handler_ -- so it has to run on the session strand, alongside
-    // the read and write handlers it tears down. close() is reached from a deadline expiry, an
-    // idle-timer completion and row_streamer::cancel()'s post, none of which is on that strand.
-    // Post it, as http_session_manager does for its own teardown paths. Posting also keeps stop()
-    // off this body's mutex, which it would otherwise re-enter.
+    // the read and write handlers it tears down. close() is reached off that strand from a
+    // deadline expiry, an idle-timer completion and row_streamer::cancel()'s post, so the stop is
+    // posted there.
     //
-    // The session is already claimed above, so the widened gap between deciding the stop and
-    // running it stays invisible to the pool.
+    // The session is already claimed above, so the gap between deciding the stop and running it
+    // stays invisible to the pool.
     if (to_stop) {
       asio::post(to_stop->get_executor(), [to_stop]() {
         to_stop->stop();
       });
     }
+    return true;
   }
 
   void next(utils::movable_function<void(std::string, bool, std::error_code)>&& callback)
@@ -315,6 +328,9 @@ private:
   // the same lock for uniformity. deadline_ is guarded because an asio timer may not be armed and
   // cancelled concurrently; deadline_generation_ supersedes a queued completion.
   std::shared_ptr<http_session> session_;
+  // hostname:port of the session the body was built with, kept for logging after session_ is
+  // released.
+  std::string endpoint_;
   std::string cached_data_;
   std::error_code final_ec_;
   asio::steady_timer deadline_;

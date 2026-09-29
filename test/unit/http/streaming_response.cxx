@@ -26,8 +26,14 @@
 
 #include <asio/io_context.hpp>
 
+#include <chrono>
+#include <exception>
+#include <functional>
+#include <memory>
+#include <optional>
 #include <string>
 #include <system_error>
+#include <utility>
 
 namespace couchbase::test
 {
@@ -98,6 +104,200 @@ a_second_cancel_leaves_the_body_closed([[maybe_unused]] context& ctx)
   assert_false(has_more, "a closed stream reports no more data");
   assert_error(ec, errc::common::request_canceled, "the terminal error is still reported");
 }
+
+struct consumer_failure : std::exception {
+};
+
+// Regression: the stream-end handler, which checks the connection back into the pool, is skipped
+// when the final body callback throws, leaving the session checked out.
+void
+a_throwing_final_body_callback_still_ends_the_stream([[maybe_unused]] context& ctx)
+{
+  asio::io_context io;
+  // Declared ahead of `stream`: its destructor stops the session, which runs the handlers still
+  // installed there.
+  auto body = std::make_shared<std::optional<couchbase::core::http_response_body>>();
+  bool stream_end_ran = false;
+
+  utils::loopback_stream stream{ io,
+                                 R"({"requestID":"r1","signature":{},"results":[{"n":0})",
+                                 R"(],"status":"success"})" };
+  stream.connect(
+    [&](couchbase::core::http_response_body received) {
+      *body = std::move(received);
+      // Drains the prefix buffered by the header parse; the next pull is the socket read the
+      // tail completes.
+      body->value().next([&](std::string, bool, std::error_code) {
+        stream.send_tail();
+        body->value().next([](std::string, bool has_more, std::error_code) {
+          if (!has_more) {
+            throw consumer_failure{};
+          }
+        });
+      });
+    },
+    [&stream_end_ran]() {
+      stream_end_ran = true;
+    });
+
+  const auto bound = utils::deadline_in(scaled_budget(std::chrono::seconds(2)));
+  bool thrown = false;
+  try {
+    io.run_until(bound);
+  } catch (const consumer_failure&) {
+    thrown = true;
+  }
+  // Drains whatever the unwound handler left queued.
+  io.restart();
+  io.run_until(bound);
+
+  assert_true(thrown, "the body callback's exception propagates out of io_context::run");
+  assert_true(stream_end_ran, "the stream-end handler runs although the body callback threw");
+}
+
+struct pull_result {
+  bool completed{ false };
+  std::error_code ec{};
+};
+
+// Calls `run`, which runs `io`, and reports whether it threw consumer_failure. Either way `io` is
+// restarted, so it can be run again.
+template<typename Run>
+auto
+throws_consumer_failure(asio::io_context& io, Run&& run) -> bool
+{
+  bool thrown = false;
+  try {
+    std::forward<Run>(run)();
+  } catch (const consumer_failure&) {
+    thrown = true;
+  }
+  io.restart();
+  return thrown;
+}
+
+// Regression: a read callback that throws on a stopped session leaves the read in flight, so every
+// later read_some() queues behind it and never completes.
+void
+a_throwing_read_callback_on_a_stopped_session_releases_the_read([[maybe_unused]] context& ctx)
+{
+  asio::io_context io;
+  utils::loopback_stream stream{ io };
+  stream.connect([](couchbase::core::http_response_body) {
+  });
+  const auto session = stream.session();
+  session->stop();
+
+  session->read_some([](std::string, bool, std::error_code) {
+    throw consumer_failure{};
+  });
+  const bool thrown = throws_consumer_failure(io, [&io]() {
+    io.poll();
+  });
+
+  pull_result later{};
+  session->read_some([&later](std::string, bool, std::error_code ec) {
+    later = { true, ec };
+  });
+  io.poll();
+
+  assert_true(thrown, "the read callback's exception propagates out of io_context::run");
+  assert_true(later.completed, "a read issued after the throw completes");
+  assert_error(later.ec, errc::common::request_canceled, "the stopped session cancels the read");
+}
+
+// Regression: a queued read callback that throws while the queue drains strands the callbacks
+// queued behind it, and leaves the read in flight for every later read_some().
+void
+a_throwing_queued_read_callback_strands_no_later_read([[maybe_unused]] context& ctx)
+{
+  asio::io_context io;
+  utils::loopback_stream stream{ io };
+  stream.connect([](couchbase::core::http_response_body) {
+  });
+  const auto session = stream.session();
+  session->stop();
+
+  pull_result behind{};
+  session->read_some([&session, &behind](std::string, bool, std::error_code) {
+    // Issued on the strand while this read is in flight, so both queue behind it.
+    session->read_some([](std::string, bool, std::error_code) {
+      throw consumer_failure{};
+    });
+    session->read_some([&behind](std::string, bool, std::error_code ec) {
+      behind = { true, ec };
+    });
+  });
+  const bool thrown = throws_consumer_failure(io, [&io]() {
+    io.poll();
+  });
+  io.poll();
+
+  pull_result later{};
+  session->read_some([&later](std::string, bool, std::error_code ec) {
+    later = { true, ec };
+  });
+  io.poll();
+
+  assert_true(thrown, "the queued callback's exception propagates out of io_context::run");
+  assert_true(behind.completed, "the callback queued behind the throwing one completes");
+  assert_error(behind.ec, errc::common::request_canceled, "it completes as the queue drains");
+  assert_true(later.completed, "a read issued after the drain completes");
+  assert_error(later.ec, errc::common::request_canceled, "the stopped session cancels the read");
+}
+
+// Regression: a streaming response handler that throws skips reinstalling the response context, so
+// the rest of the body is fed to an empty parser and the stream-end handler never runs.
+void
+a_throwing_streaming_response_handler_still_ends_the_stream([[maybe_unused]] context& ctx)
+{
+  const std::string prefix = R"({"requestID":"r1","signature":{},"results":[{"n":0})";
+  const std::string tail = R"(],"status":"success"})";
+  asio::io_context io;
+  // Declared ahead of `stream`: its destructor stops the session, which runs the handlers still
+  // installed there.
+  auto body = std::make_shared<std::optional<couchbase::core::http_response_body>>();
+  bool stream_end_ran = false;
+
+  utils::loopback_stream stream{ io, prefix, tail };
+  stream.connect(
+    [&](couchbase::core::http_response_body received) {
+      *body = std::move(received);
+      throw consumer_failure{};
+    },
+    [&stream_end_ran]() {
+      stream_end_ran = true;
+    });
+  const auto bound = utils::deadline_in(scaled_budget(std::chrono::seconds(2)));
+  const bool thrown = throws_consumer_failure(io, [&io, bound]() {
+    io.run_until(bound);
+  });
+  assert_true(thrown, "the response handler's exception propagates out of io_context::run");
+  assert_true(body->has_value(), "the response handler received the body");
+
+  std::string received;
+  pull_result last{};
+  std::function<void(std::string, bool, std::error_code)> pull;
+  pull = [&](std::string data, bool has_more, std::error_code ec) {
+    received += data;
+    if (has_more && !ec) {
+      return body->value().next([&pull](std::string d, bool m, std::error_code e) {
+        pull(std::move(d), m, e);
+      });
+    }
+    last = { true, ec };
+  };
+  stream.send_tail();
+  body->value().next([&pull](std::string d, bool m, std::error_code e) {
+    pull(std::move(d), m, e);
+  });
+  io.run_until(bound);
+
+  assert_true(last.completed, "the body is read to its end");
+  assert_success(last.ec, "the rest of the body parses after the throw");
+  assert_eq(received, prefix + tail, "every byte of the body is delivered");
+  assert_true(stream_end_ran, "the stream-end handler runs although the response handler threw");
+}
 } // namespace
 
 auto
@@ -111,6 +311,13 @@ tests() -> test_suite
         {},
         timeout::instant },
       { CASE(a_second_cancel_leaves_the_body_closed), {}, timeout::instant },
+      // A loopback connect and one response, bounded at two seconds inside the case.
+      { CASE(a_throwing_final_body_callback_still_ends_the_stream), {}, timeout::network },
+      { CASE(a_throwing_read_callback_on_a_stopped_session_releases_the_read),
+        {},
+        timeout::network },
+      { CASE(a_throwing_queued_read_callback_strands_no_later_read), {}, timeout::network },
+      { CASE(a_throwing_streaming_response_handler_still_ends_the_stream), {}, timeout::network },
     },
   };
 }

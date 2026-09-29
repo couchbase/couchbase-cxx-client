@@ -21,17 +21,29 @@
 #include "framework/errors.hxx"
 
 #include "core/analytics_stream.hxx"
+#include "core/analytics_stream_component.hxx"
+#include "core/app_telemetry_meter.hxx"
+#include "core/cluster.hxx"
 #include "core/cluster_credentials.hxx"
+#include "core/cluster_label_listener.hxx"
 #include "core/cluster_options.hxx"
+#include "core/core_sdk_shim.hxx"
 #include "core/free_form_http_request.hxx"
+#include "core/http_component.hxx"
 #include "core/io/http_context.hxx"
 #include "core/io/http_session.hxx"
+#include "core/io/http_session_manager.hxx"
 #include "core/io/query_cache.hxx"
+#include "core/metrics/meter_wrapper.hxx"
+#include "core/metrics/noop_meter.hxx"
 #include "core/origin.hxx"
 #include "core/query_stream.hxx"
+#include "core/query_stream_component.hxx"
 #include "core/row_streamer.hxx"
 #include "core/service_type.hxx"
 #include "core/topology/configuration.hxx"
+#include "core/tracing/noop_tracer.hxx"
+#include "core/tracing/tracer_wrapper.hxx"
 #include "test_helper_streaming.hxx"
 
 #include <couchbase/error_codes.hxx>
@@ -43,6 +55,12 @@
 #include <asio/steady_timer.hpp>
 #include <asio/write.hpp>
 
+#if defined(__linux__)
+#include <linux/sockios.h>
+#include <sys/ioctl.h>
+#endif
+
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <functional>
@@ -62,31 +80,18 @@ namespace utils = ::test::utils;
 
 using namespace std::chrono_literals;
 
-// Short enough to keep the suite quick, long enough that a scheduling hiccup on a loaded machine
-// does not fire it before the case has set its scenario up. Scaled for the same reason as
-// far_deadline(): a fixed value is reached by an instrumented run before the scenario is ready.
-constexpr auto short_deadline_unscaled = 50ms;
+using utils::back_pressured_options;
+using utils::deadline_in;
+using utils::marker_offset;
+using utils::past;
+using utils::result_document;
+using utils::short_deadline;
+using utils::short_deadline_unscaled;
 
-// Scale an unscaled duration by the suite multiplier. Multiples are taken of the unscaled value
-// and scaled once: scale_budget() saturates at milliseconds::max() for a large accepted factor,
-// and multiplying a saturated result again is meaningless.
-auto
-scaled_budget(std::chrono::milliseconds unscaled) -> std::chrono::milliseconds
-{
-  return scale_budget(unscaled, timeout_multiplier(safe_getenv(timeout_multiplier_variable)));
-}
-
-auto
-short_deadline() -> std::chrono::milliseconds
-{
-  static const auto scaled =
-    scaled_budget(std::chrono::duration_cast<std::chrono::milliseconds>(short_deadline_unscaled));
-  return scaled;
-}
 // A deadline no case may reach, kept under the case budget on purpose. A bound at or above the
 // budget can never fail an assertion: the harness kills the case first, and reports a timeout
-// naming nothing. The gap holds for any multiplier of one or more, which is what the variable
-// is for; below one, scale_budget()'s one-millisecond floor closes it.
+// naming nothing. The gap holds for any multiplier, which the framework requires to be at least
+// one.
 constexpr auto far_deadline_unscaled = 2s;
 
 // The harness scales each case budget by CB_TEST_TIMEOUT_MULTIPLIER but does not reach constants
@@ -100,57 +105,12 @@ far_deadline() -> std::chrono::milliseconds
   return scaled;
 }
 
-// Keeps a wait strictly past the expiry it follows: equal time points are unordered.
-constexpr auto marker_offset = 5ms;
-
-// Saturating add on a time point. Any deadline here may already be time_point::max() under a
-// large accepted multiplier, and adding to that wraps into the past -- turning a deadline that
-// should never fire into one that fires at once. Nothing in this file adds to a time point
-// directly; every site goes through this.
-auto
-past(std::chrono::steady_clock::time_point tp, std::chrono::milliseconds d)
-  -> std::chrono::steady_clock::time_point
-{
-  const auto limit = std::chrono::steady_clock::time_point::max();
-  // Compared in milliseconds. `limit - tp` is the clock's own duration, finer than milliseconds on
-  // every platform here, so comparing the two directly converts `d` to that unit -- and a `d` of
-  // milliseconds::max(), which scale_budget returns for a saturating multiplier, overflows in that
-  // conversion. The guard then reads false and the addition below wraps into the past, firing at
-  // once the deadline that was meant never to fire. duration_cast to the coarser unit truncates
-  // towards zero, cannot overflow, and only ever understates the headroom.
-  const auto headroom = std::chrono::duration_cast<std::chrono::milliseconds>(limit - tp);
-  return d > headroom ? limit : tp + d;
-}
-
-auto
-deadline_in(std::chrono::milliseconds d) -> std::chrono::steady_clock::time_point
-{
-  return past(std::chrono::steady_clock::now(), d);
-}
-
 // Rows totalling several times the high-water mark below, so a consumer that stops pulling leaves
 // the streamer parked above it with no read outstanding.
 auto
 large_result_document() -> std::string
 {
-  std::string doc = R"({"results":[)";
-  for (int i = 0; i < 2000; ++i) {
-    if (i != 0) {
-      doc += ",";
-    }
-    doc += R"({"n":)" + std::to_string(i) + "}";
-  }
-  doc += R"(],"status":"success"})";
-  return doc;
-}
-
-auto
-back_pressured_options() -> couchbase::core::row_streamer_options
-{
-  couchbase::core::row_streamer_options opts{};
-  opts.high_water_bytes = std::size_t{ 4 } * 1024;
-  opts.low_water_bytes = std::size_t{ 1 } * 1024;
-  return opts;
+  return result_document(2000);
 }
 
 // Drives a streamer to the point where back-pressure has stopped the reads, then hands control
@@ -487,12 +447,24 @@ arming_from_another_thread_is_safe([[maybe_unused]] context& ctx)
   // has armed anything.
   auto work = asio::make_work_guard(io);
 
+  // Bounds the case: an arm that is lost leaves the pull parked, and that fails here rather than
+  // at the harness budget.
+  asio::steady_timer give_up{ io };
+  give_up.expires_at(deadline_in(scaled_budget(short_deadline_unscaled * 40)));
+  give_up.async_wait([&](std::error_code ec) {
+    if (ec == asio::error::operation_aborted) {
+      return;
+    }
+    io.stop();
+  });
+
   std::error_code end_ec{ make_error_code(std::errc::operation_in_progress) };
   bool ended = false;
   streamer.start([&](std::string, std::error_code) {
     streamer.next_row([&](std::string /* row */, std::error_code ec) {
       end_ec = ec;
       ended = true;
+      give_up.cancel();
       work.reset();
     });
   });
@@ -591,6 +563,143 @@ analytics_stream_terminates_at_its_deadline([[maybe_unused]] context& ctx)
   assert_eq(end_ec, couchbase::errc::common::ambiguous_timeout, "the reported terminal");
 }
 
+struct component_stream_outcome {
+  std::error_code dispatch_ec{ make_error_code(std::errc::operation_in_progress) };
+  couchbase::core::io::deadline_state armed{
+    couchbase::core::io::deadline_state::body_already_ended
+  };
+  std::optional<std::error_code> terminal{};
+};
+
+// The terminal a deadline reports on a stream handed out by Component, which is where a request's
+// `readonly` becomes the row_streamer's is_read_only. The cluster is never opened: its
+// http_session_manager is pointed at a loopback endpoint that sends one row and nothing after it,
+// so the stream parks and only the deadline ends it.
+template<typename Component, typename Request, typename Stream>
+auto
+deadline_through_a_component(bool readonly) -> component_stream_outcome
+{
+  asio::io_context io;
+  utils::loopback_stream server{ io, R"({"requestID":"r1","signature":{},"results":[{"n":0})" };
+  const auto port = server.port();
+
+  couchbase::core::cluster cluster{ io };
+  auto [manager_ec, manager] = cluster.http_session_manager();
+  assert_success(manager_ec, "an unopened cluster has a session manager");
+  auto labels = std::make_shared<couchbase::core::cluster_label_listener>();
+  manager->set_tracer(couchbase::core::tracing::tracer_wrapper::create(
+    std::make_shared<couchbase::core::tracing::noop_tracer>(), labels));
+  manager->set_meter(couchbase::core::metrics::meter_wrapper::create(
+    std::make_shared<couchbase::core::metrics::noop_meter>(), labels));
+  manager->set_app_telemetry_meter(std::make_shared<couchbase::core::app_telemetry_meter>());
+  couchbase::core::topology::configuration config{};
+  couchbase::core::topology::configuration::node node{};
+  node.hostname = "127.0.0.1";
+  node.services_plain.query = port;
+  node.services_plain.analytics = port;
+  config.nodes.push_back(node);
+  manager->set_configuration(config, couchbase::core::cluster_options{});
+
+  const Component component{ io,
+                             couchbase::core::http_component{
+                               io, couchbase::core::core_sdk_shim{ cluster } },
+                             far_deadline() };
+  Request request{};
+  request.statement = "SELECT 1";
+  request.readonly = readonly;
+
+  // Recorded in the handlers and asserted by the caller once the loop has stopped.
+  component_stream_outcome outcome{};
+  std::optional<Stream> stream{};
+  std::function<void()> pull = [&]() {
+    stream->next_row([&](std::optional<std::string> row, std::error_code ec) {
+      if (ec || !row.has_value()) {
+        outcome.terminal = ec;
+        io.stop();
+        return;
+      }
+      pull();
+    });
+  };
+  component.execute(std::move(request), [&](Stream s, auto error_ctx) {
+    outcome.dispatch_ec = error_ctx.ec;
+    if (error_ctx.ec) {
+      io.stop();
+      return;
+    }
+    stream = std::move(s);
+    outcome.armed = stream->set_deadline(deadline_in(short_deadline()));
+    pull();
+  });
+
+  asio::steady_timer give_up{ io };
+  give_up.expires_at(deadline_in(scaled_budget(short_deadline_unscaled * 40)));
+  give_up.async_wait([&](std::error_code ec) {
+    if (ec == asio::error::operation_aborted) {
+      return;
+    }
+    io.stop();
+  });
+  io.run();
+  return outcome;
+}
+
+void
+a_read_only_query_stream_reports_an_unambiguous_deadline([[maybe_unused]] context& ctx)
+{
+  const auto outcome = deadline_through_a_component<couchbase::core::query_stream_component,
+                                                    couchbase::core::operations::query_request,
+                                                    couchbase::core::query_stream>(true);
+  assert_success(outcome.dispatch_ec, "the component hands out a stream");
+  assert_eq(outcome.armed, couchbase::core::io::deadline_state::armed, "the deadline arms");
+  assert_true(outcome.terminal.has_value(), "the stream terminates");
+  assert_eq(outcome.terminal.value_or(std::error_code{}),
+            couchbase::errc::common::unambiguous_timeout,
+            "readonly reaches the streamer, so a read-only query's deadline is unambiguous");
+}
+
+void
+a_mutating_query_stream_reports_an_ambiguous_deadline([[maybe_unused]] context& ctx)
+{
+  const auto outcome = deadline_through_a_component<couchbase::core::query_stream_component,
+                                                    couchbase::core::operations::query_request,
+                                                    couchbase::core::query_stream>(false);
+  assert_success(outcome.dispatch_ec, "the component hands out a stream");
+  assert_eq(outcome.armed, couchbase::core::io::deadline_state::armed, "the deadline arms");
+  assert_true(outcome.terminal.has_value(), "the stream terminates");
+  assert_eq(outcome.terminal.value_or(std::error_code{}),
+            couchbase::errc::common::ambiguous_timeout,
+            "a query that may mutate reports an ambiguous deadline");
+}
+
+void
+a_read_only_analytics_stream_reports_an_unambiguous_deadline([[maybe_unused]] context& ctx)
+{
+  const auto outcome = deadline_through_a_component<couchbase::core::analytics_stream_component,
+                                                    couchbase::core::operations::analytics_request,
+                                                    couchbase::core::analytics_stream>(true);
+  assert_success(outcome.dispatch_ec, "the component hands out a stream");
+  assert_eq(outcome.armed, couchbase::core::io::deadline_state::armed, "the deadline arms");
+  assert_true(outcome.terminal.has_value(), "the stream terminates");
+  assert_eq(outcome.terminal.value_or(std::error_code{}),
+            couchbase::errc::common::unambiguous_timeout,
+            "readonly reaches the streamer, so a read-only analytics deadline is unambiguous");
+}
+
+void
+a_mutating_analytics_stream_reports_an_ambiguous_deadline([[maybe_unused]] context& ctx)
+{
+  const auto outcome = deadline_through_a_component<couchbase::core::analytics_stream_component,
+                                                    couchbase::core::operations::analytics_request,
+                                                    couchbase::core::analytics_stream>(false);
+  assert_success(outcome.dispatch_ec, "the component hands out a stream");
+  assert_eq(outcome.armed, couchbase::core::io::deadline_state::armed, "the deadline arms");
+  assert_true(outcome.terminal.has_value(), "the stream terminates");
+  assert_eq(outcome.terminal.value_or(std::error_code{}),
+            couchbase::errc::common::ambiguous_timeout,
+            "an analytics request that may mutate reports an ambiguous deadline");
+}
+
 void
 a_replayed_query_stream_ignores_a_deadline([[maybe_unused]] context& ctx)
 {
@@ -673,7 +782,8 @@ a_deadline_over_a_parked_socket_read_reports_a_timeout([[maybe_unused]] context&
                                                         origin,
                                                         "127.0.0.1",
                                                         std::to_string(port),
-                                                        http_ctx);
+                                                        http_ctx,
+                                                        /* pool_generation */ 0);
 
   std::error_code parked_ec{ make_error_code(std::errc::operation_in_progress) };
   bool parked_completed = false;
@@ -741,6 +851,202 @@ a_deadline_over_a_parked_socket_read_reports_a_timeout([[maybe_unused]] context&
             couchbase::errc::common::ambiguous_timeout,
             "the parked read reports the deadline, not the socket abort that delivered it");
 }
+
+#if defined(__linux__)
+// SIOCOUTQ is what observes that the peer holds the tail, and only Linux exposes it, so the case
+// below runs only there.
+
+// Waits, bounded, until `done` holds; reports whether it did.
+template<typename Predicate>
+auto
+wait_until(Predicate done) -> bool
+{
+  // deadline_in saturates: now() + a budget scaled to milliseconds::max() would overflow.
+  const auto give_up = deadline_in(scaled_budget(std::chrono::seconds{ 2 }));
+  while (!done()) {
+    if (std::chrono::steady_clock::now() > give_up) {
+      return false;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds{ 1 });
+  }
+  return true;
+}
+
+// Waits until the peer has acknowledged everything written to `socket`, so the bytes are in its
+// receive queue, and reports whether it did.
+auto
+wait_until_peer_received(asio::ip::tcp::socket& socket) -> bool
+{
+  return wait_until([&socket]() {
+    int unacknowledged = 0;
+    return ::ioctl(socket.native_handle(), SIOCOUTQ, &unacknowledged) == 0 && unacknowledged == 0;
+  });
+}
+
+// Regression: a read that completes the response is delivered as a clean end even when the
+// body was closed after the socket read and before the read completion ran, and the next pull
+// reports the same end instead of the close's terminal.
+void
+a_close_behind_a_completed_final_read_keeps_the_clean_end([[maybe_unused]] context& ctx)
+{
+  asio::io_context io;
+
+  asio::ip::tcp::acceptor acceptor{
+    io, asio::ip::tcp::endpoint{ asio::ip::make_address("127.0.0.1"), 0 }
+  };
+  const auto port = acceptor.local_endpoint().port();
+  asio::ip::tcp::socket server_socket{ io };
+
+  const std::string head = "HTTP/1.1 200 OK\r\n"
+                           "Content-Type: application/json\r\n"
+                           "Content-Length: 20\r\n"
+                           "\r\n"
+                           "0123456789";
+  const std::string tail = "abcdefghij";
+  std::string request_buffer(4096, '\0');
+  // Recorded, not asserted: either io thread may run these handlers, and an assertion thrown on
+  // second_runner would terminate the process.
+  std::error_code accept_error{ make_error_code(std::errc::operation_in_progress) };
+  std::error_code request_error{ make_error_code(std::errc::operation_in_progress) };
+  std::error_code head_error{ make_error_code(std::errc::operation_in_progress) };
+  acceptor.async_accept(server_socket, [&](std::error_code accept_ec) {
+    accept_error = accept_ec;
+    if (accept_ec) {
+      return;
+    }
+    server_socket.async_read_some(asio::buffer(request_buffer),
+                                  [&](std::error_code read_ec, std::size_t) {
+                                    request_error = read_ec;
+                                    if (read_ec) {
+                                      return;
+                                    }
+                                    asio::write(server_socket, asio::buffer(head), head_error);
+                                  });
+  });
+
+  couchbase::core::cluster_credentials creds{};
+  creds.username = "user";
+  creds.password = "pass";
+  couchbase::core::cluster_options options{};
+  couchbase::core::origin origin{ creds, "127.0.0.1", port, options };
+  couchbase::core::topology::configuration config{};
+  couchbase::core::query_cache cache{};
+  couchbase::core::http_context http_ctx{ config, options,     cache, "127.0.0.1",
+                                          port,   "127.0.0.1", port };
+
+  auto session =
+    std::make_shared<couchbase::core::io::http_session>(couchbase::core::service_type::query,
+                                                        "client-id",
+                                                        "node-uuid",
+                                                        io,
+                                                        origin,
+                                                        "127.0.0.1",
+                                                        std::to_string(port),
+                                                        http_ctx,
+                                                        /* pool_generation */ 0);
+
+  // The body's results are recorded rather than asserted inside handlers: a throw there unwinds
+  // out of io.run() with handlers still holding the locals by reference.
+  std::string received;
+  bool ended = false;
+  bool more_at_end = true;
+  std::error_code end_ec{ make_error_code(std::errc::operation_in_progress) };
+  bool after_more = true;
+  std::error_code after_ec{ make_error_code(std::errc::operation_in_progress) };
+  bool read_queued = false;
+  bool parked = false;
+  std::optional<couchbase::core::io::http_streaming_response_body> body{};
+  std::function<void()> pull = [&]() {
+    body->next([&](std::string data, bool has_more, std::error_code ec) {
+      received += data;
+      if (ec || !has_more) {
+        ended = true;
+        more_at_end = has_more;
+        end_ec = ec;
+        body->next([&](std::string, bool next_more, std::error_code next_ec) {
+          after_more = next_more;
+          after_ec = next_ec;
+          session->stop();
+          io.stop();
+        });
+        return;
+      }
+      pull();
+      if (parked) {
+        return;
+      }
+      parked = true;
+      // The pull above parks a read for the tail. The blocker holds the session strand while the
+      // other io thread performs that socket read, whose completion queues on the held strand. The
+      // close then posts stop() to the strand behind it.
+      asio::post(session->get_executor(), [&]() {
+        std::error_code write_ec;
+        asio::write(server_socket, asio::buffer(tail), write_ec);
+        const auto received = wait_until_peer_received(server_socket);
+        // Already expired, so its completion runs in the reactor pass that sees the tail, or a
+        // later one. With one other io thread, descriptor completions are queued ahead of timer
+        // completions within a pass, so once it has run the read completion is on the strand.
+        auto marker = std::make_shared<asio::steady_timer>(io);
+        auto marked = std::make_shared<std::atomic_bool>(false);
+        marker->expires_at(std::chrono::steady_clock::time_point::min());
+        marker->async_wait([marker, marked](std::error_code) {
+          marked->store(true);
+        });
+        read_queued = received && wait_until([&marked]() {
+                        return marked->load();
+                      });
+        body->close();
+      });
+    });
+  };
+
+  couchbase::core::io::http_request request{};
+  request.type = couchbase::core::service_type::query;
+  request.method = "GET";
+  request.path = "/query/service";
+  request.stream_response = true;
+  session->connect([&]() {
+    session->write_and_stream(
+      request,
+      [&](auto err, couchbase::core::io::http_streaming_response resp) {
+        if (utils::dispatch_failed(err)) {
+          return;
+        }
+        body = resp.body();
+        pull();
+      },
+      []() {
+      });
+  });
+
+  asio::steady_timer give_up{ io };
+  give_up.expires_at(deadline_in(scaled_budget(short_deadline_unscaled * 40)));
+  give_up.async_wait([&](std::error_code ec) {
+    if (ec == asio::error::operation_aborted) {
+      return;
+    }
+    session->stop();
+    io.stop();
+  });
+  std::thread second_runner{ [&io]() {
+    io.run();
+  } };
+  io.run();
+  second_runner.join();
+
+  assert_success(accept_error, "the loopback server accepts the connection");
+  assert_success(request_error, "the loopback server reads the request");
+  assert_success(head_error, "the loopback server writes the head of the response");
+  assert_true(read_queued, "the tail's read completion is queued before the close");
+  assert_true(ended, "the stream ends");
+  assert_eq(received, std::string{ "0123456789abcdefghij" }, "every body byte is delivered");
+  assert_false(more_at_end, "the final read reports the end of the body");
+  assert_eq(
+    end_ec, std::error_code{}, "the completed response is a clean end, not the close's terminal");
+  assert_false(after_more, "the next pull reports the end of the body");
+  assert_eq(after_ec, std::error_code{}, "the next pull reports the same clean end");
+}
+#endif
 
 void
 a_body_reports_the_deadline_to_a_pull_that_arrives_afterwards([[maybe_unused]] context& ctx)
@@ -823,6 +1129,35 @@ a_close_after_the_fault_body_finished_keeps_its_terminal([[maybe_unused]] contex
   });
   io.run();
   assert_eq(after, terminal, "a close after the seam finished does not replace its terminal");
+}
+
+// A seam with no bytes and no stall is terminal before its first pull, which set_deadline reports
+// as body_already_ended. A close in that state must keep the configured terminal, as the real body
+// refuses a close once drained.
+void
+a_close_before_the_first_pull_keeps_the_fault_body_terminal([[maybe_unused]] context& ctx)
+{
+  asio::io_context io;
+  // Distinct from request_canceled, which is what the seam reports once cancelled.
+  const auto terminal = make_error_code(std::errc::connection_reset);
+  auto body = couchbase::core::http_response_body::create_in_memory_faulty(
+    io, /*data*/ {}, /*cached_chunk_size*/ 0, terminal, /*stall*/ false);
+
+  assert_eq(body.set_deadline(deadline_in(far_deadline()),
+                              couchbase::core::io::deadline_terminal::ambiguous),
+            couchbase::core::io::deadline_state::body_already_ended,
+            "a seam with nothing left to deliver refuses a deadline");
+  body.cancel();
+
+  std::error_code first{ make_error_code(std::errc::operation_in_progress) };
+  bool has_more = true;
+  body.next([&](std::string, bool more, std::error_code ec) {
+    first = ec;
+    has_more = more;
+  });
+  io.run();
+  assert_eq(first, terminal, "a close before the first pull does not replace the terminal");
+  assert_false(has_more, "the body reports end-of-stream");
 }
 
 void
@@ -995,30 +1330,36 @@ void
 the_body_has_ended_before_its_connection_is_checked_in([[maybe_unused]] context& ctx)
 {
   asio::io_context io;
-  // A response that can be completed: the header promises exactly the prefix plus the tail.
-  utils::loopback_stream stream{ io,
-                                 R"({"requestID":"r1","signature":{},"results":[{"n":0})",
-                                 R"(],"status":"success"})" };
-
+  // Declared ahead of `stream`: its destructor stops the session, which runs the handlers still
+  // installed there, and they write these.
   auto body = std::make_shared<std::optional<couchbase::core::http_response_body>>();
   std::error_code final_ec{ make_error_code(std::errc::operation_in_progress) };
   bool final_has_more = true;
   std::string final_data;
   bool finished = false;
+  bool stream_end_ran = false;
+  auto state_at_stream_end = couchbase::core::io::deadline_state::armed;
+
+  // A response that can be completed: the header promises exactly the prefix plus the tail.
+  utils::loopback_stream stream{ io,
+                                 R"({"requestID":"r1","signature":{},"results":[{"n":0})",
+                                 R"(],"status":"success"})" };
 
   // http_session runs this when it checks the connection back into the keep-alive pool. The body
   // has already observed the end of its response by then, so it refuses a deadline: there is
   // nothing left to bound, and nothing that would stop a connection the pool has republished.
   // An expired deadline is used because one that armed would fire on the drain below, which is
   // how the stop reached a pooled session before.
-  auto on_stream_end = [&io, body]() {
+  //
+  // Recorded rather than asserted here, so a failure is reported after io.run_until() rather than
+  // unwinding out of it with the session and socket still live.
+  auto on_stream_end = [&io, &stream_end_ran, &state_at_stream_end, body]() {
     if (!body->has_value()) {
       return;
     }
-    assert_eq(body->value().set_deadline(std::chrono::steady_clock::now() - 1s,
-                                         couchbase::core::io::deadline_terminal::unambiguous),
-              couchbase::core::io::deadline_state::body_already_ended,
-              "the body has ended before its connection is checked in");
+    stream_end_ran = true;
+    state_at_stream_end = body->value().set_deadline(
+      std::chrono::steady_clock::now() - 1s, couchbase::core::io::deadline_terminal::unambiguous);
     // Nested drain on the same thread: an expiry that had armed would land before this returns.
     io.poll();
   };
@@ -1042,6 +1383,10 @@ the_body_has_ended_before_its_connection_is_checked_in([[maybe_unused]] context&
 
   io.run_until(deadline_in(far_deadline()));
 
+  assert_true(stream_end_ran, "the stream-end handler runs once the response has been read");
+  assert_eq(state_at_stream_end,
+            couchbase::core::io::deadline_state::body_already_ended,
+            "the body has ended before its connection is checked in");
   assert_true(finished, "the final pull completes");
   assert_eq(final_ec,
             std::error_code{},
@@ -1104,7 +1449,8 @@ a_response_complete_before_any_read_reports_end_of_stream([[maybe_unused]] conte
                                                         origin,
                                                         "127.0.0.1",
                                                         std::to_string(port),
-                                                        http_ctx);
+                                                        http_ctx,
+                                                        /* pool_generation */ 0);
 
   bool ended = false;
   bool has_more = true;
@@ -1150,6 +1496,64 @@ a_response_complete_before_any_read_reports_end_of_stream([[maybe_unused]] conte
             couchbase::core::io::deadline_state::body_already_ended,
             "there is nothing left to bound");
 }
+// A transport error mid-body is a terminal of its own: read_some reports it, the body records it
+// as it closes, and next() reports that record rather than the armed deadline, on the failing pull
+// and on every pull after it.
+void
+a_peer_closing_mid_body_reports_the_transport_error([[maybe_unused]] context& ctx)
+{
+  asio::io_context io;
+  utils::loopback_stream server{ io };
+
+  asio::steady_timer give_up{ io };
+  give_up.expires_at(deadline_in(scaled_budget(short_deadline_unscaled * 40)));
+  give_up.async_wait([&](std::error_code ec) {
+    if (ec == asio::error::operation_aborted) {
+      return;
+    }
+    io.stop();
+  });
+
+  std::optional<couchbase::core::http_response_body> body{};
+  auto armed = couchbase::core::io::deadline_state::body_already_ended;
+  bool ended = false;
+  std::error_code seen{ make_error_code(std::errc::operation_in_progress) };
+  std::error_code later{ make_error_code(std::errc::operation_in_progress) };
+  bool later_has_more = true;
+  std::function<void()> pull = [&]() {
+    body->next([&](std::string, bool has_more, std::error_code ec) {
+      if (ec || !has_more) {
+        ended = true;
+        seen = ec;
+        body->next([&](std::string, bool more, std::error_code again) {
+          later_has_more = more;
+          later = again;
+          give_up.cancel();
+        });
+        return;
+      }
+      // The prefix has arrived, and the Content-Length promises more than it.
+      server.close_peer();
+      pull();
+    });
+  };
+  server.connect([&](couchbase::core::http_response_body b) {
+    body = std::move(b);
+    armed = body->set_deadline(deadline_in(far_deadline()),
+                               couchbase::core::io::deadline_terminal::ambiguous);
+    pull();
+  });
+  io.run();
+
+  assert_eq(armed, couchbase::core::io::deadline_state::armed, "the live body takes a deadline");
+  assert_true(ended, "the pull parked on the socket completes once the peer closes");
+  assert_eq(seen,
+            std::error_code{ asio::error::eof },
+            "the pull reports the transport error, not the deadline");
+  assert_eq(later, seen, "a pull after the failure reports the same terminal");
+  assert_false(later_has_more, "the failed body reports end-of-stream");
+}
+
 // The fault seam stands in for the real body, so a case on it establishes nothing unless the two
 // agree about when a body has ended. With no bytes to hand out and no stall, the seam's terminal
 // is reached by its first pull, which makes it terminal before that pull ever runs -- the state
@@ -1205,11 +1609,20 @@ tests() -> test_suite
       { CASE(arming_after_the_stream_ended_is_a_no_op) },
       { CASE(query_stream_terminates_at_its_deadline) },
       { CASE(analytics_stream_terminates_at_its_deadline) },
+      { CASE(a_read_only_query_stream_reports_an_unambiguous_deadline) },
+      { CASE(a_mutating_query_stream_reports_an_ambiguous_deadline) },
+      { CASE(a_read_only_analytics_stream_reports_an_unambiguous_deadline) },
+      { CASE(a_mutating_analytics_stream_reports_an_ambiguous_deadline) },
       { CASE(a_replayed_query_stream_ignores_a_deadline) },
       { CASE(a_body_reports_the_deadline_to_a_pull_that_arrives_afterwards) },
       { CASE(a_close_after_a_clean_end_keeps_the_clean_terminal) },
       { CASE(a_close_after_the_fault_body_finished_keeps_its_terminal) },
+      { CASE(a_close_before_the_first_pull_keeps_the_fault_body_terminal) },
       { CASE(a_deadline_over_a_parked_socket_read_reports_a_timeout) },
+#if defined(__linux__)
+      { CASE(a_close_behind_a_completed_final_read_keeps_the_clean_end) },
+#endif
+      { CASE(a_peer_closing_mid_body_reports_the_transport_error) },
       { CASE(a_response_complete_before_any_read_reports_end_of_stream) },
       { CASE(a_fault_body_terminal_at_construction_refuses_a_deadline) },
     },
