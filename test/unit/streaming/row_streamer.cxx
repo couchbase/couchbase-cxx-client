@@ -355,9 +355,9 @@ refills_the_buffer_after_a_drain_below_the_low_water_mark([[maybe_unused]] conte
               "reading pauses once the buffered budget passes the high-water mark");
 
   // Drain more bytes than the budget held at the pause, one pull at a time. Reading stays stopped
-  // until a release drops the budget under the low-water mark, so passing that total is possible
-  // only if the resume refilled: a lost resume leaves the budget falling to zero and the pull past
-  // that point unanswered.
+  // until a release drops the budget to or under the low-water mark, so passing that total is
+  // possible only if the resume refilled: a lost resume leaves the budget falling to zero and the
+  // pull past that point unanswered.
   //
   // Polled rather than run: a row handed to a full channel stays queued as a pending send, which
   // is outstanding work that only a receiver completes, and this loop supplies one at a time. A
@@ -463,6 +463,97 @@ resumes_reading_when_a_drain_races_the_closing_read_window([[maybe_unused]] cont
     assert_eq(terminal_reached.get(), std::error_code{}, "the stream ends cleanly");
     assert_eq(seen.load(), row_count, "every row is yielded exactly once");
   }
+}
+
+void
+resumes_reading_when_the_low_water_mark_is_zero([[maybe_unused]] context& ctx)
+{
+  // buffered_bytes_ is unsigned, so a strict comparison against a zero low-water mark is
+  // unsatisfiable: the consumer would never ask the producer to resume, and reading would stop for
+  // good at the first pause. Whatever the mark is set to, a buffer drained empty has to resume.
+  asio::io_context io;
+  constexpr int row_count = 1000;
+  const std::string doc = watermark_exercising_document(row_count);
+
+  couchbase::core::row_streamer_options opts{};
+  opts.high_water_bytes = std::size_t{ 2 } * 1024;
+  opts.low_water_bytes = 0;
+  auto body = utils::make_chunked_response_body(io, doc, 256);
+  couchbase::core::row_streamer streamer{ io, std::move(body), "/results/^", opts };
+
+  streamer.start([](std::string, std::error_code) {
+  });
+
+  // One pull at a time, polled rather than run, for the reason given in the case above. A resume
+  // that never fires leaves the pull after the buffer empties unanswered.
+  int seen = 0;
+  bool ended = false;
+  std::error_code end_ec{ make_error_code(std::errc::operation_in_progress) };
+  while (!ended && seen <= row_count) {
+    bool answered = false;
+    streamer.next_row([&](std::string row, std::error_code ec) {
+      answered = true;
+      if (ec || row.empty()) {
+        ended = true;
+        end_ec = ec;
+        return;
+      }
+      ++seen;
+    });
+    for (int spin = 0; spin < 20 && !answered; ++spin) {
+      io.restart();
+      io.poll();
+    }
+    assert_true(answered, "every pull is answered, so reading resumed at an empty buffer");
+  }
+  assert_true(ended, "the stream reaches its terminal");
+  assert_eq(end_ec, std::error_code{}, "the stream ends cleanly");
+  assert_eq(seen, row_count, "every row is yielded exactly once");
+}
+
+void
+streams_to_completion_with_both_watermarks_at_zero([[maybe_unused]] context& ctx)
+{
+  // The degenerate setting: read ahead of the consumer by nothing at all. The producer declines
+  // the gate while any row is buffered and the consumer asks for a resume once none is, so the
+  // two marks meet at an empty buffer and the stream advances one read at a time. Neither side
+  // may decline there, or the stream ends at its first pause.
+  asio::io_context io;
+  constexpr int row_count = 200;
+  const std::string doc = watermark_exercising_document(row_count);
+
+  couchbase::core::row_streamer_options opts{};
+  opts.high_water_bytes = 0;
+  opts.low_water_bytes = 0;
+  auto body = utils::make_chunked_response_body(io, doc, 256);
+  couchbase::core::row_streamer streamer{ io, std::move(body), "/results/^", opts };
+
+  streamer.start([](std::string, std::error_code) {
+  });
+
+  int seen = 0;
+  bool ended = false;
+  std::error_code end_ec{ make_error_code(std::errc::operation_in_progress) };
+  while (!ended && seen <= row_count) {
+    bool answered = false;
+    streamer.next_row([&](std::string row, std::error_code ec) {
+      answered = true;
+      if (ec || row.empty()) {
+        ended = true;
+        end_ec = ec;
+        return;
+      }
+      ++seen;
+    });
+    for (int spin = 0; spin < 20 && !answered; ++spin) {
+      io.restart();
+      io.poll();
+    }
+    assert_true(answered, "every pull is answered, so neither side declines at an empty buffer");
+  }
+  assert_true(ended, "the stream reaches its terminal");
+  assert_eq(end_ec, std::error_code{}, "the stream ends cleanly");
+  assert_eq(seen, row_count, "every row is yielded exactly once");
 }
 
 void
@@ -606,6 +697,8 @@ tests() -> test_suite
       // timeout::slow, not network: the case bounds each stall at three seconds of its own, and
       // the budget has to outlast those bounds for the failure to be reported as one.
       { CASE(resumes_reading_when_a_drain_races_the_closing_read_window), {}, timeout::slow },
+      { CASE(resumes_reading_when_the_low_water_mark_is_zero) },
+      { CASE(streams_to_completion_with_both_watermarks_at_zero) },
       { CASE(handles_an_empty_result_set) },
       { CASE(yields_scalar_and_null_row_values) },
       { CASE(preserves_embedded_brackets_and_unicode_in_a_row) },
