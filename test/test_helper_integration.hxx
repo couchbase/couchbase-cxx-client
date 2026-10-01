@@ -18,6 +18,7 @@
 #pragma once
 
 #include "test_helper.hxx"
+#include "utils/drop_guard.hxx"
 #include "utils/integration_test_guard.hxx"
 #include "utils/wait_until.hxx"
 

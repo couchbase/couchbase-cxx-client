@@ -51,6 +51,7 @@
 #include <couchbase/watch_query_indexes_options.hxx>
 
 #include <algorithm>
+#include <optional>
 
 using Catch::Approx;
 
@@ -100,6 +101,11 @@ TEST_CASE("integration: bucket management", "[integration]")
   }
 
   auto bucket_name = test::utils::uniq_id("bucket");
+  const test::utils::drop_guard drop_bucket{
+    integration.cluster,
+    "bucket " + bucket_name,
+    couchbase::core::operations::management::bucket_drop_request{ bucket_name },
+  };
 
   SECTION("crud")
   {
@@ -343,6 +349,11 @@ TEST_CASE("integration: bucket management", "[integration]")
     std::string all_valid_chars{
       "abcdefghijklmnopqrstuvwxyz%20_123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     };
+    const test::utils::drop_guard drop_valid_chars_bucket{
+      integration.cluster,
+      "bucket " + all_valid_chars,
+      couchbase::core::operations::management::bucket_drop_request{ all_valid_chars },
+    };
     {
       couchbase::core::operations::management::bucket_create_request req;
       req.bucket.name = all_valid_chars;
@@ -356,11 +367,6 @@ TEST_CASE("integration: bucket management", "[integration]")
       auto resp = test::utils::execute(integration.cluster, req);
       REQUIRE_SUCCESS(resp.ctx.ec);
       REQUIRE(resp.bucket.name == all_valid_chars);
-    }
-    {
-      couchbase::core::operations::management::bucket_drop_request req;
-      req.name = all_valid_chars;
-      test::utils::execute(integration.cluster, req);
     }
   }
 
@@ -1015,12 +1021,6 @@ TEST_CASE("integration: bucket management", "[integration]")
   }
 
   test::utils::close_bucket(integration.cluster, bucket_name);
-
-  // drop bucket if not already dropped
-  {
-    couchbase::core::operations::management::bucket_drop_request req{ bucket_name };
-    test::utils::execute(integration.cluster, req);
-  }
 }
 
 TEST_CASE("integration: bucket management history", "[integration]")
@@ -1041,6 +1041,16 @@ TEST_CASE("integration: bucket management history", "[integration]")
 
   auto bucket_name = test::utils::uniq_id("bucket");
   auto update_bucket_name = test::utils::uniq_id("bucket");
+  const test::utils::drop_guard drop_bucket{
+    integration.cluster,
+    "bucket " + bucket_name,
+    couchbase::core::operations::management::bucket_drop_request{ bucket_name },
+  };
+  const test::utils::drop_guard drop_update_bucket{
+    integration.cluster,
+    "bucket " + update_bucket_name,
+    couchbase::core::operations::management::bucket_drop_request{ update_bucket_name },
+  };
 
   SECTION("create history")
   {
@@ -1113,13 +1123,6 @@ TEST_CASE("integration: bucket management history", "[integration]")
       }
     }
   }
-
-  {
-    couchbase::core::operations::management::bucket_drop_request req{ bucket_name };
-    couchbase::core::operations::management::bucket_drop_request update_req{ update_bucket_name };
-    test::utils::execute(integration.cluster, req);
-    test::utils::execute(integration.cluster, update_req);
-  }
 }
 
 std::optional<couchbase::core::topology::collections_manifest::collection>
@@ -1157,19 +1160,6 @@ create_collection(const couchbase::core::cluster& cluster,
   return resp.ctx.ec;
 }
 
-std::error_code
-drop_collection(const couchbase::core::cluster& cluster,
-                const std::string& bucket_name,
-                const std::string& scope_name,
-                const std::string& collection_name)
-{
-  couchbase::core::operations::management::collection_drop_request req{ bucket_name,
-                                                                        scope_name,
-                                                                        collection_name };
-  auto resp = test::utils::execute(cluster, req);
-  return resp.ctx.ec;
-}
-
 bool
 scope_exists(const couchbase::core::cluster& cluster,
              const std::string& bucket_name,
@@ -1202,8 +1192,20 @@ TEST_CASE("integration: collection management", "[integration]")
     "abcdefghijklmnopqrstuvwxyz%20_123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
   };
   std::int32_t max_expiry = 5;
+  const test::utils::drop_guard drop_scope{
+    integration.cluster,
+    "scope " + scope_name,
+    couchbase::core::operations::management::scope_drop_request{ integration.ctx.bucket,
+                                                                 scope_name },
+  };
   SECTION("core api")
   {
+    const test::utils::drop_guard drop_valid_chars_scope{
+      integration.cluster,
+      "scope " + all_valid_chars,
+      couchbase::core::operations::management::scope_drop_request{ integration.ctx.bucket,
+                                                                   all_valid_chars },
+    };
     {
       couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket,
                                                                          all_valid_chars };
@@ -1241,11 +1243,6 @@ TEST_CASE("integration: collection management", "[integration]")
 
         REQUIRE(collection->name == all_valid_chars);
       }
-    }
-    {
-      couchbase::core::operations::management::scope_drop_request req{ integration.ctx.bucket,
-                                                                       all_valid_chars };
-      auto resp = test::utils::execute(integration.cluster, req);
     }
     {
       couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket,
@@ -1453,6 +1450,12 @@ TEST_CASE("integration: collection management create collection with max expiry"
 
   auto scope_name = "_default";
   auto collection_name = test::utils::uniq_id("collection");
+  const test::utils::drop_guard drop_max_expiry_collection{
+    integration.cluster,
+    "collection " + collection_name,
+    couchbase::core::operations::management::collection_drop_request{
+      integration.ctx.bucket, scope_name, collection_name },
+  };
 
   auto c = integration.public_cluster();
 
@@ -1587,13 +1590,6 @@ TEST_CASE("integration: collection management create collection with max expiry"
       REQUIRE(error.ec() == couchbase::errc::common::invalid_argument);
     }
   }
-
-  // Clean up the collection that was created
-  {
-    auto ec =
-      drop_collection(integration.cluster, integration.ctx.bucket, scope_name, collection_name);
-    REQUIRE((!ec || ec == couchbase::errc::common::collection_not_found));
-  }
 }
 
 TEST_CASE("integration: collection management update collection with max expiry", "[integration]")
@@ -1610,6 +1606,12 @@ TEST_CASE("integration: collection management update collection with max expiry"
 
   auto scope_name = "_default";
   auto collection_name = test::utils::uniq_id("collection");
+  const test::utils::drop_guard drop_max_expiry_collection{
+    integration.cluster,
+    "collection " + collection_name,
+    couchbase::core::operations::management::collection_drop_request{
+      integration.ctx.bucket, scope_name, collection_name },
+  };
 
   {
     auto ec =
@@ -1747,13 +1749,6 @@ TEST_CASE("integration: collection management update collection with max expiry"
       REQUIRE(error.ec() == couchbase::errc::common::invalid_argument);
     }
   }
-
-  {
-    // Clean up the collection that was created
-    auto ec =
-      drop_collection(integration.cluster, integration.ctx.bucket, scope_name, collection_name);
-    REQUIRE((!ec || ec == couchbase::errc::common::collection_not_found));
-  }
 }
 
 TEST_CASE("integration: collection management history retention not supported in bucket",
@@ -1771,6 +1766,12 @@ TEST_CASE("integration: collection management history retention not supported in
 
   auto scope_name = "_default";
   auto collection_name = test::utils::uniq_id("collection");
+  const test::utils::drop_guard drop_history_collection{
+    integration.cluster,
+    "collection " + collection_name,
+    couchbase::core::operations::management::collection_drop_request{
+      integration.ctx.bucket, scope_name, collection_name },
+  };
 
   SECTION("create collection")
   {
@@ -1834,13 +1835,6 @@ TEST_CASE("integration: collection management history retention not supported in
       REQUIRE(error.ec() == couchbase::errc::common::feature_not_available);
     }
   }
-
-  // Clean up the collection that was created
-  {
-    auto ec =
-      drop_collection(integration.cluster, integration.ctx.bucket, scope_name, collection_name);
-    REQUIRE((!ec || ec == couchbase::errc::common::collection_not_found));
-  }
 }
 
 TEST_CASE("integration: collection management bucket dedup", "[integration]")
@@ -1860,6 +1854,11 @@ TEST_CASE("integration: collection management bucket dedup", "[integration]")
   auto bucket_name = test::utils::uniq_id("bucket");
   auto scope_name = test::utils::uniq_id("scope");
   auto collection_name = test::utils::uniq_id("collection");
+  const test::utils::drop_guard drop_bucket{
+    integration.cluster,
+    "bucket " + bucket_name,
+    couchbase::core::operations::management::bucket_drop_request{ bucket_name },
+  };
 
   // Create a magma bucket for use in this test
   {
@@ -1929,13 +1928,6 @@ TEST_CASE("integration: collection management bucket dedup", "[integration]")
              !collection->history.value();
     }));
   }
-
-  // Clean up the bucket that was created for this test
-  {
-    couchbase::core::operations::management::bucket_drop_request req{ bucket_name };
-    auto resp = test::utils::execute(integration.cluster, req);
-    REQUIRE_SUCCESS(resp.ctx.ec);
-  }
 }
 
 void
@@ -1999,6 +1991,16 @@ TEST_CASE("integration: user groups management", "[integration]")
     };
 
     auto group_name = test::utils::uniq_id("group");
+    const test::utils::drop_guard drop_valid_chars_bucket{
+      integration.cluster,
+      "bucket " + all_valid_chars,
+      couchbase::core::operations::management::bucket_drop_request{ all_valid_chars },
+    };
+    couchbase::core::operations::management::group_drop_request drop_group_req{};
+    drop_group_req.name = group_name;
+    const test::utils::drop_guard drop_group{ integration.cluster,
+                                              "group " + group_name,
+                                              drop_group_req };
     {
       couchbase::core::operations::management::bucket_create_request req;
       req.bucket.name = all_valid_chars;
@@ -2022,11 +2024,6 @@ TEST_CASE("integration: user groups management", "[integration]")
       REQUIRE_SUCCESS(resp.ctx.ec);
     }
     {
-      couchbase::core::operations::management::bucket_drop_request req;
-      req.name = all_valid_chars;
-      auto resp = test::utils::execute(integration.cluster, req);
-    }
-    {
       couchbase::core::operations::management::group_drop_request req;
       req.name = group_name;
       auto resp = test::utils::execute(integration.cluster, req);
@@ -2038,6 +2035,16 @@ TEST_CASE("integration: user groups management", "[integration]")
   {
     auto group_name_1 = test::utils::uniq_id("group");
     auto group_name_2 = test::utils::uniq_id("group");
+    const test::utils::drop_guard drop_group_1{
+      integration.cluster,
+      "group " + group_name_1,
+      couchbase::core::operations::management::group_drop_request{ group_name_1 },
+    };
+    const test::utils::drop_guard drop_group_2{
+      integration.cluster,
+      "group " + group_name_2,
+      couchbase::core::operations::management::group_drop_request{ group_name_2 },
+    };
 
     couchbase::core::management::rbac::group group{};
     group.name = group_name_1;
@@ -2135,6 +2142,16 @@ TEST_CASE("integration: user groups management", "[integration]")
   {
     auto group_name = test::utils::uniq_id("group");
     auto user_name = test::utils::uniq_id("user");
+    const test::utils::drop_guard drop_group{
+      integration.cluster,
+      "group " + group_name,
+      couchbase::core::operations::management::group_drop_request{ group_name },
+    };
+    const test::utils::drop_guard drop_user{
+      integration.cluster,
+      "user " + user_name,
+      couchbase::core::operations::management::user_drop_request{ user_name },
+    };
 
     couchbase::core::management::rbac::group group{};
     group.name = group_name;
@@ -2287,6 +2304,11 @@ TEST_CASE("integration: user management", "[integration]")
     SECTION("change user password")
     {
       auto user_name = test::utils::uniq_id("newUser");
+      couchbase::core::operations::management::user_drop_request drop_user_req{};
+      drop_user_req.username = user_name;
+      const test::utils::drop_guard drop_user{ integration.cluster,
+                                               "user " + user_name,
+                                               drop_user_req };
       // Create options
       auto options_outdated = couchbase::cluster_options(user_name, integration.ctx.password);
       auto options_updated = couchbase::cluster_options(user_name, "newPassword");
@@ -2354,6 +2376,17 @@ TEST_CASE("integration: user management collections roles", "[integration]")
   auto scope_name = test::utils::uniq_id("scope");
   auto collection_name = test::utils::uniq_id("collection");
   auto user_name = test::utils::uniq_id("user");
+  const test::utils::drop_guard drop_scope{
+    integration.cluster,
+    "scope " + scope_name,
+    couchbase::core::operations::management::scope_drop_request{ integration.ctx.bucket,
+                                                                 scope_name },
+  };
+  couchbase::core::operations::management::user_drop_request drop_user_req{};
+  drop_user_req.username = user_name;
+  const test::utils::drop_guard drop_user{ integration.cluster,
+                                           "user " + user_name,
+                                           drop_user_req };
 
   {
     couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket,
@@ -2426,13 +2459,6 @@ TEST_CASE("integration: user management collections roles", "[integration]")
     REQUIRE(resp.user.roles[0].scope == scope_name);
     REQUIRE(resp.user.roles[0].collection == collection_name);
   }
-
-  {
-    couchbase::core::operations::management::scope_drop_request req{ integration.ctx.bucket,
-                                                                     scope_name };
-    auto resp = test::utils::execute(integration.cluster, req);
-    REQUIRE_SUCCESS(resp.ctx.ec);
-  }
 }
 
 TEST_CASE("integration: query index management", "[integration]")
@@ -2447,6 +2473,11 @@ TEST_CASE("integration: query index management", "[integration]")
     SECTION("primary index")
     {
       auto bucket_name = test::utils::uniq_id("bucket");
+      const test::utils::drop_guard drop_bucket{
+        integration.cluster,
+        "bucket " + bucket_name,
+        couchbase::core::operations::management::bucket_drop_request{ bucket_name },
+      };
 
       {
         couchbase::core::operations::management::bucket_create_request req;
@@ -2526,11 +2557,6 @@ TEST_CASE("integration: query index management", "[integration]")
           REQUIRE_SUCCESS(error.ec());
         }
       }
-
-      {
-        couchbase::core::operations::management::bucket_drop_request req{ bucket_name };
-        test::utils::execute(integration.cluster, req);
-      }
     }
   }
 
@@ -2539,6 +2565,12 @@ TEST_CASE("integration: query index management", "[integration]")
     SECTION("core API")
     {
       auto index_name = test::utils::uniq_id("index");
+      couchbase::core::operations::management::query_index_drop_request drop_index_req{};
+      drop_index_req.bucket_name = integration.ctx.bucket;
+      drop_index_req.index_name = index_name;
+      const test::utils::drop_guard drop_index{ integration.cluster,
+                                                "query index " + index_name,
+                                                drop_index_req };
       {
         couchbase::core::operations::management::query_index_create_response resp;
         bool operation_completed = test::utils::wait_until([&integration, &index_name, &resp]() {
@@ -2612,6 +2644,12 @@ TEST_CASE("integration: query index management", "[integration]")
       auto c = integration.public_cluster();
 
       auto index_name = test::utils::uniq_id("index");
+      couchbase::core::operations::management::query_index_drop_request drop_index_req{};
+      drop_index_req.bucket_name = integration.ctx.bucket;
+      drop_index_req.index_name = index_name;
+      const test::utils::drop_guard drop_index{ integration.cluster,
+                                                "query index " + index_name,
+                                                drop_index_req };
       {
         std::error_code ec;
         bool operation_completed =
@@ -2705,6 +2743,12 @@ TEST_CASE("integration: query index management", "[integration]")
       auto c = integration.public_cluster();
 
       auto index_name = test::utils::uniq_id("index");
+      couchbase::core::operations::management::query_index_drop_request drop_index_req{};
+      drop_index_req.bucket_name = integration.ctx.bucket;
+      drop_index_req.index_name = index_name;
+      const test::utils::drop_guard drop_index{ integration.cluster,
+                                                "query index " + index_name,
+                                                drop_index_req };
       {
         std::error_code ec;
         bool operation_completed =
@@ -2768,6 +2812,12 @@ TEST_CASE("integration: query index management", "[integration]")
     SECTION("core API")
     {
       auto index_name = test::utils::uniq_id("index");
+      couchbase::core::operations::management::query_index_drop_request drop_index_req{};
+      drop_index_req.bucket_name = integration.ctx.bucket;
+      drop_index_req.index_name = index_name;
+      const test::utils::drop_guard drop_index{ integration.cluster,
+                                                "query index " + index_name,
+                                                drop_index_req };
       {
         couchbase::core::operations::management::query_index_create_response resp;
         bool operation_completed = test::utils::wait_until([&integration, &index_name, &resp]() {
@@ -2921,6 +2971,20 @@ TEST_CASE("integration: collections query index management", "[integration]")
   auto index_name = test::utils::uniq_id("collections_index");
   auto scope_name = test::utils::uniq_id("indexscope");
   auto collection_name = test::utils::uniq_id("indexcollection");
+  const test::utils::drop_guard drop_scope{
+    integration.cluster,
+    "scope " + scope_name,
+    couchbase::core::operations::management::scope_drop_request{ integration.ctx.bucket,
+                                                                 scope_name },
+  };
+  couchbase::core::operations::management::query_index_drop_request drop_index_req{};
+  drop_index_req.bucket_name = integration.ctx.bucket;
+  drop_index_req.scope_name = scope_name;
+  drop_index_req.collection_name = collection_name;
+  drop_index_req.index_name = index_name;
+  const test::utils::drop_guard drop_index{ integration.cluster,
+                                            "query index " + index_name,
+                                            drop_index_req };
 
   test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
@@ -3518,13 +3582,6 @@ TEST_CASE("integration: collections query index management", "[integration]")
           .ec() == couchbase::errc::common::index_not_found);
     }
   }
-
-  {
-    couchbase::core::operations::management::scope_drop_request req{ integration.ctx.bucket,
-                                                                     scope_name };
-    auto resp = test::utils::execute(integration.cluster, req);
-    REQUIRE_SUCCESS(resp.ctx.ec);
-  }
 }
 
 TEST_CASE("integration: analytics index management with core API", "[integration]")
@@ -3547,6 +3604,12 @@ TEST_CASE("integration: analytics index management with core API", "[integration
     auto dataverse_name = test::utils::uniq_id("dataverse");
     auto dataset_name = test::utils::uniq_id("dataset");
     auto index_name = test::utils::uniq_id("index");
+    // Dropping the dataverse drops its dataset and index too.
+    const test::utils::drop_guard drop_dataverse{
+      integration.cluster,
+      "dataverse " + dataverse_name,
+      couchbase::core::operations::management::analytics_dataverse_drop_request{ dataverse_name },
+    };
 
     {
       couchbase::core::operations::management::analytics_dataverse_create_request req{};
@@ -3792,6 +3855,12 @@ TEST_CASE("integration: analytics index management with core API", "[integration
         fmt::format("{}/{}", test::utils::uniq_id("dataverse"), test::utils::uniq_id("dataverse"));
       auto dataset_name = test::utils::uniq_id("dataset");
       auto index_name = test::utils::uniq_id("index");
+      // Dropping the dataverse drops its dataset and index too.
+      const test::utils::drop_guard drop_dataverse{
+        integration.cluster,
+        "dataverse " + dataverse_name,
+        couchbase::core::operations::management::analytics_dataverse_drop_request{ dataverse_name },
+      };
 
       {
         couchbase::core::operations::management::analytics_dataverse_create_request req{};
@@ -3819,11 +3888,19 @@ TEST_CASE("integration: analytics index management with core API", "[integration
         REQUIRE_SUCCESS(resp.ctx.ec);
       }
 
+      // A dataverse is not dropped while its Local link is connected.
+      std::optional<test::utils::drop_guard<
+        couchbase::core::operations::management::analytics_link_disconnect_request>>
+        disconnect_link;
       {
         couchbase::core::operations::management::analytics_link_connect_request req{};
         req.dataverse_name = dataverse_name;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec);
+        couchbase::core::operations::management::analytics_link_disconnect_request disconnect_req{};
+        disconnect_req.dataverse_name = dataverse_name;
+        disconnect_link.emplace(
+          integration.cluster, "Local link of " + dataverse_name, disconnect_req);
       }
 
       {
@@ -3831,6 +3908,7 @@ TEST_CASE("integration: analytics index management with core API", "[integration
         req.dataverse_name = dataverse_name;
         auto resp = test::utils::execute(integration.cluster, req);
         REQUIRE_SUCCESS(resp.ctx.ec);
+        disconnect_link->dismiss();
       }
 
       {
@@ -3865,6 +3943,18 @@ run_s3_link_test_core_api(test::utils::integration_test_guard& integration,
                           const std::string& dataverse_name,
                           const std::string& link_name)
 {
+  const test::utils::drop_guard drop_dataverse{
+    integration.cluster,
+    "dataverse " + dataverse_name,
+    couchbase::core::operations::management::analytics_dataverse_drop_request{ dataverse_name },
+  };
+  const test::utils::drop_guard drop_link{
+    integration.cluster,
+    "link " + link_name,
+    couchbase::core::operations::management::analytics_link_drop_request{ link_name,
+                                                                          dataverse_name },
+  };
+
   {
     couchbase::core::operations::management::analytics_dataverse_create_request req{};
     req.dataverse_name = dataverse_name;
@@ -3994,6 +4084,18 @@ run_azure_link_test_core_api(test::utils::integration_test_guard& integration,
                              const std::string& dataverse_name,
                              const std::string& link_name)
 {
+  const test::utils::drop_guard drop_dataverse{
+    integration.cluster,
+    "dataverse " + dataverse_name,
+    couchbase::core::operations::management::analytics_dataverse_drop_request{ dataverse_name },
+  };
+  const test::utils::drop_guard drop_link{
+    integration.cluster,
+    "link " + link_name,
+    couchbase::core::operations::management::analytics_link_drop_request{ link_name,
+                                                                          dataverse_name },
+  };
+
   {
     couchbase::core::operations::management::analytics_dataverse_create_request req{};
     req.dataverse_name = dataverse_name;
@@ -4188,6 +4290,12 @@ TEST_CASE("integration: analytics external link management with core API", "[int
     SECTION("link crud scopes")
     {
       auto scope_name = test::utils::uniq_id("scope");
+      const test::utils::drop_guard drop_scope{
+        integration.cluster,
+        "scope " + scope_name,
+        couchbase::core::operations::management::scope_drop_request{ integration.ctx.bucket,
+                                                                     scope_name },
+      };
 
       {
         couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket,
@@ -4211,13 +4319,6 @@ TEST_CASE("integration: analytics external link management with core API", "[int
         {
           run_azure_link_test_core_api(integration, dataverse_name, link_name);
         }
-      }
-
-      {
-        couchbase::core::operations::management::scope_drop_request req{ integration.ctx.bucket,
-                                                                         scope_name };
-        auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_SUCCESS(resp.ctx.ec);
       }
     }
   }
@@ -4247,6 +4348,12 @@ TEST_CASE("integration: analytics index management with public API", "[integrati
     auto dataverse_name = test::utils::uniq_id("dataverse");
     auto dataset_name = test::utils::uniq_id("dataset");
     auto index_name = test::utils::uniq_id("index");
+    // Dropping the dataverse drops its dataset and index too.
+    const test::utils::drop_guard drop_dataverse{
+      integration.cluster,
+      "dataverse " + dataverse_name,
+      couchbase::core::operations::management::analytics_dataverse_drop_request{ dataverse_name },
+    };
 
     {
       auto error = mgr.create_dataverse(dataverse_name, {}).get();
@@ -4451,6 +4558,12 @@ TEST_CASE("integration: analytics index management with public API", "[integrati
         fmt::format("{}/{}", test::utils::uniq_id("dataverse"), test::utils::uniq_id("dataverse"));
       auto dataset_name = test::utils::uniq_id("dataset");
       auto index_name = test::utils::uniq_id("index");
+      // Dropping the dataverse drops its dataset and index too.
+      const test::utils::drop_guard drop_dataverse{
+        integration.cluster,
+        "dataverse " + dataverse_name,
+        couchbase::core::operations::management::analytics_dataverse_drop_request{ dataverse_name },
+      };
 
       {
         auto error = mgr.create_dataverse(dataverse_name, {}).get();
@@ -4471,16 +4584,25 @@ TEST_CASE("integration: analytics index management with public API", "[integrati
         REQUIRE_SUCCESS(error.ec());
       }
 
+      // A dataverse is not dropped while its Local link is connected.
+      std::optional<test::utils::drop_guard<
+        couchbase::core::operations::management::analytics_link_disconnect_request>>
+        disconnect_link;
       {
         auto opts = couchbase::connect_link_analytics_options().dataverse_name(dataverse_name);
         auto error = mgr.connect_link(opts).get();
         REQUIRE_SUCCESS(error.ec());
+        couchbase::core::operations::management::analytics_link_disconnect_request disconnect_req{};
+        disconnect_req.dataverse_name = dataverse_name;
+        disconnect_link.emplace(
+          integration.cluster, "Local link of " + dataverse_name, disconnect_req);
       }
 
       {
         auto opts = couchbase::disconnect_link_analytics_options().dataverse_name(dataverse_name);
         auto error = mgr.disconnect_link(opts).get();
         REQUIRE_SUCCESS(error.ec());
+        disconnect_link->dismiss();
       }
 
       {
@@ -4511,6 +4633,18 @@ run_s3_link_test_public_api(test::utils::integration_test_guard& integration,
   auto cluster = integration.public_cluster();
 
   auto mgr = cluster.analytics_indexes();
+
+  const test::utils::drop_guard drop_dataverse{
+    integration.cluster,
+    "dataverse " + dataverse_name,
+    couchbase::core::operations::management::analytics_dataverse_drop_request{ dataverse_name },
+  };
+  const test::utils::drop_guard drop_link{
+    integration.cluster,
+    "link " + link_name,
+    couchbase::core::operations::management::analytics_link_drop_request{ link_name,
+                                                                          dataverse_name },
+  };
 
   {
     auto error = mgr.create_dataverse(dataverse_name, {}).get();
@@ -4634,6 +4768,18 @@ run_azure_link_test_public_api(test::utils::integration_test_guard& integration,
   auto cluster = integration.public_cluster();
 
   auto mgr = cluster.analytics_indexes();
+
+  const test::utils::drop_guard drop_dataverse{
+    integration.cluster,
+    "dataverse " + dataverse_name,
+    couchbase::core::operations::management::analytics_dataverse_drop_request{ dataverse_name },
+  };
+  const test::utils::drop_guard drop_link{
+    integration.cluster,
+    "link " + link_name,
+    couchbase::core::operations::management::analytics_link_drop_request{ link_name,
+                                                                          dataverse_name },
+  };
 
   {
     auto error = mgr.create_dataverse(dataverse_name, {}).get();
@@ -4802,6 +4948,12 @@ TEST_CASE("integration: analytics external link management with public API", "[i
     SECTION("link crud scopes")
     {
       auto scope_name = test::utils::uniq_id("scope");
+      const test::utils::drop_guard drop_scope{
+        integration.cluster,
+        "scope " + scope_name,
+        couchbase::core::operations::management::scope_drop_request{ integration.ctx.bucket,
+                                                                     scope_name },
+      };
 
       {
         couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket,
@@ -4825,13 +4977,6 @@ TEST_CASE("integration: analytics external link management with public API", "[i
         {
           run_azure_link_test_public_api(integration, dataverse_name, link_name);
         }
-      }
-
-      {
-        couchbase::core::operations::management::scope_drop_request req{ integration.ctx.bucket,
-                                                                         scope_name };
-        auto resp = test::utils::execute(integration.cluster, req);
-        REQUIRE_SUCCESS(resp.ctx.ec);
       }
     }
   }
@@ -4958,6 +5103,12 @@ TEST_CASE("integration: freeform HTTP request", "[integration]")
     }
 
     auto scope_name = test::utils::uniq_id("freeform_scope");
+    const test::utils::drop_guard drop_scope{
+      integration.cluster,
+      "scope " + scope_name,
+      couchbase::core::operations::management::scope_drop_request{ integration.ctx.bucket,
+                                                                   scope_name },
+    };
 
     couchbase::core::operations::management::freeform_request req{};
     req.type = couchbase::core::service_type::management;
