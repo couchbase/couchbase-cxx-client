@@ -1,0 +1,55 @@
+name: Run FIT Testing
+
+on:
+  schedule:
+    - cron: '0 5 * * *'
+
+  workflow_dispatch:
+    inputs:
+      preset:
+        description: FIT presets or preset groups to run, comma-separated. (`fit preset list`)
+        required: false
+        type: string
+        default: op-multi-lite
+
+      collect_extra_diagnostics:
+        description: Collect additional diagnostics (includes cbcollect, is slower)
+        required: false
+        type: boolean
+        default: true
+
+      channel:
+        description: fit-cli install channel ("latest" or "ci").
+        required: false
+        type: string
+        default: ci
+
+      performer_tag:
+        description: Tag of the cxx-fit-performer image to test against.
+        required: false
+        type: string
+        default: main
+
+  workflow_call:
+    inputs:
+      preset:
+        required: false
+        type: string
+
+      performer_tag:
+        required: false
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+  checks: write
+
+jobs:
+  fit:
+    uses: couchbaselabs/fit-cli/.github/workflows/fit-cli.yaml@main
+    with:
+      preset: ${{ inputs.preset || vars.FIT_CLI_PRESET || 'op-multi-lite' }}
+      collect_extra_diagnostics: ${{ inputs.collect_extra_diagnostics == '' && true || inputs.collect_extra_diagnostics }}
+      performer: cxx-fit-performer:${{ inputs.performer_tag || 'main' }}
+      channel: ${{ inputs.channel || vars.FIT_CLI_CHANNEL || 'ci' }}
