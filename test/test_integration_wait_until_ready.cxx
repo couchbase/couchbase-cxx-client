@@ -17,6 +17,8 @@
 
 #include "test_helper_integration.hxx"
 
+#include "core/operations/management/bucket_drop.hxx"
+
 #include <couchbase/cluster.hxx>
 #include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/collection.hxx>
@@ -170,6 +172,11 @@ TEST_CASE("integration: freshly created bucket is durable-write ready after wait
 
   auto cluster = integration.public_cluster();
   const auto bucket_name = test::utils::uniq_id("wait_until_ready");
+  const test::utils::drop_guard drop_bucket{
+    integration.cluster,
+    "bucket " + bucket_name,
+    couchbase::core::operations::management::bucket_drop_request{ bucket_name },
+  };
 
   couchbase::management::cluster::bucket_settings settings{};
   settings.name = bucket_name;
@@ -195,9 +202,6 @@ TEST_CASE("integration: freshly created bucket is durable-write ready after wait
       .upsert(test::utils::uniq_id("key"), tao::json::value{ { "answer", 42 } }, upsert)
       .get();
   REQUIRE_SUCCESS(upsert_err.ec());
-
-  auto drop_err = cluster.buckets().drop_bucket(bucket_name).get();
-  REQUIRE_SUCCESS(drop_err.ec());
 }
 
 TEST_CASE("integration: wait_until_ready completes when the cluster is torn down mid-wait",

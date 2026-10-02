@@ -85,6 +85,11 @@ run_core_eventing_management_lifecycle_test(test::utils::integration_test_guard&
   }
 
   auto meta_bucket_name = test::utils::uniq_id("meta");
+  const test::utils::drop_guard drop_meta_bucket{
+    integration.cluster,
+    "bucket " + meta_bucket_name,
+    couchbase::core::operations::management::bucket_drop_request{ meta_bucket_name },
+  };
   {
 
     couchbase::core::management::cluster::bucket_settings bucket_settings;
@@ -113,6 +118,25 @@ function OnDelete(meta, options) {
     log("Doc deleted/expired", meta.id);
 }
 )";
+
+  // An undeploy completes asynchronously, and the drop is refused until it has; the lifecycle
+  // below allows it three minutes too.
+  const test::utils::drop_guard drop_function{
+    integration.cluster,
+    "function " + function_name,
+    couchbase::core::operations::management::eventing_drop_function_request{
+      function_name, bucket_name, scope_name },
+    std::chrono::minutes{ 3 },
+  };
+  // As long as the drop: a function still bootstrapping refuses the undeploy, and the drop cannot
+  // succeed until an undeploy has.
+  const test::utils::drop_guard undeploy_function{
+    integration.cluster,
+    "deployment of function " + function_name,
+    couchbase::core::operations::management::eventing_undeploy_function_request{
+      function_name, bucket_name, scope_name },
+    std::chrono::minutes{ 3 },
+  };
 
   INFO(fmt::format("function_name: {}\nbucket_name: {}\nscope_name: {}",
                    function_name,
@@ -344,12 +368,6 @@ function OnDelete(meta, options) {
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE(resp.ctx.ec == couchbase::errc::management::eventing_function_not_found);
   }
-
-  {
-    couchbase::core::operations::management::bucket_drop_request req{ meta_bucket_name };
-    auto resp = test::utils::execute(integration.cluster, req);
-    REQUIRE_SUCCESS(resp.ctx.ec);
-  }
 }
 
 TEST_CASE("integration: eventing functions management", "[integration]")
@@ -399,6 +417,23 @@ TEST_CASE("integration: scoped eventing functions management", "[integration]")
     auto scoped_function_name = test::utils::uniq_id("scoped");
 
     auto meta_bucket_name = test::utils::uniq_id("meta");
+    const test::utils::drop_guard drop_meta_bucket{
+      integration.cluster,
+      "bucket " + meta_bucket_name,
+      couchbase::core::operations::management::bucket_drop_request{ meta_bucket_name },
+    };
+    const test::utils::drop_guard drop_admin_function{
+      integration.cluster,
+      "function " + admin_function_name,
+      couchbase::core::operations::management::eventing_drop_function_request{
+        admin_function_name },
+    };
+    const test::utils::drop_guard drop_scoped_function{
+      integration.cluster,
+      "function " + scoped_function_name,
+      couchbase::core::operations::management::eventing_drop_function_request{
+        scoped_function_name, integration.ctx.bucket, "_default" },
+    };
     {
 
       couchbase::core::management::cluster::bucket_settings bucket_settings;
@@ -597,28 +632,6 @@ function OnDelete(meta, options) {
                                      });
         REQUIRE(function != resp.status.functions.end());
       }
-    }
-
-    {
-      couchbase::core::operations::management::eventing_drop_function_request req{
-        scoped_function_name, integration.ctx.bucket, "_default"
-      };
-      auto resp = test::utils::execute(integration.cluster, req);
-      REQUIRE_SUCCESS(resp.ctx.ec);
-    }
-
-    {
-      couchbase::core::operations::management::eventing_drop_function_request req{
-        admin_function_name
-      };
-      auto resp = test::utils::execute(integration.cluster, req);
-      REQUIRE_SUCCESS(resp.ctx.ec);
-    }
-
-    {
-      couchbase::core::operations::management::bucket_drop_request req{ meta_bucket_name };
-      auto resp = test::utils::execute(integration.cluster, req);
-      REQUIRE_SUCCESS(resp.ctx.ec);
     }
   }
 }

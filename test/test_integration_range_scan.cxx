@@ -1773,6 +1773,12 @@ TEST_CASE("integration: range scan re-resolves recreated collection id", "[integ
 
   const auto scope_name = std::string{ couchbase::scope::default_name };
   const auto collection_name = test::utils::uniq_id("recreate");
+  const test::utils::drop_guard drop_recreated_collection{
+    integration.cluster,
+    "collection " + collection_name,
+    couchbase::core::operations::management::collection_drop_request{
+      integration.ctx.bucket, scope_name, collection_name },
+  };
 
   auto create_collection = [&]() {
     couchbase::core::operations::management::collection_create_request req{ integration.ctx.bucket,
@@ -1859,7 +1865,4 @@ TEST_CASE("integration: range scan re-resolves recreated collection id", "[integ
       REQUIRE(item.body->value == value);
     }
   }
-
-  // Drop the collection we created so the test bucket is not left polluted.
-  drop_collection();
 }

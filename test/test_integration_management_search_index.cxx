@@ -22,6 +22,9 @@
 
 #include <couchbase/codec/tao_json_serializer.hxx>
 
+#include <optional>
+#include <string>
+
 // serverless requires 1 partition and 1 replica
 const std::string serverless_plan_params = R"({ "indexPartition": 1, "numReplicas": 1 })";
 
@@ -43,6 +46,14 @@ TEST_CASE("integration: search index management", "[integration]")
     auto index1_name = index1_base_name;
     auto index2_name = test::utils::uniq_id("index2");
     auto alias_name = test::utils::uniq_id("alias");
+    const std::string requested_index2_name = index2_name;
+    const std::string requested_alias_name = alias_name;
+
+    couchbase::core::operations::management::search_index_drop_request drop_requested_index1_req{};
+    drop_requested_index1_req.index_name = index1_name;
+    const test::utils::drop_guard drop_requested_index1{ integration.cluster,
+                                                         "search index " + index1_name,
+                                                         drop_requested_index1_req };
 
     {
       couchbase::core::management::search::index index;
@@ -61,6 +72,16 @@ TEST_CASE("integration: search index management", "[integration]")
         index1_name = resp.name;
       }
     }
+    // The server may rename the index; a renamed one gets a guard of its own.
+    std::optional<
+      test::utils::drop_guard<couchbase::core::operations::management::search_index_drop_request>>
+      drop_renamed_index1;
+    if (!index1_name.empty() && index1_name != index1_base_name) {
+      couchbase::core::operations::management::search_index_drop_request drop_index1_req{};
+      drop_index1_req.index_name = index1_name;
+      drop_renamed_index1.emplace(
+        integration.cluster, "search index " + index1_name, drop_index1_req);
+    }
 
     {
       couchbase::core::management::search::index index;
@@ -76,6 +97,12 @@ TEST_CASE("integration: search index management", "[integration]")
       auto resp = test::utils::execute(integration.cluster, req);
       REQUIRE(resp.ctx.ec == couchbase::errc::common::index_exists);
     }
+
+    couchbase::core::operations::management::search_index_drop_request drop_requested_index2_req{};
+    drop_requested_index2_req.index_name = index2_name;
+    const test::utils::drop_guard drop_requested_index2{ integration.cluster,
+                                                         "search index " + index2_name,
+                                                         drop_requested_index2_req };
 
     {
       couchbase::core::management::search::index index;
@@ -98,6 +125,22 @@ TEST_CASE("integration: search index management", "[integration]")
         index2_name = resp.name;
       }
     }
+    // The server may rename the index; a renamed one gets a guard of its own.
+    std::optional<
+      test::utils::drop_guard<couchbase::core::operations::management::search_index_drop_request>>
+      drop_renamed_index2;
+    if (!index2_name.empty() && index2_name != requested_index2_name) {
+      couchbase::core::operations::management::search_index_drop_request drop_index2_req{};
+      drop_index2_req.index_name = index2_name;
+      drop_renamed_index2.emplace(
+        integration.cluster, "search index " + index2_name, drop_index2_req);
+    }
+
+    couchbase::core::operations::management::search_index_drop_request drop_requested_alias_req{};
+    drop_requested_alias_req.index_name = alias_name;
+    const test::utils::drop_guard drop_requested_alias{ integration.cluster,
+                                                        "search index " + alias_name,
+                                                        drop_requested_alias_req };
 
     {
       couchbase::core::management::search::index index;
@@ -123,6 +166,15 @@ TEST_CASE("integration: search index management", "[integration]")
       if (resp.name != alias_name) {
         alias_name = resp.name;
       }
+    }
+    // The server may rename the index; a renamed one gets a guard of its own.
+    std::optional<
+      test::utils::drop_guard<couchbase::core::operations::management::search_index_drop_request>>
+      drop_renamed_alias;
+    if (!alias_name.empty() && alias_name != requested_alias_name) {
+      couchbase::core::operations::management::search_index_drop_request drop_alias_req{};
+      drop_alias_req.index_name = alias_name;
+      drop_renamed_alias.emplace(integration.cluster, "search index " + alias_name, drop_alias_req);
     }
 
     {
@@ -224,6 +276,11 @@ TEST_CASE("integration: search index management", "[integration]")
   SECTION("control")
   {
     auto index_name = test::utils::uniq_id("index");
+    couchbase::core::operations::management::search_index_drop_request drop_index_req{};
+    drop_index_req.index_name = index_name;
+    const test::utils::drop_guard drop_index{ integration.cluster,
+                                              "search index " + index_name,
+                                              drop_index_req };
 
     {
       couchbase::core::management::search::index index;
@@ -296,11 +353,6 @@ TEST_CASE("integration: search index management", "[integration]")
         REQUIRE_SUCCESS(resp.ctx.ec);
       }
     }
-
-    couchbase::core::operations::management::search_index_drop_request req{};
-    req.index_name = index_name;
-    auto resp = test::utils::execute(integration.cluster, req);
-    REQUIRE_SUCCESS(resp.ctx.ec);
   }
 }
 
@@ -319,6 +371,11 @@ TEST_CASE("integration: search index management public API", "[integration]")
   auto c = integration.public_cluster();
 
   auto index_name = test::utils::uniq_id("index");
+  couchbase::core::operations::management::search_index_drop_request drop_index_req{};
+  drop_index_req.index_name = index_name;
+  const test::utils::drop_guard drop_index{ integration.cluster,
+                                            "search index " + index_name,
+                                            drop_index_req };
 
   SECTION("search indexes crud")
   {
@@ -420,6 +477,12 @@ TEST_CASE("integration: search index management analyze document", "[integration
   }
 
   auto index_name = test::utils::uniq_id("index");
+  const std::string requested_index_name = index_name;
+  couchbase::core::operations::management::search_index_drop_request drop_requested_index_req{};
+  drop_requested_index_req.index_name = index_name;
+  const test::utils::drop_guard drop_requested_index{ integration.cluster,
+                                                      "search index " + index_name,
+                                                      drop_requested_index_req };
 
   {
     couchbase::core::management::search::index index;
@@ -435,6 +498,15 @@ TEST_CASE("integration: search index management analyze document", "[integration
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
     index_name = resp.name;
+  }
+  // The server may rename the index; a renamed one gets a guard of its own.
+  std::optional<
+    test::utils::drop_guard<couchbase::core::operations::management::search_index_drop_request>>
+    drop_renamed_index;
+  if (!index_name.empty() && index_name != requested_index_name) {
+    couchbase::core::operations::management::search_index_drop_request drop_index_req{};
+    drop_index_req.index_name = index_name;
+    drop_renamed_index.emplace(integration.cluster, "search index " + index_name, drop_index_req);
   }
 
   REQUIRE(test::utils::wait_for_search_pindexes_ready(
@@ -456,13 +528,6 @@ TEST_CASE("integration: search index management analyze document", "[integration
     REQUIRE_SUCCESS(resp.ctx.ec);
     REQUIRE_FALSE(resp.analysis.empty());
   }
-
-  {
-    couchbase::core::operations::management::search_index_drop_request req{};
-    req.index_name = index_name;
-    auto resp = test::utils::execute(integration.cluster, req);
-    REQUIRE_SUCCESS(resp.ctx.ec);
-  }
 }
 
 TEST_CASE("integration: search index management analyze document public API", "[integration]")
@@ -482,6 +547,11 @@ TEST_CASE("integration: search index management analyze document public API", "[
   }
 
   auto index_name = test::utils::uniq_id("index");
+  couchbase::core::operations::management::search_index_drop_request drop_index_req{};
+  drop_index_req.index_name = index_name;
+  const test::utils::drop_guard drop_index{ integration.cluster,
+                                            "search index " + index_name,
+                                            drop_index_req };
 
   {
     auto c = integration.public_cluster();
@@ -509,9 +579,6 @@ TEST_CASE("integration: search index management analyze document public API", "[
     REQUIRE(operation_completed);
     REQUIRE_SUCCESS(result.first.ec());
     REQUIRE_FALSE(result.second.empty());
-
-    auto drop_err = c.search_indexes().drop_index(index_name).get();
-    REQUIRE_SUCCESS(drop_err.ec());
   }
 }
 
@@ -531,6 +598,13 @@ TEST_CASE("integration: scope search index management public API", "[integration
 
   auto manager = c.bucket(integration.ctx.bucket).scope("_default").search_indexes();
   auto index_name = test::utils::uniq_id("index");
+  couchbase::core::operations::management::search_index_drop_request drop_index_req{};
+  drop_index_req.index_name = index_name;
+  drop_index_req.bucket_name = integration.ctx.bucket;
+  drop_index_req.scope_name = "_default";
+  const test::utils::drop_guard drop_index{ integration.cluster,
+                                            "search index " + index_name,
+                                            drop_index_req };
 
   SECTION("search indexes crud")
   {
@@ -632,6 +706,13 @@ TEST_CASE("integration: scope search index management analyze document public AP
 
   auto manager = c.bucket(integration.ctx.bucket).scope("_default").search_indexes();
   auto index_name = test::utils::uniq_id("index");
+  couchbase::core::operations::management::search_index_drop_request drop_index_req{};
+  drop_index_req.index_name = index_name;
+  drop_index_req.bucket_name = integration.ctx.bucket;
+  drop_index_req.scope_name = "_default";
+  const test::utils::drop_guard drop_index{ integration.cluster,
+                                            "search index " + index_name,
+                                            drop_index_req };
   {
     {
       couchbase::management::search::index index;
@@ -657,9 +738,6 @@ TEST_CASE("integration: scope search index management analyze document public AP
     INFO(result.first.ctx().to_json());
     REQUIRE_SUCCESS(result.first.ec());
     REQUIRE_FALSE(result.second.empty());
-
-    auto drop_err = manager.drop_index(index_name).get();
-    REQUIRE_SUCCESS(drop_err.ec());
   }
 }
 

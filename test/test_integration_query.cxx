@@ -33,6 +33,7 @@
 #include "core/operations/document_remove.hxx"
 #include "core/operations/document_replace.hxx"
 #include "core/operations/document_upsert.hxx"
+#include "core/operations/management/analytics.hxx"
 #include "core/operations/management/collections.hxx"
 #include "core/operations/management/query.hxx"
 #include "couchbase/codec/binary_noop_serializer.hxx"
@@ -125,6 +126,13 @@ TEST_CASE("integration: query on a collection", "[integration]")
   };
   auto json = couchbase::core::utils::json::generate_binary(value);
 
+  // Dropping the scope drops its collection too.
+  const test::utils::drop_guard drop_scope{
+    integration.cluster,
+    "scope " + scope_name,
+    couchbase::core::operations::management::scope_drop_request{ integration.ctx.bucket,
+                                                                 scope_name },
+  };
   {
     couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket,
                                                                        scope_name };
@@ -219,13 +227,6 @@ TEST_CASE("integration: query on a collection", "[integration]")
     REQUIRE_SUCCESS(resp.ctx.ec);
     REQUIRE(resp.rows.size() == 1);
     REQUIRE(value == couchbase::core::utils::json::parse(resp.rows[0]));
-  }
-
-  {
-    couchbase::core::operations::management::scope_drop_request req{ integration.ctx.bucket,
-                                                                     scope_name };
-    auto resp = test::utils::execute(integration.cluster, req);
-    REQUIRE_SUCCESS(resp.ctx.ec);
   }
 }
 
@@ -534,6 +535,12 @@ TEST_CASE("integration: analytics create dataset", "[integration]")
   if (!integration.cluster_version().supports_gcccp()) {
     test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
   }
+  const test::utils::drop_guard drop_dataverse{
+    integration.cluster,
+    "dataverse " + integration.ctx.bucket + "/test-scope",
+    couchbase::core::operations::management::analytics_dataverse_drop_request{
+      integration.ctx.bucket + "/test-scope" },
+  };
   couchbase::core::operations::analytics_request req{ fmt::format(
     "CREATE DATAVERSE `{}`.`test-scope` IF NOT EXISTS", integration.ctx.bucket) };
   std::vector<std::string> rows{};
@@ -655,6 +662,13 @@ TEST_CASE("integration: query from scope with public API", "[integration]")
     { "b", 2.0 },
   };
   auto json = couchbase::core::utils::json::generate_binary(value);
+  // Dropping the scope drops its collection too.
+  const test::utils::drop_guard drop_scope{
+    integration.cluster,
+    "scope " + scope_name,
+    couchbase::core::operations::management::scope_drop_request{ integration.ctx.bucket,
+                                                                 scope_name },
+  };
   {
     couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket,
                                                                        scope_name };

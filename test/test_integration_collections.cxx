@@ -31,6 +31,9 @@
 
 #include <tao/json/value.hpp>
 
+#include <algorithm>
+#include <stdexcept>
+
 TEST_CASE("integration: missing scope and collection", "[integration]")
 {
   test::utils::integration_test_guard integration;
@@ -105,6 +108,12 @@ TEST_CASE("integration: get and insert non default scope and collection", "[inte
   auto key = test::utils::uniq_id("foo");
   auto id =
     couchbase::core::document_id{ integration.ctx.bucket, scope_name, collection_name, key };
+  const test::utils::drop_guard drop_scope{
+    integration.cluster,
+    "scope " + scope_name,
+    couchbase::core::operations::management::scope_drop_request{ integration.ctx.bucket,
+                                                                 scope_name },
+  };
 
   {
     couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket,
@@ -139,13 +148,6 @@ TEST_CASE("integration: get and insert non default scope and collection", "[inte
     REQUIRE_SUCCESS(resp.ctx.ec());
     REQUIRE(resp.value == couchbase::core::utils::to_binary(key));
   }
-
-  {
-    couchbase::core::operations::management::scope_drop_request req{ integration.ctx.bucket,
-                                                                     scope_name };
-    auto resp = test::utils::execute(integration.cluster, req);
-    REQUIRE_SUCCESS(resp.ctx.ec);
-  }
 }
 
 TEST_CASE("integration: insert into dropped scope", "[integration]")
@@ -162,6 +164,12 @@ TEST_CASE("integration: insert into dropped scope", "[integration]")
   auto key = test::utils::uniq_id("foo");
   auto id =
     couchbase::core::document_id{ integration.ctx.bucket, scope_name, collection_name, key };
+  const test::utils::drop_guard drop_scope{
+    integration.cluster,
+    "scope " + scope_name,
+    couchbase::core::operations::management::scope_drop_request{ integration.ctx.bucket,
+                                                                 scope_name },
+  };
 
   {
     couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket,
@@ -216,4 +224,48 @@ TEST_CASE("integration: insert into dropped scope", "[integration]")
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE(resp.ctx.ec() == couchbase::errc::common::scope_not_found);
   }
+}
+
+TEST_CASE("integration: drop_guard drops its resource when an exception unwinds its scope",
+          "[integration]")
+{
+  test::utils::integration_test_guard integration;
+
+  if (!integration.cluster_version().supports_collections()) {
+    SKIP("cluster does not support collections");
+  }
+
+  auto scope_name = test::utils::uniq_id("scope");
+  auto scope_exists = [&]() {
+    couchbase::core::operations::management::scope_get_all_request req{ integration.ctx.bucket };
+    auto resp = test::utils::execute(integration.cluster, req);
+    REQUIRE_SUCCESS(resp.ctx.ec);
+    return std::any_of(
+      resp.manifest.scopes.begin(), resp.manifest.scopes.end(), [&](const auto& scope) {
+        return scope.name == scope_name;
+      });
+  };
+
+  try {
+    const test::utils::drop_guard drop_scope{
+      integration.cluster,
+      "scope " + scope_name,
+      couchbase::core::operations::management::scope_drop_request{ integration.ctx.bucket,
+                                                                   scope_name },
+    };
+    couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket,
+                                                                       scope_name };
+    auto resp = test::utils::execute(integration.cluster, req);
+    REQUIRE_SUCCESS(resp.ctx.ec);
+    REQUIRE(test::utils::wait_until_collection_manifest_propagated(
+      integration.cluster, integration.ctx.bucket, resp.uid));
+    REQUIRE(scope_exists());
+    throw std::runtime_error("unwind");
+  } catch (const std::runtime_error&) {
+  }
+
+  // The drop is not awaited for manifest propagation, so poll for its effect.
+  REQUIRE(test::utils::wait_until([&]() {
+    return !scope_exists();
+  }));
 }

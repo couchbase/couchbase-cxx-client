@@ -37,6 +37,8 @@
 
 #include <tao/json/from_string.hpp>
 
+#include <list>
+
 TEST_CASE("integration: analytics query", "[integration]")
 {
   test::utils::integration_test_guard integration;
@@ -52,6 +54,11 @@ TEST_CASE("integration: analytics query", "[integration]")
   test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
 
   auto dataset_name = test::utils::uniq_id("dataset");
+  couchbase::core::operations::management::analytics_dataset_drop_request drop_dataset_req{};
+  drop_dataset_req.dataset_name = dataset_name;
+  const test::utils::drop_guard drop_dataset{ integration.cluster,
+                                              "dataset " + dataset_name,
+                                              drop_dataset_req };
 
   {
     couchbase::core::operations::management::analytics_dataset_create_request req{};
@@ -207,6 +214,12 @@ TEST_CASE("integration: analytics query", "[integration]")
   {
     std::string custom_dataverse = fmt::format("Default/{}", test::utils::uniq_id("dataverse"));
     std::string custom_dataset = test::utils::uniq_id("dataset");
+    // Dropping the dataverse drops its dataset too.
+    const test::utils::drop_guard drop_custom_dataverse{
+      integration.cluster,
+      "dataverse " + custom_dataverse,
+      couchbase::core::operations::management::analytics_dataverse_drop_request{ custom_dataverse },
+    };
 
     {
       couchbase::core::operations::management::analytics_dataverse_create_request req{};
@@ -243,12 +256,6 @@ TEST_CASE("integration: analytics query", "[integration]")
       REQUIRE_SUCCESS(resp.ctx.ec);
     }
   }
-
-  {
-    couchbase::core::operations::management::analytics_dataset_drop_request req{};
-    req.dataset_name = dataset_name;
-    test::utils::execute(integration.cluster, req);
-  }
 }
 
 TEST_CASE("integration: analytics scope query", "[integration]")
@@ -270,6 +277,27 @@ TEST_CASE("integration: analytics scope query", "[integration]")
 
   auto scope_name = test::utils::uniq_id("scope");
   auto collection_name = test::utils::uniq_id("collection");
+  // Dropping the scope drops its collection too.
+  const test::utils::drop_guard drop_scope{
+    integration.cluster,
+    "scope " + scope_name,
+    couchbase::core::operations::management::scope_drop_request{ integration.ctx.bucket,
+                                                                 scope_name },
+  };
+  // ENABLE ANALYTICS creates the analytics scope `bucket`.`scope`; dropped before the KV scope.
+  const test::utils::drop_guard drop_analytics_scope{
+    integration.cluster,
+    "dataverse " + integration.ctx.bucket + "/" + scope_name,
+    couchbase::core::operations::management::analytics_dataverse_drop_request{
+      integration.ctx.bucket + "/" + scope_name },
+  };
+  // ENABLE ANALYTICS also connects the scope's Local link, and a scope is not dropped while it is
+  // connected.
+  couchbase::core::operations::management::analytics_link_disconnect_request disconnect_req{};
+  disconnect_req.dataverse_name = integration.ctx.bucket + "/" + scope_name;
+  const test::utils::drop_guard disconnect_analytics_scope{
+    integration.cluster, "Local link of " + disconnect_req.dataverse_name, disconnect_req
+  };
 
   {
     couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket,
@@ -327,12 +355,6 @@ TEST_CASE("integration: analytics scope query", "[integration]")
   }));
   REQUIRE_SUCCESS(resp.ctx.ec);
   REQUIRE(resp.rows[0] == value);
-
-  {
-    couchbase::core::operations::management::scope_drop_request req{ integration.ctx.bucket,
-                                                                     scope_name };
-    test::utils::execute(integration.cluster, req);
-  }
 }
 
 couchbase::core::http_context
@@ -394,6 +416,11 @@ TEST_CASE("integration: public API analytics query", "[integration]")
   auto collection = cluster.bucket(integration.ctx.bucket).default_collection();
 
   auto dataset_name = test::utils::uniq_id("dataset");
+  couchbase::core::operations::management::analytics_dataset_drop_request drop_dataset_req{};
+  drop_dataset_req.dataset_name = dataset_name;
+  const test::utils::drop_guard drop_dataset{ integration.cluster,
+                                              "dataset " + dataset_name,
+                                              drop_dataset_req };
 
   {
     couchbase::core::operations::management::analytics_dataset_create_request req{};
@@ -575,12 +602,6 @@ TEST_CASE("integration: public API analytics query", "[integration]")
     REQUIRE(error.ec() == couchbase::errc::common::internal_server_failure);
     REQUIRE(resp.meta_data().status() == couchbase::analytics_status::fatal);
   }
-
-  {
-    couchbase::core::operations::management::analytics_dataset_drop_request req{};
-    req.dataset_name = dataset_name;
-    test::utils::execute(integration.cluster, req);
-  }
 }
 
 TEST_CASE("integration: public API analytics scope query", "[integration]")
@@ -603,6 +624,27 @@ TEST_CASE("integration: public API analytics scope query", "[integration]")
 
   auto scope_name = test::utils::uniq_id("scope");
   auto collection_name = test::utils::uniq_id("collection");
+  // Dropping the scope drops its collection too.
+  const test::utils::drop_guard drop_scope{
+    integration.cluster,
+    "scope " + scope_name,
+    couchbase::core::operations::management::scope_drop_request{ integration.ctx.bucket,
+                                                                 scope_name },
+  };
+  // ENABLE ANALYTICS creates the analytics scope `bucket`.`scope`; dropped before the KV scope.
+  const test::utils::drop_guard drop_analytics_scope{
+    integration.cluster,
+    "dataverse " + integration.ctx.bucket + "/" + scope_name,
+    couchbase::core::operations::management::analytics_dataverse_drop_request{
+      integration.ctx.bucket + "/" + scope_name },
+  };
+  // ENABLE ANALYTICS also connects the scope's Local link, and a scope is not dropped while it is
+  // connected.
+  couchbase::core::operations::management::analytics_link_disconnect_request disconnect_req{};
+  disconnect_req.dataverse_name = integration.ctx.bucket + "/" + scope_name;
+  const test::utils::drop_guard disconnect_analytics_scope{
+    integration.cluster, "Local link of " + disconnect_req.dataverse_name, disconnect_req
+  };
 
   {
     const couchbase::core::operations::management::scope_create_request req{ integration.ctx.bucket,
@@ -666,12 +708,6 @@ TEST_CASE("integration: public API analytics scope query", "[integration]")
   REQUIRE_FALSE(resp.meta_data().request_id().empty());
   REQUIRE_FALSE(resp.meta_data().client_context_id().empty());
   REQUIRE(resp.meta_data().status() == couchbase::analytics_status::success);
-
-  {
-    const couchbase::core::operations::management::scope_drop_request req{ integration.ctx.bucket,
-                                                                           scope_name };
-    test::utils::execute(integration.cluster, req);
-  }
 }
 
 TEST_CASE("integration: public API analytics query using both named and positional parameters",
@@ -974,7 +1010,14 @@ TEST_CASE("integration: analytics management identifier encoding", "[integration
       prefix + "-\\n\\t\\\\",
     };
 
+    std::list<test::utils::drop_guard<
+      couchbase::core::operations::management::analytics_dataverse_drop_request>>
+      drop_names;
     for (const auto& name : names) {
+      drop_names.emplace_back(
+        integration.cluster,
+        "dataverse " + name,
+        couchbase::core::operations::management::analytics_dataverse_drop_request{ name });
       REQUIRE_SUCCESS(create_dataverse(name));
     }
 
@@ -1020,6 +1063,11 @@ TEST_CASE("integration: analytics management identifier encoding", "[integration
     // quote_dataverse_name() maps '/' to a dot-qualified pair of identifiers, so it escapes each
     // part separately. A backslash on either side of the separator has to stay inside its own part.
     const auto compound = prefix + "-a\\b/" + prefix + "-c\\d";
+    const test::utils::drop_guard drop_compound{
+      integration.cluster,
+      "dataverse " + compound,
+      couchbase::core::operations::management::analytics_dataverse_drop_request{ compound },
+    };
     REQUIRE_SUCCESS(create_dataverse(compound));
 
     // Analytics stores a two-part dataverse under the literal "first/second" name.
@@ -1037,6 +1085,12 @@ TEST_CASE("integration: analytics management identifier encoding", "[integration
     // escapes each segment, so a backslash inside a segment must not leak into the field list.
     const auto dataverse = prefix + "-fdv";
     const auto dataset = prefix + "-fds";
+    // Dropping the dataverse drops its dataset and index too.
+    const test::utils::drop_guard drop_test_dataverse{
+      integration.cluster,
+      "dataverse " + dataverse,
+      couchbase::core::operations::management::analytics_dataverse_drop_request{ dataverse },
+    };
 
     REQUIRE_SUCCESS(create_dataverse(dataverse));
     {
@@ -1081,6 +1135,11 @@ TEST_CASE("integration: analytics management identifier encoding", "[integration
     // so drop_dataverse(attacker_name) would have targeted "victim" instead. Correct escaping keeps
     // the whole thing one literal identifier, so the victim is never touched.
     const auto victim = prefix + "-victim";
+    const test::utils::drop_guard drop_victim{
+      integration.cluster,
+      "dataverse " + victim,
+      couchbase::core::operations::management::analytics_dataverse_drop_request{ victim },
+    };
     REQUIRE_SUCCESS(create_dataverse(victim));
 
     const auto attacker = victim + "\\u0060.\\u0060x";
@@ -1099,6 +1158,12 @@ TEST_CASE("integration: analytics management identifier encoding", "[integration
     const auto dataverse = prefix + "-dv";
     const auto dataset = prefix + "-\\u0060ds";
     const auto index = prefix + "-\\u0060idx";
+    // Dropping the dataverse drops its dataset and index too.
+    const test::utils::drop_guard drop_test_dataverse{
+      integration.cluster,
+      "dataverse " + dataverse,
+      couchbase::core::operations::management::analytics_dataverse_drop_request{ dataverse },
+    };
 
     REQUIRE_SUCCESS(create_dataverse(dataverse));
 

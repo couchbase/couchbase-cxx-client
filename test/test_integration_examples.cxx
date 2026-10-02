@@ -18,9 +18,11 @@
 #include "couchbase/configuration_profiles_registry.hxx"
 #include "test_helper_integration.hxx"
 
+#include "core/operations/management/bucket_drop.hxx"
 #include "core/operations/management/query_index_build.hxx"
 #include "core/operations/management/query_index_create.hxx"
 #include "core/operations/management/query_index_get_all.hxx"
+#include "core/operations/management/search_index_drop.hxx"
 #include "utils/logger.hxx"
 
 #include <couchbase/boolean_query.hxx>
@@ -50,6 +52,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <optional>
 #include <string>
 #include <thread>
 #include <utility>
@@ -569,22 +572,36 @@ States","iata":"Q5","icao":"MLA","id":10,"name":"40-Mile Air","type":"airline"}}
 
 TEST_CASE("example: search", "[integration]")
 {
-  {
-    test::utils::integration_test_guard integration;
+  test::utils::integration_test_guard integration;
 
-    if (integration.cluster_version().is_capella()) {
-      SKIP("Capella does not allow to use REST API to load sample buckets");
-    }
-    if (!integration.cluster_version().supports_collections()) {
-      SKIP("cluster does not support collections");
-    }
+  if (integration.cluster_version().is_capella()) {
+    SKIP("Capella does not allow to use REST API to load sample buckets");
+  }
+  if (!integration.cluster_version().supports_collections()) {
+    SKIP("cluster does not support collections");
+  }
 
+  couchbase::core::operations::management::search_index_drop_request drop_requested_index_req{};
+  drop_requested_index_req.index_name = "travel-sample-index";
+  const test::utils::drop_guard drop_requested_index{ integration.cluster,
+                                                      "search index travel-sample-index",
+                                                      drop_requested_index_req };
+  const auto index_name =
     test::utils::create_search_index(integration,
                                      "travel-sample",
                                      "travel-sample-index",
                                      integration.cluster_version().is_mad_hatter()
                                        ? "travel_sample_index_params_v6.json"
-                                       : "travel_sample_index_params.json");
+                                       : "travel_sample_index_params.json")
+      .second;
+  // The server may rename the index; a renamed one gets a guard of its own.
+  std::optional<
+    test::utils::drop_guard<couchbase::core::operations::management::search_index_drop_request>>
+    drop_renamed_index;
+  if (!index_name.empty() && index_name != "travel-sample-index") {
+    couchbase::core::operations::management::search_index_drop_request drop_index_req{};
+    drop_index_req.index_name = index_name;
+    drop_renamed_index.emplace(integration.cluster, "search index " + index_name, drop_index_req);
   }
 
   const auto env = test::utils::test_context::load_from_environment();
@@ -596,11 +613,6 @@ TEST_CASE("example: search", "[integration]")
   };
 
   REQUIRE(example_search::main(4, argv) == 0);
-
-  {
-    test::utils::integration_test_guard integration;
-    test::utils::drop_search_index(integration, "travel-sample-index");
-  }
 }
 
 namespace example_buckets
@@ -714,6 +726,13 @@ TEST_CASE("example: bucket management", "[integration]")
   if (integration.cluster_version().is_capella()) {
     SKIP("Capella does not allow to use REST API to load sample buckets");
   }
+
+  const test::utils::drop_guard drop_bucket{
+    integration.cluster,
+    "bucket cxx_test_integration_examples_bucket",
+    couchbase::core::operations::management::bucket_drop_request{
+      "cxx_test_integration_examples_bucket" },
+  };
 
   const auto env = test::utils::test_context::load_from_environment();
 

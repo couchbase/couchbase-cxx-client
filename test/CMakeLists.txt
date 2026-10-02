@@ -16,6 +16,8 @@ add_subdirectory(unit/management)
 
 add_subdirectory(unit/transactions)
 
+add_subdirectory(unit/utils)
+
 # Registered here rather than in cmake/TestFramework.cmake beside the framework's own self-tests:
 # only a call from this file reaches build_unit_tests. It is pure computation over the tools helper
 # and needs no server, so unit is the label, and unit is a label with an aggregate.
