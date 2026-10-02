@@ -31,7 +31,9 @@
 #include <asio/experimental/concurrent_channel.hpp>
 #include <asio/io_context.hpp>
 #include <asio/post.hpp>
+
 #include <asio/steady_timer.hpp>
+#include <chrono>
 
 #include <atomic>
 #include <memory>
@@ -171,22 +173,56 @@ public:
       });
   }
 
+  auto set_deadline(std::chrono::time_point<std::chrono::steady_clock> deadline_tp)
+    -> io::deadline_state
+  {
+    // Held across the check and the arm. Testing the flag and then arming as two steps leaves a
+    // window in which cancel() can run to completion in between, so this thread would install a
+    // deadline on a stream already cancelled and an expiry could report a timeout after it.
+    // cancel() takes the same lock around its own state change and its cancel_deadline(), so the
+    // two orderings are the only ones: arm-then-cancel, which the cancel supersedes, or
+    // cancel-then-arm, which this refuses.
+    const std::scoped_lock<std::mutex> lock{ cancel_mutex_ };
+    if (cancelled_) {
+      return io::deadline_state::body_already_ended;
+    }
+    // Arms on the calling thread: the body serialises arming, cancelling and the terminal
+    // transition under one lock and supersedes an expiry already queued. Not posted, which would
+    // leave the previous deadline installed until the post ran.
+    const auto on_expiry =
+      options_.is_read_only ? io::deadline_terminal::unambiguous : io::deadline_terminal::ambiguous;
+    return body_.set_deadline(deadline_tp, on_expiry);
+  }
+
   void cancel()
   {
-    // Tear the HTTP body (and the socket + timers it owns on the session) down on the io_context
-    // thread, where every other body operation runs. Calling body_.cancel() directly from an
-    // arbitrary caller thread — e.g. the thread dropping the public handle — races the io thread
-    // that may be mid-read and corrupts non-thread-safe session state. The channel is
-    // thread-safe, so cancel/close it synchronously to unblock a waiting consumer immediately.
+    {
+      // The state change and the supersession are one step, against set_deadline() holding the
+      // same lock across its check and its arm. Recorded on this thread rather than in the posted
+      // teardown: the flag refuses later arms, and cancel_deadline() supersedes one already armed,
+      // which would otherwise stay live until the post ran and could take the body's terminal --
+      // reporting a timeout for a stream the caller had already cancelled.
+      const std::scoped_lock<std::mutex> lock{ cancel_mutex_ };
+      cancelled_ = true;
+      body_.cancel_deadline();
+    }
+    // An explicit cancel must win over a racing inter-read idle timer, so it is disarmed here
+    // rather than in the posted teardown: a timer completion running before that post would set
+    // timed_out_ and the read abort would be reported as a timeout. The completion holds this lock
+    // across its generation test and its store, so it either sees the bump and returns, or its
+    // store precedes the clear. idle_disarmed_ refuses a timer armed by a read completing before
+    // the teardown.
+    {
+      const std::scoped_lock<std::mutex> lock{ idle_timer_mutex_ };
+      idle_disarmed_ = true;
+      idle_timer_.cancel();
+      idle_generation_.fetch_add(1, std::memory_order_relaxed);
+      timed_out_ = false;
+    }
+    // Tear the body down from the io_context rather than the caller's thread, which may never run
+    // it. The channel is thread-safe, so cancel/close it synchronously to unblock a waiting
+    // consumer immediately.
     asio::post(io_, [self = shared_from_this()]() {
-      // An explicit cancel must win over a racing inter-read idle timer. Cancel the timer,
-      // supersede its generation so a completion that is already queued is ignored, and clear
-      // timed_out_ so the read abort below is reported as request_canceled rather than being
-      // misclassified as an (un)ambiguous timeout by the read-completion path. Done here, on the io
-      // thread, because the timer is not thread-safe.
-      self->idle_timer_.cancel();
-      self->idle_generation_.fetch_add(1, std::memory_order_relaxed);
-      self->timed_out_ = false;
       self->body_.cancel();
     });
     rows_.cancel();
@@ -264,6 +300,10 @@ private:
     if (options_.idle_timeout.count() <= 0) {
       return;
     }
+    const std::scoped_lock<std::mutex> lock{ idle_timer_mutex_ };
+    if (idle_disarmed_) {
+      return;
+    }
     const auto generation = idle_generation_.fetch_add(1, std::memory_order_relaxed) + 1;
     idle_timer_.expires_after(options_.idle_timeout);
     idle_timer_.async_wait([weak = weak_from_this(), generation](std::error_code ec) {
@@ -278,14 +318,29 @@ private:
       // cancels and bumps the generation, but a timer that fired at almost the same instant may
       // already be queued. Acting on such a stale fire would abort the healthy next read and
       // misreport it as a timeout.
-      if (self->idle_generation_.load(std::memory_order_relaxed) != generation) {
-        return;
+      {
+        // Under the lock cancel_idle_timer() bumps the generation in: on another thread, cancel()
+        // could otherwise bump and clear timed_out_ between this test and the store, and the
+        // cancelled read would be reported as a timeout.
+        const std::scoped_lock<std::mutex> lock{ self->idle_timer_mutex_ };
+        if (self->idle_generation_.load(std::memory_order_relaxed) != generation) {
+          return;
+        }
+        // Server stalled while a read was in flight: abort it; the read completion delivers the
+        // terminal with a timeout error (steered by timed_out_).
+        self->timed_out_ = true;
       }
-      // Server stalled while a read was in flight: abort it; the read completion delivers the
-      // terminal with a timeout error (steered by timed_out_).
-      self->timed_out_ = true;
       self->body_.cancel();
     });
+  }
+
+  // Cancels the idle timer and supersedes its generation, so a completion already queued is
+  // ignored.
+  void cancel_idle_timer()
+  {
+    const std::scoped_lock<std::mutex> lock{ idle_timer_mutex_ };
+    idle_timer_.cancel();
+    idle_generation_.fetch_add(1, std::memory_order_relaxed);
   }
 
   void maybe_feed_lexer()
@@ -310,8 +365,7 @@ private:
     body_.next([self = shared_from_this()](const auto& data, bool has_more, auto ec) mutable {
       // A read completed (or was aborted); the idle timer only guards an in-flight read. Cancel it
       // and bump the generation so a timer that fired at the same instant is treated as stale.
-      self->idle_timer_.cancel();
-      self->idle_generation_.fetch_add(1, std::memory_order_relaxed);
+      self->cancel_idle_timer();
       if (ec) {
         self->received_all_data_ = true;
         // If the idle timer aborted the read, report a timeout rather than the raw cancel error.
@@ -390,11 +444,22 @@ private:
     rows_;
   row_streamer_options options_;
   asio::steady_timer idle_timer_;
+  // Armed from the read path and cancelled from the read completion and from cancel() on its
+  // caller's thread, which differ once more than one thread runs the io_context or cancel() is
+  // called off it. Also held across the timer completion's generation test and its timed_out_
+  // store.
+  std::mutex idle_timer_mutex_{};
+  // Set by cancel(); guarded by idle_timer_mutex_.
+  bool idle_disarmed_{ false };
   std::atomic_size_t buffered_bytes_{ 0 };
   std::atomic_bool received_all_data_{ false };
   std::atomic_bool feeding_{ false };
   std::atomic_bool lexer_completed_{ false };
   std::atomic_bool timed_out_{ false };
+  // Guards the pair below against set_deadline(): the check and the arm, and the state change and
+  // the supersession, each have to be one step or an arm can land on a cancelled stream.
+  std::mutex cancel_mutex_{};
+  bool cancelled_{ false };
   // Guards the one-shot delivery of the preamble handler (see deliver_metadata_header): the stream
   // must resolve start()'s handler on every terminal, even when the lexer never fires its metadata
   // callback (empty body, or a valid-JSON-but-not-an-object root).
@@ -426,6 +491,13 @@ void
 row_streamer::next_row(utils::movable_function<void(std::string, std::error_code)>&& handler)
 {
   impl_->next_row(std::move(handler));
+}
+
+auto
+row_streamer::set_deadline(std::chrono::time_point<std::chrono::steady_clock> deadline_tp)
+  -> io::deadline_state
+{
+  return impl_->set_deadline(deadline_tp);
 }
 
 void

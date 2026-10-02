@@ -23,6 +23,8 @@
 #include <couchbase/error_codes.hxx>
 
 #include <asio/io_context.hpp>
+#include <asio/post.hpp>
+#include <asio/steady_timer.hpp>
 
 #include <atomic>
 #include <chrono>
@@ -30,6 +32,7 @@
 #include <cstdint>
 #include <functional>
 #include <future>
+#include <optional>
 #include <string>
 #include <system_error>
 #include <thread>
@@ -678,6 +681,42 @@ cancel_wins_over_an_armed_idle_timer([[maybe_unused]] context& ctx)
   assert_true(ended, "the stream terminates rather than parking the consumer");
   assert_eq(end_ec, couchbase::errc::common::request_canceled, "the reported terminal");
 }
+
+// Regression: cancel() superseded the idle timer only in its posted teardown. An idle-timer
+// completion that ran after cancel() but before that post reported the cancelled stream as a
+// timeout.
+void
+cancel_wins_over_an_idle_timer_completion_due_before_its_teardown([[maybe_unused]] context& ctx)
+{
+  asio::io_context io;
+  auto body = couchbase::core::http_response_body::create_in_memory_faulty(
+    io, /*data*/ {}, /*cached_chunk_size*/ 0, /*terminal_ec*/ {}, /*stall*/ true);
+  couchbase::core::row_streamer_options opts{};
+  opts.idle_timeout = std::chrono::milliseconds{ 20 };
+  opts.is_read_only = false; // would classify as ambiguous_timeout if misreported
+  couchbase::core::row_streamer streamer{ io, std::move(body), "/results/^", opts };
+
+  // Due before the idle timer, which start() arms. The blocker below holds the io thread past both
+  // deadlines, so one reactor pass readies both completions in deadline order: cancel() runs, then
+  // the idle-timer completion, then cancel()'s posted teardown.
+  asio::steady_timer canceller{ io, std::chrono::milliseconds{ 5 } };
+  canceller.async_wait([&streamer](std::error_code) {
+    streamer.cancel();
+  });
+  std::optional<std::error_code> start_ec;
+  streamer.start([&](std::string, std::error_code ec) {
+    start_ec = ec;
+  });
+  asio::post(io, []() {
+    std::this_thread::sleep_for(std::chrono::milliseconds{ 60 });
+  });
+  io.run();
+
+  assert_true(start_ec.has_value(), "start()'s handler resolves");
+  assert_eq(*start_ec,
+            std::error_code{ couchbase::errc::common::request_canceled },
+            "a cancel the idle timer fires after is reported as a cancel");
+}
 } // namespace
 
 auto
@@ -706,6 +745,7 @@ tests() -> test_suite
       { CASE(idle_timeout_on_a_read_only_request_is_unambiguous) },
       { CASE(surfaces_a_mid_stream_transport_error_verbatim) },
       { CASE(cancel_wins_over_an_armed_idle_timer) },
+      { CASE(cancel_wins_over_an_idle_timer_completion_due_before_its_teardown) },
     },
   };
 }

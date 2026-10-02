@@ -27,6 +27,7 @@
 #include "core/tls_context_provider.hxx"
 #include "core/tracing/noop_tracer.hxx"
 #include "core/tracing/tracer_wrapper.hxx"
+#include "core/utils/movable_function.hxx"
 #include "http_command.hxx"
 #include "http_context.hxx"
 #include "http_session.hxx"
@@ -34,10 +35,14 @@
 
 #include <gsl/narrow>
 
+#include <atomic>
 #include <chrono>
+#include <exception>
 #include <optional>
 #include <queue>
 #include <random>
+#include <utility>
+#include <vector>
 
 namespace couchbase::core::io
 {
@@ -180,17 +185,22 @@ public:
           const auto& hostname = node.hostname_for(options_.network);
           const auto& canonical_hostname = node.hostname;
           std::uint16_t canonical_port = node.port_or(type, options_.enable_tls, 0);
-          auto session = create_session(type,
-                                        node_details{
-                                          hostname,
-                                          port,
-                                          node.node_uuid,
-                                          canonical_hostname,
-                                          canonical_port,
-                                        });
-          if (session->is_connected()) {
-            std::scoped_lock lock(sessions_mutex_);
-            busy_sessions_[type].push_back(session);
+          // Created and listed pending in one section, as check_out does, so a close() either
+          // stops it or precedes it. Unlisted while its connect is pending, it would be invisible
+          // to a close() whose completion lets the io_context stop.
+          std::shared_ptr<http_session> session;
+          {
+            const std::scoped_lock lock(sessions_mutex_);
+            session = create_session(type,
+                                     node_details{
+                                       hostname,
+                                       port,
+                                       node.node_uuid,
+                                       canonical_hostname,
+                                       canonical_port,
+                                     },
+                                     generation_);
+            pending_sessions_[type].push_back(session);
           }
           operations::http_noop_request request{};
           request.type = type;
@@ -298,7 +308,7 @@ public:
       if (preferred_node_address.empty()) {
         session = idle_sessions_[type].front();
         idle_sessions_[type].pop_front();
-        if (session->reset_idle()) {
+        if (is_reusable(*session)) {
           break;
         }
       } else {
@@ -315,15 +325,16 @@ public:
         if (ptr != idle_sessions_[type].end()) {
           session = *ptr;
           idle_sessions_[type].erase(ptr);
-          if (session->reset_idle()) {
+          if (is_reusable(*session)) {
             break;
           }
         } else {
-          session = create_session(type, preferred_node);
+          session = create_session(type, preferred_node, generation_);
           break;
         }
       }
-      CB_LOG_TRACE("{} Idle timer has expired for \"{}\".  Attempting to select another session.",
+      CB_LOG_TRACE("{} Idle session \"{}\" is stopping or its idle timer has expired.  Attempting "
+                   "to select another session.",
                    session->log_prefix(),
                    logger::system_data(fmt::format("{}:{}", session->hostname(), session->port())));
       session.reset();
@@ -334,7 +345,7 @@ public:
       if (node.port == 0) {
         return { errc::common::service_not_available, nullptr };
       }
-      session = create_session(type, node);
+      session = create_session(type, node, generation_);
     }
     if (session->is_connected()) {
       busy_sessions_[type].push_back(session);
@@ -363,17 +374,47 @@ public:
       return;
     }
     bool should_stop = false;
-    std::chrono::milliseconds idle_timeout{};
     {
-      std::scoped_lock lock(config_mutex_);
-      if (!session->keep_alive() || !config_.has_node(options_.network,
-                                                      session->type(),
-                                                      options_.enable_tls,
-                                                      session->hostname(),
-                                                      session->port())) {
+      // config_mutex_ guards config_, which set_configuration() writes without sessions_mutex_.
+      // sessions_mutex_ in the same section keeps update_config()'s eviction, which holds both,
+      // from landing between the has_node test and the publication: that would pool a connection
+      // to a node that has left the cluster. check_in must therefore never be called with
+      // sessions_mutex_ held.
+      const std::scoped_lock lock(config_mutex_, sessions_mutex_);
+      // stopped_ is set before stop()'s teardown runs on_stop, whose cleanup takes
+      // sessions_mutex_. Read under that lock, either the stop is seen here, or its cleanup runs
+      // after the publication below and removes the session again.
+      //
+      // stopping_ is a stop the session's owner has decided and not yet executed, claimed before
+      // this check_in can run: by a streaming body under its own mutex while reading_complete_ is
+      // false (http_session::read_some runs the body's completion, which sets it, before the
+      // stream-end handler).
+      if (session->is_stopped() || session->is_stopping()) {
+        return;
+      }
+      if (session->pool_generation() != generation_ || !session->keep_alive() ||
+          !config_.has_node(options_.network,
+                            session->type(),
+                            options_.enable_tls,
+                            session->hostname(),
+                            session->port())) {
         should_stop = true;
       } else {
-        idle_timeout = options_.idle_http_connection_timeout;
+        // Under sessions_mutex_, as check_out's reset_idle() is. set_idle() binds the timer
+        // completion to the strand and never calls stop() inline, so on_stop cannot re-enter
+        // sessions_mutex_ here.
+        session->set_idle(options_.idle_http_connection_timeout);
+        idle_sessions_[type].push_back(session);
+        if (auto busy_it = busy_sessions_.find(type); busy_it != busy_sessions_.end()) {
+          busy_it->second.remove_if([id = session->id()](const auto& s) -> bool {
+            return !s || s->id() == id;
+          });
+        }
+        if (auto pend_it = pending_sessions_.find(type); pend_it != pending_sessions_.end()) {
+          pend_it->second.remove_if([id = session->id()](const auto& s) -> bool {
+            return !s || s->id() == id;
+          });
+        }
       }
     }
     if (should_stop) {
@@ -381,65 +422,73 @@ public:
         session->stop();
       });
     }
-    if (!session->is_stopped()) {
-      // set_idle() arms the idle timer via async_wait — it never calls stop() inline,
-      // so on_stop cannot re-enter sessions_mutex_ here. It must precede publication to
-      // idle_sessions_ so a concurrent check_out's reset_idle() finds a pending timer.
-      session->set_idle(idle_timeout);
-      CB_LOG_DEBUG("{} put HTTP session back to idle connections", session->log_prefix());
-      std::scoped_lock lock(sessions_mutex_);
-      idle_sessions_[type].push_back(session);
-      if (auto busy_it = busy_sessions_.find(type); busy_it != busy_sessions_.end()) {
-        busy_it->second.remove_if([id = session->id()](const auto& s) -> bool {
-          return !s || s->id() == id;
-        });
-      }
-      if (auto pend_it = pending_sessions_.find(type); pend_it != pending_sessions_.end()) {
-        pend_it->second.remove_if([id = session->id()](const auto& s) -> bool {
-          return !s || s->id() == id;
-        });
-      }
-    }
+    CB_LOG_DEBUG("{} put HTTP session back to idle connections", session->log_prefix());
   }
 
-  void close()
+  // on_stopped runs once every session listed at the call has been stopped and holds no
+  // read_some() call, on the strand of the last one, or before close() returns when none is listed.
+  // Until then the read_some() calls queued on a session hold the body that holds the session, and
+  // its on_stop cleanup holds this manager. Whoever stops the io_context must wait for it: a
+  // handler still queued then never runs, and the session, its body and this manager are never
+  // released. A do_read() the stop aborts is not waited for: its completion holds only the session,
+  // which destroying the io_context releases.
+  void close(utils::movable_function<void()> on_stopped = {})
   {
     std::map<service_type, std::list<std::shared_ptr<http_session>>> busy_sessions, idle_sessions,
       pending_sessions;
     {
+      // A new generation starts with the lists moved out. check_in and publish_busy refuse a
+      // session from an earlier one, so none is listed again; a connect callback stops its session
+      // instead. check_out creates sessions in the new generation.
       const std::scoped_lock lock(sessions_mutex_);
-      busy_sessions = std::move(busy_sessions_);
-      idle_sessions = std::move(idle_sessions_);
-      pending_sessions = std::move(pending_sessions_);
+      ++generation_;
+      // Exchanged rather than moved: the manager goes on serving, and a moved-from map is only
+      // valid, not empty.
+      busy_sessions = std::exchange(busy_sessions_, {});
+      idle_sessions = std::exchange(idle_sessions_, {});
+      pending_sessions = std::exchange(pending_sessions_, {});
     }
-    for (auto& [type, sessions] : idle_sessions) {
-      for (auto& s : sessions) {
-        if (s) {
-          // stop() (not just reset_idle()) so the read armed by set_idle() is
-          // torn down: reset_idle() only cancels the idle timer, leaving the
-          // pending async read alive, which keeps a shared_ptr to the session
-          // and prevents the io_context from draining on close. Post it to the
-          // session's executor so it runs after any in-flight strand handler
-          // (e.g. the armed read's completion), matching update_config()'s eviction path.
-          asio::post(s->get_executor(), [s]() {
-            s->stop();
-          });
+    // Every session is stopped on its own strand, as check_in and update_config() do. stop()
+    // closes the stream and cancels the response, which the strand's read and write handlers use.
+    // Run on this thread, it races those handlers, and a queued do_write() finds no socket. An
+    // idle session is stopped rather than only reset_idle()d, so the read armed by set_idle() is
+    // torn down and its shared_ptr does not keep the io_context from draining.
+    std::vector<std::shared_ptr<http_session>> stopping;
+    for (auto* lists : { &idle_sessions, &busy_sessions, &pending_sessions }) {
+      for (auto& [type, sessions] : *lists) {
+        for (auto& s : sessions) {
+          if (s) {
+            stopping.emplace_back(std::move(s));
+          }
         }
       }
     }
-    for (auto& [type, sessions] : busy_sessions) {
-      for (auto& s : sessions) {
-        if (s) {
+    if (stopping.empty()) {
+      if (on_stopped) {
+        on_stopped();
+      }
+      return;
+    }
+    auto remaining = std::make_shared<std::atomic_size_t>(stopping.size());
+    auto done = std::make_shared<utils::movable_function<void()>>(std::move(on_stopped));
+    for (auto& s : stopping) {
+      asio::post(s->get_executor(), [s, remaining, done]() {
+        // A stop() that throws has still torn the session down, so its reads still drain.
+        std::exception_ptr error{};
+        try {
           s->stop();
+        } catch (...) {
+          error = std::current_exception();
         }
-      }
-    }
-    for (auto& [type, sessions] : pending_sessions) {
-      for (auto& s : sessions) {
-        if (s) {
-          s->stop();
+        s->on_reads_drained([remaining, done]() {
+          if (remaining->fetch_sub(1) == 1 && *done) {
+            (*done)();
+          }
+        });
+        if (error) {
+          std::rethrow_exception(error);
         }
-      }
+      });
     }
   }
 
@@ -493,6 +542,17 @@ public:
                       preferred_node,
                       deadline,
                       cb = std::move(callback)]() mutable {
+      // stop() runs this callback, from close() among others. A stopped session is terminal: a
+      // replacement would open a socket for an operation the stop has ended.
+      if (session->is_stopped()) {
+        return cb(errc::common::request_canceled, {});
+      }
+      // A session from before a close() gets no replacement and no reconnect: close() may not reach
+      // it, so it is stopped here.
+      if (self->is_retired(*session)) {
+        session->stop();
+        return cb(errc::common::request_canceled, {});
+      }
       if (!session->is_connected()) {
         if (deadline < std::chrono::steady_clock::now()) {
           session->stop();
@@ -509,11 +569,14 @@ public:
           cb(errc::common::service_not_available, {});
           return;
         }
-        auto new_session = self->create_session(session->type(), node);
+        auto new_session = self->create_replacement(session->type(), node, *session);
+        if (!new_session) {
+          return cb(errc::common::request_canceled, {});
+        }
         if (new_session->is_connected()) {
-          {
-            const std::scoped_lock inner_lock(self->sessions_mutex_);
-            self->busy_sessions_[new_session->type()].push_back(new_session);
+          if (!self->publish_busy(new_session, /* leaving_pending */ true)) {
+            new_session->stop();
+            return cb(errc::common::request_canceled, {});
           }
           cb({}, new_session);
         } else {
@@ -525,13 +588,9 @@ public:
           cb(errc::common::unambiguous_timeout, {});
           return;
         }
-        {
-          const std::scoped_lock inner_lock(self->sessions_mutex_);
-          self->busy_sessions_[session->type()].push_back(session);
-          self->pending_sessions_[session->type()].remove_if(
-            [id = session->id()](const auto& s) -> bool {
-              return !s || s->id() == id;
-            });
+        if (!self->publish_busy(session, /* leaving_pending */ true)) {
+          session->stop();
+          return cb(errc::common::request_canceled, {});
         }
         cb({}, session);
       }
@@ -550,9 +609,25 @@ private:
                       cmd,
                       preferred_node = std::move(preferred_node),
                       reuse_session]() mutable {
+      // stop() runs this callback, from close() among others. A stopped session is terminal: a
+      // replacement would open a socket and send a request the stop has ended, and with
+      // reuse_session the stopped session's connect() would run this callback again inline, an
+      // unbounded recursion.
+      if (session->is_stopped()) {
+        return cmd->invoke_handler(errc::common::request_canceled, {});
+      }
+      // A session from before a close() gets no replacement and no reconnect: close() may not reach
+      // it, so it is stopped here.
+      if (self->is_retired(*session)) {
+        session->stop();
+        return cmd->invoke_handler(errc::common::request_canceled, {});
+      }
       if (!session->is_connected()) {
         if (cmd->deadline_expiry() < std::chrono::steady_clock::now()) {
-          // The http command will stop its session when the deadline expires.
+          // The command's deadline completes it, but stops only the session it held when it
+          // fired, which may be the one this replaced. Stopped here, a replacement does not stay
+          // listed pending until close().
+          session->stop();
           return;
         }
         if (reuse_session) {
@@ -567,24 +642,93 @@ private:
           cmd->invoke_handler(errc::common::service_not_available, {});
           return;
         }
-        auto new_session = self->create_session(session->type(), node);
+        auto new_session = self->create_replacement(session->type(), node, *session);
+        if (!new_session) {
+          return cmd->invoke_handler(errc::common::request_canceled, {});
+        }
         cmd->set_command_session(new_session);
         if (new_session->is_connected()) {
-          std::scoped_lock inner_lock(self->sessions_mutex_);
-          self->busy_sessions_[new_session->type()].push_back(new_session);
+          if (!self->publish_busy(new_session, /* leaving_pending */ true)) {
+            new_session->stop();
+            return cmd->invoke_handler(errc::common::request_canceled, {});
+          }
           cmd->send_to();
         } else {
           self->connect_then_send(new_session, cmd, preferred_node);
         }
       } else {
-        std::scoped_lock inner_lock(self->sessions_mutex_);
-        self->busy_sessions_[session->type()].push_back(session);
+        if (!self->publish_busy(session, /* leaving_pending */ true)) {
+          session->stop();
+          return cmd->invoke_handler(errc::common::request_canceled, {});
+        }
+        // Outside sessions_mutex_: send_to() can complete the command inline (an encode_to
+        // failure, or a session already stopped), and the completion calls check_in, which takes
+        // it.
         cmd->send_to();
       }
     });
   }
 
-  auto create_session(service_type type, const node_details& node) -> std::shared_ptr<http_session>
+  // Lists a connected session as busy unless its stop() has begun or it is from before a close(),
+  // and reports whether it did. stop() sets stopped_ before on_stop's cleanup takes
+  // sessions_mutex_, so a stop is either seen here or removes the session after it is listed.
+  // Tested outside the lock, a stop landing in between would list a session whose cleanup has
+  // already run. A refused session is the caller's to stop: close() does not reach one it never had
+  // in a list.
+  auto publish_busy(const std::shared_ptr<http_session>& session, bool leaving_pending = false)
+    -> bool
+  {
+    const std::scoped_lock lock(sessions_mutex_);
+    if (session->pool_generation() != generation_ || session->is_stopped()) {
+      return false;
+    }
+    busy_sessions_[session->type()].push_back(session);
+    if (leaving_pending) {
+      pending_sessions_[session->type()].remove_if([id = session->id()](const auto& s) -> bool {
+        return !s || s->id() == id;
+      });
+    }
+    return true;
+  }
+
+  auto current_generation() -> std::uint64_t
+  {
+    const std::scoped_lock lock(sessions_mutex_);
+    return generation_;
+  }
+
+  // Serves a generation that a close() has ended.
+  auto is_retired(const http_session& session) -> bool
+  {
+    return session.pool_generation() != current_generation();
+  }
+
+  // A popped idle session goes back into service only if nothing has claimed it and reset_idle()
+  // accepts it, which it refuses once the idle timer has fired or a stop() has begun.
+  static auto is_reusable(http_session& session) -> bool
+  {
+    return !session.is_stopping() && session.reset_idle();
+  }
+
+  // A failover replacement for `failed`. It serves the same operation, so it belongs to the same
+  // generation, and it is listed pending from creation: close() either stops it or has already
+  // retired that generation, and then the replacement is discarded and nullptr returned. Unlisted
+  // until its connect completes, it would be invisible to a close() whose completion lets the
+  // io_context stop.
+  auto create_replacement(service_type type, const node_details& node, const http_session& failed)
+    -> std::shared_ptr<http_session>
+  {
+    auto session = create_session(type, node, failed.pool_generation());
+    const std::scoped_lock lock(sessions_mutex_);
+    if (session->pool_generation() != generation_) {
+      return nullptr;
+    }
+    pending_sessions_[type].push_back(session);
+    return session;
+  }
+
+  auto create_session(service_type type, const node_details& node, std::uint64_t generation)
+    -> std::shared_ptr<http_session>
   {
     std::shared_ptr<http_session> session;
     if (options_.enable_tls) {
@@ -604,7 +748,8 @@ private:
                                                  node.port,
                                                  node.canonical_hostname,
                                                  node.canonical_port,
-                                               });
+                                               },
+                                               generation);
     } else {
       session = std::make_shared<http_session>(type,
                                                client_id_,
@@ -621,7 +766,8 @@ private:
                                                  node.port,
                                                  node.canonical_hostname,
                                                  node.canonical_port,
-                                               });
+                                               },
+                                               generation);
     }
 
     session->on_stop([type, id = session->id(), self = this->shared_from_this()]() {
@@ -751,6 +897,9 @@ private:
   std::size_t next_index_{ 0 };
   std::mutex next_index_mutex_{};
   std::mutex sessions_mutex_{};
+  // Advanced by close(); guarded by sessions_mutex_. A session carries the generation it serves,
+  // and check_in and publish_busy refuse one from an earlier generation.
+  std::uint64_t generation_{ 0 };
   query_cache query_cache_{};
 };
 } // namespace couchbase::core::io

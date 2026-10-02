@@ -26,8 +26,10 @@
 
 #include <couchbase/error_codes.hxx>
 
+#include <gsl/util>
 #include <spdlog/fmt/bin_to_hex.h>
 
+#include <exception>
 #include <utility>
 
 namespace couchbase::core::io
@@ -106,11 +108,13 @@ http_session::http_session(couchbase::core::service_type type,
                            origin& origin,
                            std::string hostname,
                            std::string service,
-                           couchbase::core::http_context http_ctx)
+                           couchbase::core::http_context http_ctx,
+                           std::uint64_t pool_generation)
   : type_(type)
   , client_id_(std::move(client_id))
   , node_uuid_(std::move(node_uuid))
   , id_(uuid::to_string(uuid::random()))
+  , pool_generation_(pool_generation)
   , ctx_(ctx)
   , resolver_(ctx_)
   , stream_(std::make_unique<plain_stream_impl>(ctx_))
@@ -134,17 +138,19 @@ http_session::http_session(couchbase::core::service_type type,
                            origin& origin,
                            std::string hostname,
                            std::string service,
-                           couchbase::core::http_context http_ctx)
+                           couchbase::core::http_context http_ctx,
+                           std::uint64_t pool_generation)
   : type_(type)
   , client_id_(std::move(client_id))
   , node_uuid_(std::move(node_uuid))
   , id_(uuid::to_string(uuid::random()))
+  , pool_generation_(pool_generation)
   , ctx_(ctx)
   , resolver_(ctx_)
   , stream_(std::make_unique<tls_stream_impl>(ctx_, tls))
-  , connect_deadline_timer_(ctx_)
-  , idle_timer_(ctx_)
-  , retry_backoff_(ctx_)
+  , connect_deadline_timer_(stream_->get_executor())
+  , idle_timer_(stream_->get_executor())
+  , retry_backoff_(stream_->get_executor())
   , origin_(origin)
   , hostname_(std::move(hostname))
   , service_(std::move(service))
@@ -195,15 +201,16 @@ http_session::remote_endpoint() -> const asio::ip::tcp::endpoint&
 auto
 http_session::diag_info() -> diag::endpoint_diag_info
 {
+  const auto last_active = last_active_.load();
   return { type_,
            id_,
-           last_active_.time_since_epoch().count() == 0
+           last_active.time_since_epoch().count() == 0
              ? std::nullopt
              : std::make_optional(std::chrono::duration_cast<std::chrono::microseconds>(
-                 std::chrono::steady_clock::now() - last_active_)),
+                 std::chrono::steady_clock::now() - last_active)),
            remote_address(),
            local_address(),
-           state_ };
+           state_.load() };
 }
 
 auto
@@ -217,6 +224,12 @@ auto
 http_session::id() const -> const std::string&
 {
   return id_;
+}
+
+auto
+http_session::pool_generation() const -> std::uint64_t
+{
+  return pool_generation_;
 }
 
 auto
@@ -276,21 +289,24 @@ void
 http_session::initiate_connect()
 {
   if (stopped_) {
-    return;
+    // stop() has begun, so nothing connects. Its teardown may already have taken an earlier
+    // callback, so the one just stored, which holds this session, is run here. Whichever of this
+    // call and the teardown moves it out under connect_callback_mutex_ runs it.
+    return invoke_connect_callback();
   }
   if (state_ != diag::endpoint_state::connecting) {
     CB_LOG_DEBUG("{} {} attempt to establish HTTP connection",
                  info_.log_prefix(),
                  logger::system_data(fmt::format("{}:{}", hostname_, service_)));
     state_ = diag::endpoint_state::connecting;
-    async_resolve(http_ctx_.options.use_ip_protocol,
-                  resolver_,
-                  hostname_,
-                  service_,
-                  [capture0 = shared_from_this()](auto&& PH1, auto&& PH2) {
-                    capture0->on_resolve(std::forward<decltype(PH1)>(PH1),
-                                         std::forward<decltype(PH2)>(PH2));
-                  });
+    async_resolve(
+      http_ctx_.options.use_ip_protocol,
+      resolver_,
+      hostname_,
+      service_,
+      asio::bind_executor(get_executor(), [capture0 = shared_from_this()](auto&& PH1, auto&& PH2) {
+        capture0->on_resolve(std::forward<decltype(PH1)>(PH1), std::forward<decltype(PH2)>(PH2));
+      }));
   } else {
     // reset state in case the session is being reused
     state_ = diag::endpoint_state::disconnected;
@@ -349,24 +365,50 @@ http_session::invoke_connect_callback()
 void
 http_session::stop()
 {
-  if (stopped_) {
+  // One caller wins. A stop() from a response handler the teardown below runs returns here; a
+  // second teardown would lock current_response_mutex_ again inside cancel_current_response().
+  // An exchange rather than a load and a store: two threads stopping at once would both pass a
+  // load and run the teardown concurrently.
+  if (stopped_.exchange(true)) {
     return;
   }
-  stopped_ = true;
+  // Every step runs although a callback throws, because a later stop() returns above and on_stop
+  // is what removes the session from the manager's pools. The first exception is rethrown once the
+  // teardown is complete; later ones are dropped. Not a scope guard: its destructor is noexcept.
+  std::exception_ptr failure;
+  const auto run_step = [&failure](auto&& step) {
+    try {
+      step();
+    } catch (...) {
+      if (!failure) {
+        failure = std::current_exception();
+      }
+    }
+  };
   state_ = diag::endpoint_state::disconnecting;
   stream_->close([](std::error_code) {
   });
-  invoke_connect_callback();
+  run_step([this]() {
+    invoke_connect_callback();
+  });
   connect_deadline_timer_.cancel();
-  idle_timer_.cancel();
+  {
+    const std::scoped_lock lock(idle_timer_mutex_);
+    idle_timer_.cancel();
+  }
   retry_backoff_.cancel();
 
-  cancel_current_response(errc::common::request_canceled);
+  run_step([this]() {
+    cancel_current_response(errc::common::request_canceled);
+  });
 
   if (auto handler = std::move(on_stop_handler_); handler) {
-    handler();
+    run_step(handler);
   }
   state_ = diag::endpoint_state::disconnected;
+  if (failure) {
+    std::rethrow_exception(failure);
+  }
 }
 
 auto
@@ -379,6 +421,18 @@ auto
 http_session::is_stopped() const -> bool
 {
   return stopped_;
+}
+
+void
+http_session::mark_stopping()
+{
+  stopping_ = true;
+}
+
+auto
+http_session::is_stopping() const -> bool
+{
+  return stopping_;
 }
 
 void
@@ -410,9 +464,9 @@ http_session::flush()
   if (stopped_) {
     return;
   }
-  asio::post(asio::bind_executor(ctx_, [self = shared_from_this()]() {
+  asio::post(get_executor(), [self = shared_from_this()]() {
     self->do_write();
-  }));
+  });
 }
 
 void
@@ -421,16 +475,24 @@ http_session::write_and_stream(
   utils::movable_function<void(std::error_code, io::http_streaming_response)> resp_handler,
   utils::movable_function<void()> stream_end_handler)
 {
-  if (stopped_) {
-    resp_handler(errc::common::request_canceled, {});
-    stream_end_handler();
-    return;
-  }
   {
     streaming_response_context ctx{ std::move(resp_handler), std::move(stream_end_handler) };
-    const std::scoped_lock lock(current_response_mutex_);
-    std::swap(current_streaming_response_, ctx);
-    streaming_response_ = true;
+    bool installed = false;
+    {
+      // As in write_and_subscribe: the stopped_ test shares the section that installs the
+      // context, so a stop is either seen here or its cancel_current_response() ends the stream.
+      const std::scoped_lock lock(current_response_mutex_);
+      if (!stopped_) {
+        std::swap(current_streaming_response_, ctx);
+        streaming_response_ = true;
+        installed = true;
+      }
+    }
+    if (!installed) {
+      ctx.resp_handler(errc::common::request_canceled, {});
+      ctx.stream_end_handler();
+      return;
+    }
   }
   if (request.headers["connection"] == "keep-alive") {
     keep_alive_ = true;
@@ -461,12 +523,17 @@ http_session::write_and_stream(
 void
 http_session::set_idle(std::chrono::milliseconds timeout)
 {
+  const std::scoped_lock lock(idle_timer_mutex_);
+  // check_in can call this off the strand after its is_stopped() test, while a teardown runs. The
+  // teardown cancels the idle timer under this mutex after stopped_ is set, so either that cancel
+  // finds the wait armed here, or this test sees the stop. Armed after the cancel, the wait would
+  // hold the stopped session until the idle timeout.
+  if (stopped_) {
+    return;
+  }
   idle_timer_.expires_after(timeout);
-  // Bind the timeout handler to the session strand. idle_timer_ runs on the raw io_context in the
-  // plaintext constructor, and set_idle() also arms a liveness read on the strand, so without this
-  // the idle-timeout stop() could run concurrently with the armed read's completion on a
-  // multi-threaded io_context. Binding serializes idle-timeout teardown with the read/write
-  // handlers (same reasoning as posting stop() onto the strand elsewhere).
+  // Bound to the session strand, so the idle-timeout stop() is serialised with the completion of
+  // the liveness read armed below.
   idle_timer_.async_wait(
     asio::bind_executor(get_executor(), [self = shared_from_this()](std::error_code ec) {
       if (ec == asio::error::operation_aborted) {
@@ -502,12 +569,17 @@ http_session::reset_idle() -> bool
   idle_ = false;
   // Return true if cancel() is successful. Since the idle_timer_ has a single pending
   // wait per session, we know the timer has already expired if cancel() returns 0.
-  const auto reset = idle_timer_.cancel() != 0;
+  // stop() sets stopped_ before it cancels the idle timer under this mutex, so a stop whose cancel
+  // has not run yet is seen here, and one whose cancel has run leaves nothing to cancel.
+  const bool reset = [this]() {
+    const std::scoped_lock lock(idle_timer_mutex_);
+    return idle_timer_.cancel() != 0 && !stopped_;
+  }();
   if (!reset) {
-    // The idle timer already fired: its (strand-bound) handler is about to stop() this session,
-    // so it is being torn down rather than checked out. Restore idle_ so the still-armed liveness
-    // read stays on the idle path (tearing the connection down) instead of being fed to the
-    // response parser as if it were request traffic.
+    // The idle timer already fired, and its (strand-bound) handler is about to stop() this
+    // session, or a stop() has begun: the session is being torn down rather than checked out.
+    // Restore idle_ so the still-armed liveness read stays on the idle path (tearing the
+    // connection down) instead of being fed to the response parser as if it were request traffic.
     idle_ = true;
   }
   return reset;
@@ -517,23 +589,47 @@ void
 http_session::read_some(
   utils::movable_function<void(std::string, bool, std::error_code)>&& callback)
 {
-  if (stopped_ || !stream_->is_open()) {
-    callback({}, {}, errc::common::request_canceled);
+  // Initiated on the strand: callers pull from arbitrary io threads, and the body's close() closes
+  // stream_ through a stop() it posts to the strand.
+  asio::dispatch(get_executor(),
+                 [self = shared_from_this(), callback = std::move(callback)]() mutable {
+                   self->do_read_some(std::move(callback));
+                 });
+}
+
+void
+http_session::do_read_some(read_callback&& callback)
+{
+  if (read_some_in_flight_) {
+    queued_reads_.push_back(std::move(callback));
     return;
   }
-  std::unique_lock<std::mutex> lock{ read_some_mutex_ };
+  read_some_in_flight_ = true;
+  if (stopped_ || !stream_->is_open()) {
+    // Completed by the drain in finish_read_some(), never inline: this runs from that function's
+    // first branch, which a noexcept scope guard reaches, so a callback throwing here would
+    // terminate. At the front, since it was issued before anything still queued.
+    queued_reads_.push_front(std::move(callback));
+    return finish_read_some(errc::common::request_canceled, false);
+  }
   return stream_->async_read_some(
     asio::buffer(input_buffer_),
-    [self = shared_from_this(), callback = std::move(callback), lck = std::move(lock)](
-      std::error_code ec, std::size_t bytes_transferred) mutable {
+    [self = shared_from_this(),
+     callback = std::move(callback)](std::error_code ec, std::size_t bytes_transferred) mutable {
+      // Declared first, so it runs last: after the callback and the stream-end handler.
+      std::error_code queued_ec{};
+      bool response_ended = false;
+      const auto release = gsl::finally([&self, &queued_ec, &response_ended]() {
+        self->finish_read_some(queued_ec, response_ended);
+      });
       if (ec == asio::error::operation_aborted || self->stopped_) {
         CB_LOG_PROTOCOL("[HTTP, IN] type={}, host=\"{}\", rc={}, bytes_received={}",
                         self->type_,
                         self->info_.remote_address(),
                         ec ? ec.message() : "ok",
                         bytes_transferred);
-        lck.unlock();
-        callback({}, {}, errc::common::request_canceled);
+        queued_ec = errc::common::request_canceled;
+        callback({}, {}, queued_ec);
         return;
       }
       CB_LOG_PROTOCOL("[HTTP, IN] type={}, host=\"{}\", rc={}, bytes_received={}{:a}",
@@ -549,44 +645,142 @@ http_session::read_some(
       if (ec) {
         CB_LOG_ERROR(
           "{} IO error while reading from the socket: {}", self->info_.log_prefix(), ec.message());
-        lck.unlock();
+        queued_ec = ec;
         callback({}, {}, ec);
         return self->stop();
       }
       http_streaming_parser::feeding_result res{};
+      std::string data;
+      streaming_response_context ctx{};
+      bool stopped = false;
       {
+        // One section, as in do_read(): stop() sets stopped_ before its cancel takes this mutex,
+        // so the section either sees the stop or takes the parts of the response before the cancel.
         const std::scoped_lock lock(self->current_response_mutex_);
-        res = self->current_streaming_response_.parser.feed(
-          reinterpret_cast<const char*>(self->input_buffer_.data()), bytes_transferred);
+        stopped = self->stopped_;
+        if (!stopped) {
+          res = self->current_streaming_response_.parser.feed(
+            reinterpret_cast<const char*>(self->input_buffer_.data()), bytes_transferred);
+          if (!res.failure) {
+            std::swap(data, self->current_streaming_response_.parser.body_chunk);
+            if (res.complete) {
+              std::swap(self->current_streaming_response_, ctx);
+            }
+          }
+        }
+      }
+      if (stopped) {
+        queued_ec = errc::common::request_canceled;
+        return callback({}, {}, queued_ec);
       }
       if (res.failure) {
         self->stop();
-        lck.unlock();
-        return callback({}, {}, errc::common::parsing_failure);
+        queued_ec = errc::common::parsing_failure;
+        return callback({}, {}, queued_ec);
       }
-
-      std::string data;
-      {
-        const std::scoped_lock lock(self->current_response_mutex_);
-        std::swap(data, self->current_streaming_response_.parser.body_chunk);
-      }
-
+      response_ended = res.complete;
       if (res.complete) {
-        streaming_response_context ctx{};
-        {
-          const std::scoped_lock lock(self->current_response_mutex_);
-          std::swap(self->current_streaming_response_, ctx);
-        }
-        if (ctx.stream_end_handler) {
-          ctx.stream_end_handler();
-        }
+        // Cleared with the end of the response: check_in then posts the liveness read's do_read().
+        self->body_pulled_ = false;
         if (ctx.resp->must_close_connection()) {
           self->keep_alive_ = false;
         }
       }
-      lck.unlock();
+      // The stream-end handler checks this connection back into the keep-alive pool, and must not
+      // run until the body has observed the end of its response. Until it does,
+      // http_streaming_response_body_impl still holds this session with reading_complete_ false,
+      // and treats it as a response abandoned mid-body: a deadline expiry reaching close_impl in
+      // that state stops the session. Checking in first publishes the connection while that is
+      // still true, so the stop lands on whichever request took it out of the pool next.
+      //
+      // Check-in therefore waits for the whole body callback chain, which ends in consumer code: a
+      // request issued from inside that callback does not find this connection pooled and opens
+      // another. The guard runs the handler even if the callback throws, which would otherwise
+      // leave the session checked out and never returned to the pool.
+      const auto end_stream = gsl::finally([handler = std::move(ctx.stream_end_handler)]() mutable {
+        if (handler) {
+          handler();
+        }
+      });
       callback(std::move(data), !res.complete, {});
     });
+}
+
+void
+http_session::finish_read_some(std::error_code ec, bool response_ended)
+{
+  if (!ec && !response_ended && !queued_reads_.empty()) {
+    read_some_in_flight_ = false;
+    auto next = std::move(queued_reads_.front());
+    queued_reads_.pop_front();
+    return do_read_some(std::move(next));
+  }
+  // Nothing more belongs to this response. Each queued read completes without touching the socket.
+  if (queued_reads_.empty()) {
+    read_some_in_flight_ = false;
+    return notify_reads_drained();
+  }
+  if (!ec) {
+    // A clean end: the stream-end handler has already checked the connection in, and another
+    // request may have taken it out. Its reads must not queue behind these, which belong to the
+    // response that ended, so they are moved out and the flag cleared before they drain.
+    auto ended = std::make_shared<std::deque<read_callback>>();
+    std::swap(*ended, queued_reads_);
+    read_some_in_flight_ = false;
+    ++ended_drains_;
+    return drain_ended_reads(std::move(ended));
+  }
+  // After a failure the session is being torn down. The flag stays set until the queue is empty, so
+  // a read_some() from one of these callbacks queues behind the rest and completes the same way.
+  // One callback per handler posted to the strand, never inline: this function runs from noexcept
+  // scope guards, where a throwing callback would terminate. The guard posts the next handler even
+  // if the callback throws, so the exception reaches io_context::run() and the rest still complete
+  // in order.
+  asio::post(get_executor(), [self = shared_from_this(), ec]() {
+    auto callback = std::move(self->queued_reads_.front());
+    self->queued_reads_.pop_front();
+    const auto next = gsl::finally([&self, ec]() {
+      self->finish_read_some(ec, true);
+    });
+    callback({}, false, ec);
+  });
+}
+
+void
+http_session::on_reads_drained(utils::movable_function<void()>&& handler)
+{
+  reads_drained_.emplace_back(std::move(handler));
+  notify_reads_drained();
+}
+
+void
+http_session::notify_reads_drained()
+{
+  if (read_some_in_flight_ || ended_drains_ != 0) {
+    return;
+  }
+  // Posted, never inline: this runs from noexcept scope guards.
+  for (auto& handler : std::exchange(reads_drained_, {})) {
+    asio::post(get_executor(), std::move(handler));
+  }
+}
+
+void
+http_session::drain_ended_reads(std::shared_ptr<std::deque<read_callback>> reads)
+{
+  if (reads->empty()) {
+    --ended_drains_;
+    return notify_reads_drained();
+  }
+  // Posted one per handler for the reason finish_read_some() posts its drain.
+  asio::post(get_executor(), [self = shared_from_this(), reads]() {
+    auto callback = std::move(reads->front());
+    reads->pop_front();
+    const auto next = gsl::finally([&self, &reads]() {
+      self->drain_ended_reads(reads);
+    });
+    callback({}, false, {});
+  });
 }
 
 void
@@ -711,7 +905,10 @@ http_session::on_connect(const std::error_code& ec,
 void
 http_session::do_read()
 {
-  if (stopped_ || reading_ || !stream_->is_open()) {
+  // body_pulled_: past a streaming response's head the body belongs to read_some(), which reads the
+  // same socket into the same buffer. A do_read() armed then, such as the one a write completion
+  // starts after the head has already arrived, would take a part of that body and drop it.
+  if (stopped_ || reading_ || body_pulled_ || !stream_->is_open()) {
     return;
   }
   reading_ = true;
@@ -785,17 +982,30 @@ http_session::do_read()
           if (res.complete && ctx.resp->must_close_connection()) {
             self->keep_alive_ = false;
           }
+          self->body_pulled_ = !res.complete;
           self->reading_ = false;
-          if (auto handler = std::move(ctx.resp_handler); handler) {
-            handler({}, *ctx.resp);
-          }
-          if (!res.complete) {
-            const std::scoped_lock lock(self->current_response_mutex_);
-            std::swap(self->current_streaming_response_, ctx);
-          } else {
+          // Runs even if the response handler throws. Skipped, the context holding the parser
+          // would be dropped, so the rest of the body is fed to an empty parser and the stream-end
+          // handler never runs.
+          const auto reinstall_or_end = gsl::finally([&self, &ctx, complete = res.complete]() {
+            if (!complete) {
+              // A stop() that ran while ctx was swapped out, from the response handler or from
+              // another thread, ended nothing, and a context reinstalled into a stopped session is
+              // never ended: its stream-end handler keeps this session alive. stop() sets
+              // stopped_ before its teardown takes this mutex, so either the teardown finds the
+              // reinstalled context or this test sees the stop.
+              const std::scoped_lock lock(self->current_response_mutex_);
+              if (!self->stopped_) {
+                std::swap(self->current_streaming_response_, ctx);
+                return;
+              }
+            }
             if (auto handler = std::move(ctx.stream_end_handler); handler) {
               handler();
             }
+          });
+          if (auto handler = std::move(ctx.resp_handler); handler) {
+            handler({}, *ctx.resp);
           }
           return;
         }
@@ -803,20 +1013,27 @@ http_session::do_read()
         return self->do_read();
       }
       http_parser::feeding_result res{};
+      response_context ctx{};
       {
+        // One section for the feed and the take. stop() sets stopped_ before its
+        // cancel_current_response() takes this mutex, so either the stop is seen here and its
+        // cancel completes the response, or the cancel runs after the take and finds no handler.
+        // A cancel between a feed and a separate take would leave an empty context, whose handler
+        // throws std::bad_function_call on the io thread.
         const std::scoped_lock lock(self->current_response_mutex_);
+        if (self->stopped_) {
+          return;
+        }
         res = self->current_response_.parser.feed(
           reinterpret_cast<const char*>(self->input_buffer_.data()), bytes_transferred);
+        if (res.complete) {
+          std::swap(self->current_response_, ctx);
+        }
       }
       if (res.failure) {
         return self->stop();
       }
       if (res.complete) {
-        response_context ctx{};
-        {
-          const std::scoped_lock lock(self->current_response_mutex_);
-          std::swap(self->current_response_, ctx);
-        }
         if (ctx.parser.response.must_close_connection()) {
           self->keep_alive_ = false;
         }

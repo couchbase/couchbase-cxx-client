@@ -35,10 +35,14 @@
 #include <asio.hpp>
 #include <spdlog/fmt/bundled/chrono.h>
 
+#include <cstddef>
+#include <cstdint>
+#include <deque>
 #include <memory>
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace couchbase::core::io
 {
@@ -75,7 +79,8 @@ public:
                origin& origin,
                std::string hostname,
                std::string service,
-               http_context http_ctx);
+               http_context http_ctx,
+               std::uint64_t pool_generation);
 
   http_session(service_type type,
                std::string client_id,
@@ -85,7 +90,8 @@ public:
                origin& origin,
                std::string hostname,
                std::string service,
-               http_context http_ctx);
+               http_context http_ctx,
+               std::uint64_t pool_generation);
 
   ~http_session();
 
@@ -98,6 +104,11 @@ public:
   [[nodiscard]] auto log_prefix() -> std::string;
   [[nodiscard]] auto id() const -> const std::string&;
   [[nodiscard]] auto node_uuid() const -> const std::string&;
+  // The http_session_manager generation the session serves, fixed for its lifetime: the one it
+  // was created in, or for a failover replacement the one of the session it replaces. close()
+  // starts a new generation, and the manager neither lists nor reuses a session from an earlier
+  // one. A session outside any manager passes 0.
+  [[nodiscard]] auto pool_generation() const -> std::uint64_t;
   [[nodiscard]] auto credentials() const -> cluster_credentials;
   [[nodiscard]] auto is_connected() const -> bool;
   [[nodiscard]] auto type() const -> service_type;
@@ -107,30 +118,55 @@ public:
 
   void connect(utils::movable_function<void()>&& callback);
   void on_stop(std::function<void()> handler);
+  // Marks the session stopped and tears it down on the calling thread: releases the stream and
+  // posts its close to the strand, runs the connect callback, cancels the timers and the current
+  // response, and runs on_stop. Only the first call does anything; a later one returns at once,
+  // possibly before that teardown is done.
   void stop();
 
   auto keep_alive() const -> bool;
   auto is_stopped() const -> bool;
 
+  // A stop that another object has decided on but not yet executed. It is claimed while that
+  // object holds its own lock and executed after the lock is released, so between the two the
+  // session is still running and still reusable-looking. http_session_manager::check_in refuses a
+  // claimed session and check_out skips one. stop() does not set it, so a reader asking whether a
+  // session is owed or undergoing a stop tests is_stopped() as well. The claimer must call stop():
+  // a session claimed while checked out and never stopped stays in busy_sessions_ with its socket
+  // open until http_session_manager::close(), and one claimed while idle is dropped from every list
+  // by check_out and stays open until its idle timer fires. A separate flag rather than stopped_:
+  // stop() returns early when stopped_ is set, so claiming through that member would turn the
+  // teardown into a no-op.
+  void mark_stopping();
+  [[nodiscard]] auto is_stopping() const -> bool;
+
   template<typename Handler>
   void write_and_subscribe(io::http_request& request, Handler&& handler)
   {
-    if (stopped_) {
-      // The session was stopped between checkout and here -- e.g. the read armed while the
-      // connection was idle completed with the peer's FIN/RST after reset_idle() cleared idle_,
-      // driving do_read() -> stop(). Surface a retryable cancellation instead of dropping the
-      // request silently, which would strand the caller until its operation timeout.
-      std::forward<Handler>(handler)(errc::common::request_canceled, {});
-      return;
-    }
     {
       response_context ctx{ std::forward<Handler>(handler) };
       if (request.streaming) {
         ctx.parser.response.body.use_json_streaming(std::move(request.streaming.value()));
       }
-      std::scoped_lock lock(current_response_mutex_);
-      streaming_response_ = false;
-      std::swap(current_response_, ctx);
+      bool installed = false;
+      {
+        // The stopped_ test shares the section that installs the context. stop() sets stopped_
+        // before its cancel_current_response() takes this mutex, so either the stop is seen here,
+        // or its cancel runs after the install and completes the request. Tested outside this
+        // section, a stop in between would leave an installed context that nothing completes.
+        const std::scoped_lock lock(current_response_mutex_);
+        if (!stopped_) {
+          streaming_response_ = false;
+          std::swap(current_response_, ctx);
+          installed = true;
+        }
+      }
+      if (!installed) {
+        // Stopped between check-out and here, for example by the peer's FIN on the liveness read
+        // or by http_session_manager::close(). A retryable cancellation, not a request left to
+        // its deadline.
+        return ctx.handler(errc::common::request_canceled, {});
+      }
     }
     if (request.headers["connection"] == "keep-alive") {
       keep_alive_ = true;
@@ -168,8 +204,19 @@ public:
 
   /**
    * Reads some bytes from the body of the HTTP response. Should only be used in streaming mode.
+   * The read is initiated on the session strand, so the callback may run after this returns. At
+   * most one read is outstanding on the socket: a call made while one is in flight is queued and
+   * started when it completes, so callbacks for one response run in call order. Calls queued past
+   * the end of the response complete with no data and no more to come; calls queued behind a read
+   * that fails complete with its error.
    */
   void read_some(utils::movable_function<void(std::string, bool, std::error_code)>&& callback);
+
+  // Posts `handler` to the strand once the session holds no read_some() call. Called on the strand;
+  // every handler registered before then is posted. After stop(), a read in flight completes when
+  // its aborted socket read does, and the calls queued behind it complete after that; until then
+  // the session holds what they captured.
+  void on_reads_drained(utils::movable_function<void()>&& handler);
 
 private:
   struct streaming_response_context {
@@ -190,6 +237,11 @@ private:
   void on_connect(const std::error_code& ec, asio::ip::tcp::resolver::results_type::iterator it);
   void initiate_connect();
   void do_read();
+  using read_callback = utils::movable_function<void(std::string, bool, std::error_code)>;
+  void do_read_some(read_callback&& callback);
+  void finish_read_some(std::error_code ec, bool response_ended);
+  void drain_ended_reads(std::shared_ptr<std::deque<read_callback>> reads);
+  void notify_reads_drained();
   void do_write();
   void write(const std::vector<std::uint8_t>& buf);
   void write(const std::string_view& buf);
@@ -201,11 +253,18 @@ private:
   std::string client_id_;
   std::string node_uuid_;
   std::string id_;
+  std::uint64_t pool_generation_;
   asio::io_context& ctx_;
   asio::ip::tcp::resolver resolver_;
   std::unique_ptr<stream_impl> stream_;
+  // The timers are built on the strand executor, and the resolve completion is bound to it: their
+  // handlers close stream_ and run the connect callback, serialised with the connect and read
+  // handlers that touch the same state.
   asio::steady_timer connect_deadline_timer_;
   asio::steady_timer idle_timer_;
+  // set_idle() and reset_idle() touch idle_timer_ under the manager's sessions_mutex_ from any
+  // thread, and stop() cancels it on its calling thread; an asio timer is not thread-safe.
+  std::mutex idle_timer_mutex_{};
   asio::steady_timer retry_backoff_;
 
   core::origin& origin_;
@@ -214,6 +273,7 @@ private:
   std::string user_agent_;
 
   std::atomic_bool stopped_{ false };
+  std::atomic_bool stopping_{ false };
   std::atomic_bool connected_{ false };
   std::atomic_bool keep_alive_{ false };
   std::atomic_bool reading_{ false };
@@ -230,7 +290,20 @@ private:
   streaming_response_context current_streaming_response_{};
   bool streaming_response_{ false };
   std::mutex current_response_mutex_{};
-  std::mutex read_some_mutex_{};
+
+  // Touched only on the strand. A read_some() arriving while one is in flight waits here, since
+  // both would read the socket into input_buffer_.
+  bool read_some_in_flight_{ false };
+  // Set while a streaming response's body is pulled through read_some(), from the head until the
+  // read that ends it; do_read() arms nothing meanwhile. Touched only on the strand.
+  bool body_pulled_{ false };
+  std::deque<read_callback> queued_reads_{};
+  // Reads moved out at a clean end and still completing through drain_ended_reads(). Touched only
+  // on the strand.
+  std::size_t ended_drains_{ 0 };
+  // Posted once read_some_in_flight_ is clear and ended_drains_ is zero. Touched only on the
+  // strand.
+  std::vector<utils::movable_function<void()>> reads_drained_{};
 
   std::array<std::uint8_t, 16384> input_buffer_{};
   std::vector<std::vector<std::uint8_t>> output_buffer_{};
@@ -242,7 +315,10 @@ private:
   std::mutex info_mutex_{};
   couchbase::core::http_context http_ctx_;
 
-  std::chrono::time_point<std::chrono::steady_clock> last_active_{};
-  diag::endpoint_state state_{ diag::endpoint_state::disconnected };
+  // Read by diag_info() from any thread.
+  std::atomic<std::chrono::steady_clock::time_point> last_active_{};
+  // Written by stop() on its calling thread, by initiate_connect() on the connect() caller or on
+  // the strand, and by on_connect() on the strand; read by diag_info() from any thread.
+  std::atomic<diag::endpoint_state> state_{ diag::endpoint_state::disconnected };
 };
 } // namespace couchbase::core::io

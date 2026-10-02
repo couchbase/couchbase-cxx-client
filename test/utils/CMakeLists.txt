@@ -11,6 +11,10 @@ add_library(
 set_target_properties(test_utils PROPERTIES POSITION_INDEPENDENT_CODE ON)
 set_project_warnings(test_utils)
 set_project_options(test_utils)
+# The objects carry inline std::shared_ptr code, and their copy may be the one the test executable
+# and the client library both call. Uninstrumented, its reference-count release is invisible to
+# ThreadSanitizer.
+enable_sanitizers(test_utils)
 target_include_directories(
   test_utils SYSTEM BEFORE PRIVATE $<BUILD_INTERFACE:$<TARGET_PROPERTY:spdlog::spdlog,INTERFACE_INCLUDE_DIRECTORIES>>
                                    $<BUILD_INTERFACE:$<TARGET_PROPERTY:asio,INTERFACE_INCLUDE_DIRECTORIES>>)
