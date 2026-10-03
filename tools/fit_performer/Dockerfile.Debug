@@ -2,7 +2,12 @@
 #
 # Multi-stage build for the Couchbase C++ SDK FIT performer.
 #
-# Stage 1 ("builder") compiles tools/fit_performer in Release mode. To keep the
+# The file extension is the CMAKE_BUILD_TYPE: the "Build FIT performer image"
+# workflow selects Dockerfile.<build type> from its build_type input. Every
+# variant enables the production features, OpenTelemetry and couchbase2://
+# (Protostellar); only the build type and stripping differ.
+#
+# Stage 1 ("builder") compiles tools/fit_performer in Debug mode. To keep the
 # final image down to "just the binary", we deliberately do NOT install the
 # system gRPC/protobuf/OpenSSL development packages: their absence makes the
 # project's find_package() calls fail, so gRPC, protobuf, abseil, c-ares,
@@ -12,7 +17,7 @@
 # the ubuntu:24.04 runtime base already provides.
 #
 # Build context MUST be the repository root, e.g.:
-#   docker build -f tools/fit_performer/Dockerfile -t cxx-fit-performer .
+#   docker build -f tools/fit_performer/Dockerfile.Debug -t cxx-fit-performer .
 #
 # Everything (BoringSSL, the Mozilla CA bundle, gRPC, OpenTelemetry, ...) is
 # downloaded at CMake configure time, so the build needs network access.
@@ -29,10 +34,9 @@ ENV DEBIAN_FRONTEND=noninteractive
 # build-essential -> gcc/g++/make, cmake+ninja-build -> generator,
 # git -> CPM dependency checkout, curl/ca-certificates -> CMake's file(DOWNLOAD)
 # of the Mozilla CA bundle over TLS, zlib1g-dev -> system zlib that gRPC links
-# against on Linux, pkg-config -> dependency probing. libssl-dev is required by
-# OpenTelemetry's bundled curl, which runs its own find_package(OpenSSL); the
-# SDK core itself still uses static BoringSSL (forced by STATIC_BORINGSSL=ON),
-# so only curl links the system OpenSSL.
+# against on Linux, pkg-config -> dependency probing. No OpenSSL package: with
+# STATIC_BORINGSSL=ON, cmake/ThirdPartyDependencies.cmake builds curl against the
+# same static BoringSSL as the SDK.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
@@ -43,7 +47,6 @@ RUN apt-get update \
         ca-certificates \
         pkg-config \
         zlib1g-dev \
-        libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
@@ -52,13 +55,21 @@ WORKDIR /src
 # lives in core/ and couchbase/, and uses helpers from cmake/).
 COPY . .
 
-# Configure a Release build of only the performer and its dependencies.
+# The image workflow checks out one commit without tags, so `git describe` in
+# cmake/VersionInfo.cmake would find no tag and the performer would report its
+# version without the commit count. Fetch the remaining history and the tags
+# from the checkout's origin. A full clone, or a tree without .git, is used as is.
+RUN if [ "$(git rev-parse --is-shallow-repository 2>/dev/null)" = true ]; then \
+        git fetch --quiet --unshallow --tags origin; \
+    fi
+
+# Configure a Debug build of only the performer and its dependencies.
 # Tools are required (fit_performer lives under tools/); tests, examples and
 # docs are disabled to avoid building anything we will not ship. Static client
 # library + static BoringSSL + (implicitly) source-built gRPC/protobuf/curl
 # yield a self-contained binary.
 RUN cmake -S . -B build -G Ninja \
-        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_BUILD_TYPE=Debug \
         -DCOUCHBASE_CXX_CLIENT_BUILD_TOOLS=ON \
         -DCOUCHBASE_CXX_CLIENT_BUILD_TESTS=OFF \
         -DCOUCHBASE_CXX_CLIENT_BUILD_EXAMPLES=OFF \
@@ -66,17 +77,17 @@ RUN cmake -S . -B build -G Ninja \
         -DCOUCHBASE_CXX_CLIENT_BUILD_SHARED=OFF \
         -DCOUCHBASE_CXX_CLIENT_BUILD_STATIC=ON \
         -DCOUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY=ON \
+        -DCOUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2=ON \
         -DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON \
-    && cmake --build build --target fit_performer -j"$(nproc)" \
-    && strip build/tools/fit_performer/fit_performer
+    && cmake --build build --target fit_performer -j"$(nproc)"
 
 # Fail the build early if the binary depends on shared libraries the runtime
-# image will not have. Allowed: the C/C++ runtime, zlib, the dynamic loader, and
-# system OpenSSL (libssl/libcrypto, pulled in transitively via OpenTelemetry's
-# curl). This keeps the "only the binary" promise honest.
+# image will not have. Allowed: the C/C++ runtime, zlib and the dynamic loader.
+# A system libssl or libcrypto here would mean a second TLS implementation next
+# to the static BoringSSL. This keeps the "only the binary" promise honest.
 RUN ldd build/tools/fit_performer/fit_performer || true; \
     if ldd build/tools/fit_performer/fit_performer \
-         | grep -Eiv 'libstdc\+\+|libc\.so|libm\.so|libgcc_s|libz\.so|libssl|libcrypto|libdl|librt|libpthread|ld-linux|linux-vdso|not a dynamic' \
+         | grep -Eiv 'libstdc\+\+|libc\.so|libm\.so|libgcc_s|libz\.so|libdl|librt|libpthread|ld-linux|linux-vdso|not a dynamic' \
          | grep -q '=>'; then \
       echo "ERROR: unexpected shared library dependency (see ldd output above)"; \
       ldd build/tools/fit_performer/fit_performer; \
@@ -97,14 +108,13 @@ LABEL org.opencontainers.image.title="${SDK}-fit-performer" \
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# ca-certificates: general TLS trust store. libssl3 is needed because
-# OpenTelemetry's curl links system OpenSSL. libstdc++6, libgcc-s1 and zlib1g are
+# ca-certificates: general TLS trust store. libstdc++6, libgcc-s1 and zlib1g are
 # already present in the ubuntu base; install explicitly to be robust against
 # slim variants and to make the runtime dependencies self-documenting.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
-        libssl3t64 \
+        libgcc-s1 \
         libstdc++6 \
         zlib1g \
     && rm -rf /var/lib/apt/lists/*

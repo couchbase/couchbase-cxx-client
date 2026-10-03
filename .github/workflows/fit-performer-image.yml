@@ -29,6 +29,10 @@ on:
         type: string
         description: "Performer version. Specify a branch, tag, full commit hash, GitHub PR like 'refs/pull/37/merge', or Gerrit PR like 'refs/changes/58/240858/6'"
         required: true
+      build_type:
+        type: string
+        description: "CMAKE_BUILD_TYPE: Release or Debug, selecting tools/fit_performer/Dockerfile.<build_type>. Empty builds tools/fit_performer/Dockerfile, for refs that predate the per-build-type Dockerfiles."
+        default: Release
 
 jobs:
   publish:
@@ -38,8 +42,86 @@ jobs:
       packages: write
 
     steps:
-      - uses: couchbaselabs/sdk-docker-build-action@v1
+      # No shell: the inputs reach the script only through env, each must match the shapes it may
+      # take, and the Dockerfile path comes from a fixed table. An error names the input, never its
+      # value.
+      - name: Validate inputs
+        id: validated
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ inputs.ref }}
+          BUILD_TYPE: ${{ inputs.build_type }}
+        with:
+          script: |
+            const event = process.env.EVENT ?? '';
+            const ref = process.env.REF ?? '';
+            if (event === 'workflow_dispatch' &&
+                !(/^[A-Za-z0-9][A-Za-z0-9._\/-]*$/.test(ref) && !ref.includes('..'))) {
+              throw new Error('ref must be a branch, tag, commit hash or refs/... path');
+            }
+            // A push builds Release; a dispatch with an empty build_type builds the legacy Dockerfile.
+            const dockerfiles = new Map([
+              ['Release', 'Dockerfile.Release'],
+              ['Debug', 'Dockerfile.Debug'],
+              ['', 'Dockerfile'],
+            ]);
+            const buildType = event === 'push' ? 'Release' : (process.env.BUILD_TYPE ?? '');
+            if (!dockerfiles.has(buildType)) {
+              throw new Error('build_type must be Release, Debug or empty');
+            }
+            core.setOutput('dockerfile', `tools/fit_performer/${dockerfiles.get(buildType)}`);
+            core.setOutput('release', String(buildType === 'Release'));
+
+      - id: build
+        uses: couchbaselabs/sdk-docker-build-action@v1
         with:
           sdk: cxx
           ref: ${{ inputs.ref }}
-          dockerfile: tools/fit_performer/Dockerfile
+          dockerfile: ${{ steps.validated.outputs.dockerfile }}
+
+      # Adds the version the performer reports as a second tag on the pushed digest. The action
+      # checks out one commit without tags, so the rest of the history is fetched first. Only git
+      # and docker run, with argument vectors, so nothing from the checkout executes. '+' is not
+      # valid in an image tag and becomes '_'. Only a Dockerfile.Release image takes a version tag:
+      # Debug is a different build, and the legacy Dockerfile does not fetch the history, so its
+      # binary reports a version without the commit count. A tagged commit takes none either, since
+      # its version is the release tag the tag push already published. Neither does a commit whose
+      # nearest annotated tag is not a version tag.
+      - name: Tag the image with the SDK version
+        if: steps.validated.outputs.release == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PINNED_IMAGE: ${{ steps.build.outputs.pinned-image }}
+        with:
+          script: |
+            const pinned = process.env.PINNED_IMAGE ?? '';
+            const image = /^(ghcr\.io\/[a-z0-9._\/-]+)@sha256:[0-9a-f]{64}$/.exec(pinned);
+            if (!image) {
+              throw new Error('the action did not report a pinned ghcr.io image');
+            }
+            const git = async (...args) => (await exec.getExecOutput('git', args, { silent: true })).stdout.trim();
+            if (await git('rev-parse', '--is-shallow-repository') === 'true') {
+              await exec.exec('git', ['fetch', '--quiet', '--unshallow', '--tags', 'origin']);
+            }
+            // The mapping parse_git_describe_output() (core/meta/version.cxx) applies. The image
+            // build passes no BUILD_NUMBER, so the build number is 1.
+            const describe = await git('describe', '--always', '--long', 'HEAD');
+            const match = /^([0-9]+\.[0-9]+\.[0-9]+(?:-\w+(?:\.\w+)*)?)-([0-9]+)-g([0-9a-f]+)$/.exec(describe);
+            // The nearest annotated tag is not a version tag (or none is reachable). The performer
+            // then reports <project version>+<revision>, which carries no commit count to tag with.
+            if (!match) {
+              core.warning('git describe did not yield <version>-<commits>-g<hash>; not tagging');
+              return;
+            }
+            const [, tag, distance, hash] = match;
+            if (distance === '0') {
+              core.info(`SDK version ${tag} is a release tag; not tagging`);
+              return;
+            }
+            const semver = `${tag}+${distance}.1.${hash}`;
+            const imageTag = semver.replace('+', '_');
+            core.info(`SDK version ${semver}, tagged ${imageTag}`);
+            // --prefer-index=false: the tag points at the pushed digest itself, not at a new index.
+            await exec.exec('docker', ['buildx', 'imagetools', 'create', '--prefer-index=false',
+                                       '--tag', `${image[1]}:${imageTag}`, pinned]);
