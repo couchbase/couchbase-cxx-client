@@ -18,13 +18,14 @@
 #
 # This mirrors what the "Build FIT performer image" GitHub workflow does via
 # couchbaselabs/sdk-docker-build-action, but stays entirely local: it builds
-# tools/fit_performer/Dockerfile with the repository root as the build context,
-# then runs the resulting image and waits for the gRPC server to report that it
-# is listening.
+# tools/fit_performer/Dockerfile.<build type> with the repository root as the
+# build context, then runs the resulting image and waits for the gRPC server to
+# report that it is listening.
 
 set -euo pipefail
 
 TAG="cxx-fit-performer:local"
+BUILD_TYPE="Release"
 PORT="8060"
 NO_CACHE=""
 SKIP_RUN="false"
@@ -34,10 +35,11 @@ usage() {
   cat <<'EOF'
 Usage: tools/fit_performer/build-image.sh [options]
 
-Builds the C++ FIT performer Docker image (Release) and verifies it starts.
+Builds the C++ FIT performer Docker image and verifies it starts.
 
 Options:
   -t, --tag TAG        Image tag to build (default: cxx-fit-performer:local)
+  -b, --build-type T   Release or Debug, selects Dockerfile.T (default: Release)
   -p, --port PORT      Host port to map when verifying (default: 8060)
       --no-cache       Pass --no-cache to docker build
       --skip-run       Build only; do not start a container to verify
@@ -54,6 +56,7 @@ EOF
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -t|--tag)     TAG="$2"; shift 2 ;;
+    -b|--build-type) BUILD_TYPE="$2"; shift 2 ;;
     -p|--port)    PORT="$2"; shift 2 ;;
     --no-cache)   NO_CACHE="--no-cache"; shift ;;
     --skip-run)   SKIP_RUN="true"; shift ;;
@@ -66,7 +69,11 @@ done
 # Resolve the repository root so the script works from any directory. The build
 # context MUST be the repo root because the performer links the full client.
 REPO_ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
-DOCKERFILE="${REPO_ROOT}/tools/fit_performer/Dockerfile"
+case "${BUILD_TYPE}" in
+  Release|Debug) ;;
+  *) echo "ERROR: --build-type must be Release or Debug" >&2; usage >&2; exit 2 ;;
+esac
+DOCKERFILE="${REPO_ROOT}/tools/fit_performer/Dockerfile.${BUILD_TYPE}"
 
 echo "==> Repository root: ${REPO_ROOT}"
 echo "==> Dockerfile:      ${DOCKERFILE}"

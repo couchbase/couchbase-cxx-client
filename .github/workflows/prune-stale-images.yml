@@ -20,6 +20,13 @@ jobs:
           container: cxx-fit-performer
           keep-younger-than: 7 # days
           prune-untagged: true
+          # A version is pruned if any one of its tags matches, and a snapshot's SDK version tag
+          # (<x.y.z>[-<pre>]_<commits>.1.<hash>, as fit-performer-image.yml writes it) shares its
+          # version with the branch tag. So keep every version that has a tag other than these
+          # temporary ones: a version tag expires only once the branch tag has moved to a newer build.
+          keep-tags-regexes: |
+            ^(?!sha-|refs-)(?![0-9]+\.[0-9]+\.[0-9]+(-\w+(\.\w+)*)?_[0-9]+\.1\.[0-9a-f]+$)
           prune-tags-regexes: |
             ^refs-
             ^sha-
+            ^[0-9]+\.[0-9]+\.[0-9]+(-\w+(\.\w+)*)?_[0-9]+\.1\.[0-9a-f]+$
