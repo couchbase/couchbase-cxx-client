@@ -87,7 +87,10 @@ public:
     });
   }
 
-  void set_stream_end_callback(utils::movable_function<void()>&& stream_end_callback)
+  // Receives the session the stream was dispatched on, which a failover makes different from the
+  // one checked out.
+  void set_stream_end_callback(
+    utils::movable_function<void(std::shared_ptr<io::http_session>)>&& stream_end_callback)
   {
     stream_end_callback_ = std::move(stream_end_callback);
   }
@@ -148,7 +151,7 @@ public:
           self->invoke_response_handler(ec, std::move(resp));
         },
         [self]() {
-          self->stream_end_callback_();
+          self->stream_end_callback_(self->session_);
         });
     };
 
@@ -225,7 +228,7 @@ private:
   free_form_http_request_callback callback_;
   std::shared_ptr<tracing::tracer_wrapper> tracer_{};
   std::shared_ptr<couchbase::tracing::request_span> dispatch_span_{};
-  utils::movable_function<void()> stream_end_callback_;
+  utils::movable_function<void(std::shared_ptr<io::http_session>)> stream_end_callback_;
   std::shared_ptr<io::http_session> session_;
   std::mutex callback_mutex_;
 };
@@ -267,16 +270,16 @@ public:
         self->request_.timeout,
         self->encoded_.client_context_id);
       self->trigger_timeout();
-      if (self->session_) {
-        self->session_->stop();
+      if (auto dispatched = self->session(); dispatched) {
+        dispatched->stop();
       }
     });
   }
 
   void cancel() override
   {
-    if (session_) {
-      session_->stop();
+    if (auto dispatched = session(); dispatched) {
+      dispatched->stop();
     }
     invoke_response_handler(errc::common::request_canceled, {});
   }
@@ -296,10 +299,13 @@ public:
 
   void send_to(std::shared_ptr<io::http_session> session)
   {
-    if (!callback_) {
-      return;
+    {
+      const std::scoped_lock lock(callback_mutex_);
+      if (!callback_) {
+        return;
+      }
+      session_ = std::move(session);
     }
-    session_ = std::move(session);
 
     session_->write_and_subscribe(
       encoded_, [self = shared_from_this()](std::error_code ec, io::http_response resp) {
@@ -308,6 +314,14 @@ public:
         }
         self->invoke_response_handler(ec, std::move(resp));
       });
+  }
+
+  // The session send_to() dispatched on, or null if it never ran. A failover makes it different
+  // from the one checked out.
+  [[nodiscard]] auto session() -> std::shared_ptr<io::http_session>
+  {
+    const std::scoped_lock lock(callback_mutex_);
+    return session_;
   }
 
   [[nodiscard]] auto deadline_expiry() const -> std::chrono::time_point<std::chrono::steady_clock>
@@ -418,10 +432,10 @@ private:
       }
       session = std::move(s);
     }
-    op->set_stream_end_callback(
-      [session_manager, session, service = op->request().service]() mutable {
-        session_manager->check_in(service, session);
-      });
+    op->set_stream_end_callback([session_manager, service = op->request().service](
+                                  std::shared_ptr<io::http_session> served) mutable {
+      session_manager->check_in(service, std::move(served));
+    });
     op->set_tracer(session_manager->tracer());
     if (!session->is_connected()) {
       session_manager->connect_then_send_pending_op(
@@ -452,12 +466,18 @@ private:
       }
       session = std::move(s);
     }
-    op->start(
-      [callback = std::move(callback), session_manager, session, service = op->request().service](
-        auto resp, auto ec) mutable {
-        callback(std::move(resp), ec);
-        session_manager->check_in(service, session);
-      });
+    op->start([callback = std::move(callback),
+               session_manager,
+               session,
+               weak_op = std::weak_ptr<pending_buffered_http_operation>{ op },
+               service = op->request().service](auto resp, auto ec) mutable {
+      callback(std::move(resp), ec);
+      std::shared_ptr<io::http_session> served{};
+      if (auto self = weak_op.lock(); self) {
+        served = self->session();
+      }
+      session_manager->check_in(service, served ? std::move(served) : std::move(session));
+    });
 
     if (!session->is_connected()) {
       session_manager->connect_then_send_pending_op(
