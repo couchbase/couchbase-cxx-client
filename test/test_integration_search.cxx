@@ -42,6 +42,7 @@
 
 #include <tao/json/value.hpp>
 
+#include <optional>
 #include <regex>
 
 using Catch::Matchers::StartsWith;
@@ -72,13 +73,29 @@ TEST_CASE("integration: search query", "[integration]")
 
   std::uint64_t beer_sample_doc_count = 5;
   bool completed{};
-  std::string index_name{};
+  std::string index_name = test::utils::uniq_id("beer-search-index");
+  const std::string requested_index_name = index_name;
+  couchbase::core::operations::management::search_index_drop_request drop_requested_index_req{};
+  drop_requested_index_req.index_name = index_name;
+  const test::utils::drop_guard drop_requested_index{ integration.cluster,
+                                                      "search index " + index_name,
+                                                      drop_requested_index_req };
+
   std::tie(completed, index_name) =
     test::utils::create_search_index(integration,
                                      integration.ctx.bucket,
-                                     test::utils::uniq_id("beer-search-index"),
+                                     index_name,
                                      "search_beers_index_params.json",
                                      beer_sample_doc_count);
+  // The server may rename the index; a renamed one gets a guard of its own.
+  std::optional<
+    test::utils::drop_guard<couchbase::core::operations::management::search_index_drop_request>>
+    drop_renamed_index;
+  if (!index_name.empty() && index_name != requested_index_name) {
+    couchbase::core::operations::management::search_index_drop_request drop_index_req{};
+    drop_index_req.index_name = index_name;
+    drop_renamed_index.emplace(integration.cluster, "search index " + index_name, drop_index_req);
+  }
   REQUIRE(completed);
 
   REQUIRE(test::utils::wait_for_search_pindexes_ready(
@@ -354,13 +371,6 @@ TEST_CASE("integration: search query", "[integration]")
     REQUIRE_SUCCESS(resp.ctx.ec);
     REQUIRE(resp.rows.size() == 1);
   }
-
-  {
-    couchbase::core::operations::management::search_index_drop_request req{};
-    req.index_name = index_name;
-    auto resp = test::utils::execute(integration.cluster, req);
-    REQUIRE_SUCCESS(resp.ctx.ec);
-  }
 }
 
 TEST_CASE("integration: search query consistency", "[integration]")
@@ -405,6 +415,12 @@ TEST_CASE("integration: search query consistency", "[integration]")
         )";
 
   auto index_name = test::utils::uniq_id("search_index");
+  const std::string requested_index_name = index_name;
+  couchbase::core::operations::management::search_index_drop_request drop_requested_index_req{};
+  drop_requested_index_req.index_name = index_name;
+  const test::utils::drop_guard drop_requested_index{ integration.cluster,
+                                                      "search index " + index_name,
+                                                      drop_requested_index_req };
 
   {
     couchbase::core::management::search::index index{};
@@ -427,6 +443,15 @@ TEST_CASE("integration: search query consistency", "[integration]")
       CB_LOG_INFO("update index name \"{}\" -> \"{}\"", index_name, resp.name);
     }
     index_name = resp.name;
+  }
+  // The server may rename the index; a renamed one gets a guard of its own.
+  std::optional<
+    test::utils::drop_guard<couchbase::core::operations::management::search_index_drop_request>>
+    drop_renamed_index;
+  if (!index_name.empty() && index_name != requested_index_name) {
+    couchbase::core::operations::management::search_index_drop_request drop_index_req{};
+    drop_index_req.index_name = index_name;
+    drop_renamed_index.emplace(integration.cluster, "search index " + index_name, drop_index_req);
   }
 
   REQUIRE(test::utils::wait_for_search_pindexes_ready(
@@ -502,13 +527,6 @@ TEST_CASE("integration: search query consistency", "[integration]")
       }
     }
   }
-
-  {
-    couchbase::core::operations::management::search_index_drop_request req{};
-    req.index_name = index_name;
-    auto resp = test::utils::execute(integration.cluster, req);
-    REQUIRE_SUCCESS(resp.ctx.ec);
-  }
 }
 
 TEST_CASE("integration: search query collections", "[integration]")
@@ -529,6 +547,18 @@ TEST_CASE("integration: search query collections", "[integration]")
   auto collection1_name = test::utils::uniq_id("collection");
   auto collection2_name = test::utils::uniq_id("collection");
   std::string doc = R"({"name": "test"})";
+  const test::utils::drop_guard drop_collection1{
+    integration.cluster,
+    "collection " + collection1_name,
+    couchbase::core::operations::management::collection_drop_request{
+      integration.ctx.bucket, "_default", collection1_name },
+  };
+  const test::utils::drop_guard drop_collection2{
+    integration.cluster,
+    "collection " + collection2_name,
+    couchbase::core::operations::management::collection_drop_request{
+      integration.ctx.bucket, "_default", collection2_name },
+  };
 
   for (const auto& collection : { collection1_name, collection2_name }) {
     {
@@ -550,6 +580,13 @@ TEST_CASE("integration: search query collections", "[integration]")
       REQUIRE_SUCCESS(resp.ctx.ec());
     }
   }
+
+  const std::string requested_index_name = index_name;
+  couchbase::core::operations::management::search_index_drop_request drop_requested_index_req{};
+  drop_requested_index_req.index_name = index_name;
+  const test::utils::drop_guard drop_requested_index{ integration.cluster,
+                                                      "search index " + index_name,
+                                                      drop_requested_index_req };
 
   {
     // clang-format off
@@ -609,6 +646,16 @@ TEST_CASE("integration: search query collections", "[integration]")
     }
     index_name = resp.name;
   }
+  // The server may rename the index; a renamed one gets a guard of its own.
+  // Declared after the collection guards, so the index is dropped before its collections.
+  std::optional<
+    test::utils::drop_guard<couchbase::core::operations::management::search_index_drop_request>>
+    drop_renamed_index;
+  if (!index_name.empty() && index_name != requested_index_name) {
+    couchbase::core::operations::management::search_index_drop_request drop_index_req{};
+    drop_index_req.index_name = index_name;
+    drop_renamed_index.emplace(integration.cluster, "search index " + index_name, drop_index_req);
+  }
 
   REQUIRE(test::utils::wait_until_indexed(integration.cluster, index_name, 2));
 
@@ -645,13 +692,6 @@ TEST_CASE("integration: search query collections", "[integration]")
     auto resp = test::utils::execute(integration.cluster, req);
     REQUIRE_SUCCESS(resp.ctx.ec);
     REQUIRE(resp.rows.size() == 2);
-  }
-
-  {
-    couchbase::core::operations::management::search_index_drop_request req{};
-    req.index_name = index_name;
-    auto resp = test::utils::execute(integration.cluster, req);
-    REQUIRE_SUCCESS(resp.ctx.ec);
   }
 }
 

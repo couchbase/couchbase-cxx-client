@@ -17,6 +17,8 @@
 
 #include "test_helper_integration.hxx"
 
+#include "core/operations/management/query_index_drop.hxx"
+
 #include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/lookup_in_specs.hxx>
 #include <couchbase/match_all_query.hxx>
@@ -962,6 +964,15 @@ TEST_CASE("integration: enable external tracer - HTTP operations", "[integration
     {
       const auto mgr = cluster.bucket(integration.ctx.bucket).default_collection().query_indexes();
       const auto index_name = test::utils::uniq_id("tracer_idx");
+      couchbase::core::operations::management::query_index_drop_request drop_index_req{};
+      drop_index_req.bucket_name = integration.ctx.bucket;
+      drop_index_req.scope_name = "_default";
+      drop_index_req.collection_name = "_default";
+      drop_index_req.index_name = index_name;
+      drop_index_req.ignore_if_does_not_exist = true;
+      const test::utils::drop_guard drop_index{ integration.cluster,
+                                                "query index " + index_name,
+                                                drop_index_req };
 
       {
         auto err =

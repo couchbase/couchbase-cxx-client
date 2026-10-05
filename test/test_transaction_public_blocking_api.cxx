@@ -619,6 +619,12 @@ TEST_CASE("transactions public blocking API: can query from a scope", "[transact
   auto id = test::utils::uniq_id("txn");
   auto c = integration.public_cluster();
 
+  const test::utils::drop_guard drop_scope{
+    integration.cluster,
+    "scope " + new_scope_name,
+    couchbase::core::operations::management::scope_drop_request{ integration.ctx.bucket,
+                                                                 new_scope_name },
+  };
   upsert_scope_and_collection(
     integration.cluster, integration.ctx.bucket, new_scope_name, new_coll_name);
   auto new_scope = c.bucket(integration.ctx.bucket).scope(new_scope_name);
@@ -638,13 +644,6 @@ TEST_CASE("transactions public blocking API: can query from a scope", "[transact
     txn_opts());
   CHECK_FALSE(tx_err.ec());
   CHECK_FALSE(result.transaction_id.empty());
-
-  {
-    couchbase::core::operations::management::scope_drop_request req{ integration.ctx.bucket,
-                                                                     new_scope_name };
-    auto resp = test::utils::execute(integration.cluster, req);
-    REQUIRE_SUCCESS(resp.ctx.ec);
-  }
 }
 
 TEST_CASE("transactions public blocking API: can get doc from bucket not yet opened",
