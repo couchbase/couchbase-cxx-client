@@ -20,10 +20,14 @@
 #include "framework/errors.hxx"
 
 #include "core/app_telemetry_meter.hxx"
+#include "core/cluster.hxx"
 #include "core/cluster_credentials.hxx"
 #include "core/cluster_label_listener.hxx"
 #include "core/cluster_options.hxx"
+#include "core/core_sdk_shim.hxx"
 #include "core/diagnostics.hxx"
+#include "core/free_form_http_request.hxx"
+#include "core/http_component.hxx"
 #include "core/io/http_context.hxx"
 #include "core/io/http_message.hxx"
 #include "core/io/http_session.hxx"
@@ -377,19 +381,24 @@ struct start_line {
 struct consumer_failure : std::exception {
 };
 
+void
+instrument(http_session_manager& manager)
+{
+  auto labels = std::make_shared<couchbase::core::cluster_label_listener>();
+  manager.set_tracer(couchbase::core::tracing::tracer_wrapper::create(
+    std::make_shared<couchbase::core::tracing::noop_tracer>(), labels));
+  manager.set_meter(couchbase::core::metrics::meter_wrapper::create(
+    std::make_shared<couchbase::core::metrics::noop_meter>(), labels));
+  manager.set_app_telemetry_meter(std::make_shared<couchbase::core::app_telemetry_meter>());
+}
+
 // A session manager pointed at the loopback endpoint, with its io_context run by `threads`
 // background threads for the fixture's lifetime. A consumer_failure thrown from a completion
 // handler is counted and the runner resumes; any other exception terminates.
 struct pool_fixture {
   explicit pool_fixture(std::size_t threads = 1)
   {
-    auto labels = std::make_shared<couchbase::core::cluster_label_listener>();
-    manager->set_tracer(couchbase::core::tracing::tracer_wrapper::create(
-      std::make_shared<couchbase::core::tracing::noop_tracer>(), labels));
-    manager->set_meter(couchbase::core::metrics::meter_wrapper::create(
-      std::make_shared<couchbase::core::metrics::noop_meter>(), labels));
-    manager->set_app_telemetry_meter(std::make_shared<couchbase::core::app_telemetry_meter>());
-
+    instrument(*manager);
     manager->set_configuration(loopback_config(server.port()), options);
 
     for (std::size_t i = 0; i < threads; ++i) {
@@ -2403,6 +2412,142 @@ an_encode_failure_on_a_fresh_session_completes_and_checks_in([[maybe_unused]] co
   assert_true(f.shutdown(), "the io_context drains once the manager is closed");
 }
 
+// http_component over a cluster that is never opened, whose session manager runs on the fixture's
+// io_context. Two nodes serve the service: the first refuses connections, the second is the
+// loopback endpoint. A request naming the first node fails over to the second.
+struct component_fixture {
+  component_fixture()
+  {
+    instrument(*manager);
+    auto config = loopback_config(f.server.port());
+    auto refusing = config.nodes.front();
+    refusing.services_plain.management = refused_port;
+    config.nodes.insert(config.nodes.begin(), refusing);
+    manager->set_configuration(config, f.options);
+  }
+
+  component_fixture(const component_fixture&) = delete;
+  component_fixture(component_fixture&&) = delete;
+  auto operator=(const component_fixture&) -> component_fixture& = delete;
+  auto operator=(component_fixture&&) -> component_fixture& = delete;
+
+  ~component_fixture()
+  {
+    close_cluster();
+    f.shutdown();
+  }
+
+  // Closes the cluster, which closes its session manager and releases its hold on the io_context,
+  // then the fixture. The manager refers to the cluster's credentials, so the cluster outlives it.
+  auto shutdown() -> bool
+  {
+    assert_true(close_cluster(), "the cluster's close completes");
+    return f.shutdown();
+  }
+
+  auto close_cluster() -> bool
+  {
+    auto closed = std::make_shared<completion<bool>>();
+    cluster.close([closed]() {
+      closed->set(true);
+    });
+    return closed->wait_for(patience()).value_or(false);
+  }
+
+  [[nodiscard]] auto request(std::string path) const -> couchbase::core::http_request
+  {
+    couchbase::core::http_request request{};
+    request.service = service;
+    request.method = "GET";
+    request.path = std::move(path);
+    request.endpoint = "127.0.0.1:" + std::to_string(refused_port);
+    request.headers["connection"] = "keep-alive";
+    request.timeout = std::chrono::minutes{ 1 };
+    return request;
+  }
+
+  // Supplies the io_context, its runner and the loopback endpoint. Its own manager is unused.
+  pool_fixture f{};
+  std::uint16_t refused_port{ refusing_port() };
+  couchbase::core::cluster cluster{ f.io };
+  std::shared_ptr<http_session_manager> manager{ cluster.http_session_manager().second };
+  couchbase::core::http_component component{ f.io, couchbase::core::core_sdk_shim{ cluster } };
+};
+
+void
+drain_component_body(couchbase::core::http_response_body body,
+                     std::shared_ptr<completion<std::error_code>> terminal)
+{
+  body.next([body, terminal](std::string, bool has_more, std::error_code ec) mutable {
+    if (ec || !has_more) {
+      return terminal->set(ec);
+    }
+    drain_component_body(std::move(body), std::move(terminal));
+  });
+}
+
+// Once a request the failover replacement served has ended, the replacement is the only session
+// listed, and it is idle: the next request to its node reuses it. A replacement left busy is
+// listed too, but the next request opens another connection.
+void
+assert_only_the_replacement_is_pooled(component_fixture& c)
+{
+  std::set<std::string> listed;
+  std::shared_ptr<http_session> next;
+  // With one runner this runs after the handler that ended the request, check_in included.
+  run_on(c.f.io, [&]() {
+    listed = pooled_ids(*c.manager);
+    auto [ec, session] =
+      c.manager->check_out(service, "127.0.0.1:" + std::to_string(c.f.server.port()));
+    assert_success(ec, "check_out succeeds against the live node");
+    next = std::move(session);
+  });
+  assert_eq(listed.size(), std::size_t{ 1 }, "one session is listed once the request has ended");
+  assert_eq(listed.count(next->id()),
+            std::size_t{ 1 },
+            "the next request to the replacement's node reuses it, so it was checked in");
+  assert_true(c.shutdown(), "the io_context drains once the manager is closed");
+}
+
+// Regression: the stream-end handler checked in the session it checked out, which the failover had
+// stopped, and left the replacement that served the stream busy until close().
+void
+a_streamed_request_checks_in_its_failover_replacement([[maybe_unused]] context& ctx)
+{
+  component_fixture c{};
+  auto terminal = std::make_shared<completion<std::error_code>>();
+  auto op = c.component.do_http_request(
+    c.request("/split"), [terminal](couchbase::core::http_response resp, std::error_code ec) {
+      if (ec) {
+        return terminal->set(ec);
+      }
+      drain_component_body(resp.body(), terminal);
+    });
+  assert_true(op.has_value(), "the request is dispatched");
+  const auto ec = terminal->wait_for(patience());
+  assert_true(ec.has_value(), "the stream ends within its budget");
+  assert_success(*ec, "the replacement serves the stream to a clean end");
+  assert_only_the_replacement_is_pooled(c);
+}
+
+// Regression: the buffered completion checked in the session it checked out, which the failover had
+// stopped, and left the replacement that served the response busy until close().
+void
+a_buffered_request_checks_in_its_failover_replacement([[maybe_unused]] context& ctx)
+{
+  component_fixture c{};
+  auto done = std::make_shared<completion<std::error_code>>();
+  auto op = c.component.do_http_request_buffered(
+    c.request("/complete"), [done](couchbase::core::buffered_http_response, std::error_code ec) {
+      done->set(ec);
+    });
+  assert_true(op.has_value(), "the request is dispatched");
+  const auto ec = done->wait_for(patience());
+  assert_true(ec.has_value(), "the request completes within its budget");
+  assert_success(*ec, "the replacement serves the response");
+  assert_only_the_replacement_is_pooled(c);
+}
+
 } // namespace
 
 auto
@@ -2448,6 +2593,8 @@ tests() -> test_suite
       { CASE(a_stop_racing_check_out_leaves_no_stopped_session_in_the_pool), {}, timeout::slow },
       { CASE(a_pull_off_the_strand_racing_a_close_under_thread_sanitizer), {}, timeout::slow },
       { CASE(a_deadline_racing_the_tail_either_stops_or_pools_the_session), {}, timeout::slow },
+      { CASE(a_streamed_request_checks_in_its_failover_replacement), {}, timeout::slow },
+      { CASE(a_buffered_request_checks_in_its_failover_replacement), {}, timeout::slow },
     },
   };
 }
