@@ -125,3 +125,5 @@ jobs:
             // --prefer-index=false: the tag points at the pushed digest itself, not at a new index.
             await exec.exec('docker', ['buildx', 'imagetools', 'create', '--prefer-index=false',
                                        '--tag', `${image[1]}:${imageTag}`, pinned]);
+            // Job summaries concatenate per-step in step order, so this line follows the action's.
+            await core.summary.addRaw(`🔖 \`${image[1]}:${imageTag}\``, true).write();
