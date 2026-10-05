@@ -75,6 +75,15 @@ public:
     }
   }
 
+  // A pending read holds this body, so it is destroyed only with no pull in flight. An armed
+  // deadline does not hold it. A body dropped before its response was fully read leaves its
+  // connection mid-response, which otherwise only cluster close ends. Closing the body posts a stop
+  // of its session to the session strand.
+  ~http_streaming_response_body_impl()
+  {
+    close_impl(errc::common::request_canceled, std::nullopt);
+  }
+
   void close(std::error_code ec)
   {
     close_impl(ec, std::nullopt);
@@ -97,13 +106,12 @@ public:
   // generation was superseded.
   auto close_impl(std::error_code ec, std::optional<std::uint64_t> expect_generation) -> bool
   {
-    // session_ and final_ec_ are written here and also mutated on the session's read completion.
-    // Those paths can run on different executors once a consumer drives the io_context with more
-    // than one thread: close() is reached off-strand from row_streamer::cancel()'s asio::post, from
-    // the idle-timer completion and from the deadline completion, while the read completion runs on
-    // the session strand. Guard the shared teardown state with a mutex, and make close() idempotent
-    // so a second teardown (a cancel racing a transport error, say) neither double-stops the
-    // session nor overwrites the first terminal error with a later, less meaningful one.
+    // session_ and final_ec_ are written here and on the session's read completion, which runs on
+    // the session strand. close() is reached off that strand: from row_streamer::cancel()'s post,
+    // the idle-timer completion and the deadline completion, and from the destructor on whatever
+    // thread drops the body. A mutex guards the shared teardown state. close() is
+    // idempotent, so a second teardown (a cancel racing a transport error) neither stops the
+    // session twice nor overwrites the first terminal error.
     std::shared_ptr<http_session> to_stop;
     {
       const std::scoped_lock lock{ mutex_ };
@@ -134,33 +142,33 @@ public:
       // Hand the session out to be stopped below, then drop our reference. Written as two
       // statements rather than std::exchange because cppcheck's flow analysis mis-models the
       // std::exchange return value and wrongly reports the `if (to_stop)` guard as always-false.
-      if (!reading_complete_) {
+      //
+      // A session already stopped is skipped: the stop() call that set stopped_ runs the whole
+      // teardown, and a stop posted after the cluster closed would hold the session until the
+      // io_context is destroyed.
+      if (!reading_complete_ && session_ && !session_->is_stopped()) {
         to_stop = session_;
         // Claim the stop while this lock is held. The clean-end branch of the read completion
         // clears closed_ and hands the connection to check_in, and it can run between the claim
         // and the stop that executes it; the claim is what check_in tests, so the pool refuses a
-        // connection this body is about to stop. session_ is null for a body built without one.
-        if (to_stop) {
-          to_stop->mark_stopping();
-        }
+        // connection this body is about to stop.
+        to_stop->mark_stopping();
       }
       session_ = nullptr;
       final_ec_ = ec;
-      // Disarm: the wait holds a strong self and would keep this body alive until deadline_tp.
-      // cancel() does not stop a completion already queued, hence the generation bump.
+      // Disarm. cancel() does not stop a completion already queued, hence the generation bump.
       deadline_.cancel();
       ++deadline_generation_;
-      // close() is only reached on error/cancel (a clean end sets reading_complete_ instead), so
-      // any bytes still buffered from the initial parse belong to an aborted response and must not
-      // be handed out as data — drop them so next() surfaces the terminal error, not stale body
-      // bytes.
+      // Reached on error, cancel or destruction (a clean end sets reading_complete_ instead), so
+      // any bytes still buffered from the initial parse are not handed out as data. Dropping them
+      // makes next() surface the terminal error, not stale body bytes.
       cached_data_.clear();
     }
     // stop() runs inline -- it closes the stream, cancels the timers, cancels the current
     // response and invokes on_stop_handler_ -- so it has to run on the session strand, alongside
     // the read and write handlers it tears down. close() is reached off that strand from a
-    // deadline expiry, an idle-timer completion and row_streamer::cancel()'s post, so the stop is
-    // posted there.
+    // deadline expiry, an idle-timer completion, row_streamer::cancel()'s post and the destructor,
+    // so the stop is posted there.
     //
     // The session is already claimed above, so the gap between deciding the stop and running it
     // stays invisible to the pool.
@@ -306,11 +314,15 @@ public:
     }
     const auto generation = ++deadline_generation_;
     deadline_.expires_at(deadline_tp);
-    deadline_.async_wait([self = shared_from_this(), on_expiry, generation](auto ec) {
+    // Weak: an armed deadline does not keep a dropped body, and through it the session, alive
+    // until expiry. The destructor closes a body dropped before its deadline.
+    deadline_.async_wait([weak = weak_from_this(), on_expiry, generation](auto ec) {
       if (ec == asio::error::operation_aborted) {
         return;
       }
-      self->close_at_deadline(on_expiry, generation);
+      if (const auto self = weak.lock(); self) {
+        self->close_at_deadline(on_expiry, generation);
+      }
     });
     return deadline_state::armed;
   }

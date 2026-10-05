@@ -212,11 +212,13 @@ public:
             meter_,
             app_telemetry_meter_,
             options_.default_timeout_for(request.type));
+          cmd->set_command_session(session);
           cmd->start(
             [start = std::chrono::steady_clock::now(),
              self = shared_from_this(),
              type,
-             cmd,
+             session,
+             weak_cmd = std::weak_ptr(cmd),
              handler = collector->build_reporter()](operations::http_noop_response&& resp) {
               diag::ping_state state = diag::ping_state::ok;
               std::optional<std::string> error{};
@@ -232,27 +234,27 @@ public:
                                           ec.message(),
                                           resp.ctx.http_status));
               }
-              auto remote_address = cmd->session_->remote_address();
+              auto remote_address = session->remote_address();
               // If not connected, the remote address will be empty.  Better to
               // give the user some context on the "attempted" remote address.
               if (remote_address.empty()) {
-                remote_address =
-                  fmt::format("{}:{}", cmd->session_->hostname(), cmd->session_->port());
+                remote_address = fmt::format("{}:{}", session->hostname(), session->port());
               }
               handler->report(
                 diag::endpoint_ping_info{ type,
-                                          cmd->session_->id(),
+                                          session->id(),
                                           std::chrono::duration_cast<std::chrono::microseconds>(
                                             std::chrono::steady_clock::now() - start),
                                           remote_address,
-                                          cmd->session_->local_address(),
+                                          session->local_address(),
                                           state,
                                           {},
                                           error });
-              self->check_in(type, cmd->session_);
+              if (const auto cmd = weak_cmd.lock(); cmd) {
+                self->check_in(type, cmd->session_for_check_in());
+              }
             });
 
-          cmd->set_command_session(session);
           if (!session->is_connected()) {
             connect_then_send(session, cmd, {}, true);
           } else {
@@ -518,12 +520,13 @@ public:
       options_.default_timeout_for(request.type));
 
     using response_type = typename Request::response_type;
+    // Before start(), so a deadline that fires at once still reports the session's endpoint.
+    cmd->set_command_session(session);
     cmd->start([self = shared_from_this(), cmd, handler = std::forward<Handler>(handler)](
                  response_type&& resp) mutable {
       handler(std::move(resp));
-      self->check_in(cmd->request.type, cmd->session_);
+      self->check_in(cmd->request.type, cmd->session_for_check_in());
     });
-    cmd->set_command_session(session);
     if (!session->is_connected()) {
       connect_then_send(session, cmd, preferred_node);
     } else {

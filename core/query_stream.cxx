@@ -122,6 +122,29 @@ public:
     : streamer_{ io, std::move(body), N1QL_RESULTS_POINTER, options }
   {
   }
+  streaming_query_stream_impl(const streaming_query_stream_impl&) = delete;
+  streaming_query_stream_impl(streaming_query_stream_impl&&) = delete;
+  auto operator=(const streaming_query_stream_impl&) -> streaming_query_stream_impl& = delete;
+  auto operator=(streaming_query_stream_impl&&) -> streaming_query_stream_impl& = delete;
+
+  // Runs with no handle left, no pull in flight and the preamble delivered: each pull, and start()
+  // until the preamble, holds this object.
+  //
+  // Cancels unless a pull delivered the terminal of a completed JSON document. Without the cancel,
+  // the read-ahead keeps the body and its session alive:
+  //  - through a read in flight, until the idle timer fires or the cluster closes;
+  //  - through a row send queued on a full channel, indefinitely.
+  // The cancel stops the connection only while the body is still being read. A body read to its
+  // end has already checked the connection in.
+  //
+  // After a completed document the read-ahead reads the trailing bytes and the connection is
+  // checked in, or the idle timer ends the body.
+  ~streaming_query_stream_impl() override
+  {
+    if (!document_completed_) {
+      streamer_.cancel();
+    }
+  }
 
   void start(utils::movable_function<void(std::error_code)>&& on_ready) override
   {
@@ -215,6 +238,7 @@ public:
         const std::scoped_lock lock{ self->mutex_ };
         self->terminal_reached_ = true;
         self->terminal_ec_ = terminal_ec;
+        self->document_completed_ = !ec;
       }
       handler(std::nullopt, terminal_ec);
     });
@@ -260,6 +284,10 @@ private:
   // so every later pull re-delivers it instead of parking on the drained channel.
   bool terminal_reached_{ false };
   std::error_code terminal_ec_{};
+  // Set when a pull delivers a terminal with no streamer error: the lexer completed the JSON
+  // document. Written under mutex_. The destructor reads it unlocked: the release of the last
+  // shared_ptr orders that read after every write.
+  bool document_completed_{ false };
 };
 
 // Replays an already-buffered query_response as a stream without any JSON re-parsing: the rows are

@@ -19,6 +19,8 @@
 
 #include "framework/errors.hxx"
 
+#include "core/analytics_stream.hxx"
+#include "core/analytics_stream_component.hxx"
 #include "core/app_telemetry_meter.hxx"
 #include "core/cluster.hxx"
 #include "core/cluster_credentials.hxx"
@@ -26,6 +28,7 @@
 #include "core/cluster_options.hxx"
 #include "core/core_sdk_shim.hxx"
 #include "core/diagnostics.hxx"
+#include "core/error_context/query.hxx"
 #include "core/free_form_http_request.hxx"
 #include "core/http_component.hxx"
 #include "core/io/http_context.hxx"
@@ -34,11 +37,19 @@
 #include "core/io/http_session_manager.hxx"
 #include "core/io/http_streaming_response.hxx"
 #include "core/io/query_cache.hxx"
+#include "core/logger/logger.hxx"
 #include "core/metrics/meter_wrapper.hxx"
 #include "core/metrics/noop_meter.hxx"
+#include "core/operations/document_analytics.hxx"
+#include "core/operations/document_query.hxx"
 #include "core/operations/management/collection_update.hxx"
 #include "core/operations/management/freeform.hxx"
 #include "core/origin.hxx"
+#include "core/pending_operation.hxx"
+#include "core/pending_operation_connection_info.hxx"
+#include "core/query_stream.hxx"
+#include "core/query_stream_component.hxx"
+#include "core/row_streamer_options.hxx"
 #include "core/service_type.hxx"
 #include "core/tls_context_provider.hxx"
 #include "core/topology/configuration.hxx"
@@ -62,6 +73,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
@@ -74,9 +86,11 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <thread>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -110,12 +124,31 @@ within(std::chrono::steady_clock::time_point start, std::chrono::milliseconds bo
                                                                start) < bound;
 }
 
+// A query response of query_rows rows: the preamble with the first row, the other rows, then the
+// trailer.
+constexpr std::string_view query_first_row =
+  R"({"requestID":"r1","signature":{"n":"number"},"results":[{"n":0})";
+constexpr std::string_view query_later_rows = R"(,{"n":1},{"n":2})";
+constexpr std::string_view query_trailer = R"(],"status":"success"})";
+constexpr std::size_t query_rows = 3;
+
 // Keep-alive HTTP endpoint on its own io_context and thread, so the client io_context under test
-// carries only the SDK's work. The request path selects the response:
+// carries only the SDK's work. The request path selects the response; a request to /query/service
+// or /analytics/service is answered as the path its client-context-id header names:
 //   /complete    200 with an empty body, in one write
 //   /split       200 with a five-byte body written after a pause, so it arrives in a later read
 //   /pieces      200 with a nine-byte body written in three parts, each after a pause
+//   /close       as /complete, with Connection: close
+//   /close-split as /split, with Connection: close
 //   /incomplete  200 announcing five bytes and sending two; the rest never comes
+//   /rows        200 with the whole query response, in one write
+//   /one-row     200 with the query preamble and first row; the rest is held until release_held()
+//   /many-rows   200 with the query preamble and eight rows in one write; the trailer is held until
+//                release_held()
+//   /malformed   200 with the query preamble, the first row and a malformed second; the rest of the
+//                announced body never comes
+//   /trailing    200 with the whole query response and a newline after it; the newline is held
+//                until release_held()
 //   /held/<path> nothing until release_held(), then the response to <path>
 //   any other    no response; the connection is held open until the client closes it
 class loopback_http_server
@@ -165,7 +198,7 @@ public:
     return heads_delivered_.load();
   }
 
-  // Requests to "/held/<path>" received so far.
+  // Requests to "/held/<path>", "/one-row", "/many-rows" and "/trailing" received so far.
   [[nodiscard]] auto held() const -> std::size_t
   {
     return held_count_.load();
@@ -183,16 +216,24 @@ public:
     });
   }
 
+  // Connections the client closed while the endpoint waited for a request.
+  [[nodiscard]] auto released() const -> std::size_t
+  {
+    return released_.load();
+  }
+
 private:
   struct connection {
     connection(loopback_http_server& server,
                std::atomic<std::size_t>& heads,
-               std::atomic<std::size_t>& delivered)
+               std::atomic<std::size_t>& delivered,
+               std::atomic<std::size_t>& released_by_client)
       : socket{ server.io_ }
       , pause{ server.io_ }
       , owner{ server }
       , heads_written{ heads }
       , heads_delivered{ delivered }
+      , released{ released_by_client }
     {
     }
 
@@ -203,11 +244,12 @@ private:
     loopback_http_server& owner;
     std::atomic<std::size_t>& heads_written;
     std::atomic<std::size_t>& heads_delivered;
+    std::atomic<std::size_t>& released;
   };
 
   void accept()
   {
-    auto conn = std::make_shared<connection>(*this, heads_written_, heads_delivered_);
+    auto conn = std::make_shared<connection>(*this, heads_written_, heads_delivered_, released_);
     acceptor_.async_accept(conn->socket, [this, conn](std::error_code ec) {
       if (ec) {
         return;
@@ -223,13 +265,32 @@ private:
     });
   }
 
+  // The value of header `name`, given in lower case, in `head`; empty when absent.
+  static auto header_value(const std::string& head, const std::string& name) -> std::string
+  {
+    std::string lowered{ head };
+    std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) {
+      return static_cast<char>(std::tolower(c));
+    });
+    const auto at = lowered.find("\r\n" + name + ":");
+    if (at == std::string::npos) {
+      return {};
+    }
+    const auto begin = head.find_first_not_of(' ', at + name.size() + 3);
+    return head.substr(begin, head.find("\r\n", begin) - begin);
+  }
+
   static void serve(const std::shared_ptr<connection>& conn)
   {
     const auto end = conn->received.find("\r\n\r\n");
-    if (end == std::string::npos) {
+    const auto head = conn->received.substr(0, end == std::string::npos ? 0 : end + 2);
+    const auto length = header_value(head, "content-length");
+    const auto body_size = length.empty() ? std::size_t{ 0 } : std::stoul(length);
+    if (end == std::string::npos || conn->received.size() < end + 4 + body_size) {
       conn->socket.async_read_some(asio::buffer(conn->buffer),
                                    [conn](std::error_code ec, std::size_t bytes) {
                                      if (ec) {
+                                       ++conn->released;
                                        return;
                                      }
                                      conn->received.append(conn->buffer.data(), bytes);
@@ -237,10 +298,12 @@ private:
                                    });
       return;
     }
-    const auto path_begin = conn->received.find(' ') + 1;
-    const auto path =
-      conn->received.substr(path_begin, conn->received.find(' ', path_begin) - path_begin);
-    conn->received.erase(0, end + 4);
+    const auto path_begin = head.find(' ') + 1;
+    auto path = head.substr(path_begin, head.find(' ', path_begin) - path_begin);
+    if (path == "/query/service" || path == "/analytics/service") {
+      path = header_value(head, "client-context-id");
+    }
+    conn->received.erase(0, end + 4 + body_size);
     answer(conn, path);
   }
 
@@ -250,6 +313,13 @@ private:
       conn->owner.held_.emplace_back(conn, path.substr(held_prefix.size()));
       ++conn->owner.held_count_;
       return;
+    }
+    if (path == "/close") {
+      return respond(conn, "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 0\r\n\r\n", {});
+    }
+    if (path == "/close-split") {
+      return respond(
+        conn, "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 5\r\n\r\n", { "abcde" });
     }
     if (path == "/split") {
       return respond(conn, "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\n", { "abcde" });
@@ -262,6 +332,55 @@ private:
     }
     if (path == "/complete") {
       return respond(conn, "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n", {});
+    }
+    if (path == "/rows" || path == "/one-row" || path == "/trailing") {
+      const auto rest = std::string{ query_later_rows } + std::string{ query_trailer };
+      const std::size_t newline = path == "/trailing" ? 1 : 0;
+      auto head = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " +
+                  std::to_string(query_first_row.size() + rest.size() + newline) + "\r\n\r\n" +
+                  std::string{ query_first_row };
+      if (path == "/rows") {
+        return respond(conn, head + rest, {});
+      }
+      if (path == "/trailing") {
+        conn->owner.held_.emplace_back(conn, "/newline");
+        ++conn->owner.held_count_;
+        return respond(conn, head + rest, {});
+      }
+      conn->owner.held_.emplace_back(conn, "/rows-tail");
+      ++conn->owner.held_count_;
+      return respond(conn, std::move(head), {});
+    }
+    if (path == "/many-rows") {
+      std::string body{ query_first_row };
+      for (std::size_t n = 1; n < 8; ++n) {
+        body += R"(,{"n":)" + std::to_string(n) + "}";
+      }
+      auto head = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " +
+                  std::to_string(body.size() + query_trailer.size()) + "\r\n\r\n" + body;
+      conn->owner.held_.emplace_back(conn, "/trailer");
+      ++conn->owner.held_count_;
+      return respond(conn, std::move(head), {});
+    }
+    if (path == "/malformed") {
+      const auto body = std::string{ query_first_row } + ",}";
+      return respond(conn,
+                     "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " +
+                       std::to_string(body.size() + 1024 * 1024) + "\r\n\r\n" + body,
+                     {});
+    }
+    if (path == "/rows-tail" || path == "/trailer" || path == "/newline") {
+      // Not a response: the rest of a "/one-row", "/many-rows" or "/trailing" body. respond() for
+      // its head already armed the read of the next request.
+      auto tail = std::make_shared<std::string>("\n");
+      if (path == "/rows-tail") {
+        *tail = std::string{ query_later_rows } + std::string{ query_trailer };
+      } else if (path == "/trailer") {
+        *tail = std::string{ query_trailer };
+      }
+      return asio::async_write(
+        conn->socket, asio::buffer(*tail), [conn, tail](std::error_code, std::size_t) {
+        });
     }
     if (path == "/reset") {
       // Part of the body, then the connection closes after the pause, so a read parked for the
@@ -344,6 +463,7 @@ private:
   // Touched only on io_.
   std::vector<std::pair<std::shared_ptr<connection>, std::string>> held_{};
   std::atomic<std::size_t> held_count_{ 0 };
+  std::atomic<std::size_t> released_{ 0 };
   std::thread thread_{};
 };
 
@@ -360,7 +480,7 @@ pool_options() -> couchbase::core::cluster_options
   return options;
 }
 
-// One node serving the management service on the loopback endpoint.
+// One node serving the management, query and analytics services on the loopback endpoint.
 auto
 loopback_config(std::uint16_t port) -> couchbase::core::topology::configuration
 {
@@ -368,6 +488,8 @@ loopback_config(std::uint16_t port) -> couchbase::core::topology::configuration
   couchbase::core::topology::configuration::node node{};
   node.hostname = "127.0.0.1";
   node.services_plain.management = port;
+  node.services_plain.query = port;
+  node.services_plain.analytics = port;
   config.nodes.push_back(node);
   return config;
 }
@@ -623,13 +745,14 @@ with_connection(const std::shared_ptr<http_session_manager>& manager,
 // A checked-out, connected, keep-alive session that has completed one round trip, as the
 // manager's busy list holds it between a response and its check_in.
 auto
-borrow_connected(asio::io_context& io, const std::shared_ptr<http_session_manager>& from)
-  -> std::shared_ptr<http_session>
+borrow_connected(asio::io_context& io,
+                 const std::shared_ptr<http_session_manager>& from,
+                 couchbase::core::service_type type = service) -> std::shared_ptr<http_session>
 {
   using outcome = std::pair<std::error_code, std::shared_ptr<http_session>>;
   auto done = std::make_shared<completion<outcome>>();
-  asio::post(io, [manager = from, done]() {
-    auto [ec, session] = manager->check_out(service, {});
+  asio::post(io, [manager = from, done, type]() {
+    auto [ec, session] = manager->check_out(type, {});
     if (ec) {
       return done->set({ ec, nullptr });
     }
@@ -660,9 +783,10 @@ borrow_connected(asio::io_context& io, const std::shared_ptr<http_session_manage
 }
 
 auto
-borrow_connected(pool_fixture& f) -> std::shared_ptr<http_session>
+borrow_connected(pool_fixture& f, couchbase::core::service_type type = service)
+  -> std::shared_ptr<http_session>
 {
-  return borrow_connected(f.io, f.manager);
+  return borrow_connected(f.io, f.manager, type);
 }
 
 // Busy and idle sessions, by id. Pending sessions are not reported by export_diag_info.
@@ -2014,6 +2138,73 @@ a_reused_connection_streams_every_body_whole([[maybe_unused]] context& ctx)
               first_mangled + "\"");
 }
 
+// Regression: a response carrying Connection: close must not leave its connection pooled. A
+// streamed response records the header with its head and applies it when the body ends, in the
+// same read or in a later pull. The controls establish that a keep-alive response is pooled.
+void
+a_connection_close_response_is_not_pooled([[maybe_unused]] context& ctx)
+{
+  struct variant {
+    std::string path;
+    bool streamed;
+    std::string expected;
+  };
+  for (const auto& v : { variant{ "/complete", false, "reused" },
+                         variant{ "/complete", true, "reused" },
+                         variant{ "/close", false, "replaced" },
+                         variant{ "/close", true, "replaced" },
+                         variant{ "/close-split", true, "replaced" } }) {
+    pool_fixture f{};
+    auto done = std::make_shared<completion<std::string>>();
+    asio::post(f.io, [manager = f.manager, done, v]() {
+      auto [ec, session] = manager->check_out(service, {});
+      if (ec) {
+        return done->set("check_out: " + ec.message());
+      }
+      with_connection(
+        manager,
+        session,
+        [manager, done, v](std::error_code connect_ec, std::shared_ptr<http_session> s) {
+          if (connect_ec) {
+            return done->set("connect: " + connect_ec.message());
+          }
+          // Checks the connection in once the response has ended and reports whether the next
+          // checkout takes it again.
+          auto end = [manager, done, s]() {
+            manager->check_in(service, s);
+            auto [next_ec, next] = manager->check_out(service, {});
+            done->set(next_ec ? "check_out: " + next_ec.message()
+                              : (next == s ? "reused" : "replaced"));
+          };
+          auto request = make_request(v.path);
+          if (v.streamed) {
+            return s->write_and_stream(
+              request,
+              [done](std::error_code ec, couchbase::core::io::http_streaming_response resp) {
+                if (ec) {
+                  return done->set("response: " + ec.message());
+                }
+                drain(resp.body());
+              },
+              std::move(end));
+          }
+          s->write_and_subscribe(
+            request, [done, end](std::error_code ec, couchbase::core::io::http_response&&) {
+              if (ec) {
+                return done->set("response: " + ec.message());
+              }
+              end();
+            });
+        });
+    });
+    const auto label = v.path + (v.streamed ? ", streamed" : ", buffered");
+    const auto result = done->wait_for(patience());
+    assert_true(result.has_value(), label + ": the response ends within its budget");
+    assert_eq(*result, v.expected, label + ": the next checkout");
+    assert_true(f.shutdown(), label + ": the io_context drains once the manager is closed");
+  }
+}
+
 // A stop() from inside a streaming response handler, as an operation cancelled there makes, tears
 // the session down while the read completion holds the response context. The stream-end handler
 // must still run: reinstalled into the stopped session, the context is never ended, and it holds
@@ -2309,16 +2500,30 @@ a_throwing_reader_on_a_read_error_still_stops_the_session([[maybe_unused]] conte
 {
   pool_fixture f{};
   auto session = borrow_connected(f);
+  // Held to the end: a dropped body stops its session, which would cancel the read below instead
+  // of failing it with the transport error.
+  auto bodies = std::make_shared<std::vector<couchbase::core::io::http_streaming_response>>();
+  // Joins the runners before the bodies are released, on every exit, so a response handler still
+  // running cannot touch the vector while it is cleared. The fixture's own shutdown then returns at
+  // once.
+  const std::shared_ptr<void> release_bodies(nullptr, [bodies, &f](void*) {
+    f.shutdown();
+    bodies->clear();
+  });
+  auto read_ec = std::make_shared<completion<std::error_code>>();
   run_on(session->get_executor(), [&]() {
     auto request = make_request("/reset");
     session->write_and_stream(
       request,
-      [session](std::error_code ec, couchbase::core::io::http_streaming_response) {
+      [session, bodies, read_ec](std::error_code ec,
+                                 couchbase::core::io::http_streaming_response resp) {
         if (ec) {
           return;
         }
+        bodies->push_back(std::move(resp));
         // Parks on the socket until the endpoint closes it.
-        session->read_some([](std::string, bool, std::error_code) {
+        session->read_some([read_ec](std::string, bool, std::error_code read_error) {
+          read_ec->set(read_error);
           throw consumer_failure{};
         });
       },
@@ -2329,6 +2534,10 @@ a_throwing_reader_on_a_read_error_still_stops_the_session([[maybe_unused]] conte
                 return f.consumer_failures.load() == 1;
               }),
               "the reader's exception reaches the io_context runner");
+  const auto ec = read_ec->wait_for(patience());
+  assert_true(ec.has_value() && *ec && *ec != couchbase::errc::common::request_canceled,
+              "the reader sees the transport error, not a stop; got " +
+                (ec.has_value() ? ec->message() : std::string{ "nothing" }));
   run_on(session->get_executor(), []() {
   });
   assert_true(session->is_stopped(), "the session the read error failed is stopped");
@@ -2487,18 +2696,16 @@ an_encode_failure_on_a_fresh_session_completes_and_checks_in([[maybe_unused]] co
   assert_true(f.shutdown(), "the io_context drains once the manager is closed");
 }
 
-// http_component over a cluster that is never opened, whose session manager runs on the fixture's
-// io_context. Two nodes serve the service: the first refuses connections, the second is the
-// loopback endpoint. A request naming the first node fails over to the second.
+// http_component over a cluster that is never opened. The fixture's manager is replaced by the
+// cluster's, so pool_fixture's helpers and its shutdown act on the manager the component
+// dispatches through.
 struct component_fixture {
-  component_fixture()
+  explicit component_fixture(std::size_t threads = 1)
+    : f{ threads }
   {
-    instrument(*manager);
-    auto config = loopback_config(f.server.port());
-    auto refusing = config.nodes.front();
-    refusing.services_plain.management = refused_port;
-    config.nodes.insert(config.nodes.begin(), refusing);
-    manager->set_configuration(config, f.options);
+    f.manager = cluster.http_session_manager().second;
+    instrument(*f.manager);
+    f.manager->set_configuration(loopback_config(f.server.port()), f.options);
   }
 
   component_fixture(const component_fixture&) = delete;
@@ -2506,14 +2713,17 @@ struct component_fixture {
   auto operator=(const component_fixture&) -> component_fixture& = delete;
   auto operator=(component_fixture&&) -> component_fixture& = delete;
 
+  // The manager holds a reference to the cluster's origin, so it is closed and released before the
+  // cluster is destroyed.
   ~component_fixture()
   {
     close_cluster();
     f.shutdown();
+    f.manager.reset();
   }
 
   // Closes the cluster, which closes its session manager and releases its hold on the io_context,
-  // then the fixture. The manager refers to the cluster's credentials, so the cluster outlives it.
+  // then the fixture.
   auto shutdown() -> bool
   {
     assert_true(close_cluster(), "the cluster's close completes");
@@ -2522,32 +2732,43 @@ struct component_fixture {
 
   auto close_cluster() -> bool
   {
-    auto closed = std::make_shared<completion<bool>>();
+    const auto closed = std::make_shared<completion<bool>>();
     cluster.close([closed]() {
       closed->set(true);
     });
     return closed->wait_for(patience()).value_or(false);
   }
 
-  [[nodiscard]] auto request(std::string path) const -> couchbase::core::http_request
+  // Adds a second node, which refuses connections, and returns its endpoint. update_config() keeps
+  // the node index set_configuration() left at zero, so a request naming the refusing node fails
+  // over to the loopback endpoint, listed first.
+  auto add_refusing_node() -> std::string
   {
-    couchbase::core::http_request request{};
-    request.service = service;
-    request.method = "GET";
-    request.path = std::move(path);
-    request.endpoint = "127.0.0.1:" + std::to_string(refused_port);
-    request.headers["connection"] = "keep-alive";
-    request.timeout = std::chrono::minutes{ 1 };
-    return request;
+    const auto refused = refusing_port();
+    auto config = loopback_config(f.server.port());
+    auto refusing = config.nodes.front();
+    refusing.services_plain.management = refused;
+    config.nodes.push_back(refusing);
+    f.manager->update_config(config);
+    return "127.0.0.1:" + std::to_string(refused);
   }
 
-  // Supplies the io_context, its runner and the loopback endpoint. Its own manager is unused.
   pool_fixture f{};
-  std::uint16_t refused_port{ refusing_port() };
   couchbase::core::cluster cluster{ f.io };
-  std::shared_ptr<http_session_manager> manager{ cluster.http_session_manager().second };
   couchbase::core::http_component component{ f.io, couchbase::core::core_sdk_shim{ cluster } };
 };
+
+auto
+free_form_request(std::string path) -> couchbase::core::http_request
+{
+  couchbase::core::http_request request{};
+  request.service = service;
+  request.method = "GET";
+  request.path = std::move(path);
+  request.headers["connection"] = "keep-alive";
+  request.timeout = std::chrono::minutes{ 1 };
+  return request;
+}
 
 void
 drain_component_body(couchbase::core::http_response_body body,
@@ -2571,9 +2792,9 @@ assert_only_the_replacement_is_pooled(component_fixture& c)
   std::shared_ptr<http_session> next;
   // With one runner this runs after the handler that ended the request, check_in included.
   run_on(c.f.io, [&]() {
-    listed = pooled_ids(*c.manager);
+    listed = pooled_ids(*c.f.manager);
     auto [ec, session] =
-      c.manager->check_out(service, "127.0.0.1:" + std::to_string(c.f.server.port()));
+      c.f.manager->check_out(service, "127.0.0.1:" + std::to_string(c.f.server.port()));
     assert_success(ec, "check_out succeeds against the live node");
     next = std::move(session);
   });
@@ -2590,9 +2811,11 @@ void
 a_streamed_request_checks_in_its_failover_replacement([[maybe_unused]] context& ctx)
 {
   component_fixture c{};
+  auto request = free_form_request("/split");
+  request.endpoint = c.add_refusing_node();
   auto terminal = std::make_shared<completion<std::error_code>>();
   auto op = c.component.do_http_request(
-    c.request("/split"), [terminal](couchbase::core::http_response resp, std::error_code ec) {
+    request, [terminal](couchbase::core::http_response resp, std::error_code ec) {
       if (ec) {
         return terminal->set(ec);
       }
@@ -2611,9 +2834,11 @@ void
 a_buffered_request_checks_in_its_failover_replacement([[maybe_unused]] context& ctx)
 {
   component_fixture c{};
+  auto request = free_form_request("/complete");
+  request.endpoint = c.add_refusing_node();
   auto done = std::make_shared<completion<std::error_code>>();
   auto op = c.component.do_http_request_buffered(
-    c.request("/complete"), [done](couchbase::core::buffered_http_response, std::error_code ec) {
+    request, [done](couchbase::core::buffered_http_response, std::error_code ec) {
       done->set(ec);
     });
   assert_true(op.has_value(), "the request is dispatched");
@@ -2877,12 +3102,14 @@ a_command_deadline_before_its_response_times_out_and_stops_the_session(
   {
     request_deadline_setup setup{ f };
     auto done = std::make_shared<completion<std::error_code>>();
+    auto stopped_first = std::make_shared<std::atomic_bool>(false);
     run_on(f.io, [&]() {
-      setup.manager->execute(
-        freeform("/unanswered", unanswered_request_timeout),
-        [done](couchbase::core::operations::management::freeform_response&& resp) {
-          done->set(resp.ctx.ec);
-        });
+      setup.manager->execute(freeform("/unanswered", unanswered_request_timeout),
+                             [done, stopped_first, session = setup.session](
+                               couchbase::core::operations::management::freeform_response&& resp) {
+                               *stopped_first = session->is_stopped() || session->is_stopping();
+                               done->set(resp.ctx.ec);
+                             });
     });
     const auto ec = wait_then_drain(f, *done);
     assert_true(ec.has_value(), "the request completes");
@@ -2890,6 +3117,9 @@ a_command_deadline_before_its_response_times_out_and_stops_the_session(
               std::error_code{ couchbase::errc::common::ambiguous_timeout },
               "the deadline ends the request");
     assert_true(setup.session->is_stopped(), "the deadline stops the session");
+    // Regression: stopped after the completion, the session was checked in first, and another
+    // request could take it before the stop.
+    assert_true(stopped_first->load(), "the session is stopped before the request completes");
   }
   assert_true(f.shutdown(), "the io_context drains once the managers are closed");
 }
@@ -2903,10 +3133,13 @@ a_buffered_request_deadline_before_its_response_times_out_and_stops_the_session(
     request_deadline_setup setup{ f };
     auto component = setup.component();
     auto done = std::make_shared<completion<std::error_code>>();
+    auto stopped_first = std::make_shared<std::atomic_bool>(false);
     run_on(f.io, [&]() {
       auto op = component.do_http_request_buffered(
         free_form("/unanswered", unanswered_request_timeout),
-        [done](couchbase::core::buffered_http_response, std::error_code ec) {
+        [done, stopped_first, session = setup.session](couchbase::core::buffered_http_response,
+                                                       std::error_code ec) {
+          *stopped_first = session->is_stopped() || session->is_stopping();
           done->set(ec);
         });
       if (!op) {
@@ -2919,6 +3152,9 @@ a_buffered_request_deadline_before_its_response_times_out_and_stops_the_session(
               std::error_code{ couchbase::errc::common::ambiguous_timeout },
               "the deadline ends the request");
     assert_true(setup.session->is_stopped(), "the deadline stops the session");
+    // Regression: stopped after the completion, the session was checked in first, and another
+    // request could take it before the stop.
+    assert_true(stopped_first->load(), "the session is stopped before the request completes");
   }
   assert_true(f.shutdown(), "the io_context drains once the managers are closed");
 }
@@ -2932,12 +3168,15 @@ a_streamed_request_deadline_before_its_response_times_out_and_stops_the_session(
     request_deadline_setup setup{ f };
     auto component = setup.component();
     auto done = std::make_shared<completion<std::error_code>>();
+    auto stopped_first = std::make_shared<std::atomic_bool>(false);
     run_on(f.io, [&]() {
-      auto op =
-        component.do_http_request(free_form("/unanswered", unanswered_request_timeout),
-                                  [done](couchbase::core::http_response, std::error_code ec) {
-                                    done->set(ec);
-                                  });
+      auto op = component.do_http_request(free_form("/unanswered", unanswered_request_timeout),
+                                          [done, stopped_first, session = setup.session](
+                                            couchbase::core::http_response, std::error_code ec) {
+                                            *stopped_first =
+                                              session->is_stopped() || session->is_stopping();
+                                            done->set(ec);
+                                          });
       if (!op) {
         done->set(op.error());
       }
@@ -2948,8 +3187,1298 @@ a_streamed_request_deadline_before_its_response_times_out_and_stops_the_session(
               std::error_code{ couchbase::errc::common::ambiguous_timeout },
               "the deadline ends the request");
     assert_true(setup.session->is_stopped(), "the deadline stops the session");
+    assert_true(stopped_first->load(), "the session is stopped before the request completes");
   }
   assert_true(f.shutdown(), "the io_context drains once the managers are closed");
+}
+
+// Dispatches `request` as a streamed or a buffered free-form operation, reporting its error code
+// to `done`.
+auto
+dispatch(component_fixture& c,
+         const couchbase::core::http_request& request,
+         bool streamed,
+         const std::shared_ptr<completion<std::error_code>>& done)
+  -> std::shared_ptr<couchbase::core::pending_operation>
+{
+  auto dispatched =
+    streamed
+      ? c.component.do_http_request(request,
+                                    [done](couchbase::core::http_response, std::error_code ec) {
+                                      done->set(ec);
+                                    })
+      : c.component.do_http_request_buffered(
+          request, [done](couchbase::core::buffered_http_response, std::error_code ec) {
+            done->set(ec);
+          });
+  assert_true(dispatched.has_value(), "the request is dispatched");
+  return *dispatched;
+}
+
+// A connected keep-alive session parked idle, which the next request's check_out for `type`
+// takes.
+auto
+park_idle(pool_fixture& f, couchbase::core::service_type type = service)
+  -> std::shared_ptr<http_session>
+{
+  auto session = borrow_connected(f, type);
+  run_on(f.io, [&]() {
+    f.manager->check_in(type, session);
+  });
+  return session;
+}
+
+auto
+alive(const std::weak_ptr<void>& probe) -> std::string
+{
+  return probe.expired() ? "expired" : "alive";
+}
+
+// Regression: a completed buffered operation the caller still holds must not keep the session the
+// pool has since evicted and stopped.
+void
+a_completed_buffered_operation_does_not_hold_its_evicted_session([[maybe_unused]] context& ctx)
+{
+  component_fixture c{};
+  auto parked = park_idle(c.f);
+  const std::weak_ptr<http_session> session_probe = parked;
+  parked.reset();
+
+  auto done = std::make_shared<completion<std::error_code>>();
+  std::shared_ptr<couchbase::core::pending_operation> op;
+  run_on(c.f.io, [&]() {
+    op = dispatch(c, free_form_request("/complete"), false, done);
+  });
+  const auto ec = done->wait_for(patience());
+  assert_true(ec.has_value(), "the request completes within its budget");
+  assert_success(*ec, "the request succeeds");
+  assert_eq(c.f.server.accepted(), std::size_t{ 1 }, "the request takes the parked session");
+
+  // With one runner this runs after the handler that completed the request, check_in included.
+  run_on(c.f.io, [&]() {
+    assert_eq(pooled_ids(*c.f.manager).size(),
+              std::size_t{ 1 },
+              "the completed request checks its session in");
+    c.f.manager->update_config({});
+  });
+  assert_true(wait_until([&c]() {
+                return pooled_ids(*c.f.manager).empty();
+              }),
+              "the pool evicts the session once its node leaves the configuration");
+  const bool released = wait_until([&session_probe]() {
+    return session_probe.expired();
+  });
+  assert_true(released, "the operation does not keep the evicted session alive");
+  assert_true(c.shutdown(), "the io_context drains once the cluster is closed");
+}
+
+// Regression: an operation completed with request_canceled by its session's stop must not keep
+// that session alive while the caller holds the operation.
+void
+an_operation_cancelled_by_its_session_stop_does_not_hold_the_session([[maybe_unused]] context& ctx)
+{
+  std::string outcome;
+  bool all_released = true;
+  for (const bool streamed : { false, true }) {
+    component_fixture c{};
+    auto parked = park_idle(c.f);
+    const std::weak_ptr<http_session> session_probe = parked;
+
+    auto done = std::make_shared<completion<std::error_code>>();
+    std::shared_ptr<couchbase::core::pending_operation> op;
+    run_on(c.f.io, [&]() {
+      // The loopback endpoint does not answer this path, so only the stop ends the request.
+      op = dispatch(c, free_form_request("/held"), streamed, done);
+    });
+    run_on(parked->get_executor(), [&]() {
+      parked->stop();
+    });
+    parked.reset();
+    const auto ec = done->wait_for(patience());
+    assert_true(ec.has_value(), "the request completes within its budget");
+    assert_eq(*ec,
+              std::error_code{ couchbase::errc::common::request_canceled },
+              "the session's stop cancels the request");
+    assert_eq(c.f.server.accepted(), std::size_t{ 1 }, "the request takes the parked session");
+
+    const bool released = wait_until([&session_probe]() {
+      return session_probe.expired();
+    });
+    all_released = all_released && released;
+    outcome += std::string{ streamed ? ", streamed: " : "buffered: " } + alive(session_probe);
+    assert_true(c.shutdown(), "the io_context drains once the cluster is closed");
+  }
+  assert_true(all_released,
+              "the operation does not keep its stopped session alive; session probe " + outcome);
+}
+
+// Regression: a streamed body dropped unread, with no pull in flight, must release its operation
+// and its session without a close().
+void
+a_streamed_body_dropped_unread_releases_its_operation_and_session([[maybe_unused]] context& ctx)
+{
+  component_fixture c{};
+  auto parked = park_idle(c.f);
+  const std::weak_ptr<http_session> session_probe = parked;
+  parked.reset();
+
+  auto done = std::make_shared<completion<std::error_code>>();
+  std::weak_ptr<couchbase::core::pending_operation> op_probe;
+  run_on(c.f.io, [&]() {
+    // The endpoint sends the head and part of the body; the rest never comes.
+    op_probe = dispatch(c, free_form_request("/incomplete"), true, done);
+  });
+  const auto ec = done->wait_for(patience());
+  assert_true(ec.has_value(), "the response head arrives within its budget");
+  assert_success(*ec, "the response head is delivered");
+  assert_eq(c.f.server.accepted(), std::size_t{ 1 }, "the request takes the parked session");
+
+  const bool released = wait_until([&]() {
+    return op_probe.expired() && session_probe.expired();
+  });
+  assert_true(released,
+              "a dropped body releases its operation and session without close(); operation " +
+                alive(op_probe) + ", session " + alive(session_probe));
+  assert_true(c.shutdown(), "the io_context drains once the cluster is closed");
+}
+
+// Regression: an unread body dropped with a deadline armed must release its session when it is
+// dropped. The deadline's wait held the body until expiry, and the body held the session.
+void
+a_streamed_body_dropped_with_a_deadline_armed_releases_its_session([[maybe_unused]] context& ctx)
+{
+  component_fixture c{};
+  auto parked = park_idle(c.f);
+  const std::weak_ptr<http_session> session_probe = parked;
+  parked.reset();
+
+  auto done = std::make_shared<completion<std::error_code>>();
+  auto armed = std::make_shared<std::optional<couchbase::core::io::deadline_state>>();
+  run_on(c.f.io, [&]() {
+    // The endpoint sends the head and part of the body; the rest never comes.
+    auto op = c.component.do_http_request(
+      free_form_request("/incomplete"),
+      [done, armed](couchbase::core::http_response resp, std::error_code ec) {
+        if (!ec) {
+          *armed =
+            resp.body().set_deadline(std::chrono::steady_clock::now() + std::chrono::minutes{ 10 },
+                                     couchbase::core::io::deadline_terminal::ambiguous);
+        }
+        done->set(ec);
+      });
+    assert_true(op.has_value(), "the request is dispatched");
+  });
+  const auto ec = done->wait_for(patience());
+  assert_true(ec.has_value(), "the response head arrives within its budget");
+  assert_success(*ec, "the response head is delivered");
+  assert_true(armed->has_value() && **armed == couchbase::core::io::deadline_state::armed,
+              "the deadline is armed on the unread body");
+
+  const bool released = wait_until([&session_probe]() {
+    return session_probe.expired();
+  });
+  assert_true(released,
+              "a body dropped with a deadline armed releases its session; session " +
+                alive(session_probe));
+  assert_true(c.shutdown(), "the io_context drains once the cluster is closed");
+}
+
+// Regression: a streamed body held past cluster close and dropped afterwards must not post a stop
+// for its stopped session. The io_context has stopped, so a posted stop would hold the session
+// until the io_context is destroyed.
+void
+a_streamed_body_dropped_after_shutdown_releases_its_session([[maybe_unused]] context& ctx)
+{
+  component_fixture c{};
+  auto parked = park_idle(c.f);
+  const std::weak_ptr<http_session> session_probe = parked;
+  parked.reset();
+
+  auto done = std::make_shared<completion<std::error_code>>();
+  auto response = std::make_shared<couchbase::core::http_response>();
+  run_on(c.f.io, [&]() {
+    // The endpoint sends the head and part of the body; the rest never comes.
+    auto op = c.component.do_http_request(
+      free_form_request("/incomplete"),
+      [done, response](couchbase::core::http_response resp, std::error_code ec) {
+        *response = std::move(resp);
+        done->set(ec);
+      });
+    assert_true(op.has_value(), "the request is dispatched");
+  });
+  const auto ec = done->wait_for(patience());
+  assert_true(ec.has_value(), "the response head arrives within its budget");
+  assert_success(*ec, "the response head is delivered");
+
+  assert_true(c.shutdown(), "the io_context drains once the cluster is closed");
+  assert_false(session_probe.expired(), "the unread body holds its session through shutdown");
+  response.reset();
+  const bool released = wait_until([&session_probe]() {
+    return session_probe.expired();
+  });
+  assert_true(released,
+              "a body dropped after shutdown releases its session; session " +
+                alive(session_probe));
+}
+
+// Dispatches a request on a session still to connect and cancels it before the connect completes.
+// Returns, once the connect attempt has ended, the number of sessions listed busy or idle and the
+// number of connections the endpoint accepted that the client has not closed. `op` keeps the
+// operation alive past the connect.
+auto
+left_after_a_cancel_while_connecting(component_fixture& c,
+                                     couchbase::core::http_request request,
+                                     bool streamed,
+                                     std::shared_ptr<couchbase::core::pending_operation>& op)
+  -> std::pair<std::size_t, std::size_t>
+{
+  auto done = std::make_shared<completion<std::error_code>>();
+  run_on(c.f.io, [&]() {
+    op = dispatch(c, request, streamed, done);
+    op->cancel();
+  });
+  const auto ec = done->wait_for(patience());
+  assert_true(ec.has_value(), "the cancelled request completes within its budget");
+  assert_eq(*ec,
+            std::error_code{ couchbase::errc::common::request_canceled },
+            "cancel() completes the request");
+  // The connect callback holds the operation until the connect attempt ends, whether the session
+  // connected or was stopped, and a request sent on the session holds it until the response ends.
+  // Sampled before then, the counts below pass with the session still pending.
+  assert_true(wait_until([&op]() {
+                return op.use_count() == 1;
+              }),
+              "the connect attempt ends and nothing but the caller holds the operation");
+  run_on(c.f.io, []() {
+  });
+  // The endpoint counts accepts and closes on its own thread. The pair the predicate last read is
+  // returned, also when the wait runs out, so the caller asserts on the reading the wait judged.
+  // released() is read first: a close follows its accept, so the difference cannot underflow.
+  std::pair<std::size_t, std::size_t> left{};
+  wait_until([&c, &left]() {
+    const auto released = c.f.server.released();
+    const auto accepted = c.f.server.accepted();
+    left = { pooled_ids(*c.f.manager).size(), accepted - released };
+    return left.first == 0 && left.second == 0;
+  });
+  return left;
+}
+
+// Closes the cluster, drops the fixture's reference to the manager, and returns whether the
+// manager is then released.
+auto
+manager_released(component_fixture& c) -> bool
+{
+  const std::weak_ptr<http_session_manager> manager_probe = c.f.manager;
+  assert_true(c.shutdown(), "the io_context drains once the cluster is closed");
+  c.f.manager.reset();
+  const bool released = wait_until([&manager_probe]() {
+    return manager_probe.expired();
+  });
+  return released;
+}
+
+// Regression: an operation cancelled while its checked-out session connects must not leave that
+// session listed busy, or its connection open, once the connect completes. An operation the caller
+// still holds must not keep the manager alive.
+void
+an_operation_cancelled_while_its_session_connects_leaves_no_session_busy(
+  [[maybe_unused]] context& ctx)
+{
+  std::array<std::pair<std::size_t, std::size_t>, 2> left{};
+  std::array<bool, 2> released{};
+  for (const bool streamed : { false, true }) {
+    component_fixture c{};
+    std::shared_ptr<couchbase::core::pending_operation> op;
+    left[streamed ? 1 : 0] =
+      left_after_a_cancel_while_connecting(c, free_form_request("/complete"), streamed, op);
+    released[streamed ? 1 : 0] = manager_released(c);
+  }
+  assert_true(left[0] == std::pair<std::size_t, std::size_t>{} &&
+                left[1] == std::pair<std::size_t, std::size_t>{},
+              "no session is left busy or connected once the connect completes; listed, open: "
+              "buffered " +
+                std::to_string(left[0].first) + ", " + std::to_string(left[0].second) +
+                "; streamed " + std::to_string(left[1].first) + ", " +
+                std::to_string(left[1].second));
+  assert_true(released[0] && released[1],
+              std::string{ "the held operation does not keep the manager alive; buffered: " } +
+                (released[0] ? "released" : "alive") +
+                ", streamed: " + (released[1] ? "released" : "alive"));
+}
+
+// Regression: an operation cancelled before its failover replacement connects must not leave the
+// replacement listed busy or its connection open. An operation the caller still holds must not
+// keep the manager alive. The request names a node that refuses connections, so the replacement
+// connects to the live node.
+void
+an_operation_cancelled_before_its_failover_replacement_connects_leaves_no_session_busy(
+  [[maybe_unused]] context& ctx)
+{
+  std::array<std::pair<std::size_t, std::size_t>, 2> left{};
+  std::array<bool, 2> released{};
+  for (const bool streamed : { false, true }) {
+    component_fixture c{};
+    auto request = free_form_request("/complete");
+    request.endpoint = c.add_refusing_node();
+    std::shared_ptr<couchbase::core::pending_operation> op;
+    left[streamed ? 1 : 0] = left_after_a_cancel_while_connecting(c, request, streamed, op);
+    released[streamed ? 1 : 0] = manager_released(c);
+  }
+  assert_true(left[0] == std::pair<std::size_t, std::size_t>{} &&
+                left[1] == std::pair<std::size_t, std::size_t>{},
+              "no replacement is left busy or connected once its connect completes; listed, "
+              "open: buffered " +
+                std::to_string(left[0].first) + ", " + std::to_string(left[0].second) +
+                "; streamed " + std::to_string(left[1].first) + ", " +
+                std::to_string(left[1].second));
+  assert_true(released[0] && released[1],
+              std::string{ "the held operation does not keep the manager alive; buffered: " } +
+                (released[0] ? "released" : "alive") +
+                ", streamed: " + (released[1] ? "released" : "alive"));
+}
+
+// A stop racing the install of a response context by write_and_stream() or
+// write_and_subscribe() completes the handlers and leaves nothing alive. A context installed into
+// a stopped session would hold its owner, the owner would hold the session, and nothing would end
+// either. The case runs the stop before the write and after it.
+void
+a_stop_racing_the_response_context_install_leaves_nothing_alive([[maybe_unused]] context& ctx)
+{
+  struct owner {
+    std::shared_ptr<http_session> session;
+  };
+  std::weak_ptr<http_session_manager> manager_probe;
+  std::string outcome;
+  bool all_released = true;
+  {
+    pool_fixture f{};
+    manager_probe = f.manager;
+    for (const bool stop_first : { true, false }) {
+      for (const bool streamed : { false, true }) {
+        auto o = std::make_shared<owner>(owner{ borrow_connected(f) });
+        auto done = std::make_shared<completion<std::error_code>>();
+        run_on(o->session->get_executor(), [&]() {
+          if (stop_first) {
+            o->session->stop();
+          }
+          // The loopback endpoint does not answer this path, so only the stop ends the request.
+          auto request = make_request("/held");
+          if (streamed) {
+            o->session->write_and_stream(
+              request,
+              [o, done](std::error_code ec, couchbase::core::io::http_streaming_response) {
+                done->set(ec);
+              },
+              [o]() {
+              });
+          } else {
+            o->session->write_and_subscribe(
+              request, [o, done](std::error_code ec, couchbase::core::io::http_response&&) {
+                done->set(ec);
+              });
+          }
+          if (!stop_first) {
+            o->session->stop();
+          }
+        });
+        const auto ec = done->wait_for(patience());
+        assert_true(ec.has_value(), "the request completes within its budget");
+        assert_eq(*ec,
+                  std::error_code{ couchbase::errc::common::request_canceled },
+                  "the stop cancels the request");
+        const std::weak_ptr<owner> owner_probe = o;
+        const std::weak_ptr<http_session> session_probe = o->session;
+        o.reset();
+        const bool released = wait_until([&]() {
+          return owner_probe.expired() && session_probe.expired();
+        });
+        all_released = all_released && released;
+        outcome += std::string{ outcome.empty() ? "" : "; " } +
+                   (stop_first ? "stop first, " : "install first, ") +
+                   (streamed ? "streamed: " : "buffered: ") + "owner " + alive(owner_probe) +
+                   ", session " + alive(session_probe);
+      }
+    }
+    assert_true(f.shutdown(), "the io_context drains once the manager is closed");
+    f.manager.reset();
+  }
+  assert_true(all_released, "nothing holds the owner or the session; " + outcome);
+  assert_true(manager_probe.expired(), "nothing holds the manager once the fixture releases it");
+}
+
+// Regression: send_to() on an http_command that has already completed must stop its session. The
+// session is listed busy, and nothing else checks it in.
+void
+a_command_completed_before_send_stops_its_busy_session([[maybe_unused]] context& ctx)
+{
+  pool_fixture f{};
+  auto session = borrow_connected(f);
+  assert_eq(pooled_ids(*f.manager).size(), std::size_t{ 1 }, "the session is listed busy");
+
+  using command =
+    couchbase::core::operations::http_command<couchbase::core::operations::http_noop_request>;
+  couchbase::core::operations::http_noop_request request{};
+  request.type = service;
+  const auto labels = std::make_shared<couchbase::core::cluster_label_listener>();
+  const auto cmd =
+    std::make_shared<command>(f.io,
+                              request,
+                              f.manager->tracer(),
+                              couchbase::core::metrics::meter_wrapper::create(
+                                std::make_shared<couchbase::core::metrics::noop_meter>(), labels),
+                              std::make_shared<couchbase::core::app_telemetry_meter>(),
+                              std::chrono::minutes{ 1 });
+  auto done = std::make_shared<completion<std::error_code>>();
+  run_on(f.io, [&]() {
+    cmd->start([done](couchbase::core::operations::http_noop_response&& resp) {
+      done->set(resp.ctx.ec);
+    });
+    cmd->set_command_session(session);
+    cmd->invoke_handler(couchbase::errc::common::request_canceled, {});
+  });
+  const auto ec = done->wait_for(patience());
+  assert_true(ec.has_value(), "the command completes within its budget");
+  run_on(session->get_executor(), [&]() {
+    cmd->send_to();
+  });
+  assert_true(session->is_stopped(), "send_to() stops the session of a completed command");
+  assert_true(wait_until([&f]() {
+                return pooled_ids(*f.manager).empty();
+              }),
+              "the stopped session leaves the busy list");
+  // Fails if the command owns its session.
+  const std::weak_ptr<http_session> session_probe = session;
+  session.reset();
+  assert_true(wait_until([&session_probe]() {
+                return session_probe.expired();
+              }),
+              "the command does not keep its stopped session alive");
+  assert_true(f.shutdown(), "the io_context drains once the manager is closed");
+}
+
+// Regression: a deadline that fires before send_to() must not check the session in. cancel() and
+// send_to() both stop that session, and a request that checked it out in between would fail.
+// The completion's error context names the assigned hostname and port, and no endpoint as
+// dispatched.
+void
+a_command_completed_before_send_does_not_pool_its_session([[maybe_unused]] context& ctx)
+{
+  pool_fixture f{};
+  auto session = borrow_connected(f);
+
+  using command =
+    couchbase::core::operations::http_command<couchbase::core::operations::http_noop_request>;
+  couchbase::core::operations::http_noop_request request{};
+  request.type = service;
+  const auto labels = std::make_shared<couchbase::core::cluster_label_listener>();
+  const auto cmd =
+    std::make_shared<command>(f.io,
+                              request,
+                              f.manager->tracer(),
+                              couchbase::core::metrics::meter_wrapper::create(
+                                std::make_shared<couchbase::core::metrics::noop_meter>(), labels),
+                              std::make_shared<couchbase::core::app_telemetry_meter>(),
+                              std::chrono::minutes{ 1 });
+  std::shared_ptr<http_session> offered;
+  std::shared_ptr<http_session> taken;
+  couchbase::core::error_context::http reported{};
+  run_on(f.io, [&]() {
+    // The completion http_session_manager::execute() installs, with what it checks in recorded.
+    cmd->start([&f, &offered, &taken, &reported, weak = std::weak_ptr<command>{ cmd }](
+                 couchbase::core::operations::http_noop_response&& resp) {
+      reported = resp.ctx;
+      if (const auto c = weak.lock(); c) {
+        offered = c->session_for_check_in();
+        f.manager->check_in(service, offered);
+        // A request checking out before cancel() stops the session.
+        auto [ec, next] = f.manager->check_out(service, {});
+        taken = next;
+      }
+    });
+    cmd->set_command_session(session);
+    cmd->cancel(couchbase::errc::common::unambiguous_timeout);
+  });
+  assert_false(static_cast<bool>(offered), "a completion before send_to() checks in no session");
+  assert_eq(reported.hostname,
+            session->http_context().hostname,
+            "a completion before dispatch reports the assigned target hostname");
+  assert_eq(reported.port,
+            session->http_context().port,
+            "a completion before dispatch reports the assigned target port");
+  assert_false(reported.last_dispatched_to.has_value(),
+               "a completion before dispatch reports no dispatched endpoint");
+  assert_true(static_cast<bool>(taken), "the next check_out returns a session");
+  assert_ne(taken->id(), session->id(), "the completed command's session is not pooled");
+
+  run_on(session->get_executor(), [&]() {
+    cmd->send_to();
+  });
+  assert_true(session->is_stopped(), "the completed command's session is stopped");
+  assert_false(taken->is_stopped(), "the session the next request took is not stopped");
+  run_on(f.io, [&]() {
+    f.manager->check_in(service, taken);
+  });
+  taken.reset();
+  assert_true(f.shutdown(), "the io_context drains once the manager is closed");
+}
+
+// Regression: a buffered operation cancelled between its session's connect and the connect
+// callback's send_to() must leave that session neither pooled nor busy. The next request must
+// complete. A log callback holds the runner in that window.
+void
+an_operation_cancelled_between_connect_and_send_leaves_no_session_busy(
+  [[maybe_unused]] context& ctx)
+{
+  component_fixture c{};
+  auto reached = std::make_shared<completion<bool>>();
+  auto release = std::make_shared<completion<bool>>();
+  auto held = std::make_shared<std::atomic_bool>(false);
+  couchbase::core::logger::register_log_callback(
+    [reached, release, held](std::string_view msg,
+                             couchbase::core::logger::level /* level */,
+                             const couchbase::core::logger::log_location& /* location */) {
+      if (msg.find("connected to") == std::string_view::npos || held->exchange(true)) {
+        return;
+      }
+      reached->set(true);
+      release->wait_for(patience());
+    });
+  // Destroyed before the fixture, so a failing assertion does not leave the runner held.
+  struct gate_guard {
+    explicit gate_guard(std::shared_ptr<completion<bool>> gate)
+      : release{ std::move(gate) }
+    {
+    }
+    gate_guard(const gate_guard&) = delete;
+    gate_guard(gate_guard&&) = delete;
+    auto operator=(const gate_guard&) -> gate_guard& = delete;
+    auto operator=(gate_guard&&) -> gate_guard& = delete;
+    ~gate_guard()
+    {
+      release->set(true);
+      couchbase::core::logger::unregister_log_callback();
+    }
+    std::shared_ptr<completion<bool>> release;
+  } guard{ release };
+
+  auto first = std::make_shared<completion<std::error_code>>();
+  std::shared_ptr<couchbase::core::pending_operation> op;
+  run_on(c.f.io, [&]() {
+    op = dispatch(c, free_form_request("/complete"), false, first);
+  });
+  assert_true(reached->wait_for(patience()).has_value(), "the checked-out session connects");
+  // The runner is held: the connect callback, and send_to() with it, has not run.
+  op->cancel();
+  const auto first_ec = first->wait_for(patience());
+  assert_true(first_ec.has_value(), "the cancelled request completes within its budget");
+  assert_eq(*first_ec,
+            std::error_code{ couchbase::errc::common::request_canceled },
+            "cancel() completes the request");
+
+  auto second = std::make_shared<completion<std::error_code>>();
+  auto next = dispatch(c, free_form_request("/complete"), false, second);
+  release->set(true);
+  const auto second_ec = second->wait_for(patience());
+  assert_true(second_ec.has_value(), "the next request completes within its budget");
+  assert_success(*second_ec, "the next request succeeds");
+  assert_true(wait_until([&c]() {
+                return pooled_ids(*c.f.manager).size() == 1;
+              }),
+              "only the next request's session stays pooled");
+  assert_true(c.shutdown(), "the io_context drains once the cluster is closed");
+}
+
+// The request a wrapper sends; the loopback endpoint answers it as the path `id` names.
+auto
+query_for(std::string id) -> couchbase::core::operations::query_request
+{
+  couchbase::core::operations::query_request request{};
+  request.statement = "SELECT 1";
+  request.client_context_id = std::move(id);
+  return request;
+}
+
+auto
+analytics_for(std::string id) -> couchbase::core::operations::analytics_request
+{
+  couchbase::core::operations::analytics_request request{};
+  request.statement = "SELECT 1";
+  request.client_context_id = std::move(id);
+  return request;
+}
+
+// A request timeout longer than a case's waits. The stream's idle timer takes the request timeout,
+// so it cannot release the session while a case waits.
+constexpr std::chrono::milliseconds unreachable_timeout = std::chrono::minutes{ 10 };
+
+// What a stream handler was given. `handle` is the only reference the case keeps to the stream;
+// resetting the optional drops it.
+template<typename Stream>
+struct opened_stream {
+  std::shared_ptr<completion<std::error_code>> done{
+    std::make_shared<completion<std::error_code>>()
+  };
+  std::shared_ptr<std::optional<Stream>> handle{ std::make_shared<std::optional<Stream>>() };
+  std::shared_ptr<std::atomic<int>> calls{ std::make_shared<std::atomic<int>>(0) };
+};
+
+// Opens a stream from the calling thread, as a wrapper does, through cluster::query_stream() or
+// cluster::analytics_query_stream(). With `streaming`, it builds the stream component as those
+// functions do, with `*streaming` as its options and unreachable_timeout as its default timeout.
+// A cluster that is never opened offers no way to set cluster_options::streaming.
+template<typename Stream, typename Request>
+auto
+open_stream(component_fixture& c,
+            Request request,
+            std::optional<couchbase::core::row_streamer_options> streaming = {})
+  -> opened_stream<Stream>
+{
+  opened_stream<Stream> opened{};
+  auto handler = [done = opened.done, handle = opened.handle, calls = opened.calls](
+                   Stream stream, auto error_ctx) {
+    ++*calls;
+    *handle = std::move(stream);
+    done->set(error_ctx.ec);
+  };
+  constexpr bool is_query = std::is_same_v<Request, couchbase::core::operations::query_request>;
+  if (streaming) {
+    using component_type = std::conditional_t<is_query,
+                                              couchbase::core::query_stream_component,
+                                              couchbase::core::analytics_stream_component>;
+    const component_type component{
+      c.f.io,
+      couchbase::core::http_component{ c.f.io, couchbase::core::core_sdk_shim{ c.cluster } },
+      unreachable_timeout,
+      *streaming,
+    };
+    component.execute(std::move(request), std::move(handler));
+  } else if constexpr (is_query) {
+    c.cluster.query_stream(std::move(request), std::move(handler));
+  } else {
+    c.cluster.analytics_query_stream(std::move(request), std::move(handler));
+  }
+  return opened;
+}
+
+// Opens a stream and asserts that its handler hands out a live stream.
+template<typename Stream, typename Request>
+auto
+open_live_stream(component_fixture& c,
+                 Request request,
+                 std::optional<couchbase::core::row_streamer_options> streaming = {})
+  -> opened_stream<Stream>
+{
+  auto opened = open_stream<Stream>(c, std::move(request), streaming);
+  const auto ec = opened.done->wait_for(patience());
+  assert_true(ec.has_value(), "the stream handler runs within its budget");
+  assert_success(*ec, "the stream opens");
+  assert_true(opened.handle->has_value(), "the stream handler is given a stream");
+  return opened;
+}
+
+using pulled = std::pair<std::optional<std::string>, std::error_code>;
+
+// One next_row() from the calling thread; empty if it does not complete within patience().
+template<typename Stream>
+auto
+pull(Stream& stream) -> std::optional<pulled>
+{
+  auto done = std::make_shared<completion<pulled>>();
+  stream.next_row([done](std::optional<std::string> row, std::error_code ec) {
+    done->set({ std::move(row), ec });
+  });
+  return done->wait_for(patience());
+}
+
+// A buffered query through cluster::execute(), as a wrapper sends one.
+auto
+execute_query(component_fixture& c, std::string id) -> std::optional<std::error_code>
+{
+  auto done = std::make_shared<completion<std::error_code>>();
+  c.cluster.execute(query_for(std::move(id)),
+                    [done](couchbase::core::operations::query_response&& resp) {
+                      done->set(resp.ctx.ec);
+                    });
+  return done->wait_for(patience());
+}
+
+// A query stream read to its end checks its session in. The handle the consumer still holds does
+// not keep that session alive once the pool evicts it.
+void
+a_query_stream_read_to_the_end_returns_its_session_to_the_pool([[maybe_unused]] context& ctx)
+{
+  component_fixture c{};
+  auto parked = park_idle(c.f, couchbase::core::service_type::query);
+  const std::weak_ptr<http_session> session_probe = parked;
+  const auto session_id = parked->id();
+  parked.reset();
+
+  auto opened = open_live_stream<couchbase::core::query_stream>(c, query_for("/rows"));
+  std::size_t rows = 0;
+  std::optional<pulled> last;
+  while ((last = pull(**opened.handle)).has_value() && last->first.has_value()) {
+    ++rows;
+  }
+  assert_true(last.has_value(), "every pull completes within its budget");
+  assert_success(last->second, "the stream ends cleanly");
+  assert_eq(rows, query_rows, "every row is delivered");
+  assert_eq(c.f.server.accepted(), std::size_t{ 1 }, "the stream takes the parked session");
+  assert_true(wait_until([&]() {
+                return pooled_ids(*c.f.manager).count(session_id) == 1;
+              }),
+              "the ended stream checks its session in");
+
+  const auto next = execute_query(c, "/rows");
+  assert_true(next.has_value(), "the next query completes within its budget");
+  assert_success(*next, "the next query succeeds");
+  assert_eq(c.f.server.accepted(), std::size_t{ 1 }, "the next query reuses the connection");
+
+  run_on(c.f.io, [&]() {
+    c.f.manager->update_config({});
+  });
+  assert_true(wait_until([&c]() {
+                return pooled_ids(*c.f.manager).empty();
+              }),
+              "the pool evicts the session once its node leaves the configuration");
+  assert_true(wait_until([&session_probe]() {
+                return session_probe.expired();
+              }),
+              "the finished stream handle does not hold its session; session " +
+                alive(session_probe));
+  assert_true(c.shutdown(), "the io_context drains once the cluster is closed");
+}
+
+// Where a case drops the stream's last handle.
+enum class drop_point : std::uint8_t {
+  // After one row, from the calling thread.
+  after_one_row,
+  // Inside the handler of the pull that delivered the first row, a pull issued on the io thread.
+  inside_the_pull_handler,
+  // After the error terminal, from the calling thread.
+  after_the_error_terminal,
+};
+
+// Opens a stream, drops its last handle at `point` with the rest of the body still to come, and
+// returns whether the session was then released and its connection closed. Asserts that the next
+// query opens a new connection and that nothing holds the manager.
+template<typename Stream, typename Request>
+auto
+released_after_a_drop(Request request,
+                      couchbase::core::service_type type,
+                      const std::string& label,
+                      drop_point point,
+                      std::optional<couchbase::core::row_streamer_options> streaming = {}) -> bool
+{
+  component_fixture c{};
+  auto parked = park_idle(c.f, type);
+  const std::weak_ptr<http_session> session_probe = parked;
+  parked.reset();
+
+  request.timeout = unreachable_timeout;
+  auto opened = open_live_stream<Stream>(c, std::move(request), streaming);
+  if (point == drop_point::inside_the_pull_handler) {
+    auto first = std::make_shared<completion<bool>>();
+    // Issued on the io thread, so the handler's reset cannot run while next_row() is still
+    // returning on this one.
+    run_on(c.f.io, [&]() {
+      (**opened.handle)
+        .next_row([handle = opened.handle, first](std::optional<std::string> row, std::error_code) {
+          handle->reset();
+          first->set(row.has_value());
+        });
+    });
+    const auto had_row = first->wait_for(patience());
+    assert_true(had_row.value_or(false), label + ": the first row arrives");
+  } else if (point == drop_point::after_one_row) {
+    const auto first = pull(**opened.handle);
+    assert_true(first.has_value() && first->first.has_value(), label + ": the first row arrives");
+    opened.handle->reset();
+  } else {
+    std::optional<pulled> last;
+    while ((last = pull(**opened.handle)).has_value() && last->first.has_value()) {
+    }
+    assert_true(last.has_value(), label + ": every pull completes within its budget");
+    assert_eq(last->second,
+              std::error_code{ couchbase::errc::common::parsing_failure },
+              label + ": the stream ends with the lexer's error");
+    opened.handle->reset();
+  }
+  assert_eq(
+    c.f.server.accepted(), std::size_t{ 1 }, label + ": the stream takes the parked session");
+
+  const bool released = wait_until([&]() {
+    return session_probe.expired() && c.f.server.released() == 1;
+  });
+  // Listed busy while it is still alive, so only a released session is checked against the pool.
+  assert_true(!released || pooled_ids(*c.f.manager).empty(),
+              label + ": the stopped session is not pooled");
+  const auto next = execute_query(c, "/rows");
+  assert_true(next.has_value(), label + ": the next query completes within its budget");
+  assert_success(*next, label + ": the next query succeeds");
+  assert_eq(c.f.server.accepted(), std::size_t{ 2 }, label + ": the next query connects anew");
+  assert_true(manager_released(c), label + ": nothing holds the manager once the cluster closes");
+  return released;
+}
+
+// Asserts that a drop at `point` releases the session for both query and analytics streams.
+void
+assert_a_drop_releases_the_session(
+  const std::string& path,
+  drop_point point,
+  std::optional<couchbase::core::row_streamer_options> streaming = {})
+{
+  const bool query = released_after_a_drop<couchbase::core::query_stream>(
+    query_for(path), couchbase::core::service_type::query, "query", point, streaming);
+  const bool analytics = released_after_a_drop<couchbase::core::analytics_stream>(
+    analytics_for(path), couchbase::core::service_type::analytics, "analytics", point, streaming);
+  assert_true(query && analytics,
+              std::string{ "a dropped stream releases its session and connection; query: " } +
+                (query ? "released" : "alive") +
+                ", analytics: " + (analytics ? "released" : "alive"));
+}
+
+// A stream dropped mid-body, as a wrapper's `break` or exception leaves it, stops its session and
+// closes its connection. Neither cluster close nor the stream's idle timer is needed for that.
+void
+a_stream_dropped_after_one_row_stops_its_session([[maybe_unused]] context& ctx)
+{
+  assert_a_drop_releases_the_session("/one-row", drop_point::after_one_row);
+}
+
+// The last handle dropped inside its own pull's handler, on the io thread, stops the session. The
+// runner stays free to serve the next query.
+void
+a_stream_dropped_inside_its_pull_handler_stops_its_session([[maybe_unused]] context& ctx)
+{
+  assert_a_drop_releases_the_session("/one-row", drop_point::inside_the_pull_handler);
+}
+
+// A stream dropped after a lexer error on malformed JSON stops its session. Without the stop, the
+// read-ahead goes on reading the rest of the announced body, which never comes.
+void
+a_stream_dropped_after_its_error_terminal_stops_its_session([[maybe_unused]] context& ctx)
+{
+  assert_a_drop_releases_the_session("/malformed", drop_point::after_the_error_terminal);
+}
+
+// A stream dropped while its read-ahead is paused at the high-water mark stops its session. The
+// endpoint writes the preamble and every row in one write, so they arrive in the read that opens
+// the stream. A zero high-water mark allows no further read while a row is buffered. A one-row
+// channel holds one row and leaves the rest in queued sends.
+void
+a_stream_dropped_while_its_read_ahead_is_paused_stops_its_session([[maybe_unused]] context& ctx)
+{
+  couchbase::core::row_streamer_options streaming{};
+  streaming.high_water_bytes = 0;
+  streaming.low_water_bytes = 0;
+  streaming.row_buffer_size = 1;
+  assert_a_drop_releases_the_session("/many-rows", drop_point::after_one_row, streaming);
+}
+
+// Whether session `id` is idle in the pool: a check_out on the io thread takes it, and it is
+// checked straight back in. With no idle session the check_out creates one that never connects, and
+// the check_in drops it.
+auto
+is_idle(component_fixture& c, couchbase::core::service_type type, const std::string& id) -> bool
+{
+  bool idle = false;
+  run_on(c.f.io, [&]() {
+    auto [ec, session] = c.f.manager->check_out(type, {});
+    if (ec || !session) {
+      return;
+    }
+    idle = session->is_connected() && session->id() == id;
+    c.f.manager->check_in(type, session);
+  });
+  return idle;
+}
+
+// Reads a stream to its clean end, drops the handle while bytes after the JSON document are still
+// to come, then lets the endpoint send them. Returns whether the session was then checked in. If
+// it was, asserts that the next buffered request to the same service reuses its connection.
+template<typename Stream, typename Request>
+auto
+checked_in_after_a_drop_past_the_document(Request request,
+                                          couchbase::core::service_type type,
+                                          const std::string& label) -> bool
+{
+  component_fixture c{};
+  auto parked = park_idle(c.f, type);
+  const auto session_id = parked->id();
+  parked.reset();
+
+  request.timeout = unreachable_timeout;
+  auto next_request = request;
+  next_request.client_context_id = "/rows";
+  auto opened = open_live_stream<Stream>(c, std::move(request));
+  std::optional<pulled> last;
+  while ((last = pull(**opened.handle)).has_value() && last->first.has_value()) {
+  }
+  assert_true(last.has_value(), label + ": every pull completes within its budget");
+  assert_success(last->second, label + ": the stream ends cleanly");
+  opened.handle->reset();
+  assert_eq(c.f.server.held(), std::size_t{ 1 }, label + ": the endpoint holds the last byte");
+  c.f.server.release_held();
+
+  const bool checked_in = wait_until([&]() {
+    return is_idle(c, type, session_id);
+  });
+  if (checked_in) {
+    auto done = std::make_shared<completion<std::error_code>>();
+    c.cluster.execute(std::move(next_request), [done](auto&& resp) {
+      done->set(resp.ctx.ec);
+    });
+    const auto next = done->wait_for(patience());
+    assert_true(next.has_value(), label + ": the next query completes within its budget");
+    assert_success(*next, label + ": the next query succeeds");
+    assert_eq(
+      c.f.server.accepted(), std::size_t{ 1 }, label + ": the next query reuses the connection");
+  }
+  assert_true(c.shutdown(), label + ": the io_context drains once the cluster is closed");
+  return checked_in;
+}
+
+// A stream dropped after its clean terminal, with bytes after the JSON document still to come, is
+// not cancelled: its read-ahead reads them and checks the connection in for the next query.
+void
+a_stream_dropped_after_its_document_checks_its_session_in([[maybe_unused]] context& ctx)
+{
+  const bool query = checked_in_after_a_drop_past_the_document<couchbase::core::query_stream>(
+    query_for("/trailing"), couchbase::core::service_type::query, "query");
+  const bool analytics =
+    checked_in_after_a_drop_past_the_document<couchbase::core::analytics_stream>(
+      analytics_for("/trailing"), couchbase::core::service_type::analytics, "analytics");
+  assert_true(query && analytics,
+              std::string{ "a stream dropped past its document checks its session in; query: " } +
+                (query ? "checked in" : "not checked in") +
+                ", analytics: " + (analytics ? "checked in" : "not checked in"));
+}
+
+// A cancel() from another thread completes every pull exactly once. It races a parked pull while a
+// second runner delivers the rest of the body. The parked pull gets a row or the cancellation, and
+// the pull after a row gets the cancellation. Once the cluster closes, nothing holds the session.
+void
+a_cancel_from_another_thread_completes_a_parked_pull_once([[maybe_unused]] context& ctx)
+{
+  component_fixture c{ 2 };
+  auto parked = park_idle(c.f, couchbase::core::service_type::query);
+  const std::weak_ptr<http_session> session_probe = parked;
+  parked.reset();
+
+  auto opened = open_live_stream<couchbase::core::query_stream>(c, query_for("/one-row"));
+  auto& stream = **opened.handle;
+  const auto first = pull(stream);
+  assert_true(first.has_value() && first->first.has_value(), "the first row arrives");
+
+  auto calls = std::make_shared<std::atomic<int>>(0);
+  int pulls = 0;
+  auto next = [&]() {
+    ++pulls;
+    auto done = std::make_shared<completion<pulled>>();
+    stream.next_row([calls, done](std::optional<std::string> row, std::error_code ec) {
+      ++*calls;
+      done->set({ std::move(row), ec });
+    });
+    return done;
+  };
+  auto parked_pull = next();
+  c.f.server.release_held();
+  stream.cancel();
+  auto last = parked_pull->wait_for(patience());
+  if (last.has_value() && last->first.has_value()) {
+    last = next()->wait_for(patience());
+  }
+  assert_true(last.has_value(), "every pull completes within its budget");
+  assert_false(last->first.has_value(), "the pull after a row delivers none");
+  assert_eq(last->second,
+            std::error_code{ couchbase::errc::common::request_canceled },
+            "the stream ends with the cancellation");
+
+  opened.handle->reset();
+  assert_true(manager_released(c), "nothing holds the manager once the cluster closes");
+  assert_true(wait_until([&session_probe]() {
+                return session_probe.expired();
+              }),
+              "nothing holds the stream's session; session " + alive(session_probe));
+  assert_eq(calls->load(), pulls, "every pull completes exactly once");
+}
+
+// A stream handle held across cluster close reports an error to the next pull. Freed after the
+// io_context has stopped, as a wrapper's garbage collector frees it, it releases its session and
+// the manager and queues nothing. A queued handler would hold the streamer and its body until the
+// io_context is destroyed.
+void
+a_stream_handle_freed_after_cluster_close_releases_its_session([[maybe_unused]] context& ctx)
+{
+  component_fixture c{};
+  auto parked = park_idle(c.f, couchbase::core::service_type::query);
+  const std::weak_ptr<http_session> session_probe = parked;
+  parked.reset();
+
+  auto opened = open_live_stream<couchbase::core::query_stream>(c, query_for("/one-row"));
+  const auto first = pull(**opened.handle);
+  assert_true(first.has_value() && first->first.has_value(), "the first row arrives");
+
+  assert_true(c.close_cluster(), "the cluster's close completes");
+  const auto after = pull(**opened.handle);
+  assert_true(after.has_value(), "a pull after the close completes within its budget");
+  assert_false(after->first.has_value(), "a pull after the close delivers no row");
+  assert_true(static_cast<bool>(after->second),
+              "a pull after the close reports an error, got " + after->second.message());
+
+  const std::weak_ptr<http_session_manager> manager_probe = c.f.manager;
+  assert_true(c.f.shutdown(), "the io_context drains with the stream handle still held");
+  c.f.manager.reset();
+  c.f.io.restart();
+  assert_eq(c.f.io.poll(), std::size_t{ 0 }, "nothing is queued before the handle is freed");
+  opened.handle->reset();
+  assert_true(wait_until([&]() {
+                return session_probe.expired() && manager_probe.expired();
+              }),
+              "the handle freed after close releases the session and the manager; session " +
+                alive(session_probe) + ", manager " + alive(manager_probe));
+  c.f.io.restart();
+  const auto queued = c.f.io.poll();
+  assert_eq(queued, std::size_t{ 0 }, "the handle freed after close queues nothing");
+}
+
+// A buffered query pending when the cluster closes completes its handler exactly once, with an
+// error, and does not keep its session or the manager alive.
+void
+a_buffered_query_pending_at_cluster_close_completes_once([[maybe_unused]] context& ctx)
+{
+  component_fixture c{};
+  auto parked = park_idle(c.f, couchbase::core::service_type::query);
+  const std::weak_ptr<http_session> session_probe = parked;
+  parked.reset();
+
+  auto calls = std::make_shared<std::atomic<int>>(0);
+  auto done = std::make_shared<completion<std::error_code>>();
+  c.cluster.execute(query_for("/held/rows"),
+                    [calls, done](couchbase::core::operations::query_response&& resp) {
+                      ++*calls;
+                      done->set(resp.ctx.ec);
+                    });
+  assert_true(wait_until([&c]() {
+                return c.f.server.held() == 1;
+              }),
+              "the query reaches the endpoint");
+  assert_eq(c.f.server.accepted(), std::size_t{ 1 }, "the query takes the parked session");
+
+  assert_true(c.close_cluster(), "the cluster's close completes");
+  const auto ec = done->wait_for(patience());
+  assert_true(ec.has_value(), "the pending query completes within its budget");
+  assert_true(static_cast<bool>(*ec), "the pending query reports an error, got " + ec->message());
+
+  c.f.server.release_held();
+  assert_true(manager_released(c), "nothing holds the manager once the cluster closes");
+  assert_true(wait_until([&session_probe]() {
+                return session_probe.expired();
+              }),
+              "nothing holds the query's session; session " + alive(session_probe));
+  assert_eq(calls->load(), 1, "the query handler runs exactly once");
+}
+
+// The error context of a timed-out query names the endpoint the query was dispatched on. Nothing
+// holds the session afterwards.
+void
+a_timed_out_query_reports_its_endpoint_after_the_session_is_released([[maybe_unused]] context& ctx)
+{
+  component_fixture c{};
+  auto parked = park_idle(c.f, couchbase::core::service_type::query);
+  const std::weak_ptr<http_session> session_probe = parked;
+  const auto local = parked->local_address();
+  const auto remote = parked->remote_address();
+  parked.reset();
+
+  auto done = std::make_shared<completion<couchbase::core::error_context::query>>();
+  run_on(c.f.io, [&]() {
+    auto request = query_for("/unanswered");
+    request.timeout = unanswered_request_timeout;
+    c.cluster.execute(std::move(request),
+                      [done](couchbase::core::operations::query_response&& resp) {
+                        done->set(resp.ctx);
+                      });
+  });
+  const auto error_ctx = done->wait_for(patience());
+  assert_true(error_ctx.has_value(), "the query completes within its budget");
+  assert_eq(error_ctx->ec,
+            std::error_code{ couchbase::errc::common::ambiguous_timeout },
+            "the deadline ends the query");
+  assert_eq(c.f.server.accepted(), std::size_t{ 1 }, "the query takes the parked session");
+  assert_true(wait_until([&session_probe]() {
+                return session_probe.expired();
+              }),
+              "nothing holds the timed-out query's session; session " + alive(session_probe));
+
+  assert_eq(error_ctx->last_dispatched_to.value_or(""), remote, "last_dispatched_to");
+  assert_eq(error_ctx->last_dispatched_from.value_or(""), local, "last_dispatched_from");
+  assert_eq(error_ctx->hostname, std::string{ "127.0.0.1" }, "hostname");
+  assert_eq(error_ctx->port, c.f.server.port(), "port");
+  assert_true(c.shutdown(), "the io_context drains once the cluster is closed");
+}
+
+// Regression: a timed-out free-form operation must report the endpoint it was dispatched on after
+// its session is released.
+void
+a_timed_out_free_form_operation_reports_its_endpoint_after_the_session_is_released(
+  [[maybe_unused]] context& ctx)
+{
+  std::string outcome;
+  std::string expected;
+  bool all_reported = true;
+  for (const bool streamed : { false, true }) {
+    const std::string label = streamed ? "streamed: " : "buffered: ";
+    component_fixture c{};
+    auto parked = park_idle(c.f);
+    const std::weak_ptr<http_session> session_probe = parked;
+    const auto local = parked->local_address();
+    const auto remote = parked->remote_address();
+    parked.reset();
+
+    auto done = std::make_shared<completion<std::error_code>>();
+    std::shared_ptr<couchbase::core::pending_operation> op;
+    run_on(c.f.io, [&]() {
+      op = dispatch(c, free_form("/unanswered", unanswered_request_timeout), streamed, done);
+    });
+    const auto ec = done->wait_for(patience());
+    assert_true(ec.has_value(), label + "the request completes within its budget");
+    assert_eq(*ec,
+              std::error_code{ couchbase::errc::common::ambiguous_timeout },
+              label + "the deadline ends the request");
+    assert_eq(
+      c.f.server.accepted(), std::size_t{ 1 }, label + "the request takes the parked session");
+    assert_true(wait_until([&session_probe]() {
+                  return session_probe.expired();
+                }),
+                label + "nothing holds the timed-out request's session; session " +
+                  alive(session_probe));
+
+    const auto info =
+      std::dynamic_pointer_cast<couchbase::core::pending_operation_connection_info>(op);
+    assert_true(info != nullptr, label + "the operation reports its connection");
+    const auto host = "127.0.0.1:" + std::to_string(c.f.server.port());
+    const bool reported = info->dispatched_to() == remote && info->dispatched_from() == local &&
+                          info->dispatched_to_host() == host;
+    all_reported = all_reported && reported;
+    const auto describe_endpoint =
+      [&label](const std::string& to, const std::string& from, const std::string& to_host) {
+        return label + "to=\"" + to + "\" from=\"" + from + "\" to_host=\"" + to_host + "\"; ";
+      };
+    outcome +=
+      describe_endpoint(info->dispatched_to(), info->dispatched_from(), info->dispatched_to_host());
+    expected += describe_endpoint(remote, local, host);
+    assert_true(c.shutdown(), label + "the io_context drains once the cluster is closed");
+  }
+  assert_true(all_reported,
+              "the operation reports the endpoint it was dispatched on; got " + outcome +
+                "expected " + expected);
+}
+
+// A cluster close landing before the stream's preamble completes the stream handler exactly once,
+// with an error, and leaves nothing alive.
+void
+a_cluster_close_before_the_preamble_completes_the_stream_handler_once([[maybe_unused]] context& ctx)
+{
+  component_fixture c{};
+  auto parked = park_idle(c.f, couchbase::core::service_type::query);
+  const std::weak_ptr<http_session> session_probe = parked;
+  parked.reset();
+
+  auto opened = open_stream<couchbase::core::query_stream>(c, query_for("/held/rows"));
+  assert_true(wait_until([&c]() {
+                return c.f.server.held() == 1;
+              }),
+              "the query reaches the endpoint");
+  assert_eq(c.f.server.accepted(), std::size_t{ 1 }, "the query takes the parked session");
+
+  assert_true(c.close_cluster(), "the cluster's close completes");
+  const auto ec = opened.done->wait_for(patience());
+  assert_true(ec.has_value(), "the stream handler runs within its budget");
+  assert_true(static_cast<bool>(*ec), "the stream handler reports an error, got " + ec->message());
+
+  c.f.server.release_held();
+  assert_true(manager_released(c), "nothing holds the manager once the cluster closes");
+  opened.handle->reset();
+  assert_true(wait_until([&session_probe]() {
+                return session_probe.expired();
+              }),
+              "nothing holds the stream's session; session " + alive(session_probe));
+  assert_eq(opened.calls->load(), 1, "the stream handler runs exactly once");
+}
+
+// Pulls until the stream reports its end or an error, counting the ends reported.
+template<typename Stream>
+void
+drain_rows(std::shared_ptr<std::optional<Stream>> handle,
+           std::shared_ptr<std::atomic<int>> ends,
+           std::shared_ptr<completion<std::error_code>> terminal)
+{
+  (*handle)->next_row(
+    [handle, ends, terminal](std::optional<std::string> row, std::error_code ec) mutable {
+      if (ec || !row.has_value()) {
+        ++*ends;
+        return terminal->set(ec);
+      }
+      drain_rows(std::move(handle), std::move(ends), std::move(terminal));
+    });
+}
+
+// Releases the rest of a "/one-row" body either before the cluster closes, with the clean end
+// delivered first, or after the close completes. Asserts that the closed manager pools no session,
+// that nothing stays alive, and that the stream reports its end once.
+void
+assert_a_tail_around_cluster_close_leaves_nothing_pooled(bool tail_before_close)
+{
+  component_fixture c{};
+  auto parked = park_idle(c.f, couchbase::core::service_type::query);
+  const std::weak_ptr<http_session> session_probe = parked;
+  parked.reset();
+
+  auto opened = open_live_stream<couchbase::core::query_stream>(c, query_for("/one-row"));
+  const auto first = pull(**opened.handle);
+  assert_true(first.has_value() && first->first.has_value(), "the first row arrives");
+
+  auto ends = std::make_shared<std::atomic<int>>(0);
+  auto terminal = std::make_shared<completion<std::error_code>>();
+  drain_rows(opened.handle, ends, terminal);
+  if (tail_before_close) {
+    c.f.server.release_held();
+    const auto ec = terminal->wait_for(patience());
+    assert_true(ec.has_value(), "the stream ends within its budget");
+    assert_success(*ec, "the stream ends cleanly before the close");
+    assert_true(c.close_cluster(), "the cluster's close completes");
+  } else {
+    assert_true(c.close_cluster(), "the cluster's close completes");
+    c.f.server.release_held();
+    assert_true(terminal->wait_for(patience()).has_value(), "the stream ends within its budget");
+  }
+  assert_true(pooled_ids(*c.f.manager).empty(), "no session is pooled in the closed manager");
+
+  opened.handle->reset();
+  assert_true(manager_released(c), "nothing holds the manager once the cluster closes");
+  assert_true(wait_until([&session_probe]() {
+                return session_probe.expired();
+              }),
+              "nothing holds the stream's session; session " + alive(session_probe));
+  assert_eq(ends->load(), 1, "the stream reports its end exactly once");
+}
+
+// A stream that ended cleanly before cluster close leaves no session pooled once the close
+// completes.
+void
+a_stream_tail_delivered_before_cluster_close_leaves_nothing_pooled([[maybe_unused]] context& ctx)
+{
+  assert_a_tail_around_cluster_close_leaves_nothing_pooled(true);
+}
+
+// The rest of a stream's body, arriving after cluster close, does not check the session into the
+// closed manager.
+void
+a_stream_tail_arriving_after_cluster_close_does_not_pool_the_session([[maybe_unused]] context& ctx)
+{
+  assert_a_tail_around_cluster_close_leaves_nothing_pooled(false);
 }
 
 } // namespace
@@ -2976,6 +4505,7 @@ tests() -> test_suite
       { CASE(a_stop_after_publication_removes_the_session_from_the_pool), {}, timeout::slow },
       { CASE(check_out_does_not_hand_out_a_session_claimed_while_idle), {}, timeout::slow },
       { CASE(check_out_skips_an_idle_session_whose_stop_has_begun), {}, timeout::slow },
+      { CASE(a_connection_close_response_is_not_pooled), {}, timeout::slow },
       { CASE(a_stop_inside_a_streaming_response_handler_still_ends_the_stream), {}, timeout::slow },
       { CASE(a_stop_from_a_handler_the_teardown_runs_returns_at_once), {}, timeout::slow },
       { CASE(a_throwing_connect_callback_does_not_skip_the_teardown), {}, timeout::slow },
@@ -3015,6 +4545,56 @@ tests() -> test_suite
         {},
         timeout::slow },
       { CASE(a_streamed_request_deadline_before_its_response_times_out_and_stops_the_session),
+        {},
+        timeout::slow },
+      { CASE(a_completed_buffered_operation_does_not_hold_its_evicted_session), {}, timeout::slow },
+      { CASE(an_operation_cancelled_by_its_session_stop_does_not_hold_the_session),
+        {},
+        timeout::slow },
+      { CASE(a_streamed_body_dropped_unread_releases_its_operation_and_session),
+        {},
+        timeout::slow },
+      { CASE(a_streamed_body_dropped_after_shutdown_releases_its_session), {}, timeout::slow },
+      { CASE(a_streamed_body_dropped_with_a_deadline_armed_releases_its_session),
+        {},
+        timeout::slow },
+      { CASE(an_operation_cancelled_while_its_session_connects_leaves_no_session_busy),
+        {},
+        timeout::slow },
+      { CASE(
+          an_operation_cancelled_before_its_failover_replacement_connects_leaves_no_session_busy),
+        {},
+        timeout::slow },
+      { CASE(a_stop_racing_the_response_context_install_leaves_nothing_alive), {}, timeout::slow },
+      { CASE(a_command_completed_before_send_stops_its_busy_session), {}, timeout::slow },
+      { CASE(a_command_completed_before_send_does_not_pool_its_session), {}, timeout::slow },
+      { CASE(an_operation_cancelled_between_connect_and_send_leaves_no_session_busy),
+        {},
+        timeout::slow },
+      { CASE(a_query_stream_read_to_the_end_returns_its_session_to_the_pool), {}, timeout::slow },
+      { CASE(a_stream_dropped_after_one_row_stops_its_session), {}, timeout::slow },
+      { CASE(a_stream_dropped_inside_its_pull_handler_stops_its_session), {}, timeout::slow },
+      { CASE(a_stream_dropped_after_its_error_terminal_stops_its_session), {}, timeout::slow },
+      { CASE(a_stream_dropped_while_its_read_ahead_is_paused_stops_its_session),
+        {},
+        timeout::slow },
+      { CASE(a_stream_dropped_after_its_document_checks_its_session_in), {}, timeout::slow },
+      { CASE(a_cancel_from_another_thread_completes_a_parked_pull_once), {}, timeout::slow },
+      { CASE(a_stream_handle_freed_after_cluster_close_releases_its_session), {}, timeout::slow },
+      { CASE(a_buffered_query_pending_at_cluster_close_completes_once), {}, timeout::slow },
+      { CASE(a_timed_out_query_reports_its_endpoint_after_the_session_is_released),
+        {},
+        timeout::slow },
+      { CASE(a_timed_out_free_form_operation_reports_its_endpoint_after_the_session_is_released),
+        {},
+        timeout::slow },
+      { CASE(a_cluster_close_before_the_preamble_completes_the_stream_handler_once),
+        {},
+        timeout::slow },
+      { CASE(a_stream_tail_delivered_before_cluster_close_leaves_nothing_pooled),
+        {},
+        timeout::slow },
+      { CASE(a_stream_tail_arriving_after_cluster_close_does_not_pool_the_session),
         {},
         timeout::slow },
     },
