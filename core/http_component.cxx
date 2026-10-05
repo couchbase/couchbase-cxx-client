@@ -73,6 +73,11 @@ public:
       if (ec == asio::error::operation_aborted) {
         return;
       }
+      // deadline_.cancel() does not retract a completion already queued. A response that took
+      // the callback first has handed the session to the stream or to the pool.
+      if (!self->trigger_timeout()) {
+        return;
+      }
       CB_LOG_DEBUG(
         R"(HTTP request timed out: {}, method={}, path="{}", timeout={}, client_context_id={})",
         self->encoded_.type,
@@ -80,7 +85,6 @@ public:
         logger::user_data(self->encoded_.path),
         self->request_.timeout,
         self->encoded_.client_context_id);
-      self->trigger_timeout();
       if (self->session_) {
         self->session_->stop();
       }
@@ -108,7 +112,8 @@ public:
     invoke_response_handler(errc::common::request_canceled, {});
   }
 
-  void invoke_response_handler(std::error_code err, io::http_streaming_response resp)
+  // Returns whether this call took the callback, which is the token for completing the request.
+  auto invoke_response_handler(std::error_code err, io::http_streaming_response resp) -> bool
   {
     deadline_.cancel();
     free_form_http_request_callback callback{};
@@ -122,9 +127,11 @@ public:
     if (dispatch_span) {
       dispatch_span->end();
     }
-    if (callback) {
-      callback(http_response{ std::move(resp) }, err);
+    if (!callback) {
+      return false;
     }
+    callback(http_response{ std::move(resp) }, err);
+    return true;
   }
 
   void send_to(std::shared_ptr<io::http_session> session)
@@ -184,13 +191,13 @@ public:
   }
 
 private:
-  void trigger_timeout()
+  auto trigger_timeout() -> bool
   {
     // TODO(JC):  if triggered from the dispatch timeout, should only be
     // errc::common::unambiguous_timeout?
     auto ec =
       request_.is_read_only ? errc::common::unambiguous_timeout : errc::common::ambiguous_timeout;
-    invoke_response_handler(ec, {});
+    return invoke_response_handler(ec, {});
   }
 
   // Carries the same tags as http_command::create_dispatch_span, so a streamed request reports the
@@ -262,6 +269,11 @@ public:
       if (ec == asio::error::operation_aborted) {
         return;
       }
+      // deadline_.cancel() does not retract a completion already queued. A response that took
+      // the callback first has handed the session back to the pool.
+      if (!self->trigger_timeout()) {
+        return;
+      }
       CB_LOG_DEBUG(
         R"(HTTP request timed out: {}, method={}, path="{}", timeout={}, client_context_id={})",
         self->encoded_.type,
@@ -269,7 +281,6 @@ public:
         logger::user_data(self->encoded_.path),
         self->request_.timeout,
         self->encoded_.client_context_id);
-      self->trigger_timeout();
       if (auto dispatched = self->session(); dispatched) {
         dispatched->stop();
       }
@@ -284,7 +295,8 @@ public:
     invoke_response_handler(errc::common::request_canceled, {});
   }
 
-  void invoke_response_handler(std::error_code ec, io::http_response resp)
+  // Returns whether this call took the callback, which is the token for completing the request.
+  auto invoke_response_handler(std::error_code ec, io::http_response resp) -> bool
   {
     deadline_.cancel();
     buffered_free_form_http_request_callback callback{};
@@ -292,14 +304,19 @@ public:
       const std::scoped_lock lock(callback_mutex_);
       std::swap(callback, callback_);
     }
-    if (callback) {
-      callback(buffered_http_response{ std::move(resp) }, ec);
+    if (!callback) {
+      return false;
     }
+    callback(buffered_http_response{ std::move(resp) }, ec);
+    return true;
   }
 
   void send_to(std::shared_ptr<io::http_session> session)
   {
     {
+      // Checked and stored under the lock invoke_response_handler takes the callback with: a
+      // deadline completion that took the callback reads this session, and after it took the
+      // callback nothing is stored.
       const std::scoped_lock lock(callback_mutex_);
       if (!callback_) {
         return;
@@ -350,13 +367,13 @@ public:
   }
 
 private:
-  void trigger_timeout()
+  auto trigger_timeout() -> bool
   {
     // TODO(JC):  if triggered from the dispatch timeout, should only be
     // errc::common::unambiguous_timeout?
     auto ec =
       request_.is_read_only ? errc::common::unambiguous_timeout : errc::common::ambiguous_timeout;
-    invoke_response_handler(ec, {});
+    return invoke_response_handler(ec, {});
   }
 
   asio::steady_timer deadline_;
@@ -428,7 +445,8 @@ private:
       auto [check_out_ec, s] = session_manager->check_out(
         op->request().service, op->request().endpoint, op->request().internal.undesired_endpoint);
       if (check_out_ec) {
-        return op->invoke_response_handler(check_out_ec, {});
+        op->invoke_response_handler(check_out_ec, {});
+        return;
       }
       session = std::move(s);
     }
@@ -444,7 +462,8 @@ private:
         op->deadline_expiry(),
         [op](std::error_code ec, std::shared_ptr<io::http_session> http_session) {
           if (ec) {
-            return op->invoke_response_handler(ec, {});
+            op->invoke_response_handler(ec, {});
+            return;
           }
           op->send_to(std::move(http_session));
         });
@@ -462,7 +481,8 @@ private:
       auto [check_out_ec, s] = session_manager->check_out(
         op->request().service, op->request().endpoint, op->request().internal.undesired_endpoint);
       if (check_out_ec) {
-        return op->invoke_response_handler(check_out_ec, {});
+        op->invoke_response_handler(check_out_ec, {});
+        return;
       }
       session = std::move(s);
     }
@@ -486,7 +506,8 @@ private:
         op->deadline_expiry(),
         [op](std::error_code ec, std::shared_ptr<io::http_session> http_session) {
           if (ec) {
-            return op->invoke_response_handler(ec, {});
+            op->invoke_response_handler(ec, {});
+            return;
           }
           op->send_to(std::move(http_session));
         });
