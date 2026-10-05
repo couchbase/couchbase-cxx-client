@@ -85,9 +85,6 @@ public:
         logger::user_data(self->encoded_.path),
         self->request_.timeout,
         self->encoded_.client_context_id);
-      if (self->session_) {
-        self->session_->stop();
-      }
     });
   }
 
@@ -106,8 +103,8 @@ public:
 
   void cancel() override
   {
-    if (session_) {
-      session_->stop();
+    if (const auto session = this->session(); session) {
+      session->stop();
     }
     invoke_response_handler(errc::common::request_canceled, {});
   }
@@ -140,16 +137,21 @@ public:
       // The deadline or a cancel can complete the operation concurrently. Checking the callback and
       // storing the span under the lock that invoke_response_handler takes means the span is either
       // stored before the handler runs, and ended by it, or never created.
-      const std::scoped_lock lock(callback_mutex_);
+      std::unique_lock lock(callback_mutex_);
       if (!callback_) {
-        return;
+        // The session is listed busy and nothing checks it in; on_stop removes it.
+        lock.unlock();
+        return session->stop();
       }
-      session_ = std::move(session);
-      dispatch_span_ = create_dispatch_span();
+      session_ = session;
+      dispatched_to_ = session->remote_address();
+      dispatched_from_ = session->local_address();
+      dispatched_to_host_ = fmt::format("{}:{}", session->hostname(), session->port());
+      dispatch_span_ = create_dispatch_span(*session);
     }
 
-    auto start_op = [self = shared_from_this()]() {
-      self->session_->write_and_stream(
+    auto start_op = [self = shared_from_this(), session]() {
+      session->write_and_stream(
         self->encoded_,
         [self](std::error_code ec, io::http_streaming_response resp) {
           if (ec == asio::error::operation_aborted) {
@@ -158,7 +160,7 @@ public:
           self->invoke_response_handler(ec, std::move(resp));
         },
         [self]() {
-          self->stream_end_callback_(self->session_);
+          self->stream_end_callback_(self->session());
         });
     };
 
@@ -177,33 +179,65 @@ public:
 
   [[nodiscard]] auto dispatched_to() const -> std::string override
   {
-    return session_->remote_address();
+    const std::scoped_lock lock(callback_mutex_);
+    return dispatched_to_;
   }
 
   [[nodiscard]] auto dispatched_from() const -> std::string override
   {
-    return session_->local_address();
+    const std::scoped_lock lock(callback_mutex_);
+    return dispatched_from_;
   }
 
   [[nodiscard]] auto dispatched_to_host() const -> std::string override
   {
-    return fmt::format("{}:{}", session_->hostname(), session_->port());
+    const std::scoped_lock lock(callback_mutex_);
+    return dispatched_to_host_;
   }
 
 private:
+  // Null before send_to() runs or once the session is gone: the operation does not keep its
+  // session alive.
+  [[nodiscard]] auto session() const -> std::shared_ptr<io::http_session>
+  {
+    const std::scoped_lock lock(callback_mutex_);
+    return session_.lock();
+  }
+
+  // Ends the request with a timeout unless a response took the callback first. The session is
+  // stopped before the callback runs. Returns whether this call took the callback.
   auto trigger_timeout() -> bool
   {
     // TODO(JC):  if triggered from the dispatch timeout, should only be
     // errc::common::unambiguous_timeout?
     auto ec =
       request_.is_read_only ? errc::common::unambiguous_timeout : errc::common::ambiguous_timeout;
-    return invoke_response_handler(ec, {});
+    free_form_http_request_callback callback{};
+    std::shared_ptr<couchbase::tracing::request_span> dispatch_span{};
+    std::shared_ptr<io::http_session> session;
+    {
+      const std::scoped_lock lock(callback_mutex_);
+      std::swap(callback, callback_);
+      std::swap(dispatch_span, dispatch_span_);
+      session = session_.lock();
+    }
+    if (dispatch_span) {
+      dispatch_span->end();
+    }
+    if (!callback) {
+      return false;
+    }
+    if (session) {
+      session->stop();
+    }
+    callback(http_response{ io::http_streaming_response{} }, ec);
+    return true;
   }
 
   // Carries the same tags as http_command::create_dispatch_span, so a streamed request reports the
   // same dispatch_to_server span as a buffered one. It is parented to the caller's span because no
   // operation span exists in core for a streamed request.
-  [[nodiscard]] auto create_dispatch_span() const
+  [[nodiscard]] auto create_dispatch_span(io::http_session& session) const
     -> std::shared_ptr<couchbase::tracing::request_span>
   {
     if (!tracer_) {
@@ -215,13 +249,13 @@ private:
       dispatch_span->add_tag(tracing::attributes::dispatch::network_transport, "tcp");
       dispatch_span->add_tag(tracing::attributes::dispatch::operation_id,
                              request_.client_context_id);
-      dispatch_span->add_tag(tracing::attributes::dispatch::local_id, session_->id());
+      dispatch_span->add_tag(tracing::attributes::dispatch::local_id, session.id());
       dispatch_span->add_tag(tracing::attributes::dispatch::server_address,
-                             session_->http_context().canonical_hostname);
+                             session.http_context().canonical_hostname);
       dispatch_span->add_tag(tracing::attributes::dispatch::server_port,
-                             session_->http_context().canonical_port);
+                             session.http_context().canonical_port);
 
-      const auto& peer_endpoint = session_->remote_endpoint();
+      const auto& peer_endpoint = session.remote_endpoint();
       dispatch_span->add_tag(tracing::attributes::dispatch::peer_address,
                              peer_endpoint.address().to_string());
       dispatch_span->add_tag(tracing::attributes::dispatch::peer_port, peer_endpoint.port());
@@ -236,8 +270,13 @@ private:
   std::shared_ptr<tracing::tracer_wrapper> tracer_{};
   std::shared_ptr<couchbase::tracing::request_span> dispatch_span_{};
   utils::movable_function<void(std::shared_ptr<io::http_session>)> stream_end_callback_;
-  std::shared_ptr<io::http_session> session_;
-  std::mutex callback_mutex_;
+  std::weak_ptr<io::http_session> session_;
+  // Endpoints of the session send_to() dispatched on, guarded by callback_mutex_. Recorded because
+  // session_ expires once the session is released.
+  std::string dispatched_to_;
+  std::string dispatched_from_;
+  std::string dispatched_to_host_;
+  mutable std::mutex callback_mutex_;
 };
 
 class pending_buffered_http_operation
@@ -281,16 +320,13 @@ public:
         logger::user_data(self->encoded_.path),
         self->request_.timeout,
         self->encoded_.client_context_id);
-      if (auto dispatched = self->session(); dispatched) {
-        dispatched->stop();
-      }
     });
   }
 
   void cancel() override
   {
-    if (auto dispatched = session(); dispatched) {
-      dispatched->stop();
+    if (const auto session = this->session(); session) {
+      session->stop();
     }
     invoke_response_handler(errc::common::request_canceled, {});
   }
@@ -317,14 +353,20 @@ public:
       // Checked and stored under the lock invoke_response_handler takes the callback with: a
       // deadline completion that took the callback reads this session, and after it took the
       // callback nothing is stored.
-      const std::scoped_lock lock(callback_mutex_);
+      std::unique_lock lock(callback_mutex_);
       if (!callback_) {
-        return;
+        // The completion checks in only a session stored here, so this one stays listed busy
+        // until on_stop removes it.
+        lock.unlock();
+        return session->stop();
       }
-      session_ = std::move(session);
+      session_ = session;
+      dispatched_to_ = session->remote_address();
+      dispatched_from_ = session->local_address();
+      dispatched_to_host_ = fmt::format("{}:{}", session->hostname(), session->port());
     }
 
-    session_->write_and_subscribe(
+    session->write_and_subscribe(
       encoded_, [self = shared_from_this()](std::error_code ec, io::http_response resp) {
         if (ec == asio::error::operation_aborted) {
           return;
@@ -333,12 +375,13 @@ public:
       });
   }
 
-  // The session send_to() dispatched on, or null if it never ran. A failover makes it different
-  // from the one checked out.
-  [[nodiscard]] auto session() -> std::shared_ptr<io::http_session>
+  // The session send_to() dispatched on, which a failover makes different from the one checked
+  // out. Null if send_to() never ran or the session is gone: the operation does not keep its
+  // session alive.
+  [[nodiscard]] auto session() const -> std::shared_ptr<io::http_session>
   {
     const std::scoped_lock lock(callback_mutex_);
-    return session_;
+    return session_.lock();
   }
 
   [[nodiscard]] auto deadline_expiry() const -> std::chrono::time_point<std::chrono::steady_clock>
@@ -353,35 +396,60 @@ public:
 
   [[nodiscard]] auto dispatched_to() const -> std::string override
   {
-    return session_->remote_address();
+    const std::scoped_lock lock(callback_mutex_);
+    return dispatched_to_;
   }
 
   [[nodiscard]] auto dispatched_from() const -> std::string override
   {
-    return session_->local_address();
+    const std::scoped_lock lock(callback_mutex_);
+    return dispatched_from_;
   }
 
   [[nodiscard]] auto dispatched_to_host() const -> std::string override
   {
-    return fmt::format("{}:{}", session_->hostname(), session_->port());
+    const std::scoped_lock lock(callback_mutex_);
+    return dispatched_to_host_;
   }
 
 private:
+  // Ends the request with a timeout unless a response took the callback first. The session is
+  // stopped before the callback runs: the callback checks the session in, and check_in refuses a
+  // stopped one. Returns whether this call took the callback.
   auto trigger_timeout() -> bool
   {
     // TODO(JC):  if triggered from the dispatch timeout, should only be
     // errc::common::unambiguous_timeout?
     auto ec =
       request_.is_read_only ? errc::common::unambiguous_timeout : errc::common::ambiguous_timeout;
-    return invoke_response_handler(ec, {});
+    buffered_free_form_http_request_callback callback{};
+    std::shared_ptr<io::http_session> session;
+    {
+      const std::scoped_lock lock(callback_mutex_);
+      std::swap(callback, callback_);
+      session = session_.lock();
+    }
+    if (!callback) {
+      return false;
+    }
+    if (session) {
+      session->stop();
+    }
+    callback(buffered_http_response{ io::http_response{} }, ec);
+    return true;
   }
 
   asio::steady_timer deadline_;
   http_request request_;
   io::http_request encoded_;
   buffered_free_form_http_request_callback callback_;
-  std::shared_ptr<io::http_session> session_;
-  std::mutex callback_mutex_;
+  std::weak_ptr<io::http_session> session_;
+  // Endpoints of the session send_to() dispatched on, guarded by callback_mutex_. Recorded because
+  // session_ expires once the session is released.
+  std::string dispatched_to_;
+  std::string dispatched_from_;
+  std::string dispatched_to_host_;
+  mutable std::mutex callback_mutex_;
 };
 
 class http_component_impl
@@ -450,10 +518,15 @@ private:
       }
       session = std::move(s);
     }
-    op->set_stream_end_callback([session_manager, service = op->request().service](
-                                  std::shared_ptr<io::http_session> served) mutable {
-      session_manager->check_in(service, std::move(served));
-    });
+    // Not an owner: a completed operation that never reaches the stream end must not keep the
+    // manager alive.
+    op->set_stream_end_callback(
+      [manager = std::weak_ptr{ session_manager },
+       service = op->request().service](std::shared_ptr<io::http_session> served) {
+        if (const auto m = manager.lock(); m) {
+          m->check_in(service, std::move(served));
+        }
+      });
     op->set_tracer(session_manager->tracer());
     if (!session->is_connected()) {
       session_manager->connect_then_send_pending_op(
@@ -486,17 +559,17 @@ private:
       }
       session = std::move(s);
     }
+    // Checks in only the session send_to() stored. A completion before send_to() leaves the
+    // checked-out session to send_to(), which stops it. Checked in here, it could be taken by
+    // another request before that stop.
     op->start([callback = std::move(callback),
                session_manager,
-               session,
                weak_op = std::weak_ptr<pending_buffered_http_operation>{ op },
                service = op->request().service](auto resp, auto ec) mutable {
       callback(std::move(resp), ec);
-      std::shared_ptr<io::http_session> served{};
       if (auto self = weak_op.lock(); self) {
-        served = self->session();
+        session_manager->check_in(service, self->session());
       }
-      session_manager->check_in(service, served ? std::move(served) : std::move(session));
     });
 
     if (!session->is_connected()) {

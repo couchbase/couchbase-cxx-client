@@ -169,8 +169,7 @@ public:
               base_ctx->ec = early_error;
               apply_error_details(*base_ctx, stream->error_details());
               // No consumer will ever take ownership of this stream, so tear the underlying body
-              // (socket + timers) down explicitly rather than leaking it until the last handle
-              // drops.
+              // (socket + timers) down now rather than when the last handle drops.
               stream->cancel();
               self->invoke(callback_state, {}, std::move(*base_ctx));
               return;

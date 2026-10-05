@@ -55,9 +55,21 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
 #endif
   std::shared_ptr<metrics::meter_wrapper> meter_{};
   std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter_{ nullptr };
-  std::shared_ptr<io::http_session> session_{};
+  // Not an owner: null once nothing else holds the session.
+  std::weak_ptr<io::http_session> session_{};
   handler_type handler_{};
   std::mutex handler_mutex_{};
+  // Set by send_to() if the request had not completed, guarded by handler_mutex_. Until then
+  // session_for_check_in() returns null, so a completion before send_to() never pools the session.
+  bool sent_{ false };
+  // Guarded by handler_mutex_. complete() reports these, so its report does not depend on the
+  // session still being alive. The target fields belong to the session set_command_session()
+  // last assigned. The dispatched fields stay empty until send() dispatches.
+  std::string target_node_uuid_{};
+  std::string dispatched_from_{};
+  std::string dispatched_to_{};
+  std::string target_hostname_{};
+  std::uint16_t target_port_{};
   std::chrono::milliseconds timeout_{};
   std::string client_context_id_;
   std::shared_ptr<couchbase::tracing::request_span> parent_span_{ nullptr };
@@ -109,19 +121,26 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
     });
   }
 
-  // Completes the request with `ec` and stops its session. Returns false, and stops nothing, when
-  // the handler was already taken, as by a response handled before a deadline completion already
-  // queued: deadline.cancel() does not retract it, and the session then belongs to the pool.
+  // Stops the session, then completes the request with `ec`: the completion checks the session in,
+  // and check_in refuses a stopped one. Returns false, and stops nothing, when the handler was
+  // already taken, as by a response handled before a deadline completion already queued:
+  // deadline.cancel() does not retract it, and the session then belongs to the pool.
   auto cancel(std::error_code ec) -> bool
   {
-    auto handler = take_handler();
+    handler_type handler{};
+    std::shared_ptr<io::http_session> session;
+    {
+      const std::scoped_lock lock(handler_mutex_);
+      handler = std::move(handler_);
+      session = session_.lock();
+    }
     if (!handler) {
       return false;
     }
-    complete(std::move(handler), ec, {});
-    if (session_) {
-      session_->stop();
+    if (session) {
+      session->stop();
     }
+    complete(std::move(handler), ec, {});
     return true;
   }
 
@@ -141,7 +160,11 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
   void complete(handler_type handler, std::error_code ec, io::http_response&& msg)
   {
     if (handler) {
-      const auto& node_uuid = session_ ? session_->node_uuid() : "";
+      std::string node_uuid;
+      {
+        const std::scoped_lock lock(handler_mutex_);
+        node_uuid = target_node_uuid_;
+      }
       auto telemetry_recorder = app_telemetry_meter_->value_recorder(node_uuid, {});
       telemetry_recorder->update_counter(total_counter_for_service_type(request.type));
       if (ec == errc::common::ambiguous_timeout || ec == errc::common::unambiguous_timeout) {
@@ -157,10 +180,16 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
       ctx.path = encoded.path;
       ctx.http_status = encoded_resp.status_code;
       ctx.http_body = encoded_resp.body.data();
-      ctx.last_dispatched_from = session_->local_address();
-      ctx.last_dispatched_to = session_->remote_address();
-      ctx.hostname = session_->http_context().hostname;
-      ctx.port = session_->http_context().port;
+      {
+        const std::scoped_lock lock(handler_mutex_);
+        // A request completed before any dispatch leaves last_dispatched_from/to unset.
+        if (!dispatched_to_.empty()) {
+          ctx.last_dispatched_from = dispatched_from_;
+          ctx.last_dispatched_to = dispatched_to_;
+        }
+        ctx.hostname = target_hostname_;
+        ctx.port = target_port_;
+      }
 
       // Can raise priv::retry_http_request when a retry is required
       auto resp = request.make_response(std::move(ctx), std::move(encoded_resp));
@@ -177,19 +206,38 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
 
   void send_to()
   {
+    bool completed = false;
     {
       const std::scoped_lock lock(handler_mutex_);
-      if (!handler_) {
-        return;
+      completed = !handler_;
+      sent_ = !completed;
+    }
+    if (completed) {
+      // The completion ran with sent_ false, so session_for_check_in() gave it no session. Stopped
+      // here unless cancel() already stopped it; on_stop takes it off the busy list.
+      if (const auto session = session_.lock(); session) {
+        session->stop();
       }
+      return;
     }
     send();
   }
 
-  void set_command_session(std::shared_ptr<io::http_session> session)
+  void set_command_session(const std::shared_ptr<io::http_session>& session)
   {
-    session_.reset();
-    session_ = std::move(session);
+    const std::scoped_lock lock(handler_mutex_);
+    session_ = session;
+    target_node_uuid_ = session->node_uuid();
+    target_hostname_ = session->http_context().hostname;
+    target_port_ = session->http_context().port;
+  }
+
+  // The session the completion checks in: the one send_to() sent on, or null. A completion before
+  // send_to() gets null, so a session send_to() is about to stop is never pooled first.
+  [[nodiscard]] auto session_for_check_in() -> std::shared_ptr<io::http_session>
+  {
+    const std::scoped_lock lock(handler_mutex_);
+    return sent_ ? session_.lock() : nullptr;
   }
 
   [[nodiscard]] auto deadline_expiry() const -> std::chrono::time_point<std::chrono::steady_clock>
@@ -203,25 +251,36 @@ private:
     encoded.type = request.type;
     encoded.client_context_id = client_context_id_;
     encoded.timeout = timeout_;
-    if (auto ec = request.encode_to(encoded, session_->http_context()); ec) {
+    const auto session = session_.lock();
+    if (!session) {
+      return invoke_handler(errc::common::request_canceled, {});
+    }
+    if (auto ec = request.encode_to(encoded, session->http_context()); ec) {
       return invoke_handler(ec, {});
     }
     encoded.headers["client-context-id"] = client_context_id_;
 
     CB_LOG_TRACE(
       R"({} HTTP request: {}, method={}, path="{}", client_context_id="{}", timeout={}ms)",
-      session_->log_prefix(),
+      session->log_prefix(),
       encoded.type,
       encoded.method,
       logger::user_data(encoded.path),
       client_context_id_,
       timeout_.count());
 
-    auto dispatch_span = create_dispatch_span();
+    auto dispatch_span = create_dispatch_span(*session);
 
-    session_->write_and_subscribe(
+    {
+      const std::scoped_lock lock(handler_mutex_);
+      dispatched_from_ = session->local_address();
+      dispatched_to_ = session->remote_address();
+    }
+
+    session->write_and_subscribe(
       encoded,
       [self = this->shared_from_this(),
+       session,
        dispatch_span = std::move(dispatch_span),
        start = std::chrono::steady_clock::now()](std::error_code ec, io::http_response&& msg) {
         if (ec == asio::error::operation_aborted) {
@@ -234,7 +293,7 @@ private:
         {
           auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - start);
-          self->app_telemetry_meter_->value_recorder(self->session_->node_uuid(), {})
+          self->app_telemetry_meter_->value_recorder(session->node_uuid(), {})
             ->record_latency(latency_for_service_type(self->request.type), latency);
         }
 
@@ -251,7 +310,7 @@ private:
 
         self->deadline.cancel();
         CB_LOG_TRACE(R"({} HTTP response: {}, client_context_id="{}", ec={}, status={}, body={})",
-                     self->session_->log_prefix(),
+                     session->log_prefix(),
                      self->request.type,
                      self->client_context_id_,
                      ec.message(),
@@ -276,7 +335,7 @@ private:
       });
   }
 
-  [[nodiscard]] auto create_dispatch_span() const
+  [[nodiscard]] auto create_dispatch_span(io::http_session& session) const
     -> std::shared_ptr<couchbase::tracing::request_span>
   {
 #ifdef COUCHBASE_CXX_CLIENT_CREATE_OPERATION_SPAN_IN_CORE
@@ -289,13 +348,13 @@ private:
     if (dispatch_span->uses_tags()) {
       dispatch_span->add_tag(tracing::attributes::dispatch::network_transport, "tcp");
       dispatch_span->add_tag(tracing::attributes::dispatch::operation_id, client_context_id_);
-      dispatch_span->add_tag(tracing::attributes::dispatch::local_id, session_->id());
+      dispatch_span->add_tag(tracing::attributes::dispatch::local_id, session.id());
       dispatch_span->add_tag(tracing::attributes::dispatch::server_address,
-                             session_->http_context().canonical_hostname);
+                             session.http_context().canonical_hostname);
       dispatch_span->add_tag(tracing::attributes::dispatch::server_port,
-                             session_->http_context().canonical_port);
+                             session.http_context().canonical_port);
 
-      const auto& peer_endpoint = session_->remote_endpoint();
+      const auto& peer_endpoint = session.remote_endpoint();
       dispatch_span->add_tag(tracing::attributes::dispatch::peer_address,
                              peer_endpoint.address().to_string());
       dispatch_span->add_tag(tracing::attributes::dispatch::peer_port, peer_endpoint.port());

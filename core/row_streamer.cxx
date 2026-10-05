@@ -221,10 +221,15 @@ public:
     }
     // Tear the body down from the io_context rather than the caller's thread, which may never run
     // it. The channel is thread-safe, so cancel/close it synchronously to unblock a waiting
-    // consumer immediately.
-    asio::post(io_, [self = shared_from_this()]() {
-      self->body_.cancel();
-    });
+    // consumer immediately. No post once the read-ahead has ended: the body is closed or drained,
+    // and its cancel() does nothing. After cluster close the io_context runs out of work and
+    // stops. A post queued then never runs, and its capture holds this streamer and the body until
+    // the io_context is destroyed.
+    if (!received_all_data_) {
+      asio::post(io_, [self = shared_from_this()]() {
+        self->body_.cancel();
+      });
+    }
     rows_.cancel();
     rows_.close();
   }

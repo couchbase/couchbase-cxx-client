@@ -222,7 +222,9 @@ private:
   struct streaming_response_context {
     utils::movable_function<void(std::error_code, io::http_streaming_response)> resp_handler{};
     utils::movable_function<void()> stream_end_handler{};
-    std::optional<io::http_streaming_response> resp{};
+    // Copied from the response, which is not stored: the response's body holds this session, so
+    // storing it here would form a cycle that keeps both alive after the consumer drops the body.
+    bool must_close_connection{ false };
     http_streaming_parser parser{};
     bool complete{ false };
   };

@@ -684,7 +684,7 @@ http_session::do_read_some(read_callback&& callback)
       if (res.complete) {
         // Cleared with the end of the response: check_in then posts the liveness read's do_read().
         self->body_pulled_ = false;
-        if (ctx.resp->must_close_connection()) {
+        if (ctx.must_close_connection) {
           self->keep_alive_ = false;
         }
       }
@@ -978,10 +978,11 @@ http_session::do_read()
             std::swap(self->current_streaming_response_, ctx);
           }
 
-          ctx.resp = http_streaming_response{ self->ctx_, ctx.parser, self };
+          http_streaming_response resp{ self->ctx_, ctx.parser, self };
+          ctx.must_close_connection = resp.must_close_connection();
           ctx.parser.body_chunk = "";
 
-          if (res.complete && ctx.resp->must_close_connection()) {
+          if (res.complete && ctx.must_close_connection) {
             self->keep_alive_ = false;
           }
           self->body_pulled_ = !res.complete;
@@ -1007,7 +1008,7 @@ http_session::do_read()
             }
           });
           if (auto handler = std::move(ctx.resp_handler); handler) {
-            handler({}, *ctx.resp);
+            handler({}, std::move(resp));
           }
           return;
         }
