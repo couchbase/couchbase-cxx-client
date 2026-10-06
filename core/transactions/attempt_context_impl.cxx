@@ -2049,6 +2049,7 @@ attempt_context_impl::wrap_query(
 
   if (check_expiry) {
     if (has_expired_client_side(hook_point, std::nullopt)) {
+      query_check_expired_ = true;
       auto err = std::make_exception_ptr(
         transaction_operation_failed(FAIL_EXPIRY,
                                      fmt::format("{} expired in stage {}", statement, hook_point))
