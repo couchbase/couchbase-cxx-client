@@ -32,6 +32,7 @@
 
 #include <couchbase/tracing/request_tracer.hxx>
 
+#include <mutex>
 #include <string_view>
 #include <utility>
 
@@ -56,6 +57,7 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
   std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter_{ nullptr };
   std::shared_ptr<io::http_session> session_{};
   handler_type handler_{};
+  std::mutex handler_mutex_{};
   std::chrono::milliseconds timeout_{};
   std::string client_context_id_;
   std::shared_ptr<couchbase::tracing::request_span> parent_span_{ nullptr };
@@ -92,30 +94,53 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
       if (ec == asio::error::operation_aborted) {
         return;
       }
+      std::error_code timeout = errc::common::ambiguous_timeout;
+      if constexpr (io::http_traits::supports_readonly_v<Request>) {
+        if (self->request.readonly) {
+          timeout = errc::common::unambiguous_timeout;
+        }
+      }
+      if (!self->cancel(timeout)) {
+        return;
+      }
       CB_LOG_DEBUG(R"(HTTP request timed out: {}, client_context_id="{}")",
                    self->request.type,
                    self->client_context_id_);
-      if constexpr (io::http_traits::supports_readonly_v<Request>) {
-        if (self->request.readonly) {
-          self->cancel(errc::common::unambiguous_timeout);
-          return;
-        }
-      }
-      self->cancel(errc::common::ambiguous_timeout);
     });
   }
 
-  void cancel(std::error_code ec)
+  // Completes the request with `ec` and stops its session. Returns false, and stops nothing, when
+  // the handler was already taken, as by a response handled before a deadline completion already
+  // queued: deadline.cancel() does not retract it, and the session then belongs to the pool.
+  auto cancel(std::error_code ec) -> bool
   {
-    invoke_handler(ec, {});
+    auto handler = take_handler();
+    if (!handler) {
+      return false;
+    }
+    complete(std::move(handler), ec, {});
     if (session_) {
       session_->stop();
     }
+    return true;
   }
 
   void invoke_handler(std::error_code ec, io::http_response&& msg)
   {
-    if (handler_type handler = std::move(handler_); handler) {
+    complete(take_handler(), ec, std::move(msg));
+  }
+
+  // The handler is the token for completing the request. The deadline completion runs on the
+  // io_context and the response on the session strand, so it is taken under handler_mutex_.
+  auto take_handler() -> handler_type
+  {
+    const std::scoped_lock lock(handler_mutex_);
+    return std::move(handler_);
+  }
+
+  void complete(handler_type handler, std::error_code ec, io::http_response&& msg)
+  {
+    if (handler) {
       const auto& node_uuid = session_ ? session_->node_uuid() : "";
       auto telemetry_recorder = app_telemetry_meter_->value_recorder(node_uuid, {});
       telemetry_recorder->update_counter(total_counter_for_service_type(request.type));
@@ -152,8 +177,11 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
 
   void send_to()
   {
-    if (!handler_) {
-      return;
+    {
+      const std::scoped_lock lock(handler_mutex_);
+      if (!handler_) {
+        return;
+      }
     }
     send();
   }

@@ -54,6 +54,11 @@
 #include <asio/steady_timer.hpp>
 #include <asio/write.hpp>
 
+#if defined(__linux__)
+#include <linux/sockios.h>
+#include <sys/ioctl.h>
+#endif
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -111,6 +116,7 @@ within(std::chrono::steady_clock::time_point start, std::chrono::milliseconds bo
 //   /split       200 with a five-byte body written after a pause, so it arrives in a later read
 //   /pieces      200 with a nine-byte body written in three parts, each after a pause
 //   /incomplete  200 announcing five bytes and sending two; the rest never comes
+//   /held/<path> nothing until release_held(), then the response to <path>
 //   any other    no response; the connection is held open until the client closes it
 class loopback_http_server
 {
@@ -152,12 +158,41 @@ public:
     return heads_written_.load();
   }
 
+  // Response heads written by respond() that the client has acknowledged, so they are in its
+  // receive queue. A completed write only means the kernel accepted the bytes.
+  [[nodiscard]] auto heads_delivered() const -> std::size_t
+  {
+    return heads_delivered_.load();
+  }
+
+  // Requests to "/held/<path>" received so far.
+  [[nodiscard]] auto held() const -> std::size_t
+  {
+    return held_count_.load();
+  }
+
+  // Answers every request held so far.
+  void release_held()
+  {
+    asio::post(io_, [this]() {
+      auto held = std::move(held_);
+      held_.clear();
+      for (const auto& [conn, path] : held) {
+        answer(conn, path);
+      }
+    });
+  }
+
 private:
   struct connection {
-    connection(asio::io_context& io, std::atomic<std::size_t>& heads)
-      : socket{ io }
-      , pause{ io }
+    connection(loopback_http_server& server,
+               std::atomic<std::size_t>& heads,
+               std::atomic<std::size_t>& delivered)
+      : socket{ server.io_ }
+      , pause{ server.io_ }
+      , owner{ server }
       , heads_written{ heads }
+      , heads_delivered{ delivered }
     {
     }
 
@@ -165,12 +200,14 @@ private:
     asio::steady_timer pause;
     std::array<char, 4096> buffer{};
     std::string received{};
+    loopback_http_server& owner;
     std::atomic<std::size_t>& heads_written;
+    std::atomic<std::size_t>& heads_delivered;
   };
 
   void accept()
   {
-    auto conn = std::make_shared<connection>(io_, heads_written_);
+    auto conn = std::make_shared<connection>(*this, heads_written_, heads_delivered_);
     acceptor_.async_accept(conn->socket, [this, conn](std::error_code ec) {
       if (ec) {
         return;
@@ -204,6 +241,16 @@ private:
     const auto path =
       conn->received.substr(path_begin, conn->received.find(' ', path_begin) - path_begin);
     conn->received.erase(0, end + 4);
+    answer(conn, path);
+  }
+
+  static void answer(const std::shared_ptr<connection>& conn, const std::string& path)
+  {
+    if (const std::string held_prefix{ "/held" }; path.rfind(held_prefix + "/", 0) == 0) {
+      conn->owner.held_.emplace_back(conn, path.substr(held_prefix.size()));
+      ++conn->owner.held_count_;
+      return;
+    }
     if (path == "/split") {
       return respond(conn, "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\n", { "abcde" });
     }
@@ -255,6 +302,7 @@ private:
         }
         if (is_head) {
           ++conn->heads_written;
+          count_when_delivered(conn);
         }
         if (tails.empty()) {
           return serve(conn);
@@ -271,11 +319,31 @@ private:
       });
   }
 
+  // SIOCOUTQ is Linux-only. Elsewhere a head counts as delivered once its write completes, which
+  // does not put it in the client's receive queue; the cases that depend on that require Linux.
+  static void count_when_delivered(const std::shared_ptr<connection>& conn)
+  {
+#if defined(__linux__)
+    int unacknowledged = 0;
+    if (::ioctl(conn->socket.native_handle(), SIOCOUTQ, &unacknowledged) == 0 &&
+        unacknowledged != 0) {
+      return asio::post(conn->socket.get_executor(), [conn]() {
+        count_when_delivered(conn);
+      });
+    }
+#endif
+    ++conn->heads_delivered;
+  }
+
   asio::io_context io_{};
   asio::ip::tcp::acceptor acceptor_;
   std::uint16_t port_;
   std::atomic<std::size_t> accepted_{ 0 };
   std::atomic<std::size_t> heads_written_{ 0 };
+  std::atomic<std::size_t> heads_delivered_{ 0 };
+  // Touched only on io_.
+  std::vector<std::pair<std::shared_ptr<connection>, std::string>> held_{};
+  std::atomic<std::size_t> held_count_{ 0 };
   std::thread thread_{};
 };
 
@@ -555,11 +623,12 @@ with_connection(const std::shared_ptr<http_session_manager>& manager,
 // A checked-out, connected, keep-alive session that has completed one round trip, as the
 // manager's busy list holds it between a response and its check_in.
 auto
-borrow_connected(pool_fixture& f) -> std::shared_ptr<http_session>
+borrow_connected(asio::io_context& io, const std::shared_ptr<http_session_manager>& from)
+  -> std::shared_ptr<http_session>
 {
   using outcome = std::pair<std::error_code, std::shared_ptr<http_session>>;
   auto done = std::make_shared<completion<outcome>>();
-  asio::post(f.io, [manager = f.manager, done]() {
+  asio::post(io, [manager = from, done]() {
     auto [ec, session] = manager->check_out(service, {});
     if (ec) {
       return done->set({ ec, nullptr });
@@ -588,6 +657,12 @@ borrow_connected(pool_fixture& f) -> std::shared_ptr<http_session>
   assert_true(session && session->is_connected() && session->keep_alive(),
               "the borrowed session is connected and keep-alive");
   return session;
+}
+
+auto
+borrow_connected(pool_fixture& f) -> std::shared_ptr<http_session>
+{
+  return borrow_connected(f.io, f.manager);
 }
 
 // Busy and idle sessions, by id. Pending sessions are not reported by export_diag_info.
@@ -2548,6 +2623,335 @@ a_buffered_request_checks_in_its_failover_replacement([[maybe_unused]] context& 
   assert_only_the_replacement_is_pooled(c);
 }
 
+// The response-first cases need the answer in the client's receive queue, which SIOCOUTQ
+// observes, and a reactor that queues a socket completion ahead of a timer completion from the same
+// pass, which epoll does. Both are Linux-only.
+class needs_linux_completion_ordering : public requirement
+{
+public:
+  [[nodiscard]] auto describe() const -> std::string override
+  {
+    return "SIOCOUTQ delivery and epoll completion ordering (Linux)";
+  }
+
+  [[nodiscard]] auto check([[maybe_unused]] context& ctx) const -> check_result override
+  {
+#if defined(__linux__)
+    return check_result::ok();
+#else
+    return check_result::missing("SIOCOUTQ and the epoll completion order exist only on Linux");
+#endif
+  }
+};
+
+// CXXCBC-1046: a deadline completion queued behind a handled response stopped the session.
+// The runner is held so that one reactor pass queues the response ahead of the deadline.
+struct request_deadline_setup {
+  explicit request_deadline_setup(pool_fixture& fixture)
+    : f{ fixture }
+  {
+    auto [ec, m] = cluster.http_session_manager();
+    assert_success(ec, "an unopened cluster has a session manager");
+    manager = std::move(m);
+    instrument(*manager);
+    manager->set_configuration(loopback_config(f.server.port()), f.options);
+    session = borrow_connected(f.io, manager);
+    run_on(f.io, [&]() {
+      manager->check_in(service, session);
+    });
+    // check_in posts the read that waits on the idle connection to the strand. Armed before the
+    // request, it is the read the response completes.
+    run_on(session->get_executor(), []() {
+    });
+  }
+
+  request_deadline_setup(const request_deadline_setup&) = delete;
+  request_deadline_setup(request_deadline_setup&&) = delete;
+  auto operator=(const request_deadline_setup&) -> request_deadline_setup& = delete;
+  auto operator=(request_deadline_setup&&) -> request_deadline_setup& = delete;
+
+  ~request_deadline_setup()
+  {
+    manager->close();
+  }
+
+  [[nodiscard]] auto component() -> couchbase::core::http_component
+  {
+    return couchbase::core::http_component{ f.io, couchbase::core::core_sdk_shim{ cluster } };
+  }
+
+  // Returns once the runner has been held past both the delivery of the answer and the deadline.
+  template<typename Issue>
+  void issue_and_hold_past_the_deadline(Issue&& issue, std::chrono::milliseconds timeout)
+  {
+    const auto held = f.server.held();
+    const auto heads = f.server.heads_delivered();
+    run_on(f.io, std::forward<Issue>(issue));
+    const auto expired_after = std::chrono::steady_clock::now() + timeout;
+    const auto start = std::chrono::steady_clock::now();
+    while (f.server.held() == held && within(start, patience())) {
+      std::this_thread::yield();
+    }
+    assert_true(f.server.held() > held, "the endpoint receives the request");
+    // A write completion still posted to the strand would queue the read behind the deadline.
+    run_on(f.io, []() {
+    });
+    run_on(session->get_executor(), []() {
+    });
+    bool answered = false;
+    run_on(f.io, [&]() {
+      f.server.release_held();
+      const auto hold_start = std::chrono::steady_clock::now();
+      while ((f.server.heads_delivered() == heads ||
+              std::chrono::steady_clock::now() <= expired_after) &&
+             within(hold_start, patience())) {
+        std::this_thread::yield();
+      }
+      answered = f.server.heads_delivered() > heads;
+    });
+    assert_true(answered, "the answer is delivered while the runner is held");
+  }
+
+  pool_fixture& f;
+  couchbase::core::cluster cluster{ f.io };
+  std::shared_ptr<http_session_manager> manager{};
+  std::shared_ptr<http_session> session{};
+};
+
+// Long enough that the request is written, and its write completion has run, before the deadline
+// expires. The runner is held past it regardless, so a longer one costs only wall time.
+auto
+held_request_timeout() -> std::chrono::milliseconds
+{
+  return scaled_budget(300ms);
+}
+
+// No response ever comes, so the deadline ends the request.
+constexpr auto unanswered_request_timeout = 10ms;
+
+auto
+freeform(std::string path, std::chrono::milliseconds timeout)
+  -> couchbase::core::operations::management::freeform_request
+{
+  couchbase::core::operations::management::freeform_request request{};
+  request.type = service;
+  request.method = "GET";
+  request.path = std::move(path);
+  request.timeout = timeout;
+  return request;
+}
+
+auto
+free_form(std::string path, std::chrono::milliseconds timeout) -> couchbase::core::http_request
+{
+  couchbase::core::http_request request{};
+  request.service = service;
+  request.method = "GET";
+  request.path = std::move(path);
+  request.timeout = timeout;
+  return request;
+}
+
+// Waits for the request's completion, then for everything queued behind it, which includes a
+// deadline completion queued by the same reactor pass as the response.
+auto
+wait_then_drain(pool_fixture& f, completion<std::error_code>& done)
+  -> std::optional<std::error_code>
+{
+  auto ec = done.wait_for(patience());
+  run_on(f.io, []() {
+  });
+  return ec;
+}
+
+void
+a_command_deadline_queued_behind_its_response_leaves_the_session_pooled(
+  [[maybe_unused]] context& ctx)
+{
+  pool_fixture f{};
+  {
+    request_deadline_setup setup{ f };
+    auto done = std::make_shared<completion<std::error_code>>();
+    setup.issue_and_hold_past_the_deadline(
+      [&]() {
+        setup.manager->execute(
+          freeform("/held/complete", held_request_timeout()),
+          [done](couchbase::core::operations::management::freeform_response&& resp) {
+            done->set(resp.ctx.ec);
+          });
+      },
+      held_request_timeout());
+    const auto ec = wait_then_drain(f, *done);
+    assert_true(ec.has_value(), "the request completes");
+    assert_success(*ec, "the response is handled before the deadline completion runs");
+    assert_false(setup.session->is_stopped(), "the deadline completion leaves the session running");
+    assert_eq(pooled_ids(*setup.manager).count(setup.session->id()),
+              std::size_t{ 1 },
+              "the session the response checked in stays in the pool");
+  }
+  assert_true(f.shutdown(), "the io_context drains once the managers are closed");
+}
+
+void
+a_buffered_request_deadline_queued_behind_its_response_leaves_the_session_pooled(
+  [[maybe_unused]] context& ctx)
+{
+  pool_fixture f{};
+  {
+    request_deadline_setup setup{ f };
+    auto component = setup.component();
+    auto done = std::make_shared<completion<std::error_code>>();
+    setup.issue_and_hold_past_the_deadline(
+      [&]() {
+        auto op = component.do_http_request_buffered(
+          free_form("/held/complete", held_request_timeout()),
+          [done](couchbase::core::buffered_http_response, std::error_code ec) {
+            done->set(ec);
+          });
+        if (!op) {
+          done->set(op.error());
+        }
+      },
+      held_request_timeout());
+    const auto ec = wait_then_drain(f, *done);
+    assert_true(ec.has_value(), "the request completes");
+    assert_success(*ec, "the response is handled before the deadline completion runs");
+    assert_false(setup.session->is_stopped(), "the deadline completion leaves the session running");
+    assert_eq(pooled_ids(*setup.manager).count(setup.session->id()),
+              std::size_t{ 1 },
+              "the session the response checked in stays in the pool");
+  }
+  assert_true(f.shutdown(), "the io_context drains once the managers are closed");
+}
+
+// "/incomplete" sends two of the five bytes it announces, so the stream is still open on the
+// session when the deadline completion runs.
+void
+a_streamed_request_deadline_queued_behind_its_response_leaves_the_stream_open(
+  [[maybe_unused]] context& ctx)
+{
+  pool_fixture f{};
+  {
+    request_deadline_setup setup{ f };
+    auto component = setup.component();
+    auto done = std::make_shared<completion<std::error_code>>();
+    auto response = std::make_shared<couchbase::core::http_response>();
+    setup.issue_and_hold_past_the_deadline(
+      [&]() {
+        auto op = component.do_http_request(
+          free_form("/held/incomplete", held_request_timeout()),
+          [done, response](couchbase::core::http_response resp, std::error_code ec) {
+            *response = std::move(resp);
+            done->set(ec);
+          });
+        if (!op) {
+          done->set(op.error());
+        }
+      },
+      held_request_timeout());
+    const auto ec = wait_then_drain(f, *done);
+    assert_true(ec.has_value(), "the request completes");
+    assert_success(*ec, "the response is handled before the deadline completion runs");
+    assert_false(setup.session->is_stopped(), "the deadline completion leaves the session running");
+
+    using chunk = std::tuple<std::string, bool, std::error_code>;
+    auto pulled = std::make_shared<completion<chunk>>();
+    response->body().next([pulled](std::string data, bool has_more, std::error_code pull_ec) {
+      pulled->set({ std::move(data), has_more, pull_ec });
+    });
+    const auto first = pulled->wait_for(patience());
+    response->close();
+    assert_true(first.has_value(), "the first pull completes");
+    assert_success(std::get<2>(*first), "the stream is not ended by its request deadline");
+    assert_eq(std::get<0>(*first), std::string{ "ab" }, "the body delivers what was sent");
+    assert_true(std::get<1>(*first), "the body has more to come");
+  }
+  assert_true(f.shutdown(), "the io_context drains once the managers are closed");
+}
+
+void
+a_command_deadline_before_its_response_times_out_and_stops_the_session(
+  [[maybe_unused]] context& ctx)
+{
+  pool_fixture f{};
+  {
+    request_deadline_setup setup{ f };
+    auto done = std::make_shared<completion<std::error_code>>();
+    run_on(f.io, [&]() {
+      setup.manager->execute(
+        freeform("/unanswered", unanswered_request_timeout),
+        [done](couchbase::core::operations::management::freeform_response&& resp) {
+          done->set(resp.ctx.ec);
+        });
+    });
+    const auto ec = wait_then_drain(f, *done);
+    assert_true(ec.has_value(), "the request completes");
+    assert_eq(*ec,
+              std::error_code{ couchbase::errc::common::ambiguous_timeout },
+              "the deadline ends the request");
+    assert_true(setup.session->is_stopped(), "the deadline stops the session");
+  }
+  assert_true(f.shutdown(), "the io_context drains once the managers are closed");
+}
+
+void
+a_buffered_request_deadline_before_its_response_times_out_and_stops_the_session(
+  [[maybe_unused]] context& ctx)
+{
+  pool_fixture f{};
+  {
+    request_deadline_setup setup{ f };
+    auto component = setup.component();
+    auto done = std::make_shared<completion<std::error_code>>();
+    run_on(f.io, [&]() {
+      auto op = component.do_http_request_buffered(
+        free_form("/unanswered", unanswered_request_timeout),
+        [done](couchbase::core::buffered_http_response, std::error_code ec) {
+          done->set(ec);
+        });
+      if (!op) {
+        done->set(op.error());
+      }
+    });
+    const auto ec = wait_then_drain(f, *done);
+    assert_true(ec.has_value(), "the request completes");
+    assert_eq(*ec,
+              std::error_code{ couchbase::errc::common::ambiguous_timeout },
+              "the deadline ends the request");
+    assert_true(setup.session->is_stopped(), "the deadline stops the session");
+  }
+  assert_true(f.shutdown(), "the io_context drains once the managers are closed");
+}
+
+void
+a_streamed_request_deadline_before_its_response_times_out_and_stops_the_session(
+  [[maybe_unused]] context& ctx)
+{
+  pool_fixture f{};
+  {
+    request_deadline_setup setup{ f };
+    auto component = setup.component();
+    auto done = std::make_shared<completion<std::error_code>>();
+    run_on(f.io, [&]() {
+      auto op =
+        component.do_http_request(free_form("/unanswered", unanswered_request_timeout),
+                                  [done](couchbase::core::http_response, std::error_code ec) {
+                                    done->set(ec);
+                                  });
+      if (!op) {
+        done->set(op.error());
+      }
+    });
+    const auto ec = wait_then_drain(f, *done);
+    assert_true(ec.has_value(), "the request completes");
+    assert_eq(*ec,
+              std::error_code{ couchbase::errc::common::ambiguous_timeout },
+              "the deadline ends the request");
+    assert_true(setup.session->is_stopped(), "the deadline stops the session");
+  }
+  assert_true(f.shutdown(), "the io_context drains once the managers are closed");
+}
+
 } // namespace
 
 auto
@@ -2595,6 +2999,24 @@ tests() -> test_suite
       { CASE(a_deadline_racing_the_tail_either_stops_or_pools_the_session), {}, timeout::slow },
       { CASE(a_streamed_request_checks_in_its_failover_replacement), {}, timeout::slow },
       { CASE(a_buffered_request_checks_in_its_failover_replacement), {}, timeout::slow },
+      { CASE(a_command_deadline_queued_behind_its_response_leaves_the_session_pooled),
+        { std::make_shared<const needs_linux_completion_ordering>() },
+        timeout::slow },
+      { CASE(a_buffered_request_deadline_queued_behind_its_response_leaves_the_session_pooled),
+        { std::make_shared<const needs_linux_completion_ordering>() },
+        timeout::slow },
+      { CASE(a_streamed_request_deadline_queued_behind_its_response_leaves_the_stream_open),
+        { std::make_shared<const needs_linux_completion_ordering>() },
+        timeout::slow },
+      { CASE(a_command_deadline_before_its_response_times_out_and_stops_the_session),
+        {},
+        timeout::slow },
+      { CASE(a_buffered_request_deadline_before_its_response_times_out_and_stops_the_session),
+        {},
+        timeout::slow },
+      { CASE(a_streamed_request_deadline_before_its_response_times_out_and_stops_the_session),
+        {},
+        timeout::slow },
     },
   };
 }
