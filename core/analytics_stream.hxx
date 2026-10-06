@@ -24,6 +24,7 @@
 #include "utils/movable_function.hxx"
 
 #include <chrono>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -56,9 +57,14 @@ public:
    */
   analytics_stream() = default;
 
+  /**
+   * http_status is the status of the response the body belongs to; an HTTP 400 that matches no
+   * specific error is reported as invalid_argument.
+   */
   analytics_stream(asio::io_context& io,
                    http_response_body body,
-                   row_streamer_options options = {});
+                   row_streamer_options options = {},
+                   std::uint32_t http_status = 0);
 
   /**
    * Starts the stream. Resolves once the preamble has been parsed. The early_error is set when

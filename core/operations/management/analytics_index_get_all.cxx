@@ -55,7 +55,7 @@ analytics_index_get_all_request::make_response(error_context::http&& ctx,
       return response;
     }
     response.status = payload.optional<std::string>("status").value_or("unknown");
-    if (response.status == "success") {
+    if (response.status == "success" && encoded.status_code != 400) {
       if (auto* results = payload.find("results"); results != nullptr && results->is_array()) {
         for (const auto& res : results->get_array()) {
           couchbase::core::management::analytics::index idx;
@@ -76,7 +76,8 @@ analytics_index_get_all_request::make_response(error_context::http&& ctx,
           response.errors.emplace_back(err);
         }
       }
-      response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
+      response.ctx.ec =
+        extract_analytics_error_code(encoded.status_code, response.errors, encoded.body.data());
     }
   }
   return response;

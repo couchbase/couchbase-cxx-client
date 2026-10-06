@@ -161,7 +161,8 @@ public:
         auto options = self->streaming_options_;
         options.idle_timeout = timeout;
         options.is_read_only = read_only;
-        auto stream = std::make_shared<analytics_stream>(self->io_, resp.body(), options);
+        auto stream =
+          std::make_shared<analytics_stream>(self->io_, resp.body(), options, resp.status_code());
         stream->start(
           [self, callback_state, stream, base_ctx](std::error_code early_error) mutable {
             if (early_error) {

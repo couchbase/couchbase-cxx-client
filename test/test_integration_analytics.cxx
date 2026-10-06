@@ -205,7 +205,7 @@ TEST_CASE("integration: analytics query", "[integration]")
     req.statement = fmt::format("DROP DATASET Default.`{}`", dataset_name);
     req.readonly = true;
     auto resp = test::utils::execute(integration.cluster, req);
-    REQUIRE(resp.ctx.ec == couchbase::errc::common::internal_server_failure);
+    REQUIRE(resp.ctx.ec == couchbase::errc::common::invalid_argument);
     REQUIRE(resp.meta.status ==
             couchbase::core::operations::analytics_response::analytics_status::fatal);
   }
@@ -599,7 +599,7 @@ TEST_CASE("integration: public API analytics query", "[integration]")
                                             couchbase::analytics_options{}.readonly(true))
                            .get();
 
-    REQUIRE(error.ec() == couchbase::errc::common::internal_server_failure);
+    REQUIRE(error.ec() == couchbase::errc::common::invalid_argument);
     REQUIRE(resp.meta_data().status() == couchbase::analytics_status::fatal);
   }
 }

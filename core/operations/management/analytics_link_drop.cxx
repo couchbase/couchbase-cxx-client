@@ -72,7 +72,7 @@ analytics_link_drop_request::make_response(error_context::http&& ctx,
     }
     if (payload.is_object()) {
       response.status = payload.optional<std::string>("status").value_or("unknown");
-      if (response.status != "success") {
+      if (response.status != "success" || encoded.status_code == 400) {
         if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
           for (const auto& error : errors->get_array()) {
             const analytics_link_drop_response::problem err{
@@ -103,7 +103,8 @@ analytics_link_drop_request::make_response(error_context::http&& ctx,
     } else if (link_not_found) {
       response.ctx.ec = errc::analytics::link_not_found;
     } else {
-      response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
+      response.ctx.ec =
+        extract_analytics_error_code(encoded.status_code, response.errors, encoded.body.data());
     }
   }
   return response;

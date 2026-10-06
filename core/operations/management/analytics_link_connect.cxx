@@ -66,7 +66,7 @@ analytics_link_connect_request::make_response(error_context::http&& ctx,
     }
     response.status = payload.optional<std::string>("status").value_or("unknown");
 
-    if (response.status != "success") {
+    if (response.status != "success" || encoded.status_code == 400) {
       bool link_not_found = false;
 
       if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
@@ -88,7 +88,8 @@ analytics_link_connect_request::make_response(error_context::http&& ctx,
       if (link_not_found) {
         response.ctx.ec = errc::analytics::link_not_found;
       } else {
-        response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
+        response.ctx.ec =
+          extract_analytics_error_code(encoded.status_code, response.errors, encoded.body.data());
       }
     }
   }

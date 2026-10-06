@@ -104,7 +104,8 @@ query_index_create_request::make_response(error_context::http&& ctx,
     }
     response.status = payload.at("status").get_string();
 
-    if (response.status != "success") {
+    // RFC-58: a 400 is a failure whatever status the body reports.
+    if (response.status != "success" || encoded.status_code == 400) {
       bool index_already_exists = false;
       bool bucket_not_found = false;
       bool collection_not_found = false;
@@ -124,6 +125,9 @@ query_index_create_request::make_response(error_context::http&& ctx,
             }
             if (error.message.find("Bucket Not Found") != std::string::npos) {
               bucket_not_found = true;
+            }
+            if (!common_ec) {
+              common_ec = management::extract_common_query_error_code(error.code, error.message);
             }
           } break;
 
@@ -149,7 +153,9 @@ query_index_create_request::make_response(error_context::http&& ctx,
             break;
 
           default:
-            common_ec = management::extract_common_query_error_code(error.code, error.message);
+            if (!common_ec) {
+              common_ec = management::extract_common_query_error_code(error.code, error.message);
+            }
             break;
         }
         response.errors.emplace_back(error);
@@ -168,7 +174,7 @@ query_index_create_request::make_response(error_context::http&& ctx,
         response.ctx.ec = errc::common::authentication_failure;
       } else if (common_ec) {
         response.ctx.ec = common_ec.value();
-      } else if (!response.errors.empty()) {
+      } else {
         response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
       }
     }

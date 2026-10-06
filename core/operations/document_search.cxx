@@ -384,7 +384,11 @@ search_request::make_response(error_context::search&& ctx,
         response.ctx.ec = errc::common::quota_limited;
         return response;
       }
-    } else if (encoded.status_code == 429) {
+      // RFC-58: a 400 not mapped above is invalid_argument.
+      response.ctx.ec = errc::common::invalid_argument;
+      return response;
+    }
+    if (encoded.status_code == 429) {
       tao::json::value payload{};
       try {
         payload = utils::json::parse(encoded.body.data());

@@ -102,17 +102,20 @@ parse_analytics_meta(const tao::json::value& payload) -> analytics_response::ana
 }
 
 auto
-map_analytics_error(const analytics_response::analytics_meta_data& meta) -> std::error_code
+map_analytics_error(const analytics_response::analytics_meta_data& meta, std::uint32_t http_status)
+  -> std::error_code
 {
-  if (meta.status == analytics_response::analytics_status::success) {
+  if (meta.status == analytics_response::analytics_status::success && http_status != 400) {
     return {};
   }
+  const auto unmatched =
+    http_status == 400 ? errc::common::invalid_argument : errc::common::internal_server_failure;
 
   if (meta.errors.empty()) {
     /* Reachable from make_response, which calls this for any non-success status even when the
      * payload carries no "errors" array, and from the streaming-path caller, which has no such
-     * guarantee either. Classify as a generic internal failure. */
-    return errc::common::internal_server_failure;
+     * guarantee either. */
+    return unmatched;
   }
 
   const auto first_error_code = meta.errors.front().code;
@@ -121,6 +124,13 @@ map_analytics_error(const analytics_response::analytics_meta_data& meta) -> std:
   switch (first_error_code) {
     case 21002: /* Request timed out and will be cancelled */
       ec = errc::common::unambiguous_timeout;
+      break;
+    case 24000: /* RFC-58: ParsingFailure */
+      ec = errc::common::parsing_failure;
+      break;
+    case 23000: /* RFC-58: TemporaryFailure */
+    case 23003: /* RFC-58: TemporaryFailure */
+      ec = errc::common::temporary_failure;
       break;
     case 23007: /* Job queue is full with [string] jobs */
       ec = errc::analytics::job_queue_full;
@@ -145,14 +155,20 @@ map_analytics_error(const analytics_response::analytics_meta_data& meta) -> std:
       ec = errc::analytics::link_not_found;
       break;
     default:
+      // RFC-58 maps these ranges whatever the HTTP status, so a 400 carrying one is not
+      // invalid_argument.
       if (first_error_code >= 24000 && first_error_code < 25000) {
         ec = errc::analytics::compilation_failure;
+      } else if (first_error_code >= 20000 && first_error_code < 21000) {
+        ec = errc::common::authentication_failure;
+      } else if (first_error_code >= 25000 && first_error_code < 26000) {
+        ec = errc::common::internal_server_failure;
       }
       break;
   }
 
   if (!ec) {
-    ec = errc::common::internal_server_failure;
+    ec = unmatched;
   }
 
   return ec;

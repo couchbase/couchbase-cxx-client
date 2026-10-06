@@ -70,7 +70,7 @@ analytics_dataset_create_request::make_response(error_context::http&& ctx,
       return response;
     }
     response.status = payload.optional<std::string>("status").value_or("unknown");
-    if (response.status != "success") {
+    if (response.status != "success" || encoded.status_code == 400) {
       bool dataset_exists = false;
       bool link_not_found = false;
 
@@ -98,7 +98,8 @@ analytics_dataset_create_request::make_response(error_context::http&& ctx,
       } else if (link_not_found) {
         response.ctx.ec = errc::analytics::link_not_found;
       } else {
-        response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
+        response.ctx.ec =
+          extract_analytics_error_code(encoded.status_code, response.errors, encoded.body.data());
       }
     }
   }

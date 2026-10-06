@@ -5,6 +5,8 @@ couchbase_add_test(unit/http/session_manager_eviction LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/http/streaming_response LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/http/tls_hostname_verification LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/http/session_pool_lifetime LABEL unit LINK_CLIENT)
+couchbase_add_test(unit/http/http_400 LABEL unit LINK_CLIENT)
+couchbase_add_test(unit/http/complete_http_response LABEL unit LINK_CLIENT)
 # This test configures TLS contexts through the TLS library directly, so it must use the same copy
 # of that library as the client. A shared client with a statically linked TLS library has its own
 # copy, and a context passed between two copies is invalid. The test therefore links the static
