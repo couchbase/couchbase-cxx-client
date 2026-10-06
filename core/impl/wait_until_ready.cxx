@@ -337,6 +337,19 @@ wait_until_ready(core::cluster core,
                  std::set<service_type> services,
                  utils::movable_function<void(std::error_code)> handler)
 {
+  if (core.is_protostellar()) {
+    // couchbase2 exposes a single gRPC channel; readiness is that channel reaching a connected
+    // state, not a per-service/per-bucket ping. So service_types and bucket_name have nothing to
+    // probe and are ignored (mirrors Java/Go). offline is rejected exactly as the classic op does
+    // below, so behavior is uniform across transports; every other desired_state waits for READY.
+    if (desired_state == couchbase::cluster_state::offline) {
+      return asio::post(core.io_context(), [handler = std::move(handler)]() mutable {
+        handler(errc::common::invalid_argument);
+      });
+    }
+    return core.protostellar_wait_until_ready(timeout, std::move(handler));
+  }
+
   auto op = std::make_shared<wait_until_ready_operation>(std::move(core),
                                                          std::move(bucket_name),
                                                          timeout,
