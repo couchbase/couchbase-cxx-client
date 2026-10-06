@@ -22,6 +22,8 @@
 #include "core/impl/encoded_search_query.hxx"
 #include "core/impl/encoded_search_sort.hxx"
 #include "core/io/http_context.hxx"
+#include "core/io/http_error.hxx"
+#include "core/io/http_message.hxx"
 #include "core/io/query_cache.hxx"
 #include "core/operations/document_search.hxx"
 #include "core/topology/configuration_json.hxx"
@@ -822,6 +824,69 @@ only_the_fusion_modes_are_gated_by_the_capability([[maybe_unused]] context& ctx)
   assert_false(couchbase::core::is_score_fusion(couchbase::core::search_scoring_mode{}),
                "an unset mode is not score fusion");
 }
+
+auto
+search_error(std::uint32_t status, const std::string& error) -> std::error_code
+{
+  couchbase::core::io::http_response encoded{};
+  encoded.status_code = status;
+  encoded.body.append(tao::json::to_string(tao::json::value{
+    { "status", "fail" },
+    { "error", error },
+  }));
+  return couchbase::core::operations::search_request{}.make_response({}, encoded).ctx.ec;
+}
+
+void
+an_unrecognised_rejection_is_an_invalid_argument([[maybe_unused]] context& ctx)
+{
+  assert_eq(search_error(400,
+                         "rest_index: Query, indexName: i, err: bleve: QueryBleve parsing "
+                         "searchRequest, err: sort must be empty or descending order of score "
+                         "for score fusion"),
+            couchbase::errc::common::invalid_argument,
+            "a 400 whose text matches none of the known reasons");
+}
+
+void
+a_recognised_rejection_keeps_its_own_error([[maybe_unused]] context& ctx)
+{
+  assert_eq(search_error(400, "rest_auth: preparePerms, err: index not found"),
+            couchbase::errc::common::index_not_found,
+            "the catch-all for a 400 does not shadow the specific reasons");
+  assert_eq(
+    search_error(400, "rest_index: Query, indexName: i, err: no planPIndexes for indexName: i"),
+    couchbase::errc::search::index_not_ready,
+    "an index that is not ready yet");
+}
+
+void
+a_rejection_without_the_expected_fields_is_an_invalid_argument([[maybe_unused]] context& ctx)
+{
+  for (const char* body : { "{}", R"({"status":"fail","error":42})", "[]" }) {
+    couchbase::core::io::http_response encoded{};
+    encoded.status_code = 400;
+    encoded.body.append(body);
+    const couchbase::core::operations::search_request request{};
+    assert_eq(couchbase::core::io::complete_http_response(
+                request,
+                [] {
+                  return couchbase::core::error_context::search{};
+                },
+                encoded)
+                .ctx.ec,
+              couchbase::errc::common::invalid_argument,
+              std::string{ "a 400 whose body lacks a string error: " } + body);
+  }
+}
+
+void
+a_server_fault_is_still_an_internal_server_failure([[maybe_unused]] context& ctx)
+{
+  assert_eq(search_error(500, "internal error"),
+            couchbase::errc::common::internal_server_failure,
+            "only a 400 is the caller's error");
+}
 } // namespace
 
 auto
@@ -866,6 +931,10 @@ tests() -> test_suite
       { CASE(the_scoring_parameters_survive_build) },
       { CASE(score_fusion_is_read_from_the_search_cluster_capabilities) },
       { CASE(only_the_fusion_modes_are_gated_by_the_capability) },
+      { CASE(an_unrecognised_rejection_is_an_invalid_argument) },
+      { CASE(a_recognised_rejection_keeps_its_own_error) },
+      { CASE(a_rejection_without_the_expected_fields_is_an_invalid_argument) },
+      { CASE(a_server_fault_is_still_an_internal_server_failure) },
     },
   };
 }

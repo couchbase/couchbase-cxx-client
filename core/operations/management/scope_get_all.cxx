@@ -46,7 +46,12 @@ scope_get_all_request::make_response(error_context::http&& ctx,
   if (!response.ctx.ec) {
     switch (encoded.status_code) {
       case 400:
-        response.ctx.ec = errc::common::unsupported_operation;
+        if (encoded.body.data().find("Not allowed on this version of cluster") !=
+            std::string::npos) {
+          response.ctx.ec = errc::common::unsupported_operation;
+        } else {
+          response.ctx.ec = errc::common::invalid_argument;
+        }
         break;
       case 404:
         response.ctx.ec = errc::common::bucket_not_found;

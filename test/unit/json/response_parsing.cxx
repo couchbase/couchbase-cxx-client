@@ -23,6 +23,8 @@
 #include "framework/test_registry.hxx"
 
 #include "core/analytics_scan_consistency.hxx"
+#include "core/io/http_error.hxx"
+#include "core/io/http_message.hxx"
 #include "core/operations/analytics_response_parsing.hxx"
 #include "core/operations/document_analytics.hxx"
 #include "core/operations/document_query.hxx"
@@ -121,6 +123,23 @@ map_query_error_classifies_n1ql_error_codes([[maybe_unused]] context& ctx)
 }
 
 void
+map_query_error_reports_an_unrecognised_400_as_invalid_argument([[maybe_unused]] context& ctx)
+{
+  assert_error(ops::map_query_error(query_meta_with("fatal", 5000), 400),
+               couchbase::errc::common::invalid_argument,
+               "a 400 whose error code has no specific mapping");
+  assert_error(ops::map_query_error(query_meta_with("fatal", 0), 400),
+               couchbase::errc::common::invalid_argument,
+               "a 400 with no errors block");
+  assert_error(ops::map_query_error(query_meta_with("fatal", 3000), 400),
+               couchbase::errc::common::parsing_failure,
+               "a 400 whose error code has a specific mapping keeps it");
+  assert_error(ops::map_query_error(query_meta_with("fatal", 5000), 500),
+               couchbase::errc::common::internal_server_failure,
+               "only a 400 is the caller's error");
+}
+
+void
 encode_query_options_emits_the_shared_request_body_fields([[maybe_unused]] context& ctx)
 {
   ops::query_request req{ "SELECT 1" };
@@ -186,6 +205,96 @@ map_analytics_error_classifies_analytics_error_codes([[maybe_unused]] context& c
                  analytics_meta_with(ops::analytics_response::analytics_status::fatal, 0)),
                couchbase::errc::common::internal_server_failure,
                "a non-success status with no errors block");
+}
+
+void
+map_analytics_error_reports_an_unrecognised_400_as_invalid_argument([[maybe_unused]] context& ctx)
+{
+  using status = ops::analytics_response::analytics_status;
+  assert_error(ops::map_analytics_error(analytics_meta_with(status::fatal, 20000), 400),
+               couchbase::errc::common::invalid_argument,
+               "a 400 whose error code has no specific mapping");
+  assert_error(ops::map_analytics_error(analytics_meta_with(status::fatal, 0), 400),
+               couchbase::errc::common::invalid_argument,
+               "a 400 with no errors block");
+  assert_error(ops::map_analytics_error(analytics_meta_with(status::fatal, 24044), 400),
+               couchbase::errc::analytics::dataset_not_found,
+               "a 400 whose error code has a specific mapping keeps it");
+  assert_error(ops::map_analytics_error(analytics_meta_with(status::fatal, 20000), 500),
+               couchbase::errc::common::internal_server_failure,
+               "only a 400 is the caller's error");
+}
+
+auto
+buffered_error(std::uint32_t status, const std::string& body, bool analytics) -> std::error_code
+{
+  couchbase::core::io::http_response encoded{};
+  encoded.status_code = status;
+  encoded.body.append(body);
+  if (analytics) {
+    return ops::analytics_request{}.make_response({}, encoded).ctx.ec;
+  }
+  return ops::query_request{}.make_response({}, encoded).ctx.ec;
+}
+
+void
+an_undecodable_400_is_an_invalid_argument([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::io::invalid_argument_for_undecodable_400;
+  const std::string syntax_error =
+    R"({"status":"fatal","errors":[{"code":3000,"msg":"syntax error"}]})";
+
+  assert_error(invalid_argument_for_undecodable_400(
+                 couchbase::errc::common::parsing_failure, 400, "<html>Bad Request</html>"),
+               couchbase::errc::common::invalid_argument,
+               "a 400 whose body is not JSON");
+  assert_error(invalid_argument_for_undecodable_400(
+                 couchbase::errc::streaming_json_lexer::stray_token, 400, ""),
+               couchbase::errc::common::invalid_argument,
+               "a 400 whose body the streaming lexer rejected");
+  assert_error(invalid_argument_for_undecodable_400(
+                 couchbase::errc::common::parsing_failure, 400, syntax_error),
+               couchbase::errc::common::parsing_failure,
+               "a parsing_failure mapped from a JSON body is a service error and is kept");
+  assert_error(invalid_argument_for_undecodable_400(
+                 buffered_error(400, syntax_error, false), 400, syntax_error),
+               couchbase::errc::common::parsing_failure,
+               "a buffered query syntax error keeps its mapping through completion");
+  assert_error(invalid_argument_for_undecodable_400(
+                 couchbase::errc::common::parsing_failure, 200, "<html>OK</html>"),
+               couchbase::errc::common::parsing_failure,
+               "a body that is not JSON is still a parsing failure for another status");
+  assert_error(invalid_argument_for_undecodable_400(
+                 couchbase::errc::streaming_json_lexer::stray_token, 502, ""),
+               couchbase::errc::streaming_json_lexer::stray_token,
+               "a lexer failure for another status is left alone");
+  assert_success(invalid_argument_for_undecodable_400({}, 400, ""), "a success is left alone");
+}
+
+void
+a_buffered_statement_rejected_with_a_400_is_an_invalid_argument([[maybe_unused]] context& ctx)
+{
+  assert_error(
+    buffered_error(400, R"({"status":"fatal","errors":[{"code":5000,"msg":"boom"}]})", false),
+    couchbase::errc::common::invalid_argument,
+    "query: a 400 whose error code has no specific mapping");
+  assert_error(buffered_error(400, "", false),
+               couchbase::errc::common::invalid_argument,
+               "query: a 400 with an empty body");
+  assert_error(
+    buffered_error(400, R"({"status":"fatal","errors":[{"code":20000,"msg":"boom"}]})", true),
+    couchbase::errc::common::invalid_argument,
+    "analytics: a 400 whose error code has no specific mapping");
+  assert_error(buffered_error(400, R"({"status":"success","results":[]})", false),
+               couchbase::errc::common::invalid_argument,
+               "query: a 400 whose body reports success");
+  assert_error(buffered_error(400, R"({"status":"success","results":[]})", true),
+               couchbase::errc::common::invalid_argument,
+               "analytics: a 400 whose body reports success");
+  assert_error(
+    buffered_error(500, R"({"status":"fatal","errors":[{"code":5000,"msg":"boom"}]})", false),
+    couchbase::errc::common::internal_server_failure,
+    "only a 400 is the caller's error");
 }
 
 void
@@ -273,9 +382,13 @@ tests() -> test_suite
     {
       { CASE(parse_query_meta_extracts_the_fields_of_a_query_response) },
       { CASE(map_query_error_classifies_n1ql_error_codes) },
+      { CASE(map_query_error_reports_an_unrecognised_400_as_invalid_argument) },
       { CASE(encode_query_options_emits_the_shared_request_body_fields) },
       { CASE(parse_analytics_meta_extracts_the_fields_of_an_analytics_response) },
       { CASE(map_analytics_error_classifies_analytics_error_codes) },
+      { CASE(map_analytics_error_reports_an_unrecognised_400_as_invalid_argument) },
+      { CASE(a_buffered_statement_rejected_with_a_400_is_an_invalid_argument) },
+      { CASE(an_undecodable_400_is_an_invalid_argument) },
       { CASE(encode_analytics_options_emits_the_shared_request_body_fields) },
       { CASE(encode_analytics_options_quotes_both_halves_of_the_query_context) },
       { CASE(encode_analytics_options_escapes_a_backslash_in_the_query_context) },

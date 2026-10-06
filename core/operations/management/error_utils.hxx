@@ -35,7 +35,7 @@ std::optional<std::error_code>
 extract_common_query_error_code(std::uint64_t code, const std::string& message);
 
 std::pair<std::error_code, eventing_problem>
-extract_eventing_error_code(const tao::json::value& response);
+extract_eventing_error_code(const tao::json::value& response, std::uint32_t status_code);
 
 std::optional<std::error_code>
 translate_query_error_code(std::uint64_t error,

@@ -49,6 +49,8 @@ change_password_request::make_response(error_context::http&& ctx,
         if (encoded.body.data().find("Not allowed on this version of cluster") !=
             std::string::npos) {
           response.ctx.ec = errc::common::feature_not_available;
+        } else {
+          response.ctx.ec = errc::common::invalid_argument;
         }
         break;
       default:

@@ -24,6 +24,7 @@
 #include "utils/movable_function.hxx"
 
 #include <chrono>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -56,7 +57,14 @@ public:
    */
   query_stream() = default;
 
-  query_stream(asio::io_context& io, http_response_body body, row_streamer_options options = {});
+  /**
+   * http_status is the status of the response the body belongs to; an HTTP 400 that matches no
+   * specific error is reported as invalid_argument.
+   */
+  query_stream(asio::io_context& io,
+               http_response_body body,
+               row_streamer_options options = {},
+               std::uint32_t http_status = 0);
 
   /**
    * Constructs a stream that replays an already-buffered response (rows are row-JSON strings,

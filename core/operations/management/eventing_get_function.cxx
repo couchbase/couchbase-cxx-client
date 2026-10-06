@@ -54,7 +54,7 @@ eventing_get_function_request::make_response(error_context::http&& ctx,
       response.ctx.ec = errc::common::parsing_failure;
       return response;
     }
-    auto [ec, problem] = extract_eventing_error_code(payload);
+    auto [ec, problem] = extract_eventing_error_code(payload, encoded.status_code);
     if (ec) {
       response.ctx.ec = ec;
       response.error.emplace(problem);

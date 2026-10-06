@@ -230,6 +230,10 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
           response.ctx.ec = errc::common::service_not_available;
           break;
 
+        case 400:
+          response.ctx.ec = errc::common::invalid_argument;
+          break;
+
         case 500:
         default:
           response.ctx.ec = errc::common::internal_server_failure;
@@ -264,7 +268,8 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
       }
     }
 
-    if (response.meta.status == "success") {
+    // RFC-58: a 400 is a failure whatever status the body reports.
+    if (response.meta.status == "success" && encoded.status_code != 400) {
       if (response.prepared) {
         if (ctx_.has_value()) {
           ctx_->cache.put(statement, response.prepared.value());
@@ -312,13 +317,14 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
             break;
         }
 
-        response.ctx.ec = map_query_error(response.meta);
+        response.ctx.ec = map_query_error(response.meta, encoded.status_code);
       }
       if (!response.ctx.ec) {
         CB_LOG_TRACE("Unexpected error returned by query engine: client_context_id=\"{}\", body={}",
                      response.ctx.client_context_id,
                      logger::user_data(encoded.body.data()));
-        response.ctx.ec = errc::common::internal_server_failure;
+        response.ctx.ec = encoded.status_code == 400 ? errc::common::invalid_argument
+                                                     : errc::common::internal_server_failure;
       }
     }
   }
