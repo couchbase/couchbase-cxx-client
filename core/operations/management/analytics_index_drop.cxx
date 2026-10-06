@@ -67,7 +67,7 @@ analytics_index_drop_request::make_response(error_context::http&& ctx,
     }
     response.status = payload.optional<std::string>("status").value_or("unknown");
 
-    if (response.status != "success") {
+    if (response.status != "success" || encoded.status_code == 400) {
       bool index_does_not_exist = false;
       bool dataset_not_found = false;
 
@@ -95,7 +95,8 @@ analytics_index_drop_request::make_response(error_context::http&& ctx,
       } else if (dataset_not_found) {
         response.ctx.ec = errc::analytics::dataset_not_found;
       } else {
-        response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
+        response.ctx.ec =
+          extract_analytics_error_code(encoded.status_code, response.errors, encoded.body.data());
       }
     }
   }

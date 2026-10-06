@@ -144,12 +144,14 @@ analytics_request::make_response(error_context::analytics&& ctx,
       }
     }
 
-    if (response.meta.status != analytics_response::analytics_status::success) {
+    // RFC-58: a 400 is a failure whatever status the body reports.
+    if (response.meta.status != analytics_response::analytics_status::success ||
+        encoded.status_code == 400) {
       if (!response.meta.errors.empty()) {
         response.ctx.first_error_code = response.meta.errors.front().code;
         response.ctx.first_error_message = response.meta.errors.front().message;
       }
-      response.ctx.ec = map_analytics_error(response.meta);
+      response.ctx.ec = map_analytics_error(response.meta, encoded.status_code);
     }
   }
   return response;

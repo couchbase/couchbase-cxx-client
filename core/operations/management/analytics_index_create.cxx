@@ -93,7 +93,7 @@ analytics_index_create_request::make_response(error_context::http&& ctx,
     }
     response.status = payload.optional<std::string>("status").value_or("unknown");
 
-    if (response.status != "success") {
+    if (response.status != "success" || encoded.status_code == 400) {
       bool index_exists = false;
       bool dataset_not_found = false;
       bool link_not_found = false;
@@ -127,7 +127,8 @@ analytics_index_create_request::make_response(error_context::http&& ctx,
       } else if (link_not_found) {
         response.ctx.ec = errc::analytics::link_not_found;
       } else {
-        response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
+        response.ctx.ec =
+          extract_analytics_error_code(encoded.status_code, response.errors, encoded.body.data());
       }
     }
   }

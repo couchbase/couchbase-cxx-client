@@ -28,6 +28,10 @@ auto
 extract_common_error_code(std::uint32_t status_code, const std::string& response_body)
   -> std::error_code
 {
+  // RFC-58: a 400 that reaches this fallback is invalid_argument.
+  if (status_code == 400) {
+    return errc::common::invalid_argument;
+  }
   if (status_code == 429) {
     if (response_body.find("Limit(s) exceeded") != std::string::npos) {
       return errc::common::rate_limited;
@@ -74,15 +78,26 @@ extract_common_query_error_code(std::uint64_t code, const std::string& message)
       break;
   }
 
+  // RFC-58 maps these ranges whatever the HTTP status, so a 400 carrying one is not
+  // invalid_argument.
+  if (code >= 5000 && code < 6000) {
+    return errc::common::internal_server_failure;
+  }
+  if (code >= 10000 && code < 11000) {
+    return errc::common::authentication_failure;
+  }
   return {};
 }
 
 auto
-extract_eventing_error_code(const tao::json::value& response)
+extract_eventing_error_code(const tao::json::value& response, std::uint32_t status_code)
   -> std::pair<std::error_code, eventing_problem>
 {
+  // RFC-58: a 400 that names no specific problem is invalid_argument.
+  const std::error_code unmatched_400 =
+    status_code == 400 ? errc::common::invalid_argument : std::error_code{};
   if (!response.is_object()) {
-    return {};
+    return { unmatched_400, {} };
   }
   if (const auto& name = response.find("name"); name != nullptr && name->is_string()) {
     std::string description;
@@ -132,9 +147,9 @@ extract_eventing_error_code(const tao::json::value& response)
     if (problem.name == "ERR_INVALID_CONFIG" || problem.name == "ERR_INTER_FUNCTION_RECURSION") {
       return { errc::common::invalid_argument, problem };
     }
-    return { errc::common::internal_server_failure, problem };
+    return { unmatched_400 ? unmatched_400 : errc::common::internal_server_failure, problem };
   }
-  return {};
+  return { unmatched_400, {} };
 }
 
 auto
@@ -217,6 +232,31 @@ translate_query_error_code(std::uint64_t error, const std::string& message, std:
 }
 
 auto
+extract_query_error_code(std::uint32_t status_code, const std::string& response_body)
+  -> std::error_code
+{
+  tao::json::value payload{};
+  try {
+    payload = utils::json::parse(response_body);
+  } catch (const tao::pegtl::parse_error&) {
+    return extract_common_error_code(status_code, response_body);
+  }
+  if (const auto* errors = payload.is_object() ? payload.find("errors") : nullptr;
+      errors != nullptr && errors->is_array() && !errors->get_array().empty()) {
+    const auto& first = errors->get_array().front();
+    if (const auto* code = first.is_object() ? first.find("code") : nullptr;
+        code != nullptr && code->is_integer()) {
+      if (auto ec = translate_query_error_code(code->as<std::uint64_t>(),
+                                               first.optional<std::string>("msg").value_or(""));
+          ec) {
+        return ec.value();
+      }
+    }
+  }
+  return extract_common_error_code(status_code, response_body);
+}
+
+auto
 translate_analytics_error_code(std::uint64_t error, const std::string& /* message */)
   -> std::optional<std::error_code>
 {
@@ -229,6 +269,13 @@ translate_analytics_error_code(std::uint64_t error, const std::string& /* messag
 
     case 24006: /* Link [string] does not exist | Link [string] does not exist */
       return errc::analytics::link_not_found;
+
+    case 24000: /* RFC-58: ParsingFailure */
+      return errc::common::parsing_failure;
+
+    case 23000: /* RFC-58: TemporaryFailure */
+    case 23003: /* RFC-58: TemporaryFailure */
+      return errc::common::temporary_failure;
 
     case 23007: /* Job queue is full with [string] jobs */
       return errc::analytics::job_queue_full;
@@ -263,9 +310,15 @@ translate_analytics_error_code(std::uint64_t error, const std::string& /* messag
       if (error >= 24000 && error < 25000) {
         return errc::analytics::compilation_failure;
       }
+      if (error >= 20000 && error < 21000) {
+        return errc::common::authentication_failure;
+      }
+      if (error >= 25000 && error < 26000) {
+        return errc::common::internal_server_failure;
+      }
       break;
   }
-  return errc::common::internal_server_failure;
+  return {};
 }
 
 auto

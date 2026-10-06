@@ -82,7 +82,7 @@ query_index_get_all_deferred_request::make_response(couchbase::core::error_conte
   query_index_get_all_deferred_response response{ std::move(ctx) };
   if (!response.ctx.ec) {
     if (encoded.status_code != 200) {
-      response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
+      response.ctx.ec = extract_query_error_code(encoded.status_code, encoded.body.data());
       return response;
     }
     tao::json::value payload{};

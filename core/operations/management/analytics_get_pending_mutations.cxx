@@ -70,7 +70,8 @@ analytics_get_pending_mutations_request::make_response(error_context::http&& ctx
         response.errors.emplace_back(err);
       }
     }
-    response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
+    response.ctx.ec =
+      extract_analytics_error_code(encoded.status_code, response.errors, encoded.body.data());
   }
   return response;
 }

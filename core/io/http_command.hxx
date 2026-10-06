@@ -27,6 +27,7 @@
 #include "core/tracing/constants.hxx"
 #include "core/tracing/tracer_wrapper.hxx"
 #include "core/utils/movable_function.hxx"
+#include "http_error.hxx"
 #include "http_session.hxx"
 #include "http_traits.hxx"
 
@@ -173,33 +174,36 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
         telemetry_recorder->update_counter(canceled_counter_for_service_type(request.type));
       }
       encoded_response_type encoded_resp{ std::move(msg) };
-      error_context_type ctx{};
-      ctx.ec = ec;
-      ctx.client_context_id = client_context_id_;
-      ctx.method = encoded.method;
-      ctx.path = encoded.path;
-      ctx.http_status = encoded_resp.status_code;
-      ctx.http_body = encoded_resp.body.data();
-      {
-        const std::scoped_lock lock(handler_mutex_);
-        // A request completed before any dispatch leaves last_dispatched_from/to unset.
-        if (!dispatched_to_.empty()) {
-          // A resend after a refused client certificate writes the request on a new connection.
-          if (const auto session = session_.lock(); session) {
-            if (auto [from, to] = session->dispatched_endpoints(); !to.empty()) {
-              dispatched_from_ = std::move(from);
-              dispatched_to_ = std::move(to);
+      auto make_context = [&]() {
+        error_context_type ctx{};
+        ctx.ec = ec;
+        ctx.client_context_id = client_context_id_;
+        ctx.method = encoded.method;
+        ctx.path = encoded.path;
+        ctx.http_status = encoded_resp.status_code;
+        ctx.http_body = encoded_resp.body.data();
+        {
+          const std::scoped_lock lock(handler_mutex_);
+          // A request completed before any dispatch leaves last_dispatched_from/to unset.
+          if (!dispatched_to_.empty()) {
+            // A resend after a refused client certificate writes the request on a new connection.
+            if (const auto session = session_.lock(); session) {
+              if (auto [from, to] = session->dispatched_endpoints(); !to.empty()) {
+                dispatched_from_ = std::move(from);
+                dispatched_to_ = std::move(to);
+              }
             }
+            ctx.last_dispatched_from = dispatched_from_;
+            ctx.last_dispatched_to = dispatched_to_;
           }
-          ctx.last_dispatched_from = dispatched_from_;
-          ctx.last_dispatched_to = dispatched_to_;
+          ctx.hostname = target_hostname_;
+          ctx.port = target_port_;
         }
-        ctx.hostname = target_hostname_;
-        ctx.port = target_port_;
-      }
+        return ctx;
+      };
 
       // Can raise priv::retry_http_request when a retry is required
-      auto resp = request.make_response(std::move(ctx), std::move(encoded_resp));
+      auto resp = io::complete_http_response(request, make_context, encoded_resp);
 
 #ifdef COUCHBASE_CXX_CLIENT_CREATE_OPERATION_SPAN_IN_CORE
       span_->end();

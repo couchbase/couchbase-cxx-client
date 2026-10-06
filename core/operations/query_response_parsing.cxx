@@ -93,16 +93,20 @@ parse_query_meta(const tao::json::value& payload) -> query_response::query_meta_
 }
 
 auto
-map_query_error(const query_response::query_meta_data& meta) -> std::error_code
+map_query_error(const query_response::query_meta_data& meta, std::uint32_t http_status)
+  -> std::error_code
 {
-  if (meta.status == "success") {
+  const auto unmatched =
+    http_status == 400 ? errc::common::invalid_argument : errc::common::internal_server_failure;
+
+  if (meta.status == "success" && http_status != 400) {
     return {};
   }
 
   if (!meta.errors || meta.errors->empty()) {
     /* Unreachable from make_response, which only calls map_query_error after confirming
      * errors is non-empty; present for the streaming-path caller, which has no such guard. */
-    return errc::common::internal_server_failure;
+    return unmatched;
   }
 
   const auto& first = meta.errors->front();
@@ -198,7 +202,7 @@ map_query_error(const query_response::query_meta_data& meta) -> std::error_code
   }
 
   if (!ec) {
-    ec = errc::common::internal_server_failure;
+    ec = unmatched;
   }
 
   return ec;

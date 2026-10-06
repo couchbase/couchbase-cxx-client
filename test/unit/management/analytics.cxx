@@ -20,6 +20,7 @@
 
 #include "utils/http_context.hxx"
 
+#include "core/io/http_error.hxx"
 #include "core/io/http_message.hxx"
 #include "core/operations/management/analytics.hxx"
 #include "core/utils/json.hxx"
@@ -29,7 +30,9 @@
 
 #include <tao/json/value.hpp>
 
+#include <cstdint>
 #include <string>
+#include <system_error>
 
 namespace couchbase::test
 {
@@ -572,6 +575,75 @@ quote_field_path_quotes_every_segment_of_a_dotted_path([[maybe_unused]] context&
   assert_eq(analytics::quote_field_path("a.b.c"), "`a`.`b`.`c`", "three segments");
   assert_eq(analytics::quote_field_path("a\\b.c"), "`a\\\\b`.`c`", "a backslash inside a segment");
 }
+template<typename Request>
+auto
+mapped_error(std::uint32_t status, const std::string& body) -> std::error_code
+{
+  couchbase::core::io::http_response encoded{};
+  encoded.status_code = status;
+  encoded.body.append(body);
+  const Request request{};
+  return couchbase::core::io::complete_http_response(
+           request,
+           [] {
+             return couchbase::core::error_context::http{};
+           },
+           encoded)
+    .ctx.ec;
+}
+
+auto
+analytics_errors(std::uint32_t code) -> std::string
+{
+  return R"({"status":"fatal","errors":[{"code":)" + std::to_string(code) + R"(,"msg":"boom"}]})";
+}
+
+void
+a_management_rejection_keeps_its_rfc_58_mapping([[maybe_unused]] context& ctx)
+{
+  namespace mgmt = couchbase::core::operations::management;
+  using create = mgmt::analytics_dataset_create_request;
+  assert_eq(mapped_error<create>(400, analytics_errors(24500)),
+            couchbase::errc::analytics::compilation_failure,
+            "24xxx is a compilation failure, as for a statement");
+  assert_eq(mapped_error<create>(400, analytics_errors(20001)),
+            couchbase::errc::common::authentication_failure,
+            "20xxx is an authentication failure");
+  assert_eq(mapped_error<create>(400, analytics_errors(25001)),
+            couchbase::errc::common::internal_server_failure,
+            "25xxx is an internal server failure");
+  assert_eq(mapped_error<create>(400, analytics_errors(24000)),
+            couchbase::errc::common::parsing_failure,
+            "24000 is a parsing failure");
+  assert_eq(mapped_error<create>(400, analytics_errors(23003)),
+            couchbase::errc::common::temporary_failure,
+            "23003 is a temporary failure");
+  assert_eq(mapped_error<create>(400, analytics_errors(22001)),
+            couchbase::errc::common::invalid_argument,
+            "a code without a mapping falls back to invalid_argument");
+  assert_eq(
+    mapped_error<mgmt::analytics_link_create_request<
+      couchbase::core::management::analytics::s3_external_link>>(400, analytics_errors(20001)),
+    couchbase::errc::common::authentication_failure,
+    "link create");
+  assert_eq(
+    mapped_error<mgmt::analytics_get_pending_mutations_request>(400, analytics_errors(20001)),
+    couchbase::errc::common::authentication_failure,
+    "get pending mutations");
+}
+
+void
+a_management_rejection_that_claims_success_is_an_error([[maybe_unused]] context& ctx)
+{
+  namespace mgmt = couchbase::core::operations::management;
+  const std::string body = R"({"status":"success"})";
+  assert_eq(mapped_error<mgmt::analytics_dataset_create_request>(400, body),
+            couchbase::errc::common::invalid_argument,
+            "dataset create");
+  assert_eq(mapped_error<mgmt::analytics_index_get_all_request>(400, body),
+            couchbase::errc::common::invalid_argument,
+            "index get all");
+}
 } // namespace
 
 auto
@@ -606,6 +678,8 @@ tests() -> test_suite
       { CASE(quote_identifier_quotes_the_name_and_escapes_its_backslashes) },
       { CASE(quote_dataverse_name_splits_on_slash_and_escapes_backslashes) },
       { CASE(quote_field_path_quotes_every_segment_of_a_dotted_path) },
+      { CASE(a_management_rejection_keeps_its_rfc_58_mapping) },
+      { CASE(a_management_rejection_that_claims_success_is_an_error) },
     },
   };
 }

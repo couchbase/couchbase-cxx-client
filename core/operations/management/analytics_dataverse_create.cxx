@@ -65,7 +65,7 @@ analytics_dataverse_create_request::make_response(error_context::http&& ctx,
     }
     response.status = payload.optional<std::string>("status").value_or("unknown");
 
-    if (response.status != "success") {
+    if (response.status != "success" || encoded.status_code == 400) {
       bool dataverse_exists = false;
 
       if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
@@ -87,7 +87,8 @@ analytics_dataverse_create_request::make_response(error_context::http&& ctx,
       if (dataverse_exists) {
         response.ctx.ec = errc::analytics::dataverse_exists;
       } else {
-        response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
+        response.ctx.ec =
+          extract_analytics_error_code(encoded.status_code, response.errors, encoded.body.data());
       }
     }
   }

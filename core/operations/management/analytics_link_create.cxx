@@ -49,7 +49,7 @@ make_analytics_link_create_response(error_context::http&& ctx, const io::http_re
     }
     if (payload.is_object()) {
       response.status = payload.optional<std::string>("status").value_or("unknown");
-      if (response.status != "success") {
+      if (response.status != "success" || encoded.status_code == 400) {
         if (auto* errors = payload.find("errors"); errors != nullptr && errors->is_array()) {
           for (const auto& error : errors->get_array()) {
             const management::analytics_link_create_response::problem err{
@@ -80,7 +80,8 @@ make_analytics_link_create_response(error_context::http&& ctx, const io::http_re
     } else if (link_exists) {
       response.ctx.ec = errc::analytics::link_exists;
     } else {
-      response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
+      response.ctx.ec =
+        extract_analytics_error_code(encoded.status_code, response.errors, encoded.body.data());
     }
   }
   return response;

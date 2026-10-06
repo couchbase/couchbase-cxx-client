@@ -24,6 +24,7 @@
 #include "core/operations/management/collection_update.hxx"
 #include "core/operations/management/scope_create.hxx"
 #include "core/operations/management/scope_drop.hxx"
+#include "core/operations/management/scope_get_all.hxx"
 
 #include <couchbase/error_codes.hxx>
 
@@ -74,6 +75,14 @@ auto
 scope_drop() -> couchbase::core::operations::management::scope_drop_request
 {
   return { "default", "myscope" };
+}
+
+auto
+scope_get_all() -> couchbase::core::operations::management::scope_get_all_request
+{
+  couchbase::core::operations::management::scope_get_all_request req{};
+  req.bucket_name = "default";
+  return req;
 }
 
 void
@@ -207,6 +216,36 @@ collection_update_reports_a_missing_bucket([[maybe_unused]] context& ctx)
             couchbase::errc::common::bucket_not_found,
             "a 404 naming the bucket");
 }
+
+void
+drop_and_list_report_an_unrecognised_rejection_as_invalid_argument([[maybe_unused]] context& ctx)
+{
+  const std::string rejection = R"({"errors":{"name":"unsupported request"}})";
+  assert_eq(mapped_error(collection_drop(), 400, rejection),
+            couchbase::errc::common::invalid_argument,
+            "collection_drop: a 400 whose text matches none of the known reasons");
+  assert_eq(mapped_error(scope_drop(), 400, rejection),
+            couchbase::errc::common::invalid_argument,
+            "scope_drop: a 400 whose text matches none of the known reasons");
+  assert_eq(mapped_error(scope_get_all(), 400, rejection),
+            couchbase::errc::common::invalid_argument,
+            "scope_get_all: a 400 whose text matches none of the known reasons");
+}
+
+void
+drop_and_list_report_a_cluster_without_collections_as_unsupported([[maybe_unused]] context& ctx)
+{
+  const std::string rejection = "Not allowed on this version of cluster";
+  assert_eq(mapped_error(collection_drop(), 400, rejection),
+            couchbase::errc::common::unsupported_operation,
+            "collection_drop");
+  assert_eq(mapped_error(scope_drop(), 400, rejection),
+            couchbase::errc::common::unsupported_operation,
+            "scope_drop");
+  assert_eq(mapped_error(scope_get_all(), 400, rejection),
+            couchbase::errc::common::unsupported_operation,
+            "scope_get_all");
+}
 } // namespace
 
 auto
@@ -230,6 +269,8 @@ tests() -> test_suite
       { CASE(collection_update_reports_a_missing_collection) },
       { CASE(collection_update_reports_a_missing_scope) },
       { CASE(collection_update_reports_a_missing_bucket) },
+      { CASE(drop_and_list_report_an_unrecognised_rejection_as_invalid_argument) },
+      { CASE(drop_and_list_report_a_cluster_without_collections_as_unsupported) },
     },
   };
 }
