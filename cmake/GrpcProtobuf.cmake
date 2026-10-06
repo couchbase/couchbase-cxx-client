@@ -397,6 +397,16 @@ if(NOT gRPC_FOUND)
     # Set PROTOBUF_IMPORT_DIRS so protobuf_Generate.cmake and gRPC_Generate.cmake
     # add the necessary -I flag when invoking protoc.
     set(PROTOBUF_IMPORT_DIRS "${grpc_SOURCE_DIR}/third_party/protobuf/src" CACHE STRING "" FORCE)
+
+    # With WITH_OTLP_GRPC, OTel's cmake/grpc.cmake finds this gRPC through the grpc-config.cmake
+    # redirect and sets gRPC_PROVIDER to "find_package", so its protobuf.cmake runs
+    # find_package(Protobuf) instead. That resolves a platform protobuf where one is installed, or
+    # fetches a second copy whose targets collide with these. This empty package config makes the
+    # CONFIG search succeed on the targets that already exist. ThirdPartyDependencies.cmake passes
+    # it to OpenTelemetry alone, as a package option, so no other find_package(Protobuf) sees it.
+    set(COUCHBASE_CXX_CLIENT_BUNDLED_PROTOBUF_DIR "${CMAKE_BINARY_DIR}/cmake/protobuf-from-grpc")
+    file(WRITE "${COUCHBASE_CXX_CLIENT_BUNDLED_PROTOBUF_DIR}/protobuf-config.cmake"
+         "# protobuf::libprotobuf and protobuf::protoc are defined by gRPC's bundled protobuf.\n")
   endif()
 
   if(TARGET grpc++ AND NOT TARGET gRPC::grpc++)

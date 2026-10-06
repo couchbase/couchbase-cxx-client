@@ -143,6 +143,19 @@ if(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
     declare_system_library(CURL::libcurl)
   endif()
 
+  # The FIT driver gives the C++ performer an OTLP/gRPC collector endpoint, so the performer needs
+  # the gRPC exporters. OpenTelemetry finds the gRPC that GrpcProtobuf.cmake resolved: the cached
+  # gRPC_DIR for a platform package, CPM's grpc-config.cmake redirect for a source build.
+  set(_couchbase_otel_protobuf_option)
+  if(COUCHBASE_CXX_CLIENT_BUILD_TOOLS AND COUCHBASE_CXX_CLIENT_BUILD_FIT_PERFORMER)
+    set(_couchbase_otel_with_otlp_grpc ON)
+    if(COUCHBASE_CXX_CLIENT_BUNDLED_PROTOBUF_DIR)
+      set(_couchbase_otel_protobuf_option "Protobuf_DIR ${COUCHBASE_CXX_CLIENT_BUNDLED_PROTOBUF_DIR}")
+    endif()
+  else()
+    set(_couchbase_otel_with_otlp_grpc OFF)
+  endif()
+
   if(NOT TARGET opentelemetry)
     # These curl settings apply to the configuration that does NOT vendor curl above, where
     # OpenTelemetry resolves the platform's libcurl: they are no-ops against a system package, and
@@ -167,7 +180,8 @@ if(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
       "WITH_BENCHMARK OFF"
       "WITH_EXAMPLES OFF"
       "WITH_FUNC_TESTS OFF"
-      "WITH_OTLP_GRPC OFF"
+      "WITH_OTLP_GRPC ${_couchbase_otel_with_otlp_grpc}"
+      ${_couchbase_otel_protobuf_option}
       "WITH_OTLP_HTTP ON"
       "WITH_PROMETHEUS OFF"
       "WITH_OPENTRACING OFF"
@@ -181,6 +195,10 @@ if(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
 
   declare_system_library(opentelemetry_exporter_otlp_http)
   declare_system_library(opentelemetry_exporter_otlp_http_metric)
+  if(_couchbase_otel_with_otlp_grpc)
+    declare_system_library(opentelemetry_exporter_otlp_grpc)
+    declare_system_library(opentelemetry_exporter_otlp_grpc_metrics)
+  endif()
 endif()
 
 if(NOT TARGET Microsoft.GSL::GSL)
