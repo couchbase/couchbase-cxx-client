@@ -3241,10 +3241,10 @@ attempt_context_impl::set_atr_pending_locked(
           // This bounds the value to [0-timeout].  It should always be in this
           // range, this is just to protect against the application clock
           // changing.
-          const long remaining_bounded_nanos =
+          const auto remaining_bounded_nanos =
             std::max(std::min(remaining.count(), self->overall()->config().timeout.count()),
                      static_cast<std::chrono::nanoseconds::rep>(0));
-          const long remaining_bounded_msecs = remaining_bounded_nanos / 1'000'000;
+          const auto remaining_bounded_msecs = remaining_bounded_nanos / 1'000'000;
 
           core::operations::mutate_in_request req{ self->atr_id_.value() };
 
