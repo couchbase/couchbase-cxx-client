@@ -409,8 +409,19 @@ if(asio_ADDED)
 
     message(STATUS "Set _WIN32_WINNT=${_WIN32_WINNT}")
 
-    target_compile_definitions(asio INTERFACE _WIN32_WINNT=${_WIN32_WINNT} WIN32_LEAN_AND_MEAN)
-    target_compile_options(asio INTERFACE /bigobj)
+    # PUBLIC: asio.cpp and the code including asio's headers must see the same values. asio otherwise
+    # derives ASIO_HAS_THREADS per translation unit from predefined macros and earlier includes, and two
+    # translation units that disagree compile the same asio classes against different mutex and thread types.
+    target_compile_definitions(asio PUBLIC _WIN32_WINNT=${_WIN32_WINNT} WIN32_LEAN_AND_MEAN ASIO_HAS_THREADS=1)
+    if(MSVC)
+      target_compile_options(asio INTERFACE /bigobj)
+    else()
+      # MSVC gets these through asio's #pragma comment(lib); MinGW needs them on the link line.
+      target_link_libraries(asio PUBLIC ws2_32 mswsock bcrypt)
+      if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_compile_options(asio INTERFACE -Wa,-mbig-obj)
+      endif()
+    endif()
   endif()
 
   add_library(asio::asio ALIAS asio)
