@@ -19,6 +19,7 @@
 
 #include <couchbase/error_codes.hxx>
 
+#include "core/io/http_error.hxx"
 #include "core/operations/query_response_parsing.hxx"
 #include "free_form_http_request.hxx"
 #include "logger/logger.hxx"
@@ -118,8 +119,10 @@ class streaming_query_stream_impl
 public:
   streaming_query_stream_impl(asio::io_context& io,
                               http_response_body body,
-                              row_streamer_options options)
+                              row_streamer_options options,
+                              std::uint32_t http_status)
     : streamer_{ io, std::move(body), N1QL_RESULTS_POINTER, options }
+    , http_status_{ http_status }
   {
   }
 
@@ -128,7 +131,8 @@ public:
     streamer_.start([self = shared_from_this(), on_ready = std::move(on_ready)](
                       std::string preamble, std::error_code ec) mutable {
       if (ec) {
-        return on_ready(normalize_stream_error(ec));
+        return on_ready(normalize_stream_error(
+          io::invalid_argument_for_undecodable_400(ec, self->http_status_, {})));
       }
       operations::query_response::query_meta_data meta{};
       try {
@@ -140,7 +144,8 @@ public:
           const std::scoped_lock lock{ self->mutex_ };
           self->error_details_.raw = std::move(preamble);
         }
-        return on_ready(errc::common::parsing_failure);
+        return on_ready(io::invalid_argument_for_undecodable_400(
+          errc::common::parsing_failure, self->http_status_, {}));
       }
       {
         const std::scoped_lock lock{ self->mutex_ };
@@ -150,12 +155,12 @@ public:
       // An upfront error is rare for the streaming path (status/errors usually arrive in the
       // trailer). Mirror the analytics preamble check and gate on error entries rather than status:
       // a benign non-success preamble status (e.g. "running") would otherwise be handed to
-      // map_query_error, whose no-errors fallback returns internal_server_failure — a spurious
+      // map_query_error, whose no-errors fallback reports an error — a spurious
       // error. Checking errors also surfaces a genuine preamble error now rather than one next()
       // call later.
       std::error_code early_error{};
       if (meta.errors && !meta.errors->empty()) {
-        early_error = operations::map_query_error(meta);
+        early_error = operations::map_query_error(meta, self->http_status_);
       }
       on_ready(early_error);
     });
@@ -190,7 +195,8 @@ public:
       std::error_code terminal_ec{};
       if (ec) {
         // Normalize a mid-document lexer failure to parsing_failure, matching the buffered path.
-        terminal_ec = normalize_stream_error(ec);
+        terminal_ec = normalize_stream_error(
+          io::invalid_argument_for_undecodable_400(ec, self->http_status_, {}));
       } else if (auto raw_meta = self->streamer_.metadata(); !raw_meta.has_value()) {
         // A clean end without reconstructed metadata violates the row_streamer invariant; surface
         // it rather than silently reporting success with no metadata.
@@ -199,14 +205,15 @@ public:
       } else {
         try {
           auto meta = operations::parse_query_meta(utils::json::parse(raw_meta.value()));
-          terminal_ec = operations::map_query_error(meta);
+          terminal_ec = operations::map_query_error(meta, self->http_status_);
           const std::scoped_lock lock{ self->mutex_ };
           // The trailer is where a request that failed part-way reports itself, so its diagnostics
           // supersede the preamble's for the terminal error.
           self->error_details_ = extract_error_details(meta, std::move(raw_meta.value()));
           self->meta_data_ = std::move(meta);
         } catch (const std::exception&) {
-          terminal_ec = errc::common::parsing_failure;
+          terminal_ec = io::invalid_argument_for_undecodable_400(
+            errc::common::parsing_failure, self->http_status_, {});
           const std::scoped_lock lock{ self->mutex_ };
           self->error_details_.raw = std::move(raw_meta.value());
         }
@@ -252,6 +259,7 @@ public:
 
 private:
   row_streamer streamer_;
+  std::uint32_t http_status_{};
   mutable std::mutex mutex_{};
   std::optional<std::string> signature_{};
   std::optional<operations::query_response::query_meta_data> meta_data_{};
@@ -350,8 +358,11 @@ private:
 
 query_stream::query_stream(asio::io_context& io,
                            http_response_body body,
-                           row_streamer_options options)
-  : impl_{ std::make_shared<streaming_query_stream_impl>(io, std::move(body), options) }
+                           row_streamer_options options,
+                           std::uint32_t http_status)
+  : impl_{
+    std::make_shared<streaming_query_stream_impl>(io, std::move(body), options, http_status)
+  }
 {
 }
 

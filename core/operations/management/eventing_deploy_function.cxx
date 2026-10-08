@@ -47,6 +47,9 @@ eventing_deploy_function_request::make_response(error_context::http&& ctx,
   eventing_deploy_function_response response{ std::move(ctx) };
   if (!response.ctx.ec) {
     if (encoded.body.data().empty()) {
+      if (encoded.status_code == 400) {
+        response.ctx.ec = errc::common::invalid_argument;
+      }
       return response;
     }
     tao::json::value payload{};
@@ -56,7 +59,7 @@ eventing_deploy_function_request::make_response(error_context::http&& ctx,
       response.ctx.ec = errc::common::parsing_failure;
       return response;
     }
-    auto [ec, problem] = extract_eventing_error_code(payload);
+    auto [ec, problem] = extract_eventing_error_code(payload, encoded.status_code);
     if (ec) {
       response.ctx.ec = ec;
       response.error.emplace(problem);

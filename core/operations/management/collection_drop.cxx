@@ -47,7 +47,11 @@ collection_drop_request::make_response(error_context::http&& ctx,
   if (!response.ctx.ec) {
     switch (const auto& body = encoded.body.data(); encoded.status_code) {
       case 400:
-        response.ctx.ec = errc::common::unsupported_operation;
+        if (body.find("Not allowed on this version of cluster") != std::string_view::npos) {
+          response.ctx.ec = errc::common::unsupported_operation;
+        } else {
+          response.ctx.ec = errc::common::invalid_argument;
+        }
         break;
       case 404: {
         const auto collection_prefix_pos = body.find("Collection with name ");

@@ -20,14 +20,20 @@
 
 #include "utils/http_context.hxx"
 
+#include "core/io/http_error.hxx"
 #include "core/io/http_message.hxx"
+#include "core/operations/management/query_index_build.hxx"
 #include "core/operations/management/query_index_create.hxx"
+#include "core/operations/management/query_index_drop.hxx"
+#include "core/operations/management/query_index_get_all_deferred.hxx"
 #include "core/utils/json.hxx"
 
 #include <tao/json/value.hpp>
 
+#include <cstdint>
 #include <regex>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -87,6 +93,78 @@ a_key_that_already_has_backticks_is_not_quoted_twice([[maybe_unused]] context& c
   assert_eq(match[1].str(), "`test_index`", "the index name");
   assert_eq(match[2].str(), "`field-1`, `field-2`, `field-3`", "the key list");
 }
+
+template<typename Request>
+auto
+mapped_error(std::uint32_t status, const std::string& body) -> std::error_code
+{
+  couchbase::core::io::http_response encoded{};
+  encoded.status_code = status;
+  encoded.body.append(body);
+  const Request request{};
+  return couchbase::core::io::complete_http_response(
+           request,
+           [] {
+             return couchbase::core::error_context::http{};
+           },
+           encoded)
+    .ctx.ec;
+}
+
+void
+a_rejection_with_no_errors_listed_is_an_invalid_argument([[maybe_unused]] context& ctx)
+{
+  using create = couchbase::core::operations::management::query_index_create_request;
+  using drop = couchbase::core::operations::management::query_index_drop_request;
+  const std::string body = R"({"status":"fatal","errors":[]})";
+  assert_eq(mapped_error<create>(400, body),
+            couchbase::errc::common::invalid_argument,
+            "create: a 400 is not reported as a success");
+  assert_eq(mapped_error<drop>(400, body),
+            couchbase::errc::common::invalid_argument,
+            "drop: a 400 is not reported as a success");
+  assert_eq(mapped_error<create>(400, "{}"),
+            couchbase::errc::common::invalid_argument,
+            "create: a 400 whose body has no status or errors");
+  assert_eq(mapped_error<drop>(400, "{}"),
+            couchbase::errc::common::invalid_argument,
+            "drop: a 400 whose body has no status or errors");
+}
+
+void
+a_rejection_that_claims_success_is_an_invalid_argument([[maybe_unused]] context& ctx)
+{
+  using build = couchbase::core::operations::management::query_index_build_request;
+  using create = couchbase::core::operations::management::query_index_create_request;
+  using drop = couchbase::core::operations::management::query_index_drop_request;
+  const std::string body = R"({"status":"success"})";
+  assert_eq(mapped_error<build>(400, body), couchbase::errc::common::invalid_argument, "build");
+  assert_eq(mapped_error<create>(400, body), couchbase::errc::common::invalid_argument, "create");
+  assert_eq(mapped_error<drop>(400, body), couchbase::errc::common::invalid_argument, "drop");
+}
+
+void
+a_failure_body_without_usable_errors_is_not_a_success([[maybe_unused]] context& ctx)
+{
+  using create = couchbase::core::operations::management::query_index_create_request;
+  using drop = couchbase::core::operations::management::query_index_drop_request;
+  using deferred = couchbase::core::operations::management::query_index_get_all_deferred_request;
+  assert_eq(mapped_error<create>(500, R"({"status":"fatal","errors":[]})"),
+            couchbase::errc::common::internal_server_failure,
+            "create: a failed status with no errors listed");
+  assert_eq(mapped_error<drop>(500, R"({"status":"fatal","errors":[]})"),
+            couchbase::errc::common::internal_server_failure,
+            "drop: a failed status with no errors listed");
+  assert_eq(mapped_error<create>(500, R"({"status":"fatal","errors":null})"),
+            couchbase::errc::common::parsing_failure,
+            "create: errors that are not an array");
+  assert_eq(mapped_error<create>(500, "{}"),
+            couchbase::errc::common::parsing_failure,
+            "create: a 500 whose body has no status");
+  assert_eq(mapped_error<deferred>(200, "{}"),
+            couchbase::errc::common::parsing_failure,
+            "get_all_deferred: a 200 whose body has no status is not an empty list");
+}
 } // namespace
 
 auto
@@ -98,6 +176,9 @@ tests() -> test_suite
       { CASE(a_single_key_is_wrapped_in_backticks) },
       { CASE(multiple_keys_are_wrapped_individually) },
       { CASE(a_key_that_already_has_backticks_is_not_quoted_twice) },
+      { CASE(a_rejection_with_no_errors_listed_is_an_invalid_argument) },
+      { CASE(a_rejection_that_claims_success_is_an_invalid_argument) },
+      { CASE(a_failure_body_without_usable_errors_is_not_a_success) },
     },
   };
 }

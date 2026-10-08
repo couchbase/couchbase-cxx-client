@@ -23,6 +23,7 @@
 
 #include <tao/json/forward.hpp>
 
+#include <cstdint>
 #include <system_error>
 
 namespace couchbase::core::operations
@@ -45,10 +46,15 @@ parse_query_meta(const tao::json::value& payload) -> query_response::query_meta_
  * prepared_statement_failure here; the cache-erase + retry_http_request throw remains in
  * make_response and applies only to the 4040/4050/4070 subset.
  *
- * Returns an empty error_code when the query succeeded (meta.status == "success" and no
- * prepared-statement retry needed).
+ * Returns an empty error_code when the query succeeded (meta.status == "success", http_status is
+ * not 400, and no prepared-statement retry needed).
+ *
+ * http_status is the status of the response that carried the metadata, or 0 where there is none.
+ * A failure that matches no specific mapping is invalid_argument for an HTTP 400 (RFC-58) and
+ * internal_server_failure otherwise.
  */
 [[nodiscard]] auto
-map_query_error(const query_response::query_meta_data& meta) -> std::error_code;
+map_query_error(const query_response::query_meta_data& meta, std::uint32_t http_status = 0)
+  -> std::error_code;
 
 } // namespace couchbase::core::operations

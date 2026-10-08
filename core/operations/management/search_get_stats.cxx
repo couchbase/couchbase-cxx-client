@@ -16,6 +16,7 @@
  */
 
 #include "search_get_stats.hxx"
+#include "error_utils.hxx"
 
 #include <couchbase/error_codes.hxx>
 
@@ -37,6 +38,10 @@ search_get_stats_request::make_response(error_context::http&& ctx,
 {
   search_get_stats_response response{ std::move(ctx) };
   if (!response.ctx.ec) {
+    if (encoded.status_code != 200) {
+      response.ctx.ec = extract_common_error_code(encoded.status_code, encoded.body.data());
+      return response;
+    }
     response.stats = encoded.body.data();
   }
   return response;

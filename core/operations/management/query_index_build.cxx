@@ -81,7 +81,8 @@ query_index_build_request::make_response(error_context::http&& ctx,
       return response;
     }
     response.status = payload.at("status").get_string();
-    if (response.status != "success") {
+    // RFC-58: a 400 is a failure whatever status the body reports.
+    if (response.status != "success" || encoded.status_code == 400) {
       std::optional<std::error_code> common_ec{};
       for (const auto& entry : payload.at("errors").get_array()) {
         query_index_build_response::query_problem error;

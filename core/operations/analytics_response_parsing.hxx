@@ -23,6 +23,7 @@
 
 #include <tao/json/forward.hpp>
 
+#include <cstdint>
 #include <system_error>
 
 namespace couchbase::core::operations
@@ -41,9 +42,14 @@ parse_analytics_meta(const tao::json::value& payload) -> analytics_response::ana
  * Map analytics meta-data to an error_code.
  *
  * Pure classifier — no side effects, no exceptions thrown. Returns an empty error_code when the
- * analytics query succeeded (meta.status == success).
+ * analytics query succeeded (meta.status == success and http_status is not 400).
+ *
+ * http_status is the status of the response that carried the metadata, or 0 where there is none.
+ * A failure that matches no specific mapping is invalid_argument for an HTTP 400 (RFC-58) and
+ * internal_server_failure otherwise.
  */
 [[nodiscard]] auto
-map_analytics_error(const analytics_response::analytics_meta_data& meta) -> std::error_code;
+map_analytics_error(const analytics_response::analytics_meta_data& meta,
+                    std::uint32_t http_status = 0) -> std::error_code;
 
 } // namespace couchbase::core::operations

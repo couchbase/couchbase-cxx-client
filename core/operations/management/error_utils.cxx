@@ -28,6 +28,10 @@ auto
 extract_common_error_code(std::uint32_t status_code, const std::string& response_body)
   -> std::error_code
 {
+  // RFC-58: a 400 that reaches this fallback is invalid_argument.
+  if (status_code == 400) {
+    return errc::common::invalid_argument;
+  }
   if (status_code == 429) {
     if (response_body.find("Limit(s) exceeded") != std::string::npos) {
       return errc::common::rate_limited;
@@ -78,11 +82,14 @@ extract_common_query_error_code(std::uint64_t code, const std::string& message)
 }
 
 auto
-extract_eventing_error_code(const tao::json::value& response)
+extract_eventing_error_code(const tao::json::value& response, std::uint32_t status_code)
   -> std::pair<std::error_code, eventing_problem>
 {
+  // RFC-58: a 400 that names no specific problem is invalid_argument.
+  const std::error_code unmatched_400 =
+    status_code == 400 ? errc::common::invalid_argument : std::error_code{};
   if (!response.is_object()) {
-    return {};
+    return { unmatched_400, {} };
   }
   if (const auto& name = response.find("name"); name != nullptr && name->is_string()) {
     std::string description;
@@ -132,9 +139,9 @@ extract_eventing_error_code(const tao::json::value& response)
     if (problem.name == "ERR_INVALID_CONFIG" || problem.name == "ERR_INTER_FUNCTION_RECURSION") {
       return { errc::common::invalid_argument, problem };
     }
-    return { errc::common::internal_server_failure, problem };
+    return { unmatched_400 ? unmatched_400 : errc::common::internal_server_failure, problem };
   }
-  return {};
+  return { unmatched_400, {} };
 }
 
 auto

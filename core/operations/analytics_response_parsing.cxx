@@ -102,17 +102,20 @@ parse_analytics_meta(const tao::json::value& payload) -> analytics_response::ana
 }
 
 auto
-map_analytics_error(const analytics_response::analytics_meta_data& meta) -> std::error_code
+map_analytics_error(const analytics_response::analytics_meta_data& meta, std::uint32_t http_status)
+  -> std::error_code
 {
-  if (meta.status == analytics_response::analytics_status::success) {
+  if (meta.status == analytics_response::analytics_status::success && http_status != 400) {
     return {};
   }
+  const auto unmatched =
+    http_status == 400 ? errc::common::invalid_argument : errc::common::internal_server_failure;
 
   if (meta.errors.empty()) {
     /* Reachable from make_response, which calls this for any non-success status even when the
      * payload carries no "errors" array, and from the streaming-path caller, which has no such
-     * guarantee either. Classify as a generic internal failure. */
-    return errc::common::internal_server_failure;
+     * guarantee either. */
+    return unmatched;
   }
 
   const auto first_error_code = meta.errors.front().code;
@@ -152,7 +155,7 @@ map_analytics_error(const analytics_response::analytics_meta_data& meta) -> std:
   }
 
   if (!ec) {
-    ec = errc::common::internal_server_failure;
+    ec = unmatched;
   }
 
   return ec;

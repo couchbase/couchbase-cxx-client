@@ -37,6 +37,7 @@
 #include <optional>
 #include <string>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 namespace couchbase::test
@@ -351,6 +352,66 @@ a_mid_stream_analytics_terminal_error_is_reported_with_the_request_context(
   assert_eq(
     reported.at("first_error_message").as<std::string>(), "boom", "the service error message");
 }
+// The error the stream reports for doc, from the preamble (first) and at the terminal (second).
+auto
+stream_errors(const std::string& doc, std::uint32_t http_status)
+  -> std::pair<std::error_code, std::error_code>
+{
+  asio::io_context io;
+  auto body = utils::make_cached_response_body(io, doc);
+  couchbase::core::analytics_stream stream{ io, std::move(body), {}, http_status };
+  std::error_code early_ec{};
+  std::error_code end_ec{};
+  std::function<void()> pump = [&]() {
+    stream.next_row([&](std::optional<std::string> row, std::error_code ec) {
+      if (!row.has_value()) {
+        end_ec = ec;
+        return;
+      }
+      pump();
+    });
+  };
+  stream.start([&](std::error_code ec) {
+    early_ec = ec;
+    if (!ec) {
+      pump();
+    }
+  });
+  io.run();
+  return { early_ec, end_ec };
+}
+
+void
+an_unrecognised_400_is_reported_as_invalid_argument([[maybe_unused]] context& ctx)
+{
+  const std::string trailer = R"({"requestID":"r","results":[{"a":1}],)"
+                              R"("status":"fatal","errors":[{"code":20000,"msg":"boom"}]})";
+  assert_eq(stream_errors(trailer, 400).second,
+            std::error_code{ couchbase::errc::common::invalid_argument },
+            "a trailer error with no specific mapping on a 400");
+  assert_eq(stream_errors(trailer, 500).second,
+            std::error_code{ couchbase::errc::common::internal_server_failure },
+            "only a 400 is the caller's error");
+
+  const std::string preamble = R"({"requestID":"r","errors":[{"code":20000,"msg":"boom"}],)"
+                               R"("results":[],"status":"fatal"})";
+  assert_eq(stream_errors(preamble, 400).first,
+            std::error_code{ couchbase::errc::common::invalid_argument },
+            "a preamble error with no specific mapping on a 400");
+
+  assert_eq(
+    stream_errors(R"({"requestID":"r","results":[{"a":1}],"status":"success"})", 400).second,
+    std::error_code{ couchbase::errc::common::invalid_argument },
+    "a 400 whose trailer reports success");
+
+  assert_eq(stream_errors("<html>Bad Request</html>", 400).first,
+            std::error_code{ couchbase::errc::common::invalid_argument },
+            "a 400 whose body is not JSON");
+  assert_eq(stream_errors("<html>Bad Gateway</html>", 502).first,
+            std::error_code{ couchbase::errc::common::parsing_failure },
+            "a body that is not JSON is still a parsing failure for another status");
+}
+
 } // namespace
 
 auto
@@ -361,6 +422,7 @@ tests() -> test_suite
     {
       { CASE(yields_rows_then_exposes_late_metadata) },
       { CASE(surfaces_a_trailing_analytics_error_after_rows) },
+      { CASE(an_unrecognised_400_is_reported_as_invalid_argument) },
       { CASE(reports_a_clean_end_for_an_empty_result_set) },
       { CASE(normalizes_a_malformed_body_to_parsing_failure) },
       { CASE(normalizes_an_oversized_row_to_parsing_failure) },

@@ -19,6 +19,7 @@
 
 #include <couchbase/error_codes.hxx>
 
+#include "core/io/http_error.hxx"
 #include "core/operations/analytics_response_parsing.hxx"
 #include "free_form_http_request.hxx"
 #include "logger/logger.hxx"
@@ -80,8 +81,12 @@ extract_error_details(const operations::analytics_response::analytics_meta_data&
 class analytics_stream_impl : public std::enable_shared_from_this<analytics_stream_impl>
 {
 public:
-  analytics_stream_impl(asio::io_context& io, http_response_body body, row_streamer_options options)
+  analytics_stream_impl(asio::io_context& io,
+                        http_response_body body,
+                        row_streamer_options options,
+                        std::uint32_t http_status)
     : streamer_{ io, std::move(body), ANALYTICS_RESULTS_POINTER, options }
+    , http_status_{ http_status }
   {
   }
 
@@ -90,7 +95,8 @@ public:
     streamer_.start([self = shared_from_this(), on_ready = std::move(on_ready)](
                       std::string preamble, std::error_code ec) mutable {
       if (ec) {
-        return on_ready(normalize_stream_error(ec));
+        return on_ready(normalize_stream_error(
+          io::invalid_argument_for_undecodable_400(ec, self->http_status_, {})));
       }
       operations::analytics_response::analytics_meta_data meta{};
       try {
@@ -102,7 +108,8 @@ public:
           const std::scoped_lock lock{ self->mutex_ };
           self->error_details_.raw = std::move(preamble);
         }
-        return on_ready(errc::common::parsing_failure);
+        return on_ready(io::invalid_argument_for_undecodable_400(
+          errc::common::parsing_failure, self->http_status_, {}));
       }
       {
         const std::scoped_lock lock{ self->mutex_ };
@@ -114,7 +121,7 @@ public:
       // the preamble already carries error entries.
       std::error_code early_error{};
       if (!meta.errors.empty()) {
-        early_error = operations::map_analytics_error(meta);
+        early_error = operations::map_analytics_error(meta, self->http_status_);
       }
       on_ready(early_error);
     });
@@ -149,7 +156,8 @@ public:
       std::error_code terminal_ec{};
       if (ec) {
         // Normalize a mid-document lexer failure to parsing_failure, matching the buffered path.
-        terminal_ec = normalize_stream_error(ec);
+        terminal_ec = normalize_stream_error(
+          io::invalid_argument_for_undecodable_400(ec, self->http_status_, {}));
       } else if (auto raw_meta = self->streamer_.metadata(); !raw_meta.has_value()) {
         // A clean end without reconstructed metadata violates the row_streamer invariant; surface
         // it rather than silently reporting success with no metadata.
@@ -158,14 +166,15 @@ public:
       } else {
         try {
           auto meta = operations::parse_analytics_meta(utils::json::parse(raw_meta.value()));
-          terminal_ec = operations::map_analytics_error(meta);
+          terminal_ec = operations::map_analytics_error(meta, self->http_status_);
           const std::scoped_lock lock{ self->mutex_ };
           // The trailer is where a request that failed part-way reports itself, so its diagnostics
           // supersede the preamble's for the terminal error.
           self->error_details_ = extract_error_details(meta, std::move(raw_meta.value()));
           self->meta_data_ = std::move(meta);
         } catch (const std::exception&) {
-          terminal_ec = errc::common::parsing_failure;
+          terminal_ec = io::invalid_argument_for_undecodable_400(
+            errc::common::parsing_failure, self->http_status_, {});
           const std::scoped_lock lock{ self->mutex_ };
           self->error_details_.raw = std::move(raw_meta.value());
         }
@@ -211,6 +220,7 @@ public:
 
 private:
   row_streamer streamer_;
+  std::uint32_t http_status_{};
   mutable std::mutex mutex_{};
   std::optional<std::string> signature_{};
   std::optional<operations::analytics_response::analytics_meta_data> meta_data_{};
@@ -223,8 +233,9 @@ private:
 
 analytics_stream::analytics_stream(asio::io_context& io,
                                    http_response_body body,
-                                   row_streamer_options options)
-  : impl_{ std::make_shared<analytics_stream_impl>(io, std::move(body), options) }
+                                   row_streamer_options options,
+                                   std::uint32_t http_status)
+  : impl_{ std::make_shared<analytics_stream_impl>(io, std::move(body), options, http_status) }
 {
 }
 
