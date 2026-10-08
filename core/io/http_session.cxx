@@ -26,6 +26,7 @@
 
 #include <couchbase/error_codes.hxx>
 
+#include <asio/ssl/error.hpp>
 #include <gsl/util>
 #include <spdlog/fmt/bin_to_hex.h>
 
@@ -34,6 +35,12 @@
 
 namespace couchbase::core::io
 {
+namespace
+{
+// Between connection attempts, and before a resend after a refused client certificate.
+constexpr std::chrono::milliseconds reconnect_backoff{ 500 };
+} // namespace
+
 http_session_info::http_session_info(const std::string& client_id, const std::string& session_id)
   : log_prefix_(fmt::format("[{}/{}]", client_id, session_id))
 {
@@ -192,6 +199,21 @@ http_session::local_address() -> std::string
 }
 
 auto
+http_session::dispatched_endpoints() -> std::pair<std::string, std::string>
+{
+  const std::scoped_lock lock(info_mutex_);
+  return { dispatched_from_, dispatched_to_ };
+}
+
+void
+http_session::record_dispatch()
+{
+  const std::scoped_lock lock(info_mutex_);
+  dispatched_from_ = info_.local_address();
+  dispatched_to_ = info_.remote_address();
+}
+
+auto
 http_session::remote_endpoint() -> const asio::ip::tcp::endpoint&
 {
   const std::scoped_lock lock(info_mutex_);
@@ -310,7 +332,7 @@ http_session::initiate_connect()
   } else {
     // reset state in case the session is being reused
     state_ = diag::endpoint_state::disconnected;
-    auto backoff = std::chrono::milliseconds(500);
+    auto backoff = reconnect_backoff;
     CB_LOG_DEBUG(
       "{} waiting for {}ms before trying to connect", info_.log_prefix(), backoff.count());
     retry_backoff_.expires_after(backoff);
@@ -347,6 +369,127 @@ http_session::cancel_current_response(std::error_code ec)
       ctx.handler(ec, std::move(ctx.parser.response));
     }
   }
+}
+
+void
+http_session::remember_request(bool uses_certificate)
+{
+  // Only a session with certificate credentials resends, so no other session keeps a copy.
+  const std::scoped_lock lock(output_buffer_mutex_);
+  if (fresh_connection_ && uses_certificate) {
+    unanswered_request_ = output_buffer_;
+  } else {
+    unanswered_request_.clear();
+  }
+}
+
+namespace
+{
+// The alerts a server sends when it refuses the client certificate. OpenSSL and BoringSSL report a
+// received alert as the reason SSL_AD_REASON_OFFSET plus the alert's code.
+auto
+is_refused_certificate(std::error_code ec) -> bool
+{
+  if (ec.category() != asio::error::get_ssl_category()) {
+    return false;
+  }
+  // OpenSSL 1.1 defines ERR_GET_REASON() as a macro with a C-style cast; OpenSSL 3.0 and later,
+  // and BoringSSL, define it as an inline function.
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wold-style-cast"
+#endif
+  const int alert = ERR_GET_REASON(static_cast<std::uint32_t>(ec.value())) - SSL_AD_REASON_OFFSET;
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
+  switch (alert) {
+    case SSL_AD_BAD_CERTIFICATE:
+    case SSL_AD_UNSUPPORTED_CERTIFICATE:
+    case SSL_AD_CERTIFICATE_REVOKED:
+    case SSL_AD_CERTIFICATE_EXPIRED:
+    case SSL_AD_CERTIFICATE_UNKNOWN:
+    case SSL_AD_UNKNOWN_CA:
+    case SSL_AD_ACCESS_DENIED:
+#if defined(SSL_AD_CERTIFICATE_REQUIRED)
+    case SSL_AD_CERTIFICATE_REQUIRED:
+#endif
+      return true;
+    default:
+      return false;
+  }
+}
+} // namespace
+
+// Under TLS 1.3 the server checks the client certificate after the client's handshake has
+// completed. A refusal therefore arrives as an alert when the response to the first request on a
+// new connection is read. The server has processed nothing on that connection, so the request
+// is written again on a new one, with the current TLS context. This repeats until the request is
+// answered or its command's deadline stops this session. Only a session with certificate
+// credentials resends: other credentials present no client certificate, and a rotation cannot
+// change that.
+auto
+http_session::resend_after_rejected_handshake(std::error_code ec) -> bool
+{
+  if (stopped_ || !fresh_connection_ || !is_refused_certificate(ec) ||
+      !credentials().uses_certificate()) {
+    return false;
+  }
+  {
+    const std::scoped_lock lock(output_buffer_mutex_);
+    if (unanswered_request_.empty()) {
+      return false;
+    }
+  }
+  CB_LOG_WARNING("{} client certificate refused by the server ({}), reconnecting",
+                 info_.log_prefix(),
+                 ec.message());
+  connected_ = false;
+  reading_ = false;
+  {
+    const std::scoped_lock lock(writing_buffer_mutex_);
+    writing_buffer_.clear();
+  }
+  state_ = diag::endpoint_state::disconnected;
+  stream_->close([self = shared_from_this()](std::error_code) {
+    // A stop() that ran meanwhile cancelled retry_backoff_; arming it after that cancel would hold
+    // this session for the backoff.
+    if (self->stopped_) {
+      return;
+    }
+    self->retry_backoff_.expires_after(reconnect_backoff);
+    self->retry_backoff_.async_wait([self](std::error_code wait_ec) {
+      if (wait_ec == asio::error::operation_aborted || self->stopped_) {
+        return;
+      }
+      self->reconnect_to_resend();
+    });
+  });
+  return true;
+}
+
+// initiate_connect() also runs the connect callback after a failed attempt and its backoff. The
+// callback then connects again.
+void
+http_session::reconnect_to_resend()
+{
+  {
+    const std::scoped_lock lock(connect_callback_mutex_);
+    connect_callback_ = [self = shared_from_this()]() {
+      if (self->stopped_) {
+        return;
+      }
+      if (!self->connected_) {
+        return self->reconnect_to_resend();
+      }
+      {
+        const std::scoped_lock buffer_lock(self->output_buffer_mutex_);
+        self->output_buffer_ = self->unanswered_request_;
+      }
+      self->flush();
+    };
+  }
+  initiate_connect();
 }
 
 void
@@ -517,6 +660,7 @@ http_session::write_and_stream(
   }
   write("\r\n");
   write(request.body);
+  remember_request(creds.uses_certificate());
   flush();
 }
 
@@ -899,6 +1043,7 @@ http_session::on_connect(const std::error_code& ec,
       info_ = http_session_info(client_id_, id_, stream_->local_endpoint(), it->endpoint());
     }
     connect_deadline_timer_.cancel();
+    fresh_connection_ = true;
     invoke_connect_callback();
     flush();
   }
@@ -943,6 +1088,9 @@ http_session::do_read()
                        self->info_.log_prefix(),
                        ec.message());
         } else {
+          if (self->resend_after_rejected_handshake(ec)) {
+            return;
+          }
           CB_LOG_ERROR("{} IO error while reading from the socket: {}",
                        self->info_.log_prefix(),
                        ec.message());
@@ -957,6 +1105,10 @@ http_session::do_read()
         CB_LOG_DEBUG("{} unexpected data on idle HTTP connection, stopping session",
                      self->info_.log_prefix());
         return self->stop();
+      }
+      if (self->fresh_connection_.exchange(false)) {
+        const std::scoped_lock lock(self->output_buffer_mutex_);
+        self->unanswered_request_.clear();
       }
 
       if (self->streaming_response_) {
@@ -1060,6 +1212,9 @@ http_session::do_write()
     return;
   }
   std::swap(writing_buffer_, output_buffer_);
+  // Recorded where the request is handed to the socket. A request a stop() keeps from this point
+  // is not reported as written on this connection.
+  record_dispatch();
   std::vector<asio::const_buffer> buffers;
   buffers.reserve(writing_buffer_.size());
   for (auto& buf : writing_buffer_) {
@@ -1082,6 +1237,9 @@ http_session::do_write()
       }
       self->last_active_ = std::chrono::steady_clock::now();
       if (ec) {
+        if (self->resend_after_rejected_handshake(ec)) {
+          return;
+        }
         CB_LOG_ERROR(
           "{} IO error while writing to the socket: {}", self->info_.log_prefix(), ec.message());
         return self->stop();

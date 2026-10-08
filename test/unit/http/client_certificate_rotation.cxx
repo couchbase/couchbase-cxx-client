@@ -31,11 +31,16 @@
 #include "core/cluster_credentials.hxx"
 #include "core/cluster_label_listener.hxx"
 #include "core/cluster_options.hxx"
+#include "core/core_sdk_shim.hxx"
+#include "core/free_form_http_request.hxx"
+#include "core/http_component.hxx"
 #include "core/io/http_session_manager.hxx"
 #include "core/metrics/meter_wrapper.hxx"
 #include "core/metrics/noop_meter.hxx"
 #include "core/operations/http_noop.hxx"
 #include "core/origin.hxx"
+#include "core/pending_operation.hxx"
+#include "core/pending_operation_connection_info.hxx"
 #include "core/service_type.hxx"
 #include "core/tls_context_provider.hxx"
 #include "core/topology/configuration.hxx"
@@ -156,6 +161,7 @@ make_identity(const std::string& common_name,
 }
 
 constexpr std::int64_t year_2000 = 946684800;
+constexpr std::int64_t year_2001 = 978307200;
 constexpr std::int64_t year_2099 = 4070908800;
 
 auto
@@ -218,13 +224,27 @@ client_context(const identity& client) -> std::shared_ptr<asio::ssl::context>
   return ctx;
 }
 
-// A loopback HTTPS endpoint that verifies client certificates against ca. presented holds the
-// common name of every client certificate it accepted, in accept order. While hold is set, a
-// request is answered only when release() is called.
+// A client context that presents no certificate, as a session with password credentials does.
+auto
+anonymous_context() -> std::shared_ptr<asio::ssl::context>
+{
+  auto ctx = std::make_shared<asio::ssl::context>(asio::ssl::context::tls_client);
+  ctx->set_verify_mode(asio::ssl::verify_none);
+  return ctx;
+}
+
+// A loopback HTTPS endpoint that requires a client certificate signed by ca. Where the TLS library
+// has TLS 1.3 it speaks only that, so a refused certificate reaches the client after the client's
+// handshake has completed. With tls_1_2 it speaks only TLS 1.2, and refuses during the handshake.
+// presented lists the common name of each accepted certificate, in order. rejected counts refused
+// handshakes, and on_reject runs after each. With close_on_reject the endpoint then closes the
+// connection, as a server does. answered_from is the client
+// address of the connection that answered last. While hold is set, a request is answered only on
+// release().
 class certificate_endpoint
 {
 public:
-  certificate_endpoint(asio::io_context& io, const identity& ca)
+  certificate_endpoint(asio::io_context& io, const identity& ca, bool tls_1_2 = false)
     : io_{ io }
     , server_{ make_identity("server", year_2000, year_2099, &ca) }
   {
@@ -232,6 +252,14 @@ public:
     SSL_CTX_use_PrivateKey(ctx_.native_handle(), server_.key.get());
     X509_STORE_add_cert(SSL_CTX_get_cert_store(ctx_.native_handle()), ca.cert.get());
     ctx_.set_verify_mode(asio::ssl::verify_peer | asio::ssl::verify_fail_if_no_peer_cert);
+    if (tls_1_2) {
+      SSL_CTX_set_max_proto_version(ctx_.native_handle(), TLS1_2_VERSION);
+    }
+#if defined(TLS1_3_VERSION)
+    else {
+      SSL_CTX_set_min_proto_version(ctx_.native_handle(), TLS1_3_VERSION);
+    }
+#endif
     accept();
   }
 
@@ -257,6 +285,10 @@ public:
   }
 
   std::vector<std::string> presented{};
+  std::string answered_from{};
+  int rejected{ 0 };
+  std::function<void()> on_reject{};
+  bool close_on_reject{ false };
   bool hold{ false };
   std::function<void()> on_request{};
 
@@ -273,6 +305,14 @@ private:
       streams_.push_back(s);
       s->async_handshake(asio::ssl::stream_base::server, [this, s](std::error_code hs) {
         if (hs) {
+          ++rejected;
+          if (on_reject) {
+            on_reject();
+          }
+          if (close_on_reject) {
+            std::error_code ignored;
+            s->lowest_layer().close(ignored);
+          }
           return;
         }
         presented.push_back(common_name_of(peer_certificate(s->native_handle()).get()));
@@ -291,6 +331,9 @@ private:
       }
       auto respond = [this, s]() {
         static const std::string ok{ "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n" };
+        std::error_code ignored;
+        const auto client = s->lowest_layer().remote_endpoint(ignored);
+        answered_from = client.address().to_string() + ":" + std::to_string(client.port());
         asio::async_write(*s, asio::buffer(ok), [this, s](std::error_code wec, std::size_t) {
           if (!wec) {
             serve(s);
@@ -364,6 +407,14 @@ request(asio::io_context& io,
   return result;
 }
 
+auto
+certificate_credentials() -> couchbase::core::cluster_credentials
+{
+  couchbase::core::cluster_credentials creds{};
+  creds.certificate_path = "client-a";
+  return creds;
+}
+
 // A real http_session_manager with TLS enabled, pointed at endpoint for the query service.
 struct rotation_fixture {
   asio::io_context io{};
@@ -371,15 +422,18 @@ struct rotation_fixture {
   certificate_endpoint endpoint{ io, ca };
   identity client_a{ make_identity("client-a", year_2000, year_2099, &ca) };
   identity client_b{ make_identity("client-b", year_2000, year_2099, &ca) };
+  identity client_expired{ make_identity("client-expired", year_2000, year_2001, &ca) };
   couchbase::core::tls_context_provider tls{ client_context(client_a) };
   couchbase::core::cluster_options options{};
   std::optional<couchbase::core::origin> origin{};
   std::shared_ptr<couchbase::core::io::http_session_manager> manager{};
+  // The last completion's last_dispatched_from.
+  std::string dispatched_from{};
 
-  rotation_fixture()
+  explicit rotation_fixture(couchbase::core::cluster_credentials creds = certificate_credentials(),
+                            bool tls_1_2 = false)
+    : endpoint{ io, ca, tls_1_2 }
   {
-    couchbase::core::cluster_credentials creds{};
-    creds.certificate_path = "client-a";
     options.enable_tls = true;
     options.network = "default";
     options.idle_http_connection_timeout = 30s;
@@ -420,7 +474,9 @@ struct rotation_fixture {
     req.type = couchbase::core::service_type::query;
     req.timeout = timeout;
     manager->execute(
-      req, [on_done = std::move(on_done)](couchbase::core::operations::http_noop_response&& resp) {
+      req,
+      [this, on_done = std::move(on_done)](couchbase::core::operations::http_noop_response&& resp) {
+        dispatched_from = resp.ctx.last_dispatched_from.value_or("");
         on_done(resp.ctx.ec);
       });
   }
@@ -606,6 +662,9 @@ struct cluster_fixture {
   couchbase::core::cluster_credentials client_b{
     write_pem(make_identity("client-b", year_2000, year_2099, &ca), dir.path)
   };
+  couchbase::core::cluster_credentials client_expired{
+    write_pem(make_identity("client-expired", year_2000, year_2001, &ca), dir.path)
+  };
   couchbase::core::cluster cluster{ io };
   std::shared_ptr<couchbase::core::io::http_session_manager> manager{};
 
@@ -695,6 +754,179 @@ update_credentials_racing_close_completes([[maybe_unused]] context& ctx)
     assert_success(result, "update_credentials() that got past its closed check completes");
   }
 }
+
+// A certificate the server refuses fails requests with a timeout rather than an immediate error,
+// and rotating to a valid certificate recovers.
+void
+a_rejected_certificate_retries_until_the_request_times_out([[maybe_unused]] context& ctx)
+{
+  rotation_fixture f;
+  const auto first = f.request();
+  assert_true(first.has_value(), "the first request completes");
+  assert_success(*first, "the first request succeeds");
+
+  f.rotate_to(f.client_expired);
+  const auto refused = f.request(scaled_budget(2s));
+  assert_true(refused.has_value(), "the request with the expired certificate completes");
+  assert_true(*refused == couchbase::errc::common::unambiguous_timeout ||
+                *refused == couchbase::errc::common::ambiguous_timeout,
+              "the request with the expired certificate ends in a timeout");
+  assert_true(f.endpoint.rejected > 1, "the session keeps reconnecting while the server refuses");
+
+  f.rotate_to(f.client_b);
+  const auto recovered = f.request();
+  assert_true(recovered.has_value(), "the request after rotating to a valid certificate completes");
+  assert_success(*recovered, "the request after rotating to a valid certificate succeeds");
+  assert_eq(f.endpoint.presented.back(),
+            std::string{ "client-b" },
+            "the request after recovery presents the valid certificate");
+}
+
+// Under TLS 1.2 the server refuses the certificate during the handshake, and the connect is
+// retried. The request still ends in a timeout rather than an immediate error, and rotating to a
+// valid certificate recovers.
+void
+a_certificate_refused_in_the_handshake_retries_until_the_request_times_out(
+  [[maybe_unused]] context& ctx)
+{
+  rotation_fixture f{ certificate_credentials(), true };
+  f.rotate_to(f.client_expired);
+  const auto refused = f.request(scaled_budget(2s));
+  assert_true(refused.has_value(), "the request with the expired certificate completes");
+  assert_true(*refused == couchbase::errc::common::unambiguous_timeout ||
+                *refused == couchbase::errc::common::ambiguous_timeout,
+              "the request with the expired certificate ends in a timeout");
+  assert_true(f.endpoint.rejected > 1, "the connect is retried while the server refuses");
+
+  f.rotate_to(f.client_b);
+  const auto recovered = f.request();
+  assert_true(recovered.has_value(), "the request after rotating to a valid certificate completes");
+  assert_success(*recovered, "the request after rotating to a valid certificate succeeds");
+  assert_eq(f.endpoint.presented.back(),
+            std::string{ "client-b" },
+            "the request after recovery presents the valid certificate");
+}
+
+// A server that closes the connection after refusing the certificate leaves its alert to be read
+// first, so the request is resent rather than failed at once.
+void
+a_refusal_followed_by_a_close_retries_until_the_request_times_out([[maybe_unused]] context& ctx)
+{
+  rotation_fixture f;
+  f.endpoint.close_on_reject = true;
+  f.rotate_to(f.client_expired);
+  const auto refused = f.request(scaled_budget(2s));
+  assert_true(refused.has_value(), "the request with the expired certificate completes");
+  assert_true(*refused == couchbase::errc::common::unambiguous_timeout ||
+                *refused == couchbase::errc::common::ambiguous_timeout,
+              "the request with the expired certificate ends in a timeout");
+  assert_true(f.endpoint.rejected > 1, "the session keeps reconnecting while the server refuses");
+}
+
+// A request that keeps being refused picks up a rotation to a valid certificate and succeeds.
+void
+a_refused_request_succeeds_once_the_certificate_is_rotated([[maybe_unused]] context& ctx)
+{
+  rotation_fixture f;
+  f.rotate_to(f.client_expired);
+  f.endpoint.on_reject = [&f]() {
+    f.endpoint.on_reject = {};
+    f.rotate_to(f.client_b);
+  };
+  std::optional<std::error_code> result{};
+  f.send(scaled_budget(4s), [&result](std::error_code ec) {
+    result = ec;
+  });
+  f.run_until(
+    [&result]() {
+      return result.has_value();
+    },
+    6s);
+  assert_true(result.has_value(), "the request completes");
+  assert_success(*result, "the request that was refused succeeds after the rotation");
+  assert_true(f.endpoint.rejected > 0, "the server refused the expired certificate first");
+  assert_true(f.endpoint.presented == std::vector<std::string>{ "client-b" },
+              "the request is answered on a connection that presents the rotated certificate");
+  assert_eq(f.dispatched_from,
+            f.endpoint.answered_from,
+            "the request reports the connection that answered it, not the refused one");
+}
+
+#if defined(TLS1_3_VERSION)
+// A session with password credentials has no certificate that a rotation could replace, so a
+// refusal fails the request at once. Below TLS 1.3 the refusal fails the handshake instead, and
+// the connect is retried until the deadline.
+void
+a_refused_session_without_a_certificate_is_not_resent([[maybe_unused]] context& ctx)
+{
+  couchbase::core::cluster_credentials creds{};
+  creds.username = "user";
+  creds.password = "password";
+  rotation_fixture f{ creds };
+  f.tls.set_ctx(anonymous_context());
+  const auto result = f.request(scaled_budget(2s));
+  assert_true(result.has_value(), "the request completes");
+  assert_true(*result && *result != couchbase::errc::common::unambiguous_timeout &&
+                *result != couchbase::errc::common::ambiguous_timeout,
+              "the request fails without waiting for its deadline");
+  assert_eq(f.endpoint.rejected, 1, "the refused request is not sent again");
+}
+#endif
+
+// A free-form request refused for its certificate is sent again with the certificate rotated by
+// cluster::update_credentials(), and reports the connection that answered it.
+void
+a_refused_free_form_request_succeeds_once_the_certificate_is_rotated([[maybe_unused]] context& ctx)
+{
+  for (const bool streamed : { false, true }) {
+    const std::string label = streamed ? "streamed: " : "buffered: ";
+    cluster_fixture f;
+    assert_success(f.cluster.update_credentials(f.client_expired).ec,
+                   label + "the credentials are updated");
+    std::error_code rotated{};
+    f.endpoint.on_reject = [&f, &rotated]() {
+      f.endpoint.on_reject = {};
+      rotated = f.cluster.update_credentials(f.client_b).ec;
+    };
+    couchbase::core::http_component component{ f.io, couchbase::core::core_sdk_shim{ f.cluster } };
+    couchbase::core::http_request request{};
+    request.service = couchbase::core::service_type::query;
+    request.method = "GET";
+    request.path = "/";
+    request.timeout = scaled_budget(2s);
+    std::optional<std::error_code> result{};
+    auto op =
+      streamed
+        ? component.do_http_request(request,
+                                    [&result](couchbase::core::http_response, std::error_code ec) {
+                                      result = ec;
+                                    })
+        : component.do_http_request_buffered(
+            request, [&result](couchbase::core::buffered_http_response, std::error_code ec) {
+              result = ec;
+            });
+    assert_true(op.has_value(), label + "the request is dispatched");
+    run_until(
+      f.io,
+      [&result]() {
+        return result.has_value();
+      },
+      3s);
+    assert_true(result.has_value(), label + "the request completes");
+    assert_success(rotated, label + "the credentials are rotated on the refusal");
+    assert_success(*result, label + "the request that was refused succeeds after the rotation");
+    assert_true(f.endpoint.rejected > 0,
+                label + "the server refused the expired certificate first");
+    assert_true(f.endpoint.presented == names({ "client-b" }),
+                label + "the request is answered on a connection that presents client-b");
+    const auto info =
+      std::dynamic_pointer_cast<couchbase::core::pending_operation_connection_info>(*op);
+    assert_true(info != nullptr, label + "the operation reports its connection");
+    assert_eq(info->dispatched_from(),
+              f.endpoint.answered_from,
+              label + "the request reports the connection that answered it, not the refused one");
+  }
+}
 } // namespace
 
 auto
@@ -712,6 +944,21 @@ tests() -> test_suite
         timeout::network },
       { CASE(update_credentials_retires_the_idle_sessions), {}, timeout::network },
       { CASE(update_credentials_racing_close_completes), {}, timeout::network },
+      // Two requests and one that waits out its timeout.
+      { CASE(a_rejected_certificate_retries_until_the_request_times_out), {}, timeout::slow },
+      { CASE(a_certificate_refused_in_the_handshake_retries_until_the_request_times_out),
+        {},
+        timeout::slow },
+      { CASE(a_refusal_followed_by_a_close_retries_until_the_request_times_out),
+        {},
+        timeout::slow },
+      { CASE(a_refused_request_succeeds_once_the_certificate_is_rotated), {}, timeout::network },
+      { CASE(a_refused_free_form_request_succeeds_once_the_certificate_is_rotated),
+        {},
+        timeout::network },
+#if defined(TLS1_3_VERSION)
+      { CASE(a_refused_session_without_a_certificate_is_not_resent), {}, timeout::network },
+#endif
     },
   };
 }
