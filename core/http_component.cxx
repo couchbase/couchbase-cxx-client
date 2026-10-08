@@ -169,6 +169,7 @@ public:
           if (ec == asio::error::operation_aborted) {
             return;
           }
+          self->refresh_dispatched();
           self->invoke_response_handler(ec, std::move(resp));
         },
         [self]() {
@@ -208,6 +209,19 @@ public:
   }
 
 private:
+  // Rereads the endpoints from the session. A resend after a refused client certificate writes the
+  // request on a new connection.
+  void refresh_dispatched()
+  {
+    const std::scoped_lock lock(callback_mutex_);
+    if (const auto session = session_.lock(); session) {
+      if (auto [from, to] = session->dispatched_endpoints(); !to.empty()) {
+        dispatched_from_ = std::move(from);
+        dispatched_to_ = std::move(to);
+      }
+    }
+  }
+
   // Null before send_to() runs or once the session is gone: the operation does not keep its
   // session alive.
   [[nodiscard]] auto session() const -> std::shared_ptr<io::http_session>
@@ -233,6 +247,7 @@ private:
   // call took the callback.
   auto trigger_timeout() -> bool
   {
+    refresh_dispatched();
     // TODO(JC):  if triggered from the dispatch timeout, should only be
     // errc::common::unambiguous_timeout?
     auto ec =
@@ -416,6 +431,7 @@ public:
         if (ec == asio::error::operation_aborted) {
           return;
         }
+        self->refresh_dispatched();
         self->invoke_response_handler(ec, std::move(resp));
       });
   }
@@ -458,11 +474,25 @@ public:
   }
 
 private:
+  // Rereads the endpoints from the session. A resend after a refused client certificate writes the
+  // request on a new connection.
+  void refresh_dispatched()
+  {
+    const std::scoped_lock lock(callback_mutex_);
+    if (const auto session = session_.lock(); session) {
+      if (auto [from, to] = session->dispatched_endpoints(); !to.empty()) {
+        dispatched_from_ = std::move(from);
+        dispatched_to_ = std::move(to);
+      }
+    }
+  }
+
   // Ends the request with a timeout unless a response took the callback first. The session is
   // stopped before the callback runs: the callback checks the session in, and check_in refuses a
   // stopped one. Returns whether this call took the callback.
   auto trigger_timeout() -> bool
   {
+    refresh_dispatched();
     // TODO(JC):  if triggered from the dispatch timeout, should only be
     // errc::common::unambiguous_timeout?
     auto ec =
