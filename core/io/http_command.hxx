@@ -184,6 +184,13 @@ struct http_command : public std::enable_shared_from_this<http_command<Request>>
         const std::scoped_lock lock(handler_mutex_);
         // A request completed before any dispatch leaves last_dispatched_from/to unset.
         if (!dispatched_to_.empty()) {
+          // A resend after a refused client certificate writes the request on a new connection.
+          if (const auto session = session_.lock(); session) {
+            if (auto [from, to] = session->dispatched_endpoints(); !to.empty()) {
+              dispatched_from_ = std::move(from);
+              dispatched_to_ = std::move(to);
+            }
+          }
           ctx.last_dispatched_from = dispatched_from_;
           ctx.last_dispatched_to = dispatched_to_;
         }

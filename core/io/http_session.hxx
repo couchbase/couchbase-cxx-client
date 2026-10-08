@@ -100,6 +100,10 @@ public:
   [[nodiscard]] auto http_context() -> couchbase::core::http_context&;
   [[nodiscard]] auto remote_address() -> std::string;
   [[nodiscard]] auto local_address() -> std::string;
+  // Local and remote endpoints of the connection the current request was last handed to the socket
+  // on, empty before the first write. A resent request is recorded when its write starts on the new
+  // connection, not when that connection completes.
+  [[nodiscard]] auto dispatched_endpoints() -> std::pair<std::string, std::string>;
   [[nodiscard]] auto remote_endpoint() -> const asio::ip::tcp::endpoint&;
   [[nodiscard]] auto diag_info() -> diag::endpoint_diag_info;
   [[nodiscard]] auto log_prefix() -> std::string;
@@ -203,6 +207,7 @@ public:
     }
     write("\r\n");
     write(request.body);
+    remember_request(creds.uses_certificate());
     flush();
   }
 
@@ -261,6 +266,10 @@ private:
   void write(const std::string_view& buf);
   void flush();
   void cancel_current_response(std::error_code ec);
+  void remember_request(bool uses_certificate);
+  void record_dispatch();
+  auto resend_after_rejected_handshake(std::error_code ec) -> bool;
+  void reconnect_to_resend();
   void invoke_connect_callback();
 
   service_type type_{};
@@ -276,11 +285,21 @@ private:
   // handlers close stream_ and run the connect callback, serialised with the connect and read
   // handlers that touch the same state.
   asio::steady_timer connect_deadline_timer_;
+  // The strand arms and cancels connect_deadline_timer_, and stop() cancels it on its calling
+  // thread. Arming tests stopped_ under this lock, as for retry_backoff_.
+  std::mutex connect_deadline_timer_mutex_{};
   asio::steady_timer idle_timer_;
   // set_idle() and reset_idle() touch idle_timer_ under the manager's sessions_mutex_ from any
   // thread, and stop() cancels it on its calling thread; an asio timer is not thread-safe.
   std::mutex idle_timer_mutex_{};
   asio::steady_timer retry_backoff_;
+  // The strand arms retry_backoff_ and stop() cancels it on its calling thread; an asio timer is
+  // not thread-safe. Arming tests stopped_ under this lock, so a stop() either cancels the armed
+  // timer or makes the arming site return.
+  std::mutex retry_backoff_mutex_{};
+  // Only the first certificate refusal logs at warning: the resend repeats every reconnect_backoff
+  // until the deadline.
+  std::atomic_bool refusal_logged_{ false };
 
   core::origin& origin_;
   std::string hostname_;
@@ -322,12 +341,20 @@ private:
 
   std::array<std::uint8_t, 16384> input_buffer_{};
   std::vector<std::vector<std::uint8_t>> output_buffer_{};
+  // The first request written on a new connection, kept until the first byte of its response
+  // arrives. Guarded by output_buffer_mutex_.
+  std::vector<std::vector<std::uint8_t>> unanswered_request_{};
+  // Set by a connect, cleared by the first byte of a response.
+  std::atomic_bool fresh_connection_{ false };
   std::vector<std::vector<std::uint8_t>> writing_buffer_{};
   std::mutex output_buffer_mutex_{};
   std::mutex writing_buffer_mutex_{};
   asio::ip::tcp::resolver::results_type endpoints_{};
   http_session_info info_;
+  // Guards info_, dispatched_from_ and dispatched_to_.
   std::mutex info_mutex_{};
+  std::string dispatched_from_{};
+  std::string dispatched_to_{};
   couchbase::core::http_context http_ctx_;
 
   // Read by diag_info() from any thread.
