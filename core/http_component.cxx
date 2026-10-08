@@ -101,9 +101,21 @@ public:
     tracer_ = std::move(tracer);
   }
 
+  // Once the stream has ended its connection is back in the pool, possibly serving another
+  // request, so cancel() leaves it alone. A cancel that comes first keeps the stream end from
+  // checking the connection in.
   void cancel() override
   {
-    if (const auto session = this->session(); session) {
+    std::shared_ptr<io::http_session> session;
+    {
+      const std::scoped_lock lock(callback_mutex_);
+      if (stream_ended_) {
+        return;
+      }
+      cancelled_ = true;
+      session = session_.lock();
+    }
+    if (session) {
       session->stop();
     }
     invoke_response_handler(errc::common::request_canceled, {});
@@ -160,7 +172,7 @@ public:
           self->invoke_response_handler(ec, std::move(resp));
         },
         [self]() {
-          self->stream_end_callback_(self->session());
+          self->stream_end_callback_(self->session_at_stream_end());
         });
     };
 
@@ -204,8 +216,21 @@ private:
     return session_.lock();
   }
 
+  // The session to check in at stream end: null if cancel() or the deadline came first, which stops
+  // it.
+  [[nodiscard]] auto session_at_stream_end() -> std::shared_ptr<io::http_session>
+  {
+    const std::scoped_lock lock(callback_mutex_);
+    stream_ended_ = true;
+    if (cancelled_) {
+      return nullptr;
+    }
+    return session_.lock();
+  }
+
   // Ends the request with a timeout unless a response took the callback first. The session is
-  // stopped before the callback runs. Returns whether this call took the callback.
+  // stopped before the callback runs, and a stream end does not check it in. Returns whether this
+  // call took the callback.
   auto trigger_timeout() -> bool
   {
     // TODO(JC):  if triggered from the dispatch timeout, should only be
@@ -219,6 +244,9 @@ private:
       const std::scoped_lock lock(callback_mutex_);
       std::swap(callback, callback_);
       std::swap(dispatch_span, dispatch_span_);
+      if (callback) {
+        cancelled_ = true;
+      }
       session = session_.lock();
     }
     if (dispatch_span) {
@@ -276,6 +304,9 @@ private:
   std::string dispatched_to_;
   std::string dispatched_from_;
   std::string dispatched_to_host_;
+  // Guarded by callback_mutex_.
+  bool stream_ended_{ false };
+  bool cancelled_{ false };
   mutable std::mutex callback_mutex_;
 };
 
@@ -323,12 +354,26 @@ public:
     });
   }
 
+  // Takes the callback, then stops the session before running it: the callback checks the session
+  // in, and check_in refuses a stopped one. With no callback left the operation has completed, and
+  // its connection may be serving another request.
   void cancel() override
   {
-    if (const auto session = this->session(); session) {
+    buffered_free_form_http_request_callback callback{};
+    std::shared_ptr<io::http_session> session;
+    {
+      const std::scoped_lock lock(callback_mutex_);
+      std::swap(callback, callback_);
+      session = session_.lock();
+    }
+    if (!callback) {
+      return;
+    }
+    deadline_.cancel();
+    if (session) {
       session->stop();
     }
-    invoke_response_handler(errc::common::request_canceled, {});
+    callback(buffered_http_response{ io::http_response{} }, errc::common::request_canceled);
   }
 
   // Returns whether this call took the callback, which is the token for completing the request.
