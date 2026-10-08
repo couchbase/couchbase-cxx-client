@@ -171,11 +171,11 @@ public:
   /**
    * Replaces the current authenticator used by this cluster.
    *
-   * NOTE: Setting a new authenticator does not change the authentication status of existing
-   connections.
+   * NOTE: Existing KV connections keep the certificate they were opened with. HTTP requests sent
+   * after the call use a new connection, and a request already in flight completes.
    *
    * @param authenticator the authenticator to replace
-
+   *
    * @exception errc::common::invalid_argument if TLS is not enabled.
    *
    * @return error
