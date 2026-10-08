@@ -70,3 +70,5 @@ transaction_test(examples)
 # from there would be discarded, and build_integration_tests would omit the target. It links the
 # client, so it has no place in the CNG-only configuration that reads TestFramework.cmake alone.
 couchbase_add_test(framework/cluster_probes_selftest LABEL integration LINK_CLIENT)
+
+couchbase_add_test(transactions/query_expiry LABEL transaction LINK_CLIENT)

@@ -27,6 +27,7 @@
 
 #include <asio/post.hpp>
 #include <asio/steady_timer.hpp>
+#include <optional>
 #include <utility>
 
 namespace couchbase::core::transactions
@@ -299,6 +300,18 @@ transaction_context::existing_error(bool previous_op_failed)
 void
 transaction_context::handle_error(const std::exception_ptr& err, txn_complete_callback&& callback)
 {
+  auto auto_rollback = [this]() -> std::optional<final_error> {
+    try {
+      current_attempt_context_->rollback();
+      return {};
+    } catch (const std::exception& e) {
+      CB_ATTEMPT_CTX_LOG_ERROR(current_attempt_context_, "auto rollback failed: {}", e.what());
+    } catch (...) {
+      CB_ATTEMPT_CTX_LOG_ERROR(current_attempt_context_, "auto rollback failed");
+    }
+    return current_attempt_context_->query_check_expired_ ? EXPIRED : FAILED;
+  };
+
   try {
     try {
       std::rethrow_exception(err);
@@ -316,22 +329,15 @@ transaction_context::handle_error(const std::exception_ptr& err, txn_complete_ca
     if (er.should_rollback()) {
       CB_ATTEMPT_CTX_LOG_TRACE(current_attempt_context_,
                                "got rollback-able exception, rolling back");
-      try {
-        current_attempt_context_->rollback();
-      } catch (const std::exception& er_rollback) {
+      if (auto rollback_failed = auto_rollback(); rollback_failed) {
         cleanup().add_attempt(current_attempt_context_);
-        // A failed auto-rollback (including one that runs out of time and expires) re-raises the
-        // ORIGINAL error that provoked the rollback, with retry suppressed - the application cares
-        // about what made the rollback happen, not that the rollback then also failed. The
-        // reference SDKs surface EXPIRED only for an application-driven rollback, which this SDK
-        // does not expose (design doc "The Core Loop": propagate the original
-        // TransactionOperationFailed with retry set to false).
-        CB_ATTEMPT_CTX_LOG_TRACE(
-          current_attempt_context_,
-          "got error \"{}\" while auto rolling back, throwing original error \"{}\"",
-          er_rollback.what(),
-          er.what());
-        auto final = er.get_final_exception(*this);
+        // A failed auto-rollback raises the original error without retry, or EXPIRED in place of
+        // FAILED.
+        auto raised = er;
+        if (rollback_failed == EXPIRED && raised.to_raise() == FAILED) {
+          raised.expired();
+        }
+        auto final = raised.get_final_exception(*this);
         // if you get here, we didn't throw, yet we had an error.  Fall through
         // in this case.  Note the current logic is such that rollback will not
         // have a commit ambiguous error, so we should always throw.
@@ -365,28 +371,25 @@ transaction_context::handle_error(const std::exception_ptr& err, txn_complete_ca
     return callback(final, res);
   } catch (const std::exception& ex) {
     CB_ATTEMPT_CTX_LOG_ERROR(current_attempt_context_, "got runtime error \"{}\"", ex.what());
-    try {
-      current_attempt_context_->rollback();
-    } catch (...) {
-      CB_ATTEMPT_CTX_LOG_ERROR(
-        current_attempt_context_, "got error rolling back \"{}\"", ex.what());
-    }
+    const auto rollback_failed = auto_rollback();
     cleanup().add_attempt(current_attempt_context_);
     // the assumption here is this must come from the logic, not
     // our operations (which only throw transaction_operation_failed),
     auto op_failed = transaction_operation_failed(FAIL_OTHER, ex.what());
+    if (rollback_failed == EXPIRED) {
+      op_failed.expired();
+    }
     return callback(op_failed.get_final_exception(*this), std::nullopt);
   } catch (...) {
     CB_ATTEMPT_CTX_LOG_ERROR(current_attempt_context_, "got unexpected error, rolling back");
-    try {
-      current_attempt_context_->rollback();
-    } catch (...) {
-      CB_ATTEMPT_CTX_LOG_ERROR(current_attempt_context_, "got error rolling back unexpected error");
-    }
+    const auto rollback_failed = auto_rollback();
     cleanup().add_attempt(current_attempt_context_);
     // the assumption here is this must come from the logic, not
     // our operations (which only throw transaction_operation_failed),
     auto op_failed = transaction_operation_failed(FAIL_OTHER, "Unexpected error");
+    if (rollback_failed == EXPIRED) {
+      op_failed.expired();
+    }
     return callback(op_failed.get_final_exception(*this), std::nullopt);
   }
 }

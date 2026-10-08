@@ -463,6 +463,9 @@ public:
 
 private:
   std::atomic<bool> expiry_overtime_mode_{ false };
+  // Set when the client-side expiry check of a query statement fires. Any later failed
+  // auto-rollback in this attempt raises EXPIRED instead of FAILED.
+  std::atomic<bool> query_check_expired_{ false };
 
   auto check_expiry_pre_commit(std::string stage, std::optional<const std::string> doc_id) -> bool;
 
