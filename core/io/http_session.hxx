@@ -35,6 +35,7 @@
 #include <asio.hpp>
 #include <spdlog/fmt/bundled/chrono.h>
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -109,6 +110,16 @@ public:
   // starts a new generation, and the manager neither lists nor reuses a session from an earlier
   // one. A session outside any manager passes 0.
   [[nodiscard]] auto pool_generation() const -> std::uint64_t;
+  // The manager's TLS epoch when this session was created. check_in stops a session from an earlier
+  // epoch: its connection may carry a client certificate that has since been replaced.
+  void set_tls_epoch(std::uint64_t epoch)
+  {
+    tls_epoch_ = epoch;
+  }
+  [[nodiscard]] auto tls_epoch() const -> std::uint64_t
+  {
+    return tls_epoch_;
+  }
   [[nodiscard]] auto credentials() const -> cluster_credentials;
   [[nodiscard]] auto is_connected() const -> bool;
   [[nodiscard]] auto type() const -> service_type;
@@ -256,6 +267,7 @@ private:
   std::string node_uuid_;
   std::string id_;
   std::uint64_t pool_generation_;
+  std::atomic<std::uint64_t> tls_epoch_{ 0 };
   asio::io_context& ctx_;
   asio::ip::tcp::resolver resolver_;
   std::unique_ptr<stream_impl> stream_;
