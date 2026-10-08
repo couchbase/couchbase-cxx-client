@@ -306,40 +306,26 @@ public:
       return !s;
     });
     std::shared_ptr<http_session> session{};
-    while (!idle_sessions_[type].empty()) {
-      if (preferred_node_address.empty()) {
-        session = idle_sessions_[type].front();
-        idle_sessions_[type].pop_front();
-        if (is_reusable(*session)) {
-          break;
-        }
-      } else {
-        auto ptr = std::find_if(idle_sessions_[type].begin(),
-                                idle_sessions_[type].end(),
-                                [&preferred_node_address,
-                                 &h = preferred_node.hostname,
-                                 &p = preferred_node.port](const auto& s) {
-                                  // Check for a match using both the unresolved hostname & IP
-                                  // address
-                                  return (s->remote_address() == preferred_node_address ||
-                                          (s->hostname() == h && s->port() == std::to_string(p)));
-                                });
-        if (ptr != idle_sessions_[type].end()) {
-          session = *ptr;
-          idle_sessions_[type].erase(ptr);
-          if (is_reusable(*session)) {
-            break;
-          }
-        } else {
-          session = create_session(type, preferred_node, generation_);
-          break;
-        }
-      }
-      CB_LOG_TRACE("{} Idle session \"{}\" is stopping or its idle timer has expired.  Attempting "
-                   "to select another session.",
-                   session->log_prefix(),
-                   logger::system_data(fmt::format("{}:{}", session->hostname(), session->port())));
-      session.reset();
+    // Only a reusable session leaves the idle list. One that is not has a stop queued, by its idle
+    // timer or by retire_sessions(), and stays listed until on_stop unlists it, so a close() before
+    // then still stops it and waits for it.
+    auto& idle = idle_sessions_[type];
+    const auto taken = std::find_if(
+      idle.begin(),
+      idle.end(),
+      [&preferred_node_address, &h = preferred_node.hostname, &p = preferred_node.port](
+        const auto& s) {
+        // Check for a match using both the unresolved hostname & IP address
+        const bool matches = preferred_node_address.empty() ||
+                             s->remote_address() == preferred_node_address ||
+                             (s->hostname() == h && s->port() == std::to_string(p));
+        return matches && is_reusable(*s);
+      });
+    if (taken != idle.end()) {
+      session = *taken;
+      idle.erase(taken);
+    } else if (!preferred_node_address.empty()) {
+      session = create_session(type, preferred_node, generation_);
     }
     if (!session) {
       auto node = preferred_node_address.empty() ? next_node(type)
@@ -394,7 +380,8 @@ public:
       if (session->is_stopped() || session->is_stopping()) {
         return;
       }
-      if (session->pool_generation() != generation_ || !session->keep_alive() ||
+      if (session->pool_generation() != generation_ || session->tls_epoch() != tls_epoch_ ||
+          !session->keep_alive() ||
           !config_.has_node(options_.network,
                             session->type(),
                             options_.enable_tls,
@@ -425,6 +412,34 @@ public:
       });
     }
     CB_LOG_DEBUG("{} put HTTP session back to idle connections", session->log_prefix());
+  }
+
+  // Stops the reuse of every session created before the call, for a credential that the connection
+  // carries, such as a client certificate. Idle sessions stop now. A busy or connecting session
+  // completes its request first; check_in then stops it, because its TLS epoch is stale.
+  void retire_sessions()
+  {
+    std::vector<std::shared_ptr<http_session>> retired;
+    {
+      const std::scoped_lock lock(sessions_mutex_);
+      ++tls_epoch_;
+      // Claimed but left listed until their stop runs, so a close() before then stops them and
+      // waits for them. check_out skips a claimed session, and on_stop unlists it.
+      for (const auto& [type, sessions] : idle_sessions_) {
+        for (const auto& s : sessions) {
+          if (s) {
+            s->mark_stopping();
+            retired.push_back(s);
+          }
+        }
+      }
+    }
+    // Stopped on its own strand, as close() does.
+    for (auto& s : retired) {
+      asio::post(s->get_executor(), [s]() {
+        s->stop();
+      });
+    }
   }
 
   // on_stopped runs once every session listed at the call has been stopped and holds no
@@ -733,6 +748,9 @@ private:
   auto create_session(service_type type, const node_details& node, std::uint64_t generation)
     -> std::shared_ptr<http_session>
   {
+    // Read before the session takes the TLS context. retire_sessions() runs after the context is
+    // replaced, so this epoch is never newer than the context.
+    const std::uint64_t tls_epoch = tls_epoch_;
     std::shared_ptr<http_session> session;
     if (options_.enable_tls) {
       session = std::make_shared<http_session>(type,
@@ -799,6 +817,7 @@ private:
         }
       }
     });
+    session->set_tls_epoch(tls_epoch);
     return session;
   }
 
@@ -903,6 +922,8 @@ private:
   // Advanced by close(); guarded by sessions_mutex_. A session carries the generation it serves,
   // and check_in and publish_busy refuse one from an earlier generation.
   std::uint64_t generation_{ 0 };
+  // Advanced by retire_sessions(). Unlike generation_, it ends no in-flight request.
+  std::atomic<std::uint64_t> tls_epoch_{ 0 };
   query_cache query_cache_{};
 };
 } // namespace couchbase::core::io

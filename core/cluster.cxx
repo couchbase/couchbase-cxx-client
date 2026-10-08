@@ -735,6 +735,7 @@ public:
 
   auto update_credentials(const cluster_credentials& auth) -> core::error
   {
+    const std::scoped_lock lock(update_credentials_mutex_);
     if (stopped_) {
       return { errc::network::cluster_closed, {} };
     }
@@ -757,8 +758,7 @@ public:
     });
 
     if (auth.requires_tls()) {
-      // Recreate and atomically swap the TLS context, existing sessions should continue to use the
-      // old one.
+      // Recreate and atomically swap the TLS context. KV sessions keep the one they connected with.
       const auto new_ctx = std::make_shared<asio::ssl::context>(asio::ssl::context::tls_client);
       auto ec = configure_tls_context(new_ctx);
       if (ec) {
@@ -767,6 +767,11 @@ public:
         return { ec, {} };
       }
       tls_.set_ctx(new_ctx);
+      // A pooled HTTP connection presents the certificate it was opened with. A password or JWT is
+      // sent with each request.
+      if (auth.uses_certificate()) {
+        session_manager_->retire_sessions();
+      }
     }
 
     if (auth.uses_jwt()) {
@@ -1597,7 +1602,15 @@ public:
     stopped_ = true;
     asio::post(asio::bind_executor(
       ctx_, [self = shared_from_this(), handler = std::move(handler)]() mutable {
-        if (auto session = std::move(self->session_); session) {
+        std::optional<io::mcbp_session> session{};
+        std::shared_ptr<io::http_session_manager> session_manager{};
+        {
+          // update_credentials() uses both from the caller's thread.
+          const std::scoped_lock lock(self->update_credentials_mutex_);
+          session = std::move(self->session_);
+          session_manager = std::move(self->session_manager_);
+        }
+        if (session) {
           session->stop(retry_reason::do_not_retry);
         }
 
@@ -1612,7 +1625,7 @@ public:
         // The rest of the teardown waits until every HTTP session is stopped and holds no
         // read_some() call. The caller may stop the io_context as soon as `handler` runs, and an
         // HTTP session whose stop is still queued then is never torn down.
-        if (const auto session_manager = std::move(self->session_manager_); session_manager) {
+        if (session_manager) {
           return session_manager->close([self, handler = std::move(handler)]() mutable {
             self->finish_close(std::move(handler));
           });
@@ -1828,6 +1841,8 @@ private:
   std::optional<io::mcbp_session> session_{};
   std::shared_ptr<impl::dns_srv_tracker> dns_srv_tracker_{};
   std::mutex buckets_mutex_{};
+  // Orders update_credentials() against close() moving session_ and session_manager_ out.
+  std::mutex update_credentials_mutex_{};
   std::map<std::string, std::shared_ptr<bucket>> buckets_{};
   couchbase::core::origin origin_{};
 #ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
