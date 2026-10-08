@@ -3421,6 +3421,100 @@ a_streamed_body_dropped_after_shutdown_releases_its_session([[maybe_unused]] con
                 alive(session_probe));
 }
 
+// Regression: cancel() on an operation that had already completed stopped the session it had
+// checked in, which another request may have taken since. That request then failed with
+// request_canceled.
+void
+a_cancel_after_completion_leaves_the_reused_connection_alone([[maybe_unused]] context& ctx)
+{
+  std::string outcome;
+  bool any_stopped = false;
+  for (const bool streamed : { false, true }) {
+    component_fixture c{};
+    auto parked = park_idle(c.f);
+
+    auto terminal = std::make_shared<completion<std::error_code>>();
+    std::shared_ptr<couchbase::core::pending_operation> op;
+    run_on(c.f.io, [&]() {
+      if (streamed) {
+        auto dispatched = c.component.do_http_request(
+          free_form_request("/complete"),
+          [terminal](couchbase::core::http_response resp, std::error_code ec) {
+            if (ec) {
+              return terminal->set(ec);
+            }
+            drain_component_body(resp.body(), terminal);
+          });
+        assert_true(dispatched.has_value(), "the request is dispatched");
+        op = *dispatched;
+      } else {
+        op = dispatch(c, free_form_request("/complete"), false, terminal);
+      }
+    });
+    const auto ec = terminal->wait_for(patience());
+    assert_true(ec.has_value(), "the request completes within its budget");
+    assert_success(*ec, "the request completes cleanly");
+
+    // With one runner this runs after the handler that checked the connection in.
+    std::shared_ptr<http_session> reused;
+    run_on(c.f.io, [&]() {
+      reused = check_out(*c.f.manager);
+    });
+    assert_true(reused == parked, "the next request takes the connection the operation checked in");
+    run_on(c.f.io, [&]() {
+      op->cancel();
+    });
+    const bool stopped = reused->is_stopped() || reused->is_stopping();
+    any_stopped = any_stopped || stopped;
+    outcome +=
+      std::string{ streamed ? ", streamed: " : "buffered: " } + (stopped ? "stopped" : "running");
+    assert_true(c.shutdown(), "the io_context drains once the cluster is closed");
+  }
+  assert_false(any_stopped,
+               "cancel() after completion leaves the reused connection running; " + outcome);
+}
+
+// Regression: a cancel() between the response head and the end of its body must stop the
+// connection. The stream end runs inside that stop and does not check the connection in.
+void
+a_cancel_before_the_stream_ends_leaves_the_connection_out_of_the_pool([[maybe_unused]] context& ctx)
+{
+  component_fixture c{};
+  auto parked = park_idle(c.f);
+  const auto parked_id = parked->id();
+  parked.reset();
+
+  auto head = std::make_shared<completion<std::error_code>>();
+  // Held until the case ends: a body dropped mid-stream stops its connection itself.
+  auto body = std::make_shared<std::optional<couchbase::core::http_response_body>>();
+  std::shared_ptr<couchbase::core::pending_operation> op;
+  run_on(c.f.io, [&]() {
+    auto dispatched = c.component.do_http_request(
+      free_form_request("/one-row"),
+      [head, body](couchbase::core::http_response resp, std::error_code ec) {
+        if (!ec) {
+          *body = resp.body();
+        }
+        head->set(ec);
+      });
+    assert_true(dispatched.has_value(), "the request is dispatched");
+    op = *dispatched;
+  });
+  const auto ec = head->wait_for(patience());
+  assert_true(ec.has_value(), "the response head arrives within its budget");
+  assert_success(*ec, "the response head arrives");
+
+  run_on(c.f.io, [&]() {
+    op->cancel();
+  });
+  assert_true(wait_until([&c, &parked_id]() {
+                return c.f.server.released() == 1 && pooled_ids(*c.f.manager).count(parked_id) == 0;
+              }),
+              "cancel() closes the connection and the stream end does not pool it");
+  body->reset();
+  assert_true(c.shutdown(), "the io_context drains once the cluster is closed");
+}
+
 // Dispatches a request on a session still to connect and cancels it before the connect completes.
 // Returns, once the connect attempt has ended, the number of sessions listed busy or idle and the
 // number of connections the endpoint accepted that the client has not closed. `op` keeps the
@@ -4556,6 +4650,10 @@ tests() -> test_suite
         timeout::slow },
       { CASE(a_streamed_body_dropped_after_shutdown_releases_its_session), {}, timeout::slow },
       { CASE(a_streamed_body_dropped_with_a_deadline_armed_releases_its_session),
+        {},
+        timeout::slow },
+      { CASE(a_cancel_after_completion_leaves_the_reused_connection_alone), {}, timeout::slow },
+      { CASE(a_cancel_before_the_stream_ends_leaves_the_connection_out_of_the_pool),
         {},
         timeout::slow },
       { CASE(an_operation_cancelled_while_its_session_connects_leaves_no_session_busy),
