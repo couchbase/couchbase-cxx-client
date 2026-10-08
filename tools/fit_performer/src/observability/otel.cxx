@@ -25,10 +25,10 @@
 #include <google/protobuf/map.h>
 #include <spdlog/spdlog.h>
 
-#include <opentelemetry/exporters/otlp/otlp_http_exporter_factory.h>
-#include <opentelemetry/exporters/otlp/otlp_http_exporter_options.h>
-#include <opentelemetry/exporters/otlp/otlp_http_metric_exporter_factory.h>
-#include <opentelemetry/exporters/otlp/otlp_http_metric_exporter_options.h>
+#include <opentelemetry/exporters/otlp/otlp_grpc_exporter_factory.h>
+#include <opentelemetry/exporters/otlp/otlp_grpc_exporter_options.h>
+#include <opentelemetry/exporters/otlp/otlp_grpc_metric_exporter_factory.h>
+#include <opentelemetry/exporters/otlp/otlp_grpc_metric_exporter_options.h>
 #include <opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader_factory.h>
 #include <opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader_options.h>
 #include <opentelemetry/sdk/metrics/meter_context_factory.h>
@@ -78,16 +78,25 @@ create_otel_resource(
   }
   return opentelemetry::sdk::resource::Resource::Create(resource_attributes);
 }
+
+// The FIT driver sends an OTLP/gRPC endpoint with a scheme. The gRPC exporter drops the scheme, so
+// TLS is chosen from it here.
+auto
+uses_tls(const std::string& endpoint) -> bool
+{
+  return endpoint.rfind("https:", 0) == 0;
+}
 } // namespace
 
 auto
 create_tracer_provider(const protocol::observability::TracingConfig& cfg)
   -> std::unique_ptr<opentelemetry::sdk::trace::TracerProvider>
 {
-  opentelemetry::exporter::otlp::OtlpHttpExporterOptions exporter_opts{};
-  exporter_opts.url = cfg.endpoint_hostname();
+  opentelemetry::exporter::otlp::OtlpGrpcExporterOptions exporter_opts{};
+  exporter_opts.endpoint = cfg.endpoint_hostname();
+  exporter_opts.use_ssl_credentials = uses_tls(cfg.endpoint_hostname());
 
-  auto exporter = opentelemetry::exporter::otlp::OtlpHttpExporterFactory::Create(exporter_opts);
+  auto exporter = opentelemetry::exporter::otlp::OtlpGrpcExporterFactory::Create(exporter_opts);
 
   std::unique_ptr<opentelemetry::sdk::trace::SpanProcessor> processor;
   if (cfg.batching()) {
@@ -123,11 +132,12 @@ auto
 create_meter_provider(const protocol::observability::MetricsConfig& cfg)
   -> std::unique_ptr<opentelemetry::sdk::metrics::MeterProvider>
 {
-  opentelemetry::exporter::otlp::OtlpHttpMetricExporterOptions exporter_opts{};
-  exporter_opts.url = cfg.endpoint_hostname();
+  opentelemetry::exporter::otlp::OtlpGrpcMetricExporterOptions exporter_opts{};
+  exporter_opts.endpoint = cfg.endpoint_hostname();
+  exporter_opts.use_ssl_credentials = uses_tls(cfg.endpoint_hostname());
 
   auto exporter =
-    opentelemetry::exporter::otlp::OtlpHttpMetricExporterFactory::Create(exporter_opts);
+    opentelemetry::exporter::otlp::OtlpGrpcMetricExporterFactory::Create(exporter_opts);
 
   opentelemetry::sdk::metrics::PeriodicExportingMetricReaderOptions reader_opts{};
   reader_opts.export_interval_millis = std::chrono::milliseconds(cfg.export_every_millis());

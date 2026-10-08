@@ -156,5 +156,5 @@ target_link_libraries(
           asio::asio)
 if(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
   target_compile_definitions(fit_performer PRIVATE COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
-  target_link_libraries(fit_performer PRIVATE opentelemetry_exporter_otlp_http opentelemetry_exporter_otlp_http_metric)
+  target_link_libraries(fit_performer PRIVATE opentelemetry_exporter_otlp_grpc opentelemetry_exporter_otlp_grpc_metrics)
 endif()
