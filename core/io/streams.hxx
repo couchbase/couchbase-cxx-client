@@ -28,6 +28,7 @@
 #include <asio/ssl/stream.hpp>
 #include <asio/strand.hpp>
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -101,7 +102,7 @@ protected:
   // apart from one this process opened itself, because an inherited socket must not
   // be shut down: shutdown(2) acts on the open file description, which fork(2)
   // shares, so it would tear down a connection the parent is still using.
-  long long owner_pid_;
+  std::int64_t owner_pid_;
 
 public:
   stream_impl(asio::io_context& ctx, bool is_tls);
