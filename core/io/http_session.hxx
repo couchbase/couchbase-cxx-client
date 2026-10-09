@@ -35,6 +35,7 @@
 #include <asio.hpp>
 #include <spdlog/fmt/bundled/chrono.h>
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -99,6 +100,10 @@ public:
   [[nodiscard]] auto http_context() -> couchbase::core::http_context&;
   [[nodiscard]] auto remote_address() -> std::string;
   [[nodiscard]] auto local_address() -> std::string;
+  // Local and remote endpoints of the connection the current request was last handed to the socket
+  // on, empty before the first write. A resent request is recorded when its write starts on the new
+  // connection, not when that connection completes.
+  [[nodiscard]] auto dispatched_endpoints() -> std::pair<std::string, std::string>;
   [[nodiscard]] auto remote_endpoint() -> const asio::ip::tcp::endpoint&;
   [[nodiscard]] auto diag_info() -> diag::endpoint_diag_info;
   [[nodiscard]] auto log_prefix() -> std::string;
@@ -109,6 +114,16 @@ public:
   // starts a new generation, and the manager neither lists nor reuses a session from an earlier
   // one. A session outside any manager passes 0.
   [[nodiscard]] auto pool_generation() const -> std::uint64_t;
+  // The manager's TLS epoch when this session was created. check_in stops a session from an earlier
+  // epoch: its connection may carry a client certificate that has since been replaced.
+  void set_tls_epoch(std::uint64_t epoch)
+  {
+    tls_epoch_ = epoch;
+  }
+  [[nodiscard]] auto tls_epoch() const -> std::uint64_t
+  {
+    return tls_epoch_;
+  }
   [[nodiscard]] auto credentials() const -> cluster_credentials;
   [[nodiscard]] auto is_connected() const -> bool;
   [[nodiscard]] auto type() const -> service_type;
@@ -191,6 +206,7 @@ public:
     }
     write("\r\n");
     write(request.body);
+    remember_request(creds.uses_certificate());
     flush();
   }
 
@@ -249,6 +265,10 @@ private:
   void write(const std::string_view& buf);
   void flush();
   void cancel_current_response(std::error_code ec);
+  void remember_request(bool uses_certificate);
+  void record_dispatch();
+  auto resend_after_rejected_handshake(std::error_code ec) -> bool;
+  void reconnect_to_resend();
   void invoke_connect_callback();
 
   service_type type_{};
@@ -256,6 +276,7 @@ private:
   std::string node_uuid_;
   std::string id_;
   std::uint64_t pool_generation_;
+  std::atomic<std::uint64_t> tls_epoch_{ 0 };
   asio::io_context& ctx_;
   asio::ip::tcp::resolver resolver_;
   std::unique_ptr<stream_impl> stream_;
@@ -309,12 +330,20 @@ private:
 
   std::array<std::uint8_t, 16384> input_buffer_{};
   std::vector<std::vector<std::uint8_t>> output_buffer_{};
+  // The first request written on a new connection, kept until the first byte of its response
+  // arrives. Guarded by output_buffer_mutex_.
+  std::vector<std::vector<std::uint8_t>> unanswered_request_{};
+  // Set by a connect, cleared by the first byte of a response.
+  std::atomic_bool fresh_connection_{ false };
   std::vector<std::vector<std::uint8_t>> writing_buffer_{};
   std::mutex output_buffer_mutex_{};
   std::mutex writing_buffer_mutex_{};
   asio::ip::tcp::resolver::results_type endpoints_{};
   http_session_info info_;
+  // Guards info_, dispatched_from_ and dispatched_to_.
   std::mutex info_mutex_{};
+  std::string dispatched_from_{};
+  std::string dispatched_to_{};
   couchbase::core::http_context http_ctx_;
 
   // Read by diag_info() from any thread.
