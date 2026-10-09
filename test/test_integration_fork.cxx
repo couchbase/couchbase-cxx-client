@@ -21,6 +21,10 @@
 
 #include "utils/logger.hxx"
 
+#include "core/transactions.hxx"
+#include "core/transactions/attempt_context_testing_hooks.hxx"
+#include "core/transactions/cleanup_testing_hooks.hxx"
+#include "core/transactions/internal/transactions_cleanup.hxx"
 #include "core/utils/connection_string.hxx"
 
 #include <couchbase/cluster.hxx>
@@ -28,6 +32,7 @@
 #include <couchbase/diagnostics_result.hxx>
 #include <couchbase/error_codes.hxx>
 #include <couchbase/fork_event.hxx>
+#include <couchbase/lookup_in_specs.hxx>
 #include <couchbase/service_type.hxx>
 
 #include <tao/json/value.hpp>
@@ -44,6 +49,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cerrno>
 #include <charconv>
 #include <chrono>
@@ -596,6 +602,9 @@ namespace couchbase
 {
 auto
 extract_core_cluster(const couchbase::cluster& cluster) -> const core::cluster&;
+auto
+extract_core_transactions(const couchbase::cluster& cluster)
+  -> const std::shared_ptr<core::transactions::transactions>&;
 } // namespace couchbase
 
 TEST_CASE("integration: a forked child leaves the parent's connections unread", "[integration]")
@@ -747,6 +756,127 @@ TEST_CASE("integration: a forked child leaves the parent's connections unread", 
     CHECK_FALSE(err.ec());
   }
   cluster.close().get();
+}
+
+namespace
+{
+// Whether the transactions client record in the bucket's default collection lists the client.
+auto
+client_record_lists(const couchbase::cluster& cluster,
+                    const std::string& bucket,
+                    const std::string& client_uuid) -> bool
+{
+  auto [err, res] = cluster.bucket(bucket)
+                      .default_collection()
+                      .lookup_in("_txn:client-record",
+                                 couchbase::lookup_in_specs{
+                                   couchbase::lookup_in_specs::get("records.clients").xattr(),
+                                 })
+                      .get();
+  if (err.ec() || !res.exists(0)) {
+    return false;
+  }
+  const auto clients = res.content_as<tao::json::value>(0);
+  return clients.is_object() && clients.find(client_uuid) != nullptr;
+}
+} // namespace
+
+// CXXCBC-914: a forked child must not remove the transactions client record it inherited. The
+// record belongs to the parent, which stays registered under it. The parent's own close() goes
+// through the same hook, which shows the hook is reachable.
+TEST_CASE("integration: a forked child leaves the parent's client record registered",
+          "[integration]")
+{
+  {
+    test::utils::integration_test_guard integration;
+    if (integration.cluster_version().is_mock()) {
+      SKIP("the mock does not support the fork scenario");
+    }
+  }
+  const auto ctx = test::utils::test_context::load_from_environment();
+  test::utils::init_logger();
+  setbuf(stdout, nullptr);
+
+  static std::atomic<int> removals{ 0 };
+  removals = 0;
+  auto cleanup_hooks = std::make_shared<couchbase::core::transactions::cleanup_testing_hooks>();
+  cleanup_hooks->client_record_before_remove_client =
+    [](const std::string&,
+       couchbase::core::utils::movable_function<void(
+         std::optional<couchbase::core::transactions::error_class>)>&& handler) {
+      ++removals;
+      handler({});
+    };
+
+  auto options = couchbase::cluster_options(ctx.username, ctx.password);
+  options.apply_profile("wan_development");
+  // Registers the keyspace when the cluster opens, so close() has a record to remove there.
+  options.transactions().cleanup_config().add_collection({ ctx.bucket, "_default", "_default" });
+  options.transactions().test_factories(
+    std::make_shared<couchbase::core::transactions::attempt_context_testing_hooks>(),
+    cleanup_hooks);
+  auto [connect_err, cluster] = couchbase::cluster::connect(ctx.connection_string, options).get();
+  REQUIRE_SUCCESS(connect_err.ec());
+
+  // A cleanup thread registers the parent after the cluster opens.
+  const auto parent_uuid = couchbase::extract_core_transactions(cluster)->cleanup().client_uuid();
+  const auto registered_deadline = std::chrono::steady_clock::now() + std::chrono::seconds{ 30 };
+  while (!client_record_lists(cluster, ctx.bucket, parent_uuid)) {
+    if (std::chrono::steady_clock::now() > registered_deadline) {
+      FAIL("the parent did not register in the client record within 30 seconds");
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds{ 100 });
+  }
+
+  cluster.notify_fork(couchbase::fork_event::prepare);
+  const auto child_pid = fork();
+  if (child_pid < 0) {
+    const auto fork_errno = errno;
+    cluster.notify_fork(couchbase::fork_event::parent);
+    FAIL("fork() failed: " << std::strerror(fork_errno));
+  }
+  if (child_pid == 0) {
+    try {
+      // Nothing else holds the inherited cluster, so its teardown completes in here.
+      cluster.notify_fork(couchbase::fork_event::child);
+    } catch (...) {
+      leave_child(4);
+    }
+    if (removals != 0) {
+      leave_child(5);
+    }
+    leave_child(0);
+  }
+
+  const auto child = wait_for_child(child_pid);
+  // The parent's cleanup stays stopped until notify_fork(parent), so it cannot re-register before
+  // this read. A separate cluster does the read: the parent's I/O is stopped too.
+  std::string observer_error{};
+  bool parent_still_registered{ false };
+  try {
+    auto observer_options = couchbase::cluster_options(ctx.username, ctx.password);
+    observer_options.apply_profile("wan_development");
+    auto [observer_err, observer] =
+      couchbase::cluster::connect(ctx.connection_string, observer_options).get();
+    if (observer_err.ec()) {
+      observer_error = observer_err.ec().message();
+    } else {
+      parent_still_registered = client_record_lists(observer, ctx.bucket, parent_uuid);
+      observer.close().get();
+    }
+  } catch (const std::exception& e) {
+    observer_error = e.what();
+  }
+  cluster.notify_fork(couchbase::fork_event::parent);
+  cluster.close().get();
+
+  CHECK(child.error == std::string{});
+  CHECK(WIFEXITED(child.status));
+  // 4 = notify_fork(child) threw, 5 = the child tried to remove the parent's client record.
+  CHECK(WEXITSTATUS(child.status) == 0);
+  INFO("observer: " << observer_error);
+  CHECK(parent_still_registered);
+  CHECK(removals > 0);
 }
 
 #endif // _WIN32

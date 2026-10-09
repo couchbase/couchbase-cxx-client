@@ -18,6 +18,7 @@
 #include "streams.hxx"
 
 #include "core/platform/uuid.h"
+#include "core/utils/process_id.hxx"
 
 #include <asio.hpp>
 #include <asio/error.hpp>
@@ -32,9 +33,7 @@
 #include <memory>
 #include <mutex>
 
-#if defined(_WIN32)
-#include <process.h>
-#else
+#if !defined(_WIN32)
 #include <unistd.h>
 #endif
 
@@ -42,16 +41,6 @@ namespace couchbase::core::io
 {
 namespace
 {
-auto
-current_process_id() -> long long
-{
-#if defined(_WIN32)
-  return static_cast<long long>(::_getpid());
-#else
-  return static_cast<long long>(::getpid());
-#endif
-}
-
 /**
  * Release a socket this process inherited across fork(2), without disturbing the
  * connection the parent is still using.
@@ -163,14 +152,14 @@ public:
   {
     const std::scoped_lock lock(mutex_);
     prune();
-    plain_.push_back({ socket, current_process_id() });
+    plain_.push_back({ socket, utils::current_process_id() });
   }
 
   void add(const std::shared_ptr<asio::ssl::stream<asio::ip::tcp::socket>>& stream)
   {
     const std::scoped_lock lock(mutex_);
     prune();
-    tls_.push_back({ stream, current_process_id() });
+    tls_.push_back({ stream, utils::current_process_id() });
   }
 
   // The detach result needs no handling. asio's reactive release() fails only on a socket that is
@@ -178,7 +167,7 @@ public:
   // operations aborted, so a failed close(2) cannot let anything run on the parent's connection.
   void detach_inherited()
   {
-    const auto pid = current_process_id();
+    const auto pid = utils::current_process_id();
     const std::scoped_lock lock(mutex_);
     for (const auto& [weak, owner_pid] : plain_) {
       if (auto socket = weak.lock(); socket && owner_pid != pid && socket->is_open()) {
@@ -236,7 +225,7 @@ stream_impl::stream_impl(asio::io_context& ctx, bool is_tls)
   , strand_(asio::make_strand(ctx))
   , tls_(is_tls)
   , id_(uuid::to_string(uuid::random()))
-  , owner_pid_(current_process_id())
+  , owner_pid_(utils::current_process_id())
 {
 }
 
@@ -294,7 +283,7 @@ plain_stream_impl::close(utils::movable_function<void(std::error_code)>&& handle
       // Decide here rather than when this was posted: io_.stop() at fork_prepare
       // does not drain the queue, so a close queued before the fork runs in the
       // child once the io_context is restarted, and there the answer differs.
-      if (owner_pid != current_process_id()) {
+      if (owner_pid != utils::current_process_id()) {
         detach_inherited_socket(*stream, ec);
       } else {
         stream->shutdown(asio::socket_base::shutdown_both, ec);
@@ -403,7 +392,7 @@ tls_stream_impl::close(utils::movable_function<void(std::error_code)>&& handler)
       asio::error_code ec{};
       // See plain_stream_impl::close(): the inheritance test belongs here, not at
       // post time.
-      if (owner_pid != current_process_id()) {
+      if (owner_pid != utils::current_process_id()) {
         detach_inherited_socket(stream->lowest_layer(), ec);
       } else {
         stream->lowest_layer().shutdown(asio::socket_base::shutdown_both, ec);
