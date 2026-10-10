@@ -80,9 +80,19 @@ async_resolve(ip_protocol protocol,
 configure_tls_handshake(asio::ssl::stream<asio::ip::tcp::socket>& stream,
                         const std::string& hostname) -> std::error_code;
 
+class inherited_stream_registry;
+
+// For a forked child, after io_context::notify_fork(fork_child) and before anything runs on ctx:
+// releases and closes every registered stream on ctx that another process opened, without
+// shutdown(2). No pending operation on those streams can then read or write a connection the
+// parent is still using. The DNS client's sockets are not registered.
+void
+detach_inherited_sockets(asio::io_context& ctx);
+
 class stream_impl
 {
 protected:
+  inherited_stream_registry& inherited_;
   asio::strand<asio::io_context::executor_type> strand_;
   bool tls_;
   std::string id_{};

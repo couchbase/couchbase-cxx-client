@@ -21,20 +21,35 @@
 
 #include "utils/logger.hxx"
 
+#include "core/utils/connection_string.hxx"
+
 #include <couchbase/cluster.hxx>
 #include <couchbase/codec/tao_json_serializer.hxx>
+#include <couchbase/diagnostics_result.hxx>
 #include <couchbase/error_codes.hxx>
 #include <couchbase/fork_event.hxx>
+#include <couchbase/service_type.hxx>
 
 #include <tao/json/value.hpp>
 
 #include <spdlog/fmt/bundled/format.h>
 
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <algorithm>
+#include <array>
 #include <cerrno>
+#include <charconv>
 #include <chrono>
+#include <cstdint>
+#include <iterator>
+#include <utility>
 // <csignal> rather than <signal.h>: clang-tidy's modernize-deprecated-headers is enabled.
 // kill(2) is POSIX rather than C, but this whole file is already POSIX-only and the build
 // defines _GNU_SOURCE, so the declaration comes through.
@@ -48,6 +63,7 @@
 #include <sstream>
 #include <string>
 #include <thread>
+#include <vector>
 
 // Regression guard for cluster::notify_fork().
 //
@@ -128,6 +144,49 @@ leave_child(int status)
   std::_Exit(status);
 }
 
+// Long enough for memcheck's exit-time report in a healthy child, described at the top of this
+// file; short of CTest's own per-test timeout.
+constexpr int child_deadline_minutes{ 15 };
+
+// A forked child's wait status. `error` is set when the child did not exit within the deadline or
+// could not be waited for.
+struct child_wait {
+  int status{};
+  std::string error{};
+};
+
+// Kills the child only once the deadline has passed. A wait that fails other than with EINTR
+// leaves it alone: the pid may no longer be ours to signal.
+auto
+wait_for_child(pid_t child_pid) -> child_wait
+{
+  const auto deadline =
+    std::chrono::steady_clock::now() + std::chrono::minutes{ child_deadline_minutes };
+  child_wait result{};
+  while (true) {
+    const auto rc = waitpid(child_pid, &result.status, WNOHANG);
+    const auto wait_errno = rc < 0 ? errno : 0;
+    if (rc == child_pid) {
+      return result;
+    }
+    if (rc < 0 && wait_errno != EINTR) {
+      result.error = fmt::format("waitpid() failed: {}", std::strerror(wait_errno));
+      return result;
+    }
+    if (std::chrono::steady_clock::now() >= deadline) {
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds{ 100 });
+  }
+  kill(child_pid, SIGKILL);
+  while (waitpid(child_pid, &result.status, 0) < 0 && errno == EINTR) {
+    // reap the killed child so it cannot outlive this test
+  }
+  result.error =
+    fmt::format("the child did not exit within {} minutes and was killed", child_deadline_minutes);
+  return result;
+}
+
 // Total CPU the process has burned, in clock ticks. Fields 14 and 15 of /proc/<pid>/stat are
 // utime and stime. The comm field ahead of them is parenthesised and may itself hold spaces and
 // parentheses, so the scan starts after its last ')' rather than at a fixed offset.
@@ -165,6 +224,142 @@ try {
   return utime + stime;
 } catch (...) {
   // A diagnostic, read while a wedged child is still unreaped: it may not throw past here.
+  return {};
+}
+
+constexpr std::size_t mcbp_header_size{ 24 };
+
+// The local and peer ports of each KV connection in a diagnostics report. An endpoint that has not
+// connected yet reports port 0 and is left out.
+auto
+kv_endpoint_ports(const couchbase::diagnostics_result& report)
+  -> std::vector<std::pair<std::uint16_t, std::uint16_t>>
+{
+  const auto port_of = [](const std::string& address) -> std::uint16_t {
+    const auto colon = address.rfind(':');
+    std::uint16_t port{};
+    if (colon == std::string::npos ||
+        std::from_chars(address.data() + colon + 1, address.data() + address.size(), port).ec !=
+          std::errc{}) {
+      return 0;
+    }
+    return port;
+  };
+  std::vector<std::pair<std::uint16_t, std::uint16_t>> ports;
+  const auto endpoints = report.endpoints();
+  const auto kv = endpoints.find(couchbase::service_type::key_value);
+  if (kv == endpoints.end()) {
+    return ports;
+  }
+  for (const auto& endpoint : kv->second) {
+    const auto local = port_of(endpoint.local());
+    const auto peer = port_of(endpoint.remote());
+    if (local != 0 && peer != 0) {
+      ports.emplace_back(local, peer);
+    }
+  }
+  return ports;
+}
+
+// The port of a socket's own address (getsockname) or its peer's (getpeername).
+auto
+socket_port(int fd, int (*query)(int, sockaddr*, socklen_t*)) -> std::optional<std::uint16_t>
+{
+  sockaddr_storage address{};
+  socklen_t length = sizeof(address);
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+  if (query(fd, reinterpret_cast<sockaddr*>(&address), &length) != 0) {
+    return {};
+  }
+  if (address.ss_family == AF_INET) {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+    return ntohs(reinterpret_cast<const sockaddr_in*>(&address)->sin_port);
+  }
+  if (address.ss_family == AF_INET6) {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+    return ntohs(reinterpret_cast<const sockaddr_in6*>(&address)->sin6_port);
+  }
+  return {};
+}
+
+// The inode of the socket behind a descriptor. fork(2) shares it; a socket opened later never has
+// the same one, even on a reused descriptor number and local port.
+auto
+socket_inode(int fd) -> std::optional<ino_t>
+{
+  struct stat st{};
+  if (fstat(fd, &st) != 0 || !S_ISSOCK(st.st_mode)) {
+    return {};
+  }
+  return st.st_ino;
+}
+
+// This process's sockets whose local and peer ports match one of `ports`.
+auto
+sockets_with_ports(const std::vector<std::pair<std::uint16_t, std::uint16_t>>& ports)
+  -> std::vector<int>
+{
+  std::vector<int> fds;
+  const auto limit = std::min<long>(sysconf(_SC_OPEN_MAX), 4096);
+  for (int fd = 0; fd < limit; ++fd) {
+    struct stat st{};
+    if (fstat(fd, &st) != 0 || !S_ISSOCK(st.st_mode)) {
+      continue;
+    }
+    const auto local = socket_port(fd, getsockname);
+    const auto peer = socket_port(fd, getpeername);
+    if (local && peer &&
+        std::find(ports.begin(), ports.end(), std::pair{ local.value(), peer.value() }) !=
+          ports.end()) {
+      fds.push_back(fd);
+    }
+  }
+  return fds;
+}
+
+// The server echoes the opaque unchanged, so its byte order does not matter.
+auto
+noop_request(std::uint32_t opaque) -> std::array<std::uint8_t, mcbp_header_size>
+{
+  std::array<std::uint8_t, mcbp_header_size> frame{};
+  frame[0] = 0x80; // request
+  frame[1] = 0x0a; // NOOP
+  std::memcpy(&frame[12], &opaque, sizeof(opaque));
+  return frame;
+}
+
+// The end offset of the NOOP response carrying `opaque` within the bytes queued on `fd`, when
+// it and every frame ahead of it are queued complete. Reads nothing out of the queue.
+auto
+queued_noop_response_end(int fd, std::uint32_t opaque) -> std::optional<std::size_t>
+{
+  int available{};
+  if (ioctl(fd, FIONREAD, &available) != 0 || available <= 0) {
+    return {};
+  }
+  std::vector<std::uint8_t> bytes(static_cast<std::size_t>(available));
+  const auto peeked = recv(fd, bytes.data(), bytes.size(), MSG_PEEK | MSG_DONTWAIT);
+  if (peeked <= 0) {
+    return {};
+  }
+  const auto size = static_cast<std::size_t>(peeked);
+  std::size_t offset{};
+  while (offset + mcbp_header_size <= size) {
+    std::uint32_t body_length{};
+    std::memcpy(&body_length, &bytes[offset + 8], sizeof(body_length));
+    const auto end = offset + mcbp_header_size + ntohl(body_length);
+    if (end > size) {
+      return {};
+    }
+    std::uint32_t frame_opaque{};
+    std::memcpy(&frame_opaque, &bytes[offset + 12], sizeof(frame_opaque));
+    // 0x18 is the response magic once tracing has been negotiated, 0x81 otherwise.
+    const auto magic = bytes[offset];
+    if ((magic == 0x81 || magic == 0x18) && bytes[offset + 1] == 0x0a && frame_opaque == opaque) {
+      return end;
+    }
+    offset = end;
+  }
   return {};
 }
 } // namespace
@@ -323,7 +518,6 @@ TEST_CASE("integration: cluster remains usable in a forked child", "[integration
   // Memcheck's exit-time report over the child's still-reachable blocks, described at the
   // top of this file, is what sets that floor. What this guards is an actual hang, which is
   // unbounded, so the headroom costs nothing on a child that exits normally.
-  constexpr int child_deadline_minutes{ 15 };
   int status{};
   pid_t reaped{ -1 };
   const auto child_deadline =
@@ -390,6 +584,168 @@ TEST_CASE("integration: cluster remains usable in a forked child", "[integration
   // 4 = something in the child threw.
   REQUIRE(WEXITSTATUS(status) == 0);
 
+  cluster.close().get();
+}
+
+// CXXCBC-913: a forked child must not read from connections it inherited. The parent queues a
+// NOOP response on each of its KV connections while its own I/O is stopped, so the response can
+// only leave the queue through the child. The queue is shared across fork(2), so the parent finds
+// it intact afterwards exactly when the child read nothing. Over TLS the plain-text NOOP cannot be
+// sent, so the parent's queue check is skipped.
+namespace couchbase
+{
+auto
+extract_core_cluster(const couchbase::cluster& cluster) -> const core::cluster&;
+} // namespace couchbase
+
+TEST_CASE("integration: a forked child leaves the parent's connections unread", "[integration]")
+{
+  {
+    test::utils::integration_test_guard integration;
+    if (integration.cluster_version().is_mock()) {
+      SKIP("the mock does not support the fork scenario");
+    }
+  }
+  const auto ctx = test::utils::test_context::load_from_environment();
+  const auto tls = couchbase::core::utils::parse_connection_string(ctx.connection_string).tls;
+  test::utils::init_logger();
+  setbuf(stdout, nullptr);
+
+  auto options = couchbase::cluster_options(ctx.username, ctx.password);
+  options.apply_profile("wan_development");
+  auto [connect_err, cluster] = couchbase::cluster::connect(ctx.connection_string, options).get();
+  REQUIRE_SUCCESS(connect_err.ec());
+  auto collection = cluster.bucket(ctx.bucket).default_collection();
+  const auto parent_id = test::utils::uniq_id("fork-unread");
+  {
+    auto [err, res] = collection.upsert(parent_id, tao::json::value{ { "side", "parent" } }).get();
+    REQUIRE_SUCCESS(err.ec());
+  }
+
+  // The inherited core's teardown releases its buckets. The label listener goes only with the core.
+  const auto& inherited_core = couchbase::extract_core_cluster(cluster);
+  const auto inherited_bucket = std::weak_ptr(inherited_core.find_bucket_by_name(ctx.bucket));
+  const auto inherited_listener = std::weak_ptr(inherited_core.cluster_label_listener());
+  auto [diagnostics_err, report] = cluster.diagnostics().get();
+  REQUIRE_SUCCESS(diagnostics_err.ec());
+  const auto ports = kv_endpoint_ports(report);
+
+  cluster.notify_fork(couchbase::fork_event::prepare);
+  // The parent runs no I/O from here until notify_fork(parent).
+  constexpr std::uint32_t opaque{ 0x31424346 };
+  const auto sockets = sockets_with_ports(ports);
+  std::vector<std::optional<ino_t>> inherited_inodes{};
+  std::transform(
+    sockets.begin(), sockets.end(), std::back_inserter(inherited_inodes), socket_inode);
+  std::string setup_error{};
+  if (sockets.empty()) {
+    setup_error =
+      fmt::format("none of the {} KV connections in the diagnostics report is open", ports.size());
+  }
+  if (!tls) {
+    const auto request = noop_request(opaque);
+    for (const auto fd : sockets) {
+      if (::write(fd, request.data(), request.size()) != static_cast<ssize_t>(request.size())) {
+        setup_error = fmt::format("write to fd {} failed: {}", fd, std::strerror(errno));
+      }
+    }
+    const auto all_queued = [&sockets]() {
+      return std::all_of(sockets.begin(), sockets.end(), [](int fd) {
+        return queued_noop_response_end(fd, opaque).has_value();
+      });
+    };
+    const auto queue_deadline = std::chrono::steady_clock::now() + std::chrono::seconds{ 30 };
+    while (setup_error.empty() && !all_queued()) {
+      if (std::chrono::steady_clock::now() > queue_deadline) {
+        setup_error = "the NOOP responses were not queued within 30 seconds";
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds{ 10 });
+    }
+  }
+  if (!setup_error.empty()) {
+    cluster.notify_fork(couchbase::fork_event::parent);
+    FAIL(setup_error);
+  }
+
+  const auto child_pid = fork();
+  if (child_pid < 0) {
+    const auto fork_errno = errno;
+    cluster.notify_fork(couchbase::fork_event::parent);
+    FAIL("fork() failed: " << std::strerror(fork_errno));
+  }
+  if (child_pid == 0) {
+    try {
+      cluster.notify_fork(couchbase::fork_event::child);
+    } catch (...) {
+      leave_child(4);
+    }
+    if (!tls) {
+      // Observation window: a child reading the inherited connections drains the queues here.
+      const auto window_end = std::chrono::steady_clock::now() + std::chrono::seconds{ 2 };
+      const auto any_queued = [&sockets]() {
+        return std::any_of(sockets.begin(), sockets.end(), [](int fd) {
+          return queued_noop_response_end(fd, opaque).has_value();
+        });
+      };
+      while (any_queued() && std::chrono::steady_clock::now() < window_end) {
+        std::this_thread::sleep_for(std::chrono::milliseconds{ 10 });
+      }
+    }
+    // The child closes every connection it inherited: a descriptor still open on the same socket
+    // is the parent's connection, held open by the child.
+    for (std::size_t i = 0; i < sockets.size(); ++i) {
+      if (inherited_inodes[i].has_value() && socket_inode(sockets[i]) == inherited_inodes[i]) {
+        leave_child(5);
+      }
+    }
+    // A handle acquired before the fork still holds the inherited core here, so only a completed
+    // teardown can have released its buckets.
+    if (!inherited_bucket.expired()) {
+      leave_child(6);
+    }
+    // A wrapper SDK drops such a handle in the child when its garbage collector runs. After that
+    // nothing holds the inherited core.
+    {
+      [[maybe_unused]] const auto dropped = std::move(collection);
+    }
+    if (!inherited_listener.expired()) {
+      leave_child(7);
+    }
+    leave_child(0);
+  }
+
+  const auto child = wait_for_child(child_pid);
+
+  // Judged before notify_fork(parent), whose own reads would consume the queues. Each response is
+  // then read out through its end, so the parent's sessions resume on a frame boundary.
+  std::vector<int> drained{};
+  if (!tls) {
+    for (const auto fd : sockets) {
+      const auto end = queued_noop_response_end(fd, opaque);
+      if (!end) {
+        drained.push_back(fd);
+        continue;
+      }
+      std::vector<std::uint8_t> discard(end.value());
+      [[maybe_unused]] const auto consumed = recv(fd, discard.data(), discard.size(), MSG_WAITALL);
+    }
+  }
+  cluster.notify_fork(couchbase::fork_event::parent);
+
+  if (!tls) {
+    INFO("connections the child read from: " << drained.size() << " of " << sockets.size());
+    CHECK(drained.empty());
+  }
+  CHECK(child.error == std::string{});
+  CHECK(WIFEXITED(child.status));
+  // 4 = notify_fork(child) threw, 5 = the child kept an inherited connection open,
+  // 6 = the inherited core's teardown did not complete, 7 = the inherited core was not destroyed.
+  CHECK(WEXITSTATUS(child.status) == 0);
+  {
+    auto [err, res] = collection.get(parent_id).get();
+    INFO("parent get after the fork: " << err.ec().message());
+    CHECK_FALSE(err.ec());
+  }
   cluster.close().get();
 }
 
