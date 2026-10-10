@@ -18,6 +18,7 @@
 #include "streams.hxx"
 
 #include "core/platform/uuid.h"
+#include "core/utils/process_id.hxx"
 
 #include <asio.hpp>
 #include <asio/error.hpp>
@@ -27,11 +28,12 @@
 // <asio/ssl.hpp>; do not include <openssl/*.h> directly so the static BoringSSL
 // build (which ships its own headers) keeps working, matching core/io/mcbp_session.cxx.
 
+#include <algorithm>
 #include <cerrno>
+#include <memory>
+#include <mutex>
 
-#if defined(_WIN32)
-#include <process.h>
-#else
+#if !defined(_WIN32)
 #include <unistd.h>
 #endif
 
@@ -39,16 +41,6 @@ namespace couchbase::core::io
 {
 namespace
 {
-auto
-current_process_id() -> long long
-{
-#if defined(_WIN32)
-  return static_cast<long long>(::_getpid());
-#else
-  return static_cast<long long>(::getpid());
-#endif
-}
-
 /**
  * Release a socket this process inherited across fork(2), without disturbing the
  * connection the parent is still using.
@@ -144,11 +136,96 @@ configure_tls_handshake(asio::ssl::stream<asio::ip::tcp::socket>& stream,
   return ec;
 }
 
+// The sockets of one io_context, each with the process that opened it. Held weakly: a socket also
+// lives in the handlers that use it, such as a close posted before a fork, and is found there too.
+class inherited_stream_registry : public asio::execution_context::service
+{
+public:
+  static inline asio::execution_context::id id{};
+
+  explicit inherited_stream_registry(asio::execution_context& ctx)
+    : asio::execution_context::service(ctx)
+  {
+  }
+
+  void add(const std::shared_ptr<asio::ip::tcp::socket>& socket)
+  {
+    const std::scoped_lock lock(mutex_);
+    prune();
+    plain_.push_back({ socket, utils::current_process_id() });
+  }
+
+  void add(const std::shared_ptr<asio::ssl::stream<asio::ip::tcp::socket>>& stream)
+  {
+    const std::scoped_lock lock(mutex_);
+    prune();
+    tls_.push_back({ stream, utils::current_process_id() });
+  }
+
+  // The detach result needs no handling. asio's reactive release() fails only on a socket that is
+  // not open, which is skipped here, and once it succeeds the socket is out of the reactor with its
+  // operations aborted, so a failed close(2) cannot let anything run on the parent's connection.
+  void detach_inherited()
+  {
+    const auto pid = utils::current_process_id();
+    const std::scoped_lock lock(mutex_);
+    for (const auto& [weak, owner_pid] : plain_) {
+      if (auto socket = weak.lock(); socket && owner_pid != pid && socket->is_open()) {
+        asio::error_code ec{};
+        detach_inherited_socket(*socket, ec);
+      }
+    }
+    for (const auto& [weak, owner_pid] : tls_) {
+      if (auto stream = weak.lock();
+          stream && owner_pid != pid && stream->lowest_layer().is_open()) {
+        asio::error_code ec{};
+        detach_inherited_socket(stream->lowest_layer(), ec);
+      }
+    }
+    prune();
+  }
+
+private:
+  template<typename Stream>
+  struct entry {
+    std::weak_ptr<Stream> stream;
+    long long owner_pid;
+  };
+
+  void shutdown() override
+  {
+  }
+
+  void prune()
+  {
+    const auto expired = [](const auto& e) {
+      return e.stream.expired();
+    };
+    plain_.erase(std::remove_if(plain_.begin(), plain_.end(), expired), plain_.end());
+    tls_.erase(std::remove_if(tls_.begin(), tls_.end(), expired), tls_.end());
+  }
+
+  std::mutex mutex_{};
+  std::vector<entry<asio::ip::tcp::socket>> plain_{};
+  std::vector<entry<asio::ssl::stream<asio::ip::tcp::socket>>> tls_{};
+};
+
+void
+detach_inherited_sockets(asio::io_context& ctx)
+{
+  if (asio::has_service<inherited_stream_registry>(ctx)) {
+    asio::use_service<inherited_stream_registry>(static_cast<asio::execution_context&>(ctx))
+      .detach_inherited();
+  }
+}
+
 stream_impl::stream_impl(asio::io_context& ctx, bool is_tls)
-  : strand_(asio::make_strand(ctx))
+  : inherited_(
+      asio::use_service<inherited_stream_registry>(static_cast<asio::execution_context&>(ctx)))
+  , strand_(asio::make_strand(ctx))
   , tls_(is_tls)
   , id_(uuid::to_string(uuid::random()))
-  , owner_pid_(current_process_id())
+  , owner_pid_(utils::current_process_id())
 {
 }
 
@@ -168,6 +245,7 @@ plain_stream_impl::plain_stream_impl(asio::io_context& ctx)
   : stream_impl(ctx, false)
   , stream_(std::make_shared<asio::ip::tcp::socket>(strand_))
 {
+  inherited_.add(stream_);
 }
 
 auto
@@ -205,7 +283,7 @@ plain_stream_impl::close(utils::movable_function<void(std::error_code)>&& handle
       // Decide here rather than when this was posted: io_.stop() at fork_prepare
       // does not drain the queue, so a close queued before the fork runs in the
       // child once the io_context is restarted, and there the answer differs.
-      if (owner_pid != current_process_id()) {
+      if (owner_pid != utils::current_process_id()) {
         detach_inherited_socket(*stream, ec);
       } else {
         stream->shutdown(asio::socket_base::shutdown_both, ec);
@@ -235,6 +313,7 @@ plain_stream_impl::async_connect(
   if (!stream_) {
     id_ = uuid::to_string(uuid::random());
     stream_ = std::make_shared<asio::ip::tcp::socket>(strand_);
+    inherited_.add(stream_);
   }
   return stream_->async_connect(endpoint,
                                 [stream = stream_, handler = std::move(handler)](auto ec) {
@@ -276,6 +355,7 @@ tls_stream_impl::tls_stream_impl(asio::io_context& ctx, tls_context_provider& tl
       std::make_shared<asio::ssl::stream<asio::ip::tcp::socket>>(asio::ip::tcp::socket(strand_),
                                                                  *tls_.get_ctx()))
 {
+  inherited_.add(stream_);
 }
 
 auto
@@ -312,7 +392,7 @@ tls_stream_impl::close(utils::movable_function<void(std::error_code)>&& handler)
       asio::error_code ec{};
       // See plain_stream_impl::close(): the inheritance test belongs here, not at
       // post time.
-      if (owner_pid != current_process_id()) {
+      if (owner_pid != utils::current_process_id()) {
         detach_inherited_socket(stream->lowest_layer(), ec);
       } else {
         stream->lowest_layer().shutdown(asio::socket_base::shutdown_both, ec);
@@ -342,6 +422,7 @@ tls_stream_impl::async_connect(const asio::ip::tcp::resolver::results_type::endp
     id_ = uuid::to_string(uuid::random());
     stream_ = std::make_shared<asio::ssl::stream<asio::ip::tcp::socket>>(
       asio::ip::tcp::socket(strand_), *tls_.get_ctx());
+    inherited_.add(stream_);
   }
   return stream_->lowest_layer().async_connect(
     endpoint,

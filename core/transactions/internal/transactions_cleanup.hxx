@@ -130,6 +130,11 @@ public:
   // only used for testing
   void force_cleanup_entry(atr_cleanup_entry& entry, transactions_cleanup_attempt& attempt);
   // only used for testing
+  [[nodiscard]] auto client_uuid() const -> const std::string&
+  {
+    return client_uuid_;
+  }
+  // only used for testing
   auto force_cleanup_atr(const core::document_id& atr_id,
                          std::vector<transactions_cleanup_attempt>& results) -> atr_cleanup_stats;
   auto get_active_clients(const couchbase::transactions::transaction_keyspace& keyspace,
@@ -162,6 +167,8 @@ private:
   std::optional<asio::thread_pool> atr_cleanup_pool_;
 
   const std::string client_uuid_;
+  // The process that registered client_uuid_. A forked child inherits the uuid but not the record.
+  const long long client_record_owner_pid_;
   std::list<couchbase::transactions::transaction_keyspace> collections_;
 
   void attempts_loop();

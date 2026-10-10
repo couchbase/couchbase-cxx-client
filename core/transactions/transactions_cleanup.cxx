@@ -27,6 +27,7 @@
 #include "internal/utils.hxx"
 
 #include "core/operations.hxx"
+#include "core/utils/process_id.hxx"
 
 #include <couchbase/fmt/transaction_keyspace.hxx>
 
@@ -57,6 +58,7 @@ transactions_cleanup::transactions_cleanup(
   : cluster_(std::move(cluster))
   , config_(std::move(config))
   , client_uuid_(uid_generator::next())
+  , client_record_owner_pid_(utils::current_process_id())
 {
   start();
 }
@@ -764,7 +766,10 @@ transactions_cleanup::close()
 {
   stop();
   CB_LOST_ATTEMPT_CLEANUP_LOG_DEBUG("all lost attempt cleanup threads closed");
-  remove_client_record_from_all_buckets(client_uuid_);
+  // In a forked child the record is the parent's, and the parent is still registered under it.
+  if (client_record_owner_pid_ == utils::current_process_id()) {
+    remove_client_record_from_all_buckets(client_uuid_);
+  }
 }
 
 transactions_cleanup::~transactions_cleanup()

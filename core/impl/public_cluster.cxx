@@ -25,6 +25,7 @@
 #include "core/cluster_options.hxx"
 #include "core/core_sdk_shim.hxx"
 #include "core/io/ip_protocol.hxx"
+#include "core/io/streams.hxx"
 #include "core/origin.hxx"
 #include "core/tls_verify_mode.hxx"
 #include "core/tracing/constants.hxx"
@@ -538,7 +539,7 @@ public:
       } catch (...) {
         // Undo everything this prepare did, then report. Returning stopped and threadless
         // would hang ~cluster_impl, which waits on a completion only the IO thread can
-        // deliver -- the same hazard as the fork_child/fork_parent path below. The fork
+        // deliver -- the same hazard as the fork_parent path below. The fork
         // must not go ahead, but the cluster stays usable and destructible.
         //
         // The io_context comes back first: restarting cleanup spawns workers that issue KV
@@ -559,21 +560,12 @@ public:
         }
         throw;
       }
-    } else {
-      // TODO(CXXCBC-913): disown this cluster's sockets here, instead of leaving it to the
-      // reconnect. epoll_reactor::notify_fork(fork_child) below re-registers every
-      // descriptor inherited from the parent into the child's new epoll instance, so
-      // from here until those sockets are closed the child polls file descriptions the
-      // parent is still using. Closing them is at least no longer destructive -- see
-      // stream_impl::close(), which detaches a socket it did not open rather than
-      // shutting it down -- but it happens on the reconnect path, asynchronously, and
-      // only once the replaced impl is destroyed.
+    } else if (event == fork_event::parent) {
       io_.restart();
       try {
         io_.notify_fork(fork_event_to_asio(event));
       } catch (...) {
-        // notify_fork() throws if re-registering a descriptor with the new
-        // epoll instance fails. The io_context is unusable after that (asio says
+        // A service's notify_fork() threw. The io_context is unusable after that (asio says
         // to destroy it), but destruction itself needs a runner: do_close()
         // waits on a completion only the IO thread can deliver, so returning
         // from here stopped and threadless would hang ~cluster_impl instead of
@@ -586,6 +578,29 @@ public:
       io_thread_ = std::thread{ [&io = io_] {
         io.run();
       } };
+    } else {
+      // The sockets of this io_context share open file descriptions with the parent, and their
+      // pending reads, writes and timers belong to the parent's sessions. The child detaches every
+      // registered stream, then runs the inherited core's teardown to completion. The teardown
+      // cannot reach the parent's connections through those streams.
+      //
+      // close() comes before the fixup. It sets stopped_, so if the fixup throws, ~cluster_impl
+      // still completes without a runner.
+      std::promise<void> closed;
+      auto closed_future = closed.get_future();
+      core_.close([closed = std::move(closed)]() mutable {
+        closed.set_value();
+      });
+      // The fixup gives the child its own reactor, and on kqueue it is the only code that repairs
+      // kqueue_fd_. It must come before the detach: releasing a socket removes it from the
+      // reactor, and until the fixup that reactor is the parent's.
+      io_.notify_fork(fork_event_to_asio(event));
+      core::io::detach_inherited_sockets(io_);
+      io_.restart();
+      io_thread_ = std::thread{ [&io = io_] {
+        io.run();
+      } };
+      closed_future.get();
     }
 
     // prepare was handled above, before the io_context was stopped. The child does
@@ -615,6 +630,12 @@ public:
   [[nodiscard]] auto core() const -> const core::cluster&
   {
     return core_;
+  }
+
+  [[nodiscard]] auto core_transactions() const
+    -> const std::shared_ptr<core::transactions::transactions>&
+  {
+    return transactions_;
   }
 
   [[nodiscard]] auto transactions() const -> std::shared_ptr<transactions::transactions>
@@ -678,6 +699,19 @@ extract_core_cluster(const couchbase::cluster& cluster) -> const core::cluster&
   static_assert(sizeof(couchbase::cluster) == sizeof(std::shared_ptr<cluster_impl>),
                 "expected size of couchbase::cluster and std::shared_ptr<cluster_impl> to match");
   return reinterpret_cast<const std::shared_ptr<cluster_impl>*>(&cluster)->get()->core();
+}
+
+/*
+ * This function exists only for usage in the unit tests, and might be removed at any moment.
+ * Avoid using it unless it is absolutely necessary.
+ */
+auto
+extract_core_transactions(const couchbase::cluster& cluster)
+  -> const std::shared_ptr<core::transactions::transactions>&
+{
+  return reinterpret_cast<const std::shared_ptr<cluster_impl>*>(&cluster)
+    ->get()
+    ->core_transactions();
 }
 
 void
