@@ -270,6 +270,12 @@
 #define COUCHBASE_CXX_CLIENT_STABLE_OTEL_CONVENTIONS 1
 
 /**
+ * An HTTP 400 that matches no more specific error is reported as
+ * couchbase::errc::common::invalid_argument (SDK-RFC 58 revision 22).
+ */
+#define COUCHBASE_CXX_CLIENT_HTTP_400_IS_INVALID_ARGUMENT 1
+
+/**
  * The implementations for couchbase::transactions::transactions and
  * couchbase::core::transactions::transactions are separate, i.e.,
  * couchbase::core::transactions::transactions does not implement the Public API.
