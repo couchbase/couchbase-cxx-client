@@ -632,6 +632,12 @@ public:
     return core_;
   }
 
+  [[nodiscard]] auto core_transactions() const
+    -> const std::shared_ptr<core::transactions::transactions>&
+  {
+    return transactions_;
+  }
+
   [[nodiscard]] auto transactions() const -> std::shared_ptr<transactions::transactions>
   {
     return std::make_shared<transactions::transactions>(transactions_);
@@ -693,6 +699,19 @@ extract_core_cluster(const couchbase::cluster& cluster) -> const core::cluster&
   static_assert(sizeof(couchbase::cluster) == sizeof(std::shared_ptr<cluster_impl>),
                 "expected size of couchbase::cluster and std::shared_ptr<cluster_impl> to match");
   return reinterpret_cast<const std::shared_ptr<cluster_impl>*>(&cluster)->get()->core();
+}
+
+/*
+ * This function exists only for usage in the unit tests, and might be removed at any moment.
+ * Avoid using it unless it is absolutely necessary.
+ */
+auto
+extract_core_transactions(const couchbase::cluster& cluster)
+  -> const std::shared_ptr<core::transactions::transactions>&
+{
+  return reinterpret_cast<const std::shared_ptr<cluster_impl>*>(&cluster)
+    ->get()
+    ->core_transactions();
 }
 
 void
