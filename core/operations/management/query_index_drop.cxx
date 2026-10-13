@@ -89,7 +89,8 @@ query_index_drop_request::make_response(error_context::http&& ctx,
           case 5000: /* IKey: "Internal Error" */
           {
             if (utils::contains_string(error.message, "index", true) &&
-                utils::contains_string(error.message, "not found", true)) {
+                (utils::contains_string(error.message, "not found", true) ||
+                 utils::contains_string(error.message, "does not exist", true))) {
               index_not_found = true;
             }
             if (!common_ec) {

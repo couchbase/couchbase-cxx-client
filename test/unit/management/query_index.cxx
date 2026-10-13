@@ -230,6 +230,16 @@ the_per_scope_index_limit_is_quota_limited([[maybe_unused]] context& ctx)
             couchbase::errc::common::quota_limited,
             "drop");
 }
+
+void
+a_drop_of_an_index_that_does_not_exist_is_index_not_found([[maybe_unused]] context& ctx)
+{
+  using drop = couchbase::core::operations::management::query_index_drop_request;
+  const std::string body = R"({"status":"errors","errors":[{"code":5000,)"
+                           R"("msg":"GSI Drop() - cause: Index does not exist."}]})";
+  assert_eq(mapped_error<drop>(500, body), couchbase::errc::common::index_not_found, "a 500");
+  assert_eq(mapped_error<drop>(400, body), couchbase::errc::common::index_not_found, "a 400");
+}
 } // namespace
 
 auto
@@ -247,6 +257,7 @@ tests() -> test_suite
       { CASE(a_coded_rejection_keeps_its_rfc_58_mapping) },
       { CASE(the_first_mapped_error_decides) },
       { CASE(the_per_scope_index_limit_is_quota_limited) },
+      { CASE(a_drop_of_an_index_that_does_not_exist_is_index_not_found) },
     },
   };
 }
