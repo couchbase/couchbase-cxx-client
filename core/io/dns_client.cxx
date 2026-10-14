@@ -17,9 +17,11 @@
 
 #include "dns_client.hxx"
 
+#include "core/io/streams.hxx"
 #include "core/logger/logger.hxx"
 #include "core/logger/redaction.hxx"
 #include "core/utils/join_strings.hxx"
+#include "core/utils/process_id.hxx"
 #include "dns_codec.hxx"
 #include "dns_config.hxx"
 
@@ -71,7 +73,8 @@ public:
     asio::ip::address address,
     std::uint16_t port,
     utils::movable_function<void(couchbase::core::io::dns::dns_srv_response&& resp)> handler)
-    : deadline_(ctx)
+    : ctx_(ctx)
+    , deadline_(ctx)
     , udp_deadline_(ctx)
     , udp_(ctx)
     , tcp_(ctx)
@@ -103,6 +106,13 @@ public:
                  total_timeout);
     const asio::ip::udp::endpoint endpoint(address_, port_);
     udp_.open(endpoint.protocol());
+    // A process forked while this lookup is pending inherits both sockets. Registering them lets
+    // the forked process's fixup release them, so it cannot read the response this process is
+    // waiting for.
+    register_inherited_socket(ctx_,
+                              std::shared_ptr<asio::ip::udp::socket>(shared_from_this(), &udp_));
+    register_inherited_socket(ctx_,
+                              std::shared_ptr<asio::ip::tcp::socket>(shared_from_this(), &tcp_));
     CB_LOG_PROTOCOL("[DNS, UDP, OUT] host=\"{}\", port={}, buffer_size={}{:a}",
                     address_.to_string(),
                     port_,
@@ -156,7 +166,8 @@ public:
             self->recv_buf_.resize(bytes_transferred);
             const dns_message message = dns_codec::decode(self->recv_buf_);
             if (message.header.flags.tc == truncation::yes) {
-              self->udp_.close();
+              std::error_code ignored{};
+              self->udp_.close(ignored);
               CB_LOG_DEBUG("DNS UDP read operation returned truncated response, retrying with TCP");
               return self->retry_with_tcp();
             }
@@ -174,7 +185,7 @@ public:
                 utils::join_strings(answer.target.labels, "."), answer.port });
             }
             CB_LOG_DEBUG("DNS UDP returned {} records", resp.targets.size());
-            return self->handler_(std::move(resp));
+            return self->complete(std::move(resp));
           });
       });
     udp_deadline_.expires_after(udp_timeout);
@@ -182,7 +193,8 @@ public:
       if (ec == asio::error::operation_aborted) {
         return;
       }
-      self->udp_.cancel();
+      std::error_code ignored{};
+      self->udp_.cancel(ignored);
       CB_LOG_DEBUG("DNS UDP deadline has been reached, cancelling UDP operation and fall back to "
                    "TCP, address=\"{}\"",
                    logger::system_data(self->nameserver_address()));
@@ -198,15 +210,32 @@ public:
                    "(tcp.is_open={}, address=\"{}\")",
                    self->tcp_.is_open(),
                    logger::system_data(self->nameserver_address()));
-      self->udp_.cancel();
+      std::error_code ignored{};
+      self->udp_.cancel(ignored);
       if (self->tcp_.is_open()) {
-        self->tcp_.cancel();
+        self->tcp_.cancel(ignored);
       }
-      return self->handler_({ errc::common::unambiguous_timeout });
+      return self->complete({ errc::common::unambiguous_timeout });
     });
   }
 
 private:
+  // A lookup that a forked process inherited belongs to the process that started it. The child
+  // fixup releases its sockets, which fails their pending operations; neither those failures nor
+  // its timers may retry or complete the lookup in that process.
+  [[nodiscard]] auto inherited() const -> bool
+  {
+    return owner_pid_ != utils::current_process_id();
+  }
+
+  void complete(dns_srv_response&& resp)
+  {
+    if (inherited()) {
+      return;
+    }
+    handler_(std::move(resp));
+  }
+
   [[nodiscard]] auto nameserver_address() const -> std::string
   {
     return fmt::format("{}:{}", address_.to_string(), port_);
@@ -214,6 +243,9 @@ private:
 
   void retry_with_tcp()
   {
+    if (inherited()) {
+      return;
+    }
     if (bool expected_state{ false };
         !retrying_with_tcp_.compare_exchange_strong(expected_state, true)) {
       return;
@@ -237,7 +269,7 @@ private:
         CB_LOG_DEBUG("DNS TCP connection has been aborted, address=\"{}\", ec={}",
                      logger::system_data(self->nameserver_address()),
                      ec1.message());
-        return self->handler_({ ec1 });
+        return self->complete({ ec1 });
       }
       auto send_size = static_cast<std::uint16_t>(self->send_buf_.size());
       self->send_buf_.insert(self->send_buf_.begin(), static_cast<std::uint8_t>(send_size & 0xffU));
@@ -264,7 +296,7 @@ private:
                          logger::system_data(self->nameserver_address()),
                          ec2.message());
             self->deadline_.cancel();
-            return self->handler_({ ec2 });
+            return self->complete({ ec2 });
           }
           asio::async_read(
             self->tcp_,
@@ -288,7 +320,7 @@ private:
                   logger::system_data(self->nameserver_address()),
                   ec3.message());
                 self->deadline_.cancel();
-                return self->handler_({ ec3 });
+                return self->complete({ ec3 });
               }
               self->recv_buf_size_ = utils::network_to_host(self->recv_buf_size_);
               self->recv_buf_.resize(self->recv_buf_size_);
@@ -314,7 +346,7 @@ private:
                     CB_LOG_DEBUG("DNS TCP read operation has been aborted, address=\"{}\", ec={}",
                                  logger::system_data(self->nameserver_address()),
                                  ec4.message());
-                    return self->handler_({ ec4 });
+                    return self->complete({ ec4 });
                   }
                   self->recv_buf_.resize(bytes_transferred4);
                   const dns_message message = dns_codec::decode(self->recv_buf_);
@@ -331,13 +363,14 @@ private:
                       utils::join_strings(answer.target.labels, "."), answer.port });
                   }
                   CB_LOG_DEBUG("DNS TCP returned {} records", resp.targets.size());
-                  return self->handler_(std::move(resp));
+                  return self->complete(std::move(resp));
                 });
             });
         });
     });
   }
 
+  asio::io_context& ctx_;
   asio::steady_timer deadline_;
   asio::steady_timer udp_deadline_;
   asio::ip::udp::socket udp_;
@@ -353,6 +386,7 @@ private:
   std::vector<std::uint8_t> recv_buf_{};
 
   std::atomic_bool retrying_with_tcp_{ false };
+  std::int64_t owner_pid_{ utils::current_process_id() };
 };
 
 void

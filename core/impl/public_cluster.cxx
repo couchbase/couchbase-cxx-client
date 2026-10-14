@@ -332,6 +332,28 @@ public:
       });
   }
 
+  // The open notify_fork(child) starts and does not wait for. Requests issued meanwhile wait in the
+  // core for the bootstrap. A failed open leaves the core closed, so they then get cluster_closed.
+  //
+  // The handler captures `this`. It runs inline when open() fails or succeeds without I/O, and
+  // otherwise on the IO thread before do_close() joins it: do_close() closes the core first, which
+  // completes a pending open.
+  void reopen()
+  {
+    opened_future_ = opened_.get_future().share();
+    core_.open(options_to_origin(connection_string_, options_), [this](std::error_code ec) {
+      if (ec) {
+        CB_LOG_ERROR("Unable to reconnect instance after fork: {}", ec.message());
+      }
+      opened_.set_value();
+    });
+    // Created now, not after the bootstrap, so transactions() never sees it unset and nothing
+    // writes it from the IO thread. The requests its cleanup issues wait in the core for the
+    // bootstrap.
+    transactions_ =
+      std::make_shared<core::transactions::transactions>(core_, options_.transactions);
+  }
+
   void query(std::string statement, query_options::built options, query_handler&& handler) const
   {
     auto obs_rec = create_observability_recorder(
@@ -581,8 +603,8 @@ public:
     } else {
       // The sockets of this io_context share open file descriptions with the parent, and their
       // pending reads, writes and timers belong to the parent's sessions. The child detaches every
-      // registered stream, then runs the inherited core's teardown to completion. The teardown
-      // cannot reach the parent's connections through those streams.
+      // registered stream and socket, then runs the inherited core's teardown to completion. The
+      // teardown cannot reach the parent's connections through them.
       //
       // close() comes before the fixup. It sets stopped_, so if the fixup throws, ~cluster_impl
       // still completes without a runner.
@@ -646,6 +668,19 @@ public:
 private:
   void do_close()
   {
+    if (opened_future_.valid() &&
+        opened_future_.wait_for(std::chrono::seconds::zero()) != std::future_status::ready) {
+      // Closing the core fails the pending bootstrap and releases the requests the transactions
+      // cleanup holds, so neither wait below runs to bootstrap_timeout. The second core_.close()
+      // further down finds the core stopped and returns at once.
+      std::promise<void> core_stopped;
+      auto f = core_stopped.get_future();
+      core_.close([core_stopped = std::move(core_stopped)]() mutable {
+        core_stopped.set_value();
+      });
+      f.get();
+      opened_future_.wait();
+    }
     if (auto txns = std::move(transactions_); txns != nullptr) {
       // blocks until cleanup is finished
       txns->close();
@@ -681,6 +716,9 @@ private:
   asio::io_context io_{ ASIO_CONCURRENCY_HINT_SAFE };
   core::cluster core_{ io_ };
   std::shared_ptr<couchbase::core::transactions::transactions> transactions_{ nullptr };
+  // Set by reopen(); fulfilled once its open has finished, either way. do_close() reads it.
+  std::promise<void> opened_{};
+  std::shared_future<void> opened_future_{};
   std::thread io_thread_{ [&io = io_] {
     io.run();
   } };
@@ -924,34 +962,10 @@ cluster::notify_fork(fork_event event) -> void
     return;
   }
 
-  auto new_impl = std::make_shared<cluster_impl>(impl_->connection_string(), impl_->options());
-  impl_.reset();
-
-  {
-    auto barrier = std::make_shared<std::promise<void>>();
-    auto future = barrier->get_future();
-
-    new_impl->open([this, barrier, new_impl](const auto& err, const auto& /* c */) {
-      if (err.ec()) {
-        // TODO(SA): we should fall back to a background reconnect loop
-        CB_LOG_ERROR("Unable to reconnect instance after fork: {}", err.ec().message());
-      }
-      // Adopt the new impl either way. Leaving impl_ null on failure turned the
-      // child's next operation into a segfault, because every data-plane method
-      // dereferences impl_ unchecked; an impl that failed to open reports
-      // errc::network::cluster_closed instead, which is what a caller already gets
-      // from a handle it acquired before the fork.
-      impl_ = new_impl;
-      // Always fulfill the barrier. Returning early here used to hang this
-      // function forever: `barrier` is still owned by the enclosing scope below,
-      // so the promise is never destroyed and future.get() never sees a
-      // broken_promise either -- a failed post-fork reconnect just wedged the
-      // caller.
-      barrier->set_value();
-    });
-
-    future.get();
-  }
+  impl_ = std::make_shared<cluster_impl>(impl_->connection_string(), impl_->options());
+  // Does not wait for the bootstrap: a cluster whose nodes do not answer would hold the child for
+  // the bootstrap timeout. The child has one thread here, so nothing reads impl_ concurrently.
+  impl_->reopen();
 #endif
 }
 

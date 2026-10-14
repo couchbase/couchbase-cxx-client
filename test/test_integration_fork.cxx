@@ -21,21 +21,38 @@
 
 #include "utils/logger.hxx"
 
+#include "core/io/dns_client.hxx"
+#include "core/io/dns_config.hxx"
+#include "core/io/streams.hxx"
 #include "core/transactions.hxx"
 #include "core/transactions/attempt_context_testing_hooks.hxx"
 #include "core/transactions/cleanup_testing_hooks.hxx"
 #include "core/transactions/internal/transactions_cleanup.hxx"
 #include "core/utils/connection_string.hxx"
 
+#include <couchbase/analytics_options.hxx>
 #include <couchbase/cluster.hxx>
 #include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/diagnostics_result.hxx>
 #include <couchbase/error_codes.hxx>
 #include <couchbase/fork_event.hxx>
+#include <couchbase/get_any_replica_options.hxx>
+#include <couchbase/lookup_in_all_replicas_options.hxx>
 #include <couchbase/lookup_in_specs.hxx>
+#include <couchbase/password_authenticator.hxx>
+#include <couchbase/query_options.hxx>
 #include <couchbase/service_type.hxx>
+#include <couchbase/transactions/attempt_context.hxx>
+#include <couchbase/transactions/transaction_options.hxx>
+#include <couchbase/upsert_options.hxx>
 
 #include <tao/json/value.hpp>
+
+#include <asio/connect.hpp>
+#include <asio/io_context.hpp>
+#include <asio/ip/tcp.hpp>
+#include <asio/ip/udp.hpp>
+#include <asio/write.hpp>
 
 #include <spdlog/fmt/bundled/format.h>
 
@@ -65,6 +82,9 @@
 #include <cstring>
 #include <exception>
 #include <fstream>
+#include <functional>
+#include <future>
+#include <memory>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -685,6 +705,10 @@ TEST_CASE("integration: a forked child leaves the parent's connections unread", 
   if (child_pid == 0) {
     try {
       cluster.notify_fork(couchbase::fork_event::child);
+      // The reopen opens its sockets on the IO thread and may reuse the inherited descriptor
+      // numbers checked below. Waiting for it orders those sockets before the checks.
+      [[maybe_unused]] const auto ready =
+        cluster.wait_until_ready(std::chrono::seconds{ 30 }).get();
     } catch (...) {
       leave_child(4);
     }
@@ -911,6 +935,702 @@ TEST_CASE("integration: a forked child leaves the parent's client record registe
   INFO("observer: " << observer_error);
   CHECK(parent_still_registered);
   CHECK(removals > 0);
+}
+
+namespace
+{
+// Forwards each connection accepted on 127.0.0.1 to one server address, until stop(). A cluster
+// that bootstraps through it loses its seed when it stops, while the server itself stays up.
+class tcp_proxy
+{
+public:
+  tcp_proxy(const std::string& host, std::uint16_t port)
+  {
+    asio::ip::tcp::resolver resolver{ io_ };
+    target_ = resolver.resolve(host, std::to_string(port));
+    acceptor_.open(asio::ip::tcp::v4());
+    acceptor_.bind({ asio::ip::address_v4::loopback(), 0 });
+    acceptor_.listen();
+    accept();
+    thread_ = std::thread{ [this] {
+      io_.run();
+    } };
+  }
+
+  tcp_proxy(const tcp_proxy&) = delete;
+  tcp_proxy(tcp_proxy&&) = delete;
+  auto operator=(const tcp_proxy&) -> tcp_proxy& = delete;
+  auto operator=(tcp_proxy&&) -> tcp_proxy& = delete;
+
+  ~tcp_proxy()
+  {
+    stop();
+  }
+
+  [[nodiscard]] auto port() const -> std::uint16_t
+  {
+    return acceptor_.local_endpoint().port();
+  }
+
+  // Joins the thread, then closes the listener and every forwarded connection.
+  void stop()
+  {
+    if (!thread_.joinable()) {
+      return;
+    }
+    io_.stop();
+    thread_.join();
+    asio::error_code ignored;
+    acceptor_.close(ignored);
+    for (const auto& socket : sockets_) {
+      socket->close(ignored);
+    }
+  }
+
+private:
+  using socket_ptr = std::shared_ptr<asio::ip::tcp::socket>;
+
+  void accept()
+  {
+    acceptor_.async_accept([this](std::error_code ec, asio::ip::tcp::socket accepted) {
+      if (ec) {
+        return;
+      }
+      auto client = std::make_shared<asio::ip::tcp::socket>(std::move(accepted));
+      auto server = std::make_shared<asio::ip::tcp::socket>(io_);
+      sockets_.push_back(client);
+      sockets_.push_back(server);
+      asio::async_connect(
+        *server, target_, [this, client, server](std::error_code connect_ec, const auto&) {
+          if (connect_ec) {
+            asio::error_code ignored;
+            client->close(ignored);
+            return;
+          }
+          forward(client, server);
+          forward(server, client);
+        });
+      accept();
+    });
+  }
+
+  void forward(const socket_ptr& from, const socket_ptr& to)
+  {
+    auto buffer = std::make_shared<std::array<char, 16 * 1024>>();
+    from->async_read_some(
+      asio::buffer(*buffer), [this, from, to, buffer](std::error_code ec, std::size_t n) {
+        if (ec) {
+          asio::error_code ignored;
+          to->close(ignored);
+          return;
+        }
+        asio::async_write(
+          *to, asio::buffer(*buffer, n), [this, from, to, buffer](std::error_code write_ec, auto) {
+            if (!write_ec) {
+              forward(from, to);
+            }
+          });
+      });
+  }
+
+  asio::io_context io_{};
+  asio::ip::tcp::acceptor acceptor_{ io_ };
+  asio::ip::tcp::resolver::results_type target_{};
+  std::vector<socket_ptr> sockets_{};
+  std::thread thread_{};
+};
+
+// The bootstrap timeout of the clusters below. A child whose notify_fork(child) waits for the
+// bootstrap of an unreachable seed is held for all of it.
+constexpr std::chrono::seconds reopen_bootstrap_timeout{ 10 };
+
+auto
+seconds_since(std::chrono::steady_clock::time_point start) -> double
+{
+  return std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+}
+
+// Connects through a tcp_proxy, stops the proxy, and forks. The child runs `child_body` against a
+// cluster whose seed refuses connections, and exits with its result.
+auto
+fork_with_seed_gone(const std::function<int(couchbase::cluster&)>& child_body) -> child_wait
+{
+  {
+    test::utils::integration_test_guard integration;
+    if (integration.cluster_version().is_mock()) {
+      SKIP("the mock does not support the fork scenario");
+    }
+  }
+  const auto ctx = test::utils::test_context::load_from_environment();
+  const auto parsed = couchbase::core::utils::parse_connection_string(ctx.connection_string);
+  if (parsed.tls || parsed.bootstrap_nodes.empty() ||
+      parsed.protocol != couchbase::core::utils::connection_string::protocol_type::mcbp) {
+    SKIP("the proxy forwards plain MCBP to one bootstrap node");
+  }
+  const auto& seed = parsed.bootstrap_nodes.front();
+  test::utils::init_logger();
+  setbuf(stdout, nullptr);
+
+  // Destroyed before the fork, so neither its thread nor its io_context descriptors reach the
+  // child.
+  std::optional<tcp_proxy> proxy{};
+  proxy.emplace(seed.address, seed.port == 0 ? parsed.default_port : seed.port);
+  auto options = couchbase::cluster_options(ctx.username, ctx.password);
+  options.apply_profile("wan_development");
+  options.timeouts().bootstrap_timeout(reopen_bootstrap_timeout);
+  auto [connect_err, cluster] =
+    couchbase::cluster::connect(fmt::format("couchbase://127.0.0.1:{}=mcbp", proxy->port()),
+                                options)
+      .get();
+  REQUIRE_SUCCESS(connect_err.ec());
+  proxy.reset();
+
+  cluster.notify_fork(couchbase::fork_event::prepare);
+  const auto child_pid = fork();
+  if (child_pid < 0) {
+    const auto fork_errno = errno;
+    cluster.notify_fork(couchbase::fork_event::parent);
+    FAIL("fork() failed: " << std::strerror(fork_errno));
+  }
+  if (child_pid == 0) {
+    try {
+      leave_child(child_body(cluster));
+    } catch (const std::exception& e) {
+      fmt::print("CHILD(pid={}): threw: {}\n", getpid(), e.what());
+    } catch (...) {
+      fmt::print("CHILD(pid={}): threw an unknown exception\n", getpid());
+    }
+    leave_child(99);
+  }
+  cluster.notify_fork(couchbase::fork_event::parent);
+  auto child = wait_for_child(child_pid);
+  cluster.close().get();
+  return child;
+}
+} // namespace
+
+// CXXCBC-1087: notify_fork(child) must not wait for the bootstrap of the replacement cluster. A
+// child whose seed is gone would otherwise be held for the whole bootstrap timeout. Requests issued
+// during that bootstrap wait for it, and still time out on their own timeout.
+TEST_CASE("integration: a forked child does not wait for an unreachable seed", "[integration]")
+{
+  const auto bucket_name = test::utils::test_context::load_from_environment().bucket;
+  const auto child = fork_with_seed_gone([&bucket_name](couchbase::cluster& cluster) {
+    const auto half_bootstrap = reopen_bootstrap_timeout.count() / 2.0;
+    auto start = std::chrono::steady_clock::now();
+    cluster.notify_fork(couchbase::fork_event::child);
+    if (const auto elapsed = seconds_since(start); elapsed >= half_bootstrap) {
+      fmt::print("CHILD(pid={}): notify_fork(child) took {:.3f}s\n", getpid(), elapsed);
+      return 1;
+    }
+    // A callback on the IO thread, during the reopen, gets the transactions the reopen set up.
+    auto io_thread_transactions = std::make_shared<std::promise<bool>>();
+    auto io_thread_transactions_seen = io_thread_transactions->get_future();
+    cluster.query("SELECT 1=1",
+                  couchbase::query_options{}.timeout(std::chrono::seconds{ 1 }),
+                  [&cluster, io_thread_transactions](const auto& /* err */, const auto& /* res */) {
+                    io_thread_transactions->set_value(
+                      couchbase::extract_core_transactions(cluster) != nullptr);
+                  });
+
+    const auto options = couchbase::query_options{}.timeout(std::chrono::seconds{ 1 });
+    start = std::chrono::steady_clock::now();
+    auto [query_err, query_res] = cluster.query("SELECT 1=1", options).get();
+    if (const auto elapsed = seconds_since(start);
+        query_err.ec() != couchbase::errc::common::unambiguous_timeout ||
+        elapsed >= half_bootstrap) {
+      fmt::print(
+        "CHILD(pid={}): query: {} after {:.3f}s\n", getpid(), query_err.ec().message(), elapsed);
+      return 2;
+    }
+
+    start = std::chrono::steady_clock::now();
+    auto [stream_err, stream_res] = cluster.query_stream("SELECT 1=1", options).get();
+    if (const auto elapsed = seconds_since(start);
+        stream_err.ec() != couchbase::errc::common::unambiguous_timeout ||
+        elapsed >= half_bootstrap) {
+      fmt::print("CHILD(pid={}): query_stream: {} after {:.3f}s\n",
+                 getpid(),
+                 stream_err.ec().message(),
+                 elapsed);
+      return 3;
+    }
+
+    start = std::chrono::steady_clock::now();
+    auto [analytics_err, analytics_res] =
+      cluster
+        .analytics_query_stream("SELECT 1",
+                                couchbase::analytics_options{}.timeout(std::chrono::seconds{ 1 }))
+        .get();
+    if (const auto elapsed = seconds_since(start);
+        analytics_err.ec() != couchbase::errc::common::unambiguous_timeout ||
+        elapsed >= half_bootstrap) {
+      fmt::print("CHILD(pid={}): analytics_query_stream: {} after {:.3f}s\n",
+                 getpid(),
+                 analytics_err.ec().message(),
+                 elapsed);
+      return 5;
+    }
+
+    // Key-value requests wait for the bootstrap too, and time out on their own timeout.
+    auto collection = cluster.bucket(bucket_name).default_collection();
+    start = std::chrono::steady_clock::now();
+    auto [upsert_err, upsert_res] =
+      collection
+        .upsert(test::utils::uniq_id("fork-held"),
+                tao::json::value{ { "a", 1 } },
+                couchbase::upsert_options{}.timeout(std::chrono::seconds{ 1 }))
+        .get();
+    if (const auto elapsed = seconds_since(start);
+        upsert_err.ec() != couchbase::errc::common::unambiguous_timeout ||
+        elapsed >= half_bootstrap) {
+      fmt::print(
+        "CHILD(pid={}): upsert: {} after {:.3f}s\n", getpid(), upsert_err.ec().message(), elapsed);
+      return 6;
+    }
+
+    start = std::chrono::steady_clock::now();
+    auto [replica_err, replica_res] =
+      collection
+        .get_any_replica(test::utils::uniq_id("fork-held"),
+                         couchbase::get_any_replica_options{}.timeout(std::chrono::seconds{ 1 }))
+        .get();
+    if (const auto elapsed = seconds_since(start);
+        replica_err.ec() != couchbase::errc::common::unambiguous_timeout ||
+        elapsed >= half_bootstrap) {
+      fmt::print("CHILD(pid={}): get_any_replica: {} after {:.3f}s\n",
+                 getpid(),
+                 replica_err.ec().message(),
+                 elapsed);
+      return 7;
+    }
+
+    start = std::chrono::steady_clock::now();
+    auto [lookup_err, lookup_res] =
+      collection
+        .lookup_in_all_replicas(
+          test::utils::uniq_id("fork-held"),
+          couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("a") },
+          couchbase::lookup_in_all_replicas_options{}.timeout(std::chrono::seconds{ 1 }))
+        .get();
+    if (const auto elapsed = seconds_since(start);
+        lookup_err.ec() != couchbase::errc::common::unambiguous_timeout ||
+        elapsed >= half_bootstrap) {
+      fmt::print("CHILD(pid={}): lookup_in_all_replicas: {} after {:.3f}s\n",
+                 getpid(),
+                 lookup_err.ec().message(),
+                 elapsed);
+      return 8;
+    }
+
+    if (!io_thread_transactions_seen.get()) {
+      fmt::print("CHILD(pid={}): a callback on the IO thread saw no transactions\n", getpid());
+      return 4;
+    }
+
+    // A transaction whose operations cannot reach the cluster reports an error.
+    auto [txn_err, txn_res] = cluster.transactions()->run(
+      [&collection](
+        std::shared_ptr<couchbase::transactions::attempt_context> attempt) -> couchbase::error {
+        auto [insert_err, doc] = attempt->insert(
+          collection, test::utils::uniq_id("fork-txn"), tao::json::value{ { "a", 1 } });
+        return insert_err;
+      },
+      couchbase::transactions::transaction_options{}.timeout(std::chrono::seconds{ 2 }));
+    if (!txn_err.ec()) {
+      fmt::print("CHILD(pid={}): a transaction without a cluster succeeded\n", getpid());
+      return 9;
+    }
+    return 0;
+  });
+  CHECK(child.error == std::string{});
+  REQUIRE(WIFEXITED(child.status));
+  // 1 = notify_fork(child) waited for the bootstrap; 2 = the query, 3 = the streaming query, 5 =
+  // the streaming analytics query, 6 = the upsert, 7 = get_any_replica, or 8 =
+  // lookup_in_all_replicas did not time out on its own timeout; 4 = a callback on the IO thread saw
+  // no transactions; 9 = a transaction succeeded without a cluster; 99 = the child threw.
+  CHECK(WEXITSTATUS(child.status) == 0);
+}
+
+TEST_CASE("integration: closing a forked child's cluster cancels its pending reopen",
+          "[integration]")
+{
+  const auto child = fork_with_seed_gone([](couchbase::cluster& cluster) {
+    cluster.notify_fork(couchbase::fork_event::child);
+    const auto start = std::chrono::steady_clock::now();
+    cluster.close().get();
+    if (const auto elapsed = seconds_since(start);
+        elapsed >= reopen_bootstrap_timeout.count() / 2.0) {
+      fmt::print("CHILD(pid={}): close() took {:.3f}s\n", getpid(), elapsed);
+      return 1;
+    }
+    return 0;
+  });
+  CHECK(child.error == std::string{});
+  REQUIRE(WIFEXITED(child.status));
+  // 1 = close() waited for the bootstrap, 99 = the child threw.
+  CHECK(WEXITSTATUS(child.status) == 0);
+}
+
+// A second fork from a child whose reopen is still pending. reopen() constructs the transactions,
+// and so starts their cleanup, inside notify_fork(child). prepare stops that cleanup before
+// io_.stop() and the IO thread join, so the second fork completes and the grandchild exits 0
+// without a cleanup thread alive across it.
+TEST_CASE("integration: a forked child can fork again while its reopen is pending", "[integration]")
+{
+  const auto child = fork_with_seed_gone([](couchbase::cluster& cluster) {
+    cluster.notify_fork(couchbase::fork_event::child);
+    cluster.notify_fork(couchbase::fork_event::prepare);
+    const auto grandchild_pid = fork();
+    if (grandchild_pid < 0) {
+      cluster.notify_fork(couchbase::fork_event::parent);
+      return 1;
+    }
+    if (grandchild_pid == 0) {
+      cluster.notify_fork(couchbase::fork_event::child);
+      leave_child(0);
+    }
+    cluster.notify_fork(couchbase::fork_event::parent);
+    const auto grandchild = wait_for_child(grandchild_pid);
+    if (!grandchild.error.empty() || !WIFEXITED(grandchild.status) ||
+        WEXITSTATUS(grandchild.status) != 0) {
+      fmt::print("CHILD(pid={}): grandchild failed: status={} {}\n",
+                 getpid(),
+                 grandchild.status,
+                 grandchild.error);
+      return 2;
+    }
+    return 0;
+  });
+  CHECK(child.error == std::string{});
+  REQUIRE(WIFEXITED(child.status));
+  // 1 = the second fork failed, 2 = the grandchild failed, 99 = the child threw.
+  CHECK(WEXITSTATUS(child.status) == 0);
+}
+
+// Requests issued straight after notify_fork(child) wait for the reopen's bootstrap. A query
+// issued before the cluster has a configuration would otherwise fail with service_not_available.
+TEST_CASE("integration: a forked child's requests wait for its reopen", "[integration]")
+{
+  bool supports_query{ false };
+  {
+    test::utils::integration_test_guard integration;
+    if (integration.cluster_version().is_mock()) {
+      SKIP("the mock does not support the fork scenario");
+    }
+    supports_query = integration.cluster_version().supports_query();
+  }
+  const auto ctx = test::utils::test_context::load_from_environment();
+  test::utils::init_logger();
+  setbuf(stdout, nullptr);
+
+  auto options = couchbase::cluster_options(ctx.username, ctx.password);
+  options.apply_profile("wan_development");
+  auto [connect_err, cluster] = couchbase::cluster::connect(ctx.connection_string, options).get();
+  REQUIRE_SUCCESS(connect_err.ec());
+  const auto upsert_id = test::utils::uniq_id("fork-reopen-upsert");
+  const auto txn_id = test::utils::uniq_id("fork-reopen-txn");
+
+  cluster.notify_fork(couchbase::fork_event::prepare);
+  const auto child_pid = fork();
+  if (child_pid < 0) {
+    const auto fork_errno = errno;
+    cluster.notify_fork(couchbase::fork_event::parent);
+    FAIL("fork() failed: " << std::strerror(fork_errno));
+  }
+  if (child_pid == 0) {
+    try {
+      cluster.notify_fork(couchbase::fork_event::child);
+      // Both read or write origin_ while the reopen's bootstrap rewrites it.
+      if (auto [origin_ec, origin] = couchbase::extract_core_cluster(cluster).origin(); origin_ec) {
+        fmt::print("CHILD(pid={}): origin() failed: {}\n", getpid(), origin_ec.message());
+        leave_child(4);
+      }
+      if (auto auth_err = cluster.set_authenticator(
+            couchbase::password_authenticator{ ctx.username, ctx.password });
+          auth_err.ec()) {
+        fmt::print(
+          "CHILD(pid={}): set_authenticator failed: {}\n", getpid(), auth_err.ec().message());
+        leave_child(5);
+      }
+      if (supports_query) {
+        auto [query_err, query_res] = cluster.query("SELECT 1=1", {}).get();
+        if (query_err.ec()) {
+          fmt::print("CHILD(pid={}): query failed: {}\n", getpid(), query_err.ec().message());
+          leave_child(1);
+        }
+      }
+      auto collection = cluster.bucket(ctx.bucket).default_collection();
+      auto [upsert_err, upsert_res] =
+        collection.upsert(upsert_id, tao::json::value{ { "side", "child" } }).get();
+      if (upsert_err.ec()) {
+        fmt::print("CHILD(pid={}): upsert failed: {}\n", getpid(), upsert_err.ec().message());
+        leave_child(2);
+      }
+      auto [txn_err, txn_res] = cluster.transactions()->run(
+        [&collection, &txn_id](
+          std::shared_ptr<couchbase::transactions::attempt_context> attempt) -> couchbase::error {
+          auto [insert_err, doc] =
+            attempt->insert(collection, txn_id, tao::json::value{ { "a", 1 } });
+          return insert_err;
+        });
+      if (txn_err.ec()) {
+        fmt::print("CHILD(pid={}): transaction failed: {}\n", getpid(), txn_err.ec().message());
+        leave_child(3);
+      }
+    } catch (const std::exception& e) {
+      fmt::print("CHILD(pid={}): threw: {}\n", getpid(), e.what());
+      leave_child(99);
+    } catch (...) {
+      fmt::print("CHILD(pid={}): threw an unknown exception\n", getpid());
+      leave_child(99);
+    }
+    leave_child(0);
+  }
+  cluster.notify_fork(couchbase::fork_event::parent);
+  const auto child = wait_for_child(child_pid);
+  cluster.close().get();
+
+  CHECK(child.error == std::string{});
+  REQUIRE(WIFEXITED(child.status));
+  // 1 = query failed, 2 = upsert failed, 3 = transaction failed, 4 = origin() failed, 5 =
+  // set_authenticator() failed, 99 = the child threw.
+  CHECK(WEXITSTATUS(child.status) == 0);
+}
+
+// close() after a reopen whose bootstrap is known to have succeeded. The pending case is covered by
+// "closing a forked child's cluster cancels its pending reopen".
+TEST_CASE("integration: closing a forked child's cluster after its reopen succeeds",
+          "[integration]")
+{
+  {
+    test::utils::integration_test_guard integration;
+    if (integration.cluster_version().is_mock()) {
+      SKIP("the mock does not support the fork scenario");
+    }
+  }
+  const auto ctx = test::utils::test_context::load_from_environment();
+  test::utils::init_logger();
+  setbuf(stdout, nullptr);
+
+  auto options = couchbase::cluster_options(ctx.username, ctx.password);
+  options.apply_profile("wan_development");
+  auto [connect_err, cluster] = couchbase::cluster::connect(ctx.connection_string, options).get();
+  REQUIRE_SUCCESS(connect_err.ec());
+
+  cluster.notify_fork(couchbase::fork_event::prepare);
+  const auto child_pid = fork();
+  if (child_pid < 0) {
+    const auto fork_errno = errno;
+    cluster.notify_fork(couchbase::fork_event::parent);
+    FAIL("fork() failed: " << std::strerror(fork_errno));
+  }
+  if (child_pid == 0) {
+    try {
+      cluster.notify_fork(couchbase::fork_event::child);
+      if (cluster.wait_until_ready(std::chrono::seconds{ 30 }).get().ec()) {
+        leave_child(1);
+      }
+      cluster.close().get();
+    } catch (const std::exception& e) {
+      fmt::print("CHILD(pid={}): threw: {}\n", getpid(), e.what());
+      leave_child(99);
+    } catch (...) {
+      fmt::print("CHILD(pid={}): threw an unknown exception\n", getpid());
+      leave_child(99);
+    }
+    leave_child(0);
+  }
+  cluster.notify_fork(couchbase::fork_event::parent);
+  const auto child = wait_for_child(child_pid);
+  cluster.close().get();
+
+  CHECK(child.error == std::string{});
+  REQUIRE(WIFEXITED(child.status));
+  // 1 = the reopen did not become ready, 99 = the child threw.
+  CHECK(WEXITSTATUS(child.status) == 0);
+}
+
+// A second fork straight after notify_fork(child), without waiting for the reopen against a
+// reachable cluster. The reopen creates the transactions and starts their cleanup threads before
+// notify_fork(child) returns, so the cleanup prepare stops includes those threads, and the
+// grandchild gets a working cluster.
+TEST_CASE("integration: a forked child can fork again while its reopen succeeds", "[integration]")
+{
+  {
+    test::utils::integration_test_guard integration;
+    if (integration.cluster_version().is_mock()) {
+      SKIP("the mock does not support the fork scenario");
+    }
+  }
+  const auto ctx = test::utils::test_context::load_from_environment();
+  test::utils::init_logger();
+  setbuf(stdout, nullptr);
+
+  auto options = couchbase::cluster_options(ctx.username, ctx.password);
+  options.apply_profile("wan_development");
+  auto [connect_err, cluster] = couchbase::cluster::connect(ctx.connection_string, options).get();
+  REQUIRE_SUCCESS(connect_err.ec());
+
+  cluster.notify_fork(couchbase::fork_event::prepare);
+  const auto child_pid = fork();
+  if (child_pid < 0) {
+    const auto fork_errno = errno;
+    cluster.notify_fork(couchbase::fork_event::parent);
+    FAIL("fork() failed: " << std::strerror(fork_errno));
+  }
+  if (child_pid == 0) {
+    try {
+      cluster.notify_fork(couchbase::fork_event::child);
+      cluster.notify_fork(couchbase::fork_event::prepare);
+      const auto grandchild_pid = fork();
+      if (grandchild_pid < 0) {
+        cluster.notify_fork(couchbase::fork_event::parent);
+        leave_child(1);
+      }
+      if (grandchild_pid == 0) {
+        cluster.notify_fork(couchbase::fork_event::child);
+        auto [upsert_err, upsert_res] =
+          cluster.bucket(ctx.bucket)
+            .default_collection()
+            .upsert(test::utils::uniq_id("fork-grandchild"), tao::json::value{ { "a", 1 } })
+            .get();
+        if (upsert_err.ec()) {
+          fmt::print(
+            "GRANDCHILD(pid={}): upsert failed: {}\n", getpid(), upsert_err.ec().message());
+          leave_child(1);
+        }
+        leave_child(0);
+      }
+      cluster.notify_fork(couchbase::fork_event::parent);
+      const auto grandchild = wait_for_child(grandchild_pid);
+      if (!grandchild.error.empty() || !WIFEXITED(grandchild.status) ||
+          WEXITSTATUS(grandchild.status) != 0) {
+        fmt::print("CHILD(pid={}): grandchild failed: status={} {}\n",
+                   getpid(),
+                   grandchild.status,
+                   grandchild.error);
+        leave_child(2);
+      }
+    } catch (const std::exception& e) {
+      fmt::print("CHILD(pid={}): threw: {}\n", getpid(), e.what());
+      leave_child(99);
+    } catch (...) {
+      fmt::print("CHILD(pid={}): threw an unknown exception\n", getpid());
+      leave_child(99);
+    }
+    leave_child(0);
+  }
+  cluster.notify_fork(couchbase::fork_event::parent);
+  const auto child = wait_for_child(child_pid);
+  cluster.close().get();
+
+  CHECK(child.error == std::string{});
+  REQUIRE(WIFEXITED(child.status));
+  // 1 = the second fork failed, 2 = the grandchild failed, 99 = the child threw.
+  CHECK(WEXITSTATUS(child.status) == 0);
+}
+
+namespace
+{
+// Whether this process holds a UDP socket bound to `port` on an IPv4 address, among descriptors
+// below 1024.
+auto
+holds_udp_socket_on(std::uint16_t port) -> bool
+{
+  for (int fd = 0; fd < 1024; ++fd) {
+    int type{};
+    socklen_t type_len = sizeof(type);
+    if (getsockopt(fd, SOL_SOCKET, SO_TYPE, &type, &type_len) != 0 || type != SOCK_DGRAM) {
+      continue;
+    }
+    sockaddr_storage address{};
+    socklen_t address_len = sizeof(address);
+    if (getsockname(fd, reinterpret_cast<sockaddr*>(&address), &address_len) != 0) {
+      continue;
+    }
+    if (address.ss_family == AF_INET &&
+        ntohs(reinterpret_cast<const sockaddr_in*>(&address)->sin_port) == port) {
+      return true;
+    }
+  }
+  return false;
+}
+} // namespace
+
+// A process forked while a DNS SRV lookup is pending inherits the lookup's UDP socket and timers.
+// The child's fixup must release the socket, or the child can read the response the parent is
+// waiting for, and the inherited timers must do nothing when the child runs the io_context.
+TEST_CASE("integration: a forked child releases an inherited DNS lookup", "[integration]")
+{
+  test::utils::init_logger();
+  const auto dns_timeout = std::chrono::milliseconds{ 500 };
+  bool lookup_completed{ false };
+  asio::io_context io{};
+  asio::ip::udp::socket silent_nameserver(io, { asio::ip::make_address("127.0.0.1"), 0 });
+  // The lookup falls back to TCP on the same port. Only a child that retries the lookup can
+  // connect.
+  asio::ip::tcp::acceptor tcp_fallback(
+    io, { asio::ip::make_address("127.0.0.1"), silent_nameserver.local_endpoint().port() });
+  couchbase::core::io::dns::dns_client client(io);
+  client.query_srv("srv.example.invalid",
+                   "_couchbase",
+                   couchbase::core::io::dns::dns_config{
+                     "127.0.0.1", silent_nameserver.local_endpoint().port(), dns_timeout },
+                   [&lookup_completed](couchbase::core::io::dns::dns_srv_response&& /* timeout */) {
+                     lookup_completed = true;
+                   });
+  auto io_thread = std::thread([&io]() {
+    io.run();
+  });
+
+  // The query's arrival gives the lookup's local port, and shows its socket is open.
+  std::array<char, 512> query{};
+  asio::ip::udp::endpoint lookup{};
+  silent_nameserver.receive_from(asio::buffer(query), lookup);
+  io.stop();
+  io_thread.join();
+  // Both of the lookup's deadlines expire while the io_context is stopped, so the child runs their
+  // handlers as soon as it restarts it.
+  std::this_thread::sleep_for(3 * dns_timeout);
+
+  io.notify_fork(asio::execution_context::fork_prepare);
+  const auto child_pid = fork();
+  if (child_pid < 0) {
+    const auto fork_errno = errno;
+    io.notify_fork(asio::execution_context::fork_parent);
+    FAIL("fork() failed: " << std::strerror(fork_errno));
+  }
+  if (child_pid == 0) {
+    // The fixup cluster_impl::notify_fork(child) runs on its inherited io_context.
+    io.notify_fork(asio::execution_context::fork_child);
+    couchbase::core::io::detach_inherited_sockets(io);
+    if (holds_udp_socket_on(lookup.port())) {
+      leave_child(1);
+    }
+    try {
+      io.restart();
+      io.run_for(4 * dns_timeout);
+    } catch (...) {
+      leave_child(2);
+    }
+    leave_child(lookup_completed ? 3 : 0);
+  }
+  io.notify_fork(asio::execution_context::fork_parent);
+  const auto child = wait_for_child(child_pid);
+  tcp_fallback.non_blocking(true);
+  asio::ip::tcp::socket retried(io);
+  asio::error_code accept_ec{};
+  tcp_fallback.accept(retried, accept_ec);
+
+  CHECK(child.error == std::string{});
+  REQUIRE(WIFEXITED(child.status));
+  // 1 = the child still holds the lookup's socket, 2 = running the inherited io_context threw,
+  // 3 = the inherited lookup completed in the child.
+  CHECK(WEXITSTATUS(child.status) == 0);
+  // The parent stops its io_context as soon as the query arrives, so a connection is the child's
+  // retry.
+  CHECK(accept_ec == asio::error::would_block);
 }
 
 #endif // _WIN32

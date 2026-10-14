@@ -61,10 +61,12 @@ namespace
  * release() also completes any outstanding asynchronous operations on this socket
  * with operation_aborted, which is what we want: those reads belong to the parent.
  */
-// Takes the basic_socket base rather than tcp::socket so the same code serves both
-// the plain socket and a TLS stream's lowest_layer(), whose type is that base.
+// Takes the basic_socket base rather than a concrete socket type, so the same code serves the
+// plain socket, a TLS stream's lowest_layer(), whose type is that base, and the DNS client's
+// sockets.
+template<typename Protocol>
 void
-detach_inherited_socket(asio::basic_socket<asio::ip::tcp>& socket, asio::error_code& ec)
+detach_inherited_socket(asio::basic_socket<Protocol>& socket, asio::error_code& ec)
 {
   if (!socket.is_open()) {
     ec = asio::error::bad_descriptor;
@@ -162,6 +164,13 @@ public:
     tls_.push_back({ stream, utils::current_process_id() });
   }
 
+  void add(const std::shared_ptr<asio::ip::udp::socket>& socket)
+  {
+    const std::scoped_lock lock(mutex_);
+    prune();
+    udp_.push_back({ socket, utils::current_process_id() });
+  }
+
   // The detach result needs no handling. asio's reactive release() fails only on a socket that is
   // not open, which is skipped here, and once it succeeds the socket is out of the reactor with its
   // operations aborted, so a failed close(2) cannot let anything run on the parent's connection.
@@ -180,6 +189,12 @@ public:
           stream && owner_pid != pid && stream->lowest_layer().is_open()) {
         asio::error_code ec{};
         detach_inherited_socket(stream->lowest_layer(), ec);
+      }
+    }
+    for (const auto& [weak, owner_pid] : udp_) {
+      if (auto socket = weak.lock(); socket && owner_pid != pid && socket->is_open()) {
+        asio::error_code ec{};
+        detach_inherited_socket(*socket, ec);
       }
     }
     prune();
@@ -203,11 +218,13 @@ private:
     };
     plain_.erase(std::remove_if(plain_.begin(), plain_.end(), expired), plain_.end());
     tls_.erase(std::remove_if(tls_.begin(), tls_.end(), expired), tls_.end());
+    udp_.erase(std::remove_if(udp_.begin(), udp_.end(), expired), udp_.end());
   }
 
   std::mutex mutex_{};
   std::vector<entry<asio::ip::tcp::socket>> plain_{};
   std::vector<entry<asio::ssl::stream<asio::ip::tcp::socket>>> tls_{};
+  std::vector<entry<asio::ip::udp::socket>> udp_{};
 };
 
 void
@@ -217,6 +234,22 @@ detach_inherited_sockets(asio::io_context& ctx)
     asio::use_service<inherited_stream_registry>(static_cast<asio::execution_context&>(ctx))
       .detach_inherited();
   }
+}
+
+void
+register_inherited_socket(asio::io_context& ctx,
+                          const std::shared_ptr<asio::ip::tcp::socket>& socket)
+{
+  asio::use_service<inherited_stream_registry>(static_cast<asio::execution_context&>(ctx))
+    .add(socket);
+}
+
+void
+register_inherited_socket(asio::io_context& ctx,
+                          const std::shared_ptr<asio::ip::udp::socket>& socket)
+{
+  asio::use_service<inherited_stream_registry>(static_cast<asio::execution_context&>(ctx))
+    .add(socket);
 }
 
 stream_impl::stream_impl(asio::io_context& ctx, bool is_tls)

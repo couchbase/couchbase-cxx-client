@@ -24,6 +24,7 @@
 #include <asio/error.hpp>
 #include <asio/io_context.hpp>
 #include <asio/ip/tcp.hpp>
+#include <asio/ip/udp.hpp>
 #include <asio/ssl/context.hpp>
 #include <asio/ssl/stream.hpp>
 #include <asio/strand.hpp>
@@ -84,11 +85,20 @@ configure_tls_handshake(asio::ssl::stream<asio::ip::tcp::socket>& stream,
 class inherited_stream_registry;
 
 // For a forked child, after io_context::notify_fork(fork_child) and before anything runs on ctx:
-// releases and closes every registered stream on ctx that another process opened, without
-// shutdown(2). No pending operation on those streams can then read or write a connection the
-// parent is still using. The DNS client's sockets are not registered.
+// releases and closes every registered stream and socket on ctx that another process opened,
+// without shutdown(2). No pending operation on them can then read or write a connection the
+// parent is still using. The DNS client registers its sockets through register_inherited_socket().
 void
 detach_inherited_sockets(asio::io_context& ctx);
+
+// Records a socket on ctx that is not a stream, so that detach_inherited_sockets() in a forked
+// child releases it. Held weakly: the registry does not keep the socket alive.
+void
+register_inherited_socket(asio::io_context& ctx,
+                          const std::shared_ptr<asio::ip::tcp::socket>& socket);
+void
+register_inherited_socket(asio::io_context& ctx,
+                          const std::shared_ptr<asio::ip::udp::socket>& socket);
 
 class stream_impl
 {
