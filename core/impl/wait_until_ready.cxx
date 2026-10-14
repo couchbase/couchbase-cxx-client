@@ -18,6 +18,8 @@
 #include "wait_until_ready.hxx"
 
 #include "core/diagnostics.hxx"
+#include "core/logger/logger.hxx"
+#include "core/logger/redaction.hxx"
 #include "core/topology/configuration.hxx"
 #include "with_bucket_config_or_timeout.hxx"
 
@@ -28,7 +30,10 @@
 #include <asio/steady_timer.hpp>
 
 #include <algorithm>
+#include <atomic>
+#include <cstdint>
 #include <memory>
+#include <string_view>
 #include <utility>
 
 namespace couchbase::core::impl
@@ -39,6 +44,15 @@ namespace
 // bucket's vbucket map will not change faster than that regardless; a short poll just keeps latency
 // low once it does.
 constexpr std::chrono::milliseconds poll_interval{ 100 };
+
+auto
+data_node_count(const topology::configuration& config) -> std::uint32_t
+{
+  return static_cast<std::uint32_t>(
+    std::count_if(config.nodes.begin(), config.nodes.end(), [](const auto& node) {
+      return node.services_plain.key_value.has_value() || node.services_tls.key_value.has_value();
+    }));
+}
 } // namespace
 
 // online   : every requested service has at least one endpoint and ALL of them are ok.
@@ -81,9 +95,44 @@ ping_predicate_satisfied(const diag::ping_result& report,
   return true;
 }
 
-// True once every vbucket has its active and all replica copies assigned to a node. A freshly
-// created bucket reports an empty/partial vbucket map (replica slots set to -1) until the server
-// finishes placing replicas; durable (MAJORITY) writes are ambiguous until then.
+// One replica per data node besides the one holding the active, up to num_replicas. The server
+// leaves a replica slot at -1 for as long as there is no node to place it on. A configuration
+// listing no data node is not capped.
+auto
+placeable_replicas(const topology::configuration& config) -> std::uint32_t
+{
+  const auto data_nodes = data_node_count(config);
+  if (data_nodes == 0) {
+    return config.num_replicas.value_or(0); // no node list to cap against
+  }
+  return std::min(config.num_replicas.value_or(0), data_nodes - 1);
+}
+
+auto
+unplaceable_replicas(const topology::configuration& config) -> std::uint32_t
+{
+  return config.num_replicas.value_or(0) - placeable_replicas(config);
+}
+
+void
+warn_if_replicas_unplaceable(const topology::configuration& config,
+                             std::string_view bucket_name,
+                             std::atomic_bool& logged)
+{
+  if (unplaceable_replicas(config) == 0 || logged.exchange(true)) {
+    return;
+  }
+  CB_LOG_WARNING("bucket \"{}\" is configured with {} replica(s), but {} data node(s) can hold "
+                 "only {} replica(s)",
+                 logger::metadata(bucket_name),
+                 config.num_replicas.value_or(0),
+                 data_node_count(config),
+                 placeable_replicas(config));
+}
+
+// True once every vbucket has its active and the placeable replica copies assigned to a node. A
+// freshly created bucket reports an empty/partial vbucket map (replica slots set to -1) until the
+// server finishes placing replicas; durable (MAJORITY) writes are ambiguous until then.
 auto
 vbucket_map_ready(const topology::configuration& config) -> bool
 {
@@ -95,7 +144,7 @@ vbucket_map_ready(const topology::configuration& config) -> bool
     return false;
   }
   // active + replicas
-  const auto copies = static_cast<std::size_t>(config.num_replicas.value_or(0)) + 1;
+  const auto copies = static_cast<std::size_t>(placeable_replicas(config)) + 1;
   for (const auto& chain : vbmap) {
     if (chain.size() < copies) {
       return false;
@@ -289,9 +338,17 @@ private:
           }
           self->do_ping();
         },
-        [](const std::shared_ptr<topology::configuration>& config)
+        // Weak: the helper parks this resolver in the bucket's deferred queue, which must not pin
+        // the operation and its handler.
+        [weak = weak_from_this()](const std::shared_ptr<topology::configuration>& config)
           -> std::pair<std::error_code, bool> {
-          return { {}, config && vbucket_map_ready(*config) };
+          auto self = weak.lock();
+          if (!self || !config) {
+            return { {}, false };
+          }
+          warn_if_replicas_unplaceable(
+            *config, self->bucket_name_.value_or(""), self->unplaceable_replicas_logged_);
+          return { {}, vbucket_map_ready(*config) };
         });
     } else {
       do_ping();
@@ -326,6 +383,8 @@ private:
   utils::movable_function<void(std::error_code)> handler_;
   asio::steady_timer timer_;
   bool completed_{ false };
+  // Every poll sees the same configuration until a node is added, so the warning is logged once.
+  std::atomic_bool unplaceable_replicas_logged_{ false };
 };
 } // namespace
 
