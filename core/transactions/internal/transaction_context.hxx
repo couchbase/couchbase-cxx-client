@@ -40,7 +40,7 @@ using txn_complete_callback =
   std::function<void(std::optional<transaction_exception>,
                      std::optional<::couchbase::transactions::transaction_result>)>;
 
-struct exp_delay;
+struct async_timed_exp_delay;
 
 class transaction_context : public std::enable_shared_from_this<transaction_context>
 {
@@ -174,6 +174,6 @@ private:
   std::shared_ptr<attempt_context_impl> current_attempt_context_;
   mutable std::mutex mutex_;
 
-  std::unique_ptr<exp_delay> delay_;
+  std::unique_ptr<async_timed_exp_delay> delay_;
 };
 } // namespace couchbase::core::transactions

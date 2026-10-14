@@ -23,9 +23,15 @@
 #include <couchbase/codec/default_json_transcoder.hxx>
 #include <couchbase/transactions/transaction_get_result.hxx>
 
+#include <asio/io_context.hpp>
+#include <asio/steady_timer.hpp>
+
 #include <chrono>
 #include <cmath>
 #include <cstddef>
+#include <exception>
+#include <functional>
+#include <memory>
 #include <string>
 #include <thread>
 #include <vector>
@@ -233,30 +239,106 @@ exponential_backoff_never_retries_faster_than_the_capped_schedule([[maybe_unused
   }
 }
 
-void
-exp_delay_throws_once_its_timeout_elapses([[maybe_unused]] context& ctx)
+// Calls delay until it fails, recording when each call completes, and returns the failure.
+auto
+run_until_failure(const async_timed_exp_delay& delay,
+                  asio::io_context& io,
+                  std::vector<std::chrono::steady_clock::time_point>& completions)
+  -> std::exception_ptr
 {
-  retry_state state;
-  exp_delay op(one_ms, ten_ms, hundred_ms);
+  std::exception_ptr failure;
+  std::function<void()> step = [&] {
+    delay([&](const std::exception_ptr& err) {
+      completions.push_back(std::chrono::steady_clock::now());
+      if (err) {
+        failure = err;
+        return;
+      }
+      step();
+    });
+  };
+  step();
+  io.run();
+  return failure;
+}
+
+void
+timed_exp_delay_fails_once_its_timeout_elapses([[maybe_unused]] context& ctx)
+{
+  asio::io_context io;
+  const async_timed_exp_delay delay(
+    std::make_shared<asio::steady_timer>(io), one_ms, ten_ms, hundred_ms);
+  std::vector<std::chrono::steady_clock::time_point> completions;
   const auto start = std::chrono::steady_clock::now();
 
+  const auto failure = run_until_failure(delay, io, completions);
+
+  assert_true(failure != nullptr, "the delay reports its timeout rather than waiting forever");
   try {
-    while (true) {
-      op();
-      state.function2();
-    }
+    std::rethrow_exception(failure);
   } catch (const retry_operation_timeout&) {
     assert_true(std::chrono::steady_clock::now() - start >= hundred_ms,
                 "the timeout is not declared before it elapses");
     // Minimum jitter maximises the count: the delays are 0.9, 1.8, 3.6, 7.2 ms and are then
-    // clamped to ten_ms with the jitter discarded, so 13.5 ms of the hundred_ms budget buys eight
-    // more full delays and a ninth truncated against the deadline. Thirteen delays, so fourteen
-    // calls, and fifteen is out of reach. sleep_for may overshoot, which lowers the count, so only
-    // the upper bound is checkable.
-    assert_true(state.timings.size() < 15, "the delays are not shorter than the schedule");
-    return;
+    // clamped to ten_ms, so 13.5 ms of the hundred_ms budget buys eight more full delays and a
+    // ninth truncated against the deadline. Thirteen delays, so fourteen successful calls and a
+    // fifteenth that fails; sixteen is out of reach. A timer may fire late, which lowers the
+    // count, so only the upper bound is checkable.
+    assert_true(completions.size() < 16, "the delays are not shorter than the schedule");
+  } catch (...) {
+    fail("the delay fails with retry_operation_timeout");
   }
-  fail("the delay reports its timeout rather than blocking forever");
+}
+
+void
+timed_exp_delay_fails_once_its_retries_are_exhausted([[maybe_unused]] context& ctx)
+{
+  asio::io_context io;
+  async_timed_exp_delay delay(
+    std::make_shared<asio::steady_timer>(io), one_ms, one_ms, std::chrono::seconds(10));
+  delay.max_retries = 3;
+  std::vector<std::chrono::steady_clock::time_point> completions;
+
+  const auto failure = run_until_failure(delay, io, completions);
+
+  assert_true(failure != nullptr, "the delay reports exhausted retries rather than waiting");
+  try {
+    std::rethrow_exception(failure);
+  } catch (const retry_operation_retries_exhausted&) {
+    // The first call starts the timeout, three more are delayed, and the fifth fails.
+    assert_eq(completions.size(), std::size_t{ 5 }, "the delay allows max_retries delays");
+  } catch (...) {
+    fail("the delay fails with retry_operation_retries_exhausted");
+  }
+}
+
+// The delay runs in completion handlers, where blocking the calling thread stalls every other
+// operation on that IO thread.
+void
+timed_exp_delay_waits_without_blocking_the_caller([[maybe_unused]] context& ctx)
+{
+  asio::io_context io;
+  const async_timed_exp_delay delay(
+    std::make_shared<asio::steady_timer>(io), hundred_ms, hundred_ms, std::chrono::seconds(10));
+  bool started{ false };
+  delay([&started](const std::exception_ptr& err) {
+    started = err == nullptr;
+  });
+  assert_true(started, "the first call starts the timeout and completes inline");
+
+  bool completed{ false };
+  const auto called_at = std::chrono::steady_clock::now();
+  delay([&completed](const std::exception_ptr& err) {
+    completed = err == nullptr;
+  });
+  assert_true(std::chrono::steady_clock::now() - called_at < hundred_ms / 2,
+              "the call returns before the delay elapses");
+  assert_true(!completed, "the callback waits for the timer");
+
+  io.run();
+  assert_true(completed, "the callback runs once the timer fires");
+  assert_true(std::chrono::steady_clock::now() - called_at >= hundred_ms * min_jitter_fraction,
+              "the timer waits for the delay");
 }
 
 void
@@ -461,7 +543,9 @@ tests() -> test_suite
       { CASE(exponential_backoff_never_retries_faster_than_the_capped_schedule),
         {},
         timeout::slow },
-      { CASE(exp_delay_throws_once_its_timeout_elapses), {}, timeout::slow },
+      { CASE(timed_exp_delay_fails_once_its_timeout_elapses), {}, timeout::slow },
+      { CASE(timed_exp_delay_fails_once_its_retries_are_exhausted), {}, timeout::slow },
+      { CASE(timed_exp_delay_waits_without_blocking_the_caller), {}, timeout::slow },
       { CASE(constant_delay_throws_once_its_attempts_are_exhausted), {}, timeout::slow },
       { CASE(a_core_get_result_converts_to_the_public_one), {}, timeout::instant },
       { CASE(a_core_get_result_survives_a_round_trip_through_the_public_one),
