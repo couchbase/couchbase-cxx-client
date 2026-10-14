@@ -54,6 +54,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <condition_variable>
 #include <list>
 #include <map>
@@ -175,8 +176,9 @@ TxnService::startTxn(ConnectionPtr conn,
             return {};
           }
         } catch (const performer_exception& e) {
+          // Rethrow so the transaction rolls back without a retry; startTxn returns grpc_status.
           grpc_status = e.to_grpc_status();
-          break;
+          throw;
         }
       }
       spdlog::trace("{} attempt {} complete", request->name(), attempt_count);
@@ -736,8 +738,7 @@ TxnService::execute_command(ConnectionPtr conn,
                             std::shared_ptr<couchbase::transactions::attempt_context> ctx,
                             const protocol::transactions::TransactionCommand& cmd,
                             const std::string& logger_prefix,
-                            fit_cxx::transaction_context& txn_ctx,
-                            bool is_batch)
+                            fit_cxx::transaction_context& txn_ctx)
 {
   spdlog::trace("{} executing {}", logger_prefix, cmd.DebugString());
   check_for_wait(cmd);
@@ -1141,23 +1142,14 @@ TxnService::execute_command(ConnectionPtr conn,
                       });
   }
   if (cmd.has_commit()) {
-    if (is_batch) {
-      auto core_ctx =
-        std::dynamic_pointer_cast<couchbase::core::transactions::attempt_context_impl>(ctx);
-      core_ctx->commit();
-    } else {
-      spdlog::trace("ignoring commit command");
-    }
+    // The performer advertises ExtSDKIntegration, so the transaction commits when the lambda
+    // returns, and CommandCommit is ignored.
+    spdlog::trace("ignoring commit command");
   } else if (cmd.has_rollback()) {
-    if (is_batch) {
-      auto core_ctx =
-        std::dynamic_pointer_cast<couchbase::core::transactions::attempt_context_impl>(ctx);
-      core_ctx->rollback();
-    } else {
-      // this should just raise an exception
-      throw couchbase::core::transactions::transaction_operation_failed(
-        couchbase::core::transactions::error_class::FAIL_OTHER, "got cmd rollback");
-    }
+    // Under ExtSDKIntegration, CommandRollback raises an error so that the transaction rolls back
+    // automatically.
+    throw couchbase::core::transactions::transaction_operation_failed(
+      couchbase::core::transactions::error_class::FAIL_OTHER, "got cmd rollback");
   } else if (cmd.has_query()) {
     auto opts = TxnSvcUtils::to_transactions_query_options(cmd.query());
     return execute_op(cmd.query(),
@@ -1200,12 +1192,9 @@ TxnService::execute_command(ConnectionPtr conn,
   } else if (cmd.has_throw_exception()) {
     return { couchbase::errc::transaction_op::generic, "got cmd ThrowException, returning error" };
   } else if (cmd.has_wait_on_latch()) {
-    // counting_latch::wait() throws a plain std::runtime_error (deliberately NOT a
-    // performer_exception) if the latch is cancelled because the transaction timed out or its
-    // stream was torn down. Like the "timeout hack" in startTxn, a non-performer_exception
-    // propagates out of the SDK run() lambda so the transaction is rolled back without a retry.
-    // Converting it to a performer_exception would instead route it through startTxn's handler,
-    // which reports the error but returns success - committing a transaction that was aborted.
+    // counting_latch::wait() throws std::runtime_error if the latch is cancelled because the
+    // transaction timed out or its stream was torn down. It propagates out of the SDK run() lambda,
+    // so the transaction is rolled back without a retry.
     txn_ctx.latches().get(cmd.wait_on_latch().latch_name())->wait();
   } else if (cmd.has_set_latch()) {
     // Count down our own copy of the latch and tell the driver (and thereby other concurrent
@@ -1213,75 +1202,59 @@ TxnService::execute_command(ConnectionPtr conn,
     txn_ctx.latches().get(cmd.set_latch().latch_name())->set();
     txn_ctx.broadcast_set_latch(cmd.set_latch().latch_name());
   } else if (cmd.has_parallelize()) {
-    // parallelism is a proto int32; a zero or negative value would launch no worker threads and
-    // silently skip every sub-command. Fail fast so the driver sees the configuration error.
+    // CommandBatch: `parallelism` workers take the commands in order, each starting the next one as
+    // soon as its current one finishes, so that many commands are in flight until the list runs
+    // out. Every command runs, even after one fails, and the first failure, a returned error or a
+    // thrown exception, is propagated once all workers finish, so the attempt is not in use when
+    // the lambda exits.
     const std::int32_t parallelism = cmd.parallelize().parallelism();
     if (parallelism <= 0) {
       throw performer_exception::invalid_argument(
         "parallelize requires a parallelism of at least 1, got " + std::to_string(parallelism));
     }
-    uint32_t in_flight = 0;
-    std::mutex mtx;
-    std::condition_variable cv;
-    // A parallel sub-command can return a (non-throwing) operation error just like a serial one.
-    // The serial path propagates it to fail/roll back the transaction (see the run loop); mirror
-    // that here by keeping the first such error and returning it once all workers finish. This
-    // matches the reference Java performer's BatchExecutor, which stores the first thrown error and
-    // rethrows it after the batch completes.
-    couchbase::error batch_error{};
-    // since we are fed the _synchronous_ transaction context, lets make N threads, have each of the
-    // threads eat commands off the list of commands and perform them synchronously.   That insures
-    // if we make the number of threads equal to the parallelism requested, we will always have that
-    // level of parallelism.
-    auto cmd_iterator = cmd.parallelize().commands().begin();
-    auto thread_fn = [&]() {
-      std::unique_lock<std::mutex> lock(mtx);
-
-      do {
-        cv.wait(lock, [&cmd, &in_flight]() {
-          return in_flight < static_cast<std::uint32_t>(cmd.parallelize().parallelism());
-        });
-        if (cmd_iterator == cmd.parallelize().commands().end()) {
-          spdlog::trace("batch thread reached end of commands");
-          return;
-        }
-        const auto& c = *cmd_iterator;
-        cmd_iterator++;
-        in_flight++;
-        spdlog::trace("async executing command, {} now in-flight", in_flight);
-        lock.unlock();
+    const auto& commands = cmd.parallelize().commands();
+    std::atomic<int> next{ 0 };
+    std::mutex failure_mutex;
+    couchbase::error first_error{};
+    std::exception_ptr first_exception{};
+    auto worker = [&]() {
+      for (int i = next++; i < commands.size(); i = next++) {
         couchbase::error op_err{};
+        std::exception_ptr op_exception{};
         try {
-          op_err = execute_command(conn, ctx, c, logger_prefix, txn_ctx, true);
+          op_err = execute_command(conn, ctx, commands.Get(i), logger_prefix, txn_ctx);
         } catch (...) {
-          // Release the in-flight slot and wake a waiter even on exception; otherwise the other
-          // workers can block forever in cv.wait() and f.get() below would deadlock. The exception
-          // is re-thrown and surfaced by f.get().
-          lock.lock();
-          in_flight--;
-          lock.unlock();
-          cv.notify_one();
-          throw;
+          op_exception = std::current_exception();
         }
-        lock.lock();
-        in_flight--;
-        if (op_err && !batch_error) {
-          batch_error = op_err;
+        if (op_err || op_exception) {
+          const std::scoped_lock lock(failure_mutex);
+          if (!first_error && !first_exception) {
+            first_error = op_err;
+            first_exception = op_exception;
+          }
         }
-        lock.unlock();
-        cv.notify_one();
-        lock.lock();
-      } while (true);
+      }
     };
-    std::list<std::future<void>> futures{};
-    for (std::int32_t i = 0; i < cmd.parallelize().parallelism(); i++) {
-      futures.emplace_back(std::async(std::launch::async, thread_fn));
+    std::vector<std::thread> workers;
+    workers.reserve(static_cast<std::size_t>(parallelism));
+    try {
+      for (std::int32_t i = 0; i < parallelism; ++i) {
+        workers.emplace_back(worker);
+      }
+    } catch (...) {
+      // A joinable std::thread destroyed during unwinding calls std::terminate.
+      for (auto& w : workers) {
+        w.join();
+      }
+      throw;
     }
-    // now wait for 'em
-    for (auto& f : futures) {
-      f.get();
+    for (auto& w : workers) {
+      w.join();
     }
-    return batch_error;
+    if (first_exception) {
+      std::rethrow_exception(first_exception);
+    }
+    return first_error;
   } else {
     throw performer_exception::unimplemented("Do not understand transaction command " +
                                              cmd.DebugString());
@@ -1392,8 +1365,8 @@ TxnService::transactionStream(
                      fmt::format("no connection with ID={}", request.cluster_connection_id()) };
           break;
         }
-        // The set-latch broadcaster writes to the stream, but it is only ever invoked from within
-        // the transaction (i.e. on the worker thread), keeping the worker the sole writer.
+        // The set-latch broadcaster runs on the worker thread and on parallelize batch threads;
+        // write_mutex serialises its stream writes.
         txn_ctx = std::make_shared<fit_cxx::transaction_context>(
           [stream, write_mutex](const std::string& name) {
             protocol::transactions::TransactionStreamPerformerToDriver broadcast;

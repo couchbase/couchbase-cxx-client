@@ -123,8 +123,7 @@ private:
                                    std::shared_ptr<couchbase::transactions::attempt_context> ctx,
                                    const protocol::transactions::TransactionCommand& cmd,
                                    const std::string& logger_prefix,
-                                   fit_cxx::transaction_context& txn_ctx,
-                                   bool is_batch = false);
+                                   fit_cxx::transaction_context& txn_ctx);
 
   grpc::Status startTxn(ConnectionPtr conn,
                         const protocol::transactions::TransactionCreateRequest* request,
