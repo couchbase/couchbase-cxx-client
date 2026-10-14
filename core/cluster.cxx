@@ -190,6 +190,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstring>
+#include <list>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -311,6 +312,53 @@ private:
 
 namespace
 {
+// A request held by cluster_impl::defer_until_open().
+struct deferred_request {
+  utils::movable_function<void(std::error_code)> resume{};
+  std::unique_ptr<asio::steady_timer> deadline{};
+  std::atomic_bool completed{ false };
+  // Where the entry sits in cluster_impl::deferred_until_open_, while it is there. Guarded by
+  // deferred_until_open_mutex_.
+  std::optional<std::list<std::shared_ptr<deferred_request>>::iterator> queued{};
+
+  void complete(std::error_code ec)
+  {
+    if (completed.exchange(true)) {
+      return;
+    }
+    if (deadline && !ec) {
+      deadline->cancel();
+      // The deadline can pass while the IO thread is busy, before the timer callback runs. A
+      // request resumed after it would be dispatched with remaining_until()'s floor.
+      if (deadline->expiry() <= std::chrono::steady_clock::now()) {
+        ec = errc::common::unambiguous_timeout;
+      }
+    }
+    auto handler = std::move(resume);
+    handler(ec);
+  }
+};
+
+// What is left of a held request's timeout. At least a millisecond: zero means "use the default".
+auto
+remaining_until(std::chrono::steady_clock::time_point deadline) -> std::chrono::milliseconds
+{
+  return std::max(std::chrono::duration_cast<std::chrono::milliseconds>(
+                    deadline - std::chrono::steady_clock::now()),
+                  std::chrono::milliseconds{ 1 });
+}
+
+// Whether T has a client_context_id member: a request that can carry one, or a context that reports
+// it.
+template<typename T, typename = void>
+struct has_client_context_id : std::false_type {
+};
+
+template<typename T>
+struct has_client_context_id<T, std::void_t<decltype(std::declval<T&>().client_context_id)>>
+  : std::true_type {
+};
+
 template<typename Request>
 auto
 is_feature_supported(const Request& /* request */,
@@ -593,7 +641,10 @@ public:
       return handler(errc::common::invalid_argument);
     }
 
-    origin_ = std::move(origin);
+    {
+      const std::scoped_lock lock(origin_mutex_);
+      origin_ = std::move(origin);
+    }
     apply_log_redaction();
     CB_LOG_DEBUG(R"(open cluster, id: "{}", core version: "{}", connection string: {}, {})",
                  id_,
@@ -619,19 +670,29 @@ public:
       return handler(errc::common::feature_not_available);
 #endif
     }
+    {
+      const std::scoped_lock lock(deferred_until_open_mutex_);
+      opening_ = true;
+    }
     setup_observability();
     if (origin_.options().enable_dns_srv) {
       auto [hostname, port] = origin_.next_address();
       dns_srv_tracker_ = std::make_shared<impl::dns_srv_tracker>(
         ctx_, hostname, origin_.options().dns_config, origin_.options().enable_tls);
+      {
+        // close() completes the open itself rather than waiting out the lookup.
+        const std::scoped_lock lock(dns_srv_open_handler_mutex_);
+        dns_srv_open_handler_ = std::move(handler);
+      }
       return asio::post(asio::bind_executor(
-        ctx_,
-        [self = shared_from_this(),
-         hostname = std::move(hostname),
-         handler = std::move(handler)]() mutable {
+        ctx_, [self = shared_from_this(), hostname = std::move(hostname)]() mutable {
           return self->dns_srv_tracker_->get_srv_nodes(
-            [self, hostname = std::move(hostname), handler = std::move(handler)](
-              origin::node_list nodes, std::error_code ec) mutable {
+            [self, hostname = std::move(hostname)](origin::node_list nodes,
+                                                   std::error_code ec) mutable {
+              auto handler = self->take_dns_srv_open_handler();
+              if (!handler) {
+                return;
+              }
               if (ec) {
 #ifdef __clang_analyzer__
                 // TODO(CXXCBC-549): clang-tidy-19 reports potential memory leak here
@@ -642,6 +703,7 @@ public:
                 });
               }
               if (!nodes.empty()) {
+                const std::scoped_lock lock(self->origin_mutex_);
                 self->origin_.set_nodes(std::move(nodes));
                 CB_LOG_INFO(
                   "replace list of bootstrap nodes with addresses from DNS SRV of \"{}\": [{}]",
@@ -666,6 +728,14 @@ public:
       // couchbase2 has no bucket bootstrap. Opening one would dial the gateway over MCBP, which it
       // does not serve, and fail with unambiguous_timeout only at bootstrap_timeout.
       return handler(errc::common::feature_not_available);
+    }
+    if (defer_until_open([&] {
+          return [self = shared_from_this(), bucket_name, handler = std::move(handler)](
+                   std::error_code /* no deadline */) mutable {
+            self->open_bucket(bucket_name, std::move(handler));
+          };
+        })) {
+      return;
     }
     std::shared_ptr<bucket> b{};
     {
@@ -740,7 +810,8 @@ public:
 
   auto update_credentials(const cluster_credentials& auth) -> core::error
   {
-    const std::scoped_lock lock(update_credentials_mutex_);
+    // origin_mutex_ as well: while open() bootstraps, the IO thread writes origin_.
+    const std::scoped_lock lock(update_credentials_mutex_, origin_mutex_);
     if (stopped_) {
       return { errc::network::cluster_closed, {} };
     }
@@ -787,14 +858,6 @@ public:
     return {};
   }
 
-  auto origin() const -> std::pair<std::error_code, couchbase::core::origin>
-  {
-    if (stopped_) {
-      return { errc::network::cluster_closed, {} };
-    }
-    return { {}, origin_ };
-  }
-
   template<class Request,
            class Handler,
            typename std::enable_if_t<
@@ -819,6 +882,27 @@ public:
       }
     }
 #endif
+    // The request's timeout counts from now, not from the end of the bootstrap.
+    if (const auto deadline =
+          std::chrono::steady_clock::now() +
+          request.timeout.value_or(default_timeout_for(service_type::key_value));
+        defer_until_open(
+          [&] {
+            return [self = shared_from_this(),
+                    deadline,
+                    request = std::move(request),
+                    handler = std::forward<Handler>(handler)](std::error_code ec) mutable {
+              if (ec) {
+                return handler(request.make_response(make_key_value_error_context(ec, request.id),
+                                                     response_type{}));
+              }
+              request.timeout = remaining_until(deadline);
+              self->execute(std::move(request), std::move(handler));
+            };
+          },
+          deadline)) {
+      return;
+    }
     if (auto bucket = find_bucket_by_name(request.id.bucket()); bucket != nullptr) {
       return bucket->execute(std::move(request), std::forward<Handler>(handler));
     }
@@ -866,6 +950,33 @@ public:
       }
     }
 #endif
+    // The request's timeout counts from now, not from the end of the bootstrap.
+    if (const auto deadline = std::chrono::steady_clock::now() +
+                              request.timeout.value_or(default_timeout_for(request.type));
+        defer_until_open(
+          [&] {
+            return [self = shared_from_this(),
+                    deadline,
+                    request = std::move(request),
+                    handler = std::forward<Handler>(handler)](std::error_code ec) mutable {
+              if (ec) {
+                auto response = request.make_response({ ec }, response_type{});
+                if constexpr (has_client_context_id<Request>::value &&
+                              has_client_context_id<decltype(response.ctx)>::value) {
+                  // The caller's id, or a generated one, as a dispatched request carries.
+                  response.ctx.client_context_id = request.client_context_id.has_value()
+                                                     ? *request.client_context_id
+                                                     : uuid::to_string(uuid::random());
+                }
+                return handler(std::move(response));
+              }
+              request.timeout = remaining_until(deadline);
+              self->execute(std::move(request), std::move(handler));
+            };
+          },
+          deadline)) {
+      return;
+    }
     // cppcheck-suppress knownConditionTrueFalse
     if (!is_feature_supported(
           request, session_manager_->configuration_capabilities(), origin_.options())) {
@@ -897,6 +1008,27 @@ public:
     // words.
     if (is_protostellar()) {
       return execute(std::move(request), std::forward<Handler>(handler));
+    }
+    // open_bucket() below holds a request without a deadline, so the timed hold is taken here.
+    if (const auto deadline = std::chrono::steady_clock::now() +
+                              request.timeout.value_or(default_timeout_for(request.type));
+        defer_until_open(
+          [&] {
+            return [self = shared_from_this(),
+                    deadline,
+                    cap,
+                    request = std::move(request),
+                    handler = std::forward<Handler>(handler)](std::error_code ec) mutable {
+              if (ec) {
+                return handler(request.make_response({ ec }, {}));
+              }
+              request.timeout = remaining_until(deadline);
+              self->execute_with_bucket_capability_check(
+                std::move(request), cap, std::move(handler));
+            };
+          },
+          deadline)) {
+      return;
     }
     auto bucket_name = request.bucket_name;
     return open_bucket(
@@ -1369,6 +1501,10 @@ public:
 
   void do_open(utils::movable_function<void(std::error_code)> handler)
   {
+    // After a DNS SRV lookup, close() may already have run; a bootstrap now would outlive it.
+    if (stopped_) {
+      return handler(errc::network::cluster_closed);
+    }
     // Warn users if idle_http_connection_timeout is too close to server idle timeouts
     if (origin_.options().idle_http_connection_timeout > std::chrono::milliseconds(4'500)) {
       CB_LOG_INFO("[{}]: The SDK may produce trivial warnings due to the idle HTTP connection "
@@ -1403,7 +1539,16 @@ public:
 
     if (origin_.options().enable_tls) {
       const auto ctx = tls_.get_ctx();
-      auto ec = configure_tls_context(ctx);
+      std::error_code ec{};
+      {
+        // configure_tls_context() reads the credentials, which a forked child's
+        // set_authenticator() can rewrite while its reopen runs.
+        const std::scoped_lock lock(update_credentials_mutex_);
+        ec = configure_tls_context(ctx);
+        if (!ec) {
+          session_ = io::mcbp_session(id_, {}, ctx_, tls_, origin_, dns_srv_tracker_);
+        }
+      }
       if (ec) {
 #ifdef __clang_analyzer__
         // TODO(CXXCBC-549): clang-tidy-19 reports potential memory leak here
@@ -1413,13 +1558,14 @@ public:
           return handler(ec);
         });
       }
-      session_ = io::mcbp_session(id_, {}, ctx_, tls_, origin_, dns_srv_tracker_);
     } else {
+      const std::scoped_lock lock(update_credentials_mutex_);
       session_ = io::mcbp_session(id_, {}, ctx_, origin_, dns_srv_tracker_);
     }
     session_->bootstrap([self = shared_from_this(), handler = std::move(handler)](
                           std::error_code ec, const topology::configuration& config) mutable {
       if (!ec) {
+        std::unique_lock origin_lock(self->origin_mutex_);
         if (self->origin_.options().network == "auto") {
           self->origin_.options().network =
             config.select_network(self->session_->bootstrap_hostname());
@@ -1441,6 +1587,7 @@ public:
             logger::system_data_list(
               self->origin_.get_node_addresses(), logger::list_entries::quoted, ","));
         }
+        origin_lock.unlock();
         // FIXME(SA): fix the session manager to receive initial configuration and cluster-wide
         // session to poll for updates like the bucket does. Or just subscribe before the bootstrap.
         self->session_manager_->set_configuration(config, self->origin_.options());
@@ -1464,7 +1611,10 @@ public:
           handler(ec);
         });
       }
+      // After the open handler, so a held request sees what the handler set up inline, such as the
+      // transactions connect() creates when no metadata collection is configured.
       handler(ec);
+      self->run_deferred_until_open();
     });
   }
 
@@ -1633,6 +1783,11 @@ public:
     stopped_ = true;
     asio::post(asio::bind_executor(
       ctx_, [self = shared_from_this(), handler = std::move(handler)]() mutable {
+        // Re-issued after stopped_ is set, so each deferred request completes with cluster_closed.
+        self->run_deferred_until_open();
+        if (auto open_handler = self->take_dns_srv_open_handler(); open_handler) {
+          open_handler(errc::network::cluster_closed);
+        }
         std::optional<io::mcbp_session> session{};
         std::shared_ptr<io::http_session_manager> session_manager{};
         {
@@ -1792,6 +1947,88 @@ public:
     return {};
   }
 
+  // A request issued while open() bootstraps would read origin_ and session_, which the IO thread
+  // writes until the bootstrap ends. While that window is open, the request made by `make_resume`
+  // is held and this returns true. `make_resume` is called only then, so a request that is not
+  // held is not moved from.
+  //
+  // The held request resumes exactly once: with no error when run_deferred_until_open() closes the
+  // window, or with unambiguous_timeout when `deadline` passes first.
+  template<typename MakeResume>
+  auto defer_until_open(MakeResume&& make_resume,
+                        std::optional<std::chrono::steady_clock::time_point> deadline = {}) -> bool
+  {
+    const std::scoped_lock lock(deferred_until_open_mutex_);
+    if (!opening_) {
+      return false;
+    }
+    auto entry = std::make_shared<deferred_request>();
+    entry->resume = std::forward<MakeResume>(make_resume)();
+    if (deadline) {
+      entry->deadline = std::make_unique<asio::steady_timer>(ctx_, deadline.value());
+      entry->deadline->async_wait([weak_self = weak_from_this(), entry](std::error_code ec) {
+        if (ec == asio::error::operation_aborted) {
+          return;
+        }
+        // Removed now, or each request that times out during a slow bootstrap stays queued
+        // until the bootstrap ends.
+        if (auto self = weak_self.lock()) {
+          const std::scoped_lock lock(self->deferred_until_open_mutex_);
+          if (entry->queued) {
+            self->deferred_until_open_.erase(*entry->queued);
+            entry->queued.reset();
+          }
+        }
+        entry->complete(errc::common::unambiguous_timeout);
+      });
+    }
+    entry->queued = deferred_until_open_.insert(deferred_until_open_.end(), entry);
+    return true;
+  }
+
+  // Closes the bootstrap window and resumes what it held. Runs on the IO thread, at the end of a
+  // successful bootstrap or at the start of close(); a failed bootstrap reaches close() first.
+  void run_deferred_until_open()
+  {
+    std::list<std::shared_ptr<deferred_request>> deferred{};
+    {
+      const std::scoped_lock lock(deferred_until_open_mutex_);
+      opening_ = false;
+      std::swap(deferred, deferred_until_open_);
+      for (const auto& entry : deferred) {
+        entry->queued.reset();
+      }
+    }
+    for (const auto& entry : deferred) {
+      entry->complete({});
+    }
+  }
+
+  // A DNS SRV open's handler, taken by whichever of the lookup and close() finishes first.
+  auto take_dns_srv_open_handler() -> utils::movable_function<void(std::error_code)>
+  {
+    const std::scoped_lock lock(dns_srv_open_handler_mutex_);
+    auto handler = std::move(dns_srv_open_handler_);
+    dns_srv_open_handler_ = nullptr;
+    return handler;
+  }
+
+  // The timeouts are not among the fields the bootstrap rewrites, so no lock is needed.
+  [[nodiscard]] auto default_timeout_for(service_type type) const -> std::chrono::milliseconds
+  {
+    return origin_.options().default_timeout_for(type);
+  }
+
+  // origin_ copied under origin_mutex_: the IO thread rewrites it while open() bootstraps.
+  auto origin() const -> std::pair<std::error_code, couchbase::core::origin>
+  {
+    if (stopped_) {
+      return { errc::network::cluster_closed, {} };
+    }
+    const std::scoped_lock lock(origin_mutex_);
+    return { {}, origin_ };
+  }
+
   auto http_session_manager()
     -> std::pair<std::error_code, std::shared_ptr<io::http_session_manager>>
   {
@@ -1903,7 +2140,8 @@ private:
   std::optional<io::mcbp_session> session_{};
   std::shared_ptr<impl::dns_srv_tracker> dns_srv_tracker_{};
   std::mutex buckets_mutex_{};
-  // Orders update_credentials() against close() moving session_ and session_manager_ out.
+  // Orders update_credentials() against do_open() constructing session_, and against close() moving
+  // session_ and session_manager_ out.
   std::mutex update_credentials_mutex_{};
   std::map<std::string, std::shared_ptr<bucket>> buckets_{};
   couchbase::core::origin origin_{};
@@ -1924,10 +2162,64 @@ private:
   std::atomic_bool stopped_{ false };
   std::mutex close_hooks_mutex_{};
   std::vector<std::pair<std::weak_ptr<void>, utils::movable_function<void()>>> close_hooks_{};
+  std::mutex deferred_until_open_mutex_{};
+  bool opening_{ false };
+  // Each entry's resume holds this cluster until it runs, as session_'s bootstrap callback does.
+  // close() runs them, so the io_context must outlive the cluster and still be running when
+  // close() is called.
+  std::list<std::shared_ptr<deferred_request>> deferred_until_open_{};
+  std::mutex dns_srv_open_handler_mutex_{};
+  utils::movable_function<void(std::error_code)> dns_srv_open_handler_{};
+  // Taken by origin(), update_credentials() and the writes to origin_ that can overlap them: the
+  // assignment in open(), and the DNS SRV and bootstrap callbacks.
+  mutable std::mutex origin_mutex_{};
   std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter_{
     std::make_shared<core::app_telemetry_meter>()
   };
 };
+
+namespace
+{
+// Holds a replica read issued while open() bootstraps, as cluster_impl::execute() holds a
+// key-value request. These reach the bucket through open_bucket(), which carries no deadline.
+// `make_error` builds the response for a request whose timeout passes first.
+template<typename Request, typename Handler, typename MakeError>
+auto
+defer_replica_read(const cluster& self,
+                   const std::shared_ptr<cluster_impl>& impl,
+                   Request& request,
+                   Handler& handler,
+                   MakeError make_error) -> bool
+{
+  const auto deadline =
+    std::chrono::steady_clock::now() +
+    request.timeout.value_or(impl->default_timeout_for(service_type::key_value));
+  return impl->defer_until_open(
+    [&] {
+      return [self,
+              deadline,
+              request = std::move(request),
+              handler = std::move(handler),
+              make_error = std::move(make_error)](std::error_code ec) mutable {
+        if (ec) {
+          return handler(make_error(request, ec));
+        }
+        request.timeout = remaining_until(deadline);
+        self.execute(std::move(request), std::move(handler));
+      };
+    },
+    deadline);
+}
+
+// The response for a subdocument replica read that did not run.
+template<typename Response, typename Request>
+auto
+subdocument_replica_error(const Request& request, std::error_code ec) -> Response
+{
+  return Response{ make_subdocument_error_context(
+    make_key_value_error_context(ec, request.id), ec, {}, {}, false) };
+}
+} // namespace
 
 cluster::cluster(asio::io_context& ctx)
   : impl_{ std::make_shared<cluster_impl>(ctx) }
@@ -2093,6 +2385,11 @@ cluster::execute(
     return handler(operations::get_all_replicas_response{
       make_key_value_error_context(errc::common::feature_not_available, request.id) });
   }
+  if (defer_replica_read(*this, impl_, request, handler, [](const auto& r, std::error_code ec) {
+        return operations::get_all_replicas_response{ make_key_value_error_context(ec, r.id) };
+      })) {
+    return;
+  }
   auto bucket_name = request.id.bucket();
   return open_bucket(
     bucket_name,
@@ -2127,6 +2424,11 @@ cluster::execute(
   if (impl_->is_protostellar()) {
     return handler(operations::get_any_replica_response{
       make_key_value_error_context(errc::common::feature_not_available, request.id) });
+  }
+  if (defer_replica_read(*this, impl_, request, handler, [](const auto& r, std::error_code ec) {
+        return operations::get_any_replica_response{ make_key_value_error_context(ec, r.id) };
+      })) {
+    return;
   }
   auto bucket_name = request.id.bucket();
   return open_bucket(
@@ -2181,6 +2483,11 @@ cluster::execute(
       {},
       false) });
   }
+  if (defer_replica_read(*this, impl_, request, handler, [](const auto& r, std::error_code ec) {
+        return subdocument_replica_error<operations::lookup_in_any_replica_response>(r, ec);
+      })) {
+    return;
+  }
   return request.execute(impl_, std::move(handler));
 }
 
@@ -2196,6 +2503,11 @@ cluster::execute(
       {},
       {},
       false) });
+  }
+  if (defer_replica_read(*this, impl_, request, handler, [](const auto& r, std::error_code ec) {
+        return subdocument_replica_error<operations::lookup_in_all_replicas_response>(r, ec);
+      })) {
+    return;
   }
   return request.execute(impl_, std::move(handler));
 }
@@ -2226,6 +2538,30 @@ cluster::query_stream(operations::query_request request,
                       utils::movable_function<void(couchbase::core::query_stream,
                                                    error_context::query)>&& handler) const
 {
+  if (const auto deadline =
+        std::chrono::steady_clock::now() +
+        request.timeout.value_or(impl_->default_timeout_for(service_type::query));
+      impl_->defer_until_open(
+        [&] {
+          return
+            [self = *this, deadline, request = std::move(request), handler = std::move(handler)](
+              std::error_code ec) mutable {
+              if (ec) {
+                error_context::query ctx{};
+                ctx.ec = ec;
+                ctx.statement = request.statement;
+                ctx.client_context_id = request.client_context_id.has_value()
+                                          ? *request.client_context_id
+                                          : uuid::to_string(uuid::random());
+                return handler({}, std::move(ctx));
+              }
+              request.timeout = remaining_until(deadline);
+              self.query_stream(std::move(request), std::move(handler));
+            };
+        },
+        deadline)) {
+    return;
+  }
   // Mirror operations::query_request::encode_to: use_replica is only honored when the cluster
   // advertises read-from-replica support, otherwise the request is rejected up front. Rejected here
   // means nothing was dispatched, so the context can only describe the request itself.
@@ -2269,6 +2605,30 @@ cluster::analytics_query_stream(
   utils::movable_function<void(couchbase::core::analytics_stream, error_context::analytics)>&&
     handler) const
 {
+  if (const auto deadline =
+        std::chrono::steady_clock::now() +
+        request.timeout.value_or(impl_->default_timeout_for(service_type::analytics));
+      impl_->defer_until_open(
+        [&] {
+          return
+            [self = *this, deadline, request = std::move(request), handler = std::move(handler)](
+              std::error_code ec) mutable {
+              if (ec) {
+                error_context::analytics ctx{};
+                ctx.ec = ec;
+                ctx.statement = request.statement;
+                ctx.client_context_id = request.client_context_id.has_value()
+                                          ? *request.client_context_id
+                                          : uuid::to_string(uuid::random());
+                return handler({}, std::move(ctx));
+              }
+              request.timeout = remaining_until(deadline);
+              self.analytics_query_stream(std::move(request), std::move(handler));
+            };
+        },
+        deadline)) {
+    return;
+  }
   auto cluster_opts = impl_->origin().second.options();
   auto default_timeout = cluster_opts.default_timeout_for(service_type::analytics);
   http_component http{ impl_->io_context(), core_sdk_shim{ *this } };

@@ -24,9 +24,12 @@
 
 #include "couchbase/cluster.hxx"
 
+#include "core/analytics_stream.hxx"
 #include "core/metrics/meter_wrapper.hxx"
+#include "core/operations/document_analytics.hxx"
 #include "core/operations/document_append.hxx"
 #include "core/operations/document_decrement.hxx"
+#include "core/operations/document_get.hxx"
 #include "core/operations/document_increment.hxx"
 #include "core/operations/document_insert.hxx"
 #include "core/operations/document_mutate_in.hxx"
@@ -35,8 +38,22 @@
 #include "core/operations/document_remove.hxx"
 #include "core/operations/document_replace.hxx"
 #include "core/operations/document_upsert.hxx"
+#include "core/operations/management/collection_create.hxx"
+#include "core/query_stream.hxx"
 #include "core/tracing/tracer_wrapper.hxx"
 #include "core/utils/connection_string.hxx"
+
+#include <asio/ip/tcp.hpp>
+#include <asio/ip/udp.hpp>
+
+#include <spdlog/fmt/bundled/format.h>
+
+#include <atomic>
+#include <cstddef>
+#include <future>
+#include <string>
+#include <thread>
+#include <tuple>
 
 TEST_CASE("integration: connecting with empty bootstrap nodes list", "[integration]")
 {
@@ -329,4 +346,267 @@ TEST_CASE("integration: cluster::tracer and meter return non-null shared_ptr by 
   std::shared_ptr<couchbase::core::metrics::meter_wrapper> meter = integration.cluster.meter();
   CHECK(tracer != nullptr);
   CHECK(meter != nullptr);
+}
+
+TEST_CASE("integration: a request whose deadline passes while the open handler runs times out",
+          "[integration]")
+{
+  test::utils::init_logger();
+  asio::io_context io{};
+  auto ctx = test::utils::test_context::load_from_environment();
+  auto origin = couchbase::core::origin(
+    ctx.build_auth(), couchbase::core::utils::parse_connection_string(ctx.connection_string));
+  couchbase::core::cluster cluster(io);
+  auto io_thread = std::thread([&io]() {
+    io.run();
+  });
+
+  // The open handler runs on the IO thread before held requests resume, so no timer callback can
+  // run while it is blocked. A request issued then is held, and its deadline passes in the hold.
+  auto entered = std::make_shared<std::promise<std::error_code>>();
+  auto entered_future = entered->get_future();
+  auto release = std::make_shared<std::promise<void>>();
+  cluster.open(origin, [entered, released = release->get_future().share()](std::error_code ec) {
+    entered->set_value(ec);
+    released.wait();
+  });
+  const auto open_ec = entered_future.get();
+
+  // A dispatched request for a missing bucket fails with bucket_not_found, so that code is what
+  // a request resumed past its deadline would report.
+  couchbase::core::operations::get_request request{ couchbase::core::document_id{
+    "no_such_bucket", "_default", "_default", "held-past-deadline" } };
+  request.timeout = std::chrono::milliseconds{ 100 };
+  auto response = std::make_shared<std::promise<std::error_code>>();
+  auto response_future = response->get_future();
+  cluster.execute(request, [response](couchbase::core::operations::get_response&& resp) {
+    response->set_value(resp.ctx.ec());
+  });
+  std::this_thread::sleep_for(5 * request.timeout.value());
+  release->set_value();
+
+  const auto response_ec = response_future.get();
+  test::utils::close_cluster(cluster);
+  io_thread.join();
+
+  REQUIRE_SUCCESS(open_ec);
+  REQUIRE(response_ec == couchbase::errc::common::unambiguous_timeout);
+}
+
+TEST_CASE("integration: requests held by the bootstrap report their client_context_id",
+          "[integration]")
+{
+  test::utils::init_logger();
+  asio::io_context io{};
+
+  // Completes the TCP handshake from its backlog and never answers, so the bootstrap runs until
+  // bootstrap_timeout and every request times out while held.
+  asio::ip::tcp::acceptor silent_seed(io, { asio::ip::make_address("127.0.0.1"), 0 });
+  auto origin = couchbase::core::origin(
+    {},
+    couchbase::core::utils::parse_connection_string(fmt::format(
+      "couchbase://127.0.0.1:{}?bootstrap_timeout=20000", silent_seed.local_endpoint().port())));
+  couchbase::core::cluster cluster(io);
+  auto io_thread = std::thread([&io]() {
+    io.run();
+  });
+  cluster.open(origin, [](std::error_code /* the bootstrap times out */) {
+  });
+
+  couchbase::core::operations::query_request query{ "SELECT 1" };
+  query.client_context_id = "held-query-stream";
+  query.timeout = std::chrono::milliseconds{ 200 };
+  auto query_ctx = std::make_shared<std::promise<couchbase::core::error_context::query>>();
+  auto query_future = query_ctx->get_future();
+  cluster.query_stream(std::move(query),
+                       [query_ctx](couchbase::core::query_stream /* never opened */,
+                                   couchbase::core::error_context::query ctx) {
+                         query_ctx->set_value(std::move(ctx));
+                       });
+
+  couchbase::core::operations::analytics_request analytics{};
+  analytics.statement = "SELECT 1";
+  analytics.client_context_id = "held-analytics-stream";
+  analytics.timeout = std::chrono::milliseconds{ 200 };
+  auto analytics_ctx = std::make_shared<std::promise<couchbase::core::error_context::analytics>>();
+  auto analytics_future = analytics_ctx->get_future();
+  cluster.analytics_query_stream(
+    std::move(analytics),
+    [analytics_ctx](couchbase::core::analytics_stream /* never opened */,
+                    couchbase::core::error_context::analytics ctx) {
+      analytics_ctx->set_value(std::move(ctx));
+    });
+
+  couchbase::core::operations::query_request plain_query{ "SELECT 1" };
+  plain_query.client_context_id = "held-query";
+  plain_query.timeout = std::chrono::milliseconds{ 200 };
+  auto plain_query_ctx = std::make_shared<std::promise<couchbase::core::error_context::query>>();
+  auto plain_query_future = plain_query_ctx->get_future();
+  cluster.execute(std::move(plain_query),
+                  [plain_query_ctx](couchbase::core::operations::query_response&& resp) {
+                    plain_query_ctx->set_value(std::move(resp.ctx));
+                  });
+
+  couchbase::core::operations::analytics_request plain_analytics{};
+  plain_analytics.statement = "SELECT 1";
+  plain_analytics.client_context_id = "held-analytics";
+  plain_analytics.timeout = std::chrono::milliseconds{ 200 };
+  auto plain_analytics_ctx =
+    std::make_shared<std::promise<couchbase::core::error_context::analytics>>();
+  auto plain_analytics_future = plain_analytics_ctx->get_future();
+  cluster.execute(std::move(plain_analytics),
+                  [plain_analytics_ctx](couchbase::core::operations::analytics_response&& resp) {
+                    plain_analytics_ctx->set_value(std::move(resp.ctx));
+                  });
+
+  const auto query_result = query_future.get();
+  const auto analytics_result = analytics_future.get();
+  const auto plain_query_result = plain_query_future.get();
+  const auto plain_analytics_result = plain_analytics_future.get();
+  test::utils::close_cluster(cluster);
+  io.stop();
+  io_thread.join();
+
+  REQUIRE(query_result.ec == couchbase::errc::common::unambiguous_timeout);
+  REQUIRE(query_result.client_context_id == "held-query-stream");
+  REQUIRE(analytics_result.ec == couchbase::errc::common::unambiguous_timeout);
+  REQUIRE(analytics_result.client_context_id == "held-analytics-stream");
+  REQUIRE(plain_query_result.ec == couchbase::errc::common::unambiguous_timeout);
+  REQUIRE(plain_query_result.client_context_id == "held-query");
+  REQUIRE(plain_analytics_result.ec == couchbase::errc::common::unambiguous_timeout);
+  REQUIRE(plain_analytics_result.client_context_id == "held-analytics");
+}
+
+TEST_CASE("integration: a capability-checked request held by the bootstrap times out on schedule",
+          "[integration]")
+{
+  test::utils::init_logger();
+  asio::io_context io{};
+
+  // Completes the TCP handshake from its backlog and never answers, so the bootstrap runs until
+  // bootstrap_timeout.
+  asio::ip::tcp::acceptor silent_seed(io, { asio::ip::make_address("127.0.0.1"), 0 });
+  const auto bootstrap_timeout = std::chrono::seconds{ 20 };
+  auto origin = couchbase::core::origin({},
+                                        couchbase::core::utils::parse_connection_string(fmt::format(
+                                          "couchbase://127.0.0.1:{}?bootstrap_timeout={}",
+                                          silent_seed.local_endpoint().port(),
+                                          std::chrono::milliseconds{ bootstrap_timeout }.count())));
+  couchbase::core::cluster cluster(io);
+  auto io_thread = std::thread([&io]() {
+    io.run();
+  });
+  cluster.open(origin, [](std::error_code /* the bootstrap times out */) {
+  });
+
+  // `history` routes it through the bucket capability check, which opens the bucket first.
+  couchbase::core::operations::management::collection_create_request request{ "default",
+                                                                              "_default",
+                                                                              "held-by-bootstrap" };
+  request.history = true;
+  request.timeout = std::chrono::seconds{ 1 };
+  auto response = std::make_shared<std::promise<std::error_code>>();
+  auto response_future = response->get_future();
+  const auto start = std::chrono::steady_clock::now();
+  cluster.execute(
+    request,
+    [response](couchbase::core::operations::management::collection_create_response&& resp) {
+      response->set_value(resp.ctx.ec);
+    });
+
+  const auto response_ec = response_future.get();
+  const auto elapsed = std::chrono::steady_clock::now() - start;
+  test::utils::close_cluster(cluster);
+  io.stop();
+  io_thread.join();
+
+  REQUIRE(response_ec == couchbase::errc::common::unambiguous_timeout);
+  REQUIRE(elapsed < bootstrap_timeout / 2);
+}
+
+TEST_CASE("integration: closing a cluster during its DNS SRV lookup completes the open",
+          "[integration]")
+{
+  test::utils::init_logger();
+  asio::io_context io{};
+
+  // A nameserver that never answers. The lookup falls back from UDP to TCP on the same port, so
+  // both are held: the UDP socket is never read and the TCP listener never accepts.
+  asio::ip::udp::socket silent_udp(io, { asio::ip::make_address("127.0.0.1"), 0 });
+  const auto dns_port = silent_udp.local_endpoint().port();
+  asio::ip::tcp::acceptor silent_tcp(io, { asio::ip::make_address("127.0.0.1"), dns_port });
+  const auto dns_timeout = std::chrono::seconds{ 60 };
+
+  auto connstr = couchbase::core::utils::parse_connection_string("couchbase://srv.example.invalid");
+  REQUIRE(connstr.options.enable_dns_srv);
+  connstr.options.dns_config =
+    couchbase::core::io::dns::dns_config{ "127.0.0.1", dns_port, dns_timeout };
+  auto origin = couchbase::core::origin({}, connstr);
+  couchbase::core::cluster cluster(io);
+  auto io_thread = std::thread([&io]() {
+    io.run();
+  });
+
+  auto opened = std::make_shared<std::promise<std::error_code>>();
+  auto opened_future = opened->get_future();
+  const auto start = std::chrono::steady_clock::now();
+  cluster.open(origin, [opened](std::error_code ec) {
+    opened->set_value(ec);
+  });
+  test::utils::close_cluster(cluster);
+
+  const auto status = opened_future.wait_for(dns_timeout / 2);
+  const auto elapsed = std::chrono::steady_clock::now() - start;
+  std::error_code open_ec{};
+  if (status == std::future_status::ready) {
+    open_ec = opened_future.get();
+  }
+  io.stop();
+  io_thread.join();
+
+  REQUIRE(status == std::future_status::ready);
+  REQUIRE(open_ec == couchbase::errc::network::cluster_closed);
+  REQUIRE(elapsed < dns_timeout / 2);
+}
+
+TEST_CASE("integration: updating credentials while open() configures TLS does not race",
+          "[integration]")
+{
+  test::utils::init_logger();
+  asio::io_context io{};
+
+  // The seed never answers, so open() stays in its bootstrap while the credentials change.
+  asio::ip::tcp::acceptor silent_seed(io, { asio::ip::make_address("127.0.0.1"), 0 });
+  auto origin = couchbase::core::origin(
+    couchbase::core::cluster_credentials{ "user", std::string(64, 'a') },
+    couchbase::core::utils::parse_connection_string(fmt::format(
+      "couchbases://127.0.0.1:{}?tls_verify=none", silent_seed.local_endpoint().port())));
+  couchbase::core::cluster cluster(io);
+  auto io_thread = std::thread([&io]() {
+    io.run();
+  });
+
+  // Catches update_credentials() rewriting origin_ while do_open(), inline in open(), configures
+  // TLS. ThreadSanitizer reports it as a data race.
+  std::atomic_bool stop{ false };
+  std::promise<void> updating;
+  auto updater = std::thread([&cluster, &stop, &updating]() {
+    for (std::size_t i = 0; !stop; ++i) {
+      std::ignore = cluster.update_credentials(
+        couchbase::core::cluster_credentials{ "user", std::string(64 + (i % 64), 'b') });
+      if (i == 0) {
+        updating.set_value();
+      }
+    }
+  });
+  updating.get_future().wait();
+  cluster.open(origin, [](std::error_code /* the bootstrap does not finish */) {
+  });
+  std::this_thread::sleep_for(std::chrono::milliseconds{ 500 });
+  stop = true;
+  updater.join();
+  test::utils::close_cluster(cluster);
+  io.stop();
+  io_thread.join();
+  SUCCEED("open() configured TLS while the credentials changed");
 }
