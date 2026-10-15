@@ -30,6 +30,7 @@
 #include "core/bucket.hxx"
 #include "core/bucket_unit_test_api.hxx"
 #include "core/mcbp/queue_request.hxx"
+#include "core/mcbp/queue_response.hxx"
 #include "core/origin.hxx"
 #include "core/protocol/hello_feature.hxx"
 #include "core/tls_context_provider.hxx"
@@ -181,6 +182,80 @@ a_cancelled_non_idempotent_request_is_completed_without_consulting_a_retry(
   assert_true(invoked.load(), "the caller is answered rather than parked on a retry");
   assert_eq(observed, couchbase::errc::common::request_canceled, "the cancellation is the answer");
 }
+
+auto
+make_response(couchbase::core::key_value_status_code status)
+  -> std::shared_ptr<couchbase::core::mcbp::queue_response>
+{
+  couchbase::core::mcbp::packet packet{};
+  packet.status_code_ = status;
+  return std::make_shared<couchbase::core::mcbp::queue_response>(std::move(packet));
+}
+
+void
+get_collection_id_answered_unknown_collection_is_completed([[maybe_unused]] context& ctx)
+{
+  asio::io_context io;
+  couchbase::core::tls_context_provider tls{};
+  auto bucket = make_detached_bucket(io, tls);
+
+  std::atomic_bool invoked{ false };
+  std::error_code observed{};
+  auto request = std::make_shared<queue_request>(
+    couchbase::core::protocol::magic::client_request,
+    couchbase::core::protocol::client_opcode::get_collection_id,
+    [&invoked, &observed](auto /* response */, auto /* request */, std::error_code ec) {
+      observed = ec;
+      invoked.store(true);
+    });
+  // key_value_collection_outdated is retried without consulting the strategy, so only the
+  // exclusion keeps the request from being parked.
+  request->retry_strategy_ = std::make_shared<retry_everything>();
+
+  bucket->unit_test_api().resolve_response(
+    request,
+    make_response(couchbase::core::key_value_status_code::unknown_collection),
+    couchbase::errc::common::collection_not_found,
+    couchbase::retry_reason::do_not_retry,
+    {});
+
+  // Regression: a retried GetCollectionID for a missing collection ends only at its deadline, and
+  // the collection id cache sends it with none.
+  assert_true(invoked.load(), "GetCollectionID is answered rather than retried");
+  assert_eq(observed,
+            couchbase::errc::common::collection_not_found,
+            "the missing collection is the answer");
+}
+
+void
+data_request_answered_unknown_collection_is_retried([[maybe_unused]] context& ctx)
+{
+  asio::io_context io;
+  couchbase::core::tls_context_provider tls{};
+  auto bucket = make_detached_bucket(io, tls);
+
+  std::atomic_bool invoked{ false };
+  auto request = std::make_shared<queue_request>(
+    couchbase::core::protocol::magic::client_request,
+    couchbase::core::protocol::client_opcode::range_scan_create,
+    [&invoked](auto /* response */, auto /* request */, auto /* error */) {
+      invoked.store(true);
+    });
+
+  bucket->unit_test_api().resolve_response(
+    request,
+    make_response(couchbase::core::key_value_status_code::unknown_collection),
+    couchbase::errc::common::collection_not_found,
+    couchbase::retry_reason::do_not_retry,
+    {});
+
+  assert_false(invoked.load(), "any other command takes the collection-outdated retry");
+  assert_true(
+    request->retry_reasons().count(couchbase::retry_reason::key_value_collection_outdated) > 0,
+    "the retry is recorded as collection outdated");
+
+  request->cancel(couchbase::errc::common::request_canceled);
+}
 } // namespace
 
 auto
@@ -194,6 +269,8 @@ tests() -> test_suite
       { CASE(a_cancelled_non_idempotent_request_is_completed_without_consulting_a_retry),
         {},
         timeout::fast },
+      { CASE(get_collection_id_answered_unknown_collection_is_completed), {}, timeout::fast },
+      { CASE(data_request_answered_unknown_collection_is_retried), {}, timeout::fast },
     },
   };
 }

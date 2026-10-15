@@ -172,6 +172,17 @@ public:
     } else {
       switch (status) {
         case key_value_status_code::unknown_collection:
+          /*
+           * SDK-RFC 0049 (SDK3 Retry Handling), section "Response Code Retry List":
+           * > Explicitly excluded here is the GetCollectionID KV command, since it returns 0x88 if
+           * > the collection is not found.
+           *
+           * The request completes with collection_not_found.
+           */
+          if (req->command_ == protocol::client_opcode::get_collection_id) {
+            reason = retry_reason::do_not_retry;
+            break;
+          }
           /**
            * The server does not recognise the collection id we sent. This covers two cases:
            *
