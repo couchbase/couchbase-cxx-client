@@ -30,6 +30,7 @@
 #include "core/operations/document_append.hxx"
 #include "core/operations/document_decrement.hxx"
 #include "core/operations/document_get.hxx"
+#include "core/operations/document_get_any_replica.hxx"
 #include "core/operations/document_increment.hxx"
 #include "core/operations/document_insert.hxx"
 #include "core/operations/document_mutate_in.hxx"
@@ -42,9 +43,11 @@
 #include "core/query_stream.hxx"
 #include "core/tracing/tracer_wrapper.hxx"
 #include "core/utils/connection_string.hxx"
+#include "core/utils/json.hxx"
 
 #include <asio/ip/tcp.hpp>
 #include <asio/ip/udp.hpp>
+#include <asio/post.hpp>
 
 #include <spdlog/fmt/bundled/format.h>
 
@@ -609,4 +612,166 @@ TEST_CASE("integration: updating credentials while open() configures TLS does no
   io.stop();
   io_thread.join();
   SUCCEED("open() configured TLS while the credentials changed");
+}
+
+namespace
+{
+// Opens a core cluster that has opened no bucket, blocks its IO thread, issues `request`, and
+// releases the thread after `blocked`. While the thread is blocked no bucket bootstrap and no timer
+// can run, so `blocked` is spent waiting for the bucket from the request's point of view.
+template<typename Request>
+auto
+issue_while_io_blocked(Request request,
+                       std::chrono::milliseconds blocked,
+                       bool open_bucket_first = false,
+                       std::chrono::steady_clock::duration* issued_to_completed = nullptr) ->
+  typename Request::response_type
+{
+  using response_type = typename Request::response_type;
+  asio::io_context io{};
+  auto ctx = test::utils::test_context::load_from_environment();
+  auto origin = couchbase::core::origin(
+    ctx.build_auth(), couchbase::core::utils::parse_connection_string(ctx.connection_string));
+  couchbase::core::cluster cluster(io);
+  auto io_thread = std::thread([&io]() {
+    io.run();
+  });
+  auto opened = std::make_shared<std::promise<std::error_code>>();
+  auto opened_future = opened->get_future();
+  cluster.open(origin, [opened](std::error_code ec) {
+    opened->set_value(ec);
+  });
+  const auto open_ec = opened_future.get();
+  std::error_code bucket_ec{};
+  if (!open_ec && open_bucket_first) {
+    auto bucket_opened = std::make_shared<std::promise<std::error_code>>();
+    auto bucket_future = bucket_opened->get_future();
+    cluster.open_bucket(ctx.bucket, [bucket_opened](std::error_code ec) {
+      bucket_opened->set_value(ec);
+    });
+    bucket_ec = bucket_future.get();
+  }
+  if (open_ec || bucket_ec) {
+    test::utils::close_cluster(cluster);
+    io_thread.join();
+    REQUIRE_SUCCESS(open_ec);
+    REQUIRE_SUCCESS(bucket_ec);
+  }
+
+  std::promise<void> entered;
+  std::promise<void> release;
+  asio::post(io, [&entered, released = release.get_future().share()] {
+    entered.set_value();
+    released.wait();
+  });
+  entered.get_future().wait();
+
+  auto response = std::make_shared<std::promise<response_type>>();
+  auto response_future = response->get_future();
+  const auto issued = std::chrono::steady_clock::now();
+  auto completed = std::make_shared<std::chrono::steady_clock::time_point>();
+  cluster.execute(std::move(request), [response, completed](response_type&& resp) {
+    *completed = std::chrono::steady_clock::now();
+    response->set_value(std::move(resp));
+  });
+  std::this_thread::sleep_for(blocked);
+  release.set_value();
+
+  auto resp = response_future.get();
+  if (issued_to_completed != nullptr) {
+    *issued_to_completed = *completed - issued;
+  }
+  test::utils::close_cluster(cluster);
+  io_thread.join();
+  return resp;
+}
+
+auto
+document_in_default_bucket(const std::string& prefix) -> couchbase::core::document_id
+{
+  return { test::utils::test_context::load_from_environment().bucket,
+           "_default",
+           "_default",
+           test::utils::uniq_id(prefix) };
+}
+} // namespace
+
+TEST_CASE("integration: a key-value request's timeout counts the wait for its bucket to open",
+          "[integration]")
+{
+  test::utils::init_logger();
+  couchbase::core::operations::get_request request{ document_in_default_bucket("bucket-wait") };
+  request.timeout = std::chrono::milliseconds{ 200 };
+
+  auto resp = issue_while_io_blocked(request, std::chrono::seconds{ 1 });
+
+  REQUIRE(resp.ctx.ec() == couchbase::errc::common::unambiguous_timeout);
+}
+
+TEST_CASE("integration: a durable mutation's floor counts from when it is issued", "[integration]")
+{
+  {
+    test::utils::integration_test_guard integration;
+    if (!integration.cluster_version().supports_enhanced_durability()) {
+      SKIP("cluster does not support enhanced durability");
+    }
+  }
+  test::utils::init_logger();
+  const tao::json::value value{ { "a", 1 } };
+  couchbase::core::operations::upsert_request request{
+    document_in_default_bucket("durable-floor"),
+    couchbase::core::utils::json::generate_binary(value)
+  };
+  request.durability_level = couchbase::durability_level::majority;
+  request.timeout = std::chrono::milliseconds{ 100 };
+
+  SECTION("the floor replaces a shorter timeout")
+  {
+    // Blocked past the request's own 100 ms. A slow server may still time the write out, but
+    // not before the 1.5 s floor, counted from when the request was issued.
+    std::chrono::steady_clock::duration elapsed{};
+    auto resp = issue_while_io_blocked(request, std::chrono::milliseconds{ 200 }, true, &elapsed);
+    // An upsert that times out after it was sent reports ambiguous_timeout.
+    if (resp.ctx.ec() == couchbase::errc::common::unambiguous_timeout ||
+        resp.ctx.ec() == couchbase::errc::common::ambiguous_timeout) {
+      REQUIRE(elapsed >= std::chrono::milliseconds{ 1'400 });
+    } else {
+      REQUIRE_SUCCESS(resp.ctx.ec());
+    }
+  }
+
+  SECTION("waiting for the bucket spends the floor")
+  {
+    auto resp = issue_while_io_blocked(request, std::chrono::seconds{ 2 });
+    REQUIRE(resp.ctx.ec() == couchbase::errc::common::unambiguous_timeout);
+  }
+}
+
+TEST_CASE("integration: a replica read's timeout counts the wait for its bucket", "[integration]")
+{
+  test::utils::init_logger();
+  couchbase::core::operations::get_any_replica_request request{ document_in_default_bucket(
+    "replica-wait") };
+  request.timeout = std::chrono::milliseconds{ 200 };
+
+  auto resp = issue_while_io_blocked(request, std::chrono::seconds{ 1 });
+
+  REQUIRE(resp.ctx.ec() == couchbase::errc::common::unambiguous_timeout);
+}
+
+TEST_CASE("integration: a capability-checked request's timeout counts the wait for its bucket",
+          "[integration]")
+{
+  test::utils::init_logger();
+  couchbase::core::operations::management::collection_create_request request{
+    test::utils::test_context::load_from_environment().bucket,
+    "_default",
+    test::utils::uniq_id("capability-wait")
+  };
+  request.history = true;
+  request.timeout = std::chrono::milliseconds{ 200 };
+
+  auto resp = issue_while_io_blocked(request, std::chrono::seconds{ 1 });
+
+  REQUIRE(resp.ctx.ec == couchbase::errc::common::unambiguous_timeout);
 }

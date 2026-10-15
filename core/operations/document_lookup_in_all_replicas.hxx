@@ -25,13 +25,16 @@
 #include "core/logger/redaction.hxx"
 #include "core/operations/document_lookup_in.hxx"
 #include "core/operations/operation_traits.hxx"
+#include "core/service_type.hxx"
 #include "core/tracing/constants.hxx"
+#include "core/utils/deadline.hxx"
 #include "core/utils/movable_function.hxx"
 
 #include <couchbase/codec/encoded_value.hxx>
 #include <couchbase/error_codes.hxx>
 #include <couchbase/node_id.hxx>
 
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -78,271 +81,256 @@ struct lookup_in_all_replicas_request {
   template<typename Core, typename Handler>
   void execute(Core core, Handler handler)
   {
-    core->open_bucket(
+    const auto deadline = std::chrono::steady_clock::now() +
+                          timeout.value_or(core->default_timeout_for(service_type::key_value));
+    core->with_bucket_configuration(
       id.bucket(),
+      deadline,
       [core,
        id = id,
-       timeout = timeout,
+       deadline,
        specs = specs,
        parent_span = parent_span,
        read_preference = read_preference,
        access_deleted = access_deleted,
-       h = std::forward<Handler>(handler)](std::error_code ec) mutable {
+       h = std::forward<Handler>(handler)](
+        std::error_code ec, std::shared_ptr<topology::configuration> config) mutable {
         if (ec) {
-          std::optional<std::string> first_error_path{};
-          std::optional<std::size_t> first_error_index{};
-          return h(
-            response_type{ make_subdocument_error_context(make_key_value_error_context(ec, id),
-                                                          ec,
-                                                          first_error_path,
-                                                          first_error_index,
-                                                          false) });
+          return h(response_type{ make_subdocument_error_context(
+            make_key_value_error_context(ec, id), ec, {}, {}, false) });
         }
-        core->with_bucket_configuration(
-          id.bucket(),
-          [core,
-           id,
-           timeout,
-           specs,
-           parent_span,
-           read_preference,
-           access_deleted,
-           h = std::forward<Handler>(h)](std::error_code ec,
-                                         std::shared_ptr<topology::configuration> config) mutable {
-            if (!config->capabilities.supports_subdoc_read_replica()) {
-              ec = errc::common::feature_not_available;
+        if (!config->capabilities.supports_subdoc_read_replica()) {
+          ec = errc::common::feature_not_available;
+        }
+
+        const auto [e, origin] = core->origin();
+        if (e && !ec) {
+          ec = e;
+        }
+
+        auto nodes =
+          impl::effective_nodes(id, config, read_preference, origin.options().server_group);
+        if (nodes.empty()) {
+          CB_LOG_DEBUG(
+            "Unable to retrieve replicas for \"{}\", server_group={}, number_of_replicas={}",
+            logger::document(id),
+            logger::metadata(origin.options().server_group),
+            config->num_replicas.value_or(0));
+          ec = errc::key_value::document_irretrievable;
+        }
+
+        if (!ec && specs.empty()) {
+          ec = errc::common::invalid_argument;
+        }
+
+        if (ec) {
+          return h(response_type{ make_subdocument_error_context(
+            make_key_value_error_context(ec, id), ec, {}, {}, false) });
+        }
+
+        using handler_type = utils::movable_function<void(response_type)>;
+
+        struct replica_context {
+          replica_context(handler_type handler,
+                          std::size_t expected_responses,
+                          std::vector<couchbase::core::impl::subdoc::command> specs)
+            : handler_(std::move(handler))
+            , expected_responses_(expected_responses)
+            , specs_(std::move(specs))
+          {
+          }
+
+          void append_synthetic_error_fields(lookup_in_all_replicas_response::entry& entry,
+                                             std::error_code ec,
+                                             std::optional<key_value_status_code> status_code) const
+          {
+            entry.fields.reserve(specs_.size());
+            for (std::size_t i = 0; i < specs_.size(); ++i) {
+              const auto& spec = specs_[i];
+              lookup_in_all_replicas_response::entry::lookup_in_entry error_field{};
+              error_field.path = spec.path_;
+              error_field.ec = ec;
+              error_field.status = status_code.value_or(key_value_status_code::invalid);
+              error_field.original_index = i;
+              error_field.exists = false;
+              error_field.opcode = static_cast<protocol::subdoc_opcode>(spec.opcode_);
+              entry.fields.emplace_back(std::move(error_field));
             }
+          }
 
-            const auto [e, origin] = core->origin();
-            if (e && !ec) {
-              ec = e;
-            }
+          handler_type handler_;
+          std::size_t expected_responses_;
+          std::size_t successful_responses_{ 0 };
+          bool done_{ false };
+          std::mutex mutex_{};
+          std::vector<lookup_in_all_replicas_response::entry> result_{};
+          std::vector<couchbase::core::impl::subdoc::command> specs_;
+        };
 
-            auto nodes =
-              impl::effective_nodes(id, config, read_preference, origin.options().server_group);
-            if (nodes.empty()) {
-              CB_LOG_DEBUG(
-                "Unable to retrieve replicas for \"{}\", server_group={}, number_of_replicas={}",
-                logger::document(id),
-                logger::metadata(origin.options().server_group),
-                config->num_replicas.value_or(0));
-              ec = errc::key_value::document_irretrievable;
-            }
+        auto ctx = std::make_shared<replica_context>(std::move(h), nodes.size(), specs);
 
-            if (!ec && specs.empty()) {
-              ec = errc::common::invalid_argument;
-            }
+        for (const auto& node : nodes) {
+          auto subop_span =
+            core->tracer()->create_span(node.is_replica ? tracing::operation::mcbp_lookup_in_replica
+                                                        : tracing::operation::mcbp_lookup_in,
+                                        parent_span);
 
-            if (ec) {
-              return h(response_type{ make_subdocument_error_context(
-                make_key_value_error_context(ec, id), ec, {}, {}, false) });
-            }
+          if (subop_span->uses_tags()) {
+            subop_span->add_tag(tracing::attributes::op::service, tracing::service::key_value);
+            subop_span->add_tag(tracing::attributes::op::operation_name,
+                                node.is_replica ? tracing::operation::mcbp_lookup_in_replica
+                                                : tracing::operation::mcbp_lookup_in);
+            subop_span->add_tag(tracing::attributes::op::bucket_name, id.bucket());
+            subop_span->add_tag(tracing::attributes::op::scope_name, id.scope());
+            subop_span->add_tag(tracing::attributes::op::collection_name, id.collection());
+          }
 
-            using handler_type = utils::movable_function<void(response_type)>;
-
-            struct replica_context {
-              replica_context(handler_type handler,
-                              std::size_t expected_responses,
-                              std::vector<couchbase::core::impl::subdoc::command> specs)
-                : handler_(std::move(handler))
-                , expected_responses_(expected_responses)
-                , specs_(std::move(specs))
+          if (node.is_replica) {
+            document_id replica_id{ id };
+            replica_id.node_index(node.index);
+            auto replica_req = impl::lookup_in_replica_request{
+              std::move(replica_id),
+              specs,
+              utils::remaining_until(deadline),
+              subop_span,
+            };
+            replica_req.access_deleted = access_deleted;
+            // CXXCBC-797: Store the requested specs inside replica_context and capture only
+            // the ctx shared pointer in the completion handler. This prevents UAF/dangling
+            // references and avoids repeated vector allocations, while allowing us to construct
+            // synthetic error fields for each requested spec if a node returns a document-level
+            // failure.
+            core->execute(replica_req, [ctx, subop_span](auto&& resp) {
               {
+                if (subop_span->uses_tags()) {
+                  subop_span->add_tag(tracing::attributes::op::retry_count,
+                                      resp.ctx.retry_attempts());
+                }
+                subop_span->end();
               }
-
-              void append_synthetic_error_fields(
-                lookup_in_all_replicas_response::entry& entry,
-                std::error_code ec,
-                std::optional<key_value_status_code> status_code) const
+              handler_type local_handler{};
               {
-                entry.fields.reserve(specs_.size());
-                for (std::size_t i = 0; i < specs_.size(); ++i) {
-                  const auto& spec = specs_[i];
-                  lookup_in_all_replicas_response::entry::lookup_in_entry error_field{};
-                  error_field.path = spec.path_;
-                  error_field.ec = ec;
-                  error_field.status = status_code.value_or(key_value_status_code::invalid);
-                  error_field.original_index = i;
-                  error_field.exists = false;
-                  error_field.opcode = static_cast<protocol::subdoc_opcode>(spec.opcode_);
-                  entry.fields.emplace_back(std::move(error_field));
+                const std::scoped_lock lock(ctx->mutex_);
+                if (ctx->done_) {
+                  return;
+                }
+                --ctx->expected_responses_;
+                lookup_in_all_replicas_response::entry top_entry{};
+                top_entry.cas = resp.cas;
+                top_entry.deleted = resp.deleted;
+                top_entry.is_replica = true;
+                top_entry.dispatched_to_node_id = resp.ctx.last_dispatched_to_node_id();
+
+                if (resp.ctx.ec() && resp.fields.empty()) {
+                  // Document-level error for this replica, and no specific field errors.
+                  // Create synthetic error fields for all requested specs to preserve indices.
+                  ctx->append_synthetic_error_fields(
+                    top_entry, resp.ctx.ec(), resp.ctx.status_code());
+                } else {
+                  // Successful response, or response with field-level errors
+                  ++ctx->successful_responses_;
+                  for (auto& field : resp.fields) {
+                    lookup_in_all_replicas_response::entry::lookup_in_entry lookup_in_entry{};
+                    lookup_in_entry.path = field.path;
+                    lookup_in_entry.value = field.value;
+                    lookup_in_entry.status = field.status;
+                    lookup_in_entry.ec = field.ec;
+                    lookup_in_entry.exists = field.exists;
+                    lookup_in_entry.original_index = field.original_index;
+                    lookup_in_entry.opcode = field.opcode;
+                    top_entry.fields.emplace_back(lookup_in_entry);
+                  }
+                }
+                ctx->result_.emplace_back(std::move(top_entry));
+                if (ctx->expected_responses_ == 0) {
+                  ctx->done_ = true;
+                  if (ctx->successful_responses_ == 0) {
+                    ctx->result_.clear();
+                  }
+                  std::swap(local_handler, ctx->handler_);
                 }
               }
-
-              handler_type handler_;
-              std::size_t expected_responses_;
-              std::size_t successful_responses_{ 0 };
-              bool done_{ false };
-              std::mutex mutex_{};
-              std::vector<lookup_in_all_replicas_response::entry> result_{};
-              std::vector<couchbase::core::impl::subdoc::command> specs_;
-            };
-
-            auto ctx = std::make_shared<replica_context>(std::move(h), nodes.size(), specs);
-
-            for (const auto& node : nodes) {
-              auto subop_span = core->tracer()->create_span(
-                node.is_replica ? tracing::operation::mcbp_lookup_in_replica
-                                : tracing::operation::mcbp_lookup_in,
-                parent_span);
-
-              if (subop_span->uses_tags()) {
-                subop_span->add_tag(tracing::attributes::op::service, tracing::service::key_value);
-                subop_span->add_tag(tracing::attributes::op::operation_name,
-                                    node.is_replica ? tracing::operation::mcbp_lookup_in_replica
-                                                    : tracing::operation::mcbp_lookup_in);
-                subop_span->add_tag(tracing::attributes::op::bucket_name, id.bucket());
-                subop_span->add_tag(tracing::attributes::op::scope_name, id.scope());
-                subop_span->add_tag(tracing::attributes::op::collection_name, id.collection());
+              if (local_handler) {
+                if (ctx->result_.empty()) {
+                  // Return an error only when we have no results from any replica.
+                  return local_handler({ std::move(resp.ctx), {} });
+                }
+                return local_handler({ {}, std::move(ctx->result_) });
               }
-
-              if (node.is_replica) {
-                document_id replica_id{ id };
-                replica_id.node_index(node.index);
-                auto replica_req = impl::lookup_in_replica_request{
-                  std::move(replica_id),
-                  specs,
-                  timeout,
-                  subop_span,
-                };
-                replica_req.access_deleted = access_deleted;
-                // CXXCBC-797: Store the requested specs inside replica_context and capture only
-                // the ctx shared pointer in the completion handler. This prevents UAF/dangling
-                // references and avoids repeated vector allocations, while allowing us to construct
-                // synthetic error fields for each requested spec if a node returns a document-level
-                // failure.
-                core->execute(replica_req, [ctx, subop_span](auto&& resp) {
-                  {
-                    if (subop_span->uses_tags()) {
-                      subop_span->add_tag(tracing::attributes::op::retry_count,
-                                          resp.ctx.retry_attempts());
-                    }
-                    subop_span->end();
+            });
+          } else {
+            core->execute(
+              lookup_in_request{
+                document_id{ id },
+                {},
+                {},
+                false,
+                specs,
+                utils::remaining_until(deadline),
+                io::retry_context<false>{}, // Explicit construction to avoid compiler ambiguity
+                subop_span,
+              },
+              [ctx, subop_span](auto&& resp) {
+                {
+                  if (subop_span->uses_tags()) {
+                    subop_span->add_tag(tracing::attributes::op::retry_count,
+                                        resp.ctx.retry_attempts());
                   }
-                  handler_type local_handler{};
-                  {
-                    const std::scoped_lock lock(ctx->mutex_);
-                    if (ctx->done_) {
-                      return;
-                    }
-                    --ctx->expected_responses_;
-                    lookup_in_all_replicas_response::entry top_entry{};
-                    top_entry.cas = resp.cas;
-                    top_entry.deleted = resp.deleted;
-                    top_entry.is_replica = true;
-                    top_entry.dispatched_to_node_id = resp.ctx.last_dispatched_to_node_id();
+                  subop_span->end();
+                }
+                handler_type local_handler{};
+                {
+                  const std::scoped_lock lock(ctx->mutex_);
+                  if (ctx->done_) {
+                    return;
+                  }
+                  --ctx->expected_responses_;
+                  lookup_in_all_replicas_response::entry top_entry{};
+                  top_entry.cas = resp.cas;
+                  top_entry.deleted = resp.deleted;
+                  top_entry.is_replica = false;
+                  top_entry.dispatched_to_node_id = resp.ctx.last_dispatched_to_node_id();
 
-                    if (resp.ctx.ec() && resp.fields.empty()) {
-                      // Document-level error for this replica, and no specific field errors.
-                      // Create synthetic error fields for all requested specs to preserve indices.
-                      ctx->append_synthetic_error_fields(
-                        top_entry, resp.ctx.ec(), resp.ctx.status_code());
-                    } else {
-                      // Successful response, or response with field-level errors
-                      ++ctx->successful_responses_;
-                      for (auto& field : resp.fields) {
-                        lookup_in_all_replicas_response::entry::lookup_in_entry lookup_in_entry{};
-                        lookup_in_entry.path = field.path;
-                        lookup_in_entry.value = field.value;
-                        lookup_in_entry.status = field.status;
-                        lookup_in_entry.ec = field.ec;
-                        lookup_in_entry.exists = field.exists;
-                        lookup_in_entry.original_index = field.original_index;
-                        lookup_in_entry.opcode = field.opcode;
-                        top_entry.fields.emplace_back(lookup_in_entry);
-                      }
-                    }
-                    ctx->result_.emplace_back(std::move(top_entry));
-                    if (ctx->expected_responses_ == 0) {
-                      ctx->done_ = true;
-                      if (ctx->successful_responses_ == 0) {
-                        ctx->result_.clear();
-                      }
-                      std::swap(local_handler, ctx->handler_);
+                  if (resp.ctx.ec() && resp.fields.empty()) {
+                    // Document-level error for active copy, and no specific field errors.
+                    // Create synthetic error fields for all requested specs to preserve
+                    // indices.
+                    ctx->append_synthetic_error_fields(
+                      top_entry, resp.ctx.ec(), resp.ctx.status_code());
+                  } else {
+                    // Successful response, or response with field-level errors
+                    ++ctx->successful_responses_;
+                    for (auto& field : resp.fields) {
+                      lookup_in_all_replicas_response::entry::lookup_in_entry lookup_in_entry{};
+                      lookup_in_entry.path = field.path;
+                      lookup_in_entry.value = field.value;
+                      lookup_in_entry.status = field.status;
+                      lookup_in_entry.ec = field.ec;
+                      lookup_in_entry.exists = field.exists;
+                      lookup_in_entry.original_index = field.original_index;
+                      lookup_in_entry.opcode = field.opcode;
+                      top_entry.fields.emplace_back(lookup_in_entry);
                     }
                   }
-                  if (local_handler) {
-                    if (ctx->result_.empty()) {
-                      // Return an error only when we have no results from any replica.
-                      return local_handler({ std::move(resp.ctx), {} });
+                  ctx->result_.emplace_back(std::move(top_entry));
+                  if (ctx->expected_responses_ == 0) {
+                    ctx->done_ = true;
+                    if (ctx->successful_responses_ == 0) {
+                      ctx->result_.clear();
                     }
-                    return local_handler({ {}, std::move(ctx->result_) });
+                    std::swap(local_handler, ctx->handler_);
                   }
-                });
-              } else {
-                core->execute(
-                  lookup_in_request{
-                    document_id{ id },
-                    {},
-                    {},
-                    false,
-                    specs,
-                    timeout,
-                    io::retry_context<false>{}, // Explicit construction to avoid compiler ambiguity
-                    subop_span,
-                  },
-                  [ctx, subop_span](auto&& resp) {
-                    {
-                      if (subop_span->uses_tags()) {
-                        subop_span->add_tag(tracing::attributes::op::retry_count,
-                                            resp.ctx.retry_attempts());
-                      }
-                      subop_span->end();
-                    }
-                    handler_type local_handler{};
-                    {
-                      const std::scoped_lock lock(ctx->mutex_);
-                      if (ctx->done_) {
-                        return;
-                      }
-                      --ctx->expected_responses_;
-                      lookup_in_all_replicas_response::entry top_entry{};
-                      top_entry.cas = resp.cas;
-                      top_entry.deleted = resp.deleted;
-                      top_entry.is_replica = false;
-                      top_entry.dispatched_to_node_id = resp.ctx.last_dispatched_to_node_id();
-
-                      if (resp.ctx.ec() && resp.fields.empty()) {
-                        // Document-level error for active copy, and no specific field errors.
-                        // Create synthetic error fields for all requested specs to preserve
-                        // indices.
-                        ctx->append_synthetic_error_fields(
-                          top_entry, resp.ctx.ec(), resp.ctx.status_code());
-                      } else {
-                        // Successful response, or response with field-level errors
-                        ++ctx->successful_responses_;
-                        for (auto& field : resp.fields) {
-                          lookup_in_all_replicas_response::entry::lookup_in_entry lookup_in_entry{};
-                          lookup_in_entry.path = field.path;
-                          lookup_in_entry.value = field.value;
-                          lookup_in_entry.status = field.status;
-                          lookup_in_entry.ec = field.ec;
-                          lookup_in_entry.exists = field.exists;
-                          lookup_in_entry.original_index = field.original_index;
-                          lookup_in_entry.opcode = field.opcode;
-                          top_entry.fields.emplace_back(lookup_in_entry);
-                        }
-                      }
-                      ctx->result_.emplace_back(std::move(top_entry));
-                      if (ctx->expected_responses_ == 0) {
-                        ctx->done_ = true;
-                        if (ctx->successful_responses_ == 0) {
-                          ctx->result_.clear();
-                        }
-                        std::swap(local_handler, ctx->handler_);
-                      }
-                    }
-                    if (local_handler) {
-                      if (ctx->result_.empty()) {
-                        // Return an error only when we have no results from any replica.
-                        return local_handler({ std::move(resp.ctx), {} });
-                      }
-                      return local_handler({ {}, std::move(ctx->result_) });
-                    }
-                  });
-              }
-            }
-          });
+                }
+                if (local_handler) {
+                  if (ctx->result_.empty()) {
+                    // Return an error only when we have no results from any replica.
+                    return local_handler({ std::move(resp.ctx), {} });
+                  }
+                  return local_handler({ {}, std::move(ctx->result_) });
+                }
+              });
+          }
+        }
       });
   }
 };

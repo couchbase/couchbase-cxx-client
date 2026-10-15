@@ -26,13 +26,16 @@
 #include "core/logger/redaction.hxx"
 #include "core/operations/document_lookup_in.hxx"
 #include "core/operations/operation_traits.hxx"
+#include "core/service_type.hxx"
 #include "core/tracing/constants.hxx"
+#include "core/utils/deadline.hxx"
 #include "core/utils/movable_function.hxx"
 
 #include <couchbase/codec/encoded_value.hxx>
 #include <couchbase/error_codes.hxx>
 #include <couchbase/read_preference.hxx>
 
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -75,256 +78,241 @@ struct lookup_in_any_replica_request {
   template<typename Core, typename Handler>
   void execute(Core core, Handler handler)
   {
-    core->open_bucket(
+    const auto deadline = std::chrono::steady_clock::now() +
+                          timeout.value_or(core->default_timeout_for(service_type::key_value));
+    core->with_bucket_configuration(
       id.bucket(),
+      deadline,
       [core,
        id = id,
-       timeout = timeout,
+       deadline,
        specs = specs,
        parent_span = parent_span,
        read_preference = read_preference,
        access_deleted = access_deleted,
-       h = std::forward<Handler>(handler)](std::error_code ec) mutable {
+       h = std::forward<Handler>(handler)](
+        std::error_code ec, std::shared_ptr<topology::configuration> config) mutable {
         if (ec) {
-          std::optional<std::string> first_error_path{};
-          std::optional<std::size_t> first_error_index{};
-          h(response_type{ make_subdocument_error_context(make_key_value_error_context(ec, id),
-                                                          ec,
-                                                          first_error_path,
-                                                          first_error_index,
-                                                          false) });
-          return;
+          return h(response_type{ make_subdocument_error_context(
+            make_key_value_error_context(ec, id), ec, {}, {}, false) });
         }
-        return core->with_bucket_configuration(
-          id.bucket(),
-          [core,
-           id,
-           timeout,
-           specs,
-           parent_span,
-           read_preference,
-           access_deleted,
-           h = std::forward<Handler>(h)](std::error_code ec,
-                                         std::shared_ptr<topology::configuration> config) mutable {
-            if (!config->capabilities.supports_subdoc_read_replica()) {
-              ec = errc::common::feature_not_available;
-            }
-            const auto [e, origin] = core->origin();
-            if (e && !ec) {
-              ec = e;
-            }
+        if (!config->capabilities.supports_subdoc_read_replica()) {
+          ec = errc::common::feature_not_available;
+        }
+        const auto [e, origin] = core->origin();
+        if (e && !ec) {
+          ec = e;
+        }
 
-            auto nodes =
-              impl::effective_nodes(id, config, read_preference, origin.options().server_group);
-            if (nodes.empty()) {
-              CB_LOG_DEBUG(
-                "Unable to retrieve replicas for \"{}\", server_group={}, number_of_replicas={}",
-                logger::document(id),
-                logger::metadata(origin.options().server_group),
-                config->num_replicas.value_or(0));
-              ec = errc::key_value::document_irretrievable;
+        auto nodes =
+          impl::effective_nodes(id, config, read_preference, origin.options().server_group);
+        if (nodes.empty()) {
+          CB_LOG_DEBUG(
+            "Unable to retrieve replicas for \"{}\", server_group={}, number_of_replicas={}",
+            logger::document(id),
+            logger::metadata(origin.options().server_group),
+            config->num_replicas.value_or(0));
+          ec = errc::key_value::document_irretrievable;
+        }
+
+        if (!ec && specs.empty()) {
+          ec = errc::common::invalid_argument;
+        }
+
+        if (ec) {
+          return h(response_type{ make_subdocument_error_context(
+            make_key_value_error_context(ec, id), ec, {}, {}, false) });
+        }
+
+        using handler_type = utils::movable_function<void(response_type)>;
+
+        struct replica_context {
+          replica_context(handler_type&& handler, std::size_t expected_responses)
+            : handler_(std::move(handler))
+            , expected_responses_(expected_responses)
+          {
+          }
+
+          void add_cancellation_token(std::shared_ptr<impl::cancellation_token> token)
+          {
+            std::scoped_lock<std::mutex> lock(cancel_tokens_mutex_);
+            cancel_tokens_.emplace_back(std::move(token));
+          }
+
+          auto get_cancellation_tokens() -> std::vector<std::shared_ptr<impl::cancellation_token>>
+          {
+            std::vector<std::shared_ptr<impl::cancellation_token>> tokens{};
+            {
+              std::scoped_lock<std::mutex> lock(cancel_tokens_mutex_);
+              std::swap(tokens, cancel_tokens_);
             }
+            return tokens;
+          }
 
-            if (!ec && specs.empty()) {
-              ec = errc::common::invalid_argument;
-            }
+          handler_type handler_;
+          std::size_t expected_responses_;
+          bool done_{ false };
+          std::mutex mutex_{};
+          std::vector<std::shared_ptr<impl::cancellation_token>> cancel_tokens_{};
+          std::mutex cancel_tokens_mutex_{};
+        };
+        auto ctx = std::make_shared<replica_context>(std::move(h), nodes.size());
 
-            if (ec) {
-              return h(response_type{ make_subdocument_error_context(
-                make_key_value_error_context(ec, id), ec, {}, {}, false) });
-            }
+        for (const auto& node : nodes) {
+          auto subop_span =
+            core->tracer()->create_span(node.is_replica ? tracing::operation::mcbp_lookup_in_replica
+                                                        : tracing::operation::mcbp_lookup_in,
+                                        parent_span);
 
-            using handler_type = utils::movable_function<void(response_type)>;
+          if (subop_span->uses_tags()) {
+            subop_span->add_tag(tracing::attributes::op::service, tracing::service::key_value);
+            subop_span->add_tag(tracing::attributes::op::operation_name,
+                                node.is_replica ? tracing::operation::mcbp_lookup_in_replica
+                                                : tracing::operation::mcbp_lookup_in);
+            subop_span->add_tag(tracing::attributes::op::bucket_name, id.bucket());
+            subop_span->add_tag(tracing::attributes::op::scope_name, id.scope());
+            subop_span->add_tag(tracing::attributes::op::collection_name, id.collection());
+          }
 
-            struct replica_context {
-              replica_context(handler_type&& handler, std::size_t expected_responses)
-                : handler_(std::move(handler))
-                , expected_responses_(expected_responses)
+          if (node.is_replica) {
+            document_id replica_id{ id };
+            replica_id.node_index(node.index);
+            impl::with_cancellation<impl::lookup_in_replica_request> replica_req{
               {
-              }
-
-              void add_cancellation_token(std::shared_ptr<impl::cancellation_token> token)
-              {
-                std::scoped_lock<std::mutex> lock(cancel_tokens_mutex_);
-                cancel_tokens_.emplace_back(std::move(token));
-              }
-
-              auto get_cancellation_tokens()
-                -> std::vector<std::shared_ptr<impl::cancellation_token>>
-              {
-                std::vector<std::shared_ptr<impl::cancellation_token>> tokens{};
-                {
-                  std::scoped_lock<std::mutex> lock(cancel_tokens_mutex_);
-                  std::swap(tokens, cancel_tokens_);
-                }
-                return tokens;
-              }
-
-              handler_type handler_;
-              std::size_t expected_responses_;
-              bool done_{ false };
-              std::mutex mutex_{};
-              std::vector<std::shared_ptr<impl::cancellation_token>> cancel_tokens_{};
-              std::mutex cancel_tokens_mutex_{};
+                std::move(replica_id),
+                specs,
+                utils::remaining_until(deadline),
+                subop_span,
+              },
             };
-            auto ctx = std::make_shared<replica_context>(std::move(h), nodes.size());
-
-            for (const auto& node : nodes) {
-              auto subop_span = core->tracer()->create_span(
-                node.is_replica ? tracing::operation::mcbp_lookup_in_replica
-                                : tracing::operation::mcbp_lookup_in,
-                parent_span);
-
-              if (subop_span->uses_tags()) {
-                subop_span->add_tag(tracing::attributes::op::service, tracing::service::key_value);
-                subop_span->add_tag(tracing::attributes::op::operation_name,
-                                    node.is_replica ? tracing::operation::mcbp_lookup_in_replica
-                                                    : tracing::operation::mcbp_lookup_in);
-                subop_span->add_tag(tracing::attributes::op::bucket_name, id.bucket());
-                subop_span->add_tag(tracing::attributes::op::scope_name, id.scope());
-                subop_span->add_tag(tracing::attributes::op::collection_name, id.collection());
+            ctx->add_cancellation_token(replica_req.cancel_token);
+            replica_req.access_deleted = access_deleted;
+            core->execute(replica_req, [ctx, subop_span](auto&& resp) {
+              {
+                if (subop_span->uses_tags()) {
+                  subop_span->add_tag(tracing::attributes::op::retry_count,
+                                      resp.ctx.retry_attempts());
+                }
+                subop_span->end();
               }
-
-              if (node.is_replica) {
-                document_id replica_id{ id };
-                replica_id.node_index(node.index);
-                impl::with_cancellation<impl::lookup_in_replica_request> replica_req{
-                  {
-                    std::move(replica_id),
-                    specs,
-                    timeout,
-                    subop_span,
-                  },
-                };
-                ctx->add_cancellation_token(replica_req.cancel_token);
-                replica_req.access_deleted = access_deleted;
-                core->execute(replica_req, [ctx, subop_span](auto&& resp) {
-                  {
-                    if (subop_span->uses_tags()) {
-                      subop_span->add_tag(tracing::attributes::op::retry_count,
-                                          resp.ctx.retry_attempts());
-                    }
-                    subop_span->end();
+              handler_type local_handler;
+              std::vector<std::shared_ptr<impl::cancellation_token>> cancel_tokens;
+              {
+                std::scoped_lock lock(ctx->mutex_);
+                if (ctx->done_) {
+                  return;
+                }
+                --ctx->expected_responses_;
+                if (resp.fields.empty()) {
+                  // document was not retrieved (e.g. not_found, access error) —
+                  // for lookup_in, fields are only populated when the document
+                  // is successfully fetched; ctx.ec() is used only for
+                  // document-level errors, and per-path failures (such as
+                  // subdoc_multi_path_failure) still produce non-empty fields
+                  if (ctx->expected_responses_ > 0) {
+                    // just ignore the response
+                    return;
                   }
-                  handler_type local_handler;
-                  std::vector<std::shared_ptr<impl::cancellation_token>> cancel_tokens;
-                  {
-                    std::scoped_lock lock(ctx->mutex_);
-                    if (ctx->done_) {
-                      return;
-                    }
-                    --ctx->expected_responses_;
-                    if (resp.fields.empty()) {
-                      // document was not retrieved (e.g. not_found, access error) —
-                      // for lookup_in, fields are only populated when the document
-                      // is successfully fetched; ctx.ec() is used only for
-                      // document-level errors, and per-path failures (such as
-                      // subdoc_multi_path_failure) still produce non-empty fields
-                      if (ctx->expected_responses_ > 0) {
-                        // just ignore the response
-                        return;
-                      }
-                      // consider document irretrievable and give up
-                      resp.ctx.override_ec(errc::key_value::document_irretrievable);
-                    }
-                    ctx->done_ = true;
-                    std::swap(local_handler, ctx->handler_);
-                    cancel_tokens = ctx->get_cancellation_tokens();
-                  }
-                  for (const auto& token : cancel_tokens) {
-                    token->cancel();
-                  }
-                  if (local_handler) {
-                    response_type res{};
-                    res.ctx = resp.ctx;
-                    res.cas = resp.cas;
-                    res.deleted = resp.deleted;
-                    res.is_replica = true;
-                    for (auto& field : resp.fields) {
-                      auto lookup_in_entry = lookup_in_any_replica_response::entry{};
-                      lookup_in_entry.path = field.path;
-                      lookup_in_entry.value = field.value;
-                      lookup_in_entry.status = field.status;
-                      lookup_in_entry.ec = field.ec;
-                      lookup_in_entry.exists = field.exists;
-                      lookup_in_entry.original_index = field.original_index;
-                      lookup_in_entry.opcode = field.opcode;
-                      res.fields.emplace_back(lookup_in_entry);
-                    }
-                    return local_handler(res);
-                  }
-                });
-              } else {
-                impl::with_cancellation<lookup_in_request> req{
-                  {
-                    id,
-                    {},
-                    {},
-                    false,
-                    specs,
-                    timeout,
-                    {},
-                    subop_span,
-                  },
-                };
-                ctx->add_cancellation_token(req.cancel_token);
-                core->execute(std::move(req), [subop_span, ctx](auto&& resp) {
-                  {
-                    if (subop_span->uses_tags()) {
-                      subop_span->add_tag(tracing::attributes::op::retry_count,
-                                          resp.ctx.retry_attempts());
-                    }
-                    subop_span->end();
-                  }
-                  handler_type local_handler{};
-                  std::vector<std::shared_ptr<impl::cancellation_token>> cancel_tokens;
-                  {
-                    std::scoped_lock lock(ctx->mutex_);
-                    if (ctx->done_) {
-                      return;
-                    }
-                    --ctx->expected_responses_;
-                    if (resp.fields.empty()) {
-                      // document was not retrieved (e.g. not_found, access error) —
-                      // use fields.empty() to distinguish this from successful multi-lookups
-                      // (including those with per-path failures), which still return fields
-                      if (ctx->expected_responses_ > 0) {
-                        // just ignore the response
-                        return;
-                      }
-                      // consider document irretrievable and give up
-                      resp.ctx.override_ec(errc::key_value::document_irretrievable);
-                    }
-                    ctx->done_ = true;
-                    std::swap(local_handler, ctx->handler_);
-                    cancel_tokens = ctx->get_cancellation_tokens();
-                  }
-                  for (const auto& token : cancel_tokens) {
-                    token->cancel();
-                  }
-                  if (local_handler) {
-                    auto res = response_type{};
-                    res.ctx = resp.ctx;
-                    res.cas = resp.cas;
-                    res.deleted = resp.deleted;
-                    res.is_replica = false;
-                    for (auto& field : resp.fields) {
-                      auto lookup_in_entry = lookup_in_any_replica_response::entry{};
-                      lookup_in_entry.path = field.path;
-                      lookup_in_entry.value = field.value;
-                      lookup_in_entry.status = field.status;
-                      lookup_in_entry.ec = field.ec;
-                      lookup_in_entry.exists = field.exists;
-                      lookup_in_entry.original_index = field.original_index;
-                      lookup_in_entry.opcode = field.opcode;
-                      res.fields.emplace_back(lookup_in_entry);
-                    }
-                    return local_handler(res);
-                  }
-                });
+                  // consider document irretrievable and give up
+                  resp.ctx.override_ec(errc::key_value::document_irretrievable);
+                }
+                ctx->done_ = true;
+                std::swap(local_handler, ctx->handler_);
+                cancel_tokens = ctx->get_cancellation_tokens();
               }
-            }
-          });
+              for (const auto& token : cancel_tokens) {
+                token->cancel();
+              }
+              if (local_handler) {
+                response_type res{};
+                res.ctx = resp.ctx;
+                res.cas = resp.cas;
+                res.deleted = resp.deleted;
+                res.is_replica = true;
+                for (auto& field : resp.fields) {
+                  auto lookup_in_entry = lookup_in_any_replica_response::entry{};
+                  lookup_in_entry.path = field.path;
+                  lookup_in_entry.value = field.value;
+                  lookup_in_entry.status = field.status;
+                  lookup_in_entry.ec = field.ec;
+                  lookup_in_entry.exists = field.exists;
+                  lookup_in_entry.original_index = field.original_index;
+                  lookup_in_entry.opcode = field.opcode;
+                  res.fields.emplace_back(lookup_in_entry);
+                }
+                return local_handler(res);
+              }
+            });
+          } else {
+            impl::with_cancellation<lookup_in_request> req{
+              {
+                id,
+                {},
+                {},
+                false,
+                specs,
+                utils::remaining_until(deadline),
+                {},
+                subop_span,
+              },
+            };
+            ctx->add_cancellation_token(req.cancel_token);
+            core->execute(std::move(req), [subop_span, ctx](auto&& resp) {
+              {
+                if (subop_span->uses_tags()) {
+                  subop_span->add_tag(tracing::attributes::op::retry_count,
+                                      resp.ctx.retry_attempts());
+                }
+                subop_span->end();
+              }
+              handler_type local_handler{};
+              std::vector<std::shared_ptr<impl::cancellation_token>> cancel_tokens;
+              {
+                std::scoped_lock lock(ctx->mutex_);
+                if (ctx->done_) {
+                  return;
+                }
+                --ctx->expected_responses_;
+                if (resp.fields.empty()) {
+                  // document was not retrieved (e.g. not_found, access error) —
+                  // use fields.empty() to distinguish this from successful multi-lookups
+                  // (including those with per-path failures), which still return fields
+                  if (ctx->expected_responses_ > 0) {
+                    // just ignore the response
+                    return;
+                  }
+                  // consider document irretrievable and give up
+                  resp.ctx.override_ec(errc::key_value::document_irretrievable);
+                }
+                ctx->done_ = true;
+                std::swap(local_handler, ctx->handler_);
+                cancel_tokens = ctx->get_cancellation_tokens();
+              }
+              for (const auto& token : cancel_tokens) {
+                token->cancel();
+              }
+              if (local_handler) {
+                auto res = response_type{};
+                res.ctx = resp.ctx;
+                res.cas = resp.cas;
+                res.deleted = resp.deleted;
+                res.is_replica = false;
+                for (auto& field : resp.fields) {
+                  auto lookup_in_entry = lookup_in_any_replica_response::entry{};
+                  lookup_in_entry.path = field.path;
+                  lookup_in_entry.value = field.value;
+                  lookup_in_entry.status = field.status;
+                  lookup_in_entry.ec = field.ec;
+                  lookup_in_entry.exists = field.exists;
+                  lookup_in_entry.original_index = field.original_index;
+                  lookup_in_entry.opcode = field.opcode;
+                  res.fields.emplace_back(lookup_in_entry);
+                }
+                return local_handler(res);
+              }
+            });
+          }
+        }
       });
   }
 };

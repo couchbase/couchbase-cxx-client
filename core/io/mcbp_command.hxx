@@ -57,8 +57,6 @@ using mcbp_command_handler =
 
 template<typename Manager, typename Request>
 struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, Request>> {
-  static constexpr std::chrono::milliseconds durability_timeout_floor{ 1'500 };
-
   using encoded_request_type = typename Request::encoded_request_type;
   using encoded_response_type = typename Request::encoded_response_type;
   asio::steady_timer deadline;
@@ -114,18 +112,6 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     , timeout_(request.timeout.value_or(default_timeout))
     , parent_span_(request.parent_span)
   {
-    if constexpr (io::mcbp_traits::supports_durability_v<Request>) {
-      if (request.durability_level != durability_level::none &&
-          timeout_ < durability_timeout_floor) {
-        CB_LOG_DEBUG(
-          R"(Timeout is too low for operation with durability, increasing to sensible value. key="{}", timeout={}ms, floor={}ms, id="{}")",
-          logger::document(request.id),
-          timeout_.count(),
-          durability_timeout_floor.count(),
-          id());
-        timeout_ = durability_timeout_floor;
-      }
-    }
   }
 
   // The diagnostic identifier ("<opcode>/<uuid>") is used only in log lines,
