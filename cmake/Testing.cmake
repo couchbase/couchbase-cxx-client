@@ -14,8 +14,12 @@ if(COUCHBASE_CXX_CLIENT_ENABLE_VALGRIND)
   find_program(VALGRIND valgrind)
   if(VALGRIND)
     set(VALGRIND_COMMAND "${VALGRIND}")
+    # --run-libc-freeres=no: at exit, memcheck runs glibc's __libc_freeres on the last thread after
+    # exit_group has killed the others. Its stdio cleanup takes every FILE lock, so a thread killed
+    # while writing a log line to stderr leaves that lock held and the process waits on it forever.
+    # A fork child that leaves through _Exit() while the SDK's threads still log is such a process.
     set(VALGRIND_COMMAND_OPTIONS
-        "-v --tool=memcheck --leak-check=full --track-fds=yes --num-callers=50 --show-reachable=yes --track-origins=yes --malloc-fill=0xff --free-fill=0xfe --suppressions=${PROJECT_SOURCE_DIR}/.valgrind_suppressions.txt"
+        "-v --tool=memcheck --leak-check=full --track-fds=yes --num-callers=50 --show-reachable=yes --track-origins=yes --malloc-fill=0xff --free-fill=0xfe --run-libc-freeres=no --suppressions=${PROJECT_SOURCE_DIR}/.valgrind_suppressions.txt"
     )
     set(MEMORYCHECK_COMMAND "${VALGRIND}")
     set(MEMORYCHECK_COMMAND_OPTIONS "${VALGRIND_COMMAND_OPTIONS}")
