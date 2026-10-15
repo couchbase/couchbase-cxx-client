@@ -234,6 +234,12 @@ component::component(asio::io_context& io, component_config config)
 component::~component() = default;
 
 auto
+component::channel() const -> const std::shared_ptr<grpc::Channel>&
+{
+  return dispatcher_.channel();
+}
+
+auto
 component::execute(const operations::get_request& request,
                    utils::movable_function<void(operations::get_response)>&& handler)
   -> pending_call

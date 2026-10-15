@@ -662,6 +662,11 @@ public:
     if (stopped_) {
       return handler(errc::network::cluster_closed);
     }
+    if (is_protostellar()) {
+      // couchbase2 has no bucket bootstrap. Opening one would dial the gateway over MCBP, which it
+      // does not serve, and fail with unambiguous_timeout only at bootstrap_timeout.
+      return handler(errc::common::feature_not_available);
+    }
     std::shared_ptr<bucket> b{};
     {
       const std::scoped_lock lock(buckets_mutex_);
@@ -1046,6 +1051,32 @@ public:
   {
     const std::scoped_lock lock(protostellar_mutex_);
     return protostellar_;
+  }
+
+  // Whether the couchbase2 channel is READY. An idle channel is asked to connect, so polling this
+  // also establishes the connection. cluster_closed once the cluster is closed.
+  [[nodiscard]] auto protostellar_channel_ready() const -> std::pair<std::error_code, bool>
+  {
+    const auto component = protostellar_component();
+    if (stopped_ || component == nullptr) {
+      return { errc::network::cluster_closed, false };
+    }
+    const auto& channel = component->channel();
+    auto state = channel->GetState(/* try_to_connect */ true);
+    if (state != GRPC_CHANNEL_READY && state != GRPC_CHANNEL_SHUTDOWN) {
+      // On gRPC builds that progress a connection only under polling, an attempt stalls while no
+      // call is in flight. A wait whose deadline has already passed polls once without blocking.
+      channel->WaitForStateChange(state, std::chrono::system_clock::now());
+      state = channel->GetState(/* try_to_connect */ false);
+    }
+    switch (state) {
+      case GRPC_CHANNEL_READY:
+        return { {}, true };
+      case GRPC_CHANNEL_SHUTDOWN:
+        return { errc::network::cluster_closed, false };
+      default:
+        return { {}, false };
+    }
   }
 #endif
 
@@ -3143,6 +3174,17 @@ cluster::is_protostellar() const -> bool
   }
 #endif
   return false;
+}
+
+auto
+cluster::protostellar_channel_ready() const -> std::pair<std::error_code, bool>
+{
+#ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
+  if (impl_ && impl_->is_protostellar()) {
+    return impl_->protostellar_channel_ready();
+  }
+#endif
+  return { errc::common::feature_not_available, false };
 }
 
 } // namespace couchbase::core

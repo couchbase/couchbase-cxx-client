@@ -365,6 +365,9 @@ public:
     -> const std::shared_ptr<cluster_label_listener>&;
   [[nodiscard]] auto find_bucket_by_name(const std::string& name) const -> std::shared_ptr<bucket>;
   [[nodiscard]] auto is_protostellar() const -> bool;
+  // couchbase2 only: whether the gRPC channel is READY, asking an idle channel to connect.
+  // cluster_closed once the cluster is closed, feature_not_available for any other cluster.
+  [[nodiscard]] auto protostellar_channel_ready() const -> std::pair<std::error_code, bool>;
 
 private:
   std::shared_ptr<cluster_impl> impl_;

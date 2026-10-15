@@ -505,6 +505,10 @@ public:
    * Waits until the desired state of the cluster is reached, actively pinging its services until
    * they respond or the timeout elapses.
    *
+   * Over couchbase2, the wait ends once the gRPC channel to the gateway is connected. No service is
+   * pinged, the requested services are not considered, and @c cluster_state::online and
+   * @c cluster_state::degraded are the same state.
+   *
    * @param timeout the maximum time to wait for readiness.
    * @param options custom options to change the default behavior.
    * @param handler the handler that implements @ref wait_until_ready_handler.
@@ -519,6 +523,10 @@ public:
   /**
    * Waits until the desired state of the cluster is reached, actively pinging its services until
    * they respond or the timeout elapses.
+   *
+   * Over couchbase2, the wait ends once the gRPC channel to the gateway is connected. No service is
+   * pinged, the requested services are not considered, and @c cluster_state::online and
+   * @c cluster_state::degraded are the same state.
    *
    * @param timeout the maximum time to wait for readiness.
    * @param options custom options to change the default behavior.

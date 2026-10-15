@@ -54,7 +54,7 @@ struct wait_until_ready_options {
 
   /**
    * Customizes the set of services to consider. When empty, whichever services the topology reports
-   * are considered.
+   * are considered. Over couchbase2 the set is not considered.
    *
    * @param service_types the services to consider.
    * @return reference to this object, for use in chaining.
