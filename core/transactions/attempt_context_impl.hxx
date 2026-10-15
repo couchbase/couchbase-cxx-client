@@ -74,6 +74,7 @@ class transactions;
 enum class forward_compat_stage : std::uint8_t;
 class staged_mutation_queue;
 class staged_mutation;
+struct async_timed_exp_delay;
 struct attempt_context_testing_hooks;
 
 class attempt_context_impl
@@ -488,9 +489,9 @@ private:
     forward_compat_stage stage,
     std::function<void(std::optional<transaction_operation_failed>)>&& cb);
 
-  template<typename Handler, typename Delay>
+  template<typename Handler>
   void check_atr_entry_for_blocking_document(const transaction_get_result& doc,
-                                             Delay delay,
+                                             std::shared_ptr<async_timed_exp_delay> delay,
                                              Handler&& cb);
 
   template<typename Handler>
@@ -545,6 +546,16 @@ private:
                              const std::string& op_id,
                              const std::optional<document_metadata>& document_metadata,
                              Handler&& cb);
+
+  [[nodiscard]] auto staged_insert_delay() const -> std::shared_ptr<async_timed_exp_delay>;
+
+  template<typename Handler, typename Delay>
+  void retry_create_staged_insert(const core::document_id& id,
+                                  const codec::encoded_value& content,
+                                  std::uint64_t cas,
+                                  Delay&& delay,
+                                  const std::string& op_id,
+                                  Handler&& cb);
 
   template<typename Handler, typename Delay>
   void create_staged_insert_error_handler(const core::document_id& id,

@@ -279,7 +279,13 @@ retry_op(std::function<R()> func)
     DEFAULT_RETRY_OP_DELAY, std::numeric_limits<std::size_t>::max(), func);
 }
 
-struct exp_delay {
+// Exponential backoff bounded by a timeout, waiting on a timer so that it is safe to call from a
+// completion handler. The first call starts the timeout and completes inline. Later calls complete
+// after the backoff, or with retry_operation_timeout past the timeout or on cancellation, or with
+// retry_operation_retries_exhausted after max_retries. Calls must not overlap: state is
+// unsynchronised and expires_after cancels a pending wait.
+struct async_timed_exp_delay {
+  std::shared_ptr<asio::steady_timer> timer;
   std::chrono::nanoseconds initial_delay;
   std::chrono::nanoseconds max_delay;
   std::chrono::nanoseconds timeout;
@@ -288,36 +294,44 @@ struct exp_delay {
   std::size_t max_retries{ 100 };
 
   template<typename R1, typename P1, typename R2, typename P2, typename R3, typename P3>
-  exp_delay(std::chrono::duration<R1, P1> initial,
-            std::chrono::duration<R2, P2> max,
-            std::chrono::duration<R3, P3> limit)
-    : initial_delay(std::chrono::duration_cast<std::chrono::nanoseconds>(initial))
+  async_timed_exp_delay(std::shared_ptr<asio::steady_timer> timer,
+                        std::chrono::duration<R1, P1> initial,
+                        std::chrono::duration<R2, P2> max,
+                        std::chrono::duration<R3, P3> limit)
+    : timer(std::move(timer))
+    , initial_delay(std::chrono::duration_cast<std::chrono::nanoseconds>(initial))
     , max_delay(std::chrono::duration_cast<std::chrono::nanoseconds>(max))
     , timeout(std::chrono::duration_cast<std::chrono::nanoseconds>(limit))
   {
   }
-  void operator()() const
+  void operator()(utils::movable_function<void(std::exception_ptr)> callback) const
   {
     auto now = std::chrono::steady_clock::now();
     if (retries >= max_retries) {
-      throw retry_operation_retries_exhausted("retries exhausted");
+      return callback(
+        std::make_exception_ptr(retry_operation_retries_exhausted("retries exhausted")));
     }
     if (!end_time) {
       end_time = std::chrono::steady_clock::now() + timeout;
-      return;
+      return callback({});
     }
     if (now > *end_time) {
-      throw retry_operation_timeout("timed out");
+      return callback(std::make_exception_ptr(retry_operation_timeout("timed out")));
     }
     auto delay = initial_delay * (jitter() * pow(2, retries++));
     if (delay > max_delay) {
       delay = max_delay;
     }
     if (now + delay > *end_time) {
-      std::this_thread::sleep_for(*end_time - now);
-    } else {
-      std::this_thread::sleep_for(delay);
+      delay = *end_time - now;
     }
+    timer->expires_after(std::chrono::duration_cast<std::chrono::nanoseconds>(delay));
+    timer->async_wait([callback = std::move(callback)](std::error_code ec) mutable {
+      if (ec == asio::error::operation_aborted) {
+        return callback(std::make_exception_ptr(retry_operation_timeout("retry aborted")));
+      }
+      callback({});
+    });
   }
 };
 
@@ -372,10 +386,9 @@ struct async_exp_delay {
 
   void operator()(utils::movable_function<void(std::exception_ptr)> callback) const
   {
-    // retries must be incremented exactly once per call (see the synchronous exp_delay above):
-    // the guard reads it without mutating, and pow() does the single post-increment. Incrementing
-    // in both places double-counts -- halving the effective max_retries and doubling the exponent
-    // growth per attempt.
+    // retries must be incremented exactly once per call: the guard reads it without mutating, and
+    // pow() does the single post-increment. Incrementing in both places double-counts -- halving
+    // the effective max_retries and doubling the exponent growth per attempt.
     if (retries >= max_retries) {
       callback(std::make_exception_ptr(retry_operation_retries_exhausted("retries exhausted")));
       return;

@@ -72,3 +72,4 @@ transaction_test(examples)
 couchbase_add_test(framework/cluster_probes_selftest LABEL integration LINK_CLIENT)
 
 couchbase_add_test(transactions/query_expiry LABEL transaction LINK_CLIENT)
+couchbase_add_test(transactions/retry_waits LABEL transaction LINK_CLIENT)

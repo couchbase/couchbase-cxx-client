@@ -201,11 +201,14 @@ attempt_context_impl::check_and_handle_blocking_transactions(
       if (err) {
         return cb(err);
       }
-      return check_atr_entry_for_blocking_document(doc,
-                                                   exp_delay(std::chrono::milliseconds(50),
-                                                             std::chrono::milliseconds(500),
-                                                             std::chrono::seconds(1)),
-                                                   std::move(cb));
+      return check_atr_entry_for_blocking_document(
+        doc,
+        std::make_shared<async_timed_exp_delay>(
+          std::make_shared<asio::steady_timer>(cluster_ref().io_context()),
+          std::chrono::milliseconds(50),
+          std::chrono::milliseconds(500),
+          std::chrono::seconds(1)),
+        std::move(cb));
     }
     CB_ATTEMPT_CTX_LOG_DEBUG(this,
                              "doc \"{}\" is in another transaction {}, but doesn't have enough "
@@ -972,9 +975,7 @@ attempt_context_impl::replace(const transaction_get_result& document,
                       self->create_staged_insert(document.id(),
                                                  std::move(content),
                                                  document.cas().value(),
-                                                 exp_delay(std::chrono::milliseconds(5),
-                                                           std::chrono::milliseconds(300),
-                                                           self->overall()->config().timeout),
+                                                 self->staged_insert_delay(),
                                                  op_id,
                                                  std::move(cb));
                       return;
@@ -1345,14 +1346,8 @@ attempt_context_impl::insert(const core::document_id& id,
                                                      std::move(cb));
                 }
                 const std::uint64_t cas = 0;
-                self->create_staged_insert(id,
-                                           std::move(content),
-                                           cas,
-                                           exp_delay(std::chrono::milliseconds(5),
-                                                     std::chrono::milliseconds(300),
-                                                     self->overall()->config().timeout),
-                                           op_id,
-                                           std::move(cb));
+                self->create_staged_insert(
+                  id, std::move(content), cas, self->staged_insert_delay(), op_id, std::move(cb));
               });
           } catch (const std::exception& e) {
             return self->op_completed_with_error(
@@ -1401,19 +1396,24 @@ attempt_context_impl::select_atr_if_needed_unlocked(
     CB_ATTEMPT_CTX_LOG_ERROR(this, "unexpected error \"{}\" during select atr if needed", e.what());
   }
 }
-template<typename Handler, typename Delay>
+template<typename Handler>
 void
-attempt_context_impl::check_atr_entry_for_blocking_document(const transaction_get_result& doc,
-                                                            Delay delay,
-                                                            Handler&& cb)
+attempt_context_impl::check_atr_entry_for_blocking_document(
+  const transaction_get_result& doc,
+  std::shared_ptr<async_timed_exp_delay> delay,
+  Handler&& cb)
 {
-  try {
-    delay();
-    return hooks_.before_check_atr_entry_for_blocking_doc(
-      shared_from_this(),
+  (*delay)([self = shared_from_this(), doc, delay, cb = std::forward<Handler>(cb)](
+             const std::exception_ptr& delay_err) mutable {
+    if (delay_err) {
+      return cb(transaction_operation_failed(FAIL_WRITE_WRITE_CONFLICT,
+                                             "document is in another transaction")
+                  .retry());
+    }
+    return self->hooks_.before_check_atr_entry_for_blocking_doc(
+      self,
       doc.id().key(),
-      [self = shared_from_this(), delay = std::move(delay), cb = std::forward<Handler>(cb), doc](
-        auto ec) mutable {
+      [self, delay = std::move(delay), cb = std::move(cb), doc](auto ec) mutable {
         if (ec) {
           return cb(transaction_operation_failed(FAIL_WRITE_WRITE_CONFLICT,
                                                  "document is in another transaction")
@@ -1453,7 +1453,8 @@ attempt_context_impl::check_atr_entry_for_blocking_document(const transaction_ge
                                                "existing atr entry found in state {}, retrying",
                                                attempt_state_name(it->state()));
                   }
-                  return self->check_atr_entry_for_blocking_document(doc, delay, std::move(cb));
+                  return self->check_atr_entry_for_blocking_document(
+                    doc, std::move(delay), std::move(cb));
                 }
               }
               CB_ATTEMPT_CTX_LOG_DEBUG(self, "no blocking atr entry");
@@ -1465,11 +1466,7 @@ attempt_context_impl::check_atr_entry_for_blocking_document(const transaction_ge
                         .retry());
           });
       });
-  } catch (const retry_operation_timeout&) {
-    return cb(
-      transaction_operation_failed(FAIL_WRITE_WRITE_CONFLICT, "document is in another transaction")
-        .retry());
-  }
+  });
 }
 void
 attempt_context_impl::remove(const transaction_get_result& document, VoidCallback&& cb)
@@ -3655,8 +3652,8 @@ attempt_context_impl::create_staged_insert_error_handler(const core::document_id
         transaction_operation_failed(ec, "transient error in insert").retry());
     case FAIL_AMBIGUOUS:
       CB_ATTEMPT_CTX_LOG_DEBUG(this, "FAIL_AMBIGUOUS in create_staged_insert, retrying");
-      delay();
-      return create_staged_insert(id, content, cas, delay, op_id, std::forward<Handler>(cb));
+      return retry_create_staged_insert(
+        id, content, cas, std::forward<Delay>(delay), op_id, std::forward<Handler>(cb));
     case FAIL_OTHER:
       return op_completed_with_error(
         std::forward<Handler>(cb),
@@ -3745,8 +3742,7 @@ attempt_context_impl::create_staged_insert_error_handler(const core::document_id
                                              "create staged insert found existing deleted doc, "
                                              "retrying with cas {}",
                                              doc->cas().value());
-                    delay();
-                    return self->create_staged_insert(
+                    return self->retry_create_staged_insert(
                       id, content, doc->cas().value(), delay, op_id, std::forward<Handler>(cb));
                   }
                   if (!doc->links().is_document_in_transaction()) {
@@ -3798,9 +3794,8 @@ attempt_context_impl::create_staged_insert_error_handler(const core::document_id
                                                "doc ok to overwrite, retrying create_staged_insert "
                                                "with cas {}",
                                                doc->cas().value());
-                      delay();
-                      return self->create_staged_insert(
-                        id, content, doc->cas().value(), delay, op_id, std::forward<Handler>(cb));
+                      return self->retry_create_staged_insert(
+                        id, content, doc->cas().value(), delay, op_id, std::move(cb));
                     });
                 } else {
                   // no doc now, just retry entire txn
@@ -3824,6 +3819,58 @@ attempt_context_impl::create_staged_insert_error_handler(const core::document_id
         std::forward<Handler>(cb),
         transaction_operation_failed(ec, "failed in create_staged_insert").retry());
   }
+}
+
+auto
+attempt_context_impl::staged_insert_delay() const -> std::shared_ptr<async_timed_exp_delay>
+{
+  auto delay = std::make_shared<async_timed_exp_delay>(
+    std::make_shared<asio::steady_timer>(cluster_ref().io_context()),
+    std::chrono::milliseconds(5),
+    std::chrono::milliseconds(300),
+    overall()->config().timeout);
+  // The transaction expiry bounds the retries; a retry limit would fail a long transaction early.
+  delay->max_retries = std::numeric_limits<std::size_t>::max();
+  return delay;
+}
+
+template<typename Handler, typename Delay>
+void
+attempt_context_impl::retry_create_staged_insert(const core::document_id& id,
+                                                 const codec::encoded_value& content,
+                                                 std::uint64_t cas,
+                                                 Delay&& delay,
+                                                 const std::string& op_id,
+                                                 Handler&& cb)
+{
+  auto shared_delay = delay;
+  (*shared_delay)([self = shared_from_this(),
+                   id,
+                   content = content,
+                   cas,
+                   delay = std::forward<Delay>(delay),
+                   op_id,
+                   cb = std::forward<Handler>(cb)](const std::exception_ptr& delay_err) mutable {
+    if (delay_err) {
+      try {
+        std::rethrow_exception(delay_err);
+      } catch (const retry_operation_timeout&) {
+        return self->create_staged_insert_error_handler(id,
+                                                        content,
+                                                        cas,
+                                                        delay,
+                                                        op_id,
+                                                        std::move(cb),
+                                                        FAIL_EXPIRY,
+                                                        UNKNOWN,
+                                                        "create_staged_insert retries timed out");
+      } catch (const std::exception& e) {
+        return self->op_completed_with_error(std::move(cb),
+                                             transaction_operation_failed(FAIL_OTHER, e.what()));
+      }
+    }
+    return self->create_staged_insert(id, std::move(content), cas, delay, op_id, std::move(cb));
+  });
 }
 
 template<typename Handler, typename Delay>

@@ -60,9 +60,11 @@ transaction_context::transaction_context(transactions& txns,
   , config_(config.apply(txns.config()))
   , deferred_elapsed_(0)
   , cleanup_(txns.cleanup())
-  , delay_(new exp_delay(std::chrono::milliseconds(1),
-                         std::chrono::milliseconds(100),
-                         2 * config_.timeout))
+  , delay_(std::make_unique<async_timed_exp_delay>(
+      std::make_shared<asio::steady_timer>(txns.cluster_ref().io_context()),
+      std::chrono::milliseconds(1),
+      std::chrono::milliseconds(100),
+      2 * config_.timeout))
 {
   // add metadata_collection to cleanup, if present
   if (config_.metadata_collection) {
@@ -139,21 +141,25 @@ void
 transaction_context::new_attempt_context(async_attempt_context::VoidCallback&& cb)
 {
   asio::post(transactions_.cluster_ref().io_context(),
-             [self = shared_from_this(), cb = std::move(cb)]() {
+             [self = shared_from_this(), cb = std::move(cb)]() mutable {
                // the first time we call the delay, it just records an end time.  After
                // that, it actually delays.
-               try {
-                 (*self->delay_)();
-                 self->current_attempt_context_ = attempt_context_impl::create(self);
-                 CB_ATTEMPT_CTX_LOG_INFO(self->current_attempt_context_,
-                                         "starting attempt {}/{}/{}/",
-                                         self->num_attempts(),
-                                         self->transaction_id(),
-                                         self->current_attempt_context_->id());
-                 cb(nullptr);
-               } catch (...) {
-                 cb(std::current_exception());
-               }
+               (*self->delay_)([self, cb = std::move(cb)](const std::exception_ptr& err) mutable {
+                 if (err) {
+                   return cb(err);
+                 }
+                 try {
+                   self->current_attempt_context_ = attempt_context_impl::create(self);
+                   CB_ATTEMPT_CTX_LOG_INFO(self->current_attempt_context_,
+                                           "starting attempt {}/{}/{}/",
+                                           self->num_attempts(),
+                                           self->transaction_id(),
+                                           self->current_attempt_context_->id());
+                   cb(nullptr);
+                 } catch (...) {
+                   cb(std::current_exception());
+                 }
+               });
              });
 }
 
