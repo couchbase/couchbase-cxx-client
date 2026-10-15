@@ -104,6 +104,17 @@ TxnService::disconnectConnections(grpc::ServerContext* /*context*/,
   return grpc::Status::OK;
 }
 
+template<typename Cmd>
+void
+check_for_wait(const Cmd& cmd)
+{
+  if (cmd.wait_msecs() > 0) {
+    spdlog::trace("waiting {}ms before executing cmd {}", cmd.wait_msecs(), cmd.DebugString());
+    std::this_thread::sleep_for(std::chrono::milliseconds(cmd.wait_msecs()));
+    spdlog::trace("done waiting {}ms, executing cmd {}", cmd.wait_msecs(), cmd.DebugString());
+  }
+}
+
 grpc::Status
 TxnService::startTxn(ConnectionPtr conn,
                      const protocol::transactions::TransactionCreateRequest* request,
@@ -120,6 +131,17 @@ TxnService::startTxn(ConnectionPtr conn,
   }
 
   int attempt_count = 0;
+  // Under ExtSDKIntegration CommandCommit is ignored, and the transaction commits only after the
+  // lambda returns. Trailing setLatch commands after a commit are held here and set once run()
+  // returns. A peer released by such a latch then finds the ATR entry COMMITTED. Every case whose
+  // transaction ends with commit() then setLatch() takes this path. Seen failing without it,
+  // twoConcurrentTransactionsDeletingSameDocReadBeforeCommit in:
+  //   MultipleTransactionsTest
+  //   ConcurrentTransactionsOnMultiplePerformersTest
+  // Revisiting these cases in the FIT driver would fix them for every performer. The driver would
+  // set the latch when the transaction result arrives, and this deferral could be removed.
+  std::vector<std::pair<std::string, std::shared_ptr<fit_cxx::counting_latch>>>
+    latches_after_commit;
   std::list<fit_cxx::TxnSvcHook> hooks;
   couchbase::transactions::transaction_options opts;
   grpc::Status grpc_status{};
@@ -148,11 +170,34 @@ TxnService::startTxn(ConnectionPtr conn,
       attempt_count++;
       // now get the specific attempt we want to execute...
       const auto& attempt = request->attempts(attempt_to_use);
+      // Only trailing setLatch commands after a commit are deferred; one followed by any other
+      // command could be what that command waits on.
+      int deferred_from = attempt.commands_size();
+      while (deferred_from > 0 && attempt.commands(deferred_from - 1).has_set_latch()) {
+        --deferred_from;
+      }
+      if (deferred_from == 0 || !attempt.commands(deferred_from - 1).has_commit()) {
+        deferred_from = attempt.commands_size();
+      }
+      latches_after_commit.clear();
       // and iterate over the commands in that attempt
-      for (const protocol::transactions::TransactionCommand& command : attempt.commands()) {
-        spdlog::trace("{} executing command: {}", request->name(), command.DebugString());
+      for (int i = 0; i < attempt.commands_size(); ++i) {
+        const auto& command = attempt.commands(i);
         try {
-          auto op_err = execute_command(conn, ctx, command, request->name(), txn_ctx);
+          couchbase::error op_err{};
+          if (i >= deferred_from) {
+            // The command's wait and the checks below still apply; only setting the latch moves.
+            spdlog::trace("{} deferring latch {} until the transaction completes",
+                          request->name(),
+                          command.set_latch().latch_name());
+            check_for_wait(command);
+            // Looked up here, so that an unknown latch fails the transaction before it commits.
+            const auto& name = command.set_latch().latch_name();
+            latches_after_commit.emplace_back(name, txn_ctx.latches().get(name));
+          } else {
+            spdlog::trace("{} executing command: {}", request->name(), command.DebugString());
+            op_err = execute_command(conn, ctx, command, request->name(), txn_ctx);
+          }
           if (timed_out) {
             // this means we wrapped this in a call that limited the duration of the transaction,
             // and now we have exceeded that.   The "timeout hack" was done previously when we
@@ -185,6 +230,12 @@ TxnService::startTxn(ConnectionPtr conn,
       return {};
     },
     opts);
+
+  // Set whether or not the commit succeeded, if the last lambda run reached them.
+  for (const auto& [name, latch] : latches_after_commit) {
+    latch->set();
+    txn_ctx.broadcast_set_latch(name);
+  }
 
   if (!grpc_status.ok()) {
     spdlog::trace("startTxn returning non-OK status: {}", grpc_status.error_message());
@@ -629,17 +680,6 @@ execute_op(const Command& cmd,
     return {};
   }
   return err;
-}
-
-template<typename Cmd>
-void
-check_for_wait(const Cmd& cmd)
-{
-  if (cmd.wait_msecs() > 0) {
-    spdlog::trace("waiting {}ms before executing cmd {}", cmd.wait_msecs(), cmd.DebugString());
-    std::this_thread::sleep_for(std::chrono::milliseconds(cmd.wait_msecs()));
-    spdlog::trace("done waiting {}ms, executing cmd {}", cmd.wait_msecs(), cmd.DebugString());
-  }
 }
 
 auto
