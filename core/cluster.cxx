@@ -1681,6 +1681,19 @@ public:
       }
     }
 #endif
+    // Hooks run before the handler: the caller may stop the io_context as soon as it runs, and an
+    // operation waiting on a timer would then never complete.
+    decltype(close_hooks_) hooks{};
+    {
+      const std::scoped_lock lock(close_hooks_mutex_);
+      hooks = std::move(close_hooks_);
+      close_hooks_.clear();
+    }
+    for (auto& [owner, hook] : hooks) {
+      if (!owner.expired()) {
+        hook();
+      }
+    }
     work_.reset();
     // Observability members: stop in place, do NOT std::move. See the
     // comment above close() for why this matters across fork(child).
@@ -1700,6 +1713,24 @@ public:
       orphan_reporter_->stop();
     }
     handler();
+  }
+
+  auto add_close_hook(std::weak_ptr<void> owner, utils::movable_function<void()>&& hook) -> bool
+  {
+    const std::scoped_lock lock(close_hooks_mutex_);
+    // close() sets stopped_ before it posts the teardown, and finish_close() takes the hooks under
+    // this mutex, so a hook that passes this check is called.
+    if (stopped_) {
+      return false;
+    }
+    close_hooks_.erase(std::remove_if(close_hooks_.begin(),
+                                      close_hooks_.end(),
+                                      [](const auto& entry) {
+                                        return entry.first.expired();
+                                      }),
+                       close_hooks_.end());
+    close_hooks_.emplace_back(std::move(owner), std::move(hook));
+    return true;
   }
 
   auto direct_dispatch(const std::string& bucket_name,
@@ -1891,6 +1922,8 @@ private:
   std::shared_ptr<metrics::meter_wrapper> meter_{ nullptr };
   std::shared_ptr<orphan_reporter> orphan_reporter_{ nullptr };
   std::atomic_bool stopped_{ false };
+  std::mutex close_hooks_mutex_{};
+  std::vector<std::pair<std::weak_ptr<void>, utils::movable_function<void()>>> close_hooks_{};
   std::shared_ptr<core::app_telemetry_meter> app_telemetry_meter_{
     std::make_shared<core::app_telemetry_meter>()
   };
@@ -3174,6 +3207,16 @@ cluster::is_protostellar() const -> bool
   }
 #endif
   return false;
+}
+
+auto
+cluster::add_close_hook(std::weak_ptr<void> owner, utils::movable_function<void()>&& hook) const
+  -> bool
+{
+  if (!impl_) {
+    return false;
+  }
+  return impl_->add_close_hook(std::move(owner), std::move(hook));
 }
 
 auto

@@ -18,20 +18,32 @@
 #include "framework/test_registry.hxx"
 #include "utils/topology_fixtures.hxx"
 
+#include "core/cluster.hxx"
 #include "core/diagnostics.hxx"
 #include "core/impl/wait_until_ready.hxx"
+#include "core/origin.hxx"
 #include "core/service_type.hxx"
 #include "core/topology/configuration.hxx"
+#include "core/utils/connection_string.hxx"
 
 #include <couchbase/cluster_state.hxx>
+#include <couchbase/error_codes.hxx>
 #include <couchbase/logger.hxx>
 
+#include <asio/io_context.hpp>
+#include <asio/post.hpp>
+
 #include <atomic>
+#include <chrono>
 #include <cstdint>
+#include <future>
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <system_error>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -405,6 +417,197 @@ a_tls_only_kv_port_marks_a_data_node([[maybe_unused]] context& ctx)
             std::uint32_t{ 1 },
             "two TLS-only data nodes hold one of three replicas");
 }
+
+// A core cluster open against an address with no listener, so its bootstrap keeps failing. close()
+// stops it the way the public cluster's close() does: close the core, then stop the io_context and
+// join its thread. A continuation still queued after that never runs.
+class closable_core
+{
+public:
+  closable_core()
+  {
+    thread_ = std::thread([this]() {
+      io_.run();
+    });
+    couchbase::core::cluster_credentials credentials;
+    credentials.username = "Administrator";
+    credentials.password = "password";
+    core_.open(
+      couchbase::core::origin{
+        credentials, couchbase::core::utils::parse_connection_string("couchbase://127.0.0.1:1") },
+      [](std::error_code) {
+      });
+  }
+
+  closable_core(const closable_core&) = delete;
+  closable_core(closable_core&&) = delete;
+  auto operator=(const closable_core&) -> closable_core& = delete;
+  auto operator=(closable_core&&) -> closable_core& = delete;
+
+  ~closable_core()
+  {
+    close();
+  }
+
+  [[nodiscard]] auto core() const -> const couchbase::core::cluster&
+  {
+    return core_;
+  }
+
+  [[nodiscard]] auto io() -> asio::io_context&
+  {
+    return io_;
+  }
+
+  void close()
+  {
+    if (closed_) {
+      return;
+    }
+    closed_ = true;
+    std::promise<void> stopped;
+    core_.close([&stopped]() {
+      stopped.set_value();
+    });
+    stopped.get_future().get();
+    io_.stop();
+    thread_.join();
+  }
+
+private:
+  asio::io_context io_{};
+  couchbase::core::cluster core_{ io_ };
+  std::thread thread_{};
+  bool closed_{ false };
+};
+
+auto
+start_wait(const couchbase::core::cluster& core,
+           std::optional<std::string> bucket_name,
+           std::chrono::milliseconds timeout,
+           cluster_state desired_state = cluster_state::online) -> std::future<std::error_code>
+{
+  auto done = std::make_shared<std::promise<std::error_code>>();
+  auto future = done->get_future();
+  couchbase::core::impl::wait_until_ready(
+    core, std::move(bucket_name), timeout, desired_state, {}, [done](std::error_code ec) {
+      done->set_value(ec);
+    });
+  return future;
+}
+
+void
+assert_cluster_closed(std::future<std::error_code>& future, const std::string& what)
+{
+  assert_true(future.wait_for(std::chrono::seconds(5)) == std::future_status::ready,
+              what + " completes while the cluster object is alive");
+  const auto ec = future.get();
+  assert_true(ec == couchbase::errc::network::cluster_closed,
+              what + " is cluster_closed: " + ec.message());
+}
+
+// Returns once every handler posted to `io` before the call has run. A classic wait has already
+// armed its anchor timer inline, before wait_until_ready() returned; this confirms the io thread
+// is running.
+void
+run_posted_handlers(asio::io_context& io)
+{
+  auto ran = std::make_shared<std::promise<void>>();
+  asio::post(io, [ran]() {
+    ran->set_value();
+  });
+  assert_true(ran->get_future().wait_for(std::chrono::seconds(5)) == std::future_status::ready,
+              "the io thread runs posted handlers");
+}
+
+void
+assert_pending(std::future<std::error_code>& future, const std::string& what)
+{
+  assert_true(future.wait_for(std::chrono::seconds(0)) == std::future_status::timeout,
+              what + " is pending before close");
+}
+
+// Regression: close() stopped the io_context with a timer or posted continuation of the wait
+// queued, so the wait did not complete.
+void
+a_cluster_wait_pending_at_close_completes_with_cluster_closed([[maybe_unused]] context& ctx)
+{
+  closable_core cluster;
+  auto wait = start_wait(cluster.core(), std::nullopt, std::chrono::seconds(30));
+  run_posted_handlers(cluster.io());
+  assert_pending(wait, "a cluster wait");
+  cluster.close();
+  assert_cluster_closed(wait, "a cluster wait pending at close");
+}
+
+// Regression: as above, for a wait that opens the bucket first.
+void
+a_bucket_wait_pending_at_close_completes_with_cluster_closed([[maybe_unused]] context& ctx)
+{
+  closable_core cluster;
+  auto wait = start_wait(cluster.core(), "default", std::chrono::seconds(30));
+  run_posted_handlers(cluster.io());
+  assert_pending(wait, "a bucket wait");
+  cluster.close();
+  assert_cluster_closed(wait, "a bucket wait pending at close");
+}
+
+// Regression: a wait completed by close() kept its handler, and the handler's captures, alive for
+// as long as a continuation of the wait stayed queued on the stopped io_context.
+void
+a_wait_completed_on_close_releases_its_handler([[maybe_unused]] context& ctx)
+{
+  closable_core cluster;
+  auto sentinel = std::make_shared<int>(0);
+  const std::weak_ptr<int> watched = sentinel;
+  auto done = std::make_shared<std::promise<std::error_code>>();
+  auto wait = done->get_future();
+  couchbase::core::impl::wait_until_ready(
+    cluster.core(),
+    std::nullopt,
+    std::chrono::seconds(30),
+    cluster_state::online,
+    {},
+    [done, sentinel = std::move(sentinel)](std::error_code ec) {
+      done->set_value(ec);
+    });
+  run_posted_handlers(cluster.io());
+  cluster.close();
+
+  assert_cluster_closed(wait, "a wait pending at close");
+  assert_true(watched.expired(), "the handler's captures are released once it has run");
+}
+
+// Regression: the retry timer of a wait started after close() landed on the stopped io_context.
+void
+a_cluster_wait_after_close_completes_with_cluster_closed([[maybe_unused]] context& ctx)
+{
+  closable_core cluster;
+  cluster.close();
+  auto wait = start_wait(cluster.core(), std::nullopt, std::chrono::seconds(30));
+  assert_cluster_closed(wait, "a cluster wait after close");
+}
+
+// Guards the bucket wait after close(), which open_bucket() already answered with cluster_closed.
+void
+a_bucket_wait_after_close_completes_with_cluster_closed([[maybe_unused]] context& ctx)
+{
+  closable_core cluster;
+  cluster.close();
+  auto wait = start_wait(cluster.core(), "default", std::chrono::seconds(30));
+  assert_cluster_closed(wait, "a bucket wait after close");
+}
+
+// Regression: the offline rejection was posted to the stopped io_context.
+void
+an_offline_wait_after_close_completes_with_cluster_closed([[maybe_unused]] context& ctx)
+{
+  closable_core cluster;
+  cluster.close();
+  auto wait =
+    start_wait(cluster.core(), std::nullopt, std::chrono::seconds(30), cluster_state::offline);
+  assert_cluster_closed(wait, "an offline wait after close");
+}
 } // namespace
 
 auto
@@ -446,6 +649,12 @@ tests() -> test_suite
       { CASE(placeable_or_uncapped_replicas_are_not_warned_about), {}, timeout::instant },
       { CASE(a_configuration_without_data_nodes_is_not_capped), {}, timeout::instant },
       { CASE(a_tls_only_kv_port_marks_a_data_node), {}, timeout::instant },
+      { CASE(a_cluster_wait_pending_at_close_completes_with_cluster_closed), {}, timeout::slow },
+      { CASE(a_bucket_wait_pending_at_close_completes_with_cluster_closed), {}, timeout::slow },
+      { CASE(a_wait_completed_on_close_releases_its_handler), {}, timeout::slow },
+      { CASE(a_cluster_wait_after_close_completes_with_cluster_closed), {}, timeout::slow },
+      { CASE(a_bucket_wait_after_close_completes_with_cluster_closed), {}, timeout::slow },
+      { CASE(an_offline_wait_after_close_completes_with_cluster_closed), {}, timeout::slow },
     },
   };
 }

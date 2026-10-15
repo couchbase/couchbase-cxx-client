@@ -368,6 +368,12 @@ public:
   // couchbase2 only: whether the gRPC channel is READY, asking an idle channel to connect.
   // cluster_closed once the cluster is closed, feature_not_available for any other cluster.
   [[nodiscard]] auto protostellar_channel_ready() const -> std::pair<std::error_code, bool>;
+  // Calls `hook` on the io_context during close(), before close()'s handler, if `owner` is still
+  // alive then. Returns false, without registering, once the cluster is stopped. open() also stops
+  // it without calling hooks when the origin has no nodes, the build has no couchbase2 support, or
+  // the couchbase2 channel cannot be built.
+  [[nodiscard]] auto add_close_hook(std::weak_ptr<void> owner,
+                                    utils::movable_function<void()>&& hook) const -> bool;
 
 private:
   std::shared_ptr<cluster_impl> impl_;

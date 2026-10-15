@@ -207,10 +207,20 @@ public:
 
   void run()
   {
+    // close() completes a wait still in flight: the public cluster stops its io_context once
+    // close()'s handler runs, so no timer or posted continuation of this wait would run after
+    // that. A cluster already closed completes here, inline, as open_bucket() does.
+    const std::weak_ptr<wait_until_ready_operation> weak_for_close = shared_from_this();
+    if (!core_.add_close_hook(weak_for_close, [weak_for_close]() {
+          if (auto self = weak_for_close.lock(); self) {
+            self->complete(errc::network::cluster_closed);
+          }
+        })) {
+      return complete(errc::network::cluster_closed);
+    }
     if (desired_state_ == couchbase::cluster_state::offline) {
-      // Reject on the io_context rather than inline: run() is called on the caller's thread, and
-      // every other completion path lands on the io thread. Hopping here keeps the handler's
-      // execution context uniform regardless of which validation/branch completes the operation.
+      // Reject on the io_context, not inline, so the handler runs on the io thread as on the poll
+      // path. A closed cluster is answered inline above, because its io_context may be stopped.
       auto self = shared_from_this();
       return asio::post(core_.io_context(), [self]() {
         self->complete(errc::common::invalid_argument);
@@ -220,12 +230,6 @@ public:
       // couchbase2 reaches every service through the gateway's gRPC channel, so a READY channel is
       // both the online and the degraded state, whatever the bucket and services. There is no
       // bucket to open and no session to ping. Posted for the same reason as the rejection above.
-      // A closed cluster completes inline with cluster_closed, as open_bucket() does on the classic
-      // path: the public cluster stops its io_context on close, so a posted poll would not run
-      // until the io_context is destroyed.
-      if (const auto ec = core_.protostellar_channel_ready().first; ec) {
-        return complete(ec);
-      }
       auto self = shared_from_this();
       return asio::post(core_.io_context(), [self]() {
         self->poll();
@@ -271,13 +275,16 @@ private:
     return std::max(left, std::chrono::milliseconds::zero());
   }
 
+  // The close hook can run on another io thread than a continuation of this wait.
   void complete(std::error_code ec)
   {
-    if (completed_) {
+    if (completed_.exchange(true)) {
       return;
     }
-    completed_ = true;
-    handler_(ec);
+    // Moved out, so that the handler's captures are released when it returns: a completed wait can
+    // stay referenced by a continuation queued on a stopped io_context.
+    auto handler = std::move(handler_);
+    handler(ec);
   }
 
   void schedule_retry()
@@ -407,7 +414,7 @@ private:
   std::set<service_type> services_;
   utils::movable_function<void(std::error_code)> handler_;
   asio::steady_timer timer_;
-  bool completed_{ false };
+  std::atomic_bool completed_{ false };
   // Every poll sees the same configuration until a node is added, so the warning is logged once.
   std::atomic_bool unplaceable_replicas_logged_{ false };
 };
