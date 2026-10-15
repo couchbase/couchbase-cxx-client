@@ -25,9 +25,12 @@
 #include "core/operations/document_get.hxx"
 #include "core/operations/document_get_replica.hxx"
 #include "core/operations/operation_traits.hxx"
+#include "core/service_type.hxx"
+#include "core/utils/deadline.hxx"
 #include "core/utils/movable_function.hxx"
 #include "couchbase/error_codes.hxx"
 
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -59,17 +62,23 @@ struct get_any_replica_request {
   template<typename Core, typename Handler>
   void execute(Core core, Handler handler)
   {
+    const auto deadline = std::chrono::steady_clock::now() +
+                          timeout.value_or(core->default_timeout_for(service_type::key_value));
     core->with_bucket_configuration(
       id.bucket(),
+      deadline,
       [core,
        id = id,
-       timeout = timeout,
+       deadline,
        read_preference = read_preference,
        parent_span = std::move(parent_span),
        h = std::forward<Handler>(handler)](
         std::error_code ec, std::shared_ptr<topology::configuration> config) mutable {
+        if (ec) {
+          return h(response_type{ make_key_value_error_context(ec, id) });
+        }
         const auto [e, origin] = core->origin();
-        if (e && !ec) {
+        if (e) {
           ec = e;
         }
 
@@ -142,7 +151,7 @@ struct get_any_replica_request {
             impl::with_cancellation<operations::get_replica_request> req{
               {
                 std::move(replica_id),
-                timeout,
+                utils::remaining_until(deadline),
                 {},
                 {},
                 {},
@@ -193,7 +202,7 @@ struct get_any_replica_request {
                 id,
                 {},
                 {},
-                timeout,
+                utils::remaining_until(deadline),
                 {},
                 subop_span,
               },

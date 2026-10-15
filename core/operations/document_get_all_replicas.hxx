@@ -29,9 +29,12 @@
 #include "core/operations/document_get_replica.hxx"
 #include "core/operations/operation_traits.hxx"
 #include "core/public_fwd.hxx"
+#include "core/service_type.hxx"
 #include "core/tracing/constants.hxx"
+#include "core/utils/deadline.hxx"
 #include "core/utils/movable_function.hxx"
 
+#include <chrono>
 #include <memory>
 #include <mutex>
 
@@ -66,11 +69,14 @@ struct get_all_replicas_request {
   template<typename Core, typename Handler>
   void execute(Core core, Handler handler)
   {
+    const auto deadline = std::chrono::steady_clock::now() +
+                          timeout.value_or(core->default_timeout_for(service_type::key_value));
     core->with_bucket_configuration(
       id.bucket(),
+      deadline,
       [core,
        id = id,
-       timeout = timeout,
+       deadline,
        read_preference = read_preference,
        parent_span = std::move(parent_span),
        h = std::forward<Handler>(handler)](
@@ -133,7 +139,7 @@ struct get_all_replicas_request {
             core->execute(
               operations::get_replica_request{
                 std::move(replica_id),
-                timeout,
+                utils::remaining_until(deadline),
                 {},
                 {},
                 {},
@@ -186,7 +192,7 @@ struct get_all_replicas_request {
                 document_id{ id },
                 {},
                 {},
-                timeout,
+                utils::remaining_until(deadline),
                 {},
                 subop_span,
               },

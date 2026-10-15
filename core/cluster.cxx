@@ -50,6 +50,7 @@
 #include "core/io/http_message.hxx"
 #include "core/io/http_session_manager.hxx"
 #include "core/io/mcbp_session.hxx"
+#include "core/io/mcbp_traits.hxx"
 #include "core/logger/logger.hxx"
 #include "core/logger/redaction.hxx"
 #include "core/management/analytics_link_azure_blob_external.hxx"
@@ -168,6 +169,7 @@
 #include "core/tracing/noop_tracer.hxx"
 #include "core/tracing/threshold_logging_tracer.hxx"
 #include "core/tracing/tracer_wrapper.hxx"
+#include "core/utils/deadline.hxx"
 #include "core/utils/movable_function.hxx"
 #include "crud_component.hxx"
 #include "dispatcher.hxx"
@@ -312,7 +314,9 @@ private:
 
 namespace
 {
-// A request held by cluster_impl::defer_until_open().
+// A wait with an optional deadline, held by cluster_impl::defer_until_open() or
+// cluster_impl::wait_until(). complete() runs on the IO thread; the destructor runs `resume` on
+// whichever thread drops the last reference.
 struct deferred_request {
   utils::movable_function<void(std::error_code)> resume{};
   std::unique_ptr<asio::steady_timer> deadline{};
@@ -326,27 +330,54 @@ struct deferred_request {
     if (completed.exchange(true)) {
       return;
     }
-    if (deadline && !ec) {
+    if (deadline) {
+      // An armed timer keeps the entry and the io_context's work alive until it expires.
       deadline->cancel();
       // The deadline can pass while the IO thread is busy, before the timer callback runs. A
       // request resumed after it would be dispatched with remaining_until()'s floor.
-      if (deadline->expiry() <= std::chrono::steady_clock::now()) {
+      if (!ec && deadline->expiry() <= std::chrono::steady_clock::now()) {
         ec = errc::common::unambiguous_timeout;
       }
     }
     auto handler = std::move(resume);
     handler(ec);
   }
+
+  // complete() for a thread other than the IO thread: the timer is not touched, and is left to
+  // expire or to be destroyed with its io_context.
+  void complete_off_io_thread(std::error_code ec)
+  {
+    if (completed.exchange(true)) {
+      return;
+    }
+    auto handler = std::move(resume);
+    if (handler) {
+      handler(ec);
+    }
+  }
+
+  deferred_request() = default;
+  deferred_request(const deferred_request&) = delete;
+  deferred_request(deferred_request&&) = delete;
+  auto operator=(const deferred_request&) -> deferred_request& = delete;
+  auto operator=(deferred_request&&) -> deferred_request& = delete;
+
+  // A stopped io_context drops the timer wait and any completion posted to it. The last reference
+  // then goes here, and the request completes with cluster_closed rather than never. The timer is
+  // not touched: its io_context may be shutting down.
+  ~deferred_request()
+  {
+    try {
+      complete_off_io_thread(errc::network::cluster_closed);
+    } catch (...) { // NOLINT(bugprone-empty-catch)
+    }
+  }
 };
 
-// What is left of a held request's timeout. At least a millisecond: zero means "use the default".
-auto
-remaining_until(std::chrono::steady_clock::time_point deadline) -> std::chrono::milliseconds
-{
-  return std::max(std::chrono::duration_cast<std::chrono::milliseconds>(
-                    deadline - std::chrono::steady_clock::now()),
-                  std::chrono::milliseconds{ 1 });
-}
+using utils::remaining_until;
+
+// A durable mutation gets at least this long, counted from when it is issued.
+constexpr std::chrono::milliseconds durability_timeout_floor{ 1'500 };
 
 // Whether T has a client_context_id member: a request that can carry one, or a context that reports
 // it.
@@ -718,6 +749,64 @@ public:
     do_open(std::move(handler));
   }
 
+  // Runs `resume` once: with the error that `start` reports through the completion it is given, or
+  // with unambiguous_timeout when `deadline` passes first. A success reported after `deadline` is a
+  // timeout too. `resume` runs on the IO thread while the cluster is open. After close() the IO
+  // thread may never run again, so a stopped cluster completes at once with cluster_closed, and a
+  // wait that reports after close() runs `resume` on the thread that reports.
+  template<typename Start>
+  void wait_until(std::chrono::steady_clock::time_point deadline,
+                  utils::movable_function<void(std::error_code)>&& resume,
+                  Start&& start)
+  {
+    if (stopped_) {
+      return resume(errc::network::cluster_closed);
+    }
+    auto entry = std::make_shared<deferred_request>();
+    entry->resume = std::move(resume);
+    entry->deadline = std::make_unique<asio::steady_timer>(ctx_, deadline);
+    entry->deadline->async_wait([entry](std::error_code ec) {
+      if (ec != asio::error::operation_aborted) {
+        entry->complete(errc::common::unambiguous_timeout);
+      }
+    });
+    // Held weakly: `start` may keep this completion after the wait ends, as a bucket's queue of
+    // configuration waiters does. The pending timer keeps the entry alive until it completes.
+    std::forward<Start>(start)(
+      [self = shared_from_this(),
+       weak_entry = std::weak_ptr<deferred_request>(entry)](std::error_code ec) {
+        auto entry = weak_entry.lock();
+        if (!entry) {
+          return;
+        }
+        if (self->ctx_.get_executor().running_in_this_thread()) {
+          return entry->complete(ec);
+        }
+        // A wait that started just before close() can report after the IO thread has stopped, and
+        // a stopped io_context keeps what is posted to it without running it.
+        if (self->stopped_) {
+          entry->complete_off_io_thread(ec);
+          // The armed timer would keep the io_context busy until the deadline; dropped if it
+          // stopped.
+          return asio::post(self->ctx_, [entry] {
+            entry->deadline->cancel();
+          });
+        }
+        asio::post(self->ctx_, [entry, ec] {
+          entry->complete(ec);
+        });
+      });
+  }
+
+  void open_bucket_until(const std::string& bucket_name,
+                         std::chrono::steady_clock::time_point deadline,
+                         utils::movable_function<void(std::error_code)>&& handler)
+  {
+    wait_until(deadline, std::move(handler), [&](auto&& done) {
+      open_bucket(bucket_name, std::forward<decltype(done)>(done));
+    });
+  }
+
   void open_bucket(const std::string& bucket_name,
                    utils::movable_function<void(std::error_code)>&& handler)
   {
@@ -882,28 +971,53 @@ public:
       }
     }
 #endif
-    // The request's timeout counts from now, not from the end of the bootstrap.
-    if (const auto deadline =
-          std::chrono::steady_clock::now() +
-          request.timeout.value_or(default_timeout_for(service_type::key_value));
-        defer_until_open(
-          [&] {
-            return [self = shared_from_this(),
-                    deadline,
-                    request = std::move(request),
-                    handler = std::forward<Handler>(handler)](std::error_code ec) mutable {
-              if (ec) {
-                return handler(request.make_response(make_key_value_error_context(ec, request.id),
-                                                     response_type{}));
-              }
-              request.timeout = remaining_until(deadline);
-              self->execute(std::move(request), std::move(handler));
-            };
-          },
-          deadline)) {
+    auto timeout = request.timeout.value_or(default_timeout_for(service_type::key_value));
+    if constexpr (io::mcbp_traits::supports_durability_v<Request>) {
+      if (request.durability_level != durability_level::none &&
+          timeout < durability_timeout_floor) {
+        CB_LOG_DEBUG(
+          R"(Timeout is too low for operation with durability, increasing to sensible value. key="{}", timeout={}ms, floor={}ms)",
+          logger::document(request.id),
+          timeout.count(),
+          durability_timeout_floor.count());
+        timeout = durability_timeout_floor;
+      }
+    }
+    execute_until(std::move(request),
+                  std::chrono::steady_clock::now() + timeout,
+                  std::forward<Handler>(handler));
+  }
+
+  // A key-value request's timeout counts from when it was issued: waiting for the bootstrap or for
+  // the bucket to open spends it, and the command gets only what is left. Past `deadline` the
+  // request gets unambiguous_timeout and is not dispatched.
+  template<class Request, class Handler>
+  void execute_until(Request request,
+                     std::chrono::steady_clock::time_point deadline,
+                     Handler&& handler)
+  {
+    using response_type = typename Request::encoded_response_type;
+    if (stopped_) {
+      return handler(request.make_response(
+        make_key_value_error_context(errc::network::cluster_closed, request.id), response_type{}));
+    }
+    auto resume = [&] {
+      return [self = shared_from_this(),
+              deadline,
+              request = std::move(request),
+              handler = std::forward<Handler>(handler)](std::error_code ec) mutable {
+        if (ec) {
+          return handler(
+            request.make_response(make_key_value_error_context(ec, request.id), response_type{}));
+        }
+        self->execute_until(std::move(request), deadline, std::move(handler));
+      };
+    };
+    if (defer_until_open(resume, deadline)) {
       return;
     }
     if (auto bucket = find_bucket_by_name(request.id.bucket()); bucket != nullptr) {
+      request.timeout = remaining_until(deadline);
       return bucket->execute(std::move(request), std::forward<Handler>(handler));
     }
     if (request.id.bucket().empty()) {
@@ -911,16 +1025,7 @@ public:
         make_key_value_error_context(errc::common::bucket_not_found, request.id), response_type{}));
     }
     auto bucket_name = request.id.bucket();
-    return open_bucket(bucket_name,
-                       [self = shared_from_this(),
-                        request = std::move(request),
-                        handler = std::forward<Handler>(handler)](std::error_code ec) mutable {
-                         if (ec) {
-                           return handler(request.make_response(
-                             make_key_value_error_context(ec, request.id), response_type{}));
-                         }
-                         return self->execute(std::move(request), std::forward<Handler>(handler));
-                       });
+    open_bucket_until(bucket_name, deadline, resume());
   }
 
   template<class Request,
@@ -1009,10 +1114,12 @@ public:
     if (is_protostellar()) {
       return execute(std::move(request), std::forward<Handler>(handler));
     }
-    // open_bucket() below holds a request without a deadline, so the timed hold is taken here.
-    if (const auto deadline = std::chrono::steady_clock::now() +
-                              request.timeout.value_or(default_timeout_for(request.type));
-        defer_until_open(
+    // The waits for the bootstrap and for the bucket's configuration spend the request's timeout;
+    // the request gets what is left. The timed hold comes first: open_bucket() would hold the
+    // request without a deadline, and it would stay queued after timing out.
+    const auto deadline = std::chrono::steady_clock::now() +
+                          request.timeout.value_or(default_timeout_for(request.type));
+    if (defer_until_open(
           [&] {
             return [self = shared_from_this(),
                     deadline,
@@ -1031,31 +1138,25 @@ public:
       return;
     }
     auto bucket_name = request.bucket_name;
-    return open_bucket(
+    return with_bucket_configuration(
       bucket_name,
+      deadline,
       [self = shared_from_this(),
-       bucket_name,
+       deadline,
        cap,
        request = std::move(request),
-       handler = std::forward<Handler>(handler)](std::error_code ec) mutable {
+       handler = std::forward<Handler>(handler)](
+        std::error_code ec, const std::shared_ptr<topology::configuration>& config) mutable {
         if (ec) {
           handler(request.make_response({ ec }, {}));
           return;
         }
-        return self->with_bucket_configuration(
-          bucket_name,
-          [self, cap, request = std::move(request), handler = std::forward<Handler>(handler)](
-            std::error_code ec, const std::shared_ptr<topology::configuration>& config) mutable {
-            if (ec) {
-              handler(request.make_response({ ec }, {}));
-              return;
-            }
-            if (!config->capabilities.has_bucket_capability(cap)) {
-              handler(request.make_response({ errc::common::feature_not_available }, {}));
-              return;
-            }
-            return self->execute(std::move(request), std::forward<Handler>(handler));
-          });
+        if (!config->capabilities.has_bucket_capability(cap)) {
+          handler(request.make_response({ errc::common::feature_not_available }, {}));
+          return;
+        }
+        request.timeout = remaining_until(deadline);
+        return self->execute(std::move(request), std::forward<Handler>(handler));
       });
   }
 
@@ -1647,6 +1748,32 @@ public:
           return bucket->with_configuration(std::move(handler));
         }
         return handler(errc::common::bucket_not_found, nullptr);
+      });
+  }
+
+  // with_bucket_configuration(), or unambiguous_timeout with no configuration once `deadline`
+  // passes.
+  void with_bucket_configuration(
+    const std::string& bucket_name,
+    std::chrono::steady_clock::time_point deadline,
+    utils::movable_function<void(std::error_code, std::shared_ptr<topology::configuration>)>&&
+      handler)
+  {
+    // Written before the completion is dispatched, and read only after it ran.
+    auto config = std::make_shared<std::shared_ptr<topology::configuration>>();
+    wait_until(
+      deadline,
+      [config, handler = std::move(handler)](std::error_code ec) mutable {
+        handler(ec, ec ? nullptr : std::move(*config));
+      },
+      [&](auto&& done) {
+        with_bucket_configuration(
+          bucket_name,
+          [config, done = std::forward<decltype(done)>(done)](
+            std::error_code ec, std::shared_ptr<topology::configuration> c) mutable {
+            *config = std::move(c);
+            done(ec);
+          });
       });
   }
 
@@ -2390,16 +2517,7 @@ cluster::execute(
       })) {
     return;
   }
-  auto bucket_name = request.id.bucket();
-  return open_bucket(
-    bucket_name,
-    [impl = impl_, request = std::move(request), handler = std::move(handler)](auto ec) mutable {
-      if (ec) {
-        return handler(
-          operations::get_all_replicas_response{ make_key_value_error_context(ec, request.id) });
-      }
-      return request.execute(impl, std::move(handler));
-    });
+  return request.execute(impl_, std::move(handler));
 }
 
 void
@@ -2430,16 +2548,7 @@ cluster::execute(
       })) {
     return;
   }
-  auto bucket_name = request.id.bucket();
-  return open_bucket(
-    bucket_name,
-    [impl = impl_, request = std::move(request), handler = std::move(handler)](auto ec) mutable {
-      if (ec) {
-        return handler(
-          operations::get_any_replica_response{ make_key_value_error_context(ec, request.id) });
-      }
-      return request.execute(impl, std::move(handler));
-    });
+  return request.execute(impl_, std::move(handler));
 }
 
 void
