@@ -196,6 +196,9 @@ public:
   // Out of line: `stubs` is incomplete here, so its deleter cannot be instantiated in this header.
   ~component();
 
+  // The channel every call of this component is issued on.
+  [[nodiscard]] auto channel() const -> const std::shared_ptr<grpc::Channel>&;
+
   auto execute(const operations::get_request& request,
                utils::movable_function<void(operations::get_response)>&& handler) -> pending_call;
   auto execute(const operations::get_projected_request& request,

@@ -130,6 +130,10 @@ public:
    * satisfy immediately. The @c cluster_state::degraded target is ping-only, since it deliberately
    * tolerates partial availability.
    *
+   * Over couchbase2, the wait ends once the gRPC channel to the gateway is connected. Neither the
+   * bucket nor the credentials are checked, the requested services are not considered, and
+   * @c cluster_state::online and @c cluster_state::degraded are the same state.
+   *
    * @param timeout the maximum time to wait for readiness.
    * @param options custom options to change the default behavior.
    * @param handler the handler that implements @ref wait_until_ready_handler.

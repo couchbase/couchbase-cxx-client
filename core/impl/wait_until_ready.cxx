@@ -216,6 +216,21 @@ public:
         self->complete(errc::common::invalid_argument);
       });
     }
+    if (core_.is_protostellar()) {
+      // couchbase2 reaches every service through the gateway's gRPC channel, so a READY channel is
+      // both the online and the degraded state, whatever the bucket and services. There is no
+      // bucket to open and no session to ping. Posted for the same reason as the rejection above.
+      // A closed cluster completes inline with cluster_closed, as open_bucket() does on the classic
+      // path: the public cluster stops its io_context on close, so a posted poll would not run
+      // until the io_context is destroyed.
+      if (const auto ec = core_.protostellar_channel_ready().first; ec) {
+        return complete(ec);
+      }
+      auto self = shared_from_this();
+      return asio::post(core_.io_context(), [self]() {
+        self->poll();
+      });
+    }
     if (bucket_name_) {
       // Opening the bucket is what makes its configuration (and therefore the vbucket map we poll)
       // available on the core cluster. It is idempotent for an already-open bucket.
@@ -306,6 +321,16 @@ private:
     }
     if (remaining() == std::chrono::milliseconds::zero()) {
       return complete(errc::common::unambiguous_timeout);
+    }
+    if (core_.is_protostellar()) {
+      const auto [ec, ready] = core_.protostellar_channel_ready();
+      if (ec) {
+        return complete(ec);
+      }
+      if (ready) {
+        return complete({});
+      }
+      return schedule_retry();
     }
     if (bucket_name_ && desired_state_ == couchbase::cluster_state::online) {
       // KV readiness (replica placement) first -- it is the condition durable writes need and the
