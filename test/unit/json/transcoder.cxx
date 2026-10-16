@@ -17,6 +17,8 @@
 
 #include "framework/test_registry.hxx"
 
+#include "core/utils/json.hxx"
+
 #include <couchbase/codec/codec_flags.hxx>
 #include <couchbase/codec/default_json_transcoder.hxx>
 #include <couchbase/codec/lenient_json_transcoder.hxx>
@@ -26,10 +28,41 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
+#include <new>
 #include <string>
 #include <string_view>
 #include <system_error>
 #include <vector>
+
+#ifndef COUCHBASE_CXX_CLIENT_BUILD_SANITIZED
+namespace
+{
+thread_local volatile long g_alloc_count{ 0 };
+} // namespace
+
+auto
+operator new(std::size_t sz) -> void*
+{
+  g_alloc_count = g_alloc_count + 1;
+  if (void* p = std::malloc(sz == 0 ? 1 : sz)) {
+    return p;
+  }
+  throw std::bad_alloc{};
+}
+
+void
+operator delete(void* p) noexcept
+{
+  std::free(p);
+}
+
+void
+operator delete(void* p, std::size_t /* sz */) noexcept
+{
+  std::free(p);
+}
+#endif
 
 namespace couchbase::test
 {
@@ -254,6 +287,45 @@ the_lenient_transcoder_decodes_user_data_stored_with_binary_flags([[maybe_unused
   assert_eq(decoded.full_name, std::string{ "Albert Einstein" }, "the full name field");
   assert_eq(decoded.birth_year, std::uint32_t{ 1879 }, "the birth year field");
 }
+
+void
+generate_binary_matches_generate_across_escaped_and_multi_field_documents(
+  [[maybe_unused]] context& ctx)
+{
+  const auto small_binary = couchbase::core::utils::json::generate_binary(albert());
+  assert_true(small_binary == albert_json(),
+              "generate_binary(const T&) matches generate byte-for-byte");
+  assert_true(small_binary.capacity() >= 256,
+              "generate_binary reserves an initial 256-byte buffer");
+
+  // 20 escaped fields produce ~1120 bytes of JSON across >100 consumer writes. With initial
+  // reserve(256) and geometric vector growth, generate_binary performs only a few reallocations
+  // (3 allocations: 256 -> 512 -> 1024 -> 2048), whereas per-write reserve(size + token) caused
+  // >60 reallocations and left capacity == size.
+  tao::json::value doc = tao::json::empty_object;
+  for (int i = 0; i < 20; ++i) {
+    doc["field_" + std::to_string(i)] =
+      "line1\n\t\"quoted_" + std::to_string(i) + "\"\\backslash\r\n\x01end";
+  }
+  doc["flag_true"] = true;
+  doc["flag_false"] = false;
+  doc["null_val"] = tao::json::null;
+
+  const auto as_string = couchbase::core::utils::json::generate(doc);
+#ifndef COUCHBASE_CXX_CLIENT_BUILD_SANITIZED
+  g_alloc_count = 0;
+#endif
+  const auto as_binary = couchbase::core::utils::json::generate_binary(doc);
+#ifndef COUCHBASE_CXX_CLIENT_BUILD_SANITIZED
+  const long allocs = g_alloc_count;
+  assert_true(allocs <= 12L,
+              "generate_binary grows geometrically in O(log N) allocations rather than per-token");
+#endif
+  assert_true(as_binary == to_bytes(as_string),
+              "generate_binary matches generate byte-for-byte across multi-field escaped JSON");
+  assert_true(as_binary.capacity() > as_binary.size(),
+              "to_byte_vector grows geometrically rather than reserving exact token sizes");
+}
 } // namespace
 
 auto
@@ -271,6 +343,7 @@ tests() -> test_suite
       { CASE(the_lenient_transcoder_decodes_under_any_common_flags) },
       { CASE(json_stored_with_binary_flags_is_read_only_by_the_lenient_transcoder) },
       { CASE(the_lenient_transcoder_decodes_user_data_stored_with_binary_flags) },
+      { CASE(generate_binary_matches_generate_across_escaped_and_multi_field_documents) },
     },
   };
 }

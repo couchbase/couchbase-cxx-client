@@ -41,11 +41,6 @@ noop_on_row(std::string&& /* row */) -> stream_control
 {
   return stream_control::next_row;
 }
-
-void
-noop_on_meta_header_complete(std::error_code /* ec */, std::string&& /* meta_header */)
-{ /* do nothing */
-}
 } // namespace
 
 #define STATE_MARKER_ROOT (reinterpret_cast<void*>(1))
@@ -142,11 +137,10 @@ struct streaming_lexer_impl {
   std::size_t keep_position_{};
 
   std::string buffer_{};
-  std::string last_key_{};
+  std::size_t last_key_offset_{ 0 };
+  std::size_t last_key_len_{ 0 };
   std::error_code error_{};
-  utils::movable_function<void(std::error_code, std::string&&)> on_meta_header_complete_{
-    noop_on_meta_header_complete
-  };
+  utils::movable_function<void(std::error_code, std::string&&)> on_meta_header_complete_{};
   std::function<void(std::error_code, std::size_t, std::string&&)> on_complete_{ noop_on_complete };
   std::function<stream_control(std::string&&)> on_row_{ noop_on_row };
   bool root_has_been_validated_{ false };
@@ -258,8 +252,10 @@ error_callback(jsonsl_t lexer,
 
   impl->error_ = convert_status(error);
 
-  impl->on_meta_header_complete_(impl->error_, {});
-  impl->on_meta_header_complete_ = detail::noop_on_meta_header_complete;
+  if (impl->on_meta_header_complete_) {
+    impl->on_meta_header_complete_(impl->error_, {});
+    impl->on_meta_header_complete_ = nullptr;
+  }
 
   impl->on_complete_(impl->error_, impl->number_of_rows_, {});
   impl->on_complete_ = detail::noop_on_complete;
@@ -283,9 +279,11 @@ meta_header_complete_callback(jsonsl_t lexer,
   impl->meta_header_length_ = state->pos_begin;
   lexer->action_callback_PUSH = nullptr;
 
-  auto meta_header = impl->meta_buffer_;
-  impl->on_meta_header_complete_({}, std::move(meta_header));
-  impl->on_meta_header_complete_ = detail::noop_on_meta_header_complete;
+  if (impl->on_meta_header_complete_) {
+    auto meta_header = impl->meta_buffer_;
+    impl->on_meta_header_complete_({}, std::move(meta_header));
+    impl->on_meta_header_complete_ = nullptr;
+  }
 }
 
 void
@@ -309,9 +307,11 @@ trailer_pop_callback(jsonsl_t lexer,
   impl->meta_complete_ = true;
 
   // This will have no effect if on_meta_header_complete has already been called.
-  auto meta_header = impl->meta_buffer_;
-  impl->on_meta_header_complete_({}, std::move(meta_header));
-  impl->on_meta_header_complete_ = detail::noop_on_meta_header_complete;
+  if (impl->on_meta_header_complete_) {
+    auto meta_header = impl->meta_buffer_;
+    impl->on_meta_header_complete_({}, std::move(meta_header));
+    impl->on_meta_header_complete_ = nullptr;
+  }
 
   impl->on_complete_({}, impl->number_of_rows_, std::move(impl->meta_buffer_));
   // Reset so trailing bytes after a well-formed document (which would drive error_callback) cannot
@@ -375,8 +375,8 @@ initial_action_pop_callback(jsonsl_t lexer,
   }
 
   if (state->type == JSONSL_T_HKEY) {
-    impl->last_key_ =
-      impl->buffer_.substr(state->pos_begin + 1, state->pos_cur - state->pos_begin - 1);
+    impl->last_key_offset_ = state->pos_begin + 1;
+    impl->last_key_len_ = state->pos_cur - state->pos_begin - 1;
   }
 
   if (state->data == STATE_MARKER_ROOT) {
@@ -398,8 +398,12 @@ initial_action_push_callback(jsonsl_t lexer,
 
   jsonsl_jpr_match_t match = JSONSL_MATCH_UNKNOWN;
   if (state->type != JSONSL_T_HKEY) {
-    auto key = std::move(impl->last_key_);
-    jsonsl_jpr_match_state(lexer, state, key.data(), key.size(), &match);
+    std::string_view key{};
+    if (impl->last_key_len_ > 0) {
+      key = impl->get_buffer_region(impl->last_key_offset_, impl->last_key_len_);
+      impl->last_key_len_ = 0;
+    }
+    jsonsl_jpr_match_state(lexer, state, key.empty() ? "" : key.data(), key.size(), &match);
   }
   impl->validate_root(state, match);
   if (state->type == JSONSL_T_LIST && match == JSONSL_MATCH_POSSIBLE) {
@@ -459,8 +463,10 @@ streaming_lexer::feed(std::string_view data)
       impl_->aborted_ = true;
       impl_->error_ = errc::streaming_json_lexer::generic;
 
-      impl_->on_meta_header_complete_(impl_->error_, {});
-      impl_->on_meta_header_complete_ = detail::noop_on_meta_header_complete;
+      if (impl_->on_meta_header_complete_) {
+        impl_->on_meta_header_complete_(impl_->error_, {});
+        impl_->on_meta_header_complete_ = nullptr;
+      }
 
       impl_->on_complete_(impl_->error_, impl_->number_of_rows_, {});
       impl_->on_complete_ = detail::noop_on_complete;
