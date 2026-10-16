@@ -75,8 +75,7 @@ struct get_replica_request {
     -> std::error_code;
 
   [[nodiscard]] auto make_response(key_value_error_context&& ctx,
-                                   const encoded_response_type& encoded) const
-    -> get_replica_response;
+                                   encoded_response_type&& encoded) const -> get_replica_response;
 };
 
 using movable_get_replica_handler =

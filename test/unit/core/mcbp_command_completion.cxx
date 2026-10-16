@@ -412,6 +412,22 @@ a_rejected_retry_keeps_the_ambiguity_of_an_earlier_attempt([[maybe_unused]] cont
             std::error_code{ couchbase::errc::common::ambiguous_timeout },
             "the first attempt may still have been applied");
 }
+
+void
+constructing_mcbp_command_moves_request_value_buffer([[maybe_unused]] context& ctx)
+{
+  command_fixture fixture{};
+  couchbase::core::operations::upsert_request request{};
+  request.id = named_collection_key();
+  request.value.assign(65'536, std::byte{ 0x5a });
+  const auto* original_data = request.value.data();
+
+  auto cmd = fixture.make_command(std::move(request));
+
+  assert_eq(cmd->request.value.size(), std::size_t{ 65'536 }, "request value size preserved");
+  assert_true(cmd->request.value.data() == original_data,
+              "mcbp_command moves the request value buffer instead of copying it");
+}
 } // namespace
 
 auto
@@ -436,6 +452,7 @@ tests() -> test_suite
         {},
         timeout::fast },
       { CASE(a_rejected_retry_keeps_the_ambiguity_of_an_earlier_attempt), {}, timeout::fast },
+      { CASE(constructing_mcbp_command_moves_request_value_buffer), {}, timeout::fast },
     },
   };
 }

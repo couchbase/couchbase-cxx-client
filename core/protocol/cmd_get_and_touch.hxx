@@ -41,6 +41,11 @@ public:
     return value_;
   }
 
+  [[nodiscard]] auto value() -> auto&
+  {
+    return value_;
+  }
+
   [[nodiscard]] auto flags() const -> std::uint32_t
   {
     return flags_;

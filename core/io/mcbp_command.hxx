@@ -134,8 +134,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     std::chrono::steady_clock::now()
   };
   std::chrono::time_point<std::chrono::steady_clock> deadline_expiry_{ started_at_ + timeout_ };
-  std::vector<std::chrono::microseconds> server_durations_{};
-  // Sum of server_durations_, kept as they are added so an orphan needs no rescan.
+  std::optional<std::chrono::microseconds> last_server_duration_{};
   std::chrono::microseconds total_server_duration_{};
 
   static auto make_command_strand(asio::io_context& ctx) -> command_strand
@@ -154,8 +153,8 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     : deadline(ctx)
     , retry_backoff(ctx)
     , strand_(make_command_strand(ctx))
-    , request(req)
-    , manager_(manager)
+    , request(std::move(req))
+    , manager_(std::move(manager))
     , timeout_(request.timeout.value_or(default_timeout))
     , parent_span_(request.parent_span)
   {
@@ -516,8 +515,9 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
         {
           const auto server_duration_us =
             static_cast<std::uint64_t>(protocol::parse_server_duration_us(msg));
-          self->server_durations_.emplace_back(std::chrono::microseconds(server_duration_us));
-          self->total_server_duration_ += std::chrono::microseconds(server_duration_us);
+          const std::chrono::microseconds dur{ server_duration_us };
+          self->last_server_duration_ = dur;
+          self->total_server_duration_ += dur;
           if (auto dispatch_span = self->take_dispatch_span(); dispatch_span) {
             self->close_dispatch_span(dispatch_span, server_duration_us);
           }
@@ -944,7 +944,7 @@ private:
     return {
       session_,
       request.opaque,
-      server_durations_.empty() ? std::chrono::microseconds{} : server_durations_.back(),
+      last_server_duration_.value_or(std::chrono::microseconds{}),
       total_server_duration_,
     };
   }

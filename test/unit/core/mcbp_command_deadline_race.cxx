@@ -846,7 +846,9 @@ a_late_withdrawal_runs_no_response_handler_beside_the_completion([[maybe_unused]
   // it records telemetry beside the completion.
   std::size_t handlers_run{ 0 };
   for (const auto& cmd : commands) {
-    handlers_run += cmd->server_durations_.size();
+    if (cmd->last_server_duration_.has_value()) {
+      ++handlers_run;
+    }
   }
   assert_eq(not_completed_once, std::size_t{ 0 }, "every round completes its command once");
   assert_eq(left_subscribed, std::size_t{ 0 }, "the late withdrawal removes every subscription");
@@ -1001,7 +1003,7 @@ a_deadline_completes_while_the_tracer_blocks_the_dispatch([[maybe_unused]] conte
   assert_eq(fixture.withdraw_subscriptions_since(marker),
             std::size_t{ 0 },
             "no subscription outlives the completion");
-  assert_true(cmd->server_durations_.empty(), "the late subscription's handler never ran");
+  assert_false(cmd->last_server_duration_.has_value(), "the late subscription's handler never ran");
   // The write was committed before the claim, so the server may apply it.
   assert_eq(completions.first(),
             std::error_code{ couchbase::errc::common::ambiguous_timeout },
@@ -1035,7 +1037,8 @@ a_response_after_the_completion_ends_its_dispatch_span_once_and_reports_an_orpha
   // complete() ends the span before the caller can end its parent; the response leaves it alone.
   assert_eq(recorder->ended_on().size(), std::size_t{ 1 }, "the dispatch span ends once");
   assert_true(fixture.orphan_reported(), "the late response is reported as an orphan");
-  assert_true(cmd->server_durations_.empty(), "the late response records no server duration");
+  assert_false(cmd->last_server_duration_.has_value(),
+               "the late response records no server duration");
   assert_true(fixture.telemetry_report().empty(), "the late response records no latency");
 }
 
@@ -1081,7 +1084,8 @@ a_discarded_subscription_has_its_dispatch_span_ended_once([[maybe_unused]] conte
   assert_eq(fixture.withdraw_subscriptions_since(marker),
             std::size_t{ 0 },
             "the subscription was discarded");
-  assert_true(cmd->server_durations_.empty(), "the discarded subscription's handler never ran");
+  assert_false(cmd->last_server_duration_.has_value(),
+               "the discarded subscription's handler never ran");
   // A span left open shows an external tracer an operation that never finished.
   assert_eq(recorder->ended_on().size(), std::size_t{ 1 }, "the dispatch span ends once");
 }
@@ -1195,7 +1199,8 @@ a_late_server_answer_mapped_to_request_canceled_is_reported_as_an_orphan(
               "the late subscription receives the server's answer");
 
   assert_eq(completions.count(), std::size_t{ 1 }, "the command completes once");
-  assert_true(cmd->server_durations_.empty(), "the late answer changes nothing on the command");
+  assert_false(cmd->last_server_duration_.has_value(),
+               "the late answer changes nothing on the command");
   assert_true(fixture.orphan_reported(), "an answer from the server is reported as an orphan");
 }
 
@@ -1228,7 +1233,7 @@ a_response_queued_behind_a_sibling_cancellation_changes_nothing([[maybe_unused]]
   assert_eq(completions.first(),
             std::error_code{ couchbase::errc::common::request_canceled },
             "the cancellation is the answer");
-  assert_true(cmd->server_durations_.empty(), "the queued response changes nothing");
+  assert_false(cmd->last_server_duration_.has_value(), "the queued response changes nothing");
   assert_eq(fixture.written(couchbase::core::protocol::client_opcode::get),
             std::size_t{ 1 },
             "nothing is written after the completion");
@@ -1873,7 +1878,7 @@ a_late_frame_is_reported_with_its_own_server_duration([[maybe_unused]] context& 
                   "the orphan carries the late frame's server duration");
   assert_contains(
     output, R"("total_server_duration_us":)" + expected, "and counts it in the total");
-  assert_true(cmd->server_durations_.empty(), "the completed command is not changed");
+  assert_false(cmd->last_server_duration_.has_value(), "the completed command is not changed");
 }
 
 // A manager whose schedule_for_retry() holds the first retry until released. It runs after

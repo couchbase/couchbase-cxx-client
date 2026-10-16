@@ -40,6 +40,11 @@ public:
     return value_;
   }
 
+  [[nodiscard]] auto value() -> auto&
+  {
+    return value_;
+  }
+
   [[nodiscard]] auto flags() const -> std::uint32_t;
 
   [[nodiscard]] auto parse(key_value_status_code status,
