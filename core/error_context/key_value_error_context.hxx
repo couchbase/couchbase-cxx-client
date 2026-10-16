@@ -257,6 +257,18 @@ public:
 
   [[nodiscard]] auto to_json() const -> std::string;
 
+  void override_ec(std::error_code ec) override;
+
+  void defer_operation_id(std::uint8_t opcode) noexcept
+  {
+    command_opcode_ = opcode;
+  }
+
+  [[nodiscard]] auto command_opcode() const noexcept -> std::optional<std::uint8_t>
+  {
+    return command_opcode_;
+  }
+
 private:
   std::string id_{};
   std::string bucket_{};
@@ -267,5 +279,6 @@ private:
   couchbase::cas cas_{};
   std::optional<key_value_error_map_info> error_map_info_{};
   std::optional<key_value_extended_error_info> extended_error_info_{};
+  std::optional<std::uint8_t> command_opcode_{};
 };
 } // namespace couchbase::core
