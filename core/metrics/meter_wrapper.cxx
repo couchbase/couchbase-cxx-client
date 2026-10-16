@@ -20,6 +20,8 @@
 #include <couchbase/error_codes.hxx>
 
 #include "core/metrics/constants.hxx"
+#include "core/metrics/logging_meter.hxx"
+#include "core/metrics/noop_meter.hxx"
 #include "core/tracing/constants.hxx"
 
 #include <algorithm>
@@ -143,6 +145,8 @@ metric_attributes::encode() const -> std::map<std::string, std::string>
 meter_wrapper::meter_wrapper(std::shared_ptr<couchbase::metrics::meter> meter,
                              std::shared_ptr<cluster_label_listener> label_listener)
   : meter_{ std::move(meter) }
+  , logging_meter_{ std::dynamic_pointer_cast<logging_meter>(meter_) }
+  , is_noop_meter_{ std::dynamic_pointer_cast<noop_meter>(meter_) != nullptr }
   , cluster_label_listener_{ std::move(label_listener) }
 {
 }
@@ -164,7 +168,7 @@ meter_wrapper::value_recorder_for(const metric_attributes& attrs)
   -> std::shared_ptr<couchbase::metrics::value_recorder>
 {
   {
-    const std::scoped_lock lock(recorder_cache_mutex_);
+    const std::shared_lock lock(recorder_cache_mutex_);
     if (auto it = recorder_cache_.find(attrs); it != recorder_cache_.end()) {
       return it->second;
     }
@@ -177,7 +181,7 @@ meter_wrapper::value_recorder_for(const metric_attributes& attrs)
   // a race is harmless.
   auto recorder = meter_->get_value_recorder(operation_meter_name, attrs.encode());
 
-  const std::scoped_lock lock(recorder_cache_mutex_);
+  const std::unique_lock lock(recorder_cache_mutex_);
   // A concurrent caller may have inserted this key while the lock was released; emplace keeps the
   // first-inserted recorder and returns it, so all callers share one recorder per key.
   return recorder_cache_.emplace(attrs, std::move(recorder)).first->second;
@@ -187,6 +191,19 @@ void
 meter_wrapper::record_value(metric_attributes attrs,
                             std::chrono::steady_clock::time_point start_time)
 {
+  if (is_noop_meter_) {
+    return;
+  }
+
+  const auto duration_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                             std::chrono::steady_clock::now() - start_time)
+                             .count();
+
+  if (logging_meter_) {
+    logging_meter_->record_value(attrs.service, attrs.operation, duration_us);
+    return;
+  }
+
   // The listener is optional -- the wrapper can be constructed without one -- so only enrich the
   // attributes with cluster labels when it is present.
   if (cluster_label_listener_) {
@@ -199,9 +216,7 @@ meter_wrapper::record_value(metric_attributes attrs,
     }
   }
 
-  value_recorder_for(attrs)->record_value(std::chrono::duration_cast<std::chrono::microseconds>(
-                                            std::chrono::steady_clock::now() - start_time)
-                                            .count());
+  value_recorder_for(attrs)->record_value(duration_us);
 }
 
 auto

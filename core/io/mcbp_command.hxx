@@ -116,17 +116,17 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
 
   // The diagnostic identifier ("<opcode>/<uuid>") is used only in log lines,
   // retry traces, and the returned key_value error context — never on the wire.
-  // Build it lazily on first use and cache it, so it is materialized at most once
-  // per command instead of eagerly in every constructor, and repeated readers -- a
-  // retry log line and then the completion's error context -- share the one cached
-  // value. The completion path builds the error context, so a completed operation
-  // still materializes it once; the laziness only avoids the cost for commands that
-  // never reach a point that needs it. The cache is logically const (it does not
-  // change the command's observable value), hence the mutable member and const
-  // accessor. Access while the command is in flight
-  // is serialized -- non-cancellable operations run on their session's single io
-  // thread, and cancellable (replica) operations confine access to the command
-  // strand (see strand_) -- so the one-time memoizing write needs no synchronization.
+  // It is built on first use and cached, so repeated readers -- a retry log line
+  // and then the completion's error context -- share one value. A completion with
+  // no error and a status code of 0 does not build it: make_key_value_error_context
+  // passes the cached value, possibly empty, and records the opcode instead. The
+  // identifier is built from that opcode only when an error is set later, by
+  // key_value_error_context::override_ec or make_subdocument_error_context. The cache
+  // is logically const, hence the mutable member and const accessor. Access while
+  // the command is in flight is serialized -- non-cancellable operations run on
+  // their session's single io thread, and cancellable (replica) operations confine
+  // access to the command strand (see strand_) -- so the memoizing write needs no
+  // synchronization.
   [[nodiscard]] auto id() const -> const std::string&
   {
     if (id_.empty()) {

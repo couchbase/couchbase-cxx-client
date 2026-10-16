@@ -18,10 +18,16 @@
 #include "framework/test_registry.hxx"
 
 #include "core/cluster_label_listener.hxx"
+#include "core/logger/logger.hxx"
+#include "core/metrics/logging_meter.hxx"
 #include "core/metrics/meter_wrapper.hxx"
+#include "core/metrics/noop_meter.hxx"
 
 #include <couchbase/error_codes.hxx>
 #include <couchbase/metrics/meter.hxx>
+
+#include <asio/io_context.hpp>
+#include <tao/json.hpp>
 
 #include <chrono>
 #include <cstdint>
@@ -67,6 +73,21 @@ public:
       recorder = std::make_shared<counting_value_recorder>();
     }
     return recorder;
+  }
+};
+
+// A noop_meter that counts recorder lookups. The wrapper detects the noop meter by dynamic cast, so
+// this subclass takes the same path.
+class counting_noop_meter : public couchbase::core::metrics::noop_meter
+{
+public:
+  int get_value_recorder_calls{ 0 };
+
+  auto get_value_recorder(const std::string& name, const std::map<std::string, std::string>& tags)
+    -> std::shared_ptr<couchbase::metrics::value_recorder> override
+  {
+    ++get_value_recorder_calls;
+    return noop_meter::get_value_recorder(name, tags);
   }
 };
 
@@ -220,6 +241,67 @@ meter_wrapper_record_value_tolerates_a_null_cluster_label_listener([[maybe_unuse
             std::size_t{ 1 },
             "the recorded value lands on that recorder");
 }
+
+void
+meter_wrapper_fast_paths_logging_meter_and_noop_meter([[maybe_unused]] context& ctx)
+{
+  std::string emitted_report{};
+  couchbase::core::logger::register_log_callback(
+    [&](std::string_view msg,
+        couchbase::core::logger::level /* lvl */,
+        couchbase::core::logger::log_location /* loc */) {
+      if (const auto pos = msg.find("Metrics: "); pos != std::string_view::npos) {
+        emitted_report = std::string{ msg.substr(pos + std::string_view{ "Metrics: " }.size()) };
+      }
+    });
+  // The callback is process-wide and refers to emitted_report, so it is unregistered however the
+  // case ends, including when an assertion throws.
+  struct unregister_on_exit {
+    unregister_on_exit() = default;
+    unregister_on_exit(const unregister_on_exit&) = delete;
+    unregister_on_exit(unregister_on_exit&&) = delete;
+    auto operator=(const unregister_on_exit&) -> unregister_on_exit& = delete;
+    auto operator=(unregister_on_exit&&) -> unregister_on_exit& = delete;
+    ~unregister_on_exit()
+    {
+      couchbase::core::logger::unregister_log_callback();
+    }
+  } const unregister_guard{};
+
+  auto listener = std::make_shared<couchbase::core::cluster_label_listener>();
+  const auto start_time = std::chrono::steady_clock::now() - std::chrono::microseconds{ 50 };
+  {
+    asio::io_context io{};
+    auto logging = std::make_shared<couchbase::core::metrics::logging_meter>(
+      io, couchbase::core::metrics::logging_meter_options{ std::chrono::hours{ 1 } });
+    couchbase::core::metrics::meter_wrapper logging_wrapper{ logging, listener };
+
+    logging_wrapper.record_value(kv_attributes("get"), start_time);
+    logging_wrapper.record_value(kv_attributes("custom_dynamic_op"), start_time);
+    // The explicit lookup must resolve the histogram record_value() fed, not a noop or a copy.
+    logging_wrapper.value_recorder_for(kv_attributes("get"))->record_value(1);
+  }
+  couchbase::core::logger::unregister_log_callback();
+
+  assert_false(emitted_report.empty(),
+               "logging_meter emits its metrics report on destruction when values were recorded");
+  const auto report = tao::json::from_string(emitted_report);
+  const auto& kv = report.at("operations").at("kv");
+  assert_eq(kv.at("get").at("total_count").as<std::uint64_t>(),
+            std::uint64_t{ 2 },
+            "the kv/get histogram records the fast-path sample and the explicit one");
+  assert_eq(kv.at("custom_dynamic_op").at("total_count").as<std::uint64_t>(),
+            std::uint64_t{ 1 },
+            "the kv/custom_dynamic_op histogram records the one sample");
+
+  auto noop = std::make_shared<counting_noop_meter>();
+  couchbase::core::metrics::meter_wrapper noop_wrapper{ noop, listener };
+  noop_wrapper.record_value(kv_attributes("get"), start_time);
+  assert_eq(noop->get_value_recorder_calls, 0, "recording on noop_meter looks up no recorder");
+  assert_true(noop_wrapper.value_recorder_for(kv_attributes("get")) != nullptr,
+              "noop_meter still resolves a value_recorder when requested explicitly");
+  assert_eq(noop->get_value_recorder_calls, 1, "the explicit lookup reaches the noop_meter");
+}
 } // namespace
 
 auto
@@ -235,6 +317,7 @@ tests() -> test_suite
       { CASE(meter_wrapper_record_value_routes_every_value_through_one_cached_recorder) },
       { CASE(standardized_error_type_classifies_by_category_not_raw_value) },
       { CASE(meter_wrapper_record_value_tolerates_a_null_cluster_label_listener) },
+      { CASE(meter_wrapper_fast_paths_logging_meter_and_noop_meter) },
     },
   };
 }
