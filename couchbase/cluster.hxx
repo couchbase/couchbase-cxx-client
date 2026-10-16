@@ -509,6 +509,9 @@ public:
    * pinged, the requested services are not considered, and @c cluster_state::online and
    * @c cluster_state::degraded are the same state.
    *
+   * Closing the cluster ends a wait in flight with @ref errc::network::cluster_closed, and a wait
+   * started after the cluster is closed fails the same way.
+   *
    * @param timeout the maximum time to wait for readiness.
    * @param options custom options to change the default behavior.
    * @param handler the handler that implements @ref wait_until_ready_handler.
@@ -527,6 +530,9 @@ public:
    * Over couchbase2, the wait ends once the gRPC channel to the gateway is connected. No service is
    * pinged, the requested services are not considered, and @c cluster_state::online and
    * @c cluster_state::degraded are the same state.
+   *
+   * Closing the cluster ends a wait in flight with @ref errc::network::cluster_closed, and a wait
+   * started after the cluster is closed fails the same way.
    *
    * @param timeout the maximum time to wait for readiness.
    * @param options custom options to change the default behavior.

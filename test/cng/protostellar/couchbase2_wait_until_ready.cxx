@@ -19,17 +19,26 @@
 // the classic path, which pings and opens the bucket over MCBP, never succeeds against a gateway.
 
 #include "cng/fixtures/live_fixture.hxx"
+#include "core/cluster.hxx"
 #include "framework/test_registry.hxx"
 
 #include <couchbase/cluster.hxx>
 
 #include <asio/io_context.hpp>
+#include <asio/post.hpp>
 
 #include <chrono>
 #include <future>
 #include <memory>
 #include <string>
 #include <system_error>
+#include <thread>
+
+namespace couchbase
+{
+auto
+extract_core_cluster(const couchbase::cluster& cluster) -> const core::cluster&;
+} // namespace couchbase
 
 namespace couchbase::test
 {
@@ -152,6 +161,44 @@ wait_until_ready_after_close_is_cluster_closed([[maybe_unused]] context& ctx)
                 bucket_ec.message());
 }
 
+// Regression: close() stopped the io_context with a timer or posted continuation of the wait
+// queued, so the wait did not complete.
+void
+wait_until_ready_pending_at_close_is_cluster_closed([[maybe_unused]] context& ctx)
+{
+  auto cluster = connect_unreachable();
+  auto cluster_wait = cluster.wait_until_ready(30s);
+  auto bucket_wait = cluster.bucket("default").wait_until_ready(30s);
+  // run() posts the first poll; once a handler posted after it has run, both waits have polled
+  // the channel and armed their retry timers.
+  auto ran = std::make_shared<std::promise<void>>();
+  asio::post(couchbase::extract_core_cluster(cluster).io_context(), [ran]() {
+    ran->set_value();
+  });
+  assert_true(ran->get_future().wait_for(5s) == std::future_status::ready,
+              "the io thread runs posted handlers");
+  assert_true(cluster_wait.wait_for(0s) == std::future_status::timeout,
+              "cluster.wait_until_ready() is pending before close");
+  assert_true(bucket_wait.wait_for(0s) == std::future_status::timeout,
+              "bucket.wait_until_ready() is pending before close");
+  cluster.close().get();
+
+  // Both are read before asserting, so that a failure reports each wait.
+  const bool cluster_done = cluster_wait.wait_for(5s) == std::future_status::ready;
+  const bool bucket_done = bucket_wait.wait_for(5s) == std::future_status::ready;
+  assert_true(cluster_done && bucket_done,
+              "both waits pending at close complete: cluster " + std::to_string(cluster_done) +
+                ", bucket " + std::to_string(bucket_done));
+  const auto cluster_ec = cluster_wait.get().ec();
+  const auto bucket_ec = bucket_wait.get().ec();
+  assert_true(cluster_ec == couchbase::errc::network::cluster_closed,
+              "cluster.wait_until_ready() pending at close is cluster_closed: " +
+                cluster_ec.message());
+  assert_true(bucket_ec == couchbase::errc::network::cluster_closed,
+              "bucket.wait_until_ready() pending at close is cluster_closed: " +
+                bucket_ec.message());
+}
+
 void
 wait_until_ready_succeeds_against_gateway([[maybe_unused]] context& ctx)
 {
@@ -192,6 +239,7 @@ tests() -> test_suite
       { CASE(open_bucket_is_feature_not_available_over_couchbase2), {}, timeout::integration },
       { CASE(wait_until_ready_times_out_on_unreachable_gateway), {}, timeout::integration },
       { CASE(wait_until_ready_after_close_is_cluster_closed), {}, timeout::integration },
+      { CASE(wait_until_ready_pending_at_close_is_cluster_closed), {}, timeout::slow },
       { CASE(wait_until_ready_succeeds_against_gateway),
         { needs::real_cluster() },
         timeout::integration },
