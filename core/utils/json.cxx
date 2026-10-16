@@ -101,13 +101,11 @@ private:
 
   void write(tao::binary_view data)
   {
-    buffer_.reserve(buffer_.size() + data.size());
     buffer_.insert(buffer_.end(), data.begin(), data.end());
   }
 
   void write(std::string_view data)
   {
-    buffer_.reserve(buffer_.size() + data.size());
     const auto* begin = reinterpret_cast<const std::byte*>(data.data());
     buffer_.insert(buffer_.end(), begin, begin + data.size());
   }
@@ -303,8 +301,22 @@ auto
 generate_binary(const tao::json::value& object) -> std::vector<std::byte>
 {
   std::vector<std::byte> out;
+  // The first writes of a non-empty container land in one allocation. A scalar or an empty
+  // container gets no reserve: the vector is moved into results that keep its capacity, such as the
+  // boolean of a subdocument exists or the {} of a projection that matched nothing.
+  constexpr std::size_t initial_container_capacity{ 256 };
+  if ((object.is_object() && !object.get_object().empty()) ||
+      (object.is_array() && !object.get_array().empty())) {
+    out.reserve(initial_container_capacity);
+  }
   tao::json::events::transformer<to_byte_vector> consumer(out);
   tao::json::events::from_value(consumer, object);
+  // A result never keeps more than generate_binary_max_capacity_factor times its size, because the
+  // caller keeps its capacity. A larger one is copied into an exact-size buffer; shrink_to_fit() is
+  // only a request, and a failed allocation here propagates.
+  if (out.capacity() > generate_binary_max_capacity_factor * out.size()) {
+    return { out.begin(), out.end() };
+  }
   return out;
 }
 } // namespace couchbase::core::utils::json
