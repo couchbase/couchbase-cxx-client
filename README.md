@@ -31,6 +31,12 @@ CPMAddPackage(
   "COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL ON")
 ```
 
+Releases before 1.6.0 bundle BoringSSL, selected by
+`COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL` as above. From 1.6.0 the bundled library is
+AWS-LC, selected by `COUCHBASE_CXX_CLIENT_STATIC_AWSLC`. The old name is still
+accepted for the 1.6.x series: it forwards to the new option and prints a
+deprecation notice at configure time. It is removed in 1.7.0.
+
 If you install the library in the system using the `install` target or a package
 management system, you can use `FindPackage`:
 
@@ -56,7 +62,7 @@ basic development dependencies exist (C++17 compiler).
 git clone https://github.com/couchbase/couchbase-cxx-client.git
 cd couchbase-cxx-client
 mkdir build
-cmake -S . -B build -DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON
+cmake -S . -B build -DCOUCHBASE_CXX_CLIENT_STATIC_AWSLC=ON
 cmake --build build
 ```
 

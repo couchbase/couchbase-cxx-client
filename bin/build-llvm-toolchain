@@ -38,7 +38,7 @@
 #     -DCMAKE_EXE_LINKER_FLAGS="-stdlib=libc++ -L$PREFIX/lib/x86_64-unknown-linux-gnu -Wl,-rpath,$PREFIX/lib/x86_64-unknown-linux-gnu -lc++abi" \
 #     -DCMAKE_SHARED_LINKER_FLAGS="-stdlib=libc++ -L$PREFIX/lib/x86_64-unknown-linux-gnu -Wl,-rpath,$PREFIX/lib/x86_64-unknown-linux-gnu -lc++abi" \
 #     -DENABLE_SANITIZER_THREAD=ON \
-#     -DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON
+#     -DCOUCHBASE_CXX_CLIENT_STATIC_AWSLC=ON
 #
 # Disk space: ~20-40 GB for build dir, ~2-4 GB installed
 # Build time: ~15-45 min depending on hardware
@@ -352,7 +352,7 @@ echo ""
 echo "Usage with couchbase-cxx-client:"
 echo "  cmake -DCMAKE_TOOLCHAIN_FILE=${PREFIX}/tsan-toolchain.cmake \\"
 echo "        -DENABLE_SANITIZER_THREAD=ON \\"
-echo "        -DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON \\"
+echo "        -DCOUCHBASE_CXX_CLIENT_STATIC_AWSLC=ON \\"
 echo "        -S . -B build-tsan"
 echo ""
 echo "Or rebuild just the TSan runtimes later:"

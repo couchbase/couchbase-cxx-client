@@ -4,8 +4,8 @@
 # fit_performer links gRPC and protobuf for its own service, so each needs protobuf (and, for
 # fit_performer, gRPC) in its own right. In a package the shared client embeds those statically and
 # hides them, so it exports none of them -- and a tool linking the shared client ends up running a
-# second protobuf, a second gRPC and a second BoringSSL alongside the ones inside the library. Two
-# gRPC event engines and two BoringSSL instances in one process is the blob duplication this
+# second protobuf, a second gRPC and a second AWS-LC alongside the ones inside the library. Two
+# gRPC event engines and two AWS-LC instances in one process is the blob duplication this
 # packaging exists to avoid, and it is not merely wasted space: each copy carries its own descriptor
 # pool, RNG and error queue.
 #
@@ -108,9 +108,9 @@ endif()
 
 propagate_public_compile_definitions(cbc spdlog::spdlog asio)
 
-if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND WIN32)
+if(COUCHBASE_CXX_CLIENT_STATIC_AWSLC AND WIN32)
   # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings, as we don't (atm) keep track fo the *.PDB
-  # from the BoringSSL build
+  # from the AWS-LC build
   set_target_properties(cbc PROPERTIES LINK_FLAGS "/ignore:4099")
 endif()
 

@@ -12,9 +12,9 @@ function(define_example name)
                                   $<BUILD_INTERFACE:$<TARGET_PROPERTY:asio,INTERFACE_INCLUDE_DIRECTORIES>>)
   propagate_public_compile_definitions(${name} spdlog::spdlog asio)
   target_link_libraries(${name} PRIVATE ${CMAKE_THREAD_LIBS_INIT} taocpp::json ${couchbase_cxx_client_DEFAULT_LIBRARY})
-  if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND WIN32)
+  if(COUCHBASE_CXX_CLIENT_STATIC_AWSLC AND WIN32)
     # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings, as we don't (atm) keep track of the
-    # *.PDB from the BoringSSL build
+    # *.PDB from the AWS-LC build
     set_target_properties(${name} PROPERTIES LINK_FLAGS "/ignore:4099")
   endif()
 endfunction()
@@ -53,9 +53,9 @@ macro(define_asio_example name)
   set_project_options(${name})
   target_include_directories(${name} PUBLIC ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/private)
   target_link_libraries(${name} PRIVATE ${CMAKE_THREAD_LIBS_INIT} asio taocpp::json)
-  if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND WIN32)
+  if(COUCHBASE_CXX_CLIENT_STATIC_AWSLC AND WIN32)
     # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings, as we don't (atm) keep track of the
-    # *.PDB from the BoringSSL build
+    # *.PDB from the AWS-LC build
     set_target_properties(${name} PROPERTIES LINK_FLAGS "/ignore:4099")
   endif()
 endmacro()

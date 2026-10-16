@@ -80,7 +80,7 @@ echo "==> Dockerfile:      ${DOCKERFILE}"
 echo "==> Image tag:       ${TAG}"
 echo
 
-echo "==> Building image (this builds gRPC/protobuf/BoringSSL/OpenTelemetry from"
+echo "==> Building image (this builds gRPC/protobuf/AWS-LC/OpenTelemetry from"
 echo "    source on first run and can take 15+ minutes)..."
 # shellcheck disable=SC2086 # NO_CACHE is intentionally word-split (empty or flag)
 docker build ${NO_CACHE} \

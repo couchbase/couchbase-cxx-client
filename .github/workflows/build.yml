@@ -48,8 +48,7 @@ jobs:
         os: [windows-2025, windows-2022, windows-11-arm]
     runs-on: ${{ matrix.os }}
     steps:
-      # BoringSSL's x86/x64 assembly is assembled with nasm; the ARM64 leg
-      # builds with OPENSSL_NO_ASM and therefore does not need it.
+      # nasm assembles the x86/x64 assembly; the ARM64 leg does not use it.
       - name: Install dependencies
         timeout-minutes: 20
         if: matrix.os != 'windows-11-arm'
@@ -77,8 +76,7 @@ jobs:
           # up is symbols in the cdb backtrace bin/build-tests.rb prints when
           # cbc crashes.
           CB_CMAKE_BUILD_TYPE: Release
-          # No BoringSSL assembly exists for the Windows ARM64 target, so build
-          # the crypto sources in portable C-only mode on that leg.
+          # The ARM64 leg builds the crypto sources in portable C-only mode.
           CB_OPENSSL_NO_ASM: ${{ matrix.os == 'windows-11-arm' && '1' || '' }}
           # CB_NUMBER_OF_JOBS deliberately unset: build-tests.rb now autodetects
           # the runner's processor count via Etc.nprocessors (4 on windows-2022/2025).
