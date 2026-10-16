@@ -21,13 +21,28 @@
 #include <memory>
 #include <stdexcept>
 
-namespace internal
-{
-
+// Platform headers stay at global scope: included inside a namespace, the standard library headers
+// they reach are declared inside it, and std resolves to that namespace's std.
 #ifdef _MSC_VER
 #include <windows.h>
 
 #include <bcrypt.h>
+#elif defined(__APPLE__)
+#include <CommonCrypto/CommonCryptor.h>
+#include <CommonCrypto/CommonDigest.h>
+#include <CommonCrypto/CommonHMAC.h>
+#include <CommonCrypto/CommonKeyDerivation.h>
+#else
+#include "include_ssl/evp.h"
+#include "include_ssl/hmac.h"
+#include "include_ssl/md5.h"
+#include "include_ssl/sha.h"
+#endif
+
+namespace internal
+{
+
+#ifdef _MSC_VER
 
 struct HeapAllocDeleter {
   void operator()(PBYTE bytes)
@@ -335,11 +350,6 @@ decrypt(const couchbase::core::crypto::Cipher /* cipher */,
 
 #elif defined(__APPLE__)
 
-#include <CommonCrypto/CommonCryptor.h>
-#include <CommonCrypto/CommonDigest.h>
-#include <CommonCrypto/CommonHMAC.h>
-#include <CommonCrypto/CommonKeyDerivation.h>
-
 auto
 HMAC_SHA1(std::string_view key, std::string_view data) -> std::string
 {
@@ -588,11 +598,6 @@ decrypt(const couchbase::core::crypto::Cipher cipher,
 }
 
 #else
-
-#include "include_ssl/evp.h"
-#include "include_ssl/hmac.h"
-#include "include_ssl/md5.h"
-#include "include_ssl/sha.h"
 
 // OpenSSL
 
