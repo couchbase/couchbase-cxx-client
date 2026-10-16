@@ -38,6 +38,7 @@
 #include "core/service_type.hxx"
 #include "core/tracing/constants.hxx"
 #include "core/tracing/tracer_wrapper.hxx"
+#include "core/utils/crc32.hxx"
 #include "core/utils/movable_function.hxx"
 #include "dispatcher.hxx"
 #include "impl/bootstrap_state_listener.hxx"
@@ -73,6 +74,7 @@
 #include <mutex>
 #include <optional>
 #include <queue>
+#include <shared_mutex>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -464,7 +466,7 @@ public:
   [[nodiscard]] auto server_by_vbucket(std::uint16_t vbucket, std::size_t node_index)
     -> std::optional<std::size_t>
   {
-    const std::scoped_lock lock(config_mutex_);
+    const std::shared_lock lock(config_mutex_);
     if (config_) {
       return config_->server_by_vbucket(vbucket, node_index);
     }
@@ -474,22 +476,23 @@ public:
   [[nodiscard]] auto map_id(const document_id& id)
     -> std::pair<std::uint16_t, std::optional<std::size_t>>
   {
-    const std::scoped_lock lock(config_mutex_);
+    const std::uint32_t crc = utils::hash_crc32(id.key().data(), id.key().size());
+    const std::shared_lock lock(config_mutex_);
     if (config_) {
-      return config_->map_key(id.key(), id.node_index());
+      return config_->map_key_by_hash(crc, id.node_index());
     }
     return { 0, std::nullopt };
   }
 
   [[nodiscard]] auto config_snapshot() const -> std::shared_ptr<topology::configuration>
   {
-    const std::scoped_lock lock(config_mutex_);
+    const std::shared_lock lock(config_mutex_);
     return config_;
   }
 
   auto config_rev() const -> std::string
   {
-    const std::scoped_lock lock(config_mutex_);
+    const std::shared_lock lock(config_mutex_);
     if (config_) {
       return config_->rev_str();
     }
@@ -499,9 +502,10 @@ public:
   [[nodiscard]] auto map_id(const std::vector<std::byte>& key, std::size_t node_index)
     -> std::pair<std::uint16_t, std::optional<std::size_t>>
   {
-    const std::scoped_lock lock(config_mutex_);
+    const std::uint32_t crc = utils::hash_crc32(key.data(), key.size());
+    const std::shared_lock lock(config_mutex_);
     if (config_) {
-      return config_->map_key(key, node_index);
+      return config_->map_key_by_hash(crc, node_index);
     }
     return { 0, std::nullopt };
   }
@@ -1184,7 +1188,7 @@ public:
   [[nodiscard]] auto find_session_by_index(std::size_t index) const
     -> std::optional<io::mcbp_session>
   {
-    const std::scoped_lock lock(sessions_mutex_);
+    const std::shared_lock lock(sessions_mutex_);
     if (auto ptr = sessions_.find(index); ptr != sessions_.end()) {
       return ptr->second;
     }
@@ -1204,13 +1208,11 @@ public:
 
   [[nodiscard]] auto next_session_index() -> std::size_t
   {
-    const std::scoped_lock lock(sessions_mutex_);
-
-    if (auto index = round_robin_next_.fetch_add(1); index < sessions_.size()) {
-      return index;
+    const std::shared_lock lock(sessions_mutex_);
+    if (sessions_.empty()) {
+      return 0;
     }
-    round_robin_next_ = 0;
-    return 0;
+    return round_robin_next_.fetch_add(1, std::memory_order_relaxed) % sessions_.size();
   }
 
   [[nodiscard]] auto default_timeout() const -> std::chrono::milliseconds
@@ -1262,7 +1264,7 @@ public:
   {
     std::map<size_t, io::mcbp_session> sessions;
     {
-      const std::scoped_lock lock(sessions_mutex_);
+      const std::shared_lock lock(sessions_mutex_);
       sessions = sessions_;
     }
     for (const auto& [index, session] : sessions) {
@@ -1275,7 +1277,7 @@ public:
   {
     std::map<size_t, io::mcbp_session> sessions;
     {
-      const std::scoped_lock lock(sessions_mutex_);
+      const std::shared_lock lock(sessions_mutex_);
       sessions = sessions_;
     }
     for (const auto& [index, session] : sessions) {
@@ -1314,7 +1316,7 @@ public:
   {
     std::map<size_t, io::mcbp_session> sessions;
     {
-      const std::scoped_lock lock(sessions_mutex_);
+      const std::shared_lock lock(sessions_mutex_);
       sessions = sessions_;
     }
     for (auto& [index, session] : sessions) {
@@ -1346,7 +1348,7 @@ private:
   std::atomic_bool configured_{ false };
 
   std::shared_ptr<topology::configuration> config_{};
-  mutable std::mutex config_mutex_{};
+  mutable std::shared_mutex config_mutex_{};
 
   std::vector<std::shared_ptr<config_listener>> config_listeners_{};
   std::mutex config_listeners_mutex_{};
@@ -1365,7 +1367,7 @@ private:
   // the session, the bucket, and the whole cluster graph. Track it here so close() can stop it and
   // let the continuation fire. Guarded by sessions_mutex_.
   std::optional<io::mcbp_session> bootstrapping_session_{};
-  mutable std::mutex sessions_mutex_{};
+  mutable std::shared_mutex sessions_mutex_{};
   std::atomic_size_t round_robin_next_{ 0 };
 };
 
