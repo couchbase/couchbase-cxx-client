@@ -1015,10 +1015,9 @@ TxnService::execute_command(ConnectionPtr conn,
         }
         // get it first.  <sigh>
         auto res = attempt_ctx->get(coll, id);
-        if (res.first.ec() == couchbase::errc::transaction_op::document_not_found) {
-          throw couchbase::core::transactions::transaction_operation_failed(
-            couchbase::core::transactions::FAIL_DOC_NOT_FOUND, "doc not found")
-            .cause(couchbase::core::transactions::external_exception::DOCUMENT_NOT_FOUND_EXCEPTION);
+        if (res.first) {
+          // execute_op validates this against expected_result and applies do_not_propagate_error.
+          return res;
         }
         auto doc = res.second;
         if (cmd.replace().has_content()) {
