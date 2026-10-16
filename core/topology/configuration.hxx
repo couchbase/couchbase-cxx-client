@@ -182,6 +182,8 @@ struct configuration {
     -> std::pair<std::uint16_t, std::optional<std::size_t>>;
   auto map_key(const std::vector<std::byte>& key, std::size_t index) const
     -> std::pair<std::uint16_t, std::optional<std::size_t>>;
+  auto map_key_by_hash(std::uint32_t crc, std::size_t index) const
+    -> std::pair<std::uint16_t, std::optional<std::size_t>>;
 
   auto server_by_vbucket(std::uint16_t vbucket, std::size_t index) const
     -> std::optional<std::size_t>;

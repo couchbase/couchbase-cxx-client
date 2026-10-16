@@ -21,6 +21,7 @@
 
 #include "core/app_telemetry_meter.hxx"
 #include "core/bucket.hxx"
+#include "core/bucket_unit_test_api.hxx"
 #include "core/cluster_credentials.hxx"
 #include "core/cluster_options.hxx"
 #include "core/io/mcbp_command.hxx"
@@ -44,6 +45,8 @@
 #include <asio/io_context.hpp>
 
 #include <algorithm>
+#include <array>
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -598,6 +601,56 @@ a_retry_scheduled_after_close_is_canceled([[maybe_unused]] context& ctx)
   assert_eq(completions.size(), std::size_t{ 1 }, "schedule_for_retry() answers the command once");
   assert_error(completions.front(), errc::common::request_canceled, "the command was abandoned");
 }
+
+void
+next_session_index_cycles_sequentially_across_sessions([[maybe_unused]] context& ctx)
+{
+  bucket_fixture fixture{};
+  fixture.install_config(3, /* rev = */ 1, /* with_key_value_port = */ true);
+  assert_true(fixture.get()->connect_session(0), "session 0 started");
+  assert_true(fixture.get()->connect_session(1), "session 1 started");
+  assert_true(fixture.get()->connect_session(2), "session 2 started");
+
+  auto api = fixture.get()->unit_test_api();
+  const std::array<std::size_t, 6> expected{ 0, 1, 2, 0, 1, 2 };
+  for (std::size_t i = 0; i < expected.size(); ++i) {
+    assert_eq(
+      api.next_session_index(), expected[i], "round-robin index at step " + std::to_string(i));
+  }
+}
+
+void
+next_session_index_distributes_evenly_across_threads([[maybe_unused]] context& ctx)
+{
+  bucket_fixture fixture{};
+  fixture.install_config(3, /* rev = */ 1, /* with_key_value_port = */ true);
+  assert_true(fixture.get()->connect_session(0), "session 0 started");
+  assert_true(fixture.get()->connect_session(1), "session 1 started");
+  assert_true(fixture.get()->connect_session(2), "session 2 started");
+
+  constexpr std::size_t num_threads = 8;
+  constexpr std::size_t calls_per_thread = 300;
+  std::array<std::atomic<std::size_t>, 3> counts{ 0, 0, 0 };
+
+  auto api = fixture.get()->unit_test_api();
+  std::vector<std::thread> threads;
+  threads.reserve(num_threads);
+  for (std::size_t t = 0; t < num_threads; ++t) {
+    threads.emplace_back([&api, &counts] {
+      for (std::size_t i = 0; i < calls_per_thread; ++i) {
+        const auto idx = api.next_session_index();
+        counts.at(idx).fetch_add(1, std::memory_order_relaxed);
+      }
+    });
+  }
+  for (auto& th : threads) {
+    th.join();
+  }
+
+  assert_eq(counts[0].load(), std::size_t{ 800 }, "session 0 selected 800 times");
+  assert_eq(counts[1].load(), std::size_t{ 800 }, "session 1 selected 800 times");
+  assert_eq(counts[2].load(), std::size_t{ 800 }, "session 2 selected 800 times");
+}
 } // namespace
 
 auto
@@ -634,6 +687,8 @@ tests() -> test_suite
       { CASE(a_command_waiting_for_a_session_is_canceled_by_close), {}, timeout::fast },
       { CASE(a_retry_whose_backoff_ends_after_close_is_canceled), {}, timeout::fast },
       { CASE(a_retry_scheduled_after_close_is_canceled), {}, timeout::fast },
+      { CASE(next_session_index_cycles_sequentially_across_sessions), {}, timeout::fast },
+      { CASE(next_session_index_distributes_evenly_across_threads), {}, timeout::fast },
     },
   };
 }
