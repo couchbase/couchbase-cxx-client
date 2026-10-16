@@ -1,0 +1,1 @@
+couchbase_add_test(integration/kv/range_scan_orchestrator LABEL integration LINK_CLIENT)
