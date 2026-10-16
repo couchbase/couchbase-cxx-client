@@ -34,16 +34,25 @@ auto
 mcbp_parser::next(mcbp_message& msg) -> mcbp_parser::result
 {
   static const std::size_t header_size = 24;
-  if (buf.size() < header_size) {
+  const std::size_t avail{ buf.size() - read_offset_ };
+  if (avail < header_size) {
+    if (read_offset_ != 0) {
+      buf.erase(buf.begin(), buf.begin() + static_cast<std::ptrdiff_t>(read_offset_));
+      read_offset_ = 0;
+    }
     return result::need_data;
   }
-  std::memcpy(&msg.header, buf.data(), header_size);
-  std::uint32_t body_size = utils::network_to_host(msg.header.bodylen);
-  if (body_size > 0 && buf.size() - header_size < body_size) {
+  const auto* frame = buf.data() + read_offset_;
+  std::memcpy(&msg.header, frame, header_size);
+  const std::uint32_t body_size = utils::network_to_host(msg.header.bodylen);
+  if (body_size > 0 && avail - header_size < body_size) {
+    if (read_offset_ != 0) {
+      buf.erase(buf.begin(), buf.begin() + static_cast<std::ptrdiff_t>(read_offset_));
+      read_offset_ = 0;
+    }
     return result::need_data;
   }
   msg.body.clear();
-  msg.body.reserve(body_size);
   std::uint32_t key_size = utils::network_to_host(msg.header.keylen);
   std::uint32_t prefix_size = static_cast<std::uint32_t>(msg.header.extlen) + key_size;
   if (msg.header.magic == static_cast<std::uint8_t>(protocol::magic::alt_client_response)) {
@@ -52,11 +61,11 @@ mcbp_parser::next(mcbp_message& msg) -> mcbp_parser::result
     prefix_size = static_cast<std::uint32_t>(sizes.framing_extras) +
                   static_cast<std::uint32_t>(msg.header.extlen) + key_size;
   }
-  // The prefix (framing extras + extras + key) must lie within the body that
-  // bodylen advertised. extlen and keylen are separate header fields from
-  // bodylen, so a frame can claim prefix_size > body_size. Only body_size was
-  // checked against the buffer above; without this guard the inserts below read
-  // past the buffer and "body_size - prefix_size" underflows on the snappy path.
+  // The prefix (framing extras + extras + key) must lie within the body that bodylen advertised.
+  // extlen and keylen are header fields separate from bodylen, so a frame can claim
+  // prefix_size > body_size. On the Snappy path "body_size - prefix_size" would underflow and the
+  // prefix copy would read past the body. On the raw path the body would be shorter than the
+  // extras and key that the response handlers skip by these sizes.
   if (prefix_size > body_size) {
     CB_LOG_WARNING("rejecting malformed frame: prefix_size ({}) exceeds body_size ({}), "
                    "magic={:x}, opcode={:x}, extlen={}, keylen={}",
@@ -69,44 +78,53 @@ mcbp_parser::next(mcbp_message& msg) -> mcbp_parser::result
     reset();
     return result::failure;
   }
-  msg.body.insert(
-    msg.body.end(), buf.begin() + header_size, buf.begin() + header_size + prefix_size);
 
   const bool is_compressed =
     protocol::has_flag(static_cast<std::byte>(msg.header.datatype), protocol::datatype::snappy);
   bool use_raw_value = true;
   if (is_compressed) {
-    std::string uncompressed;
-    const std::size_t offset = header_size + prefix_size;
-    if (snappy::Uncompress(reinterpret_cast<const char*>(buf.data() + offset),
-                           body_size - prefix_size,
-                           &uncompressed)) {
-      msg.body.insert(msg.body.end(),
-                      reinterpret_cast<std::byte*>(uncompressed.data()),
-                      reinterpret_cast<std::byte*>(uncompressed.data() + uncompressed.size()));
-      use_raw_value = false;
-      // patch header with new body size
-      msg.header.bodylen =
-        utils::host_to_network(static_cast<std::uint32_t>(prefix_size + uncompressed.size()));
+    const auto* compressed_data = reinterpret_cast<const char*>(frame + header_size + prefix_size);
+    const std::size_t compressed_size{ body_size - prefix_size };
+    std::size_t uncompressed_length{ 0 };
+    // The declared length comes from the server. Where size_t is 32 bits, prefix_size plus a length
+    // near its maximum wraps, and the resize would leave less room than the prefix copy writes.
+    if (snappy::GetUncompressedLength(compressed_data, compressed_size, &uncompressed_length) &&
+        uncompressed_length <= msg.body.max_size() - prefix_size) {
+      msg.body.resize(prefix_size + uncompressed_length);
+      if (prefix_size > 0) {
+        std::memcpy(msg.body.data(), frame + header_size, prefix_size);
+      }
+      if (snappy::RawUncompress(compressed_data,
+                                compressed_size,
+                                reinterpret_cast<char*>(msg.body.data() + prefix_size))) {
+        use_raw_value = false;
+        // patch header with new body size
+        msg.header.bodylen =
+          utils::host_to_network(static_cast<std::uint32_t>(prefix_size + uncompressed_length));
+      } else {
+        msg.body.clear();
+      }
     }
   }
   if (use_raw_value) {
-    msg.body.insert(msg.body.end(),
-                    buf.begin() + header_size + prefix_size,
-                    buf.begin() + header_size + body_size);
+    msg.body.insert(msg.body.end(), frame + header_size, frame + header_size + body_size);
   }
-  buf.erase(buf.begin(), buf.begin() + header_size + body_size);
-  if (!buf.empty() && !protocol::is_valid_magic(std::to_integer<std::uint8_t>(buf[0]))) {
-    CB_LOG_WARNING("parsed frame for magic={:x}, opcode={:x}, opaque={}, body_len={}. Invalid "
-                   "magic of the next frame: {:x}, {} "
-                   "bytes to parse{}",
-                   msg.header.magic,
-                   msg.header.opcode,
-                   msg.header.opaque,
-                   body_size,
-                   buf[0],
-                   buf.size(),
-                   spdlog::to_hex(buf));
+  read_offset_ += header_size + body_size;
+  if (read_offset_ == buf.size()) {
+    buf.clear();
+    read_offset_ = 0;
+  } else if (!protocol::is_valid_magic(std::to_integer<std::uint8_t>(buf[read_offset_]))) {
+    CB_LOG_WARNING(
+      "parsed frame for magic={:x}, opcode={:x}, opaque={}, body_len={}. Invalid "
+      "magic of the next frame: {:x}, {} "
+      "bytes to parse{}",
+      msg.header.magic,
+      msg.header.opcode,
+      msg.header.opaque,
+      body_size,
+      buf[read_offset_],
+      buf.size() - read_offset_,
+      spdlog::to_hex(buf.begin() + static_cast<std::ptrdiff_t>(read_offset_), buf.end()));
     reset();
   }
   return result::ok;
