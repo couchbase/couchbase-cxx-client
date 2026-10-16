@@ -91,7 +91,9 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
   std::optional<std::string> last_dispatched_from_{};
   std::optional<std::string> last_dispatched_to_{};
   std::chrono::time_point<std::chrono::steady_clock> started_at_{};
-  std::vector<std::chrono::microseconds> server_durations_{};
+  std::chrono::microseconds last_server_duration_{ 0 };
+  std::chrono::microseconds total_server_duration_{ 0 };
+  bool has_server_durations_{ false };
 
   static auto make_command_strand(asio::io_context& ctx) -> command_strand
   {
@@ -109,8 +111,8 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     : deadline(ctx)
     , retry_backoff(ctx)
     , strand_(make_command_strand(ctx))
-    , request(req)
-    , manager_(manager)
+    , request(std::move(req))
+    , manager_(std::move(manager))
     , timeout_(request.timeout.value_or(default_timeout))
     , parent_span_(request.parent_span)
   {
@@ -391,7 +393,10 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
         {
           const auto server_duration_us =
             static_cast<std::uint64_t>(protocol::parse_server_duration_us(msg));
-          self->server_durations_.emplace_back(std::chrono::microseconds(server_duration_us));
+          const std::chrono::microseconds dur{ server_duration_us };
+          self->last_server_duration_ = dur;
+          self->total_server_duration_ += dur;
+          self->has_server_durations_ = true;
           self->close_dispatch_span(dispatch_span, server_duration_us);
         }
         {
@@ -538,11 +543,9 @@ private:
     attrs.operation_id = fmt::format("0x{:x}", request.opaque);
     attrs.last_remote_socket = session_->remote_address();
     attrs.last_local_socket = session_->local_address();
-    if (!server_durations_.empty()) {
-      attrs.last_server_duration = server_durations_.back();
-      for (const auto d : server_durations_) {
-        attrs.total_server_duration += d;
-      }
+    if (has_server_durations_) {
+      attrs.last_server_duration = last_server_duration_;
+      attrs.total_server_duration = total_server_duration_;
     }
     attrs.total_duration = std::chrono::duration_cast<std::chrono::microseconds>(
       std::chrono::steady_clock::now() - started_at_);
