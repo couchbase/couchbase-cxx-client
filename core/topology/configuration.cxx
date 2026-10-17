@@ -318,7 +318,7 @@ configuration::server_by_vbucket(std::uint16_t vbucket, std::size_t index) const
 }
 
 auto
-configuration::map_key(const std::string& key, std::size_t index) const
+configuration::map_key_by_hash(std::uint32_t crc, std::size_t index) const
   -> std::pair<std::uint16_t, std::optional<std::size_t>>
 {
   // The number of vbuckets comes from the map itself, so a map without rows
@@ -326,23 +326,30 @@ configuration::map_key(const std::string& key, std::size_t index) const
   if (!vbmap.has_value() || vbmap->empty()) {
     return { 0, {} };
   }
-  const std::uint32_t crc = utils::hash_crc32(key.data(), key.size());
   auto vbucket = static_cast<std::uint16_t>(crc % vbmap->size());
   return { vbucket, server_by_vbucket(vbucket, index) };
+}
+
+auto
+configuration::map_key(const std::string& key, std::size_t index) const
+  -> std::pair<std::uint16_t, std::optional<std::size_t>>
+{
+  if (!vbmap.has_value() || vbmap->empty()) {
+    return { 0, {} };
+  }
+  const std::uint32_t crc = utils::hash_crc32(key.data(), key.size());
+  return map_key_by_hash(crc, index);
 }
 
 auto
 configuration::map_key(const std::vector<std::byte>& key, std::size_t index) const
   -> std::pair<std::uint16_t, std::optional<std::size_t>>
 {
-  // The number of vbuckets comes from the map itself, so a map without rows
-  // cannot be asked which vbucket a key belongs to.
   if (!vbmap.has_value() || vbmap->empty()) {
     return { 0, {} };
   }
   const std::uint32_t crc = utils::hash_crc32(key.data(), key.size());
-  auto vbucket = static_cast<std::uint16_t>(crc % vbmap->size());
-  return { vbucket, server_by_vbucket(vbucket, index) };
+  return map_key_by_hash(crc, index);
 }
 
 auto
