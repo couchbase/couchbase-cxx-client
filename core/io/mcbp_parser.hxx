@@ -40,10 +40,12 @@ struct mcbp_parser {
   void reset()
   {
     buf.clear();
+    read_offset_ = 0;
   }
 
   auto next(mcbp_message& msg) -> result;
 
   std::vector<std::byte> buf;
+  std::size_t read_offset_{ 0 };
 };
 } // namespace couchbase::core::io
