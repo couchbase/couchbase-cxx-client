@@ -32,12 +32,12 @@ get_request::encode_to(get_request::encoded_request_type& encoded,
 }
 
 auto
-get_request::make_response(key_value_error_context&& ctx,
-                           const encoded_response_type& encoded) const -> get_response
+get_request::make_response(key_value_error_context&& ctx, encoded_response_type&& encoded) const
+  -> get_response
 {
   get_response response{ std::move(ctx) };
   if (!response.ctx.ec()) {
-    response.value = encoded.body().value();
+    response.value = std::move(encoded.body().value());
     response.cas = encoded.cas();
     response.flags = encoded.body().flags();
   }
