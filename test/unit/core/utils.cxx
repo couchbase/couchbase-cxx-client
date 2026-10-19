@@ -141,6 +141,19 @@ form_encode_writes_two_hex_digits_per_escaped_byte([[maybe_unused]] context& ctx
 }
 
 void
+form_encode_escapes_a_backtick([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::utils::string_codec::form_encode;
+
+  // Catches 0x60 copied literally: the urlencoded byte set allows 0x61 to 0x7A, not 0x60.
+  assert_eq(form_encode("a`b"), std::string{ "a%60b" }, "a backtick is written as %60");
+  assert_ne(form_encode("a`b"), std::string{ "a`b" }, "not the raw backtick");
+  assert_eq(form_encode("_"), std::string{ "_" }, "0x5f below the backtick stays literal");
+  assert_eq(form_encode("a"), std::string{ "a" }, "0x61 above the backtick stays literal");
+  assert_eq(form_encode("\xe9"), std::string{ "%e9" }, "a byte above 0x7f is escaped");
+}
+
+void
 url_encode_writes_two_hex_digits_per_escaped_byte([[maybe_unused]] context& ctx)
 {
   using couchbase::core::utils::string_codec::url_decode;
@@ -510,6 +523,7 @@ tests() -> test_suite
       { CASE(an_error_code_renders_as_its_category_and_value), {}, timeout::instant },
       { CASE(a_path_separator_is_percent_escaped), {}, timeout::instant },
       { CASE(form_encode_writes_two_hex_digits_per_escaped_byte), {}, timeout::instant },
+      { CASE(form_encode_escapes_a_backtick), {}, timeout::instant },
       { CASE(url_encode_writes_two_hex_digits_per_escaped_byte), {}, timeout::instant },
       { CASE(join_strings_separates_every_element), {}, timeout::instant },
       { CASE(join_strings_fmt_separates_every_element), {}, timeout::instant },
