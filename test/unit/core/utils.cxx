@@ -173,6 +173,49 @@ url_encode_writes_two_hex_digits_per_escaped_byte([[maybe_unused]] context& ctx)
 }
 
 void
+url_encode_escapes_every_byte_after_a_plus_or_an_escape([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::utils::string_codec::url_decode;
+  using couchbase::core::utils::string_codec::url_encode;
+
+  // Catches the output being cut at the first illegal byte that follows a '+' or a %XX escape.
+  assert_eq(url_encode("a+\x01"), std::string{ "a+%01" }, "the byte after '+' is escaped");
+  assert_ne(url_encode("a+\x01"), std::string{ "a+" }, "not cut after the '+'");
+
+  assert_eq(url_encode("%41\x01"), std::string{ "%41%01" }, "the escape is kept, the byte escaped");
+  assert_ne(url_encode("%41\x01"), std::string{ "%41" }, "not cut after the escape");
+
+  assert_eq(url_encode("a+b c"), std::string{ "a+b%20c" }, "a space after '+' is escaped");
+  assert_ne(url_encode("a+b c"), std::string{ "a+b" }, "not cut at the space");
+  assert_eq(url_decode(url_encode("a+b c")), std::string{ "a+b c" }, "the encoding decodes back");
+}
+
+void
+url_encode_escapes_high_bytes_after_a_percent([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::utils::string_codec::url_encode;
+
+  // Catches the bytes after '%' reaching isxdigit() as negative chars, which is undefined.
+  assert_eq(url_encode("%\xff\xff"), std::string{ "%25%ff%ff" }, "'%' and both 0xff are escaped");
+}
+
+void
+url_encode_escapes_a_byte_that_cannot_start_utf8([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::utils::string_codec::url_decode;
+  using couchbase::core::utils::string_codec::url_encode;
+
+  // Catches an invalid UTF-8 lead byte producing an empty or cut result.
+  assert_eq(url_encode("\xff"), std::string{ "%ff" }, "0xff is written as %ff");
+  assert_ne(url_encode("\xff"), std::string{}, "not dropped");
+  const std::string ff_between{ "a\xff"
+                                "b" };
+  assert_eq(url_encode(ff_between), std::string{ "a%ffb" }, "the bytes around 0xff are kept");
+  assert_ne(url_encode(ff_between), std::string{ "a" }, "not cut at 0xff");
+  assert_eq(url_decode(url_encode(ff_between)), ff_between, "the encoding decodes back");
+}
+
+void
 join_strings_separates_every_element([[maybe_unused]] context& ctx)
 {
   std::vector<std::string> field_specs{ "testkey:string" };
@@ -525,6 +568,9 @@ tests() -> test_suite
       { CASE(form_encode_writes_two_hex_digits_per_escaped_byte), {}, timeout::instant },
       { CASE(form_encode_escapes_a_backtick), {}, timeout::instant },
       { CASE(url_encode_writes_two_hex_digits_per_escaped_byte), {}, timeout::instant },
+      { CASE(url_encode_escapes_every_byte_after_a_plus_or_an_escape), {}, timeout::instant },
+      { CASE(url_encode_escapes_high_bytes_after_a_percent), {}, timeout::instant },
+      { CASE(url_encode_escapes_a_byte_that_cannot_start_utf8), {}, timeout::instant },
       { CASE(join_strings_separates_every_element), {}, timeout::instant },
       { CASE(join_strings_fmt_separates_every_element), {}, timeout::instant },
       { CASE(the_user_agent_trims_and_escapes_the_extra_it_is_given), {}, timeout::instant },
