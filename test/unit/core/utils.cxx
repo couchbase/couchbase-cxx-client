@@ -114,6 +114,51 @@ a_path_separator_is_percent_escaped([[maybe_unused]] context& ctx)
             "a slash inside a path segment does not stay a separator");
 }
 
+// Regression: a byte below 0x10 was escaped with one hex digit, so "\x01" "2" encoded as "%12", the
+// encoding of "\x12". The one-digit forms are refuted, and decoded to show the bytes they stand
+// for.
+void
+form_encode_writes_two_hex_digits_per_escaped_byte([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::utils::string_codec::form_encode;
+  using couchbase::core::utils::string_codec::url_decode;
+
+  const std::string one_then_digit{ "\x01"
+                                    "2" };
+  const std::string eighteen{ "\x12" };
+
+  assert_eq(form_encode(one_then_digit), std::string{ "%012" }, "0x01 is written as %01");
+  assert_ne(form_encode(one_then_digit), std::string{ "%12" }, "not the one-digit form %12");
+  assert_eq(url_decode("%12"), eighteen, "%12 decodes as 0x12");
+  assert_ne(
+    form_encode(one_then_digit), form_encode(eighteen), "two different inputs encode differently");
+  assert_eq(url_decode(form_encode(one_then_digit)), one_then_digit, "the encoding decodes back");
+
+  assert_eq(form_encode("a\tb"), std::string{ "a%09b" }, "a tab is written as %09");
+  assert_ne(form_encode("a\tb"), std::string{ "a%9b" }, "not the one-digit form a%9b");
+  assert_eq(url_decode("a%9b"), std::string{ "a\x9b" }, "a%9b decodes as 'a' then 0x9b");
+  assert_eq(url_decode(form_encode("a\tb")), std::string{ "a\tb" }, "the encoding decodes back");
+}
+
+void
+url_encode_writes_two_hex_digits_per_escaped_byte([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::utils::string_codec::url_decode;
+  using couchbase::core::utils::string_codec::url_encode;
+
+  const std::string one_then_digit{ "\x01"
+                                    "2" };
+
+  assert_eq(url_encode(one_then_digit), std::string{ "%012" }, "0x01 is written as %01");
+  assert_ne(url_encode(one_then_digit), std::string{ "%12" }, "not the one-digit form %12");
+  assert_eq(url_decode(url_encode(one_then_digit)), one_then_digit, "the encoding decodes back");
+
+  assert_eq(url_encode("\nb"), std::string{ "%0ab" }, "a newline is written as %0a");
+  assert_ne(url_encode("\nb"), std::string{ "%ab" }, "not the one-digit form %ab");
+  assert_eq(url_decode("%ab"), std::string{ "\xab" }, "%ab decodes as 0xab");
+  assert_eq(url_decode(url_encode("\nb")), std::string{ "\nb" }, "the encoding decodes back");
+}
+
 void
 join_strings_separates_every_element([[maybe_unused]] context& ctx)
 {
@@ -464,6 +509,8 @@ tests() -> test_suite
       { CASE(a_duplicate_json_key_is_resolved_rather_than_rejected), {}, timeout::instant },
       { CASE(an_error_code_renders_as_its_category_and_value), {}, timeout::instant },
       { CASE(a_path_separator_is_percent_escaped), {}, timeout::instant },
+      { CASE(form_encode_writes_two_hex_digits_per_escaped_byte), {}, timeout::instant },
+      { CASE(url_encode_writes_two_hex_digits_per_escaped_byte), {}, timeout::instant },
       { CASE(join_strings_separates_every_element), {}, timeout::instant },
       { CASE(join_strings_fmt_separates_every_element), {}, timeout::instant },
       { CASE(the_user_agent_trims_and_escapes_the_extra_it_is_given), {}, timeout::instant },
