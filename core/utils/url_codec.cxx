@@ -212,15 +212,11 @@ form_encode(Ti first, Ti last, To& out)
 {
   for (; first != last; ++first) {
     auto c = static_cast<unsigned char>(*first);
-    if (isalnum(c)) {
-      out.insert(out.end(), first, first + 1);
-      continue;
-    }
     if (c == ' ') {
       char tmp = '+';
       out.insert(out.end(), &tmp, &tmp + 1);
     } else if ((c == 0x2A || c == 0x2D || c == 0x2E) || (c >= 0x30 && c <= 0x39) ||
-               (c >= 0x41 && c <= 0x5A) || (c == 0x5F) || (c >= 0x60 && c <= 0x7A)) {
+               (c >= 0x41 && c <= 0x5A) || (c == 0x5F) || (c >= 0x61 && c <= 0x7A)) {
       out.insert(out.end(), static_cast<char>(c));
     } else {
       out.append(fmt::format("%{:02x}", static_cast<std::uint8_t>(*first)));
