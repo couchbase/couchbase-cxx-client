@@ -30,7 +30,8 @@ eventing_resume_function_request::encode_to(encoded_request_type& encoded,
                                             http_context& /* context */) const -> std::error_code
 {
   encoded.method = "POST";
-  encoded.path = fmt::format("/api/v1/functions/{}/resume", name);
+  encoded.path =
+    fmt::format("/api/v1/functions/{}/resume", utils::string_codec::v2::path_escape(name));
   if (bucket_name.has_value() && scope_name.has_value()) {
     encoded.path += fmt::format("?bucket={}&scope={}",
                                 utils::string_codec::v2::path_escape(bucket_name.value()),

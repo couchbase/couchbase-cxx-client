@@ -60,7 +60,7 @@ analytics_link_get_all_request::encode_to(encoded_request_type& encoded,
       } else {
         encoded.path = fmt::format("/analytics/link/{}/{}",
                                    utils::string_codec::v2::path_escape(dataverse_name.value()),
-                                   link_name.value());
+                                   utils::string_codec::v2::path_escape(link_name.value()));
       }
     }
   } else {

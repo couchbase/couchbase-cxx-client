@@ -15,7 +15,9 @@
  *   limitations under the License.
  */
 
+#include "framework/errors.hxx"
 #include "framework/test_registry.hxx"
+#include "utils/http_context.hxx"
 
 #include "core/io/http_error.hxx"
 #include "core/io/http_message.hxx"
@@ -131,6 +133,25 @@ a_server_fault_is_still_an_internal_server_failure([[maybe_unused]] context& ctx
             "only a 400 is the caller's error");
   assert_eq(mapped_error<deploy>(200, ""), std::error_code{}, "a 200 with no body is a success");
 }
+
+// A name holding '#', '?', '/', '%' and a space, and its escaped form.
+const std::string hostile_name{ "a#b?c/d%e f" };
+const std::string escaped_name{ "a%23b%3Fc%2Fd%25e%20f" };
+
+void
+a_function_name_is_one_path_segment([[maybe_unused]] context& ctx)
+{
+  couchbase::core::io::http_request http_req;
+  auto http_ctx = ::test::utils::make_http_context();
+
+  get req{};
+  req.name = hostile_name;
+
+  assert_success(req.encode_to(http_req, http_ctx), "the request is encoded");
+  // Catches a raw '#', which ends the path at function "a".
+  assert_eq(http_req.path, "/api/v1/functions/" + escaped_name, "the function name is escaped");
+  assert_ne(http_req.path, "/api/v1/functions/" + hostile_name, "not the raw name");
+}
 } // namespace
 
 auto
@@ -143,6 +164,7 @@ tests() -> test_suite
       { CASE(a_rejection_that_names_no_problem_is_an_invalid_argument) },
       { CASE(a_recognised_problem_keeps_its_own_error) },
       { CASE(a_server_fault_is_still_an_internal_server_failure) },
+      { CASE(a_function_name_is_one_path_segment) },
     },
   };
 }

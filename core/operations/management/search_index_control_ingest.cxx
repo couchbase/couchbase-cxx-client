@@ -38,11 +38,12 @@ search_index_control_ingest_request::encode_to(encoded_request_type& encoded,
     encoded.path = fmt::format("/api/bucket/{}/scope/{}/index/{}/ingestControl/{}",
                                utils::string_codec::v2::path_escape(bucket_name.value()),
                                utils::string_codec::v2::path_escape(scope_name.value()),
-                               index_name,
+                               utils::string_codec::v2::path_escape(index_name),
                                pause ? "pause" : "resume");
   } else {
-    encoded.path =
-      fmt::format("/api/index/{}/ingestControl/{}", index_name, pause ? "pause" : "resume");
+    encoded.path = fmt::format("/api/index/{}/ingestControl/{}",
+                               utils::string_codec::v2::path_escape(index_name),
+                               pause ? "pause" : "resume");
   }
   return {};
 }

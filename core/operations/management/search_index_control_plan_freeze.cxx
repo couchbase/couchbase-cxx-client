@@ -39,11 +39,12 @@ search_index_control_plan_freeze_request::encode_to(encoded_request_type& encode
     encoded.path = fmt::format("/api/bucket/{}/scope/{}/index/{}/planFreezeControl/{}",
                                utils::string_codec::v2::path_escape(bucket_name.value()),
                                utils::string_codec::v2::path_escape(scope_name.value()),
-                               index_name,
+                               utils::string_codec::v2::path_escape(index_name),
                                freeze ? "freeze" : "unfreeze");
   } else {
-    encoded.path =
-      fmt::format("/api/index/{}/planFreezeControl/{}", index_name, freeze ? "freeze" : "unfreeze");
+    encoded.path = fmt::format("/api/index/{}/planFreezeControl/{}",
+                               utils::string_codec::v2::path_escape(index_name),
+                               freeze ? "freeze" : "unfreeze");
   }
   return {};
 }

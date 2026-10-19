@@ -887,6 +887,38 @@ a_server_fault_is_still_an_internal_server_failure([[maybe_unused]] context& ctx
             couchbase::errc::common::internal_server_failure,
             "only a 400 is the caller's error");
 }
+
+// A name holding '#', '?', '/', '%' and a space, and its escaped form.
+const std::string hostile_name{ "a#b?c/d%e f" };
+const std::string escaped_name{ "a%23b%3Fc%2Fd%25e%20f" };
+
+void
+a_search_request_escapes_every_name_in_its_path([[maybe_unused]] context& ctx)
+{
+  couchbase::core::topology::configuration config{};
+  auto http_ctx = make_search_http_context(config);
+
+  couchbase::core::operations::search_request request{};
+  request.index_name = hostile_name;
+  request.query = couchbase::core::json_string{ R"({"match":"x"})" };
+
+  couchbase::core::io::http_request encoded;
+  assert_success(request.encode_to(encoded, http_ctx), "the request is encoded");
+  assert_eq(encoded.path, "/api/index/" + escaped_name + "/query", "the index name is escaped");
+  assert_ne(encoded.path, "/api/index/" + hostile_name + "/query", "not the raw name");
+
+  request.bucket_name = hostile_name;
+  request.scope_name = hostile_name;
+  assert_success(request.encode_to(encoded, http_ctx), "the scoped request is encoded");
+  assert_eq(encoded.path,
+            "/api/bucket/" + escaped_name + "/scope/" + escaped_name + "/index/" + escaped_name +
+              "/query",
+            "bucket, scope and index names are escaped");
+  assert_ne(encoded.path,
+            "/api/bucket/" + hostile_name + "/scope/" + hostile_name + "/index/" + hostile_name +
+              "/query",
+            "not the raw names");
+}
 } // namespace
 
 auto
@@ -935,6 +967,7 @@ tests() -> test_suite
       { CASE(a_recognised_rejection_keeps_its_own_error) },
       { CASE(a_rejection_without_the_expected_fields_is_an_invalid_argument) },
       { CASE(a_server_fault_is_still_an_internal_server_failure) },
+      { CASE(a_search_request_escapes_every_name_in_its_path) },
     },
   };
 }

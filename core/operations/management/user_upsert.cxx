@@ -32,7 +32,8 @@ user_upsert_request::encode_to(encoded_request_type& encoded,
                                http_context& /* context */) const -> std::error_code
 {
   encoded.method = "PUT";
-  encoded.path = fmt::format("/settings/rbac/users/{}/{}", domain, user.username);
+  encoded.path = fmt::format(
+    "/settings/rbac/users/{}/{}", domain, utils::string_codec::v2::path_escape(user.username));
   std::vector<std::string> params{};
   if (user.display_name) {
     params.push_back(

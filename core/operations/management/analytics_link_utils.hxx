@@ -33,7 +33,7 @@ endpoint_from_analytics_link(const analytics_link_type& link) -> std::string
   if (std::count(link.dataverse.begin(), link.dataverse.end(), '/') > 0) {
     return fmt::format("/analytics/link/{}/{}",
                        utils::string_codec::v2::path_escape(link.dataverse),
-                       link.link_name);
+                       utils::string_codec::v2::path_escape(link.link_name));
   }
   return "/analytics/link";
 }

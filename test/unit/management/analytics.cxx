@@ -644,6 +644,29 @@ a_management_rejection_that_claims_success_is_an_error([[maybe_unused]] context&
             couchbase::errc::common::invalid_argument,
             "index get all");
 }
+
+// A name holding '#', '?', '/', '%' and a space, and its escaped form.
+const std::string hostile_name{ "a#b?c/d%e f" };
+const std::string escaped_name{ "a%23b%3Fc%2Fd%25e%20f" };
+
+void
+an_analytics_link_name_is_one_path_segment([[maybe_unused]] context& ctx)
+{
+  couchbase::core::io::http_request http_req;
+  auto http_ctx = ::test::utils::make_http_context();
+
+  couchbase::core::operations::management::analytics_link_drop_request req{};
+  req.dataverse_name = "travel/inventory";
+  req.link_name = hostile_name;
+
+  assert_success(req.encode_to(http_req, http_ctx), "the request is encoded");
+  // Catches a raw '#', which ends the path at link "a".
+  assert_eq(http_req.path,
+            "/analytics/link/travel%2Finventory/" + escaped_name,
+            "the link name is escaped");
+  assert_ne(
+    http_req.path, "/analytics/link/travel%2Finventory/" + hostile_name, "not the raw name");
+}
 } // namespace
 
 auto
@@ -680,6 +703,7 @@ tests() -> test_suite
       { CASE(quote_field_path_quotes_every_segment_of_a_dotted_path) },
       { CASE(a_management_rejection_keeps_its_rfc_58_mapping) },
       { CASE(a_management_rejection_that_claims_success_is_an_error) },
+      { CASE(an_analytics_link_name_is_one_path_segment) },
     },
   };
 }

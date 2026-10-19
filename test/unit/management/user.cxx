@@ -22,7 +22,9 @@
 
 #include "core/io/http_message.hxx"
 #include "core/operations/management/change_password.hxx"
+#include "core/operations/management/group_get.hxx"
 #include "core/operations/management/group_upsert.hxx"
+#include "core/operations/management/user_get.hxx"
 #include "core/operations/management/user_upsert.hxx"
 #include "core/utils/url_codec.hxx"
 
@@ -191,6 +193,44 @@ a_group_upsert_form_encodes_every_field([[maybe_unused]] context& ctx)
   assert_eq(values["ldap_group_ref"], "cn=readers,ou=Groups", "LDAP group reference");
   assert_eq(values["roles"], "data_reader[default]", "roles");
 }
+
+// A name holding '#', '?', '/', '%' and a space, and its escaped form.
+const std::string hostile_name{ "a#b?c/d%e f" };
+const std::string escaped_name{ "a%23b%3Fc%2Fd%25e%20f" };
+
+void
+a_user_name_is_one_path_segment([[maybe_unused]] context& ctx)
+{
+  couchbase::core::io::http_request http_req;
+  auto http_ctx = ::test::utils::make_http_context();
+
+  couchbase::core::operations::management::user_get_request req{};
+  req.username = hostile_name;
+
+  assert_success(req.encode_to(http_req, http_ctx), "the request is encoded");
+  // Catches a raw '#', which ends the path at user "a".
+  assert_eq(
+    http_req.path, "/settings/rbac/users/local/" + escaped_name, "the user name is escaped");
+  const std::string raw = "/settings/rbac/users/local/" + hostile_name;
+  assert_ne(http_req.path, raw, "not the raw name");
+  assert_eq(raw.substr(0, raw.find('#')),
+            std::string{ "/settings/rbac/users/local/a" },
+            "the raw path addresses user a");
+}
+
+void
+a_group_name_is_one_path_segment([[maybe_unused]] context& ctx)
+{
+  couchbase::core::io::http_request http_req;
+  auto http_ctx = ::test::utils::make_http_context();
+
+  couchbase::core::operations::management::group_get_request req{};
+  req.name = hostile_name;
+
+  assert_success(req.encode_to(http_req, http_ctx), "the request is encoded");
+  assert_eq(http_req.path, "/settings/rbac/groups/" + escaped_name, "the group name is escaped");
+  assert_ne(http_req.path, "/settings/rbac/groups/" + hostile_name, "not the raw name");
+}
 } // namespace
 
 auto
@@ -205,6 +245,8 @@ tests() -> test_suite
       { CASE(a_plus_in_a_user_password_is_not_a_space) },
       { CASE(a_user_upsert_form_encodes_every_field) },
       { CASE(a_group_upsert_form_encodes_every_field) },
+      { CASE(a_user_name_is_one_path_segment) },
+      { CASE(a_group_name_is_one_path_segment) },
     },
   };
 }

@@ -41,9 +41,9 @@ search_index_upsert_request::encode_to(encoded_request_type& encoded,
     encoded.path = fmt::format("/api/bucket/{}/scope/{}/index/{}",
                                utils::string_codec::v2::path_escape(bucket_name.value()),
                                utils::string_codec::v2::path_escape(scope_name.value()),
-                               index.name);
+                               utils::string_codec::v2::path_escape(index.name));
   } else {
-    encoded.path = fmt::format("/api/index/{}", index.name);
+    encoded.path = fmt::format("/api/index/{}", utils::string_codec::v2::path_escape(index.name));
   }
   tao::json::value body{
     { "name", index.name },
