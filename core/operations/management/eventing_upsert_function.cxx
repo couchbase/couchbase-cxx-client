@@ -332,7 +332,8 @@ eventing_upsert_function_request::encode_to(encoded_request_type& encoded,
 
   encoded.headers["content-type"] = "application/json";
   encoded.method = "POST";
-  encoded.path = fmt::format("/api/v1/functions/{}", function.name);
+  encoded.path =
+    fmt::format("/api/v1/functions/{}", utils::string_codec::v2::path_escape(function.name));
   if (bucket_name.has_value() && scope_name.has_value()) {
     encoded.path += fmt::format("?bucket={}&scope={}",
                                 utils::string_codec::v2::path_escape(bucket_name.value()),

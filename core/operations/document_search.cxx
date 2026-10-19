@@ -21,6 +21,7 @@
 #include "core/logger/logger.hxx"
 #include "core/logger/redaction.hxx"
 #include "core/utils/json.hxx"
+#include "core/utils/url_codec.hxx"
 
 #include <couchbase/error_codes.hxx>
 
@@ -164,11 +165,12 @@ search_request::encode_to(search_request::encoded_request_type& encoded,
 
   if (bucket_name.has_value() && scope_name.has_value()) {
     encoded.path = fmt::format("/api/bucket/{}/scope/{}/index/{}/query",
-                               bucket_name.value(),
-                               scope_name.value(),
-                               index_name);
+                               utils::string_codec::v2::path_escape(bucket_name.value()),
+                               utils::string_codec::v2::path_escape(scope_name.value()),
+                               utils::string_codec::v2::path_escape(index_name));
   } else {
-    encoded.path = fmt::format("/api/index/{}/query", index_name);
+    encoded.path =
+      fmt::format("/api/index/{}/query", utils::string_codec::v2::path_escape(index_name));
   }
 
   encoded.type = type;

@@ -48,7 +48,7 @@ view_index_upsert_request::encode_to(encoded_request_type& encoded,
   encoded.path = fmt::format("/{}/_design/{}{}",
                              utils::string_codec::v2::path_escape(bucket_name),
                              document.ns == design_document_namespace::development ? "dev_" : "",
-                             document.name);
+                             utils::string_codec::v2::path_escape(document.name));
   encoded.body = utils::json::generate(body);
   return {};
 }

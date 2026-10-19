@@ -31,7 +31,8 @@ group_upsert_request::encode_to(encoded_request_type& encoded,
                                 http_context& /* context */) const -> std::error_code
 {
   encoded.method = "PUT";
-  encoded.path = fmt::format("/settings/rbac/groups/{}", group.name);
+  encoded.path =
+    fmt::format("/settings/rbac/groups/{}", utils::string_codec::v2::path_escape(group.name));
   std::vector<std::string> params{};
   if (group.description) {
     params.push_back(

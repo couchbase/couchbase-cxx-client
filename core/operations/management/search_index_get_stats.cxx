@@ -18,6 +18,7 @@
 #include "search_index_get_stats.hxx"
 
 #include "core/utils/json.hxx"
+#include "core/utils/url_codec.hxx"
 #include "error_utils.hxx"
 
 #include <spdlog/fmt/bundled/core.h>
@@ -33,7 +34,8 @@ search_index_get_stats_request::encode_to(encoded_request_type& encoded,
     return errc::common::invalid_argument;
   }
   encoded.method = "GET";
-  encoded.path = fmt::format("/api/stats/index/{}", index_name);
+  encoded.path =
+    fmt::format("/api/stats/index/{}", utils::string_codec::v2::path_escape(index_name));
   return {};
 }
 

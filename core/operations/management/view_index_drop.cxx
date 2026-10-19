@@ -33,7 +33,7 @@ view_index_drop_request::encode_to(encoded_request_type& encoded,
   encoded.path = fmt::format("/{}/_design/{}{}",
                              utils::string_codec::v2::path_escape(bucket_name),
                              ns == design_document_namespace::development ? "dev_" : "",
-                             document_name);
+                             utils::string_codec::v2::path_escape(document_name));
   return {};
 }
 

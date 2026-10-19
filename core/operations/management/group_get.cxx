@@ -19,6 +19,7 @@
 
 #include "core/management/rbac_json.hxx"
 #include "core/utils/json.hxx"
+#include "core/utils/url_codec.hxx"
 #include "error_utils.hxx"
 
 #include <spdlog/fmt/bundled/core.h>
@@ -31,7 +32,8 @@ group_get_request::encode_to(encoded_request_type& encoded,
                              http_context& /* context */) const -> std::error_code
 {
   encoded.method = "GET";
-  encoded.path = fmt::format("/settings/rbac/groups/{}", name);
+  encoded.path =
+    fmt::format("/settings/rbac/groups/{}", utils::string_codec::v2::path_escape(name));
   encoded.headers["content-type"] = "application/x-www-form-urlencoded";
   return {};
 }

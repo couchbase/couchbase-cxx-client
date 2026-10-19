@@ -15,7 +15,9 @@
  *   limitations under the License.
  */
 
+#include "framework/errors.hxx"
 #include "framework/test_registry.hxx"
+#include "utils/http_context.hxx"
 
 #include "utils/test_data.hxx"
 
@@ -24,6 +26,8 @@
 #include "core/management/search_index.hxx"
 #include "core/operations/management/search_get_stats.hxx"
 #include "core/operations/management/search_index_drop.hxx"
+#include "core/operations/management/search_index_get.hxx"
+#include "core/operations/management/search_index_get_stats.hxx"
 
 #include <couchbase/error_codes.hxx>
 
@@ -151,6 +155,49 @@ a_stats_request_refused_for_its_credentials_is_an_authentication_failure(
               "RFC-58: Search 401 and 403 are authentication failures");
   }
 }
+
+// A name holding '#', '?', '/', '%' and a space, and its escaped form.
+const std::string hostile_name{ "a#b?c/d%e f" };
+const std::string escaped_name{ "a%23b%3Fc%2Fd%25e%20f" };
+
+void
+a_search_index_name_is_one_path_segment([[maybe_unused]] context& ctx)
+{
+  couchbase::core::io::http_request http_req;
+  auto http_ctx = ::test::utils::make_http_context();
+
+  couchbase::core::operations::management::search_index_get_request req{};
+  req.index_name = hostile_name;
+
+  assert_success(req.encode_to(http_req, http_ctx), "the request is encoded");
+  // Catches a raw '#', which ends the path at index "a".
+  assert_eq(http_req.path, "/api/index/" + escaped_name, "the global path escapes the name");
+  assert_ne(http_req.path, "/api/index/" + hostile_name, "not the raw name");
+
+  req.bucket_name = "travel-sample";
+  req.scope_name = "inventory";
+  assert_success(req.encode_to(http_req, http_ctx), "the scoped request is encoded");
+  assert_eq(http_req.path,
+            "/api/bucket/travel-sample/scope/inventory/index/" + escaped_name,
+            "the scoped path escapes the name");
+  assert_ne(http_req.path,
+            "/api/bucket/travel-sample/scope/inventory/index/" + hostile_name,
+            "not the raw name");
+}
+
+void
+a_search_index_stats_name_is_one_path_segment([[maybe_unused]] context& ctx)
+{
+  couchbase::core::io::http_request http_req;
+  auto http_ctx = ::test::utils::make_http_context();
+
+  couchbase::core::operations::management::search_index_get_stats_request req{};
+  req.index_name = hostile_name;
+
+  assert_success(req.encode_to(http_req, http_ctx), "the request is encoded");
+  assert_eq(http_req.path, "/api/stats/index/" + escaped_name, "the index name is escaped");
+  assert_ne(http_req.path, "/api/stats/index/" + hostile_name, "not the raw name");
+}
 } // namespace
 
 auto
@@ -167,6 +214,8 @@ tests() -> test_suite
       { CASE(a_management_rejection_without_the_expected_fields_is_an_invalid_argument) },
       { CASE(a_rejected_stats_request_is_an_invalid_argument) },
       { CASE(a_stats_request_refused_for_its_credentials_is_an_authentication_failure) },
+      { CASE(a_search_index_name_is_one_path_segment) },
+      { CASE(a_search_index_stats_name_is_one_path_segment) },
     },
   };
 }

@@ -18,6 +18,7 @@
 #include "user_drop.hxx"
 
 #include "core/management/rbac_fmt.hxx"
+#include "core/utils/url_codec.hxx"
 #include "error_utils.hxx"
 
 namespace couchbase::core::operations::management
@@ -27,7 +28,8 @@ user_drop_request::encode_to(encoded_request_type& encoded,
                              http_context& /* context */) const -> std::error_code
 {
   encoded.method = "DELETE";
-  encoded.path = fmt::format("/settings/rbac/users/{}/{}", domain, username);
+  encoded.path = fmt::format(
+    "/settings/rbac/users/{}/{}", domain, utils::string_codec::v2::path_escape(username));
   return {};
 }
 

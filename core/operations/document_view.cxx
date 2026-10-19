@@ -127,10 +127,10 @@ document_view_request::encode_to(document_view_request::encoded_request_type& en
   encoded.method = "POST";
   encoded.headers["content-type"] = "application/json";
   encoded.path = fmt::format("/{}/_design/{}{}/_view/{}?{}",
-                             bucket_name,
+                             utils::string_codec::v2::path_escape(bucket_name),
                              ns == design_document_namespace::development ? "dev_" : "",
-                             document_name,
-                             view_name,
+                             utils::string_codec::v2::path_escape(document_name),
+                             utils::string_codec::v2::path_escape(view_name),
                              utils::join_strings(query_string, "&"));
   encoded.body = utils::json::generate(body);
   if (row_callback) {

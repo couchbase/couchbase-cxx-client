@@ -41,8 +41,9 @@ analytics_link_drop_request::encode_to(encoded_request_type& encoded,
     encoded.body = utils::string_codec::v2::form_encode(values);
     encoded.path = "/analytics/link";
   } else {
-    encoded.path = fmt::format(
-      "/analytics/link/{}/{}", utils::string_codec::v2::path_escape(dataverse_name), link_name);
+    encoded.path = fmt::format("/analytics/link/{}/{}",
+                               utils::string_codec::v2::path_escape(dataverse_name),
+                               utils::string_codec::v2::path_escape(link_name));
   }
   return {};
 }

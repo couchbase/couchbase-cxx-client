@@ -38,11 +38,12 @@ search_index_control_query_request::encode_to(encoded_request_type& encoded,
     encoded.path = fmt::format("/api/bucket/{}/scope/{}/index/{}/queryControl/{}",
                                utils::string_codec::v2::path_escape(bucket_name.value()),
                                utils::string_codec::v2::path_escape(scope_name.value()),
-                               index_name,
+                               utils::string_codec::v2::path_escape(index_name),
                                allow ? "allow" : "disallow");
   } else {
-    encoded.path =
-      fmt::format("/api/index/{}/queryControl/{}", index_name, allow ? "allow" : "disallow");
+    encoded.path = fmt::format("/api/index/{}/queryControl/{}",
+                               utils::string_codec::v2::path_escape(index_name),
+                               allow ? "allow" : "disallow");
   }
   return {};
 }

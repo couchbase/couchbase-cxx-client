@@ -36,9 +36,10 @@ search_index_get_documents_count_request::encode_to(encoded_request_type& encode
     encoded.path = fmt::format("/api/bucket/{}/scope/{}/index/{}/count",
                                utils::string_codec::v2::path_escape(bucket_name.value()),
                                utils::string_codec::v2::path_escape(scope_name.value()),
-                               index_name);
+                               utils::string_codec::v2::path_escape(index_name));
   } else {
-    encoded.path = fmt::format("/api/index/{}/count", index_name);
+    encoded.path =
+      fmt::format("/api/index/{}/count", utils::string_codec::v2::path_escape(index_name));
   }
   return {};
 }
