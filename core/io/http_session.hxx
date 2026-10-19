@@ -358,7 +358,10 @@ private:
   couchbase::core::http_context http_ctx_;
 
   // Read by diag_info() from any thread.
-  std::atomic<std::chrono::steady_clock::time_point> last_active_{};
+  // Initialised with a value: libstdc++ 8 deletes atomic<T>::atomic() when T() is not noexcept.
+  std::atomic<std::chrono::steady_clock::time_point> last_active_{
+    std::chrono::steady_clock::time_point{}
+  };
   // Written by stop() on its calling thread, by initiate_connect() on the connect() caller or on
   // the strand, and by on_connect() on the strand; read by diag_info() from any thread.
   std::atomic<diag::endpoint_state> state_{ diag::endpoint_state::disconnected };
