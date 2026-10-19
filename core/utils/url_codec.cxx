@@ -120,7 +120,7 @@ url_encode(Ti first, Ti last, To& o, bool check_encoded = true) -> bool
       }
 
       do {
-        o.append(fmt::format("%{:x}", static_cast<std::uint8_t>(*first)));
+        o.append(fmt::format("%{:02x}", static_cast<std::uint8_t>(*first)));
       } while (--numbytes && ++first != last);
     }
   }
@@ -223,7 +223,7 @@ form_encode(Ti first, Ti last, To& out)
                (c >= 0x41 && c <= 0x5A) || (c == 0x5F) || (c >= 0x60 && c <= 0x7A)) {
       out.insert(out.end(), static_cast<char>(c));
     } else {
-      out.append(fmt::format("%{:x}", static_cast<std::uint8_t>(*first)));
+      out.append(fmt::format("%{:02x}", static_cast<std::uint8_t>(*first)));
     }
   }
 }
