@@ -35,22 +35,24 @@ group_upsert_request::encode_to(encoded_request_type& encoded,
   std::vector<std::string> params{};
   if (group.description) {
     params.push_back(
-      fmt::format("description={}", utils::string_codec::url_encode(group.description.value())));
+      fmt::format("description={}", utils::string_codec::form_encode(group.description.value())));
   }
   if (group.ldap_group_reference) {
     params.push_back(fmt::format(
-      "ldap_group_ref={}", utils::string_codec::url_encode(group.ldap_group_reference.value())));
+      "ldap_group_ref={}", utils::string_codec::form_encode(group.ldap_group_reference.value())));
   }
+  // Names go into the spec unescaped: the server does not percent-decode role parameters after
+  // form-decoding the body, so the spec is form-encoded exactly once, as a whole.
   std::vector<std::string> encoded_roles{};
   encoded_roles.reserve(group.roles.size());
   for (const auto& role : group.roles) {
     std::string spec = role.name;
     if (role.bucket) {
-      spec += fmt::format("[{}", utils::string_codec::v2::path_escape(role.bucket.value()));
+      spec += fmt::format("[{}", role.bucket.value());
       if (role.scope) {
-        spec += fmt::format(":{}", utils::string_codec::v2::path_escape(role.scope.value()));
+        spec += fmt::format(":{}", role.scope.value());
         if (role.collection) {
-          spec += fmt::format(":{}", utils::string_codec::v2::path_escape(role.collection.value()));
+          spec += fmt::format(":{}", role.collection.value());
         }
       }
       spec += ']';
@@ -59,7 +61,7 @@ group_upsert_request::encode_to(encoded_request_type& encoded,
   }
   if (!encoded_roles.empty()) {
     const std::string concatenated = fmt::format("{}", utils::join_strings(encoded_roles, ","));
-    params.push_back(fmt::format("roles={}", utils::string_codec::url_encode(concatenated)));
+    params.push_back(fmt::format("roles={}", utils::string_codec::form_encode(concatenated)));
   }
   encoded.body = utils::join_strings(params, "&");
   encoded.headers["content-type"] = "application/x-www-form-urlencoded";

@@ -36,26 +36,28 @@ user_upsert_request::encode_to(encoded_request_type& encoded,
   std::vector<std::string> params{};
   if (user.display_name) {
     params.push_back(
-      fmt::format("name={}", utils::string_codec::url_encode(user.display_name.value())));
+      fmt::format("name={}", utils::string_codec::form_encode(user.display_name.value())));
   }
   if (user.password) {
     params.push_back(
-      fmt::format("password={}", utils::string_codec::url_encode(user.password.value())));
+      fmt::format("password={}", utils::string_codec::form_encode(user.password.value())));
   }
   if (!user.groups.empty()) {
     const std::string encoded_groups = utils::join_strings(user.groups, ",");
-    params.push_back(fmt::format("groups={}", utils::string_codec::url_encode(encoded_groups)));
+    params.push_back(fmt::format("groups={}", utils::string_codec::form_encode(encoded_groups)));
   }
+  // Names go into the spec unescaped: the server does not percent-decode role parameters after
+  // form-decoding the body, so the spec is form-encoded exactly once, as a whole.
   std::vector<std::string> encoded_roles{};
   encoded_roles.reserve(user.roles.size());
   for (const auto& role : user.roles) {
     std::string spec = role.name;
     if (role.bucket) {
-      spec += fmt::format("[{}", utils::string_codec::v2::path_escape(role.bucket.value()));
+      spec += fmt::format("[{}", role.bucket.value());
       if (role.scope) {
-        spec += fmt::format(":{}", utils::string_codec::v2::path_escape(role.scope.value()));
+        spec += fmt::format(":{}", role.scope.value());
         if (role.collection) {
-          spec += fmt::format(":{}", utils::string_codec::v2::path_escape(role.collection.value()));
+          spec += fmt::format(":{}", role.collection.value());
         }
       }
       spec += ']';
@@ -64,7 +66,7 @@ user_upsert_request::encode_to(encoded_request_type& encoded,
   }
   if (!encoded_roles.empty()) {
     const std::string concatenated = utils::join_strings(encoded_roles, ",");
-    params.push_back(fmt::format("roles={}", utils::string_codec::url_encode(concatenated)));
+    params.push_back(fmt::format("roles={}", utils::string_codec::form_encode(concatenated)));
   }
   encoded.body = utils::join_strings(params, "&");
   encoded.headers["content-type"] = "application/x-www-form-urlencoded";
