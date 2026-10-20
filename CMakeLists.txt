@@ -16,7 +16,7 @@ endif()
 
 project(
   couchbase_cxx_client
-  VERSION "1.4.0"
+  VERSION "1.5.0"
   LANGUAGES CXX C)
 message(
   STATUS
