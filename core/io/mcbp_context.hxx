@@ -20,21 +20,54 @@
 #include "core/protocol/hello_feature.hxx"
 #include "core/topology/configuration.hxx"
 
-#include <algorithm>
+#include <cstdint>
 #include <optional>
 #include <vector>
 
 namespace couchbase::core
 {
 
+[[nodiscard]] inline auto
+compute_features_mask(const std::vector<protocol::hello_feature>& features) noexcept
+  -> std::uint64_t
+{
+  std::uint64_t mask = 0;
+  for (const auto f : features) {
+    const auto bit = static_cast<std::uint16_t>(f);
+    if (bit < 64) {
+      mask |= (std::uint64_t{ 1 } << bit);
+    }
+  }
+  return mask;
+}
+
 struct mcbp_context {
   const std::optional<topology::configuration>& config;
   const std::vector<protocol::hello_feature>& supported_features;
+  std::uint64_t supported_features_mask{ 0 };
 
-  [[nodiscard]] auto supports_feature(protocol::hello_feature feature) const -> bool
+  mcbp_context(const std::optional<topology::configuration>& cfg,
+               const std::vector<protocol::hello_feature>& features,
+               std::uint64_t mask) noexcept
+    : config{ cfg }
+    , supported_features{ features }
+    , supported_features_mask{ mask }
   {
-    return std::find(supported_features.begin(), supported_features.end(), feature) !=
-           supported_features.end();
+  }
+
+  mcbp_context(const std::optional<topology::configuration>& cfg,
+               const std::vector<protocol::hello_feature>& features) noexcept
+    : config{ cfg }
+    , supported_features{ features }
+    , supported_features_mask{ compute_features_mask(features) }
+  {
+  }
+
+  [[nodiscard]] constexpr auto supports_feature(protocol::hello_feature feature) const noexcept
+    -> bool
+  {
+    const auto bit = static_cast<std::uint16_t>(feature);
+    return bit < 64 && ((supported_features_mask & (std::uint64_t{ 1 } << bit)) != 0);
   }
 };
 
