@@ -888,7 +888,7 @@ enum class management {
   bucket_not_flushable = 607,
 
   /// Occurs if the function is not found
-  /// name is "ERR_APP_NOT_FOUND_TS"
+  /// name is "ERR_APP_NOT_FOUND_TS" or "ERR_APP_NOT_FOUND"
   eventing_function_not_found = 608,
 
   /// Occurs if the function is not deployed, but the action expects it to

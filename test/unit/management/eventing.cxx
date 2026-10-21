@@ -123,6 +123,10 @@ a_recognised_problem_keeps_its_own_error([[maybe_unused]] context& ctx)
               400, R"({"name":"ERR_APP_NOT_FOUND_TS","code":2,"description":"not found"})"),
             couchbase::errc::management::eventing_function_not_found,
             "the catch-all for a 400 does not shadow the specific problems");
+  assert_eq(
+    mapped_error<deploy>(400, R"({"name":"ERR_APP_NOT_FOUND","code":1,"description":"not found"})"),
+    couchbase::errc::management::eventing_function_not_found,
+    "ERR_APP_NOT_FOUND is mapped like ERR_APP_NOT_FOUND_TS");
 }
 
 void
