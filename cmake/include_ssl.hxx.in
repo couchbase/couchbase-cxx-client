@@ -17,9 +17,9 @@
 
 #pragma once
 
-#if defined(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
+#if defined(COUCHBASE_CXX_CLIENT_STATIC_AWSLC)
 
-#include <openssl/is_boringssl.h>
+#include <openssl/is_awslc.h>
 
 #if defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic push

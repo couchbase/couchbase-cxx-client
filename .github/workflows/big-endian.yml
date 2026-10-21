@@ -14,8 +14,8 @@ name: big-endian
 # assumed on a host that is actually big-endian.
 #
 # s390x is used because it is the big-endian target QEMU emulates most reliably. Note that
-# BoringSSL has no s390x port, so this builds against the distro's OpenSSL; that is the C++ SDK
-# default, but a wrapper SDK that forces BoringSSL cannot be built for this platform at all.
+# AWS-LC ships no s390x assembly, so this builds against the distro's OpenSSL, which is the C++
+# SDK default.
 
 on:
   workflow_dispatch:
@@ -76,7 +76,7 @@ jobs:
                 -DCOUCHBASE_CXX_CLIENT_BUILD_DOCS=OFF \
                 -DCOUCHBASE_CXX_CLIENT_BUILD_TOOLS=OFF \
                 -DCOUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY=OFF \
-                -DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=OFF \
+                -DCOUCHBASE_CXX_CLIENT_STATIC_AWSLC=OFF \
                 -DCACHE_OPTION=none
               cmake --build /src/cmake-build-tests --parallel 4 --target build_unit_tests
               ./bin/run-unit-tests

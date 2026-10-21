@@ -12,14 +12,14 @@
 # system gRPC/protobuf/OpenSSL development packages: their absence makes the
 # project's find_package() calls fail, so gRPC, protobuf, abseil, c-ares,
 # OpenTelemetry and curl are fetched and built statically from source, and
-# COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON statically links BoringSSL. The
+# COUCHBASE_CXX_CLIENT_STATIC_AWSLC=ON statically links AWS-LC. The
 # resulting executable depends only on the C/C++ runtime and zlib, all of which
 # the ubuntu:24.04 runtime base already provides.
 #
 # Build context MUST be the repository root, e.g.:
 #   docker build -f tools/fit_performer/Dockerfile.Release -t cxx-fit-performer .
 #
-# Everything (BoringSSL, the Mozilla CA bundle, gRPC, OpenTelemetry, ...) is
+# Everything (AWS-LC, the Mozilla CA bundle, gRPC, OpenTelemetry, ...) is
 # downloaded at CMake configure time, so the build needs network access.
 
 ARG UBUNTU_VERSION=24.04
@@ -35,8 +35,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 # git -> CPM dependency checkout, curl/ca-certificates -> CMake's file(DOWNLOAD)
 # of the Mozilla CA bundle over TLS, zlib1g-dev -> system zlib that gRPC links
 # against on Linux, pkg-config -> dependency probing. No OpenSSL package: with
-# STATIC_BORINGSSL=ON, cmake/ThirdPartyDependencies.cmake builds curl against the
-# same static BoringSSL as the SDK.
+# STATIC_AWSLC=ON, cmake/ThirdPartyDependencies.cmake builds curl against the
+# same static AWS-LC as the SDK.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
@@ -66,7 +66,7 @@ RUN if [ "$(git rev-parse --is-shallow-repository 2>/dev/null)" = true ]; then \
 # Configure a Release build of only the performer and its dependencies.
 # Tools are required (fit_performer lives under tools/); tests, examples and
 # docs are disabled to avoid building anything we will not ship. Static client
-# library + static BoringSSL + (implicitly) source-built gRPC/protobuf/curl
+# library + static AWS-LC + (implicitly) source-built gRPC/protobuf/curl
 # yield a self-contained binary.
 RUN cmake -S . -B build -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
@@ -78,14 +78,14 @@ RUN cmake -S . -B build -G Ninja \
         -DCOUCHBASE_CXX_CLIENT_BUILD_STATIC=ON \
         -DCOUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY=ON \
         -DCOUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2=ON \
-        -DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON \
+        -DCOUCHBASE_CXX_CLIENT_STATIC_AWSLC=ON \
     && cmake --build build --target fit_performer -j"$(nproc)" \
     && strip build/tools/fit_performer/fit_performer
 
 # Fail the build early if the binary depends on shared libraries the runtime
 # image will not have. Allowed: the C/C++ runtime, zlib and the dynamic loader.
 # A system libssl or libcrypto here would mean a second TLS implementation next
-# to the static BoringSSL. This keeps the "only the binary" promise honest.
+# to the static AWS-LC. This keeps the "only the binary" promise honest.
 RUN ldd build/tools/fit_performer/fit_performer || true; \
     if ldd build/tools/fit_performer/fit_performer \
          | grep -Eiv 'libstdc\+\+|libc\.so|libm\.so|libgcc_s|libz\.so|libdl|librt|libpthread|ld-linux|linux-vdso|not a dynamic' \

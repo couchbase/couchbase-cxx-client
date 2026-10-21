@@ -146,3 +146,33 @@ jobs:
           name: clang-tidy-fixes
           path: cmake-build-clang-tidy/build/clang-tidy-fixes.yaml
           if-no-files-found: ignore
+
+  # The shared library must not export the statically linked AWS-LC: its symbols would bind
+  # against a platform OpenSSL loaded into the same process. Each object format hides them by a
+  # different mechanism at the link step, so the check runs on ELF and Mach-O. Only the library
+  # is built; the test matrix also runs the checker, but does not exist for every format.
+  exported_symbols:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ github.job }}-${{ matrix.os }}
+      - name: Build the shared library with static AWS-LC
+        timeout-minutes: 60
+        run: |
+          cmake -S . -B cmake-build-exported-symbols -DCMAKE_BUILD_TYPE=Release \
+            -DCOUCHBASE_CXX_CLIENT_BUILD_SHARED=ON -DCOUCHBASE_CXX_CLIENT_BUILD_STATIC=OFF \
+            -DCOUCHBASE_CXX_CLIENT_STATIC_AWSLC=ON -DCOUCHBASE_CXX_CLIENT_BUILD_TESTS=OFF \
+            -DCOUCHBASE_CXX_CLIENT_BUILD_TOOLS=OFF -DCOUCHBASE_CXX_CLIENT_BUILD_EXAMPLES=OFF \
+            -DCOUCHBASE_CXX_CLIENT_BUILD_DOCS=OFF
+          cmake --build cmake-build-exported-symbols --target couchbase_cxx_client --parallel 4
+      - name: Check exported symbols
+        run: ./bin/check-exported-symbols cmake-build-exported-symbols
