@@ -109,7 +109,7 @@ extract_eventing_error_code(const tao::json::value& response, std::uint32_t stat
       name->get_string(),
       description,
     };
-    if (problem.name == "ERR_APP_NOT_FOUND_TS") {
+    if (problem.name == "ERR_APP_NOT_FOUND_TS" || problem.name == "ERR_APP_NOT_FOUND") {
       return { errc::management::eventing_function_not_found, problem };
     }
     if (problem.name == "ERR_APP_NOT_DEPLOYED") {
