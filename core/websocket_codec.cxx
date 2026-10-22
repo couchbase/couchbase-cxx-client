@@ -443,16 +443,18 @@ encode_payload_length(std::size_t length) -> std::vector<std::byte>
   }
   // 7 + 64
   constexpr std::uint8_t field_7_bit = 127 | flag_mask;
+  // std::size_t is 32 bits on 32-bit targets, where shifting it by 32 or more is undefined.
+  const std::uint64_t wide_length = length;
   return {
     std::byte{ field_7_bit },
-    static_cast<std::byte>((length >> 56) & 0xff),
-    static_cast<std::byte>((length >> 48) & 0xff),
-    static_cast<std::byte>((length >> 40) & 0xff),
-    static_cast<std::byte>((length >> 32) & 0xff),
-    static_cast<std::byte>((length >> 24) & 0xff),
-    static_cast<std::byte>((length >> 16) & 0xff),
-    static_cast<std::byte>((length >> 8) & 0xff),
-    static_cast<std::byte>(length & 0xff),
+    static_cast<std::byte>((wide_length >> 56) & 0xff),
+    static_cast<std::byte>((wide_length >> 48) & 0xff),
+    static_cast<std::byte>((wide_length >> 40) & 0xff),
+    static_cast<std::byte>((wide_length >> 32) & 0xff),
+    static_cast<std::byte>((wide_length >> 24) & 0xff),
+    static_cast<std::byte>((wide_length >> 16) & 0xff),
+    static_cast<std::byte>((wide_length >> 8) & 0xff),
+    static_cast<std::byte>(wide_length & 0xff),
   };
 }
 
