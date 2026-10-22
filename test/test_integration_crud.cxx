@@ -37,6 +37,7 @@
 #include "core/operations/document_unlock.hxx"
 #include "core/operations/document_upsert.hxx"
 #include "core/operations_fwd.hxx"
+#include "core/protocol/cmd_get_cluster_config.hxx"
 
 #include <couchbase/cluster.hxx>
 #include <couchbase/codec/tao_json_serializer.hxx>
@@ -75,7 +76,11 @@ TEST_CASE("integration: switching off mutation token", "[integration]")
     REQUIRE(!resp.cas.empty());
     REQUIRE(resp.token.sequence_number() == 0);
     REQUIRE(resp.token.partition_uuid() == 0);
-    REQUIRE_FALSE(resp.token.partition_id() == 0);
+    const auto config = couchbase::core::protocol::parse_config(
+      integration.load_bucket_info().config_json, "127.0.0.1", 11210);
+    REQUIRE(config.vbmap.has_value());
+    REQUIRE_FALSE(config.vbmap->empty());
+    REQUIRE(resp.token.partition_id() == config.map_key(id.key(), 0).first);
     REQUIRE_FALSE(resp.token.bucket_name().empty());
   }
   {
