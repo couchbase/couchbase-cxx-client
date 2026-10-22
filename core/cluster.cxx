@@ -2651,22 +2651,21 @@ cluster::query_stream(operations::query_request request,
         std::chrono::steady_clock::now() +
         request.timeout.value_or(impl_->default_timeout_for(service_type::query));
       impl_->defer_until_open(
-        [&] {
-          return
-            [self = *this, deadline, request = std::move(request), handler = std::move(handler)](
-              std::error_code ec) mutable {
-              if (ec) {
-                error_context::query ctx{};
-                ctx.ec = ec;
-                ctx.statement = request.statement;
-                ctx.client_context_id = request.client_context_id.has_value()
-                                          ? *request.client_context_id
-                                          : uuid::to_string(uuid::random());
-                return handler({}, std::move(ctx));
-              }
-              request.timeout = remaining_until(deadline);
-              self.query_stream(std::move(request), std::move(handler));
-            };
+        [&, self = *this] {
+          return [self, deadline, request = std::move(request), handler = std::move(handler)](
+                   std::error_code ec) mutable {
+            if (ec) {
+              error_context::query ctx{};
+              ctx.ec = ec;
+              ctx.statement = request.statement;
+              ctx.client_context_id = request.client_context_id.has_value()
+                                        ? *request.client_context_id
+                                        : uuid::to_string(uuid::random());
+              return handler({}, std::move(ctx));
+            }
+            request.timeout = remaining_until(deadline);
+            self.query_stream(std::move(request), std::move(handler));
+          };
         },
         deadline)) {
     return;
@@ -2718,22 +2717,21 @@ cluster::analytics_query_stream(
         std::chrono::steady_clock::now() +
         request.timeout.value_or(impl_->default_timeout_for(service_type::analytics));
       impl_->defer_until_open(
-        [&] {
-          return
-            [self = *this, deadline, request = std::move(request), handler = std::move(handler)](
-              std::error_code ec) mutable {
-              if (ec) {
-                error_context::analytics ctx{};
-                ctx.ec = ec;
-                ctx.statement = request.statement;
-                ctx.client_context_id = request.client_context_id.has_value()
-                                          ? *request.client_context_id
-                                          : uuid::to_string(uuid::random());
-                return handler({}, std::move(ctx));
-              }
-              request.timeout = remaining_until(deadline);
-              self.analytics_query_stream(std::move(request), std::move(handler));
-            };
+        [&, self = *this] {
+          return [self, deadline, request = std::move(request), handler = std::move(handler)](
+                   std::error_code ec) mutable {
+            if (ec) {
+              error_context::analytics ctx{};
+              ctx.ec = ec;
+              ctx.statement = request.statement;
+              ctx.client_context_id = request.client_context_id.has_value()
+                                        ? *request.client_context_id
+                                        : uuid::to_string(uuid::random());
+              return handler({}, std::move(ctx));
+            }
+            request.timeout = remaining_until(deadline);
+            self.analytics_query_stream(std::move(request), std::move(handler));
+          };
         },
         deadline)) {
     return;
