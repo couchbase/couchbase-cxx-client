@@ -238,14 +238,28 @@ set(CA_BUNDLE_CPP_FILE "${CMAKE_CURRENT_BINARY_DIR}/generated/mozilla_ca_bundle.
 # seems to be cross-platform and fast.
 string(
   REGEX MATCHALL
-        "[^=#]+=+\n-----BEGIN CERTIFICATE-----[^-]+-----END CERTIFICATE-----"
+        "[^\n]+\n=+\n(#[^\n]*\n)*-----BEGIN CERTIFICATE-----[^-]+-----END CERTIFICATE-----"
         CERTIFICATES
         "${CA_BUNDLE_CONTENT}")
 list(LENGTH CERTIFICATES NUMBER_OF_CERTIFICATES)
+if(COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE)
+  # A bundle layout that the certificate expressions do not recognise fails configure. Otherwise the
+  # library builds with fewer default roots than the bundle carries, or none.
+  string(REGEX MATCHALL "-----BEGIN CERTIFICATE-----" PEM_BLOCKS "${CA_BUNDLE_CONTENT}")
+  list(LENGTH PEM_BLOCKS NUMBER_OF_PEM_BLOCKS)
+  if(NUMBER_OF_CERTIFICATES EQUAL 0 OR NOT NUMBER_OF_CERTIFICATES EQUAL NUMBER_OF_PEM_BLOCKS)
+    message(
+      FATAL_ERROR
+        "Extracted ${NUMBER_OF_CERTIFICATES} of ${NUMBER_OF_PEM_BLOCKS} certificates from "
+        "${COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE_ROOT}/mozilla-ca-bundle.crt")
+  endif()
+endif()
 file(
   WRITE ${CA_BUNDLE_CPP_FILE}
   "
 #include \"core/mozilla_ca_bundle.hxx\"
+
+#include <couchbase/build_config.hxx>
 
 #include <gsl/span>
 
@@ -256,22 +270,76 @@ namespace couchbase::core::default_ca
 {
 constexpr inline std::array<certificate, ${NUMBER_OF_CERTIFICATES}> certificates{
 ")
+set(CERTIFICATE_BODIES "")
 foreach(CERTIFICATE ${CERTIFICATES})
   string(
     REGEX MATCH
-          "[ \t\r\n]*([^=\n]+)[ \t\r\n]*=+\n(-----BEGIN CERTIFICATE-----[^-]+-----END CERTIFICATE-----)"
+          "^([^\n]+)\n=+\n(#[^\n]*\n)*(-----BEGIN CERTIFICATE-----[^-]+-----END CERTIFICATE-----)$"
           PARTS
-          ${CERTIFICATE})
+          "${CERTIFICATE}")
+  if(NOT PARTS)
+    message(FATAL_ERROR "Unable to split CA bundle entry into name and certificate:\n${CERTIFICATE}")
+  endif()
+  set(CERTIFICATE_NAME "${CMAKE_MATCH_1}")
+  set(CERTIFICATE_BODY "${CMAKE_MATCH_3}")
+  if(NOT CERTIFICATE_BODY MATCHES "^-----BEGIN CERTIFICATE-----\n([A-Za-z0-9+/=]+\n)+-----END CERTIFICATE-----$")
+    message(FATAL_ERROR "CA bundle entry \"${CERTIFICATE_NAME}\" is not a PEM certificate:\n${CERTIFICATE_BODY}")
+  endif()
+  # The name is emitted as an R"(...)" literal, which ends at the first )" it contains. The body
+  # cannot contain one: the PEM check above admits no ')'.
+  string(FIND "${CERTIFICATE_NAME}" ")\"" CLOSING_DELIMITER)
+  if(NOT CLOSING_DELIMITER EQUAL -1)
+    message(FATAL_ERROR "CA bundle entry name cannot be embedded as a raw string: ${CERTIFICATE_NAME}")
+  endif()
+  list(APPEND CERTIFICATE_BODIES "${CERTIFICATE_BODY}")
   file(APPEND ${CA_BUNDLE_CPP_FILE}
-"  certificate{ R\"(${CMAKE_MATCH_1})\",
-               R\"(${CMAKE_MATCH_2})\", },
+"  certificate{ R\"(${CERTIFICATE_NAME})\",
+               R\"(${CERTIFICATE_BODY})\", },
 
 ")
 endforeach()
+set(UNIQUE_CERTIFICATE_BODIES ${CERTIFICATE_BODIES})
+list(REMOVE_DUPLICATES UNIQUE_CERTIFICATE_BODIES)
+list(LENGTH UNIQUE_CERTIFICATE_BODIES NUMBER_OF_UNIQUE_CERTIFICATES)
+if(NOT NUMBER_OF_UNIQUE_CERTIFICATES EQUAL NUMBER_OF_CERTIFICATES)
+  message(FATAL_ERROR "CA bundle carries ${NUMBER_OF_CERTIFICATES} certificates, but only "
+                      "${NUMBER_OF_UNIQUE_CERTIFICATES} are distinct")
+endif()
 
 file(
   APPEND ${CA_BUNDLE_CPP_FILE}
 "};
+
+namespace
+{
+constexpr auto
+is_pem_certificate(std::string_view body) -> bool
+{
+  constexpr std::string_view header{ \"-----BEGIN CERTIFICATE-----\\n\" };
+  constexpr std::string_view footer{ \"\\n-----END CERTIFICATE-----\" };
+  return body.size() > header.size() + footer.size() && body.substr(0, header.size()) == header &&
+         body.substr(body.size() - footer.size()) == footer;
+}
+
+constexpr auto
+every_entry_is_named_certificate() -> bool
+{
+  for (const auto& entry : certificates) {
+    if (entry.authority.empty() || !is_pem_certificate(entry.body)) {
+      return false;
+    }
+  }
+  return true;
+}
+} // namespace
+
+// An array sized larger than its initialiser list value-initialises the remaining entries.
+static_assert(every_entry_is_named_certificate(),
+              \"every embedded CA bundle entry carries a name and a PEM certificate\");
+#if defined(COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE)
+static_assert(!certificates.empty(),
+              \"COUCHBASE_CXX_CLIENT_EMBED_MOZILLA_CA_BUNDLE is enabled, but no certificates were embedded\");
+#endif
 
 auto
 mozilla_ca_certs() -> gsl::span<const certificate>
