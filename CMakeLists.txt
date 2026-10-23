@@ -562,8 +562,12 @@ if(COUCHBASE_CXX_CLIENT_BUILD_SHARED OR BUILD_SHARED_LIBS)
   add_library(couchbase_cxx_client SHARED ${couchbase_cxx_client_FILES})
   add_library(couchbase_cxx_client::couchbase_cxx_client ALIAS couchbase_cxx_client)
 
-  set_target_properties(couchbase_cxx_client PROPERTIES VERSION ${couchbase_cxx_client_VERSION_MAJOR}
-                                                        SOVERSION ${couchbase_cxx_client_VERSION})
+  # The soname carries MAJOR.MINOR. A patch release keeps the ABI, so a binary linked against one
+  # MAJOR.MINOR release loads every later patch of it; a minor release may change the ABI and the soname.
+  set_target_properties(
+    couchbase_cxx_client
+    PROPERTIES VERSION ${couchbase_cxx_client_VERSION}
+               SOVERSION ${couchbase_cxx_client_VERSION_MAJOR}.${couchbase_cxx_client_VERSION_MINOR})
   list(APPEND couchbase_cxx_client_LIBRARIES couchbase_cxx_client)
   if(NOT WIN32)
     set(couchbase_cxx_client_DEFAULT_LIBRARY couchbase_cxx_client::couchbase_cxx_client)
