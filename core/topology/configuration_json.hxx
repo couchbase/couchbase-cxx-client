@@ -229,7 +229,7 @@ struct traits<couchbase::core::topology::configuration> {
             vbmap[i][n] = p[n].template as<std::int16_t>();
           }
         }
-        result.vbmap = vbmap;
+        result.vbmap = std::move(vbmap);
       }
     }
     if (const auto m = v.find("bucketCapabilities"); m != nullptr && m->is_array()) {
