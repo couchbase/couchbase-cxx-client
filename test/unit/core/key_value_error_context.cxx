@@ -19,13 +19,18 @@
 
 #include "core/document_id.hxx"
 #include "core/error_context/key_value.hxx"
+#include "core/operations/document_get.hxx"
+#include "core/operations/document_get_replica.hxx"
+#include "core/utils/byteswap.hxx"
 
 #include <couchbase/error_codes.hxx>
 #include <couchbase/retry_reason.hxx>
 
 #include <cstddef>
+#include <cstdint>
 #include <set>
 #include <string>
+#include <utility>
 
 namespace couchbase::test
 {
@@ -110,6 +115,54 @@ retry_attempts_are_carried_without_a_reason([[maybe_unused]] context& ctx)
   assert_eq(error_ctx.retry_attempts(), std::size_t{ 5 }, "the retry attempt count");
   assert_true(error_ctx.retry_reasons().empty(), "no retry reason is recorded");
 }
+
+void
+get_and_replica_make_response_move_value_buffer_without_copy([[maybe_unused]] context& ctx)
+{
+  auto make_msg =
+    [](couchbase::core::protocol::client_opcode opcode) -> couchbase::core::io::mcbp_message {
+    couchbase::core::io::mcbp_message msg{};
+    msg.header.magic = static_cast<std::uint8_t>(couchbase::core::protocol::magic::client_response);
+    msg.header.opcode = static_cast<std::uint8_t>(opcode);
+    msg.header.extlen = 4;
+    // Set network-order bodylen (68 = 0x44: 4-byte flags + 64-byte value)
+    msg.header.bodylen = couchbase::core::utils::host_to_network(std::uint32_t{ 68U });
+    msg.body.assign(68, std::byte{ 0x5a });
+    return msg;
+  };
+
+  {
+    const couchbase::core::operations::get_request req{
+      couchbase::core::document_id{ "default", "_default", "_default", "k" },
+    };
+    couchbase::core::operations::get_request::encoded_response_type encoded{
+      make_msg(couchbase::core::protocol::client_opcode::get),
+    };
+    const std::byte* original_data_ptr = encoded.body().value().data();
+    assert_eq(encoded.body().value().size(), std::size_t{ 64 }, "parsed 64-byte value");
+
+    auto resp = req.make_response({}, std::move(encoded));
+    assert_eq(resp.value.size(), std::size_t{ 64 }, "moved 64-byte value");
+    assert_true(resp.value.data() == original_data_ptr,
+                "get_request::make_response moves value buffer without reallocating");
+  }
+
+  {
+    const couchbase::core::operations::get_replica_request req{
+      couchbase::core::document_id{ "default", "_default", "_default", "k" },
+    };
+    couchbase::core::operations::get_replica_request::encoded_response_type encoded{
+      make_msg(couchbase::core::protocol::client_opcode::get_replica),
+    };
+    const std::byte* original_data_ptr = encoded.body().value().data();
+    assert_eq(encoded.body().value().size(), std::size_t{ 64 }, "parsed 64-byte value");
+
+    auto resp = req.make_response({}, std::move(encoded));
+    assert_eq(resp.value.size(), std::size_t{ 64 }, "moved 64-byte value");
+    assert_true(resp.value.data() == original_data_ptr,
+                "get_replica_request::make_response moves value buffer without reallocating");
+  }
+}
 } // namespace
 
 auto
@@ -126,6 +179,7 @@ tests() -> test_suite
         timeout::instant },
       { CASE(the_two_error_context_overloads_agree_on_observable_state), {}, timeout::instant },
       { CASE(retry_attempts_are_carried_without_a_reason), {}, timeout::instant },
+      { CASE(get_and_replica_make_response_move_value_buffer_without_copy), {}, timeout::instant },
     },
   };
 }
