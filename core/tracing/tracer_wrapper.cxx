@@ -19,12 +19,14 @@
 
 #include "constants.hxx"
 #include "core/logger/logger.hxx"
+#include "threshold_logging_tracer.hxx"
 
 namespace couchbase::core::tracing
 {
 tracer_wrapper::tracer_wrapper(std::shared_ptr<couchbase::tracing::request_tracer> tracer,
                                std::shared_ptr<cluster_label_listener> label_listener)
   : tracer_{ std::move(tracer) }
+  , is_threshold_tracer_{ std::dynamic_pointer_cast<threshold_logging_tracer>(tracer_) != nullptr }
   , cluster_label_listener_{ std::move(label_listener) }
 {
 }
@@ -47,18 +49,20 @@ tracer_wrapper::create_span(std::string span_name,
   -> std::shared_ptr<couchbase::tracing::request_span>
 {
   auto span = tracer_->start_span(std::move(span_name), std::move(parent_span));
-  if (!span->uses_tags()) {
+  if (is_threshold_tracer_ || !span->uses_tags()) {
     return span;
   }
 
   span->add_tag(attributes::common::system, "couchbase");
 
-  auto [cluster_name, cluster_uuid] = cluster_label_listener_->cluster_labels();
-  if (cluster_name) {
-    span->add_tag(attributes::common::cluster_name, cluster_name.value());
-  }
-  if (cluster_uuid) {
-    span->add_tag(attributes::common::cluster_uuid, cluster_uuid.value());
+  if (cluster_label_listener_) {
+    auto [cluster_name, cluster_uuid] = cluster_label_listener_->cluster_labels();
+    if (cluster_name) {
+      span->add_tag(attributes::common::cluster_name, cluster_name.value());
+    }
+    if (cluster_uuid) {
+      span->add_tag(attributes::common::cluster_uuid, cluster_uuid.value());
+    }
   }
 
   return span;

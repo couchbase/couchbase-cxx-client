@@ -50,6 +50,7 @@ public:
 
 private:
   std::shared_ptr<couchbase::tracing::request_tracer> tracer_;
+  bool is_threshold_tracer_{ false };
   std::shared_ptr<couchbase::core::cluster_label_listener> cluster_label_listener_;
 };
 } // namespace couchbase::core::tracing

@@ -20,6 +20,8 @@
 #include "core/document_id.hxx"
 #include "core/error_context/key_value_error_context.hxx"
 #include "core/error_context/subdocument_error_context.hxx"
+#include "core/io/mcbp_command_id.hxx"
+#include "core/protocol/client_opcode.hxx"
 
 #include <cstdint>
 #include <optional>
@@ -28,6 +30,16 @@
 
 namespace couchbase::core
 {
+
+void
+key_value_error_context::override_ec(std::error_code ec)
+{
+  base_error_context::override_ec(ec);
+  if (ec && operation_id().empty() && command_opcode_.has_value()) {
+    override_operation_id(
+      operations::make_command_id(static_cast<protocol::client_opcode>(command_opcode_.value())));
+  }
+}
 
 auto
 make_key_value_error_context(std::error_code ec, const document_id& id) -> key_value_error_context
@@ -67,8 +79,14 @@ make_subdocument_error_context(const key_value_error_context& ctx,
                                std::optional<std::uint64_t> first_error_index,
                                bool deleted) -> subdocument_error_context
 {
-  return {
-    ctx.operation_id(),
+  const auto opcode = ctx.command_opcode();
+  std::string operation_id = ctx.operation_id();
+  if (ec && operation_id.empty() && opcode.has_value()) {
+    operation_id =
+      operations::make_command_id(static_cast<protocol::client_opcode>(opcode.value()));
+  }
+  subdocument_error_context sub_ctx{
+    std::move(operation_id),
     ec,
     ctx.last_dispatched_to(),
     ctx.last_dispatched_from(),
@@ -88,5 +106,9 @@ make_subdocument_error_context(const key_value_error_context& ctx,
     first_error_index,
     deleted,
   };
+  if (opcode.has_value()) {
+    sub_ctx.defer_operation_id(opcode.value());
+  }
+  return sub_ctx;
 }
 } // namespace couchbase::core
