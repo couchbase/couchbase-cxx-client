@@ -96,6 +96,8 @@ struct key_value_error_category : std::error_category {
         return "replica_index_out_of_bounds (136)";
       case errc::key_value::replica_index_currently_unavailable:
         return "replica_index_currently_unavailable (137)";
+      case errc::key_value::document_too_deep:
+        return "document_too_deep (138)";
     }
     return "FIXME: unknown error code (recompile with newer library): couchbase.key_value." +
            std::to_string(ev);

@@ -27,6 +27,11 @@
 #include <string>
 #include <system_error>
 
+namespace google::rpc
+{
+class Status;
+} // namespace google::rpc
+
 namespace couchbase::core
 {
 struct document_id;
@@ -64,6 +69,11 @@ map_status_code(grpc::StatusCode code, operation_kind kind) -> std::error_code;
 // ALREADY_EXISTS into specific KV/management errors.
 [[nodiscard]] auto
 map_status(const grpc::Status& status, operation_kind kind) -> std::error_code;
+
+// Map an embedded google.rpc.Status message (e.g. LookupInResponse::Spec::status) to an error_code.
+// Uses the same status code and detail rules as the grpc::Status overload.
+[[nodiscard]] auto
+map_status(const google::rpc::Status& status, operation_kind kind) -> std::error_code;
 
 // Human-readable message for a failed status: the message from the attached google.rpc.Status
 // rich-error details when present, otherwise the plain gRPC status message.

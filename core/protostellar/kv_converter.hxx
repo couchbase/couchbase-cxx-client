@@ -24,6 +24,7 @@
 
 #include "core/document_id.hxx"
 #include "core/error_context/key_value.hxx"
+#include "core/impl/subdoc/path_flags.hxx"
 #include "core/logger/logger.hxx"
 #include "core/operations/document_append.hxx"
 #include "core/operations/document_decrement.hxx"
@@ -34,6 +35,7 @@
 #include "core/operations/document_get_projected.hxx"
 #include "core/operations/document_increment.hxx"
 #include "core/operations/document_insert.hxx"
+#include "core/operations/document_lookup_in.hxx"
 #include "core/operations/document_prepend.hxx"
 #include "core/operations/document_remove.hxx"
 #include "core/operations/document_replace.hxx"
@@ -41,7 +43,9 @@
 #include "core/operations/document_unlock.hxx"
 #include "core/operations/document_upsert.hxx"
 #include "core/protostellar/compression_settings.hxx"
+#include "core/protostellar/error_utils.hxx"
 #include "core/utils/binary.hxx"
+#include "core/utils/json.hxx"
 
 #include <couchbase/cas.hxx>
 #include <couchbase/durability_level.hxx>
@@ -50,9 +54,11 @@
 
 #include <couchbase/kv/v1/kv.pb.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace couchbase::core::protostellar::kv
 {
@@ -595,6 +601,154 @@ decode(const v1::PrependResponse& proto, key_value_error_context ctx)
   -> operations::prepend_response
 {
   return decode_mutation<operations::prepend_response>(proto, std::move(ctx));
+}
+
+// ── Subdocument (lookup_in) ────────────────────────────────────────────────────
+
+// kv.proto defines LookupInResponse.specs and MutateInResponse.specs as 1:1 with the request
+// specs. Underneath, memcached requires XATTR specs to precede non-XATTR specs, and
+// stellar-gateway calls memdx.ReorderSubdocOps(ops) to stable-partition IsXattr specs ahead of
+// non-IsXattr specs. Stable-partitioning XATTR specs ahead of non-XATTR specs on the wire
+// (subdoc_wire_order) and remapping wire indices back to caller indices in decode() satisfies both
+// a strict 1:1 kv.proto gateway and stellar-gateway: ReorderSubdocOps receives an already
+// partitioned slice and returns orderedOps[w] == in.Specs[w] with the identity map opIndexes[w] ==
+// w, avoiding stellar-gateway's mixed-order opIndexes / OPERATION_EXISTS / OpIndex indexing bugs
+// (kvserver.go:1082-1109, 1295, 1322-1330) without depending on them.
+inline auto
+subdoc_wire_order(const std::vector<impl::subdoc::command>& specs) -> std::vector<std::size_t>
+{
+  std::vector<std::size_t> wire_to_caller;
+  wire_to_caller.reserve(specs.size());
+  for (std::size_t i = 0; i < specs.size(); ++i) {
+    if (impl::subdoc::has_xattr_path_flag(specs[i].flags_)) {
+      wire_to_caller.push_back(i);
+    }
+  }
+  for (std::size_t i = 0; i < specs.size(); ++i) {
+    if (!impl::subdoc::has_xattr_path_flag(specs[i].flags_)) {
+      wire_to_caller.push_back(i);
+    }
+  }
+  return wire_to_caller;
+}
+
+inline auto
+encode(const operations::lookup_in_request& request) -> v1::LookupInRequest
+{
+  v1::LookupInRequest proto;
+  set_location(proto, request.id);
+  const auto wire_to_caller = subdoc_wire_order(request.specs);
+  for (const auto caller_idx : wire_to_caller) {
+    const auto& entry = request.specs[caller_idx];
+    auto* spec = proto.add_specs();
+    switch (entry.opcode_) {
+      case impl::subdoc::opcode::get_doc:
+        spec->set_operation(v1::LookupInRequest::Spec::OPERATION_GET);
+        spec->set_path("");
+        break;
+      case impl::subdoc::opcode::get:
+        spec->set_operation(v1::LookupInRequest::Spec::OPERATION_GET);
+        spec->set_path(entry.path_);
+        break;
+      case impl::subdoc::opcode::exists:
+        spec->set_operation(v1::LookupInRequest::Spec::OPERATION_EXISTS);
+        spec->set_path(entry.path_);
+        break;
+      case impl::subdoc::opcode::get_count:
+        spec->set_operation(v1::LookupInRequest::Spec::OPERATION_COUNT);
+        spec->set_path(entry.path_);
+        break;
+      default:
+        break;
+    }
+    if (impl::subdoc::has_xattr_path_flag(entry.flags_)) {
+      spec->mutable_flags()->set_xattr(true);
+    }
+  }
+  return proto;
+}
+
+inline auto
+decode(const v1::LookupInResponse& proto,
+       key_value_error_context ctx,
+       const operations::lookup_in_request& request) -> operations::lookup_in_response
+{
+  if (ctx.ec()) {
+    return operations::lookup_in_response{
+      make_subdocument_error_context(ctx, ctx.ec(), {}, {}, false),
+    };
+  }
+  if (static_cast<std::size_t>(proto.specs_size()) != request.specs.size()) {
+    return operations::lookup_in_response{
+      make_subdocument_error_context(ctx, errc::common::internal_server_failure, {}, {}, false),
+    };
+  }
+
+  const auto wire_to_caller = subdoc_wire_order(request.specs);
+  std::vector<operations::lookup_in_response::entry> fields(request.specs.size());
+
+  for (std::size_t wire_idx = 0; wire_idx < request.specs.size(); ++wire_idx) {
+    const auto caller_idx = wire_to_caller[wire_idx];
+    const auto& req_spec = request.specs[caller_idx];
+    const auto& resp_spec = proto.specs(static_cast<int>(wire_idx));
+    auto& field = fields[caller_idx];
+    field.original_index = caller_idx;
+    field.path = req_spec.path_;
+    field.opcode = static_cast<protocol::subdoc_opcode>(req_spec.opcode_);
+
+    std::error_code spec_ec{};
+    if (resp_spec.has_status()) {
+      spec_ec = map_status(resp_spec.status(), operation_kind::read_only);
+    }
+
+    if (field.opcode == protocol::subdoc_opcode::exists) {
+      // stellar-gateway (kvserver.go LookupIn) returns OPERATION_EXISTS as content "true" or
+      // "false". Both content "false" and path_not_found map to a non-throwing false result. Other
+      // spec errors stay on field.ec so exists(index) and content_as<bool>(index) surface them.
+      if (!spec_ec && resp_spec.content() != "false") {
+        field.status = key_value_status_code::success;
+        field.exists = true;
+        field.value = utils::json::generate_binary(true);
+      } else if (!spec_ec || spec_ec == errc::key_value::path_not_found) {
+        field.status = key_value_status_code::subdoc_path_not_found;
+        field.exists = false;
+        field.value = utils::json::generate_binary(false);
+      } else {
+        field.status = key_value_status_code::unknown;
+        field.exists = false;
+        field.ec = spec_ec;
+      }
+    } else if (!spec_ec) {
+      field.status = key_value_status_code::success;
+      field.exists = true;
+      field.value = utils::to_binary(resp_spec.content());
+    } else {
+      field.status = (spec_ec == errc::key_value::path_not_found)
+                       ? key_value_status_code::subdoc_path_not_found
+                       : key_value_status_code::unknown;
+      field.exists = false;
+      field.ec = spec_ec;
+      field.value = utils::to_binary(resp_spec.content());
+    }
+  }
+
+  std::optional<std::size_t> first_error_index{};
+  std::optional<std::string> first_error_path{};
+  for (std::size_t caller_idx = 0; caller_idx < fields.size(); ++caller_idx) {
+    if (fields[caller_idx].ec) {
+      first_error_index = caller_idx;
+      first_error_path = fields[caller_idx].path;
+      break;
+    }
+  }
+
+  return operations::lookup_in_response{
+    make_subdocument_error_context(
+      ctx, ctx.ec(), std::move(first_error_path), first_error_index, false),
+    couchbase::cas{ proto.cas() },
+    std::move(fields),
+    false,
+  };
 }
 
 } // namespace couchbase::core::protostellar::kv
