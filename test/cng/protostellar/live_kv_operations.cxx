@@ -435,6 +435,46 @@ append_to_a_missing_document_is_reported_as_not_found([[maybe_unused]] context& 
               "appending to a document that does not exist is document_not_found");
 }
 
+void
+lookup_in_reads_subdocument_paths_and_reports_missing_ones([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::impl::subdoc::command;
+  using couchbase::core::impl::subdoc::opcode;
+
+  live_kv_fixture fixture;
+  const std::string key{ "cng-live-lookup-in" };
+  seed(fixture, key, R"({"name":"alice","items":[1,2,3]})");
+
+  ops::lookup_in_request request;
+  request.id = fixture.id(key);
+  request.specs = {
+    command{ opcode::get, "name", {}, {} },    command{ opcode::get_count, "items", {}, {} },
+    command{ opcode::exists, "name", {}, {} }, command{ opcode::exists, "absent", {}, {} },
+    command{ opcode::get, "absent", {}, {} },
+  };
+  const auto result = fixture.execute(std::move(request));
+  skip_if_unsupported(result.ctx.ec(), "LookupIn");
+  assert_false(static_cast<bool>(result.ctx.ec()),
+               "lookup_in succeeded at the document level even with a missing path");
+  assert_true(result.cas.value() != 0, "lookup_in returns a non-zero cas");
+  assert_eq(result.fields.size(), std::size_t{ 5 }, "all five specs returned");
+  assert_eq(cu::to_string(result.fields[0].value), std::string{ R"("alice")" }, "get path value");
+  assert_eq(cu::to_string(result.fields[1].value), std::string{ "3" }, "get_count path value");
+  assert_true(result.fields[2].exists && !result.fields[2].ec, "exists on present path is true");
+  assert_true(!result.fields[3].exists && !result.fields[3].ec, "exists on absent path is false");
+  assert_true(result.fields[4].ec == couchbase::errc::key_value::path_not_found,
+              "get on absent path reports path_not_found");
+
+  discard(fixture, key);
+
+  ops::lookup_in_request missing_doc;
+  missing_doc.id = fixture.id(key);
+  missing_doc.specs = { command{ opcode::get, "name", {}, {} } };
+  const auto missing_result = fixture.execute(std::move(missing_doc));
+  assert_true(missing_result.ctx.ec() == couchbase::errc::key_value::document_not_found,
+              "lookup_in on a missing document reports document_not_found");
+}
+
 } // namespace
 
 auto
@@ -466,6 +506,9 @@ tests() -> test_suite
         { needs::real_cluster() },
         timeout::integration },
       { CASE(append_to_a_missing_document_is_reported_as_not_found),
+        { needs::real_cluster() },
+        timeout::integration },
+      { CASE(lookup_in_reads_subdocument_paths_and_reports_missing_ones),
         { needs::real_cluster() },
         timeout::integration },
     },

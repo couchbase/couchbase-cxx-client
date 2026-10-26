@@ -26,6 +26,9 @@
 
 #include <couchbase/error_codes.hxx>
 
+#include <google/rpc/error_details.pb.h>
+#include <google/rpc/status.pb.h>
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -704,6 +707,203 @@ custom_compression_thresholds_are_honoured([[maybe_unused]] context& ctx)
               "payload below custom min_size is sent uncompressed");
 }
 
+void
+lookup_in_encodes_location_specs_and_flags([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::impl::subdoc::build_lookup_in_path_flags;
+  using couchbase::core::impl::subdoc::command;
+  using couchbase::core::impl::subdoc::opcode;
+
+  ops::lookup_in_request request;
+  request.id = document_id{ "travel-sample", "inventory", "airline", "airline_10" };
+  request.specs = {
+    command{ opcode::get, "name", {}, build_lookup_in_path_flags(false, false) },
+    command{ opcode::exists, "iata", {}, build_lookup_in_path_flags(false, false) },
+    command{ opcode::get_count, "routes", {}, build_lookup_in_path_flags(false, false) },
+    command{ opcode::get, "$document.exptime", {}, build_lookup_in_path_flags(true, false) },
+    command{ opcode::get_doc, "", {}, build_lookup_in_path_flags(false, false) },
+  };
+
+  const auto proto = pk::encode(request);
+  assert_eq(proto.bucket_name(), std::string{ "travel-sample" }, "bucket");
+  assert_eq(proto.scope_name(), std::string{ "inventory" }, "scope");
+  assert_eq(proto.collection_name(), std::string{ "airline" }, "collection");
+  assert_eq(proto.key(), std::string{ "airline_10" }, "key");
+  assert_false(proto.has_flags(), "flags message omitted");
+  assert_eq(proto.specs_size(), 5, "all five specs encoded with XATTR specs partitioned first");
+
+  // XATTR spec (caller index 3) is placed at wire index 0 ahead of body specs so
+  // stellar-gateway's ReorderSubdocOps is an identity permutation.
+  assert_true(proto.specs(0).operation() == v1::LookupInRequest::Spec::OPERATION_GET,
+              "xattr get -> OPERATION_GET at wire index 0");
+  assert_eq(proto.specs(0).path(), std::string{ "$document.exptime" }, "xattr path preserved");
+  assert_true(proto.specs(0).has_flags() && proto.specs(0).flags().xattr(), "xattr flag set");
+
+  assert_true(proto.specs(1).operation() == v1::LookupInRequest::Spec::OPERATION_GET,
+              "get -> OPERATION_GET at wire index 1");
+  assert_eq(proto.specs(1).path(), std::string{ "name" }, "get path");
+  assert_false(proto.specs(1).has_flags(), "non-xattr spec omits flags");
+
+  assert_true(proto.specs(2).operation() == v1::LookupInRequest::Spec::OPERATION_EXISTS,
+              "exists -> OPERATION_EXISTS at wire index 2");
+  assert_eq(proto.specs(2).path(), std::string{ "iata" }, "exists path");
+
+  assert_true(proto.specs(3).operation() == v1::LookupInRequest::Spec::OPERATION_COUNT,
+              "get_count -> OPERATION_COUNT at wire index 3");
+  assert_eq(proto.specs(3).path(), std::string{ "routes" }, "get_count path");
+
+  assert_true(proto.specs(4).operation() == v1::LookupInRequest::Spec::OPERATION_GET,
+              "get_doc -> OPERATION_GET with empty path at wire index 4");
+  assert_eq(proto.specs(4).path(), std::string{}, "get_doc path is empty");
+
+  // And decode restores caller order when responses arrive in wire order.
+  v1::LookupInResponse resp_proto;
+  resp_proto.set_cas(0x1234ULL);
+  resp_proto.add_specs()->set_content("100");
+  resp_proto.add_specs()->set_content(R"("40-Mile Air")");
+  resp_proto.add_specs()->set_content("false");
+  resp_proto.add_specs()->set_content("7");
+  resp_proto.add_specs()->set_content(R"({"name":"40-Mile Air"})");
+
+  const auto decoded = pk::decode(resp_proto, key_value_error_context{}, request);
+  assert_eq(decoded.fields.size(), std::size_t{ 5 }, "five fields decoded in caller order");
+  assert_eq(decoded.fields[0].original_index, std::size_t{ 0 }, "caller index 0 restored");
+  assert_eq(
+    cu::to_string(decoded.fields[0].value), std::string{ R"("40-Mile Air")" }, "caller 0 value");
+  assert_eq(decoded.fields[1].original_index, std::size_t{ 1 }, "caller index 1 restored");
+  assert_false(decoded.fields[1].exists, "exists=false at caller index 1 after XATTR spec");
+  assert_eq(decoded.fields[3].original_index, std::size_t{ 3 }, "caller index 3 restored");
+  assert_eq(cu::to_string(decoded.fields[3].value), std::string{ "100" }, "xattr value at 3");
+}
+
+void
+lookup_in_decodes_spec_values_and_exists_semantics([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::impl::subdoc::command;
+  using couchbase::core::impl::subdoc::opcode;
+
+  ops::lookup_in_request request;
+  request.id = test_id();
+  request.specs = {
+    command{ opcode::get, "name", {}, {} },         command{ opcode::get_count, "items", {}, {} },
+    command{ opcode::exists, "present", {}, {} },   command{ opcode::exists, "absent", {}, {} },
+    command{ opcode::exists, "bad..path", {}, {} },
+  };
+
+  v1::LookupInResponse proto;
+  proto.set_cas(0x7788ULL);
+  proto.add_specs()->set_content(R"("Couchbase")");
+  proto.add_specs()->set_content("3");
+  proto.add_specs()->set_content("true");
+  proto.add_specs()->set_content("false");
+  auto* invalid_exists = proto.add_specs();
+  invalid_exists->mutable_status()->set_code(
+    static_cast<std::int32_t>(grpc::StatusCode::INVALID_ARGUMENT));
+
+  const auto response = pk::decode(proto, key_value_error_context{}, request);
+  assert_false(static_cast<bool>(response.ctx.ec()),
+               "top-level context stays clear when RPC succeeded");
+  assert_eq(response.cas.value(), 0x7788ULL, "cas decoded");
+  assert_eq(response.fields.size(), std::size_t{ 5 }, "all specs decoded");
+
+  assert_false(static_cast<bool>(response.fields[0].ec), "get spec succeeded");
+  assert_true(response.fields[0].exists, "get spec exists");
+  assert_eq(cu::to_string(response.fields[0].value), std::string{ R"("Couchbase")" }, "get value");
+
+  assert_false(static_cast<bool>(response.fields[1].ec), "count spec succeeded");
+  assert_true(response.fields[1].exists, "count spec exists");
+  assert_eq(cu::to_string(response.fields[1].value), std::string{ "3" }, "count value");
+
+  assert_false(static_cast<bool>(response.fields[2].ec), "exists=true has no error");
+  assert_true(response.fields[2].exists, "exists=true sets exists");
+  assert_eq(
+    cu::to_string(response.fields[2].value), std::string{ "true" }, "exists=true JSON value");
+
+  assert_false(static_cast<bool>(response.fields[3].ec),
+               "exists=false has no error so content_as<bool> returns false without throwing");
+  assert_false(response.fields[3].exists, "exists=false clears exists");
+  assert_eq(
+    cu::to_string(response.fields[3].value), std::string{ "false" }, "exists=false JSON value");
+
+  assert_true(response.fields[4].ec == couchbase::errc::common::invalid_argument,
+              "exists with INVALID_ARGUMENT preserves spec error so exists() throws");
+  assert_false(response.fields[4].exists, "failed exists spec reports exists=false");
+  assert_true(response.ctx.first_error_index() == std::optional<std::size_t>{ 4 },
+              "first_error_index points to the failing exists spec");
+  assert_true(response.ctx.first_error_path() == std::optional<std::string>{ "bad..path" },
+              "first_error_path records the failing spec path");
+}
+
+void
+lookup_in_partial_failure_keeps_top_level_context_clear([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::impl::subdoc::command;
+  using couchbase::core::impl::subdoc::opcode;
+
+  ops::lookup_in_request request;
+  request.id = test_id();
+  request.specs = {
+    command{ opcode::get, "ok", {}, {} },
+    command{ opcode::get, "missing.path", {}, {} },
+    command{ opcode::get_count, "not_an_array", {}, {} },
+  };
+
+  v1::LookupInResponse proto;
+  proto.set_cas(0x99aaULL);
+  proto.add_specs()->set_content("42");
+
+  auto* missing_spec = proto.add_specs();
+  missing_spec->mutable_status()->set_code(static_cast<std::int32_t>(grpc::StatusCode::NOT_FOUND));
+  google::rpc::ResourceInfo path_resource;
+  path_resource.set_resource_type("path");
+  assert_true(missing_spec->mutable_status()->add_details()->PackFrom(path_resource),
+              "PackFrom succeeded");
+
+  auto* mismatch_spec = proto.add_specs();
+  mismatch_spec->mutable_status()->set_code(
+    static_cast<std::int32_t>(grpc::StatusCode::FAILED_PRECONDITION));
+  google::rpc::PreconditionFailure pf;
+  pf.add_violations()->set_type("PATH_MISMATCH");
+  assert_true(mismatch_spec->mutable_status()->add_details()->PackFrom(pf), "PackFrom succeeded");
+
+  const auto response = pk::decode(proto, key_value_error_context{}, request);
+  assert_false(static_cast<bool>(response.ctx.ec()),
+               "per-spec failures do not set top-level ctx.ec()");
+  assert_eq(response.cas.value(), 0x99aaULL, "cas preserved on partial failure");
+  assert_false(static_cast<bool>(response.fields[0].ec), "spec 0 succeeded");
+  assert_eq(cu::to_string(response.fields[0].value), std::string{ "42" }, "spec 0 value");
+  assert_true(response.fields[1].ec == couchbase::errc::key_value::path_not_found,
+              "spec 1 mapped to path_not_found");
+  assert_false(response.fields[1].exists, "spec 1 does not exist");
+  assert_true(response.fields[2].ec == couchbase::errc::key_value::path_mismatch,
+              "spec 2 mapped to path_mismatch");
+  assert_true(response.ctx.first_error_index() == std::optional<std::size_t>{ 1 },
+              "first_error_index records the first failing spec");
+  assert_true(response.ctx.first_error_path() == std::optional<std::string>{ "missing.path" },
+              "first_error_path records the first failing spec path");
+}
+
+void
+lookup_in_mismatched_spec_count_fails_closed([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::impl::subdoc::command;
+  using couchbase::core::impl::subdoc::opcode;
+
+  ops::lookup_in_request request;
+  request.id = test_id();
+  request.specs = {
+    command{ opcode::get, "a", {}, {} },
+    command{ opcode::get, "b", {}, {} },
+  };
+
+  v1::LookupInResponse proto;
+  proto.add_specs()->set_content("1");
+
+  const auto response = pk::decode(proto, key_value_error_context{}, request);
+  assert_true(response.ctx.ec() == couchbase::errc::common::internal_server_failure,
+              "truncated spec list fails closed as internal_server_failure");
+}
+
 } // namespace
 
 auto
@@ -739,6 +939,10 @@ tests() -> test_suite
       { CASE(an_oversized_declared_length_is_refused) },
       { CASE(cluster_options_maps_compression_settings) },
       { CASE(custom_compression_thresholds_are_honoured) },
+      { CASE(lookup_in_encodes_location_specs_and_flags) },
+      { CASE(lookup_in_decodes_spec_values_and_exists_semantics) },
+      { CASE(lookup_in_partial_failure_keeps_top_level_context_clear) },
+      { CASE(lookup_in_mismatched_spec_count_fails_closed) },
     },
   };
 }

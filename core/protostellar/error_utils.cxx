@@ -59,7 +59,9 @@ map_precondition(const std::string& type) -> std::error_code
     return errc::key_value::document_not_locked;
   }
   if (type == "DOC_TOO_DEEP") {
-    return errc::key_value::value_too_deep;
+    // Maps to key_value_status_code::subdoc_doc_too_deep ("The document contains too many levels to
+    // parse"), which core/protocol/status.cxx maps to errc::key_value::path_too_deep.
+    return errc::key_value::path_too_deep;
   }
   if (type == "DOC_NOT_JSON") {
     return errc::key_value::document_not_json;
@@ -141,6 +143,37 @@ map_already_exists(const std::string& resource_type) -> std::error_code
   }
   return errc::key_value::document_exists;
 }
+auto
+map_rich_status(grpc::StatusCode code, const google::rpc::Status* rich, operation_kind kind)
+  -> std::error_code
+{
+  switch (code) {
+    case grpc::StatusCode::FAILED_PRECONDITION:
+      if (rich != nullptr) {
+        if (auto failure = find_detail<google::rpc::PreconditionFailure>(*rich);
+            failure && failure->violations_size() > 0) {
+          return map_precondition(failure->violations(0).type());
+        }
+      }
+      return errc::common::internal_server_failure;
+    case grpc::StatusCode::NOT_FOUND:
+      if (rich != nullptr) {
+        if (auto info = find_detail<google::rpc::ResourceInfo>(*rich)) {
+          return map_not_found(info->resource_type());
+        }
+      }
+      return errc::key_value::document_not_found;
+    case grpc::StatusCode::ALREADY_EXISTS:
+      if (rich != nullptr) {
+        if (auto info = find_detail<google::rpc::ResourceInfo>(*rich)) {
+          return map_already_exists(info->resource_type());
+        }
+      }
+      return errc::key_value::document_exists;
+    default:
+      return map_status_code(code, kind);
+  }
+}
 } // namespace
 
 auto
@@ -191,41 +224,19 @@ map_status_code(grpc::StatusCode code, operation_kind kind) -> std::error_code
 auto
 map_status(const grpc::Status& status, operation_kind kind) -> std::error_code
 {
-  const auto code = status.error_code();
-
   // The typed google.rpc.Status details refine three codes into specific SDK errors (RFC 77 "Other
   // errors" + errorhandler.go). Everything else is keyed on the bare gRPC code, plus `kind` for
   // DEADLINE_EXCEEDED (see map_status_code).
   google::rpc::Status rich;
   const bool have_rich =
     !status.error_details().empty() && rich.ParseFromString(status.error_details());
+  return map_rich_status(status.error_code(), have_rich ? &rich : nullptr, kind);
+}
 
-  switch (code) {
-    case grpc::StatusCode::FAILED_PRECONDITION:
-      if (have_rich) {
-        if (auto failure = find_detail<google::rpc::PreconditionFailure>(rich);
-            failure && failure->violations_size() > 0) {
-          return map_precondition(failure->violations(0).type());
-        }
-      }
-      return errc::common::internal_server_failure;
-    case grpc::StatusCode::NOT_FOUND:
-      if (have_rich) {
-        if (auto info = find_detail<google::rpc::ResourceInfo>(rich)) {
-          return map_not_found(info->resource_type());
-        }
-      }
-      return errc::key_value::document_not_found;
-    case grpc::StatusCode::ALREADY_EXISTS:
-      if (have_rich) {
-        if (auto info = find_detail<google::rpc::ResourceInfo>(rich)) {
-          return map_already_exists(info->resource_type());
-        }
-      }
-      return errc::key_value::document_exists;
-    default:
-      return map_status_code(code, kind);
-  }
+auto
+map_status(const google::rpc::Status& status, operation_kind kind) -> std::error_code
+{
+  return map_rich_status(static_cast<grpc::StatusCode>(status.code()), &status, kind);
 }
 
 auto
