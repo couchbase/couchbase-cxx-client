@@ -161,6 +161,7 @@ struct recorded_request {
   bool has_cas{ false };
   std::size_t call_count{ 0 };
   v1::LookupInRequest lookup_in{};
+  v1::MutateInRequest mutate_in{};
 };
 
 class kv_surface_service final : public v1::KvService::Service
@@ -402,6 +403,74 @@ public:
         resp_spec->set_content(R"({"name":"alice"})");
       } else {
         resp_spec->set_content(R"(")" + exec_spec.path() + R"(")");
+      }
+    }
+    return grpc::Status::OK;
+  }
+
+  auto MutateIn(grpc::ServerContext* /* context */,
+                const v1::MutateInRequest* request,
+                v1::MutateInResponse* response) -> grpc::Status override
+  {
+    record(request);
+    record_expiry(request);
+    last.has_cas = request->has_cas();
+    last.cas = request->cas();
+    last.mutate_in = *request;
+    if (auto status = fail_for(request->key()); !status.ok()) {
+      return status;
+    }
+    response->set_cas(0xa00aULL);
+    set_token(response->mutable_mutation_token(), request->bucket_name(), 15U, 0xb00aULL, 210ULL);
+
+    // Transcribed from stellar-gateway's MutateIn
+    // (gateway/dataimpl/server_v1/kvserver.go:1195-1337) and gocbcorex's memdx.ReorderSubdocOps
+    // (ops_crud.go:714-734): XATTR specs are stable- partitioned ahead of non-XATTR specs,
+    // producing ordered_specs and op_indexes[req_idx] = wire_idx, and wire result i is written into
+    // specs[op_indexes[i]].
+    std::vector<v1::MutateInRequest::Spec> ordered_specs;
+    ordered_specs.reserve(static_cast<std::size_t>(request->specs_size()));
+    std::vector<int> op_indexes(static_cast<std::size_t>(request->specs_size()), 0);
+    if (strict_one_to_one_subdoc) {
+      for (int i = 0; i < request->specs_size(); ++i) {
+        op_indexes[static_cast<std::size_t>(i)] = i;
+        ordered_specs.push_back(request->specs(i));
+      }
+    } else {
+      for (int i = 0; i < request->specs_size(); ++i) {
+        if (request->specs(i).flags().xattr()) {
+          op_indexes[static_cast<std::size_t>(i)] = static_cast<int>(ordered_specs.size());
+          ordered_specs.push_back(request->specs(i));
+        }
+      }
+      for (int i = 0; i < request->specs_size(); ++i) {
+        if (!request->specs(i).flags().xattr()) {
+          op_indexes[static_cast<std::size_t>(i)] = static_cast<int>(ordered_specs.size());
+          ordered_specs.push_back(request->specs(i));
+        }
+      }
+    }
+    for (int i = 0; i < request->specs_size(); ++i) {
+      response->add_specs();
+    }
+    for (int i = 0; i < request->specs_size(); ++i) {
+      const auto& exec_spec = ordered_specs[static_cast<std::size_t>(i)];
+      if (exec_spec.operation() == v1::MutateInRequest::Spec::OPERATION_INSERT &&
+          (exec_spec.path() == "a.b" || exec_spec.path() == "$meta.attr")) {
+        // kvserver.go:1295 indexes the unreordered in.Specs[memdErr.OpIndex].Path using the
+        // wire execution index i; a strict 1:1 gateway uses exec_spec.path().
+        const auto& reported_path =
+          strict_one_to_one_subdoc ? exec_spec.path() : request->specs(i).path();
+        google::rpc::ResourceInfo info;
+        info.set_resource_type("path");
+        info.set_resource_name(request->bucket_name() + "/" + request->scope_name() + "/" +
+                               request->collection_name() + "/" + request->key() + "/" +
+                               reported_path);
+        return rich_status(grpc::StatusCode::ALREADY_EXISTS, "subdoc path already exists", info);
+      }
+      auto* resp_spec = response->mutable_specs(op_indexes[static_cast<std::size_t>(i)]);
+      if (exec_spec.operation() == v1::MutateInRequest::Spec::OPERATION_COUNTER) {
+        resp_spec->set_content("15");
       }
     }
     return grpc::Status::OK;
@@ -1272,6 +1341,240 @@ lookup_in_expired_after_retries_reports_unambiguous_timeout([[maybe_unused]] con
   assert_eq(server.service().last.call_count, std::size_t{ 0 }, "nothing was sent to the server");
 }
 
+void
+mutate_in_sends_specs_and_returns_cas_token_and_counter_values([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::impl::subdoc::build_mutate_in_path_flags;
+  using couchbase::core::impl::subdoc::command;
+  using couchbase::core::impl::subdoc::opcode;
+
+  in_process_server server;
+  ops::mutate_in_request request;
+  request.id = make_id("k1");
+  request.cas = couchbase::cas{ 0x1122ULL };
+  request.store_semantics = couchbase::store_semantics::replace;
+  request.durability_level = couchbase::durability_level::majority;
+  request.expiry = 60U;
+  request.specs = {
+    command{ opcode::dict_upsert,
+             "name",
+             cu::to_binary(R"("alice")"),
+             build_mutate_in_path_flags(false, true, false, false) },
+    command{ opcode::counter,
+             "visits",
+             cu::to_binary("5"),
+             build_mutate_in_path_flags(false, true, false, false) },
+    command{ opcode::dict_upsert,
+             "meta.tag",
+             cu::to_binary(R"("v1")"),
+             build_mutate_in_path_flags(true, true, false, false) },
+  };
+
+  const auto outcome = run(server, std::move(request));
+
+  assert_false(static_cast<bool>(outcome.ctx.ec()), "mutate_in succeeded");
+  assert_eq(outcome.cas.value(), 0xa00aULL, "cas round-trips");
+  assert_eq(outcome.token.sequence_number(), 210ULL, "mutation token round-trips");
+  assert_eq(outcome.fields.size(), std::size_t{ 3 }, "all three spec results returned");
+  assert_true(outcome.fields[0].value.empty(), "dict_upsert returns empty content");
+  assert_eq(
+    cu::to_string(outcome.fields[1].value), std::string{ "15" }, "counter returns new value");
+  assert_true(outcome.fields[2].value.empty(), "xattr dict_upsert returns empty content");
+  assert_true(server.service().last.has_cas && server.service().last.cas == 0x1122ULL,
+              "cas reached the wire");
+  assert_true(server.service().last.expiry_secs == std::optional<std::uint32_t>{ 60U },
+              "expiry_secs reached the wire");
+  assert_true(server.service().last.mutate_in.store_semantic() ==
+                v1::MutateInRequest::STORE_SEMANTIC_REPLACE,
+              "store_semantics::replace reached the wire");
+  assert_true(server.service().last.mutate_in.durability_level() == v1::DURABILITY_LEVEL_MAJORITY,
+              "durability_level reached the wire");
+  assert_false(server.service().last.mutate_in.has_flags(), "flags omitted when unset");
+  assert_eq(server.service().last.mutate_in.specs(0).path(),
+            std::string{ "meta.tag" },
+            "xattr path partitioned to wire index 0");
+  assert_true(server.service().last.mutate_in.specs(0).flags().xattr(),
+              "xattr flag preserved at wire index 0");
+  assert_eq(server.service().last.mutate_in.specs(1).path(),
+            std::string{ "name" },
+            "first body spec at wire index 1");
+  assert_eq(server.service().last.mutate_in.specs(2).path(),
+            std::string{ "visits" },
+            "counter body spec at wire index 2");
+}
+
+void
+mutate_in_rejects_invalid_requests_without_dispatching([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::impl::subdoc::command;
+  using couchbase::core::impl::subdoc::opcode;
+
+  in_process_server server;
+
+  ops::mutate_in_request empty_specs;
+  empty_specs.id = make_id("k1");
+  const auto empty_outcome = run(server, std::move(empty_specs));
+  assert_true(empty_outcome.ctx.ec() == couchbase::errc::common::invalid_argument,
+              "empty mutate_in specs fail with invalid_argument");
+  assert_eq(server.service().last.call_count, std::size_t{ 0 }, "empty specs not dispatched");
+
+  ops::mutate_in_request non_mutation_opcode;
+  non_mutation_opcode.id = make_id("k1");
+  non_mutation_opcode.specs = { command{ opcode::get, "a", {}, {} } };
+  const auto opcode_outcome = run(server, std::move(non_mutation_opcode));
+  assert_true(opcode_outcome.ctx.ec() == couchbase::errc::common::invalid_argument,
+              "lookup opcode in mutate_in fails with invalid_argument");
+  assert_eq(server.service().last.call_count, std::size_t{ 0 }, "bad opcode not dispatched");
+
+  ops::mutate_in_request remove_with_value;
+  remove_with_value.id = make_id("k1");
+  remove_with_value.specs = { command{ opcode::remove, "a", cu::to_binary("1"), {} } };
+  const auto remove_val_outcome = run(server, std::move(remove_with_value));
+  assert_true(remove_val_outcome.ctx.ec() == couchbase::errc::common::invalid_argument,
+              "remove spec with non-empty value fails with invalid_argument");
+  assert_eq(server.service().last.call_count, std::size_t{ 0 }, "remove+value not dispatched");
+
+  ops::mutate_in_request upsert_without_value;
+  upsert_without_value.id = make_id("k1");
+  upsert_without_value.specs = { command{ opcode::dict_upsert, "a", {}, {} } };
+  const auto upsert_no_val_outcome = run(server, std::move(upsert_without_value));
+  assert_true(upsert_no_val_outcome.ctx.ec() == couchbase::errc::common::invalid_argument,
+              "dict_upsert spec with empty value fails with invalid_argument");
+  assert_eq(server.service().last.call_count, std::size_t{ 0 }, "upsert+empty not dispatched");
+
+  ops::mutate_in_request upsert_with_cas;
+  upsert_with_cas.id = make_id("k1");
+  upsert_with_cas.store_semantics = couchbase::store_semantics::upsert;
+  upsert_with_cas.cas = couchbase::cas{ 1ULL };
+  upsert_with_cas.specs = { command{ opcode::dict_upsert, "a", cu::to_binary("1"), {} } };
+  const auto upsert_cas_outcome = run(server, std::move(upsert_with_cas));
+  assert_true(upsert_cas_outcome.ctx.ec() == couchbase::errc::common::invalid_argument,
+              "upsert with non-zero cas fails with invalid_argument");
+  assert_eq(server.service().last.call_count, std::size_t{ 0 }, "upsert+cas not dispatched");
+
+  ops::mutate_in_request insert_with_cas;
+  insert_with_cas.id = make_id("k1");
+  insert_with_cas.store_semantics = couchbase::store_semantics::insert;
+  insert_with_cas.cas = couchbase::cas{ 1ULL };
+  insert_with_cas.specs = { command{ opcode::dict_upsert, "a", cu::to_binary("1"), {} } };
+  const auto insert_cas_outcome = run(server, std::move(insert_with_cas));
+  assert_true(insert_cas_outcome.ctx.ec() == couchbase::errc::common::invalid_argument,
+              "insert with non-zero cas fails with invalid_argument");
+  assert_eq(server.service().last.call_count, std::size_t{ 0 }, "insert+cas not dispatched");
+
+  ops::mutate_in_request insert_with_preserve_expiry;
+  insert_with_preserve_expiry.id = make_id("k1");
+  insert_with_preserve_expiry.store_semantics = couchbase::store_semantics::insert;
+  insert_with_preserve_expiry.preserve_expiry = true;
+  insert_with_preserve_expiry.specs = {
+    command{ opcode::dict_upsert, "a", cu::to_binary("1"), {} },
+  };
+  const auto insert_preserve_outcome = run(server, std::move(insert_with_preserve_expiry));
+  assert_true(insert_preserve_outcome.ctx.ec() == couchbase::errc::common::invalid_argument,
+              "insert with preserve_expiry fails with invalid_argument");
+  assert_eq(
+    server.service().last.call_count, std::size_t{ 0 }, "insert+preserve_expiry not dispatched");
+
+  ops::mutate_in_request oversized;
+  oversized.id = make_id("k1");
+  oversized.specs.assign(17, command{ opcode::dict_upsert, "a", cu::to_binary("1"), {} });
+  const auto oversized_outcome = run(server, std::move(oversized));
+  assert_true(oversized_outcome.ctx.ec() == couchbase::errc::common::invalid_argument,
+              "mutate_in with 17 specs fails with invalid_argument");
+  assert_eq(server.service().last.call_count, std::size_t{ 0 }, "oversized specs not dispatched");
+
+  ops::mutate_in_request max_valid;
+  max_valid.id = make_id("k1");
+  max_valid.specs.assign(16, command{ opcode::dict_upsert, "a", cu::to_binary("1"), {} });
+  const auto max_valid_outcome = run(server, std::move(max_valid));
+  assert_false(static_cast<bool>(max_valid_outcome.ctx.ec()),
+               "mutate_in with 16 specs is dispatched");
+  assert_eq(server.service().last.call_count, std::size_t{ 1 }, "16-spec mutate_in reached server");
+}
+
+void
+mutate_in_rejects_unsupported_features_without_dispatching([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::impl::subdoc::build_mutate_in_path_flags;
+  using couchbase::core::impl::subdoc::command;
+  using couchbase::core::impl::subdoc::opcode;
+
+  in_process_server server;
+
+  ops::mutate_in_request access_deleted;
+  access_deleted.id = make_id("k1");
+  access_deleted.access_deleted = true;
+  access_deleted.specs = { command{ opcode::dict_upsert, "a", cu::to_binary("1"), {} } };
+  assert_true(run(server, std::move(access_deleted)).ctx.ec() ==
+                couchbase::errc::common::feature_not_available,
+              "access_deleted fails with feature_not_available");
+
+  ops::mutate_in_request create_as_deleted;
+  create_as_deleted.id = make_id("k1");
+  create_as_deleted.create_as_deleted = true;
+  create_as_deleted.specs = { command{ opcode::dict_upsert, "a", cu::to_binary("1"), {} } };
+  assert_true(run(server, std::move(create_as_deleted)).ctx.ec() ==
+                couchbase::errc::common::feature_not_available,
+              "create_as_deleted fails with feature_not_available");
+
+  ops::mutate_in_request revive_doc;
+  revive_doc.id = make_id("k1");
+  revive_doc.revive_document = true;
+  revive_doc.specs = { command{ opcode::dict_upsert, "a", cu::to_binary("1"), {} } };
+  assert_true(run(server, std::move(revive_doc)).ctx.ec() ==
+                couchbase::errc::common::feature_not_available,
+              "revive_document fails with feature_not_available");
+
+  ops::mutate_in_request revive_semantics;
+  revive_semantics.id = make_id("k1");
+  revive_semantics.store_semantics = couchbase::store_semantics::revive;
+  revive_semantics.specs = { command{ opcode::dict_upsert, "a", cu::to_binary("1"), {} } };
+  assert_true(run(server, std::move(revive_semantics)).ctx.ec() ==
+                couchbase::errc::common::feature_not_available,
+              "store_semantics::revive fails with feature_not_available");
+
+  ops::mutate_in_request user_flags;
+  user_flags.id = make_id("k1");
+  user_flags.flags = 0x02000006U;
+  user_flags.specs = { command{ opcode::set_doc, "", cu::to_binary("raw"), {} } };
+  assert_true(run(server, std::move(user_flags)).ctx.ec() ==
+                couchbase::errc::common::feature_not_available,
+              "engaged request.flags fails with feature_not_available");
+
+  ops::mutate_in_request replace_with_xattr;
+  replace_with_xattr.id = make_id("k1");
+  replace_with_xattr.specs = { command{ opcode::replace_body_with_xattr, "sys", {}, {} } };
+  assert_true(run(server, std::move(replace_with_xattr)).ctx.ec() ==
+                couchbase::errc::common::feature_not_available,
+              "replace_body_with_xattr fails with feature_not_available");
+
+  ops::mutate_in_request expand_macros;
+  expand_macros.id = make_id("k1");
+  expand_macros.specs = {
+    command{ opcode::dict_upsert,
+             "meta.cas",
+             cu::to_binary(R"("${Mutation.CAS}")"),
+             build_mutate_in_path_flags(true, true, true, false) },
+  };
+  assert_true(run(server, std::move(expand_macros)).ctx.ec() ==
+                couchbase::errc::common::feature_not_available,
+              "expand_macros fails with feature_not_available");
+
+  ops::mutate_in_request binary_xattr;
+  binary_xattr.id = make_id("k1");
+  binary_xattr.specs = {
+    command{ opcode::dict_upsert,
+             "$bin",
+             cu::to_binary("raw"),
+             build_mutate_in_path_flags(true, true, false, true) },
+  };
+  assert_true(run(server, std::move(binary_xattr)).ctx.ec() ==
+                couchbase::errc::common::feature_not_available,
+              "binary xattr spec fails with feature_not_available");
+
+  assert_eq(
+    server.service().last.call_count, std::size_t{ 0 }, "no unsupported request dispatched");
+}
 // --- the gateway's own error catalogue --------------------------------------------------------
 //
 // Everything below is transcribed from the server rather than inferred from another SDK's tests.
@@ -1287,10 +1590,19 @@ lookup_in_expired_after_retries_reports_unambiguous_timeout([[maybe_unused]] con
 
 enum class gateway_error {
   doc_missing,
+  doc_exists,
+  path_missing,
+  path_exists,
+  path_mismatch,
+  cannot_insert,
+  bad_delta,
+  invalid_xattr,
   doc_cas_mismatch,
   doc_locked,
   doc_not_locked,
   doc_not_numeric,
+  doc_not_json,
+  doc_too_deep,
   value_too_large,
   durability_impossible,
   sync_write_ambiguous,
@@ -1308,6 +1620,20 @@ gateway_key(gateway_error which) -> const char*
   switch (which) {
     case gateway_error::doc_missing:
       return "gw-doc-missing";
+    case gateway_error::doc_exists:
+      return "gw-doc-exists";
+    case gateway_error::path_missing:
+      return "gw-path-missing";
+    case gateway_error::path_exists:
+      return "gw-path-exists";
+    case gateway_error::path_mismatch:
+      return "gw-path-mismatch";
+    case gateway_error::cannot_insert:
+      return "gw-cannot-insert";
+    case gateway_error::bad_delta:
+      return "gw-bad-delta";
+    case gateway_error::invalid_xattr:
+      return "gw-invalid-xattr";
     case gateway_error::doc_cas_mismatch:
       return "gw-cas-mismatch";
     case gateway_error::doc_locked:
@@ -1316,6 +1642,10 @@ gateway_key(gateway_error which) -> const char*
       return "gw-not-locked";
     case gateway_error::doc_not_numeric:
       return "gw-not-numeric";
+    case gateway_error::doc_not_json:
+      return "gw-not-json";
+    case gateway_error::doc_too_deep:
+      return "gw-too-deep";
     case gateway_error::value_too_large:
       return "gw-value-too-large";
     case gateway_error::durability_impossible:
@@ -1343,6 +1673,48 @@ gateway_status(gateway_error which) -> grpc::Status
   switch (which) {
     case gateway_error::doc_missing: // NewDocMissingStatus
       return resource_not_found("document");
+    case gateway_error::doc_exists: { // NewDocExistsStatus
+      google::rpc::ResourceInfo info;
+      info.set_resource_type("document");
+      info.set_resource_name("b/s/c/k");
+      return rich_status(grpc::StatusCode::ALREADY_EXISTS, "document already exists", info);
+    }
+    case gateway_error::path_missing: { // NewSdPathNotFoundStatus
+      google::rpc::ResourceInfo info;
+      info.set_resource_type("path");
+      info.set_resource_name("b/s/c/gw-path-missing/a.b");
+      return rich_status(grpc::StatusCode::NOT_FOUND, "path not found", info);
+    }
+    case gateway_error::path_exists: { // NewSdPathExistsStatus
+      google::rpc::ResourceInfo info;
+      info.set_resource_type("path");
+      info.set_resource_name("b/s/c/gw-path-exists/a.b");
+      return rich_status(grpc::StatusCode::ALREADY_EXISTS, "path already exists", info);
+    }
+    case gateway_error::path_mismatch: { // NewSdPathMismatchStatus
+      google::rpc::PreconditionFailure failure;
+      auto* v = failure.add_violations();
+      v->set_type("PATH_MISMATCH");
+      v->set_subject("document/b/s/c/gw-path-mismatch/a.b");
+      return rich_status(grpc::StatusCode::FAILED_PRECONDITION, "PATH_MISMATCH", failure);
+    }
+    case gateway_error::cannot_insert: { // NewSdValueOutOfRangeStatus
+      google::rpc::PreconditionFailure failure;
+      auto* v = failure.add_violations();
+      v->set_type("VALUE_OUT_OF_RANGE");
+      v->set_subject("document/b/s/c/gw-cannot-insert/a.b");
+      return rich_status(grpc::StatusCode::FAILED_PRECONDITION, "VALUE_OUT_OF_RANGE", failure);
+    }
+    case gateway_error::bad_delta: { // NewSdBadDeltaStatus
+      google::rpc::BadRequest bad;
+      bad.add_field_violations()->set_field("delta");
+      return rich_status(grpc::StatusCode::INVALID_ARGUMENT, "bad delta", bad);
+    }
+    case gateway_error::invalid_xattr: { // NewSdInvalidXattrStatus
+      google::rpc::BadRequest bad;
+      bad.add_field_violations()->set_field("xattr");
+      return rich_status(grpc::StatusCode::INVALID_ARGUMENT, "invalid xattr", bad);
+    }
     case gateway_error::scope_missing: // NewScopeMissingStatus
       return resource_not_found("scope");
     case gateway_error::collection_missing: // NewCollectionMissingStatus
@@ -1360,6 +1732,10 @@ gateway_status(gateway_error which) -> grpc::Status
       return precondition_failed("NOT_LOCKED");
     case gateway_error::doc_not_numeric: // NewDocNotNumericStatus
       return precondition_failed("DOC_NOT_NUMERIC");
+    case gateway_error::doc_not_json: // NewSdNotJsonStatus
+      return precondition_failed("DOC_NOT_JSON");
+    case gateway_error::doc_too_deep: // NewSdDocTooDeepStatus
+      return precondition_failed("DOC_TOO_DEEP");
     case gateway_error::value_too_large: // NewValueTooLargeStatus
       return precondition_failed("VALUE_TOO_LARGE");
     case gateway_error::durability_impossible: // NewDurabilityImpossibleStatus
@@ -1389,6 +1765,19 @@ gateway_expectation(gateway_error which, bool mutating) -> std::error_code
   switch (which) {
     case gateway_error::doc_missing:
       return couchbase::errc::key_value::document_not_found;
+    case gateway_error::doc_exists:
+      return couchbase::errc::key_value::document_exists;
+    case gateway_error::path_missing:
+      return couchbase::errc::key_value::path_not_found;
+    case gateway_error::path_exists:
+      return couchbase::errc::key_value::path_exists;
+    case gateway_error::path_mismatch:
+      return couchbase::errc::key_value::path_mismatch;
+    case gateway_error::cannot_insert:
+      return couchbase::errc::key_value::value_invalid;
+    case gateway_error::bad_delta:
+    case gateway_error::invalid_xattr:
+      return couchbase::errc::common::invalid_argument;
     case gateway_error::scope_missing:
       return couchbase::errc::common::scope_not_found;
     case gateway_error::collection_missing:
@@ -1401,6 +1790,10 @@ gateway_expectation(gateway_error which, bool mutating) -> std::error_code
       return couchbase::errc::key_value::document_not_locked;
     case gateway_error::doc_not_numeric:
       return couchbase::errc::key_value::delta_invalid;
+    case gateway_error::doc_not_json:
+      return couchbase::errc::key_value::document_not_json;
+    case gateway_error::doc_too_deep:
+      return couchbase::errc::key_value::document_too_deep;
     case gateway_error::value_too_large:
       return couchbase::errc::key_value::value_too_large;
     case gateway_error::durability_impossible:
@@ -1704,6 +2097,138 @@ lookup_in_maps_every_status_the_gateway_can_return([[maybe_unused]] context& ctx
   assert_true(outcome.fields[4].exists, "XATTR spec reports exists=true");
 }
 
+void
+mutate_in_maps_every_status_the_gateway_can_return([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::impl::subdoc::build_mutate_in_path_flags;
+  using couchbase::core::impl::subdoc::command;
+  using couchbase::core::impl::subdoc::opcode;
+
+  // kvserver.go MutateIn: all subdoc mutation failures are returned as top-level RPC statuses
+  // because MutateIn is atomic.
+  check_gateway_errors({ gateway_error::bad_delta,
+                         gateway_error::cannot_insert,
+                         gateway_error::collection_missing,
+                         gateway_error::collection_no_write_access,
+                         gateway_error::doc_cas_mismatch,
+                         gateway_error::doc_exists,
+                         gateway_error::doc_locked,
+                         gateway_error::doc_missing,
+                         gateway_error::doc_not_json,
+                         gateway_error::doc_too_deep,
+                         gateway_error::durability_impossible,
+                         gateway_error::generic,
+                         gateway_error::invalid_xattr,
+                         gateway_error::path_exists,
+                         gateway_error::path_mismatch,
+                         gateway_error::path_missing,
+                         gateway_error::scope_missing,
+                         gateway_error::sync_write_ambiguous,
+                         gateway_error::value_too_large },
+                       true,
+                       [](const char* key) {
+                         ops::mutate_in_request request;
+                         request.id = make_id(key);
+                         request.specs = {
+                           command{ opcode::dict_upsert, "a", cu::to_binary("1"), {} },
+                         };
+                         return request;
+                       });
+
+  in_process_server server;
+  for (const bool strict_one_to_one : { false, true }) {
+    server.service().strict_one_to_one_subdoc = strict_one_to_one;
+
+    ops::mutate_in_request mixed_body_fails;
+    mixed_body_fails.id = make_id("k1");
+    mixed_body_fails.specs = {
+      command{ opcode::dict_upsert, "other", cu::to_binary("1"), {} },
+      command{ opcode::dict_add, "a.b", cu::to_binary("2"), {} },
+      command{ opcode::dict_upsert,
+               "$meta.attr",
+               cu::to_binary("3"),
+               build_mutate_in_path_flags(true, true, false, false) },
+    };
+    const auto mixed_outcome = run(server, std::move(mixed_body_fails));
+    assert_true(mixed_outcome.ctx.ec() == couchbase::errc::key_value::path_exists,
+                "mixed XATTR/body failure maps to path_exists");
+    assert_eq(mixed_outcome.ctx.first_error_path(),
+              std::optional<std::string>{ "a.b" },
+              "mixed XATTR/body failure populates first_error_path from ResourceInfo");
+    assert_eq(mixed_outcome.ctx.first_error_index(),
+              std::optional<std::size_t>{ 1 },
+              "mixed XATTR/body failure resolves caller index 1 for failing body path");
+
+    ops::mutate_in_request mixed_xattr_fails;
+    mixed_xattr_fails.id = make_id("k1");
+    mixed_xattr_fails.specs = {
+      command{ opcode::dict_upsert, "other", cu::to_binary("1"), {} },
+      command{ opcode::dict_add,
+               "$meta.attr",
+               cu::to_binary("3"),
+               build_mutate_in_path_flags(true, false, false, false) },
+    };
+    const auto mixed_xattr_outcome = run(server, std::move(mixed_xattr_fails));
+    assert_true(mixed_xattr_outcome.ctx.ec() == couchbase::errc::key_value::path_exists,
+                "mixed body/XATTR failure on XATTR insert maps to path_exists");
+    assert_eq(mixed_xattr_outcome.ctx.first_error_path(),
+              std::optional<std::string>{ "$meta.attr" },
+              "mixed body/XATTR failure reports the XATTR path rather than caller index 0");
+    assert_eq(mixed_xattr_outcome.ctx.first_error_index(),
+              std::optional<std::size_t>{ 1 },
+              "mixed body/XATTR failure resolves caller index 1 for failing XATTR path");
+  }
+
+  // PreconditionFailure prefixes subjects with "document/<b/s/c/k>/"; ResourceInfo uses
+  // "<b/s/c/k>/". Verify each branch strips its own prefix when bucket, scope, collection, and key
+  // are "document".
+  {
+    google::rpc::PreconditionFailure pf;
+    auto* v = pf.add_violations();
+    v->set_type("PATH_MISMATCH");
+    v->set_subject("document/document/document/document/document/a.b");
+    server.service().programmed =
+      rich_status(grpc::StatusCode::FAILED_PRECONDITION, "path mismatch", pf);
+    ops::mutate_in_request doc_pf_req;
+    doc_pf_req.id = couchbase::core::document_id{ "document", "document", "document", "document" };
+    doc_pf_req.specs = {
+      command{ opcode::dict_upsert, "document/a.b", cu::to_binary("1"), {} },
+      command{ opcode::dict_upsert, "a.b", cu::to_binary("2"), {} },
+    };
+    const auto doc_pf_outcome = run(server, std::move(doc_pf_req));
+    assert_true(doc_pf_outcome.ctx.ec() == couchbase::errc::key_value::path_mismatch,
+                "PreconditionFailure PATH_MISMATCH maps to path_mismatch");
+    assert_eq(
+      doc_pf_outcome.ctx.first_error_path(),
+      std::optional<std::string>{ "a.b" },
+      "PreconditionFailure strips 5-part prefix when bucket/scope/collection/key are 'document'");
+    assert_eq(doc_pf_outcome.ctx.first_error_index(),
+              std::optional<std::size_t>{ 1 },
+              "PreconditionFailure identifies spec 'a.b', not 'document/a.b'");
+  }
+  {
+    google::rpc::ResourceInfo ri;
+    ri.set_resource_type("path");
+    ri.set_resource_name("document/document/document/document/document/a.b");
+    server.service().programmed = rich_status(grpc::StatusCode::ALREADY_EXISTS, "path exists", ri);
+    ops::mutate_in_request doc_ri_req;
+    doc_ri_req.id = couchbase::core::document_id{ "document", "document", "document", "document" };
+    doc_ri_req.specs = {
+      command{ opcode::dict_add, "document/a.b", cu::to_binary("1"), {} },
+      command{ opcode::dict_add, "a.b", cu::to_binary("2"), {} },
+    };
+    const auto doc_ri_outcome = run(server, std::move(doc_ri_req));
+    assert_true(doc_ri_outcome.ctx.ec() == couchbase::errc::key_value::path_exists,
+                "ResourceInfo path ALREADY_EXISTS maps to path_exists");
+    assert_eq(doc_ri_outcome.ctx.first_error_path(),
+              std::optional<std::string>{ "document/a.b" },
+              "ResourceInfo strips 4-part prefix preserving path starting with 'document/'");
+    assert_eq(doc_ri_outcome.ctx.first_error_index(),
+              std::optional<std::size_t>{ 0 },
+              "ResourceInfo identifies spec 'document/a.b', not 'a.b'");
+  }
+}
+
 // --- the contested corners, each pinned with its source ---------------------------------------
 
 void
@@ -1893,6 +2418,11 @@ tests() -> test_suite
       { CASE(lookup_in_rejects_empty_specs_without_dispatching), {}, timeout::network },
       { CASE(lookup_in_rejects_unsupported_features_without_dispatching), {}, timeout::network },
       { CASE(lookup_in_expired_after_retries_reports_unambiguous_timeout), {}, timeout::network },
+      { CASE(mutate_in_sends_specs_and_returns_cas_token_and_counter_values),
+        {},
+        timeout::network },
+      { CASE(mutate_in_rejects_invalid_requests_without_dispatching), {}, timeout::network },
+      { CASE(mutate_in_rejects_unsupported_features_without_dispatching), {}, timeout::network },
       { CASE(a_not_found_resource_type_selects_the_specific_error), {}, timeout::network },
       { CASE(touch_maps_every_status_the_gateway_can_return), {}, timeout::network },
       { CASE(exists_maps_every_status_the_gateway_can_return), {}, timeout::network },
@@ -1904,6 +2434,7 @@ tests() -> test_suite
       { CASE(append_maps_every_status_the_gateway_can_return), {}, timeout::network },
       { CASE(prepend_maps_every_status_the_gateway_can_return), {}, timeout::network },
       { CASE(lookup_in_maps_every_status_the_gateway_can_return), {}, timeout::network },
+      { CASE(mutate_in_maps_every_status_the_gateway_can_return), {}, timeout::network },
       { CASE(unlock_reports_a_bad_cas_as_cas_mismatch_not_locked), {}, timeout::network },
       { CASE(a_cas_mismatch_arrives_as_error_info_not_precondition_failure), {}, timeout::network },
       { CASE(a_locked_document_is_reported_so_the_retry_layer_can_see_it), {}, timeout::network },

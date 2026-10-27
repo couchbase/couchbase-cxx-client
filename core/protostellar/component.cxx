@@ -806,6 +806,72 @@ has_unsupported_lookup_in_feature(const operations::lookup_in_request& request) 
       return (spec.flags_ & ~impl::subdoc::path_flag_xattr) != std::byte{ 0 };
     });
 }
+
+[[nodiscard]] auto
+has_unsupported_mutate_in_feature(const operations::mutate_in_request& request) -> bool
+{
+  // MutateInResponse carries no tombstone indicator. MutateInRequest has no fields for
+  // create_as_deleted, revive_document, store_semantics::revive, document flags,
+  // replace_body_with_xattr, or path flags beyond xattr and create_parents.
+  if (request.access_deleted || request.create_as_deleted || request.revive_document ||
+      request.store_semantics == couchbase::store_semantics::revive || request.flags.has_value()) {
+    return true;
+  }
+  return std::any_of(
+    request.specs.begin(), request.specs.end(), [](const impl::subdoc::command& spec) {
+      constexpr auto supported_flags =
+        impl::subdoc::path_flag_xattr | impl::subdoc::path_flag_create_parents;
+      return spec.opcode_ == impl::subdoc::opcode::replace_body_with_xattr ||
+             (spec.flags_ & ~supported_flags) != std::byte{ 0 };
+    });
+}
+
+[[nodiscard]] auto
+is_valid_mutate_in_spec(const impl::subdoc::command& spec) -> bool
+{
+  switch (spec.opcode_) {
+    case impl::subdoc::opcode::remove:
+    case impl::subdoc::opcode::remove_doc:
+      return spec.value_.empty();
+    case impl::subdoc::opcode::dict_add:
+    case impl::subdoc::opcode::dict_upsert:
+    case impl::subdoc::opcode::replace:
+    case impl::subdoc::opcode::set_doc:
+    case impl::subdoc::opcode::array_push_last:
+    case impl::subdoc::opcode::array_push_first:
+    case impl::subdoc::opcode::array_insert:
+    case impl::subdoc::opcode::array_add_unique:
+    case impl::subdoc::opcode::counter:
+      return !spec.value_.empty();
+    default:
+      return false;
+  }
+}
+
+[[nodiscard]] auto
+has_only_valid_mutate_in_specs(const operations::mutate_in_request& request) -> bool
+{
+  return std::all_of(request.specs.begin(), request.specs.end(), is_valid_mutate_in_spec);
+}
+
+// Copy only the spec metadata consumed by kv::decode() (opcode, path, flags, original_index).
+// kv::encode() has already copied the payload buffers into MutateInRequest.
+[[nodiscard]] auto
+without_spec_values(const operations::mutate_in_request& request) -> operations::mutate_in_request
+{
+  operations::mutate_in_request stripped{};
+  stripped.specs.reserve(request.specs.size());
+  for (const auto& spec : request.specs) {
+    stripped.specs.push_back(impl::subdoc::command{
+      spec.opcode_,
+      spec.path_,
+      {},
+      spec.flags_,
+      spec.original_index_,
+    });
+  }
+  return stripped;
+}
 } // namespace
 
 auto
@@ -878,6 +944,53 @@ component::execute(const operations::lookup_in_request& request,
       auto ctx =
         make_error_context(status, id, operation_kind::read_only, retry_attempts, retry_reasons);
       handler(kv::decode(resp, std::move(ctx), request));
+    });
+}
+
+auto
+component::execute(const operations::mutate_in_request& request,
+                   utils::movable_function<void(operations::mutate_in_response)>&& handler)
+  -> pending_call
+{
+  if (has_unsupported_mutate_in_feature(request)) {
+    return fail_feature_not_available(io_, request, handler);
+  }
+  if (request.specs.empty() || request.specs.size() > max_subdoc_specs ||
+      !has_only_valid_mutate_in_specs(request) ||
+      (request.store_semantics != couchbase::store_semantics::replace && !request.cas.empty()) ||
+      (request.store_semantics == couchbase::store_semantics::insert && request.preserve_expiry)) {
+    return fail_invalid_argument(io_, request, handler);
+  }
+  const auto timeout = resolve_kv_timeout(request.timeout, request.durability_level, timeouts_);
+  if (timeout <= std::chrono::milliseconds::zero()) {
+    return fail_expired(io_, request, handler);
+  }
+  auto proto = std::make_shared<v1::MutateInRequest>(kv::encode(request));
+  const auto id = request.id;
+  const auto retry_attempts = request.retries.retry_attempts();
+  const auto retry_reasons = request.retries.retry_reasons();
+  const auto auth = authorization_;
+  auto* stub = stubs_->kv.get();
+  return dispatcher_.unary<v1::MutateInResponse>(
+    timeout,
+    [stub, proto, auth](
+      grpc::ClientContext& ctx, v1::MutateInResponse& resp, std::function<void(grpc::Status)> cb) {
+      if (!auth.empty()) {
+        ctx.AddMetadata("authorization", auth);
+      }
+      stub->async()->MutateIn(&ctx, proto.get(), &resp, std::move(cb));
+    },
+    [handler = std::move(handler),
+     id,
+     proto,
+     decode_request = without_spec_values(request),
+     retry_attempts,
+     retry_reasons](grpc::Status status, v1::MutateInResponse resp) mutable {
+      (void)proto; // kept only to keep the request alive for the call
+      auto error_path = subdoc_error_path(status, id);
+      auto ctx =
+        make_error_context(status, id, operation_kind::mutating, retry_attempts, retry_reasons);
+      handler(kv::decode(resp, std::move(ctx), decode_request, std::move(error_path)));
     });
 }
 
