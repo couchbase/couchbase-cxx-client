@@ -252,6 +252,44 @@ error_message(const grpc::Status& status) -> std::string
 }
 
 auto
+subdoc_error_path(const grpc::Status& status, const document_id& id) -> std::optional<std::string>
+{
+  if (const auto& details = status.error_details(); !details.empty()) {
+    google::rpc::Status rich;
+    if (rich.ParseFromString(details)) {
+      const std::string doc_prefix =
+        id.bucket() + "/" + id.scope() + "/" + id.collection() + "/" + id.key() + "/";
+      if (const auto info = find_detail<google::rpc::ResourceInfo>(rich)) {
+        if (info->resource_type() == "path" && !info->resource_name().empty()) {
+          std::string path = info->resource_name();
+          if (path.rfind(doc_prefix, 0) == 0) {
+            path.erase(0, doc_prefix.size());
+          }
+          return path;
+        }
+      }
+      if (const auto failure = find_detail<google::rpc::PreconditionFailure>(rich);
+          failure && failure->violations_size() > 0) {
+        const auto& v = failure->violations(0);
+        if ((v.type() == "PATH_MISMATCH" || v.type() == "VALUE_OUT_OF_RANGE" ||
+             v.type() == "PATH_VALUE_OUT_OF_RANGE") &&
+            !v.subject().empty()) {
+          std::string path = v.subject();
+          const std::string subject_prefix = "document/" + doc_prefix;
+          if (path.rfind(subject_prefix, 0) == 0) {
+            path.erase(0, subject_prefix.size());
+          } else if (path.rfind(doc_prefix, 0) == 0) {
+            path.erase(0, doc_prefix.size());
+          }
+          return path;
+        }
+      }
+    }
+  }
+  return std::nullopt;
+}
+
+auto
 retry_reason_for(std::error_code ec) -> std::optional<couchbase::retry_reason>
 {
   // UNAVAILABLE maps to temporary_failure (error_utils map_status_code): the call did not reach a

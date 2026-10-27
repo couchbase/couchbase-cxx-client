@@ -80,6 +80,12 @@ map_status(const google::rpc::Status& status, operation_kind kind) -> std::error
 [[nodiscard]] auto
 error_message(const grpc::Status& status) -> std::string;
 
+// Subdocument path from the attached google.rpc.Status ResourceInfo (resource_type == "path") or
+// PreconditionFailure (PATH_MISMATCH / VALUE_OUT_OF_RANGE / PATH_VALUE_OUT_OF_RANGE) detail, with
+// the detail-specific document prefix for `id` stripped when present, or nullopt otherwise.
+[[nodiscard]] auto
+subdoc_error_path(const grpc::Status& status, const document_id& id) -> std::optional<std::string>;
+
 // Build a KV error context from a gRPC status: maps the status code to an error_code and, on
 // failure, attaches the server-provided message (see error_message) as the context's
 // human-readable explanation so callers see why the gateway rejected the operation.

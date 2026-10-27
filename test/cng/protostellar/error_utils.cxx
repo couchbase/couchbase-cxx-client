@@ -298,6 +298,49 @@ error_message_prefers_rich_details([[maybe_unused]] context& ctx)
   assert_eq(ps::error_message(without_details),
             std::string{ "generic grpc message" },
             "falls back to the gRPC message");
+
+  const couchbase::core::document_id id{ "b", "s", "c", "k" };
+  google::rpc::ResourceInfo path_info;
+  path_info.set_resource_type("path");
+  path_info.set_resource_name("b/s/c/k/sub.field");
+  assert_eq(ps::subdoc_error_path(status_with_detail(grpc::StatusCode::NOT_FOUND, path_info), id),
+            std::optional<std::string>{ "sub.field" },
+            "subdoc_error_path extracts and strips ResourceInfo.resource_name for path resources");
+  google::rpc::PreconditionFailure path_mismatch;
+  auto* v = path_mismatch.add_violations();
+  v->set_type("PATH_MISMATCH");
+  v->set_subject("document/b/s/c/k/sub.field");
+  assert_eq(ps::subdoc_error_path(
+              status_with_detail(grpc::StatusCode::FAILED_PRECONDITION, path_mismatch), id),
+            std::optional<std::string>{ "sub.field" },
+            "subdoc_error_path extracts and strips PreconditionFailure.subject for PATH_MISMATCH");
+
+  const couchbase::core::document_id doc_id{ "document", "document", "document", "document" };
+  google::rpc::ResourceInfo doc_prefixed_path_info;
+  doc_prefixed_path_info.set_resource_type("path");
+  doc_prefixed_path_info.set_resource_name("document/document/document/document/document/a.b");
+  assert_eq(
+    ps::subdoc_error_path(status_with_detail(grpc::StatusCode::NOT_FOUND, doc_prefixed_path_info),
+                          doc_id),
+    std::optional<std::string>{ "document/a.b" },
+    "ResourceInfo strips only the 4-part document prefix so paths starting with document/ survive");
+  google::rpc::PreconditionFailure doc_prefixed_mismatch;
+  auto* dv = doc_prefixed_mismatch.add_violations();
+  dv->set_type("PATH_MISMATCH");
+  dv->set_subject("document/document/document/document/document/a.b");
+  assert_eq(
+    ps::subdoc_error_path(
+      status_with_detail(grpc::StatusCode::FAILED_PRECONDITION, doc_prefixed_mismatch), doc_id),
+    std::optional<std::string>{ "a.b" },
+    "PreconditionFailure strips the 5-part document/<b/s/c/k>/ prefix even when all parts are "
+    "'document'");
+
+  assert_false(
+    ps::subdoc_error_path(status_with_detail(grpc::StatusCode::NOT_FOUND, resource("bucket")), id)
+      .has_value(),
+    "subdoc_error_path ignores non-path ResourceInfo");
+  assert_false(ps::subdoc_error_path(without_details, id).has_value(),
+               "subdoc_error_path returns nullopt when no ResourceInfo is present");
 }
 
 void

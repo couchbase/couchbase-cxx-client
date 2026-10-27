@@ -40,6 +40,7 @@
 #include <couchbase/best_effort_retry_strategy.hxx>
 #include <couchbase/error_codes.hxx>
 #include <couchbase/lookup_in_specs.hxx>
+#include <couchbase/mutate_in_specs.hxx>
 #include <couchbase/retry_reason.hxx>
 
 #include <couchbase/kv/v1/kv.grpc.pb.h>
@@ -158,6 +159,18 @@ public:
     }
     response->set_cas(42);
     response->add_specs()->set_content(R"("ok")");
+    return grpc::Status::OK;
+  }
+
+  auto MutateIn(grpc::ServerContext* /* context */,
+                const v1::MutateInRequest* /* request */,
+                v1::MutateInResponse* response) -> grpc::Status override
+  {
+    if (++calls <= failures_) {
+      return { grpc::StatusCode::UNAVAILABLE, "not yet" };
+    }
+    response->set_cas(84);
+    response->add_specs()->set_content("5");
     return grpc::Status::OK;
   }
 
@@ -644,6 +657,76 @@ lookup_in_retries_through_the_cluster_and_returns_specs([[maybe_unused]] context
             "lookup_in returns decoded spec content");
 }
 
+void
+mutate_in_retries_through_the_cluster_and_returns_specs([[maybe_unused]] context& ctx)
+{
+  int port = 0;
+  flaky_kv_service service{ 1 };
+  pin_callback_queue();
+
+  grpc::ServerBuilder builder;
+  builder.RegisterService(&service);
+  builder.AddListeningPort("127.0.0.1:0", grpc::InsecureServerCredentials(), &port);
+  auto server = builder.BuildAndStart();
+
+  auto parsed = parse_connection_string("couchbase2://127.0.0.1:" + std::to_string(port));
+  origin cluster_origin{ cluster_credentials{}, parsed };
+  cluster_origin.options().enable_tls = false;
+  cluster_origin.options().default_retry_strategy_ =
+    couchbase::make_best_effort_retry_strategy([](std::size_t) {
+      return 50ms;
+    });
+
+  asio::io_context io;
+  auto guard = asio::make_work_guard(io);
+  std::thread io_thread([&io]() {
+    io.run();
+  });
+  couchbase::core::cluster cluster{ io };
+
+  std::promise<std::error_code> opened;
+  cluster.open(cluster_origin, [&opened](std::error_code ec) {
+    opened.set_value(ec);
+  });
+  const auto open_ec = opened.get_future().get();
+
+  ops::mutate_in_response result{};
+  if (!open_ec) {
+    couchbase::mutate_in_specs specs{ couchbase::mutate_in_specs::increment("count", 5) };
+    ops::mutate_in_request request;
+    request.id = document_id{ "b", "s", "c", "k" };
+    request.specs = specs.specs();
+    request.timeout = 5s;
+
+    std::promise<ops::mutate_in_response> done;
+    cluster.execute(std::move(request), [&done](ops::mutate_in_response response) {
+      done.set_value(std::move(response));
+    });
+    result = done.get_future().get();
+  }
+
+  std::promise<void> closed;
+  cluster.close([&closed]() {
+    closed.set_value();
+  });
+  closed.get_future().get();
+  guard.reset();
+  io_thread.join();
+  server->Shutdown(std::chrono::system_clock::now());
+
+  assert_false(static_cast<bool>(open_ec), "open(couchbase2://) succeeds");
+  assert_false(static_cast<bool>(result.ctx.ec()), "mutate_in succeeds on retry");
+  assert_eq(result.ctx.retry_attempts(), std::size_t{ 1 }, "one retry attempt is reported");
+  assert_eq(result.ctx.retry_reasons().count(couchbase::retry_reason::service_not_available),
+            std::size_t{ 1 },
+            "service_not_available retry reason is reported");
+  assert_eq(result.cas.value(), std::uint64_t{ 84 }, "mutate_in cas is returned");
+  assert_eq(result.fields.size(), std::size_t{ 1 }, "mutate_in returns 1 field");
+  assert_eq(couchbase::core::utils::to_string(result.fields[0].value),
+            std::string{ "5" },
+            "mutate_in returns decoded counter content");
+}
+
 } // namespace
 
 auto
@@ -658,6 +741,7 @@ tests() -> test_suite
       { CASE(a_retried_mutation_that_runs_out_of_budget_is_ambiguous), {}, timeout::slow },
       { CASE(closing_the_cluster_during_a_backoff_still_answers), {}, timeout::slow },
       { CASE(lookup_in_retries_through_the_cluster_and_returns_specs), {}, timeout::slow },
+      { CASE(mutate_in_retries_through_the_cluster_and_returns_specs), {}, timeout::slow },
     },
   };
 }

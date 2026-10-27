@@ -36,6 +36,7 @@
 #include "core/operations/document_increment.hxx"
 #include "core/operations/document_insert.hxx"
 #include "core/operations/document_lookup_in.hxx"
+#include "core/operations/document_mutate_in.hxx"
 #include "core/operations/document_prepend.hxx"
 #include "core/operations/document_remove.hxx"
 #include "core/operations/document_replace.hxx"
@@ -751,6 +752,173 @@ decode(const v1::LookupInResponse& proto,
     make_subdocument_error_context(
       ctx, ctx.ec(), std::move(first_error_path), first_error_index, false),
     couchbase::cas{ proto.cas() },
+    std::move(fields),
+    false,
+  };
+}
+
+// ── MutateIn ──────────────────────────────────────────────────────────────────
+
+inline auto
+encode(const operations::mutate_in_request& request) -> v1::MutateInRequest
+{
+  v1::MutateInRequest proto;
+  set_location(proto, request.id);
+  switch (request.store_semantics) {
+    case couchbase::store_semantics::replace:
+      proto.set_store_semantic(v1::MutateInRequest::STORE_SEMANTIC_REPLACE);
+      break;
+    case couchbase::store_semantics::upsert:
+      proto.set_store_semantic(v1::MutateInRequest::STORE_SEMANTIC_UPSERT);
+      break;
+    case couchbase::store_semantics::insert:
+      proto.set_store_semantic(v1::MutateInRequest::STORE_SEMANTIC_INSERT);
+      break;
+    case couchbase::store_semantics::revive:
+      break;
+  }
+  if (const auto level = to_proto_durability(request.durability_level); level) {
+    proto.set_durability_level(*level);
+  }
+  if (!request.cas.empty()) {
+    proto.set_cas(request.cas.value());
+  }
+  // MutateInRequest uses the same expiry oneof convention as ReplaceRequest in stellar-gateway
+  // (kvserver.go MutateIn): an absent oneof maps to opts.PreserveExpiry = true, so a mutation
+  // that does not ask to preserve expiry must emit an explicit zero when no expiry is set.
+  set_expiry(proto, request.expiry.value_or(0U), request.preserve_expiry);
+
+  // Partition XATTR specs ahead of body specs on the wire, then restore caller order in decode().
+  for (const auto caller_idx : subdoc_wire_order(request.specs)) {
+    const auto& entry = request.specs[caller_idx];
+    auto* spec = proto.add_specs();
+    switch (entry.opcode_) {
+      case impl::subdoc::opcode::dict_add:
+        spec->set_operation(v1::MutateInRequest::Spec::OPERATION_INSERT);
+        spec->set_path(entry.path_);
+        break;
+      case impl::subdoc::opcode::dict_upsert:
+        spec->set_operation(v1::MutateInRequest::Spec::OPERATION_UPSERT);
+        spec->set_path(entry.path_);
+        break;
+      case impl::subdoc::opcode::replace:
+        spec->set_operation(v1::MutateInRequest::Spec::OPERATION_REPLACE);
+        spec->set_path(entry.path_);
+        break;
+      case impl::subdoc::opcode::set_doc:
+        spec->set_operation(v1::MutateInRequest::Spec::OPERATION_REPLACE);
+        spec->set_path("");
+        break;
+      case impl::subdoc::opcode::remove:
+        spec->set_operation(v1::MutateInRequest::Spec::OPERATION_REMOVE);
+        spec->set_path(entry.path_);
+        break;
+      case impl::subdoc::opcode::remove_doc:
+        spec->set_operation(v1::MutateInRequest::Spec::OPERATION_REMOVE);
+        spec->set_path("");
+        break;
+      case impl::subdoc::opcode::array_push_last:
+        spec->set_operation(v1::MutateInRequest::Spec::OPERATION_ARRAY_APPEND);
+        spec->set_path(entry.path_);
+        break;
+      case impl::subdoc::opcode::array_push_first:
+        spec->set_operation(v1::MutateInRequest::Spec::OPERATION_ARRAY_PREPEND);
+        spec->set_path(entry.path_);
+        break;
+      case impl::subdoc::opcode::array_insert:
+        spec->set_operation(v1::MutateInRequest::Spec::OPERATION_ARRAY_INSERT);
+        spec->set_path(entry.path_);
+        break;
+      case impl::subdoc::opcode::array_add_unique:
+        spec->set_operation(v1::MutateInRequest::Spec::OPERATION_ARRAY_ADD_UNIQUE);
+        spec->set_path(entry.path_);
+        break;
+      case impl::subdoc::opcode::counter:
+        spec->set_operation(v1::MutateInRequest::Spec::OPERATION_COUNTER);
+        spec->set_path(entry.path_);
+        break;
+      default:
+        break;
+    }
+    if (!entry.value_.empty()) {
+      spec->set_content(utils::to_string(entry.value_));
+    }
+    const bool create_path = impl::subdoc::has_create_path_flag(entry.flags_);
+    const bool xattr = impl::subdoc::has_xattr_path_flag(entry.flags_);
+    if (create_path || xattr) {
+      auto* flags = spec->mutable_flags();
+      if (create_path) {
+        flags->set_create_path(true);
+      }
+      if (xattr) {
+        flags->set_xattr(true);
+      }
+    }
+  }
+  return proto;
+}
+
+inline auto
+decode(const v1::MutateInResponse& proto,
+       key_value_error_context ctx,
+       const operations::mutate_in_request& request,
+       std::optional<std::string> first_error_path = {}) -> operations::mutate_in_response
+{
+  if (ctx.ec()) {
+    std::optional<std::size_t> first_error_index{};
+    if (first_error_path.has_value()) {
+      std::size_t matches = 0;
+      for (std::size_t i = 0; i < request.specs.size(); ++i) {
+        const auto& spec = request.specs[i];
+        const std::string_view wire_path = (spec.opcode_ == impl::subdoc::opcode::set_doc ||
+                                            spec.opcode_ == impl::subdoc::opcode::remove_doc)
+                                             ? std::string_view{}
+                                             : std::string_view{ spec.path_ };
+        if (wire_path == *first_error_path) {
+          first_error_index = i;
+          ++matches;
+        }
+      }
+      if (matches != 1) {
+        first_error_index.reset();
+      }
+    }
+    return operations::mutate_in_response{
+      make_subdocument_error_context(
+        ctx, ctx.ec(), std::move(first_error_path), first_error_index, false),
+    };
+  }
+  if (static_cast<std::size_t>(proto.specs_size()) != request.specs.size()) {
+    return operations::mutate_in_response{
+      make_subdocument_error_context(ctx, errc::common::internal_server_failure, {}, {}, false),
+    };
+  }
+
+  const auto order = subdoc_wire_order(request.specs);
+  std::vector<operations::mutate_in_response::entry> fields(request.specs.size());
+  for (std::size_t wire_idx = 0; wire_idx < request.specs.size(); ++wire_idx) {
+    const auto caller_idx = order[wire_idx];
+    const auto& req_spec = request.specs[caller_idx];
+    const auto& resp_spec = proto.specs(static_cast<int>(wire_idx));
+    auto& field = fields[caller_idx];
+    field.original_index = caller_idx;
+    field.path = req_spec.path_;
+    field.opcode = static_cast<protocol::subdoc_opcode>(req_spec.opcode_);
+    field.status = key_value_status_code::success;
+    if (resp_spec.has_content()) {
+      field.value = utils::to_binary(resp_spec.content());
+    }
+  }
+
+  couchbase::mutation_token token{};
+  if (proto.has_mutation_token()) {
+    token = to_core_token(proto.mutation_token());
+  }
+
+  return operations::mutate_in_response{
+    make_subdocument_error_context(ctx, ctx.ec(), {}, {}, false),
+    couchbase::cas{ proto.cas() },
+    std::move(token),
     std::move(fields),
     false,
   };
