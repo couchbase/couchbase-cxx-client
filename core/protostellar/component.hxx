@@ -42,6 +42,7 @@
 #include "core/operations/document_increment.hxx"
 #include "core/operations/document_insert.hxx"
 #include "core/operations/document_lookup_in.hxx"
+#include "core/operations/document_mutate_in.hxx"
 #include "core/operations/document_prepend.hxx"
 #include "core/operations/document_query.hxx"
 #include "core/operations/document_remove.hxx"
@@ -152,6 +153,8 @@ template<>
 inline constexpr bool component_supports_v<operations::prepend_request> = true;
 template<>
 inline constexpr bool component_supports_v<operations::lookup_in_request> = true;
+template<>
+inline constexpr bool component_supports_v<operations::mutate_in_request> = true;
 
 // Resolves the effective timeout for a KV operation: the request's own timeout if set, else the
 // per-service default — the durable default for a synchronous-durability mutation (RFC 77
@@ -247,6 +250,9 @@ public:
     -> pending_call;
   auto execute(const operations::lookup_in_request& request,
                utils::movable_function<void(operations::lookup_in_response)>&& handler)
+    -> pending_call;
+  auto execute(const operations::mutate_in_request& request,
+               utils::movable_function<void(operations::mutate_in_response)>&& handler)
     -> pending_call;
 
   // N1QL query over the couchbase2 server-streaming transport. Rows are buffered into the response

@@ -162,6 +162,16 @@ a_request_that_cannot_be_durable_asks_for_no_durability([[maybe_unused]] context
   const ops::upsert_request plain_mutation;
   assert_true(ps::requested_durability(plain_mutation) == couchbase::durability_level::none,
               "a mutation that requested no durability asks for none");
+
+  ops::mutate_in_request durable_subdoc;
+  durable_subdoc.durability_level = couchbase::durability_level::persist_to_majority;
+  assert_true(ps::requested_durability(durable_subdoc) ==
+                couchbase::durability_level::persist_to_majority,
+              "a durable mutate_in asks for the level it was given");
+
+  const ops::mutate_in_request plain_subdoc;
+  assert_true(ps::requested_durability(plain_subdoc) == couchbase::durability_level::none,
+              "a non-durable mutate_in asks for none");
 }
 
 // Records the deadline each call arrives with, which is the only observable that names which budget
@@ -189,6 +199,18 @@ public:
   {
     record(context);
     response->set_cas(42);
+    return grpc::Status::OK;
+  }
+
+  auto MutateIn(grpc::ServerContext* context,
+                const v1::MutateInRequest* request,
+                v1::MutateInResponse* response) -> grpc::Status override
+  {
+    record(context);
+    response->set_cas(42);
+    for (int i = 0; i < request->specs_size(); ++i) {
+      response->add_specs();
+    }
     return grpc::Status::OK;
   }
 
@@ -303,6 +325,27 @@ a_read_is_never_given_the_durable_budget([[maybe_unused]] context& ctx)
   assert_true(budget <= 400, "a read keeps the standard key_value timeout");
 }
 
+void
+mutate_in_uses_kv_timeout_and_durable_timeout([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::impl::subdoc::command;
+  using couchbase::core::impl::subdoc::opcode;
+
+  ops::mutate_in_request plain;
+  plain.id = document_id{ "b", "s", "c", "k" };
+  plain.specs = { command{ opcode::dict_upsert, "a", cu::to_binary("1"), {} } };
+  const auto plain_budget = observed_budget_for(std::move(plain));
+  assert_true(plain_budget <= 400, "non-durable mutate_in keeps the standard key_value timeout");
+
+  ops::mutate_in_request durable;
+  durable.id = document_id{ "b", "s", "c", "k" };
+  durable.durability_level = couchbase::durability_level::majority;
+  durable.specs = { command{ opcode::dict_upsert, "a", cu::to_binary("1"), {} } };
+  const auto durable_budget = observed_budget_for(std::move(durable));
+  assert_true(durable_budget > 1'500 && durable_budget <= 3'000,
+              "durable mutate_in gets the configured key_value_durable_timeout");
+}
+
 } // namespace
 
 auto
@@ -320,6 +363,7 @@ tests() -> test_suite
         {},
         timeout::slow },
       { CASE(a_read_is_never_given_the_durable_budget), {}, timeout::slow },
+      { CASE(mutate_in_uses_kv_timeout_and_durable_timeout), {}, timeout::slow },
     },
   };
 }
