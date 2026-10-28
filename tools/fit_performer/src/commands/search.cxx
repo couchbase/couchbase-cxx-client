@@ -34,7 +34,10 @@
 #include <couchbase/search_sort_score.hxx>
 #include <couchbase/term_facet.hxx>
 
+#include <google/protobuf/struct.pb.h>
 #include <google/protobuf/util/time_util.h>
+
+#include <tao/json/value.hpp>
 
 #include <variant>
 
@@ -749,10 +752,11 @@ to_conjunction_query(const protocol::sdk::search::ConjunctionQuery& query)
   couchbase::conjunction_query conjunction_query;
   for (const auto& search_query : query.conjuncts()) {
     auto query_cb = to_search_query(search_query);
-    std::visit(common::overloaded{ [&conjunction_query](auto&& arg) -> void {
-                 conjunction_query.and_also(arg);
-               } },
-               query_cb);
+    std::visit(
+      [&conjunction_query](auto&& arg) -> void {
+        conjunction_query.and_also(arg);
+      },
+      query_cb);
   }
   if (query.has_boost()) {
     conjunction_query.boost(query.boost());
@@ -767,10 +771,11 @@ to_disjunction_query(const protocol::sdk::search::DisjunctionQuery& query)
   couchbase::disjunction_query disjunction_query;
   for (const auto& search_query : query.disjuncts()) {
     auto query_cb = to_search_query(search_query);
-    std::visit(common::overloaded{ [&disjunction_query](auto&& arg) -> void {
-                 disjunction_query.or_else(arg);
-               } },
-               query_cb);
+    std::visit(
+      [&disjunction_query](auto&& arg) -> void {
+        disjunction_query.or_else(arg);
+      },
+      query_cb);
   }
   if (query.has_min()) {
     disjunction_query.min(query.min());
@@ -789,29 +794,32 @@ to_boolean_query(const protocol::sdk::search::BooleanQuery& query) -> couchbase:
   for (const auto& must_query : query.must()) {
     auto query_cb = fit_cxx::commands::search::to_search_query(must_query);
 
-    std::visit(common::overloaded{ [&boolean_query](auto&& arg) -> void {
-                 auto must = boolean_query.must().and_also(arg);
-                 boolean_query.must(must);
-               } },
-               query_cb);
+    std::visit(
+      [&boolean_query](auto&& arg) -> void {
+        auto must = boolean_query.must().and_also(arg);
+        boolean_query.must(must);
+      },
+      query_cb);
   }
   for (const auto& should_query : query.should()) {
     auto query_cb = fit_cxx::commands::search::to_search_query(should_query);
 
-    std::visit(common::overloaded{ [&boolean_query](auto&& arg) -> void {
-                 auto should = boolean_query.should().or_else(arg);
-                 boolean_query.should(should);
-               } },
-               query_cb);
+    std::visit(
+      [&boolean_query](auto&& arg) -> void {
+        auto should = boolean_query.should().or_else(arg);
+        boolean_query.should(should);
+      },
+      query_cb);
   }
   for (const auto& must_not_query : query.must_not()) {
     auto query_cb = fit_cxx::commands::search::to_search_query(must_not_query);
 
-    std::visit(common::overloaded{ [&boolean_query](auto&& arg) -> void {
-                 auto must_not = boolean_query.must_not().or_else(arg);
-                 boolean_query.must_not(must_not);
-               } },
-               query_cb);
+    std::visit(
+      [&boolean_query](auto&& arg) -> void {
+        auto must_not = boolean_query.must_not().or_else(arg);
+        boolean_query.must_not(must_not);
+      },
+      query_cb);
   }
 
   if (query.has_should_min()) {
@@ -889,8 +897,79 @@ to_match_none_query(const protocol::sdk::search::MatchNoneQuery& /*query*/)
 }
 
 auto
-to_search_query(const protocol::sdk::search::SearchQuery& query)
-  -> fit_cxx::commands::search::search_query_types
+to_json(const google::protobuf::Value& value) -> tao::json::value
+{
+  switch (value.kind_case()) {
+    case google::protobuf::Value::kNullValue:
+      return tao::json::null;
+    case google::protobuf::Value::kNumberValue:
+      return value.number_value();
+    case google::protobuf::Value::kStringValue:
+      return value.string_value();
+    case google::protobuf::Value::kBoolValue:
+      return value.bool_value();
+    case google::protobuf::Value::kStructValue: {
+      tao::json::value object = tao::json::empty_object;
+      for (const auto& [name, field] : value.struct_value().fields()) {
+        object[name] = to_json(field);
+      }
+      return object;
+    }
+    case google::protobuf::Value::kListValue: {
+      tao::json::value array = tao::json::empty_array;
+      for (const auto& entry : value.list_value().values()) {
+        array.push_back(to_json(entry));
+      }
+      return array;
+    }
+    case google::protobuf::Value::KIND_NOT_SET:
+      break;
+  }
+  throw performer_exception::invalid_argument("Search query parameter value is not set");
+}
+
+auto
+to_custom_score_query(const protocol::sdk::search::CustomScoreQuery& query)
+  -> couchbase::custom_score_query
+{
+  auto custom = std::visit(
+    [&query](auto&& inner) -> couchbase::custom_score_query {
+      return couchbase::custom_score_query(inner, query.source());
+    },
+    to_search_query(query.query()));
+  if (query.fields_size() > 0) {
+    custom.fields({ query.fields().begin(), query.fields().end() });
+  }
+  if (query.has_parameters()) {
+    for (const auto& [name, value] : query.parameters().fields()) {
+      custom.add_parameter(name, to_json(value));
+    }
+  }
+  return custom;
+}
+
+auto
+to_custom_filter_query(const protocol::sdk::search::CustomFilterQuery& query)
+  -> couchbase::custom_filter_query
+{
+  auto custom = std::visit(
+    [&query](auto&& inner) -> couchbase::custom_filter_query {
+      return couchbase::custom_filter_query(inner, query.source());
+    },
+    to_search_query(query.query()));
+  if (query.fields_size() > 0) {
+    custom.fields({ query.fields().begin(), query.fields().end() });
+  }
+  if (query.has_parameters()) {
+    for (const auto& [name, value] : query.parameters().fields()) {
+      custom.add_parameter(name, to_json(value));
+    }
+  }
+  return custom;
+}
+
+auto
+to_search_query(const protocol::sdk::search::SearchQuery& query) -> search_query_types
 {
   switch (query.query_case()) {
     case protocol::sdk::search::SearchQuery::QueryCase::kMatch:
@@ -933,6 +1012,10 @@ to_search_query(const protocol::sdk::search::SearchQuery& query)
       return to_match_all_query(query.match_all());
     case protocol::sdk::search::SearchQuery::QueryCase::kMatchNone:
       return to_match_none_query(query.match_none());
+    case protocol::sdk::search::SearchQuery::QueryCase::kCustomScore:
+      return to_custom_score_query(query.custom_score());
+    case protocol::sdk::search::SearchQuery::QueryCase::kCustomFilter:
+      return to_custom_filter_query(query.custom_filter());
     default:
       throw performer_exception::unimplemented("Unknown search query type provided");
   }
@@ -1141,10 +1224,11 @@ to_vector_queries(
 #ifdef COUCHBASE_CXX_CLIENT_HAS_VECTOR_SEARCH_PREFILTER
     if (vector_query.options().has_prefilter()) {
       auto prefilter_query = to_search_query(vector_query.options().prefilter());
-      std::visit(common::overloaded{ [&query](auto&& arg) {
-                   query->prefilter(arg);
-                 } },
-                 prefilter_query);
+      std::visit(
+        [&query](auto&& arg) {
+          query->prefilter(arg);
+        },
+        prefilter_query);
     }
 #endif
     queries.push_back(*query);
@@ -1169,19 +1253,21 @@ to_search_request(const protocol::sdk::search::SearchRequest& request)
     couchbase::search_request search_request(vector);
     if (request.has_search_query()) {
       auto query = to_search_query(request.search_query());
-      std::visit(common::overloaded{ [&search_request](auto&& arg) {
-                   search_request.search_query(arg);
-                 } },
-                 query);
+      std::visit(
+        [&search_request](auto&& arg) {
+          search_request.search_query(arg);
+        },
+        query);
     }
     return search_request;
   }
   if (request.has_search_query()) {
     auto query = to_search_query(request.search_query());
-    auto search_request = std::visit(common::overloaded{ [](auto&& arg) {
-                                       return couchbase::search_request(arg);
-                                     } },
-                                     query);
+    auto search_request = std::visit(
+      [](auto&& arg) {
+        return couchbase::search_request(arg);
+      },
+      query);
     return search_request;
   }
   throw performer_exception::unimplemented(

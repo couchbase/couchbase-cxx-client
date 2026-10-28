@@ -58,6 +58,7 @@ enum class cluster_capability {
   search_vector_search,
   search_scoped_search_index,
   search_score_fusion,
+  search_udf_query,
 };
 
 struct configuration_capabilities {
@@ -125,6 +126,11 @@ struct configuration_capabilities {
   [[nodiscard]] auto supports_score_fusion() const -> bool
   {
     return has_cluster_capability(cluster_capability::search_score_fusion);
+  }
+
+  [[nodiscard]] auto supports_search_udf_query() const -> bool
+  {
+    return has_cluster_capability(cluster_capability::search_udf_query);
   }
 
   [[nodiscard]] auto is_analytics_cluster(const cluster_options& options) const -> bool;

@@ -327,6 +327,9 @@ struct traits<couchbase::core::topology::configuration> {
           } else if (name == "scoreFusion") {
             result.capabilities.cluster.insert(
               couchbase::core::cluster_capability::search_score_fusion);
+          } else if (name == "udfQuery") {
+            result.capabilities.cluster.insert(
+              couchbase::core::cluster_capability::search_udf_query);
           }
         }
       }

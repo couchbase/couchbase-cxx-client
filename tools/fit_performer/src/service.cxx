@@ -1648,6 +1648,9 @@ TxnService::performerCapsFetch(grpc::ServerContext* /*context*/,
 #ifdef COUCHBASE_CXX_CLIENT_HTTP_400_IS_INVALID_ARGUMENT
   response->add_sdk_implementation_caps(protocol::sdk::Caps::SDK_HTTP_400_INVALID_ARGUMENT);
 #endif
+#ifdef COUCHBASE_CXX_CLIENT_HAS_SEARCH_CUSTOM_SCRIPT_QUERIES
+  response->add_sdk_implementation_caps(protocol::sdk::Caps::SDK_SEARCH_CUSTOM_SCRIPT_QUERIES);
+#endif
 
   response->add_supported_apis(protocol::shared::API::DEFAULT);
 

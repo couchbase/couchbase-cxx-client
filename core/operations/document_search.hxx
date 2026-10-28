@@ -173,6 +173,12 @@ struct search_request {
   [[nodiscard]] auto make_response(error_context::search&& ctx,
                                    const encoded_response_type& encoded) const -> search_response;
 
+  /**
+   * Whether the query, or the prefilter of any vector query, contains a custom_score or
+   * custom_filter query. Entries in raw are not inspected.
+   */
+  [[nodiscard]] auto uses_custom_script_queries() const -> bool;
+
   std::string body_str{};
 
   std::shared_ptr<couchbase::tracing::request_span> parent_span{ nullptr };

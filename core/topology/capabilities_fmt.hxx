@@ -145,6 +145,9 @@ struct fmt::formatter<couchbase::core::cluster_capability> {
       case couchbase::core::cluster_capability::search_score_fusion:
         name = "search_score_fusion";
         break;
+      case couchbase::core::cluster_capability::search_udf_query:
+        name = "search_udf_query";
+        break;
     }
     return format_to(ctx.out(), "{}", name);
   }

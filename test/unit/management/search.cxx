@@ -31,7 +31,10 @@
 
 #include <couchbase/boolean_field_query.hxx>
 #include <couchbase/boolean_query.hxx>
+#include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/conjunction_query.hxx>
+#include <couchbase/custom_filter_query.hxx>
+#include <couchbase/custom_score_query.hxx>
 #include <couchbase/date_range_query.hxx>
 #include <couchbase/disjunction_query.hxx>
 #include <couchbase/doc_id_query.hxx>
@@ -53,6 +56,7 @@
 #include <couchbase/search_sort_geo_distance.hxx>
 #include <couchbase/term_query.hxx>
 #include <couchbase/term_range_query.hxx>
+#include <couchbase/vector_query.hxx>
 #include <couchbase/vector_search.hxx>
 #include <couchbase/wildcard_query.hxx>
 
@@ -422,6 +426,157 @@ match_none_and_match_all_encode_as_empty_objects([[maybe_unused]] context& ctx)
     assert_success(encoded.ec, "the query encodes");
     assert_eq(encoded.query, R"({"match_all": {}})"_json, "match_all");
   }
+}
+
+void
+a_custom_score_query_encodes_its_query_source_fields_and_params([[maybe_unused]] context& ctx)
+{
+  //! [search-custom-score]
+  auto query = couchbase::custom_score_query(couchbase::match_query("hotel").field("type"),
+                                             R"(
+function hotel_score(doc, params) {
+  const price = doc.fields.price_per_night;
+  return price === undefined ? doc.score : doc.score * params.budget / (params.budget + price);
+})")
+                 .fields({ "price_per_night" })
+                 .parameters(std::pair{ "budget", 200 });
+  //! [search-custom-score]
+  const auto encoded = query.encode();
+  assert_success(encoded.ec, "the query encodes");
+  assert_eq(encoded.query,
+            R"(
+{"custom_score": {
+    "query": {"match": "hotel", "field": "type"},
+    "source": "\nfunction hotel_score(doc, params) {\n  const price = doc.fields.price_per_night;\n  return price === undefined ? doc.score : doc.score * params.budget / (params.budget + price);\n}",
+    "fields": ["price_per_night"],
+    "params": {"budget": 200}
+}}
+)"_json,
+            "the inner query, the source, the fields and the parameters");
+}
+
+void
+a_custom_filter_query_encodes_its_query_source_fields_and_params([[maybe_unused]] context& ctx)
+{
+  //! [search-custom-filter]
+  auto query =
+    couchbase::custom_filter_query(couchbase::match_query("hotel").field("type"),
+                                   "function has_parking(doc) { return doc.fields.free_parking; }")
+      .fields({ "*" });
+  //! [search-custom-filter]
+  query.parameters(
+    std::pair{ "budget", 100 },
+    std::pair{ "nested", tao::json::value{ { "a", tao::json::value::array({ 1, "b" }) } } });
+  const auto encoded = query.encode();
+  assert_success(encoded.ec, "the query encodes");
+  assert_eq(encoded.query,
+            R"(
+{"custom_filter": {
+    "query": {"match": "hotel", "field": "type"},
+    "source": "function has_parking(doc) { return doc.fields.free_parking; }",
+    "fields": ["*"],
+    "params": {"budget": 100, "nested": {"a": [1, "b"]}}
+}}
+)"_json,
+            "the inner query, the source, the fields and the nested parameters");
+}
+
+void
+custom_script_queries_omit_unset_fields_and_params([[maybe_unused]] context& ctx)
+{
+  {
+    const auto encoded =
+      couchbase::custom_score_query(couchbase::match_all_query{}, "src").encode();
+    assert_success(encoded.ec, "the query encodes");
+    assert_eq(encoded.query,
+              R"({"custom_score": {"query": {"match_all": {}}, "source": "src"}})"_json,
+              "only the query and the source");
+  }
+  {
+    const auto encoded =
+      couchbase::custom_filter_query(couchbase::match_all_query{}, "src").encode();
+    assert_success(encoded.ec, "the query encodes");
+    assert_eq(encoded.query,
+              R"({"custom_filter": {"query": {"match_all": {}}, "source": "src"}})"_json,
+              "only the query and the source");
+  }
+}
+
+void
+custom_script_query_parameters_and_fields_replace_earlier_ones([[maybe_unused]] context& ctx)
+{
+  auto query = couchbase::custom_score_query(couchbase::match_all_query{}, "src")
+                 .fields({ "a", "b" })
+                 .parameters(std::pair{ "x", 1 }, std::pair{ "y", 2 });
+  query.fields({ "c" }).parameters(std::pair{ "z", "three" });
+  const auto encoded = query.encode();
+  assert_success(encoded.ec, "the query encodes");
+  assert_eq(encoded.query,
+            R"(
+{"custom_score": {"query": {"match_all": {}}, "source": "src",
+                  "fields": ["c"], "params": {"z": "three"}}}
+)"_json,
+            "only the last fields and parameters");
+}
+
+void
+custom_script_query_parameters_can_be_added_one_at_a_time([[maybe_unused]] context& ctx)
+{
+  auto query = couchbase::custom_filter_query(couchbase::match_all_query{}, "src")
+                 .parameters(std::pair{ "x", 1 }, std::pair{ "y", 2 });
+  query.add_parameter("y", tao::json::value::array({ "two" })).add_parameter("z", 3.5);
+  const auto encoded = query.encode();
+  assert_success(encoded.ec, "the query encodes");
+  assert_eq(encoded.query,
+            R"(
+{"custom_filter": {"query": {"match_all": {}}, "source": "src",
+                   "params": {"x": 1, "y": ["two"], "z": 3.5}}}
+)"_json,
+            "an added parameter joins the others, and replaces one of the same name");
+}
+
+void
+custom_script_queries_nest_in_compound_queries([[maybe_unused]] context& ctx)
+{
+  auto query = couchbase::conjunction_query{
+    couchbase::custom_filter_query(couchbase::match_query("hotel"), "filter"),
+    couchbase::custom_score_query(
+      couchbase::custom_filter_query(couchbase::match_query("motel"), "inner-filter"), "score"),
+  };
+  const auto encoded = query.encode();
+  assert_success(encoded.ec, "the query encodes");
+  assert_eq(encoded.query,
+            R"(
+{"conjuncts": [
+    {"custom_filter": {"query": {"match": "hotel"}, "source": "filter"}},
+    {"custom_score": {
+        "query": {"custom_filter": {"query": {"match": "motel"}, "source": "inner-filter"}},
+        "source": "score"}}
+]}
+)"_json,
+            "each custom query in place, and one nested in another");
+}
+
+void
+a_custom_script_query_the_server_would_refuse_fails_to_encode([[maybe_unused]] context& ctx)
+{
+  assert_eq(couchbase::custom_score_query(couchbase::match_all_query{}, "").encode().ec,
+            std::error_code{ couchbase::errc::common::invalid_argument },
+            "a score function needs a source");
+  assert_eq(couchbase::custom_filter_query(couchbase::match_all_query{}, "").encode().ec,
+            std::error_code{ couchbase::errc::common::invalid_argument },
+            "a filter function needs a source");
+
+  // boost() is hidden on the custom queries, but it is still reachable through the base class.
+  couchbase::custom_score_query boosted(couchbase::match_all_query{}, "src");
+  static_cast<couchbase::search_query&>(boosted).boost(2.0);
+  assert_eq(boosted.encode().ec,
+            std::error_code{ couchbase::errc::common::invalid_argument },
+            "the server would drop a boost without saying so");
+
+  assert_eq(couchbase::custom_filter_query(couchbase::conjunction_query{}, "src").encode().ec,
+            std::error_code{ couchbase::errc::common::invalid_argument },
+            "an inner query that fails to encode fails the custom query");
 }
 
 void
@@ -806,6 +961,105 @@ score_fusion_is_read_from_the_search_cluster_capabilities([[maybe_unused]] conte
 }
 
 void
+udf_query_is_read_from_the_search_cluster_capabilities([[maybe_unused]] context& ctx)
+{
+  const auto without = couchbase::core::utils::json::parse(
+    R"({"nodes":[],"clusterCapabilities":{"search":["vectorSearch","scoreFusion"]}})");
+  assert_false(
+    without.as<couchbase::core::topology::configuration>().capabilities.supports_search_udf_query(),
+    "a search capability list without udfQuery does not enable it");
+
+  const auto with = couchbase::core::utils::json::parse(
+    R"({"nodes":[],"clusterCapabilities":{"search":["vectorSearch","udfQuery"]}})");
+  assert_true(
+    with.as<couchbase::core::topology::configuration>().capabilities.supports_search_udf_query(),
+    "the capability is read from the search list");
+
+  const auto elsewhere = couchbase::core::utils::json::parse(
+    R"({"nodes":[],"clusterCapabilities":{"n1ql":["udfQuery"]}})");
+  assert_false(elsewhere.as<couchbase::core::topology::configuration>()
+                 .capabilities.supports_search_udf_query(),
+               "the same name under another service does not enable it");
+}
+
+auto
+search_with_query(const std::string& query) -> couchbase::core::operations::search_request
+{
+  couchbase::core::operations::search_request request{};
+  request.index_name = "idx";
+  request.query = couchbase::core::json_string{ std::string{ query } };
+  return request;
+}
+
+void
+custom_script_queries_are_found_wherever_the_server_would_run_them([[maybe_unused]] context& ctx)
+{
+  const std::string custom_score = R"({"custom_score":{"query":{"match_all":{}},"source":"s"}})";
+  const std::string custom_filter = R"({"custom_filter":{"query":{"match_all":{}},"source":"s"}})";
+
+  assert_true(search_with_query(custom_score).uses_custom_script_queries(), "custom_score");
+  assert_true(search_with_query(custom_filter).uses_custom_script_queries(), "custom_filter");
+  assert_true(search_with_query(R"({"conjuncts":[{"match":"x"},)" + custom_score + "]}")
+                .uses_custom_script_queries(),
+              "inside a conjunction");
+  assert_true(search_with_query(R"({"disjuncts":[)" + custom_filter + R"(],"min":1})")
+                .uses_custom_script_queries(),
+              "inside a disjunction");
+  for (const auto* clause : { "must", "should", "must_not" }) {
+    assert_true(search_with_query(std::string{ R"({")" } + clause + R"(":{"disjuncts":[)" +
+                                  custom_filter + "]}}")
+                  .uses_custom_script_queries(),
+                std::string{ "inside a boolean query's " } + clause);
+  }
+
+  auto in_prefilter = search_with_query(R"({"match_none":{}})");
+  in_prefilter.vector_search = couchbase::core::json_string{ std::string{
+    R"([{"field":"v","vector":[1.0],"k":3,"filter":)" + custom_score + "}]" } };
+  assert_true(in_prefilter.uses_custom_script_queries(), "inside a vector query's prefilter");
+}
+
+void
+other_queries_do_not_need_the_udf_query_capability([[maybe_unused]] context& ctx)
+{
+  assert_false(search_with_query(R"({"match":"custom_score","field":"custom_filter"})")
+                 .uses_custom_script_queries(),
+               "the names as values are not queries");
+  assert_false(search_with_query(R"({"conjuncts":[{"match":"x"},{"match_all":{}}]})")
+                 .uses_custom_script_queries(),
+               "a compound query without one");
+
+  auto with_prefilter = search_with_query(R"({"match_none":{}})");
+  with_prefilter.vector_search = couchbase::core::json_string{ std::string{
+    R"([{"field":"v","vector":[1.0],"k":3,"filter":{"match":"x"}}])" } };
+  assert_false(with_prefilter.uses_custom_script_queries(), "an ordinary prefilter");
+
+  assert_false(search_with_query(R"({"match_all":)").uses_custom_script_queries(),
+               "a query that does not parse is left for encoding to report");
+
+  couchbase::core::configuration_capabilities capabilities{};
+  assert_false(capabilities.supports_search_udf_query(), "the capability is off by default");
+  capabilities.cluster.insert(couchbase::core::cluster_capability::search_udf_query);
+  assert_true(capabilities.supports_search_udf_query(), "inserting the capability turns it on");
+}
+
+void
+the_public_queries_are_found_once_encoded([[maybe_unused]] context& ctx)
+{
+  const couchbase::boolean_query boolean = couchbase::boolean_query{}.must_not(
+    couchbase::custom_filter_query(couchbase::match_query("hotel"), "src"));
+  auto request = search_with_query(couchbase::core::utils::json::generate(boolean.encode().query));
+  assert_true(request.uses_custom_script_queries(), "in a boolean query's must_not");
+
+  auto knn = search_with_query(R"({"match_none":{}})");
+  const auto vector = couchbase::vector_search(
+    couchbase::vector_query("v", std::vector<double>{ 1.0 })
+      .prefilter(couchbase::custom_score_query(couchbase::match_all_query{}, "src")));
+  knn.vector_search =
+    couchbase::core::json_string{ couchbase::core::utils::json::generate(vector.encode().query) };
+  assert_true(knn.uses_custom_script_queries(), "in a vector query's prefilter");
+}
+
+void
 only_the_fusion_modes_are_gated_by_the_capability([[maybe_unused]] context& ctx)
 {
   couchbase::core::configuration_capabilities capabilities{};
@@ -943,6 +1197,13 @@ tests() -> test_suite
       { CASE(a_date_range_query_encodes_string_and_tm_bounds) },
       { CASE(a_term_range_query_encodes_its_bounds_and_inclusivity) },
       { CASE(match_none_and_match_all_encode_as_empty_objects) },
+      { CASE(a_custom_score_query_encodes_its_query_source_fields_and_params) },
+      { CASE(a_custom_filter_query_encodes_its_query_source_fields_and_params) },
+      { CASE(custom_script_queries_omit_unset_fields_and_params) },
+      { CASE(custom_script_query_parameters_and_fields_replace_earlier_ones) },
+      { CASE(custom_script_query_parameters_can_be_added_one_at_a_time) },
+      { CASE(custom_script_queries_nest_in_compound_queries) },
+      { CASE(a_custom_script_query_the_server_would_refuse_fails_to_encode) },
       { CASE(a_geo_distance_query_encodes_its_location_and_distance) },
       { CASE(a_geo_bounding_box_query_encodes_its_corners) },
       { CASE(a_geo_polygon_query_encodes_its_points) },
@@ -963,6 +1224,10 @@ tests() -> test_suite
       { CASE(the_scoring_parameters_survive_build) },
       { CASE(score_fusion_is_read_from_the_search_cluster_capabilities) },
       { CASE(only_the_fusion_modes_are_gated_by_the_capability) },
+      { CASE(udf_query_is_read_from_the_search_cluster_capabilities) },
+      { CASE(custom_script_queries_are_found_wherever_the_server_would_run_them) },
+      { CASE(other_queries_do_not_need_the_udf_query_capability) },
+      { CASE(the_public_queries_are_found_once_encoded) },
       { CASE(an_unrecognised_rejection_is_an_invalid_argument) },
       { CASE(a_recognised_rejection_keeps_its_own_error) },
       { CASE(a_rejection_without_the_expected_fields_is_an_invalid_argument) },
