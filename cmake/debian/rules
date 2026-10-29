@@ -4,8 +4,9 @@
 	dh $@ --buildsystem=cmake
 
 override_dh_strip:
+	dh_dwz -pcouchbase-cxx-client-tools -pcouchbase-cxx-client
 	dh_strip -pcouchbase-cxx-client-tools -pcouchbase-cxx-client --dbg-package=couchbase-cxx-client-dbg
-	dh_strip --remaining-packages
+	dh_strip --remaining-packages --no-automatic-dbgsym
 
 override_dh_auto_configure:
 	echo "usr/include/couchbase" \
