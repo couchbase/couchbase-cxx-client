@@ -2,7 +2,7 @@ Source: couchbase-cxx-client
 Section: libs
 Priority: optional
 Maintainer: Couchbase SDK Team <support@couchbase.com>
-Build-Depends: debhelper (>= 9), cmake, pkg-config,
+Build-Depends: debhelper (>= 10.10.4), dwz, cmake, pkg-config,
 	zlib1g-dev,
 	nlohmann-json3-dev
 Standards-Version: 4.5.0
