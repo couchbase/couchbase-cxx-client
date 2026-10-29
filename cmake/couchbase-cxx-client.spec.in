@@ -142,6 +142,11 @@ DESTDIR="%{buildroot}" /usr/bin/cmake --install "redhat-linux-build"
 # gRPC_INSTALL. cmake/GrpcProtobuf.cmake redirects all of them under this one prefix so they can be
 # dropped together; nothing packaged here comes from it.
 rm -rf "%{buildroot}%{_prefix}/vendored-not-installed"
+%if 0%{?grpc_supported}
+# Strip debug sections from fit_performer before find-debuginfo.sh runs. Its debug symbols are not
+# packaged, and dwz runs out of DIEs on its unstripped binary.
+%{__strip} --strip-debug "%{buildroot}%{_bindir}/fit_performer"
+%endif
 
 %files
 %license %{_docdir}/couchbase*/LICENSE.txt
