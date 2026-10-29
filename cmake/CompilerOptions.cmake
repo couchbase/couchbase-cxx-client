@@ -41,13 +41,52 @@ function(set_project_options target_name)
   endif()
 
   if(HAVE_BACKTRACE OR HAVE_DLADDR)
-    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
-       AND NOT APPLE
-       AND (CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo"))
-      target_compile_options(${target_name} PRIVATE -ggdb3)
-    endif()
     target_compile_definitions(${target_name} PRIVATE -D_GNU_SOURCE=1)
     target_link_libraries(${target_name} PRIVATE -rdynamic)
+  endif()
+endfunction()
+
+function(couchbase_get_targets_recursively out_var dir)
+  get_property(
+    _targets
+    DIRECTORY "${dir}"
+    PROPERTY BUILDSYSTEM_TARGETS)
+  get_property(
+    _subdirs
+    DIRECTORY "${dir}"
+    PROPERTY SUBDIRECTORIES)
+  foreach(_subdir IN LISTS _subdirs)
+    couchbase_get_targets_recursively(_sub_targets "${_subdir}")
+    list(APPEND _targets ${_sub_targets})
+  endforeach()
+  set(${out_var}
+      "${_targets}"
+      PARENT_SCOPE)
+endfunction()
+
+function(couchbase_optimize_third_party_target target_name)
+  if(NOT MSVC AND TARGET ${target_name})
+    get_target_property(_target_type ${target_name} TYPE)
+    if(_target_type STREQUAL "STATIC_LIBRARY"
+       OR _target_type STREQUAL "SHARED_LIBRARY"
+       OR _target_type STREQUAL "OBJECT_LIBRARY")
+      target_compile_options(${target_name} PRIVATE $<$<COMPILE_LANGUAGE:C,CXX>:-ffunction-sections>
+                                                    $<$<COMPILE_LANGUAGE:C,CXX>:-fdata-sections>)
+      if(COUCHBASE_CXX_CLIENT_PACKAGE_BUILD)
+        # Lowers the debug level of a build type that has one; never adds debug info to one that has not.
+        target_compile_options(
+          ${target_name} PRIVATE $<$<AND:$<COMPILE_LANGUAGE:C,CXX>,$<CONFIG:Debug,RelWithDebInfo>>:-g1>)
+      endif()
+    endif()
+  endif()
+endfunction()
+
+function(couchbase_optimize_third_party_directory dir)
+  if(NOT MSVC AND EXISTS "${dir}")
+    couchbase_get_targets_recursively(_third_party_targets "${dir}")
+    foreach(_target IN LISTS _third_party_targets)
+      couchbase_optimize_third_party_target(${_target})
+    endforeach()
   endif()
 endfunction()
 
