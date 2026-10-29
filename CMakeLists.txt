@@ -298,7 +298,6 @@ set(couchbase_cxx_client_FILES
     core/impl/vector_search.cxx
     core/impl/view_error_category.cxx
     core/impl/wildcard_query.cxx
-    core/impl/crypto.cxx
     core/impl/observability_recorder.cxx
     core/impl/transactions.cxx
     core/io/dns_client.cxx
@@ -327,7 +326,6 @@ set(couchbase_cxx_client_FILES
     core/mcbp/packet.cxx
     core/mcbp/queue_request.cxx
     core/mcbp/server_duration.cxx
-    core/meta/version.cxx
     core/metrics/logging_meter.cxx
     core/metrics/meter_wrapper.cxx
     core/n1ql_query_options.cxx
@@ -539,9 +537,14 @@ endif()
 set(couchbase_cxx_client_LIBRARIES)
 set(couchbase_cxx_client_DEFAULT_LIBRARY)
 
+add_library(couchbase_cxx_client_objects OBJECT ${couchbase_cxx_client_FILES})
+
 option(COUCHBASE_CXX_CLIENT_BUILD_STATIC "Build with static library" ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT})
 if(COUCHBASE_CXX_CLIENT_BUILD_STATIC)
-  add_library(couchbase_cxx_client_static_intermediate STATIC ${couchbase_cxx_client_FILES})
+  add_library(
+    couchbase_cxx_client_static_intermediate STATIC
+    $<TARGET_OBJECTS:couchbase_cxx_client_objects>
+    core/meta/version.cxx)
   add_library(couchbase_cxx_client::couchbase_cxx_client_static_intermediate ALIAS
               couchbase_cxx_client_static_intermediate)
   target_compile_definitions(couchbase_cxx_client_static_intermediate PRIVATE COUCHBASE_CXX_CLIENT_STATIC_TARGET)
@@ -549,6 +552,7 @@ if(COUCHBASE_CXX_CLIENT_BUILD_STATIC)
   option(COUCHBASE_CXX_CLIENT_STATIC_STDLIB "Statically link C++ standard library" FALSE)
   if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
     if(COUCHBASE_CXX_CLIENT_STATIC_STDLIB)
+      target_compile_options(couchbase_cxx_client_objects PRIVATE -static-libgcc -static-libstdc++)
       target_compile_options(couchbase_cxx_client_static_intermediate PRIVATE -static-libgcc -static-libstdc++)
       target_link_libraries(couchbase_cxx_client_static_intermediate PRIVATE -static-libgcc -static-libstdc++)
     endif()
@@ -559,7 +563,10 @@ endif()
 
 option(COUCHBASE_CXX_CLIENT_BUILD_SHARED "Build with shared library" ${COUCHBASE_CXX_CLIENT_MASTER_PROJECT})
 if(COUCHBASE_CXX_CLIENT_BUILD_SHARED OR BUILD_SHARED_LIBS)
-  add_library(couchbase_cxx_client SHARED ${couchbase_cxx_client_FILES})
+  add_library(
+    couchbase_cxx_client SHARED
+    $<TARGET_OBJECTS:couchbase_cxx_client_objects>
+    core/meta/version.cxx)
   add_library(couchbase_cxx_client::couchbase_cxx_client ALIAS couchbase_cxx_client)
 
   # The soname carries MAJOR.MINOR. A patch release keeps the ABI, so a binary linked against one
@@ -579,7 +586,7 @@ if(NOT couchbase_cxx_client_DEFAULT_LIBRARY)
 have to be selected")
 endif()
 
-foreach(TARGET ${couchbase_cxx_client_LIBRARIES})
+foreach(TARGET couchbase_cxx_client_objects ${couchbase_cxx_client_LIBRARIES})
   include(cmake/DetectStandardFilesystem.cmake)
   couchbase_cxx_check_filesystem(
     ${TARGET}
