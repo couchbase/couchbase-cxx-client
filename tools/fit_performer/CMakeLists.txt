@@ -67,7 +67,8 @@ grpc_generate_cpp(
 if(MSVC)
   set_source_files_properties(${PROTO_SOURCES} ${GRPC_SOURCES} PROPERTIES COMPILE_OPTIONS "/W0;/FS")
 else()
-  set_source_files_properties(${PROTO_SOURCES} ${GRPC_SOURCES} PROPERTIES COMPILE_OPTIONS "-w")
+  set_source_files_properties(${PROTO_SOURCES} ${GRPC_SOURCES} PROPERTIES COMPILE_OPTIONS
+                                                                          "-w;-g0;-ffunction-sections;-fdata-sections")
 endif()
 
 set(FIT_PERFORMER_SOURCES
