@@ -312,11 +312,9 @@ if(COUCHBASE_CXX_CLIENT_BUILD_STATIC)
 
   install(FILES ${couchbase_cxx_client_static_IMPORTED_LOCATION} DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
-  # This archive carries every vendored dependency, so its debug info dwarfs everything else the
-  # development package ships: 2.8 GB against the 126 MB of the same archive stripped. Most
-  # distributions strip static archives themselves -- EL through brp-strip-static-archive, Debian
-  # through dh_strip -- but Fedora no longer does, and there the development package went out at
-  # 332 MB where every other target ships 13 MB.
+  # This archive carries every vendored dependency, so unstripped, its debug info is most of what the
+  # development package ships. Most distributions strip static archives themselves -- EL through
+  # brp-strip-static-archive, Debian through dh_strip -- but Fedora does not.
   #
   # Strip it here so what ships does not depend on which of those a distribution still runs. Only for
   # a package build: a local install is where someone debugging into the vendored code wants the

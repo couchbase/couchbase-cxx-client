@@ -30,6 +30,15 @@ function(set_project_options target_name)
   if(MSVC)
     target_compile_options(${target_name} PRIVATE /bigobj /FS)
     target_link_libraries(${target_name} PRIVATE iphlpapi)
+  else()
+    target_compile_options(${target_name} PRIVATE $<$<COMPILE_LANGUAGE:C,CXX>:-ffunction-sections>
+                                                  $<$<COMPILE_LANGUAGE:C,CXX>:-fdata-sections>)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+      get_target_property(_target_type ${target_name} TYPE)
+      if(_target_type STREQUAL "SHARED_LIBRARY" OR _target_type STREQUAL "EXECUTABLE")
+        target_link_options(${target_name} PRIVATE -Wl,--gc-sections)
+      endif()
+    endif()
   endif()
 
   if(HAVE_BACKTRACE)
@@ -42,7 +51,12 @@ function(set_project_options target_name)
 
   if(HAVE_BACKTRACE OR HAVE_DLADDR)
     target_compile_definitions(${target_name} PRIVATE -D_GNU_SOURCE=1)
-    target_link_libraries(${target_name} PRIVATE -rdynamic)
+    # print_backtrace() names a frame through dladdr(), which reads only .dynsym. An executable puts
+    # its own functions there only when linked with -rdynamic; a shared library exports without it.
+    get_target_property(_target_type ${target_name} TYPE)
+    if(_target_type STREQUAL "EXECUTABLE")
+      target_link_options(${target_name} PRIVATE -rdynamic)
+    endif()
   endif()
 endfunction()
 
