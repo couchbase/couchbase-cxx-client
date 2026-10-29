@@ -88,13 +88,10 @@ set(_ps_service_protos
     couchbase/admin/query/v1/query.proto
     couchbase/admin/search/v1/search.proto
     couchbase/analytics/v1/analytics.proto
-    couchbase/internal/hooks/v1/hooks.proto
-    couchbase/internal/xdcr/v1/xdcr.proto
     couchbase/kv/v1/kv.proto
     couchbase/query/v1/query.proto
     couchbase/routing/v2/routing.proto
     couchbase/search/v1/search.proto
-    couchbase/transactions/v1/transactions.proto
     couchbase/view/v1/view.proto)
 
 set(_ps_srcs "")
@@ -226,14 +223,14 @@ if(MSVC)
   # grpc::SerializationTraits undefined when call_op_set.h is processed before proto_utils.h. The
   # ordering does occur here: grpc_cpp_plugin emits the generated .grpc.pb.h includes
   # alphabetically, so async_stream.h (which pulls call_op_set.h) precedes proto_utils.h. It does
-  # not, however, produce a diagnostic: the windows-2022 and windows-11-arm legs each compile all 30
-  # of this library's translation units and link it without one, so the workaround is not needed
+  # not, however, produce a diagnostic: the windows-2022 and windows-11-arm jobs each compile every
+  # translation unit of this library and link it without one, so the workaround is not needed
   # here. Should SerializationTraits ever turn up undefined in a *.grpc.pb.cc, the remedy is
   # /permissive-, which makes the lookup conformant without inverting include order -- not the
   # force-include.
   target_compile_options(couchbase_cxx_protostellar PRIVATE /W0 /FS /bigobj)
 else()
-  target_compile_options(couchbase_cxx_protostellar PRIVATE -w)
+  target_compile_options(couchbase_cxx_protostellar PRIVATE -w -g0 -ffunction-sections -fdata-sections)
 endif()
 
 # The hand-written transport (core/protostellar/*.cxx: the gRPC<->asio bridge, credentials, and
