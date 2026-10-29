@@ -36,7 +36,7 @@ makedepends="
 	zlib-dev
 	nlohmann-json
 "
-subpackages="${pkgname}-dev ${pkgname}-tools"
+subpackages="${pkgname}-dev ${pkgname}-tools ${pkgname}-fit-performer:fit_performer"
 options="!check"
 
 unpack() {
@@ -56,6 +56,7 @@ build() {
 		-DCOUCHBASE_CXX_CLIENT_BUILD_TESTS=OFF \
 		-DCOUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY=ON \
 		-DCOUCHBASE_CXX_CLIENT_BUILD_TOOLS=ON \
+		-DCOUCHBASE_CXX_CLIENT_BUILD_FIT_PERFORMER=ON \
 		-DCOUCHBASE_CXX_CLIENT_BUILD_STATIC=ON \
 		-DCOUCHBASE_CXX_CLIENT_BUILD_SHARED=ON
 	cmake --build apk-build
@@ -64,20 +65,30 @@ build() {
 tools() {
 	pkgdesc="${pkgdesc} (tools)"
 
-	amove usr/bin
+	amove usr/bin/cbc
+	_copy_notices
+}
 
-	# cbc no longer depends on the library package and carries the SDK and taocpp code inside the
-	# binary, so the notices for that code have to ship with it. Copied under this subpackage's own
-	# documentation directory rather than shared with the base package, which is what the Debian
-	# packaging has to do -- dpkg rejects two packages owning one path even when the contents match.
-	# Whether apk would tolerate sharing was not established; a private directory needs no answer.
+fit_performer() {
+	pkgdesc="${pkgdesc} (FIT performer)"
+	# ${pkgname}-tools owned usr/bin/fit_performer until this subpackage existed.
+	replaces="${pkgname}-tools"
+
+	amove usr/bin/fit_performer
+	_copy_notices
+}
+
+# cbc and fit_performer do not depend on the library package and carry the SDK, taocpp and vendored
+# code inside the binary, so the notices for that code have to ship with each of them. Copied under
+# the subpackage's own documentation directory rather than shared with the base package, which is
+# what the Debian packaging has to do -- dpkg rejects two packages owning one path even when the
+# contents match.
+_copy_notices() {
 	local _doc="${subpkgdir}/usr/share/doc/${subpkgname}"
 	mkdir -p "${_doc}/tao/json" "${_doc}/tao/pegtl"
 	cp "${pkgdir}/usr/share/doc/couchbase_cxx_client/LICENSE.txt" "${_doc}/"
 	cp "${pkgdir}/usr/share/doc/tao/json/LICENSE" "${_doc}/tao/json/"
 	cp "${pkgdir}/usr/share/doc/tao/pegtl/LICENSE" "${_doc}/tao/pegtl/"
-	# And the notices for the vendored dependencies compiled into cbc, which the base package
-	# receives from the install step but this subpackage does not.
 	cp -r "${pkgdir}/usr/share/doc/couchbase_cxx_client/third_party" "${_doc}/"
 }
 
