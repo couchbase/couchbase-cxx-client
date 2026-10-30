@@ -290,6 +290,11 @@ if(NOT MSVC)
 endif()
 
 if(NOT TARGET taocpp::json)
+  if(NOT TARGET taocpp::pegtl AND NOT TARGET pegtl)
+    set(CMAKE_DISABLE_FIND_PACKAGE_pegtl ON)
+    unset(pegtl_FOUND CACHE)
+    unset(pegtl_FOUND)
+  endif()
   # https://github.com/taocpp/json/releases
   cpmaddpackage(
     NAME
@@ -316,6 +321,7 @@ if(NOT TARGET taocpp::json)
     "TAOCPP_JSON_INSTALL_DOC_DIR ${CMAKE_INSTALL_DATAROOTDIR}/doc/tao/json"
     "TAOCPP_JSON_BUILD_TESTS OFF"
     "TAOCPP_JSON_BUILD_EXAMPLES OFF")
+  unset(CMAKE_DISABLE_FIND_PACKAGE_pegtl)
 endif()
 
 if(NOT TARGET asio::asio)
