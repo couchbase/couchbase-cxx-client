@@ -165,6 +165,8 @@ if(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
     set(CURL_ENABLE_EXPORT_TARGET OFF CACHE BOOL "" FORCE)
     set(CURL_DISABLE_SRP ON CACHE BOOL "" FORCE)
 
+    # opentelemetry-cpp sets CMP0092 to OLD, which CMake 4 reports as deprecated on every configure.
+    set(CMAKE_WARN_DEPRECATED OFF)
     # https://github.com/open-telemetry/opentelemetry-cpp/releases
     cpmaddpackage(
       NAME
@@ -193,6 +195,7 @@ if(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
       "CMAKE_C_VISIBILITY_PRESET hidden"
       "CMAKE_CXX_VISIBILITY_PRESET hidden"
       "CMAKE_POSITION_INDEPENDENT_CODE ON")
+    unset(CMAKE_WARN_DEPRECATED)
     couchbase_optimize_third_party_directory("${opentelemetry_SOURCE_DIR}")
   endif()
 
