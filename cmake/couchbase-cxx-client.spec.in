@@ -99,6 +99,8 @@ demand to run integration verification against the production SDK packages.
 
 %prep
 %autosetup -p1 -n@COUCHBASE_CXX_CLIENT_TARBALL_NAME@
+# Examples are built, not shipped: linking them against the shared library fails the build when
+# the export list cmake/GenerateExportMap.cmake writes omits a symbol the examples use.
 %cmake \
 %if 0%{?rhel} == 8 || 0%{?rocky} == 8 || 0%{?ol} == 8
     -S "." -B "redhat-linux-build" \
@@ -107,7 +109,7 @@ demand to run integration verification against the production SDK packages.
     -DCOUCHBASE_CXX_CLIENT_INSTALL=ON \
     -DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON \
     -DCOUCHBASE_CXX_CLIENT_PACKAGE_BUILD=ON \
-    -DCOUCHBASE_CXX_CLIENT_BUILD_EXAMPLES=OFF \
+    -DCOUCHBASE_CXX_CLIENT_BUILD_EXAMPLES=ON \
     -DCOUCHBASE_CXX_CLIENT_BUILD_TESTS=OFF \
 %if 0%{?amzn} == 0 && (0%{?rhel} >= 9 || 0%{?fedora} > 0)
     -DCOUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY=ON \
@@ -142,6 +144,11 @@ DESTDIR="%{buildroot}" /usr/bin/cmake --install "redhat-linux-build"
 # gRPC_INSTALL. cmake/GrpcProtobuf.cmake redirects all of them under this one prefix so they can be
 # dropped together; nothing packaged here comes from it.
 rm -rf "%{buildroot}%{_prefix}/vendored-not-installed"
+%if 0%{?grpc_supported}
+# Strip debug sections from fit_performer before find-debuginfo.sh runs. Its debug symbols are not
+# packaged, and dwz runs out of DIEs on its unstripped binary.
+%{__strip} --strip-debug "%{buildroot}%{_bindir}/fit_performer"
+%endif
 
 %files
 %license %{_docdir}/couchbase*/LICENSE.txt

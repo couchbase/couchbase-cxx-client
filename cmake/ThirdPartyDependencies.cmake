@@ -42,6 +42,7 @@ if(NOT TARGET spdlog::spdlog)
     "CMAKE_POSITION_INDEPENDENT_CODE ON"
     "SPDLOG_BUILD_SHARED OFF"
     "SPDLOG_FMT_EXTERNAL OFF")
+  couchbase_optimize_third_party_directory("${spdlog_SOURCE_DIR}")
 endif()
 
 if((COUCHBASE_CXX_CLIENT_BUILD_TOOLS AND COUCHBASE_CXX_CLIENT_BUILD_FIT_PERFORMER)
@@ -141,6 +142,7 @@ if(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
       message(FATAL_ERROR "Vendored curl did not provide CURL::libcurl")
     endif()
     declare_system_library(CURL::libcurl)
+    couchbase_optimize_third_party_directory("${curl_SOURCE_DIR}")
   endif()
 
   # The FIT driver gives the C++ performer an OTLP/gRPC collector endpoint, so the performer needs
@@ -163,6 +165,8 @@ if(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
     set(CURL_ENABLE_EXPORT_TARGET OFF CACHE BOOL "" FORCE)
     set(CURL_DISABLE_SRP ON CACHE BOOL "" FORCE)
 
+    # opentelemetry-cpp sets CMP0092 to OLD, which CMake 4 reports as deprecated on every configure.
+    set(CMAKE_WARN_DEPRECATED OFF)
     # https://github.com/open-telemetry/opentelemetry-cpp/releases
     cpmaddpackage(
       NAME
@@ -191,6 +195,8 @@ if(COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY)
       "CMAKE_C_VISIBILITY_PRESET hidden"
       "CMAKE_CXX_VISIBILITY_PRESET hidden"
       "CMAKE_POSITION_INDEPENDENT_CODE ON")
+    unset(CMAKE_WARN_DEPRECATED)
+    couchbase_optimize_third_party_directory("${opentelemetry_SOURCE_DIR}")
   endif()
 
   declare_system_library(opentelemetry_exporter_otlp_http)
@@ -239,6 +245,7 @@ if(NOT TARGET hdr_histogram_static)
     "HDR_LOG_REQUIRED OFF"
     "HDR_HISTOGRAM_BUILD_SHARED OFF"
     "HDR_HISTOGRAM_BUILD_PROGRAMS OFF")
+  couchbase_optimize_third_party_directory("${hdr_histogram_SOURCE_DIR}")
 endif()
 
 if(NOT TARGET llhttp::llhttp)
@@ -260,6 +267,7 @@ if(NOT TARGET llhttp::llhttp)
     "CMAKE_POSITION_INDEPENDENT_CODE ON"
     "BUILD_SHARED_LIBS OFF"
     "BUILD_STATIC_LIBS ON")
+  couchbase_optimize_third_party_directory("${llhttp_SOURCE_DIR}")
 endif()
 
 if(NOT TARGET snappy)
@@ -283,6 +291,7 @@ if(NOT TARGET snappy)
     "BUILD_SHARED_LIBS OFF"
     "SNAPPY_BUILD_TESTS OFF"
     "SNAPPY_BUILD_BENCHMARKS OFF")
+  couchbase_optimize_third_party_directory("${snappy_SOURCE_DIR}")
 endif()
 if(NOT MSVC)
   # https://github.com/google/snappy/pull/156
@@ -290,6 +299,11 @@ if(NOT MSVC)
 endif()
 
 if(NOT TARGET taocpp::json)
+  if(NOT TARGET taocpp::pegtl AND NOT TARGET pegtl)
+    set(CMAKE_DISABLE_FIND_PACKAGE_pegtl ON)
+    unset(pegtl_FOUND CACHE)
+    unset(pegtl_FOUND)
+  endif()
   # https://github.com/taocpp/json/releases
   cpmaddpackage(
     NAME
@@ -316,6 +330,7 @@ if(NOT TARGET taocpp::json)
     "TAOCPP_JSON_INSTALL_DOC_DIR ${CMAKE_INSTALL_DATAROOTDIR}/doc/tao/json"
     "TAOCPP_JSON_BUILD_TESTS OFF"
     "TAOCPP_JSON_BUILD_EXAMPLES OFF")
+  unset(CMAKE_DISABLE_FIND_PACKAGE_pegtl)
 endif()
 
 if(NOT TARGET asio::asio)
@@ -346,7 +361,7 @@ if(asio_ADDED)
   target_compile_definitions(asio PUBLIC ASIO_STANDALONE=1 ASIO_NO_DEPRECATED=1 ASIO_SEPARATE_COMPILATION=1)
   target_link_libraries(asio PRIVATE Threads::Threads)
   if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL)
-    target_link_libraries(asio PUBLIC $<TARGET_OBJECTS:ssl> $<TARGET_OBJECTS:crypto>)
+    target_link_libraries(asio PUBLIC ssl crypto)
     # Add BoringSSL include directories before asio's own include directories.
     target_include_directories(
       asio BEFORE PRIVATE $<BUILD_INTERFACE:$<TARGET_PROPERTY:ssl,INTERFACE_INCLUDE_DIRECTORIES>>
@@ -359,6 +374,7 @@ if(asio_ADDED)
     PROPERTIES C_VISIBILITY_PRESET hidden
                CXX_VISIBILITY_PRESET hidden
                POSITION_INDEPENDENT_CODE TRUE)
+  couchbase_optimize_third_party_target(asio)
 
   if(WIN32)
     # macro see @ https://stackoverflow.com/a/40217291/1746503
@@ -430,6 +446,7 @@ endif()
 add_library(jsonsl OBJECT ${PROJECT_SOURCE_DIR}/third_party/jsonsl/jsonsl.c)
 set_target_properties(jsonsl PROPERTIES C_VISIBILITY_PRESET hidden POSITION_INDEPENDENT_CODE TRUE)
 target_include_directories(jsonsl SYSTEM PUBLIC ${PROJECT_SOURCE_DIR}/third_party/jsonsl)
+couchbase_optimize_third_party_target(jsonsl)
 
 declare_system_library(snappy)
 declare_system_library(llhttp::llhttp)

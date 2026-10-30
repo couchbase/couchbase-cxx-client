@@ -133,16 +133,16 @@ private:
     const std::size_t body_size_bytes =
       framing_extras.size() + extras.size() + key.size() + value.size();
 
-    // SA: for some reason GCC 8.5.0 on CentOS 8 sees here null-pointer dereference
-    // JC: BoringSSL changes, noticed the same when building w/ GCC 11.3.0; TODO:  is 12 okay?
-#if defined(__GNUC__) && __GNUC__ >= 8 && __GNUC__ < 12
+    // GCC reports a potential null dereference on these stores: it does not track that the
+    // vector holds at least header_size bytes.
+#if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wnull-dereference"
 #endif
     std::vector<std::byte> payload(header_size + body_size_bytes, std::byte{});
     payload[0] = static_cast<std::byte>(magic_);
     payload[1] = static_cast<std::byte>(opcode_);
-#if defined(__GNUC__) && __GNUC__ >= 8 && __GNUC__ < 12
+#if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic pop
 #endif
 
