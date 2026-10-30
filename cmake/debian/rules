@@ -56,12 +56,14 @@ override_dh_auto_configure:
 		>> debian/couchbase-cxx-client.install
 	echo "usr/share/doc/couchbase_cxx_client/third_party" \
 		>> debian/couchbase-cxx-client.install
+# Examples are built, not shipped: linking them against the shared library fails the build when
+# the export list cmake/GenerateExportMap.cmake writes omits a symbol the examples use.
 	dh_auto_configure -- \
 		-DCMAKE_BUILD_TYPE=RelWithDebInfo \
 		-DBUILD_SHARED_LIBS=OFF \
 		-DCOUCHBASE_CXX_CLIENT_INSTALL=ON \
 		-DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON \
-		-DCOUCHBASE_CXX_CLIENT_BUILD_EXAMPLES=OFF \
+		-DCOUCHBASE_CXX_CLIENT_BUILD_EXAMPLES=ON \
 		-DCOUCHBASE_CXX_CLIENT_BUILD_TESTS=OFF \
 		-DCOUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY=ON \
 		-DCOUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2=ON \
