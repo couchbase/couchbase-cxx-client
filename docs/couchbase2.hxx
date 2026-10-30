@@ -69,8 +69,9 @@
  *   @ref couchbase::collection#get_any_replica,
  *   @ref couchbase::collection#lookup_in_all_replicas and
  *   @ref couchbase::collection#lookup_in_any_replica.
- * * Subdocument operations against the active node, @ref couchbase::collection#lookup_in and
- *   @ref couchbase::collection#mutate_in.
+ * * Subdocument mutations against the active node, @ref couchbase::collection#mutate_in.
+ * * @ref couchbase::collection#lookup_in when called with @c access_deleted or binary XATTR
+ *   specifications.
  * * Requests carrying an option or a value the transport has no equivalent for, across query,
  *   analytics, search, views and management -- a memcached bucket, for instance. The refusal
  *   depends on what the request carries rather than on the operation, so the same call may be

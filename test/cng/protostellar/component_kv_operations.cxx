@@ -46,6 +46,7 @@
 #include "core/cluster_credentials.hxx"
 #include "core/document_id.hxx"
 #include "core/error_context/key_value.hxx"
+#include "core/impl/subdoc/path_flags.hxx"
 #include "core/protostellar/component.hxx"
 #include "core/utils/binary.hxx"
 
@@ -96,7 +97,9 @@ rich_status(grpc::StatusCode code, const std::string& message, const Detail& det
   google::rpc::Status rich;
   rich.set_code(static_cast<std::int32_t>(code));
   rich.set_message(message);
-  rich.add_details()->PackFrom(detail);
+  if (!rich.add_details()->PackFrom(detail)) {
+    throw std::runtime_error("rich_status: PackFrom failed");
+  }
   return { code, message, rich.SerializeAsString() };
 }
 
@@ -156,6 +159,8 @@ struct recorded_request {
   std::uint64_t delta{ 0 };
   std::optional<std::int64_t> initial{};
   bool has_cas{ false };
+  std::size_t call_count{ 0 };
+  v1::LookupInRequest lookup_in{};
 };
 
 class kv_surface_service final : public v1::KvService::Service
@@ -313,6 +318,49 @@ public:
     return grpc::Status::OK;
   }
 
+  auto LookupIn(grpc::ServerContext* /* context */,
+                const v1::LookupInRequest* request,
+                v1::LookupInResponse* response) -> grpc::Status override
+  {
+    record(request);
+    last.lookup_in = *request;
+    if (auto status = fail_for(request->key()); !status.ok()) {
+      return status;
+    }
+    response->set_cas(0xa009ULL);
+    for (int i = 0; i < request->specs_size(); ++i) {
+      const auto& req_spec = request->specs(i);
+      auto* resp_spec = response->add_specs();
+      if (req_spec.path() == "missing") {
+        resp_spec->mutable_status()->set_code(
+          static_cast<std::int32_t>(grpc::StatusCode::NOT_FOUND));
+        google::rpc::ResourceInfo info;
+        info.set_resource_type("path");
+        if (!resp_spec->mutable_status()->add_details()->PackFrom(info)) {
+          return { grpc::StatusCode::INTERNAL, "PackFrom failed" };
+        }
+      } else if (req_spec.path() == "mismatch" || req_spec.path() == "not-json" ||
+                 req_spec.path() == "too-deep") {
+        resp_spec->mutable_status()->set_code(
+          static_cast<std::int32_t>(grpc::StatusCode::FAILED_PRECONDITION));
+        google::rpc::PreconditionFailure failure;
+        failure.add_violations()->set_type(req_spec.path() == "mismatch"   ? "PATH_MISMATCH"
+                                           : req_spec.path() == "not-json" ? "DOC_NOT_JSON"
+                                                                           : "DOC_TOO_DEEP");
+        if (!resp_spec->mutable_status()->add_details()->PackFrom(failure)) {
+          return { grpc::StatusCode::INTERNAL, "PackFrom failed" };
+        }
+      } else if (req_spec.operation() == v1::LookupInRequest::Spec::OPERATION_EXISTS) {
+        resp_spec->set_content(req_spec.path() == "absent" ? "false" : "true");
+      } else if (req_spec.operation() == v1::LookupInRequest::Spec::OPERATION_COUNT) {
+        resp_spec->set_content("4");
+      } else {
+        resp_spec->set_content(R"("val)" + std::to_string(i) + R"(")");
+      }
+    }
+    return grpc::Status::OK;
+  }
+
   recorded_request last{};
 
   // The server outlives every case, so each one starts by wiping what the last left behind.
@@ -333,7 +381,9 @@ private:
   template<typename Request>
   void record(const Request* request)
   {
+    const auto previous_calls = last.call_count;
     last = recorded_request{};
+    last.call_count = previous_calls + 1;
     last.key = request->key();
     last.bucket = request->bucket_name();
     last.scope = request->scope_name();
@@ -900,6 +950,123 @@ prepend_sends_the_content_and_reaches_the_prepend_stub([[maybe_unused]] context&
   assert_eq(outcome.token.sequence_number(), 208ULL, "the mutation token round-trips");
 }
 
+// --- lookup_in ----------------------------------------------------------------------------------
+
+void
+lookup_in_sends_specs_and_returns_per_spec_results([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::impl::subdoc::build_lookup_in_path_flags;
+  using couchbase::core::impl::subdoc::command;
+  using couchbase::core::impl::subdoc::opcode;
+
+  in_process_server server;
+  ops::lookup_in_request request;
+  request.id = make_id("k1");
+  request.specs = {
+    command{ opcode::get, "name", {}, build_lookup_in_path_flags(false, false) },
+    command{ opcode::exists, "absent", {}, build_lookup_in_path_flags(false, false) },
+    command{ opcode::get, "missing", {}, build_lookup_in_path_flags(false, false) },
+    command{ opcode::get, "$document.exptime", {}, build_lookup_in_path_flags(true, false) },
+  };
+
+  const auto outcome = run(server, std::move(request));
+
+  assert_false(static_cast<bool>(outcome.ctx.ec()),
+               "lookup_in succeeded at the document level even with a missing path");
+  assert_eq(outcome.cas.value(), 0xa009ULL, "cas round-trips");
+  assert_eq(outcome.fields.size(), std::size_t{ 4 }, "all four specs returned");
+  assert_true(server.service().last.lookup_in.specs(0).flags().xattr(),
+              "xattr spec from caller index 3 is partitioned to wire index 0");
+  assert_false(static_cast<bool>(outcome.fields[0].ec), "spec 0 succeeded");
+  assert_eq(cu::to_string(outcome.fields[0].value),
+            std::string{ R"("val1")" },
+            "spec 0 restored from wire 1");
+  assert_false(static_cast<bool>(outcome.fields[1].ec), "exists=false spec carries no error");
+  assert_false(outcome.fields[1].exists, "exists=false reported");
+  assert_true(outcome.fields[2].ec == couchbase::errc::key_value::path_not_found,
+              "missing get path carries path_not_found");
+  assert_true(outcome.ctx.first_error_index() == std::optional<std::size_t>{ 2 },
+              "first_error_index points to caller index 2 rather than wire index 3");
+  assert_false(static_cast<bool>(outcome.fields[3].ec), "xattr spec succeeded");
+  assert_eq(cu::to_string(outcome.fields[3].value),
+            std::string{ R"("val0")" },
+            "xattr restored from wire 0");
+}
+
+void
+lookup_in_rejects_empty_specs_without_dispatching([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::impl::subdoc::command;
+  using couchbase::core::impl::subdoc::opcode;
+
+  in_process_server server;
+  ops::lookup_in_request request;
+  request.id = make_id("k1");
+
+  const auto outcome = run(server, std::move(request));
+
+  assert_true(outcome.ctx.ec() == couchbase::errc::common::invalid_argument,
+              "empty lookup_in specs fail with invalid_argument");
+
+  ops::lookup_in_request non_empty_value_req;
+  non_empty_value_req.id = make_id("k1");
+  non_empty_value_req.specs = { command{ opcode::get, "a", cu::to_binary("unexpected"), {} } };
+  const auto non_empty_value_out = run(server, std::move(non_empty_value_req));
+  assert_true(non_empty_value_out.ctx.ec() == couchbase::errc::common::invalid_argument,
+              "lookup_in spec with non-empty value fails with invalid_argument");
+
+  assert_eq(server.service().last.call_count, std::size_t{ 0 }, "nothing was sent to the server");
+}
+
+void
+lookup_in_rejects_unsupported_features_without_dispatching([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::impl::subdoc::build_lookup_in_path_flags;
+  using couchbase::core::impl::subdoc::command;
+  using couchbase::core::impl::subdoc::opcode;
+
+  in_process_server server;
+
+  ops::lookup_in_request deleted_req;
+  deleted_req.id = make_id("k1");
+  deleted_req.access_deleted = true;
+  deleted_req.specs = { command{ opcode::get, "a", {}, {} } };
+  const auto deleted_out = run(server, std::move(deleted_req));
+  assert_true(deleted_out.ctx.ec() == couchbase::errc::common::feature_not_available,
+              "access_deleted fails with feature_not_available");
+
+  ops::lookup_in_request binary_xattr_req;
+  binary_xattr_req.id = make_id("k1");
+  binary_xattr_req.specs = {
+    command{ opcode::get, "$bin", {}, build_lookup_in_path_flags(true, true) },
+  };
+  const auto binary_xattr_out = run(server, std::move(binary_xattr_req));
+  assert_true(binary_xattr_out.ctx.ec() == couchbase::errc::common::feature_not_available,
+              "binary xattr spec fails with feature_not_available");
+
+  assert_eq(server.service().last.call_count, std::size_t{ 0 }, "nothing was sent to the server");
+}
+
+void
+lookup_in_expired_after_retries_reports_unambiguous_timeout([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::impl::subdoc::command;
+  using couchbase::core::impl::subdoc::opcode;
+
+  in_process_server server;
+  ops::lookup_in_request request;
+  request.id = make_id("k1");
+  request.specs = { command{ opcode::get, "a", {}, {} } };
+  request.timeout = std::chrono::milliseconds{ 0 };
+  request.retries.record_retry_attempt(couchbase::retry_reason::socket_not_available);
+
+  const auto outcome = run(server, std::move(request));
+
+  assert_true(outcome.ctx.ec() == couchbase::errc::common::unambiguous_timeout,
+              "read-only lookup_in expired after retries still reports unambiguous_timeout");
+  assert_eq(server.service().last.call_count, std::size_t{ 0 }, "nothing was sent to the server");
+}
+
 // --- the gateway's own error catalogue --------------------------------------------------------
 //
 // Everything below is transcribed from the server rather than inferred from another SDK's tests.
@@ -1280,6 +1447,58 @@ prepend_maps_every_status_the_gateway_can_return([[maybe_unused]] context& ctx)
                        });
 }
 
+void
+lookup_in_maps_every_status_the_gateway_can_return([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::impl::subdoc::build_lookup_in_path_flags;
+  using couchbase::core::impl::subdoc::command;
+  using couchbase::core::impl::subdoc::opcode;
+
+  // kvserver.go LookupIn returns CollectionMissing, CollectionNoReadAccess, DocMissing, Generic,
+  // and ScopeMissing as top-level RPC statuses.
+  check_gateway_errors({ gateway_error::collection_missing,
+                         gateway_error::collection_no_read_access,
+                         gateway_error::doc_missing,
+                         gateway_error::generic,
+                         gateway_error::scope_missing },
+                       false,
+                       [](const char* key) {
+                         ops::lookup_in_request request;
+                         request.id = make_id(key);
+                         request.specs = { command{ opcode::get, "a", {}, {} } };
+                         return request;
+                       });
+
+  // kvserver.go LookupIn places PathMissing, PathMismatch, SdNotJson, and SdDocTooDeep into
+  // LookupInResponse.specs[i].status while returning an OK RPC status so XATTR specs on the same
+  // document still succeed.
+  in_process_server server;
+  ops::lookup_in_request per_spec_request;
+  per_spec_request.id = make_id("k1");
+  per_spec_request.specs = {
+    command{ opcode::get, "missing", {}, {}, 0 },
+    command{ opcode::get, "mismatch", {}, {}, 1 },
+    command{ opcode::get, "not-json", {}, {}, 2 },
+    command{ opcode::get, "too-deep", {}, {}, 3 },
+    command{ opcode::get, "$document.exptime", {}, build_lookup_in_path_flags(true, false), 4 },
+  };
+  const auto outcome = run(server, std::move(per_spec_request));
+  assert_false(static_cast<bool>(outcome.ctx.ec()),
+               "LookupIn with per-spec failures returns a clear top-level error context");
+  assert_eq(outcome.fields.size(), std::size_t{ 5 }, "all five fields returned");
+  assert_true(outcome.fields[0].ec == couchbase::errc::key_value::path_not_found,
+              "NOT_FOUND + ResourceInfo(path) -> path_not_found");
+  assert_true(outcome.fields[1].ec == couchbase::errc::key_value::path_mismatch,
+              "FAILED_PRECONDITION + PATH_MISMATCH -> path_mismatch");
+  assert_true(outcome.fields[2].ec == couchbase::errc::key_value::document_not_json,
+              "FAILED_PRECONDITION + DOC_NOT_JSON -> document_not_json");
+  assert_true(outcome.fields[3].ec == couchbase::errc::key_value::path_too_deep,
+              "FAILED_PRECONDITION + DOC_TOO_DEEP -> path_too_deep");
+  assert_false(static_cast<bool>(outcome.fields[4].ec),
+               "XATTR spec alongside body errors succeeds");
+  assert_true(outcome.fields[4].exists, "XATTR spec reports exists=true");
+}
+
 // --- the contested corners, each pinned with its source ---------------------------------------
 
 void
@@ -1462,6 +1681,10 @@ tests() -> test_suite
       { CASE(append_maps_a_cas_mismatch), {}, timeout::network },
       { CASE(append_maps_a_missing_document), {}, timeout::network },
       { CASE(prepend_sends_the_content_and_reaches_the_prepend_stub), {}, timeout::network },
+      { CASE(lookup_in_sends_specs_and_returns_per_spec_results), {}, timeout::network },
+      { CASE(lookup_in_rejects_empty_specs_without_dispatching), {}, timeout::network },
+      { CASE(lookup_in_rejects_unsupported_features_without_dispatching), {}, timeout::network },
+      { CASE(lookup_in_expired_after_retries_reports_unambiguous_timeout), {}, timeout::network },
       { CASE(a_not_found_resource_type_selects_the_specific_error), {}, timeout::network },
       { CASE(touch_maps_every_status_the_gateway_can_return), {}, timeout::network },
       { CASE(exists_maps_every_status_the_gateway_can_return), {}, timeout::network },
@@ -1472,6 +1695,7 @@ tests() -> test_suite
       { CASE(decrement_maps_every_status_the_gateway_can_return), {}, timeout::network },
       { CASE(append_maps_every_status_the_gateway_can_return), {}, timeout::network },
       { CASE(prepend_maps_every_status_the_gateway_can_return), {}, timeout::network },
+      { CASE(lookup_in_maps_every_status_the_gateway_can_return), {}, timeout::network },
       { CASE(unlock_reports_a_bad_cas_as_cas_mismatch_not_locked), {}, timeout::network },
       { CASE(a_cas_mismatch_arrives_as_error_info_not_precondition_failure), {}, timeout::network },
       { CASE(a_locked_document_is_reported_so_the_retry_layer_can_see_it), {}, timeout::network },

@@ -940,13 +940,8 @@ public:
    * @exception errc::common::ambiguous_timeout
    * @exception errc::common::unambiguous_timeout
    *
-   * @note Not served over the @ref couchbase2 "couchbase2" transport, which reports
-   * @ref errc::common::feature_not_available for subdocument lookups.
-   *
    * @since 1.0.0
    * @committed
-   * @cng_since{1.4.0}
-   * @cng_uncommitted
    */
   void lookup_in(std::string document_id,
                  const lookup_in_specs& specs,
@@ -966,13 +961,8 @@ public:
    * @exception errc::common::ambiguous_timeout
    * @exception errc::common::unambiguous_timeout
    *
-   * @note Not served over the @ref couchbase2 "couchbase2" transport, which reports
-   * @ref errc::common::feature_not_available for subdocument lookups.
-   *
    * @since 1.0.0
    * @committed
-   * @cng_since{1.4.0}
-   * @cng_uncommitted
    */
   [[nodiscard]] auto lookup_in(std::string document_id,
                                const lookup_in_specs& specs,
