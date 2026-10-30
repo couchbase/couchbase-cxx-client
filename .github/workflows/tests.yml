@@ -127,6 +127,7 @@ jobs:
       fail-fast: false
       matrix:
         server:
+          - 8.5.0-1382
           - 8.0.1-4792
           - 8.0.0
           - 7.6.10

@@ -32,9 +32,14 @@
 #include "core/operations/document_search.hxx"
 #include "core/operations/document_upsert.hxx"
 #include "core/operations/management/collection_create.hxx"
+#include "core/operations/management/freeform.hxx"
 #include "core/operations/management/search_index_drop.hxx"
 #include "core/operations/management/search_index_upsert.hxx"
 
+#include <couchbase/boolean_query.hxx>
+#include <couchbase/codec/tao_json_serializer.hxx>
+#include <couchbase/custom_filter_query.hxx>
+#include <couchbase/custom_score_query.hxx>
 #include <couchbase/match_none_query.hxx>
 #include <couchbase/query_string_query.hxx>
 #include <couchbase/search_scoring_none.hxx>
@@ -44,6 +49,10 @@
 
 #include <optional>
 #include <regex>
+#include <set>
+#include <string>
+#include <utility>
+#include <vector>
 
 using Catch::Matchers::StartsWith;
 
@@ -762,4 +771,190 @@ TEST_CASE("integration: disabled scoring is not behind the score fusion capabili
   // here would mean "none" had been gated behind score fusion, which it must never be.
   REQUIRE(error.ec());
   REQUIRE(error.ec() != couchbase::errc::common::feature_not_available);
+}
+
+TEST_CASE("integration: custom script queries are refused when the cluster does not advertise them",
+          "[integration]")
+{
+  test::utils::integration_test_guard integration;
+
+  if (!integration.cluster_version().supports_search()) {
+    SKIP("cluster does not support search");
+  }
+  if (integration.cluster_version().supports_search_custom_script_queries()) {
+    SKIP("cluster supports custom script queries");
+  }
+
+  auto c = integration.public_cluster();
+
+  SECTION("custom score query")
+  {
+    const couchbase::search_request request{ couchbase::custom_score_query(
+      couchbase::match_none_query{}, "function score(doc, params) { return doc.score; }") };
+    auto [error, result] = c.search("does-not-exist", request).get();
+    REQUIRE(error.ec() == couchbase::errc::common::feature_not_available);
+  }
+
+  SECTION("custom filter query nested in a boolean query")
+  {
+    const couchbase::search_request request{ couchbase::boolean_query{}.must_not(
+      couchbase::custom_filter_query(couchbase::match_none_query{},
+                                     "function filter(doc, params) { return true; }")) };
+    auto [error, result] = c.search("does-not-exist", request).get();
+    REQUIRE(error.ec() == couchbase::errc::common::feature_not_available);
+  }
+}
+
+TEST_CASE("integration: custom score and filter queries", "[integration]")
+{
+  test::utils::integration_test_guard integration;
+
+  if (!integration.cluster_version().supports_search_custom_script_queries()) {
+    SKIP("cluster does not support custom script queries");
+  }
+  if (integration.cluster_version().is_capella()) {
+    SKIP("the feature is enabled through the search service's manager options");
+  }
+
+  // The feature is disabled on the server by default, and is switched back off when the test ends.
+  auto custom_script_queries_enabled = [](bool enabled) {
+    couchbase::core::operations::management::freeform_request req{};
+    req.type = couchbase::core::service_type::search;
+    req.method = "PUT";
+    req.path = "/api/managerOptions";
+    req.headers["content-type"] = "application/json";
+    req.body = couchbase::core::utils::json::generate(
+      tao::json::value{ { "customScriptQueriesEnabled", enabled ? "true" : "false" } });
+    return req;
+  };
+  {
+    auto resp = test::utils::execute(integration.cluster, custom_script_queries_enabled(true));
+    INFO(resp.body);
+    REQUIRE_SUCCESS(resp.ctx.ec);
+    REQUIRE(resp.status == 200);
+  }
+  const test::utils::drop_guard disable_custom_script_queries{
+    integration.cluster, "the custom script queries setting", custom_script_queries_enabled(false)
+  };
+
+  test::utils::open_bucket(integration.cluster, integration.ctx.bucket);
+
+  const std::string params = R"(
+{
+  "mapping": {
+    "default_mapping": {"enabled": true, "dynamic": true},
+    "default_type": "_default",
+    "default_analyzer": "standard",
+    "default_field": "_all"
+  },
+  "doc_config": {"mode": "type_field", "type_field": "_type"}
+}
+)";
+
+  auto index_name = test::utils::uniq_id("search_index");
+  const std::string requested_index_name = index_name;
+  couchbase::core::operations::management::search_index_drop_request drop_requested_index_req{};
+  drop_requested_index_req.index_name = index_name;
+  const test::utils::drop_guard drop_requested_index{ integration.cluster,
+                                                      "search index " + index_name,
+                                                      drop_requested_index_req };
+  {
+    couchbase::core::management::search::index index{};
+    index.name = index_name;
+    index.params_json = params;
+    index.type = "fulltext-index";
+    index.source_name = integration.ctx.bucket;
+    index.source_type = "couchbase";
+    if (integration.cluster_version().requires_search_replicas()) {
+      index.plan_params_json = couchbase::core::utils::json::generate({
+        { "indexPartitions", 1 },
+        { "numReplicas", 1 },
+      });
+    }
+    couchbase::core::operations::management::search_index_upsert_request req{};
+    req.index = index;
+    auto resp = test::utils::execute(integration.cluster, req);
+    REQUIRE_SUCCESS(resp.ctx.ec);
+    index_name = resp.name;
+  }
+  // The server may rename the index; a renamed one gets a guard of its own.
+  std::optional<
+    test::utils::drop_guard<couchbase::core::operations::management::search_index_drop_request>>
+    drop_renamed_index;
+  if (!index_name.empty() && index_name != requested_index_name) {
+    couchbase::core::operations::management::search_index_drop_request drop_index_req{};
+    drop_index_req.index_name = index_name;
+    drop_renamed_index.emplace(integration.cluster, "search index " + index_name, drop_index_req);
+  }
+
+  REQUIRE(test::utils::wait_for_search_pindexes_ready(
+    integration.cluster, integration.ctx.bucket, index_name));
+
+  const auto tag = test::utils::uniq_id("tag");
+  const auto cheap_id = test::utils::uniq_id("cheap");
+  const auto mid_id = test::utils::uniq_id("mid");
+  const auto dear_id = test::utils::uniq_id("dear");
+  for (const auto& [key, price] : std::vector<std::pair<std::string, int>>{
+         { cheap_id, 50 }, { mid_id, 150 }, { dear_id, 300 } }) {
+    const couchbase::core::document_id id{ integration.ctx.bucket, "_default", "_default", key };
+    auto resp =
+      test::utils::execute(integration.cluster,
+                           couchbase::core::operations::upsert_request{
+                             id,
+                             couchbase::core::utils::json::generate_binary(tao::json::value{
+                               { "_type", "custom_script_query_doc" },
+                               { "tag", tag },
+                               { "price", price },
+                             }),
+                           });
+    REQUIRE_SUCCESS(resp.ctx.ec());
+  }
+
+  auto c = integration.public_cluster();
+  const couchbase::query_string_query tagged{ "tag:" + tag };
+
+  REQUIRE(test::utils::wait_until(
+    [&]() {
+      auto [error, result] = c.search(index_name, couchbase::search_request{ tagged }).get();
+      return !error.ec() && result.rows().size() == 3;
+    },
+    std::chrono::minutes{ 1 }));
+
+  SECTION("custom filter query")
+  {
+    const couchbase::search_request request{
+      couchbase::custom_filter_query(
+        tagged, "function within_budget(doc, params) { return doc.fields.price <= params.budget; }")
+        .fields({ "price" })
+        .parameters(std::pair{ "budget", 200 }),
+    };
+    auto [error, result] = c.search(index_name, request).get();
+    INFO(error.message());
+    REQUIRE_SUCCESS(error.ec());
+    std::set<std::string> ids;
+    for (const auto& row : result.rows()) {
+      ids.insert(row.id());
+    }
+    REQUIRE(ids == std::set<std::string>{ cheap_id, mid_id });
+  }
+
+  SECTION("custom score query")
+  {
+    const couchbase::search_request request{
+      couchbase::custom_score_query(
+        tagged, "function by_price(doc, params) { return doc.fields.price * params.factor; }")
+        .fields({ "price" })
+        .parameters(std::pair{ "factor", 2 }),
+    };
+    auto [error, result] = c.search(index_name, request).get();
+    INFO(error.message());
+    REQUIRE_SUCCESS(error.ec());
+    REQUIRE(result.rows().size() == 3);
+    REQUIRE(result.rows()[0].id() == dear_id);
+    REQUIRE(result.rows()[0].score() == 600);
+    REQUIRE(result.rows()[1].id() == mid_id);
+    REQUIRE(result.rows()[1].score() == 300);
+    REQUIRE(result.rows()[2].id() == cheap_id);
+    REQUIRE(result.rows()[2].score() == 100);
+  }
 }

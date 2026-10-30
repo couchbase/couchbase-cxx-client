@@ -414,6 +414,10 @@ is_feature_supported(const operations::search_request& request,
   if (is_score_fusion(request.scoring) && !capabilities.supports_score_fusion()) {
     return false;
   }
+  // The capability is checked first, so that the query is only walked when it could be refused.
+  if (!capabilities.supports_search_udf_query() && request.uses_custom_script_queries()) {
+    return false;
+  }
 
   return true;
 }

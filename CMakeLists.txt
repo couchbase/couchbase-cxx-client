@@ -191,6 +191,7 @@ set(couchbase_cxx_client_FILES
     core/impl/common_error_category.cxx
     core/impl/configuration_profiles_registry.cxx
     core/impl/conjunction_query.cxx
+    core/impl/custom_script_query.cxx
     core/impl/crypto.cxx
     core/impl/date_range.cxx
     core/impl/date_range_facet.cxx

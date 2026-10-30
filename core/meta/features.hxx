@@ -281,3 +281,8 @@
  * couchbase::core::transactions::transactions does not implement the Public API.
  */
 #define COUCHBASE_CXX_CLIENT_TRANSACTIONS_PUBLIC_CORE_IMPL_SEPARATION 1
+
+/**
+ * couchbase::custom_score_query and couchbase::custom_filter_query are available.
+ */
+#define COUCHBASE_CXX_CLIENT_HAS_SEARCH_CUSTOM_SCRIPT_QUERIES 1

@@ -276,6 +276,13 @@ struct server_version {
     return supports_search() && ((major == 8 && minor >= 1) || major > 8);
   }
 
+  [[nodiscard]] auto supports_search_custom_script_queries() const -> bool
+  {
+    // Custom score and filter queries are an Enterprise Edition feature 8.5 feature; the "udfQuery"
+    // cluster capability is advertised only from that release.
+    return supports_search() && is_enterprise() && ((major == 8 && minor >= 5) || major > 8);
+  }
+
   [[nodiscard]] auto supports_document_not_locked_status() const -> bool
   {
     return !use_gocaves && (major > 7 || (major == 7 && minor >= 6));

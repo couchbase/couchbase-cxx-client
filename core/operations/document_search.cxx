@@ -27,8 +27,86 @@
 
 #include <tao/json/contrib/traits.hpp>
 
+#include <algorithm>
+#include <array>
+#include <string_view>
+
 namespace couchbase::core::operations
 {
+namespace
+{
+auto
+contains_custom_script_query(const tao::json::value& query) -> bool
+{
+  if (query.is_array()) {
+    const auto& entries = query.get_array();
+    return std::any_of(entries.begin(), entries.end(), contains_custom_script_query);
+  }
+  if (!query.is_object()) {
+    return false;
+  }
+  if (query.find("custom_score") != nullptr || query.find("custom_filter") != nullptr) {
+    return true;
+  }
+  static constexpr std::array compound_keys{
+    "conjuncts", "disjuncts", "must", "should", "must_not"
+  };
+  return std::any_of(compound_keys.begin(), compound_keys.end(), [&query](const char* key) {
+    const auto* child = query.find(key);
+    return child != nullptr && contains_custom_script_query(*child);
+  });
+}
+
+auto
+knn_contains_custom_script_query(const tao::json::value& knn) -> bool
+{
+  if (!knn.is_array()) {
+    return false;
+  }
+  const auto& vector_queries = knn.get_array();
+  return std::any_of(
+    vector_queries.begin(), vector_queries.end(), [](const tao::json::value& vector_query) {
+      const auto* filter = vector_query.is_object() ? vector_query.find("filter") : nullptr;
+      return filter != nullptr && contains_custom_script_query(*filter);
+    });
+}
+
+auto
+mentions_custom_script_query(const json_string& json) -> bool
+{
+  std::string_view text{};
+  if (json.is_string()) {
+    text = json.str();
+  } else if (json.is_binary()) {
+    const auto& bytes = json.bytes();
+    text = { reinterpret_cast<const char*>(bytes.data()), bytes.size() };
+  }
+  return text.find("custom_score") != std::string_view::npos ||
+         text.find("custom_filter") != std::string_view::npos;
+}
+} // namespace
+
+auto
+search_request::uses_custom_script_queries() const -> bool
+{
+  // The key names are looked for in the encoded JSON first, so that it is only parsed when it could
+  // contain a custom script query. A false positive, such as a match query for the text
+  // "custom_score", only costs the full walk.
+  if (!mentions_custom_script_query(query) &&
+      (!vector_search.has_value() || !mentions_custom_script_query(vector_search.value()))) {
+    return false;
+  }
+
+  try {
+    return contains_custom_script_query(utils::json::parse(query)) ||
+           (vector_search.has_value() &&
+            knn_contains_custom_script_query(utils::json::parse(vector_search.value())));
+  } catch (const std::exception&) {
+    // Nothing we can do here, so let's just let the search request proceed.
+    return false;
+  }
+}
+
 auto
 search_request::encode_to(search_request::encoded_request_type& encoded,
                           http_context& context) -> std::error_code

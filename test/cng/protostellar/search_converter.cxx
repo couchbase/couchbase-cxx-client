@@ -102,6 +102,17 @@ encode_returns_nullopt_for_unmappable_query([[maybe_unused]] context& ctx)
   boosted_match_all.query = couchbase::core::json_string{ R"({"match_all":{},"boost":2})" };
   assert_false(ps::encode(boosted_match_all).has_value(),
                "match_all cannot carry a boost, so a boosted one is refused rather than flattened");
+
+  // couchbase2 has no support for custom score or filter query yet
+  for (const auto* custom : { "custom_score", "custom_filter" }) {
+    auto custom_request = base_request();
+    custom_request.query =
+      couchbase::core::json_string{ std::string{ R"({")" } + custom +
+                                    R"(":{"query":{"match_all":{}},"source":"s"}})" };
+    assert_false(ps::encode(custom_request).has_value(), std::string{ custom } + " is not mapped");
+    assert_false(ps::query_is_malformed(custom_request),
+                 std::string{ custom } + " is refused as unsupported, not as malformed");
+  }
 }
 
 // A boost is serialized beside the query key, so rejecting every two-key object would make

@@ -29,6 +29,8 @@
 #include <couchbase/boolean_field_query.hxx>
 #include <couchbase/boolean_query.hxx>
 #include <couchbase/conjunction_query.hxx>
+#include <couchbase/custom_filter_query.hxx>
+#include <couchbase/custom_score_query.hxx>
 #include <couchbase/date_range_query.hxx>
 #include <couchbase/disjunction_query.hxx>
 #include <couchbase/doc_id_query.hxx>
@@ -73,7 +75,9 @@ using search_query_types = std::variant<couchbase::match_query,
                                         couchbase::prefix_query,
                                         couchbase::phrase_query,
                                         couchbase::match_all_query,
-                                        couchbase::match_none_query>;
+                                        couchbase::match_none_query,
+                                        couchbase::custom_score_query,
+                                        couchbase::custom_filter_query>;
 
 struct command_args {
   std::shared_ptr<couchbase::cluster> cluster{};
