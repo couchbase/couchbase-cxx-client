@@ -1,0 +1,112 @@
+name: abi
+permissions: {}
+
+# Checks that the ABI of libcouchbase_cxx_client.so.MAJOR.MINOR does not break while the soname
+# stays the same. bin/check-abi describes what each event is compared with.
+on:
+  push:
+    branches:
+      - main
+      - release-*
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+  pull_request:
+    branches:
+      - main
+      - release-*
+  workflow_dispatch:
+    inputs:
+      ref:
+        type: string
+        description: "Tag, branch or commit to record as the ABI baseline of its soname"
+        required: true
+
+# Pull request runs cancel each other. Every other run has a group of its own, so none replaces
+# another.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  compare:
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    # Ubuntu 24.04 ships libabigail 2.4, whose abidw crashes on this library.
+    container: registry.fedoraproject.org/fedora:44
+    permissions:
+      contents: read
+      deployments: write
+    env:
+      CCACHE_MAXSIZE: 500M
+    steps:
+      - name: Install dependencies
+        timeout-minutes: 20
+        run: dnf install -y ccache cmake gcc-c++ git libabigail ninja-build ruby
+      # The build of a pull request runs its own code, so the token is not left in .git/config.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Verify the report parser against its fixtures
+        run: bin/check-abi --self-test
+      - name: Tool versions
+        id: tools
+        run: echo "key=$(bin/check-abi tools-key)" >> "${GITHUB_OUTPUT}"
+      # A dump depends on the tool versions and on the build and abidw options in bin/check-abi.
+      - name: Restore ABI dumps
+        uses: actions/cache/restore@v4
+        with:
+          path: abi-dumps
+          key: abi-dumps-${{ steps.tools.outputs.key }}-${{ hashFiles('bin/check-abi') }}-${{ github.run_id }}
+          restore-keys: abi-dumps-${{ steps.tools.outputs.key }}-${{ hashFiles('bin/check-abi') }}-
+      - name: Restore ccache
+        uses: actions/cache/restore@v4
+        with:
+          path: .ccache
+          key: ccache-abi-${{ github.run_id }}
+          restore-keys: ccache-abi-
+      - name: Compare
+        timeout-minutes: 150
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bin/check-abi ci
+      # Only branch pushes save. A pull request's cache would serve that pull request alone, and a
+      # tag's cache that tag alone. bin/check-abi keeps the dumps of the most recently used commits,
+      # so a pull request usually finds its base once the push of that base has run.
+      - name: Save ccache
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref_type == 'branch' }}
+        uses: actions/cache/save@v4
+        with:
+          path: .ccache
+          key: ccache-abi-${{ github.run_id }}
+      - name: Save ABI dumps
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref_type == 'branch' }}
+        uses: actions/cache/save@v4
+        with:
+          path: abi-dumps
+          key: abi-dumps-${{ steps.tools.outputs.key }}-${{ hashFiles('bin/check-abi') }}-${{ github.run_id }}
+      - name: Upload the reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: abi-report
+          path: report-*.txt
+          if-no-files-found: ignore
+
+  record:
+    needs: compare
+    if: ${{ !cancelled() && ((github.ref_type == 'tag' && needs.compare.result == 'success') || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          persist-credentials: false
+      - name: Record the baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NAME: ${{ inputs.ref || github.ref_name }}
+        run: bin/check-abi record HEAD "${NAME}"

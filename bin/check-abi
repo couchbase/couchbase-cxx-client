@@ -1,0 +1,613 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+#  Copyright 2026-Present Couchbase, Inc.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+
+# Checks that the ABI of libcouchbase_cxx_client.so.MAJOR.MINOR does not break while the soname
+# stays the same, using libabigail (abidw, abidiff).
+#
+#   bin/check-abi compare OLD NEW     compare two ABIs; each is an .abi dump, a build directory of a
+#                                     package build, a source tree, or a git revision; source trees
+#                                     and revisions are built in the package configuration
+#   bin/check-abi history [SONAME]    list the recorded baselines and per-commit results
+#   bin/check-abi record REF [NAME]   record REF as the baseline of its soname, under NAME; a
+#                                     release tag older than the current baseline's is skipped
+#   bin/check-abi ci                  what .github/workflows/abi.yml runs for the current event
+#   bin/check-abi tools-key           the tool versions a dump depends on
+#   bin/check-abi --self-test         check the report parser and the release-tag guard
+#
+# The newest deployment to the GitHub environment abi-MAJOR.MINOR names the baseline commit of a
+# soname. Each push to a branch adds a deployment to abi-MAJOR.MINOR-commits that summarises its
+# comparisons. A deployment holds a commit and a description; dumps are rebuilt from the commit.
+#
+# Exit status: 0 no break, 1 a break, 2 abidiff failed or wrote a report the parser does not
+# recognise, 3 usage or environment error.
+
+require "English"
+require "fileutils"
+require "json"
+require "net/http"
+require "open3"
+require "optparse"
+require "uri"
+
+# The workflow's container has no locale, and CMakeLists.txt is not ASCII.
+Encoding.default_external = Encoding::UTF_8
+
+module CheckAbi
+  class Error < StandardError
+    def status = 3
+  end
+
+  class ToolError < Error
+    def status = 2
+  end
+
+  LIBRARY = "libcouchbase_cxx_client.so"
+
+  # The packages' options for the shared library, without couchbase2 and OpenTelemetry. Neither
+  # changes a declaration in the public headers.
+  CMAKE_OPTIONS = %w[
+    -DCMAKE_BUILD_TYPE=RelWithDebInfo
+    -DCOUCHBASE_CXX_CLIENT_PACKAGE_BUILD=ON
+    -DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON
+    -DCOUCHBASE_CXX_CLIENT_BUILD_STATIC=OFF
+    -DCOUCHBASE_CXX_CLIENT_BUILD_TESTS=OFF
+    -DCOUCHBASE_CXX_CLIENT_BUILD_EXAMPLES=OFF
+    -DCOUCHBASE_CXX_CLIENT_BUILD_TOOLS=OFF
+    -DCOUCHBASE_CXX_CLIENT_BUILD_DOCS=OFF
+    -DCOUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY=OFF
+    -DCOUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2=OFF
+  ].freeze
+
+  def self.run(*args, chdir: nil, quiet: false)
+    warn args.join(" ") unless quiet
+    out, err, status = Open3.capture3(*args, **(chdir ? {chdir: chdir} : {}))
+    raise Error, "#{args.join(' ')} failed with #{status}:\n#{err}" unless status.success?
+
+    out
+  end
+
+  RELEASE_TAG = /\A\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?\z/
+
+  # Release branches are tagged independently, so the newest deployment is not always the newest
+  # release. Recording an older tag, such as a re-run of its workflow, would move the baseline back.
+  # Names that are not release tags, such as a commit given to workflow_dispatch, always record.
+  def self.older_release?(name, baseline)
+    [name, baseline].all? { |n| n.to_s.match?(RELEASE_TAG) } &&
+      Gem::Version.new(name) < Gem::Version.new(baseline)
+  end
+
+  def self.soname(cmakelists)
+    version = cmakelists[/^project\(.*?VERSION\s+"?(\d+\.\d+)\./m, 1]
+    raise Error, "no project VERSION in CMakeLists.txt" unless version
+
+    version
+  end
+
+  # Reads an `abidiff --leaf-changes-only` report and returns the entries that break the public
+  # ABI.
+  #
+  # Every entry under a function, variable or symbol heading is a break. A type is a break when
+  # its own name is in couchbase:: outside couchbase::core, which public classes hold only through
+  # std::shared_ptr. These rules replace abidiff suppressions: a suppressed type hides every change
+  # reported through it, and libabigail 3.0 aborts when a type suppression meets
+  # --non-reachable-types.
+  #
+  # libabigail 3.0 also reports types as changed with no difference listed, and asio typedefs
+  # named ::type and ::completion_handler_type under couchbase::cluster functions as removed, when
+  # a dump is compared with itself. A changed type with no detail lines is not a break, and neither
+  # is a typedef with either name; the public headers declare none.
+  class Report
+    HEADING = /\A\d+ .*:\z/
+    TYPE_HEADING = /unreachable from any public interface:\z/
+    LEAF_TYPE = /\A'(.*)' changed:\z/
+    SECTION_TYPE = /\A  \[([DC])\] '(.*)'(?: changed:)?\z/
+    SECTION_ENTRY = /\A  \[[DC]\] /
+    KIND = /\A(?:(?:const|volatile) )*(?:(class|struct|union|enum|typedef) )?/
+
+    Entry = Struct.new(:line, :name, :kind, :marker, :details) do
+      def changed? = marker != "D"
+    end
+
+    attr_reader :breaks
+
+    def initialize(text)
+      @breaks = []
+      parse(text)
+    end
+
+    def self.public_type?(name, kind)
+      name.start_with?("couchbase::") && !name.start_with?("couchbase::core::") &&
+        !(kind == "typedef" && name.match?(/::(?:type|completion_handler_type)\z/))
+    end
+
+    private
+
+    def parse(text)
+      in_section = false
+      in_types = false
+      entry = nil
+      text.each_line(chomp: true) do |line|
+        if line.empty?
+          entry = close(entry)
+        elsif line.match?(HEADING)
+          entry = close(entry)
+          in_section = true
+          in_types = line.match?(TYPE_HEADING)
+        elsif (m = line.match(LEAF_TYPE))
+          entry = close(entry)
+          entry = type_entry(line, m[1], "C")
+        elsif in_types && (m = line.match(SECTION_TYPE))
+          entry = close(entry)
+          entry = type_entry(line, m[2], m[1])
+        elsif line.match?(SECTION_ENTRY)
+          entry = close(entry)
+          @breaks << line.strip
+        elsif entry && line.start_with?(entry.line.start_with?(" ") ? "    " : "  ")
+          entry.details << line
+        elsif line.start_with?("  [A] ") || line.start_with?("   ") || (!in_section && line.include?("summary: "))
+          next
+        else
+          raise ToolError, "unrecognised abidiff output: #{line}"
+        end
+      end
+      close(entry)
+    end
+
+    def type_entry(line, quoted, marker)
+      prefix = quoted[KIND]
+      Entry.new(line, quoted[prefix.length..], quoted.match(KIND)[1], marker, [])
+    end
+
+    def close(entry)
+      return nil unless entry
+      return nil if entry.changed? && entry.details.empty?
+
+      @breaks << entry.line.strip if Report.public_type?(entry.name, entry.kind)
+      nil
+    end
+  end
+
+  class Abigail
+    def self.version(tool = "abidw")
+      CheckAbi.run(tool, "--version", quiet: true).split.last
+    end
+
+    def self.dump(library, headers, out)
+      FileUtils.mkdir_p(File.dirname(out))
+      # --load-all-types keeps the public types no exported function reaches: most result types
+      # reach applications only through std::function handlers.
+      CheckAbi.run("abidw", "--load-all-types", "--headers-dir", headers, "--drop-private-types",
+                   "--out-file", out, library)
+    end
+
+    # abidiff's exit status flags tool errors with 1 and 2. Its change bits are not usable: a
+    # changed class layout sets only 4, as a new function does. The report decides instead.
+    # libabigail 3.0 sometimes aborts on a comparison that succeeds when repeated, so a run killed
+    # by a signal is retried.
+    def self.diff(old, new, *flags, attempts: 3)
+      attempts.times do |attempt|
+        out, err, status = Open3.capture3("abidiff", "--non-reachable-types", "--leaf-changes-only",
+                                          "--no-default-suppression", *flags, old, new)
+        return out if status.exited? && (status.exitstatus & 3).zero?
+        raise ToolError, "abidiff failed with #{status}:\n#{err}" if status.exited? || attempt == attempts - 1
+
+        warn "abidiff was killed (#{status}), retrying: #{err.lines.first}"
+      end
+    end
+  end
+
+  Result = Struct.new(:label, :gate, :breaks, :added_functions, :added_variables, :report) do
+    def summary
+      if breaks.any?
+        "#{breaks.size} breaking changes"
+      elsif (added_functions + added_variables).positive?
+        "#{added_functions} functions and #{added_variables} variables added"
+      else
+        "no ABI change"
+      end
+    end
+  end
+
+  def self.compare(old_dump, new_dump, label: File.basename(old_dump), gate: true)
+    breaks = Report.new(Abigail.diff(old_dump, new_dump, "--no-added-syms")).breaks
+    report = Abigail.diff(old_dump, new_dump)
+    added = lambda { |what| report[/^.*#{what} summary: .*?(\d+) Added/, 1].to_i }
+    Result.new(label, gate, breaks, added.call("functions"), added.call("variables"), report)
+  end
+
+  # Builds and dumps commits of the repository in the current directory. Dumps are kept in
+  # `dumps`/<sha>.abi, and other commits are checked out as worktrees next to them.
+  class Builder
+    def initialize(dumps:, work: ".")
+      @dumps = dumps
+      @work = work
+    end
+
+    def dump_path(sha) = File.join(@dumps, "#{sha}.abi")
+
+    # `refresh` rebuilds a dump that exists, for a source tree whose contents are not named by `sha`.
+    def dump_commit(sha, source: nil, refresh: false)
+      out = dump_path(sha)
+      if File.exist?(out) && !refresh
+        FileUtils.touch(out)
+        return out
+      end
+      unless source
+        source = File.join(@work, "src-#{sha[0, 12]}")
+        unless File.directory?(source)
+          CheckAbi.run("git", "fetch", "--quiet", "--no-tags", "--depth=1", "origin", sha)
+          CheckAbi.run("git", "worktree", "add", "--detach", source, sha)
+        end
+      end
+      build = File.join(@work, "build-#{sha[0, 12]}")
+      launcher = if system("ccache", "--version",
+                           out: File::NULL)
+                   %w[-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache]
+                 else
+                   []
+                 end
+      CheckAbi.run("cmake", "-S", source, "-B", build, "-G", "Ninja", *CMAKE_OPTIONS, *launcher)
+      CheckAbi.run("cmake", "--build", build, "--target", "couchbase_cxx_client")
+      Abigail.dump(File.join(build, LIBRARY), File.join(source, "couchbase"), out)
+      out
+    end
+
+    def prune(keep)
+      Dir[File.join(@dumps, "*.abi")].sort_by { |f| -File.mtime(f).to_f }.drop(keep).each { |f| File.delete(f) }
+    end
+  end
+
+  # An argument of `compare`: an .abi dump, a build directory, a source tree, or a git revision.
+  def self.resolve(arg, builder)
+    return arg if arg.end_with?(".abi") && File.file?(arg)
+
+    if File.file?(File.join(arg, "CMakeLists.txt")) && File.directory?(File.join(arg, "couchbase"))
+      return builder.dump_commit(File.basename(File.expand_path(arg)), source: arg, refresh: true)
+    end
+
+    if File.directory?(arg) && File.exist?(File.join(arg, LIBRARY))
+      cache = File.read(File.join(arg, "CMakeCache.txt"))
+      unless cache.match?(/^COUCHBASE_CXX_CLIENT_PACKAGE_BUILD:BOOL=ON$/)
+        raise Error, "#{arg} is not a package build: only a package build exports just the public API"
+      end
+
+      source = cache[/^CMAKE_HOME_DIRECTORY:INTERNAL=(.*)$/, 1]
+      out = File.join(builder.dump_path(File.basename(File.expand_path(arg))))
+      Abigail.dump(File.join(arg, LIBRARY), File.join(source, "couchbase"), out)
+      return out
+    end
+
+    sha = run("git", "rev-parse", "--verify", "#{arg}^{commit}", quiet: true).strip
+    builder.dump_commit(sha)
+  end
+
+  class GitHub
+    API = "https://api.github.com"
+
+    def initialize(repository: ENV.fetch("GITHUB_REPOSITORY", "couchbase/couchbase-cxx-client"),
+                   token: ENV["GH_TOKEN"] || ENV["GITHUB_TOKEN"] || gh_token)
+      @repository = repository
+      @token = token
+    end
+
+    def deployments(environment, limit: 1)
+      get("deployments", environment: environment, per_page: limit)
+    end
+
+    def state(deployment)
+      get("deployments/#{deployment['id']}/statuses", per_page: 1).first&.fetch("state")
+    end
+
+    def baseline(soname)
+      deployment = deployments("abi-#{soname}").first
+      deployment && [deployment["sha"], deployment["description"] || deployment["ref"]]
+    end
+
+    def record(sha, environment:, description:, state: "success", log_url: nil)
+      description = description[0, 140]
+      deployment = post("deployments", ref: sha, environment: environment, description: description,
+                                       auto_merge: false, required_contexts: [], production_environment: false)
+      post("deployments/#{deployment['id']}/statuses",
+           {state: state, description: description, log_url: log_url}.compact)
+    end
+
+    private
+
+    def gh_token
+      out, status = Open3.capture2("gh", "auth", "token", err: File::NULL)
+      status.success? ? out.strip : nil
+    rescue Errno::ENOENT
+      nil
+    end
+
+    def get(path, **query)
+      request(Net::HTTP::Get, "#{path}?#{URI.encode_www_form(query)}")
+    end
+
+    def post(path, body)
+      request(Net::HTTP::Post, path, body)
+    end
+
+    def request(type, path, body = nil)
+      uri = URI("#{API}/repos/#{@repository}/#{path}")
+      req = type.new(uri)
+      req["Accept"] = "application/vnd.github+json"
+      req["Authorization"] = "Bearer #{@token}" if @token
+      req.body = JSON.generate(body) if body
+      res = Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |http| http.request(req) }
+      raise Error, "GitHub #{type::METHOD} #{path}: #{res.code} #{res.body}" unless res.is_a?(Net::HTTPSuccess)
+
+      JSON.parse(res.body)
+    end
+  end
+
+  # What .github/workflows/abi.yml runs for the event in GITHUB_EVENT_NAME.
+  #
+  # - A pull request is compared with its base commit, the first parent of its merge commit, so
+  #   the report shows what the pull request itself changes. A break fails unless the pull request
+  #   changes the soname.
+  # - A push to a branch is compared with the previous commit and with the baseline of its soname.
+  #   A break against the baseline fails. The push is recorded in abi-MAJOR.MINOR-commits, in
+  #   failure state when either comparison found a break or could not run.
+  # - A tag is compared with the previous baseline; the record job then records it.
+  class CI
+    def initialize(github: GitHub.new, builder: Builder.new(dumps: "abi-dumps"), keep: 8)
+      @github = github
+      @builder = builder
+      @keep = keep
+      @event = ENV.fetch("GITHUB_EVENT_NAME")
+      @payload = JSON.parse(File.read(ENV.fetch("GITHUB_EVENT_PATH")))
+      @branch_push = @event == "push" && ENV["GITHUB_REF_TYPE"] == "branch"
+    end
+
+    def run
+      workspace = ENV.fetch("GITHUB_WORKSPACE", Dir.pwd)
+      # The workflow's container runs as root and the workspace belongs to the runner's user, so
+      # git needs the workspace, and the worktrees created under it, marked safe.
+      CheckAbi.run("git", "config", "--global", "--add", "safe.directory", "*", quiet: true)
+      ENV["CCACHE_DIR"] ||= File.join(workspace, ".ccache")
+      # Lets the worktree builds under src-<sha> hit the cache of the checkout's build.
+      ENV["CCACHE_BASEDIR"] ||= workspace
+      ENV["CCACHE_NOHASHDIR"] ||= "1"
+      @soname = CheckAbi.soname(File.read("CMakeLists.txt"))
+      results = []
+      failed = false
+      begin
+        current = @builder.dump_commit(head, source: ".")
+        plan.each do |sha, label, gate|
+          result = CheckAbi.compare(@builder.dump_commit(sha), current, label: label, gate: gate)
+          results << result
+          annotate(result)
+          failed ||= gate && result.breaks.any?
+        end
+      rescue Error
+        record_commit(results, crashed: true) if @branch_push
+        raise
+      end
+      @builder.prune(@keep) if @branch_push
+      record_commit(results, crashed: false) if @branch_push
+      puts "::error title=ABI::the ABI of soname #{@soname} changed; record a new baseline only if the break is accepted" if failed
+      failed ? 1 : 0
+    end
+
+    private
+
+    def head = CheckAbi.run("git", "rev-parse", "HEAD", quiet: true).strip
+
+    def soname_at(sha) = CheckAbi.soname(CheckAbi.run("git", "show", "#{sha}:CMakeLists.txt", quiet: true))
+
+    def plan
+      baseline = @github.baseline(@soname)
+      puts "::notice title=ABI::abi-#{@soname} has no baseline yet" unless baseline
+      case @event
+      when "pull_request"
+        base = CheckAbi.run("git", "rev-parse", "HEAD^1", quiet: true).strip
+        [[base, "#{@payload.dig('pull_request', 'base', 'ref')} at #{base[0, 7]}", soname_at(base) == @soname]]
+      when "push"
+        entries = []
+        before = @payload["before"].to_s
+        if @branch_push && !before.delete("0").empty? && before != baseline&.first
+          if system("git", "fetch", "--quiet", "--no-tags", "--depth=1", "origin", before)
+            entries << [before, "previous commit #{before[0, 7]}", false]
+          else
+            puts "::warning title=ABI::previous commit #{before[0, 7]} cannot be fetched"
+          end
+        end
+        entries << [baseline[0], "baseline #{baseline[1]}", @branch_push] if baseline
+        entries
+      else
+        raise Error, "unsupported event #{@event}"
+      end
+    end
+
+    def annotate(result)
+      level = if result.breaks.empty?
+                "notice"
+              elsif result.gate
+                "error"
+              else
+                "warning"
+              end
+      puts "::#{level} title=ABI::#{result.summary} against #{result.label}"
+      puts result.breaks
+      File.open(ENV.fetch("GITHUB_STEP_SUMMARY", File::NULL), "a") do |f|
+        # A step summary is limited to 1 MiB.
+        f.puts "### #{LIBRARY}.#{@soname} against #{result.label}: #{result.summary}", "```",
+               result.report[0, 400_000], "```"
+      end
+      File.write("report-#{result.label.tr('^A-Za-z0-9.', '-')}.txt", result.report)
+    end
+
+    def record_commit(results, crashed:)
+      description = results.map { |r| "#{r.label}: #{r.summary}" }.join("; ")
+      description = if crashed
+                      "comparison failed"
+                    else
+                      (description.empty? ? "nothing to compare with" : description)
+                    end
+      state = crashed || results.any? { |r| r.breaks.any? } ? "failure" : "success"
+      run_url = "#{ENV.fetch('GITHUB_SERVER_URL',
+                             nil)}/#{ENV.fetch('GITHUB_REPOSITORY', nil)}/actions/runs/#{ENV.fetch('GITHUB_RUN_ID', nil)}"
+      @github.record(head, environment: "abi-#{@soname}-commits", description: description, state: state,
+                           log_url: run_url)
+    end
+  end
+
+  def self.tools_key = "libabigail-#{Abigail.version}-gcc-#{run('gcc', '-dumpfullversion', quiet: true).strip}"
+
+  def self.history(github, soname, limit)
+    soname ||= CheckAbi.soname(File.read("CMakeLists.txt"))
+    {"abi-#{soname}" => "baselines", "abi-#{soname}-commits" => "commits"}.each do |environment, title|
+      puts "#{title} (#{environment}):"
+      deployments = github.deployments(environment, limit: limit)
+      puts "  none" if deployments.empty?
+      deployments.each do |d|
+        puts format("  %s  %s  %-7s  %s", d["created_at"], d["sha"][0, 12], github.state(d), d["description"])
+      end
+    end
+  end
+
+  SELF_TEST = [
+    ["nothing", <<~REPORT, []],
+      Leaf changes summary: 0 artifact changed
+      Removed/Changed/Added functions summary: 0 Removed, 0 Changed, 0 Added function
+    REPORT
+    ["public layout change", <<~REPORT, ["'class couchbase::mutation_token at mutation_token.hxx:31:1' changed:"]],
+      Leaf changes summary: 1 artifact changed
+
+      'class couchbase::mutation_token at mutation_token.hxx:31:1' changed:
+        type size changed from 448 to 512 (in bits)
+        1 data member insertion:
+          'uint64_t abi_probe_', at offset 192 (in bits) at mutation_token.hxx:116:1
+    REPORT
+    ["core, std and phantom types", <<~REPORT, []],
+      Unreachable types summary: 1 removed, 3 changed, 0 added types
+
+      1 removed type unreachable from any public interface:
+
+        [D] 'typedef couchbase::cluster_impl::notify_fork::type'
+
+      3 changed types unreachable from any public interface:
+
+        [C] 'class couchbase::core::document_id' changed:
+          type size changed from 1536 to 1600 (in bits)
+
+        [C] 'const std::vector<couchbase::mutation_token>' changed:
+          in unqualified underlying type 'class std::vector<couchbase::mutation_token>':
+
+        [C] 'const couchbase::transactions::attempt_context' changed:
+
+    REPORT
+    ["removed symbols and public types",
+     <<~REPORT, ["[D] 'method void couchbase::cluster::close()'    {_ZN9couchbase7cluster5closeEv}", "[D] _ZN9couchbase7cluster5closeEv", "[D] 'class couchbase::scan_result'"]],
+       Removed/Changed/Added functions summary: 1 Removed, 0 Changed, 0 Added function
+
+       1 Removed function:
+
+         [D] 'method void couchbase::cluster::close()'    {_ZN9couchbase7cluster5closeEv}
+
+       1 Removed function symbol not referenced by debug info:
+
+         [D] _ZN9couchbase7cluster5closeEv
+
+       1 removed type unreachable from any public interface:
+
+         [D] 'class couchbase::scan_result'
+     REPORT
+  ].freeze
+
+  def self.self_test
+    failures = SELF_TEST.reject do |name, report, expected|
+      actual = Report.new(report).breaks
+      warn "#{name}: expected #{expected.inspect}, got #{actual.inspect}" unless actual == expected
+      actual == expected
+    end
+    [["1.5.1", "1.5.2", true], ["1.5.2", "1.5.1", false], ["1.5.2", "1.5.2", false],
+     ["1.5.0-beta.1", "1.5.0", true], ["1.5.1", "946421c", false], ["main", "1.5.2", false],
+     ["1.5.1", nil, false]].each do |name, baseline, expected|
+      next if older_release?(name, baseline) == expected
+
+      warn "older_release?(#{name.inspect}, #{baseline.inspect}): expected #{expected}"
+      failures << :older_release
+    end
+    begin
+      Report.new("Leaf changes summary: 1 artifact changed\n\n?? a shape the parser does not know\n")
+      warn "unrecognised line: no error raised"
+      failures << :unrecognised
+    rescue ToolError
+      nil
+    end
+    puts failures.empty? ? "ok" : "#{failures.size} failures"
+    failures.empty? ? 0 : 1
+  end
+
+  def self.main(argv)
+    limit = 20
+    parser = OptionParser.new do |o|
+      o.banner = "usage: bin/check-abi {compare OLD NEW | history [SONAME] | record REF [NAME] | ci | tools-key | --self-test}"
+      o.on("--limit N", Integer, "deployments listed by history (default #{limit})") { |n| limit = n }
+    end
+    return self_test if argv.delete("--self-test")
+
+    command, *args = parser.parse(argv)
+    case command
+    when "compare"
+      raise Error, parser.banner unless args.size == 2
+
+      builder = Builder.new(dumps: ".abi-dumps", work: ".abi-work")
+      result = compare(resolve(args[0], builder), resolve(args[1], builder), label: args[0])
+      puts result.report, "", "#{result.summary} against #{args[0]}", *result.breaks
+      result.breaks.empty? ? 0 : 1
+    when "history"
+      history(GitHub.new, args[0], limit)
+      0
+    when "record"
+      raise Error, parser.banner unless [1, 2].include?(args.size)
+
+      name = args[1] || args[0]
+      sha = run("git", "rev-parse", "--verify", "#{args[0]}^{commit}", quiet: true).strip
+      soname = soname(run("git", "show", "#{sha}:CMakeLists.txt", quiet: true))
+      run_url = ENV.fetch("GITHUB_RUN_ID",
+                          nil) && "#{ENV.fetch('GITHUB_SERVER_URL',
+                                               nil)}/#{ENV.fetch('GITHUB_REPOSITORY', nil)}/actions/runs/#{ENV.fetch('GITHUB_RUN_ID', nil)}"
+      github = GitHub.new
+      current = github.baseline(soname)&.last
+      if older_release?(name, current)
+        puts "Not recorded: #{name} is older than #{current}, the baseline of abi-#{soname}"
+        return 0
+      end
+      github.record(sha, environment: "abi-#{soname}", description: name, log_url: run_url)
+      puts "Recorded #{name} (#{sha[0, 7]}) as the baseline of abi-#{soname}"
+      0
+    when "ci"
+      CI.new.run
+    when "tools-key"
+      puts tools_key
+      0
+    else
+      raise Error, parser.banner
+    end
+  rescue Error => e
+    warn e.message
+    e.status
+  rescue StandardError => e
+    warn e.full_message
+    3
+  end
+end
+
+exit CheckAbi.main(ARGV) if $PROGRAM_NAME == __FILE__
