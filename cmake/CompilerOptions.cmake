@@ -84,8 +84,10 @@ function(couchbase_optimize_third_party_target target_name)
     if(_target_type STREQUAL "STATIC_LIBRARY"
        OR _target_type STREQUAL "SHARED_LIBRARY"
        OR _target_type STREQUAL "OBJECT_LIBRARY")
-      target_compile_options(${target_name} PRIVATE $<$<COMPILE_LANGUAGE:C,CXX>:-ffunction-sections>
-                                                    $<$<COMPILE_LANGUAGE:C,CXX>:-fdata-sections>)
+      # -w: diagnostics in code this project does not maintain cannot be acted on here.
+      target_compile_options(
+        ${target_name} PRIVATE $<$<COMPILE_LANGUAGE:C,CXX>:-ffunction-sections>
+                               $<$<COMPILE_LANGUAGE:C,CXX>:-fdata-sections> $<$<COMPILE_LANGUAGE:C,CXX>:-w>)
       if(COUCHBASE_CXX_CLIENT_PACKAGE_BUILD)
         # Lowers the debug level of a build type that has one; never adds debug info to one that has not.
         target_compile_options(
