@@ -230,6 +230,58 @@ resource_info_selects_typed_not_found_and_exists([[maybe_unused]] context& ctx)
 }
 
 void
+rich_status_message_overload_maps_codes_and_details([[maybe_unused]] context& ctx)
+{
+  google::rpc::Status ok_status;
+  ok_status.set_code(static_cast<std::int32_t>(grpc::StatusCode::OK));
+  assert_false(static_cast<bool>(ps::map_status(ok_status, ps::operation_kind::read_only)),
+               "embedded OK status maps to no error");
+
+  google::rpc::Status path_missing;
+  path_missing.set_code(static_cast<std::int32_t>(grpc::StatusCode::NOT_FOUND));
+  assert_true(path_missing.add_details()->PackFrom(resource("path")), "PackFrom succeeded");
+  assert_true(ps::map_status(path_missing, ps::operation_kind::read_only) ==
+                couchbase::errc::key_value::path_not_found,
+              "embedded NOT_FOUND + ResourceInfo(path) -> path_not_found");
+
+  google::rpc::Status path_already_exists;
+  path_already_exists.set_code(static_cast<std::int32_t>(grpc::StatusCode::ALREADY_EXISTS));
+  assert_true(path_already_exists.add_details()->PackFrom(resource("path")), "PackFrom succeeded");
+  assert_true(ps::map_status(path_already_exists, ps::operation_kind::mutating) ==
+                couchbase::errc::key_value::path_exists,
+              "embedded ALREADY_EXISTS + ResourceInfo(path) -> path_exists");
+
+  google::rpc::Status mismatch;
+  mismatch.set_code(static_cast<std::int32_t>(grpc::StatusCode::FAILED_PRECONDITION));
+  assert_true(mismatch.add_details()->PackFrom(precondition("PATH_MISMATCH")),
+              "PackFrom succeeded");
+  assert_true(ps::map_status(mismatch, ps::operation_kind::read_only) ==
+                couchbase::errc::key_value::path_mismatch,
+              "embedded FAILED_PRECONDITION + PATH_MISMATCH -> path_mismatch");
+
+  google::rpc::Status too_deep;
+  too_deep.set_code(static_cast<std::int32_t>(grpc::StatusCode::FAILED_PRECONDITION));
+  assert_true(too_deep.add_details()->PackFrom(precondition("DOC_TOO_DEEP")), "PackFrom succeeded");
+  assert_true(ps::map_status(too_deep, ps::operation_kind::read_only) ==
+                couchbase::errc::key_value::path_too_deep,
+              "embedded FAILED_PRECONDITION + DOC_TOO_DEEP -> path_too_deep");
+
+  google::rpc::Status out_of_range;
+  out_of_range.set_code(static_cast<std::int32_t>(grpc::StatusCode::FAILED_PRECONDITION));
+  assert_true(out_of_range.add_details()->PackFrom(precondition("VALUE_OUT_OF_RANGE")),
+              "PackFrom succeeded");
+  assert_true(ps::map_status(out_of_range, ps::operation_kind::mutating) ==
+                couchbase::errc::key_value::value_invalid,
+              "embedded FAILED_PRECONDITION + VALUE_OUT_OF_RANGE -> value_invalid");
+
+  google::rpc::Status bad_path;
+  bad_path.set_code(static_cast<std::int32_t>(grpc::StatusCode::INVALID_ARGUMENT));
+  assert_true(ps::map_status(bad_path, ps::operation_kind::read_only) ==
+                couchbase::errc::common::invalid_argument,
+              "embedded INVALID_ARGUMENT -> invalid_argument");
+}
+
+void
 error_message_prefers_rich_details([[maybe_unused]] context& ctx)
 {
   google::rpc::Status rich;
@@ -246,6 +298,49 @@ error_message_prefers_rich_details([[maybe_unused]] context& ctx)
   assert_eq(ps::error_message(without_details),
             std::string{ "generic grpc message" },
             "falls back to the gRPC message");
+
+  const couchbase::core::document_id id{ "b", "s", "c", "k" };
+  google::rpc::ResourceInfo path_info;
+  path_info.set_resource_type("path");
+  path_info.set_resource_name("b/s/c/k/sub.field");
+  assert_eq(ps::subdoc_error_path(status_with_detail(grpc::StatusCode::NOT_FOUND, path_info), id),
+            std::optional<std::string>{ "sub.field" },
+            "subdoc_error_path extracts and strips ResourceInfo.resource_name for path resources");
+  google::rpc::PreconditionFailure path_mismatch;
+  auto* v = path_mismatch.add_violations();
+  v->set_type("PATH_MISMATCH");
+  v->set_subject("document/b/s/c/k/sub.field");
+  assert_eq(ps::subdoc_error_path(
+              status_with_detail(grpc::StatusCode::FAILED_PRECONDITION, path_mismatch), id),
+            std::optional<std::string>{ "sub.field" },
+            "subdoc_error_path extracts and strips PreconditionFailure.subject for PATH_MISMATCH");
+
+  const couchbase::core::document_id doc_id{ "document", "document", "document", "document" };
+  google::rpc::ResourceInfo doc_prefixed_path_info;
+  doc_prefixed_path_info.set_resource_type("path");
+  doc_prefixed_path_info.set_resource_name("document/document/document/document/document/a.b");
+  assert_eq(
+    ps::subdoc_error_path(status_with_detail(grpc::StatusCode::NOT_FOUND, doc_prefixed_path_info),
+                          doc_id),
+    std::optional<std::string>{ "document/a.b" },
+    "ResourceInfo strips only the 4-part document prefix so paths starting with document/ survive");
+  google::rpc::PreconditionFailure doc_prefixed_mismatch;
+  auto* dv = doc_prefixed_mismatch.add_violations();
+  dv->set_type("PATH_MISMATCH");
+  dv->set_subject("document/document/document/document/document/a.b");
+  assert_eq(
+    ps::subdoc_error_path(
+      status_with_detail(grpc::StatusCode::FAILED_PRECONDITION, doc_prefixed_mismatch), doc_id),
+    std::optional<std::string>{ "a.b" },
+    "PreconditionFailure strips the 5-part document/<b/s/c/k>/ prefix even when all parts are "
+    "'document'");
+
+  assert_false(
+    ps::subdoc_error_path(status_with_detail(grpc::StatusCode::NOT_FOUND, resource("bucket")), id)
+      .has_value(),
+    "subdoc_error_path ignores non-path ResourceInfo");
+  assert_false(ps::subdoc_error_path(without_details, id).has_value(),
+               "subdoc_error_path returns nullopt when no ResourceInfo is present");
 }
 
 void
@@ -308,6 +403,7 @@ tests() -> test_suite
       { CASE(deadline_exceeded_depends_on_the_operation_kind) },
       { CASE(precondition_details_map_to_specific_kv_errors) },
       { CASE(resource_info_selects_typed_not_found_and_exists) },
+      { CASE(rich_status_message_overload_maps_codes_and_details) },
       { CASE(error_message_prefers_rich_details) },
       { CASE(make_error_context_maps_code_and_attaches_message) },
       { CASE(retry_reason_for_classifies_retryable_errors) },
