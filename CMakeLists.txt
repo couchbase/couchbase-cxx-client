@@ -575,6 +575,28 @@ if(COUCHBASE_CXX_CLIENT_BUILD_SHARED OR BUILD_SHARED_LIBS)
     couchbase_cxx_client
     PROPERTIES VERSION ${couchbase_cxx_client_VERSION}
                SOVERSION ${couchbase_cxx_client_VERSION_MAJOR}.${couchbase_cxx_client_VERSION_MINOR})
+  # The packaged library exports only the public API. Off this switch the integration tests link
+  # the shared library and use the asio it embeds, so it exports everything.
+  if(COUCHBASE_CXX_CLIENT_PACKAGE_BUILD AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    # cmake/GenerateExportMap.cmake decides which symbols are public and lists them by name.
+    set(_objects_list "${PROJECT_BINARY_DIR}/couchbase_cxx_client_objects.txt")
+    file(GENERATE OUTPUT "${_objects_list}" CONTENT "$<JOIN:$<TARGET_OBJECTS:couchbase_cxx_client_objects>,\n>\n")
+    file(GLOB_RECURSE _public_headers CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/couchbase/*.hxx")
+    set(_version_script "${PROJECT_BINARY_DIR}/couchbase_cxx_client.map")
+    add_custom_command(
+      OUTPUT "${_version_script}"
+      COMMAND
+        "${CMAKE_COMMAND}" -D "OBJECTS=${_objects_list}" -D "HEADERS_DIR=${PROJECT_SOURCE_DIR}/couchbase" -D
+        "NM=${CMAKE_NM}" -D "OUTPUT=${_version_script}" -P "${PROJECT_SOURCE_DIR}/cmake/GenerateExportMap.cmake"
+      DEPENDS couchbase_cxx_client_objects $<TARGET_OBJECTS:couchbase_cxx_client_objects> ${_public_headers}
+              "${PROJECT_SOURCE_DIR}/cmake/GenerateExportMap.cmake"
+      COMMENT "Listing the symbols libcouchbase_cxx_client exports"
+      VERBATIM)
+    add_custom_target(couchbase_cxx_client_exports DEPENDS "${_version_script}")
+    add_dependencies(couchbase_cxx_client couchbase_cxx_client_exports)
+    target_link_options(couchbase_cxx_client PRIVATE "LINKER:--version-script=${_version_script}")
+    set_target_properties(couchbase_cxx_client PROPERTIES LINK_DEPENDS "${_version_script}")
+  endif()
   list(APPEND couchbase_cxx_client_LIBRARIES couchbase_cxx_client)
   if(NOT WIN32)
     set(couchbase_cxx_client_DEFAULT_LIBRARY couchbase_cxx_client::couchbase_cxx_client)

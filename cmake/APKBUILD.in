@@ -44,6 +44,8 @@ unpack() {
 }
 
 build() {
+	# Examples are built, not shipped: linking them against the shared library fails the build when
+	# the export list cmake/GenerateExportMap.cmake writes omits a symbol the examples use.
 	cmake -B apk-build -S "${srcdir}" -G Ninja \
 		-DCMAKE_INSTALL_PREFIX=/usr \
 		-DCMAKE_BUILD_TYPE=MinSizeRel \
@@ -52,7 +54,7 @@ build() {
 		-DCOUCHBASE_CXX_CLIENT_INSTALL=ON \
 		-DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON \
 		-DCOUCHBASE_CXX_CLIENT_PACKAGE_BUILD=ON \
-		-DCOUCHBASE_CXX_CLIENT_BUILD_EXAMPLES=OFF \
+		-DCOUCHBASE_CXX_CLIENT_BUILD_EXAMPLES=ON \
 		-DCOUCHBASE_CXX_CLIENT_BUILD_TESTS=OFF \
 		-DCOUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY=ON \
 		-DCOUCHBASE_CXX_CLIENT_BUILD_TOOLS=ON \
