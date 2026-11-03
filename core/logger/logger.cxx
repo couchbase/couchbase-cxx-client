@@ -18,11 +18,15 @@
 #include <spdlog/async.h>
 #include <spdlog/async_logger.h>
 #include <spdlog/common.h>
+#include <spdlog/details/console_globals.h>
+#include <spdlog/details/fmt_helper.h>
 #include <spdlog/details/os.h>
 #include <spdlog/logger.h>
+#include <spdlog/pattern_formatter.h>
 #include <spdlog/sinks/dist_sink.h>
 #include <spdlog/sinks/null_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/sinks/stdout_sinks.h>
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
@@ -34,6 +38,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace
 {
@@ -41,11 +46,43 @@ const std::string file_logger_name{ "couchbase_cxx_client_file_logger" };
 const std::string protocol_logger_name{ "couchbase_cxx_client_protocol_logger" };
 
 /**
- * Custom log pattern which the loggers will use.
- * This pattern is duplicated for some test cases. If you need to update it,
- * please also update in all relevant places.
+ * Custom log pattern which the loggers will use. %* is the thread id; see thread_id_flag.
  */
-const std::string log_pattern{ "[%Y-%m-%d %T.%e] %4oms [%^%4!l%$] [%P,%t] %v" };
+const std::string log_pattern{ "[%Y-%m-%d %T.%e] %4oms [%^%4!l%$] [%P,%*] %v" };
+
+// spdlog caches each thread's id in a thread_local, so in a forked child the forking thread keeps
+// reporting its id in the parent. %* replaces that one stale id with the thread's id in the child.
+std::size_t forking_thread_id{ 0 }; // written by prepare, read by child, on the forking thread
+std::atomic<std::size_t> stale_thread_id{ 0 };
+std::atomic<std::size_t> forked_thread_id{ 0 };
+
+class thread_id_flag : public spdlog::custom_flag_formatter
+{
+public:
+  void format(const spdlog::details::log_msg& msg,
+              const std::tm& /* tm */,
+              spdlog::memory_buf_t& dest) override
+  {
+    auto id = msg.thread_id;
+    if (id == stale_thread_id.load(std::memory_order_relaxed)) {
+      id = forked_thread_id.load(std::memory_order_relaxed);
+    }
+    spdlog::details::fmt_helper::append_int(id, dest);
+  }
+
+  [[nodiscard]] auto clone() const -> std::unique_ptr<custom_flag_formatter> override
+  {
+    return std::make_unique<thread_id_flag>();
+  }
+};
+
+auto
+make_formatter() -> std::unique_ptr<spdlog::formatter>
+{
+  auto formatter = std::make_unique<spdlog::pattern_formatter>();
+  formatter->add_flag<thread_id_flag>('*').set_pattern(log_pattern);
+  return formatter;
+}
 
 /**
  * Instances of spdlog (async) file logger.
@@ -67,17 +104,18 @@ std::atomic_int log_callback_version{ 0 };
 // log_callback.
 std::atomic<bool> log_callback_present{ false };
 
+thread_local std::shared_ptr<spdlog::logger> cached_file_logger{ nullptr };
+thread_local int cached_file_logger_version{ -1 };
+
 auto
 get_file_logger() -> std::shared_ptr<spdlog::logger>
 {
-  thread_local std::shared_ptr<spdlog::logger> logger{ nullptr };
-  thread_local int version{ -1 };
-  if (version != file_logger_version) {
+  if (cached_file_logger_version != file_logger_version) {
     const std::scoped_lock lock(file_logger_mutex);
-    logger = file_logger;
-    version = file_logger_version;
+    cached_file_logger = file_logger;
+    cached_file_logger_version = file_logger_version;
   }
-  return logger;
+  return cached_file_logger;
 }
 
 auto
@@ -119,6 +157,78 @@ update_file_logger(const std::shared_ptr<spdlog::logger>& new_logger)
  * Instance of the protocol logger.
  */
 std::shared_ptr<spdlog::logger> protocol_logger{};
+
+std::atomic<bool> periodic_flusher_started{ false };
+
+std::mutex fork_mutex;
+std::mutex error_report_mutex;
+constexpr std::chrono::seconds periodic_flush_interval{ 1 };
+
+// replaces spdlog's default handler, whose mutex notify_fork() cannot hold across a fork
+void
+report_logger_error(const std::string& message)
+{
+  const std::scoped_lock lock(error_report_mutex);
+  static std::chrono::steady_clock::time_point last_report{};
+  const auto now = std::chrono::steady_clock::now();
+  if (now - last_report < std::chrono::seconds{ 1 }) {
+    return;
+  }
+  last_report = now;
+  // Without a lock of its own: console_mutex is taken before error_report_mutex in prepare. Never
+  // destroyed: an async logger can report an error during static destruction.
+  static auto* const sink = []() {
+    // NOLINTNEXTLINE(cppcoreguidelines-owning-memory)
+    auto* stderr_sink = new spdlog::sinks::stderr_sink_st();
+    stderr_sink->set_pattern("[couchbase logger error] %v");
+    return stderr_sink;
+  }();
+  try {
+    sink->log(spdlog::details::log_msg{ "", spdlog::level::err, message });
+  } catch (const std::exception&) { // NOLINT(bugprone-empty-catch)
+    // the report is dropped; an exception here would escape spdlog and end the logging thread
+  }
+}
+
+// Destroying them in the child would write to the parent's files and join missing threads. Runs
+// with the fork locks held, so no thread the child starts can read file_logger before the reset.
+void
+abandon_inherited_loggers()
+{
+  // NOLINTNEXTLINE(cppcoreguidelines-owning-memory)
+  static auto* inherited = new std::vector<std::shared_ptr<void>>();
+  spdlog::apply_all([](const std::shared_ptr<spdlog::logger>& logger) {
+    inherited->push_back(logger);
+  });
+  if (cached_file_logger) {
+    inherited->push_back(cached_file_logger);
+  }
+  if (protocol_logger) {
+    inherited->push_back(protocol_logger);
+    protocol_logger.reset();
+  }
+  if (auto pool = spdlog::details::registry::instance().get_tp(); pool) {
+    inherited->push_back(pool);
+    spdlog::details::registry::instance().set_tp(nullptr);
+  }
+  spdlog::drop_all();
+  if (file_logger) {
+    inherited->push_back(file_logger);
+    file_logger.reset();
+  }
+  ++file_logger_version;
+  periodic_flusher_started = false;
+}
+
+void
+release_fork_locks()
+{
+  error_report_mutex.unlock();
+  spdlog::details::console_mutex::mutex().unlock();
+  custom_rotating_file_sink_mt::unlock_all_after_fork();
+  log_callback_mutex.unlock();
+  file_logger_mutex.unlock();
+}
 } // namespace
 
 namespace couchbase::core::logger
@@ -257,12 +367,51 @@ shutdown()
    */
   get_file_logger().reset();
   spdlog::details::registry::instance().shutdown();
+  periodic_flusher_started = false;
 }
 
 auto
 is_initialized() -> bool
 {
   return get_file_logger() != nullptr;
+}
+
+void
+notify_fork(couchbase::fork_event event)
+{
+  switch (event) {
+    case couchbase::fork_event::prepare:
+      fork_mutex.lock();
+      forking_thread_id = spdlog::details::os::thread_id();
+      if (periodic_flusher_started) {
+        spdlog::flush_every(std::chrono::seconds::zero());
+      }
+      file_logger_mutex.lock();
+      log_callback_mutex.lock();
+      custom_rotating_file_sink_mt::lock_all_for_fork();
+      spdlog::details::console_mutex::mutex().lock();
+      error_report_mutex.lock();
+      break;
+
+    case couchbase::fork_event::parent: {
+      // released even when starting the flusher thread throws
+      const std::unique_lock fork_lock(fork_mutex, std::adopt_lock);
+      release_fork_locks();
+      if (periodic_flusher_started) {
+        spdlog::flush_every(periodic_flush_interval);
+      }
+      break;
+    }
+
+    case couchbase::fork_event::child: {
+      const std::unique_lock fork_lock(fork_mutex, std::adopt_lock);
+      forked_thread_id.store(spdlog::details::os::_thread_id(), std::memory_order_relaxed);
+      stale_thread_id.store(forking_thread_id, std::memory_order_relaxed);
+      abandon_inherited_loggers();
+      release_fork_locks();
+      break;
+    }
+  }
 }
 
 namespace
@@ -332,7 +481,7 @@ create_file_logger_impl(const std::string& logger_name, const configuration& log
         cyclesz = 1024LLU * 1024 * 1024; // use up to 1 GB log file size
       }
 
-      auto fsink = std::make_shared<custom_rotating_file_sink_mt>(fname, cyclesz, log_pattern);
+      auto fsink = std::make_shared<custom_rotating_file_sink_mt>(fname, cyclesz, make_formatter());
       fsink->set_level(spdlog::level::trace);
       sink->add_sink(fsink);
     }
@@ -341,12 +490,12 @@ create_file_logger_impl(const std::string& logger_name, const configuration& log
       auto stderrsink = std::make_shared<spdlog::sinks::stderr_color_sink_mt>();
 
       // Set the formatting pattern of this sink
-      stderrsink->set_pattern(log_pattern);
+      stderrsink->set_formatter(make_formatter());
       stderrsink->set_level(translate_level(logger_settings.console_sink_log_level));
       sink->add_sink(stderrsink);
     }
     if (nullptr != logger_settings.sink) {
-      logger_settings.sink->set_pattern(log_pattern);
+      logger_settings.sink->set_formatter(make_formatter());
       sink->add_sink(logger_settings.sink);
     }
 
@@ -366,11 +515,13 @@ create_file_logger_impl(const std::string& logger_name, const configuration& log
         logger_name, sink, tp, spdlog::async_overflow_policy::block);
     }
 
-    logger->set_pattern(log_pattern);
+    logger->set_formatter(make_formatter());
+    logger->set_error_handler(report_logger_error);
     logger->set_level(translate_level(logger_settings.log_level));
 
     // Set the flushing interval policy
-    spdlog::flush_every(std::chrono::seconds(1));
+    spdlog::flush_every(periodic_flush_interval);
+    periodic_flusher_started = true;
 
     spdlog::register_logger(logger);
   } catch (const spdlog::spdlog_ex& ex) {
@@ -450,7 +601,7 @@ create_blackhole_logger()
   auto new_logger = std::make_shared<spdlog::logger>(
     file_logger_name, std::make_shared<spdlog::sinks::null_sink_mt>());
   new_logger->set_level(spdlog::level::off);
-  new_logger->set_pattern(log_pattern);
+  new_logger->set_formatter(make_formatter());
 
   update_file_logger(new_logger);
 }
@@ -461,7 +612,8 @@ create_console_logger()
   auto stderrsink = std::make_shared<spdlog::sinks::stderr_color_sink_mt>();
   auto new_logger = std::make_shared<spdlog::logger>(file_logger_name, stderrsink);
   new_logger->set_level(spdlog::level::info);
-  new_logger->set_pattern(log_pattern);
+  new_logger->set_formatter(make_formatter());
+  new_logger->set_error_handler(report_logger_error);
   update_file_logger(new_logger);
 }
 

@@ -50,9 +50,12 @@ class custom_rotating_file_sink : public spdlog::sinks::base_sink<Mutex>
 public:
   custom_rotating_file_sink(const spdlog::filename_t& base_filename,
                             std::size_t max_size,
-                            const std::string& log_pattern);
+                            std::unique_ptr<spdlog::formatter> log_formatter);
 
   ~custom_rotating_file_sink() override;
+
+  static void lock_all_for_fork();
+  static void unlock_all_after_fork();
 
 protected:
   // Explicitly instantiated in custom_rotating_file_sink.cxx
@@ -70,7 +73,7 @@ private:
   const std::size_t max_size_;
   std::unique_ptr<spdlog::details::file_helper> file_helper_;
   std::size_t current_size_{ 0 };
-  std::unique_ptr<spdlog::pattern_formatter> formatter;
+  std::unique_ptr<spdlog::formatter> formatter;
   unsigned long next_file_id_;
 
   const std::string opening_log_file_{ "---------- Opening logfile: " };

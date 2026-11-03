@@ -27,7 +27,10 @@
 #include <algorithm>
 #include <gsl/assert>
 #include <memory>
+#include <mutex>
+#include <set>
 #include <spdlog/details/file_helper.h>
+#include <utility>
 
 namespace
 {
@@ -63,19 +66,40 @@ find_first_logfile_id(const std::string& basename) -> unsigned long
 }
 } // namespace
 
+namespace
+{
+template<class Sink>
+struct live_sinks {
+  std::mutex mutex{};
+  std::set<Sink*> sinks{};
+};
+
+template<class Sink>
+auto
+live_sinks_of() -> live_sinks<Sink>&
+{
+  // never destroyed: a sink owned by another static can be destroyed after it
+  static auto* registry = new live_sinks<Sink>(); // NOLINT(cppcoreguidelines-owning-memory)
+  return *registry;
+}
+} // namespace
+
 template<class Mutex>
-custom_rotating_file_sink<Mutex>::custom_rotating_file_sink(const spdlog::filename_t& base_filename,
-                                                            std::size_t max_size,
-                                                            const std::string& log_pattern)
+custom_rotating_file_sink<Mutex>::custom_rotating_file_sink(
+  const spdlog::filename_t& base_filename,
+  std::size_t max_size,
+  std::unique_ptr<spdlog::formatter> log_formatter)
   : base_filename_{ base_filename }
   , max_size_{ max_size }
   , file_helper_{ open_file() }
   , current_size_{ file_helper_->size() } // expensive. called only once
-  , formatter{ std::make_unique<spdlog::pattern_formatter>(log_pattern,
-                                                           spdlog::pattern_time_type::local) }
+  , formatter{ std::move(log_formatter) }
   , next_file_id_{ find_first_logfile_id(base_filename) }
 {
   add_hook(opening_log_file_);
+  auto& registry = live_sinks_of<custom_rotating_file_sink<Mutex>>();
+  const std::scoped_lock lock(registry.mutex);
+  registry.sinks.insert(this);
 }
 
 /* In addition to the functionality of spdlog's rotating_file_sink,
@@ -153,7 +177,39 @@ custom_rotating_file_sink<Mutex>::open_file() -> std::unique_ptr<spdlog::details
 template<class Mutex>
 custom_rotating_file_sink<Mutex>::~custom_rotating_file_sink()
 {
+  // registry lock held until the file is closed, so a fork never copies an unflushed file
+  auto& registry = live_sinks_of<custom_rotating_file_sink<Mutex>>();
+  const std::scoped_lock lock(registry.mutex);
+  registry.sinks.erase(this);
   add_hook(closing_log_file_);
+  file_helper_.reset();
+}
+
+template<class Mutex>
+void
+custom_rotating_file_sink<Mutex>::lock_all_for_fork()
+{
+  auto& registry = live_sinks_of<custom_rotating_file_sink<Mutex>>();
+  registry.mutex.lock();
+  for (auto* sink : registry.sinks) {
+    sink->mutex_.lock();
+    try {
+      sink->file_helper_->flush();
+    } catch (const spdlog::spdlog_ex&) { // NOLINT(bugprone-empty-catch)
+      // a failed flush is ignored; the sink stays locked until unlock_all_after_fork()
+    }
+  }
+}
+
+template<class Mutex>
+void
+custom_rotating_file_sink<Mutex>::unlock_all_after_fork()
+{
+  auto& registry = live_sinks_of<custom_rotating_file_sink<Mutex>>();
+  for (auto* sink : registry.sinks) {
+    sink->mutex_.unlock();
+  }
+  registry.mutex.unlock();
 }
 
 template class custom_rotating_file_sink<std::mutex>;
