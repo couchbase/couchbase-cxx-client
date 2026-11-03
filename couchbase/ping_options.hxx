@@ -18,6 +18,7 @@
 #pragma once
 
 #include <couchbase/common_options.hxx>
+#include <couchbase/error.hxx>
 #include <couchbase/ping_result.hxx>
 #include <couchbase/service_type.hxx>
 

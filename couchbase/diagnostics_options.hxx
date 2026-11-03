@@ -19,7 +19,9 @@
 
 #include <couchbase/common_options.hxx>
 #include <couchbase/diagnostics_result.hxx>
+#include <couchbase/error.hxx>
 
+#include <functional>
 #include <optional>
 #include <utility>
 

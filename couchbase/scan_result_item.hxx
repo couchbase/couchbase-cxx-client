@@ -24,6 +24,7 @@
 #include <couchbase/result.hxx>
 
 #include <chrono>
+#include <memory>
 #include <optional>
 #include <string>
 #include <type_traits>

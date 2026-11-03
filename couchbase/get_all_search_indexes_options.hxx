@@ -18,6 +18,7 @@
 #pragma once
 
 #include <couchbase/common_options.hxx>
+#include <couchbase/error.hxx>
 #include <couchbase/management/search_index.hxx>
 
 #include <functional>

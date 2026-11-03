@@ -20,6 +20,7 @@
 #include <couchbase/search_facet_result.hxx>
 #include <couchbase/search_numeric_range.hxx>
 
+#include <memory>
 #include <string>
 #include <vector>
 

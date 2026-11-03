@@ -18,6 +18,7 @@
 #pragma once
 
 #include <couchbase/common_options.hxx>
+#include <couchbase/error.hxx>
 #include <couchbase/error_codes.hxx>
 #include <couchbase/management/analytics_dataset.hxx>
 

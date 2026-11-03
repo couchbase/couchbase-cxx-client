@@ -18,6 +18,7 @@
 #pragma once
 
 #include <optional>
+#include <string_view>
 #include <vector>
 
 namespace couchbase::subdoc
