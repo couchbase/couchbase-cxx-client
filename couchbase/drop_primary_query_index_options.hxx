@@ -18,8 +18,10 @@
 #pragma once
 
 #include <couchbase/common_options.hxx>
+#include <couchbase/error.hxx>
 #include <couchbase/error_codes.hxx>
 
+#include <functional>
 #include <optional>
 #include <string>
 

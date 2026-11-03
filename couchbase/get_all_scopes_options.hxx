@@ -17,12 +17,15 @@
 
 #pragma once
 
+#include <couchbase/common_options.hxx>
+#include <couchbase/error.hxx>
 #include <couchbase/management/scope_spec.hxx>
 
 #include <functional>
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace couchbase
 {

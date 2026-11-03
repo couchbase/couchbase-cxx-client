@@ -19,6 +19,7 @@
 
 #include <couchbase/codec/default_json_transcoder.hxx>
 #include <couchbase/common_options.hxx>
+#include <couchbase/error.hxx>
 
 #include <functional>
 #include <memory>

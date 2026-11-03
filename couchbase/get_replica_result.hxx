@@ -20,6 +20,7 @@
 #include <couchbase/codec/default_json_transcoder.hxx>
 #include <couchbase/result.hxx>
 
+#include <memory>
 #include <vector>
 
 namespace couchbase
