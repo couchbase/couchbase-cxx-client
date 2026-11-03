@@ -1,0 +1,522 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+#  Copyright 2026-Present Couchbase, Inc.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+
+# Checks the symbols the packaged shared library exports against the public headers, independently
+# of cmake/GenerateExportMap.cmake. The generator decides from the text of the headers with regular
+# expressions. This script asks the compilers: clang's AST for what the headers declare and call,
+# and the undefined symbols of a GCC object that compiles every inline function of the headers.
+#
+#   bin/check-export-map BUILD_DIR            check a package build with OpenTelemetry, which
+#                                             couchbase/metrics/otel_meter.hxx and
+#                                             couchbase/tracing/otel_tracer.hxx include
+#   bin/check-export-map --build BUILD_DIR    configure and build the library and examples there first
+#   bin/check-export-map --self-test
+#
+# The headers compile against what an application has: couchbase/, the tao/json and PEGTL headers
+# the development package ships, OpenTelemetry for the two headers above, and {fmt} for
+# couchbase/fmt/, whose headers specialise fmt::formatter after the application includes
+# <fmt/format.h>.
+#
+# Checks, each reported on its own:
+#
+#   headers       every public header compiles on its own, and includes nothing else from outside
+#                 couchbase/ and the standard library
+#   map-applied   the library exports exactly the global list of the generated version script
+#   no-leaks      every exported symbol is in couchbase:: outside couchbase::core, or belongs to an
+#                 entry of COUCHBASE_PUBLIC_CORE_FUNCTIONS
+#   declarations  everything an application can link against is exported: each function and
+#                 variable the headers declare without a definition, outside couchbase::core,
+#                 including members of std:: specialisations over couchbase types and operators at
+#                 global scope; and each couchbase:: symbol their inline functions refer to
+#   core-list     the couchbase::core functions the headers use inline are exactly those
+#                 COUCHBASE_PUBLIC_CORE_FUNCTIONS names: one missing fails to link, one extra is
+#                 stale
+#   typeinfo      no class the headers declare keeps its typeinfo or vtable local, which would break
+#                 dynamic_cast, exceptions and derived classes in an application
+#
+# Neither compiler instantiates the headers' templates, so a call that depends on a template
+# argument is seen only by clang, and only when it resolves to a function rather than a function
+# template.
+#
+# Exit status: 0 every check passed, 1 a check failed, 2 the inputs could not be read or built.
+
+require "English"
+require "etc"
+require "fileutils"
+require "json"
+require "open3"
+require "optparse"
+require "set"
+require "shellwords"
+require "tmpdir"
+
+# CMakeLists.txt and the headers are not ASCII, and a CI container has no locale.
+Encoding.default_external = Encoding::UTF_8
+
+module CheckExportMap
+  class Error < StandardError; end
+  class HeadersError < Error; end
+
+  LIBRARY = "libcouchbase_cxx_client.so"
+  MAP = "couchbase_cxx_client.map"
+  GENERATOR = "cmake/GenerateExportMap.cmake"
+  # Third-party include prefixes a public header may use, and who provides them.
+  THIRD_PARTY = {
+    "tao" => "the development package",
+    "opentelemetry" => "the application, for couchbase/metrics/otel_meter.hxx and couchbase/tracing/otel_tracer.hxx",
+    "fmt" => "the application, for couchbase/fmt/"
+  }.freeze
+
+  def self.capture(*args, stdin: nil)
+    out, err, status = Open3.capture3(*args, stdin_data: stdin)
+    raise Error, "#{args.first(3).join(' ')} failed with #{status}:\n#{err}" unless status.success?
+
+    out
+  end
+
+  def self.demangle(names)
+    return {} if names.empty?
+
+    names.zip(capture("c++filt", stdin: names.join("\n")).lines(chomp: true)).to_h
+  end
+
+  # The entries of set(COUCHBASE_PUBLIC_CORE_FUNCTIONS ...). Comments go first: they name calls
+  # such as make_error_code(), whose parenthesis would end the list.
+  def self.listed_core_functions(cmake)
+    body = cmake.gsub(/#[^\n]*/, "")[/^set\(COUCHBASE_PUBLIC_CORE_FUNCTIONS\b([^)]*)\)/m, 1]
+    raise Error, "#{GENERATOR} defines no COUCHBASE_PUBLIC_CORE_FUNCTIONS" unless body
+
+    body.split
+  end
+
+  # The global names of a version script.
+  def self.map_globals(map)
+    global = map[/global:(.*?)local:/m, 1] or raise Error, "#{MAP} has no global: section"
+    global.split(/[;\s]+/).reject(&:empty?)
+  end
+
+  STD_SUBSTITUTIONS = %w[St Sa Sb Ss Si So Sd].freeze
+
+  # The namespaces a mangled name starts in, outermost first: ["couchbase", "core", ...], ["std"],
+  # or [] for the global namespace. Read from the Itanium mangling rather than the demangled text,
+  # where a function template's return type comes first.
+  def self.scope(mangled)
+    s = mangled.dup
+    return [] unless s.delete_prefix!("_Z")
+
+    loop do
+      # Special names: vtable, VTT, typeinfo and its name, guard variable, TLS init and wrapper,
+      # thunks with their call offsets, and local entities, which belong to the enclosing function.
+      break unless s.sub!(/\A(?:T[VTIS]|GV|T[HW]|Th n?\d+_|Tv n?\d+_n?\d+_|Tc(?:h n?\d+_|v n?\d+_n?\d+_){2}|Z)/x, "")
+    end
+    nested = s.delete_prefix!("N")
+    s.sub!(/\A[rVK]*[RO]?/, "") if nested
+    return ["std"] if STD_SUBSTITUTIONS.any? { |p| s.start_with?(p) }
+
+    names = []
+    while (m = s.match(/\A(\d+)/))
+      length = m[1].to_i
+      names << s[m[1].size, length]
+      s = s[(m[1].size + length)..]
+      break unless nested
+    end
+    # An unscoped name is global; only a nested name's leading components are namespaces.
+    nested ? names : []
+  end
+
+  # The entity a demangled name of the couchbase::core namespace refers to, without its parameters
+  # and ABI tags.
+  def self.core_entity(demangled)
+    demangled.sub(/\A.*? (?=couchbase::core::)/, "").gsub(/\[abi:[^\]]*\]/, "").sub(/\(.*\z/m, "")
+  end
+
+  def self.covered?(entity, core_functions)
+    core_functions.any? { |f| entity == f || entity.start_with?("#{f}::") }
+  end
+
+  def self.public_symbol?(mangled, demangled, core_functions)
+    scope = scope(mangled)
+    return false unless scope.first == "couchbase"
+    return true unless scope[1] == "core"
+
+    covered?(core_entity(demangled), core_functions)
+  end
+
+  # Declarations and inline uses of the public headers, from clang's JSON AST of a translation unit
+  # that includes every one of them. The dump holds the declarations whose qualified names match a
+  # filter, each as one top-level object.
+  class Ast
+    FUNCTIONS = %w[FunctionDecl CXXMethodDecl CXXConstructorDecl CXXDestructorDecl CXXConversionDecl].freeze
+    TEMPLATES = %w[FunctionTemplateDecl ClassTemplateDecl ClassTemplatePartialSpecializationDecl].freeze
+
+    attr_reader :declared, :called
+
+    def initialize(*dumps)
+      @nodes = {}
+      @declared = Set.new
+      @defined = Set.new
+      @references = Set.new
+      dumps.each do |json|
+        json.split(/(?<=^\})\n(?=\{)/).each { |chunk| walk(JSON.parse(chunk, allow_duplicate_key: true), nil, false, false) }
+      end
+      # A declaration whose definition follows elsewhere in a header, inline, is not required.
+      @declared -= @defined
+      @called = @references.filter_map { |id| @nodes[id] }.map { |n| n["mangledName"] }.to_set - @defined
+    end
+
+    private
+
+    def defined_here?(node)
+      node["inline"] || node["constexpr"] || (node["inner"] || []).any? { |c| c["kind"] == "CompoundStmt" }
+    end
+
+    def walk(node, parent, in_template, in_function)
+      kind = node["kind"]
+      in_template ||= TEMPLATES.include?(kind)
+      if (FUNCTIONS.include?(kind) || kind == "VarDecl") && node["mangledName"] && !in_function
+        @nodes[node["id"]] = node
+        if defined_here?(node)
+          @defined << node["mangledName"]
+        elsif !in_template && out_of_line?(node, parent)
+          @declared << node["mangledName"]
+        end
+      end
+      case kind
+      when "DeclRefExpr" then @references << node.dig("referencedDecl", "id")
+      when "MemberExpr" then @references << node["referencedMemberDecl"]
+      when "UnresolvedLookupExpr" then (node["lookups"] || []).each { |l| @references << l["id"] }
+      end
+      in_function ||= FUNCTIONS.include?(kind)
+      (node["inner"] || []).each { |child| walk(child, kind, in_template, in_function) }
+    end
+
+    # A declaration the library has to define: nothing makes the compiler generate it in the
+    # application.
+    def out_of_line?(node, parent)
+      return false if node["isImplicit"] || node["explicitlyDeleted"] || node["explicitlyDefaulted"] || node["pure"]
+      return true unless node["kind"] == "VarDecl"
+      # A static data member needs the library's definition when it is ODR-used, initialiser or not.
+      return true if parent == "CXXRecordDecl" && node["storageClass"] == "static"
+
+      node["storageClass"] == "extern" || (node["storageClass"] == "static" && !node["inner"])
+    end
+  end
+
+  class Checker
+    Result = Struct.new(:name, :failures)
+
+    def initialize(build_dir, clang: "clang++", gcc: "g++", jobs: Etc.nprocessors)
+      @build = File.expand_path(build_dir)
+      cache = read(File.join(@build, "CMakeCache.txt"))
+      unless cache.match?(/^COUCHBASE_CXX_CLIENT_PACKAGE_BUILD:BOOL=ON$/)
+        raise Error, "#{@build} is not a package build: only a package build exports just the public API"
+      end
+      unless cache.match?(/^COUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY:BOOL=ON$/)
+        raise Error, "#{@build} is built without OpenTelemetry, whose headers two public headers include"
+      end
+
+      @source = cache[/^CMAKE_HOME_DIRECTORY:INTERNAL=(.*)$/, 1]
+      @clang = clang
+      @gcc = gcc
+      @jobs = jobs
+      @core_functions = CheckExportMap.listed_core_functions(read(File.join(@source, GENERATOR)))
+      @library = File.join(@build, LIBRARY)
+      @exported = CheckExportMap.capture("nm", "-D", "--defined-only", "--format=just-symbols", @library).lines(chomp: true).to_set
+    end
+
+    # The checks that read the compilers' output need the public headers to compile together; when
+    # they do not, those checks fail with the compiler's message rather than pass unrun.
+    def results
+      Dir.mktmpdir do |dir|
+        @public = File.join(dir, "include")
+        FileUtils.mkdir_p(@public)
+        File.symlink(File.join(@source, "couchbase"), File.join(@public, "couchbase"))
+        first = [headers, map_applied, no_leaks]
+        begin
+          ast = Ast.new(ast_json("couchbase::"), ast_json("operator"))
+          referenced = inline_references(dir)
+        rescue HeadersError => e
+          return first + %w[declarations core-list typeinfo].map { |name| Result.new(name, ["not run: #{e.message}"]) }
+        end
+        first + [declarations(ast, referenced), core_list(ast, referenced), typeinfo(ast)]
+      end
+    end
+
+    private
+
+    def read(path)
+      File.read(path)
+    rescue Errno::ENOENT
+      raise Error, "#{path} does not exist"
+    end
+
+    def headers_list
+      Dir.chdir(@source) { Dir["couchbase/**/*.hxx"].sort }
+    end
+
+    def include_line(header)
+      prefix = header.start_with?("couchbase/fmt/") ? "#include <fmt/format.h>\n" : ""
+      "#{prefix}#include <#{header}>\n"
+    end
+
+    def translation_unit
+      headers_list.map { |h| include_line(h) }.uniq.join
+    end
+
+    def commands
+      @commands ||= JSON.parse(read(File.join(@build, "compile_commands.json"))).map do |c|
+        [c["file"], c["arguments"] || Shellwords.split(c["command"])]
+      end
+    end
+
+    # The definitions CMake gives the project's examples, which compile against the public headers
+    # as an application does, and the include directories that provide THIRD_PARTY: the tree
+    # holding couchbase/ is not one of them, so a header reaching into core/ fails to compile.
+    def flags
+      @flags ||= begin
+        examples = File.join(@source, "examples") + "/"
+        _, example = commands.find { |file, _| file.start_with?(examples) && file.end_with?(".cxx") }
+        raise Error, "#{@build} compiles no examples; build it with COUCHBASE_CXX_CLIENT_BUILD_EXAMPLES=ON" unless example
+
+        directories = commands.flat_map do |_, args|
+          args.each_with_index.filter_map do |arg, i|
+            if arg == "-I" || arg == "-isystem" then args[i + 1]
+            elsif arg.start_with?("-I") then arg[2..]
+            end
+          end
+        end.uniq
+        third_party = directories.select { |d| THIRD_PARTY.keys.any? { |p| File.directory?(File.join(d, p)) } }
+        ["-std=c++17", *example.grep(/\A-D/), "-I", @public, *third_party.flat_map { |d| ["-I", d] }]
+      end
+    end
+
+    def compile(source, *extra)
+      Open3.capture3(@clang, *flags, "-fsyntax-only", *extra, "-x", "c++", "-", stdin_data: source)
+    end
+
+    def ast_json(filter)
+      out, err, status = compile(translation_unit, "-Xclang", "-ast-dump=json", "-Xclang", "-ast-dump-filter=#{filter}")
+      raise HeadersError, "the public headers do not compile together: #{err.lines.grep(/error:/).first&.strip}" unless status.success?
+
+      out
+    end
+
+    # The symbols the inline functions of the headers refer to. -fkeep-inline-functions makes GCC
+    # emit every inline function, used or not, with its own mangling of what it calls, including
+    # constructors and destructors, which clang's AST does not name.
+    def inline_references(dir)
+      object = File.join(dir, "headers.o")
+      _, err, status = Open3.capture3(@gcc, *flags, "-fkeep-inline-functions", "-c", "-x", "c++", "-", "-o", object,
+                                      stdin_data: translation_unit)
+      raise HeadersError, "the public headers do not compile together with #{@gcc}: #{err.lines.grep(/error:/).first&.strip}" unless status.success?
+
+      CheckExportMap.capture("nm", "--undefined-only", "--format=just-symbols", object).lines(chomp: true).to_set
+    end
+
+    def headers
+      flags
+      queue = Queue.new
+      headers_list.each { |h| queue << h }
+      failures = Queue.new
+      Array.new(@jobs) do
+        Thread.new do
+          while (header = queue.pop(true) rescue nil) # rubocop:disable Style/RescueModifier
+            _, err, status = compile(include_line(header))
+            failures << "#{header}: #{err.lines.grep(/error:/).first&.strip}" unless status.success?
+          end
+        end
+      end.each(&:join)
+      failures = Array.new(failures.size) { failures.pop }
+      headers_list.each do |header|
+        File.read(File.join(@source, header)).scan(/^\s*#\s*include\s*<([^>]+)>/).flatten.each do |included|
+          next if included.start_with?("couchbase/") || THIRD_PARTY.key?(included.split("/").first)
+          next unless included.include?("/") || included.end_with?(".hpp")
+
+          failures << "#{header}: includes <#{included}>, which an application does not have"
+        end
+      end
+      Result.new("headers", failures.sort)
+    end
+
+    def map_applied
+      listed = CheckExportMap.map_globals(read(File.join(@build, MAP))).to_set
+      failures = (@exported - listed).map { |s| "exported but not in #{MAP}: #{s}" } +
+                 (listed - @exported).map { |s| "in #{MAP} but not exported: #{s}" }
+      Result.new("map-applied", failures.sort)
+    end
+
+    def no_leaks
+      names = CheckExportMap.demangle(@exported.to_a)
+      failures = names.reject { |m, d| CheckExportMap.public_symbol?(m, d, @core_functions) }.map { |m, d| "#{d}  (#{m})" }
+      Result.new("no-leaks", failures.sort)
+    end
+
+    # What an application can link against: declarations without a definition anywhere outside
+    # couchbase::core whose names involve a couchbase type, and the couchbase:: symbols inline
+    # code refers to.
+    def declarations(ast, referenced)
+      declared = ast.declared.select { |m| m.include?("9couchbase") && CheckExportMap.scope(m)[0, 2] != %w[couchbase core] }
+      used = referenced.select { |m| CheckExportMap.scope(m).first == "couchbase" }
+      required = CheckExportMap.demangle((declared + used.to_a).uniq)
+      failures = required.reject { |m, _| @exported.include?(m) }.map do |m, d|
+        source = used.include?(m) ? "referred to by an inline function" : "declared"
+        "#{source}, not exported: #{d}  (#{m})"
+      end
+      Result.new("declarations", failures.sort)
+    end
+
+    def core_list(ast, referenced)
+      core = (ast.called.to_a + referenced.to_a).uniq.select { |m| CheckExportMap.scope(m)[0, 2] == %w[couchbase core] }
+      entities = CheckExportMap.demangle(core).values.map { |d| CheckExportMap.core_entity(d) }.to_set
+      missing = entities.reject { |e| CheckExportMap.covered?(e, @core_functions) }
+      stale = @core_functions.reject { |f| entities.any? { |e| CheckExportMap.covered?(e, [f]) } }
+      failures = missing.map { |e| "used inline by a public header, not in COUCHBASE_PUBLIC_CORE_FUNCTIONS: #{e}" } +
+                 stale.map { |f| "in COUCHBASE_PUBLIC_CORE_FUNCTIONS, not used by any public header: #{f}" }
+      Result.new("core-list", failures.sort)
+    end
+
+    def typeinfo(ast)
+      classes = CheckExportMap.demangle(ast.declared.to_a).values.filter_map do |d|
+        scope = d.sub(/\(.*\z/m, "")
+        scope.sub(/::[^:]+\z/, "") if scope.count(":") > 2
+      end.to_set
+      symbols = CheckExportMap.capture("nm", @library).lines(chomp: true)
+      return Result.new("typeinfo", ["#{@library} has no symbol table: it is stripped"]) if symbols.none? { |l| l.include?(" _ZT") }
+
+      local = symbols.filter_map do |line|
+        _, type, name = line.split(" ", 3)
+        name if type&.match?(/\A[a-z]\z/) && name&.match?(/\A_ZT[VIST]/)
+      end
+      failures = CheckExportMap.demangle(local).filter_map do |m, d|
+        "local: #{d}  (#{m})" if classes.include?(d.sub(/\A(?:typeinfo name for|typeinfo for|vtable for|VTT for) /, ""))
+      end
+      Result.new("typeinfo", failures.sort)
+    end
+  end
+
+  # The package configuration of the shared library, with OpenTelemetry as the packages build it.
+  def self.build(dir, source)
+    # In a workflow container, GITHUB_WORKSPACE is where actions/cache saves .ccache from.
+    ENV["CCACHE_DIR"] ||= File.join(ENV["GITHUB_WORKSPACE"], ".ccache") if ENV["GITHUB_WORKSPACE"]
+    capture("cmake", "-S", source, "-B", dir, "-G", "Ninja", "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
+            "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON", "-DCOUCHBASE_CXX_CLIENT_PACKAGE_BUILD=ON",
+            "-DCOUCHBASE_CXX_CLIENT_STATIC_BORINGSSL=ON", "-DCOUCHBASE_CXX_CLIENT_BUILD_STATIC=OFF",
+            "-DCOUCHBASE_CXX_CLIENT_BUILD_TESTS=OFF", "-DCOUCHBASE_CXX_CLIENT_BUILD_EXAMPLES=ON",
+            "-DCOUCHBASE_CXX_CLIENT_BUILD_TOOLS=OFF", "-DCOUCHBASE_CXX_CLIENT_BUILD_DOCS=OFF",
+            "-DCOUCHBASE_CXX_CLIENT_BUILD_OPENTELEMETRY=ON", "-DCOUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2=OFF",
+            *(system("ccache", "--version", out: File::NULL) ? %w[-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache] : []))
+    # The examples link against the library: a symbol the export list omits fails them here.
+    system("cmake", "--build", dir, "--target", "couchbase_cxx_client") or raise Error, "the library did not build"
+    system("cmake", "--build", dir) or raise Error, "the examples did not link against the library"
+  end
+
+  SELF_TEST_AST = <<~JSON
+    {
+      "id": "0x1", "kind": "CXXRecordDecl", "name": "cluster", "inner": [
+        { "id": "0x2", "kind": "CXXMethodDecl", "name": "close", "mangledName": "_ZN9couchbase7cluster5closeEv" },
+        { "id": "0x3", "kind": "CXXMethodDecl", "name": "ok", "mangledName": "_ZNK9couchbase7cluster2okEv",
+          "inner": [ { "kind": "CompoundStmt", "inner": [
+            { "kind": "VarDecl", "name": "local", "mangledName": "_ZZNK9couchbase7cluster2okEvE5local", "storageClass": "static" },
+            { "kind": "CallExpr", "inner": [ { "kind": "DeclRefExpr", "referencedDecl": { "id": "0x9", "name": "key_value_category" } } ] } ] } ] },
+        { "id": "0x4", "kind": "CXXMethodDecl", "name": "copy", "mangledName": "_ZN9couchbase7clusteraSERKS0_", "explicitlyDefaulted": "default" },
+        { "id": "0x5", "kind": "CXXMethodDecl", "name": "run", "mangledName": "_ZN9couchbase7cluster3runEv", "pure": true },
+        { "id": "0x8", "kind": "VarDecl", "name": "limit", "mangledName": "_ZN9couchbase7cluster5limitE", "storageClass": "static",
+          "inner": [ { "kind": "IntegerLiteral" } ] },
+        { "id": "0xa", "kind": "CXXMethodDecl", "name": "later", "mangledName": "_ZN9couchbase7cluster5laterEv" }
+      ]
+    }
+    {
+      "id": "0xb", "kind": "CXXMethodDecl", "name": "later", "mangledName": "_ZN9couchbase7cluster5laterEv", "inline": true,
+      "inner": [ { "kind": "CompoundStmt" } ]
+    }
+    {
+      "id": "0x6", "kind": "FunctionTemplateDecl", "name": "templated", "inner": [
+        { "id": "0x7", "kind": "FunctionDecl", "name": "templated", "mangledName": "_ZN9couchbase9templatedIT_EEvv" } ]
+    }
+    {
+      "id": "0x9", "kind": "FunctionDecl", "name": "key_value_category", "mangledName": "_ZN9couchbase4core4impl18key_value_categoryEv"
+    }
+  JSON
+
+  def self.self_test
+    failures = []
+    check = lambda do |name, actual, expected|
+      failures << "#{name}: expected #{expected.inspect}, got #{actual.inspect}" unless actual == expected
+    end
+    ast = Ast.new(SELF_TEST_AST)
+    check.call("declared", ast.declared.to_a.sort,
+               %w[_ZN9couchbase4core4impl18key_value_categoryEv _ZN9couchbase7cluster5closeEv _ZN9couchbase7cluster5limitE])
+    check.call("called", ast.called.to_a, %w[_ZN9couchbase4core4impl18key_value_categoryEv])
+    check.call("listed", listed_core_functions("set(COUCHBASE_PUBLIC_CORE_FUNCTIONS\n  # x.hxx: make_error_code()\n  a::b\n  c::d)\n"),
+               %w[a::b c::d])
+    check.call("globals", map_globals("{\n  global:\n    _Z1a;\n    _Z1b;\n  local:\n    *;\n};\n"), %w[_Z1a _Z1b])
+    {
+      "_ZN9couchbase7cluster5closeEv" => %w[couchbase cluster close],
+      "_ZNK9couchbase5error7messageB5cxx11Ev" => %w[couchbase error message],
+      "_ZTIN9couchbase5errorE" => %w[couchbase error],
+      "_ZTSN9couchbase5errorE" => %w[couchbase error],
+      "_ZGVZN9couchbase3fooEvE1x" => %w[couchbase foo],
+      "_ZThn8_N9couchbase7cluster5closeEv" => %w[couchbase cluster close],
+      "_ZN9couchbase4core4impl18key_value_categoryEv" => %w[couchbase core impl key_value_category],
+      "_ZNSt6vectorIiSaIiEE9push_backERKi" => ["std"],
+      "_ZSt8__invokeIRN9couchbase3fooEJEENSt15__invoke_resultIT_JDpT0_EE4typeEOS4_DpOS5_" => ["std"],
+      "_ZN4asio10io_context3runEv" => %w[asio io_context run],
+      "_ZplN9couchbase3pubES0_" => []
+    }.each { |m, expected| check.call("scope #{m}", scope(m), expected) }
+    core = %w[couchbase::core::impl::key_value_category couchbase::core::thing]
+    {
+      ["_ZN9couchbase4core4impl18key_value_categoryEv", "couchbase::core::impl::key_value_category()"] => true,
+      ["_ZN9couchbase4core4impl20key_value_category_xEv", "couchbase::core::impl::key_value_category_x()"] => false,
+      ["_ZN9couchbase4core5thingC2Ev", "couchbase::core::thing::thing()"] => true,
+      ["_ZN9couchbase4core7cluster4openEv", "couchbase::core::cluster::open()"] => false,
+      ["_ZSt8__invokeIRN9couchbase3fooEJEEvOS2_", "couchbase::error std::__invoke<couchbase::foo&>(couchbase::foo&)"] => false
+    }.each { |(m, d), expected| check.call("public_symbol? #{d}", public_symbol?(m, d, core), expected) }
+    check.call("core_entity", core_entity("std::string couchbase::core::impl::name[abi:cxx11](int)"), "couchbase::core::impl::name")
+    failures.each { |f| warn f }
+    puts failures.empty? ? "ok" : "#{failures.size} failures"
+    failures.empty? ? 0 : 1
+  end
+
+  def self.main(argv)
+    build = false
+    clang = ENV.fetch("CLANGXX", "clang++")
+    gcc = ENV.fetch("GXX", "g++")
+    parser = OptionParser.new do |o|
+      o.banner = "usage: bin/check-export-map [--build] [--clang PATH] [--gcc PATH] BUILD_DIR | --self-test"
+      o.on("--build", "configure and build the package library and examples in BUILD_DIR first") { build = true }
+      o.on("--clang PATH", "clang++ for the header checks and the AST (default $CLANGXX, else clang++)") { |c| clang = c }
+      o.on("--gcc PATH", "g++ for the inline functions (default $GXX, else g++)") { |g| gcc = g }
+    end
+    return self_test if argv.delete("--self-test")
+
+    dir, = parser.parse(argv)
+    raise Error, parser.banner unless dir
+
+    self.build(dir, File.expand_path("..", __dir__)) if build
+    results = Checker.new(dir, clang: clang, gcc: gcc).results
+    results.each do |result|
+      puts "#{result.failures.empty? ? 'PASS' : 'FAIL'} #{result.name}"
+      result.failures.each { |f| puts "  #{f}" }
+    end
+    results.all? { |r| r.failures.empty? } ? 0 : 1
+  rescue Error => e
+    warn e.message
+    2
+  end
+end
+
+exit CheckExportMap.main(ARGV) if $PROGRAM_NAME == __FILE__

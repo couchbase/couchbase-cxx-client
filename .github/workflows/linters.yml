@@ -146,3 +146,37 @@ jobs:
           name: clang-tidy-fixes
           path: cmake-build-clang-tidy/build/clang-tidy-fixes.yaml
           if-no-files-found: ignore
+
+  # bin/check-export-map checks the exports of the packaged library against clang's view of the
+  # public headers, independently of cmake/GenerateExportMap.cmake, and that each public header
+  # compiles on its own.
+  export_map:
+    runs-on: ubuntu-24.04
+    container: registry.fedoraproject.org/fedora:44
+    env:
+      CCACHE_MAXSIZE: 500M
+    steps:
+      - name: Install dependencies
+        timeout-minutes: 20
+        run: dnf install -y binutils ccache clang cmake fmt-devel gcc-c++ git ninja-build ruby
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify the checker against its fixtures
+        run: bin/check-export-map --self-test
+      - name: Restore ccache
+        uses: actions/cache/restore@v4
+        with:
+          path: .ccache
+          key: ccache-export-map-${{ github.run_id }}
+          restore-keys: ccache-export-map-
+      - name: Check the exported symbols
+        timeout-minutes: 90
+        run: bin/check-export-map --build build
+      # Only pushes save, so pull requests do not evict other workflows' caches.
+      - name: Save ccache
+        if: ${{ !cancelled() && github.event_name == 'push' }}
+        uses: actions/cache/save@v4
+        with:
+          path: .ccache
+          key: ccache-export-map-${{ github.run_id }}
