@@ -27,11 +27,8 @@
 #include <string>
 #include <system_error>
 
-namespace couchbase::core
-{
-struct document_id;
-class key_value_error_context;
-} // namespace couchbase::core
+#include "core/document_id.hxx"
+#include "core/error_context/key_value_error_context.hxx"
 
 namespace couchbase::core::protostellar
 {
