@@ -100,12 +100,15 @@ jobs:
       contents: read
       deployments: write
     steps:
+      # The workflow's own commit supplies bin/check-abi, since the recorded ref may predate it.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref || github.ref }}
           persist-credentials: false
       - name: Record the baseline
         env:
           GH_TOKEN: ${{ github.token }}
+          REF: ${{ inputs.ref || github.ref }}
           NAME: ${{ inputs.ref || github.ref_name }}
-        run: bin/check-abi record HEAD "${NAME}"
+        run: |
+          git fetch --depth 1 --no-tags origin "${REF}"
+          bin/check-abi record FETCH_HEAD "${NAME}"
