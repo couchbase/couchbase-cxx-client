@@ -22,6 +22,7 @@
 #                                     package build, a source tree, or a git revision; source trees
 #                                     and revisions are built in the package configuration
 #   bin/check-abi history [SONAME]    list the recorded baselines and per-commit results
+#   bin/check-abi report FILE         write the baselines and results of every soname as HTML
 #   bin/check-abi record REF [NAME]   record REF as the baseline of its soname, under NAME; a
 #                                     release tag older than the current baseline's is skipped
 #   bin/check-abi ci                  what .github/workflows/abi.yml runs for the current event
@@ -36,6 +37,7 @@
 # recognise, 3 usage or environment error.
 
 require "English"
+require "cgi"
 require "fileutils"
 require "json"
 require "net/http"
@@ -56,6 +58,8 @@ module CheckAbi
   end
 
   LIBRARY = "libcouchbase_cxx_client.so"
+  # The baselines of a soname, and the per-commit results compared against them.
+  ENVIRONMENT = /\Aabi-(\d+\.\d+)(-commits)?\z/
 
   # The packages' options for the shared library, without couchbase2 and OpenTelemetry. Neither
   # changes a declaration in the public headers.
@@ -298,6 +302,8 @@ module CheckAbi
   class GitHub
     API = "https://api.github.com"
 
+    attr_reader :repository
+
     def initialize(repository: ENV.fetch("GITHUB_REPOSITORY", "couchbase/couchbase-cxx-client"),
                    token: ENV["GH_TOKEN"] || ENV["GITHUB_TOKEN"] || gh_token)
       @repository = repository
@@ -325,7 +331,59 @@ module CheckAbi
            {state: state, description: description, log_url: log_url}.compact)
     end
 
+    ENVIRONMENTS = <<~GRAPHQL
+      query($owner: String!, $name: String!, $after: String) {
+        repository(owner: $owner, name: $name) {
+          list: environments(first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { name } }
+        }
+      }
+    GRAPHQL
+
+    DEPLOYMENTS = <<~GRAPHQL
+      query($owner: String!, $name: String!, $environments: [String!], $after: String) {
+        repository(owner: $owner, name: $name) {
+          list: deployments(environments: $environments, first: 100, after: $after,
+                            orderBy: {field: CREATED_AT, direction: DESC}) {
+            pageInfo { hasNextPage endCursor }
+            nodes { environment commitOid description createdAt latestStatus { state logUrl } }
+          }
+        }
+      }
+    GRAPHQL
+
+    # Every deployment of every abi-MAJOR.MINOR and abi-MAJOR.MINOR-commits environment, newest first.
+    def abi_deployments
+      environments = all(ENVIRONMENTS).map { |n| n["name"] }.grep(ENVIRONMENT)
+      environments.empty? ? [] : all(DEPLOYMENTS, environments: environments)
+    end
+
     private
+
+    # The nodes of every page of a query whose connection is aliased as list.
+    def all(query, **variables)
+      owner, name = @repository.split("/", 2)
+      nodes = []
+      after = nil
+      loop do
+        page = graphql(query, owner: owner, name: name, after: after, **variables).dig("repository", "list")
+        nodes.concat(page["nodes"])
+        return nodes unless page.dig("pageInfo", "hasNextPage")
+
+        after = page.dig("pageInfo", "endCursor")
+      end
+    end
+
+    def graphql(query, **variables)
+      uri = URI("#{API}/graphql")
+      req = Net::HTTP::Post.new(uri)
+      req["Authorization"] = "Bearer #{@token}" if @token
+      req.body = JSON.generate(query: query, variables: variables)
+      res = Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |http| http.request(req) }
+      body = res.is_a?(Net::HTTPSuccess) ? JSON.parse(res.body) : {}
+      raise Error, "GitHub GraphQL: #{res.code} #{res.body}" if body["data"].nil? || body["errors"]
+
+      body["data"]
+    end
 
     def gh_token
       out, status = Open3.capture2("gh", "auth", "token", err: File::NULL)
@@ -470,6 +528,71 @@ module CheckAbi
 
   def self.tools_key = "libabigail-#{Abigail.version}-gcc-#{run('gcc', '-dumpfullversion', quiet: true).strip}"
 
+  # A static HTML page of deployments as GitHub#abi_deployments returns them, newest soname first.
+  def self.page(deployments, repository:, generated: Time.now.utc)
+    h = ->(text) { CGI.escapeHTML(text.to_s) }
+    commit = ->(d) { %(<a href="https://github.com/#{h[repository]}/commit/#{h[d['commitOid']]}"><code>#{h[d['commitOid'].to_s[0, 8]]}</code></a>) }
+    run = ->(d) { (url = d.dig("latestStatus", "logUrl")) ? %(<a href="#{h[url]}">run</a>) : "" }
+    state = ->(d) { (d.dig("latestStatus", "state") || "pending").downcase }
+    sonames = deployments.group_by { |d| d["environment"][ENVIRONMENT, 1] }
+                         .sort_by { |soname, _| Gem::Version.new(soname) }.reverse
+    sections = sonames.map do |soname, list|
+      baselines, commits = list.partition { |d| d["environment"] == "abi-#{soname}" }
+      baseline_rows = baselines.each_with_index.map do |d, i|
+        "<tr><td>#{h[d['createdAt']]}</td><td>#{commit[d]}</td><td>#{h[d['description']]}</td>" \
+          "<td>#{i.zero? ? 'current' : 'superseded'}</td><td>#{run[d]}</td></tr>"
+      end
+      commit_rows = commits.map do |d|
+        lines = d["description"].to_s.split("; ").map { |line| h[line] }.join("<br>")
+        %(<tr class="#{h[state[d]]}"><td>#{h[d['createdAt']]}</td><td>#{commit[d]}</td>) +
+          "<td>#{h[state[d]]}</td><td>#{lines}</td><td>#{run[d]}</td></tr>"
+      end
+      broken = commits.count { |d| %w[failure error].include?(state[d]) }
+      <<~SECTION
+        <h2>#{h[LIBRARY]}.#{h[soname]}</h2>
+        <p>#{commits.size} commits checked, #{broken} with an ABI break or a failed comparison.</p>
+        <h3>Baselines</h3>
+        #{baseline_rows.empty? ? '<p>None recorded.</p>' : "<div class=\"scroll\"><table><tr><th>Recorded</th><th>Commit</th><th>Name</th><th></th><th></th></tr>#{baseline_rows.join}</table></div>"}
+        <h3>Commits</h3>
+        #{commit_rows.empty? ? '<p>None checked.</p>' : "<div class=\"scroll\"><table><tr><th>Checked</th><th>Commit</th><th>State</th><th>Result</th><th></th></tr>#{commit_rows.join}</table></div>"}
+      SECTION
+    end
+    <<~HTML
+      <!doctype html>
+      <html lang="en">
+      <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <title>ABI history</title>
+      <style>
+        :root { color-scheme: light dark; --fg: #1f2328; --bg: #fff; --muted: #59636e; --line: #d1d9e0;
+                --bad: #fbe9eb; --badfg: #b3261e; }
+        @media (prefers-color-scheme: dark) {
+          :root { --fg: #e6edf3; --bg: #0d1117; --muted: #9198a1; --line: #3d444d; --bad: #3b1d22; --badfg: #ff8182; }
+        }
+        body { margin: 0 auto; max-width: 72rem; padding: 1rem; font: 15px/1.5 system-ui, sans-serif;
+               color: var(--fg); background: var(--bg); }
+        a { color: inherit; }
+        p, .muted { color: var(--muted); }
+        .scroll { overflow-x: auto; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { text-align: left; vertical-align: top; padding: .35rem .6rem; border-bottom: 1px solid var(--line); }
+        td:first-child { white-space: nowrap; }
+        tr.failure, tr.error { background: var(--bad); }
+        tr.failure td:nth-child(3), tr.error td:nth-child(3) { color: var(--badfg); font-weight: 600; }
+        tr.inactive td:nth-child(3) { color: var(--muted); }
+      </style>
+      </head>
+      <body>
+      <h1>ABI history of #{h[repository]}</h1>
+      <p>Each push to a branch is compared with the previous commit and with the baseline of its soname.
+      A release tag records the baseline. Generated #{h[generated.strftime('%Y-%m-%d %H:%M UTC')]}.</p>
+      #{sections.empty? ? '<p>No ABI results recorded.</p>' : sections.join}
+      </body>
+      </html>
+    HTML
+  end
+
   def self.history(github, soname, limit)
     soname ||= CheckAbi.soname(File.read("CMakeLists.txt"))
     {"abi-#{soname}" => "baselines", "abi-#{soname}-commits" => "commits"}.each do |environment, title|
@@ -545,6 +668,16 @@ module CheckAbi
       warn "older_release?(#{name.inspect}, #{baseline.inspect}): expected #{expected}"
       failures << :older_release
     end
+    html = page([{"environment" => "abi-1.5-commits", "commitOid" => "a" * 40, "description" => "x <y>; z",
+                  "createdAt" => "2026-01-01T00:00:00Z", "latestStatus" => {"state" => "FAILURE"}},
+                 {"environment" => "abi-1.10", "commitOid" => "b" * 40, "description" => "1.10.0",
+                  "createdAt" => "2026-01-01T00:00:00Z", "latestStatus" => {"state" => "SUCCESS"}}],
+                repository: "o/r")
+    unless html.include?("x &lt;y&gt;<br>z") && html.include?('<tr class="failure">') &&
+           html.index("#{LIBRARY}.1.10") < html.index("#{LIBRARY}.1.5")
+      warn "page: escaping, failure rows or soname order wrong"
+      failures << :page
+    end
     begin
       Report.new("Leaf changes summary: 1 artifact changed\n\n?? a shape the parser does not know\n")
       warn "unrecognised line: no error raised"
@@ -559,7 +692,7 @@ module CheckAbi
   def self.main(argv)
     limit = 20
     parser = OptionParser.new do |o|
-      o.banner = "usage: bin/check-abi {compare OLD NEW | history [SONAME] | record REF [NAME] | ci | tools-key | --self-test}"
+      o.banner = "usage: bin/check-abi {compare OLD NEW | history [SONAME] | report FILE | record REF [NAME] | ci | tools-key | --self-test}"
       o.on("--limit N", Integer, "deployments listed by history (default #{limit})") { |n| limit = n }
     end
     return self_test if argv.delete("--self-test")
@@ -575,6 +708,14 @@ module CheckAbi
       result.breaks.empty? ? 0 : 1
     when "history"
       history(GitHub.new, args[0], limit)
+      0
+    when "report"
+      raise Error, parser.banner unless args.size == 1
+
+      github = GitHub.new
+      FileUtils.mkdir_p(File.dirname(args[0]))
+      File.write(args[0], page(github.abi_deployments, repository: github.repository))
+      puts "Wrote #{args[0]}"
       0
     when "record"
       raise Error, parser.banner unless [1, 2].include?(args.size)
