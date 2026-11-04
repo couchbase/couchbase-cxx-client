@@ -28,13 +28,13 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y libssl-dev cmake gcc g++ curl libcurl4-openssl-dev libprotobuf-dev libgrpc-dev libgrpc++-dev gdb protobuf-compiler protobuf-compiler-grpc
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
       - name: Validate test labels
         run: ./bin/validate-test-labels
       - name: ccache
-        uses: hendrikmuhs/ccache-action@v1.2
+        uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
         with:
           key: ${{ github.job }}
       - name: Build tests
@@ -49,7 +49,7 @@ jobs:
           CB_COUCHBASE2: 1
       - name: Upload build artifacts
         if: ${{ success() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: build
           path: ./cmake-build-tests
@@ -67,11 +67,11 @@ jobs:
           # binaries in the prebuilt artifact -- currently cng_protostellar_codegen_smoke. (A later commit
           # links the transport into the client library itself, which extends this to every binary.)
           sudo apt-get install -y libssl-dev cmake gcc g++ curl gdb libprotobuf-dev libgrpc-dev libgrpc++-dev
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: build
           path: ./cmake-build-tests
@@ -108,7 +108,7 @@ jobs:
                 --no-tests=error --output-junit cng-results.xml
       - name: Upload test results
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: unit-test-results
           # bin/run-unit-tests cds into the build dir before ctest, so --output-junit lands there.
@@ -116,7 +116,7 @@ jobs:
           if-no-files-found: warn
       - name: Upload CNG test results
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: cng-test-results
           path: ./cmake-build-tests/cng-results.xml
@@ -149,11 +149,11 @@ jobs:
           # binaries in the prebuilt artifact -- currently cng_protostellar_codegen_smoke. (A later commit
           # links the transport into the client library itself, which extends this to every binary.)
           sudo apt-get install -y libssl-dev cmake gcc g++ curl gdb libprotobuf-dev libgrpc-dev libgrpc++-dev
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: build
           path: ./cmake-build-tests
@@ -201,11 +201,11 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y libssl-dev cmake gcc g++ curl gdb libprotobuf-dev libgrpc-dev libgrpc++-dev
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: build
           path: ./cmake-build-tests
@@ -240,7 +240,7 @@ jobs:
                 --no-tests=error --output-junit cng-live-results.xml
       - name: Upload CNG live test results
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           # Distinct from the unit job's cng-test-results: artifact names must be unique per run.
           name: cng-live-test-results

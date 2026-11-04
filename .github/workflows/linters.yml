@@ -22,7 +22,7 @@ jobs:
   log_annotations:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # The checker is a heuristic over argument names, so it can only report what looks
       # sensitive and is not wrapped. A pass is not proof that the logs are correctly redacted.
       # Its own fixture runs first: the analysis is fiddly enough that a silently empty report is
@@ -35,7 +35,7 @@ jobs:
   clang_format:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 2
       - name: Install dependencies
@@ -56,7 +56,7 @@ jobs:
   clang_static_analyzer:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
       - name: Install dependencies
@@ -76,7 +76,7 @@ jobs:
           CB_SCAN_BUILD: /usr/bin/scan-build-${{ env.LLVM_VERSION }}
       - name: Upload scan-build report
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: report
           path: cmake-build-report.tar.gz
@@ -84,7 +84,7 @@ jobs:
   cppcheck:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
       - name: Install dependencies
@@ -105,7 +105,7 @@ jobs:
   clang_tidy:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
           # Need history back to the PR base so the diff-based run can find it.
@@ -141,7 +141,7 @@ jobs:
           CB_NUMBER_OF_JOBS: 4
       - name: Upload clang-tidy fixes
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: clang-tidy-fixes
           path: cmake-build-clang-tidy/build/clang-tidy-fixes.yaml
@@ -152,20 +152,21 @@ jobs:
   # compiles on its own.
   export_map:
     runs-on: ubuntu-24.04
-    container: registry.fedoraproject.org/fedora:44
+    # The digest fixes the image; moving to a newer Fedora 44 build means updating it.
+    container: registry.fedoraproject.org/fedora:44@sha256:4688bc8003a1a6a7815e5f9d1f1b5c6bc9cafa582654af7cec61435d91655e3b
     env:
       CCACHE_MAXSIZE: 500M
     steps:
       - name: Install dependencies
         timeout-minutes: 20
         run: dnf install -y binutils ccache clang cmake fmt-devel gcc-c++ git ninja-build ruby
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Verify the checker against its fixtures
         run: bin/check-export-map --self-test
       - name: Restore ccache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .ccache
           key: ccache-export-map-${{ github.run_id }}
@@ -176,7 +177,22 @@ jobs:
       # Only pushes save, so pull requests do not evict other workflows' caches.
       - name: Save ccache
         if: ${{ !cancelled() && github.event_name == 'push' }}
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .ccache
           key: ccache-export-map-${{ github.run_id }}
+
+  action_pins:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read # checkout, and tags of public action repositories
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check action pins
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # The runner image's Ruby; the script needs only the standard library and gh.
+        run: ruby bin/check-action-pins.rb
