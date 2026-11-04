@@ -44,7 +44,7 @@ jobs:
         timeout-minutes: 20
         run: sudo apt-get update && sudo apt-get install -y abigail-tools ccache
       # The build of a pull request runs its own code, so the token is not left in .git/config.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 2
           persist-credentials: false
@@ -55,13 +55,13 @@ jobs:
         run: echo "key=$(bin/check-abi tools-key)" >> "${GITHUB_OUTPUT}"
       # A dump depends on the tool versions and on the build and abidw options in bin/check-abi.
       - name: Restore ABI dumps
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: abi-dumps
           key: abi-dumps-${{ steps.tools.outputs.key }}-${{ hashFiles('bin/check-abi') }}-${{ github.run_id }}
           restore-keys: abi-dumps-${{ steps.tools.outputs.key }}-${{ hashFiles('bin/check-abi') }}-
       - name: Restore ccache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .ccache
           key: ccache-abi-${{ github.run_id }}
@@ -76,19 +76,19 @@ jobs:
       # so a pull request usually finds its base once the push of that base has run.
       - name: Save ccache
         if: ${{ !cancelled() && github.event_name == 'push' && github.ref_type == 'branch' }}
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .ccache
           key: ccache-abi-${{ github.run_id }}
       - name: Save ABI dumps
         if: ${{ !cancelled() && github.event_name == 'push' && github.ref_type == 'branch' }}
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: abi-dumps
           key: abi-dumps-${{ steps.tools.outputs.key }}-${{ hashFiles('bin/check-abi') }}-${{ github.run_id }}
       - name: Upload the reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: abi-report
           path: |
@@ -105,7 +105,7 @@ jobs:
       deployments: write
     steps:
       # The workflow's own commit supplies bin/check-abi, since the recorded ref may predate it.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Record the baseline
