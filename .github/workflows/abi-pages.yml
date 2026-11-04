@@ -1,0 +1,41 @@
+name: abi-pages
+permissions: {}
+
+# Publishes the ABI baselines and per-commit results that the abi workflow records as deployments.
+on:
+  workflow_run:
+    workflows: [abi]
+    types: [completed]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # A pull request run records nothing.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.event != 'pull_request'
+    runs-on: ubuntu-26.04
+    permissions:
+      actions: read
+      contents: read
+      deployments: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Render the report
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bin/check-abi report _site/index.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4
