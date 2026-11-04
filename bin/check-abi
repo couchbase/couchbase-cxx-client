@@ -317,12 +317,14 @@ module CheckAbi
       deployment && [deployment["sha"], deployment["description"] || deployment["ref"]]
     end
 
-    def record(sha, environment:, description:, state: "success", log_url: nil)
+    # auto_inactive marks every earlier deployment of the environment inactive, which replaces its
+    # success or failure state. A baseline wants that; a per-commit result must keep its state.
+    def record(sha, environment:, description:, state: "success", log_url: nil, auto_inactive: true)
       description = description[0, 140]
       deployment = post("deployments", ref: sha, environment: environment, description: description,
                                        auto_merge: false, required_contexts: [], production_environment: false)
       post("deployments/#{deployment['id']}/statuses",
-           {state: state, description: description, log_url: log_url}.compact)
+           {state: state, description: description, log_url: log_url, auto_inactive: auto_inactive}.compact)
     end
 
     private
@@ -464,7 +466,7 @@ module CheckAbi
       run_url = "#{ENV.fetch('GITHUB_SERVER_URL',
                              nil)}/#{ENV.fetch('GITHUB_REPOSITORY', nil)}/actions/runs/#{ENV.fetch('GITHUB_RUN_ID', nil)}"
       @github.record(head, environment: "abi-#{@soname}-commits", description: description, state: state,
-                           log_url: run_url)
+                           log_url: run_url, auto_inactive: false)
     end
   end
 
