@@ -106,11 +106,11 @@ module CheckAbi
   # Reads an `abidiff --leaf-changes-only` report and returns the entries that break the public
   # ABI.
   #
-  # Every entry under a function, variable or symbol heading is a break. A type is a break when
-  # its own name is in couchbase:: outside couchbase::core, which public classes hold only through
-  # std::shared_ptr. These rules replace abidiff suppressions: a suppressed type hides every change
-  # reported through it, and libabigail 3.0 aborts when a type suppression meets
-  # --non-reachable-types.
+  # A soname change is a break, as is every entry under a function, variable or symbol heading. A
+  # type is a break when its own name is in couchbase:: outside couchbase::core, which public
+  # classes hold only through std::shared_ptr. These rules replace abidiff suppressions: a
+  # suppressed type hides every change reported through it, and libabigail 3.0 aborts when a type
+  # suppression meets --non-reachable-types.
   #
   # libabigail 3.0 also reports types as changed with no difference listed, and asio typedefs
   # named ::type and ::completion_handler_type under couchbase::cluster functions as removed, when
@@ -164,7 +164,10 @@ module CheckAbi
           @breaks << line.strip
         elsif entry && line.start_with?(entry.line.start_with?(" ") ? "    " : "  ")
           entry.details << line
-        elsif line.start_with?("  [A] ") || line.start_with?("   ") || (!in_section && line.include?("summary: "))
+        elsif line.start_with?("SONAME changed from ")
+          @breaks << line
+        elsif line.start_with?("  [A] ") || line.start_with?("   ") || line == "ELF SONAME changed" ||
+              (!in_section && line.include?("summary: "))
           next
         else
           raise ToolError, "unrecognised abidiff output: #{line}"
@@ -709,6 +712,17 @@ module CheckAbi
     ["nothing", <<~REPORT, []],
       Leaf changes summary: 0 artifact changed
       Removed/Changed/Added functions summary: 0 Removed, 0 Changed, 0 Added function
+    REPORT
+    ["soname change", <<~REPORT, ["SONAME changed from 'libcouchbase_cxx_client.so.1.4' to 'libcouchbase_cxx_client.so.1.5'"]],
+      ELF SONAME changed
+      Leaf changes summary: 0 artifact changed
+      Changed leaf types summary: 0 leaf type changed
+      Removed/Changed/Added functions summary: 0 Removed, 0 Changed, 0 Added function
+      Removed/Changed/Added variables summary: 0 Removed, 0 Changed, 0 Added variable
+      Unreachable types summary: 0 removed, 0 changed, 0 added type
+
+      SONAME changed from 'libcouchbase_cxx_client.so.1.4' to 'libcouchbase_cxx_client.so.1.5'
+
     REPORT
     ["public layout change", <<~REPORT, ["'class couchbase::mutation_token at mutation_token.hxx:31:1' changed:"]],
       Leaf changes summary: 1 artifact changed
