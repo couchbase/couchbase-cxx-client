@@ -148,8 +148,9 @@ jobs:
           - lsan
           - tsan
           - ubsan
+        # Aliases from couchbaselabs/cb-alias, resolved to a server version at run time.
         server:
-          - 8.0.0
+          - 8.0-release
         tls:
           - plain
           - tls
@@ -163,12 +164,12 @@ jobs:
         # whole suite with no overlap. The other sanitizers are fast and run
         # unsharded.
         include:
-          - { sanitizer: valgrind, server: 8.0.0, tls: plain, shard_index: 1, shard_total: 3 }
-          - { sanitizer: valgrind, server: 8.0.0, tls: plain, shard_index: 2, shard_total: 3 }
-          - { sanitizer: valgrind, server: 8.0.0, tls: plain, shard_index: 3, shard_total: 3 }
-          - { sanitizer: valgrind, server: 8.0.0, tls: tls, shard_index: 1, shard_total: 3 }
-          - { sanitizer: valgrind, server: 8.0.0, tls: tls, shard_index: 2, shard_total: 3 }
-          - { sanitizer: valgrind, server: 8.0.0, tls: tls, shard_index: 3, shard_total: 3 }
+          - { sanitizer: valgrind, server: 8.0-release, tls: plain, shard_index: 1, shard_total: 3 }
+          - { sanitizer: valgrind, server: 8.0-release, tls: plain, shard_index: 2, shard_total: 3 }
+          - { sanitizer: valgrind, server: 8.0-release, tls: plain, shard_index: 3, shard_total: 3 }
+          - { sanitizer: valgrind, server: 8.0-release, tls: tls, shard_index: 1, shard_total: 3 }
+          - { sanitizer: valgrind, server: 8.0-release, tls: tls, shard_index: 2, shard_total: 3 }
+          - { sanitizer: valgrind, server: 8.0-release, tls: tls, shard_index: 3, shard_total: 3 }
     runs-on: ubuntu-24.04
     steps:
       - name: Install dependencies
@@ -188,12 +189,19 @@ jobs:
         with:
           name: build-${{ matrix.sanitizer }}
           path: ./cmake-build-tests-${{ matrix.sanitizer }}
+      - name: Resolve server version
+        id: resolve-server
+        uses: couchbaselabs/sdk-resolve-cb-alias-action@3f0d92ad9b0061e46dad23bf3a93dd915ea78343 # v1
+        with:
+          alias: ${{ matrix.server }}
       - name: Create Couchbase cluster with cbdinocluster
         id: cbdino
         uses: ./.github/actions/create-cluster
         with:
-          version: ${{ matrix.server }}
+          version: ${{ steps.resolve-server.outputs.version }}
           suite: integration
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Check couchbase
         env:
           HOST: ${{ steps.cbdino.outputs.ip }}
@@ -202,7 +210,7 @@ jobs:
         timeout-minutes: 120
         env:
           CB_SANITIZER: ${{ matrix.sanitizer }}
-          TEST_SERVER_VERSION: ${{ matrix.server }}
+          TEST_SERVER_VERSION: ${{ steps.resolve-server.outputs.version }}
           TEST_CONNECTION_STRING: ${{ matrix.tls == 'tls' && format('{0}?trust_certificate=cluster.crt', steps.cbdino.outputs.tls-connstr) || steps.cbdino.outputs.connstr }}
           TEST_LOG_LEVEL: trace
           CB_TEST_SHARD_INDEX: ${{ matrix.shard_index }}

@@ -126,14 +126,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Aliases from couchbaselabs/cb-alias, resolved to a server version at run time.
         server:
-          - 8.5.0-1382
-          - 8.0.1-4792
-          - 8.0.0
-          - 7.6.10
-          - 7.2.9
-          - 7.1.6
-          - 7.0.5
+          - 8.5-stable
+          - 8.0-stable
+          - 8.0-release
+          - 7.6-stable
+          - 7.6-release
+          - 7.2-release
+          - 7.1-release
+          - 7.0-release
         suite:
           - integration
           - transaction
@@ -155,11 +157,16 @@ jobs:
         with:
           name: build
           path: ./cmake-build-tests
+      - name: Resolve server version
+        id: resolve-server
+        uses: couchbaselabs/sdk-resolve-cb-alias-action@3f0d92ad9b0061e46dad23bf3a93dd915ea78343 # v1
+        with:
+          alias: ${{ matrix.server }}
       - name: Create Couchbase cluster with cbdinocluster
         id: cbdino
         uses: ./.github/actions/create-cluster
         with:
-          version: ${{ matrix.server }}
+          version: ${{ steps.resolve-server.outputs.version }}
           suite: ${{ matrix.suite }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -170,7 +177,7 @@ jobs:
       - name: Run ${{ matrix.suite }} tests
         timeout-minutes: 40
         env:
-          TEST_SERVER_VERSION: ${{ matrix.server }}
+          TEST_SERVER_VERSION: ${{ steps.resolve-server.outputs.version }}
           TEST_CONNECTION_STRING: ${{ steps.cbdino.outputs.connstr }}
           TEST_LOG_LEVEL: trace
         run: |
@@ -202,11 +209,16 @@ jobs:
         with:
           name: build
           path: ./cmake-build-tests
+      - name: Resolve server version
+        id: resolve-server
+        uses: couchbaselabs/sdk-resolve-cb-alias-action@3f0d92ad9b0061e46dad23bf3a93dd915ea78343 # v1
+        with:
+          alias: 8.0-release
       - name: Create Couchbase cluster with Cloud Native Gateway
         id: cbdino
         uses: ./.github/actions/create-cng-cluster
         with:
-          version: 8.0.0
+          version: ${{ steps.resolve-server.outputs.version }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Run CNG tests
