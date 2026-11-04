@@ -23,6 +23,8 @@
 #                                     and revisions are built in the package configuration
 #   bin/check-abi history [SONAME]    list the recorded baselines and per-commit results
 #   bin/check-abi report FILE         write the baselines and results of every soname as HTML
+#   bin/check-abi publish COMMIT DIR  add the reports in DIR as those of COMMIT to refs/site/pages
+#                                     branch, and render abi/index.html there
 #   bin/check-abi record REF [NAME]   record REF as the baseline of its soname, under NAME; a
 #                                     release tag older than the current baseline's is skipped
 #   bin/check-abi ci                  what .github/workflows/abi.yml runs for the current event
@@ -304,6 +306,18 @@ module CheckAbi
 
     attr_reader :repository
 
+    # The run executing this, in GitHub Actions.
+    def run_url
+      ENV["GITHUB_RUN_ID"] && "#{ENV.fetch('GITHUB_SERVER_URL', 'https://github.com')}/#{@repository}/actions/runs/#{ENV['GITHUB_RUN_ID']}"
+    end
+
+    # Authenticates git over HTTPS through the environment, so the token appears in no command line.
+    def git_auth_env
+      header = "AUTHORIZATION: basic #{["x-access-token:#{@token}"].pack('m0')}"
+      {"GIT_CONFIG_COUNT" => "1", "GIT_CONFIG_KEY_0" => "http.https://github.com/.extraheader",
+       "GIT_CONFIG_VALUE_0" => header}
+    end
+
     def initialize(repository: ENV.fetch("GITHUB_REPOSITORY", "couchbase/couchbase-cxx-client"),
                    token: ENV["GH_TOKEN"] || ENV["GITHUB_TOKEN"] || gh_token)
       @repository = repository
@@ -505,12 +519,13 @@ module CheckAbi
               end
       puts "::#{level} title=ABI::#{result.summary} against #{result.label}"
       puts result.breaks
+      heading = "#{LIBRARY}.#{@soname} against #{result.label}: #{result.summary}"
       File.open(ENV.fetch("GITHUB_STEP_SUMMARY", File::NULL), "a") do |f|
         # A step summary is limited to 1 MiB.
-        f.puts "### #{LIBRARY}.#{@soname} against #{result.label}: #{result.summary}", "```",
-               result.report[0, 400_000], "```"
+        f.puts "### #{heading}", "```", result.report[0, 400_000], "```"
       end
-      File.write("report-#{result.label.tr('^A-Za-z0-9.', '-')}.txt", result.report)
+      # abidiff writes nothing when nothing changed, so the heading keeps such a report readable.
+      File.write("report-#{result.label.tr('^A-Za-z0-9.', '-')}.txt", "#{heading}\n\n#{result.report}")
     end
 
     def record_commit(results, crashed:)
@@ -521,21 +536,30 @@ module CheckAbi
                       (description.empty? ? "nothing to compare with" : description)
                     end
       state = crashed || results.any? { |r| r.breaks.any? } ? "failure" : "success"
-      run_url = "#{ENV.fetch('GITHUB_SERVER_URL',
-                             nil)}/#{ENV.fetch('GITHUB_REPOSITORY', nil)}/actions/runs/#{ENV.fetch('GITHUB_RUN_ID', nil)}"
-      @github.record(head, environment: "abi-#{@soname}-commits", description: description, state: state,
-                           log_url: run_url, auto_inactive: false)
+      # The publish job records it: this job builds the commit, so it holds no write permission.
+      File.write(RESULT_FILE, JSON.generate(environment: "abi-#{@soname}-commits", description: description,
+                                            state: state))
     end
   end
 
   def self.tools_key = "libabigail-#{Abigail.version}-gcc-#{run('gcc', '-dumpfullversion', quiet: true).strip}"
 
   # A static HTML page of deployments as GitHub#abi_deployments returns them, newest soname first.
-  def self.page(deployments, repository:, generated: Time.now.utc)
+  # reports maps a commit to the abidiff report files published under reports/COMMIT/.
+  def self.page(deployments, repository:, reports: {}, generated: Time.now.utc)
     h = ->(text) { CGI.escapeHTML(text.to_s) }
     commit = ->(d) { %(<a href="https://github.com/#{h[repository]}/commit/#{h[d['commitOid']]}"><code>#{h[d['commitOid'].to_s[0, 8]]}</code></a>) }
-    run = ->(d) { (url = d.dig("latestStatus", "logUrl")) ? %(<a href="#{h[url]}">run</a>) : "" }
+    # Any writer of a deployment status sets logUrl, and the page shares the github.io origin, so only
+    # a run of this repository is linked.
+    runs = "https://github.com/#{repository}/actions/runs/"
+    run = ->(d) { (url = d.dig("latestStatus", "logUrl")).to_s.start_with?(runs) ? %(<a href="#{h[url]}">run</a>) : "" }
     state = ->(d) { (d.dig("latestStatus", "state") || "pending").downcase }
+    # report-previous-commit-a03a99d.txt is linked as "previous", report-baseline-1.5.1.txt as "baseline".
+    report_links = lambda do |d|
+      reports.fetch(d["commitOid"], []).sort.map do |file|
+        %(<a href="reports/#{h[d['commitOid']]}/#{h[file]}">#{h[file.delete_prefix('report-').split(/[-.]/).first]}</a>)
+      end.join(" ")
+    end
     sonames = deployments.group_by { |d| d["environment"][ENVIRONMENT, 1] }
                          .sort_by { |soname, _| Gem::Version.new(soname) }.reverse
     sections = sonames.map do |soname, list|
@@ -547,7 +571,7 @@ module CheckAbi
       commit_rows = commits.map do |d|
         lines = d["description"].to_s.split("; ").map { |line| h[line] }.join("<br>")
         %(<tr class="#{h[state[d]]}"><td>#{h[d['createdAt']]}</td><td>#{commit[d]}</td>) +
-          "<td>#{h[state[d]]}</td><td>#{lines}</td><td>#{run[d]}</td></tr>"
+          "<td>#{h[state[d]]}</td><td>#{lines}</td><td>#{report_links[d]} #{run[d]}</td></tr>"
       end
       broken = commits.count { |d| %w[failure error].include?(state[d]) }
       <<~SECTION
@@ -556,7 +580,7 @@ module CheckAbi
         <h3>Baselines</h3>
         #{baseline_rows.empty? ? '<p>None recorded.</p>' : "<div class=\"scroll\"><table><tr><th>Recorded</th><th>Commit</th><th>Name</th><th></th><th></th></tr>#{baseline_rows.join}</table></div>"}
         <h3>Commits</h3>
-        #{commit_rows.empty? ? '<p>None checked.</p>' : "<div class=\"scroll\"><table><tr><th>Checked</th><th>Commit</th><th>State</th><th>Result</th><th></th></tr>#{commit_rows.join}</table></div>"}
+        #{commit_rows.empty? ? '<p>None checked.</p>' : "<div class=\"scroll\"><table><tr><th>Checked</th><th>Commit</th><th>State</th><th>Result</th><th>Reports</th></tr>#{commit_rows.join}</table></div>"}
       SECTION
     end
     <<~HTML
@@ -593,6 +617,80 @@ module CheckAbi
       </body>
       </html>
     HTML
+  end
+
+  # Outside refs/heads, so clones and fetches do not download the site and GitHub lists no branch.
+  SITE_REF = "refs/site/pages"
+  # The result of a branch push, which bin/check-abi ci writes and bin/check-abi publish records.
+  RESULT_FILE = "abi-result.json"
+  ROOT_INDEX = <<~HTML
+    <!doctype html>
+    <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>couchbase-cxx-client</title></head>
+    <body style="font: 15px/1.5 system-ui, sans-serif; max-width: 72rem; margin: 0 auto; padding: 1rem">
+    <h1>couchbase-cxx-client</h1>
+    <ul><li><a href="abi/">ABI history</a></li></ul>
+    </body></html>
+  HTML
+
+  # Adds the abidiff reports of commit to abi/reports/COMMIT/ in SITE_REF and renders abi/index.html
+  # from the deployments. A push that loses a race with another run's publish starts again from the
+  # new head of SITE_REF; the reports and the page come out the same either way.
+  #
+  # On a branch push, a compare job that succeeded has written a result, so a missing one is an
+  # error. A compare job that failed without one stopped before comparing, as on a timeout or a
+  # failed setup step, and the push is recorded as failed.
+  def self.publish(github, commit:, from:, branch_push:, compared:, attempts: 5)
+    reports = Dir.glob(File.join(from, "report-*.txt"))
+    result_file = File.join(from, RESULT_FILE)
+    if File.exist?(result_file)
+      result = JSON.parse(File.read(result_file))
+      unless result["environment"].to_s.end_with?("-commits") && result["environment"].match?(ENVIRONMENT) &&
+             %w[success failure].include?(result["state"]) && result["description"].is_a?(String)
+        raise Error, "#{result_file} is not a result written by bin/check-abi ci"
+      end
+
+      github.record(commit, environment: result["environment"], description: result["description"],
+                            state: result["state"], log_url: github.run_url, auto_inactive: false)
+    elsif branch_push
+      raise Error, "#{result_file} is missing, though the compare job succeeded" if compared
+
+      github.record(commit, environment: "abi-#{soname(File.read('CMakeLists.txt'))}-commits",
+                            description: "comparison did not finish", state: "failure",
+                            log_url: github.run_url, auto_inactive: false)
+    end
+    dir = ".abi-site"
+    url = "https://github.com/#{github.repository}.git"
+    attempts.times do |attempt|
+      FileUtils.rm_rf(dir)
+      run("git", "init", "--quiet", dir)
+      if system("git", "ls-remote", "--exit-code", url, SITE_REF, out: File::NULL)
+        run("git", "-C", dir, "fetch", "--quiet", "--depth", "1", url, SITE_REF)
+        run("git", "-C", dir, "checkout", "--quiet", "FETCH_HEAD")
+      end
+      reports_dir = File.join(dir, "abi", "reports")
+      FileUtils.mkdir_p(File.join(reports_dir, commit))
+      reports.each { |report| FileUtils.cp(report, File.join(reports_dir, commit)) }
+      published = Dir.children(reports_dir).to_h { |sha| [sha, Dir.children(File.join(reports_dir, sha))] }
+      File.write(File.join(dir, "abi", "index.html"),
+                 page(github.abi_deployments, repository: github.repository, reports: published))
+      File.write(File.join(dir, "index.html"), ROOT_INDEX) unless File.exist?(File.join(dir, "index.html"))
+      run("git", "-C", dir, "add", "--all", quiet: true)
+      if system("git", "-C", dir, "diff", "--cached", "--quiet")
+        puts "#{SITE_REF} is up to date"
+        return 0
+      end
+      run("git", "-C", dir, "-c", "user.name=github-actions[bot]",
+          "-c", "user.email=41898282+github-actions[bot]@users.noreply.github.com",
+          "commit", "--quiet", "--message", "ABI history at #{commit[0, 12]}", quiet: true)
+      _, err, status = Open3.capture3(github.git_auth_env, "git", "-C", dir, "push", url, "HEAD:#{SITE_REF}")
+      if status.success?
+        puts "Published #{reports.size} reports of #{commit[0, 12]} to #{SITE_REF}"
+        return 0
+      end
+      warn "push to #{SITE_REF} failed (attempt #{attempt + 1} of #{attempts}):\n#{err}"
+    end
+    raise Error, "could not push to #{SITE_REF}"
   end
 
   def self.history(github, soname, limit)
@@ -671,13 +769,21 @@ module CheckAbi
       failures << :older_release
     end
     html = page([{"environment" => "abi-1.5-commits", "commitOid" => "a" * 40, "description" => "x <y>; z",
-                  "createdAt" => "2026-01-01T00:00:00Z", "latestStatus" => {"state" => "FAILURE"}},
+                  "createdAt" => "2026-01-01T00:00:00Z",
+                  "latestStatus" => {"state" => "FAILURE", "logUrl" => "javascript:alert(1)"}},
                  {"environment" => "abi-1.10", "commitOid" => "b" * 40, "description" => "1.10.0",
-                  "createdAt" => "2026-01-01T00:00:00Z", "latestStatus" => {"state" => "SUCCESS"}}],
-                repository: "o/r")
-    unless html.include?("x &lt;y&gt;<br>z") && html.include?('<tr class="failure">') &&
+                  "createdAt" => "2026-01-01T00:00:00Z",
+                  "latestStatus" => {"state" => "SUCCESS", "logUrl" => "https://github.com/o/r/actions/runs/7"}},
+                 {"environment" => "abi-1.10-commits", "commitOid" => "c" * 40, "description" => "",
+                  "createdAt" => "2026-01-01T00:00:00Z",
+                  "latestStatus" => {"state" => "SUCCESS", "logUrl" => "https://example.com/o/r/actions/runs/7"}}],
+                repository: "o/r", reports: {"a" * 40 => ["report-previous-commit-1234567.txt"]})
+    link = "href=\"reports/#{'a' * 40}/report-previous-commit-1234567.txt\">previous</a>"
+    unless html.include?("x &lt;y&gt;<br>z") && html.include?('<tr class="failure">') && html.include?(link) &&
+           !html.include?("javascript:") && !html.include?("example.com") &&
+           html.include?('href="https://github.com/o/r/actions/runs/7"') &&
            html.index("#{LIBRARY}.1.10") < html.index("#{LIBRARY}.1.5")
-      warn "page: escaping, failure rows or soname order wrong"
+      warn "page: escaping, link schemes, failure rows, report links or soname order wrong"
       failures << :page
     end
     begin
@@ -694,7 +800,7 @@ module CheckAbi
   def self.main(argv)
     limit = 20
     parser = OptionParser.new do |o|
-      o.banner = "usage: bin/check-abi {compare OLD NEW | history [SONAME] | report FILE | record REF [NAME] | ci | tools-key | --self-test}"
+      o.banner = "usage: bin/check-abi {compare OLD NEW | history [SONAME] | report FILE | publish COMMIT DIR | record REF [NAME] | ci | tools-key | --self-test}"
       o.on("--limit N", Integer, "deployments listed by history (default #{limit})") { |n| limit = n }
     end
     return self_test if argv.delete("--self-test")
@@ -719,22 +825,25 @@ module CheckAbi
       File.write(args[0], page(github.abi_deployments, repository: github.repository))
       puts "Wrote #{args[0]}"
       0
+    when "publish"
+      raise Error, parser.banner unless args.size == 2
+
+      publish(GitHub.new, commit: args[0], from: args[1],
+                          branch_push: ENV["GITHUB_EVENT_NAME"] == "push" && ENV["GITHUB_REF_TYPE"] == "branch",
+                          compared: ENV["COMPARE_RESULT"] == "success")
     when "record"
       raise Error, parser.banner unless [1, 2].include?(args.size)
 
       name = args[1] || args[0]
       sha = run("git", "rev-parse", "--verify", "#{args[0]}^{commit}", quiet: true).strip
       soname = soname(run("git", "show", "#{sha}:CMakeLists.txt", quiet: true))
-      run_url = ENV.fetch("GITHUB_RUN_ID",
-                          nil) && "#{ENV.fetch('GITHUB_SERVER_URL',
-                                               nil)}/#{ENV.fetch('GITHUB_REPOSITORY', nil)}/actions/runs/#{ENV.fetch('GITHUB_RUN_ID', nil)}"
       github = GitHub.new
       current = github.baseline(soname)&.last
       if older_release?(name, current)
         puts "Not recorded: #{name} is older than #{current}, the baseline of abi-#{soname}"
         return 0
       end
-      github.record(sha, environment: "abi-#{soname}", description: name, log_url: run_url)
+      github.record(sha, environment: "abi-#{soname}", description: name, log_url: github.run_url)
       puts "Recorded #{name} (#{sha[0, 7]}) as the baseline of abi-#{soname}"
       0
     when "ci"
