@@ -23,6 +23,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       # The checker is a heuristic over argument names, so it can only report what looks
       # sensitive and is not wrapped. A pass is not proof that the logs are correctly redacted.
       # Its own fixture runs first: the analysis is fiddly enough that a silently empty report is
@@ -38,6 +40,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 2
+          persist-credentials: false
       - name: Install dependencies
         timeout-minutes: 20
         run: |
@@ -59,6 +62,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
+          persist-credentials: false
       - name: Install dependencies
         timeout-minutes: 20
         run: |
@@ -87,6 +91,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
+          persist-credentials: false
       - name: Install dependencies
         timeout-minutes: 20
         run: |
@@ -110,6 +115,7 @@ jobs:
           submodules: recursive
           # Need history back to the PR base so the diff-based run can find it.
           fetch-depth: 0
+          persist-credentials: false
       - name: Install dependencies
         timeout-minutes: 20
         run: |
