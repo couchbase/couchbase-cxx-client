@@ -43,7 +43,7 @@ require "open3"
 require "optparse"
 require "uri"
 
-# The workflow's container has no locale, and CMakeLists.txt is not ASCII.
+# A CI shell may have no UTF-8 locale, and CMakeLists.txt is not ASCII.
 Encoding.default_external = Encoding::UTF_8
 
 module CheckAbi
@@ -182,6 +182,11 @@ module CheckAbi
   end
 
   class Abigail
+    # The release the ubuntu-26.04 runner ships, which CI requires. libabigail 3.0 aborts in abidiff
+    # on most comparisons of this library's dumps and cannot read dumps written by 2.x, and 2.4
+    # crashes in abidw. Moving it means rerunning the controls with the new release first.
+    VERSION = "2.9.0"
+
     def self.version(tool = "abidw")
       CheckAbi.run(tool, "--version", quiet: true).split.last
     end
@@ -196,17 +201,12 @@ module CheckAbi
 
     # abidiff's exit status flags tool errors with 1 and 2. Its change bits are not usable: a
     # changed class layout sets only 4, as a new function does. The report decides instead.
-    # libabigail 3.0 sometimes aborts on a comparison that succeeds when repeated, so a run killed
-    # by a signal is retried.
-    def self.diff(old, new, *flags, attempts: 3)
-      attempts.times do |attempt|
-        out, err, status = Open3.capture3("abidiff", "--non-reachable-types", "--leaf-changes-only",
-                                          "--no-default-suppression", *flags, old, new)
-        return out if status.exited? && (status.exitstatus & 3).zero?
-        raise ToolError, "abidiff failed with #{status}:\n#{err}" if status.exited? || attempt == attempts - 1
+    def self.diff(old, new, *flags)
+      out, err, status = Open3.capture3("abidiff", "--non-reachable-types", "--leaf-changes-only",
+                                        "--no-default-suppression", *flags, old, new)
+      raise ToolError, "abidiff failed with #{status}:\n#{err}" unless status.exited? && (status.exitstatus & 3).zero?
 
-        warn "abidiff was killed (#{status}), retrying: #{err.lines.first}"
-      end
+      out
     end
   end
 
@@ -376,9 +376,10 @@ module CheckAbi
 
     def run
       workspace = ENV.fetch("GITHUB_WORKSPACE", Dir.pwd)
-      # The workflow's container runs as root and the workspace belongs to the runner's user, so
-      # git needs the workspace, and the worktrees created under it, marked safe.
-      CheckAbi.run("git", "config", "--global", "--add", "safe.directory", "*", quiet: true)
+      unless Abigail.version == Abigail::VERSION
+        raise Error, "CI runs libabigail #{Abigail::VERSION}, and abidw on PATH is #{Abigail.version}"
+      end
+
       ENV["CCACHE_DIR"] ||= File.join(workspace, ".ccache")
       # Lets the worktree builds under src-<sha> hit the cache of the checkout's build.
       ENV["CCACHE_BASEDIR"] ||= workspace

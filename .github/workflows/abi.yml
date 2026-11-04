@@ -30,9 +30,8 @@ concurrency:
 jobs:
   compare:
     if: github.event_name != 'workflow_dispatch'
-    runs-on: ubuntu-24.04
-    # Ubuntu 24.04 ships libabigail 2.4, whose abidw crashes on this library.
-    container: registry.fedoraproject.org/fedora:44
+    # bin/check-abi requires the libabigail release this image ships.
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       deployments: write
@@ -41,7 +40,7 @@ jobs:
     steps:
       - name: Install dependencies
         timeout-minutes: 20
-        run: dnf install -y ccache cmake gcc-c++ git libabigail ninja-build ruby
+        run: sudo apt-get update && sudo apt-get install -y abigail-tools ccache
       # The build of a pull request runs its own code, so the token is not left in .git/config.
       - uses: actions/checkout@v4
         with:
@@ -96,7 +95,7 @@ jobs:
   record:
     needs: compare
     if: ${{ !cancelled() && ((github.ref_type == 'tag' && needs.compare.result == 'success') || github.event_name == 'workflow_dispatch') }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       deployments: write
