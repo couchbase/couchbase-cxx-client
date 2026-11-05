@@ -21,12 +21,16 @@
 #include "core/document_id.hxx"
 #include "core/impl/replica_utils.hxx"
 #include "core/topology/configuration.hxx"
+#include "core/utils/crc32.hxx"
 
 #include <couchbase/read_preference.hxx>
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace couchbase::test
@@ -123,6 +127,88 @@ a_vbucket_map_without_rows_maps_no_key([[maybe_unused]] context& ctx)
   const auto [binary_vbucket, binary_server] = config.map_key(binary_key, 0);
   assert_eq(binary_vbucket, 0, "no row can be chosen");
   assert_false(binary_server.has_value(), "no row means no server");
+
+  const auto [hash_vbucket, hash_server] =
+    config.map_key_by_hash(couchbase::core::utils::hash_crc32("foo", 3), 0);
+  assert_eq(hash_vbucket, 0, "no row can be chosen");
+  assert_false(hash_server.has_value(), "no row means no server");
+}
+
+auto
+bitwise_ieee8023_couchbase_crc32(const std::uint8_t* data, std::size_t len) noexcept
+  -> std::uint32_t
+{
+  std::uint32_t crc = 0xffffffffU;
+  for (std::size_t i = 0; i < len; ++i) {
+    crc ^= data[i];
+    for (int bit = 0; bit < 8; ++bit) {
+      crc = (crc >> 1U) ^ ((crc & 1U) != 0U ? 0xedb88320U : 0U);
+    }
+  }
+  return ((~crc) >> 16U) & 0x7fffU;
+}
+
+void
+crc32_hardware_and_software_slicing_agree_across_lengths_and_alignments(
+  [[maybe_unused]] context& ctx)
+{
+  // Standard IEEE 802.3 CRC-32 of "123456789" is 0xcbf43926; Couchbase hash is
+  // (0xcbf43926 >> 16) & 0x7fff = 0x4bf4.
+  assert_eq(couchbase::core::utils::hash_crc32("123456789", 9),
+            std::uint32_t{ 0x4bf4U },
+            "known-answer test vector for 123456789");
+  assert_eq(couchbase::core::utils::hash_crc32_software("123456789", 9),
+            std::uint32_t{ 0x4bf4U },
+            "software known-answer test vector for 123456789");
+
+  std::vector<std::uint8_t> raw(264);
+  for (std::size_t i = 0; i < raw.size(); ++i) {
+    raw[i] = static_cast<std::uint8_t>(((i * 131U) + 17U) & 0xffU);
+  }
+
+  for (std::size_t align = 0; align < 8; ++align) {
+    for (std::size_t len = 0; len <= 250; ++len) {
+      const auto* u8_ptr = raw.data() + align;
+      const auto* char_ptr = reinterpret_cast<const char*>(u8_ptr);
+      const std::uint32_t expected = bitwise_ieee8023_couchbase_crc32(u8_ptr, len);
+
+      const auto sw = couchbase::core::utils::hash_crc32_software(char_ptr, len);
+      const auto hw = couchbase::core::utils::hash_crc32(char_ptr, len);
+      assert_eq(sw, expected, "software slicing-by-8 matches bitwise IEEE 802.3 reference");
+      assert_eq(hw, expected, "hash_crc32 matches bitwise IEEE 802.3 reference");
+    }
+  }
+}
+
+void
+map_key_by_hash_matches_map_key_across_vbuckets_and_replicas([[maybe_unused]] context& ctx)
+{
+  vbucket_map map(64);
+  for (std::size_t vb = 0; vb < 64; ++vb) {
+    map[vb] = {
+      static_cast<std::int16_t>(vb % 3),
+      static_cast<std::int16_t>((vb + 1) % 3),
+    };
+  }
+  const auto config = config_with_vbmap(std::move(map), 1, 3);
+
+  for (int i = 0; i < 200; ++i) {
+    const std::string key = "document_key_" + std::to_string(i);
+    const auto crc = couchbase::core::utils::hash_crc32(key.data(), key.size());
+    const auto expected_vbucket = static_cast<std::uint16_t>(crc % 64U);
+    for (const std::size_t index : { std::size_t{ 0 }, std::size_t{ 1 }, std::size_t{ 2 } }) {
+      const std::optional<std::size_t> expected_server =
+        index < 2 ? std::optional<std::size_t>{ (expected_vbucket + index) % 3U } : std::nullopt;
+      const auto from_key = config.map_key(key, index);
+      const auto from_hash = config.map_key_by_hash(crc, index);
+      assert_eq(from_key.first, expected_vbucket, "map_key vbucket matches fixture formula");
+      assert_true(from_key.second == expected_server,
+                  "map_key server index matches fixture formula");
+      assert_eq(from_hash.first, expected_vbucket, "map_key_by_hash vbucket matches fixture");
+      assert_true(from_hash.second == expected_server,
+                  "map_key_by_hash server index matches fixture");
+    }
+  }
 }
 } // namespace
 
@@ -141,6 +227,10 @@ tests() -> test_suite
       { CASE(an_assigned_chain_slot_names_its_node_index), {}, timeout::instant },
       { CASE(replica_reads_stop_at_the_end_of_a_short_vbucket_row), {}, timeout::instant },
       { CASE(a_vbucket_map_without_rows_maps_no_key), {}, timeout::instant },
+      { CASE(crc32_hardware_and_software_slicing_agree_across_lengths_and_alignments),
+        {},
+        timeout::instant },
+      { CASE(map_key_by_hash_matches_map_key_across_vbuckets_and_replicas), {}, timeout::instant },
     },
   };
 }
