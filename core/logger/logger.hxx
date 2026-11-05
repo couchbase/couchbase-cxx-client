@@ -25,6 +25,8 @@
 
 #pragma once
 
+#include <couchbase/fork_event.hxx>
+
 #include <functional>
 
 #include "level.hxx"
@@ -75,6 +77,19 @@ create_file_logger(const configuration& logger_settings) -> std::optional<std::s
  */
 auto
 create_protocol_logger(const configuration& logger_settings) -> std::optional<std::string>;
+
+/**
+ * The thread that calls fork() passes prepare before it, then parent in the parent, also when
+ * fork() fails, and child in the child. Until the next event that thread must not log, and other
+ * threads may log but call no other function of the logger, couchbase::logger::set_level()
+ * included. The child has no logger until it creates one; a registered log callback stays
+ * registered. A lock held inside a configuration::sink or a log callback at the fork stays locked
+ * in the child. Nested with couchbase::cluster::notify_fork(), the logger is the inner call: the
+ * cluster's prepare joins threads that log, so it runs before the logger's prepare, and the
+ * cluster's parent or child runs after the logger's.
+ */
+void
+notify_fork(couchbase::fork_event event);
 
 /**
  * Initialize the logger with the blackhole logger object
