@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ABI history</title>
+<style>
+  :root { color-scheme: light dark; --fg: #1f2328; --bg: #fff; --muted: #59636e; --line: #d1d9e0;
+          --bad: #fbe9eb; --badfg: #b3261e; }
+  @media (prefers-color-scheme: dark) {
+    :root { --fg: #e6edf3; --bg: #0d1117; --muted: #9198a1; --line: #3d444d; --bad: #3b1d22; --badfg: #ff8182; }
+  }
+  body { margin: 0 auto; max-width: 72rem; padding: 1rem; font: 15px/1.5 system-ui, sans-serif;
+         color: var(--fg); background: var(--bg); }
+  a { color: inherit; }
+  p, .muted { color: var(--muted); }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; vertical-align: top; padding: .35rem .6rem; border-bottom: 1px solid var(--line); }
+  td:first-child { white-space: nowrap; }
+  tr.failure, tr.error { background: var(--bad); }
+  tr.failure td:nth-child(3), tr.error td:nth-child(3) { color: var(--badfg); font-weight: 600; }
+  tr.inactive td:nth-child(3) { color: var(--muted); }
+</style>
+</head>
+<body>
+<h1>ABI history of couchbase/couchbase-cxx-client</h1>
+<p>Each push to a branch is compared with the previous commit and with the baseline of its soname.
+A release tag records the baseline. Generated 2026-11-05 17:00 UTC.</p>
+<h2>libcouchbase_cxx_client.so.1.5</h2>
+<p>7 commits checked, 0 with an ABI break or a failed comparison.</p>
+<h3>Baselines</h3>
+<div class="scroll"><table><tr><th>Recorded</th><th>Commit</th><th>Name</th><th></th><th></th></tr><tr><td>2026-11-04T16:56:11Z</td><td><a href="https://github.com/couchbase/couchbase-cxx-client/commit/946421c821c8ab325d31d4e832b692464717817d"><code>946421c8</code></a></td><td>946421c821c8ab325d31d4e832b692464717817d</td><td>current</td><td><a href="https://github.com/couchbase/couchbase-cxx-client/actions/runs/41872470076">run</a></td></tr></table></div>
+<h3>Commits</h3>
+<div class="scroll"><table><tr><th>Checked</th><th>Commit</th><th>State</th><th>Result</th><th>Reports</th></tr><tr class="success"><td>2026-11-05T17:00:22Z</td><td><a href="https://github.com/couchbase/couchbase-cxx-client/commit/45c44a192ce0bfee3bfa48c8a89bebd75718dd2d"><code>45c44a19</code></a></td><td>success</td><td>previous commit 0c3bd67: no ABI change<br>baseline 946421c821c8ab325d31d4e832b692464717817d: no ABI change</td><td><a href="reports/45c44a192ce0bfee3bfa48c8a89bebd75718dd2d/report-baseline-946421c821c8ab325d31d4e832b692464717817d.txt">baseline</a> <a href="reports/45c44a192ce0bfee3bfa48c8a89bebd75718dd2d/report-previous-commit-0c3bd67.txt">previous</a> <a href="https://github.com/couchbase/couchbase-cxx-client/actions/runs/42065191623">run</a></td></tr><tr class="success"><td>2026-11-04T20:25:26Z</td><td><a href="https://github.com/couchbase/couchbase-cxx-client/commit/0c3bd67b93f58d7c310f83a567d06baaaa31b2b7"><code>0c3bd67b</code></a></td><td>success</td><td>previous commit b4f1574: no ABI change<br>baseline 946421c821c8ab325d31d4e832b692464717817d: no ABI change</td><td> <a href="https://github.com/couchbase/couchbase-cxx-client/actions/runs/41900480740">run</a></td></tr><tr class="success"><td>2026-11-04T20:16:51Z</td><td><a href="https://github.com/couchbase/couchbase-cxx-client/commit/b4f15748743a14dcf844456344bc6415d4ff3bfa"><code>b4f15748</code></a></td><td>success</td><td>previous commit a1570c9: no ABI change<br>baseline 946421c821c8ab325d31d4e832b692464717817d: no ABI change</td><td> <a href="https://github.com/couchbase/couchbase-cxx-client/actions/runs/41900272604">run</a></td></tr><tr class="success"><td>2026-11-04T18:12:23Z</td><td><a href="https://github.com/couchbase/couchbase-cxx-client/commit/a1570c96b7cd524ca96cc81e788db38066791751"><code>a1570c96</code></a></td><td>success</td><td>previous commit 56fddc4: no ABI change<br>baseline 946421c821c8ab325d31d4e832b692464717817d: no ABI change</td><td> <a href="https://github.com/couchbase/couchbase-cxx-client/actions/runs/41882932726">run</a></td></tr><tr class="inactive"><td>2026-11-04T17:16:35Z</td><td><a href="https://github.com/couchbase/couchbase-cxx-client/commit/56fddc4c908bf7621c66ec999a0c597e0f5f4aa7"><code>56fddc4c</code></a></td><td>inactive</td><td>previous commit a03a99d: no ABI change<br>baseline 946421c821c8ab325d31d4e832b692464717817d: no ABI change</td><td> <a href="https://github.com/couchbase/couchbase-cxx-client/actions/runs/41872423513">run</a></td></tr><tr class="inactive"><td>2026-11-04T14:33:38Z</td><td><a href="https://github.com/couchbase/couchbase-cxx-client/commit/a03a99d85279462e6c1027711d100bee89c2ed6e"><code>a03a99d8</code></a></td><td>inactive</td><td>previous commit eccb025: no ABI change</td><td> <a href="https://github.com/couchbase/couchbase-cxx-client/actions/runs/41843847627">run</a></td></tr><tr class="inactive"><td>2026-11-03T23:39:45Z</td><td><a href="https://github.com/couchbase/couchbase-cxx-client/commit/eccb025a96a53b1a00e903aacb9444ce9840152a"><code>eccb025a</code></a></td><td>inactive</td><td>previous commit 946421c: no ABI change</td><td> <a href="https://github.com/couchbase/couchbase-cxx-client/actions/runs/41737210884">run</a></td></tr></table></div>
+
+</body>
+</html>
