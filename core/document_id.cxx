@@ -72,7 +72,12 @@ is_valid_collection_element(std::string_view element) -> bool
 [[nodiscard]] auto
 compile_collection_path(const std::string& scope, const std::string& collection) -> std::string
 {
-  return fmt::format("{}.{}", scope, collection);
+  std::string path;
+  path.reserve(scope.size() + 1 + collection.size());
+  path.append(scope);
+  path.push_back('.');
+  path.append(collection);
+  return path;
 }
 } // namespace
 
@@ -105,13 +110,16 @@ auto
 make_protocol_key(const document_id& id) -> std::vector<std::byte>
 {
   std::vector<std::byte> key{};
+  const auto& k = id.key();
+  const auto* key_bytes = reinterpret_cast<const std::byte*>(k.data());
   if (id.is_collection_resolved()) {
     const utils::unsigned_leb128<std::uint32_t> encoded(id.collection_uid());
-    key.reserve(encoded.size());
+    key.reserve(encoded.size() + k.size());
     key.insert(key.end(), encoded.begin(), encoded.end());
+  } else {
+    key.reserve(k.size());
   }
-  key.reserve(key.size() + id.key().size());
-  couchbase::core::utils::to_binary(id.key(), std::back_insert_iterator(key));
+  key.insert(key.end(), key_bytes, key_bytes + k.size());
   return key;
 }
 } // namespace couchbase::core

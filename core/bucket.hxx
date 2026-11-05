@@ -90,7 +90,7 @@ public:
       return;
     }
     auto cmd = std::make_shared<operations::mcbp_command<bucket, Request>>(
-      ctx_, shared_from_this(), request, default_timeout());
+      ctx_, shared_from_this(), std::move(request), default_timeout());
     // Capture the command weakly. The completion is stored as cmd->handler_, so a strong capture
     // forms a cmd -> handler_ -> cmd cycle that is only broken when the handler runs. For
     // cancellable (replica fan-out) operations the completion is dispatched onto the command strand
@@ -138,6 +138,9 @@ public:
           self->map_and_send(cmd);
         });
       }
+    }
+    if (!cmd->handler_) {
+      return;
     }
     if (is_closed()) {
       return cmd->cancel(retry_reason::do_not_retry);
@@ -264,6 +267,9 @@ public:
   void schedule_for_retry(std::shared_ptr<operations::mcbp_command<bucket, Request>> cmd,
                           std::chrono::milliseconds duration)
   {
+    if (!cmd->handler_) {
+      return;
+    }
     if (is_closed()) {
       return cmd->cancel(retry_reason::do_not_retry);
     }

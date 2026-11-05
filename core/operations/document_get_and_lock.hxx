@@ -55,7 +55,6 @@ struct get_and_lock_request {
                                mcbp_context&& context) const -> std::error_code;
 
   [[nodiscard]] auto make_response(key_value_error_context&& ctx,
-                                   const encoded_response_type& encoded) const
-    -> get_and_lock_response;
+                                   encoded_response_type&& encoded) const -> get_and_lock_response;
 };
 } // namespace couchbase::core::operations
