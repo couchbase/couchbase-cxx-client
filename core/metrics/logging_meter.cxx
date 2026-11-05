@@ -31,6 +31,8 @@
 #include <tao/json/value.hpp>
 
 #include <memory>
+#include <mutex>
+#include <shared_mutex>
 #include <utility>
 
 namespace couchbase::core::metrics
@@ -156,9 +158,12 @@ logging_meter::log_report() const
       },
     },
   };
-  for (const auto& [service, operations] : recorders_) {
-    for (const auto& [operation, recorder] : operations) {
-      report["operations"][service][operation] = recorder->emit();
+  {
+    const std::shared_lock lock(recorders_mutex_);
+    for (const auto& [service, operations] : recorders_) {
+      for (const auto& [operation, recorder] : operations) {
+        report["operations"][service][operation] = recorder->emit();
+      }
     }
   }
   if (report.find("operations") != nullptr) {
@@ -204,6 +209,39 @@ logging_meter::stop()
 }
 
 auto
+logging_meter::lookup_or_create_recorder(const std::string& service,
+                                         const std::string& operation,
+                                         const std::map<std::string, std::string>* tags)
+  -> std::shared_ptr<logging_value_recorder>
+{
+  {
+    const std::shared_lock lock(recorders_mutex_);
+    if (auto s_it = recorders_.find(service); s_it != recorders_.end()) {
+      if (auto op_it = s_it->second.find(operation); op_it != s_it->second.end()) {
+        return op_it->second;
+      }
+    }
+  }
+
+  const std::unique_lock lock(recorders_mutex_);
+  auto& service_recorders = recorders_[service];
+  if (auto op_it = service_recorders.find(operation); op_it != service_recorders.end()) {
+    return op_it->second;
+  }
+  auto recorder = std::make_shared<logging_value_recorder>(
+    operation, tags != nullptr ? *tags : std::map<std::string, std::string>{});
+  return service_recorders.emplace(operation, std::move(recorder)).first->second;
+}
+
+void
+logging_meter::record_value(const std::string& service,
+                            const std::string& operation,
+                            std::int64_t value)
+{
+  lookup_or_create_recorder(service, operation)->record_value(value);
+}
+
+auto
 logging_meter::get_value_recorder(const std::string& name,
                                   const std::map<std::string, std::string>& tags)
   -> std::shared_ptr<couchbase::metrics::value_recorder>
@@ -226,11 +264,6 @@ logging_meter::get_value_recorder(const std::string& name,
     return noop_recorder;
   }
 
-  const std::scoped_lock lock(recorders_mutex_);
-  auto& service_recorders = recorders_[service->second];
-
-  auto [it, _] = service_recorders.try_emplace(
-    operation->second, std::make_shared<logging_value_recorder>(operation->second, tags));
-  return it->second;
+  return lookup_or_create_recorder(service->second, operation->second, &tags);
 }
 } // namespace couchbase::core::metrics

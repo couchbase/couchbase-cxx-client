@@ -18,10 +18,15 @@
 #include "framework/test_registry.hxx"
 
 #include "core/cluster_label_listener.hxx"
+#include "core/logger/logger.hxx"
+#include "core/metrics/logging_meter.hxx"
 #include "core/metrics/meter_wrapper.hxx"
+#include "core/metrics/noop_meter.hxx"
 
 #include <couchbase/error_codes.hxx>
 #include <couchbase/metrics/meter.hxx>
+
+#include <asio/io_context.hpp>
 
 #include <chrono>
 #include <cstdint>
@@ -220,6 +225,49 @@ meter_wrapper_record_value_tolerates_a_null_cluster_label_listener([[maybe_unuse
             std::size_t{ 1 },
             "the recorded value lands on that recorder");
 }
+
+void
+meter_wrapper_fast_paths_logging_meter_and_noop_meter([[maybe_unused]] context& ctx)
+{
+  std::string emitted_report{};
+  couchbase::core::logger::register_log_callback(
+    [&](std::string_view msg,
+        couchbase::core::logger::level /* lvl */,
+        couchbase::core::logger::log_location /* loc */) {
+      if (msg.find("Metrics: ") != std::string_view::npos) {
+        emitted_report = std::string{ msg };
+      }
+    });
+
+  auto listener = std::make_shared<couchbase::core::cluster_label_listener>();
+  const auto start_time = std::chrono::steady_clock::now() - std::chrono::microseconds{ 50 };
+  {
+    asio::io_context io{};
+    auto logging = std::make_shared<couchbase::core::metrics::logging_meter>(
+      io, couchbase::core::metrics::logging_meter_options{ std::chrono::hours{ 1 } });
+    couchbase::core::metrics::meter_wrapper logging_wrapper{ logging, listener };
+
+    logging_wrapper.record_value(kv_attributes("get"), start_time);
+    logging_wrapper.record_value(kv_attributes("custom_dynamic_op"), start_time);
+    assert_true(logging_wrapper.value_recorder_for(kv_attributes("get")) != nullptr,
+                "logging_meter still resolves a value_recorder when requested explicitly");
+  }
+  couchbase::core::logger::unregister_log_callback();
+
+  assert_false(emitted_report.empty(),
+               "logging_meter emits its metrics report on destruction when values were recorded");
+  assert_true(emitted_report.find(R"("get":{"percentiles_us":)") != std::string::npos &&
+                emitted_report.find(R"("total_count":1)") != std::string::npos,
+              "pre-populated kv/get histogram records the fast-path sample");
+  assert_true(emitted_report.find(R"("custom_dynamic_op":{"percentiles_us":)") != std::string::npos,
+              "dynamic kv/custom_dynamic_op histogram is created and records the sample");
+
+  auto noop = std::make_shared<couchbase::core::metrics::noop_meter>();
+  couchbase::core::metrics::meter_wrapper noop_wrapper{ noop, listener };
+  noop_wrapper.record_value(kv_attributes("get"), start_time);
+  assert_true(noop_wrapper.value_recorder_for(kv_attributes("get")) != nullptr,
+              "noop_meter still resolves a value_recorder when requested explicitly");
+}
 } // namespace
 
 auto
@@ -235,6 +283,7 @@ tests() -> test_suite
       { CASE(meter_wrapper_record_value_routes_every_value_through_one_cached_recorder) },
       { CASE(standardized_error_type_classifies_by_category_not_raw_value) },
       { CASE(meter_wrapper_record_value_tolerates_a_null_cluster_label_listener) },
+      { CASE(meter_wrapper_fast_paths_logging_meter_and_noop_meter) },
     },
   };
 }

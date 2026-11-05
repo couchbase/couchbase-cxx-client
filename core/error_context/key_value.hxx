@@ -104,11 +104,11 @@ make_key_value_error_context(std::error_code ec,
                                                     command->session_->canonical_port_number());
   }
 
-  return {
-    command->id(),
+  key_value_error_context ctx{
+    (ec || status_code != 0) ? command->id() : command->id_,
     ec,
-    command->last_dispatched_to_,
-    command->last_dispatched_from_,
+    std::move(command->last_dispatched_to_),
+    std::move(command->last_dispatched_from_),
     retry_attempts,
     std::move(retry_reasons),
     std::move(dispatched_to_node_id),
@@ -122,6 +122,10 @@ make_key_value_error_context(std::error_code ec,
     std::move(error_map_info),
     response.error_info(),
   };
+  if (ctx.operation_id().empty()) {
+    ctx.defer_operation_id(static_cast<std::uint8_t>(response.opcode()));
+  }
+  return ctx;
 }
 
 auto

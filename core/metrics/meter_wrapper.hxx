@@ -28,6 +28,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <shared_mutex>
 #include <string>
 #include <system_error>
 #include <tuple>
@@ -36,6 +37,8 @@
 
 namespace couchbase::core::metrics
 {
+class logging_meter;
+
 struct metric_attributes {
   std::string service;
   std::string operation;
@@ -113,8 +116,10 @@ public:
 
 private:
   std::shared_ptr<couchbase::metrics::meter> meter_;
+  std::shared_ptr<logging_meter> logging_meter_{ nullptr };
+  bool is_noop_meter_{ false };
   std::shared_ptr<cluster_label_listener> cluster_label_listener_;
-  std::mutex recorder_cache_mutex_{};
+  std::shared_mutex recorder_cache_mutex_{};
   // Keyed by the full attribute set (not just service/operation): the meter is pluggable, and a
   // custom meter may hand out a distinct recorder per tag combination, so the cache must ask it
   // once for each distinct attribute set rather than assume any particular dedup granularity. The

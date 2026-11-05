@@ -23,7 +23,9 @@
 
 #include <asio/steady_timer.hpp>
 
+#include <cstdint>
 #include <mutex>
+#include <shared_mutex>
 
 namespace couchbase::core::metrics
 {
@@ -36,7 +38,7 @@ class logging_meter
 private:
   asio::steady_timer emit_report_;
   logging_meter_options options_;
-  std::mutex recorders_mutex_{};
+  mutable std::shared_mutex recorders_mutex_{};
   // service name -> operation name -> recorder
   std::map<std::string, std::map<std::string, std::shared_ptr<logging_value_recorder>>>
     recorders_{};
@@ -44,6 +46,12 @@ private:
   void log_report() const;
 
   void rearm_reporter();
+
+  [[nodiscard]] auto lookup_or_create_recorder(
+    const std::string& service,
+    const std::string& operation,
+    const std::map<std::string, std::string>* tags = nullptr)
+    -> std::shared_ptr<logging_value_recorder>;
 
 public:
   logging_meter(asio::io_context& ctx, logging_meter_options options);
@@ -53,6 +61,8 @@ public:
   void start() override;
 
   void stop() override;
+
+  void record_value(const std::string& service, const std::string& operation, std::int64_t value);
 
   auto get_value_recorder(const std::string& name, const std::map<std::string, std::string>& tags)
     -> std::shared_ptr<couchbase::metrics::value_recorder> override;
