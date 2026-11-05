@@ -101,13 +101,11 @@ private:
 
   void write(tao::binary_view data)
   {
-    buffer_.reserve(buffer_.size() + data.size());
     buffer_.insert(buffer_.end(), data.begin(), data.end());
   }
 
   void write(std::string_view data)
   {
-    buffer_.reserve(buffer_.size() + data.size());
     const auto* begin = reinterpret_cast<const std::byte*>(data.data());
     buffer_.insert(buffer_.end(), begin, begin + data.size());
   }
@@ -303,6 +301,7 @@ auto
 generate_binary(const tao::json::value& object) -> std::vector<std::byte>
 {
   std::vector<std::byte> out;
+  out.reserve(256);
   tao::json::events::transformer<to_byte_vector> consumer(out);
   tao::json::events::from_value(consumer, object);
   return out;

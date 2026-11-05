@@ -23,9 +23,40 @@
 #include "utils/logger.hxx"
 
 #include <cstddef>
+#include <cstdlib>
+#include <new>
 #include <string>
 #include <system_error>
 #include <vector>
+
+#ifndef COUCHBASE_CXX_CLIENT_BUILD_SANITIZED
+namespace
+{
+thread_local volatile long g_alloc_count{ 0 };
+} // namespace
+
+auto
+operator new(std::size_t sz) -> void*
+{
+  g_alloc_count = g_alloc_count + 1;
+  if (void* p = std::malloc(sz == 0 ? 1 : sz)) {
+    return p;
+  }
+  throw std::bad_alloc{};
+}
+
+void
+operator delete(void* p) noexcept
+{
+  std::free(p);
+}
+
+void
+operator delete(void* p, std::size_t /* sz */) noexcept
+{
+  std::free(p);
+}
+#endif
 
 namespace couchbase::test
 {
@@ -205,6 +236,105 @@ a_payload_without_a_row_array_completes_with_no_rows([[maybe_unused]] context& c
   assert_true(result.rows.empty(), "no row was handed to the row handler");
   assert_eq(result.meta, chunk, "the whole payload is metadata");
 }
+
+void
+meta_header_callback_receives_prefix_and_preserves_full_meta([[maybe_unused]] context& ctx)
+{
+  ::test::utils::init_logger();
+
+  couchbase::core::utils::json::streaming_lexer lexer("/results/^", 4);
+  std::string meta_header{};
+  int meta_header_calls{ 0 };
+  std::vector<std::string> rows{};
+  std::string full_meta{};
+  std::error_code final_ec{};
+
+  lexer.on_metadata_header_complete([&](std::error_code ec, std::string&& header) {
+    assert_success(ec, "metadata header parses cleanly");
+    ++meta_header_calls;
+    meta_header = std::move(header);
+  });
+  lexer.on_row([&](std::string&& row) {
+    rows.emplace_back(std::move(row));
+    return couchbase::core::utils::json::stream_control::next_row;
+  });
+  lexer.on_complete([&](std::error_code ec, std::size_t /* number_of_rows */, std::string&& meta) {
+    final_ec = ec;
+    full_meta = std::move(meta);
+  });
+
+  lexer.feed(R"({"requestID":"req-1","clientContextID":"ctx-1","results":[)");
+  lexer.feed(R"({"id":1},{"id":2}],"status":"success"})");
+
+  assert_success(final_ec, "the payload parses cleanly");
+  assert_eq(meta_header_calls, 1, "on_meta_header_complete is invoked once before the rows");
+  assert_eq(meta_header,
+            std::string{ R"({"requestID":"req-1","clientContextID":"ctx-1","results":[)" },
+            "on_meta_header_complete receives the pre-row metadata header");
+  assert_eq(rows.size(), std::size_t{ 2 }, "both rows are emitted");
+  assert_eq(
+    full_meta,
+    std::string{
+      R"({"requestID":"req-1","clientContextID":"ctx-1","results":[],"status":"success"})" },
+    "on_complete still receives the full metadata including the pre-row header and trailer");
+}
+
+void
+many_long_metadata_keys_without_header_callback_parse_cleanly([[maybe_unused]] context& ctx)
+{
+  ::test::utils::init_logger();
+
+  // Exercise the default path (no on_metadata_header_complete callback registered) with 32 long
+  // (>40 byte, non-SSO) non-matching top-level and nested metadata keys before and after "results",
+  // fed across small chunks to trigger buffer compaction and string_view key comparison.
+  std::string payload = "{";
+  std::string expected_meta = "{";
+  for (int i = 0; i < 16; ++i) {
+    const std::string entry = "\"pre_metadata_attribute_with_long_non_sso_name_" +
+                              std::to_string(i) + "\":{\"nested_long_metadata_key_" +
+                              std::to_string(i) + "\":" + std::to_string(i) + "},";
+    payload += entry;
+    expected_meta += entry;
+  }
+  payload += R"("results":[{"row":1},{"row":2},{"row":3}],)";
+  expected_meta += R"("results":[],)";
+  for (int i = 0; i < 16; ++i) {
+    const std::string entry = "\"post_metadata_attribute_with_long_non_sso_name_" +
+                              std::to_string(i) + "\":\"value_" + std::to_string(i) + "\",";
+    payload += entry;
+    expected_meta += entry;
+  }
+  payload += R"("status":"success"})";
+  expected_meta += R"("status":"success"})";
+
+  std::vector<std::string> chunks;
+  for (std::size_t pos = 0; pos < payload.size(); pos += 37) {
+    chunks.push_back(payload.substr(pos, 37));
+  }
+
+#ifndef COUCHBASE_CXX_CLIENT_BUILD_SANITIZED
+  g_alloc_count = 0;
+#endif
+  const auto result = parse(chunks);
+#ifndef COUCHBASE_CXX_CLIENT_BUILD_SANITIZED
+  const long allocs = g_alloc_count;
+  // With string_view key comparisons and no unused meta_header_ copy, parsing 64 long (>40 byte)
+  // metadata keys performs <25 heap allocations (versus >70 if keys allocate std::string).
+  assert_true(allocs <= 25L,
+              "streaming_lexer compares metadata keys via string_view without per-key allocation");
+#endif
+  assert_success(result.ec, "chunked payload with many long metadata keys parses cleanly");
+  assert_true(result.row_handler_ran, "row handler ran");
+  assert_true(result.complete_handler_ran, "completion handler ran");
+  assert_eq(result.number_of_rows, std::size_t{ 3 }, "all three rows counted");
+  assert_eq(result.rows.size(), std::size_t{ 3 }, "all three rows emitted");
+  assert_eq(result.rows[0], std::string{ R"({"row":1})" }, "first row");
+  assert_eq(result.rows[1], std::string{ R"({"row":2})" }, "second row");
+  assert_eq(result.rows[2], std::string{ R"({"row":3})" }, "third row");
+  assert_eq(result.meta,
+            expected_meta,
+            "full metadata is preserved without on_metadata_header_complete registered");
+}
 } // namespace
 
 auto
@@ -218,6 +348,8 @@ tests() -> test_suite
       { CASE(a_chunk_boundary_inside_a_metadata_value_is_reassembled) },
       { CASE(a_chunk_boundary_between_a_metadata_key_and_its_value_is_reassembled) },
       { CASE(a_payload_without_a_row_array_completes_with_no_rows) },
+      { CASE(meta_header_callback_receives_prefix_and_preserves_full_meta) },
+      { CASE(many_long_metadata_keys_without_header_callback_parse_cleanly) },
     },
   };
 }
