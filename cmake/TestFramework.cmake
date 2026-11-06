@@ -1,5 +1,9 @@
-# The shared test framework: the runner, the common main(), the registration helpers, and the
-# framework's own self-test.
+# The shared test framework and the benchmark framework built on it:
+#
+# - test_framework_core (context, probes, requirements), test_framework_main (the test runner and
+#   its main()), the probe backends, couchbase_add_test() and the framework's self-tests;
+# - benchmark_framework (histogram, statistics, the benchmark runner and its reports),
+#   benchmark_framework_main, couchbase_add_benchmark() and the runner's timing self-test.
 #
 # Hand-rolled (CXXCBC-885), deliberately NOT Catch2. It lives outside either test subdirectory
 # because both test trees link it. See test/cng/README.md to build and run the CNG tests.
@@ -172,37 +176,17 @@ endfunction()
 # couchbase2 tests, which also link the generated protobuf stubs directly.
 set(couchbase_cxx_client_test_library ${couchbase_cxx_client_DEFAULT_LIBRARY})
 
-# couchbase_add_test(<relpath> LABEL <label> [LINK_CLIENT] [LIBS <lib>...])
+# couchbase_link_test_backend(<target> <link_client>)
 #
-# relpath is under test/ without the extension (e.g. cng/protostellar/dispatcher). The target name
-# is that path with the separators flattened, which makes it unique by construction: keying on the
-# file stem instead would collide the moment two subsystems each have a parser.cxx. LINK_CLIENT
-# links the client library and its core header include set, for tests that exercise core code.
-function(couchbase_add_test relpath)
-  cmake_parse_arguments(ARG "LINK_CLIENT" "LABEL" "LIBS" ${ARGN})
-
-  # Every entry is a label some leg in bin/ or .github/workflows/ selects with --label-regex. A
-  # label no runner selects is worse than a typo: it configures, builds and links, and the cases
-  # are then never executed by anything. Do not add one here without the leg that runs it.
-  set(known_labels unit integration transaction benchmark cng)
-  if(NOT ARG_LABEL IN_LIST known_labels)
-    # A typo here is invisible at build time and then quietly drops the binary out of the CI leg
-    # that was supposed to run it.
-    message(FATAL_ERROR "couchbase_add_test(${relpath}): LABEL must be one of ${known_labels}, "
-                        "got \"${ARG_LABEL}\"")
-  endif()
-
-  string(REPLACE "/" "_" target "${relpath}")
-  add_executable(${target} ${PROJECT_SOURCE_DIR}/test/${relpath}.cxx)
-  # The suite name in the run's own output, taken from the path rather than written out again in
-  # the file: a hand-written one drifts the moment the file is renamed and nothing notices.
-  target_compile_definitions(${target} PRIVATE COUCHBASE_TEST_SUITE_NAME="${target}")
+# What a test or benchmark executable needs besides its framework library: the client library, its
+# core header include set and the cluster probes when <link_client> is true, the null probes
+# otherwise.
+function(couchbase_link_test_backend target link_client)
   target_include_directories(${target} PRIVATE ${PROJECT_SOURCE_DIR})
   target_include_directories(
     ${target} SYSTEM BEFORE
     PRIVATE $<BUILD_INTERFACE:$<TARGET_PROPERTY:spdlog::spdlog,INTERFACE_INCLUDE_DIRECTORIES>>)
-  target_link_libraries(${target} PRIVATE test_framework_main Threads::Threads)
-  if(ARG_LINK_CLIENT)
+  if(link_client)
     target_include_directories(${target} PRIVATE ${PROJECT_BINARY_DIR}/generated
                                                  ${PROJECT_BINARY_DIR}/generated_$<CONFIG>)
     target_include_directories(
@@ -234,6 +218,36 @@ function(couchbase_add_test relpath)
   else()
     target_link_libraries(${target} PRIVATE test_framework_null_probes)
   endif()
+endfunction()
+
+# couchbase_add_test(<relpath> LABEL <label> [LINK_CLIENT] [LIBS <lib>...])
+#
+# relpath is under test/ without the extension (e.g. cng/protostellar/dispatcher). The target name
+# is that path with the separators flattened, which makes it unique by construction: keying on the
+# file stem instead would collide the moment two subsystems each have a parser.cxx. LINK_CLIENT
+# links the client library and its core header include set, for tests that exercise core code.
+function(couchbase_add_test relpath)
+  cmake_parse_arguments(ARG "LINK_CLIENT" "LABEL" "LIBS" ${ARGN})
+
+  # Every entry is a label some script in bin/ or job in .github/workflows/ selects with
+  # --label-regex. A label no runner selects is worse than a typo: it configures, builds and links,
+  # and the cases are then never executed by anything. Do not add one here without the job that
+  # runs it.
+  set(known_labels unit integration transaction benchmark cng)
+  if(NOT ARG_LABEL IN_LIST known_labels)
+    # A typo here is invisible at build time and then quietly drops the binary out of the CI job
+    # that was supposed to run it.
+    message(FATAL_ERROR "couchbase_add_test(${relpath}): LABEL must be one of ${known_labels}, "
+                        "got \"${ARG_LABEL}\"")
+  endif()
+
+  string(REPLACE "/" "_" target "${relpath}")
+  add_executable(${target} ${PROJECT_SOURCE_DIR}/test/${relpath}.cxx)
+  # The suite name in the run's own output, taken from the path rather than written out again in
+  # the file: a hand-written one drifts the moment the file is renamed and nothing notices.
+  target_compile_definitions(${target} PRIVATE COUCHBASE_TEST_SUITE_NAME="${target}")
+  target_link_libraries(${target} PRIVATE test_framework_main Threads::Threads)
+  couchbase_link_test_backend(${target} ${ARG_LINK_CLIENT})
   if(ARG_LIBS)
     target_link_libraries(${target} PRIVATE ${ARG_LIBS})
   endif()
@@ -287,10 +301,51 @@ couchbase_add_test(framework/selftest LABEL cng)
 # server: every value it asserts on is constructed by hand. cng for the same reason as above.
 couchbase_add_test(framework/errors_selftest LABEL cng LINK_CLIENT)
 
-# The in-tree benchmark framework: histogram and statistics. Standard library and
-# test_framework_core only.
-add_library(benchmark_framework STATIC ${PROJECT_SOURCE_DIR}/test/benchmark/statistics.cxx)
+# The in-tree benchmark framework: histogram, statistics, the runner and the reports. Standard
+# library and test_framework_core only.
+add_library(
+  benchmark_framework STATIC
+  ${PROJECT_SOURCE_DIR}/test/benchmark/statistics.cxx
+  ${PROJECT_SOURCE_DIR}/test/benchmark/bench_runner.cxx
+  ${PROJECT_SOURCE_DIR}/test/benchmark/report.cxx)
 target_link_libraries(benchmark_framework PUBLIC test_framework_core)
 set_project_options(benchmark_framework)
 set_project_warnings(benchmark_framework)
 enable_sanitizers(benchmark_framework)
+
+# Each benchmark executable links this and provides its own benchmarks().
+add_library(benchmark_framework_main STATIC ${PROJECT_SOURCE_DIR}/test/benchmark/bench_main.cxx)
+target_link_libraries(benchmark_framework_main PUBLIC benchmark_framework)
+set_project_options(benchmark_framework_main)
+set_project_warnings(benchmark_framework_main)
+enable_sanitizers(benchmark_framework_main)
+
+# The runner's stopping rules, which assert on wall-clock durations. cng for the reason
+# framework/selftest is; the rest of the benchmark framework's self-test is benchmark/selftest,
+# under unit (test/CMakeLists.txt).
+couchbase_add_test(benchmark/timing_selftest LABEL cng LIBS benchmark_framework)
+
+# couchbase_add_benchmark(<relpath> [LINK_CLIENT] [LIBS <lib>...])
+#
+# relpath is under test/ without the extension. The target is that path with the separators
+# flattened, prefixed with benchmark_ unless it already starts so: benchmark/kv_fake builds
+# benchmark_kv_fake. bin/check-perf finds the executables through benchmarks.txt
+# (cmake/Testing.cmake). Nothing is registered with ctest: a benchmark reports numbers, not a
+# verdict.
+function(couchbase_add_benchmark relpath)
+  cmake_parse_arguments(ARG "LINK_CLIENT" "" "LIBS" ${ARGN})
+  string(REPLACE "/" "_" target "${relpath}")
+  if(NOT target MATCHES "^benchmark_")
+    set(target "benchmark_${target}")
+  endif()
+  add_executable(${target} ${PROJECT_SOURCE_DIR}/test/${relpath}.cxx)
+  target_compile_definitions(${target} PRIVATE COUCHBASE_BENCH_SUITE_NAME="${target}")
+  target_link_libraries(${target} PRIVATE benchmark_framework_main Threads::Threads)
+  couchbase_link_test_backend(${target} ${ARG_LINK_CLIENT})
+  if(ARG_LIBS)
+    target_link_libraries(${target} PRIVATE ${ARG_LIBS})
+  endif()
+  set_project_options(${target})
+  set_project_warnings(${target})
+  set_property(GLOBAL APPEND PROPERTY COUCHBASE_FRAMEWORK_BENCHMARKS ${target})
+endfunction()

@@ -15,11 +15,24 @@
  *   limitations under the License.
  */
 
+#include "benchmark/bench_runner.hxx"
+#include "benchmark/report.hxx"
 #include "benchmark/statistics.hxx"
 
 #include "framework/test_registry.hxx"
 
+#include <tao/json.hpp>
+
+#include <atomic>
+#include <chrono>
+#include <cmath>
 #include <cstdint>
+#include <limits>
+#include <memory>
+#include <set>
+#include <sstream>
+#include <string>
+#include <utility>
 #include <vector>
 
 namespace couchbase::test
@@ -76,6 +89,50 @@ running_stats_matches_two_pass([[maybe_unused]] context& ctx)
   }
   assert_near(s.mean(), 5.0, 1e-12);
   assert_near(s.stddev(), 2.138, 0.001);
+}
+
+void
+running_stats_merge_matches_single([[maybe_unused]] context& ctx)
+{
+  running_stats all;
+  running_stats a;
+  running_stats b;
+  for (double x : { 2, 4, 4, 4, 5, 5, 7, 9, 11 }) {
+    all.add(x);
+    (x < 5 ? a : b).add(x);
+  }
+  a.merge(b);
+  assert_eq(a.count(), all.count());
+  assert_near(a.mean(), all.mean(), 1e-12);
+  assert_near(a.stddev(), all.stddev(), 1e-12);
+}
+
+void
+histogram_percentile_exact_rank([[maybe_unused]] context& ctx)
+{
+  histogram h;
+  for (std::uint64_t v = 1; v <= 1000; ++v) {
+    h.record(v);
+  }
+  // p99.9 of 1..1000 is the sample at zero-based rank 998, the value 999. 1000 is in the next
+  // bucket, so a ceil() off by one rank would return the maximum.
+  assert_eq(h.percentile(99.9), h.value_at_rank(998));
+  assert_true(h.percentile(99.9) < h.max(), "p99.9 is not the maximum");
+}
+
+void
+histogram_percentile_exact_rank_large_count([[maybe_unused]] context& ctx)
+{
+  // 99.9% of 10,000,000 computes as 9990000.000000002. Its rank is 9,989,999, the last 1 ns
+  // sample. A fixed tolerance returns the 1000 ns tail instead.
+  histogram h;
+  for (int i = 0; i < 9'990'000; ++i) {
+    h.record(1);
+  }
+  for (int i = 0; i < 10'000; ++i) {
+    h.record(1000);
+  }
+  assert_eq(h.percentile(99.9), std::uint64_t{ 1 });
 }
 
 void
@@ -155,6 +212,427 @@ histogram_relative_error_holds_across_the_range([[maybe_unused]] context& ctx)
                 "bucket error exceeds 1%");
   }
 }
+// ── Runner ────────────────────────────────────────────────────────────────────
+
+using namespace std::chrono_literals;
+
+const options quick{ 10ms, 50ms, 200ms, 5.0 };
+
+auto
+run_suite(const bench_suite& suite,
+          context& ctx,
+          const std::set<std::string>& filter = {},
+          const options& opts = quick) -> std::vector<case_result>
+{
+  std::ostringstream progress;
+  return run(suite, filter, ctx, opts, progress);
+}
+
+auto
+find(const std::vector<case_result>& results, const std::string& key) -> case_result
+{
+  for (const auto& r : results) {
+    if (r.key == key) {
+      return r;
+    }
+  }
+  fail("no result for key " + key);
+}
+
+class fixed_requirement : public requirement
+{
+public:
+  fixed_requirement(std::string what, check_result result)
+    : what_{ std::move(what) }
+    , result_{ std::move(result) }
+  {
+  }
+  [[nodiscard]] auto describe() const -> std::string override
+  {
+    return what_;
+  }
+  [[nodiscard]] auto check([[maybe_unused]] context& ctx) const -> check_result override
+  {
+    return result_;
+  }
+
+private:
+  std::string what_;
+  check_result result_;
+};
+
+void
+ok_op(state& s)
+{
+  s.per_op("t1", 1, [](std::size_t) {
+    return true;
+  });
+}
+
+void
+skips_unsatisfied_requirement(context& ctx)
+{
+  auto req = std::make_shared<fixed_requirement>("a unicorn", check_result::missing("none here"));
+  const auto results = run_suite({ "s", { { CASE(ok_op), { req } } } }, ctx);
+  assert_eq(results.size(), 1U);
+  assert_true(results[0].status == outcome::skipped, "skipped");
+  assert_eq(results[0].detail, req->describe());
+}
+
+void
+fails_undetermined_requirement(context& ctx)
+{
+  auto req = std::make_shared<fixed_requirement>("a unicorn", check_result::unknown("no idea"));
+  const auto results = run_suite({ "s", { { CASE(ok_op), { req } } } }, ctx);
+  assert_eq(results.size(), 1U);
+  assert_true(results[0].status == outcome::failed, "failed");
+}
+
+class throwing_requirement : public requirement
+{
+public:
+  [[nodiscard]] auto describe() const -> std::string override
+  {
+    return "a requirement that throws";
+  }
+  [[nodiscard]] auto check([[maybe_unused]] context& ctx) const -> check_result override
+  {
+    throw std::runtime_error("check broke");
+  }
+};
+
+class skipping_requirement : public requirement
+{
+public:
+  [[nodiscard]] auto describe() const -> std::string override
+  {
+    return "a requirement that calls skip()";
+  }
+  [[nodiscard]] auto check([[maybe_unused]] context& ctx) const -> check_result override
+  {
+    skip("not here");
+  }
+};
+
+void
+throwing_requirement_fails_only_that_case(context& ctx)
+{
+  const auto results = run_suite(
+    { "s", { { CASE(ok_op), { std::make_shared<throwing_requirement>() } }, { "next", &ok_op } } },
+    ctx);
+  assert_true(find(results, "ok_op").status == outcome::failed, "the throwing check fails");
+  assert_contains(find(results, "ok_op").detail, "check broke");
+  assert_true(find(results, "next/t1").status == outcome::measured, "the next case runs");
+}
+
+void
+skip_in_requirement_skips(context& ctx)
+{
+  const auto req = std::make_shared<skipping_requirement>();
+  const auto results = run_suite({ "s", { { CASE(ok_op), { req } } } }, ctx);
+  assert_eq(results.size(), 1U);
+  assert_true(results[0].status == outcome::skipped, "skipped");
+  assert_eq(results[0].detail, req->describe());
+}
+
+void
+throws_after_one_variant(state& s)
+{
+  ok_op(s);
+  throw std::runtime_error("boom");
+}
+
+void
+exception_fails_only_that_case(context& ctx)
+{
+  const auto results =
+    run_suite({ "s", { { CASE(throws_after_one_variant) }, { CASE(ok_op) } } }, ctx);
+  assert_true(find(results, "throws_after_one_variant/t1").status == outcome::measured,
+              "the variant measured before the throw is kept");
+  assert_true(find(results, "throws_after_one_variant").status == outcome::failed,
+              "the throwing case fails");
+  assert_contains(find(results, "throws_after_one_variant").detail, "boom");
+  assert_true(find(results, "ok_op/t1").status == outcome::measured, "the next case runs");
+}
+
+void
+always_fails(state& s)
+{
+  s.per_op("t1", 2, [](std::size_t) {
+    return false;
+  });
+}
+
+void
+all_failed_ops_is_failed(context& ctx)
+{
+  const auto results = run_suite({ "s", { { CASE(always_fails) } } }, ctx);
+  const auto r = find(results, "always_fails/t1");
+  assert_true(r.status == outcome::failed, "failed");
+  assert_true(r.errors > 0 && r.errors == r.operations, "every operation is an error");
+  std::ostringstream bmf;
+  write_bmf(bmf, results);
+  assert_true(tao::json::from_string(bmf.str()).get_object().empty(), "no BMF entry");
+}
+
+void
+every_third_fails(state& s)
+{
+  std::atomic<std::uint64_t> n{ 0 };
+  s.per_op("t1", 1, [&n](std::size_t) {
+    return n++ % 3 != 0;
+  });
+}
+
+void
+some_failed_ops_counts_errors(context& ctx)
+{
+  const auto results = run_suite({ "s", { { CASE(every_third_fails) } } }, ctx);
+  const auto r = find(results, "every_third_fails/t1");
+  assert_true(r.status == outcome::measured, "measured");
+  assert_true(r.operations > 3, "operations ran");
+  assert_true((r.errors * 3) + 3 >= r.operations && r.errors * 3 <= r.operations + 3,
+              "a third of the operations are errors");
+}
+
+void
+empty_batch(state& s)
+{
+  s.batched("t1", 1, [] {
+  });
+}
+
+void
+empty_batch_is_suspect(context& ctx)
+{
+#if !defined(__OPTIMIZE__) && !(defined(_MSC_VER) && defined(NDEBUG))
+  skip("an unoptimised build keeps the empty loop, so there is nothing for the check to catch");
+#endif
+  const auto results = run_suite({ "s", { { CASE(empty_batch) } } }, ctx);
+  const auto r = find(results, "empty_batch/t1");
+  assert_true(r.status == outcome::suspect, "suspect");
+  assert_true(r.latency_ns.median < 0.5, "median below the threshold");
+}
+
+// Calls made by counted(), including those of batches that were not recorded.
+std::uint64_t counted_calls{ 0 };
+
+void
+counted(state& s)
+{
+  s.batched("t1", 1, [] {
+    ++counted_calls;
+    do_not_optimize(counted_calls);
+  });
+}
+
+void
+under_floor_batches_are_not_recorded(context& ctx)
+{
+  counted_calls = 0;
+  const auto results =
+    run_suite({ "s", { { CASE(counted) } } }, ctx, {}, { 0ms, 50ms, 200ms, 5.0 });
+  const auto r = find(results, "counted/t1");
+  // With no warmup, the batches of 1, 2, 4 ... 512 calls run during measurement and each takes far
+  // under the 1 ms floor. Recording them would make operations equal every call made.
+  assert_true(counted_calls >= r.operations + 1023,
+              "calls " + std::to_string(counted_calls) + ", recorded " +
+                std::to_string(r.operations));
+}
+
+// A window too short for any batch to reach the floor leaves no sample, which must not read as a
+// zero median and be reported suspect.
+void
+no_recorded_batch_fails(context& ctx)
+{
+  const auto results = run_suite({ "s", { { CASE(counted) } } }, ctx, {}, { 0ms, 0ms, 0ms, 5.0 });
+  const auto r = find(results, "counted/t1");
+  assert_true(r.status == outcome::failed, "failed");
+  assert_contains(r.detail, "raise --max-time");
+  assert_true(exit_code(results) == 1, "exit code 1");
+}
+
+void
+duplicate_key(state& s)
+{
+  ok_op(s);
+  ok_op(s);
+}
+
+void
+duplicate_key_fails(context& ctx)
+{
+  const auto results = run_suite({ "s", { { CASE(duplicate_key) } } }, ctx);
+  bool failed = false;
+  for (const auto& r : results) {
+    failed = failed || r.status == outcome::failed;
+  }
+  assert_true(failed, "the case fails");
+}
+
+void
+declares_no_key(state&)
+{
+}
+
+void
+case_without_a_key_fails(context& ctx)
+{
+  const auto results = run_suite({ "s", { { CASE(declares_no_key) } } }, ctx);
+  assert_eq(results.size(), 1U);
+  assert_eq(results[0].key, std::string{ "declares_no_key" });
+  assert_true(results[0].status == outcome::failed, "failed");
+  assert_eq(results[0].detail, std::string{ "the case measured no key" });
+}
+
+void
+invalid_variant(state& s)
+{
+  s.per_op("t 1", 1, [](std::size_t) {
+    return true;
+  });
+}
+
+void
+invalid_variant_fails(context& ctx)
+{
+  const auto results = run_suite({ "s", { { CASE(invalid_variant) } } }, ctx);
+  assert_eq(results.size(), 1U);
+  assert_true(results[0].status == outcome::failed, "failed");
+  assert_contains(results[0].detail, "t 1");
+}
+
+void
+bmf_shape(context& ctx)
+{
+  const auto results = run_suite({ "s", { { CASE(ok_op) } } }, ctx);
+  std::ostringstream out;
+  write_bmf(out, results);
+  const auto bmf = tao::json::from_string(out.str());
+  assert_eq(bmf.get_object().size(), 1U);
+  const auto& measures = bmf.at("ok_op/t1").get_object();
+  std::set<std::string> names;
+  for (const auto& [name, value] : measures) {
+    names.insert(name);
+  }
+  assert_true(names == std::set<std::string>{ "latency", "latency-p99", "throughput" },
+              "exactly latency, latency-p99 and throughput");
+  const auto& latency = bmf.at("ok_op/t1").at("latency");
+  const auto value = latency.at("value").as<double>();
+  assert_true(latency.at("lower_value").as<double>() <= value, "lower <= value");
+  assert_true(value <= latency.at("upper_value").as<double>(), "value <= upper");
+}
+
+void
+legal_key(state& s)
+{
+  s.per_op("Fake_2/t8", 1, [](std::size_t) {
+    return true;
+  });
+}
+
+void
+bmf_escapes_names(context& ctx)
+{
+  const auto results = run_suite({ "s", { { CASE(legal_key) } } }, ctx);
+  std::ostringstream out;
+  write_bmf(out, results);
+  const auto bmf = tao::json::from_string(out.str());
+  assert_eq(bmf.get_object().size(), 1U);
+  assert_eq(bmf.get_object().begin()->first, std::string{ "legal_key/Fake_2/t8" });
+}
+
+void
+two_variants(state& s)
+{
+  for (const auto* v : { "t1", "t2" }) {
+    s.per_op(v, 1, [](std::size_t) {
+      return true;
+    });
+  }
+}
+
+void
+filter_matches_case_or_key(context& ctx)
+{
+  const bench_suite suite{ "s", { { "a", &two_variants }, { CASE(ok_op) } } };
+  auto results = run_suite(suite, ctx, { "a" });
+  assert_eq(results.size(), 2U);
+  assert_eq(results[0].key, std::string{ "a/t1" });
+  assert_eq(results[1].key, std::string{ "a/t2" });
+
+  results = run_suite(suite, ctx, { "a/t2" });
+  assert_eq(results.size(), 1U);
+  assert_eq(results[0].key, std::string{ "a/t2" });
+
+  results = run_suite(suite, ctx, { "a/t3" });
+  assert_eq(results.size(), 1U);
+  assert_true(results[0].status == outcome::failed, "a filter matching nothing fails");
+}
+
+void
+result_json_shape(context& ctx)
+{
+  const auto results = run_suite({ "s", { { CASE(ok_op) }, { CASE(empty_batch) } } }, ctx);
+  std::ostringstream out;
+  write_result_json(out, "suite \"q\"", results, ctx);
+  const auto doc = tao::json::from_string(out.str());
+  assert_eq(doc.at("schema").as<std::int64_t>(), std::int64_t{ 1 });
+  assert_eq(doc.at("suite").get_string(), std::string{ "suite \"q\"" });
+  assert_true(doc.find("server") == nullptr, "no server without a probe backend");
+  const auto& cases = doc.at("cases").get_array();
+  assert_eq(cases.size(), 2U);
+  assert_eq(cases[0].at("key").get_string(), std::string{ "ok_op/t1" });
+  assert_eq(cases[0].at("status").get_string(), std::string{ "measured" });
+  for (const auto* field :
+       { "p50_ns", "p90_ns", "p99_ns", "p999_ns", "max_ns", "ops_per_second" }) {
+    assert_true(cases[0].find(field) != nullptr, std::string{ "per_op has " } + field);
+    assert_true(cases[1].find(field) == nullptr, std::string{ "batched lacks " } + field);
+  }
+  for (const auto* field :
+       { "detail", "latency_ns", "mean_ns", "stddev_ns", "operations", "errors", "measured_ms" }) {
+    assert_true(cases[1].find(field) != nullptr, std::string{ "batched has " } + field);
+  }
+  assert_true(cases[0].at("latency_ns").at("lower").as<double>() <=
+                cases[0].at("latency_ns").at("median").as<double>(),
+              "lower <= median");
+}
+
+void
+console_groups_skips(context& ctx)
+{
+  auto req = std::make_shared<fixed_requirement>("a unicorn", check_result::missing("none"));
+  const auto results =
+    run_suite({ "s", { { CASE(ok_op), { req } }, { CASE(two_variants), { req } } } }, ctx);
+  std::ostringstream out;
+  write_console(out, results);
+  assert_contains(out.str(), "Skipped for want of:");
+  assert_contains(out.str(), "a unicorn — 2 case(s)");
+}
+
+// A range spanning two units shows each end in its own. The median's interval is printed as its
+// bounds, in the median's unit, since it need not be symmetric.
+void
+console_range_units(context&)
+{
+  case_result r;
+  r.key = "k";
+  r.latency_ns = { 29900, 29800, 30100 };
+  r.p99_ns = 100000;
+  r.min_ns = 20000;
+  r.max_ns = 1260000;
+  case_result few = r;
+  few.key = "few";
+  few.latency_ns = { 29900,
+                     -std::numeric_limits<double>::infinity(),
+                     std::numeric_limits<double>::infinity() };
+  std::ostringstream out;
+  write_console(out, { r, few });
+  assert_contains(out.str(), "p50 29.9 µs [29.8, 30.1]");
+  assert_contains(out.str(), "p50 29.9 µs [n/a]");
+  assert_contains(out.str(), "min 20.0 µs … max 1.26 ms");
+  assert_true(out.str().find("0.02") == std::string::npos, "min is not printed in max's unit");
+}
 } // namespace
 
 auto
@@ -167,12 +645,34 @@ tests() -> test_suite
       { CASE(histogram_merge_equals_single) },
       { CASE(histogram_clamps_above_range) },
       { CASE(running_stats_matches_two_pass) },
+      { CASE(running_stats_merge_matches_single) },
+      { CASE(histogram_percentile_exact_rank) },
+      { CASE(histogram_percentile_exact_rank_large_count) },
       { CASE(median_ci_order_statistics) },
       { CASE(median_ci_single_sample) },
       { CASE(median_ci_five_samples_have_no_interval) },
       { CASE(median_ci_exact_ranks) },
       { CASE(histogram_median_ci_agrees_with_samples) },
       { CASE(histogram_relative_error_holds_across_the_range) },
+      { CASE(skips_unsatisfied_requirement) },
+      { CASE(fails_undetermined_requirement) },
+      { CASE(throwing_requirement_fails_only_that_case) },
+      { CASE(skip_in_requirement_skips) },
+      { CASE(exception_fails_only_that_case) },
+      { CASE(all_failed_ops_is_failed) },
+      { CASE(some_failed_ops_counts_errors) },
+      { CASE(empty_batch_is_suspect) },
+      { CASE(under_floor_batches_are_not_recorded) },
+      { CASE(no_recorded_batch_fails) },
+      { CASE(duplicate_key_fails) },
+      { CASE(case_without_a_key_fails) },
+      { CASE(invalid_variant_fails) },
+      { CASE(bmf_shape) },
+      { CASE(bmf_escapes_names) },
+      { CASE(filter_matches_case_or_key) },
+      { CASE(result_json_shape) },
+      { CASE(console_groups_skips) },
+      { CASE(console_range_units) },
     },
   };
 }
