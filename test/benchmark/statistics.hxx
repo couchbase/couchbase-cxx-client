@@ -35,6 +35,20 @@ struct running_stats {
     m2_ += delta * (x - mean_);
   }
 
+  // Chan's pairwise combination: the result equals adding both streams to one accumulator.
+  void merge(const running_stats& other)
+  {
+    if (other.count_ == 0) {
+      return;
+    }
+    const auto n = count_ + other.count_;
+    const auto delta = other.mean_ - mean_;
+    const auto weight = static_cast<double>(other.count_) / static_cast<double>(n);
+    m2_ += other.m2_ + delta * delta * static_cast<double>(count_) * weight;
+    mean_ += delta * weight;
+    count_ = n;
+  }
+
   [[nodiscard]] auto count() const -> std::size_t
   {
     return count_;

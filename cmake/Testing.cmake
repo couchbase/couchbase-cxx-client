@@ -240,4 +240,18 @@ get_property(transaction_targets GLOBAL PROPERTY COUCHBASE_TRANSACTION_TESTS)
 add_custom_target(build_transaction_tests DEPENDS ${transaction_targets})
 
 get_property(benchmark_targets GLOBAL PROPERTY COUCHBASE_BENCHMARKS)
-add_custom_target(build_benchmarks DEPENDS ${benchmark_targets})
+get_property(framework_benchmark_targets GLOBAL PROPERTY COUCHBASE_FRAMEWORK_BENCHMARKS)
+add_custom_target(build_benchmarks DEPENDS ${benchmark_targets} ${framework_benchmark_targets})
+
+# Every couchbase_add_benchmark() executable, one path per line, for bin/check-perf. A multi-config
+# generator writes one list per configuration, since the paths differ between them.
+set(benchmark_list "")
+foreach(target IN LISTS framework_benchmark_targets)
+  string(APPEND benchmark_list "$<TARGET_FILE:${target}>\n")
+endforeach()
+get_property(is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if(is_multi_config)
+  file(GENERATE OUTPUT "${PROJECT_BINARY_DIR}/benchmarks_$<CONFIG>.txt" CONTENT "${benchmark_list}")
+else()
+  file(GENERATE OUTPUT "${PROJECT_BINARY_DIR}/benchmarks.txt" CONTENT "${benchmark_list}")
+endif()
