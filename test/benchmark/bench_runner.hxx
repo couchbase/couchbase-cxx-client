@@ -58,6 +58,15 @@ struct case_result {
   std::uint64_t operations{ 0 };
   std::uint64_t errors{ 0 };
   std::chrono::milliseconds measured_for{ 0 };
+  // Process-wide, over the measurement window that the latencies come from: every thread of the
+  // process counts, including the SDK's I/O threads and an in-process fake server. Per operation
+  // attempted (per iteration for batched, counting the batches that the latency leaves out). Empty
+  // when the platform does not provide the counter.
+  std::optional<double> cpu_ns_per_op{};
+  std::optional<double> context_switches_per_op{};
+  // The process's peak resident set size when the key finished. A high-water mark, so it never
+  // decreases from one key to the next in one binary.
+  std::optional<std::uint64_t> max_rss_bytes{};
 };
 
 // Run the cases `filter` selects, in registration order. An empty filter selects everything; an

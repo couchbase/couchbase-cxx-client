@@ -142,6 +142,16 @@ row(const case_result& r) -> std::string
                        duration(r.stddev_ns),
                        r.operations);
   }
+  if (r.cpu_ns_per_op) {
+    text += fmt::format("   cpu {}/op", duration(*r.cpu_ns_per_op));
+  }
+  if (r.context_switches_per_op) {
+    text += fmt::format("   csw {}/op", fixed(*r.context_switches_per_op, 2));
+  }
+  if (r.max_rss_bytes) {
+    const auto mib = static_cast<double>(*r.max_rss_bytes) / (1024 * 1024);
+    text += fmt::format("   rss {} MiB", fixed(mib, decimals(mib)));
+  }
   if (r.status == outcome::suspect) {
     text += "   SUSPECT: " + r.detail;
   }
@@ -188,6 +198,12 @@ number(std::ostream& out, double v)
   } else {
     out << "null";
   }
+}
+
+void
+number(std::ostream& out, const std::optional<double>& v)
+{
+  number(out, v.value_or(std::nan("")));
 }
 
 auto
@@ -267,6 +283,14 @@ write_bmf(std::ostream& out, const std::vector<case_result>& results)
       number(out, *r.ops_per_second);
       out << '}';
     }
+    if (r.cpu_ns_per_op) {
+      out << R"(, "cpu-time": {"value": )";
+      number(out, *r.cpu_ns_per_op);
+      out << '}';
+    }
+    if (r.max_rss_bytes) {
+      out << R"(, "max-rss": {"value": )" << *r.max_rss_bytes << '}';
+    }
     out << '}';
   }
   out << "\n}\n";
@@ -332,6 +356,16 @@ write_result_json(std::ostream& out,
     if (r.ops_per_second) {
       out << R"(, "ops_per_second": )";
       number(out, r.ops_per_second.value_or(0));
+    }
+    out << R"(, "cpu_ns_per_op": )";
+    number(out, r.cpu_ns_per_op);
+    out << R"(, "context_switches_per_op": )";
+    number(out, r.context_switches_per_op);
+    out << R"(, "max_rss_bytes": )";
+    if (r.max_rss_bytes) {
+      out << *r.max_rss_bytes;
+    } else {
+      out << "null";
     }
     out << '}';
   }

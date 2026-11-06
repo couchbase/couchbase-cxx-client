@@ -299,14 +299,20 @@ couchbase_add_test(framework/selftest LABEL cng)
 # server: every value it asserts on is constructed by hand. cng for the same reason as above.
 couchbase_add_test(framework/errors_selftest LABEL cng LINK_CLIENT)
 
-# The in-tree benchmark framework: histogram, statistics, the runner and the reports. Standard
-# library and test_framework_core only; the fake MCBP server is a separate library.
+# The in-tree benchmark framework: histogram, statistics, the runner, the reports and the resource
+# usage snapshot. Standard library, the platform's process accounting and test_framework_core
+# only; the fake MCBP server is a separate library.
 add_library(
   benchmark_framework STATIC
   ${PROJECT_SOURCE_DIR}/test/benchmark/statistics.cxx
   ${PROJECT_SOURCE_DIR}/test/benchmark/bench_runner.cxx
-  ${PROJECT_SOURCE_DIR}/test/benchmark/report.cxx)
+  ${PROJECT_SOURCE_DIR}/test/benchmark/report.cxx
+  ${PROJECT_SOURCE_DIR}/test/benchmark/resource_usage.cxx)
 target_link_libraries(benchmark_framework PUBLIC test_framework_core)
+if(WIN32)
+  # GetProcessMemoryInfo
+  target_link_libraries(benchmark_framework PRIVATE psapi)
+endif()
 set_project_options(benchmark_framework)
 set_project_warnings(benchmark_framework)
 enable_sanitizers(benchmark_framework)

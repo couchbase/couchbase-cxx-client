@@ -16,6 +16,7 @@
  */
 
 #include "bench_runner.hxx"
+#include "resource_usage.hxx"
 
 #include "framework/test_framework.hxx"
 
@@ -179,25 +180,32 @@ converged(const median_ci& ci, double target_percent) -> bool
   return ci.median > 0 && (ci.upper - ci.lower) / 2 / ci.median * 100 <= target_percent;
 }
 
+// The measurement phase of a key: how long it ran, and the resource usage at its ends.
+struct window {
+  clock::duration elapsed;
+  resource_usage before;
+  resource_usage after;
+};
+
 // Warmup rounds, then measurement rounds until the stopping rule holds. round(deadline,
 // measuring) runs every thread until its first operation that ends at or after `deadline`.
-// Returns how long measurement ran.
 auto
 drive(const options& opts,
       const std::function<void(clock::time_point, bool)>& round,
-      const std::function<median_ci()>& current) -> clock::duration
+      const std::function<median_ci()>& current) -> window
 {
   auto start = clock::now();
   while (clock::now() - start < opts.warmup) {
     round(std::min(clock::now() + check_interval, start + opts.warmup), false);
   }
+  const auto before = current_resource_usage();
   start = clock::now();
   for (;;) {
     round(std::min(clock::now() + check_interval, start + opts.max_time), true);
     const auto elapsed = clock::now() - start;
     if (elapsed >= opts.max_time ||
         (elapsed >= opts.min_time && converged(current(), opts.ci_target_percent))) {
-      return elapsed;
+      return { elapsed, before, current_resource_usage() };
     }
   }
 }
@@ -209,12 +217,33 @@ nanoseconds(clock::duration d) -> std::uint64_t
     std::chrono::duration_cast<std::chrono::nanoseconds>(d).count());
 }
 
+// The increase of a counter over the window, per operation that ran in it.
+auto
+per_operation(const std::optional<std::uint64_t>& before,
+              const std::optional<std::uint64_t>& after,
+              std::uint64_t operations) -> std::optional<double>
+{
+  if (!before || !after || operations == 0) {
+    return std::nullopt;
+  }
+  return static_cast<double>(*after - *before) / static_cast<double>(operations);
+}
+
+// window_operations counts every operation or iteration that ran in the measurement window, which
+// for a batched key includes the batches its latency leaves out.
 void
-finish_key(detail::case_run& run, case_result r, clock::duration measured)
+finish_key(detail::case_run& run,
+           case_result r,
+           const window& measured,
+           std::uint64_t window_operations)
 {
   r.key = std::move(run.current_key);
   run.current_key.clear();
-  r.measured_for = std::chrono::duration_cast<std::chrono::milliseconds>(measured);
+  r.measured_for = std::chrono::duration_cast<std::chrono::milliseconds>(measured.elapsed);
+  r.cpu_ns_per_op = per_operation(measured.before.cpu_ns, measured.after.cpu_ns, window_operations);
+  r.context_switches_per_op = per_operation(
+    measured.before.context_switches, measured.after.context_switches, window_operations);
+  r.max_rss_bytes = measured.after.max_rss_bytes;
   run.results.push_back(std::move(r));
 }
 
@@ -346,11 +375,12 @@ state::per_op(std::string_view variant,
     r.p999_ns = all.percentile(99.9);
     r.max_ns = all.max();
     r.ops_per_second =
-      static_cast<double>(all.count()) / std::chrono::duration<double>(measured).count();
+      static_cast<double>(all.count()) / std::chrono::duration<double>(measured.elapsed).count();
     r.mean_ns = stats.mean();
     r.stddev_ns = stats.stddev();
   }
-  finish_key(*run_, std::move(r), measured);
+  const auto operations = r.operations;
+  finish_key(*run_, std::move(r), measured, operations);
 }
 
 void
@@ -365,6 +395,8 @@ state::run_batched(std::string_view variant,
   struct lane {
     std::uint64_t batch{ 1 };
     std::uint64_t iterations{ 0 };
+    // Every iteration of a measuring round, the batches under the floor included.
+    std::uint64_t window_iterations{ 0 };
     std::vector<double> samples{};
   };
   std::vector<lane> lanes(threads);
@@ -377,6 +409,9 @@ state::run_batched(std::string_view variant,
         const auto t0 = clock::now();
         loop(fn, l.batch);
         const auto t1 = clock::now();
+        if (measuring) {
+          l.window_iterations += l.batch;
+        }
         // A batch under the floor measures the clock as much as fn, so it only sizes the next one.
         // A capped batch is kept: it is how a loop the compiler emptied reaches `suspect`.
         if (t1 - t0 < min_batch_duration && l.batch < max_batch_iterations) {
@@ -408,8 +443,10 @@ state::run_batched(std::string_view variant,
   for (const auto x : samples()) {
     stats.add(x);
   }
+  std::uint64_t window_iterations = 0;
   for (const auto& l : lanes) {
     r.operations += l.iterations;
+    window_iterations += l.window_iterations;
   }
   r.latency_ns = median_with_ci(samples());
   r.mean_ns = stats.mean();
@@ -421,7 +458,7 @@ state::run_batched(std::string_view variant,
     r.status = outcome::suspect;
     r.detail = "median under 0.5 ns per iteration: the compiler may have removed the work";
   }
-  finish_key(*run_, std::move(r), measured);
+  finish_key(*run_, std::move(r), measured, window_iterations);
 }
 
 auto

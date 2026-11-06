@@ -31,7 +31,8 @@ write_console(std::ostream& out, const std::vector<case_result>& results);
 
 // Bencher Metric Format: one benchmark per measured key, with these measures:
 // - latency: the median in ns, with lower_value/upper_value when the median has a CI;
-// - latency-p99 (ns) and throughput (ops/s), per_op keys only.
+// - latency-p99 (ns) and throughput (ops/s), per_op keys only;
+// - cpu-time (process CPU ns per operation) and max-rss (bytes), where the platform provides them.
 // Suspect, failed and skipped results are left out, so no threshold is fed a number that does not
 // measure the case.
 void
@@ -53,14 +54,17 @@ write_bmf(std::ostream& out, const std::vector<case_result>& results);
 //         "operations": <n>, "errors": <n>, "measured_ms": <ms>,
 //         // per_op keys only:
 //         "min_ns": <ns>, "p50_ns": <ns>, "p90_ns": <ns>, "p99_ns": <ns>, "p999_ns": <ns>,
-//         "max_ns": <ns>, "ops_per_second": <n>
+//         "max_ns": <ns>, "ops_per_second": <n>,
+//         // every key; null when nothing was measured or the platform lacks the counter:
+//         "cpu_ns_per_op": <ns>, "context_switches_per_op": <n>, "max_rss_bytes": <bytes>
 //       }
 //     ]
 //   }
 //
 // "server" is present only when the run created a probe backend, and a field its probe could not
 // answer is null. Latencies are per operation, or per iteration for batched keys. A non-finite
-// number is written as null.
+// number is written as null, so "lower" and "upper" are null for a median without a 95% interval.
+// The CPU, context switch and RSS fields are those of case_result (bench_runner.hxx).
 void
 write_result_json(std::ostream& out,
                   const std::string& suite,
