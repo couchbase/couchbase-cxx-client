@@ -23,7 +23,9 @@
 #                                        detached worktree beside DIR that is removed afterwards
 #   bin/check-perf compare BASE HEAD     run BASE and HEAD in alternating rounds and give each key a
 #                                        verdict; each side is a build directory or a revision
-#   bin/check-perf --self-test           check the verdict rules, the reports and the metadata shape
+#   bin/check-perf ci                    compare in a GitHub Actions run, as described below
+#   bin/check-perf --self-test           check the verdict rules, the reports, ci and the metadata
+#                                        shape
 #
 # compare writes result.json, report.txt, comment.md and head.bmf.json to --out. A round runs every
 # selected binary of both sides. Base runs first in even rounds and head first in odd ones, so a
@@ -54,6 +56,12 @@
 # Binaries share case names, such as kv_get in kv_fake and kv_cluster, and this keeps their
 # results apart. Both sides are keyed alike, so their rows pair. A key reported twice in a round,
 # by one binary or by two, is an error.
+#
+# ci compares HEAD with a base picked from the event in GITHUB_EVENT_NAME, GITHUB_EVENT_PATH and
+# EVENT_BEFORE: HEAD^1 for a pull request, whose HEAD is the merge commit, and for a manual run;
+# EVENT_BEFORE, the previous head of the branch, for a push. A base that cannot be resolved, such as
+# the all-zero id of a new branch, leaves every case new. On a pull request ci also writes the pull
+# request number to pr-number in --out.
 #
 # Exit status: 0 done, 1 a case failed at head, 3 usage or environment error, 4 the revision has no
 # test/benchmark/, 5 the build failed.
@@ -542,6 +550,41 @@ module CheckPerf
     text
   end
 
+  NULL_SHA = "0" * 40
+
+  # The [base, head, pull request number] that ci compares for an event.
+  def self.ci_plan(event, payload, before)
+    case event
+    when "pull_request"
+      number = payload.is_a?(Hash) ? payload.dig("pull_request", "number") : nil
+      raise Error, "the pull_request event has no pull_request.number" unless number.is_a?(Integer)
+
+      ["HEAD^1", "HEAD", number]
+    when "push" then [before.to_s.empty? ? NULL_SHA : before, "HEAD", nil]
+    when "workflow_dispatch" then ["HEAD^1", "HEAD", nil]
+    else raise Error, "ci does not handle the event #{event.inspect}"
+    end
+  end
+
+  def self.ci_event(env)
+    name = env["GITHUB_EVENT_NAME"].to_s
+    path = env["GITHUB_EVENT_PATH"].to_s
+    raise Error, "ci needs GITHUB_EVENT_NAME and GITHUB_EVENT_PATH, which GitHub Actions sets" if name.empty? || path.empty?
+
+    [name, JSON.parse(File.read(path))]
+  rescue SystemCallError, JSON::ParserError => e
+    raise Error, "cannot read the event payload #{path}: #{e.message}"
+  end
+
+  def self.ci(**options)
+    name, payload = ci_event(ENV)
+    base, head, number = ci_plan(name, payload, ENV.fetch("EVENT_BEFORE", nil))
+    FileUtils.mkdir_p(options.fetch(:out))
+    File.write(File.join(options.fetch(:out), "pr-number"), "#{number}\n") if number
+    compare(base, head, **options)
+  end
+
+
   def self.self_test
     check = ->(name, actual, expected) { raise "#{name}: expected #{expected.inspect}, got #{actual.inspect}" unless actual == expected }
     flat = [100.0] * 7
@@ -566,6 +609,22 @@ module CheckPerf
     check.call("verdict likely slower", verdict([1.01, 1.015, 1.005, 1.01, 1.03, 1.01, 1.02], flat), "likely slower")
     check.call("verdict bound touches one", verdict([0.97, 0.98, 0.99, 0.98, 1.0, 0.98, 0.97], flat), "no change")
     check.call("verdict bound at effect", verdict([0.96, 0.97, 0.97, 0.97, 0.98, 0.97, 0.96], flat), "faster")
+    sha = "a" * 40
+    check.call("ci pull_request", ci_plan("pull_request", {"pull_request" => {"number" => 42}}, nil), ["HEAD^1", "HEAD", 42])
+    check.call("ci push", ci_plan("push", {}, sha), [sha, "HEAD", nil])
+    check.call("ci new branch", ci_plan("push", {}, NULL_SHA), [NULL_SHA, "HEAD", nil])
+    check.call("ci dispatch", ci_plan("workflow_dispatch", {}, ""), ["HEAD^1", "HEAD", nil])
+    status = ->(&block) { block.call rescue $ERROR_INFO.status }
+    check.call("ci unknown event", status.call { ci_plan("schedule", {}, nil) }, 3)
+    check.call("ci payload without number", status.call { ci_plan("pull_request", {}, nil) }, 3)
+    check.call("ci payload not an object", status.call { ci_plan("pull_request", [], nil) }, 3)
+    check.call("ci no event env", status.call { ci_event({}) }, 3)
+    check.call("ci missing payload file", status.call { ci_event("GITHUB_EVENT_NAME" => "push", "GITHUB_EVENT_PATH" => "/nonexistent/event.json") }, 3)
+    Dir.mktmpdir("check-perf-event") do |dir|
+      bad = File.join(dir, "event.json")
+      File.write(bad, "{")
+      check.call("ci malformed payload", status.call { ci_event("GITHUB_EVENT_NAME" => "push", "GITHUB_EVENT_PATH" => bad) }, 3)
+    end
     check.call("order", (0..3).map { |r| order(r) }, [%i[base head], %i[head base], %i[base head], %i[head base]])
     check.call("verdict noisy", verdict(faster, [100.0, 111.0, 101.0, 99.0, 100.0, 100.0, 100.0]), "noisy")
     check.call("verdict noisy boundary", verdict(faster, [100.0, 109.0, 101.0, 99.0, 100.0, 100.0, 100.0]), "faster")
@@ -704,7 +763,7 @@ module CheckPerf
     suites = []
     out = "perf-report"
     parser = OptionParser.new do |o|
-      o.banner = "usage: bin/check-perf {metadata [BUILD] | build REV DIR | compare BASE HEAD | --self-test}"
+      o.banner = "usage: bin/check-perf {metadata [BUILD] | build REV DIR | compare BASE HEAD | ci | --self-test}"
       o.on("--rounds N", Integer, "rounds of compare (default #{ROUNDS})") { |n| rounds = n }
       o.on("--suite NAME", "a binary benchmark_NAME to compare; repeatable (default all)") { |s| suites << s }
       o.on("--out DIR", "where compare writes its reports (default #{out})") { |d| out = d }
@@ -727,6 +786,10 @@ module CheckPerf
       raise Error, parser.banner unless args.size == 2 && rounds.positive?
 
       compare(args[0], args[1], rounds: rounds, suites: suites, out: out)
+    when "ci"
+      raise Error, parser.banner unless args.empty? && rounds.positive?
+
+      ci(rounds: rounds, suites: suites, out: out)
     else
       raise Error, parser.banner
     end

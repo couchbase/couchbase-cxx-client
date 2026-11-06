@@ -1,0 +1,141 @@
+name: perf
+permissions: {}
+
+# Compares the benchmarks of the merge commit of a pull request, or of a pushed commit, with those of
+# its base. bin/check-perf ci describes what each event is compared with.
+on:
+  push:
+    branches:
+      - main
+      - release-*
+  pull_request:
+    branches:
+      - main
+      - release-*
+  workflow_dispatch:
+
+# Pull request runs cancel each other. Every other run has a group of its own, so none replaces
+# another.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  sdk:
+    runs-on: ubuntu-26.04
+    # This job builds and runs the code under test, so it only reads.
+    permissions:
+      contents: read
+    env:
+      CCACHE_MAXSIZE: 500M
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_NOHASHDIR: "1"
+      EVENT_BEFORE: ${{ github.event.before }}
+    steps:
+      - name: Install dependencies
+        timeout-minutes: 20
+        run: sudo apt-get update && sudo apt-get install -y ccache cmake ninja-build gcc g++ libssl-dev
+      # The build of a pull request runs its own code, so the token is not left in .git/config. The
+      # whole history lets HEAD^1 resolve to the base of a merge commit.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify bin/check-perf against its fixtures
+        run: bin/check-perf --self-test
+      - name: Restore ccache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ccache
+          key: ccache-perf-sdk-${{ github.run_id }}
+          restore-keys: ccache-perf-sdk-
+      - name: Compare
+        timeout-minutes: 150
+        run: bin/check-perf ci --out perf-report --suite vbucket_hash --suite json --suite mcbp_parser --suite kv_fake
+      # Only branch pushes save, as in abi.yml.
+      - name: Save ccache
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref_type == 'branch' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ccache
+          key: ccache-perf-sdk-${{ github.run_id }}
+      - name: Upload the reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: perf-report
+          path: perf-report
+          if-no-files-found: ignore
+          # A re-run of this job replaces the report of the earlier attempt.
+          overwrite: true
+
+  cluster:
+    runs-on: ubuntu-26.04
+    # packages: read lets create-cluster pull images, as in tests.yml.
+    permissions:
+      contents: read
+      packages: read
+    env:
+      CCACHE_MAXSIZE: 500M
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_NOHASHDIR: "1"
+      EVENT_BEFORE: ${{ github.event.before }}
+    steps:
+      - name: Install dependencies
+        timeout-minutes: 20
+        run: sudo apt-get update && sudo apt-get install -y ccache cmake ninja-build gcc g++ libssl-dev curl
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Restore ccache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ccache
+          key: ccache-perf-cluster-${{ github.run_id }}
+          restore-keys: ccache-perf-cluster-
+      # The newest released patch of 8.0, resolved on every run. A new patch release changes the
+      # server behind the history without a change to the SDK.
+      - name: Resolve server version
+        id: resolve-server
+        uses: couchbaselabs/sdk-resolve-cb-alias-action@3f0d92ad9b0061e46dad23bf3a93dd915ea78343 # v1
+        with:
+          alias: 8.0-release
+      - name: Create Couchbase cluster with cbdinocluster
+        id: cbdino
+        uses: ./.github/actions/create-cluster
+        with:
+          version: ${{ steps.resolve-server.outputs.version }}
+          suite: perf
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check couchbase
+        env:
+          HOST: ${{ steps.cbdino.outputs.ip }}
+        run: ./bin/check-cluster
+      - name: Compare
+        timeout-minutes: 150
+        env:
+          TEST_CONNECTION_STRING: ${{ steps.cbdino.outputs.connstr }}
+          TEST_BUCKET: default
+        run: bin/check-perf ci --out perf-report --suite kv_cluster
+      - name: Save ccache
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref_type == 'branch' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ccache
+          key: ccache-perf-cluster-${{ github.run_id }}
+      - name: Upload the reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: perf-report-cluster
+          path: perf-report
+          if-no-files-found: ignore
+          # A re-run of this job replaces the report of the earlier attempt.
+          overwrite: true
+      - name: Remove Couchbase cluster
+        if: always() && steps.cbdino.outputs.id != ''
+        uses: ./.github/actions/remove-cluster
+        with:
+          id: ${{ steps.cbdino.outputs.id }}
