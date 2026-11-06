@@ -81,3 +81,9 @@ couchbase_add_test(transactions/retry_waits LABEL transaction LINK_CLIENT)
 # parse the reports it checks. Registered here for the reason given above for
 # framework/cluster_probes_selftest.
 couchbase_add_test(benchmark/selftest LABEL unit LINK_CLIENT LIBS benchmark_framework)
+
+# CPU-only component cases for the hot paths: vbucket hashing, JSON generation and streaming, and
+# the MCBP parser.
+couchbase_add_benchmark(benchmark/vbucket_hash LINK_CLIENT)
+couchbase_add_benchmark(benchmark/json LINK_CLIENT)
+couchbase_add_benchmark(benchmark/mcbp_parser LINK_CLIENT LIBS snappy)
