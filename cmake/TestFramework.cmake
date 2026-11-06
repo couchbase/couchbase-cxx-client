@@ -302,7 +302,7 @@ couchbase_add_test(framework/selftest LABEL cng)
 couchbase_add_test(framework/errors_selftest LABEL cng LINK_CLIENT)
 
 # The in-tree benchmark framework: histogram, statistics, the runner and the reports. Standard
-# library and test_framework_core only.
+# library and test_framework_core only; the fake MCBP server is a separate library.
 add_library(
   benchmark_framework STATIC
   ${PROJECT_SOURCE_DIR}/test/benchmark/statistics.cxx
