@@ -6,16 +6,13 @@
 
 find_package(Threads REQUIRED)
 
-# Each test executable links this and provides its own tests(). fmt comes from spdlog's bundled
-# copy (header include dirs only). ${PROJECT_SOURCE_DIR}/test is PUBLIC so every test spells its
-# includes from one root: "framework/test_runner.hxx", "cng/fixtures/live_fixture.hxx".
-add_library(
-  test_framework_main STATIC
-  ${PROJECT_SOURCE_DIR}/test/framework/context.cxx
-  ${PROJECT_SOURCE_DIR}/test/framework/requirement.cxx
-  ${PROJECT_SOURCE_DIR}/test/framework/test_runner.cxx
-  ${PROJECT_SOURCE_DIR}/test/framework/test_main.cxx)
-target_include_directories(test_framework_main PUBLIC ${PROJECT_SOURCE_DIR}/test
+# Context, probes and requirements, shared by the test runner and any other main() (the benchmark
+# runner). fmt comes from spdlog's bundled copy (header include dirs only).
+# ${PROJECT_SOURCE_DIR}/test is PUBLIC so every consumer spells its includes from one root:
+# "framework/test_runner.hxx", "cng/fixtures/live_fixture.hxx".
+add_library(test_framework_core STATIC ${PROJECT_SOURCE_DIR}/test/framework/context.cxx
+                                       ${PROJECT_SOURCE_DIR}/test/framework/requirement.cxx)
+target_include_directories(test_framework_core PUBLIC ${PROJECT_SOURCE_DIR}/test
                                                       ${PROJECT_SOURCE_DIR})
 # spdlog is linked, not merely included, so the framework compiles bundled fmt in the same mode as
 # the client library. Borrowing only spdlog's include directories left SPDLOG_COMPILED_LIB undefined
@@ -25,10 +22,18 @@ target_include_directories(test_framework_main PUBLIC ${PROJECT_SOURCE_DIR}/test
 # copies of the same symbols. ld folds that silently; link.exe does not, and fails with LNK2005.
 # declare_system_library() already marks spdlog's includes SYSTEM, so linking it keeps its headers
 # out of /W4 /WX without the manual BEFORE override.
-target_link_libraries(test_framework_main PUBLIC Threads::Threads spdlog::spdlog)
+target_link_libraries(test_framework_core PUBLIC Threads::Threads spdlog::spdlog)
+set_project_options(test_framework_core)
+set_project_warnings(test_framework_core)
+# Sanitized like test_utils, for the reason test/utils/CMakeLists.txt gives.
+enable_sanitizers(test_framework_core)
+
+# Each test executable links this and provides its own tests().
+add_library(test_framework_main STATIC ${PROJECT_SOURCE_DIR}/test/framework/test_runner.cxx
+                                       ${PROJECT_SOURCE_DIR}/test/framework/test_main.cxx)
+target_link_libraries(test_framework_main PUBLIC test_framework_core)
 set_project_options(test_framework_main)
 set_project_warnings(test_framework_main)
-# Sanitized like test_utils, for the reason test/utils/CMakeLists.txt gives.
 enable_sanitizers(test_framework_main)
 
 # The shared cluster helpers. Promoted out of test/CMakeLists.txt because the framework's cluster
