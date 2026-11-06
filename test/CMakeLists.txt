@@ -53,9 +53,6 @@ integration_test(handler_drop_lifetime)
 integration_test(wait_until_ready)
 integration_test(fork)
 
-integration_benchmark(get)
-integration_benchmark(replace)
-
 transaction_test(context)
 transaction_test(simple)
 transaction_test(simple_async)
@@ -98,3 +95,5 @@ couchbase_add_test(benchmark/fake_server_selftest LABEL unit LINK_CLIENT LIBS be
 couchbase_add_benchmark(benchmark/vbucket_hash LINK_CLIENT)
 couchbase_add_benchmark(benchmark/json LINK_CLIENT)
 couchbase_add_benchmark(benchmark/mcbp_parser LINK_CLIENT LIBS snappy)
+couchbase_add_benchmark(benchmark/kv_fake LINK_CLIENT LIBS benchmark_fake_server)
+couchbase_add_benchmark(benchmark/kv_cluster LINK_CLIENT)

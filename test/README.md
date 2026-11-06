@@ -264,7 +264,7 @@ couchbase_add_test(unit/core/config_profiles LABEL unit LINK_CLIENT)
 The per-directory file exists because `test/CMakeLists.txt` is the most contended file in the tree:
 one undivided list puts every migration in conflict with the others.
 
-`LABEL` is one of `unit`, `integration`, `transaction`, `benchmark`, `cng`, and decides which CI leg runs it. Every one of them is selected by a leg in `bin/` or `.github/workflows/`; a label no leg selects would build and link its cases and never run them. The framework's own selftests carry `cng`. `LINK_CLIENT` links the client library and the cluster-backed probes; omit it for a test that needs neither. `LIBS` adds anything further.
+`LABEL` is one of `unit`, `integration`, `transaction`, `cng`, and decides which CI job runs it. Every one of them is selected by a job in `bin/` or `.github/workflows/`; a label no job selects would build and link its cases and never run them. Benchmarks are registered with `couchbase_add_benchmark()` instead, as `test/benchmark/README.md` describes. The framework's own selftests carry `cng`. `LINK_CLIENT` links the client library and the cluster-backed probes; omit it for a test that needs neither. `LIBS` adds anything further.
 
 ### Declaring what a case needs
 

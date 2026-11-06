@@ -6,7 +6,6 @@ require "find"
 ALLOWED_LABELS = %w[
   unit
   integration
-  benchmark
   transactions
 ].freeze
 
