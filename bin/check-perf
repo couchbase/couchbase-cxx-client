@@ -24,8 +24,10 @@
 #   bin/check-perf compare BASE HEAD     run BASE and HEAD in alternating rounds and give each key a
 #                                        verdict; each side is a build directory or a revision
 #   bin/check-perf ci                    compare in a GitHub Actions run, as described below
-#   bin/check-perf --self-test           check the verdict rules, the reports, ci and the metadata
-#                                        shape
+#   bin/check-perf comment DIR...        render the result.json of each DIR as the one comment of the
+#                                        pull request, as described below
+#   bin/check-perf --self-test           check the verdict rules, the reports, ci, comment and the
+#                                        metadata shape
 #
 # compare writes result.json, report.txt, comment.md and head.bmf.json to --out. A round runs every
 # selected binary of both sides. Base runs first in even rounds and head first in odd ones, so a
@@ -62,6 +64,27 @@
 # the all-zero id of a new branch, leaves every case new. On a pull request ci also writes the pull
 # request number to pr-number in --out.
 #
+# comment reads the artifacts of a perf run of a pull request, which is untrusted input. It reads
+# only pr-number and result.json of each DIR. pr-number must be a positive integer, and the pull
+# request must still be at the HEAD_SHA of the run. The comment is rendered from result.json by the
+# code of this checkout, after these checks:
+#
+#   key        '/'-separated [A-Za-z_][A-Za-z0-9_]* segments, as the benchmark runner requires
+#   sha        7 to 40 hex digits, else rendered as ?
+#   verdict    one of VERDICTS; a base status one of BASE_STATUSES
+#   number     a finite Numeric
+#   free text  letters, digits, space and ._-+()/,@ only, every @ and www. neutralised, at most
+#              TEXT_LIMIT characters
+#
+# A row or field that fails its check is left out. A result.json that is not an object with rows,
+# base and head fails the command. The body is the marker line, then the comment of each DIR in
+# order, cut to 65,000 characters. It replaces the comment that github-actions[bot] wrote with that
+# marker, else creates one. It needs GH_TOKEN and GITHUB_REPOSITORY, and does nothing when no DIR
+# has a result.json.
+#
+# site renders the pages from data only: perf/data/*.json and the regular files under abi/ are
+# copied, and every other file of FROM, an index.html included, is left behind.
+#
 # Exit status: 0 done, 1 a case failed at head, 3 usage or environment error, 4 the revision has no
 # test/benchmark/, 5 the build failed.
 
@@ -69,9 +92,12 @@ require "English"
 require "etc"
 require "fileutils"
 require "json"
+require "net/http"
 require "open3"
 require "optparse"
+require "stringio"
 require "tmpdir"
+require "uri"
 
 module CheckPerf
   class Error < StandardError
@@ -434,7 +460,8 @@ module CheckPerf
     meta = metadata(head.sha ? File.join(work, "build-#{head.sha[0, 12]}") : head_arg)
     meta[:cluster] = {nodes: server["nodes"], version: server["version"]} if server
     result = {schema: 1, base: {sha: base.sha || base.label, status: base.status},
-              head: {sha: head.sha || head.label}, rounds: rounds, metadata: meta, rows: rows, skipped: skipped}
+              head: {sha: head.sha || head.label}, suites: head.binaries.keys.sort, rounds: rounds, metadata: meta,
+              rows: rows, skipped: skipped}
     result[:base][:reason] = base.reason if base.reason
     File.write(File.join(out, "result.json"), "#{JSON.pretty_generate(result)}\n")
     File.write(File.join(out, "head.bmf.json"), "#{JSON.pretty_generate(bmf)}\n")
@@ -526,7 +553,8 @@ module CheckPerf
 
   def self.comment(result)
     head = [
-      "### Benchmarks: base `#{short(result[:base][:sha])}`, head `#{short(result[:head][:sha])}`",
+      "### Benchmarks of #{result[:suites].join(', ')}: base `#{short(result[:base][:sha])}`, " \
+      "head `#{short(result[:head][:sha])}`",
       "",
       *machine(result[:metadata]).map { |l| "#{l}  " },
       *(base_note(result) ? ["", base_note(result)] : []),
@@ -583,6 +611,177 @@ module CheckPerf
     compare(base, head, **options)
   end
 
+
+  MARKER = "<!-- check-perf -->"
+  # GitHub rejects a comment body longer than 65,536 characters.
+  BODY_LIMIT = 65_000
+  TRUNCATED = "\n\nThe comment was truncated; the full reports are in the artifacts of the perf run.\n"
+  BOT_LOGIN = "github-actions[bot]"
+
+  # Calls the GitHub REST API as the token's owner: call(verb, path, body = nil) returns the parsed
+  # response. The self-test passes a lambda of the same shape instead.
+  class GitHubHttp
+    def initialize(token) = @token = token
+
+    def call(verb, path, body = nil)
+      uri = URI("https://api.github.com#{path}")
+      req = Net::HTTP.const_get(verb.to_s.capitalize).new(uri)
+      req["Accept"] = "application/vnd.github+json"
+      req["Authorization"] = "Bearer #{@token}"
+      req.body = JSON.generate(body) if body
+      res = Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |http| http.request(req) }
+      raise Error, "GitHub #{verb.to_s.upcase} #{path}: #{res.code}" unless res.is_a?(Net::HTTPSuccess)
+
+      JSON.parse(res.body)
+    end
+  end
+
+  # An artifact comes from a run of pull request code, so it is read as data: a regular file only,
+  # never a link that would read a file of the runner into the comment.
+  def self.artifact_file(dir, name)
+    path = File.join(dir, name)
+    File.file?(path) && !File.symlink?(path) ? path : nil
+  end
+
+  def self.pr_number(dirs)
+    path = dirs.filter_map { |d| artifact_file(d, "pr-number") }.first
+    raise Error, "no pr-number in #{dirs.join(', ')}" unless path
+
+    text = File.read(path, 32).to_s.sub(/\n\z/, "")
+    raise Error, "pr-number is not a pull request number" unless text.match?(/\A[1-9][0-9]*\z/)
+
+    Integer(text, 10)
+  end
+
+  KEY = %r{\A[A-Za-z_][A-Za-z0-9_]*(?:/[A-Za-z_][A-Za-z0-9_]*)*\z}
+  VERDICTS = ["faster", "slower", "likely faster", "likely slower", "noisy", "no change", "new", "removed", "failed"].freeze
+  BASE_STATUSES = %w[built missing failed].freeze
+  # The longest free-text field that comment renders from an artifact.
+  TEXT_LIMIT = 200
+  # The largest result.json that comment reads.
+  RESULT_LIMIT = 64 << 20
+
+  # Free text of an artifact as plain text: no markup, entity, reference or mention survives. nil for
+  # a non-string or an empty result.
+  def self.plain(text)
+    return nil unless text.is_a?(String)
+
+    text = text.scrub("").gsub(%r{[^A-Za-z0-9 ._\-+()/,@]}, "").strip[0, TEXT_LIMIT]
+               .gsub("@", "@\u200b").gsub(/(www)\./i, "\\1\u200b.")
+    text.empty? ? nil : text
+  end
+
+  def self.number?(v) = v.is_a?(Numeric) && v.to_f.finite?
+
+  def self.number_or_nil(value) = number?(value) ? value : nil
+
+  # A median with both CI bounds or neither, as change() expects.
+  def self.stat_of(value)
+    return nil unless value.is_a?(Hash) && number?(value["median"])
+
+    bounds = number?(value["lower"]) && number?(value["upper"])
+    {median: value["median"], lower: bounds ? value["lower"] : nil, upper: bounds ? value["upper"] : nil}
+  end
+
+  def self.comment_row(row)
+    return nil unless row.is_a?(Hash) && row["key"].is_a?(String) && row["key"].match?(KEY) && VERDICTS.include?(row["verdict"])
+
+    {key: row["key"], verdict: row["verdict"], reason: plain(row["reason"]),
+     harness_changed: row["harness_changed"] == true, suspect: row["suspect"] == true,
+     base: stat_of(row["base"]), head: stat_of(row["head"]), ratio: stat_of(row["ratio"])}
+  end
+
+  # The result that comment() renders, built from a result.json of an artifact by the checks that the
+  # header describes.
+  def self.comment_result(raw)
+    unless raw.is_a?(Hash) && raw["rows"].is_a?(Array) && raw["base"].is_a?(Hash) && raw["head"].is_a?(Hash)
+      raise Error, "result.json is not a result written by bin/check-perf"
+    end
+
+    at = ->(*path) { path.reduce(raw) { |v, k| v.is_a?(Hash) ? v[k] : nil } }
+    sha = ->(v) { v.is_a?(String) && v.match?(/\A\h{7,40}\z/) ? v : "?" }
+    integer = ->(v) { v.is_a?(Integer) ? v : nil }
+    keys = ->(v) { v.is_a?(Array) ? v.select { |k| k.is_a?(String) && k.match?(KEY) } : [] }
+    status = at.call("base", "status")
+    cluster = at.call("metadata", "cluster")
+    {base: {sha: sha.call(at.call("base", "sha")), status: BASE_STATUSES.include?(status) ? status : "?",
+            reason: plain(at.call("base", "reason"))},
+     head: {sha: sha.call(at.call("head", "sha"))},
+     # A round count past 100 is left out, which bounds the cost of likely_rate.
+     suites: keys.call(raw["suites"]), rounds: integer.call(raw["rounds"])&.then { |n| n.between?(1, 100) ? n : nil },
+     metadata: {cpu: {model: plain(at.call("metadata", "cpu", "model")),
+                      logical_cores: integer.call(at.call("metadata", "cpu", "logical_cores")),
+                      physical_cores: integer.call(at.call("metadata", "cpu", "physical_cores")),
+                      governor: plain(at.call("metadata", "cpu", "governor")), smt: at.call("metadata", "cpu", "smt") == true},
+                memory: {total_bytes: number_or_nil(at.call("metadata", "memory", "total_bytes"))},
+                runner: %w[ImageOS ImageVersion].to_h { |k| [k, plain(at.call("metadata", "runner", k))] },
+                compiler: {version: plain(at.call("metadata", "compiler", "version"))},
+                build_type: plain(at.call("metadata", "build_type")),
+                cluster: cluster.is_a?(Hash) ? {nodes: integer.call(cluster["nodes"]), version: plain(cluster["version"])} : nil},
+     rows: raw["rows"].filter_map { |r| comment_row(r) }, skipped: keys.call(raw["skipped"])}
+  end
+
+  def self.read_result(path)
+    raise Error, "#{path} is larger than #{RESULT_LIMIT} bytes" if File.size(path) > RESULT_LIMIT
+
+    JSON.parse(File.read(path, encoding: "UTF-8"))
+  rescue JSON::ParserError => e
+    raise Error, "#{path} is not JSON: #{e.message}"
+  end
+
+  # The marker line, then the rendered comment of each directory in order, within BODY_LIMIT.
+  def self.comment_body(texts)
+    body = "#{MARKER}\n#{texts.map(&:rstrip).join("\n\n")}\n"
+    return body if body.length <= BODY_LIMIT
+
+    "#{body[0, BODY_LIMIT - TRUNCATED.length]}#{TRUNCATED}"
+  end
+
+  # The comment of the marker that the token's bot wrote, so a comment that a user plants with the
+  # marker is never edited.
+  def self.find_comment(http, repo, number)
+    page = 1
+    loop do
+      comments = http.call(:get, "/repos/#{repo}/issues/#{number}/comments?per_page=100&page=#{page}")
+      found = comments.find { |c| c.dig("user", "login") == BOT_LOGIN && c["body"].to_s.start_with?("#{MARKER}\n") }
+      return found if found
+      return nil if comments.size < 100
+
+      page += 1
+    end
+  end
+
+  def self.post_comment(dirs, env: ENV, http: nil)
+    texts = dirs.filter_map { |d| (f = artifact_file(d, "result.json")) && comment(comment_result(read_result(f))) }
+    if texts.empty?
+      puts "no result.json in #{dirs.join(', ')}; nothing to post"
+      return 0
+    end
+    number = pr_number(dirs)
+    repo = env["GITHUB_REPOSITORY"].to_s
+    raise Error, "GITHUB_REPOSITORY is not OWNER/NAME" unless repo.match?(%r{\A[\w.-]+/[\w.-]+\z})
+
+    expected = env["HEAD_SHA"].to_s
+    raise Error, "HEAD_SHA is not set" if expected.empty?
+
+    http ||= GitHubHttp.new(env.fetch("GH_TOKEN") { raise Error, "GH_TOKEN is not set" })
+    head = http.call(:get, "/repos/#{repo}/pulls/#{number}").dig("head", "sha")
+    if head != expected
+      puts "superseded by #{head}"
+      return 0
+    end
+
+    body = {body: comment_body(texts)}
+    existing = find_comment(http, repo, number)
+    if existing
+      http.call(:patch, "/repos/#{repo}/issues/comments/#{existing.fetch('id')}", body)
+      puts "edited comment #{existing['id']} of pull request #{number}"
+    else
+      http.call(:post, "/repos/#{repo}/issues/#{number}/comments", body)
+      puts "created a comment on pull request #{number}"
+    end
+    0
+  end
 
   def self.self_test
     check = ->(name, actual, expected) { raise "#{name}: expected #{expected.inspect}, got #{actual.inspect}" unless actual == expected }
@@ -723,10 +922,118 @@ module CheckPerf
       check.call("unresolvable base", [missing.status, missing.binaries, missing.reason.include?("cannot be resolved")],
                  ["missing", {}, true])
       rendered = {base: {sha: missing.label, status: missing.status, reason: missing.reason}, head: {sha: "b" * 40},
-                  rounds: 1, metadata: metadata, rows: [], skipped: []}
+                  suites: %w[json kv_fake], rounds: 1, metadata: metadata, rows: [], skipped: []}
+      check.call("comment heading names the suites", comment(rendered).lines.first.start_with?("### Benchmarks of json, kv_fake: "),
+                 true)
       note = "Every case is new: check-perf-no-such-revision cannot be resolved: "
       check.call("unresolvable base rendered", [report(rendered).include?(note), comment(rendered).include?(note)],
                  [true, true])
+    end
+
+    Dir.mktmpdir("check-perf-comment") do |tmp|
+      minimal = {"base" => {"sha" => "a" * 40, "status" => "built"}, "head" => {"sha" => "b" * 40}, "suites" => ["x"],
+                 "rounds" => 7, "metadata" => {}, "rows" => [], "skipped" => []}
+      dir = lambda do |name, number: nil, text: JSON.generate(minimal)|
+        File.join(tmp, name).tap do |d|
+          FileUtils.mkdir_p(d)
+          File.write(File.join(d, "result.json"), text) if text
+          File.write(File.join(d, "pr-number"), number) if number
+        end
+      end
+      ["12; rm", "0", "", "-1", "012", "1\n\n"].each do |bad|
+        d = dir.call("bad", number: bad)
+        check.call("comment_rejects_bad_number #{bad.inspect}", status.call { pr_number([d]) }, 3)
+      end
+      check.call("pr-number trailing newline", pr_number([dir.call("good", number: "42\n")]), 42)
+      check.call("pr-number from the first dir that has one", pr_number([dir.call("none"), dir.call("second", number: "7")]), 7)
+      check.call("pr-number missing", status.call { pr_number([dir.call("none")]) }, 3)
+      check.call("comment_truncates", [comment_body(["x" * 70_000]).length <= BODY_LIMIT, comment_body(["x" * 70_000]).end_with?(TRUNCATED)],
+                 [true, true])
+      check.call("comment_marker_first", comment_body(["a", "b"]), "#{MARKER}\na\n\nb\n")
+      check.call("comment_marker_first untrusted text", comment_body(["#{MARKER}\n"]).start_with?("#{MARKER}\n#{MARKER}"), true)
+
+      calls = []
+      existing = []
+      http = lambda do |verb, path, body = nil|
+        calls << [verb, path, body]
+        case path
+        when %r{/pulls/} then {"head" => {"sha" => "abc"}}
+        when %r{/comments\?per_page=100&page=(\d+)} then existing[Regexp.last_match(1).to_i - 1] || []
+        else {"id" => 1}
+        end
+      end
+      env = {"GITHUB_REPOSITORY" => "o/r", "HEAD_SHA" => "abc"}
+      d = dir.call("run", number: "5")
+      quietly = lambda do |**kw|
+        out = $stdout
+        $stdout = StringIO.new
+        post_comment([d, File.join(tmp, "absent")], **kw)
+      ensure
+        $stdout = out
+      end
+      quietly_in_dir = lambda do |x|
+        out = $stdout
+        $stdout = StringIO.new
+        post_comment([x], env: env, http: http)
+      ensure
+        $stdout = out
+      end
+      calls.clear
+      check.call("comment creates", [quietly.call(env: env, http: http), calls.last[0, 2]], [0, [:post, "/repos/o/r/issues/5/comments"]])
+      check.call("comment body marker", calls.last[2][:body].start_with?("#{MARKER}\n"), true)
+      user = {"user" => {"login" => "mallory"}, "body" => "#{MARKER}\nplanted"}
+      bot = {"id" => 99, "user" => {"login" => BOT_LOGIN}, "body" => "#{MARKER}\nold"}
+      other = {"id" => 98, "user" => {"login" => BOT_LOGIN}, "body" => "unrelated"}
+      existing.replace([[user, other]])
+      calls.clear
+      quietly.call(env: env, http: http)
+      check.call("planted marker is not edited", calls.last[0], :post)
+      existing.replace([[user] * 100, [other, bot]])
+      calls.clear
+      quietly.call(env: env, http: http)
+      check.call("comment edits across pages", calls.last[0, 2], [:patch, "/repos/o/r/issues/comments/99"])
+      calls.clear
+      check.call("stale head sha", [quietly.call(env: env.merge("HEAD_SHA" => "def"), http: http), calls.map(&:first)], [0, [:get]])
+      hostile = minimal.merge(
+        "base" => {"sha" => "<script>", "status" => "built"}, "head" => {"sha" => "zz"},
+        "suites" => ["x", "a`b"], "skipped" => ["s/t1", "[x](https://e.example)"],
+        "metadata" => {"cpu" => {"model" => "Xeon &#64;team <img src=x onerror=alert(1)> @couchbase/team\nWWW.cpu.example"},
+                       "compiler" => {"version" => "[cc](https://e.example) #42 owner/repo#7 &commat;x"}},
+        "rows" => [{"key" => "evil`|<img src=x>&#64;team", "verdict" => "no change"},
+                   {"key" => "bogus/verdict", "verdict" => "<b>slower</b>"},
+                   {"key" => "good/t1", "verdict" => "slower", "reason" => "see #12 &#x40;org <i>x</i> www.r.example",
+                    "base" => {"median" => "1e3"}, "head" => {"median" => "INFINITE"},
+                    "ratio" => {"median" => 1.1, "lower" => 1.05, "upper" => "x"}}]
+      )
+      # JSON.parse reads 1e400 as Infinity, which JSON.generate refuses to write.
+      rendered_hostile = comment(comment_result(JSON.parse(JSON.generate(hostile).sub('"INFINITE"', "1e400"))))
+      check.call("hostile result renders none of its payload",
+                 ["<", "&", "#4", "#1", "#7", "`|", "](", "@couchbase", "@team", "bogus", "a`b", "zz"].reject { |p| !rendered_hostile.include?(p) } +
+                   rendered_hostile.scan(/www\./i),
+                 [])
+      check.call("hostile result keeps the valid rows",
+                 [rendered_hostile.include?("| `good/t1` | - | - | +10.0% | slower (see 12 x40org ix/i www\u200b.r.example) |\n"),
+                  rendered_hostile.include?("`s/t1`"), rendered_hostile.include?("base `?`, head `?`")],
+                 [true, true, true])
+      check.call("comment_result not a result", status.call { comment_result([]) }, 3)
+      check.call("comment_result rows not an array", status.call { comment_result(minimal.merge("rows" => {})) }, 3)
+      check.call("plain", [plain("a@b <c>&#64;"), plain(""), plain(5), plain("x" * 300).length, plain("see www.x.example")],
+                 ["a@\u200bb c64", nil, nil, TEXT_LIMIT, "see www\u200b.x.example"])
+      check.call("malformed result.json fails", status.call { quietly_in_dir.call(dir.call("broken", number: "5", text: "{")) }, 3)
+      check.call("no HEAD_SHA", status.call { quietly.call(env: {"GITHUB_REPOSITORY" => "o/r"}, http: http) }, 3)
+      quietly_in = lambda do |x|
+        out = $stdout
+        $stdout = StringIO.new
+        post_comment([x], env: {}, http: http)
+      ensure
+        $stdout = out
+      end
+      empty = File.join(tmp, "empty")
+      FileUtils.mkdir_p(empty)
+      calls.clear
+      check.call("no result.json", [quietly_in.call(empty), calls], [0, []])
+      File.symlink("/etc/hostname", File.join(empty, "result.json"))
+      check.call("symlink ignored", artifact_file(empty, "result.json"), nil)
     end
 
     meta = metadata
@@ -735,8 +1042,8 @@ module CheckPerf
     %i[model logical_cores physical_cores].each { |k| raise "metadata_shape: cpu #{k} is nil" if meta[:cpu][k].nil? }
     raise "metadata_shape: memory unread" unless meta[:memory].values.all?(Integer)
 
-    likely = {base: {sha: "a" * 40, status: "built"}, head: {sha: "b" * 40}, rounds: 7, metadata: meta, skipped: [],
-              rows: [integer_row]}
+    likely = {base: {sha: "a" * 40, status: "built"}, head: {sha: "b" * 40}, suites: ["x"], rounds: 7, metadata: meta,
+              skipped: [], rows: [integer_row]}
     unchanged = likely.merge(rows: [row("a", rounds.call("a", 10.0), rounds.call("a", 10.0))])
     hint = "A likely row is a hint to re-run: with 7 rounds an unchanged key reads likely with probability at most 2/128."
     check.call("likely noted", [report(likely).include?(hint), comment(likely).include?(hint)], [true, true])
@@ -746,7 +1053,7 @@ module CheckPerf
     check.call("likely not noted without a CI", [likely_rate(5), report(likely.merge(rounds: 5)).include?("A likely row")], [nil, false])
     check.call("likely not noted", [report(unchanged).include?(hint), comment(unchanged).include?(hint)], [false, false])
 
-    sample = {base: {sha: "a" * 40, status: "built"}, head: {sha: "b" * 40}, rounds: 5, metadata: meta, skipped: [],
+    sample = {base: {sha: "a" * 40, status: "built"}, head: {sha: "b" * 40}, suites: ["x"], rounds: 5, metadata: meta, skipped: [],
               rows: Array.new(5000) { |i| row("case_#{i}/v", rounds.call("x", 10.0), rounds.call("x", 10.0)) }}
     raise "comment over the limit" unless comment(sample).length <= COMMENT_LIMIT + 100
     puts "ok"
@@ -758,7 +1065,7 @@ module CheckPerf
     suites = []
     out = "perf-report"
     parser = OptionParser.new do |o|
-      o.banner = "usage: bin/check-perf {metadata [BUILD] | build REV DIR | compare BASE HEAD | ci | --self-test}"
+      o.banner = "usage: bin/check-perf {metadata [BUILD] | build REV DIR | compare BASE HEAD | ci | comment DIR... | --self-test}"
       o.on("--rounds N", Integer, "rounds of compare (default #{ROUNDS})") { |n| rounds = n }
       o.on("--suite NAME", "a binary benchmark_NAME to compare; repeatable (default all)") { |s| suites << s }
       o.on("--out DIR", "where compare writes its reports (default #{out})") { |d| out = d }
@@ -781,6 +1088,10 @@ module CheckPerf
       raise Error, parser.banner unless args.size == 2 && rounds.positive?
 
       compare(args[0], args[1], rounds: rounds, suites: suites, out: out)
+    when "comment"
+      raise Error, parser.banner if args.empty?
+
+      post_comment(args)
     when "ci"
       raise Error, parser.banner unless args.empty? && rounds.positive?
 

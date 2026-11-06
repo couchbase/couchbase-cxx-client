@@ -1,0 +1,55 @@
+name: perf-comment
+permissions: {}
+
+# Posts the report of a perf run of a pull request as one comment. The run of the pull request has
+# a read-only token, so the comment is written from here, in a run of the default branch. The
+# artifacts are the output of pull request code. bin/check-perf comment reads only their pr-number
+# and result.json, as data, and renders the comment itself; no code of the pull request is checked
+# out or run.
+on:
+  workflow_run:
+    workflows: [perf]
+    types: [completed]
+
+# One run at a time per pull request head, so two comments are not created for the same pull request.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.workflow_run.head_branch }}-${{ github.event.workflow_run.head_repository.full_name }}
+  cancel-in-progress: false
+
+jobs:
+  comment:
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-26.04
+    # actions: read lets download-artifact fetch the artifacts of another run; contents: read lets
+    # checkout fetch the default branch. Comments on a pull request go through the issues API, which
+    # pull-requests: write covers.
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+    steps:
+      # No ref: the default branch, for bin/check-perf only.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Either job may have failed before it uploaded its report.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true
+        with:
+          name: perf-report
+          path: perf-report
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true
+        with:
+          name: perf-report-cluster
+          path: perf-report-cluster
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - name: Comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: bin/check-perf comment perf-report perf-report-cluster
