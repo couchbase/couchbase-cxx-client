@@ -22,7 +22,8 @@
 #                                     package build, a source tree, or a git revision; source trees
 #                                     and revisions are built in the package configuration
 #   bin/check-abi history [SONAME]    list the recorded baselines and per-commit results
-#   bin/check-abi report FILE         write the baselines and results of every soname as HTML
+#   bin/check-abi report FILE [DIR]   write the baselines and results of every soname as HTML,
+#                                     linking the reports in DIR/COMMIT/
 #   bin/check-abi publish COMMIT DIR  add the reports in DIR as those of COMMIT to refs/site/pages
 #                                     branch, and render abi/index.html there
 #   bin/check-abi record REF [NAME]   record REF as the baseline of its soname, under NAME; a
@@ -46,6 +47,8 @@ require "net/http"
 require "open3"
 require "optparse"
 require "uri"
+
+require_relative "pages_site"
 
 # A CI shell may have no UTF-8 locale, and CMakeLists.txt is not ASCII.
 Encoding.default_external = Encoding::UTF_8
@@ -307,18 +310,11 @@ module CheckAbi
   class GitHub
     API = "https://api.github.com"
 
-    attr_reader :repository
+    attr_reader :repository, :token
 
     # The run executing this, in GitHub Actions.
     def run_url
       ENV["GITHUB_RUN_ID"] && "#{ENV.fetch('GITHUB_SERVER_URL', 'https://github.com')}/#{@repository}/actions/runs/#{ENV['GITHUB_RUN_ID']}"
-    end
-
-    # Authenticates git over HTTPS through the environment, so the token appears in no command line.
-    def git_auth_env
-      header = "AUTHORIZATION: basic #{["x-access-token:#{@token}"].pack('m0')}"
-      {"GIT_CONFIG_COUNT" => "1", "GIT_CONFIG_KEY_0" => "http.https://github.com/.extraheader",
-       "GIT_CONFIG_VALUE_0" => header}
     end
 
     def initialize(repository: ENV.fetch("GITHUB_REPOSITORY", "couchbase/couchbase-cxx-client"),
@@ -622,23 +618,13 @@ module CheckAbi
     HTML
   end
 
-  # Outside refs/heads, so clones and fetches do not download the site and GitHub lists no branch.
-  SITE_REF = "refs/site/pages"
+  SITE_REF = PagesSite::REF
   # The result of a branch push, which bin/check-abi ci writes and bin/check-abi publish records.
   RESULT_FILE = "abi-result.json"
-  ROOT_INDEX = <<~HTML
-    <!doctype html>
-    <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>couchbase-cxx-client</title></head>
-    <body style="font: 15px/1.5 system-ui, sans-serif; max-width: 72rem; margin: 0 auto; padding: 1rem">
-    <h1>couchbase-cxx-client</h1>
-    <ul><li><a href="abi/">ABI history</a></li></ul>
-    </body></html>
-  HTML
 
   # Adds the abidiff reports of commit to abi/reports/COMMIT/ in SITE_REF and renders abi/index.html
-  # from the deployments. A push that loses a race with another run's publish starts again from the
-  # new head of SITE_REF; the reports and the page come out the same either way.
+  # from the deployments. A failed push starts again from the head of SITE_REF; the reports and the
+  # page come out the same either way.
   #
   # On a branch push, a compare job that succeeded has written a result, so a missing one is an
   # error. A compare job that failed without one stopped before comparing, as on a timeout or a
@@ -662,38 +648,19 @@ module CheckAbi
                             description: "comparison did not finish", state: "failure",
                             log_url: github.run_url, auto_inactive: false)
     end
-    dir = ".abi-site"
-    url = "https://github.com/#{github.repository}.git"
-    attempts.times do |attempt|
-      FileUtils.rm_rf(dir)
-      run("git", "init", "--quiet", dir)
-      if system("git", "ls-remote", "--exit-code", url, SITE_REF, out: File::NULL)
-        run("git", "-C", dir, "fetch", "--quiet", "--depth", "1", url, SITE_REF)
-        run("git", "-C", dir, "checkout", "--quiet", "FETCH_HEAD")
-      end
+    pushed = PagesSite.publish(url: "https://github.com/#{github.repository}.git", token: github.token, site: ".abi-site",
+                               attempts: attempts, message: "ABI history at #{commit[0, 12]}") do |dir|
       reports_dir = File.join(dir, "abi", "reports")
       FileUtils.mkdir_p(File.join(reports_dir, commit))
       reports.each { |report| FileUtils.cp(report, File.join(reports_dir, commit)) }
       published = Dir.children(reports_dir).to_h { |sha| [sha, Dir.children(File.join(reports_dir, sha))] }
       File.write(File.join(dir, "abi", "index.html"),
                  page(github.abi_deployments, repository: github.repository, reports: published))
-      File.write(File.join(dir, "index.html"), ROOT_INDEX) unless File.exist?(File.join(dir, "index.html"))
-      run("git", "-C", dir, "add", "--all", quiet: true)
-      if system("git", "-C", dir, "diff", "--cached", "--quiet")
-        puts "#{SITE_REF} is up to date"
-        return 0
-      end
-      run("git", "-C", dir, "-c", "user.name=github-actions[bot]",
-          "-c", "user.email=41898282+github-actions[bot]@users.noreply.github.com",
-          "commit", "--quiet", "--message", "ABI history at #{commit[0, 12]}", quiet: true)
-      _, err, status = Open3.capture3(github.git_auth_env, "git", "-C", dir, "push", url, "HEAD:#{SITE_REF}")
-      if status.success?
-        puts "Published #{reports.size} reports of #{commit[0, 12]} to #{SITE_REF}"
-        return 0
-      end
-      warn "push to #{SITE_REF} failed (attempt #{attempt + 1} of #{attempts}):\n#{err}"
     end
-    raise Error, "could not push to #{SITE_REF}"
+    puts pushed ? "Published #{reports.size} reports of #{commit[0, 12]} to #{SITE_REF}" : "#{SITE_REF} is up to date"
+    0
+  rescue PagesSite::Error => e
+    raise Error, e.message
   end
 
   def self.history(github, soname, limit)
@@ -814,7 +781,7 @@ module CheckAbi
   def self.main(argv)
     limit = 20
     parser = OptionParser.new do |o|
-      o.banner = "usage: bin/check-abi {compare OLD NEW | history [SONAME] | report FILE | publish COMMIT DIR | record REF [NAME] | ci | tools-key | --self-test}"
+      o.banner = "usage: bin/check-abi {compare OLD NEW | history [SONAME] | report FILE [DIR] | publish COMMIT DIR | record REF [NAME] | ci | tools-key | --self-test}"
       o.on("--limit N", Integer, "deployments listed by history (default #{limit})") { |n| limit = n }
     end
     return self_test if argv.delete("--self-test")
@@ -832,11 +799,13 @@ module CheckAbi
       history(GitHub.new, args[0], limit)
       0
     when "report"
-      raise Error, parser.banner unless args.size == 1
+      raise Error, parser.banner unless [1, 2].include?(args.size)
 
       github = GitHub.new
+      dir = args[1]
+      reports = dir && File.directory?(dir) ? Dir.children(dir).to_h { |sha| [sha, Dir.children(File.join(dir, sha))] } : {}
       FileUtils.mkdir_p(File.dirname(args[0]))
-      File.write(args[0], page(github.abi_deployments, repository: github.repository))
+      File.write(args[0], page(github.abi_deployments, repository: github.repository, reports: reports))
       puts "Wrote #{args[0]}"
       0
     when "publish"
