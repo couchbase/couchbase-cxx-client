@@ -145,29 +145,40 @@ jobs:
           COMPARE_RESULT: ${{ needs.compare.result }}
         run: bin/check-abi publish "${GITHUB_SHA}" abi-report
 
-  # Deploys the head of refs/site/pages, which holds the whole site. The github-pages environment
-  # deploys from main only, so the results of release branches and tags reach the site with the next
-  # deployment from main.
+  # Deploys the site that bin/check-perf site builds from the head of refs/site/pages. The
+  # github-pages environment deploys from main only, so the results of release branches and tags
+  # reach the site with the next deployment from main.
   deploy:
     needs: publish
     if: ${{ !cancelled() && needs.publish.result == 'success' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-26.04
     concurrency:
-      group: ${{ github.workflow }}-pages
+      group: pages
       cancel-in-progress: false
+    # deployments: read lets bin/check-abi report render the ABI page from the deployments.
     permissions:
       contents: read
+      deployments: read
       pages: write
       id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
-      - name: Fetch the site
+      # The pushed commit of main, whose bin/check-perf and bin/check-abi render the pages.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Anyone who can push to refs/site/pages can change any file in it, so only its performance
+      # data and ABI reports are deployed; every page is rendered again from this checkout.
+      - name: Build the site
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          git init --quiet site
-          git -C site fetch --quiet --depth 1 "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" refs/site/pages
-          git -C site checkout --quiet FETCH_HEAD
+          git init --quiet site-ref
+          git -C site-ref fetch --quiet --depth 1 "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" refs/site/pages
+          git -C site-ref checkout --quiet FETCH_HEAD
+          bin/check-perf site site-ref site
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: site
