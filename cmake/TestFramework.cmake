@@ -233,7 +233,7 @@ function(couchbase_add_test relpath)
   # --label-regex. A label no runner selects is worse than a typo: it configures, builds and links,
   # and the cases are then never executed by anything. Do not add one here without the job that
   # runs it.
-  set(known_labels unit integration transaction benchmark cng)
+  set(known_labels unit integration transaction cng)
   if(NOT ARG_LABEL IN_LIST known_labels)
     # A typo here is invisible at build time and then quietly drops the binary out of the CI job
     # that was supposed to run it.
@@ -268,8 +268,6 @@ function(couchbase_add_test relpath)
     set_property(GLOBAL APPEND PROPERTY COUCHBASE_INTEGRATION_TESTS ${target})
   elseif(ARG_LABEL STREQUAL "transaction")
     set_property(GLOBAL APPEND PROPERTY COUCHBASE_TRANSACTION_TESTS ${target})
-  elseif(ARG_LABEL STREQUAL "benchmark")
-    set_property(GLOBAL APPEND PROPERTY COUCHBASE_BENCHMARKS ${target})
   endif()
 
   # The harness returns 77 when every case was skipped; map that to ctest's "Skipped".
@@ -347,5 +345,5 @@ function(couchbase_add_benchmark relpath)
   endif()
   set_project_options(${target})
   set_project_warnings(${target})
-  set_property(GLOBAL APPEND PROPERTY COUCHBASE_FRAMEWORK_BENCHMARKS ${target})
+  set_property(GLOBAL APPEND PROPERTY COUCHBASE_BENCHMARKS ${target})
 endfunction()
