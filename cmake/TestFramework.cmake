@@ -286,3 +286,11 @@ couchbase_add_test(framework/selftest LABEL cng)
 # What assert_success prints. It needs couchbase::error, and therefore the client library, but no
 # server: every value it asserts on is constructed by hand. cng for the same reason as above.
 couchbase_add_test(framework/errors_selftest LABEL cng LINK_CLIENT)
+
+# The in-tree benchmark framework: histogram and statistics. Standard library and
+# test_framework_core only.
+add_library(benchmark_framework STATIC ${PROJECT_SOURCE_DIR}/test/benchmark/statistics.cxx)
+target_link_libraries(benchmark_framework PUBLIC test_framework_core)
+set_project_options(benchmark_framework)
+set_project_warnings(benchmark_framework)
+enable_sanitizers(benchmark_framework)

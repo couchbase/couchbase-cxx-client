@@ -75,3 +75,7 @@ couchbase_add_test(framework/cluster_probes_selftest LABEL integration LINK_CLIE
 
 couchbase_add_test(transactions/query_expiry LABEL transaction LINK_CLIENT)
 couchbase_add_test(transactions/retry_waits LABEL transaction LINK_CLIENT)
+
+# The benchmark framework's own statistics, run with the unit tests. Registered here for the reason
+# given above for framework/cluster_probes_selftest.
+couchbase_add_test(benchmark/selftest LABEL unit LIBS benchmark_framework)
