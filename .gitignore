@@ -12,3 +12,5 @@
 /CMakeSettings.json
 /CppProperties.json
 /Testing
+/.perf-work/
+/perf-report/
