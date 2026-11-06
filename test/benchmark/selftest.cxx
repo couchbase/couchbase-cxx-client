@@ -515,12 +515,41 @@ bmf_shape(context& ctx)
   for (const auto& [name, value] : measures) {
     names.insert(name);
   }
-  assert_true(names == std::set<std::string>{ "latency", "latency-p99", "throughput" },
-              "exactly latency, latency-p99 and throughput");
+  assert_true(
+    names == std::set<std::string>{ "latency", "latency-p99", "throughput", "cpu-time", "max-rss" },
+    "exactly latency, latency-p99, throughput, cpu-time and max-rss");
   const auto& latency = bmf.at("ok_op/t1").at("latency");
   const auto value = latency.at("value").as<double>();
   assert_true(latency.at("lower_value").as<double>() <= value, "lower <= value");
   assert_true(value <= latency.at("upper_value").as<double>(), "value <= upper");
+}
+
+// POSIX and Windows both provide CPU time and peak RSS; context switches are POSIX only.
+void
+resource_usage_per_key(context& ctx)
+{
+  const auto results = run_suite({ "s", { { CASE(ok_op) }, { CASE(counted) } } }, ctx);
+  for (const auto* key : { "ok_op/t1", "counted/t1" }) {
+    const auto r = find(results, key);
+    assert_true(r.cpu_ns_per_op.has_value() && *r.cpu_ns_per_op > 0,
+                std::string{ key } + " has a positive CPU time per operation");
+    assert_true(r.max_rss_bytes.has_value() && *r.max_rss_bytes > 0,
+                std::string{ key } + " has a peak RSS");
+#if defined(_WIN32)
+    assert_true(!r.context_switches_per_op.has_value(),
+                std::string{ key } + " has no context switches on Windows");
+#else
+    assert_true(r.context_switches_per_op.has_value(),
+                std::string{ key } + " has context switches");
+#endif
+  }
+  std::ostringstream out;
+  write_result_json(out, "s", results, ctx);
+  const auto doc = tao::json::from_string(out.str());
+  const auto& measured = doc.at("cases").get_array().at(0);
+  assert_true(measured.at("cpu_ns_per_op").as<double>() > 0, "cpu_ns_per_op in the result JSON");
+  assert_true(measured.at("max_rss_bytes").as<std::uint64_t>() > 0,
+              "max_rss_bytes in the result JSON");
 }
 
 void
@@ -669,6 +698,7 @@ tests() -> test_suite
       { CASE(invalid_variant_fails) },
       { CASE(bmf_shape) },
       { CASE(bmf_escapes_names) },
+      { CASE(resource_usage_per_key) },
       { CASE(filter_matches_case_or_key) },
       { CASE(result_json_shape) },
       { CASE(console_groups_skips) },
