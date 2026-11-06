@@ -26,8 +26,13 @@
 #   bin/check-perf ci                    compare in a GitHub Actions run, as described below
 #   bin/check-perf comment DIR...        render the result.json of each DIR as the one comment of the
 #                                        pull request, as described below
-#   bin/check-perf --self-test           check the verdict rules, the reports, ci, comment and the
-#                                        metadata shape
+#   bin/check-perf publish COMMIT DIR... add the head rows of the result.json of each DIR as those of
+#                                        COMMIT to refs/site/pages, and render perf/index.html there
+#   bin/check-perf site FROM TO          copy the perf data and the ABI reports of FROM, a checkout of
+#                                        refs/site/pages, to TO, and render perf/index.html,
+#                                        abi/index.html and the root index.html there
+#   bin/check-perf --self-test           check the verdict rules, the reports, ci, comment, publish,
+#                                        site and the metadata shape
 #
 # compare writes result.json, report.txt, comment.md and head.bmf.json to --out. A round runs every
 # selected binary of both sides. Base runs first in even rounds and head first in odd ones, so a
@@ -82,8 +87,9 @@
 # marker, else creates one. It needs GH_TOKEN and GITHUB_REPOSITORY, and does nothing when no DIR
 # has a result.json.
 #
-# site renders the pages from data only: perf/data/*.json and the regular files under abi/ are
-# copied, and every other file of FROM, an index.html included, is left behind.
+# site renders the pages from data only: perf/data/*.json and abi/reports/COMMIT/report-*.txt are
+# copied, and every other file of FROM, an index.html included, is left behind. abi/index.html is
+# rendered by bin/check-abi report, which needs GH_TOKEN and GITHUB_REPOSITORY.
 #
 # Exit status: 0 done, 1 a case failed at head, 3 usage or environment error, 4 the revision has no
 # test/benchmark/, 5 the build failed.
@@ -96,8 +102,11 @@ require "net/http"
 require "open3"
 require "optparse"
 require "stringio"
+require "time"
 require "tmpdir"
 require "uri"
+
+require_relative "pages_site"
 
 module CheckPerf
   class Error < StandardError
@@ -611,7 +620,6 @@ module CheckPerf
     compare(base, head, **options)
   end
 
-
   MARKER = "<!-- check-perf -->"
   # GitHub rejects a comment body longer than 65,536 characters.
   BODY_LIMIT = 65_000
@@ -781,6 +789,285 @@ module CheckPerf
       puts "created a comment on pull request #{number}"
     end
     0
+  end
+
+  # Written to perf/index.html in refs/site/pages. Static: it fetches data/index.json and the
+  # data/SHA.json of each commit it lists, and draws with inline SVG. REPO_URL is replaced when
+  # the page is written.
+  PAGE = <<~'HTML'
+    <!doctype html>
+    <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>Performance history</title>
+    <style>
+      :root { --fg: #1f2328; --bg: #fff; --muted: #656d76; --grid: #d0d7de; --latency: #0969da; }
+      @media (prefers-color-scheme: dark) {
+        :root { --fg: #e6edf3; --bg: #0d1117; --muted: #8b949e; --grid: #30363d; --latency: #58a6ff; }
+      }
+      body { font: 14px/1.4 system-ui, sans-serif; color: var(--fg); background: var(--bg); max-width: 72rem; margin: 0 auto; padding: 1rem; }
+      nav { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; margin: 1rem 0; }
+      nav a { color: var(--fg); display: inline-flex; align-items: center; gap: .4rem; }
+      section { margin-top: 2rem; }
+      h2 { display: flex; align-items: center; gap: .5rem; font-size: 18px; margin: 0; padding-bottom: .25rem; border-bottom: 2px solid var(--c); }
+      .swatch { flex: none; width: .75rem; height: .75rem; border-radius: 2px; background: var(--c); }
+      h3 { font: 600 13px ui-monospace, monospace; margin: 1.25rem 0 .5rem; }
+      .family { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: .75rem; }
+      .chart { border: 1px solid var(--grid); border-radius: 6px; padding: .5rem; min-width: 0; }
+      h4 { font: 12px ui-monospace, monospace; margin: 0; word-break: break-all; }
+      .latest { font-size: 12px; font-variant-numeric: tabular-nums; }
+      .latest span { white-space: nowrap; }
+      .delta, .better { margin-left: .75em; }
+      .delta { color: var(--muted); }
+      .better { color: var(--c); }
+      .plot { display: grid; grid-template-columns: auto 1fr; gap: .375rem; margin-top: .25rem; }
+      .axis { display: flex; flex-direction: column; justify-content: space-between; color: var(--muted); font: 10px/1 system-ui, sans-serif; text-align: right; font-variant-numeric: tabular-nums; }
+      .axis.flat { justify-content: center; }
+      svg { width: 100%; height: 5rem; display: block; }
+      .grid { stroke: var(--grid); }
+      .series { fill: none; stroke: var(--c); stroke-width: 1.5; }
+      .pt { fill: var(--c); }
+      .pt.ring { fill: var(--bg); stroke: var(--c); stroke-width: 1.5; }
+      .muted { color: var(--muted); }
+    </style></head>
+    <body>
+    <h1>Performance history</h1>
+    <p class="muted">Each chart plots one benchmark key at each commit of main, oldest to newest. Each point links to its commit. A hollow ring marks a point that ran on a different CPU model than the point before it in the same chart.</p>
+    <nav id="jump" aria-label="Measures"></nav>
+    <p id="status" class="muted">Loading.</p>
+    <main id="charts"></main>
+    <script>
+    "use strict";
+    const REPO_URL = "@REPO_URL@";
+    const NS = "http://www.w3.org/2000/svg";
+    const get = (url) => fetch(url).then((r) => { if (!r.ok) throw new Error(url + ": " + r.status); return r.json(); });
+    const el = (name, attrs, parent) => {
+      const e = document.createElementNS(NS, name);
+      for (const k in attrs) e.setAttribute(k, attrs[k]);
+      if (parent) parent.appendChild(e);
+      return e;
+    };
+    const h = (name, attrs = {}, text) => {
+      const e = document.createElement(name);
+      for (const k in attrs) e.setAttribute(k, attrs[k]);
+      if (text !== undefined) e.textContent = text;
+      return e;
+    };
+    const duration = (ns) => ns >= 1_000_000_000 ? (ns / 1_000_000_000).toPrecision(3) + " s" : ns >= 1_000_000 ? (ns / 1_000_000).toPrecision(3) + " ms"
+      : ns >= 1_000 ? (ns / 1_000).toPrecision(3) + " µs" : ns.toPrecision(3) + " ns";
+
+    // One section per measure, in this order. colour names a custom property of the stylesheet;
+    // better is "lower" or "higher".
+    const MEASURES = [
+      {id: "latency", title: "Latency", colour: "--latency", fmt: duration, better: "lower", value: (row) => row.median,
+       about: "Median time per operation of each key, per iteration for batched keys."},
+    ];
+
+    function chart(m, key, name, points) {
+      const box = h("div", {class: "chart", title: key});
+      const last = points[points.length - 1].v, prev = points.length > 1 ? points[points.length - 2].v : 0;
+      const latest = h("div", {class: "latest"});
+      latest.append(h("span", {}, m.fmt(last)));
+      if (prev) {
+        const pct = (last - prev) / prev * 100;
+        latest.append(h("span", {class: "delta"}, (pct < 0 ? "−" : "+") + Math.abs(pct).toFixed(1) + "% vs previous"));
+      }
+      latest.append(h("span", {class: "better"}, m.better === "higher" ? "▲ higher is better" : "▼ lower is better"));
+      const vs = points.map((p) => p.v);
+      const lo = Math.min(...vs), hi = Math.max(...vs);
+      // The plot is scaled to its own range, so the axis prints that range.
+      const plot = h("div", {class: "plot"});
+      const axis = h("div", {class: hi === lo ? "axis flat" : "axis", "aria-hidden": "true"});
+      axis.append(...(hi === lo ? [h("span", {}, m.fmt(hi))] : [h("span", {}, m.fmt(hi)), h("span", {}, m.fmt(lo))]));
+      plot.append(axis);
+      box.append(h("h4", {}, name), latest, plot);
+      const W = 320, H = 80, P = 6;
+      const svg = el("svg", {viewBox: "0 0 " + W + " " + H, preserveAspectRatio: "none"}, plot);
+      const x = (i) => points.length === 1 ? W / 2 : P + i * (W - 2 * P) / (points.length - 1);
+      // A series without spread is drawn at mid-height, apart from the baseline.
+      const y = (v) => hi === lo ? H / 2 : H - P - (v - lo) * (H - 2 * P) / (hi - lo);
+      el("line", {class: "grid", x1: 0, x2: W, y1: H - 1, y2: H - 1}, svg);
+      el("polyline", {class: "series", "vector-effect": "non-scaling-stroke",
+                      points: points.map((p, i) => x(i) + "," + y(p.v)).join(" ")}, svg);
+      points.forEach((p, i) => {
+        const a = el("a", {href: REPO_URL + "/commit/" + p.sha}, svg);
+        const c = el("circle", {class: p.cpuChanged ? "pt ring" : "pt", cx: x(i), cy: y(p.v), r: p.cpuChanged ? 4.5 : 3,
+                                "vector-effect": "non-scaling-stroke"}, a);
+        el("title", {}, c).textContent = p.sha.slice(0, 12) + "  " + m.fmt(p.v) + "  " + p.date +
+          (p.cpuChanged ? "\nCPU: " + p.cpu + " (changed)" : "");
+      });
+      return box;
+    }
+
+    async function main() {
+      // Only entries with a commit id are fetched and linked: the id becomes part of a path and a URL.
+      const index = (await get("data/index.json")).reverse()
+        .filter((e) => e && typeof e.sha === "string" && /^[0-9a-f]{7,40}$/.test(e.sha));
+      const docs = await Promise.all(index.map((e) => get("data/" + e.sha + ".json").catch(() => null)));
+      const series = new Map(MEASURES.map((m) => [m.id, new Map()]));
+      docs.forEach((d, i) => {
+        if (!d || typeof d !== "object") return;
+        for (const key in d.rows) {
+          const row = d.rows[key];
+          if (!row || typeof row !== "object") continue;
+          const cpu = row.cpu_model || "unknown";
+          for (const m of MEASURES) {
+            const v = m.value(row);
+            if (typeof v !== "number" || !Number.isFinite(v)) continue;
+            const charts = series.get(m.id);
+            if (!charts.has(key)) charts.set(key, []);
+            const points = charts.get(key);
+            const cpuChanged = points.length > 0 && cpu !== points[points.length - 1].cpu;
+            points.push({sha: index[i].sha, date: index[i].date, v, cpu, cpuChanged});
+          }
+        }
+      });
+      const nav = document.getElementById("jump"), root = document.getElementById("charts");
+      for (const m of MEASURES) {
+        const charts = series.get(m.id);
+        if (!charts.size) continue;
+        const colour = "--c: var(" + m.colour + ")";
+        const section = h("section", {id: m.id, style: colour});
+        const heading = h("h2");
+        heading.append(h("span", {class: "swatch"}), m.title);
+        section.append(heading, h("p", {class: "muted"}, m.about));
+        // A key's family is its first "/" segment; the chart is titled with the rest.
+        const families = new Map();
+        for (const key of charts.keys()) {
+          const cut = key.indexOf("/");
+          const family = cut < 0 ? key : key.slice(0, cut);
+          if (!families.has(family)) families.set(family, []);
+          families.get(family).push({key, name: cut < 0 ? key : key.slice(cut + 1)});
+        }
+        for (const family of [...families.keys()].sort()) {
+          const grid = h("div", {class: "family"});
+          for (const {key, name} of families.get(family).sort((a, b) => a.name < b.name ? -1 : 1)) {
+            grid.append(chart(m, key, name, charts.get(key)));
+          }
+          section.append(h("h3", {}, family), grid);
+        }
+        root.append(section);
+        const link = h("a", {href: "#" + m.id, style: colour});
+        link.append(h("span", {class: "swatch"}), m.title);
+        nav.append(link);
+      }
+      document.getElementById("status").textContent = nav.childElementCount ? "" : "No results recorded yet.";
+    }
+    main().catch((e) => { document.getElementById("status").textContent = "Could not load the results: " + e.message; });
+    </script>
+    </body></html>
+  HTML
+
+  def self.repository = ENV.fetch("GITHUB_REPOSITORY", "couchbase/couchbase-cxx-client")
+
+  def self.perf_page = PAGE.sub("@REPO_URL@", "https://github.com/#{repository}")
+
+  # abi_page(file, reports_dir) writes abi/index.html; by default bin/check-abi report renders it
+  # from the deployments API and the reports in reports_dir.
+  ABI_PAGE = lambda do |file, reports_dir|
+    run(File.join(__dir__, "check-abi"), "report", file, reports_dir)
+  end
+
+  # Builds the site to deploy in to from the data of from, a checkout of PagesSite::REF, with the
+  # pages of this checkout. Only perf/data/*.json and abi/reports/COMMIT/report-*.txt, COMMIT 40
+  # lowercase hex digits, are taken from from, so no page pushed to the ref is deployed. A symbolic
+  # link on either path is an error: publishing never writes one, and following it would deploy a
+  # file of the runner.
+  def self.render_site(from, to, abi_page: ABI_PAGE)
+    FileUtils.rm_rf(to)
+    FileUtils.mkdir_p(to)
+    no_link = ->(path) { raise Error, "#{path} is a symbolic link" if File.symlink?(path) }
+    data_dir = File.join(from, "perf", "data")
+    [File.join(from, "perf"), data_dir].each(&no_link)
+    data = Dir.glob(File.join(data_dir, "*.json")).each(&no_link).select { |f| File.file?(f) }
+    unless data.empty?
+      FileUtils.mkdir_p(File.join(to, "perf", "data"))
+      FileUtils.cp(data, File.join(to, "perf", "data"))
+      File.write(File.join(to, "perf", "index.html"), perf_page)
+    end
+    reports_dir = File.join(from, "abi", "reports")
+    [File.join(from, "abi"), reports_dir].each(&no_link)
+    commits = File.directory?(reports_dir) ? Dir.children(reports_dir).grep(/\A[0-9a-f]{40}\z/) : []
+    commits.each do |commit|
+      dir = File.join(reports_dir, commit)
+      no_link.call(dir)
+      next unless File.directory?(dir)
+
+      reports = Dir.children(dir).grep(/\Areport-[\w.-]+\.txt\z/).map { |f| File.join(dir, f) }.each(&no_link).select { |f| File.file?(f) }
+      next if reports.empty?
+
+      FileUtils.mkdir_p(File.join(to, "abi", "reports", commit))
+      FileUtils.cp(reports, File.join(to, "abi", "reports", commit))
+    end
+    FileUtils.mkdir_p(File.join(to, "abi"))
+    abi_page.call(File.join(to, "abi", "index.html"), File.join(to, "abi", "reports"))
+    File.write(File.join(to, "index.html"), PagesSite.render_index(to))
+  end
+
+  # The data of one push. Each measured row of the result.json of each dir gives its head median and
+  # the CPU model of the dir. The head's CI bounds are added where the row has them. A result of
+  # another commit, and a row that failed at head, are left out.
+  def self.push_data(commit, date, dirs)
+    rows = {}
+    first = nil
+    dirs.each do |dir|
+      path = artifact_file(dir, "result.json") or next
+      result = JSON.parse(File.read(path))
+      raise Error, "#{path} is not a result written by bin/check-perf" unless result.is_a?(Hash) && result["rows"].is_a?(Array) &&
+                                                                              result["head"].is_a?(Hash)
+      if result.dig("head", "sha") != commit
+        puts "Skipped #{path}: it is the result of #{result.dig('head', 'sha').to_s[0, 12]}, not #{commit[0, 12]}"
+        next
+      end
+      cpu = result.dig("metadata", "cpu", "model")
+      first ||= cpu
+      result["rows"].each do |row|
+        raise Error, "#{path} has a row without a key" unless row.is_a?(Hash) && row["key"].is_a?(String)
+
+        head = row["head"]
+        next if head.nil? || row["verdict"] == "failed"
+        unless head.is_a?(Hash) && number?(head["median"])
+          raise Error, "#{path}: the head of #{row['key']} has no numeric median"
+        end
+
+        rows[row["key"]] = head.slice("median", "lower", "upper").select { |_, v| number?(v) }.merge("cpu_model" => cpu)
+      end
+    rescue JSON::ParserError => e
+      raise Error, "#{path} is not JSON: #{e.message}"
+    end
+    {"sha" => commit, "date" => date, "cpu_model" => first, "rows" => rows.sort.to_h}
+  end
+
+  # Adds the head rows of commit to perf/data/ in the site and renders perf/index.html. index.json
+  # lists the commits newest first by commit date.
+  def self.publish(commit, dirs, url: "https://github.com/#{repository}.git", token: ENV["GH_TOKEN"] || ENV.fetch("GITHUB_TOKEN", nil),
+                   site: nil, attempts: 5)
+    commit = run("git", "rev-parse", "--verify", "#{commit}^{commit}", quiet: true).strip
+    date = run("git", "show", "-s", "--format=%cI", commit, quiet: true).strip
+    data = push_data(commit, date, dirs)
+    if data["rows"].empty?
+      puts "No rows to publish for #{commit[0, 12]}"
+      return 0
+    end
+
+    Dir.mktmpdir do |tmp|
+      pushed = PagesSite.publish(url: url, token: token, site: site || File.join(tmp, "site"), attempts: attempts,
+                                 message: "Performance history at #{commit[0, 12]}") do |root|
+        dir = File.join(root, "perf", "data")
+        FileUtils.mkdir_p(dir)
+        File.write(File.join(dir, "#{commit}.json"), "#{JSON.pretty_generate(data)}\n")
+        index_file = File.join(dir, "index.json")
+        index = File.file?(index_file) ? JSON.parse(File.read(index_file)) : []
+        index = index.reject { |e| e["sha"] == commit }
+                     .push({"sha" => commit, "date" => date, "cpu_model" => data["cpu_model"]})
+                     .sort_by { |e| [Time.iso8601(e["date"]), e["sha"]] }.reverse
+        File.write(index_file, "#{JSON.pretty_generate(index)}\n")
+        File.write(File.join(root, "perf", "index.html"), perf_page)
+      end
+      puts pushed ? "Published #{data['rows'].size} rows of #{commit[0, 12]} to #{PagesSite::REF}" : "#{PagesSite::REF} is up to date"
+    end
+    0
+  rescue PagesSite::Error => e
+    raise Error, e.message
   end
 
   def self.self_test
@@ -1056,6 +1343,159 @@ module CheckPerf
     sample = {base: {sha: "a" * 40, status: "built"}, head: {sha: "b" * 40}, suites: ["x"], rounds: 5, metadata: meta, skipped: [],
               rows: Array.new(5000) { |i| row("case_#{i}/v", rounds.call("x", 10.0), rounds.call("x", 10.0)) }}
     raise "comment over the limit" unless comment(sample).length <= COMMENT_LIMIT + 100
+    Dir.mktmpdir do |tmp|
+      Dir.mkdir(File.join(tmp, "abi"))
+      Dir.mkdir(File.join(tmp, "perf"))
+      Dir.mkdir(File.join(tmp, "empty"))
+      File.write(File.join(tmp, "abi", "index.html"), "")
+      File.write(File.join(tmp, "perf", "index.html"), "")
+      html = PagesSite.render_index(tmp)
+      check.call("site_index_lists_dirs", [html.include?(%(href="abi/">ABI history)), html.include?(%(href="perf/">Performance history)),
+                                           html.include?("empty")], [true, true, false])
+
+      quiet = lambda do |&block|
+        out = [$stdout, $stderr]
+        $stdout = $stderr = StringIO.new
+        block.call
+      ensure
+        $stdout, $stderr = out
+      end
+      bare = lambda do |name|
+        File.join(tmp, name).tap { |d| run("git", "init", "--quiet", "--bare", d, quiet: true) }
+      end
+
+      # The first push is rejected, as by a concurrent publish; the second succeeds.
+      racy = bare.call("racy.git")
+      hook = File.join(racy, "hooks", "pre-receive")
+      File.write(hook, "#!/bin/sh\nn=\"$(pwd)/rejected\"\n[ -f \"$n\" ] && exit 0\ntouch \"$n\"\nexit 1\n")
+      File.chmod(0o755, hook)
+      runs = 0
+      quiet.call do
+        check.call("retry pushed", PagesSite.publish(url: racy, token: nil, site: File.join(tmp, "s1"), message: "m") do |dir|
+          runs += 1
+          File.write(File.join(dir, "x"), "x")
+        end, true)
+      end
+      check.call("retry reruns the change", runs, 2)
+      check.call("retry content", run("git", "-C", racy, "show", "#{PagesSite::REF}:x", quiet: true), "x")
+      always = bare.call("always.git")
+      File.write(File.join(always, "hooks", "pre-receive"), "#!/bin/sh\nexit 1\n")
+      File.chmod(0o755, File.join(always, "hooks", "pre-receive"))
+      failure = quiet.call do
+        PagesSite.publish(url: always, token: nil, site: File.join(tmp, "s2"), message: "m", attempts: 2) { |d| File.write(File.join(d, "x"), "x") }
+      rescue PagesSite::Error => e
+        e.message
+      end
+      check.call("retry gives up", failure, "could not push to #{PagesSite::REF}")
+
+      repo = File.join(tmp, "repo")
+      remote = bare.call("remote.git")
+      run("git", "init", "--quiet", repo, quiet: true)
+      shas = ["2026-01-01T00:00:00Z", "2026-02-01T00:00:00Z"].map do |date|
+        ENV["GIT_COMMITTER_DATE"] = date
+        run("git", "-C", repo, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "--quiet",
+            "--allow-empty", "-m", date, quiet: true)
+        run("git", "-C", repo, "rev-parse", "HEAD", quiet: true).strip
+      ensure
+        ENV.delete("GIT_COMMITTER_DATE")
+      end
+      older, newer = shas
+      write_result = lambda do |name, sha, rows, cpu|
+        d = File.join(tmp, "#{name}-#{sha[0, 7]}-#{Dir.children(tmp).size}")
+        Dir.mkdir(d)
+        File.write(File.join(d, "result.json"), JSON.generate("head" => {"sha" => sha}, "metadata" => {"cpu" => {"model" => cpu}}, "rows" => rows))
+        d
+      end
+      stat = ->(m) { {"median" => m, "lower" => m, "upper" => m} }
+      dirs_for = lambda do |sha|
+        [write_result.call("a", sha, [{"key" => "k/1", "verdict" => "no change", "head" => stat.call(5.0).merge("extra" => 1)},
+                                      {"key" => "bad", "verdict" => "failed", "head" => stat.call(1.0)},
+                                      {"key" => "gone", "verdict" => "removed", "head" => nil}], "Model X"),
+         File.join(tmp, "missing"),
+         write_result.call("b", sha, [{"key" => "c/2", "verdict" => "new", "head" => stat.call(7.0)}], "Model Y"),
+         write_result.call("old", "f" * 40, [{"key" => "stale/1", "verdict" => "new", "head" => stat.call(9.0)}], "Model Z")]
+      end
+      Dir.chdir(repo) do
+        [newer, older].each { |sha| quiet.call { check.call("publish status", publish(sha, dirs_for.call(sha), url: remote, token: nil), 0) } }
+      end
+      show = ->(path) { run("git", "-C", remote, "show", "#{PagesSite::REF}:#{path}", quiet: true) }
+      index = JSON.parse(show.call("perf/data/index.json"))
+      check.call("publish_appends_index", [index.map { |e| e["sha"] }, index.first["cpu_model"]], [[newer, older], "Model X"])
+      data = JSON.parse(show.call("perf/data/#{older}.json"))
+      check.call("publish rows", data["rows"], {"c/2" => stat.call(7.0).merge("cpu_model" => "Model Y"),
+                                                "k/1" => stat.call(5.0).merge("cpu_model" => "Model X")})
+      check.call("publish pages", [show.call("perf/index.html").include?(%(REPO_URL = "https://github.com/#{repository}")),
+                                   show.call("index.html").include?(%(href="perf/">))], [true, true])
+
+      ref = File.join(tmp, "ref")
+      FileUtils.mkdir_p([File.join(ref, "perf", "data"), File.join(ref, "abi", "reports", "c"), File.join(ref, "other")])
+      File.write(File.join(ref, "perf", "data", "index.json"), "[]")
+      File.write(File.join(ref, "perf", "data", "notes.txt"), "x")
+      File.write(File.join(ref, "perf", "index.html"), "<script>pushed</script>")
+      File.write(File.join(ref, "index.html"), "<script>pushed</script>")
+      File.write(File.join(ref, "other", "index.html"), "<script>pushed</script>")
+      File.write(File.join(ref, "abi", "index.html"), "<script>pushed</script>")
+      File.write(File.join(ref, "abi", "reports", "c", "report-x.txt"), "r")
+      commit = "c" * 40
+      FileUtils.mkdir_p([File.join(ref, "abi", "reports", commit), File.join(ref, "abi", "reports", "C" * 40)])
+      File.write(File.join(ref, "abi", "reports", commit, "report-previous-commit-1234567.txt"), "r")
+      File.write(File.join(ref, "abi", "reports", commit, "x.html"), "<script>pushed</script>")
+      File.write(File.join(ref, "abi", "reports", "C" * 40, "report-x.txt"), "r")
+      File.symlink("/etc/hostname", File.join(ref, "abi", "reports", commit, "link.txt"))
+      out = File.join(tmp, "deployed")
+      abi_calls = []
+      stub_abi = lambda do |file, reports_dir|
+        abi_calls << [file, Dir.glob("*/*", base: reports_dir).sort]
+        File.write(file, "rendered")
+      end
+      render_site(ref, out, abi_page: stub_abi)
+      deployed = Dir.glob("**/*", base: out).select { |f| File.file?(File.join(out, f)) }.sort
+      check.call("render_site takes data only", deployed,
+                 %W[abi/index.html abi/reports/#{commit}/report-previous-commit-1234567.txt index.html perf/data/index.json
+                    perf/index.html])
+      check.call("render_site renders the ABI page from the copied reports",
+                 [abi_calls, File.read(File.join(out, "abi", "index.html"))],
+                 [[[File.join(out, "abi", "index.html"), ["#{commit}/report-previous-commit-1234567.txt"]]], "rendered"])
+      outside = File.join(tmp, "outside")
+      FileUtils.mkdir_p(outside)
+      File.write(File.join(outside, "secret.json"), "{}")
+      linked = lambda do |link, target|
+        r = File.join(tmp, "linked-#{Dir.children(tmp).size}")
+        FileUtils.mkdir_p(File.join(r, File.dirname(link)))
+        File.symlink(target, File.join(r, link))
+        r
+      end
+      File.write(File.join(outside, "report-x.txt"), "r")
+      [["perf", outside], ["perf/data", outside], ["perf/data/secret.json", File.join(outside, "secret.json")],
+       ["abi", outside], ["abi/reports", outside], ["abi/reports/#{commit}", outside],
+       ["abi/reports/#{commit}/report-x.txt", File.join(outside, "report-x.txt")]].each do |link, target|
+        check.call("render_site refuses a symlinked #{link}",
+                   status.call { render_site(linked.call(link, target), File.join(tmp, "linked-out"), abi_page: stub_abi) }, 3)
+      end
+      check.call("render_site renders the pages", [File.read(File.join(out, "perf", "index.html")) == perf_page,
+                                                   File.read(File.join(out, "index.html")) == PagesSite.render_index(out)], [true, true])
+
+      message = lambda do |json|
+        d = File.join(tmp, "bad#{rand(1 << 30)}")
+        Dir.mkdir(d)
+        File.write(File.join(d, "result.json"), json)
+        push_data(newer, "2026-02-01T00:00:00Z", [d])
+        nil
+      rescue Error => e
+        e.message
+      end
+      check.call("not an object", message.call("[]").nil?, false)
+      check.call("not json", message.call("{").nil?, false)
+      row = ->(head) { JSON.generate("head" => {"sha" => newer}, "rows" => [{"key" => "k", "head" => head}]) }
+      check.call("non-numeric median", message.call(row.call({"median" => "5", "lower" => 1, "upper" => 2})).nil?, false)
+      check.call("symlinked result ignored", begin
+        d = File.join(tmp, "link")
+        Dir.mkdir(d)
+        File.symlink(Dir.glob(File.join(tmp, "a-*", "result.json")).first, File.join(d, "result.json"))
+        push_data(newer, "2026-02-01T00:00:00Z", [d])["rows"]
+      end, {})
+    end
+
     puts "ok"
     0
   end
@@ -1065,7 +1505,7 @@ module CheckPerf
     suites = []
     out = "perf-report"
     parser = OptionParser.new do |o|
-      o.banner = "usage: bin/check-perf {metadata [BUILD] | build REV DIR | compare BASE HEAD | ci | comment DIR... | --self-test}"
+      o.banner = "usage: bin/check-perf {metadata [BUILD] | build REV DIR | compare BASE HEAD | ci | comment DIR... | publish COMMIT DIR... | site FROM TO | --self-test}"
       o.on("--rounds N", Integer, "rounds of compare (default #{ROUNDS})") { |n| rounds = n }
       o.on("--suite NAME", "a binary benchmark_NAME to compare; repeatable (default all)") { |s| suites << s }
       o.on("--out DIR", "where compare writes its reports (default #{out})") { |d| out = d }
@@ -1092,6 +1532,15 @@ module CheckPerf
       raise Error, parser.banner if args.empty?
 
       post_comment(args)
+    when "publish"
+      raise Error, parser.banner if args.size < 2
+
+      publish(args[0], args[1..])
+    when "site"
+      raise Error, parser.banner unless args.size == 2
+
+      render_site(args[0], args[1])
+      0
     when "ci"
       raise Error, parser.banner unless args.empty? && rounds.positive?
 
