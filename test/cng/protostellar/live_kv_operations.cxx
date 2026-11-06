@@ -34,6 +34,7 @@
 #include "framework/test_registry.hxx"
 
 #include "core/error_context/key_value.hxx"
+#include "core/impl/subdoc/path_flags.hxx"
 #include "core/utils/binary.hxx"
 
 #include <couchbase/error_codes.hxx>
@@ -435,6 +436,237 @@ append_to_a_missing_document_is_reported_as_not_found([[maybe_unused]] context& 
               "appending to a document that does not exist is document_not_found");
 }
 
+void
+lookup_in_reads_subdocument_paths_and_reports_missing_ones([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::impl::subdoc::build_lookup_in_path_flags;
+  using couchbase::core::impl::subdoc::command;
+  using couchbase::core::impl::subdoc::opcode;
+
+  live_kv_fixture fixture;
+  const std::string key{ "cng-live-lookup-in" };
+  seed(fixture, key, R"({"name":"alice","items":[1,2,3]})");
+
+  // Mixing body exists/get/get_count specs with virtual XATTR get/exists specs placed after the
+  // body specs exercises subdoc_wire_order against the live CNG gateway: without XATTR-first wire
+  // partitioning, stellar-gateway's ReorderSubdocOps misroutes exists(name) and corrupts per-spec
+  // indices.
+  ops::lookup_in_request request;
+  request.id = fixture.id(key);
+  request.specs = {
+    command{ opcode::exists, "name", {}, {} },
+    command{ opcode::get, "name", {}, {} },
+    command{ opcode::get_count, "items", {}, {} },
+    command{ opcode::exists, "absent", {}, {} },
+    command{ opcode::get, "absent", {}, {} },
+    command{ opcode::get, "$document.exptime", {}, build_lookup_in_path_flags(true, false) },
+    command{ opcode::exists, "$document.exptime", {}, build_lookup_in_path_flags(true, false) },
+    command{ opcode::exists, "$document.absent", {}, build_lookup_in_path_flags(true, false) },
+  };
+  const auto result = fixture.execute(std::move(request));
+  assert_false(static_cast<bool>(result.ctx.ec()),
+               "lookup_in succeeded at the document level even with a missing path");
+  assert_true(result.cas.value() != 0, "lookup_in returns a non-zero cas");
+  assert_eq(result.fields.size(), std::size_t{ 8 }, "all eight specs returned in caller order");
+  assert_true(result.fields[0].exists && !result.fields[0].ec, "exists on present path is true");
+  assert_eq(cu::to_string(result.fields[1].value), std::string{ R"("alice")" }, "get path value");
+  assert_eq(cu::to_string(result.fields[2].value), std::string{ "3" }, "get_count path value");
+  assert_true(!result.fields[3].exists && !result.fields[3].ec, "exists on absent path is false");
+  assert_true(result.fields[4].ec == couchbase::errc::key_value::path_not_found,
+              "get on absent path reports path_not_found");
+  assert_true(!result.fields[5].ec && cu::to_string(result.fields[5].value) == "0",
+              "virtual xattr $document.exptime get returns 0");
+  assert_true(result.fields[6].exists && !result.fields[6].ec,
+              "virtual xattr $document.exptime exists is true");
+  assert_true(!result.fields[7].exists && !result.fields[7].ec,
+              "virtual xattr $document.absent exists is false");
+
+  discard(fixture, key);
+
+  ops::lookup_in_request missing_doc;
+  missing_doc.id = fixture.id(key);
+  missing_doc.specs = { command{ opcode::get, "name", {}, {} } };
+  const auto missing_result = fixture.execute(std::move(missing_doc));
+  assert_true(missing_result.ctx.ec() == couchbase::errc::key_value::document_not_found,
+              "lookup_in on a missing document reports document_not_found");
+}
+
+void
+lookup_in_mixed_xattr_and_exists_specs_preserve_values_and_order([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::impl::subdoc::build_lookup_in_path_flags;
+  using couchbase::core::impl::subdoc::command;
+  using couchbase::core::impl::subdoc::opcode;
+
+  live_kv_fixture fixture;
+  const std::string key{ "cng-live-lookup-in-mixed-xattr-exists" };
+  const std::string body{ R"({"name":"alice","items":[1,2,3]})" };
+  seed(fixture, key, body);
+
+  // Case 1: [exists("absent"), get("$document.exptime").xattr()].
+  ops::lookup_in_request exists_then_xattr;
+  exists_then_xattr.id = fixture.id(key);
+  exists_then_xattr.specs = {
+    command{ opcode::exists, "absent", {}, {} },
+    command{ opcode::get, "$document.exptime", {}, build_lookup_in_path_flags(true, false) },
+  };
+  const auto res_1 = fixture.execute(std::move(exists_then_xattr));
+  assert_false(static_cast<bool>(res_1.ctx.ec()), "exists_then_xattr succeeded");
+  assert_eq(res_1.fields.size(), std::size_t{ 2 }, "two fields returned");
+  assert_true(!res_1.fields[0].exists && !res_1.fields[0].ec, "exists(absent) is false");
+  assert_eq(cu::to_string(res_1.fields[0].value), std::string{ "false" }, "exists(absent) json");
+  assert_true(res_1.fields[1].exists && !res_1.fields[1].ec, "xattr get succeeded");
+  assert_eq(cu::to_string(res_1.fields[1].value),
+            std::string{ "0" },
+            "xattr exptime is 0 (not overwritten with true)");
+
+  // Case 2: [get("name"), exists("absent"), get("$document.exptime").xattr()].
+  ops::lookup_in_request get_exists_xattr;
+  get_exists_xattr.id = fixture.id(key);
+  get_exists_xattr.specs = {
+    command{ opcode::get, "name", {}, {} },
+    command{ opcode::exists, "absent", {}, {} },
+    command{ opcode::get, "$document.exptime", {}, build_lookup_in_path_flags(true, false) },
+  };
+  const auto res_2 = fixture.execute(std::move(get_exists_xattr));
+  assert_false(static_cast<bool>(res_2.ctx.ec()), "get_exists_xattr succeeded");
+  assert_eq(res_2.fields.size(), std::size_t{ 3 }, "three fields returned");
+  assert_true(res_2.fields[0].exists && !res_2.fields[0].ec, "get(name) succeeded at index 0");
+  assert_eq(
+    cu::to_string(res_2.fields[0].value), std::string{ R"("alice")" }, "get(name) value preserved");
+  assert_true(!res_2.fields[1].exists && !res_2.fields[1].ec,
+              "exists(absent) is false without error at index 1");
+  assert_true(res_2.fields[2].exists && !res_2.fields[2].ec, "xattr get succeeded at index 2");
+  assert_eq(
+    cu::to_string(res_2.fields[2].value), std::string{ "0" }, "xattr exptime value preserved");
+
+  // Case 3: Interleaved XATTR and body get, exists (present & absent), get_count, get_doc, and
+  // missing paths.
+  ops::lookup_in_request interleaved;
+  interleaved.id = fixture.id(key);
+  interleaved.specs = {
+    command{ opcode::get, "name", {}, {} },
+    command{ opcode::get, "$document.exptime", {}, build_lookup_in_path_flags(true, false) },
+    command{ opcode::exists, "absent", {}, {} },
+    command{ opcode::exists, "$document.absent", {}, build_lookup_in_path_flags(true, false) },
+    command{ opcode::exists, "name", {}, {} },
+    command{ opcode::exists, "$document.exptime", {}, build_lookup_in_path_flags(true, false) },
+    command{ opcode::get_count, "items", {}, {} },
+    command{ opcode::get_doc, "", {}, {} },
+    command{ opcode::get, "absent", {}, {} },
+  };
+  const auto res_3 = fixture.execute(std::move(interleaved));
+  assert_false(static_cast<bool>(res_3.ctx.ec()), "interleaved lookup_in top-level status clear");
+  assert_eq(res_3.fields.size(), std::size_t{ 9 }, "all nine fields returned in caller order");
+  assert_eq(cu::to_string(res_3.fields[0].value), std::string{ R"("alice")" }, "slot 0 get(name)");
+  assert_eq(cu::to_string(res_3.fields[1].value), std::string{ "0" }, "slot 1 xattr exptime");
+  assert_true(!res_3.fields[2].exists && !res_3.fields[2].ec, "slot 2 body exists(absent)");
+  assert_true(!res_3.fields[3].exists && !res_3.fields[3].ec, "slot 3 xattr exists(absent)");
+  assert_true(res_3.fields[4].exists && !res_3.fields[4].ec, "slot 4 body exists(name)");
+  assert_true(res_3.fields[5].exists && !res_3.fields[5].ec, "slot 5 xattr exists(exptime)");
+  assert_eq(cu::to_string(res_3.fields[6].value), std::string{ "3" }, "slot 6 get_count(items)");
+  assert_eq(cu::to_string(res_3.fields[7].value), body, "slot 7 get_doc");
+  assert_true(res_3.fields[8].ec == couchbase::errc::key_value::path_not_found,
+              "slot 8 get(absent) reports path_not_found");
+  assert_eq(res_3.ctx.first_error_index(),
+            std::optional<std::size_t>{ 8 },
+            "first_error_index points to caller slot 8");
+  assert_eq(res_3.ctx.first_error_path(),
+            std::optional<std::string>{ "absent" },
+            "first_error_path points to absent");
+
+  discard(fixture, key);
+}
+
+void
+mutate_in_mutates_subdocument_paths_and_returns_counter_value([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::impl::subdoc::build_lookup_in_path_flags;
+  using couchbase::core::impl::subdoc::build_mutate_in_path_flags;
+  using couchbase::core::impl::subdoc::command;
+  using couchbase::core::impl::subdoc::opcode;
+
+  live_kv_fixture fixture;
+  const std::string key{ "cng-live-mutate-in" };
+  seed(fixture, key, R"({"name":"alice","visits":10})");
+
+  // Placing an XATTR mutation after a body counter mutation exercises subdoc_wire_order against
+  // the live CNG gateway: without XATTR-first wire partitioning, stellar-gateway's
+  // ReorderSubdocOps writes the counter's "15" payload into fields[0] ("name") and leaves
+  // fields[2] ("visits") empty.
+  ops::mutate_in_request request;
+  request.id = fixture.id(key);
+  request.specs = {
+    command{ opcode::replace, "name", cu::to_binary(R"("bob")"), {} },
+    command{ opcode::dict_upsert, "city", cu::to_binary(R"("london")"), {} },
+    command{ opcode::counter, "visits", cu::to_binary("5"), {} },
+    command{ opcode::dict_upsert,
+             "meta.tag",
+             cu::to_binary(R"("v1")"),
+             build_mutate_in_path_flags(true, true, false, false) },
+  };
+  const auto mutated = fixture.execute(std::move(request));
+  assert_false(static_cast<bool>(mutated.ctx.ec()), "mutate_in succeeded");
+  assert_true(mutated.cas.value() != 0, "mutate_in returns a non-zero cas");
+  assert_eq(mutated.fields.size(), std::size_t{ 4 }, "all four spec entries returned");
+  assert_true(mutated.fields[0].value.empty(), "replace spec has empty value");
+  assert_true(mutated.fields[1].value.empty(), "dict_upsert spec has empty value");
+  assert_eq(
+    cu::to_string(mutated.fields[2].value), std::string{ "15" }, "counter spec returns new value");
+  assert_true(mutated.fields[3].value.empty(), "xattr dict_upsert spec has empty value");
+
+  ops::lookup_in_request verify;
+  verify.id = fixture.id(key);
+  verify.specs = {
+    command{ opcode::get, "name", {}, {} },
+    command{ opcode::exists, "absent", {}, {} },
+    command{ opcode::get, "city", {}, {} },
+    command{ opcode::get, "visits", {}, {} },
+    command{ opcode::get, "meta.tag", {}, build_lookup_in_path_flags(true, false) },
+    command{ opcode::exists, "meta.tag", {}, build_lookup_in_path_flags(true, false) },
+    command{ opcode::exists, "meta.absent", {}, build_lookup_in_path_flags(true, false) },
+  };
+  const auto verified = fixture.execute(std::move(verify));
+  assert_false(static_cast<bool>(verified.ctx.ec()), "lookup_in after mutate_in succeeded");
+  assert_eq(cu::to_string(verified.fields[0].value), std::string{ R"("bob")" }, "name updated");
+  assert_true(!verified.fields[1].exists && !verified.fields[1].ec, "absent body path is false");
+  assert_eq(cu::to_string(verified.fields[2].value), std::string{ R"("london")" }, "city added");
+  assert_eq(cu::to_string(verified.fields[3].value), std::string{ "15" }, "visits incremented");
+  assert_eq(
+    cu::to_string(verified.fields[4].value), std::string{ R"("v1")" }, "xattr meta.tag persisted");
+  assert_true(verified.fields[5].exists && !verified.fields[5].ec, "xattr meta.tag exists is true");
+  assert_true(!verified.fields[6].exists && !verified.fields[6].ec,
+              "xattr meta.absent exists is false");
+
+  ops::mutate_in_request bad_cas;
+  bad_cas.id = fixture.id(key);
+  bad_cas.cas = couchbase::cas{ mutated.cas.value() + 1 };
+  bad_cas.specs = {
+    command{ opcode::replace, "name", cu::to_binary(R"("charlie")"), {} },
+  };
+  const auto cas_failed = fixture.execute(std::move(bad_cas));
+  assert_true(cas_failed.ctx.ec() == couchbase::errc::common::cas_mismatch,
+              "mutate_in with wrong cas fails with cas_mismatch");
+
+  ops::mutate_in_request bad_path;
+  bad_path.id = fixture.id(key);
+  bad_path.specs = {
+    command{ opcode::dict_upsert,
+             "meta.tag",
+             cu::to_binary(R"("v2")"),
+             build_mutate_in_path_flags(true, true, false, false) },
+    command{ opcode::replace, "nonexistent", cu::to_binary("1"), {} },
+  };
+  const auto path_failed = fixture.execute(std::move(bad_path));
+  assert_true(path_failed.ctx.ec() == couchbase::errc::key_value::path_not_found,
+              "replace on missing subdocument path fails with path_not_found");
+  assert_true(path_failed.ctx.first_error_path() == std::optional<std::string>{ "nonexistent" },
+              "first_error_path identifies the failing subdocument path");
+  assert_true(path_failed.ctx.first_error_index() == std::optional<std::size_t>{ 1 },
+              "first_error_index identifies caller index 1");
+
+  discard(fixture, key);
+}
 } // namespace
 
 auto
@@ -466,6 +698,15 @@ tests() -> test_suite
         { needs::real_cluster() },
         timeout::integration },
       { CASE(append_to_a_missing_document_is_reported_as_not_found),
+        { needs::real_cluster() },
+        timeout::integration },
+      { CASE(lookup_in_reads_subdocument_paths_and_reports_missing_ones),
+        { needs::real_cluster() },
+        timeout::integration },
+      { CASE(lookup_in_mixed_xattr_and_exists_specs_preserve_values_and_order),
+        { needs::real_cluster() },
+        timeout::integration },
+      { CASE(mutate_in_mutates_subdocument_paths_and_returns_counter_value),
         { needs::real_cluster() },
         timeout::integration },
     },

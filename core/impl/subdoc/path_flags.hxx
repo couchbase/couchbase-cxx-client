@@ -80,9 +80,21 @@ build_lookup_in_path_flags(bool xattr, bool binary)
 }
 
 constexpr bool
+has_create_path_flag(std::byte flags)
+{
+  return (flags & path_flag_create_parents) == path_flag_create_parents;
+}
+
+constexpr bool
 has_xattr_path_flag(std::byte flags)
 {
   return (flags & path_flag_xattr) == path_flag_xattr;
+}
+
+constexpr bool
+has_expand_macros_path_flag(std::byte flags)
+{
+  return (flags & path_flag_expand_macros) == path_flag_expand_macros;
 }
 
 constexpr bool

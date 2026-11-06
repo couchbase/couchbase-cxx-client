@@ -182,6 +182,10 @@ convert_error_code(const std::error_code ec, protocol::shared::Exception* except
         cb_exception->set_type(protocol::shared::CouchbaseExceptionType::
                                  SDK_REPLICA_INDEX_CURRENTLY_UNAVAILABLE_EXCEPTION);
         break;
+      case static_cast<int>(couchbase::errc::key_value::document_too_deep):
+        cb_exception->set_type(
+          protocol::shared::CouchbaseExceptionType::SDK_DOCUMENT_TOO_DEEP_EXCEPTION);
+        break;
       default:
         // No FIT exception type exists for cannot_revive_living_document,
         // mutation_token_outdated or range_scan_completed.

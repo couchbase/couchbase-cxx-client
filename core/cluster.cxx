@@ -444,10 +444,16 @@ is_feature_supported(const operations::management::search_index_upsert_request& 
 
 #ifdef COUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2
 // Extract the error_code from a response's error context. KV responses carry a
-// key_value_error_context (ec() accessor); the query/analytics/search/view/management responses
-// carry a plain error_context::* struct with an `ec` field.
+// key_value_error_context or subdocument_error_context (ec() accessor); the
+// query/analytics/search/view/management responses carry a plain error_context::* struct with an
+// `ec` field.
 inline auto
 protostellar_response_ec(const key_value_error_context& ctx) -> std::error_code
+{
+  return ctx.ec();
+}
+inline auto
+protostellar_response_ec(const subdocument_error_context& ctx) -> std::error_code
 {
   return ctx.ec();
 }
