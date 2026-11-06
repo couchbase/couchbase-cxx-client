@@ -21,6 +21,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <vector>
 
 namespace couchbase::test::bench
@@ -97,8 +98,15 @@ public:
     if (count_ == 0) {
       return 0;
     }
-    const auto n = static_cast<double>(count_);
-    const auto rank = static_cast<std::uint64_t>(std::max(0.0, std::ceil(p / 100.0 * n) - 1.0));
+    // A product within rounding error of an integer is that integer: 99.9% of 1000 computes as
+    // 999.0000000000001, and ceil() would move it a whole rank. The error grows with the product,
+    // so the tolerance is relative to it.
+    auto position = p / 100.0 * static_cast<double>(count_);
+    if (const auto nearest = std::round(position);
+        std::abs(position - nearest) <= 8 * std::numeric_limits<double>::epsilon() * nearest) {
+      position = nearest;
+    }
+    const auto rank = static_cast<std::uint64_t>(std::max(0.0, std::ceil(position) - 1.0));
     return value_at_rank(rank);
   }
 
