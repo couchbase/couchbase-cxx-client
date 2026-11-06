@@ -1,0 +1,740 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+#  Copyright 2026-Present Couchbase, Inc.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+
+# Builds and compares the benchmark binaries of two revisions of this repository.
+#
+#   bin/check-perf metadata [BUILD]      describe the machine, and the compiler of BUILD (default
+#                                        build), as JSON
+#   bin/check-perf build REV DIR         build the benchmarks of REV in DIR, in Release, from a
+#                                        detached worktree beside DIR that is removed afterwards
+#   bin/check-perf compare BASE HEAD     run BASE and HEAD in alternating rounds and give each key a
+#                                        verdict; each side is a build directory or a revision
+#   bin/check-perf --self-test           check the verdict rules, the reports and the metadata shape
+#
+# compare writes result.json, report.txt, comment.md and head.bmf.json to --out. A round runs every
+# selected binary of both sides. Base runs first in even rounds and head first in odd ones, so a
+# drift over the run hits both sides alike. Each key gets the per-round ratios head/base of its
+# median latency, and a verdict:
+#
+#   faster          the upper bound of the 95% CI of the median ratio is at most 1 - MIN_EFFECT
+#   slower          the lower bound of that CI is at least 1 + MIN_EFFECT
+#   likely faster   the upper bound of that CI is below 1 but above 1 - MIN_EFFECT
+#   likely slower   the lower bound of that CI is above 1 but below 1 + MIN_EFFECT
+#   noisy           (max - min) / median of the base rounds' medians exceeds NOISY, whatever the
+#                   ratios say; or fewer than MIN_PAIRED rounds measured the key on both sides,
+#                   too few ratios for a 95% CI
+#   no change       otherwise: the CI contains 1
+#   new, removed    the key is measured only at head, or only at base; a new key that failed at
+#                   base is noted "base failed"
+#   failed          a head round reported the case failed
+#
+# A row is noted "suspect" when a round at either side reported the key suspect, a batched median
+# under 0.5 ns per iteration: the compiler removed the work, and the key has no BMF entry.
+#
+# A row is marked harness_changed when base and head are revisions and the framework sources, or the
+# case file of its binary and the headers that file includes from test/benchmark/, differ.
+#
+# A result keyed by a bare case name is keyed SUITE/CASE instead. Such a result is a skip or a
+# failure recorded before its case reached a key. SUITE is the binary's name without benchmark_.
+# Binaries share case names, such as kv_get in kv_fake and kv_cluster, and this keeps their
+# results apart. Both sides are keyed alike, so their rows pair. A key reported twice in a round,
+# by one binary or by two, is an error.
+#
+# Exit status: 0 done, 1 a case failed at head, 3 usage or environment error, 4 the revision has no
+# test/benchmark/, 5 the build failed.
+
+require "English"
+require "etc"
+require "fileutils"
+require "json"
+require "open3"
+require "optparse"
+require "tmpdir"
+
+module CheckPerf
+  class Error < StandardError
+    def status = 3
+  end
+
+  class MissingError < Error
+    def status = 4
+  end
+
+  class BuildError < Error
+    def status = 5
+  end
+
+  # With 7 rounds the CI of the median ratio spans the smallest to the largest ratio. An unchanged
+  # key then has every ratio on one side of 1.0 with probability 2/128. That bounds the rate of a
+  # likely verdict per unchanged key.
+  ROUNDS = 7
+  # The fewest per-round ratios with a 95% CI of their median; fewer give no verdict but noisy.
+  MIN_PAIRED = 6
+  # The change that the CI bound nearest 1.0 must reach for faster or slower.
+  MIN_EFFECT = 0.02
+  # The largest spread of the base rounds, relative to their median, that still gives a verdict.
+  NOISY = 0.10
+  # comment.md stays under GitHub's 65,536-character comment limit with room for a note.
+  COMMENT_LIMIT = 60_000
+
+  CMAKE_OPTIONS = %w[
+    -DCMAKE_BUILD_TYPE=Release
+    -DCOUCHBASE_CXX_CLIENT_BUILD_TESTS=ON
+    -DCOUCHBASE_CXX_CLIENT_BUILD_EXAMPLES=OFF
+    -DCOUCHBASE_CXX_CLIENT_BUILD_TOOLS=OFF
+    -DCOUCHBASE_CXX_CLIENT_BUILD_DOCS=OFF
+    -DCOUCHBASE_CXX_CLIENT_BUILD_FIT_PERFORMER=OFF
+    -DCOUCHBASE_CXX_CLIENT_BUILD_COUCHBASE2=OFF
+  ].freeze
+
+  # The sources every benchmark binary shares. A change to any of them changes every row.
+  FRAMEWORK = %w[
+    test/benchmark/bench_*
+    test/benchmark/histogram.hxx
+    test/benchmark/statistics.*
+    test/benchmark/report.*
+    test/framework/
+    cmake/TestFramework.cmake
+  ].freeze
+
+  def self.run(*args, chdir: nil, quiet: false)
+    warn args.join(" ") unless quiet
+    out, err, status = Open3.capture3(*args, **(chdir ? {chdir: chdir} : {}))
+    raise Error, "#{args.join(' ')} failed with #{status}:\n#{err}" unless status.success?
+
+    out
+  end
+
+  def self.read(path)
+    File.read(path).strip
+  rescue SystemCallError
+    nil
+  end
+
+  # The zero-based ranks k and n-1-k of the distribution-free 95% CI of a median. k is the largest
+  # rank with 2 * P(Bin(n, 1/2) <= k) <= 0.05, as median_with_ci in test/benchmark/statistics.cxx
+  # computes it. nil when no rank qualifies, which is every n < 6.
+  def self.ci_ranks(n)
+    log_term = -n * Math.log(2)
+    tail = 0.0
+    rank = nil
+    (0...n).each do |k|
+      tail += Math.exp(log_term)
+      break if 2 * tail > 0.05
+
+      rank = k
+      log_term += Math.log((n - k).to_f / (k + 1))
+    end
+    rank && [rank, n - 1 - rank]
+  end
+
+  # lower and upper are nil when the values are too few for a 95% CI.
+  def self.median_ci(values)
+    sorted = values.sort
+    n = sorted.size
+    lower, upper = ci_ranks(n)
+    {median: (sorted[(n - 1) / 2] + sorted[n / 2]) / 2.0, lower: lower && sorted[lower], upper: upper && sorted[upper]}
+  end
+
+  def self.spread(values)
+    (values.max - values.min) / median_ci(values)[:median]
+  end
+
+  # ratios are head/base per round, base_medians the base rounds' medians.
+  def self.verdict(ratios, base_medians)
+    return "noisy" if spread(base_medians) > NOISY || ratios.size < MIN_PAIRED
+
+    ci = median_ci(ratios)
+    return "faster" if ci[:upper] <= 1 - MIN_EFFECT
+    return "slower" if ci[:lower] >= 1 + MIN_EFFECT
+    return "likely faster" if ci[:upper] < 1
+    return "likely slower" if ci[:lower] > 1
+
+    "no change"
+  end
+
+  # The sides in the order round runs them.
+  def self.order(round) = round.even? ? %i[base head] : %i[head base]
+
+  MEASURED = %w[measured suspect].freeze
+
+  # base and head hold one case of the result JSON, or nil, per round. Returns nil for a key that
+  # neither side measured, such as one skipped on both.
+  def self.row(key, base, head, harness_changed: false)
+    measured = ->(c) { c && MEASURED.include?(c["status"]) && c.dig("latency_ns", "median").to_f.positive? }
+    summary = lambda do |cases|
+      medians = cases.select(&measured).map { |c| c.dig("latency_ns", "median").to_f }
+      medians.empty? ? nil : median_ci(medians)
+    end
+    errors = ->(cases) { cases.compact.sum { |c| c["errors"].to_i } }
+    pairs = base.zip(head).select { |b, h| measured.call(b) && measured.call(h) }
+    ratios = pairs.map { |b, h| h.dig("latency_ns", "median").to_f / b.dig("latency_ns", "median") }
+    reason = nil
+    base_summary = summary.call(base)
+    head_summary = summary.call(head)
+    verdict = if head.any? { |c| c && c["status"] == "failed" }
+                "failed"
+              elsif !base_summary && !head_summary
+                return nil
+              elsif !base_summary
+                reason = "base failed" if base.any? { |c| c && c["status"] == "failed" }
+                "new"
+              elsif !head_summary
+                "removed"
+              elsif ratios.empty?
+                reason = "no round measured it at both base and head"
+                "noisy"
+              elsif ratios.size < MIN_PAIRED
+                reason = "fewer than #{MIN_PAIRED} paired rounds"
+                "noisy"
+              else
+                verdict(ratios, base.select(&measured).map { |c| c.dig("latency_ns", "median").to_f })
+              end
+    result = {key: key, verdict: verdict, base: base_summary, head: head_summary,
+              ratio: ratios.empty? ? nil : median_ci(ratios), harness_changed: harness_changed,
+              errors: {base: errors.call(base), head: errors.call(head)},
+              suspect: (base + head).any? { |c| c && c["status"] == "suspect" }}
+    result[:reason] = reason if reason
+    result
+  end
+
+  # listings maps a binary to the keys of its result JSON.
+  def self.check_unique(listings)
+    owner = {}
+    listings.each do |binary, keys|
+      keys.each do |key|
+        raise Error, "#{key} is reported twice by #{binary}" if owner[key] == binary
+        raise Error, "#{key} is registered by both #{owner[key]} and #{binary}" if owner[key]
+
+        owner[key] = binary
+      end
+    end
+  end
+
+  def self.suite_name(binary) = File.basename(binary, ".exe").delete_prefix("benchmark_")
+
+  def self.metadata(build = "build")
+    cpuinfo = read("/proc/cpuinfo").to_s
+    cpus = Dir["/sys/devices/system/cpu/cpu[0-9]*/topology"]
+    cores = cpus.map { |t| read("#{t}/core_cpus_list") || read("#{t}/thread_siblings_list") }.compact.uniq
+    logical = cpuinfo.scan(/^processor\s*:/).size
+    logical = Etc.nprocessors if logical.zero?
+    smt = read("/sys/devices/system/cpu/smt/active")
+    meminfo = read("/proc/meminfo").to_s
+    kib = ->(field) { (v = meminfo[/^#{field}:\s+(\d+) kB/, 1]) && v.to_i * 1024 }
+    fstype, device = (Open3.capture2("findmnt", "-n", "-o", "FSTYPE,SOURCE", "-T", ".").first.split rescue [])
+    cache = read(File.join(build.to_s, "CMakeCache.txt")).to_s
+    compiler = cache[/^CMAKE_CXX_COMPILER:\w+=(.+)$/, 1]
+    version = compiler && (Open3.capture2(compiler, "--version").first.lines.first&.strip rescue nil)
+    {
+      cpu: {model: cpuinfo[/^model name\s*:\s*(.+)$/, 1], logical_cores: logical,
+            physical_cores: cores.empty? ? nil : cores.size,
+            governor: read("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor"),
+            smt: smt ? smt == "1" : !cores.empty? && logical > cores.size},
+      memory: {total_bytes: kib.call("MemTotal"), available_bytes: kib.call("MemAvailable")},
+      disk: {filesystem: fstype, device: device},
+      network: Dir["/sys/class/net/*/mtu"].sort.to_h { |f| [File.basename(File.dirname(f)), read(f).to_i] },
+      os: {kernel: Etc.uname[:release], distribution: read("/etc/os-release").to_s[/^PRETTY_NAME="?([^"\n]*)/, 1]},
+      runner: %w[ImageOS ImageVersion RUNNER_NAME].to_h { |k| [k, ENV.fetch(k, nil)] },
+      compiler: compiler && {path: compiler, version: version},
+      build_type: cache[/^CMAKE_BUILD_TYPE:\w+=(.*)$/, 1],
+    }
+  end
+
+  def self.sha(rev) = run("git", "rev-parse", "--verify", "#{rev}^{commit}", quiet: true).strip
+
+  # Builds the benchmarks of rev in dir and returns its commit id. A dir already built from that
+  # commit is reused. The worktree is checked out at check-perf-src next to dir and removed before
+  # returning. Builds sharing a parent directory must not run concurrently, since they share
+  # check-perf-src. The parent is also CCACHE_BASEDIR: every build compiles the same relative
+  # source paths, so ccache can reuse one build's objects in another.
+  def self.build(rev, dir)
+    sha = sha(rev)
+    dir = File.expand_path(dir)
+    stamp = File.join(dir, "check-perf.sha")
+    return sha if read(stamp) == sha
+    unless system("git", "cat-file", "-e", "#{sha}:test/benchmark", err: File::NULL)
+      raise MissingError, "#{sha[0, 12]} has no test/benchmark/"
+    end
+
+    source = File.join(File.dirname(dir), "check-perf-src")
+    system("git", "worktree", "remove", "--force", source, err: File::NULL) if File.directory?(source)
+    raise Error, "#{source} is in the way of the worktree" if File.exist?(source)
+
+    begin
+      run("git", "worktree", "add", "--detach", source, sha)
+      # cmake/Cache.cmake sets the compiler launcher itself, preferring sccache, so ccache is chosen
+      # through its CACHE_OPTION.
+      launcher = system("ccache", "--version", out: File::NULL) ? %w[-DCACHE_OPTION=ccache] : []
+      generator = system("ninja", "--version", out: File::NULL) ? %w[-G Ninja] : []
+      env = {"CCACHE_BASEDIR" => File.dirname(dir)}
+      [["cmake", "-S", source, "-B", dir, *generator, *CMAKE_OPTIONS, *launcher],
+       ["cmake", "--build", dir, "--config", "Release", "--target", "build_benchmarks"]].each do |args|
+        warn args.join(" ")
+        raise BuildError, "#{sha[0, 12]} failed to build: #{args.join(' ')}" unless system(env, *args, out: $stderr)
+      end
+      File.write(stamp, sha)
+    ensure
+      system("git", "worktree", "remove", "--force", source, err: File::NULL) if File.directory?(source)
+      FileUtils.rm_rf(source)
+      system("git", "worktree", "prune")
+    end
+    sha
+  end
+
+  def self.binaries(dir)
+    list = File.join(dir, "benchmarks.txt")
+    unless File.file?(list)
+      lists = Dir[File.join(dir, "benchmarks_*.txt")]
+      list = lists.find { |f| f.end_with?("_Release.txt") } || (lists.size == 1 ? lists.first : nil)
+      raise Error, "#{dir} has no benchmarks.txt" unless list
+    end
+    File.readlines(list, chomp: true).reject(&:empty?)
+  end
+
+  def self.build_dir?(arg)
+    File.file?(File.join(arg, "benchmarks.txt")) || !Dir[File.join(arg, "benchmarks_*.txt")].empty?
+  end
+
+  # A side of compare: its label, commit id when it is a revision, status, and binaries by suite.
+  Side = Struct.new(:label, :sha, :status, :reason, :binaries)
+
+  def self.side(arg, work, suites, required:)
+    if build_dir?(arg)
+      dir = File.expand_path(arg)
+      sha = nil
+      label = dir
+    else
+      begin
+        sha = sha(arg)
+      rescue Error => e
+        raise if required
+
+        return Side.new(arg, nil, "missing", "#{arg} cannot be resolved: #{(e.message.lines.last || e.class.name).strip}", {})
+      end
+      label = sha
+      begin
+        dir = File.join(work, "build-#{sha[0, 12]}")
+        build(sha, dir)
+      rescue MissingError, BuildError => e
+        raise if required
+
+        return Side.new(label, sha, e.is_a?(MissingError) ? "missing" : "failed", e.message, {})
+      end
+    end
+    found = binaries(dir).to_h { |b| [suite_name(b), b] }
+    unknown = suites - found.keys
+    raise Error, "#{label} has no benchmark_#{unknown.join(', benchmark_')}" if required && !unknown.empty?
+
+    found.select! { |name, _| suites.include?(name) } unless suites.empty?
+    Side.new(label, sha, "built", nil, found)
+  end
+
+  # Runs one binary and returns the result JSON it writes to json. Exit 1 and 77 are results, not
+  # errors. A binary that stops before writing its results also exits 1, so a missing result file is
+  # the error.
+  def self.measure(binary, json, bmf: nil)
+    FileUtils.rm_f(json)
+    args = [binary, "--json", json, *(bmf ? ["--bmf", bmf] : [])]
+    _, err, status = Open3.capture3(*args)
+    unless [0, 1, 77].include?(status.exitstatus) && File.file?(json)
+      missing = File.file?(json) ? "" : " and wrote no results"
+      raise Error, "#{args.join(' ')} exited with #{status.exitstatus}#{missing}:\n#{err}"
+    end
+
+    JSON.parse(File.read(json))
+  end
+
+  # The test/benchmark/ files a suite's binary is built from, besides the framework: its case file,
+  # the headers it includes from test/benchmark/, and their .cxx files.
+  def self.case_files(sha, suite)
+    main = "test/benchmark/#{suite}.cxx"
+    text, status = Open3.capture2("git", "show", "#{sha}:#{main}", err: File::NULL)
+    return [main] unless status.success?
+
+    headers = text.scan(/^#include "([^"\/]+)\.hxx"/).flatten
+    [main, *headers.flat_map { |h| ["test/benchmark/#{h}.hxx", "test/benchmark/#{h}.cxx"] }]
+  end
+
+  def self.differs?(base, head, paths)
+    _, status = Open3.capture2("git", "diff", "--quiet", base, head, "--", *paths)
+    return false if status.exitstatus.zero?
+    return true if status.exitstatus == 1
+
+    raise Error, "git diff #{base} #{head} failed with #{status}"
+  end
+
+  def self.compare(base_arg, head_arg, rounds:, suites:, out:, work: ".perf-work")
+    head = side(head_arg, work, suites, required: true)
+    base = side(base_arg, work, suites, required: false)
+    raise Error, "#{head.label} has no benchmark to run" if head.binaries.empty?
+
+    results = {base: Hash.new { |h, k| h[k] = Array.new(rounds) }, head: Hash.new { |h, k| h[k] = Array.new(rounds) }}
+    suite_of = {}
+    server = nil
+    FileUtils.mkdir_p(out)
+    bmf = {}
+    Dir.mktmpdir("check-perf") do |tmp|
+      rounds.times do |round|
+        order(round).each do |name|
+          s = name == :base ? base : head
+          keys = {}
+          s.binaries.each do |suite, binary|
+            warn "round #{round + 1}/#{rounds}: #{name} #{suite}"
+            bmf_file = name == :head && round == rounds - 1 ? File.join(tmp, "#{suite}.bmf.json") : nil
+            result = measure(binary, File.join(tmp, "#{name}-#{round}-#{suite}.json"), bmf: bmf_file)
+            bmf.merge!(JSON.parse(File.read(bmf_file))) if bmf_file
+            server ||= result["server"] if name == :head
+            cases = result["cases"].map { |c| c["key"].to_s.include?("/") ? c : c.merge("key" => "#{suite}/#{c['key']}") }
+            keys[binary] = cases.map { |c| c["key"] }
+            cases.each do |c|
+              results[name][c["key"]][round] = c
+              suite_of[c["key"]] ||= suite
+            end
+          end
+          check_unique(keys) if round.zero?
+        end
+      end
+    end
+
+    whole = base.sha && head.sha && differs?(base.sha, head.sha, FRAMEWORK)
+    changed = Hash.new do |h, suite|
+      h[suite] = whole || (base.sha && head.sha &&
+                           differs?(base.sha, head.sha, (case_files(base.sha, suite) + case_files(head.sha, suite)).uniq)) || false
+    end
+    keys = (results[:base].keys + results[:head].keys).uniq.sort
+    rows = keys.filter_map do |key|
+      row(key, results[:base].fetch(key, Array.new(rounds)), results[:head].fetch(key, Array.new(rounds)),
+          harness_changed: changed[suite_of[key]])
+    end
+    skipped = keys - rows.map { |r| r[:key] }
+
+    meta = metadata(head.sha ? File.join(work, "build-#{head.sha[0, 12]}") : head_arg)
+    meta[:cluster] = {nodes: server["nodes"], version: server["version"]} if server
+    result = {schema: 1, base: {sha: base.sha || base.label, status: base.status},
+              head: {sha: head.sha || head.label}, rounds: rounds, metadata: meta, rows: rows, skipped: skipped}
+    result[:base][:reason] = base.reason if base.reason
+    File.write(File.join(out, "result.json"), "#{JSON.pretty_generate(result)}\n")
+    File.write(File.join(out, "head.bmf.json"), "#{JSON.pretty_generate(bmf)}\n")
+    File.write(File.join(out, "report.txt"), report(result))
+    File.write(File.join(out, "comment.md"), comment(result))
+    print report(result)
+    rows.any? { |r| r[:verdict] == "failed" } ? 1 : 0
+  end
+
+  def self.duration(ns)
+    return "-" unless ns
+
+    unit, scale = [["s", 1_000_000_000.0], ["ms", 1_000_000.0], ["µs", 1_000.0]].find { |_, s| ns >= s } || ["ns", 1]
+    v = ns / scale
+    format(v >= 100 ? "%.0f %s" : v >= 10 ? "%.1f %s" : "%.2f %s", v, unit)
+  end
+
+  def self.change(ratio)
+    return "-" unless ratio
+
+    pct = ->(r) { format("%+.1f%%", (r - 1) * 100) }
+    return pct[ratio[:median]] unless ratio[:lower]
+
+    "#{pct[ratio[:median]]} [#{pct[ratio[:lower]]}, #{pct[ratio[:upper]]}]"
+  end
+
+  def self.verdict_text(row)
+    notes = [row[:reason], row[:harness_changed] ? "harness changed" : nil, row[:suspect] ? "suspect" : nil].compact
+    notes.empty? ? row[:verdict] : "#{row[:verdict]} (#{notes.join('; ')})"
+  end
+
+  def self.short(sha) = sha.to_s.match?(/\A\h{40}\z/) ? sha[0, 12] : sha
+
+  def self.machine(meta)
+    cpu = meta[:cpu]
+    gib = meta.dig(:memory, :total_bytes).to_f / 2**30
+    runner = meta[:runner].values_at("ImageOS", "ImageVersion").compact.join(" ")
+    ["CPU: #{cpu[:model]}, #{cpu[:logical_cores]} logical / #{cpu[:physical_cores]} physical cores, " \
+     "SMT #{cpu[:smt] ? 'on' : 'off'}, governor #{cpu[:governor] || 'unknown'}",
+     "Memory: #{format('%.1f', gib)} GiB; runner: #{runner.empty? ? 'local' : runner}; " \
+     "compiler: #{meta.dig(:compiler, :version) || 'unknown'}; build type: #{meta[:build_type] || 'unknown'}",
+     *(meta[:cluster] ? ["Cluster: #{meta[:cluster][:nodes]} nodes, server #{meta[:cluster][:version]}"] : [])]
+  end
+
+  # The reason of a base that was not built names the revision and why: no test/benchmark/, a
+  # revision that cannot be resolved, or a failed build.
+  def self.base_note(result)
+    base = result[:base]
+    "Every case is new: #{base[:reason]}." unless base[:status] == "built"
+  end
+
+  # The bound on the rate of a likely verdict per unchanged key over n rounds, 2 * P(Bin(n, 1/2) <= k)
+  # with k = ci_ranks(n), as [numerator, 2**n]. nil when n rounds give no CI.
+  def self.likely_rate(n)
+    k, = n.is_a?(Integer) ? ci_ranks(n) : nil
+    return nil unless k
+
+    [2 * (0..k).sum { |i| (0...i).reduce(1) { |c, j| c * (n - j) / (j + 1) } }, 2**n]
+  end
+
+  def self.likely_note(result)
+    return unless result[:rows].any? { |r| r[:verdict].start_with?("likely") }
+
+    rate = likely_rate(result[:rounds]) or return
+    "A likely row is a hint to re-run: with #{result[:rounds]} rounds an unchanged key reads likely with " \
+      "probability at most #{rate.join('/')}."
+  end
+
+  def self.report(result)
+    rows = result[:rows].map do |r|
+      [r[:key], duration(r.dig(:base, :median)), duration(r.dig(:head, :median)), change(r[:ratio]),
+       verdict_text(r), r[:errors].values.sum.positive? ? "errors #{r[:errors][:base]} / #{r[:errors][:head]}" : ""]
+    end
+    header = ["key", "base p50", "head p50", "change [95% CI]", "verdict", ""]
+    widths = header.each_index.map { |i| ([header] + rows).map { |row| row[i].length }.max }
+    table = ([header] + rows).map { |row| row.each_with_index.map { |c, i| c.ljust(widths[i]) }.join("  ").rstrip }
+    [
+      "base #{short(result[:base][:sha])} (#{result[:base][:status]}), head #{short(result[:head][:sha])}, " \
+      "rounds: #{result[:rounds]}",
+      *machine(result[:metadata]),
+      *base_note(result),
+      "",
+      *table,
+      *(result[:skipped].empty? ? [] : ["", "Skipped at base and head: #{result[:skipped].join(', ')}"]),
+      *(likely_note(result) ? ["", likely_note(result)] : []),
+      "",
+    ].join("\n")
+  end
+
+  def self.comment(result)
+    head = [
+      "### Benchmarks: base `#{short(result[:base][:sha])}`, head `#{short(result[:head][:sha])}`",
+      "",
+      *machine(result[:metadata]).map { |l| "#{l}  " },
+      *(base_note(result) ? ["", base_note(result)] : []),
+      "",
+      "| key | base p50 | head p50 | change [95% CI] | verdict |",
+      "|---|---|---|---|---|",
+    ]
+    text = "#{head.join("\n")}\n"
+    result[:rows].each_with_index do |r, i|
+      line = "| `#{r[:key]}` | #{duration(r.dig(:base, :median))} | #{duration(r.dig(:head, :median))} | " \
+             "#{change(r[:ratio])} | #{verdict_text(r)} |\n"
+      if text.length + line.length > COMMENT_LIMIT
+        text += "\n#{result[:rows].size - i} more rows are in result.json.\n"
+        break
+      end
+      text += line
+    end
+    text += "\nSkipped at base and head: #{result[:skipped].map { |k| "`#{k}`" }.join(', ')}\n" unless result[:skipped].empty?
+    text += "\n#{likely_note(result)}\n" if likely_note(result)
+    text
+  end
+
+  def self.self_test
+    check = ->(name, actual, expected) { raise "#{name}: expected #{expected.inspect}, got #{actual.inspect}" unless actual == expected }
+    flat = [100.0] * 7
+    faster = [0.80, 0.82, 0.81, 0.83, 0.79, 0.81, 0.80]
+    ci = median_ci(faster)
+    check.call("median_ci median", ci[:median], 0.81)
+    check.call("median_ci excludes 1.0", ci[:upper] < 1, true)
+    check.call("median_ci too few", median_ci(faster[0, 5]).values_at(:median, :lower, :upper), [0.81, nil, nil])
+    check.call("ci_ranks n=5", ci_ranks(5), nil)
+    check.call("ci_ranks n=6", ci_ranks(6), [0, 5])
+    check.call("ci_ranks n=7", ci_ranks(7), [0, 6])
+    check.call("ci_ranks n=8", ci_ranks(8), [0, 7])
+    # 2 * P(Bin(100, 1/2) <= 39) is 0.035, and <= 40 is 0.057.
+    check.call("ci_ranks n=100", ci_ranks(100), [39, 60])
+    check.call("verdict faster", verdict(faster, flat), "faster")
+    check.call("verdict too few ratios", verdict(faster[0, 5], flat[0, 5]), "noisy")
+    check.call("verdict slower", verdict([1.20, 1.18, 1.22, 1.19, 1.21, 1.20, 1.19], flat), "slower")
+    check.call("verdict small change", verdict([0.985, 0.99, 0.995, 0.987, 0.992, 0.99, 0.988], flat), "likely faster")
+    check.call("verdict straddles one", verdict([0.9, 1.1, 0.95, 1.05, 1.0, 1.0, 0.98], flat), "no change")
+    # The median moves by 3%, but the CI bound nearest 1.0 only by 1%.
+    check.call("verdict bound under effect", verdict([0.96, 0.97, 0.97, 0.97, 0.99, 0.97, 0.96], flat), "likely faster")
+    check.call("verdict likely slower", verdict([1.01, 1.015, 1.005, 1.01, 1.03, 1.01, 1.02], flat), "likely slower")
+    check.call("verdict bound touches one", verdict([0.97, 0.98, 0.99, 0.98, 1.0, 0.98, 0.97], flat), "no change")
+    check.call("verdict bound at effect", verdict([0.96, 0.97, 0.97, 0.97, 0.98, 0.97, 0.96], flat), "faster")
+    check.call("order", (0..3).map { |r| order(r) }, [%i[base head], %i[head base], %i[base head], %i[head base]])
+    check.call("verdict noisy", verdict(faster, [100.0, 111.0, 101.0, 99.0, 100.0, 100.0, 100.0]), "noisy")
+    check.call("verdict noisy boundary", verdict(faster, [100.0, 109.0, 101.0, 99.0, 100.0, 100.0, 100.0]), "faster")
+
+    kase = ->(key, median, status = "measured") { {"key" => key, "status" => status, "latency_ns" => {"median" => median}, "errors" => 0} }
+    rounds = ->(key, median) { Array.new(7) { kase.call(key, median) } }
+    none = Array.new(7)
+    check.call("new", row("a", none, rounds.call("a", 10.0))[:verdict], "new")
+    check.call("removed", row("a", rounds.call("a", 10.0), none)[:verdict], "removed")
+    check.call("unchanged row", row("a", rounds.call("a", 10.0), rounds.call("a", 10.0))[:verdict], "no change")
+    # Per-operation cases write integer medians, which must not divide as integers.
+    integer_row = row("a", rounds.call("a", 29_950), rounds.call("a", 29_900))
+    check.call("integer medians", [integer_row[:verdict], integer_row[:ratio][:median].round(4)], ["likely faster", 0.9983])
+    check.call("skipped on both", row("a", Array.new(7) { kase.call("a", 0, "skipped") },
+                                      Array.new(7) { kase.call("a", 0, "skipped") }), nil)
+    check.call("failed at head", row("a", rounds.call("a", 10.0),
+                                     [*rounds.call("a", 9.0)[0, 6], kase.call("a", 0, "failed")])[:verdict], "failed")
+    unpaired = row("a", [*rounds.call("a", 10.0)[0, 3], nil, nil, nil, nil], [nil, nil, nil, *rounds.call("a", 10.0)[0, 4]])
+    check.call("no paired round", [verdict_text(unpaired), unpaired[:ratio]],
+               ["noisy (no round measured it at both base and head)", nil])
+    few = row("a", rounds.call("a", 10.0), [nil, nil, *rounds.call("a", 8.0)[0, 5]])
+    check.call("fewer paired rounds than a CI needs", [verdict_text(few), few[:ratio][:lower], change(few[:ratio])],
+               ["noisy (fewer than 6 paired rounds)", nil, "-20.0%"])
+    check.call("schema keeps null sides", row("a", none, rounds.call("a", 10.0)).key?(:base), true)
+    base_failed = row("a", Array.new(7) { kase.call("a", 0, "failed") }, rounds.call("a", 10.0))
+    check.call("base failed", verdict_text(base_failed), "new (base failed)")
+    check.call("new is not base failed", verdict_text(row("a", none, rounds.call("a", 10.0))), "new")
+    suspect = row("a", Array.new(7) { kase.call("a", 0.2, "suspect") }, Array.new(7) { kase.call("a", 0.2, "suspect") })
+    check.call("suspect noted", verdict_text(suspect), "no change (suspect)")
+    check.call("measured is not suspect", verdict_text(row("a", rounds.call("a", 10.0), rounds.call("a", 10.0))), "no change")
+    check.call("harness changed", verdict_text(row("a", rounds.call("a", 10.0), rounds.call("a", 10.0), harness_changed: true)),
+               "no change (harness changed)")
+
+    begin
+      check_unique("build/test/benchmark_kv_fake" => %w[kv_get/fake/t1 kv_get/fake/t8],
+                   "build/test/benchmark_kv_cluster" => %w[kv_get/cluster/t1 kv_get/fake/t8])
+      raise "duplicate_key_across_binaries: no error raised"
+    rescue Error => e
+      check.call("duplicate_key_across_binaries status", e.status, 3)
+      check.call("duplicate_key_across_binaries names",
+                 e.message.include?("benchmark_kv_fake") && e.message.include?("benchmark_kv_cluster"), true)
+    end
+    check_unique("build/test/benchmark_kv_fake" => %w[kv_get/fake/t1], "build/test/benchmark_kv_cluster" => %w[kv_get/cluster/t1])
+    begin
+      check_unique("build/test/benchmark_kv_fake" => %w[kv_fake/kv_get kv_fake/kv_get])
+      raise "duplicate_key_in_one_binary: no error raised"
+    rescue Error => e
+      check.call("duplicate_key_in_one_binary", e.message, "kv_fake/kv_get is reported twice by build/test/benchmark_kv_fake")
+    end
+
+    Dir.mktmpdir("check-perf-case-level") do |tmp|
+      # kv_fake and kv_cluster both register kv_get; a failure before either reached a key must not collide.
+      fake = lambda do |suite, key|
+        File.join(tmp, "benchmark_#{suite}").tap do |path|
+          json = JSON.generate("schema" => 1, "cases" => [{"key" => key, "status" => "failed", "detail" => "setup"}])
+          File.write(path, "#!/bin/sh\nprintf '%s' '#{json}' > \"$2\"\n[ \"$3\" = --bmf ] && printf '{}' > \"$4\"\nexit 1\n")
+          File.chmod(0o755, path)
+        end
+      end
+      run_compare = lambda do |dir, *binaries|
+        FileUtils.mkdir_p(dir)
+        File.write(File.join(dir, "benchmarks.txt"), binaries.join("\n"))
+        out, err = $stdout, $stderr
+        $stdout = $stderr = null = File.open(File::NULL, "w")
+        code = compare(dir, dir, rounds: 1, suites: [], out: File.join(dir, "out"), work: File.join(tmp, "work"))
+        [code, JSON.parse(File.read(File.join(dir, "out", "result.json")))["rows"].map { |r| [r["key"], r["verdict"]] }]
+      ensure
+        $stdout, $stderr = out, err if out
+        null&.close
+      end
+      check.call("case_level_results_qualified",
+                 run_compare.call(File.join(tmp, "a"), fake.call("kv_fake", "kv_get"), fake.call("kv_cluster", "kv_get")),
+                 [1, [%w[kv_cluster/kv_get failed], %w[kv_fake/kv_get failed]]])
+      begin
+        run_compare.call(File.join(tmp, "b"), fake.call("x", "kv_get/fake/t1"), fake.call("y", "kv_get/fake/t1"))
+        raise "duplicate_measured_key_across_binaries: no error raised"
+      rescue Error => e
+        check.call("duplicate_measured_key_across_binaries", e.message.start_with?("kv_get/fake/t1 is registered by both"), true)
+      end
+    end
+
+    Dir.mktmpdir("check-perf-self-test") do |tmp|
+      # A binary that exits 1 before writing --json must not be read as the previous run's results.
+      binary = File.join(tmp, "benchmark_throws")
+      File.write(binary, "#!/bin/sh\nexit 1\n")
+      File.chmod(0o755, binary)
+      json = File.join(tmp, "out.json")
+      File.write(json, JSON.generate("schema" => 1, "cases" => []))
+      begin
+        measure(binary, json)
+        raise "stale_result: no error raised"
+      rescue Error => e
+        check.call("stale_result", [e.status, e.message.include?("wrote no results"), File.exist?(json)], [3, true, false])
+      end
+
+      missing = side("check-perf-no-such-revision", File.join(tmp, "work"), [], required: false)
+      check.call("unresolvable base", [missing.status, missing.binaries, missing.reason.include?("cannot be resolved")],
+                 ["missing", {}, true])
+      rendered = {base: {sha: missing.label, status: missing.status, reason: missing.reason}, head: {sha: "b" * 40},
+                  rounds: 1, metadata: metadata, rows: [], skipped: []}
+      note = "Every case is new: check-perf-no-such-revision cannot be resolved: "
+      check.call("unresolvable base rendered", [report(rendered).include?(note), comment(rendered).include?(note)],
+                 [true, true])
+    end
+
+    meta = metadata
+    check.call("metadata_shape", meta.keys.sort, %i[build_type compiler cpu disk memory network os runner])
+    check.call("metadata_shape cpu", meta[:cpu].keys.sort, %i[governor logical_cores model physical_cores smt])
+    %i[model logical_cores physical_cores].each { |k| raise "metadata_shape: cpu #{k} is nil" if meta[:cpu][k].nil? }
+    raise "metadata_shape: memory unread" unless meta[:memory].values.all?(Integer)
+
+    likely = {base: {sha: "a" * 40, status: "built"}, head: {sha: "b" * 40}, rounds: 7, metadata: meta, skipped: [],
+              rows: [integer_row]}
+    unchanged = likely.merge(rows: [row("a", rounds.call("a", 10.0), rounds.call("a", 10.0))])
+    hint = "A likely row is a hint to re-run: with 7 rounds an unchanged key reads likely with probability at most 2/128."
+    check.call("likely noted", [report(likely).include?(hint), comment(likely).include?(hint)], [true, true])
+    # ci_ranks(9) is [1, 7], so the bound is 2 * (1 + 9) / 512.
+    check.call("likely noted at 9 rounds", report(likely.merge(rounds: 9)).include?("with 9 rounds an unchanged key reads likely " \
+                                                                                    "with probability at most 20/512."), true)
+    check.call("likely not noted without a CI", [likely_rate(5), report(likely.merge(rounds: 5)).include?("A likely row")], [nil, false])
+    check.call("likely not noted", [report(unchanged).include?(hint), comment(unchanged).include?(hint)], [false, false])
+
+    sample = {base: {sha: "a" * 40, status: "built"}, head: {sha: "b" * 40}, rounds: 5, metadata: meta, skipped: [],
+              rows: Array.new(5000) { |i| row("case_#{i}/v", rounds.call("x", 10.0), rounds.call("x", 10.0)) }}
+    raise "comment over the limit" unless comment(sample).length <= COMMENT_LIMIT + 100
+    puts "ok"
+    0
+  end
+
+  def self.main(argv)
+    rounds = ROUNDS
+    suites = []
+    out = "perf-report"
+    parser = OptionParser.new do |o|
+      o.banner = "usage: bin/check-perf {metadata [BUILD] | build REV DIR | compare BASE HEAD | --self-test}"
+      o.on("--rounds N", Integer, "rounds of compare (default #{ROUNDS})") { |n| rounds = n }
+      o.on("--suite NAME", "a binary benchmark_NAME to compare; repeatable (default all)") { |s| suites << s }
+      o.on("--out DIR", "where compare writes its reports (default #{out})") { |d| out = d }
+    end
+    return self_test if argv.delete("--self-test")
+
+    command, *args = parser.parse(argv)
+    case command
+    when "metadata"
+      raise Error, parser.banner unless args.size <= 1
+
+      puts JSON.pretty_generate(metadata(args[0] || "build"))
+      0
+    when "build"
+      raise Error, parser.banner unless args.size == 2
+
+      puts build(args[0], args[1])
+      0
+    when "compare"
+      raise Error, parser.banner unless args.size == 2 && rounds.positive?
+
+      compare(args[0], args[1], rounds: rounds, suites: suites, out: out)
+    else
+      raise Error, parser.banner
+    end
+  rescue OptionParser::ParseError => e
+    warn e.message
+    3
+  rescue Error => e
+    warn e.message
+    e.status
+  rescue StandardError => e
+    warn e.full_message
+    3
+  end
+end
+
+exit CheckPerf.main(ARGV) if $PROGRAM_NAME == __FILE__
