@@ -55,6 +55,13 @@
 # process CPU time per operation, noisy on the base rounds' spread of it. It has none when either
 # side lacks the CPU time, as on a platform that cannot provide it, or when the key failed at head.
 #
+# A per-operation key also gets a throughput verdict, from its operations per second over all
+# threads. On several threads a change can raise the latency of each operation and still raise the
+# total throughput, by contending less. The verdict applies the same rules to the per-round ratios
+# base/head of throughput, so more throughput at head reads faster; noisy is on the base rounds'
+# spread of throughput. The change shown is head/base, so +% is more throughput. A batched key has
+# no throughput, and a key without it at either side, or failed at head, has no throughput verdict.
+#
 # A row is noted "suspect" when a round at either side reported the key suspect, a batched median
 # under 0.5 ns per iteration: the compiler removed the work, and the key has no BMF entry.
 #
@@ -259,6 +266,10 @@ module CheckPerf
     rss = lambda do |cases|
       ci_of.call(cases.filter_map { |c| (v = measured.call(c) && c["max_rss_bytes"]).is_a?(Integer) ? v : nil })&.dig(:median)&.round
     end
+    ops = ->(c) { (v = measured.call(c) && c["ops_per_second"]).is_a?(Numeric) && v.positive? ? v.to_f : nil }
+    ops_pairs = base.zip(head).filter_map { |b, h| (x = ops.call(b)) && (y = ops.call(h)) && [x, y] }
+    base_ops = base.filter_map(&ops)
+    head_ops = head.filter_map(&ops)
     result = {key: key, verdict: verdict, base: base_summary, head: head_summary,
               ratio: ci_of.call(ratios),
               cpu: {verdict: cpu_ratios.empty? || verdict == "failed" ? nil : verdict(cpu_ratios, base_cpu),
@@ -267,6 +278,11 @@ module CheckPerf
               harness_changed: harness_changed,
               errors: {base: errors.call(base), head: errors.call(head)},
               suspect: (base + head).any? { |c| c && c["status"] == "suspect" }}
+    unless base_ops.empty? && head_ops.empty?
+      result[:throughput] = {verdict: ops_pairs.empty? || verdict == "failed" ? nil : verdict(ops_pairs.map { |x, y| x / y }, base_ops),
+                             base: ci_of.call(base_ops), head: ci_of.call(head_ops),
+                             ratio: ci_of.call(ops_pairs.map { |x, y| y / x })}
+    end
     result[:reason] = reason if reason
     result
   end
@@ -504,6 +520,14 @@ module CheckPerf
     format(v >= 100 ? "%.0f %s" : v >= 10 ? "%.1f %s" : "%.2f %s", v, unit)
   end
 
+  # Operations per second with k and M, as the benchmark runner prints them.
+  def self.rate(v)
+    return "-" unless v
+
+    value, suffix = v >= 1_000_000 ? [v / 1_000_000.0, "M"] : v >= 1_000 ? [v / 1_000.0, "k"] : [v, ""]
+    format(value >= 100 ? "%.0f%s" : value >= 10 ? "%.1f%s" : "%.2f%s", value, suffix)
+  end
+
   def self.change(ratio)
     return "-" unless ratio
 
@@ -548,7 +572,7 @@ module CheckPerf
   end
 
   def self.likely_note(result)
-    return unless result[:rows].any? { |r| [r[:verdict], r.dig(:cpu, :verdict)].compact.any? { |v| v.start_with?("likely") } }
+    return unless result[:rows].any? { |r| [r[:verdict], r.dig(:cpu, :verdict), r.dig(:throughput, :verdict)].compact.any? { |v| v.start_with?("likely") } }
 
     rate = likely_rate(result[:rounds]) or return
     "A likely row is a hint to re-run: with #{result[:rounds]} rounds an unchanged key reads likely with " \
@@ -562,13 +586,20 @@ module CheckPerf
     [duration(cpu.dig(:base, :median)), duration(cpu.dig(:head, :median)), change(cpu[:ratio]), cpu[:verdict] || "-"]
   end
 
+  THROUGHPUT_HEADER = ["base ops/s", "head ops/s", "ops/s change [95% CI]", "ops/s verdict"].freeze
+
+  def self.throughput_columns(row)
+    ops = row[:throughput] || {}
+    [rate(ops.dig(:base, :median)), rate(ops.dig(:head, :median)), change(ops[:ratio]), ops[:verdict] || "-"]
+  end
+
   def self.report(result)
     rows = result[:rows].map do |r|
       [r[:key], duration(r.dig(:base, :median)), duration(r.dig(:head, :median)), change(r[:ratio]),
-       verdict_text(r), *cpu_columns(r),
+       verdict_text(r), *cpu_columns(r), *throughput_columns(r),
        r[:errors].values.sum.positive? ? "errors #{r[:errors][:base]} / #{r[:errors][:head]}" : ""]
     end
-    header = ["key", "base p50", "head p50", "change [95% CI]", "verdict", *CPU_HEADER, ""]
+    header = ["key", "base p50", "head p50", "change [95% CI]", "verdict", *CPU_HEADER, *THROUGHPUT_HEADER, ""]
     widths = header.each_index.map { |i| ([header] + rows).map { |row| row[i].length }.max }
     table = ([header] + rows).map { |row| row.each_with_index.map { |c, i| c.ljust(widths[i]) }.join("  ").rstrip }
     [
@@ -592,13 +623,13 @@ module CheckPerf
       *machine(result[:metadata]).map { |l| "#{l}  " },
       *(base_note(result) ? ["", base_note(result)] : []),
       "",
-      "| key | base p50 | head p50 | change [95% CI] | verdict | #{CPU_HEADER.join(' | ')} |",
-      "|---|---|---|---|---|---|---|---|---|",
+      "| key | base p50 | head p50 | change [95% CI] | verdict | #{(CPU_HEADER + THROUGHPUT_HEADER).join(' | ')} |",
+      "|#{'---|' * (5 + CPU_HEADER.size + THROUGHPUT_HEADER.size)}",
     ]
     text = "#{head.join("\n")}\n"
     result[:rows].each_with_index do |r, i|
       line = "| `#{r[:key]}` | #{duration(r.dig(:base, :median))} | #{duration(r.dig(:head, :median))} | " \
-             "#{change(r[:ratio])} | #{verdict_text(r)} | #{cpu_columns(r).join(' | ')} |\n"
+             "#{change(r[:ratio])} | #{verdict_text(r)} | #{(cpu_columns(r) + throughput_columns(r)).join(' | ')} |\n"
       if text.length + line.length > COMMENT_LIMIT
         text += "\n#{result[:rows].size - i} more rows are in result.json.\n"
         break
@@ -719,11 +750,14 @@ module CheckPerf
     return nil unless row.is_a?(Hash) && row["key"].is_a?(String) && row["key"].match?(KEY) && VERDICTS.include?(row["verdict"])
 
     cpu = row["cpu"].is_a?(Hash) ? row["cpu"] : {}
+    ops = row["throughput"].is_a?(Hash) ? row["throughput"] : {}
     {key: row["key"], verdict: row["verdict"], reason: plain(row["reason"]),
      harness_changed: row["harness_changed"] == true, suspect: row["suspect"] == true,
      base: stat_of(row["base"]), head: stat_of(row["head"]), ratio: stat_of(row["ratio"]),
      cpu: {verdict: VERDICTS.include?(cpu["verdict"]) ? cpu["verdict"] : nil,
-           base: stat_of(cpu["base"]), head: stat_of(cpu["head"]), ratio: stat_of(cpu["ratio"])}}
+           base: stat_of(cpu["base"]), head: stat_of(cpu["head"]), ratio: stat_of(cpu["ratio"])},
+     throughput: {verdict: VERDICTS.include?(ops["verdict"]) ? ops["verdict"] : nil,
+                  base: stat_of(ops["base"]), head: stat_of(ops["head"]), ratio: stat_of(ops["ratio"])}}
   end
 
   # The result that comment() renders, built from a result.json of an artifact by the checks that the
@@ -827,9 +861,9 @@ module CheckPerf
     <meta name="color-scheme" content="light dark">
     <title>Performance history</title>
     <style>
-      :root { --fg: #1f2328; --bg: #fff; --muted: #656d76; --grid: #d0d7de; --latency: #0969da; --cpu: #bc4c00; --rss: #1a7f37; }
+      :root { --fg: #1f2328; --bg: #fff; --muted: #656d76; --grid: #d0d7de; --latency: #0969da; --cpu: #bc4c00; --rss: #1a7f37; --throughput: #8250df; }
       @media (prefers-color-scheme: dark) {
-        :root { --fg: #e6edf3; --bg: #0d1117; --muted: #8b949e; --grid: #30363d; --latency: #58a6ff; --cpu: #f0883e; --rss: #3fb950; }
+        :root { --fg: #e6edf3; --bg: #0d1117; --muted: #8b949e; --grid: #30363d; --latency: #58a6ff; --cpu: #f0883e; --rss: #3fb950; --throughput: #bc8cff; }
       }
       body { font: 14px/1.4 system-ui, sans-serif; color: var(--fg); background: var(--bg); max-width: 72rem; margin: 0 auto; padding: 1rem; }
       nav { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; margin: 1rem 0; }
@@ -841,9 +875,8 @@ module CheckPerf
       .family { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: .75rem; }
       .chart { border: 1px solid var(--grid); border-radius: 6px; padding: .5rem; min-width: 0; }
       h4 { font: 12px ui-monospace, monospace; margin: 0; word-break: break-all; }
-      .latest { font-size: 12px; font-variant-numeric: tabular-nums; }
+      .latest { display: flex; flex-wrap: wrap; column-gap: .75em; font-size: 12px; font-variant-numeric: tabular-nums; }
       .latest span { white-space: nowrap; }
-      .delta, .better { margin-left: .75em; }
       .delta { color: var(--muted); }
       .better { color: var(--c); }
       .plot { display: grid; grid-template-columns: auto 1fr; gap: .375rem; margin-top: .25rem; }
@@ -885,11 +918,16 @@ module CheckPerf
     const bytes = (b) => b >= 1_073_741_824 ? (b / 1_073_741_824).toPrecision(3) + " GiB" : b >= 1_048_576 ? (b / 1_048_576).toPrecision(3) + " MiB"
       : b >= 1_024 ? (b / 1_024).toPrecision(3) + " KiB" : b + " B";
 
+    const rate = (v) => (v >= 1_000_000 ? (v / 1_000_000).toPrecision(3) + "M" : v >= 1_000 ? (v / 1_000).toPrecision(3) + "k"
+      : v.toPrecision(3)) + " ops/s";
+
     // One section per measure, in this order. colour names a custom property of the stylesheet;
     // better is "lower" or "higher".
     const MEASURES = [
       {id: "latency", title: "Latency", colour: "--latency", fmt: duration, better: "lower", value: (row) => row.median,
        about: "Median time per operation of each key, per iteration for batched keys."},
+      {id: "throughput", title: "Throughput", colour: "--throughput", fmt: rate, better: "higher", value: (row) => row.ops_per_second,
+       about: "Operations per second across all threads of the key, for per-operation keys."},
       {id: "cpu", title: "CPU time per operation", colour: "--cpu", fmt: duration, better: "lower", value: (row) => row.cpu_ns_per_op,
        about: "CPU time of the whole benchmark process per operation, per iteration for batched keys. Every thread counts."},
       {id: "rss", title: "Peak RSS", colour: "--rss", fmt: bytes, better: "lower", value: (row) => row.max_rss_bytes,
@@ -1038,8 +1076,9 @@ module CheckPerf
   end
 
   # The data of one push. Each measured row of the result.json of each dir gives its head median and
-  # the CPU model of the dir. The head's CI bounds, CPU time per operation and peak RSS are added
-  # where the row has them. A result of another commit, and a row that failed at head, are left out.
+  # the CPU model of the dir. The head's CI bounds, CPU time per operation, peak RSS and throughput
+  # are added where the row has them. A result of another commit, and a row that failed at head, are
+  # left out.
   def self.push_data(commit, date, dirs)
     rows = {}
     first = nil
@@ -1064,7 +1103,8 @@ module CheckPerf
         end
 
         at = ->(*path) { path.reduce(row) { |v, k| v.is_a?(Hash) ? v[k] : nil } }
-        usage = {"cpu_ns_per_op" => at.call("cpu", "head", "median"), "max_rss_bytes" => at.call("max_rss_bytes", "head")}
+        usage = {"cpu_ns_per_op" => at.call("cpu", "head", "median"), "max_rss_bytes" => at.call("max_rss_bytes", "head"),
+                 "ops_per_second" => at.call("throughput", "head", "median")}
         rows[row["key"]] = head.slice("median", "lower", "upper").select { |_, v| number?(v) }.merge("cpu_model" => cpu)
                                .merge(usage.select { |_, v| number?(v) })
       end
@@ -1186,6 +1226,21 @@ module CheckPerf
     no_cpu = row("a", rounds.call("a", 10.0), with_cpu.call("a", 10.0, 150.0))
     check.call("cpu absent at base", [no_cpu[:cpu][:verdict], no_cpu[:cpu][:base], cpu_columns(no_cpu)], [nil, nil, ["-", "150 ns", "-", "-"]])
     check.call("cpu null", row("a", with_cpu.call("a", 10.0, nil), with_cpu.call("a", 10.0, nil))[:cpu][:verdict], nil)
+    with_ops = ->(median, ops) { Array.new(7) { kase.call("a", median).merge("ops_per_second" => ops) } }
+    # Slower per operation, yet more operations per second in all.
+    more = row("a", with_ops.call(10.0, 100_000.0), with_ops.call(12.0, 125_000.0))
+    check.call("throughput higher is faster", [more[:verdict], more[:throughput][:verdict], throughput_columns(more)],
+               ["slower", "faster", ["100k", "125k", "+25.0% [+25.0%, +25.0%]", "faster"]])
+    less = row("a", with_ops.call(10.0, 1_250_000.0), with_ops.call(10.0, 1_000_000.0))
+    check.call("throughput lower is slower", throughput_columns(less), ["1.25M", "1.00M", "-20.0% [-20.0%, -20.0%]", "slower"])
+    spread = Array.new(7) { |i| kase.call("a", 10.0).merge("ops_per_second" => i.zero? ? 120_000.0 : 100_000.0) }
+    check.call("throughput noisy on base spread", row("a", spread, with_ops.call(10.0, 150_000.0))[:throughput][:verdict], "noisy")
+    no_ops = row("a", rounds.call("a", 10.0), with_ops.call(10.0, 1_000.0))
+    check.call("throughput absent at base", [no_ops[:throughput][:verdict], throughput_columns(no_ops)], [nil, ["-", "1.00k", "-", "-"]])
+    batched = row("a", rounds.call("a", 10.0), rounds.call("a", 10.0))
+    check.call("throughput absent on both", [batched.key?(:throughput), throughput_columns(batched)], [false, ["-"] * 4])
+    failed_ops = row("a", with_ops.call(10.0, 1_000.0), [*with_ops.call(10.0, 2_000.0)[0, 6], kase.call("a", 0, "failed")])
+    check.call("throughput failed at head", failed_ops[:throughput][:verdict], nil)
 
     begin
       check_unique("build/test/benchmark_kv_fake" => %w[kv_get/fake/t1 kv_get/fake/t8],
@@ -1334,7 +1389,9 @@ module CheckPerf
                    {"key" => "bogus/verdict", "verdict" => "<b>slower</b>"},
                    {"key" => "good/t1", "verdict" => "slower", "reason" => "see #12 &#x40;org <i>x</i> www.r.example",
                     "base" => {"median" => "1e3"}, "head" => {"median" => "INFINITE"},
-                    "ratio" => {"median" => 1.1, "lower" => 1.05, "upper" => "x"}}]
+                    "ratio" => {"median" => 1.1, "lower" => 1.05, "upper" => "x"},
+                    "throughput" => {"verdict" => "faster", "base" => {"median" => "1e6"}, "head" => {"median" => 2.0e6},
+                                     "ratio" => {"median" => "x"}}}]
       )
       # JSON.parse reads 1e400 as Infinity, which JSON.generate refuses to write.
       rendered_hostile = comment(comment_result(JSON.parse(JSON.generate(hostile).sub('"INFINITE"', "1e400"))))
@@ -1343,7 +1400,7 @@ module CheckPerf
                    rendered_hostile.scan(/www\./i),
                  [])
       check.call("hostile result keeps the valid rows",
-                 [rendered_hostile.include?("| `good/t1` | - | - | +10.0% | slower (see 12 x40org ix/i www\u200b.r.example) | - | - | - | - |\n"),
+                 [rendered_hostile.include?("| `good/t1` | - | - | +10.0% | slower (see 12 x40org ix/i www\u200b.r.example) | - | - | - | - | - | 2.00M | - | faster |\n"),
                   rendered_hostile.include?("`s/t1`"), rendered_hostile.include?("base `?`, head `?`")],
                  [true, true, true])
       check.call("cpu verdict outside the known set left out",
@@ -1393,6 +1450,9 @@ module CheckPerf
     check.call("cpu columns render", columns.map { |t| CPU_HEADER.all? { |h| t.include?(h) } && t.include?("-25.0% [-25.0%, -25.0%]") },
                [true, true])
     check.call("cpu columns absent", report(unchanged).lines.last.split.last(4), ["-"] * 4)
+    columns = [report(more_result = likely.merge(rows: [more])), comment(more_result)]
+    check.call("throughput columns render",
+               columns.map { |t| THROUGHPUT_HEADER.all? { |h| t.include?(h) } && t.include?("+25.0% [+25.0%, +25.0%]") }, [true, true])
 
     sample = {base: {sha: "a" * 40, status: "built"}, head: {sha: "b" * 40}, suites: ["x"], rounds: 5, metadata: meta, skipped: [],
               rows: Array.new(5000) { |i| row("case_#{i}/v", rounds.call("x", 10.0), rounds.call("x", 10.0)) }}
@@ -1463,7 +1523,8 @@ module CheckPerf
       stat = ->(m) { {"median" => m, "lower" => m, "upper" => m} }
       dirs_for = lambda do |sha|
         [write_result.call("a", sha, [{"key" => "k/1", "verdict" => "no change", "head" => stat.call(5.0).merge("extra" => 1),
-                                       "cpu" => {"head" => stat.call(3.0)}, "max_rss_bytes" => {"head" => 1024}},
+                                       "cpu" => {"head" => stat.call(3.0)}, "max_rss_bytes" => {"head" => 1024},
+                                       "throughput" => {"head" => stat.call(2_500.0)}},
                                       {"key" => "bad", "verdict" => "failed", "head" => stat.call(1.0)},
                                       {"key" => "gone", "verdict" => "removed", "head" => nil}], "Model X"),
          File.join(tmp, "missing"),
@@ -1479,7 +1540,7 @@ module CheckPerf
       data = JSON.parse(show.call("perf/data/#{older}.json"))
       check.call("publish rows", data["rows"], {"c/2" => stat.call(7.0).merge("cpu_model" => "Model Y"),
                                                 "k/1" => stat.call(5.0).merge("cpu_model" => "Model X", "cpu_ns_per_op" => 3.0,
-                                                                              "max_rss_bytes" => 1024)})
+                                                                              "max_rss_bytes" => 1024, "ops_per_second" => 2_500.0)})
       check.call("publish pages", [show.call("perf/index.html").include?(%(REPO_URL = "https://github.com/#{repository}")),
                                    show.call("index.html").include?(%(href="perf/">))], [true, true])
 
@@ -1547,8 +1608,9 @@ module CheckPerf
       malformed = File.join(tmp, "malformed")
       Dir.mkdir(malformed)
       File.write(File.join(malformed, "result.json"),
-                 JSON.generate("head" => {"sha" => newer}, "rows" => [{"key" => "k", "head" => stat.call(1.0), "cpu" => "x", "max_rss_bytes" => {"head" => "1"}}]))
-      check.call("malformed cpu and rss left out", push_data(newer, "2026-02-01T00:00:00Z", [malformed])["rows"], {"k" => stat.call(1.0).merge("cpu_model" => nil)})
+                 JSON.generate("head" => {"sha" => newer}, "rows" => [{"key" => "k", "head" => stat.call(1.0), "cpu" => "x", "max_rss_bytes" => {"head" => "1"},
+                                                    "throughput" => {"head" => {"median" => "1"}}}]))
+      check.call("malformed cpu, rss and throughput left out", push_data(newer, "2026-02-01T00:00:00Z", [malformed])["rows"], {"k" => stat.call(1.0).merge("cpu_model" => nil)})
       check.call("symlinked result ignored", begin
         d = File.join(tmp, "link")
         Dir.mkdir(d)
