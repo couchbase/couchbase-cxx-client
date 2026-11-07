@@ -177,48 +177,6 @@ macro(unit_test name)
   set_property(GLOBAL APPEND PROPERTY COUCHBASE_UNIT_TESTS "test_unit_${name}")
 endmacro()
 
-define_property(
-  GLOBAL
-  PROPERTY COUCHBASE_BENCHMARKS
-  BRIEF_DOCS "list of benchmarks"
-  FULL_DOCS "list of benchmark targets")
-set_property(GLOBAL PROPERTY COUCHBASE_BENCHMARKS "")
-macro(integration_benchmark name)
-  add_executable(benchmark_integration_${name} "${PROJECT_SOURCE_DIR}/test/benchmark_integration_${name}.cxx")
-  target_include_directories(
-    benchmark_integration_${name} PRIVATE ${PROJECT_SOURCE_DIR} ${PROJECT_BINARY_DIR}/generated
-                                          ${PROJECT_BINARY_DIR}/generated_$<CONFIG>)
-  target_include_directories(
-    benchmark_integration_${name} SYSTEM BEFORE
-    PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/third_party/expected/include>
-            $<BUILD_INTERFACE:$<TARGET_PROPERTY:spdlog::spdlog,INTERFACE_INCLUDE_DIRECTORIES>>
-            $<BUILD_INTERFACE:$<TARGET_PROPERTY:asio,INTERFACE_INCLUDE_DIRECTORIES>>)
-  propagate_public_compile_definitions(benchmark_integration_${name} spdlog::spdlog asio)
-  set_project_warnings(benchmark_integration_${name})
-  set_project_options(benchmark_integration_${name})
-  target_link_libraries(
-    benchmark_integration_${name}
-    PRIVATE test_main
-            Threads::Threads
-            $<BUILD_INTERFACE:Microsoft.GSL::GSL>
-            $<BUILD_INTERFACE:taocpp::json>
-            ${couchbase_cxx_client_DEFAULT_LIBRARY}
-            test_utils)
-  if(COUCHBASE_CXX_CLIENT_STATIC_BORINGSSL AND WIN32)
-    # Ignore the `LNK4099: PDB ['crypto.pdb'|'ssl.pdb'] was not found` warnings, as we don't (atm) keep track fo the
-    # *.PDB from the BoringSSL build
-    set_target_properties(benchmark_integration_${name} PROPERTIES LINK_FLAGS "/ignore:4099")
-  endif()
-  catch_discover_tests(
-    benchmark_integration_${name}
-    PROPERTIES
-    SKIP_REGULAR_EXPRESSION
-    "SKIP"
-    LABELS
-    "benchmark")
-  set_property(GLOBAL APPEND PROPERTY COUCHBASE_BENCHMARKS "benchmark_integration_${name}")
-endmacro()
-
 add_library(test_main OBJECT ${PROJECT_SOURCE_DIR}/test/main.cxx)
 target_link_libraries(test_main PUBLIC Catch2::Catch2 OpenSSL::SSL)
 target_include_directories(test_main PRIVATE ${PROJECT_SOURCE_DIR} ${PROJECT_BINARY_DIR}/generated
@@ -241,3 +199,16 @@ add_custom_target(build_transaction_tests DEPENDS ${transaction_targets})
 
 get_property(benchmark_targets GLOBAL PROPERTY COUCHBASE_BENCHMARKS)
 add_custom_target(build_benchmarks DEPENDS ${benchmark_targets})
+
+# Every couchbase_add_benchmark() executable, one path per line, for bin/check-perf. A multi-config
+# generator writes one list per configuration, since the paths differ between them.
+set(benchmark_list "")
+foreach(target IN LISTS benchmark_targets)
+  string(APPEND benchmark_list "$<TARGET_FILE:${target}>\n")
+endforeach()
+get_property(is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if(is_multi_config)
+  file(GENERATE OUTPUT "${PROJECT_BINARY_DIR}/benchmarks_$<CONFIG>.txt" CONTENT "${benchmark_list}")
+else()
+  file(GENERATE OUTPUT "${PROJECT_BINARY_DIR}/benchmarks.txt" CONTENT "${benchmark_list}")
+endif()

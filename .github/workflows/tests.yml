@@ -86,7 +86,7 @@ jobs:
           ./bin/run-unit-tests
       - name: Run CNG tests
         # The CNG tests carry LABELS "cng" (test/cng/CMakeLists.txt), which matches none of the
-        # --label-regex filters in bin/run-{unit,integration,transaction,benchmark}-tests. Without
+        # --label-regex filters in bin/run-{unit,integration,transaction}-tests. Without
         # this step they are compiled and linked by the build job but never executed by any job.
         #
         # --no-tests=error is load-bearing: a --label-regex that matches nothing makes ctest exit 0

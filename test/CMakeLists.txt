@@ -53,9 +53,6 @@ integration_test(handler_drop_lifetime)
 integration_test(wait_until_ready)
 integration_test(fork)
 
-integration_benchmark(get)
-integration_benchmark(replace)
-
 transaction_test(context)
 transaction_test(simple)
 transaction_test(simple_async)
@@ -75,3 +72,28 @@ couchbase_add_test(framework/cluster_probes_selftest LABEL integration LINK_CLIE
 
 couchbase_add_test(transactions/query_expiry LABEL transaction LINK_CLIENT)
 couchbase_add_test(transactions/retry_waits LABEL transaction LINK_CLIENT)
+
+# The benchmark framework's own self-test, run with the unit tests, less the wall-clock cases of
+# benchmark/timing_selftest (cmake/TestFramework.cmake). It links the client only for tao::json, to
+# parse the reports it checks. Registered here for the reason given above for
+# framework/cluster_probes_selftest.
+couchbase_add_test(benchmark/selftest LABEL unit LINK_CLIENT LIBS benchmark_framework)
+
+# The fake MCBP server the KV benchmarks run against. Asio only: its frames are encoded by hand, so
+# it shares no code with core/io or core/protocol and costs the same whichever SDK runs on top.
+add_library(benchmark_fake_server STATIC ${PROJECT_SOURCE_DIR}/test/benchmark/fake_server.cxx)
+target_include_directories(benchmark_fake_server PUBLIC ${PROJECT_SOURCE_DIR}/test)
+target_link_libraries(benchmark_fake_server PRIVATE asio Threads::Threads)
+set_project_options(benchmark_fake_server)
+set_project_warnings(benchmark_fake_server)
+enable_sanitizers(benchmark_fake_server)
+
+couchbase_add_test(benchmark/fake_server_selftest LABEL unit LINK_CLIENT LIBS benchmark_fake_server)
+
+# CPU-only component cases for the hot paths: vbucket hashing, JSON generation and streaming, and
+# the MCBP parser.
+couchbase_add_benchmark(benchmark/vbucket_hash LINK_CLIENT)
+couchbase_add_benchmark(benchmark/json LINK_CLIENT)
+couchbase_add_benchmark(benchmark/mcbp_parser LINK_CLIENT LIBS snappy)
+couchbase_add_benchmark(benchmark/kv_fake LINK_CLIENT LIBS benchmark_fake_server)
+couchbase_add_benchmark(benchmark/kv_cluster LINK_CLIENT)
