@@ -26,7 +26,7 @@
 #   bin/check-perf ci                    compare in a GitHub Actions run, as described below
 #   bin/check-perf comment DIR...        render the result.json of each DIR as the one comment of the
 #                                        pull request, as described below
-#   bin/check-perf publish COMMIT DIR... add the head rows of the result.json of each DIR as those of
+#   bin/check-perf publish COMMIT DIR... add the head rows of the result.json of each DIR as a run of
 #                                        COMMIT to refs/site/pages, and render perf/index.html there
 #   bin/check-perf site FROM TO          copy the perf data and the ABI reports of FROM, a checkout of
 #                                        refs/site/pages, to TO, and render perf/index.html,
@@ -76,10 +76,10 @@
 # by one binary or by two, is an error.
 #
 # ci compares HEAD with a base picked from the event in GITHUB_EVENT_NAME, GITHUB_EVENT_PATH and
-# EVENT_BEFORE: HEAD^1 for a pull request, whose HEAD is the merge commit, and for a manual run;
-# EVENT_BEFORE, the previous head of the branch, for a push. A base that cannot be resolved, such as
-# the all-zero id of a new branch, leaves every case new. On a pull request ci also writes the pull
-# request number to pr-number in --out.
+# EVENT_BEFORE: HEAD^1 for a pull request, whose HEAD is the merge commit, and for a manual or
+# scheduled run; EVENT_BEFORE, the previous head of the branch, for a push. A base that cannot be
+# resolved, such as the all-zero id of a new branch, leaves every case new. On a pull request ci
+# also writes the pull request number to pr-number in --out.
 #
 # comment reads the artifacts of a perf run of a pull request, which is untrusted input. It reads
 # only pr-number and result.json of each DIR. pr-number must be a positive integer, and the pull
@@ -653,7 +653,7 @@ module CheckPerf
 
       ["HEAD^1", "HEAD", number]
     when "push" then [before.to_s.empty? ? NULL_SHA : before, "HEAD", nil]
-    when "workflow_dispatch" then ["HEAD^1", "HEAD", nil]
+    when "workflow_dispatch", "schedule" then ["HEAD^1", "HEAD", nil]
     else raise Error, "ci does not handle the event #{event.inspect}"
     end
   end
@@ -854,7 +854,7 @@ module CheckPerf
   end
 
   # Written to perf/index.html in refs/site/pages. Static: it fetches data/index.json and the
-  # data/SHA.json of each commit it lists, and draws with inline SVG. REPO_URL is replaced when
+  # data/ID.json of each run it lists, and draws with inline SVG. REPO_URL is replaced when
   # the page is written.
   PAGE = <<~'HTML'
     <!doctype html>
@@ -892,7 +892,7 @@ module CheckPerf
     </style></head>
     <body>
     <h1>Performance history</h1>
-    <p class="muted">Each chart plots one benchmark key at each commit of main, oldest to newest. Each point links to its commit. A hollow ring marks a point that ran on a different CPU model than the point before it in the same chart.</p>
+    <p class="muted">Each chart plots one benchmark key, oldest run first. The main branch gets a run on every push and every night. Each point links to the commit it measured. A hollow ring marks a change from the previous point: a new CPU model, or a new server version.</p>
     <nav id="jump" aria-label="Measures"></nav>
     <p id="status" class="muted">Loading.</p>
     <main id="charts"></main>
@@ -963,19 +963,25 @@ module CheckPerf
                       points: points.map((p, i) => x(i) + "," + y(p.v)).join(" ")}, svg);
       points.forEach((p, i) => {
         const a = el("a", {href: REPO_URL + "/commit/" + p.sha}, svg);
-        const c = el("circle", {class: p.cpuChanged ? "pt ring" : "pt", cx: x(i), cy: y(p.v), r: p.cpuChanged ? 4.5 : 3,
+        const ring = p.cpuChanged || p.serverChanged;
+        const c = el("circle", {class: ring ? "pt ring" : "pt", cx: x(i), cy: y(p.v), r: ring ? 4.5 : 3,
                                 "vector-effect": "non-scaling-stroke"}, a);
         el("title", {}, c).textContent = p.sha.slice(0, 12) + "  " + m.fmt(p.v) + "  " + p.date +
-          (p.cpuChanged ? "\nCPU: " + p.cpu + " (changed)" : "");
+          (p.cpuChanged ? "\nCPU: " + p.cpu + " (changed)" : "") +
+          (p.server !== null ? "\nServer: " + p.server + (p.serverChanged ? " (changed)" : "") : "");
       });
       return box;
     }
 
     async function main() {
-      // Only entries with a commit id are fetched and linked: the id becomes part of a path and a URL.
+      // Only entries with a commit id are fetched and linked. The commit id and the run id each
+      // become part of a path or a URL, so each must match its pattern. An entry without an id names
+      // its data file by its commit.
       const index = (await get("data/index.json")).reverse()
-        .filter((e) => e && typeof e.sha === "string" && /^[0-9a-f]{7,40}$/.test(e.sha));
-      const docs = await Promise.all(index.map((e) => get("data/" + e.sha + ".json").catch(() => null)));
+        .filter((e) => e && typeof e.sha === "string" && /^[0-9a-f]{7,40}$/.test(e.sha))
+        .map((e) => ({sha: e.sha, date: typeof e.run === "string" ? e.run : e.date,
+                      file: typeof e.id === "string" && /^[0-9a-f]{40}-\d{8}T\d{6}Z$/.test(e.id) ? e.id : e.sha}));
+      const docs = await Promise.all(index.map((e) => get("data/" + e.file + ".json").catch(() => null)));
       const series = new Map(MEASURES.map((m) => [m.id, new Map()]));
       docs.forEach((d, i) => {
         if (!d || typeof d !== "object") return;
@@ -989,8 +995,12 @@ module CheckPerf
             const charts = series.get(m.id);
             if (!charts.has(key)) charts.set(key, []);
             const points = charts.get(key);
-            const cpuChanged = points.length > 0 && cpu !== points[points.length - 1].cpu;
-            points.push({sha: index[i].sha, date: index[i].date, v, cpu, cpuChanged});
+            const prev = points[points.length - 1];
+            const cpuChanged = prev !== undefined && cpu !== prev.cpu;
+            // A change counts only between two points that both record a version.
+            const server = typeof row.server_version === "string" ? row.server_version : null;
+            const serverChanged = prev !== undefined && server !== null && prev.server !== null && server !== prev.server;
+            points.push({sha: index[i].sha, date: index[i].date, v, cpu, cpuChanged, server, serverChanged});
           }
         }
       });
@@ -1080,6 +1090,8 @@ module CheckPerf
   # the CPU model of the dir. The head's CI bounds, CPU time per operation, peak RSS and throughput
   # are added where the row has them. A result of another commit, and a row that failed at head, are
   # left out.
+  SERVER_VERSION = /\A[0-9][0-9A-Za-z.+_-]{0,63}\z/
+
   def self.push_data(commit, date, dirs)
     rows = {}
     first = nil
@@ -1094,6 +1106,10 @@ module CheckPerf
       end
       cpu = result.dig("metadata", "cpu", "model")
       first ||= cpu
+      # The server version the benchmark binary read from its cluster, for a result measured against
+      # one. Shown on the page, so only a version-like string is kept.
+      server = result.dig("metadata", "cluster", "version")
+      server = nil unless server.is_a?(String) && server.match?(SERVER_VERSION)
       result["rows"].each do |row|
         raise Error, "#{path} has a row without a key" unless row.is_a?(Hash) && row["key"].is_a?(String)
 
@@ -1108,6 +1124,7 @@ module CheckPerf
                  "ops_per_second" => at.call("throughput", "head", "median")}
         rows[row["key"]] = head.slice("median", "lower", "upper").select { |_, v| number?(v) }.merge("cpu_model" => cpu)
                                .merge(usage.select { |_, v| number?(v) })
+        rows[row["key"]]["server_version"] = server if server
       end
     rescue JSON::ParserError => e
       raise Error, "#{path} is not JSON: #{e.message}"
@@ -1115,13 +1132,17 @@ module CheckPerf
     {"sha" => commit, "date" => date, "cpu_model" => first, "rows" => rows.sort.to_h}
   end
 
-  # Adds the head rows of commit to perf/data/ in the site and renders perf/index.html. index.json
-  # lists the commits newest first by commit date.
+  # Adds the head rows of commit to perf/data/ in the site as one run, and renders perf/index.html.
+  # Each run is kept. A commit measured again gets another point, as on the nightly run of an
+  # unchanged main. The data of a run is perf/data/ID.json. ID is the commit, a dash and the UTC
+  # time of the run. index.json lists the runs newest first by the time of the run.
   def self.publish(commit, dirs, url: "https://github.com/#{repository}.git", token: ENV["GH_TOKEN"] || ENV.fetch("GITHUB_TOKEN", nil),
-                   site: nil, attempts: 5)
+                   site: nil, attempts: 5, at: Time.now)
     commit = run("git", "rev-parse", "--verify", "#{commit}^{commit}", quiet: true).strip
     date = run("git", "show", "-s", "--format=%cI", commit, quiet: true).strip
-    data = push_data(commit, date, dirs)
+    at = at.utc
+    id = "#{commit}-#{at.strftime('%Y%m%dT%H%M%SZ')}"
+    data = push_data(commit, date, dirs).merge("run" => at.iso8601)
     if data["rows"].empty?
       puts "No rows to publish for #{commit[0, 12]}"
       return 0
@@ -1132,12 +1153,13 @@ module CheckPerf
                                  message: "Performance history at #{commit[0, 12]}") do |root|
         dir = File.join(root, "perf", "data")
         FileUtils.mkdir_p(dir)
-        File.write(File.join(dir, "#{commit}.json"), "#{JSON.pretty_generate(data)}\n")
+        File.write(File.join(dir, "#{id}.json"), "#{JSON.pretty_generate(data)}\n")
         index_file = File.join(dir, "index.json")
         index = File.file?(index_file) ? JSON.parse(File.read(index_file)) : []
-        index = index.reject { |e| e["sha"] == commit }
-                     .push({"sha" => commit, "date" => date, "cpu_model" => data["cpu_model"]})
-                     .sort_by { |e| [Time.iso8601(e["date"]), e["sha"]] }.reverse
+        # An entry written before runs were kept has no run; its commit date stands in for it.
+        index = index.reject { |e| e["id"] == id }
+                     .push({"id" => id, "sha" => commit, "date" => date, "run" => data["run"], "cpu_model" => data["cpu_model"]})
+                     .sort_by { |e| [Time.iso8601(e["run"] || e["date"]), e["sha"]] }.reverse
         File.write(index_file, "#{JSON.pretty_generate(index)}\n")
         File.write(File.join(root, "perf", "index.html"), perf_page)
       end
@@ -1177,8 +1199,9 @@ module CheckPerf
     check.call("ci push", ci_plan("push", {}, sha), [sha, "HEAD", nil])
     check.call("ci new branch", ci_plan("push", {}, NULL_SHA), [NULL_SHA, "HEAD", nil])
     check.call("ci dispatch", ci_plan("workflow_dispatch", {}, ""), ["HEAD^1", "HEAD", nil])
+    check.call("ci schedule", ci_plan("schedule", {}, nil), ["HEAD^1", "HEAD", nil])
     status = ->(&block) { block.call rescue $ERROR_INFO.status }
-    check.call("ci unknown event", status.call { ci_plan("schedule", {}, nil) }, 3)
+    check.call("ci unknown event", status.call { ci_plan("release", {}, nil) }, 3)
     check.call("ci payload without number", status.call { ci_plan("pull_request", {}, nil) }, 3)
     check.call("ci payload not an object", status.call { ci_plan("pull_request", [], nil) }, 3)
     check.call("ci no event env", status.call { ci_event({}) }, 3)
@@ -1519,10 +1542,11 @@ module CheckPerf
         ENV.delete("GIT_COMMITTER_DATE")
       end
       older, newer = shas
-      write_result = lambda do |name, sha, rows, cpu|
+      write_result = lambda do |name, sha, rows, cpu, server = nil|
         d = File.join(tmp, "#{name}-#{sha[0, 7]}-#{Dir.children(tmp).size}")
         Dir.mkdir(d)
-        File.write(File.join(d, "result.json"), JSON.generate("head" => {"sha" => sha}, "metadata" => {"cpu" => {"model" => cpu}}, "rows" => rows))
+        meta = {"cpu" => {"model" => cpu}, "cluster" => {"version" => server}}
+        File.write(File.join(d, "result.json"), JSON.generate("head" => {"sha" => sha}, "metadata" => meta, "rows" => rows))
         d
       end
       stat = ->(m) { {"median" => m, "lower" => m, "upper" => m} }
@@ -1531,19 +1555,31 @@ module CheckPerf
                                        "cpu" => {"head" => stat.call(3.0)}, "max_rss_bytes" => {"head" => 1024},
                                        "throughput" => {"head" => stat.call(2_500.0)}},
                                       {"key" => "bad", "verdict" => "failed", "head" => stat.call(1.0)},
-                                      {"key" => "gone", "verdict" => "removed", "head" => nil}], "Model X"),
+                                      {"key" => "gone", "verdict" => "removed", "head" => nil}], "Model X", "<b>8.0</b>"),
          File.join(tmp, "missing"),
-         write_result.call("b", sha, [{"key" => "c/2", "verdict" => "new", "head" => stat.call(7.0)}], "Model Y"),
+         write_result.call("b", sha, [{"key" => "c/2", "verdict" => "new", "head" => stat.call(7.0)}], "Model Y", "8.0.3-5933-enterprise"),
          write_result.call("old", "f" * 40, [{"key" => "stale/1", "verdict" => "new", "head" => stat.call(9.0)}], "Model Z")]
       end
       Dir.chdir(repo) do
-        [newer, older].each { |sha| quiet.call { check.call("publish status", publish(sha, dirs_for.call(sha), url: remote, token: nil), 0) } }
+        # older runs twice, as a nightly run of an unchanged main does; both runs are kept.
+        [[older, 1], [newer, 2], [older, 3]].each do |sha, hour|
+          quiet.call do
+            check.call("publish status", publish(sha, dirs_for.call(sha), url: remote, token: nil, at: Time.utc(2026, 1, 2, hour)), 0)
+          end
+        end
       end
       show = ->(path) { run("git", "-C", remote, "show", "#{PagesSite::REF}:#{path}", quiet: true) }
       index = JSON.parse(show.call("perf/data/index.json"))
-      check.call("publish_appends_index", [index.map { |e| e["sha"] }, index.first["cpu_model"]], [[newer, older], "Model X"])
-      data = JSON.parse(show.call("perf/data/#{older}.json"))
-      check.call("publish rows", data["rows"], {"c/2" => stat.call(7.0).merge("cpu_model" => "Model Y"),
+      check.call("publish keeps every run", [index.map { |e| e["sha"] }, index.first["cpu_model"], index.first["run"]],
+                 [[older, newer, older], "Model X", "2026-01-02T03:00:00Z"])
+      check.call("publish run ids", index.map { |e| e["id"] },
+                 ["#{older}-20260102T030000Z", "#{newer}-20260102T020000Z", "#{older}-20260102T010000Z"])
+      data = JSON.parse(show.call("perf/data/#{older}-20260102T010000Z.json"))
+      check.call("publish run time", data["run"], "2026-01-02T01:00:00Z")
+      check.call("publish second run kept", JSON.parse(show.call("perf/data/#{older}-20260102T030000Z.json"))["run"],
+                 "2026-01-02T03:00:00Z")
+      # A version that is not version-like, as in dir a, is dropped.
+      check.call("publish rows", data["rows"], {"c/2" => stat.call(7.0).merge("cpu_model" => "Model Y", "server_version" => "8.0.3-5933-enterprise"),
                                                 "k/1" => stat.call(5.0).merge("cpu_model" => "Model X", "cpu_ns_per_op" => 3.0,
                                                                               "max_rss_bytes" => 1024, "ops_per_second" => 2_500.0)})
       check.call("publish pages", [show.call("perf/index.html").include?(%(REPO_URL = "https://github.com/#{repository}")),
