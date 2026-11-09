@@ -71,9 +71,21 @@ module PagesSite
     attempts.times do |attempt|
       FileUtils.rm_rf(site)
       git("init", "--quiet", site)
-      if system("git", "ls-remote", "--exit-code", url, REF, out: File::NULL)
-        git("-C", site, "fetch", "--quiet", "--depth", "1", url, REF)
+      # The ref is writable by more than this job. A symbolic link in it checks out as a plain file,
+      # so writes below cannot follow it out of the site.
+      git("-C", site, "config", "core.symlinks", "false")
+      # Reads authenticate as the push does, so a private repository is read as it is written. Only
+      # exit status 2, no matching ref, starts the site from nothing; any other failure raises, so a
+      # failed read never publishes a site that holds only this run.
+      _, status = Open3.capture2e(git_auth_env(token), "git", "ls-remote", "--exit-code", url, REF)
+      case status.exitstatus
+      when 0
+        git("-C", site, "fetch", "--quiet", "--depth", "1", url, REF, env: git_auth_env(token))
         git("-C", site, "checkout", "--quiet", "FETCH_HEAD")
+      when 2
+        nil
+      else
+        raise Error, "git ls-remote #{REF} failed with status #{status.exitstatus}"
       end
       yield site
       File.write(File.join(site, "index.html"), render_index(site))
