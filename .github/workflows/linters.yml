@@ -34,6 +34,17 @@ jobs:
       - name: Check log annotations
         run: ./bin/check-log-annotations
 
+  check_cluster:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The cluster jobs of tests, sanitizers and perf run bin/check-cluster; its rules are checked
+      # here against a simulated cluster.
+      - name: Verify the cluster check against a simulated cluster
+        run: bin/check-cluster --self-test
+
   clang_format:
     runs-on: ubuntu-24.04
     steps:

@@ -1,6 +1,7 @@
-#!/usr/bin/env bash
+#!/usr/bin/env ruby
+# frozen_string_literal: true
 
-#  Copyright 2020-2021 Couchbase, Inc.
+#  Copyright 2020-Present Couchbase, Inc.
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -14,53 +15,409 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-HOST=${HOST:-localhost}
-USERNAME=${USERNAME:-Administrator}
-PASSWORD=${PASSWORD:-password}
-
-CREDS="${USERNAME}:${PASSWORD}"
-
-sleep 1
-
-set -ex
-
-curl -sS -w "\n" -u${CREDS} http://${HOST}:8091/pools
-curl -sS -w "\n" -u${CREDS} http://${HOST}:8091/pools/default
-curl -sS -w "\n" -u${CREDS} http://${HOST}:8091/pools/default/buckets/default
-curl -sS -w "\n" -u${CREDS} http://${HOST}:8091/pools/default/b/default
-
-set +x
-
-# A cluster whose rebalance failed answers every request above and is still unusable: the
-# services the rebalance would have activated cannot serve, so every analytics, search and
-# eventing test fails with service_not_available half an hour into the run, with nothing
-# pointing back at setup. Refuse to hand such a cluster to the suite.
+# Waits until a cluster can serve the test suites, through its management API.
 #
-# servicesNeedRebalance names the services that cannot serve, which is the harm itself. It is
-# the only field here that discriminates: `balanced` is false on a healthy 7.1.6 cluster whose
-# rebalance succeeded, and counters.rebalance_fail is cumulative and stays set after a
-# successful retry. A server that does not report servicesNeedRebalance at all -- 7.1.6 does
-# not -- reads as an empty list and passes, so this fails only on stated evidence. A rebalance
-# still in progress is not a failure, so wait for it.
-deadline=$((SECONDS + 300))
-while :
-do
-    pools_default=$(curl -sS -u"${CREDS}" "http://${HOST}:8091/pools/default" || true)
-    unbalanced=$(jq -c '.servicesNeedRebalance // []' <<<"${pools_default}" 2>/dev/null || echo '[]')
-    if [ "${unbalanced}" = "[]" ]
-    then
-        break
-    fi
-    if [ "$(jq -r '.rebalanceStatus // "none"' <<<"${pools_default}")" != "running" ]
-    then
-        echo "cluster needs a rebalance that is not running: ${unbalanced}"
-        exit 1
-    fi
-    if [ "${SECONDS}" -ge "${deadline}" ]
-    then
-        echo "rebalance did not complete within 5 minutes: ${unbalanced}"
-        exit 1
-    fi
-    sleep 5
-done
+#   bin/check-cluster              check the cluster at HOST, exit 0 when ready and 1 when refused
+#   bin/check-cluster --self-test  check the rules below against a simulated cluster
+#
+# Environment: HOST (localhost), USERNAME (Administrator), PASSWORD (password), BUCKET (default),
+# REBALANCE_ATTEMPTS (4), REBALANCE_PAUSE (15 seconds), CHECK_DEADLINE (900 seconds).
+#
+# The cluster is ready when all of these hold, checked in this order on every pass:
+#
+# 1. /pools/default answers with its nodes.
+# 2. No rebalance is running. servicesNeedRebalance is null while one runs, so balance is read only
+#    after it ends.
+# 3. servicesNeedRebalance is empty. It names the services that cannot serve: a cluster whose
+#    rebalance failed answers every request and still fails each analytics, search and eventing
+#    test with service_not_available. It is the only field that discriminates: `balanced` is false
+#    on a healthy 7.1.6 cluster, and counters.rebalance_fail stays set after a successful retry. A
+#    server that does not report it -- 7.1.6 does not -- reads as balanced. When none is running, a
+#    rebalance of all known nodes is started, up to REBALANCE_ATTEMPTS times, with a pause that
+#    starts at REBALANCE_PAUSE seconds and doubles up to 2 minutes.
+# 4. Every node is an active cluster member reporting healthy.
+# 5. Every node serves BUCKET with a vBucket map, and every node of the bucket reports healthy.
+#    Nodes can disagree while a change propagates, so every node is asked on every pass, and the
+#    cluster is ready only when all of them serve it in the same pass.
+#
+# A failed request is a condition not yet met, never a verdict. A condition not yet met is polled
+# again after a pause that starts at one second and grows by half up to five. The cluster is refused
+# when the last rebalance attempt leaves services unbalanced, or when CHECK_DEADLINE seconds pass,
+# naming the condition that did not hold.
 
+require "json"
+require "net/http"
+require "socket"
+require "uri"
+
+module CheckCluster
+  POLL_FIRST = 1.0
+  POLL_MAX = 5.0
+  REBALANCE_PAUSE_MAX = 120
+  # How long a rebalance the server accepted may take to report itself running. Until it is seen
+  # running, the cluster still reads unbalanced, which is not yet the attempt failing.
+  REBALANCE_START_GRACE = 30
+
+  # The management API of the cluster. Each method returns parsed JSON, or nil for a request that
+  # failed or did not answer JSON.
+  class Http
+    def initialize(username, password, timeout: 10)
+      @username = username
+      @password = password
+      @timeout = timeout
+    end
+
+    # address is host:port, an IPv6 host in brackets.
+    def get(address, path)
+      call(address, Net::HTTP::Get.new(path))
+    end
+
+    def post(address, path, form)
+      request = Net::HTTP::Post.new(path)
+      request.set_form_data(form)
+      call(address, request)
+    end
+
+    private
+
+    def call(address, request)
+      uri = URI("http://#{address}")
+      request.basic_auth(@username, @password)
+      response = Net::HTTP.start(uri.hostname, uri.port, open_timeout: @timeout, read_timeout: @timeout) do |http|
+        http.request(request)
+      end
+      return nil unless response.is_a?(Net::HTTPSuccess)
+
+      response.body.to_s.empty? ? {} : JSON.parse(response.body)
+    rescue StandardError
+      nil
+    end
+  end
+
+  # Polls the cluster at address until it is ready or refused. clock returns seconds, sleeper sleeps
+  # for a number of seconds, and out receives the progress lines.
+  class Check
+    def initialize(http:, address:, bucket:, attempts:, pause:, deadline:,
+                   clock: -> { Process.clock_gettime(Process::CLOCK_MONOTONIC) }, sleeper: ->(s) { sleep(s) },
+                   out: $stdout)
+      @http = http
+      @address = address
+      @bucket = bucket
+      @attempts_max = attempts
+      @pause = pause
+      @deadline = deadline
+      @clock = clock
+      @sleeper = sleeper
+      @out = out
+    end
+
+    # 0 when ready, 1 when refused.
+    def run
+      ["/pools", "/pools/default", "/pools/default/buckets/#{@bucket}"].each do |path|
+        @out.puts "GET #{path}: #{JSON.generate(@http.get(@address, path))}"
+      end
+      @until = @clock.call + @deadline
+      @poll = POLL_FIRST
+      @attempts = 0
+      @serving = []
+      loop do
+        verdict, text = pass
+        case verdict
+        when :ready
+          @out.puts "cluster ready: balanced, every node healthy, bucket #{@bucket} served by #{@serving.join(' ')}"
+          return 0
+        when :refused
+          @out.puts text
+          return 1
+        else
+          return 1 unless wait(text)
+        end
+      end
+    end
+
+    private
+
+    # One pass over the conditions: [:ready], [:refused, message] or [:wait, reason].
+    def pass
+      cluster_state || bucket_state
+    end
+
+    # Conditions 1 to 4, or nil when all hold. Keeps the nodes for bucket_state.
+    def cluster_state
+      pools = @http.get(@address, "/pools/default")
+      nodes = pools.is_a?(Hash) && pools["nodes"].is_a?(Array) ? pools["nodes"] : []
+      return [:wait, "/pools/default did not answer with nodes"] if nodes.empty?
+      if pools["rebalanceStatus"] == "running"
+        @seen_running = true
+        return [:wait, "a rebalance is running"]
+      end
+
+      unbalanced = pools["servicesNeedRebalance"] || []
+      return rebalance(nodes, unbalanced) unless unbalanced.empty?
+
+      not_ready = nodes.reject { |n| n["clusterMembership"] == "active" && n["status"] == "healthy" }
+      unless not_ready.empty?
+        states = not_ready.map { |n| n.slice("hostname", "clusterMembership", "status") }
+        return [:wait, "nodes not active and healthy: #{JSON.generate(states)}"]
+      end
+
+      @nodes = nodes
+      nil
+    end
+
+    # Condition 5, over the nodes cluster_state read. Every node is asked on every pass.
+    def bucket_state
+      hostnames = @nodes.map { |n| n["hostname"] }.uniq
+      @serving, pending = hostnames.partition do |hostname|
+        serves?(@http.get(hostname, "/pools/default/buckets/#{@bucket}"))
+      end
+      pending.empty? ? [:ready] : [:wait, "bucket #{@bucket} not served healthy by: #{pending.join(' ')}"]
+    end
+
+    def serves?(bucket)
+      return false unless bucket.is_a?(Hash)
+
+      map = bucket.dig("vBucketServerMap", "vBucketMap")
+      map.is_a?(Array) && !map.empty? && Array(bucket["nodes"]).all? { |n| n["status"] == "healthy" }
+    end
+
+    # Services need a rebalance and none is running: start one, or refuse after the last attempt.
+    def rebalance(nodes, unbalanced)
+      reason = JSON.generate(unbalanced)
+      if @attempts.positive? && @accepted && !@seen_running && @clock.call - @started_at < REBALANCE_START_GRACE
+        return [:wait, "rebalance attempt #{@attempts} has not started: #{reason}"]
+      end
+      if @attempts.positive?
+        tasks = @http.get(@address, "/pools/default/tasks")
+        errors = Array(tasks).select { |t| t.is_a?(Hash) && t["type"] == "rebalance" }.filter_map { |t| t["errorMessage"] }
+        reason = "#{reason} #{JSON.generate(errors)}" unless errors.empty?
+        if @attempts >= @attempts_max
+          return [:refused, "cluster still needs a rebalance after #{@attempts} attempts: #{reason}"]
+        end
+
+        remaining = @until - @clock.call
+        if remaining <= 0
+          return [:refused, "cluster not ready after #{@deadline} seconds: services need a rebalance: #{reason}"]
+        end
+
+        pause = [@pause, remaining].min
+        @out.puts "rebalance attempt #{@attempts} did not balance #{reason}; retrying in #{pause} seconds"
+        @sleeper.call(pause)
+        @pause = [@pause * 2, REBALANCE_PAUSE_MAX].min
+      end
+      if @clock.call >= @until
+        return [:refused, "cluster not ready after #{@deadline} seconds: services need a rebalance: #{reason}"]
+      end
+
+      @attempts += 1
+      known = nodes.map { |n| n["otpNode"] }.join(",")
+      @out.puts "starting rebalance attempt #{@attempts} of #{@attempts_max} over #{known}: #{JSON.generate(unbalanced)}"
+      @accepted = !@http.post(@address, "/controller/rebalance", "knownNodes" => known, "ejectedNodes" => "").nil?
+      @started_at = @clock.call
+      @seen_running = false
+      @poll = POLL_FIRST
+      [:wait, "services need a rebalance: #{reason}"]
+    end
+
+    # Sleeps before the next pass; false, after printing reason, once the deadline has passed.
+    def wait(reason)
+      if @clock.call >= @until
+        @out.puts "cluster not ready after #{@deadline} seconds: #{reason}"
+        return false
+      end
+      @sleeper.call(@poll)
+      @poll = [@poll * 1.5, POLL_MAX].min
+      true
+    end
+  end
+
+  # A cluster of three nodes for the self-test. Each rebalance runs for two seconds of the fake clock
+  # and the first `failures` of them fail; failures < 0 starts balanced. A rebalance reports itself
+  # running `start_delay` seconds after it is requested. A node reports warmup until
+  # `warm_at` seconds, the bucket has no vBucket map until `map_at` seconds, and nothing answers
+  # until `answers_after` seconds.
+  class FakeCluster
+    attr_reader :posts
+
+    def initialize(clock, failures:, start_delay: 0, warm_at: 0, map_at: 0, answers_after: 0, healthy: nil,
+                   serves: nil)
+      @clock = clock
+      @failures = failures
+      @start_delay = start_delay
+      @warm_at = warm_at
+      @map_at = map_at
+      # healthy.call(now, n) for node n of 1 to 3, serves.call(now, hostname) for its bucket.
+      @healthy = healthy || ->(_now, n) { warm? || n != 2 }
+      @serves = serves || ->(now, _hostname) { now >= [@warm_at, @map_at].max }
+      @answers_after = answers_after
+      @balanced = failures.negative?
+      @running_until = nil
+      @posts = []
+    end
+
+    def get(address, path)
+      return nil if @clock.call < @answers_after
+
+      settle
+      case path
+      when "/pools" then {}
+      when "/pools/default"
+        {"nodes" => nodes, "rebalanceStatus" => running? ? "running" : "none",
+         "servicesNeedRebalance" => running? || @balanced ? nil : [{"code" => "service_not_balanced", "services" => %w[index fts]}]}
+      when "/pools/default/tasks" then [{"type" => "rebalance", "errorMessage" => "Rebalance failed"}]
+      when %r{\A/pools/default/buckets/}
+        {"nodes" => nodes, "vBucketServerMap" => {"vBucketMap" => @serves.call(@clock.call, address.split(":").first) ? [[0]] : []}, "address" => address}
+      end
+    end
+
+    def post(_address, path, form)
+      @posts << [path, form]
+      @starts_at = @clock.call + @start_delay
+      @running_until = @starts_at + 2
+      {}
+    end
+
+    private
+
+    def running? = @running_until && @clock.call >= @starts_at && @clock.call < @running_until
+    def warm? = @clock.call >= @warm_at
+
+    def settle
+      return unless @running_until && @clock.call >= @running_until
+
+      @balanced = @posts.size > @failures
+      @running_until = nil
+    end
+
+    def nodes
+      (1..3).map do |n|
+        {"otpNode" => "ns_1@node#{n}", "hostname" => "node#{n}:8091", "clusterMembership" => "active",
+         "status" => @healthy.call(@clock.call, n) ? "healthy" : "warmup"}
+      end
+    end
+  end
+
+  # host:8091, with a bare IPv6 host put in brackets.
+  def self.address(host)
+    host.include?(":") && !host.start_with?("[") ? "[#{host}]:8091" : "#{host}:8091"
+  end
+
+  def self.self_test
+    check = ->(name, actual, expected) { raise "#{name}: expected #{expected.inspect}, got #{actual.inspect}" unless actual == expected }
+    simulate = lambda do |deadline: 900, pause: 15, **cluster|
+      now = 0.0
+      clock = -> { now }
+      fake = FakeCluster.new(clock, **cluster)
+      out = StringIO.new
+      status = Check.new(http: fake, address: "node1:8091", bucket: "default", attempts: 4, pause: pause, deadline: deadline,
+                         clock: clock, sleeper: ->(s) { now += s }, out: out).run
+      {status: status, posts: fake.posts.size, last: out.string.lines.last.to_s.strip, seconds: now, out: out.string}
+    end
+
+    r = simulate.call(failures: -1)
+    check.call("ready at once", [r[:status], r[:posts], r[:seconds]], [0, 0, 0.0])
+    check.call("ready names every node", r[:last], "cluster ready: balanced, every node healthy, bucket default served by node1:8091 node2:8091 node3:8091")
+
+    r = simulate.call(failures: 2)
+    check.call("rebalance retried until balanced", [r[:status], r[:posts]], [0, 3])
+    check.call("rebalance over every node", r[:out].include?("over ns_1@node1,ns_1@node2,ns_1@node3"), true)
+    check.call("rebalance pause doubles", r[:out].scan(/retrying in (\d+) seconds/).flatten, %w[15 30])
+    # Each attempt was seen running, so its failure is retried after the pause alone, not the grace.
+    check.call("a failed attempt is retried after the pause", r[:seconds] < 15 + 30 + 2 * 3 + 10, true)
+
+    r = simulate.call(failures: 9)
+    check.call("refused after the last attempt", [r[:status], r[:posts]], [1, 4])
+    check.call("refusal names the server's reason", r[:last],
+               'cluster still needs a rebalance after 4 attempts: [{"code":"service_not_balanced","services":["index","fts"]}] ["Rebalance failed"]')
+
+    # servicesNeedRebalance is null while the rebalance runs; reading that as balanced would end the
+    # check two seconds early, before the bucket is served.
+    r = simulate.call(failures: 0)
+    check.call("waits out a running rebalance", [r[:status], r[:posts], r[:seconds] >= 2], [0, 1, true])
+
+    # Until the server reports the rebalance running, the cluster reads unbalanced; a second attempt
+    # then would start a rebalance on top of the first.
+    r = simulate.call(failures: 0, start_delay: 5)
+    check.call("a rebalance slow to start is waited for", [r[:status], r[:posts]], [0, 1])
+
+    r = simulate.call(failures: 9, pause: 600, deadline: 100)
+    check.call("the pause between attempts ends at the deadline", [r[:status], r[:seconds] <= 105], [1, true])
+
+    # The first answer comes during the poll that crosses the deadline; the pass after it is past
+    # the deadline, so it starts no rebalance.
+    r = simulate.call(failures: 9, answers_after: 0.5, deadline: 1)
+    check.call("no rebalance starts after the deadline", [r[:status], r[:posts]], [1, 0])
+
+    # node1 serves its bucket at first and stops from 3 to 10; node3 serves from 5. The cluster stays
+    # balanced and healthy throughout, so only asking every node on every pass sees node1 stop.
+    serves = lambda do |now, host|
+      { "node1" => now < 3 || now >= 10, "node3" => now >= 5 }.fetch(host, true)
+    end
+    r = simulate.call(failures: -1, serves: serves)
+    check.call("every node serves the bucket in the same pass", [r[:status], r[:seconds] >= 10], [0, true])
+
+    check.call("address", [address("10.0.0.1"), address("::1"), address("[fd00::1]"), address("node")],
+               ["10.0.0.1:8091", "[::1]:8091", "[fd00::1]:8091", "node:8091"])
+    # A request to a bracketed IPv6 address reaches the server; a host without IPv6 skips the check.
+    server = begin
+      TCPServer.new("::1", 0)
+    rescue SystemCallError
+      nil
+    end
+    if server
+      reply = Thread.new do
+        client = server.accept
+        client.readpartial(4096)
+        client.write("HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}")
+        client.close
+      end
+      reply.report_on_exception = false
+      answer = Http.new("u", "p", timeout: 5).get("[::1]:#{server.addr[1]}", "/pools")
+      reply.join(5)
+      server.close
+      check.call("an IPv6 address is reached", answer, {})
+    end
+
+    r = simulate.call(failures: -1, warm_at: 8)
+    check.call("waits for the bucket and node health", [r[:status], r[:seconds] >= 8], [0, true])
+
+    r = simulate.call(failures: -1, map_at: 7)
+    check.call("waits for a vBucket map on healthy nodes", [r[:status], r[:seconds] >= 7], [0, true])
+
+    r = simulate.call(failures: -1, answers_after: 6)
+    check.call("an unanswered request is waited for", [r[:status], r[:seconds] >= 6], [0, true])
+
+    r = simulate.call(failures: -1, warm_at: 10_000, deadline: 30)
+    check.call("refused at the deadline", r[:status], 1)
+    check.call("deadline names the condition", r[:last],
+               'cluster not ready after 30 seconds: nodes not active and healthy: [{"hostname":"node2:8091","clusterMembership":"active","status":"warmup"}]')
+
+    polls = []
+    now = 0.0
+    Check.new(http: FakeCluster.new(-> { now }, failures: -1, warm_at: 10_000), address: "node1:8091", bucket: "default",
+              attempts: 4, pause: 15, deadline: 20, clock: -> { now }, sleeper: ->(s) { polls << s; now += s }, out: StringIO.new).run
+    check.call("poll backs off by half up to five seconds", polls.first(6), [1.0, 1.5, 2.25, 3.375, 5.0, 5.0])
+    puts "ok"
+    0
+  end
+
+  def self.main(argv)
+    return self_test if argv == ["--self-test"]
+    unless argv.empty?
+      warn "usage: bin/check-cluster [--self-test]"
+      return 2
+    end
+
+    env = ->(name, default) { ENV.fetch(name, "").empty? ? default : ENV.fetch(name) }
+    Check.new(http: Http.new(env.call("USERNAME", "Administrator"), env.call("PASSWORD", "password")),
+              address: address(env.call("HOST", "localhost")), bucket: env.call("BUCKET", "default"),
+              attempts: Integer(env.call("REBALANCE_ATTEMPTS", "4")), pause: Integer(env.call("REBALANCE_PAUSE", "15")),
+              deadline: Integer(env.call("CHECK_DEADLINE", "900"))).run
+  end
+end
+
+if $PROGRAM_NAME == __FILE__
+  require "stringio"
+  $stdout.sync = true
+  exit CheckCluster.main(ARGV)
+end
