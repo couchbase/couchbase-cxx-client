@@ -653,7 +653,8 @@ module CheckAbi
       reports_dir = File.join(dir, "abi", "reports")
       FileUtils.mkdir_p(File.join(reports_dir, commit))
       reports.each { |report| FileUtils.cp(report, File.join(reports_dir, commit)) }
-      published = Dir.children(reports_dir).to_h { |sha| [sha, Dir.children(File.join(reports_dir, sha))] }
+      published = Dir.children(reports_dir).select { |sha| File.directory?(File.join(reports_dir, sha)) }
+                     .to_h { |sha| [sha, Dir.children(File.join(reports_dir, sha))] }
       File.write(File.join(dir, "abi", "index.html"),
                  page(github.abi_deployments, repository: github.repository, reports: published))
     end

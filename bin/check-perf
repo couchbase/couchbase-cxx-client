@@ -728,13 +728,13 @@ module CheckPerf
   # The largest result.json that comment reads.
   RESULT_LIMIT = 64 << 20
 
-  # Free text of an artifact as plain text: no markup, entity, reference or mention survives. nil for
-  # a non-string or an empty result.
+  # Free text of an artifact as plain text: no markup, entity, reference (#n or GH-n) or mention
+  # survives. nil for a non-string or an empty result.
   def self.plain(text)
     return nil unless text.is_a?(String)
 
     text = text.scrub("").gsub(%r{[^A-Za-z0-9 ._\-+()/,@]}, "").strip[0, TEXT_LIMIT]
-               .gsub("@", "@\u200b").gsub(/(www)\./i, "\\1\u200b.")
+               .gsub("@", "@\u200b").gsub(/(www)\./i, "\\1\u200b.").gsub(/\b(gh)-(?=\d)/i, "\\1\u200b-")
     text.empty? ? nil : text
   end
 
@@ -798,8 +798,10 @@ module CheckPerf
     raise Error, "#{path} is larger than #{RESULT_LIMIT} bytes" if File.size(path) > RESULT_LIMIT
 
     JSON.parse(File.read(path, encoding: "UTF-8"))
-  rescue JSON::ParserError => e
-    raise Error, "#{path} is not JSON: #{e.message}"
+  rescue JSON::ParserError
+    # The parser message quotes the input, which is untrusted; a quoted line could read as a
+    # workflow command in the log.
+    raise Error, "#{path} is not JSON"
   end
 
   # The marker line, then the rendered comment of each directory in order, within BODY_LIMIT.
@@ -863,6 +865,7 @@ module CheckPerf
     <!doctype html>
     <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'">
     <title>Performance history</title>
     <style>
       :root { --fg: #1f2328; --bg: #fff; --muted: #656d76; --grid: #d0d7de; --latency: #0969da; --cpu: #bc4c00; --rss: #1a7f37; --throughput: #8250df; }
@@ -1087,13 +1090,22 @@ module CheckPerf
   # lowercase hex digits, are taken from from, so no page pushed to the ref is deployed. A symbolic
   # link on either path is an error: publishing never writes one, and following it would deploy a
   # file of the runner.
+  # The largest file of the site ref that the deploy copies.
+  SITE_FILE_LIMIT = 16 << 20
+
   def self.render_site(from, to, abi_page: ABI_PAGE)
     FileUtils.rm_rf(to)
     FileUtils.mkdir_p(to)
     no_link = ->(path) { raise Error, "#{path} is a symbolic link" if File.symlink?(path) }
+    small = lambda do |path|
+      next true if File.size(path) <= SITE_FILE_LIMIT
+
+      warn "Left out #{path}: larger than #{SITE_FILE_LIMIT} bytes"
+      false
+    end
     data_dir = File.join(from, "perf", "data")
     [File.join(from, "perf"), data_dir].each(&no_link)
-    data = Dir.glob(File.join(data_dir, "*.json")).each(&no_link).select { |f| File.file?(f) }
+    data = Dir.glob(File.join(data_dir, "*.json")).each(&no_link).select { |f| File.file?(f) }.select(&small)
     unless data.empty?
       FileUtils.mkdir_p(File.join(to, "perf", "data"))
       FileUtils.cp(data, File.join(to, "perf", "data"))
@@ -1107,7 +1119,7 @@ module CheckPerf
       no_link.call(dir)
       next unless File.directory?(dir)
 
-      reports = Dir.children(dir).grep(/\Areport-[\w.-]+\.txt\z/).map { |f| File.join(dir, f) }.each(&no_link).select { |f| File.file?(f) }
+      reports = Dir.children(dir).grep(/\Areport-[\w.-]+\.txt\z/).map { |f| File.join(dir, f) }.each(&no_link).select { |f| File.file?(f) }.select(&small)
       next if reports.empty?
 
       FileUtils.mkdir_p(File.join(to, "abi", "reports", commit))
@@ -1141,6 +1153,7 @@ module CheckPerf
         next
       end
       cpu = result.dig("metadata", "cpu", "model")
+      cpu = nil unless cpu.is_a?(String) && cpu.match?(DESCRIPTION)
       first ||= cpu
       # The server version the benchmark binary read from its cluster, for a result measured against
       # one. Shown on the page, so only a version-like string is kept.
@@ -1152,6 +1165,7 @@ module CheckPerf
       end
       result["rows"].each do |row|
         raise Error, "#{path} has a row without a key" unless row.is_a?(Hash) && row["key"].is_a?(String)
+        next unless row["key"].match?(KEY)
 
         head = row["head"]
         next if head.nil? || row["verdict"] == "failed"
@@ -1166,8 +1180,8 @@ module CheckPerf
                                .merge(usage.select { |_, v| number?(v) })
         rows[row["key"]]["server_version"] = server if server
       end
-    rescue JSON::ParserError => e
-      raise Error, "#{path} is not JSON: #{e.message}"
+    rescue JSON::ParserError
+      raise Error, "#{path} is not JSON"
     end
     data = {"sha" => commit, "date" => date, "cpu_model" => first, "rows" => rows.sort.to_h}
     data["descriptions"] = descriptions.sort.to_h unless descriptions.empty?
@@ -1197,7 +1211,16 @@ module CheckPerf
         FileUtils.mkdir_p(dir)
         File.write(File.join(dir, "#{id}.json"), "#{JSON.pretty_generate(data)}\n")
         index_file = File.join(dir, "index.json")
-        index = File.file?(index_file) ? JSON.parse(File.read(index_file)) : []
+        index = begin
+          File.file?(index_file) ? JSON.parse(File.read(index_file)) : []
+        rescue JSON::ParserError
+          raise Error, "#{PagesSite::REF}:perf/data/index.json is not JSON"
+        end
+        # The ref is writable by more than this job, so an entry that cannot be sorted is dropped
+        # rather than failing every later publish.
+        index = (index.is_a?(Array) ? index : []).select do |e|
+          e.is_a?(Hash) && e["sha"].is_a?(String) && (Time.iso8601(e["run"] || e["date"]) rescue false)
+        end
         # An entry written before runs were kept has no run; its commit date stands in for it.
         index = index.reject { |e| e["id"] == id }
                      .push({"id" => id, "sha" => commit, "date" => date, "run" => data["run"], "cpu_model" => data["cpu_model"]})
@@ -1475,8 +1498,11 @@ module CheckPerf
                  [nil, {median: 0.75, lower: nil, upper: nil}])
       check.call("comment_result not a result", status.call { comment_result([]) }, 3)
       check.call("comment_result rows not an array", status.call { comment_result(minimal.merge("rows" => {})) }, 3)
-      check.call("plain", [plain("a@b <c>&#64;"), plain(""), plain(5), plain("x" * 300).length, plain("see www.x.example")],
-                 ["a@\u200bb c64", nil, nil, TEXT_LIMIT, "see www\u200b.x.example"])
+      check.call("plain", [plain("a@b <c>&#64;"), plain(""), plain(5), plain("x" * 300).length, plain("see www.x.example"), plain("GH-12 gh-3 GH-x")],
+                 ["a@\u200bb c64", nil, nil, TEXT_LIMIT, "see www\u200b.x.example", "GH\u200b-12 gh\u200b-3 GH-x"])
+      injected = dir.call("injected", number: "5", text: %({"rows":"x\n::error title=t::forged"}))
+      check.call("parse error quotes no input", (read_result(File.join(injected, "result.json")) rescue $ERROR_INFO.message),
+                 "#{File.join(injected, 'result.json')} is not JSON")
       check.call("malformed result.json fails", status.call { quietly_in_dir.call(dir.call("broken", number: "5", text: "{")) }, 3)
       check.call("no HEAD_SHA", status.call { quietly.call(env: {"GITHUB_REPOSITORY" => "o/r"}, http: http) }, 3)
       quietly_in = lambda do |x|
@@ -1571,6 +1597,16 @@ module CheckPerf
         e.message
       end
       check.call("retry gives up", failure, "could not push to #{PagesSite::REF}")
+      # A ref that cannot be read is not a ref that is absent: publishing a site of this run alone
+      # would drop the history, so the read failure is raised and the block never runs.
+      runs = 0
+      unreadable = quiet.call do
+        PagesSite.publish(url: File.join(tmp, "missing.git"), token: nil, site: File.join(tmp, "s3"), message: "m") { runs += 1 }
+      rescue PagesSite::Error => e
+        e.message
+      end
+      check.call("an unreadable ref is not an absent one", [unreadable.start_with?("git ls-remote #{PagesSite::REF} failed"), runs],
+                 [true, 0])
 
       repo = File.join(tmp, "repo")
       remote = bare.call("remote.git")
@@ -1595,15 +1631,17 @@ module CheckPerf
       end
       stat = ->(m) { {"median" => m, "lower" => m, "upper" => m} }
       dirs_for = lambda do |sha|
-        [write_result.call("a", sha, [{"key" => "k/1", "verdict" => "no change", "head" => stat.call(5.0).merge("extra" => 1),
+        [write_result.call("a", sha, [{"key" => "k/t1", "verdict" => "no change", "head" => stat.call(5.0).merge("extra" => 1),
                                        "cpu" => {"head" => stat.call(3.0)}, "max_rss_bytes" => {"head" => 1024},
                                        "throughput" => {"head" => stat.call(2_500.0)}},
                                       {"key" => "bad", "verdict" => "failed", "head" => stat.call(1.0)},
                                       {"key" => "gone", "verdict" => "removed", "head" => nil}], "Model X", "<b>8.0</b>",
                            {"k" => "Measures k.", "bad name" => "x", "z" => "two\nlines"}),
          File.join(tmp, "missing"),
-         write_result.call("b", sha, [{"key" => "c/2", "verdict" => "new", "head" => stat.call(7.0)}], "Model Y", "8.0.3-5933-enterprise"),
-         write_result.call("old", "f" * 40, [{"key" => "stale/1", "verdict" => "new", "head" => stat.call(9.0)}], "Model Z")]
+         write_result.call("b", sha, [{"key" => "c/t2", "verdict" => "new", "head" => stat.call(7.0)},
+                                      {"key" => "c/<b>", "verdict" => "new", "head" => stat.call(7.0)}], "Model Y", "8.0.3-5933-enterprise"),
+         write_result.call("cpu", sha, [{"key" => "d/t1", "verdict" => "new", "head" => stat.call(1.0)}], "Model\nW"),
+         write_result.call("old", "f" * 40, [{"key" => "stale/t1", "verdict" => "new", "head" => stat.call(9.0)}], "Model Z")]
       end
       Dir.chdir(repo) do
         # older runs twice, as a nightly run of an unchanged main does; both runs are kept.
@@ -1624,12 +1662,34 @@ module CheckPerf
       check.call("publish second run kept", JSON.parse(show.call("perf/data/#{older}-20260102T030000Z.json"))["run"],
                  "2026-01-02T03:00:00Z")
       check.call("publish descriptions", data["descriptions"], {"k" => "Measures k."})
-      # A version that is not version-like, as in dir a, is dropped.
-      check.call("publish rows", data["rows"], {"c/2" => stat.call(7.0).merge("cpu_model" => "Model Y", "server_version" => "8.0.3-5933-enterprise"),
-                                                "k/1" => stat.call(5.0).merge("cpu_model" => "Model X", "cpu_ns_per_op" => 3.0,
+      # A version that is not version-like, as in dir a, a key that is not a key, and a CPU model that
+      # is not one line of text are dropped.
+      check.call("publish rows", data["rows"], {"c/t2" => stat.call(7.0).merge("cpu_model" => "Model Y", "server_version" => "8.0.3-5933-enterprise"),
+                                                "d/t1" => stat.call(1.0).merge("cpu_model" => nil),
+                                                "k/t1" => stat.call(5.0).merge("cpu_model" => "Model X", "cpu_ns_per_op" => 3.0,
                                                                               "max_rss_bytes" => 1024, "ops_per_second" => 2_500.0)})
       check.call("publish pages", [show.call("perf/index.html").include?(%(REPO_URL = "https://github.com/#{repository}")),
                                    show.call("index.html").include?(%(href="perf/">))], [true, true])
+
+      # The site ref is writable by more than the publish job, so publish survives what others put there.
+      tamper = lambda do |&block|
+        PagesSite.publish(url: remote, token: nil, site: File.join(tmp, "tamper"), message: "tamper") { |root| block.call(root) }
+      end
+      index_path = ->(root) { File.join(root, "perf", "data", "index.json") }
+      tamper.call do |root|
+        File.write(index_path.call(root), JSON.generate([nil, {"sha" => "x", "run" => "soon"}] + JSON.parse(File.read(index_path.call(root)))))
+      end
+      Dir.chdir(repo) { quiet.call { publish(newer, dirs_for.call(newer), url: remote, token: nil, at: Time.utc(2026, 1, 2, 4)) } }
+      check.call("publish drops a malformed index entry", JSON.parse(show.call("perf/data/index.json")).map { |e| e["sha"] },
+                 [newer, older, newer, older])
+      victim = File.join(tmp, "victim.json")
+      File.write(victim, "[]")
+      tamper.call do |root|
+        File.delete(index_path.call(root))
+        File.symlink(victim, index_path.call(root))
+      end
+      published = status.call { Dir.chdir(repo) { quiet.call { publish(newer, dirs_for.call(newer), url: remote, token: nil) } } }
+      check.call("publish does not follow a symbolic link in the ref", [published, File.read(victim)], [3, "[]"])
 
       ref = File.join(tmp, "ref")
       FileUtils.mkdir_p([File.join(ref, "perf", "data"), File.join(ref, "abi", "reports", "c"), File.join(ref, "other")])
@@ -1646,13 +1706,14 @@ module CheckPerf
       File.write(File.join(ref, "abi", "reports", commit, "x.html"), "<script>pushed</script>")
       File.write(File.join(ref, "abi", "reports", "C" * 40, "report-x.txt"), "r")
       File.symlink("/etc/hostname", File.join(ref, "abi", "reports", commit, "link.txt"))
+      File.write(File.join(ref, "perf", "data", "huge.json"), "x" * (SITE_FILE_LIMIT + 1))
       out = File.join(tmp, "deployed")
       abi_calls = []
       stub_abi = lambda do |file, reports_dir|
         abi_calls << [file, Dir.glob("*/*", base: reports_dir).sort]
         File.write(file, "rendered")
       end
-      render_site(ref, out, abi_page: stub_abi)
+      quiet.call { render_site(ref, out, abi_page: stub_abi) }
       deployed = Dir.glob("**/*", base: out).select { |f| File.file?(File.join(out, f)) }.sort
       check.call("render_site takes data only", deployed,
                  %W[abi/index.html abi/reports/#{commit}/report-previous-commit-1234567.txt index.html perf/data/index.json
