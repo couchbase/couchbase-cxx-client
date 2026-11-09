@@ -678,6 +678,14 @@ enum class key_value {
    * @committed
    */
   replica_index_currently_unavailable = 137,
+
+  /**
+   * The document contains too many levels to parse.
+   *
+   * @since 1.5.0
+   * @committed
+   */
+  document_too_deep = 138,
 };
 
 /**
