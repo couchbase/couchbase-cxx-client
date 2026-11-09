@@ -77,8 +77,8 @@ auto
 benchmarks() -> bench_suite
 {
   return { suite_name,
-           { { CASE(kv_get), { needs::real_cluster() } },
-             { CASE(kv_upsert), { needs::real_cluster() } },
-             { CASE(kv_upsert_get), { needs::real_cluster() } } } };
+           { { CASE(kv_get), { needs::real_cluster() }, kv::get_description },
+             { CASE(kv_upsert), { needs::real_cluster() }, kv::upsert_description },
+             { CASE(kv_upsert_get), { needs::real_cluster() }, kv::upsert_get_description } } };
 }
 } // namespace couchbase::test::bench

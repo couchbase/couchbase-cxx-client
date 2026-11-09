@@ -98,6 +98,10 @@ vbucket_hash(state& st)
 auto
 benchmarks() -> bench_suite
 {
-  return { suite_name, { { CASE(vbucket_hash) } } };
+  return { suite_name,
+           { { CASE(vbucket_hash),
+               {},
+               "Hashes a key with CRC32, and maps it to its vBucket and node in a 1,024-vBucket "
+               "map." } } };
 }
 } // namespace couchbase::test::bench

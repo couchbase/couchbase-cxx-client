@@ -462,6 +462,7 @@ module CheckPerf
     results = {base: Hash.new { |h, k| h[k] = Array.new(rounds) }, head: Hash.new { |h, k| h[k] = Array.new(rounds) }}
     suite_of = {}
     server = nil
+    descriptions = {}
     FileUtils.mkdir_p(out)
     bmf = {}
     Dir.mktmpdir("check-perf") do |tmp|
@@ -475,6 +476,7 @@ module CheckPerf
             result = measure(binary, File.join(tmp, "#{name}-#{round}-#{suite}.json"), bmf: bmf_file)
             bmf.merge!(JSON.parse(File.read(bmf_file))) if bmf_file
             server ||= result["server"] if name == :head
+            descriptions.merge!(result["descriptions"]) if name == :head && result["descriptions"].is_a?(Hash)
             cases = result["cases"].map { |c| c["key"].to_s.include?("/") ? c : c.merge("key" => "#{suite}/#{c['key']}") }
             keys[binary] = cases.map { |c| c["key"] }
             cases.each do |c|
@@ -505,6 +507,7 @@ module CheckPerf
               head: {sha: head.sha || head.label}, suites: head.binaries.keys.sort, rounds: rounds, metadata: meta,
               rows: rows, skipped: skipped}
     result[:base][:reason] = base.reason if base.reason
+    result[:descriptions] = descriptions.sort.to_h unless descriptions.empty?
     File.write(File.join(out, "result.json"), "#{JSON.pretty_generate(result)}\n")
     File.write(File.join(out, "head.bmf.json"), "#{JSON.pretty_generate(bmf)}\n")
     File.write(File.join(out, "report.txt"), report(result))
@@ -889,6 +892,7 @@ module CheckPerf
       .pt { fill: var(--c); }
       .pt.ring { fill: var(--bg); stroke: var(--c); stroke-width: 1.5; }
       .muted { color: var(--muted); }
+      .about { margin: -.25rem 0 .5rem; font-size: 13px; }
     </style></head>
     <body>
     <h1>Performance history</h1>
@@ -983,8 +987,15 @@ module CheckPerf
                       file: typeof e.id === "string" && /^[0-9a-f]{40}-\d{8}T\d{6}Z$/.test(e.id) ? e.id : e.sha}));
       const docs = await Promise.all(index.map((e) => get("data/" + e.file + ".json").catch(() => null)));
       const series = new Map(MEASURES.map((m) => [m.id, new Map()]));
+      // The description of each case, from the newest run that has one.
+      const about = new Map();
       docs.forEach((d, i) => {
         if (!d || typeof d !== "object") return;
+        if (d.descriptions && typeof d.descriptions === "object") {
+          for (const name in d.descriptions) {
+            if (typeof d.descriptions[name] === "string") about.set(name, d.descriptions[name]);
+          }
+        }
         for (const key in d.rows) {
           const row = d.rows[key];
           if (!row || typeof row !== "object") continue;
@@ -1026,7 +1037,9 @@ module CheckPerf
           for (const {key, name} of families.get(family).sort((a, b) => a.name < b.name ? -1 : 1)) {
             grid.append(chart(m, key, name, charts.get(key)));
           }
-          section.append(h("h3", {}, family), grid);
+          section.append(h("h3", {}, family));
+          if (about.has(family)) section.append(h("p", {class: "muted about"}, about.get(family)));
+          section.append(grid);
         }
         root.append(section);
         const link = h("a", {href: "#" + m.id, style: colour});
@@ -1091,9 +1104,13 @@ module CheckPerf
   # are added where the row has them. A result of another commit, and a row that failed at head, are
   # left out.
   SERVER_VERSION = /\A[0-9][0-9A-Za-z.+_-]{0,63}\z/
+  CASE_NAME = /\A[A-Za-z_][A-Za-z0-9_]*\z/
+  # One line of printable text, as a bench_case::description is.
+  DESCRIPTION = /\A[^\x00-\x1f\x7f]{1,300}\z/
 
   def self.push_data(commit, date, dirs)
     rows = {}
+    descriptions = {}
     first = nil
     dirs.each do |dir|
       path = artifact_file(dir, "result.json") or next
@@ -1110,6 +1127,10 @@ module CheckPerf
       # one. Shown on the page, so only a version-like string is kept.
       server = result.dig("metadata", "cluster", "version")
       server = nil unless server.is_a?(String) && server.match?(SERVER_VERSION)
+      # The page shows the description of a case above its charts; a malformed entry is dropped.
+      (result["descriptions"].is_a?(Hash) ? result["descriptions"] : {}).each do |name, text|
+        descriptions[name] = text if name.match?(CASE_NAME) && text.is_a?(String) && text.match?(DESCRIPTION)
+      end
       result["rows"].each do |row|
         raise Error, "#{path} has a row without a key" unless row.is_a?(Hash) && row["key"].is_a?(String)
 
@@ -1129,7 +1150,9 @@ module CheckPerf
     rescue JSON::ParserError => e
       raise Error, "#{path} is not JSON: #{e.message}"
     end
-    {"sha" => commit, "date" => date, "cpu_model" => first, "rows" => rows.sort.to_h}
+    data = {"sha" => commit, "date" => date, "cpu_model" => first, "rows" => rows.sort.to_h}
+    data["descriptions"] = descriptions.sort.to_h unless descriptions.empty?
+    data
   end
 
   # Adds the head rows of commit to perf/data/ in the site as one run, and renders perf/index.html.
@@ -1542,11 +1565,13 @@ module CheckPerf
         ENV.delete("GIT_COMMITTER_DATE")
       end
       older, newer = shas
-      write_result = lambda do |name, sha, rows, cpu, server = nil|
+      write_result = lambda do |name, sha, rows, cpu, server = nil, descriptions = nil|
         d = File.join(tmp, "#{name}-#{sha[0, 7]}-#{Dir.children(tmp).size}")
         Dir.mkdir(d)
         meta = {"cpu" => {"model" => cpu}, "cluster" => {"version" => server}}
-        File.write(File.join(d, "result.json"), JSON.generate("head" => {"sha" => sha}, "metadata" => meta, "rows" => rows))
+        doc = {"head" => {"sha" => sha}, "metadata" => meta, "rows" => rows}
+        doc["descriptions"] = descriptions if descriptions
+        File.write(File.join(d, "result.json"), JSON.generate(doc))
         d
       end
       stat = ->(m) { {"median" => m, "lower" => m, "upper" => m} }
@@ -1555,7 +1580,8 @@ module CheckPerf
                                        "cpu" => {"head" => stat.call(3.0)}, "max_rss_bytes" => {"head" => 1024},
                                        "throughput" => {"head" => stat.call(2_500.0)}},
                                       {"key" => "bad", "verdict" => "failed", "head" => stat.call(1.0)},
-                                      {"key" => "gone", "verdict" => "removed", "head" => nil}], "Model X", "<b>8.0</b>"),
+                                      {"key" => "gone", "verdict" => "removed", "head" => nil}], "Model X", "<b>8.0</b>",
+                           {"k" => "Measures k.", "bad name" => "x", "z" => "two\nlines"}),
          File.join(tmp, "missing"),
          write_result.call("b", sha, [{"key" => "c/2", "verdict" => "new", "head" => stat.call(7.0)}], "Model Y", "8.0.3-5933-enterprise"),
          write_result.call("old", "f" * 40, [{"key" => "stale/1", "verdict" => "new", "head" => stat.call(9.0)}], "Model Z")]
@@ -1578,6 +1604,7 @@ module CheckPerf
       check.call("publish run time", data["run"], "2026-01-02T01:00:00Z")
       check.call("publish second run kept", JSON.parse(show.call("perf/data/#{older}-20260102T030000Z.json"))["run"],
                  "2026-01-02T03:00:00Z")
+      check.call("publish descriptions", data["descriptions"], {"k" => "Measures k."})
       # A version that is not version-like, as in dir a, is dropped.
       check.call("publish rows", data["rows"], {"c/2" => stat.call(7.0).merge("cpu_model" => "Model Y", "server_version" => "8.0.3-5933-enterprise"),
                                                 "k/1" => stat.call(5.0).merge("cpu_model" => "Model X", "cpu_ns_per_op" => 3.0,

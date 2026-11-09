@@ -43,6 +43,7 @@ write_bmf(std::ostream& out, const std::vector<case_result>& results);
 //   {
 //     "schema": 1,
 //     "suite": "<benchmark target name>",
+//     "descriptions": { "<case>": "<bench_case::description>" },
 //     "server": { "version": "<major.minor.micro>", "nodes": <n> },
 //     "cases": [
 //       {
@@ -62,12 +63,14 @@ write_bmf(std::ostream& out, const std::vector<case_result>& results);
 //   }
 //
 // "server" is present only when the run created a probe backend, and a field its probe could not
-// answer is null. Latencies are per operation, or per iteration for batched keys. A non-finite
-// number is written as null, so "lower" and "upper" are null for a median without a 95% interval.
-// The CPU, context switch and RSS fields are those of case_result (bench_runner.hxx).
+// answer is null. "descriptions" lists the cases of described_cases that have a description, and is
+// left out when none has. Latencies are per operation, or per iteration for batched keys. A
+// non-finite number is written as null, so "lower" and "upper" are null for a median without a 95%
+// interval. The CPU, context switch and RSS fields are those of case_result (bench_runner.hxx).
 void
 write_result_json(std::ostream& out,
                   const std::string& suite,
                   const std::vector<case_result>& results,
-                  context& ctx);
+                  context& ctx,
+                  const std::vector<bench_case>& described_cases = {});
 } // namespace couchbase::test::bench

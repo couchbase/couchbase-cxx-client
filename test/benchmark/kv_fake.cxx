@@ -63,6 +63,9 @@ kv_upsert_get(state& st)
 auto
 benchmarks() -> bench_suite
 {
-  return { suite_name, { { CASE(kv_get) }, { CASE(kv_upsert) }, { CASE(kv_upsert_get) } } };
+  return { suite_name,
+           { { CASE(kv_get), {}, kv::get_description },
+             { CASE(kv_upsert), {}, kv::upsert_description },
+             { CASE(kv_upsert_get), {}, kv::upsert_get_description } } };
 }
 } // namespace couchbase::test::bench

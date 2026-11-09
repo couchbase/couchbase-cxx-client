@@ -126,6 +126,9 @@ struct bench_case {
   std::string name;
   void (*func)(state&);
   std::vector<requirement_ptr> requirements{};
+  // One sentence on what the case measures, written to the result JSON and shown above the case's
+  // charts on the history page.
+  std::string description{};
 };
 
 struct bench_suite {

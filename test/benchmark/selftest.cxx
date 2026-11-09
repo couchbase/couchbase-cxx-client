@@ -609,6 +609,15 @@ result_json_shape(context& ctx)
   assert_eq(doc.at("schema").as<std::int64_t>(), std::int64_t{ 1 });
   assert_eq(doc.at("suite").get_string(), std::string{ "suite \"q\"" });
   assert_true(doc.find("server") == nullptr, "no server without a probe backend");
+  assert_true(doc.find("descriptions") == nullptr, "no descriptions without described cases");
+
+  std::ostringstream described;
+  write_result_json(
+    described, "s", results, ctx, { { CASE(ok_op), {}, "Says \"ok\"." }, { CASE(empty_batch) } });
+  const auto descriptions = tao::json::from_string(described.str()).at("descriptions");
+  assert_eq(descriptions.get_object().size(), 1U);
+  assert_eq(descriptions.at("ok_op").get_string(), std::string{ "Says \"ok\"." });
+
   const auto& cases = doc.at("cases").get_array();
   assert_eq(cases.size(), 2U);
   assert_eq(cases[0].at("key").get_string(), std::string{ "ok_op/t1" });
