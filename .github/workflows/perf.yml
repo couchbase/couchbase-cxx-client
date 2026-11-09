@@ -2,7 +2,8 @@ name: perf
 permissions: {}
 
 # Compares the benchmarks of the merge commit of a pull request, or of a pushed commit, with those of
-# its base. bin/check-perf ci describes what each event is compared with.
+# its base. bin/check-perf ci describes what each event is compared with. The schedule runs main
+# every night at 10:17 UTC.
 on:
   push:
     branches:
@@ -13,6 +14,8 @@ on:
       - main
       - release-*
   workflow_dispatch:
+  schedule:
+    - cron: "17 10 * * *"
 
 # Pull request runs cancel each other. Every other run has a group of its own, so none replaces
 # another.
@@ -140,11 +143,12 @@ jobs:
         with:
           id: ${{ steps.cbdino.outputs.id }}
 
-  # Records the head rows of a push to main in refs/site/pages, with the page bin/check-perf renders
-  # from them. It builds nothing, so no code under test runs with its write permissions.
+  # Records the head rows of a push to main, or of the nightly run, in refs/site/pages, with the page
+  # bin/check-perf renders from them. It builds nothing, so no code under test runs with its write
+  # permissions.
   publish:
     needs: [sdk, cluster]
-    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    if: ${{ !cancelled() && (github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-26.04
     permissions:
       contents: write
@@ -187,7 +191,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
-      # The pushed commit of main, whose bin/check-perf and bin/check-abi render the pages.
+      # The commit of main that ran, whose bin/check-perf and bin/check-abi render the pages.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
