@@ -41,6 +41,17 @@
 
 namespace couchbase::test::bench::kv
 {
+// The bench_case::description of each case, which both binaries register.
+constexpr const char* get_description =
+  "Gets one of 1,000 small JSON documents per operation, blocking on 1 or 8 threads, or 64 "
+  "in flight.";
+constexpr const char* upsert_description =
+  "Upserts one of 1,000 small JSON documents per operation, blocking on 1 or 8 threads, or "
+  "64 in flight.";
+constexpr const char* upsert_get_description =
+  "Upserts, then gets, one of 100,000 512-byte JSON documents per operation on 20 "
+  "threads.";
+
 constexpr std::size_t document_count = 1000;
 constexpr std::size_t thread_stride = 7919;
 

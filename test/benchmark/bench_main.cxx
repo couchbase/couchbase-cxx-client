@@ -148,7 +148,7 @@ main(int argc, char* argv[]) -> int
     }
     if (!json_path.empty()) {
       write_file(json_path, [&](std::ostream& out) {
-        write_result_json(out, suite.name, results, ctx);
+        write_result_json(out, suite.name, results, ctx, suite.cases);
       });
     }
     return exit_code(results);

@@ -300,10 +300,25 @@ void
 write_result_json(std::ostream& out,
                   const std::string& suite,
                   const std::vector<case_result>& results,
-                  context& ctx)
+                  context& ctx,
+                  const std::vector<bench_case>& described_cases)
 {
   out << "{\n  " << R"("schema": 1,)" << "\n  " << R"("suite": )";
   quote(out, suite);
+  bool first_description = true;
+  for (const auto& bc : described_cases) {
+    if (bc.description.empty()) {
+      continue;
+    }
+    out << (first_description ? ",\n  \"descriptions\": {" : ", ");
+    first_description = false;
+    quote(out, bc.name);
+    out << ": ";
+    quote(out, bc.description);
+  }
+  if (!first_description) {
+    out << '}';
+  }
   if (ctx.backends_created() > 0) {
     out << ",\n  " << R"("server": {"version": )";
     try {

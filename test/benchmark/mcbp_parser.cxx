@@ -168,6 +168,10 @@ mcbp_parser_next(state& st)
 auto
 benchmarks() -> bench_suite
 {
-  return { suite_name, { { CASE(mcbp_parser_next) } } };
+  return { suite_name,
+           { { CASE(mcbp_parser_next),
+               {},
+               "Decodes one GET response frame per iteration with mcbp_parser::next, plain and "
+               "Snappy-compressed." } } };
 }
 } // namespace couchbase::test::bench

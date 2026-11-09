@@ -159,6 +159,16 @@ json_streaming_lexer(state& st)
 auto
 benchmarks() -> bench_suite
 {
-  return { suite_name, { { CASE(json_generate_binary) }, { CASE(json_streaming_lexer) } } };
+  return {
+    suite_name,
+    { { CASE(json_generate_binary),
+        {},
+        "Serialises a small JSON document and an 80-item nested document with "
+        "core::utils::json::generate_binary." },
+      { CASE(json_streaming_lexer),
+        {},
+        "Parses a query response of 10 or 1,000 rows with core::utils::json::streaming_lexer, "
+        "fed in 4 KiB chunks." } }
+  };
 }
 } // namespace couchbase::test::bench
