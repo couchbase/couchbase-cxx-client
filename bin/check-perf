@@ -893,6 +893,7 @@ module CheckPerf
       .pt.ring { fill: var(--bg); stroke: var(--c); stroke-width: 1.5; }
       .muted { color: var(--muted); }
       .about { margin: -.25rem 0 .5rem; font-size: 13px; }
+      #tip { position: fixed; z-index: 1; max-width: 22rem; padding: .375rem .5rem; border: 1px solid var(--grid); border-radius: 6px; background: var(--bg); font: 12px/1.4 ui-monospace, monospace; white-space: pre-line; user-select: text; box-shadow: 0 2px 8px #0003; }
     </style></head>
     <body>
     <h1>Performance history</h1>
@@ -900,6 +901,7 @@ module CheckPerf
     <nav id="jump" aria-label="Measures"></nav>
     <p id="status" class="muted">Loading.</p>
     <main id="charts"></main>
+    <div id="tip" role="tooltip" hidden></div>
     <script>
     "use strict";
     const REPO_URL = "@REPO_URL@";
@@ -939,8 +941,22 @@ module CheckPerf
        about: "Peak resident set size of the process when the key finished. It is a high-water mark, so it covers every key the binary measured before."},
     ];
 
+    // The details of a point stay open until another point is shown, Escape is pressed, or a
+    // click lands outside them, so their text can be read and selected.
+    const tip = document.getElementById("tip");
+    const showTip = (target, text) => {
+      tip.textContent = text;
+      tip.hidden = false;
+      const r = target.getBoundingClientRect(), t = tip.getBoundingClientRect();
+      tip.style.left = Math.max(4, Math.min(r.left + r.width / 2 - t.width / 2, innerWidth - t.width - 4)) + "px";
+      tip.style.top = (r.top - t.height - 8 >= 4 ? r.top - t.height - 8 : r.bottom + 8) + "px";
+    };
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") tip.hidden = true; });
+    document.addEventListener("pointerdown", (e) => { if (!tip.contains(e.target)) tip.hidden = true; });
+    addEventListener("scroll", () => { tip.hidden = true; }, {passive: true});
+
     function chart(m, key, name, points) {
-      const box = h("div", {class: "chart", title: key});
+      const box = h("div", {class: "chart"});
       const last = points[points.length - 1].v, prev = points.length > 1 ? points[points.length - 2].v : 0;
       const latest = h("div", {class: "latest"});
       latest.append(h("span", {}, m.fmt(last)));
@@ -970,9 +986,12 @@ module CheckPerf
         const ring = p.cpuChanged || p.serverChanged;
         const c = el("circle", {class: ring ? "pt ring" : "pt", cx: x(i), cy: y(p.v), r: ring ? 4.5 : 3,
                                 "vector-effect": "non-scaling-stroke"}, a);
-        el("title", {}, c).textContent = p.sha.slice(0, 12) + "  " + m.fmt(p.v) + "  " + p.date +
+        const text = p.sha.slice(0, 12) + "  " + m.fmt(p.v) + "  " + p.date +
           (p.cpuChanged ? "\nCPU: " + p.cpu + " (changed)" : "") +
           (p.server !== null ? "\nServer: " + p.server + (p.serverChanged ? " (changed)" : "") : "");
+        a.setAttribute("aria-label", text);
+        a.addEventListener("pointerenter", () => showTip(c, text));
+        a.addEventListener("focus", () => showTip(c, text));
       });
       return box;
     }
