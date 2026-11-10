@@ -3,6 +3,7 @@ couchbase_add_test(unit/observability/app_telemetry_reporter LABEL unit LINK_CLI
 couchbase_add_test(unit/observability/diagnostics LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/observability/logger LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/observability/logger_fork LABEL unit LINK_CLIENT)
+couchbase_add_test(unit/observability/logger_exit LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/observability/meter_wrapper LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/observability/metrics LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/observability/orphan_reporter LABEL unit LINK_CLIENT)
