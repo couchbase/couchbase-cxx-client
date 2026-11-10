@@ -22,6 +22,7 @@
 
 #include <snappy.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -132,19 +133,29 @@ require_decoded_value(const std::vector<std::byte>& frames, const std::string& v
   }
 }
 
-// All frames are in one buffer and next() drains them one per iteration. The buffer is refilled
-// when it runs out, so the cost of consuming from a long buffer is part of what is measured. A
-// result other than ok, after the refill too, throws and fails the case.
+// The size of one socket read, as mcbp_session::input_buffer_ feeds the parser.
+constexpr std::size_t read_size = 16384;
+
+// next() returns one frame per iteration. On need_data the parser is fed the next read_size bytes
+// of the frames, as the session feeds it one socket read, and from the start again after the last
+// frame, which ends the buffer on a frame boundary. A result other than ok or need_data throws and
+// fails the case.
 void
 drain(state& st, std::string_view variant, const std::vector<std::byte>& frames)
 {
   core::io::mcbp_parser parser;
   core::io::mcbp_message msg;
-  parser.feed(frames.begin(), frames.end());
+  std::size_t offset = 0;
   st.batched(variant, 1, [&] {
     auto result = parser.next(msg);
-    if (result == core::io::mcbp_parser::result::need_data) {
-      parser.feed(frames.begin(), frames.end());
+    while (result == core::io::mcbp_parser::result::need_data) {
+      if (offset == frames.size()) {
+        offset = 0;
+      }
+      const auto size = std::min(read_size, frames.size() - offset);
+      const auto begin = frames.begin() + static_cast<std::ptrdiff_t>(offset);
+      parser.feed(begin, begin + static_cast<std::ptrdiff_t>(size));
+      offset += size;
       result = parser.next(msg);
     }
     if (result != core::io::mcbp_parser::result::ok) {
