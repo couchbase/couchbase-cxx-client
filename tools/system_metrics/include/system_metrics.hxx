@@ -52,6 +52,16 @@ struct proc_cpu_t {
   std::uint64_t sys{ 0 };
 };
 
+/// CPU time of the whole system since boot, summed over all logical CPUs, in milliseconds.
+/// Utilisation over an interval is the busy delta divided by the total delta. A backend that cannot
+/// measure the whole machine returns zero for both.
+struct system_cpu_t {
+  /// Time spent on anything other than idle and waiting for I/O
+  std::uint64_t busy{ 0 };
+  /// busy plus idle and I/O wait
+  std::uint64_t total{ 0 };
+};
+
 struct proc_mem_t {
   std::uint64_t size{ 0 };     // virtual memory size
   std::uint64_t resident{ 0 }; // resident set size
@@ -95,6 +105,7 @@ public:
   [[nodiscard]] virtual auto get_logical_cpu_count() const -> std::uint32_t = 0;
   [[nodiscard]] virtual auto get_proc_memory(sm_pid_t pid) const -> proc_mem_t = 0;
   [[nodiscard]] virtual auto get_proc_cpu(sm_pid_t pid) const -> proc_cpu_t = 0;
+  [[nodiscard]] virtual auto get_system_cpu() const -> system_cpu_t = 0;
 };
 
 } // namespace system_metrics

@@ -6,4 +6,4 @@ The goal was to reuse the code in a light-weight manner (we don't need all the l
 
 # TODO
 
-- Add system-wide metrics?  Right now the focus is only on per-process metrics.  We could incorporate system-wide metrics fairly easily if we think those would be beneficial.
+- Add more system-wide metrics?  `get_system_cpu()` reports the whole machine's busy and total CPU time; memory and thread metrics are per-process.

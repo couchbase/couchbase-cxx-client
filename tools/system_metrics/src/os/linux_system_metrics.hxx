@@ -28,6 +28,7 @@ public:
   [[nodiscard]] auto get_system_boot_time() const -> std::uint64_t override;
   [[nodiscard]] auto get_logical_cpu_count() const -> std::uint32_t override;
   [[nodiscard]] auto get_proc_cpu(sm_pid_t pid) const -> proc_cpu_t override;
+  [[nodiscard]] auto get_system_cpu() const -> system_cpu_t override;
   [[nodiscard]] auto get_proc_memory(sm_pid_t pid) const -> proc_mem_t override;
   void iterate_proc_threads(sm_pid_t pid, IterateThreadCallback callback) override;
 };

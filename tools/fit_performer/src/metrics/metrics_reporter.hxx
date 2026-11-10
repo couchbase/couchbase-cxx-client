@@ -19,7 +19,6 @@
 
 #include <atomic>
 #include <chrono>
-#include <map>
 #include <mutex>
 
 #include <asio/steady_timer.hpp>
@@ -36,12 +35,20 @@
 namespace fit_cxx
 {
 
-struct thread_info {
-  system_metrics::sm_tid_t tid;
-  std::uint64_t utime;
-  std::uint64_t stime;
-};
-
+/// Sends a protocol::metrics::Result about once a second while a run is in progress, stamped with
+/// the time it was sampled. Field names follow metrics.top_level.proto where it standardises one.
+///
+///   processCpu     CPU time of this process over the interval, as a percentage of the CPU time
+///                  of the whole machine over the same interval: 0 to 100.
+///   systemCpu      non-idle CPU time of the whole machine over the interval, 0 to 100 percent.
+///   memHeapUsedMB  heap_used_bytes() in metrics_reporter.cxx; absent without glibc 2.33.
+///   memRssUsedMB   resident set size.
+///   memVmsMB       virtual memory size.
+///   threadCount    threads of this process.
+///   freeSwapSizeMB unused swap space of the whole machine; Linux and macOS only.
+///
+/// The CPU fields are deltas, so the first tick sends nothing and records their baseline. A sample
+/// in which the machine's CPU time did not advance leaves them out. Megabytes are 2^20 bytes.
 class metrics_reporter : public std::enable_shared_from_this<metrics_reporter>
 {
 public:
@@ -50,22 +57,13 @@ public:
                    std::weak_ptr<fit_cxx::Batcher> batcher,
                    const std::string& run_id);
 
-  ~metrics_reporter();
-
   void start();
   void stop();
 
 private:
   void rearm_reporter(std::error_code ec);
   void log_metrics();
-  double get_proc_cpu_percent(system_metrics::proc_cpu_t t1,
-                              system_metrics::proc_cpu_t t2,
-                              std::chrono::milliseconds time_delta);
-  std::map<std::string, double> get_proc_threads_cpu_percent(
-    std::map<system_metrics::sm_pid_t, thread_info> t1,
-    std::map<system_metrics::sm_pid_t, thread_info> t2,
-    std::chrono::milliseconds time_delta);
-  std::map<std::string, double> get_proc_memory();
+  void collect_and_send();
 
   asio::steady_timer metrics_timer_;
   system_metrics::sm_pid_t pid_;
@@ -73,16 +71,12 @@ private:
   std::mutex metrics_mutex_{};
   bool initialized_{ false };
   std::atomic<bool> stopped_{ false };
-  std::chrono::time_point<std::chrono::steady_clock> last_report_{};
+  bool warned_{ false };
   system_metrics::proc_cpu_t last_proc_cpu_{};
-  std::map<system_metrics::sm_pid_t, thread_info> last_threads_{};
+  system_metrics::system_cpu_t last_system_cpu_{};
   // FIT related 'things'
   std::weak_ptr<fit_cxx::Batcher> batcher_;
   std::string run_id_;
-
-  // potentially useful in the future (can be used for calculating CPU utilization)
-  // uint64_t boot_time_{};
-  // uint32_t logical_cpu_count_{};
 };
 
 } // namespace fit_cxx

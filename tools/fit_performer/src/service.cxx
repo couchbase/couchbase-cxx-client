@@ -65,6 +65,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <thread>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -1808,7 +1809,6 @@ TxnService::run(grpc::ServerContext* /*context*/,
                           request->config().streaming_config().enable_metrics());
   fit_cxx::concurrent_queue<protocol::run::Result> result_queue;
   auto batcher = fit_cxx::Batcher::build_batcher(writer, &result_queue, request, metrics_enabled);
-  batcher->start();
 
   std::shared_ptr<fit_cxx::metrics_reporter> reporter;
   if (metrics_enabled) {
@@ -1818,8 +1818,32 @@ TxnService::run(grpc::ServerContext* /*context*/,
     auto this_pid = ::getpid();
 #endif
     reporter = std::make_shared<fit_cxx::metrics_reporter>(conn->ctx(), this_pid, batcher, run_id);
-    reporter->start();
   }
+  // The batcher thread holds pointers to result_queue and writer in this frame, so it starts only
+  // once building the reporter can no longer throw. The reporter starts inside the try below, so
+  // every return after this point goes through finish_run.
+  batcher->start();
+
+  // Stops the reporter, then joins the batcher. Each return after the batcher starts calls it, and
+  // only the first call acts. The reporter's timer handler holds a strong reference to the
+  // reporter, so without stop() the reporter samples until conn->ctx() stops.
+  bool run_finished = false;
+  auto finish_run = [&reporter, &batcher, &run_finished]() {
+    if (std::exchange(run_finished, true)) {
+      return;
+    }
+    // stop() sets the flag that ends sampling before anything in it can throw, and the batcher must
+    // be joined before this frame returns, so an exception from stop() is logged, not propagated.
+    if (reporter) {
+      try {
+        reporter->stop();
+      } catch (const std::exception& e) {
+        spdlog::warn("Failed to stop the metrics reporter: {}", e.what());
+      }
+    }
+    batcher->set_workloads_complete();
+    batcher->wait();
+  };
 
   // now, loop over the workloads...
   // Declaration order matters because, on the exception path, the catch blocks below return without
@@ -1838,6 +1862,9 @@ TxnService::run(grpc::ServerContext* /*context*/,
   std::list<std::future<void>> stream_futures;
   std::list<std::future<void>> workload_futures;
   try {
+    if (reporter) {
+      reporter->start();
+    }
     for (const auto& horiz : request->workloads().horizontal_scaling()) {
       for (const auto& work : horiz.workloads()) {
         // Capture `work` by value: it is a per-iteration loop variable, so capturing it by
@@ -1925,21 +1952,18 @@ TxnService::run(grpc::ServerContext* /*context*/,
       f.get();
     }
     spdlog::info("Inform batcher that workloads are complete");
-    batcher->set_workloads_complete();
-    batcher->wait();
+    finish_run();
     spdlog::info("Sending OK status");
     return grpc::Status::OK;
   } catch (const performer_exception& err) {
     spdlog::error("got performer exception with message '{}' during run", err.what());
     // Join the batcher before returning: it holds raw pointers to this frame's `result_queue` and
     // to `writer`, so returning while its async thread is still draining would be a use-after-free.
-    batcher->set_workloads_complete();
-    batcher->wait();
+    finish_run();
     return err.to_grpc_status();
   } catch (const std::exception& err) {
     spdlog::error("got exception with message '{}' during run", err.what());
-    batcher->set_workloads_complete();
-    batcher->wait();
+    finish_run();
     return grpc::Status(grpc::StatusCode::UNKNOWN, err.what());
   }
 }

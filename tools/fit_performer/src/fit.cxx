@@ -33,6 +33,7 @@
 #include <cstdlib>
 #include <memory>
 #include <string>
+#include <thread>
 
 spdlog::level::level_enum
 translate_log_level(couchbase::core::logger::level level)
@@ -100,9 +101,10 @@ main(int argc, const char* argv[])
     return 1;
   }
 
-  spdlog::info("C++ SDK: {}, listening on '{}', build_info: {}",
+  spdlog::info("C++ SDK: {}, listening on '{}', logical CPUs: {}, build_info: {}",
                couchbase::core::meta::sdk_semver(),
                server_address,
+               std::thread::hardware_concurrency(),
                couchbase::core::meta::sdk_build_info_json());
   server->Wait();
   return 0;

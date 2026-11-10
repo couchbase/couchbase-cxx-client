@@ -360,6 +360,41 @@ linux_system_metrics::get_proc_cpu(sm_pid_t pid) const -> proc_cpu_t
 }
 
 auto
+linux_system_metrics::get_system_cpu() const -> system_cpu_t
+{
+  // The first line of /proc/stat sums all CPUs, in clock ticks:
+  //   cpu user nice system idle iowait irq softirq steal guest guest_nice
+  // guest and guest_nice are already included in user and nice, so they are not added again.
+  constexpr std::size_t idle_index = 4;
+  constexpr std::size_t iowait_index = 5;
+  constexpr std::size_t steal_index = 8;
+
+  system_cpu_t cpu;
+  tokenize_file_line_by_line(
+    0,
+    "stat",
+    [&cpu](const auto& vec) -> auto {
+      if (vec.size() <= steal_index || vec.front() != "cpu") {
+        return true;
+      }
+      std::uint64_t total = 0;
+      std::uint64_t idle = 0;
+      for (std::size_t i = 1; i <= steal_index; ++i) {
+        const auto ticks = stoull_sv(vec[i]);
+        total += ticks;
+        if (i == idle_index || i == iowait_index) {
+          idle += ticks;
+        }
+      }
+      cpu.total = linux_tick2msec(total);
+      cpu.busy = linux_tick2msec(total - idle);
+      return false;
+    },
+    ' ');
+  return cpu;
+}
+
+auto
 linux_system_metrics::get_proc_memory(sm_pid_t pid) const -> proc_mem_t
 {
   const auto pstat = proc_stat_read(pid);
@@ -436,6 +471,12 @@ auto
 linux_system_metrics::get_proc_cpu(sm_pid_t /*pid*/) const -> proc_cpu_t
 {
   return proc_cpu_t{};
+}
+
+auto
+linux_system_metrics::get_system_cpu() const -> system_cpu_t
+{
+  return system_cpu_t{};
 }
 
 auto
