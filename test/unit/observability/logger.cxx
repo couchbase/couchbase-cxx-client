@@ -33,6 +33,8 @@
 #include <spdlog/fmt/bin_to_hex.h>
 #include <spdlog/fmt/bundled/format.h>
 #include <spdlog/sinks/base_sink.h>
+#include <spdlog/sinks/callback_sink.h>
+#include <spdlog/sinks/null_sink.h>
 #include <spdlog/spdlog.h>
 
 #include <atomic>
@@ -40,7 +42,9 @@
 #include <condition_variable>
 #include <cstddef>
 #include <filesystem>
+#include <fstream>
 #include <future>
+#include <iterator>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -488,6 +492,15 @@ public:
   }
 };
 
+class log_snapshot_gate final : public thread_hook_gate
+{
+public:
+  log_snapshot_gate()
+    : thread_hook_gate{ &core_logger::unit_test_api::set_after_log_snapshot }
+  {
+  }
+};
+
 // Regression: reset() cleared the file logger, released registry_mutex, dropped the protocol
 // logger's registry entry, and released registry_mutex again before clearing protocol_logger, while
 // create_protocol_logger() released registry_mutex before publishing protocol_logger.
@@ -671,6 +684,751 @@ replacing_the_file_logger_drops_no_message([[maybe_unused]] context& ctx)
   assert_eq(second_before_release, 0, "the gated message waited at the boundary");
   assert_eq(first_received->load(), 1, "only the priming message reached the replaced logger");
   assert_eq(second_received->load(), 1, "the gated message reached the replacement logger");
+}
+
+// Regression: create_file_logger() replaced the pool of the logging thread, so an asynchronous
+// protocol logger created before it was left without one and dropped every message.
+void
+a_new_file_logger_keeps_the_protocol_logger_writing([[maybe_unused]] context& ctx)
+{
+  const auto directory = std::filesystem::temp_directory_path() /
+                         ("cxx-logger-pool-" + std::to_string(std::random_device{}()));
+  std::filesystem::create_directories(directory);
+  auto received = std::make_shared<std::atomic<int>>(0);
+  core_logger::configuration protocol{};
+  protocol.filename = (directory / "protocol").string();
+  protocol.console = false;
+  protocol.sink = std::make_shared<spdlog::sinks::callback_sink_mt>(
+    [received](const spdlog::details::log_msg& /* msg */) {
+      received->fetch_add(1);
+    });
+  const auto protocol_failure = core_logger::create_protocol_logger(protocol);
+  core_logger::configuration file{};
+  file.console = false;
+  const auto file_failure = core_logger::create_file_logger(file);
+
+  CB_LOG_PROTOCOL("{}", "message");
+  // Joins the logging thread, which first writes every message queued before the call.
+  core_logger::shutdown();
+  core_logger::reset();
+  std::error_code ignored;
+  std::filesystem::remove_all(directory, ignored);
+
+  assert_false(protocol_failure.has_value(), "the protocol logger was created");
+  assert_false(file_failure.has_value(), "the file logger was created");
+  assert_eq(received->load(), 1, "the protocol message reached its sink");
+}
+
+// Regression: two threads creating asynchronous loggers at once could each find no pool and create
+// one, and the second replaced the first, which left the first logger without a pool.
+void
+loggers_created_at_once_share_one_pool([[maybe_unused]] context& ctx)
+{
+  const auto directory = probe_directory("cxx-logger-concurrent");
+  int failures = 0;
+  int lost = 0;
+  for (int round = 0; round < 20; ++round) {
+    auto file_received = std::make_shared<std::atomic<int>>(0);
+    auto protocol_received = std::make_shared<std::atomic<int>>(0);
+    core_logger::configuration file{};
+    file.console = false;
+    file.sink = std::make_shared<spdlog::sinks::callback_sink_mt>(
+      [file_received](const spdlog::details::log_msg& /* msg */) {
+        file_received->fetch_add(1);
+      });
+    core_logger::configuration protocol{};
+    protocol.filename = (directory / "protocol").string();
+    protocol.console = false;
+    protocol.sink = std::make_shared<spdlog::sinks::callback_sink_mt>(
+      [protocol_received](const spdlog::details::log_msg& /* msg */) {
+        protocol_received->fetch_add(1);
+      });
+
+    std::promise<void> go;
+    const std::shared_future<void> start = go.get_future().share();
+    std::optional<std::string> file_failure;
+    std::optional<std::string> protocol_failure;
+    std::thread file_creator([&]() {
+      start.wait();
+      file_failure = core_logger::create_file_logger(file);
+    });
+    std::thread protocol_creator([&]() {
+      start.wait();
+      protocol_failure = core_logger::create_protocol_logger(protocol);
+    });
+    go.set_value();
+    file_creator.join();
+    protocol_creator.join();
+
+    CB_LOG_INFO_RAW("message");
+    CB_LOG_PROTOCOL("{}", "message");
+    // Joins the logging thread, which first writes every message queued before the call.
+    core_logger::shutdown();
+    core_logger::reset();
+    if (file_failure.has_value() || protocol_failure.has_value()) {
+      ++failures;
+    }
+    if (file_received->load() != 1 || protocol_received->load() != 1) {
+      ++lost;
+    }
+  }
+  std::error_code ignored;
+  std::filesystem::remove_all(directory, ignored);
+
+  assert_eq(failures, 0, "every logger was created");
+  assert_eq(lost, 0, "both loggers wrote their message in every round");
+}
+
+// Regression: create_file_logger_impl() released registry_mutex before create_file_logger() and
+// create_protocol_logger() published the new logger. A shutdown() running in that gap destroyed the
+// new logger's pool before the logger was installed, so messages logged afterwards were dropped.
+void
+logger_creation_serializes_with_shutdown([[maybe_unused]] context& ctx)
+{
+  // Forward order: shutdown() entering registry_mutex right as creation releases it must observe
+  // the published logger and drain a message logged at that boundary.
+  core_logger::reset();
+  auto file_received = std::make_shared<std::atomic<int>>(0);
+  core_logger::configuration file{};
+  file.console = false;
+  file.sink = std::make_shared<spdlog::sinks::callback_sink_mt>(
+    [file_received](const spdlog::details::log_msg& /* msg */) {
+      file_received->fetch_add(1);
+    });
+
+  std::optional<std::string> file_failure;
+  bool paused_after_create_unlock = false;
+  bool published_before_shutdown = false;
+  {
+    registry_unlock_gate gate;
+    std::thread file_creator([&]() {
+      gate.watch_this_thread();
+      file_failure = core_logger::create_file_logger(file);
+    });
+    paused_after_create_unlock = gate.wait_until_entered();
+    published_before_shutdown = core_logger::is_initialized();
+    CB_LOG_INFO_RAW("message");
+    core_logger::shutdown();
+    gate.release();
+    file_creator.join();
+  }
+  core_logger::reset();
+
+  // Reverse order: creation entering registry_mutex right after shutdown() releases it (while
+  // shutdown() still holds the detached old pool before joining its worker) must give both file
+  // and protocol loggers a fresh live pool.
+  const auto directory = probe_directory("cxx-logger-shutdown");
+  core_logger::configuration seed{};
+  seed.console = false;
+  const auto seed_failure = core_logger::create_file_logger(seed);
+
+  auto after_file_received = std::make_shared<std::atomic<int>>(0);
+  core_logger::configuration after_file{};
+  after_file.console = false;
+  after_file.sink = std::make_shared<spdlog::sinks::callback_sink_mt>(
+    [after_file_received](const spdlog::details::log_msg& /* msg */) {
+      after_file_received->fetch_add(1);
+    });
+  auto after_protocol_received = std::make_shared<std::atomic<int>>(0);
+  core_logger::configuration after_protocol{};
+  after_protocol.filename = (directory / "protocol").string();
+  after_protocol.console = false;
+  after_protocol.sink = std::make_shared<spdlog::sinks::callback_sink_mt>(
+    [after_protocol_received](const spdlog::details::log_msg& /* msg */) {
+      after_protocol_received->fetch_add(1);
+    });
+
+  bool paused_after_shutdown_unlock = false;
+  std::optional<std::string> after_file_failure;
+  std::optional<std::string> after_protocol_failure;
+  {
+    registry_unlock_gate gate;
+    std::thread reverse_shutter([&]() {
+      gate.watch_this_thread();
+      core_logger::shutdown();
+    });
+    paused_after_shutdown_unlock = gate.wait_until_entered();
+    after_file_failure = core_logger::create_file_logger(after_file);
+    after_protocol_failure = core_logger::create_protocol_logger(after_protocol);
+    gate.release();
+    reverse_shutter.join();
+  }
+
+  CB_LOG_INFO_RAW("message");
+  CB_LOG_PROTOCOL("{}", "message");
+  core_logger::shutdown();
+  core_logger::reset();
+  std::error_code ignored;
+  std::filesystem::remove_all(directory, ignored);
+
+  assert_false(file_failure.has_value(), "the file logger was created");
+  assert_true(paused_after_create_unlock, "creation reached the registry_mutex unlock boundary");
+  assert_true(published_before_shutdown,
+              "shutdown could not enter registry_mutex before the logger was published");
+  assert_eq(file_received->load(), 1, "shutdown drained a message logged at the unlock boundary");
+  assert_false(seed_failure.has_value(), "the seed logger before reverse shutdown was created");
+  assert_true(paused_after_shutdown_unlock, "shutdown reached the registry_mutex unlock boundary");
+  assert_false(after_file_failure.has_value(), "the file logger after shutdown was created");
+  assert_false(after_protocol_failure.has_value(),
+               "the protocol logger after shutdown was created");
+  assert_eq(after_file_received->load(), 1, "the file logger created after shutdown wrote");
+  assert_eq(after_protocol_received->load(), 1, "the protocol logger created after shutdown wrote");
+}
+
+struct flush_gate_state {
+  std::mutex mutex{};
+  std::condition_variable changed{};
+  std::optional<std::thread::id> watched_thread{};
+  bool registry_unlocked{ false };
+  bool flush_entered{ false };
+  bool flushed_after_registry_unlock{ false };
+  bool release_flush{ false };
+};
+
+class flush_gate_sink final : public spdlog::sinks::base_sink<spdlog::details::null_mutex>
+{
+public:
+  explicit flush_gate_sink(std::shared_ptr<flush_gate_state> state)
+    : state_{ std::move(state) }
+  {
+  }
+
+  flush_gate_sink(const flush_gate_sink&) = delete;
+  flush_gate_sink(flush_gate_sink&&) = delete;
+  auto operator=(const flush_gate_sink&) -> flush_gate_sink& = delete;
+  auto operator=(flush_gate_sink&&) -> flush_gate_sink& = delete;
+  ~flush_gate_sink() override = default;
+
+protected:
+  void sink_it_(const spdlog::details::log_msg& /* msg */) override
+  {
+  }
+
+  void flush_() override
+  {
+    const auto state = state_;
+    std::unique_lock lock(state->mutex);
+    if (!state->watched_thread.has_value() ||
+        *state->watched_thread != std::this_thread::get_id()) {
+      return;
+    }
+    state->flush_entered = true;
+    state->flushed_after_registry_unlock = state->registry_unlocked;
+    state->changed.notify_all();
+    state->changed.wait_for(lock, probe_wait(), [&state]() {
+      return state->release_flush;
+    });
+  }
+
+private:
+  std::shared_ptr<flush_gate_state> state_{};
+};
+
+auto
+read_logs(const std::filesystem::path& base) -> std::string
+{
+  std::string contents;
+  const auto prefix = base.filename().string() + ".";
+  for (const auto& entry : std::filesystem::directory_iterator(base.parent_path())) {
+    if (entry.path().filename().string().rfind(prefix, 0) == 0) {
+      std::ifstream file(entry.path(), std::ios::binary);
+      contents.append(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+    }
+  }
+  return contents;
+}
+
+// Regression: shutdown() flushed only file_logger and did so before acquiring registry_mutex, so a
+// replacement published in that gap (or any protocol_logger) had its queued messages drained into
+// stdio's buffer without receiving a flush while the logger slot kept its file open.
+void
+shutdown_flushes_loggers_captured_under_the_registry_lock([[maybe_unused]] context& ctx)
+{
+  const auto directory = probe_directory("cxx-logger-shutdown-flush");
+  core_logger::reset();
+
+  auto gate_state = std::make_shared<flush_gate_state>();
+  core_logger::configuration initial{};
+  initial.unit_test = true;
+  initial.console = false;
+  initial.sink = std::make_shared<flush_gate_sink>(gate_state);
+  const auto initial_failure = core_logger::create_file_logger(initial);
+  initial.sink.reset();
+
+  struct unlock_observer_guard {
+    explicit unlock_observer_guard(const std::shared_ptr<flush_gate_state>& state)
+    {
+      core_logger::unit_test_api::set_after_registry_unlock([state]() {
+        const std::scoped_lock lock(state->mutex);
+        if (state->watched_thread.has_value() &&
+            *state->watched_thread == std::this_thread::get_id()) {
+          state->registry_unlocked = true;
+          state->changed.notify_all();
+        }
+      });
+    }
+    unlock_observer_guard(const unlock_observer_guard&) = delete;
+    unlock_observer_guard(unlock_observer_guard&&) = delete;
+    auto operator=(const unlock_observer_guard&) -> unlock_observer_guard& = delete;
+    auto operator=(unlock_observer_guard&&) -> unlock_observer_guard& = delete;
+    ~unlock_observer_guard()
+    {
+      core_logger::unit_test_api::set_after_registry_unlock(nullptr);
+    }
+  };
+
+  bool reached_shutdown_boundary = false;
+  bool reached_initial_flush = false;
+  bool gap_replacement_attempted = false;
+  std::optional<std::string> gap_file_failure;
+  std::optional<std::string> gap_protocol_failure;
+  std::string gap_file_on_disk;
+  std::string gap_protocol_on_disk;
+  {
+    const unlock_observer_guard observer{ gate_state };
+    std::thread shutter([&gate_state]() {
+      {
+        const std::scoped_lock lock(gate_state->mutex);
+        gate_state->watched_thread = std::this_thread::get_id();
+      }
+      core_logger::shutdown();
+    });
+    bool flushed_before_registry = false;
+    {
+      std::unique_lock lock(gate_state->mutex);
+      reached_shutdown_boundary = gate_state->changed.wait_for(lock, probe_wait(), [&gate_state]() {
+        return gate_state->flush_entered || gate_state->registry_unlocked;
+      });
+      flushed_before_registry = gate_state->flush_entered && !gate_state->registry_unlocked;
+    }
+    if (flushed_before_registry) {
+      gap_replacement_attempted = true;
+      core_logger::configuration gap_file{};
+      gap_file.filename = (directory / "gap-file").string();
+      gap_file.console = false;
+      gap_file_failure = core_logger::create_file_logger(gap_file);
+      core_logger::configuration gap_protocol{};
+      gap_protocol.filename = (directory / "gap-protocol").string();
+      gap_protocol.console = false;
+      gap_protocol_failure = core_logger::create_protocol_logger(gap_protocol);
+      CB_LOG_INFO_RAW("gap-file-entry");
+      CB_LOG_PROTOCOL("{}", "gap-protocol-entry");
+    }
+    {
+      std::unique_lock lock(gate_state->mutex);
+      reached_initial_flush = gate_state->changed.wait_for(lock, probe_wait(), [&gate_state]() {
+        return gate_state->flush_entered;
+      });
+      gate_state->release_flush = true;
+    }
+    gate_state->changed.notify_all();
+    shutter.join();
+    if (gap_replacement_attempted) {
+      gap_file_on_disk = read_logs(directory / "gap-file");
+      gap_protocol_on_disk = read_logs(directory / "gap-protocol");
+    }
+  }
+  core_logger::reset();
+
+  // Publish both async loggers before shutdown() acquires registry_mutex, log short lines that fit
+  // inside stdio's block buffer, and read both files before reset() closes their handles.
+  core_logger::configuration protocol{};
+  protocol.filename = (directory / "protocol").string();
+  protocol.console = false;
+  const auto protocol_failure = core_logger::create_protocol_logger(protocol);
+
+  core_logger::configuration file{};
+  file.filename = (directory / "file").string();
+  file.console = false;
+  std::optional<std::string> file_failure;
+  bool paused_after_create_unlock = false;
+  bool file_still_alive = false;
+  bool protocol_still_alive = false;
+  std::string file_on_disk;
+  std::string protocol_on_disk;
+  {
+    registry_unlock_gate gate;
+    std::thread file_creator([&]() {
+      gate.watch_this_thread();
+      file_failure = core_logger::create_file_logger(file);
+    });
+    paused_after_create_unlock = gate.wait_until_entered();
+    CB_LOG_INFO_RAW("shutdown-flushes-file");
+    CB_LOG_PROTOCOL("{}", "shutdown-flushes-protocol");
+    core_logger::shutdown();
+    file_still_alive = core_logger::is_initialized();
+    protocol_still_alive = core_logger::should_log_protocol();
+    file_on_disk = read_logs(directory / "file");
+    protocol_on_disk = read_logs(directory / "protocol");
+    gate.release();
+    file_creator.join();
+  }
+  core_logger::reset();
+
+  // flush() itself must also flush both active loggers while their files remain open.
+  core_logger::configuration sync_file{};
+  sync_file.filename = (directory / "sync-file").string();
+  sync_file.unit_test = true;
+  sync_file.console = false;
+  const auto sync_file_failure = core_logger::create_file_logger(sync_file);
+
+  core_logger::configuration sync_protocol{};
+  sync_protocol.filename = (directory / "sync-protocol").string();
+  sync_protocol.unit_test = true;
+  sync_protocol.console = false;
+  const auto sync_protocol_failure = core_logger::create_protocol_logger(sync_protocol);
+
+  CB_LOG_INFO_RAW("flush-writes-file");
+  CB_LOG_PROTOCOL("{}", "flush-writes-protocol");
+  core_logger::flush();
+  const auto sync_file_on_disk = read_logs(directory / "sync-file");
+  const auto sync_protocol_on_disk = read_logs(directory / "sync-protocol");
+
+  core_logger::reset();
+  std::error_code ignored;
+  std::filesystem::remove_all(directory, ignored);
+
+  assert_false(initial_failure.has_value(), "the initial synchronous logger was created");
+  assert_true(reached_shutdown_boundary, "shutdown reached the registry or flush boundary");
+  assert_true(reached_initial_flush, "shutdown flushed the initial logger");
+  assert_true(gate_state->flushed_after_registry_unlock,
+              "shutdown acquired and released registry_mutex before flushing");
+  if (gap_replacement_attempted) {
+    assert_false(gap_file_failure.has_value(), "the gap file logger was created");
+    assert_false(gap_protocol_failure.has_value(), "the gap protocol logger was created");
+    assert_contains(
+      gap_file_on_disk, "gap-file-entry", "shutdown flushed a replacement file logger");
+    assert_contains(
+      gap_protocol_on_disk, "gap-protocol-entry", "shutdown flushed a replacement protocol logger");
+  }
+  assert_false(protocol_failure.has_value(), "the async protocol logger was created");
+  assert_false(file_failure.has_value(), "the async file logger was created");
+  assert_true(paused_after_create_unlock, "file creation paused right after registry_mutex unlock");
+  assert_true(file_still_alive, "file_logger stayed installed across shutdown()");
+  assert_true(protocol_still_alive, "protocol_logger stayed installed across shutdown()");
+  assert_contains(
+    file_on_disk, "shutdown-flushes-file", "shutdown flushed buffered file_logger data to disk");
+  assert_contains(protocol_on_disk,
+                  "shutdown-flushes-protocol",
+                  "shutdown flushed buffered protocol_logger data to disk");
+  assert_false(sync_file_failure.has_value(), "the synchronous file logger was created");
+  assert_false(sync_protocol_failure.has_value(), "the synchronous protocol logger was created");
+  assert_contains(sync_file_on_disk, "flush-writes-file", "flush() flushed file_logger to disk");
+  assert_contains(
+    sync_protocol_on_disk, "flush-writes-protocol", "flush() flushed protocol_logger to disk");
+}
+
+struct worker_shutdown_state {
+  std::mutex mutex{};
+  std::condition_variable changed{};
+  bool entered_first{ false };
+  bool producer_returned{ false };
+  bool finished_first{ false };
+  int received{ 0 };
+};
+
+// Regression: shutdown() guarded only flush_snapshot() against on_sdk_log_worker and still moved
+// sdk_thread_pool()'s last strong reference onto the worker, where pool.reset() either blocked on
+// a full queue or failed to join pthread_self() and terminated in ~std::thread().
+void
+shutdown_on_the_logging_worker_leaves_the_pool_for_another_thread([[maybe_unused]] context& ctx)
+{
+  const auto directory = probe_directory("cxx-logger-worker-shutdown");
+  core_logger::reset();
+
+  auto state = std::make_shared<worker_shutdown_state>();
+
+  core_logger::configuration protocol{};
+  protocol.filename = (directory / "worker-protocol").string();
+  protocol.console = false;
+  const auto protocol_failure = core_logger::create_protocol_logger(protocol);
+
+  core_logger::configuration file{};
+  file.filename = (directory / "worker-file").string();
+  file.console = false;
+  file.log_level = core_logger::level::trace;
+  file.sink =
+    std::make_shared<spdlog::sinks::callback_sink_mt>([state](const spdlog::details::log_msg& msg) {
+      const std::string_view payload{ msg.payload.data(), msg.payload.size() };
+      std::unique_lock lock(state->mutex);
+      ++state->received;
+      if (payload != "first") {
+        return;
+      }
+      state->entered_first = true;
+      state->changed.notify_all();
+      state->changed.wait_for(lock, probe_wait(), [&state]() {
+        return state->producer_returned;
+      });
+      lock.unlock();
+      core_logger::shutdown();
+      lock.lock();
+      state->finished_first = true;
+      state->changed.notify_all();
+    });
+  const auto file_failure = core_logger::create_file_logger(file);
+  file.sink.reset();
+
+  CB_LOG_INFO_RAW("first");
+  bool sink_entered_first = false;
+  bool sink_finished_first = false;
+  {
+    std::unique_lock lock(state->mutex);
+    sink_entered_first = state->changed.wait_for(lock, probe_wait(), [&state]() {
+      return state->entered_first;
+    });
+    state->producer_returned = true;
+    state->changed.notify_all();
+    sink_finished_first = state->changed.wait_for(lock, probe_wait(), [&state]() {
+      return state->finished_first;
+    });
+  }
+
+  const auto lowest_after_worker_shutdown = core_logger::get_lowest_log_level();
+  CB_LOG_INFO_RAW("second");
+  CB_LOG_PROTOCOL("{}", "after-worker-shutdown");
+  core_logger::shutdown();
+
+  const auto file_on_disk = read_logs(directory / "worker-file");
+  const auto protocol_on_disk = read_logs(directory / "worker-protocol");
+  int received = 0;
+  {
+    const std::scoped_lock lock(state->mutex);
+    received = state->received;
+  }
+
+  core_logger::reset();
+  std::error_code ignored;
+  std::filesystem::remove_all(directory, ignored);
+
+  assert_false(protocol_failure.has_value(), "the async protocol logger was created");
+  assert_false(file_failure.has_value(), "the async file logger was created");
+  assert_true(sink_entered_first, "the worker entered the sink on the first message");
+  assert_true(sink_finished_first, "shutdown() on the worker returned without terminating");
+  assert_eq(lowest_after_worker_shutdown,
+            core_logger::level::trace,
+            "shutdown() on the worker left the registered loggers intact");
+  assert_eq(received, 2, "the worker remained alive to process subsequent messages");
+  assert_contains(file_on_disk, "first", "the first message reached the file sink");
+  assert_contains(file_on_disk, "second", "the second message reached the file sink");
+  assert_contains(protocol_on_disk,
+                  "after-worker-shutdown",
+                  "the protocol logger still wrote through the shared pool");
+}
+
+// Regression: detail::log() and detail::log_protocol() retained only spdlog::logger, which holds
+// its thread pool weakly, so if another thread finished shutdown() before logger->log() ran,
+// spdlog reported a missing pool and dropped the message.
+void
+in_flight_log_calls_retain_the_pool_across_shutdown([[maybe_unused]] context& ctx)
+{
+  const auto directory = probe_directory("cxx-log-retains-pool");
+  core_logger::shutdown();
+  core_logger::reset();
+
+  auto errors = std::make_shared<std::atomic<int>>(0);
+  auto file_received = std::make_shared<std::atomic<int>>(0);
+  core_logger::configuration file{};
+  file.filename = (directory / "file").string();
+  file.console = false;
+  file.sink = std::make_shared<spdlog::sinks::callback_sink_mt>(
+    [file_received](const spdlog::details::log_msg& /* msg */) {
+      file_received->fetch_add(1, std::memory_order_relaxed);
+    });
+  const auto file_failure = core_logger::create_file_logger(file);
+  file.sink.reset();
+  if (auto* active = core_logger::get(); active != nullptr) {
+    active->set_error_handler([errors](const std::string& /* message */) {
+      errors->fetch_add(1, std::memory_order_relaxed);
+    });
+  }
+
+  bool file_paused = false;
+  {
+    log_snapshot_gate gate;
+    std::thread writer([&]() {
+      gate.watch_this_thread();
+      CB_LOG_INFO_RAW("file-across-shutdown");
+    });
+    file_paused = gate.wait_until_entered();
+    core_logger::shutdown();
+    gate.release();
+    writer.join();
+  }
+  // Read before reset() so that flushing on release of the detached pool is verified too.
+  const auto file_on_disk = read_logs(directory / "file");
+  core_logger::reset();
+
+  auto protocol_received = std::make_shared<std::atomic<int>>(0);
+  core_logger::configuration protocol{};
+  protocol.filename = (directory / "protocol").string();
+  protocol.console = false;
+  protocol.sink = std::make_shared<spdlog::sinks::callback_sink_mt>(
+    [protocol_received](const spdlog::details::log_msg& /* msg */) {
+      protocol_received->fetch_add(1, std::memory_order_relaxed);
+    });
+  const auto protocol_failure = core_logger::create_protocol_logger(protocol);
+  protocol.sink.reset();
+
+  bool protocol_paused = false;
+  {
+    log_snapshot_gate gate;
+    std::thread writer([&]() {
+      gate.watch_this_thread();
+      CB_LOG_PROTOCOL("{}", "protocol-across-shutdown");
+    });
+    protocol_paused = gate.wait_until_entered();
+    core_logger::shutdown();
+    core_logger::reset();
+    gate.release();
+    writer.join();
+  }
+  const auto protocol_on_disk = read_logs(directory / "protocol");
+
+  auto cold_received = std::make_shared<std::atomic<int>>(0);
+  core_logger::configuration cold_file{};
+  cold_file.filename = (directory / "cold-file").string();
+  cold_file.console = false;
+  cold_file.sink = std::make_shared<spdlog::sinks::callback_sink_mt>(
+    [cold_received](const spdlog::details::log_msg& /* msg */) {
+      cold_received->fetch_add(1, std::memory_order_relaxed);
+    });
+  const auto cold_failure = core_logger::create_file_logger(cold_file);
+  cold_file.sink.reset();
+
+  bool cold_paused = false;
+  {
+    log_snapshot_gate gate;
+    std::thread writer([&]() {
+      gate.watch_this_thread();
+      core_logger::detail::log(__FILE__,
+                               __LINE__,
+                               "in_flight_log_calls_retain_the_pool_across_shutdown",
+                               core_logger::level::info,
+                               "cold-across-shutdown");
+    });
+    cold_paused = gate.wait_until_entered();
+    core_logger::shutdown();
+    gate.release();
+    writer.join();
+  }
+  const auto cold_on_disk = read_logs(directory / "cold-file");
+
+  core_logger::reset();
+  std::error_code ignored;
+  std::filesystem::remove_all(directory, ignored);
+
+  assert_false(file_failure.has_value(), "the async file logger was created");
+  assert_true(file_paused, "file logging paused right after taking the logger snapshot");
+  assert_eq(errors->load(), 0, "file logging reported no missing-pool error");
+  assert_eq(file_received->load(), 1, "the file logger queued its message across shutdown()");
+  assert_contains(
+    file_on_disk, "file-across-shutdown", "the file message flushed to disk across shutdown()");
+  assert_false(protocol_failure.has_value(), "the async protocol logger was created");
+  assert_true(protocol_paused, "protocol logging paused right after taking the logger snapshot");
+  assert_eq(
+    protocol_received->load(), 1, "the protocol logger queued its message across shutdown()");
+  assert_contains(protocol_on_disk,
+                  "protocol-across-shutdown",
+                  "the protocol message flushed to disk across shutdown()");
+  assert_false(cold_failure.has_value(), "the cold-cache async file logger was created");
+  assert_true(cold_paused, "cold-cache logging paused right after taking the logger snapshot");
+  assert_eq(
+    cold_received->load(), 1, "cold-cache detail::log() queued its message across shutdown()");
+  assert_contains(cold_on_disk, "cold-across-shutdown", "the cold-cache message flushed to disk");
+}
+
+// Regression: after shutdown() without reset(), file_logger and protocol_logger remain installed
+// with expired async pools, and read_logger_for_log() fell through to file_logger_mutex on every
+// subsequent log call even when the cached logger was still alive and the slot version had not
+// changed.
+void
+logging_after_shutdown_without_reset_avoids_the_logger_mutex([[maybe_unused]] context& ctx)
+{
+  const auto directory = probe_directory("cxx-log-post-shutdown-lockfree");
+  core_logger::shutdown();
+  core_logger::reset();
+  couchbase::logger::unregister_log_callback();
+
+  core_logger::configuration file{};
+  file.console = false;
+  file.sink = std::make_shared<spdlog::sinks::null_sink_mt>();
+  const auto file_failure = core_logger::create_file_logger(file);
+  file.sink.reset();
+
+  core_logger::configuration protocol{};
+  protocol.filename = (directory / "protocol").string();
+  protocol.console = false;
+  const auto protocol_failure = core_logger::create_protocol_logger(protocol);
+
+  struct sync_state {
+    std::mutex mutex{};
+    std::condition_variable changed{};
+    bool warmed{ false };
+    bool proceed{ false };
+    bool finished{ false };
+  };
+  auto state = std::make_shared<sync_state>();
+
+  std::thread worker([state]() {
+    CB_LOG_INFO_RAW("warm-file");
+    CB_LOG_PROTOCOL("{}", "warm-protocol");
+    {
+      std::unique_lock lock(state->mutex);
+      state->warmed = true;
+      state->changed.notify_all();
+      state->changed.wait_for(lock, probe_wait(), [&state]() {
+        return state->proceed;
+      });
+    }
+    CB_LOG_INFO_RAW("post-shutdown-file");
+    CB_LOG_PROTOCOL("{}", "post-shutdown-protocol");
+    {
+      const std::scoped_lock lock(state->mutex);
+      state->finished = true;
+    }
+    state->changed.notify_all();
+  });
+
+  bool warmed = false;
+  {
+    std::unique_lock lock(state->mutex);
+    warmed = state->changed.wait_for(lock, probe_wait(), [&state]() {
+      return state->warmed;
+    });
+  }
+
+  core_logger::shutdown();
+
+  bool finished_under_fork_prepare = false;
+  // notify_fork(prepare) holds file_logger_mutex until notify_fork(parent), so a post-shutdown log
+  // call on a warm thread completes before parent only if it avoids file_logger_mutex.
+  core_logger::notify_fork(couchbase::fork_event::prepare);
+  try {
+    std::unique_lock lock(state->mutex);
+    state->proceed = true;
+    state->changed.notify_all();
+    finished_under_fork_prepare =
+      state->changed.wait_for(lock, scaled_budget(std::chrono::milliseconds{ 250 }), [&state]() {
+        return state->finished;
+      });
+  } catch (...) {
+    core_logger::notify_fork(couchbase::fork_event::parent);
+    worker.join();
+    throw;
+  }
+  core_logger::notify_fork(couchbase::fork_event::parent);
+  worker.join();
+
+  core_logger::reset();
+  std::error_code ignored;
+  std::filesystem::remove_all(directory, ignored);
+
+  assert_false(file_failure.has_value(), "the async file logger was created");
+  assert_false(protocol_failure.has_value(), "the async protocol logger was created");
+  assert_true(warmed, "the logging thread populated both logger caches before shutdown()");
+  assert_true(finished_under_fork_prepare,
+              "post-shutdown logging dropped messages without acquiring file_logger_mutex");
 }
 
 void
@@ -1277,6 +2035,13 @@ tests() -> test_suite
       { CASE(an_idle_thread_does_not_keep_a_reset_logger_alive) },
       { CASE(a_protocol_logger_is_registered_exactly_while_it_logs) },
       { CASE(replacing_the_file_logger_drops_no_message) },
+      { CASE(a_new_file_logger_keeps_the_protocol_logger_writing) },
+      { CASE(loggers_created_at_once_share_one_pool) },
+      { CASE(logger_creation_serializes_with_shutdown) },
+      { CASE(shutdown_flushes_loggers_captured_under_the_registry_lock) },
+      { CASE(shutdown_on_the_logging_worker_leaves_the_pool_for_another_thread) },
+      { CASE(in_flight_log_calls_retain_the_pool_across_shutdown) },
+      { CASE(logging_after_shutdown_without_reset_avoids_the_logger_mutex) },
       { CASE(a_registered_callback_receives_every_logged_message) },
       { CASE(the_callback_receives_the_level_of_each_message) },
       { CASE(logging_with_no_callback_registered_does_not_throw) },

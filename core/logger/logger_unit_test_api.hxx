@@ -26,8 +26,13 @@ namespace couchbase::core::logger::unit_test_api
 void
 set_after_registry_unlock(std::function<void()> callback);
 
-// Runs `callback` in read_logger() between matching cache.version and locking cache.logger. An
-// empty function clears the hook.
+// Runs `callback` in get_file_logger_for_log() or get_protocol_logger_for_log() after capturing
+// the active logger and pool snapshot. An empty function clears the hook.
+void
+set_after_log_snapshot(std::function<void()> callback);
+
+// Runs `callback` in read_logger() or read_logger_for_log() between matching cache.version and
+// locking cache.logger. An empty function clears the hook.
 void
 set_after_cached_version_match(std::function<void()> callback);
 } // namespace couchbase::core::logger::unit_test_api

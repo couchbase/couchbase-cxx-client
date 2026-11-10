@@ -129,6 +129,20 @@ make_formatter() -> std::unique_ptr<spdlog::formatter>
   return formatter;
 }
 
+struct sdk_async_pool {
+  explicit sdk_async_pool(std::shared_ptr<spdlog::details::thread_pool> p)
+    : pool{ std::move(p) }
+  {
+  }
+
+  std::shared_ptr<spdlog::details::thread_pool> pool{};
+  std::atomic<bool> shutting_down{ false };
+};
+
+// Guards file_logger, protocol_logger, and their pool handles; declared first to outlive them at
+// static teardown. Threads cache weak references and lock strong ones only during a call.
+std::mutex file_logger_mutex;
+
 /**
  * Instances of spdlog (async) file logger.
  * The files logger requires a rotating file sink which is manually configured
@@ -138,20 +152,18 @@ make_formatter() -> std::unique_ptr<spdlog::formatter>
  * to stream etc.) or further processing.
  */
 std::shared_ptr<spdlog::logger> file_logger{};
-// Guards file_logger and protocol_logger. A logging thread caches a weak reference to either and
-// holds a strong one only for the duration of a call, so replacing or resetting one never frees a
-// logger another thread is using, and an idle thread keeps no replaced logger or its files open.
-std::mutex file_logger_mutex;
+std::optional<std::weak_ptr<sdk_async_pool>> file_logger_pool{};
 std::atomic_int file_logger_version{ 0 };
 
 /**
  * Instance of the protocol logger.
  */
 std::shared_ptr<spdlog::logger> protocol_logger{};
+std::optional<std::weak_ptr<sdk_async_pool>> protocol_logger_pool{};
 std::atomic_int protocol_logger_version{ 0 };
 
-std::shared_ptr<couchbase::core::logger::log_callback> log_callback{};
 std::mutex log_callback_mutex;
+std::shared_ptr<couchbase::core::logger::log_callback> log_callback{};
 std::atomic_int log_callback_version{ 0 };
 // Mirrors "is log_callback set?" so the hot-path predicate can be answered with a single atomic
 // load, without copying the owning shared_ptr. Updated under log_callback_mutex alongside
@@ -162,8 +174,8 @@ std::atomic<bool> log_callback_present{ false };
 // Static destructors run after thread_local teardown and fall back to locking directly.
 thread_local bool thread_caches_destroyed{ false };
 
-// What a thread last read of one logger: a weak reference, whether the logger was absent, and the
-// version it was read at.
+// What a thread last read of one logger: weak references to the logger and any async pool, whether
+// the logger was absent, and the version they were read at.
 struct cached_logger {
   cached_logger() = default;
   cached_logger(const cached_logger&) = delete;
@@ -176,12 +188,34 @@ struct cached_logger {
   }
 
   std::weak_ptr<spdlog::logger> logger{};
+  std::optional<std::weak_ptr<sdk_async_pool>> async_pool{};
   bool absent{ true };
   int version{ -1 };
 };
 
 thread_local cached_logger cached_file_logger{};
 thread_local cached_logger cached_protocol_logger{};
+
+std::mutex after_log_snapshot_mutex;
+std::function<void()> after_log_snapshot_callback{};
+std::atomic<bool> after_log_snapshot_installed{ false };
+
+void
+run_after_log_snapshot()
+{
+  std::function<void()> callback{};
+  {
+    const std::scoped_lock hook_lock(after_log_snapshot_mutex);
+    callback = after_log_snapshot_callback;
+  }
+  if (callback) {
+    try {
+      callback();
+    } catch (const std::exception&) { // NOLINT(bugprone-empty-catch)
+      // unit test callback; no logger lock is held
+    }
+  }
+}
 
 std::mutex after_cached_version_match_mutex;
 std::function<void()> after_cached_version_match_callback{};
@@ -204,10 +238,89 @@ run_after_cached_version_match()
   }
 }
 
+class active_logger_snapshot
+{
+public:
+  active_logger_snapshot() = default;
+  active_logger_snapshot(std::shared_ptr<spdlog::logger> logger,
+                         std::shared_ptr<sdk_async_pool> pool)
+    : logger_{ std::move(logger) }
+    , pool_{ std::move(pool) }
+  {
+  }
+  active_logger_snapshot(const active_logger_snapshot&) = delete;
+  active_logger_snapshot(active_logger_snapshot&&) noexcept = default;
+  auto operator=(const active_logger_snapshot&) -> active_logger_snapshot& = delete;
+  auto operator=(active_logger_snapshot&& other) noexcept -> active_logger_snapshot&
+  {
+    if (this != &other) {
+      release();
+      logger_ = std::move(other.logger_);
+      pool_ = std::move(other.pool_);
+    }
+    return *this;
+  }
+
+  ~active_logger_snapshot() noexcept
+  {
+    release();
+  }
+
+  [[nodiscard]] auto operator->() const noexcept -> spdlog::logger*
+  {
+    return logger_.get();
+  }
+
+  [[nodiscard]] explicit operator bool() const noexcept
+  {
+    return logger_ != nullptr;
+  }
+
+private:
+  void release() noexcept
+  {
+    if (logger_ != nullptr && pool_ != nullptr &&
+        pool_->shutting_down.load(std::memory_order_acquire)) {
+      // shutdown() may already have queued its flush before this call queued its message, and the
+      // periodic flusher is stopped; queue a flush while the pool is still held so the worker
+      // flushes the sink before terminate drains the queue.
+      try {
+        logger_->flush();
+      } catch (const std::exception&) { // NOLINT(bugprone-empty-catch)
+        // spdlog catches sink and queue errors inside flush_(); the destructor is noexcept
+      }
+    }
+    pool_.reset();
+    logger_.reset();
+  }
+
+  std::shared_ptr<spdlog::logger> logger_{};
+  std::shared_ptr<sdk_async_pool> pool_{};
+};
+
+auto
+lock_active_logger(std::shared_ptr<spdlog::logger> logger,
+                   const std::optional<std::weak_ptr<sdk_async_pool>>& async_pool)
+  -> active_logger_snapshot
+{
+  if (logger == nullptr) {
+    return {};
+  }
+  if (!async_pool.has_value()) {
+    return { std::move(logger), {} };
+  }
+  auto pool = async_pool->lock();
+  if (pool == nullptr) {
+    return {};
+  }
+  return { std::move(logger), std::move(pool) };
+}
+
 // Re-reads under file_logger_mutex if the cached weak_ptr expired concurrently.
 auto
 read_logger(cached_logger& cache,
             const std::shared_ptr<spdlog::logger>& current,
+            const std::optional<std::weak_ptr<sdk_async_pool>>& current_pool,
             const std::atomic_int& version) -> std::shared_ptr<spdlog::logger>
 {
   if (thread_caches_destroyed) {
@@ -227,21 +340,80 @@ read_logger(cached_logger& cache,
   }
   const std::scoped_lock lock(file_logger_mutex);
   cache.logger = current;
+  cache.async_pool = current_pool;
   cache.absent = current == nullptr;
   cache.version = version;
   return current;
 }
 
 auto
+read_logger_for_log(cached_logger& cache,
+                    const std::shared_ptr<spdlog::logger>& current,
+                    const std::optional<std::weak_ptr<sdk_async_pool>>& current_pool,
+                    const std::atomic_int& version) -> active_logger_snapshot
+{
+  if (thread_caches_destroyed) {
+    const std::scoped_lock lock(file_logger_mutex);
+    return lock_active_logger(current, current_pool);
+  }
+  if (const int cached_version = cache.version; cached_version == version) {
+    if (cache.absent) {
+      return {};
+    }
+    if (after_cached_version_match_installed.load(std::memory_order_acquire)) {
+      run_after_cached_version_match();
+    }
+    if (auto logger = cache.logger.lock(); logger != nullptr) {
+      // After shutdown() without reset(), the installed logger stays alive while its pool has
+      // expired; return the empty snapshot without taking file_logger_mutex unless the slot
+      // version changed concurrently.
+      if (auto snapshot = lock_active_logger(std::move(logger), cache.async_pool);
+          snapshot || version == cached_version) {
+        return snapshot;
+      }
+    }
+  }
+  const std::scoped_lock lock(file_logger_mutex);
+  cache.logger = current;
+  cache.async_pool = current_pool;
+  cache.absent = current == nullptr;
+  cache.version = version;
+  return lock_active_logger(current, current_pool);
+}
+
+auto
 get_file_logger() -> std::shared_ptr<spdlog::logger>
 {
-  return read_logger(cached_file_logger, file_logger, file_logger_version);
+  return read_logger(cached_file_logger, file_logger, file_logger_pool, file_logger_version);
 }
 
 auto
 get_protocol_logger() -> std::shared_ptr<spdlog::logger>
 {
-  return read_logger(cached_protocol_logger, protocol_logger, protocol_logger_version);
+  return read_logger(
+    cached_protocol_logger, protocol_logger, protocol_logger_pool, protocol_logger_version);
+}
+
+auto
+get_file_logger_for_log() -> active_logger_snapshot
+{
+  auto snapshot =
+    read_logger_for_log(cached_file_logger, file_logger, file_logger_pool, file_logger_version);
+  if (snapshot && after_log_snapshot_installed.load(std::memory_order_acquire)) {
+    run_after_log_snapshot();
+  }
+  return snapshot;
+}
+
+auto
+get_protocol_logger_for_log() -> active_logger_snapshot
+{
+  auto snapshot = read_logger_for_log(
+    cached_protocol_logger, protocol_logger, protocol_logger_pool, protocol_logger_version);
+  if (snapshot && after_log_snapshot_installed.load(std::memory_order_acquire)) {
+    run_after_log_snapshot();
+  }
+  return snapshot;
 }
 
 auto
@@ -289,9 +461,12 @@ update_callback_logger(const std::shared_ptr<couchbase::core::logger::log_callba
 // outside all logger mutexes.
 auto
 publish_logger(std::shared_ptr<spdlog::logger>& slot,
+               std::optional<std::weak_ptr<sdk_async_pool>>& slot_pool,
                std::atomic_int& version,
                const std::string& name,
-               std::shared_ptr<spdlog::logger> new_logger) -> std::shared_ptr<spdlog::logger>
+               std::shared_ptr<spdlog::logger> new_logger,
+               std::optional<std::weak_ptr<sdk_async_pool>> new_pool = std::nullopt)
+  -> std::shared_ptr<spdlog::logger>
 {
   spdlog::drop(name);
   if (new_logger != nullptr) {
@@ -300,6 +475,7 @@ publish_logger(std::shared_ptr<spdlog::logger>& slot,
   const std::scoped_lock lock(file_logger_mutex);
   auto replaced = std::move(slot);
   slot = std::move(new_logger);
+  slot_pool = std::move(new_pool);
   ++version;
   return replaced;
 }
@@ -312,15 +488,137 @@ update_file_logger(std::shared_ptr<spdlog::logger> new_logger)
   std::shared_ptr<spdlog::logger> replaced{};
   {
     const scoped_registry_lock lock;
-    replaced =
-      publish_logger(file_logger, file_logger_version, file_logger_name, std::move(new_logger));
+    replaced = publish_logger(
+      file_logger, file_logger_pool, file_logger_version, file_logger_name, std::move(new_logger));
   }
+}
+
+struct logger_flush_snapshot {
+  std::shared_ptr<spdlog::logger> logger{};
+  std::optional<std::weak_ptr<sdk_async_pool>> async_pool{};
+};
+
+void
+flush_snapshot(const logger_flush_snapshot& snapshot)
+{
+  if (snapshot.logger == nullptr) {
+    return;
+  }
+  if (snapshot.async_pool.has_value()) {
+    // An async logger left installed by a prior shutdown() has an expired pool; skipping it avoids
+    // spdlog's missing-pool error, while holding a live pool keeps it alive across post_flush().
+    const auto pool = snapshot.async_pool->lock();
+    if (pool == nullptr) {
+      return;
+    }
+    snapshot.logger->flush();
+    return;
+  }
+  snapshot.logger->flush();
 }
 
 std::atomic<bool> periodic_flusher_started{ false };
 
 std::mutex fork_mutex;
 std::mutex error_report_mutex;
+// Guards sdk_thread_pool(). Never held while the pool is destroyed, since that joins its worker.
+std::mutex sdk_thread_pool_mutex;
+
+// True on the SDK async logging worker. SDK log, flush, and shutdown calls become no-ops there
+// because the blocking queue has a single consumer and cannot drain or join itself.
+thread_local bool on_sdk_log_worker{ false };
+
+// Owns the shared thread pool for asynchronous SDK loggers (spdlog::async_logger holds its pool
+// weakly). Kept separate from spdlog's global pool so application and SDK loggers do not replace
+// each other's pool.
+//
+// Constructed via sdk_thread_pool() after spdlog's registry, console mutex, and the file-scope
+// logger globals above, so reverse static destruction joins the worker before tearing those down.
+// Its destructor drops both SDK registry entries and clears both slots before releasing the pool
+// and loggers outside all locks.
+class sdk_thread_pool_owner
+{
+public:
+  sdk_thread_pool_owner() = default;
+  sdk_thread_pool_owner(const sdk_thread_pool_owner&) = delete;
+  sdk_thread_pool_owner(sdk_thread_pool_owner&&) = delete;
+  auto operator=(const sdk_thread_pool_owner&) -> sdk_thread_pool_owner& = delete;
+  auto operator=(sdk_thread_pool_owner&&) -> sdk_thread_pool_owner& = delete;
+
+  ~sdk_thread_pool_owner()
+  {
+    std::shared_ptr<spdlog::logger> replaced_file{};
+    std::shared_ptr<spdlog::logger> replaced_protocol{};
+    std::shared_ptr<sdk_async_pool> pool_handle{};
+    const auto clear_slots = [&]() noexcept {
+      if (file_logger != nullptr) {
+        replaced_file = std::move(file_logger);
+      }
+      file_logger_pool.reset();
+      ++file_logger_version;
+      if (protocol_logger != nullptr) {
+        replaced_protocol = std::move(protocol_logger);
+      }
+      protocol_logger_pool.reset();
+      ++protocol_logger_version;
+    };
+    const auto detach_pool = [&]() noexcept {
+      if (pool != nullptr) {
+        pool_handle = std::move(pool);
+        pool_handle->shutting_down.store(true, std::memory_order_release);
+      }
+    };
+    try {
+      const std::scoped_lock registry_lock(registry_mutex);
+      try {
+        spdlog::drop(file_logger_name);
+        spdlog::drop(protocol_logger_name);
+      } catch (const std::exception&) { // NOLINT(bugprone-empty-catch)
+        // the process is exiting, and the registry is left as it is
+      }
+      try {
+        const std::scoped_lock logger_lock(file_logger_mutex);
+        clear_slots();
+      } catch (const std::exception&) { // NOLINT(bugprone-empty-catch)
+        clear_slots();
+      }
+      try {
+        const std::scoped_lock pool_lock(sdk_thread_pool_mutex);
+        detach_pool();
+      } catch (const std::exception&) { // NOLINT(bugprone-empty-catch)
+        detach_pool();
+      }
+    } catch (const std::exception&) { // NOLINT(bugprone-empty-catch)
+      clear_slots();
+      detach_pool();
+    }
+    pool_handle.reset();
+    replaced_protocol.reset();
+    replaced_file.reset();
+  }
+
+  std::shared_ptr<sdk_async_pool> pool{};
+};
+
+auto
+sdk_thread_pool() -> std::shared_ptr<sdk_async_pool>&
+{
+  static auto& pool = []() -> std::shared_ptr<sdk_async_pool>& {
+    static_cast<void>(spdlog::details::registry::instance());
+    static_cast<void>(spdlog::details::console_mutex::mutex());
+    static sdk_thread_pool_owner owner{};
+    return owner.pool;
+  }();
+  return pool;
+}
+
+// Constructs the pool's owner, and the spdlog statics before it, when this library is
+// initialised. A shared library is initialised before the application, whose statics are then
+// destroyed before the owner, so one that logs through the SDK from its destructor still finds the
+// pool. Linked statically, the order against the application's own statics is unspecified.
+[[maybe_unused]] const bool sdk_thread_pool_owner_constructed =
+  (static_cast<void>(sdk_thread_pool()), true);
+
 constexpr std::chrono::seconds periodic_flush_interval{ 1 };
 
 // replaces spdlog's default handler, whose mutex notify_fork() cannot hold across a fork
@@ -363,16 +661,22 @@ abandon_inherited_loggers()
     inherited->push_back(protocol_logger);
     protocol_logger.reset();
   }
+  protocol_logger_pool.reset();
   ++protocol_logger_version;
   if (auto pool = spdlog::details::registry::instance().get_tp(); pool) {
     inherited->push_back(pool);
     spdlog::details::registry::instance().set_tp(nullptr);
+  }
+  if (auto& pool = sdk_thread_pool(); pool) {
+    inherited->push_back(pool);
+    pool.reset();
   }
   spdlog::drop_all();
   if (file_logger) {
     inherited->push_back(file_logger);
     file_logger.reset();
   }
+  file_logger_pool.reset();
   ++file_logger_version;
   periodic_flusher_started = false;
 }
@@ -383,6 +687,7 @@ release_fork_locks()
   error_report_mutex.unlock();
   spdlog::details::console_mutex::mutex().unlock();
   custom_rotating_file_sink_mt::unlock_all_after_fork();
+  sdk_thread_pool_mutex.unlock();
   log_callback_mutex.unlock();
   file_logger_mutex.unlock();
 }
@@ -462,6 +767,9 @@ level_from_str(const std::string& str) -> level
 auto
 should_log(level lvl) -> bool
 {
+  if (on_sdk_log_worker) {
+    return false;
+  }
   // One snapshot: reset() can clear the logger between two reads.
   const auto logger = get_file_logger();
   return logger != nullptr && logger->should_log(translate_level(lvl));
@@ -480,7 +788,10 @@ namespace detail
 void
 log(const char* file, int line, const char* function, level lvl, std::string_view msg)
 {
-  if (const auto logger = get_file_logger(); logger != nullptr) {
+  if (on_sdk_log_worker) {
+    return;
+  }
+  if (const auto logger = get_file_logger_for_log()) {
     logger->log(spdlog::source_loc{ file, line, function }, translate_level(lvl), msg);
   }
 }
@@ -497,33 +808,65 @@ log_custom_logger(const char* file, int line, const char* function, level lvl, s
 void
 flush()
 {
-  if (const auto logger = get_file_logger(); logger != nullptr) {
-    logger->flush();
+  // A flush is queued like a message, behind which the worker would wait in a full queue.
+  if (on_sdk_log_worker) {
+    return;
   }
+  logger_flush_snapshot file_to_flush{};
+  logger_flush_snapshot protocol_to_flush{};
+  {
+    const std::scoped_lock lock(file_logger_mutex);
+    file_to_flush = { file_logger, file_logger_pool };
+    protocol_to_flush = { protocol_logger, protocol_logger_pool };
+  }
+  flush_snapshot(file_to_flush);
+  flush_snapshot(protocol_to_flush);
 }
 
 void
 shutdown()
 {
-  // Force a flush (posts a message to the async logger if we are not in unit
-  // test mode)
-  flush();
-
-  /**
-   * This will drop all spdlog instances from the registry, and destruct the
-   * thread pool which will post terminate message(s) (one per thread) to the
-   * thread pool message queue. The calling thread will then block until all
-   * thread pool workers have joined. This ensures that any messages queued
-   * before shutdown is called will be flushed to disk. Any messages that are
-   * queued after the final terminate message will not be logged.
-   *
-   * If the logger is running in unit test mode (synchronous) then this is a
-   * no-op.
-   */
-  get_file_logger().reset();
-  const scoped_registry_lock lock;
-  spdlog::details::registry::instance().shutdown();
-  periodic_flusher_started = false;
+  // A sink runs on the pool's worker; detaching and resetting the pool there would post terminate
+  // to a queue only this thread drains or join this thread with itself.
+  if (on_sdk_log_worker) {
+    return;
+  }
+  // Stops spdlog's periodic flusher, drops every logger registered in this spdlog instance, and
+  // resets spdlog's global pool; detaching sdk_thread_pool() below drains and joins the SDK's own
+  // async logging worker once its last reference is released outside the locks.
+  logger_flush_snapshot file_to_flush{};
+  logger_flush_snapshot protocol_to_flush{};
+  std::shared_ptr<sdk_async_pool> pool_handle{};
+  {
+    // Under registry_mutex, which a logger's creation holds throughout, so that a logger created
+    // concurrently either comes before and is flushed and shut down, or comes after and gets a pool
+    // and a flusher of its own.
+    const scoped_registry_lock registry_lock;
+    spdlog::details::registry::instance().shutdown();
+    periodic_flusher_started = false;
+    {
+      const std::scoped_lock logger_lock(file_logger_mutex);
+      file_to_flush = { file_logger, file_logger_pool };
+      protocol_to_flush = { protocol_logger, protocol_logger_pool };
+    }
+    {
+      const std::scoped_lock pool_lock(sdk_thread_pool_mutex);
+      pool_handle = std::move(sdk_thread_pool());
+      if (pool_handle != nullptr) {
+        pool_handle->shutting_down.store(true, std::memory_order_release);
+      }
+    }
+  }
+  // Flushed after the locks, as queueing to a full async pool waits on its worker and a synchronous
+  // sink can take locks of its own, and before pool_handle.reset() posts terminate behind the
+  // queued flushes and joins the worker.
+  flush_snapshot(file_to_flush);
+  flush_snapshot(protocol_to_flush);
+  file_to_flush = {};
+  protocol_to_flush = {};
+  // Release outside the locks because destroying the last pool reference joins the worker. Any
+  // concurrent log call holding a snapshot joins the worker when its snapshot releases.
+  pool_handle.reset();
 }
 
 auto
@@ -550,6 +893,7 @@ notify_fork(couchbase::fork_event event)
       try {
         std::unique_lock file_logger_lock(file_logger_mutex);
         std::unique_lock log_callback_lock(log_callback_mutex);
+        std::unique_lock sdk_thread_pool_lock(sdk_thread_pool_mutex);
         custom_rotating_file_sink_mt::lock_all_for_fork();
         try {
           std::unique_lock console_lock(spdlog::details::console_mutex::mutex());
@@ -560,6 +904,7 @@ notify_fork(couchbase::fork_event event)
           throw;
         }
         // held until parent or child
+        sdk_thread_pool_lock.release();
         log_callback_lock.release();
         file_logger_lock.release();
       } catch (...) {
@@ -623,6 +968,7 @@ is_log_redaction_enabled() -> bool
 auto
 create_file_logger_impl(const std::string& logger_name,
                         std::shared_ptr<spdlog::logger>& slot,
+                        std::optional<std::weak_ptr<sdk_async_pool>>& slot_pool,
                         std::atomic_int& version,
                         const configuration& logger_settings) -> std::optional<std::string>
 {
@@ -630,6 +976,7 @@ create_file_logger_impl(const std::string& logger_name,
   // that logs from its destructor would take file_logger_mutex again.
   std::shared_ptr<spdlog::logger> replaced{};
   std::shared_ptr<spdlog::logger> logger{};
+  std::optional<std::weak_ptr<sdk_async_pool>> async_pool{};
 
   try {
     // Initialise the loggers.
@@ -692,15 +1039,22 @@ create_file_logger_impl(const std::string& logger_name,
     if (logger_settings.unit_test) {
       logger = std::make_shared<spdlog::logger>(logger_name, sink);
     } else {
-      auto buffersz = logger_settings.buffer_size;
-      // Create the default thread pool for async logging
-      spdlog::init_thread_pool(buffersz, 1);
-
-      // Get the thread pool so that we can actually construct the
-      // object with already created sinks...
-      auto tp = spdlog::thread_pool();
+      // Shared, so that creating one logger never takes the pool from another.
+      std::shared_ptr<sdk_async_pool> pool_handle{};
+      {
+        const std::scoped_lock pool_lock(sdk_thread_pool_mutex);
+        auto& shared = sdk_thread_pool();
+        if (shared == nullptr) {
+          shared = std::make_shared<sdk_async_pool>(
+            std::make_shared<spdlog::details::thread_pool>(logger_settings.buffer_size, 1, []() {
+              on_sdk_log_worker = true;
+            }));
+        }
+        pool_handle = shared;
+      }
       logger = std::make_shared<spdlog::async_logger>(
-        logger_name, sink, tp, spdlog::async_overflow_policy::block);
+        logger_name, sink, pool_handle->pool, spdlog::async_overflow_policy::block);
+      async_pool = pool_handle;
     }
 
     logger->set_formatter(make_formatter());
@@ -711,7 +1065,8 @@ create_file_logger_impl(const std::string& logger_name,
     spdlog::flush_every(periodic_flush_interval);
     periodic_flusher_started = true;
 
-    replaced = publish_logger(slot, version, logger_name, std::move(logger));
+    replaced = publish_logger(
+      slot, slot_pool, version, logger_name, std::move(logger), std::move(async_pool));
   } catch (const spdlog::spdlog_ex& ex) {
     std::string msg = std::string{ "Log initialization failed: " } + ex.what();
     return msg;
@@ -727,7 +1082,7 @@ auto
 create_file_logger(const configuration& logger_settings) -> std::optional<std::string>
 {
   return create_file_logger_impl(
-    file_logger_name, file_logger, file_logger_version, logger_settings);
+    file_logger_name, file_logger, file_logger_pool, file_logger_version, logger_settings);
 }
 
 auto
@@ -739,13 +1094,13 @@ create_protocol_logger(const configuration& logger_settings) -> std::optional<st
   auto config = logger_settings;
   config.log_level = couchbase::core::logger::level::trace;
   return create_file_logger_impl(
-    protocol_logger_name, protocol_logger, protocol_logger_version, config);
+    protocol_logger_name, protocol_logger, protocol_logger_pool, protocol_logger_version, config);
 }
 
 auto
 should_log_protocol() -> bool
 {
-  return get_protocol_logger() != nullptr;
+  return !on_sdk_log_worker && get_protocol_logger() != nullptr;
 }
 
 namespace detail
@@ -753,7 +1108,10 @@ namespace detail
 void
 log_protocol(const char* file, int line, const char* function, std::string_view msg)
 {
-  if (const auto logger = get_protocol_logger(); logger != nullptr) {
+  if (on_sdk_log_worker) {
+    return;
+  }
+  if (const auto logger = get_protocol_logger_for_log()) {
     logger->log(spdlog::source_loc{ file, line, function }, spdlog::level::level_enum::trace, msg);
   }
 }
@@ -774,9 +1132,13 @@ reset()
   std::shared_ptr<spdlog::logger> replaced_protocol{};
   {
     const scoped_registry_lock lock;
-    replaced_file = publish_logger(file_logger, file_logger_version, file_logger_name, nullptr);
-    replaced_protocol =
-      publish_logger(protocol_logger, protocol_logger_version, protocol_logger_name, nullptr);
+    replaced_file =
+      publish_logger(file_logger, file_logger_pool, file_logger_version, file_logger_name, nullptr);
+    replaced_protocol = publish_logger(protocol_logger,
+                                       protocol_logger_pool,
+                                       protocol_logger_version,
+                                       protocol_logger_name,
+                                       nullptr);
   }
 }
 
@@ -820,13 +1182,13 @@ register_spdlog_logger(const std::shared_ptr<spdlog::logger>& l)
 {
   // reset() leaves no file logger, so each use checks its own snapshot.
   try {
-    if (const auto logger = get_file_logger(); logger != nullptr) {
+    if (const auto logger = get_file_logger_for_log()) {
       logger->debug("Registering logger {}", l->name());
     }
     const scoped_registry_lock lock;
     spdlog::register_logger(l);
   } catch (const spdlog::spdlog_ex& e) {
-    if (const auto logger = get_file_logger(); logger != nullptr) {
+    if (const auto logger = get_file_logger_for_log()) {
       logger->warn("Exception caught when attempting to register the logger {} in the spdlog "
                    "registry. The verbosity of this logger "
                    "cannot be changed at runtime. e.what()={}",
@@ -905,6 +1267,15 @@ set_after_registry_unlock(std::function<void()> callback)
   const std::scoped_lock lock(after_registry_unlock_mutex);
   after_registry_unlock_callback = std::move(callback);
   after_registry_unlock_installed.store(installed, std::memory_order_release);
+}
+
+void
+set_after_log_snapshot(std::function<void()> callback)
+{
+  const bool installed = static_cast<bool>(callback);
+  const std::scoped_lock lock(after_log_snapshot_mutex);
+  after_log_snapshot_callback = std::move(callback);
+  after_log_snapshot_installed.store(installed, std::memory_order_release);
 }
 
 void
