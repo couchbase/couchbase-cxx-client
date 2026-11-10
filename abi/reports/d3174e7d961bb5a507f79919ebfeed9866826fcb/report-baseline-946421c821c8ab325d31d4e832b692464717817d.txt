@@ -1,0 +1,64 @@
+libcouchbase_cxx_client.so.1.5 against baseline 946421c821c8ab325d31d4e832b692464717817d: no ABI change
+
+Leaf changes summary: 0 artifact changed
+Changed leaf types summary: 0 leaf type changed
+Removed/Changed/Added functions summary: 0 Removed, 0 Changed, 0 Added function
+Removed/Changed/Added variables summary: 0 Removed, 0 Changed, 0 Added variable
+Unreachable types summary: 4 removed, 0 changed, 46 added types
+
+4 removed types unreachable from any public interface:
+
+  [D] 'class fmt::v11::format_int' at format.h:3917:1
+  [D] 'struct spdlog::details::console_mutex' at console_globals.h:12:1
+  [D] 'struct spdlog::details::null_mutex' at null_mutex.h:12:1
+  [D] 'struct spdlog::details::padding_info' at pattern_formatter.h:23:1
+
+46 added types unreachable from any public interface:
+
+  [A] 'class __gnu_cxx::__normal_iterator<conststd::unique_ptr<spdlog::details::flag_formatter,std::default_delete<spdlog::details::flag_formatter>>*,std::vector<std::unique_ptr<spdlog::details::flag_formatter,std::default_delete<spdlog::details::flag_formatter>>,std::allocator<std::unique_ptr<spdlog::details::flag_formatter,std::default_delete<spdlog::details::flag_formatter>>>>>'
+  [A] 'class __gnu_cxx::__normal_iterator<std::unique_ptr<spdlog::details::flag_formatter,std::default_delete<spdlog::details::flag_formatter>>*,std::vector<std::unique_ptr<spdlog::details::flag_formatter,std::default_delete<spdlog::details::flag_formatter>>,std::allocator<std::unique_ptr<spdlog::details::flag_formatter,std::default_delete<spdlog::details::flag_formatter>>>>>'
+  [A] 'class std::_Function_base::_Base_manager<(anonymousnamespace)::abandon_inherited_loggers()::<lambda(conststd::shared_ptr<spdlog::logger>&)>>' at std_function.h:123:1
+  [A] 'class std::_Function_handler<void(std::shared_ptr<spdlog::logger>),(anonymousnamespace)::abandon_inherited_loggers()::<lambda(conststd::shared_ptr<spdlog::logger>&)>>' at std_function.h:262:1
+  [A] 'class std::__uniq_ptr_impl<(anonymousnamespace)::thread_id_flag,std::default_delete<(anonymousnamespace)::thread_id_flag>>' at unique_ptr.h:141:1
+  [A] 'class std::reverse_iterator<__gnu_cxx::__normal_iterator<conststd::shared_ptr<void>*,std::vector<std::shared_ptr<void>,std::allocator<std::shared_ptr<void>>>>>'
+  [A] 'class std::reverse_iterator<__gnu_cxx::__normal_iterator<conststd::unique_ptr<spdlog::details::flag_formatter,std::default_delete<spdlog::details::flag_formatter>>*,std::vector<std::unique_ptr<spdlog::details::flag_formatter,std::default_delete<spdlog::details::flag_formatter>>,std::allocator<std::unique_ptr<spdlog::details::flag_formatter,std::default_delete<spdlog::details::flag_formatter>>>>>>'
+  [A] 'class std::reverse_iterator<__gnu_cxx::__normal_iterator<std::shared_ptr<void>*,std::vector<std::shared_ptr<void>,std::allocator<std::shared_ptr<void>>>>>'
+  [A] 'class std::reverse_iterator<__gnu_cxx::__normal_iterator<std::unique_ptr<spdlog::details::flag_formatter,std::default_delete<spdlog::details::flag_formatter>>*,std::vector<std::unique_ptr<spdlog::details::flag_formatter,std::default_delete<spdlog::details::flag_formatter>>,std::allocator<std::unique_ptr<spdlog::details::flag_formatter,std::default_delete<spdlog::details::flag_formatter>>>>>>'
+  [A] 'class std::reverse_iterator<std::_Rb_tree_const_iterator<custom_rotating_file_sink<spdlog::details::null_mutex>*>>'
+  [A] 'class std::reverse_iterator<std::_Rb_tree_const_iterator<custom_rotating_file_sink<std::mutex>*>>'
+  [A] 'class std::reverse_iterator<std::_Rb_tree_iterator<custom_rotating_file_sink<spdlog::details::null_mutex>*>>'
+  [A] 'class std::reverse_iterator<std::_Rb_tree_iterator<custom_rotating_file_sink<std::mutex>*>>'
+  [A] 'class std::tuple<(anonymousnamespace)::thread_id_flag*,std::default_delete<(anonymousnamespace)::thread_id_flag>>' at tuple:2008:1
+  [A] 'class std::unique_ptr<(anonymousnamespace)::thread_id_flag,std::default_delete<(anonymousnamespace)::thread_id_flag>>' at unique_ptr.h:270:1
+  [A] 'class thread_id_flag' at logger.cxx:59:1
+  [A] 'struct live_sinks<custom_rotating_file_sink<spdlog::details::null_mutex> >' at custom_rotating_file_sink.cxx:72:1
+  [A] 'struct live_sinks<custom_rotating_file_sink<std::mutex> >' at custom_rotating_file_sink.cxx:72:1
+  [A] 'struct spdlog::details::console_nullmutex' at console_globals.h:20:1
+  [A] 'struct std::_Head_base<0,(anonymousnamespace)::thread_id_flag*,false>' at tuple:200:1
+  [A] 'struct std::_Head_base<1,std::default_delete<(anonymousnamespace)::thread_id_flag>,true>' at tuple:91:1
+  [A] 'struct std::_Node_insert_return<std::_Rb_tree_const_iterator<custom_rotating_file_sink<spdlog::details::null_mutex>*>,std::_Node_handle<custom_rotating_file_sink<spdlog::details::null_mutex>*,custom_rotating_file_sink<spdlog::details::null_mutex>*,std::allocator<std::_Rb_tree_node<custom_rotating_file_sink<spdlog::details::null_mutex>*>>>>'
+  [A] 'struct std::_Node_insert_return<std::_Rb_tree_const_iterator<custom_rotating_file_sink<std::mutex>*>,std::_Node_handle<custom_rotating_file_sink<std::mutex>*,custom_rotating_file_sink<std::mutex>*,std::allocator<std::_Rb_tree_node<custom_rotating_file_sink<std::mutex>*>>>>'
+  [A] 'struct std::_Node_insert_return<std::__detail::_Node_iterator<std::pair<charconst,std::unique_ptr<spdlog::custom_flag_formatter,std::default_delete<spdlog::custom_flag_formatter>>>,false,false>,std::_Node_handle<char,std::pair<charconst,std::unique_ptr<spdlog::custom_flag_formatter,std::default_delete<spdlog::custom_flag_formatter>>>,std::allocator<std::__detail::_Hash_node<std::pair<charconst,std::unique_ptr<spdlog::custom_flag_formatter,std::default_delete<spdlog::custom_flag_formatter>>>,false>>>>'
+  [A] 'struct std::_Nth_type<0,(anonymousnamespace)::thread_id_flag*,std::default_delete<(anonymousnamespace)::thread_id_flag>>' at utility.h:235:1
+  [A] 'struct std::_Nth_type<1,(anonymousnamespace)::thread_id_flag*,std::default_delete<(anonymousnamespace)::thread_id_flag>>' at utility.h:235:1
+  [A] 'struct std::_Tuple_impl<0,(anonymousnamespace)::thread_id_flag*,std::default_delete<(anonymousnamespace)::thread_id_flag>>' at tuple:281:1
+  [A] 'struct std::_Tuple_impl<1,std::default_delete<(anonymousnamespace)::thread_id_flag>>' at tuple:546:1
+  [A] 'struct std::__detail::_Local_const_iterator<char,std::pair<charconst,std::unique_ptr<spdlog::custom_flag_formatter,std::default_delete<spdlog::custom_flag_formatter>>>,std::__detail::_Select1st,std::hash<char>,std::__detail::_Mod_range_hashing,std::__detail::_Default_ranged_hash,false,false>'
+  [A] 'struct std::__detail::_Local_iterator<char,std::pair<charconst,std::unique_ptr<spdlog::custom_flag_formatter,std::default_delete<spdlog::custom_flag_formatter>>>,std::__detail::_Select1st,std::hash<char>,std::__detail::_Mod_range_hashing,std::__detail::_Default_ranged_hash,false,false>'
+  [A] 'struct std::__detail::_MakeUniq<(anonymousnamespace)::thread_id_flag>' at unique_ptr.h:1053:1
+  [A] 'struct std::__detail::_Node_const_iterator<std::pair<charconst,std::unique_ptr<spdlog::custom_flag_formatter,std::default_delete<spdlog::custom_flag_formatter>>>,false,false>'
+  [A] 'struct std::__uniq_ptr_data<(anonymousnamespace)::thread_id_flag,std::default_delete<(anonymousnamespace)::thread_id_flag>,true,true>' at unique_ptr.h:232:1
+  [A] 'struct std::__uniq_ptr_impl<(anonymousnamespace)::thread_id_flag,std::default_delete<(anonymousnamespace)::thread_id_flag>>::_Ptr<(anonymousnamespace)::thread_id_flag,std::default_delete<(anonymousnamespace)::thread_id_flag>,void>' at unique_ptr.h:144:1
+  [A] 'struct std::add_lvalue_reference<(anonymousnamespace)::thread_id_flag>' at type_traits:1790:1
+  [A] 'struct std::allocator<std::_Rb_tree_node<custom_rotating_file_sink<spdlog::details::null_mutex>*>>::rebind<custom_rotating_file_sink<spdlog::details::null_mutex>*>' at allocator.h:148:1
+  [A] 'struct std::allocator<std::_Rb_tree_node<custom_rotating_file_sink<std::mutex>*>>::rebind<custom_rotating_file_sink<std::mutex>*>' at allocator.h:148:1
+  [A] 'struct std::binary_function<char,char,bool>' at stl_function.h:134:1
+  [A] 'struct std::binary_function<custom_rotating_file_sink<spdlog::details::null_mutex>*,custom_rotating_file_sink<spdlog::details::null_mutex>*,bool>' at stl_function.h:134:1
+  [A] 'struct std::binary_function<custom_rotating_file_sink<std::mutex>*,custom_rotating_file_sink<std::mutex>*,bool>' at stl_function.h:134:1
+  [A] 'struct std::default_delete<(anonymousnamespace)::thread_id_flag>' at unique_ptr.h:68:1
+  [A] 'struct std::enable_if<true,std::unique_ptr<spdlog::custom_flag_formatter,std::default_delete<spdlog::custom_flag_formatter>>&>' at type_traits:139:1
+  [A] 'struct std::tuple_element<0,std::tuple<(anonymousnamespace)::thread_id_flag*,std::default_delete<(anonymousnamespace)::thread_id_flag>>>' at tuple:2419:1
+  [A] 'struct std::tuple_element<1,std::tuple<(anonymousnamespace)::thread_id_flag*,std::default_delete<(anonymousnamespace)::thread_id_flag>>>' at tuple:2419:1
+  [A] 'struct std::unary_function<custom_rotating_file_sink<spdlog::details::null_mutex>*,custom_rotating_file_sink<spdlog::details::null_mutex>*>' at stl_function.h:120:1
+  [A] 'struct std::unary_function<custom_rotating_file_sink<std::mutex>*,custom_rotating_file_sink<std::mutex>*>' at stl_function.h:120:1
+
