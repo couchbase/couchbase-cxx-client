@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<title>Performance history</title>
+<style>
+  :root { --fg: #1f2328; --bg: #fff; --muted: #656d76; --grid: #d0d7de; --latency: #0969da; --cpu: #bc4c00; --rss: #1a7f37; --throughput: #8250df; }
+  @media (prefers-color-scheme: dark) {
+    :root { --fg: #e6edf3; --bg: #0d1117; --muted: #8b949e; --grid: #30363d; --latency: #58a6ff; --cpu: #f0883e; --rss: #3fb950; --throughput: #bc8cff; }
+  }
+  body { font: 14px/1.4 system-ui, sans-serif; color: var(--fg); background: var(--bg); max-width: 72rem; margin: 0 auto; padding: 1rem; }
+  nav { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; margin: 1rem 0; }
+  nav a { color: var(--fg); display: inline-flex; align-items: center; gap: .4rem; }
+  section { margin-top: 2rem; }
+  h2 { display: flex; align-items: center; gap: .5rem; font-size: 18px; margin: 0; padding-bottom: .25rem; border-bottom: 2px solid var(--c); }
+  .swatch { flex: none; width: .75rem; height: .75rem; border-radius: 2px; background: var(--c); }
+  h3 { font: 600 13px ui-monospace, monospace; margin: 1.25rem 0 .5rem; }
+  .family { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: .75rem; }
+  .chart { border: 1px solid var(--grid); border-radius: 6px; padding: .5rem; min-width: 0; }
+  h4 { font: 12px ui-monospace, monospace; margin: 0; word-break: break-all; }
+  .latest { display: flex; flex-wrap: wrap; column-gap: .75em; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .latest span { white-space: nowrap; }
+  .delta { color: var(--muted); }
+  .better { color: var(--c); }
+  .plot { display: grid; grid-template-columns: auto 1fr; gap: .375rem; margin-top: .25rem; }
+  .axis { display: flex; flex-direction: column; justify-content: space-between; color: var(--muted); font: 10px/1 system-ui, sans-serif; text-align: right; font-variant-numeric: tabular-nums; }
+  .axis.flat { justify-content: center; }
+  svg { width: 100%; height: 5rem; display: block; }
+  .grid { stroke: var(--grid); }
+  .series { fill: none; stroke: var(--c); stroke-width: 1.5; }
+  .pt { fill: var(--c); }
+  .pt.ring { fill: var(--bg); stroke: var(--c); stroke-width: 1.5; }
+  .muted { color: var(--muted); }
+  .about { margin: -.25rem 0 .5rem; font-size: 13px; }
+  #tip { position: fixed; z-index: 1; max-width: 22rem; padding: .375rem .5rem; border: 1px solid var(--grid); border-radius: 6px; background: var(--bg); font: 12px/1.4 ui-monospace, monospace; white-space: pre-line; user-select: text; box-shadow: 0 2px 8px #0003; }
+</style></head>
+<body>
+<h1>Performance history</h1>
+<p class="muted">Each chart plots one benchmark key, oldest run first. The main branch gets a run on every push and every night. Each point links to the commit it measured. A hollow ring marks a change from the previous point: a new CPU model, or a new server version.</p>
+<nav id="jump" aria-label="Measures"></nav>
+<p id="status" class="muted">Loading.</p>
+<main id="charts"></main>
+<div id="tip" role="tooltip" hidden></div>
+<script>
+"use strict";
+const REPO_URL = "https://github.com/couchbase/couchbase-cxx-client";
+const NS = "http://www.w3.org/2000/svg";
+const get = (url) => fetch(url).then((r) => { if (!r.ok) throw new Error(url + ": " + r.status); return r.json(); });
+const el = (name, attrs, parent) => {
+  const e = document.createElementNS(NS, name);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+};
+const h = (name, attrs = {}, text) => {
+  const e = document.createElement(name);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text !== undefined) e.textContent = text;
+  return e;
+};
+const duration = (ns) => ns >= 1_000_000_000 ? (ns / 1_000_000_000).toPrecision(3) + " s" : ns >= 1_000_000 ? (ns / 1_000_000).toPrecision(3) + " ms"
+  : ns >= 1_000 ? (ns / 1_000).toPrecision(3) + " µs" : ns.toPrecision(3) + " ns";
+
+const bytes = (b) => b >= 1_073_741_824 ? (b / 1_073_741_824).toPrecision(3) + " GiB" : b >= 1_048_576 ? (b / 1_048_576).toPrecision(3) + " MiB"
+  : b >= 1_024 ? (b / 1_024).toPrecision(3) + " KiB" : b + " B";
+
+const rate = (v) => (v >= 1_000_000 ? (v / 1_000_000).toPrecision(3) + "M" : v >= 1_000 ? (v / 1_000).toPrecision(3) + "k"
+  : v.toPrecision(3)) + " ops/s";
+
+// One section per measure, in this order. colour names a custom property of the stylesheet;
+// better is "lower" or "higher".
+const MEASURES = [
+  {id: "latency", title: "Latency", colour: "--latency", fmt: duration, better: "lower", value: (row) => row.median,
+   about: "Median time per operation of each key, per iteration for batched keys."},
+  {id: "throughput", title: "Throughput", colour: "--throughput", fmt: rate, better: "higher", value: (row) => row.ops_per_second,
+   about: "Operations per second across all threads of the key, for per-operation keys."},
+  {id: "cpu", title: "CPU time per operation", colour: "--cpu", fmt: duration, better: "lower", value: (row) => row.cpu_ns_per_op,
+   about: "CPU time of the whole benchmark process per operation, per iteration for batched keys. Every thread counts."},
+  {id: "rss", title: "Peak RSS", colour: "--rss", fmt: bytes, better: "lower", value: (row) => row.max_rss_bytes,
+   about: "Peak resident set size of the process when the key finished. It is a high-water mark, so it covers every key the binary measured before."},
+];
+
+// The details of a point stay open until another point is shown, Escape is pressed, or a
+// click lands outside them, so their text can be read and selected.
+const tip = document.getElementById("tip");
+const showTip = (target, text) => {
+  tip.textContent = text;
+  tip.hidden = false;
+  const r = target.getBoundingClientRect(), t = tip.getBoundingClientRect();
+  tip.style.left = Math.max(4, Math.min(r.left + r.width / 2 - t.width / 2, innerWidth - t.width - 4)) + "px";
+  tip.style.top = (r.top - t.height - 8 >= 4 ? r.top - t.height - 8 : r.bottom + 8) + "px";
+};
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") tip.hidden = true; });
+document.addEventListener("pointerdown", (e) => { if (!tip.contains(e.target)) tip.hidden = true; });
+addEventListener("scroll", () => { tip.hidden = true; }, {passive: true});
+
+function chart(m, key, name, points) {
+  const box = h("div", {class: "chart"});
+  const last = points[points.length - 1].v, prev = points.length > 1 ? points[points.length - 2].v : 0;
+  const latest = h("div", {class: "latest"});
+  latest.append(h("span", {}, m.fmt(last)));
+  if (prev) {
+    const pct = (last - prev) / prev * 100;
+    latest.append(h("span", {class: "delta"}, (pct < 0 ? "−" : "+") + Math.abs(pct).toFixed(1) + "% vs previous"));
+  }
+  latest.append(h("span", {class: "better"}, m.better === "higher" ? "▲ higher is better" : "▼ lower is better"));
+  const vs = points.map((p) => p.v);
+  const lo = Math.min(...vs), hi = Math.max(...vs);
+  // The plot is scaled to its own range, so the axis prints that range.
+  const plot = h("div", {class: "plot"});
+  const axis = h("div", {class: hi === lo ? "axis flat" : "axis", "aria-hidden": "true"});
+  axis.append(...(hi === lo ? [h("span", {}, m.fmt(hi))] : [h("span", {}, m.fmt(hi)), h("span", {}, m.fmt(lo))]));
+  plot.append(axis);
+  box.append(h("h4", {}, name), latest, plot);
+  const W = 320, H = 80, P = 6;
+  const svg = el("svg", {viewBox: "0 0 " + W + " " + H, preserveAspectRatio: "none"}, plot);
+  const x = (i) => points.length === 1 ? W / 2 : P + i * (W - 2 * P) / (points.length - 1);
+  // A series without spread is drawn at mid-height, apart from the baseline.
+  const y = (v) => hi === lo ? H / 2 : H - P - (v - lo) * (H - 2 * P) / (hi - lo);
+  el("line", {class: "grid", x1: 0, x2: W, y1: H - 1, y2: H - 1}, svg);
+  el("polyline", {class: "series", "vector-effect": "non-scaling-stroke",
+                  points: points.map((p, i) => x(i) + "," + y(p.v)).join(" ")}, svg);
+  points.forEach((p, i) => {
+    const a = el("a", {href: REPO_URL + "/commit/" + p.sha}, svg);
+    const ring = p.cpuChanged || p.serverChanged;
+    const c = el("circle", {class: ring ? "pt ring" : "pt", cx: x(i), cy: y(p.v), r: ring ? 4.5 : 3,
+                            "vector-effect": "non-scaling-stroke"}, a);
+    const text = p.sha.slice(0, 12) + "  " + m.fmt(p.v) + "  " + p.date +
+      (p.cpuChanged ? "\nCPU: " + p.cpu + " (changed)" : "") +
+      (p.server !== null ? "\nServer: " + p.server + (p.serverChanged ? " (changed)" : "") : "");
+    a.setAttribute("aria-label", text);
+    a.addEventListener("pointerenter", () => showTip(c, text));
+    a.addEventListener("focus", () => showTip(c, text));
+  });
+  return box;
+}
+
+async function main() {
+  // Only entries with a commit id are fetched and linked. The commit id and the run id each
+  // become part of a path or a URL, so each must match its pattern. An entry without an id names
+  // its data file by its commit.
+  const index = (await get("data/index.json")).reverse()
+    .filter((e) => e && typeof e.sha === "string" && /^[0-9a-f]{7,40}$/.test(e.sha))
+    .map((e) => ({sha: e.sha, date: typeof e.run === "string" ? e.run : e.date,
+                  file: typeof e.id === "string" && /^[0-9a-f]{40}-\d{8}T\d{6}Z$/.test(e.id) ? e.id : e.sha}));
+  const docs = await Promise.all(index.map((e) => get("data/" + e.file + ".json").catch(() => null)));
+  const series = new Map(MEASURES.map((m) => [m.id, new Map()]));
+  // The description of each case, from the newest run that has one.
+  const about = new Map();
+  docs.forEach((d, i) => {
+    if (!d || typeof d !== "object") return;
+    if (d.descriptions && typeof d.descriptions === "object") {
+      for (const name in d.descriptions) {
+        if (typeof d.descriptions[name] === "string") about.set(name, d.descriptions[name]);
+      }
+    }
+    for (const key in d.rows) {
+      const row = d.rows[key];
+      if (!row || typeof row !== "object") continue;
+      const cpu = row.cpu_model || "unknown";
+      for (const m of MEASURES) {
+        const v = m.value(row);
+        if (typeof v !== "number" || !Number.isFinite(v)) continue;
+        const charts = series.get(m.id);
+        if (!charts.has(key)) charts.set(key, []);
+        const points = charts.get(key);
+        const prev = points[points.length - 1];
+        const cpuChanged = prev !== undefined && cpu !== prev.cpu;
+        // A change counts only between two points that both record a version.
+        const server = typeof row.server_version === "string" ? row.server_version : null;
+        const serverChanged = prev !== undefined && server !== null && prev.server !== null && server !== prev.server;
+        points.push({sha: index[i].sha, date: index[i].date, v, cpu, cpuChanged, server, serverChanged});
+      }
+    }
+  });
+  const nav = document.getElementById("jump"), root = document.getElementById("charts");
+  for (const m of MEASURES) {
+    const charts = series.get(m.id);
+    if (!charts.size) continue;
+    const colour = "--c: var(" + m.colour + ")";
+    const section = h("section", {id: m.id, style: colour});
+    const heading = h("h2");
+    heading.append(h("span", {class: "swatch"}), m.title);
+    section.append(heading, h("p", {class: "muted"}, m.about));
+    // A key's family is its first "/" segment; the chart is titled with the rest.
+    const families = new Map();
+    for (const key of charts.keys()) {
+      const cut = key.indexOf("/");
+      const family = cut < 0 ? key : key.slice(0, cut);
+      if (!families.has(family)) families.set(family, []);
+      families.get(family).push({key, name: cut < 0 ? key : key.slice(cut + 1)});
+    }
+    for (const family of [...families.keys()].sort()) {
+      const grid = h("div", {class: "family"});
+      for (const {key, name} of families.get(family).sort((a, b) => a.name < b.name ? -1 : 1)) {
+        grid.append(chart(m, key, name, charts.get(key)));
+      }
+      section.append(h("h3", {}, family));
+      if (about.has(family)) section.append(h("p", {class: "muted about"}, about.get(family)));
+      section.append(grid);
+    }
+    root.append(section);
+    const link = h("a", {href: "#" + m.id, style: colour});
+    link.append(h("span", {class: "swatch"}), m.title);
+    nav.append(link);
+  }
+  document.getElementById("status").textContent = nav.childElementCount ? "" : "No results recorded yet.";
+}
+main().catch((e) => { document.getElementById("status").textContent = "Could not load the results: " + e.message; });
+</script>
+</body></html>
