@@ -146,16 +146,19 @@ update_callback_logger(const std::shared_ptr<couchbase::core::logger::log_callba
 }
 
 void
-update_file_logger(const std::shared_ptr<spdlog::logger>& new_logger)
+update_file_logger(std::shared_ptr<spdlog::logger> new_logger)
 {
-  const std::scoped_lock lock(registry_mutex, file_logger_mutex);
-  // delete if already exists
-  spdlog::drop(file_logger_name);
-  if (new_logger) {
-    file_logger = new_logger;
-    spdlog::register_logger(new_logger);
+  std::shared_ptr<spdlog::logger> replaced{};
+  {
+    const std::scoped_lock lock(registry_mutex, file_logger_mutex);
+    spdlog::drop(file_logger_name);
+    replaced = std::move(file_logger);
+    file_logger = std::move(new_logger);
+    if (file_logger != nullptr) {
+      spdlog::register_logger(file_logger);
+    }
+    ++file_logger_version;
   }
-  ++file_logger_version;
 }
 
 /**
@@ -310,10 +313,8 @@ level_from_str(const std::string& str) -> level
 auto
 should_log(level lvl) -> bool
 {
-  if (is_initialized()) {
-    return get_file_logger()->should_log(translate_level(lvl));
-  }
-  return false;
+  const auto logger = get_file_logger();
+  return logger != nullptr && logger->should_log(translate_level(lvl));
 }
 
 auto
@@ -329,9 +330,8 @@ namespace detail
 void
 log(const char* file, int line, const char* function, level lvl, std::string_view msg)
 {
-  if (is_initialized()) {
-    return get_file_logger()->log(
-      spdlog::source_loc{ file, line, function }, translate_level(lvl), msg);
+  if (const auto logger = get_file_logger(); logger != nullptr) {
+    logger->log(spdlog::source_loc{ file, line, function }, translate_level(lvl), msg);
   }
 }
 
@@ -347,8 +347,8 @@ log_custom_logger(const char* file, int line, const char* function, level lvl, s
 void
 flush()
 {
-  if (is_initialized()) {
-    get_file_logger()->flush();
+  if (const auto logger = get_file_logger(); logger != nullptr) {
+    logger->flush();
   }
 }
 
@@ -669,16 +669,19 @@ void
 register_spdlog_logger(const std::shared_ptr<spdlog::logger>& l)
 {
   try {
-    get_file_logger()->debug("Registering logger {}", l->name());
+    if (const auto logger = get_file_logger(); logger != nullptr) {
+      logger->debug("Registering logger {}", l->name());
+    }
     const std::scoped_lock lock(registry_mutex);
     spdlog::register_logger(l);
   } catch (const spdlog::spdlog_ex& e) {
-    get_file_logger()->warn(
-      "Exception caught when attempting to register the logger {} in the spdlog "
-      "registry. The verbosity of this logger "
-      "cannot be changed at runtime. e.what()={}",
-      l->name(),
-      e.what());
+    if (const auto logger = get_file_logger(); logger != nullptr) {
+      logger->warn("Exception caught when attempting to register the logger {} in the spdlog "
+                   "registry. The verbosity of this logger "
+                   "cannot be changed at runtime. e.what()={}",
+                   l->name(),
+                   e.what());
+    }
   }
 }
 

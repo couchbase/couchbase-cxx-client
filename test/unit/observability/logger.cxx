@@ -22,6 +22,7 @@
 #include "core/document_id.hxx"
 #include "core/document_id_fmt.hxx"
 #include "core/document_id_redaction.hxx"
+#include "core/logger/configuration.hxx"
 #include "core/logger/logger.hxx"
 #include "core/logger/redaction.hxx"
 #include "core/origin.hxx"
@@ -33,9 +34,12 @@
 
 #include <atomic>
 #include <cstddef>
+#include <filesystem>
 #include <memory>
+#include <random>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -730,6 +734,35 @@ enabling_redaction_is_observable([[maybe_unused]] context& ctx)
   }
   assert_false(core_logger::is_log_redaction_enabled(), "and off again afterwards");
 }
+
+void
+reset_stops_the_file_logger([[maybe_unused]] context& ctx)
+{
+  const auto directory = std::filesystem::temp_directory_path() /
+                         ("cxx-logger-reset-" + std::to_string(std::random_device{}()));
+  std::filesystem::create_directories(directory);
+  core_logger::configuration config{};
+  config.filename = (directory / "sdk").string();
+  config.unit_test = true;
+  config.console = false;
+  config.log_level = core_logger::level::trace;
+  const auto failure = core_logger::create_file_logger(config);
+  const bool created = !failure.has_value() && core_logger::is_initialized() &&
+                       core_logger::should_log(core_logger::level::trace);
+
+  core_logger::reset();
+  core_logger::detail::log(
+    __FILE__, __LINE__, "reset_stops_the_file_logger", core_logger::level::critical, "dropped");
+  core_logger::flush();
+  const bool initialized_after_reset = core_logger::is_initialized();
+  const bool logs_after_reset = core_logger::should_log(core_logger::level::critical);
+  std::error_code ignored;
+  std::filesystem::remove_all(directory, ignored);
+
+  assert_true(created, "the file logger logs at trace before the reset");
+  assert_false(initialized_after_reset, "no file logger is left after the reset");
+  assert_false(logs_after_reset, "nothing is logged after the reset");
+}
 } // namespace
 
 auto
@@ -738,6 +771,7 @@ tests() -> test_suite
   return {
     suite_name,
     {
+      { CASE(reset_stops_the_file_logger) },
       { CASE(a_registered_callback_receives_every_logged_message) },
       { CASE(the_callback_receives_the_level_of_each_message) },
       { CASE(logging_with_no_callback_registered_does_not_throw) },
