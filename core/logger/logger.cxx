@@ -14,6 +14,7 @@
 #include "configuration.hxx"
 #include "core/logger/level.hxx"
 #include "custom_rotating_file_sink.hxx"
+#include "logger_unit_test_api.hxx"
 
 #include <spdlog/async.h>
 #include <spdlog/async_logger.h>
@@ -32,6 +33,8 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <exception>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -54,6 +57,43 @@ const std::string log_pattern{ "[%Y-%m-%d %T.%e] %4oms [%^%4!l%$] [%P,%*] %v" };
 // it across the fork, so no registry mutex is left locked in the child. Taken after fork_mutex and
 // before every other logger lock.
 std::mutex registry_mutex;
+
+std::mutex after_registry_unlock_mutex;
+std::function<void()> after_registry_unlock_callback{};
+std::atomic<bool> after_registry_unlock_installed{ false };
+
+class scoped_registry_lock
+{
+public:
+  scoped_registry_lock() = default;
+  scoped_registry_lock(const scoped_registry_lock&) = delete;
+  scoped_registry_lock(scoped_registry_lock&&) = delete;
+  auto operator=(const scoped_registry_lock&) -> scoped_registry_lock& = delete;
+  auto operator=(scoped_registry_lock&&) -> scoped_registry_lock& = delete;
+
+  ~scoped_registry_lock()
+  {
+    lock_.unlock();
+    if (!after_registry_unlock_installed.load(std::memory_order_acquire)) {
+      return;
+    }
+    std::function<void()> callback{};
+    {
+      const std::scoped_lock hook_lock(after_registry_unlock_mutex);
+      callback = after_registry_unlock_callback;
+    }
+    if (callback) {
+      try {
+        callback();
+      } catch (const std::exception&) { // NOLINT(bugprone-empty-catch)
+        // unit test callback; registry_mutex is already unlocked
+      }
+    }
+  }
+
+private:
+  std::unique_lock<std::mutex> lock_{ registry_mutex };
+};
 
 // spdlog caches each thread's id in a thread_local, so in a forked child the forking thread keeps
 // reporting its id in the parent. %* replaces that one stale id with the thread's id in the child.
@@ -98,8 +138,17 @@ make_formatter() -> std::unique_ptr<spdlog::formatter>
  * to stream etc.) or further processing.
  */
 std::shared_ptr<spdlog::logger> file_logger{};
+// Guards file_logger and protocol_logger. A logging thread caches a weak reference to either and
+// holds a strong one only for the duration of a call, so replacing or resetting one never frees a
+// logger another thread is using, and an idle thread keeps no replaced logger or its files open.
 std::mutex file_logger_mutex;
 std::atomic_int file_logger_version{ 0 };
+
+/**
+ * Instance of the protocol logger.
+ */
+std::shared_ptr<spdlog::logger> protocol_logger{};
+std::atomic_int protocol_logger_version{ 0 };
 
 std::shared_ptr<couchbase::core::logger::log_callback> log_callback{};
 std::mutex log_callback_mutex;
@@ -109,31 +158,121 @@ std::atomic_int log_callback_version{ 0 };
 // log_callback.
 std::atomic<bool> log_callback_present{ false };
 
-thread_local std::shared_ptr<spdlog::logger> cached_file_logger{ nullptr };
-thread_local int cached_file_logger_version{ -1 };
+// True once any thread_local logger or callback cache on this thread runs its destructor.
+// Static destructors run after thread_local teardown and fall back to locking directly.
+thread_local bool thread_caches_destroyed{ false };
+
+// What a thread last read of one logger: a weak reference, whether the logger was absent, and the
+// version it was read at.
+struct cached_logger {
+  cached_logger() = default;
+  cached_logger(const cached_logger&) = delete;
+  cached_logger(cached_logger&&) = delete;
+  auto operator=(const cached_logger&) -> cached_logger& = delete;
+  auto operator=(cached_logger&&) -> cached_logger& = delete;
+  ~cached_logger()
+  {
+    thread_caches_destroyed = true;
+  }
+
+  std::weak_ptr<spdlog::logger> logger{};
+  bool absent{ true };
+  int version{ -1 };
+};
+
+thread_local cached_logger cached_file_logger{};
+thread_local cached_logger cached_protocol_logger{};
+
+std::mutex after_cached_version_match_mutex;
+std::function<void()> after_cached_version_match_callback{};
+std::atomic<bool> after_cached_version_match_installed{ false };
+
+void
+run_after_cached_version_match()
+{
+  std::function<void()> callback{};
+  {
+    const std::scoped_lock hook_lock(after_cached_version_match_mutex);
+    callback = after_cached_version_match_callback;
+  }
+  if (callback) {
+    try {
+      callback();
+    } catch (const std::exception&) { // NOLINT(bugprone-empty-catch)
+      // unit test callback; no logger lock is held
+    }
+  }
+}
+
+// Re-reads under file_logger_mutex if the cached weak_ptr expired concurrently.
+auto
+read_logger(cached_logger& cache,
+            const std::shared_ptr<spdlog::logger>& current,
+            const std::atomic_int& version) -> std::shared_ptr<spdlog::logger>
+{
+  if (thread_caches_destroyed) {
+    const std::scoped_lock lock(file_logger_mutex);
+    return current;
+  }
+  if (cache.version == version) {
+    if (cache.absent) {
+      return {};
+    }
+    if (after_cached_version_match_installed.load(std::memory_order_acquire)) {
+      run_after_cached_version_match();
+    }
+    if (auto logger = cache.logger.lock(); logger != nullptr) {
+      return logger;
+    }
+  }
+  const std::scoped_lock lock(file_logger_mutex);
+  cache.logger = current;
+  cache.absent = current == nullptr;
+  cache.version = version;
+  return current;
+}
 
 auto
 get_file_logger() -> std::shared_ptr<spdlog::logger>
 {
-  if (cached_file_logger_version != file_logger_version) {
-    const std::scoped_lock lock(file_logger_mutex);
-    cached_file_logger = file_logger;
-    cached_file_logger_version = file_logger_version;
-  }
-  return cached_file_logger;
+  return read_logger(cached_file_logger, file_logger, file_logger_version);
+}
+
+auto
+get_protocol_logger() -> std::shared_ptr<spdlog::logger>
+{
+  return read_logger(cached_protocol_logger, protocol_logger, protocol_logger_version);
 }
 
 auto
 get_custom_callback() -> std::shared_ptr<couchbase::core::logger::log_callback>
 {
-  thread_local std::shared_ptr<couchbase::core::logger::log_callback> callback{ nullptr };
-  thread_local int version{ -1 };
-  if (version != log_callback_version) {
+  struct cached_callback {
+    cached_callback() = default;
+    cached_callback(const cached_callback&) = delete;
+    cached_callback(cached_callback&&) = delete;
+    auto operator=(const cached_callback&) -> cached_callback& = delete;
+    auto operator=(cached_callback&&) -> cached_callback& = delete;
+    ~cached_callback()
+    {
+      thread_caches_destroyed = true;
+    }
+
+    std::shared_ptr<couchbase::core::logger::log_callback> callback{};
+    int version{ -1 };
+  };
+
+  if (thread_caches_destroyed) {
     const std::scoped_lock lock(log_callback_mutex);
-    callback = log_callback;
-    version = log_callback_version;
+    return log_callback;
   }
-  return callback;
+  thread_local cached_callback cache{};
+  if (cache.version != log_callback_version) {
+    const std::scoped_lock lock(log_callback_mutex);
+    cache.callback = log_callback;
+    cache.version = log_callback_version;
+  }
+  return cache.callback;
 }
 
 void
@@ -145,23 +284,38 @@ update_callback_logger(const std::shared_ptr<couchbase::core::logger::log_callba
   ++log_callback_version;
 }
 
-void
-update_file_logger(const std::shared_ptr<spdlog::logger>& new_logger)
+// Assumes registry_mutex is held. Updates the spdlog registry entry and the SDK's slot in one
+// critical section, and returns the replaced logger so the caller releases its last reference
+// outside all logger mutexes.
+auto
+publish_logger(std::shared_ptr<spdlog::logger>& slot,
+               std::atomic_int& version,
+               const std::string& name,
+               std::shared_ptr<spdlog::logger> new_logger) -> std::shared_ptr<spdlog::logger>
 {
-  const std::scoped_lock lock(registry_mutex, file_logger_mutex);
-  // delete if already exists
-  spdlog::drop(file_logger_name);
-  if (new_logger) {
-    file_logger = new_logger;
+  spdlog::drop(name);
+  if (new_logger != nullptr) {
     spdlog::register_logger(new_logger);
   }
-  ++file_logger_version;
+  const std::scoped_lock lock(file_logger_mutex);
+  auto replaced = std::move(slot);
+  slot = std::move(new_logger);
+  ++version;
+  return replaced;
 }
 
-/**
- * Instance of the protocol logger.
- */
-std::shared_ptr<spdlog::logger> protocol_logger{};
+void
+update_file_logger(std::shared_ptr<spdlog::logger> new_logger)
+{
+  // Released after the mutex: the last reference can destroy the logger, and a sink that logs from
+  // its destructor would take the mutex again.
+  std::shared_ptr<spdlog::logger> replaced{};
+  {
+    const scoped_registry_lock lock;
+    replaced =
+      publish_logger(file_logger, file_logger_version, file_logger_name, std::move(new_logger));
+  }
+}
 
 std::atomic<bool> periodic_flusher_started{ false };
 
@@ -205,13 +359,11 @@ abandon_inherited_loggers()
   spdlog::apply_all([](const std::shared_ptr<spdlog::logger>& logger) {
     inherited->push_back(logger);
   });
-  if (cached_file_logger) {
-    inherited->push_back(cached_file_logger);
-  }
   if (protocol_logger) {
     inherited->push_back(protocol_logger);
     protocol_logger.reset();
   }
+  ++protocol_logger_version;
   if (auto pool = spdlog::details::registry::instance().get_tp(); pool) {
     inherited->push_back(pool);
     spdlog::details::registry::instance().set_tp(nullptr);
@@ -310,10 +462,9 @@ level_from_str(const std::string& str) -> level
 auto
 should_log(level lvl) -> bool
 {
-  if (is_initialized()) {
-    return get_file_logger()->should_log(translate_level(lvl));
-  }
-  return false;
+  // One snapshot: reset() can clear the logger between two reads.
+  const auto logger = get_file_logger();
+  return logger != nullptr && logger->should_log(translate_level(lvl));
 }
 
 auto
@@ -329,9 +480,8 @@ namespace detail
 void
 log(const char* file, int line, const char* function, level lvl, std::string_view msg)
 {
-  if (is_initialized()) {
-    return get_file_logger()->log(
-      spdlog::source_loc{ file, line, function }, translate_level(lvl), msg);
+  if (const auto logger = get_file_logger(); logger != nullptr) {
+    logger->log(spdlog::source_loc{ file, line, function }, translate_level(lvl), msg);
   }
 }
 
@@ -347,8 +497,8 @@ log_custom_logger(const char* file, int line, const char* function, level lvl, s
 void
 flush()
 {
-  if (is_initialized()) {
-    get_file_logger()->flush();
+  if (const auto logger = get_file_logger(); logger != nullptr) {
+    logger->flush();
   }
 }
 
@@ -371,7 +521,7 @@ shutdown()
    * no-op.
    */
   get_file_logger().reset();
-  const std::scoped_lock lock(registry_mutex);
+  const scoped_registry_lock lock;
   spdlog::details::registry::instance().shutdown();
   periodic_flusher_started = false;
 }
@@ -471,9 +621,14 @@ is_log_redaction_enabled() -> bool
 }
 
 auto
-create_file_logger_impl(const std::string& logger_name, const configuration& logger_settings)
-  -> std::pair<std::optional<std::string>, std::shared_ptr<spdlog::logger>>
+create_file_logger_impl(const std::string& logger_name,
+                        std::shared_ptr<spdlog::logger>& slot,
+                        std::atomic_int& version,
+                        const configuration& logger_settings) -> std::optional<std::string>
 {
+  // Released after registry_mutex: the last reference can destroy the replaced logger, and a sink
+  // that logs from its destructor would take file_logger_mutex again.
+  std::shared_ptr<spdlog::logger> replaced{};
   std::shared_ptr<spdlog::logger> logger{};
 
   try {
@@ -532,8 +687,7 @@ create_file_logger_impl(const std::string& logger_name, const configuration& log
       sink->add_sink(logger_settings.sink);
     }
 
-    const std::scoped_lock lock(registry_mutex);
-    spdlog::drop(logger_name);
+    const scoped_registry_lock lock;
 
     if (logger_settings.unit_test) {
       logger = std::make_shared<spdlog::logger>(logger_name, sink);
@@ -557,12 +711,12 @@ create_file_logger_impl(const std::string& logger_name, const configuration& log
     spdlog::flush_every(periodic_flush_interval);
     periodic_flusher_started = true;
 
-    spdlog::register_logger(logger);
+    replaced = publish_logger(slot, version, logger_name, std::move(logger));
   } catch (const spdlog::spdlog_ex& ex) {
     std::string msg = std::string{ "Log initialization failed: " } + ex.what();
-    return { msg, {} };
+    return msg;
   }
-  return { {}, logger };
+  return {};
 }
 
 /**
@@ -572,12 +726,8 @@ create_file_logger_impl(const std::string& logger_name, const configuration& log
 auto
 create_file_logger(const configuration& logger_settings) -> std::optional<std::string>
 {
-  auto [error, logger] = create_file_logger_impl(file_logger_name, logger_settings);
-  if (error) {
-    return error;
-  }
-  update_file_logger(logger);
-  return {};
+  return create_file_logger_impl(
+    file_logger_name, file_logger, file_logger_version, logger_settings);
 }
 
 auto
@@ -588,18 +738,14 @@ create_protocol_logger(const configuration& logger_settings) -> std::optional<st
   }
   auto config = logger_settings;
   config.log_level = couchbase::core::logger::level::trace;
-  auto [error, logger] = create_file_logger_impl(protocol_logger_name, config);
-  if (error) {
-    return error;
-  }
-  protocol_logger = std::move(logger);
-  return {};
+  return create_file_logger_impl(
+    protocol_logger_name, protocol_logger, protocol_logger_version, config);
 }
 
 auto
 should_log_protocol() -> bool
 {
-  return protocol_logger != nullptr;
+  return get_protocol_logger() != nullptr;
 }
 
 namespace detail
@@ -607,9 +753,8 @@ namespace detail
 void
 log_protocol(const char* file, int line, const char* function, std::string_view msg)
 {
-  if (should_log_protocol()) {
-    return protocol_logger->log(
-      spdlog::source_loc{ file, line, function }, spdlog::level::level_enum::trace, msg);
+  if (const auto logger = get_protocol_logger(); logger != nullptr) {
+    logger->log(spdlog::source_loc{ file, line, function }, spdlog::level::level_enum::trace, msg);
   }
 }
 } // namespace detail
@@ -623,11 +768,16 @@ get() -> spdlog::logger*
 void
 reset()
 {
-  update_file_logger(nullptr);
-
-  const std::scoped_lock lock(registry_mutex);
-  spdlog::drop(protocol_logger_name);
-  protocol_logger.reset();
+  // Released after registry_mutex: destroying either replaced logger can run a sink destructor
+  // that logs.
+  std::shared_ptr<spdlog::logger> replaced_file{};
+  std::shared_ptr<spdlog::logger> replaced_protocol{};
+  {
+    const scoped_registry_lock lock;
+    replaced_file = publish_logger(file_logger, file_logger_version, file_logger_name, nullptr);
+    replaced_protocol =
+      publish_logger(protocol_logger, protocol_logger_version, protocol_logger_name, nullptr);
+  }
 }
 
 void
@@ -668,24 +818,28 @@ unregister_log_callback()
 void
 register_spdlog_logger(const std::shared_ptr<spdlog::logger>& l)
 {
+  // reset() leaves no file logger, so each use checks its own snapshot.
   try {
-    get_file_logger()->debug("Registering logger {}", l->name());
-    const std::scoped_lock lock(registry_mutex);
+    if (const auto logger = get_file_logger(); logger != nullptr) {
+      logger->debug("Registering logger {}", l->name());
+    }
+    const scoped_registry_lock lock;
     spdlog::register_logger(l);
   } catch (const spdlog::spdlog_ex& e) {
-    get_file_logger()->warn(
-      "Exception caught when attempting to register the logger {} in the spdlog "
-      "registry. The verbosity of this logger "
-      "cannot be changed at runtime. e.what()={}",
-      l->name(),
-      e.what());
+    if (const auto logger = get_file_logger(); logger != nullptr) {
+      logger->warn("Exception caught when attempting to register the logger {} in the spdlog "
+                   "registry. The verbosity of this logger "
+                   "cannot be changed at runtime. e.what()={}",
+                   l->name(),
+                   e.what());
+    }
   }
 }
 
 void
 unregister_spdlog_logger(const std::string& n)
 {
-  const std::scoped_lock lock(registry_mutex);
+  const scoped_registry_lock lock;
   spdlog::drop(n);
 }
 
@@ -694,7 +848,7 @@ check_log_levels(level lvl) -> bool
 {
   auto level = translate_level(lvl);
   bool correct = true;
-  const std::scoped_lock lock(registry_mutex);
+  const scoped_registry_lock lock;
   spdlog::apply_all([level, &correct](const std::shared_ptr<spdlog::logger>& l) {
     if (l->level() != level) {
       correct = false;
@@ -707,7 +861,7 @@ auto
 get_lowest_log_level() -> level
 {
   auto lowest = spdlog::level::off;
-  const std::scoped_lock lock(registry_mutex);
+  const scoped_registry_lock lock;
   // Apply the function to each registered spdlog::logger except protocol logger
   spdlog::apply_all([&lowest](const std::shared_ptr<spdlog::logger>& l) {
     lowest = std::min(l->level(), lowest);
@@ -741,4 +895,25 @@ set_log_levels(level lvl)
 
   flush();
 }
+
+namespace unit_test_api
+{
+void
+set_after_registry_unlock(std::function<void()> callback)
+{
+  const bool installed = static_cast<bool>(callback);
+  const std::scoped_lock lock(after_registry_unlock_mutex);
+  after_registry_unlock_callback = std::move(callback);
+  after_registry_unlock_installed.store(installed, std::memory_order_release);
+}
+
+void
+set_after_cached_version_match(std::function<void()> callback)
+{
+  const bool installed = static_cast<bool>(callback);
+  const std::scoped_lock lock(after_cached_version_match_mutex);
+  after_cached_version_match_callback = std::move(callback);
+  after_cached_version_match_installed.store(installed, std::memory_order_release);
+}
+} // namespace unit_test_api
 } // namespace couchbase::core::logger

@@ -22,20 +22,32 @@
 #include "core/document_id.hxx"
 #include "core/document_id_fmt.hxx"
 #include "core/document_id_redaction.hxx"
+#include "core/logger/configuration.hxx"
 #include "core/logger/logger.hxx"
+#include "core/logger/logger_unit_test_api.hxx"
 #include "core/logger/redaction.hxx"
 #include "core/origin.hxx"
 #include "core/utils/connection_string.hxx"
 
+#include <spdlog/details/null_mutex.h>
 #include <spdlog/fmt/bin_to_hex.h>
 #include <spdlog/fmt/bundled/format.h>
+#include <spdlog/sinks/base_sink.h>
 #include <spdlog/spdlog.h>
 
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <cstddef>
+#include <filesystem>
+#include <future>
 #include <memory>
+#include <mutex>
+#include <optional>
+#include <random>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -138,6 +150,528 @@ public:
 private:
   bool previous_;
 };
+
+void
+reset_stops_the_file_logger([[maybe_unused]] context& ctx)
+{
+  const auto directory = std::filesystem::temp_directory_path() /
+                         ("cxx-logger-reset-" + std::to_string(std::random_device{}()));
+  std::filesystem::create_directories(directory);
+  core_logger::configuration config{};
+  config.filename = (directory / "sdk").string();
+  config.unit_test = true;
+  config.console = false;
+  config.log_level = core_logger::level::trace;
+  const auto failure = core_logger::create_file_logger(config);
+  const bool created = !failure.has_value() && core_logger::is_initialized() &&
+                       core_logger::should_log(core_logger::level::trace);
+
+  core_logger::reset();
+  const bool initialized_after_reset = core_logger::is_initialized();
+  const bool logs_after_reset = core_logger::should_log(core_logger::level::critical);
+  std::error_code ignored;
+  std::filesystem::remove_all(directory, ignored);
+
+  assert_true(created, "the file logger logs at trace before the reset");
+  assert_false(initialized_after_reset, "no file logger is left after the reset");
+  assert_false(logs_after_reset, "nothing is logged after the reset");
+}
+
+// What a probe_sink observes, kept apart from the sink so that it is still readable once the sink
+// is destroyed.
+struct probe_state {
+  std::mutex mutex{};
+  std::condition_variable changed{};
+  // While set, a message stays inside the sink until it is cleared or the wait budget runs out.
+  bool hold{ false };
+  bool entered{ false };
+  bool inside{ false };
+  bool destroyed{ false };
+  bool destroyed_while_inside{ false };
+};
+
+// The waits a case makes on another thread, each well under the case budget.
+auto
+probe_wait() -> std::chrono::milliseconds
+{
+  return scaled_budget(std::chrono::seconds{ 2 });
+}
+
+class probe_sink final : public spdlog::sinks::base_sink<spdlog::details::null_mutex>
+{
+public:
+  explicit probe_sink(std::shared_ptr<probe_state> state)
+    : state_{ std::move(state) }
+  {
+  }
+
+  probe_sink(const probe_sink&) = delete;
+  probe_sink(probe_sink&&) = delete;
+  auto operator=(const probe_sink&) -> probe_sink& = delete;
+  auto operator=(probe_sink&&) -> probe_sink& = delete;
+
+  ~probe_sink() override
+  {
+    const std::scoped_lock lock(state_->mutex);
+    state_->destroyed = true;
+    state_->destroyed_while_inside = state_->inside;
+    state_->changed.notify_all();
+  }
+
+protected:
+  void sink_it_(const spdlog::details::log_msg& /* msg */) override
+  {
+    // A copy, since the sink can be destroyed while the message waits.
+    const auto state = state_;
+    std::unique_lock lock(state->mutex);
+    state->entered = true;
+    state->inside = true;
+    state->changed.notify_all();
+    state->changed.wait_for(lock, probe_wait(), [&state]() {
+      return !state->hold;
+    });
+    state->inside = false;
+  }
+
+  void flush_() override
+  {
+  }
+
+private:
+  std::shared_ptr<probe_state> state_;
+};
+
+auto
+probe_directory(std::string_view name) -> std::filesystem::path
+{
+  auto directory = std::filesystem::temp_directory_path() /
+                   (std::string{ name } + "-" + std::to_string(std::random_device{}()));
+  std::filesystem::create_directories(directory);
+  return directory;
+}
+
+// Regression: a thread inside CB_LOG_PROTOCOL held no reference to the protocol logger, so reset()
+// on another thread freed the logger while the message was still being written.
+void
+the_protocol_logger_can_be_reset_while_another_thread_logs([[maybe_unused]] context& ctx)
+{
+  const auto directory = probe_directory("cxx-protocol-logger");
+  auto state = std::make_shared<probe_state>();
+  state->hold = true;
+  core_logger::configuration config{};
+  config.filename = (directory / "protocol").string();
+  config.unit_test = true;
+  config.console = false;
+  config.sink = std::make_shared<probe_sink>(state);
+  const auto failure = core_logger::create_protocol_logger(config);
+  config.sink.reset();
+  // Stops the periodic flusher and empties spdlog's registry, which the flusher walks, and leaves
+  // the protocol logger installed. A flush of the held sink would lock the registry until the
+  // message is released, and make reset() wait for the writer.
+  core_logger::shutdown();
+
+  std::thread writer([]() {
+    CB_LOG_PROTOCOL("{}", "message");
+  });
+  bool inside_at_reset = false;
+  {
+    std::unique_lock lock(state->mutex);
+    inside_at_reset = state->changed.wait_for(lock, probe_wait(), [&state]() {
+      return state->inside;
+    });
+  }
+  core_logger::reset();
+  bool inside_after_reset = false;
+  {
+    const std::scoped_lock lock(state->mutex);
+    inside_after_reset = state->inside;
+    state->hold = false;
+    state->changed.notify_all();
+  }
+  writer.join();
+  std::error_code ignored;
+  std::filesystem::remove_all(directory, ignored);
+
+  assert_false(failure.has_value(), "the protocol logger was created");
+  assert_true(inside_at_reset, "the message was inside the sink when reset() started");
+  assert_true(inside_after_reset, "the message was still inside the sink when reset() returned");
+  assert_false(state->destroyed_while_inside, "no logger was freed with the message inside it");
+  assert_true(state->destroyed, "the logger was freed once the writer's call returned");
+}
+
+// Regression: each thread cached an owning reference to the loggers, so after reset() a thread
+// that had logged and then gone idle kept the old loggers, and their open files, alive.
+void
+an_idle_thread_does_not_keep_a_reset_logger_alive([[maybe_unused]] context& ctx)
+{
+  const auto directory = probe_directory("cxx-logger-idle");
+  auto file_state = std::make_shared<probe_state>();
+  auto protocol_state = std::make_shared<probe_state>();
+  core_logger::configuration file{};
+  file.unit_test = true;
+  file.console = false;
+  file.log_level = core_logger::level::trace;
+  file.sink = std::make_shared<probe_sink>(file_state);
+  const auto file_failure = core_logger::create_file_logger(file);
+  file.sink.reset();
+  core_logger::configuration protocol{};
+  protocol.filename = (directory / "protocol").string();
+  protocol.unit_test = true;
+  protocol.console = false;
+  protocol.sink = std::make_shared<probe_sink>(protocol_state);
+  const auto protocol_failure = core_logger::create_protocol_logger(protocol);
+  protocol.sink.reset();
+
+  std::promise<void> logged;
+  std::promise<void> finish;
+  std::atomic<bool> writer_timed_out{ false };
+  std::thread writer([&logged, &writer_timed_out, done = finish.get_future()]() {
+    CB_LOG_INFO_RAW("message");
+    CB_LOG_PROTOCOL("{}", "message");
+    logged.set_value();
+    writer_timed_out = done.wait_for(probe_wait()) == std::future_status::timeout;
+  });
+  const bool writer_logged =
+    logged.get_future().wait_for(probe_wait()) == std::future_status::ready;
+  core_logger::reset();
+  bool file_destroyed = false;
+  bool protocol_destroyed = false;
+  {
+    const std::scoped_lock lock(file_state->mutex);
+    file_destroyed = file_state->destroyed;
+  }
+  {
+    const std::scoped_lock lock(protocol_state->mutex);
+    protocol_destroyed = protocol_state->destroyed;
+  }
+  finish.set_value();
+  writer.join();
+  std::error_code ignored;
+  std::filesystem::remove_all(directory, ignored);
+
+  assert_false(file_failure.has_value(), "the file logger was created");
+  assert_false(protocol_failure.has_value(), "the protocol logger was created");
+  assert_true(writer_logged, "the writer logged and went idle");
+  assert_false(writer_timed_out.load(), "the writer was still alive when reset() returned");
+  assert_true(file_state->entered && protocol_state->entered, "both messages reached their sinks");
+  assert_true(file_destroyed, "reset() freed the file logger the idle thread had used");
+  assert_true(protocol_destroyed, "reset() freed the protocol logger the idle thread had used");
+}
+
+// Signals when the logger that owns it is destroyed, and waits until `proceed` is ready, so a case
+// can observe or order another thread at the exact moment a registry entry or replaced logger is
+// released.
+class drop_gate_sink final : public spdlog::sinks::base_sink<spdlog::details::null_mutex>
+{
+public:
+  drop_gate_sink(std::shared_ptr<std::promise<void>> dropped, std::shared_future<void> proceed)
+    : dropped_{ std::move(dropped) }
+    , proceed_{ std::move(proceed) }
+  {
+  }
+
+  drop_gate_sink(const drop_gate_sink&) = delete;
+  drop_gate_sink(drop_gate_sink&&) = delete;
+  auto operator=(const drop_gate_sink&) -> drop_gate_sink& = delete;
+  auto operator=(drop_gate_sink&&) -> drop_gate_sink& = delete;
+
+  ~drop_gate_sink() override
+  {
+    dropped_->set_value();
+    if (proceed_.valid()) {
+      static_cast<void>(proceed_.wait_for(probe_wait()));
+    }
+  }
+
+protected:
+  void sink_it_(const spdlog::details::log_msg& /* msg */) override
+  {
+  }
+
+  void flush_() override
+  {
+  }
+
+private:
+  std::shared_ptr<std::promise<void>> dropped_;
+  std::shared_future<void> proceed_;
+};
+
+// Pauses one watched thread on its first visit to a unit_test_api callback boundary.
+class thread_hook_gate
+{
+public:
+  using setter = void (*)(std::function<void()>);
+
+  explicit thread_hook_gate(setter set_hook)
+    : set_hook_{ set_hook }
+  {
+    set_hook_([state = state_]() {
+      std::unique_lock lock(state->mutex);
+      if (!state->armed || state->watched_thread != std::this_thread::get_id()) {
+        return;
+      }
+      state->armed = false;
+      state->entered = true;
+      state->changed.notify_all();
+      state->changed.wait_for(lock, probe_wait(), [&state]() {
+        return state->released;
+      });
+    });
+  }
+
+  thread_hook_gate(const thread_hook_gate&) = delete;
+  thread_hook_gate(thread_hook_gate&&) = delete;
+  auto operator=(const thread_hook_gate&) -> thread_hook_gate& = delete;
+  auto operator=(thread_hook_gate&&) -> thread_hook_gate& = delete;
+
+  ~thread_hook_gate()
+  {
+    release();
+    set_hook_(nullptr);
+  }
+
+  void watch_this_thread()
+  {
+    const std::scoped_lock lock(state_->mutex);
+    state_->watched_thread = std::this_thread::get_id();
+    state_->armed = true;
+  }
+
+  auto wait_until_entered() -> bool
+  {
+    std::unique_lock lock(state_->mutex);
+    return state_->changed.wait_for(lock, probe_wait(), [this]() {
+      return state_->entered;
+    });
+  }
+
+  void release()
+  {
+    {
+      const std::scoped_lock lock(state_->mutex);
+      state_->armed = false;
+      state_->released = true;
+    }
+    state_->changed.notify_all();
+  }
+
+private:
+  struct shared_state {
+    std::mutex mutex{};
+    std::condition_variable changed{};
+    std::optional<std::thread::id> watched_thread{};
+    bool armed{ false };
+    bool entered{ false };
+    bool released{ false };
+  };
+
+  setter set_hook_;
+  std::shared_ptr<shared_state> state_{ std::make_shared<shared_state>() };
+};
+
+class registry_unlock_gate final : public thread_hook_gate
+{
+public:
+  registry_unlock_gate()
+    : thread_hook_gate{ &core_logger::unit_test_api::set_after_registry_unlock }
+  {
+  }
+};
+
+class cached_version_match_gate final : public thread_hook_gate
+{
+public:
+  cached_version_match_gate()
+    : thread_hook_gate{ &core_logger::unit_test_api::set_after_cached_version_match }
+  {
+  }
+};
+
+// Regression: reset() cleared the file logger, released registry_mutex, dropped the protocol
+// logger's registry entry, and released registry_mutex again before clearing protocol_logger, while
+// create_protocol_logger() released registry_mutex before publishing protocol_logger.
+void
+a_protocol_logger_is_registered_exactly_while_it_logs([[maybe_unused]] context& ctx)
+{
+  const auto directory = probe_directory("cxx-protocol-logger-reset");
+  core_logger::reset();
+  // spdlog's default logger sits at info until shutdown() drops all registry entries, whereas the
+  // protocol logger sits at trace while registered.
+  const auto baseline_lowest = core_logger::get_lowest_log_level();
+
+  auto file_released = std::make_shared<std::promise<void>>();
+  std::promise<void> allow_file_release;
+  core_logger::configuration file{};
+  file.unit_test = true;
+  file.console = false;
+  file.sink =
+    std::make_shared<drop_gate_sink>(file_released, allow_file_release.get_future().share());
+  const auto initial_file_failure = core_logger::create_file_logger(file);
+  file.sink.reset();
+
+  core_logger::configuration protocol{};
+  protocol.filename = (directory / "protocol").string();
+  protocol.unit_test = true;
+  protocol.console = false;
+  const auto initial_protocol_failure = core_logger::create_protocol_logger(protocol);
+  const auto lowest_with_protocol = core_logger::get_lowest_log_level();
+
+  // The replaced file logger is destroyed as soon as reset() releases registry_mutex. By then
+  // reset() must already have cleared protocol_logger and dropped its registry entry too.
+  std::thread resetter([]() {
+    core_logger::reset();
+  });
+  const bool saw_file_release =
+    file_released->get_future().wait_for(probe_wait()) == std::future_status::ready;
+  const bool file_still_active = core_logger::is_initialized();
+  const bool protocol_still_active = core_logger::should_log_protocol();
+  const auto lowest_after_registry_release = core_logger::get_lowest_log_level();
+  allow_file_release.set_value();
+  resetter.join();
+
+  // Also pin create_protocol_logger(): at the moment creation releases registry_mutex,
+  // should_log_protocol() and the spdlog registry must already reflect the new logger.
+  core_logger::configuration async_protocol{};
+  async_protocol.filename = (directory / "async-protocol").string();
+  async_protocol.console = false;
+  bool created_ok = false;
+  bool paused_after_create_unlock = false;
+  bool published_before_registry_release = false;
+  core_logger::level lowest_after_create_unlock{};
+  {
+    registry_unlock_gate gate;
+    std::thread creator([&]() {
+      gate.watch_this_thread();
+      created_ok = !core_logger::create_protocol_logger(async_protocol).has_value();
+    });
+    paused_after_create_unlock = gate.wait_until_entered();
+    published_before_registry_release = core_logger::should_log_protocol();
+    lowest_after_create_unlock = core_logger::get_lowest_log_level();
+    gate.release();
+    creator.join();
+  }
+
+  core_logger::shutdown();
+  core_logger::reset();
+  std::error_code ignored;
+  std::filesystem::remove_all(directory, ignored);
+
+  assert_false(initial_file_failure.has_value(), "the file logger was created");
+  assert_false(initial_protocol_failure.has_value(), "the protocol logger was created");
+  assert_false(baseline_lowest == core_logger::level::trace,
+               "no trace logger is registered before the case starts");
+  assert_eq(
+    lowest_with_protocol, core_logger::level::trace, "the protocol logger registered at trace");
+  assert_true(saw_file_release, "reset() released the replaced file logger");
+  assert_false(file_still_active, "reset() cleared the file logger before releasing it");
+  assert_false(protocol_still_active,
+               "reset() cleared protocol_logger before releasing registry_mutex");
+  assert_eq(lowest_after_registry_release,
+            baseline_lowest,
+            "reset() dropped the protocol logger from the registry in the same critical section");
+  assert_true(created_ok, "the async protocol logger was created");
+  assert_true(paused_after_create_unlock,
+              "create_protocol_logger() reached the registry_mutex unlock boundary");
+  assert_eq(
+    lowest_after_create_unlock,
+    core_logger::level::trace,
+    "create_protocol_logger() registered the protocol logger before releasing registry_mutex");
+  assert_true(published_before_registry_release,
+              "create_protocol_logger() published protocol_logger before releasing registry_mutex");
+}
+
+// Counts what it receives and records when its owning logger destroys it.
+class counting_sink final : public spdlog::sinks::base_sink<spdlog::details::null_mutex>
+{
+public:
+  counting_sink(std::shared_ptr<std::atomic<int>> received,
+                std::shared_ptr<std::atomic<bool>> destroyed)
+    : received_{ std::move(received) }
+    , destroyed_{ std::move(destroyed) }
+  {
+  }
+
+  counting_sink(const counting_sink&) = delete;
+  counting_sink(counting_sink&&) = delete;
+  auto operator=(const counting_sink&) -> counting_sink& = delete;
+  auto operator=(counting_sink&&) -> counting_sink& = delete;
+
+  ~counting_sink() override
+  {
+    destroyed_->store(true);
+  }
+
+protected:
+  void sink_it_(const spdlog::details::log_msg& /* msg */) override
+  {
+    received_->fetch_add(1);
+  }
+
+  void flush_() override
+  {
+  }
+
+private:
+  std::shared_ptr<std::atomic<int>> received_;
+  std::shared_ptr<std::atomic<bool>> destroyed_;
+};
+
+// Regression: a file logger replaced and freed between matching the cached version and locking the
+// cached weak reference caused read_logger() to find no logger and drop the message.
+void
+replacing_the_file_logger_drops_no_message([[maybe_unused]] context& ctx)
+{
+  core_logger::reset();
+  const auto create = [](const std::shared_ptr<std::atomic<int>>& received,
+                         const std::shared_ptr<std::atomic<bool>>& destroyed) {
+    core_logger::configuration config{};
+    config.unit_test = true;
+    config.console = false;
+    config.log_level = core_logger::level::trace;
+    config.sink = std::make_shared<counting_sink>(received, destroyed);
+    return core_logger::create_file_logger(config);
+  };
+  auto first_received = std::make_shared<std::atomic<int>>(0);
+  auto first_destroyed = std::make_shared<std::atomic<bool>>(false);
+  const auto first_failure = create(first_received, first_destroyed);
+
+  auto second_received = std::make_shared<std::atomic<int>>(0);
+  auto second_destroyed = std::make_shared<std::atomic<bool>>(false);
+  std::optional<std::string> second_failure;
+  bool paused_at_boundary = false;
+  int first_before_replacement = 0;
+  bool expired_before_lock = false;
+  int second_before_release = 0;
+  {
+    cached_version_match_gate gate;
+    std::thread writer([&gate]() {
+      // Populates this thread's weak-reference cache with the first logger's version.
+      CB_LOG_INFO_RAW("prime");
+      gate.watch_this_thread();
+      CB_LOG_INFO_RAW("after-replacement");
+    });
+    paused_at_boundary = gate.wait_until_entered();
+    first_before_replacement = first_received->load();
+    second_failure = create(second_received, second_destroyed);
+    expired_before_lock = first_destroyed->load();
+    second_before_release = second_received->load();
+    gate.release();
+    writer.join();
+  }
+  core_logger::reset();
+
+  assert_false(first_failure.has_value(), "the first file logger was created");
+  assert_false(second_failure.has_value(), "the replacement file logger was created");
+  assert_true(paused_at_boundary,
+              "the writer paused between matching the cached version and locking the logger");
+  assert_eq(first_before_replacement, 1, "the priming message reached the first logger");
+  assert_true(expired_before_lock,
+              "replacement destroyed the cached logger before the writer locked its weak pointer");
+  assert_eq(second_before_release, 0, "the gated message waited at the boundary");
+  assert_eq(first_received->load(), 1, "only the priming message reached the replaced logger");
+  assert_eq(second_received->load(), 1, "the gated message reached the replacement logger");
+}
 
 void
 a_registered_callback_receives_every_logged_message([[maybe_unused]] context& ctx)
@@ -738,6 +1272,11 @@ tests() -> test_suite
   return {
     suite_name,
     {
+      { CASE(reset_stops_the_file_logger) },
+      { CASE(the_protocol_logger_can_be_reset_while_another_thread_logs) },
+      { CASE(an_idle_thread_does_not_keep_a_reset_logger_alive) },
+      { CASE(a_protocol_logger_is_registered_exactly_while_it_logs) },
+      { CASE(replacing_the_file_logger_drops_no_message) },
       { CASE(a_registered_callback_receives_every_logged_message) },
       { CASE(the_callback_receives_the_level_of_each_message) },
       { CASE(logging_with_no_callback_registered_does_not_throw) },

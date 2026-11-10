@@ -52,6 +52,7 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/ioctl.h>
+#include <sys/resource.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #endif
@@ -547,6 +548,151 @@ the_parent_keeps_flushing_periodically_after_a_fork([[maybe_unused]] context& ct
 #endif
 }
 
+// Regression: the rotating file sink writes its closing line from its noexcept destructor, so a
+// closing line that could not be written terminated the process that released the logger. The
+// child sets its file size limit to zero, so that every write that reaches the file fails, and
+// fills the stream's buffer so that the closing line is the write that flushes it.
+void
+releasing_a_logger_whose_closing_line_fails_does_not_terminate([[maybe_unused]] context& ctx)
+{
+#ifdef _WIN32
+  skip("RLIMIT_FSIZE is not available on Windows");
+#elif defined(COUCHBASE_LOGGER_FORK_TSAN)
+  // create_file_logger() starts the periodic flusher in the child.
+  skip("ThreadSanitizer kills a child that starts a thread after a multithreaded fork");
+#else
+  const auto directory =
+    std::filesystem::temp_directory_path() / fmt::format("couchbase-logger-fork-{}-full", getpid());
+  std::filesystem::create_directories(directory);
+  const auto child = fork_while_logging([&directory]() {
+    signal(SIGXFSZ, SIG_IGN);
+    rlimit limit{};
+    if (getrlimit(RLIMIT_FSIZE, &limit) != 0) {
+      return 2;
+    }
+    limit.rlim_cur = 0;
+    if (setrlimit(RLIMIT_FSIZE, &limit) != 0) {
+      return 2;
+    }
+    if (core::logger::create_file_logger(file_logger_configuration(true, directory / "full"))) {
+      return 3;
+    }
+    auto failures = std::make_shared<std::atomic<int>>(0);
+    core::logger::get()->set_error_handler([failures](const std::string& /* message */) {
+      failures->fetch_add(1);
+    });
+    // Each failed flush empties the buffer, so the messages between two failures are those that
+    // fit in it. One fewer leaves too little room for the closing line, which is longer.
+    int sent = 0;
+    int first = -1;
+    int second = -1;
+    while (second < 0 && sent < 100'000) {
+      const int before = failures->load();
+      CB_LOG_INFO_RAW("x");
+      ++sent;
+      if (failures->load() > before) {
+        (first < 0 ? first : second) = sent;
+      }
+    }
+    if (second - first < 2) {
+      return 4;
+    }
+    for (int i = 0; i < second - first - 1; ++i) {
+      CB_LOG_INFO_RAW("x");
+    }
+    core::logger::reset();
+    return 0;
+  });
+  std::error_code ignored;
+  std::filesystem::remove_all(directory, ignored);
+  assert_eq(child.status,
+            0,
+            "the child survives the release (2: no rlimit, 3: no logger, 4: no buffer, 134: "
+            "terminated)");
+#endif
+}
+
+// Logs through the SDK when it is destroyed, as a sink, or an object it holds, can.
+class logs_when_destroyed_sink final : public spdlog::sinks::base_sink<std::mutex>
+{
+public:
+  explicit logs_when_destroyed_sink(std::shared_ptr<std::atomic<int>> destroyed)
+    : destroyed_{ std::move(destroyed) }
+  {
+  }
+  logs_when_destroyed_sink(const logs_when_destroyed_sink&) = delete;
+  logs_when_destroyed_sink(logs_when_destroyed_sink&&) = delete;
+  auto operator=(const logs_when_destroyed_sink&) -> logs_when_destroyed_sink& = delete;
+  auto operator=(logs_when_destroyed_sink&&) -> logs_when_destroyed_sink& = delete;
+
+  ~logs_when_destroyed_sink() override
+  {
+    CB_LOG_INFO_RAW("destroyed");
+    CB_LOG_PROTOCOL("{}", "destroyed");
+    destroyed_->fetch_add(1, std::memory_order_relaxed);
+  }
+
+protected:
+  void sink_it_(const spdlog::details::log_msg& /* msg */) override
+  {
+  }
+
+  void flush_() override
+  {
+  }
+
+private:
+  std::shared_ptr<std::atomic<int>> destroyed_;
+};
+
+// Regression: replacing a logger released its last reference under the logger mutex, so a sink
+// logging from its destructor deadlocked reset(). Runs in a forked child bounded by a timeout.
+void
+a_sink_that_logs_when_destroyed_does_not_deadlock_a_reset([[maybe_unused]] context& ctx)
+{
+#ifdef _WIN32
+  skip("fork() is not available on Windows");
+#elif defined(COUCHBASE_LOGGER_FORK_TSAN)
+  skip("ThreadSanitizer kills a child that starts a thread after a multithreaded fork");
+#else
+  const auto directory = std::filesystem::temp_directory_path() /
+                         fmt::format("couchbase-logger-fork-{}-destroyed", getpid());
+  std::filesystem::create_directories(directory);
+  const auto child = fork_while_logging([&directory]() {
+    auto destroyed = std::make_shared<std::atomic<int>>(0);
+    core::logger::configuration file{};
+    file.unit_test = true;
+    file.console = false;
+    file.sink = std::make_shared<logs_when_destroyed_sink>(destroyed);
+    if (core::logger::create_file_logger(file)) {
+      _Exit(2);
+    }
+    file.sink.reset();
+    core::logger::configuration protocol{};
+    protocol.filename = (directory / "protocol").string();
+    protocol.unit_test = true;
+    protocol.console = false;
+    protocol.sink = std::make_shared<logs_when_destroyed_sink>(destroyed);
+    if (core::logger::create_protocol_logger(protocol)) {
+      _Exit(3);
+    }
+    protocol.sink.reset();
+    core::logger::reset();
+    if (destroyed->load(std::memory_order_relaxed) != 2) {
+      _Exit(4);
+    }
+    _Exit(0);
+    return 0;
+  });
+  std::error_code ignored;
+  std::filesystem::remove_all(directory, ignored);
+  assert_eq(child.status,
+            0,
+            "reset() destroys both sinks in the child (2, 3: no logger; 4: sink kept alive; -1: "
+            "killed at the deadline)");
+#endif
+}
+
 // The threads hold a lock of spdlog's registry for most of their loop, iterating over many
 // registered loggers or replacing the file logger, so a fork that does not hold the registry leaves
 // that lock taken in the child, where notify_fork(child) then deadlocks.
@@ -704,6 +850,7 @@ tests() -> test_suite
         {},
         timeout::integration },
       { CASE(the_parent_keeps_flushing_periodically_after_a_fork), {}, timeout::integration },
+      { CASE(a_sink_that_logs_when_destroyed_does_not_deadlock_a_reset), {}, timeout::integration },
       { CASE(a_child_forked_during_an_error_report_does_not_deadlock_in_the_error_handler),
         {},
         timeout::integration },
@@ -711,6 +858,9 @@ tests() -> test_suite
         {},
         timeout::integration },
       { CASE(a_child_forked_while_another_thread_creates_and_shuts_down_the_async_logger_exits),
+        {},
+        timeout::integration },
+      { CASE(releasing_a_logger_whose_closing_line_fails_does_not_terminate),
         {},
         timeout::integration },
     },
