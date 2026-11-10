@@ -48,6 +48,7 @@ namespace opcode
 {
 constexpr std::uint8_t get = 0x00;
 constexpr std::uint8_t set = 0x01;
+constexpr std::uint8_t remove = 0x04;
 constexpr std::uint8_t noop = 0x0a;
 constexpr std::uint8_t hello = 0x1f;
 constexpr std::uint8_t sasl_list_mechs = 0x20;
@@ -300,6 +301,18 @@ private:
           put_be(extras, ++server_.last_seqno);
         }
         return respond(req, status::success, extras, {}, 0, doc.cas);
+      }
+      case opcode::remove: {
+        // CAS is ignored.
+        if (server_.documents.erase(std::string{ req.key }) == 0) {
+          return respond(req, status::not_found);
+        }
+        std::string extras;
+        if (mutation_seqno_) {
+          put_be(extras, partition_uuid);
+          put_be(extras, ++server_.last_seqno);
+        }
+        return respond(req, status::success, extras, {}, 0, ++server_.last_cas);
       }
       case opcode::noop:
         return respond(req, status::success);

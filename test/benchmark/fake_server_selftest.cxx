@@ -35,6 +35,7 @@
 #include <future>
 #include <string>
 #include <system_error>
+#include <tuple>
 #include <utility>
 
 namespace couchbase::test
@@ -105,6 +106,68 @@ get_missing_is_not_found(context& /* ctx */)
   auto [err, result] = collection.get("missing", {}).get();
   assert_error(err, errc::key_value::document_not_found, "get of an absent key");
   cluster.close().get();
+}
+
+void
+remove_deletes_and_reports_missing(context& /* ctx */)
+{
+  const bench::fake_server server;
+  auto cluster = connect(server);
+  auto collection = cluster.bucket("default").default_collection();
+  auto [upsert_err, upsert_result] = collection.upsert("k", tao::json::value{ { "a", 1 } }).get();
+  assert_success(upsert_err, "upsert k");
+  auto [remove_err, remove_result] = collection.remove("k").get();
+  assert_success(remove_err, "remove k");
+  auto [get_err, get_result] = collection.get("k", {}).get();
+  assert_error(get_err, errc::key_value::document_not_found, "get of a removed key");
+  auto [again_err, again_result] = collection.remove("k").get();
+  assert_error(again_err, errc::key_value::document_not_found, "remove of an absent key");
+  cluster.close().get();
+}
+
+void
+pipelined_stops_after_its_failure_budget(context& /* ctx */)
+{
+  // Operations fail with no supplemental message, as most KV failures do, and the first failure is
+  // reported by its error code's message.
+  const auto run = [](std::size_t max_failures, auto fails) {
+    std::size_t started = 0;
+    const auto [failure, all_started] = bench::kv::pipelined(
+      300,
+      [&started, &fails](std::size_t i) {
+        ++started;
+        std::promise<std::pair<couchbase::error, int>> p;
+        p.set_value(
+          { fails(i) ? couchbase::error{ errc::common::temporary_failure } : couchbase::error{},
+            0 });
+        return p.get_future();
+      },
+      {},
+      max_failures);
+    return std::make_tuple(started, failure, all_started);
+  };
+  const auto expected = std::error_code{ errc::common::temporary_failure }.message();
+  const auto one = [](std::size_t i) {
+    return i == 3;
+  };
+  const auto every = [](std::size_t) {
+    return true;
+  };
+
+  // Seeding: one failure stops it.
+  const auto [seeded, seed_failure, seed_all] = run(1, one);
+  assert_true(seeded < 300 && !seed_all, "seeding starts nothing once a failure is seen");
+  assert_eq(seed_failure, expected, "seeding reports the failure");
+
+  // Removal: a scattered failure leaves every operation attempted.
+  const auto [removed, remove_failure, remove_all] = run(64, one);
+  assert_true(removed == 300 && remove_all, "removal attempts every operation past one failure");
+  assert_eq(remove_failure, expected, "removal reports the failure");
+
+  // Removal against a bucket that fails everything stops after its budget, within two windows.
+  const auto [stopped, stop_failure, stop_all] = run(64, every);
+  assert_true(stopped <= 128 && !stop_all, "removal stops after 64 failures");
+  assert_eq(stop_failure, expected, "a stopped removal reports the first failure");
 }
 
 void
@@ -180,6 +243,8 @@ tests() -> test_suite
       { CASE(upsert_then_get_round_trips), {}, timeout::fast },
       { CASE(compressible_value_round_trips), {}, timeout::fast },
       { CASE(get_missing_is_not_found), {}, timeout::fast },
+      { CASE(remove_deletes_and_reports_missing), {}, timeout::fast },
+      { CASE(pipelined_stops_after_its_failure_budget), {}, timeout::fast },
       { CASE(server_survives_client_close), {}, timeout::fast },
       { CASE(bad_magic_closes_before_body), {}, timeout::fast },
       { CASE(oversized_body_closes_before_body), {}, timeout::fast },
