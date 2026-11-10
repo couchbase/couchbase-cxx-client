@@ -45,6 +45,7 @@ struct case_run {
   std::set<std::string>& keys_seen;
   std::vector<case_result>& results;
   std::ostream& progress;
+  const resource_sampler& sample;
   // The keys this case has declared, selected or not.
   std::size_t keys_declared{ 0 };
   // The key being measured, so an exception escaping it is reported against it.
@@ -109,6 +110,18 @@ is_variant(std::string_view v) -> bool
   }
 }
 
+// Full key of `variant` within `bc`, or `bc.name` when `variant` is empty.
+auto
+key_of(const bench_case& bc, std::string_view variant) -> std::string
+{
+  auto key = bc.name;
+  if (!variant.empty()) {
+    key += '/';
+    key.append(variant);
+  }
+  return key;
+}
+
 // Validates and claims the key. False when the filter does not select it.
 auto
 begin_key(detail::case_run& run, std::string_view variant, std::size_t threads) -> bool
@@ -117,11 +130,7 @@ begin_key(detail::case_run& run, std::string_view variant, std::size_t threads) 
     throw std::invalid_argument("variant \"" + std::string{ variant } +
                                 "\" is not '/'-separated [A-Za-z_][A-Za-z0-9_]* segments");
   }
-  auto key = run.bc.name;
-  if (!variant.empty()) {
-    key += '/';
-    key.append(variant);
-  }
+  auto key = key_of(run.bc, variant);
   if (threads == 0) {
     throw std::invalid_argument("key \"" + key + "\" asks for zero threads");
   }
@@ -183,36 +192,6 @@ converged(const median_ci& ci, double target_percent) -> bool
   return ci.median > 0 && (ci.upper - ci.lower) / 2 / ci.median * 100 <= target_percent;
 }
 
-// The measurement phase of a key: how long it ran, and the resource usage at its ends.
-struct window {
-  clock::duration elapsed;
-  resource_usage before;
-  resource_usage after;
-};
-
-// Warmup rounds, then measurement rounds until the stopping rule holds. round(deadline,
-// measuring) runs every thread until its first operation that ends at or after `deadline`.
-auto
-drive(const options& opts,
-      const std::function<void(clock::time_point, bool)>& round,
-      const std::function<median_ci()>& current) -> window
-{
-  auto start = clock::now();
-  while (clock::now() - start < opts.warmup) {
-    round(std::min(clock::now() + check_interval, start + opts.warmup), false);
-  }
-  const auto before = current_resource_usage();
-  start = clock::now();
-  for (;;) {
-    round(std::min(clock::now() + check_interval, start + opts.max_time), true);
-    const auto elapsed = clock::now() - start;
-    if (elapsed >= opts.max_time ||
-        (elapsed >= opts.min_time && converged(current(), opts.ci_target_percent))) {
-      return { elapsed, before, current_resource_usage() };
-    }
-  }
-}
-
 auto
 nanoseconds(clock::duration d) -> std::uint64_t
 {
@@ -237,7 +216,7 @@ per_operation(const std::optional<std::uint64_t>& before,
 void
 finish_key(detail::case_run& run,
            case_result r,
-           const window& measured,
+           const detail::window& measured,
            std::uint64_t window_operations)
 {
   r.key = std::move(run.current_key);
@@ -286,6 +265,40 @@ check_requirements(const bench_case& bc, context& ctx) -> std::optional<case_res
 }
 } // namespace
 
+namespace detail
+{
+auto
+drive(const options& opts,
+      const std::function<void(clock::time_point, bool)>& round,
+      const std::function<median_ci()>& current,
+      const resource_sampler& sample,
+      const std::function<void()>& settle) -> window
+{
+  auto start = clock::now();
+  while (clock::now() - start < opts.warmup) {
+    round(std::min(clock::now() + check_interval, start + opts.warmup), false);
+  }
+  if (settle) {
+    settle();
+  }
+  const auto before = sample();
+  start = clock::now();
+  for (;;) {
+    round(std::min(clock::now() + check_interval, start + opts.max_time), true);
+    auto elapsed = clock::now() - start;
+    if (elapsed >= opts.max_time ||
+        (elapsed >= opts.min_time && converged(current(), opts.ci_target_percent))) {
+      if (settle) {
+        settle();
+      }
+      elapsed = clock::now() - start;
+      const auto after = sample();
+      return { elapsed, before, after };
+    }
+  }
+}
+} // namespace detail
+
 state::state(detail::case_run& run)
   : run_{ &run }
 {
@@ -300,7 +313,8 @@ state::ctx() -> context&
 void
 state::per_op(std::string_view variant,
               std::size_t threads,
-              const std::function<bool(std::size_t)>& fn)
+              const std::function<bool(std::size_t)>& fn,
+              const std::function<void()>& settle)
 {
   if (!begin_key(*run_, variant, threads)) {
     return;
@@ -354,9 +368,14 @@ state::per_op(std::string_view variant,
     }
     return all;
   };
-  const auto measured = drive(run_->opts, round, [&merged] {
-    return median_with_ci(merged());
-  });
+  const auto measured = detail::drive(
+    run_->opts,
+    round,
+    [&merged] {
+      return median_with_ci(merged());
+    },
+    run_->sample,
+    settle);
 
   case_result r;
   running_stats stats;
@@ -384,6 +403,51 @@ state::per_op(std::string_view variant,
   }
   const auto operations = r.operations;
   finish_key(*run_, std::move(r), measured, operations);
+}
+
+auto
+state::selected(std::string_view variant) const -> bool
+{
+  return run_->whole_case || run_->filter.count(key_of(run_->bc, variant)) > 0;
+}
+
+auto
+state::fail_key(std::string_view variant, std::string detail) -> bool
+{
+  auto key = key_of(run_->bc, variant);
+  for (auto& r : run_->results) {
+    if (r.key == key) {
+      r = make_result(std::move(key), outcome::failed, std::move(detail));
+      return true;
+    }
+  }
+  // The key whose measurement threw: still current, with no result yet.
+  if (run_->current_key == key) {
+    run_->results.push_back(
+      make_result(std::move(run_->current_key), outcome::failed, std::move(detail)));
+    run_->current_key.clear();
+    return true;
+  }
+  // Do not declare a filtered-out key here, so a subsequent per_op() or batched() skips it.
+  // Preserve any other current_key whose measurement threw before reaching `variant`.
+  if (run_->keys_seen.count(key) > 0 || (!run_->whole_case && run_->filter.count(key) == 0)) {
+    return false;
+  }
+  auto saved_current = std::move(run_->current_key);
+  run_->current_key.clear();
+  try {
+    if (!begin_key(*run_, variant, 1)) {
+      run_->current_key = std::move(saved_current);
+      return false;
+    }
+  } catch (...) {
+    run_->current_key = std::move(saved_current);
+    throw;
+  }
+  run_->results.push_back(
+    make_result(std::move(run_->current_key), outcome::failed, std::move(detail)));
+  run_->current_key = std::move(saved_current);
+  return true;
 }
 
 void
@@ -445,9 +509,13 @@ state::run_batched(std::string_view variant,
     }
     return all;
   };
-  const auto measured = drive(run_->opts, round, [&samples] {
-    return median_with_ci(samples());
-  });
+  const auto measured = detail::drive(
+    run_->opts,
+    round,
+    [&samples] {
+      return median_with_ci(samples());
+    },
+    run_->sample);
 
   case_result r;
   running_stats stats;
@@ -477,7 +545,8 @@ run(const bench_suite& suite,
     const std::set<std::string>& filter,
     context& ctx,
     const options& opts,
-    std::ostream& progress) -> std::vector<case_result>
+    std::ostream& progress,
+    const resource_sampler& sample) -> std::vector<case_result>
 {
   std::vector<case_result> results;
   std::set<std::string> keys_seen;
@@ -509,7 +578,7 @@ run(const bench_suite& suite,
       continue;
     }
 
-    detail::case_run cr{ ctx, opts, bc, whole_case, filter, keys_seen, results, progress };
+    detail::case_run cr{ ctx, opts, bc, whole_case, filter, keys_seen, results, progress, sample };
     state s{ cr };
     try {
       bc.func(s);

@@ -22,24 +22,45 @@
 
 #include "bench_framework.hxx"
 
+#include "core/cluster.hxx"
+#include "core/logger/configuration.hxx"
+#include "core/logger/logger.hxx"
+#include "core/utils/connection_string.hxx"
+
+#include <spdlog/details/null_mutex.h>
+#include <spdlog/sinks/base_sink.h>
+#include <spdlog/sinks/callback_sink.h>
+#include <spdlog/sinks/dist_sink.h>
+#include <spdlog/sinks/rotating_file_sink.h>
+
 #include <couchbase/cluster.hxx>
 #include <couchbase/codec/raw_json_transcoder.hxx>
 #include <couchbase/codec/tao_json_serializer.hxx>
 #include <couchbase/error_codes.hxx>
 
+#include <asio/io_context.hpp>
+#include <asio/post.hpp>
 #include <tao/json.hpp>
 
 #include <array>
+#include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <deque>
+#include <filesystem>
+#include <functional>
 #include <future>
 #include <iostream>
+#include <memory>
+#include <mutex>
 #include <random>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -54,7 +75,7 @@ constexpr const char* upsert_description =
   "64 in flight.";
 constexpr const char* upsert_get_description =
   "Upserts, then gets, one of 100,000 512-byte JSON documents per operation on 20 "
-  "threads.";
+  "threads, sharing one cluster or with one each, with and without trace logging.";
 
 // The text of a failed KV or connect operation: the error code's message, then the supplemental
 // message, which is empty for most KV failures.
@@ -134,6 +155,31 @@ connect_options(const std::string& username, const std::string& password, profil
   options.transactions().cleanup_config().cleanup_lost_attempts(on);
   options.transactions().cleanup_config().cleanup_client_attempts(on);
   return options;
+}
+
+// The connection string options that set what connect_options() sets. The connection string is
+// applied after the options: enable_metrics, enable_tracing and enable_app_telemetry override the
+// features compared between sdk_default and bare, while enable_compression overrides the shared
+// compression setting both profiles enable.
+inline constexpr std::array<std::string_view, 4> profile_options{
+  "enable_metrics",
+  "enable_tracing",
+  "enable_app_telemetry",
+  "enable_compression",
+};
+
+// Throws when the connection string sets one of profile_options, so it cannot override either the
+// features compared between sdk_default and bare or their shared compression setting.
+inline void
+require_no_profile_option(const std::string& connection_string)
+{
+  const auto params = core::utils::parse_connection_string(connection_string).params;
+  for (const auto name : profile_options) {
+    if (params.count(std::string{ name }) > 0) {
+      throw std::invalid_argument("the connection string sets " + std::string{ name } +
+                                  ", which the benchmark profiles set; remove it");
+    }
+  }
 }
 
 constexpr std::size_t pipeline_depth = 64;
@@ -293,6 +339,7 @@ connect_and_measure(state& st,
                     const std::string& bucket,
                     bool write)
 {
+  require_no_profile_option(connection_string);
   auto [err, c] = cluster::connect(connection_string, connect_options(username, password, p)).get();
   if (err) {
     throw std::runtime_error("connect failed: " + describe(err));
@@ -340,17 +387,19 @@ close_clusters(std::vector<cluster>& clusters)
   }
 }
 
-// Connects n clusters concurrently in the default profile and passes them to body. They are closed
-// however body ends. When a connection fails, the others are closed and it throws.
+// Connects n clusters concurrently in profile p and passes them to body. They are closed however
+// body ends. When a connection fails, the others are closed and it throws.
 template<typename Body>
 void
 with_clusters(std::size_t n,
               const std::string& connection_string,
               const std::string& username,
               const std::string& password,
+              profile p,
               Body body)
 {
-  const auto options = connect_options(username, password, profile::sdk_default);
+  require_no_profile_option(connection_string);
+  const auto options = connect_options(username, password, p);
   std::vector<std::future<std::pair<error, cluster>>> pending;
   for (std::size_t i = 0; i < n; ++i) {
     pending.push_back(cluster::connect(connection_string, options));
@@ -377,20 +426,325 @@ with_clusters(std::size_t n,
   close_clusters(clusters);
 }
 
-// Variants <target>/t20, <target>/t20/raw and <target>/c20, all in the default profile. One
-// operation is upsert(key, value) and then get(key), each waited for. Thread w, on its n-th
-// operation, uses key (n * upsert_get_threads + w) % upsert_get_document_count.
+// How one upsert_get operation stores and reads its document.
+enum class value_path : std::uint8_t {
+  // Builds document_body(upsert_get_payload_size) and stores it through the default transcoder;
+  // the get decodes it into a tao::json::value.
+  json,
+  // Stores the document serialised once through raw_json_transcoder; the get reads it back
+  // through raw_json_transcoder without parsing.
+  raw,
+  // Stores as json does; the get copies the value into a std::string through raw_json_transcoder.
+  mixed,
+};
+
+inline auto
+make_temp_directory(std::string_view prefix) -> std::filesystem::path
+{
+  static std::atomic<std::uint64_t> seq{ 0 };
+  auto directory = std::filesystem::temp_directory_path() /
+                   (std::string{ prefix } + run_prefix().substr(7, 16) + "-" +
+                    std::to_string(seq.fetch_add(1, std::memory_order_relaxed)));
+  std::filesystem::create_directories(directory);
+  return directory;
+}
+
+// Forwards writes and flushes to `file` and records any exception in `failed`. spdlog catches
+// sink exceptions inside its error handler, so recording them lets the benchmark fail the key.
+class failure_recording_sink final : public spdlog::sinks::base_sink<spdlog::details::null_mutex>
+{
+public:
+  failure_recording_sink(std::shared_ptr<spdlog::sinks::sink> file,
+                         std::shared_ptr<std::atomic<bool>> failed)
+    : file_{ std::move(file) }
+    , failed_{ std::move(failed) }
+  {
+  }
+
+protected:
+  void sink_it_(const spdlog::details::log_msg& msg) override
+  {
+    try {
+      file_->log(msg);
+    } catch (const std::exception&) {
+      failed_->store(true);
+    }
+  }
+
+  void flush_() override
+  {
+    try {
+      file_->flush();
+    } catch (const std::exception&) {
+      failed_->store(true);
+    }
+  }
+
+  void set_pattern_(const std::string& pattern) override
+  {
+    file_->set_pattern(pattern);
+  }
+
+  void set_formatter_(std::unique_ptr<spdlog::formatter> formatter) override
+  {
+    file_->set_formatter(std::move(formatter));
+  }
+
+private:
+  std::shared_ptr<spdlog::sinks::sink> file_;
+  std::shared_ptr<std::atomic<bool>> failed_;
+};
+
+// Routes the SDK's log, at trace level, to rotating files in a temporary directory and to no other
+// sink until the object is destroyed, then removes the directory. `wait` bounds waiting for the
+// first write and for a drain marker. `file` replaces the rotating file sink in tests.
+class trace_file_log
+{
+public:
+  static constexpr std::size_t trace_file_size = 32 * 1024 * 1024;
+  static constexpr std::size_t trace_file_count = 2;
+
+  explicit trace_file_log(std::chrono::milliseconds wait = std::chrono::seconds{ 10 },
+                          std::shared_ptr<spdlog::sinks::sink> file = nullptr)
+    : directory_{ make_temp_directory("cxx-bench-trace-") }
+    , wait_{ wait }
+  {
+    try {
+      if (file == nullptr) {
+        // The rotating sink counts the files it keeps besides the one it writes.
+        file = std::make_shared<spdlog::sinks::rotating_file_sink_st>(
+          (directory_ / "sdk.log").string(), trace_file_size, trace_file_count - 1);
+      }
+      recording_ = std::make_shared<failure_recording_sink>(std::move(file), failed_);
+      sinks_->add_sink(recording_);
+      sinks_->add_sink(counter_);
+      // Last, so that the marker has been written when this sink sees it. Outside a drain() it
+      // costs a measured message one relaxed load.
+      sinks_->add_sink(std::make_shared<spdlog::sinks::callback_sink_st>(
+        [state = drain_](const spdlog::details::log_msg& msg) {
+          if (state->armed.load(std::memory_order_relaxed) &&
+              std::string_view{ msg.payload.data(), msg.payload.size() } == drain_marker) {
+            const std::scoped_lock lock(state->mutex);
+            if (state->pending) {
+              state->pending->set_value();
+              state->pending.reset();
+            }
+          }
+        }));
+      core::logger::configuration config{};
+      config.console = false;
+      config.log_level = core::logger::level::trace;
+      config.sink = sinks_;
+      if (auto failure = core::logger::create_file_logger(config); failure.has_value()) {
+        throw std::runtime_error("the trace log could not be opened: " + failure.value());
+      }
+    } catch (...) {
+      remove_files();
+      throw;
+    }
+  }
+
+  trace_file_log(const trace_file_log&) = delete;
+  trace_file_log(trace_file_log&&) = delete;
+  auto operator=(const trace_file_log&) -> trace_file_log& = delete;
+  auto operator=(trace_file_log&&) -> trace_file_log& = delete;
+
+  // Waits up to `wait` for at least one write, flushes the sink, and detaches the preflight
+  // counter.
+  void require_written()
+  {
+    const auto deadline = std::chrono::steady_clock::now() + wait_;
+    while (written_->load(std::memory_order_relaxed) == 0) {
+      if (std::chrono::steady_clock::now() >= deadline) {
+        throw std::runtime_error("nothing was written to the trace log in " + directory_.string());
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds{ 10 });
+    }
+    // On this thread, so that a file that accepts writes into its buffer but cannot store them
+    // fails here.
+    sinks_->flush();
+    sinks_->remove_sink(counter_);
+    require_no_failed_write();
+  }
+
+  // Logs a marker through the single-worker async logger, waits up to `wait` for the marker sink
+  // to observe it, and flushes `sinks_`.
+  void drain()
+  {
+    auto marker_seen = std::make_shared<std::promise<void>>();
+    auto drained = marker_seen->get_future();
+    {
+      const std::scoped_lock lock(drain_->mutex);
+      drain_->pending = marker_seen;
+    }
+    // The marker is queued after this store, and the queue orders it before the sink's load.
+    drain_->armed.store(true, std::memory_order_relaxed);
+    core::logger::detail::log(
+      __FILE__, __LINE__, "trace_file_log::drain", core::logger::level::critical, drain_marker);
+    const bool arrived = drained.wait_for(wait_) == std::future_status::ready;
+    drain_->armed.store(false, std::memory_order_relaxed);
+    {
+      const std::scoped_lock lock(drain_->mutex);
+      drain_->pending.reset();
+    }
+    if (!arrived) {
+      throw std::runtime_error("the trace log in " + directory_.string() + " did not drain");
+    }
+    // The marker shows the messages reached the files' buffers. Flushing them on this thread puts
+    // their bytes on the same side of a resource usage sample as the messages.
+    sinks_->flush();
+  }
+
+  // Drains the logger, detaches the file sink so nothing written later counts, flushes it on this
+  // thread, stops the logger, and throws if any write or flush failed.
+  void finish()
+  {
+    drain();
+    sinks_->set_sinks({});
+    recording_->flush();
+    core::logger::reset();
+    core::logger::shutdown();
+    require_no_failed_write();
+  }
+
+  ~trace_file_log()
+  {
+    core::logger::reset();
+    core::logger::shutdown();
+    remove_files();
+  }
+
+private:
+  static constexpr std::string_view drain_marker{ "trace_file_log: drained" };
+
+  // The promise the next drain marker fulfils, if a drain() waits for one. armed is set while it
+  // does, so that the marker sink compares no payload otherwise.
+  struct drain_state {
+    std::atomic<bool> armed{ false };
+    std::mutex mutex{};
+    std::shared_ptr<std::promise<void>> pending{};
+  };
+
+  void require_no_failed_write() const
+  {
+    if (failed_->load()) {
+      throw std::runtime_error("a write to the trace log in " + directory_.string() + " failed");
+    }
+  }
+
+  void remove_files()
+  {
+    sinks_->set_sinks({});
+    recording_.reset();
+    std::error_code ec;
+    std::filesystem::remove_all(directory_, ec);
+    if (ec) {
+      std::cerr << "removing " << directory_.string() << " failed: " << ec.message() << '\n';
+    }
+  }
+
+  std::filesystem::path directory_;
+  std::chrono::milliseconds wait_;
+  std::shared_ptr<spdlog::sinks::sink> recording_{};
+  std::shared_ptr<drain_state> drain_{ std::make_shared<drain_state>() };
+  std::shared_ptr<spdlog::sinks::dist_sink_mt> sinks_{
+    std::make_shared<spdlog::sinks::dist_sink_mt>()
+  };
+  std::shared_ptr<std::atomic<bool>> failed_{ std::make_shared<std::atomic<bool>>(false) };
+  std::shared_ptr<std::atomic<std::uint64_t>> written_{
+    std::make_shared<std::atomic<std::uint64_t>>(0)
+  };
+  std::shared_ptr<spdlog::sinks::sink> counter_{ std::make_shared<spdlog::sinks::callback_sink_st>(
+    [written = written_](const spdlog::details::log_msg& /* msg */) {
+      written->fetch_add(1, std::memory_order_relaxed);
+    }) };
+};
+
+// Waits, for at most `wait`, until the I/O thread of `c` has finished every ready handler.
+// The public cluster runs its io_context on one thread. Posting to `io` waits out the active
+// handler, and `io.poll()` drains queued strand handlers and posted continuations without
+// waiting on idle sockets or timers. A handler can log after completing an operation's future,
+// so this precedes a drain() that counts that message.
+inline void
+finish_io(const cluster& c,
+          std::chrono::milliseconds wait,
+          const std::function<void()>& after_post = {})
+{
+  auto passed = std::make_shared<std::promise<void>>();
+  auto barrier = passed->get_future();
+  auto& io = core::get_core_cluster(c).io_context();
+  asio::post(io, [&io, passed]() {
+    io.poll();
+    passed->set_value();
+  });
+  if (after_post) {
+    after_post();
+  }
+  if (barrier.wait_for(wait) != std::future_status::ready) {
+    throw std::runtime_error("the cluster's I/O thread did not reach the barrier");
+  }
+}
+
+// Finishes `trace` after the key of `variant` was measured. A failure fails that key, with no
+// measurements, or the case when the filter left the key out.
+inline void
+finish_trace(state& st, trace_file_log& trace, const std::string& variant)
+{
+  try {
+    trace.finish();
+  } catch (const std::exception& e) {
+    if (!st.fail_key(variant, e.what())) {
+      throw;
+    }
+  }
+}
+
+// Runs body, which sets up a trace log and measures the key of `variant`. Any exception from
+// setup, measurement, or drain marks that key failed with no measurements, or rethrows to fail
+// the case when the filter left the key out.
+template<typename Body>
+void
+with_trace_key(state& st, const std::string& variant, Body body)
+{
+  try {
+    body();
+  } catch (const std::exception& e) {
+    if (!st.fail_key(variant, e.what())) {
+      throw;
+    }
+  }
+}
+
+// Rejects active SDK protocol logging (TEST_LOG_PROTOCOL), which writes every packet at trace
+// regardless of log level.
+inline void
+require_no_protocol_log()
+{
+  if (core::logger::should_log_protocol()) {
+    throw std::invalid_argument(
+      "the SDK protocol logger is active (check TEST_LOG_PROTOCOL); unset it");
+  }
+}
+
+// Variants of kv_upsert_get. One operation is upsert(key, value) and then get(key), each waited
+// for. Thread w, on its n-th operation, uses key (n * upsert_get_threads + w) %
+// upsert_get_document_count. Each value_path is described at its enumerator.
 //
-// - t20: upsert_get_threads threads share one cluster. The value is
-//   document_body(upsert_get_payload_size), built on every upsert and stored through the default
-//   transcoder; the get decodes it into a tao::json::value.
-// - t20/raw: as t20, but the value is that document serialised once, stored through
-//   raw_json_transcoder, and the get reads it back through raw_json_transcoder without parsing.
+// - t20: upsert_get_threads threads share one cluster in the default profile, value_path::json.
+// - t20/raw: as t20 with value_path::raw.
+// - t20/mixed: as t20 with value_path::mixed.
+// - t20/mixed/trace: as t20/mixed, with the SDK logging at trace level to a file (trace_file_log).
+// - t20/mixed/bare: as t20/mixed in the bare profile.
 // - c20: as t20, but each thread has a cluster of its own, connected before and closed after the
 //   measurement.
+// - c20/mixed: as c20 with value_path::mixed.
 //
-// A failed upsert or get throws, which fails the case. The documents are stored and the c20
-// clusters are connected even when the filter selects none of these keys.
+// t20/mixed/trace runs last under with_trace_key(); a failed upsert or get marks only that key
+// failed without measurements. In every other variant, a failed operation throws, failing the
+// active key and stopping the case. Any failure before with_trace_key() also marks a selected
+// trace key failed, and rethrows if another selected variant was not finished or the trace key was
+// filtered out. Seeding, cluster connections, and trace setup run even when the filter selects
+// none of these keys.
 inline void
 measure_upsert_get(state& st,
                    std::string_view target,
@@ -399,21 +753,60 @@ measure_upsert_get(state& st,
                    const std::string& password,
                    const std::string& bucket)
 {
-  const auto raw = tao::json::to_string(document_body(upsert_get_payload_size));
-  if (raw.size() != upsert_get_document_size) {
-    throw std::logic_error("the upsert_get document is " + std::to_string(raw.size()) + " bytes");
+  const auto key_name = [target](std::string_view variant) {
+    return std::string{ target } + "/" + std::string{ variant };
+  };
+  const auto trace_key = key_name("t20/mixed/trace");
+  std::size_t pending_other_keys = 0;
+  for (const std::string_view variant : {
+         "t20",
+         "t20/raw",
+         "t20/mixed",
+         "t20/mixed/bare",
+         "c20",
+         "c20/mixed",
+       }) {
+    if (st.selected(key_name(variant))) {
+      ++pending_other_keys;
+    }
   }
+  std::string raw;
+  try {
+    require_no_protocol_log();
+    // Close the framework's idle probe connection after kv_cluster caches its metadata.
+    st.ctx().close_backend();
+    // Force the console logger to info so t20/mixed and t20/mixed/trace share one baseline across
+    // executables regardless of TEST_LOG_LEVEL.
+    if (!core::logger::is_initialized()) {
+      core::logger::create_console_logger();
+    }
+    core::logger::set_log_levels(core::logger::level::info);
+    raw = tao::json::to_string(document_body(upsert_get_payload_size));
+    if (raw.size() != upsert_get_document_size) {
+      throw std::logic_error("the upsert_get document is " + std::to_string(raw.size()) + " bytes");
+    }
+  } catch (const std::exception& e) {
+    if (!st.fail_key(trace_key, e.what()) || pending_other_keys > 0) {
+      throw;
+    }
+    return;
+  }
+  // settle runs right before each resource usage sample of the window (state::per_op()).
   const auto run = [&](std::string_view variant,
                        const std::vector<collection>& colls,
-                       bool raw_path) {
+                       value_path path,
+                       const std::function<void()>& settle = {}) {
     // Thread w counts in counters[w][0], a cache line apart from the other threads.
     std::vector<std::array<std::size_t, 64 / sizeof(std::size_t)>> counters(upsert_get_threads);
+    const auto variant_key = key_name(variant);
     st.per_op(
-      std::string{ target } + "/" + std::string{ variant }, upsert_get_threads, [&](std::size_t w) {
+      variant_key,
+      upsert_get_threads,
+      [&](std::size_t w) {
         const auto& c = colls[w % colls.size()];
         const auto key =
           document_key(((counters[w][0]++ * upsert_get_threads) + w) % upsert_get_document_count);
-        const auto err = raw_path
+        const auto err = path == value_path::raw
                            ? c.upsert<codec::raw_json_transcoder>(key, raw).get().first
                            : c.upsert(key, document_body(upsert_get_payload_size)).get().first;
         if (err) {
@@ -423,44 +816,99 @@ measure_upsert_get(state& st,
         if (get_err) {
           throw std::runtime_error("get failed: " + describe(get_err));
         }
-        if (raw_path) {
-          do_not_optimize(r.content_as<std::string, codec::raw_json_transcoder>());
-        } else {
+        if (path == value_path::json) {
           do_not_optimize(r.content_as<tao::json::value>());
+        } else {
+          do_not_optimize(r.content_as<std::string, codec::raw_json_transcoder>());
         }
         return true;
-      });
+      },
+      settle);
+    if (variant != "t20/mixed/trace" && st.selected(variant_key)) {
+      --pending_other_keys;
+    }
+  };
+  const auto default_collection = [&bucket](std::vector<cluster>& clusters) {
+    std::vector<collection> colls;
+    for (auto& c : clusters) {
+      colls.push_back(c.bucket(bucket).default_collection());
+    }
+    return colls;
   };
   // The documents are removed however the variants end. A cleanup that cannot connect is reported
   // and leaves the original failure, if any, to propagate.
   const auto cleanup = [&] {
     try {
-      with_clusters(1, connection_string, username, password, [&](std::vector<cluster>& clusters) {
-        remove_documents(clusters.front().bucket(bucket).default_collection(),
-                         upsert_get_document_count);
-      });
+      with_clusters(1,
+                    connection_string,
+                    username,
+                    password,
+                    profile::sdk_default,
+                    [&](std::vector<cluster>& clusters) {
+                      remove_documents(clusters.front().bucket(bucket).default_collection(),
+                                       upsert_get_document_count);
+                    });
     } catch (const std::exception& e) {
       std::cerr << "removing the documents of " << run_prefix() << " failed: " << e.what() << '\n';
     }
   };
+  bool trace_reached = false;
   try {
-    with_clusters(1, connection_string, username, password, [&](std::vector<cluster>& clusters) {
-      const auto c = clusters.front().bucket(bucket).default_collection();
-      seed_upsert_get(c, raw);
-      run("t20", { c }, false);
-      run("t20/raw", { c }, true);
-    });
+    with_clusters(1,
+                  connection_string,
+                  username,
+                  password,
+                  profile::sdk_default,
+                  [&](std::vector<cluster>& clusters) {
+                    const auto colls = default_collection(clusters);
+                    seed_upsert_get(colls.front(), raw);
+                    run("t20", colls, value_path::json);
+                    run("t20/raw", colls, value_path::raw);
+                    run("t20/mixed", colls, value_path::mixed);
+                  });
+    with_clusters(
+      1, connection_string, username, password, profile::bare, [&](std::vector<cluster>& clusters) {
+        run("t20/mixed/bare", default_collection(clusters), value_path::mixed);
+      });
     with_clusters(upsert_get_threads,
                   connection_string,
                   username,
                   password,
+                  profile::sdk_default,
                   [&](std::vector<cluster>& clusters) {
-                    std::vector<collection> colls;
-                    for (auto& c : clusters) {
-                      colls.push_back(c.bucket(bucket).default_collection());
-                    }
-                    run("c20", colls, false);
+                    const auto colls = default_collection(clusters);
+                    run("c20", colls, value_path::json);
+                    run("c20/mixed", colls, value_path::mixed);
                   });
+    // Last, so that every earlier variant keeps the info console logger set above.
+    trace_reached = true;
+    with_trace_key(st, trace_key, [&]() {
+      trace_file_log trace{};
+      with_clusters(1,
+                    connection_string,
+                    username,
+                    password,
+                    profile::sdk_default,
+                    [&](std::vector<cluster>& clusters) {
+                      // Connecting logs at trace level, so the files are checked before the key.
+                      trace.require_written();
+                      // Drained before and after the window, behind the I/O thread's handlers, so
+                      // that it counts the processing of its own messages and none of the
+                      // connection's.
+                      run(
+                        "t20/mixed/trace", default_collection(clusters), value_path::mixed, [&]() {
+                          finish_io(clusters.front(), std::chrono::seconds{ 10 });
+                          trace.drain();
+                        });
+                    });
+      finish_trace(st, trace, trace_key);
+    });
+  } catch (const std::exception& e) {
+    cleanup();
+    if (trace_reached || !st.fail_key(trace_key, e.what()) || pending_other_keys > 0) {
+      throw;
+    }
+    return;
   } catch (...) {
     cleanup();
     throw;

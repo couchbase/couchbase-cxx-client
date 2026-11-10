@@ -27,11 +27,15 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <set>
 #include <sstream>
+#include <stdexcept>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -222,10 +226,11 @@ auto
 run_suite(const bench_suite& suite,
           context& ctx,
           const std::set<std::string>& filter = {},
-          const options& opts = quick) -> std::vector<case_result>
+          const options& opts = quick,
+          const resource_sampler& sample = current_resource_usage) -> std::vector<case_result>
 {
   std::ostringstream progress;
-  return run(suite, filter, ctx, opts, progress);
+  return run(suite, filter, ctx, opts, progress, sample);
 }
 
 auto
@@ -373,6 +378,273 @@ all_failed_ops_is_failed(context& ctx)
   std::ostringstream bmf;
   write_bmf(bmf, results);
   assert_true(tao::json::from_string(bmf.str()).get_object().empty(), "no BMF entry");
+}
+
+bool late_failure_marked{ false };
+bool late_failure_marked_unmeasured{ false };
+
+void
+fails_after_measuring_ok_op(state& s)
+{
+  s.per_op("t1", 1, [](std::size_t) {
+    return true;
+  });
+  late_failure_marked = s.fail_key("t1", "a check after the measurement failed");
+  late_failure_marked_unmeasured = s.fail_key("t2", "never measured");
+}
+
+// Regression: a check that failed after a key was measured failed only the case, and the key's
+// measurements still reached the JSON and BMF reports.
+void
+a_key_failed_after_its_measurement_is_reported_failed(context& ctx)
+{
+  const auto results = run_suite({ "s", { { CASE(fails_after_measuring_ok_op) } } }, ctx);
+  const auto r = find(results, "fails_after_measuring_ok_op/t1");
+  assert_true(late_failure_marked, "the measured key was marked failed");
+  assert_true(late_failure_marked_unmeasured, "a key not reached yet is recorded failed");
+  assert_true(find(results, "fails_after_measuring_ok_op/t2").status == outcome::failed,
+              "as a failed result of its own");
+  assert_true(r.status == outcome::failed, "failed");
+  assert_eq(r.detail, std::string{ "a check after the measurement failed" });
+  assert_true(r.latency_ns.median == 0 && !r.p50_ns.has_value() && r.operations == 0,
+              "its measurements are dropped");
+  std::ostringstream bmf;
+  write_bmf(bmf, results);
+  assert_true(tao::json::from_string(bmf.str()).get_object().empty(), "no BMF entry");
+  assert_eq(exit_code(results), 1);
+}
+
+struct settle_trace {
+  std::vector<std::string> events{};
+  std::uint64_t queued_cpu_ns{ 0 };
+  std::uint64_t drained_cpu_ns{ 0 };
+  int settles{ 0 };
+  int samples{ 0 };
+  bool window_noted{ false };
+  bool bad_phase{ false };
+};
+
+settle_trace* active_settle_trace{ nullptr };
+
+void
+settles_around_the_window(state& s)
+{
+  auto& trace = *active_settle_trace;
+  trace.queued_cpu_ns = 5000;
+  trace.events.emplace_back("setup");
+  s.per_op(
+    "t1",
+    1,
+    [&trace](std::size_t) {
+      trace.queued_cpu_ns += 1000;
+      if (trace.settles == 1 && trace.samples == 1) {
+        if (!trace.window_noted) {
+          trace.events.emplace_back("window");
+          trace.window_noted = true;
+        }
+      } else {
+        trace.bad_phase = true;
+      }
+      return true;
+    },
+    [&trace]() {
+      trace.drained_cpu_ns += std::exchange(trace.queued_cpu_ns, 0);
+      ++trace.settles;
+      trace.events.emplace_back("settle");
+    });
+}
+
+// Regression: work the operations left to another thread, such as queued log messages, was not
+// settled before the window's resource usage samples, so the window counted setup's share and
+// missed its own.
+void
+settle_runs_right_before_each_sample_of_the_window(context& ctx)
+{
+  settle_trace trace{};
+  active_settle_trace = &trace;
+  const options no_warmup{ 0ms, 50ms, 200ms, 5.0 };
+  const auto results =
+    run_suite({ "s", { { CASE(settles_around_the_window) } } }, ctx, {}, no_warmup, [&trace]() {
+      ++trace.samples;
+      trace.events.emplace_back("sample");
+      return resource_usage{ trace.drained_cpu_ns, std::nullopt, std::nullopt };
+    });
+  active_settle_trace = nullptr;
+  const auto r = find(results, "settles_around_the_window/t1");
+  assert_true(r.status == outcome::measured, "measured");
+  assert_false(trace.bad_phase, "every operation ran after the first settle and sample");
+  const std::vector<std::string> expected{
+    "setup", "settle", "sample", "window", "settle", "sample",
+  };
+  assert_true(trace.events == expected, "each resource sample ran right after its settle");
+  assert_near(r.cpu_ns_per_op.value_or(-1.0), 1000.0, 1e-9);
+}
+
+constexpr std::chrono::milliseconds slow_settle{ 300 };
+
+void
+settles_slowly_at_the_end(state& s)
+{
+  int settles = 0;
+  s.per_op(
+    "t1",
+    1,
+    [](std::size_t) {
+      return true;
+    },
+    [&settles]() {
+      if (++settles == 2) {
+        std::this_thread::sleep_for(slow_settle);
+      }
+    });
+}
+
+// Regression: the last settle() ran outside the window's elapsed time, so a variant whose queued
+// work it drained reported a throughput that left that work out.
+void
+the_last_settle_counts_towards_the_throughput(context& ctx)
+{
+  const options no_warmup{ 0ms, 50ms, 200ms, 5.0 };
+  const auto results =
+    run_suite({ "s", { { CASE(settles_slowly_at_the_end) } } }, ctx, {}, no_warmup);
+  const auto r = find(results, "settles_slowly_at_the_end/t1");
+  assert_true(r.status == outcome::measured, "measured");
+  assert_true(r.measured_for >= slow_settle, "the window includes the last settle");
+  assert_true(r.ops_per_second.has_value() &&
+                *r.ops_per_second * std::chrono::duration<double>(slow_settle).count() <=
+                  static_cast<double>(r.operations),
+              "the throughput counts the last settle's time");
+}
+
+// Regression: when a key stopped because its confidence interval converged, drive() refreshed
+// elapsed only when settle was present, so current()'s merge and CI calculation counted against a
+// settled variant's throughput while an unsettled variant stopped its clock before current() ran.
+void
+the_window_ends_after_convergence_with_or_without_settle([[maybe_unused]] context& ctx)
+{
+  constexpr std::chrono::milliseconds slow_convergence{ 120 };
+  const options opts{ 0ms, 20ms, 500ms, 5.0 };
+
+  for (const bool with_settle : { false, true }) {
+    int ci_checks = 0;
+    bool ci_finished = false;
+    bool closing_sample_saw_ci = false;
+    int samples = 0;
+
+    const auto measured = bench::detail::drive(
+      opts,
+      [](std::chrono::steady_clock::time_point deadline, bool /* measuring */) {
+        std::this_thread::sleep_until(deadline);
+      },
+      [&]() {
+        ++ci_checks;
+        std::this_thread::sleep_for(slow_convergence);
+        ci_finished = true;
+        return median_ci{ 100.0, 99.0, 101.0 };
+      },
+      [&]() {
+        if (++samples == 2) {
+          closing_sample_saw_ci = ci_finished;
+        }
+        return resource_usage{};
+      },
+      with_settle ? std::function<void()>([]() {
+      })
+                  : std::function<void()>{});
+
+    assert_eq(ci_checks, 1, "stopped on convergence");
+    assert_true(closing_sample_saw_ci, "closing resource sample ran after convergence check");
+    assert_true(measured.elapsed >= opts.min_time + slow_convergence,
+                with_settle ? "elapsed includes convergence check when settle is present"
+                            : "elapsed includes convergence check when settle is absent");
+  }
+}
+
+bool filtered_key_failed{ true };
+
+void
+fails_a_filtered_key_then_measures_it(state& s)
+{
+  ok_op(s);
+  filtered_key_failed = s.fail_key("t2", "never selected");
+  s.per_op("t2", 1, [](std::size_t) {
+    return true;
+  });
+}
+
+// Regression: fail_key() declared a filtered-out key, causing a later per_op() for it to fail as a
+// duplicate.
+void
+failing_a_filtered_out_key_leaves_it_skippable(context& ctx)
+{
+  const auto results = run_suite({ "s", { { CASE(fails_a_filtered_key_then_measures_it) } } },
+                                 ctx,
+                                 { "fails_a_filtered_key_then_measures_it/t1" });
+  assert_false(filtered_key_failed, "fail_key() declines a key the filter leaves out");
+  assert_eq(results.size(), 1U);
+  assert_true(find(results, "fails_a_filtered_key_then_measures_it/t1").status == outcome::measured,
+              "the selected key is measured, and the case does not fail");
+}
+
+bool thrown_key_failed{ false };
+
+void
+fails_the_key_its_operation_threw_from(state& s)
+{
+  try {
+    s.per_op("t1", 1, [](std::size_t) -> bool {
+      throw std::runtime_error("the operation failed");
+    });
+  } catch (const std::runtime_error&) {
+    thrown_key_failed = s.fail_key("t1", "caught after the operation failed");
+  }
+}
+
+// Regression: when a key's measurement threw, fail_key() treated that active key as filtered out.
+void
+a_key_whose_measurement_threw_can_be_failed(context& ctx)
+{
+  const auto results =
+    run_suite({ "s", { { CASE(fails_the_key_its_operation_threw_from) } } }, ctx);
+  assert_true(thrown_key_failed, "fail_key() recorded the failure");
+  const auto r = find(results, "fails_the_key_its_operation_threw_from/t1");
+  assert_true(r.status == outcome::failed, "the key failed");
+  assert_eq(r.detail, std::string{ "caught after the operation failed" });
+}
+
+// Regression: failing an unreached key while an active key's measurement was unwinding cleared
+// current_key, so the throwing key's failure was attributed to the bare case instead.
+void
+throws_from_one_key_and_fails_another(state& s)
+{
+  try {
+    s.per_op("t1", 1, [](std::size_t) -> bool {
+      throw std::runtime_error("t1 failed");
+    });
+  } catch (const std::exception& e) {
+    static_cast<void>(s.fail_key("t2", e.what()));
+    throw;
+  }
+}
+
+void
+failing_an_unreached_key_preserves_the_throwing_key(context& ctx)
+{
+  const auto all = run_suite({ "s", { { CASE(throws_from_one_key_and_fails_another) } } }, ctx);
+  assert_eq(all.size(), 2U);
+  const auto t1 = find(all, "throws_from_one_key_and_fails_another/t1");
+  const auto t2 = find(all, "throws_from_one_key_and_fails_another/t2");
+  assert_true(t1.status == outcome::failed, "the throwing key is still recorded failed");
+  assert_eq(t1.detail, std::string{ "t1 failed" });
+  assert_true(t2.status == outcome::failed, "the unreached key is recorded failed too");
+  assert_eq(t2.detail, std::string{ "t1 failed" });
+
+  const auto only_t1 = run_suite({ "s", { { CASE(throws_from_one_key_and_fails_another) } } },
+                                 ctx,
+                                 { "throws_from_one_key_and_fails_another/t1" });
+  assert_eq(only_t1.size(), 1U);
+  assert_true(find(only_t1, "throws_from_one_key_and_fails_another/t1").status == outcome::failed,
+              "only the selected throwing key is recorded when the other is filtered out");
 }
 
 void
@@ -698,6 +970,13 @@ tests() -> test_suite
       { CASE(skip_in_requirement_skips) },
       { CASE(exception_fails_only_that_case) },
       { CASE(all_failed_ops_is_failed) },
+      { CASE(a_key_failed_after_its_measurement_is_reported_failed) },
+      { CASE(failing_a_filtered_out_key_leaves_it_skippable) },
+      { CASE(a_key_whose_measurement_threw_can_be_failed) },
+      { CASE(failing_an_unreached_key_preserves_the_throwing_key) },
+      { CASE(settle_runs_right_before_each_sample_of_the_window) },
+      { CASE(the_last_settle_counts_towards_the_throughput) },
+      { CASE(the_window_ends_after_convergence_with_or_without_settle) },
       { CASE(some_failed_ops_counts_errors) },
       { CASE(empty_batch_is_suspect) },
       { CASE(under_floor_batches_are_not_recorded) },

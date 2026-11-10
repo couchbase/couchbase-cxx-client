@@ -228,6 +228,10 @@ public:
   [[nodiscard]] auto server_groups() -> std::vector<std::string>;
   [[nodiscard]] auto storage_backend() -> std::string;
 
+  // Destroys the probe backend and closes its connection while keeping cached answers readable.
+  // Uncached probes called afterwards throw probe_failure.
+  void close_backend();
+
   // How many times a backend has been created. The caching above is what keeps a suite from
   // reconnecting per case, and a number is the only way to hold that claim to account.
   [[nodiscard]] auto backends_created() const -> std::size_t;

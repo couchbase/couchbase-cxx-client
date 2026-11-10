@@ -115,6 +115,8 @@ struct context::impl {
   configuration config;
   std::unique_ptr<probe_backend> backend{};
   std::size_t backends_created{ 0 };
+  // Set by close_backend(), after which no backend is opened again.
+  bool closed{ false };
 
   cached<couchbase::test::server_version> version{};
   cached<std::size_t> replicas{};
@@ -149,6 +151,11 @@ struct context::impl {
 
   auto probes() -> probe_backend&
   {
+    if (closed) {
+      // Throw probe_failure (not probe_backend_unavailable) so answers cached before
+      // close_backend() remain readable.
+      throw probe_failure("the probe backend was closed");
+    }
     if (backend == nullptr) {
       // Deliberately not at startup: a case that asks nothing of the server must not open a
       // connection, and a suite of 300 cases must open at most this one.
@@ -248,6 +255,14 @@ context::storage_backend() -> std::string
   return impl_->ask(impl_->storage, [this]() {
     return impl_->probes().storage_backend();
   });
+}
+
+void
+context::close_backend()
+{
+  const std::lock_guard<std::mutex> guard{ impl_->mutex };
+  impl_->backend.reset();
+  impl_->closed = true;
 }
 
 auto
