@@ -111,7 +111,7 @@ A batched key fails when no batch reached 1 ms before `--max-time`. It has no sa
 |---|---|---|
 | `benchmark_vbucket_hash` | `vbucket_hash` | CRC32 and key-to-vbucket mapping, on 1 and 8 threads. |
 | `benchmark_json` | `json_generate_binary`, `json_streaming_lexer` | JSON encoding, and the streaming lexer on a query response. |
-| `benchmark_mcbp_parser` | `mcbp_parser_next` | Parsing MCBP response frames from a buffer, plain and Snappy-compressed. |
+| `benchmark_mcbp_parser` | `mcbp_parser_next` | Parsing MCBP response frames fed in 16 KiB reads, as a session reads its socket, plain and Snappy-compressed. |
 | `benchmark_kv_fake` | `kv_get`, `kv_upsert`, `kv_upsert_get` | The KV round trip against an in-process fake server. |
 | `benchmark_kv_cluster` | `kv_get`, `kv_upsert`, `kv_upsert_get` | The same KV round trip against a real cluster. |
 
