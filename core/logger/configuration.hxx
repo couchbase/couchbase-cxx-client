@@ -27,7 +27,8 @@ struct configuration {
   std::string filename;
 
   /**
-   * 8192 item size for the logging queue. This is equivalent to 2 MB
+   * 8192 item size for the logging queue. This is equivalent to 2 MB. The SDK's async loggers
+   * share one queue. The first async logger created after start-up or after shutdown() sizes it.
    */
   std::size_t buffer_size{ 8192 };
 

@@ -28,18 +28,32 @@
 #include "core/origin.hxx"
 #include "core/utils/connection_string.hxx"
 
+#include <spdlog/async.h>
 #include <spdlog/fmt/bin_to_hex.h>
 #include <spdlog/fmt/bundled/format.h>
+#include <spdlog/sinks/base_sink.h>
 #include <spdlog/spdlog.h>
 
+#ifdef __linux__
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
+
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <cstddef>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <memory>
+#include <mutex>
 #include <random>
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -763,6 +777,295 @@ reset_stops_the_file_logger([[maybe_unused]] context& ctx)
   assert_false(initialized_after_reset, "no file logger is left after the reset");
   assert_false(logs_after_reset, "nothing is logged after the reset");
 }
+auto
+make_log_directory(std::string_view name) -> std::filesystem::path
+{
+  auto directory = std::filesystem::temp_directory_path() /
+                   (std::string{ name } + "-" + std::to_string(std::random_device{}()));
+  std::filesystem::create_directories(directory);
+  return directory;
+}
+
+auto
+read_logs(const std::filesystem::path& directory, std::string_view prefix) -> std::string
+{
+  std::string contents;
+  for (const auto& entry : std::filesystem::directory_iterator(directory)) {
+    if (entry.path().filename().string().rfind(prefix, 0) == 0) {
+      std::ifstream file(entry.path());
+      contents.append(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+    }
+  }
+  return contents;
+}
+
+void
+an_idle_thread_does_not_keep_a_replaced_file_logger([[maybe_unused]] context& ctx)
+{
+  const auto directory = make_log_directory("cxx-logger-idle");
+  core_logger::configuration config{};
+  config.filename = (directory / "sdk").string();
+  config.unit_test = true;
+  config.console = false;
+  const auto failure = core_logger::create_file_logger(config);
+
+  std::mutex mutex;
+  std::condition_variable cv;
+  bool logged = false;
+  bool done = false;
+  std::thread idle([&]() {
+    core_logger::detail::log(__FILE__, __LINE__, __func__, core_logger::level::info, "cached");
+    std::unique_lock lock(mutex);
+    logged = true;
+    cv.notify_all();
+    cv.wait(lock, [&] {
+      return done;
+    });
+  });
+  {
+    std::unique_lock lock(mutex);
+    cv.wait(lock, [&] {
+      return logged;
+    });
+  }
+  core_logger::reset();
+  // The sink writes its closing line when the last reference to the logger is released.
+  const auto logs = read_logs(directory, "sdk");
+  {
+    const std::scoped_lock lock(mutex);
+    done = true;
+  }
+  cv.notify_all();
+  idle.join();
+  std::error_code ignored;
+  std::filesystem::remove_all(directory, ignored);
+
+  assert_false(failure.has_value(), "the file logger is created");
+  assert_contains(
+    logs, "Closing logfile", "reset() releases the logger a waiting thread logged through");
+}
+
+void
+protocol_logging_does_not_race_reset([[maybe_unused]] context& ctx)
+{
+  const auto directory = make_log_directory("cxx-logger-protocol");
+  core_logger::configuration config{};
+  config.filename = (directory / "protocol").string();
+  config.unit_test = true;
+  config.console = false;
+
+  bool created = !core_logger::create_protocol_logger(config).has_value();
+  std::atomic_bool started{ false };
+  std::atomic_bool stop{ false };
+  std::thread writer([&started, &stop]() {
+    while (!stop.load()) {
+      core_logger::detail::log_protocol(__FILE__, __LINE__, __func__, "packet");
+      started = true;
+      // valgrind runs one thread at a time; without a yield the writer starves the resets
+      std::this_thread::yield();
+    }
+  });
+  while (!started.load()) {
+    std::this_thread::yield();
+  }
+  for (int i = 0; i < 100; ++i) {
+    core_logger::reset();
+    created = created && !core_logger::create_protocol_logger(config).has_value();
+  }
+  stop = true;
+  writer.join();
+  core_logger::reset();
+  const bool logs_protocol_after_reset = core_logger::should_log_protocol();
+  const auto logs = read_logs(directory, "protocol");
+  std::error_code ignored;
+  std::filesystem::remove_all(directory, ignored);
+
+  assert_true(created, "every protocol logger is created");
+  assert_contains(logs, "packet", "the writer logged through a live protocol logger");
+  assert_false(logs_protocol_after_reset, "reset() disables protocol logging");
+}
+
+void
+the_file_logger_keeps_writing_after_a_protocol_logger_is_created([[maybe_unused]] context& ctx)
+{
+  const auto directory = make_log_directory("cxx-logger-pool");
+  core_logger::configuration config{};
+  config.filename = (directory / "sdk").string();
+  config.console = false;
+  const auto file_failure = core_logger::create_file_logger(config);
+
+  config.filename = (directory / "protocol").string();
+  const auto protocol_failure = core_logger::create_protocol_logger(config);
+
+  core_logger::detail::log(
+    __FILE__, __LINE__, __func__, core_logger::level::critical, "after the protocol logger");
+  core_logger::shutdown();
+  const auto logs = read_logs(directory, "sdk");
+  core_logger::reset();
+  std::error_code ignored;
+  std::filesystem::remove_all(directory, ignored);
+
+  assert_false(file_failure.has_value(), "the file logger is created");
+  assert_false(protocol_failure.has_value(), "the protocol logger is created");
+  assert_contains(logs, "after the protocol logger", "the file logger still writes");
+}
+void
+the_sdk_loggers_keep_writing_after_the_application_replaces_the_spdlog_pool(
+  [[maybe_unused]] context& ctx)
+{
+  const auto directory = make_log_directory("cxx-logger-app-pool");
+  core_logger::configuration config{};
+  config.filename = (directory / "sdk").string();
+  config.console = false;
+  const auto file_failure = core_logger::create_file_logger(config);
+  config.filename = (directory / "protocol").string();
+  const auto protocol_failure = core_logger::create_protocol_logger(config);
+
+  // replaces spdlog's global pool, as an application would
+  spdlog::init_thread_pool(8, 1);
+  core_logger::detail::log(
+    __FILE__, __LINE__, __func__, core_logger::level::critical, "after the application pool");
+  core_logger::detail::log_protocol(__FILE__, __LINE__, __func__, "after the application pool");
+  core_logger::shutdown();
+  core_logger::reset();
+  const auto sdk_logs = read_logs(directory, "sdk");
+  const auto protocol_logs = read_logs(directory, "protocol");
+  std::error_code ignored;
+  std::filesystem::remove_all(directory, ignored);
+
+  assert_false(file_failure.has_value(), "the file logger is created");
+  assert_false(protocol_failure.has_value(), "the protocol logger is created");
+  assert_contains(sdk_logs, "after the application pool", "the file logger still writes");
+  assert_contains(protocol_logs, "after the application pool", "the protocol logger still writes");
+}
+// Holds every message at a gate until open() is called.
+class gated_sink : public spdlog::sinks::base_sink<std::mutex>
+{
+public:
+  void open()
+  {
+    {
+      const std::scoped_lock lock(gate_mutex_);
+      open_ = true;
+    }
+    gate_.notify_all();
+  }
+
+  [[nodiscard]] auto written() const -> bool
+  {
+    return written_.load();
+  }
+
+protected:
+  void sink_it_(const spdlog::details::log_msg& /* msg */) override
+  {
+    std::unique_lock lock(gate_mutex_);
+    gate_.wait(lock, [this] {
+      return open_;
+    });
+    written_ = true;
+  }
+
+  void flush_() override
+  {
+  }
+
+private:
+  std::mutex gate_mutex_{};
+  std::condition_variable gate_{};
+  bool open_{ false };
+  std::atomic<bool> written_{ false };
+};
+
+void
+a_concurrent_shutdown_returns_after_the_queued_messages_are_written([[maybe_unused]] context& ctx)
+{
+  const auto directory = make_log_directory("cxx-logger-concurrent-shutdown");
+  auto sink = std::make_shared<gated_sink>();
+  core_logger::configuration config{};
+  config.filename = (directory / "sdk").string();
+  config.console = false;
+  config.sink = sink;
+  const auto failure = core_logger::create_file_logger(config);
+  core_logger::detail::log(__FILE__, __LINE__, __func__, core_logger::level::critical, "queued");
+
+  std::thread draining([] {
+    core_logger::shutdown();
+  });
+  // ponytail: ordered by sleep, which can only hide a regression, never fail a correct shutdown().
+  std::this_thread::sleep_for(std::chrono::milliseconds{ 200 });
+  std::atomic<bool> returned{ false };
+  bool written_on_return{ false };
+  std::thread concurrent([&] {
+    core_logger::shutdown();
+    written_on_return = sink->written();
+    returned = true;
+  });
+  for (int i = 0; i < 50 && !returned; ++i) {
+    std::this_thread::sleep_for(std::chrono::milliseconds{ 10 });
+  }
+  sink->open();
+  draining.join();
+  concurrent.join();
+  core_logger::reset();
+  std::error_code ignored;
+  std::filesystem::remove_all(directory, ignored);
+
+  assert_false(failure.has_value(), "the file logger is created");
+  assert_true(written_on_return, "the concurrent shutdown() returns after the message is written");
+}
+
+#ifdef __linux__
+// Points the descriptor that holds `file` at /dev/full, so every later flush of it fails.
+void
+redirect_to_dev_full(const std::filesystem::path& file)
+{
+  struct stat target{};
+  assert_eq(::stat(file.c_str(), &target), 0, "the log file exists");
+  const int full = ::open("/dev/full", O_WRONLY | O_CLOEXEC);
+  assert_true(full >= 0, "/dev/full opens");
+  bool redirected = false;
+  for (const auto& entry : std::filesystem::directory_iterator("/proc/self/fd")) {
+    const int fd = std::stoi(entry.path().filename().string());
+    struct stat st{};
+    if (fd != full && ::fstat(fd, &st) == 0 && st.st_dev == target.st_dev &&
+        st.st_ino == target.st_ino) {
+      redirected = ::dup2(full, fd) == fd;
+      break;
+    }
+  }
+  ::close(full);
+  assert_true(redirected, "the log file descriptor is redirected");
+}
+
+void
+a_closing_line_write_error_does_not_terminate([[maybe_unused]] context& ctx)
+{
+  // A failed flush empties the stdio buffer, so the closing line fails only when it overflows the
+  // buffer. Message lengths step by less than the closing line, so some iteration lands there.
+  const auto directory = make_log_directory("cxx-logger-full");
+  for (std::size_t length = 0; length <= 8192; length += 32) {
+    const auto base = "sdk-" + std::to_string(length);
+    core_logger::configuration config{};
+    config.filename = (directory / base).string();
+    config.unit_test = true;
+    config.console = false;
+    assert_false(core_logger::create_file_logger(config).has_value(), "the file logger is created");
+    std::filesystem::path file{};
+    for (const auto& entry : std::filesystem::directory_iterator(directory)) {
+      if (entry.path().filename().string().rfind(base + ".", 0) == 0) {
+        file = entry.path();
+      }
+    }
+    redirect_to_dev_full(file);
+    core_logger::detail::log(
+      __FILE__, __LINE__, __func__, core_logger::level::critical, std::string(length, 'x'));
+    core_logger::reset();
+  }
+  std::error_code ignored;
+  std::filesystem::remove_all(directory, ignored);
+}
+#endif
 } // namespace
 
 auto
@@ -772,6 +1075,14 @@ tests() -> test_suite
     suite_name,
     {
       { CASE(reset_stops_the_file_logger) },
+      { CASE(an_idle_thread_does_not_keep_a_replaced_file_logger) },
+      { CASE(protocol_logging_does_not_race_reset) },
+      { CASE(the_file_logger_keeps_writing_after_a_protocol_logger_is_created) },
+      { CASE(the_sdk_loggers_keep_writing_after_the_application_replaces_the_spdlog_pool) },
+      { CASE(a_concurrent_shutdown_returns_after_the_queued_messages_are_written) },
+#ifdef __linux__
+      { CASE(a_closing_line_write_error_does_not_terminate) },
+#endif
       { CASE(a_registered_callback_receives_every_logged_message) },
       { CASE(the_callback_receives_the_level_of_each_message) },
       { CASE(logging_with_no_callback_registered_does_not_throw) },

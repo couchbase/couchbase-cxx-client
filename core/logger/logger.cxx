@@ -13,6 +13,7 @@
 
 #include "configuration.hxx"
 #include "core/logger/level.hxx"
+#include "core/utils/no_destructor.hxx"
 #include "custom_rotating_file_sink.hxx"
 
 #include <spdlog/async.h>
@@ -53,7 +54,28 @@ const std::string log_pattern{ "[%Y-%m-%d %T.%e] %4oms [%^%4!l%$] [%P,%*] %v" };
 // Every call the logger makes into spdlog's registry runs under this lock, and notify_fork() holds
 // it across the fork, so no registry mutex is left locked in the child. Taken after fork_mutex and
 // before every other logger lock.
-std::mutex registry_mutex;
+//
+// Never destroyed. In a static link, a global constructor initialised before this translation unit
+// can construct sdk_thread_pool_exit and register an exit hook that calls shutdown(). Both then run
+// after this translation unit's statics are destroyed, and both take this lock.
+auto
+registry_mutex() -> std::mutex&
+{
+  static couchbase::core::utils::no_destructor<std::mutex> mutex{};
+  return mutex.get();
+}
+
+// Shared by every SDK async logger and guarded by registry_mutex(). Not spdlog's global pool: an
+// async logger holds its pool weakly, so replacing the global one, from here or from an application
+// linked to the same spdlog, would orphan every async logger created before. Released at exit by
+// sdk_thread_pool_exit. Never destroyed, for the same reason as registry_mutex().
+auto
+sdk_thread_pool() -> std::shared_ptr<spdlog::details::thread_pool>&
+{
+  static couchbase::core::utils::no_destructor<std::shared_ptr<spdlog::details::thread_pool>>
+    pool{};
+  return pool.get();
+}
 
 // spdlog caches each thread's id in a thread_local, so in a forked child the forking thread keeps
 // reporting its id in the parent. %* replaces that one stale id with the thread's id in the child.
@@ -109,7 +131,8 @@ std::atomic_int log_callback_version{ 0 };
 // log_callback.
 std::atomic<bool> log_callback_present{ false };
 
-thread_local std::shared_ptr<spdlog::logger> cached_file_logger{ nullptr };
+// Weak, so a thread that stops logging does not keep a replaced logger and its files open.
+thread_local std::weak_ptr<spdlog::logger> cached_file_logger{};
 thread_local int cached_file_logger_version{ -1 };
 
 auto
@@ -120,7 +143,7 @@ get_file_logger() -> std::shared_ptr<spdlog::logger>
     cached_file_logger = file_logger;
     cached_file_logger_version = file_logger_version;
   }
-  return cached_file_logger;
+  return cached_file_logger.lock();
 }
 
 auto
@@ -146,11 +169,15 @@ update_callback_logger(const std::shared_ptr<couchbase::core::logger::log_callba
 }
 
 void
+construct_exit_drain();
+
+void
 update_file_logger(std::shared_ptr<spdlog::logger> new_logger)
 {
   std::shared_ptr<spdlog::logger> replaced{};
   {
-    const std::scoped_lock lock(registry_mutex, file_logger_mutex);
+    const std::scoped_lock lock(registry_mutex(), file_logger_mutex);
+    construct_exit_drain();
     spdlog::drop(file_logger_name);
     replaced = std::move(file_logger);
     file_logger = std::move(new_logger);
@@ -162,9 +189,23 @@ update_file_logger(std::shared_ptr<spdlog::logger> new_logger)
 }
 
 /**
- * Instance of the protocol logger.
+ * Instance of the protocol logger, guarded by file_logger_mutex, which notify_fork() holds across a
+ * fork. protocol_logger_present mirrors it for should_log_protocol(), which CB_LOG_PROTOCOL
+ * evaluates on every read and write.
  */
 std::shared_ptr<spdlog::logger> protocol_logger{};
+std::atomic<bool> protocol_logger_present{ false };
+
+void
+update_protocol_logger(std::shared_ptr<spdlog::logger> new_logger)
+{
+  {
+    const std::scoped_lock lock(file_logger_mutex);
+    std::swap(protocol_logger, new_logger);
+    protocol_logger_present.store(protocol_logger != nullptr, std::memory_order_relaxed);
+  }
+  // the replaced logger is released here, outside the lock
+}
 
 std::atomic<bool> periodic_flusher_started{ false };
 
@@ -208,12 +249,12 @@ abandon_inherited_loggers()
   spdlog::apply_all([](const std::shared_ptr<spdlog::logger>& logger) {
     inherited->push_back(logger);
   });
-  if (cached_file_logger) {
-    inherited->push_back(cached_file_logger);
-  }
   if (protocol_logger) {
-    inherited->push_back(protocol_logger);
-    protocol_logger.reset();
+    inherited->push_back(std::move(protocol_logger));
+    protocol_logger_present = false;
+  }
+  if (sdk_thread_pool()) {
+    inherited->push_back(std::move(sdk_thread_pool()));
   }
   if (auto pool = spdlog::details::registry::instance().get_tp(); pool) {
     inherited->push_back(pool);
@@ -237,6 +278,40 @@ release_fork_locks()
   log_callback_mutex.unlock();
   file_logger_mutex.unlock();
 }
+
+// Stops the periodic flusher, which would otherwise flush through a released pool, then drains the
+// pool while spdlog's registry and console mutex still exist.
+struct sdk_thread_pool_exit {
+  sdk_thread_pool_exit() = default;
+  sdk_thread_pool_exit(const sdk_thread_pool_exit&) = delete;
+  sdk_thread_pool_exit(sdk_thread_pool_exit&&) = delete;
+  auto operator=(const sdk_thread_pool_exit&) -> sdk_thread_pool_exit& = delete;
+  auto operator=(sdk_thread_pool_exit&&) -> sdk_thread_pool_exit& = delete;
+  ~sdk_thread_pool_exit()
+  {
+    std::shared_ptr<spdlog::details::thread_pool> pool{};
+    {
+      const std::scoped_lock lock(registry_mutex());
+      if (periodic_flusher_started) {
+        spdlog::flush_every(std::chrono::seconds::zero());
+        periodic_flusher_started = false;
+      }
+      pool = std::move(sdk_thread_pool());
+    }
+    pool.reset();
+  }
+};
+
+// Called under registry_mutex by every SDK function that uses spdlog's registry, and before a fork.
+// The registry, and the console mutex its default logger constructs, are constructed first, so the
+// guard is destroyed before them. An exit hook registered after the first call runs before it.
+void
+construct_exit_drain()
+{
+  spdlog::details::registry::instance();
+  static const sdk_thread_pool_exit exit_drain{};
+}
+
 } // namespace
 
 namespace couchbase::core::logger
@@ -371,9 +446,13 @@ shutdown()
    * no-op.
    */
   get_file_logger().reset();
-  const std::scoped_lock lock(registry_mutex);
+  const std::scoped_lock lock(registry_mutex());
+  construct_exit_drain();
   spdlog::details::registry::instance().shutdown();
   periodic_flusher_started = false;
+  // Releasing the last reference joins the worker once the queued messages are written. Under the
+  // lock, so a concurrent shutdown() returns only after that drain.
+  sdk_thread_pool().reset();
 }
 
 auto
@@ -391,7 +470,9 @@ notify_fork(couchbase::fork_event event)
       // locks that lock_all_for_fork() took before throwing stay held.
       std::unique_lock fork_lock(fork_mutex);
       forking_thread_id = spdlog::details::os::thread_id();
-      std::unique_lock registry_lock(registry_mutex);
+      std::unique_lock registry_lock(registry_mutex());
+      // in the parent, so a child that resets its inherited loggers already has the guard
+      construct_exit_drain();
       // Stopped under registry_mutex, so no other thread holds the registry's flusher lock at the
       // fork. The flusher never takes registry_mutex, so joining it here cannot deadlock.
       if (periodic_flusher_started) {
@@ -427,7 +508,7 @@ notify_fork(couchbase::fork_event event)
     case couchbase::fork_event::parent: {
       // released even when starting the flusher thread throws
       const std::unique_lock fork_lock(fork_mutex, std::adopt_lock);
-      const std::unique_lock registry_lock(registry_mutex, std::adopt_lock);
+      const std::unique_lock registry_lock(registry_mutex(), std::adopt_lock);
       release_fork_locks();
       if (periodic_flusher_started) {
         spdlog::flush_every(periodic_flush_interval);
@@ -437,7 +518,7 @@ notify_fork(couchbase::fork_event event)
 
     case couchbase::fork_event::child: {
       const std::unique_lock fork_lock(fork_mutex, std::adopt_lock);
-      const std::unique_lock registry_lock(registry_mutex, std::adopt_lock);
+      const std::unique_lock registry_lock(registry_mutex(), std::adopt_lock);
       forked_thread_id.store(spdlog::details::os::_thread_id(), std::memory_order_relaxed);
       stale_thread_id.store(forking_thread_id, std::memory_order_relaxed);
       abandon_inherited_loggers();
@@ -532,19 +613,18 @@ create_file_logger_impl(const std::string& logger_name, const configuration& log
       sink->add_sink(logger_settings.sink);
     }
 
-    const std::scoped_lock lock(registry_mutex);
+    const std::scoped_lock lock(registry_mutex());
+    construct_exit_drain();
     spdlog::drop(logger_name);
 
     if (logger_settings.unit_test) {
       logger = std::make_shared<spdlog::logger>(logger_name, sink);
     } else {
-      auto buffersz = logger_settings.buffer_size;
-      // Create the default thread pool for async logging
-      spdlog::init_thread_pool(buffersz, 1);
-
-      // Get the thread pool so that we can actually construct the
-      // object with already created sinks...
-      auto tp = spdlog::thread_pool();
+      if (sdk_thread_pool() == nullptr) {
+        sdk_thread_pool() =
+          std::make_shared<spdlog::details::thread_pool>(logger_settings.buffer_size, 1);
+      }
+      auto tp = sdk_thread_pool();
       logger = std::make_shared<spdlog::async_logger>(
         logger_name, sink, tp, spdlog::async_overflow_policy::block);
     }
@@ -592,14 +672,14 @@ create_protocol_logger(const configuration& logger_settings) -> std::optional<st
   if (error) {
     return error;
   }
-  protocol_logger = std::move(logger);
+  update_protocol_logger(std::move(logger));
   return {};
 }
 
 auto
 should_log_protocol() -> bool
 {
-  return protocol_logger != nullptr;
+  return protocol_logger_present.load(std::memory_order_relaxed);
 }
 
 namespace detail
@@ -607,8 +687,13 @@ namespace detail
 void
 log_protocol(const char* file, int line, const char* function, std::string_view msg)
 {
+  std::shared_ptr<spdlog::logger> logger{};
   if (should_log_protocol()) {
-    return protocol_logger->log(
+    const std::scoped_lock lock(file_logger_mutex);
+    logger = protocol_logger;
+  }
+  if (logger != nullptr) {
+    return logger->log(
       spdlog::source_loc{ file, line, function }, spdlog::level::level_enum::trace, msg);
   }
 }
@@ -625,9 +710,10 @@ reset()
 {
   update_file_logger(nullptr);
 
-  const std::scoped_lock lock(registry_mutex);
+  const std::scoped_lock lock(registry_mutex());
+  construct_exit_drain();
   spdlog::drop(protocol_logger_name);
-  protocol_logger.reset();
+  update_protocol_logger(nullptr);
 }
 
 void
@@ -672,7 +758,8 @@ register_spdlog_logger(const std::shared_ptr<spdlog::logger>& l)
     if (const auto logger = get_file_logger(); logger != nullptr) {
       logger->debug("Registering logger {}", l->name());
     }
-    const std::scoped_lock lock(registry_mutex);
+    const std::scoped_lock lock(registry_mutex());
+    construct_exit_drain();
     spdlog::register_logger(l);
   } catch (const spdlog::spdlog_ex& e) {
     if (const auto logger = get_file_logger(); logger != nullptr) {
@@ -688,7 +775,8 @@ register_spdlog_logger(const std::shared_ptr<spdlog::logger>& l)
 void
 unregister_spdlog_logger(const std::string& n)
 {
-  const std::scoped_lock lock(registry_mutex);
+  const std::scoped_lock lock(registry_mutex());
+  construct_exit_drain();
   spdlog::drop(n);
 }
 
@@ -697,7 +785,8 @@ check_log_levels(level lvl) -> bool
 {
   auto level = translate_level(lvl);
   bool correct = true;
-  const std::scoped_lock lock(registry_mutex);
+  const std::scoped_lock lock(registry_mutex());
+  construct_exit_drain();
   spdlog::apply_all([level, &correct](const std::shared_ptr<spdlog::logger>& l) {
     if (l->level() != level) {
       correct = false;
@@ -710,7 +799,8 @@ auto
 get_lowest_log_level() -> level
 {
   auto lowest = spdlog::level::off;
-  const std::scoped_lock lock(registry_mutex);
+  const std::scoped_lock lock(registry_mutex());
+  construct_exit_drain();
   // Apply the function to each registered spdlog::logger except protocol logger
   spdlog::apply_all([&lowest](const std::shared_ptr<spdlog::logger>& l) {
     lowest = std::min(l->level(), lowest);
@@ -722,7 +812,8 @@ void
 set_log_levels(level lvl)
 {
   auto level = translate_level(lvl);
-  std::unique_lock lock(registry_mutex);
+  std::unique_lock lock(registry_mutex());
+  construct_exit_drain();
   // Apply the function to each registered spdlog::logger except protocol logger
   spdlog::apply_all([level](const std::shared_ptr<spdlog::logger>& l) {
     if (l->name() == protocol_logger_name) {
