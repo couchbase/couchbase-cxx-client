@@ -130,6 +130,8 @@ In `kv_get` and `kv_upsert`, the default profile has three variants, and `bare` 
 
 Both profiles connect and seed the documents even when the filter selects keys of only one of them.
 
+A run keys its documents `bench::<16 random hex digits>::<n>` and removes them when the case ends, however it ends. Runs against one bucket therefore never touch each other's documents, or documents already in the bucket. A removal that fails is written to stderr and does not fail the case.
+
 `kv_upsert_get` runs the default profile only. One operation is an UPSERT and then a GET of the same key, each waited for. It stores 100,000 documents of 512 bytes of JSON before measuring. Thread `w`, on its `n`-th operation, uses document `(n * 20 + w) % 100000`. Its variants:
 
 - `<target>/t20` runs 20 threads that share one `cluster` object. Every UPSERT builds a `tao::json::value` and stores it through the default transcoder, and every GET decodes it.

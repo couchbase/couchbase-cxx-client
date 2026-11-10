@@ -25,14 +25,18 @@
 #include <couchbase/cluster.hxx>
 #include <couchbase/codec/raw_json_transcoder.hxx>
 #include <couchbase/codec/tao_json_serializer.hxx>
+#include <couchbase/error_codes.hxx>
 
 #include <tao/json.hpp>
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <deque>
 #include <future>
+#include <iostream>
+#include <random>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -52,13 +56,36 @@ constexpr const char* upsert_get_description =
   "Upserts, then gets, one of 100,000 512-byte JSON documents per operation on 20 "
   "threads.";
 
+// The text of a failed KV or connect operation: the error code's message, then the supplemental
+// message, which is empty for most KV failures.
+inline auto
+describe(const error& err) -> std::string
+{
+  return err.message().empty() ? err.ec().message() : err.ec().message() + ": " + err.message();
+}
+
 constexpr std::size_t document_count = 1000;
 constexpr std::size_t thread_stride = 7919;
+
+// The prefix of every key of this process: bench::, 16 random hex digits, and ::. Runs against one
+// bucket never share a key, with each other or with documents already in it.
+inline auto
+run_prefix() -> const std::string&
+{
+  static const std::string prefix = [] {
+    std::random_device rd;
+    const std::uint64_t id = (std::uint64_t{ rd() } << 32U) | std::uint64_t{ rd() };
+    std::array<char, 17> hex{};
+    std::snprintf(hex.data(), hex.size(), "%016llx", static_cast<unsigned long long>(id));
+    return "bench::" + std::string(hex.data()) + "::";
+  }();
+  return prefix;
+}
 
 inline auto
 document_key(std::size_t i) -> std::string
 {
-  return "bench::" + std::to_string(i);
+  return run_prefix() + std::to_string(i);
 }
 
 // Four members, one a string of payload_size characters.
@@ -80,7 +107,7 @@ seed(const collection& c)
   const auto body = document_body();
   for (std::size_t i = 0; i < document_count; ++i) {
     if (auto [e, r] = c.upsert(document_key(i), body).get(); e) {
-      throw std::runtime_error("seeding failed: " + e.message());
+      throw std::runtime_error("seeding failed: " + describe(e));
     }
   }
 }
@@ -142,7 +169,7 @@ measure_pipelined(state& st, std::string_view prefix, Start start)
                    }
                  }
                  if (auto err = window.front().get().first; err) {
-                   throw std::runtime_error("operation failed: " + err.message());
+                   throw std::runtime_error("operation failed: " + describe(err));
                  }
                  window.pop_front();
                  window.push_back(start(n++));
@@ -154,7 +181,7 @@ measure_pipelined(state& st, std::string_view prefix, Start start)
   std::string failure;
   for (auto& op : window) {
     if (auto err = op.get().first; err && failure.empty()) {
-      failure = "operation failed: " + err.message();
+      failure = "operation failed: " + describe(err);
     }
   }
   if (!failure.empty()) {
@@ -182,7 +209,7 @@ measure(state& st, std::string_view target, profile p, const collection& c, bool
       const auto key = document_key(((t * thread_stride) + counters[t][0]++) % document_count);
       const auto err = write ? c.upsert(key, body).get().first : c.get(key).get().first;
       if (err) {
-        throw std::runtime_error("operation failed: " + err.message());
+        throw std::runtime_error("operation failed: " + describe(err));
       }
       return true;
     });
@@ -197,6 +224,62 @@ measure(state& st, std::string_view target, profile p, const collection& c, bool
     });
   }
 }
+// Runs start(0) to start(count - 1), each returning the future of a KV operation, with
+// pipeline_depth of them in flight. Failures other than `tolerated` are counted; once there are
+// max_failures of them no further operation starts. Returns the message of the first such failure
+// once the started ones finish, or an empty string, and whether every operation was started.
+template<typename Start>
+auto
+pipelined(std::size_t count,
+          Start start,
+          std::error_code tolerated = {},
+          std::size_t max_failures = 1) -> std::pair<std::string, bool>
+{
+  std::deque<decltype(start(std::size_t{}))> window;
+  std::string failure;
+  std::size_t failures = 0;
+  std::size_t next = 0;
+  const auto may_start = [&] {
+    return next < count && failures < max_failures;
+  };
+  while (!window.empty() || may_start()) {
+    if (may_start() && window.size() < pipeline_depth) {
+      window.push_back(start(next++));
+      continue;
+    }
+    if (auto err = window.front().get().first; err && err.ec() != tolerated) {
+      if (failures++ == 0) {
+        failure = describe(err);
+      }
+    }
+    window.pop_front();
+  }
+  return { failure, next == count };
+}
+
+// Removes the documents at keys 0 to count - 1. A document already gone, such as one a failed
+// seeding never stored, is not a failure. Scattered failures leave the rest attempted; after
+// pipeline_depth of them, as a bucket that stopped answering gives, no further removal starts, so
+// cleanup ends within about one timeout per window rather than one per document. A failure is
+// written to stderr and does not fail the case: the measurement is over, and the keys belong to
+// this run only.
+inline void
+remove_documents(const collection& c, std::size_t count)
+{
+  const auto [failure, all_started] = pipelined(
+    count,
+    [&c](std::size_t i) {
+      return c.remove(document_key(i));
+    },
+    errc::key_value::document_not_found,
+    pipeline_depth);
+  if (!failure.empty()) {
+    std::cerr << "removing the documents of " << run_prefix() << " failed: " << failure
+              << (all_started ? "" : "; removal stopped, so documents with this prefix may remain")
+              << '\n';
+  }
+}
+
 // Connects in profile p, stores the documents and measures the variants of p. The connection is
 // closed however the measurement ends. Each profile connects, and seeds, whether or not the filter
 // selects one of its keys.
@@ -212,16 +295,18 @@ connect_and_measure(state& st,
 {
   auto [err, c] = cluster::connect(connection_string, connect_options(username, password, p)).get();
   if (err) {
-    throw std::runtime_error("connect failed: " + err.message());
+    throw std::runtime_error("connect failed: " + describe(err));
   }
+  const auto coll = c.bucket(bucket).default_collection();
   try {
-    const auto coll = c.bucket(bucket).default_collection();
     seed(coll);
     measure(st, target, p, coll, write);
   } catch (...) {
+    remove_documents(coll, document_count);
     c.close().get();
     throw;
   }
+  remove_documents(coll, document_count);
   c.close().get();
 }
 
@@ -231,27 +316,19 @@ constexpr std::size_t upsert_get_document_size = 512;
 // The payload that makes the JSON of document_body() upsert_get_document_size bytes.
 constexpr std::size_t upsert_get_payload_size = 446;
 
-// Stores value at keys 0 to upsert_get_document_count - 1 through raw_json_transcoder, with
-// pipeline_depth upserts in flight. After a failure no further upsert starts. The first failure
-// throws once the started upserts finish.
+// Stores value at keys 0 to upsert_get_document_count - 1 through raw_json_transcoder. The first
+// failure throws, which fails the case.
 inline void
 seed_upsert_get(const collection& c, const std::string& value)
 {
-  std::deque<decltype(c.upsert<codec::raw_json_transcoder>(std::string{}, value))> window;
-  std::string failure;
-  std::size_t next = 0;
-  while (!window.empty() || (failure.empty() && next < upsert_get_document_count)) {
-    if (failure.empty() && next < upsert_get_document_count && window.size() < pipeline_depth) {
-      window.push_back(c.upsert<codec::raw_json_transcoder>(document_key(next++), value));
-      continue;
-    }
-    if (auto err = window.front().get().first; err && failure.empty()) {
-      failure = "seeding failed: " + err.message();
-    }
-    window.pop_front();
-  }
-  if (!failure.empty()) {
-    throw std::runtime_error(failure);
+  if (auto failure = pipelined(upsert_get_document_count,
+                               [&c, &value](std::size_t i) {
+                                 return c.upsert<codec::raw_json_transcoder>(document_key(i),
+                                                                             value);
+                               })
+                       .first;
+      !failure.empty()) {
+    throw std::runtime_error("seeding failed: " + failure);
   }
 }
 
@@ -285,7 +362,7 @@ with_clusters(std::size_t n,
     if (!err) {
       clusters.push_back(std::move(c));
     } else if (failure.empty()) {
-      failure = "connect failed: " + err.message();
+      failure = "connect failed: " + describe(err);
     }
   }
   try {
@@ -340,11 +417,11 @@ measure_upsert_get(state& st,
                            ? c.upsert<codec::raw_json_transcoder>(key, raw).get().first
                            : c.upsert(key, document_body(upsert_get_payload_size)).get().first;
         if (err) {
-          throw std::runtime_error("upsert failed: " + err.message());
+          throw std::runtime_error("upsert failed: " + describe(err));
         }
         auto [get_err, r] = c.get(key).get();
         if (get_err) {
-          throw std::runtime_error("get failed: " + get_err.message());
+          throw std::runtime_error("get failed: " + describe(get_err));
         }
         if (raw_path) {
           do_not_optimize(r.content_as<std::string, codec::raw_json_transcoder>());
@@ -354,19 +431,40 @@ measure_upsert_get(state& st,
         return true;
       });
   };
-  with_clusters(1, connection_string, username, password, [&](std::vector<cluster>& clusters) {
-    const auto c = clusters.front().bucket(bucket).default_collection();
-    seed_upsert_get(c, raw);
-    run("t20", { c }, false);
-    run("t20/raw", { c }, true);
-  });
-  with_clusters(
-    upsert_get_threads, connection_string, username, password, [&](std::vector<cluster>& clusters) {
-      std::vector<collection> colls;
-      for (auto& c : clusters) {
-        colls.push_back(c.bucket(bucket).default_collection());
-      }
-      run("c20", colls, false);
+  // The documents are removed however the variants end. A cleanup that cannot connect is reported
+  // and leaves the original failure, if any, to propagate.
+  const auto cleanup = [&] {
+    try {
+      with_clusters(1, connection_string, username, password, [&](std::vector<cluster>& clusters) {
+        remove_documents(clusters.front().bucket(bucket).default_collection(),
+                         upsert_get_document_count);
+      });
+    } catch (const std::exception& e) {
+      std::cerr << "removing the documents of " << run_prefix() << " failed: " << e.what() << '\n';
+    }
+  };
+  try {
+    with_clusters(1, connection_string, username, password, [&](std::vector<cluster>& clusters) {
+      const auto c = clusters.front().bucket(bucket).default_collection();
+      seed_upsert_get(c, raw);
+      run("t20", { c }, false);
+      run("t20/raw", { c }, true);
     });
+    with_clusters(upsert_get_threads,
+                  connection_string,
+                  username,
+                  password,
+                  [&](std::vector<cluster>& clusters) {
+                    std::vector<collection> colls;
+                    for (auto& c : clusters) {
+                      colls.push_back(c.bucket(bucket).default_collection());
+                    }
+                    run("c20", colls, false);
+                  });
+  } catch (...) {
+    cleanup();
+    throw;
+  }
+  cleanup();
 }
 } // namespace couchbase::test::bench::kv

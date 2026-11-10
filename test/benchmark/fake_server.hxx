@@ -24,7 +24,7 @@
 namespace couchbase::test::bench
 {
 // An in-process MCBP server on an ephemeral loopback port, served by one io thread. It answers
-// just enough for the SDK to bootstrap bucket "default" and run GET and UPSERT against an
+// just enough for the SDK to bootstrap bucket "default" and run GET, UPSERT and REMOVE against an
 // in-memory map. It handles these opcodes:
 //
 // - HELLO, accepting xerror, select_bucket, snappy, json, collections and mutation_seqno
@@ -32,11 +32,12 @@ namespace couchbase::test::bench
 // - GET_ERROR_MAP
 // - SELECT_BUCKET
 // - GET_CLUSTER_CONFIG
-// - GET, SET and NOOP
+// - GET, SET, DELETE and NOOP
 //
-// SET stores the value and its datatype as sent, compressed or not, and GET returns both. Every
-// other opcode is answered with unknown_command. The cluster config names one node at this
-// server's own port, maps every vbucket to it and never changes its rev.
+// SET stores the value and its datatype as sent, compressed or not, and GET returns both. DELETE
+// removes the document; GET and DELETE answer not_found for a missing key, which the KV cases'
+// cleanup relies on. Every other opcode is answered with unknown_command. The cluster config names
+// one node at this server's own port, maps every vbucket to it and never changes its rev.
 //
 // Frames are encoded by hand and nothing is shared with core/io or core/protocol, so the server's
 // own cost does not move with the SDK under measurement.
