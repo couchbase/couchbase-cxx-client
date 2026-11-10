@@ -201,8 +201,12 @@ if(NOT gRPC_FOUND)
   # reuse them instead of letting gRPC build a second copy.
   if(TARGET ssl AND TARGET crypto)
     # Pre-set gRPC's internal SSL variables so ssl.cmake can be skipped
-    set(_gRPC_SSL_LIBRARIES ssl crypto CACHE INTERNAL "")
-    get_target_property(_boring_include ssl INTERFACE_INCLUDE_DIRECTORIES)
+    # LINK_ONLY, as for asio: declare_system_library(gRPC::grpc++) would otherwise mark BoringSSL's
+    # include directory SYSTEM for every target that links gRPC. gRPC compiles against BoringSSL
+    # through _gRPC_SSL_INCLUDE_DIR.
+    set(_gRPC_SSL_LIBRARIES "$<LINK_ONLY:ssl>;$<LINK_ONLY:crypto>" CACHE INTERNAL "")
+    # BoringSSL exports its include directory from crypto; ssl only links crypto.
+    get_target_property(_boring_include crypto INTERFACE_INCLUDE_DIRECTORIES)
     if(_boring_include)
       set(_gRPC_SSL_INCLUDE_DIR "${_boring_include}" CACHE INTERNAL "")
     else()
@@ -213,6 +217,8 @@ if(NOT gRPC_FOUND)
     # OpenSSL was found via pkg-config (when CMake's find_package(OpenSSL) returned an unusable setup).
     # Reuse PkgConfig::PKG_CONFIG_OPENSSL directly so gRPC links the exact same OpenSSL library.
     set(_gRPC_SSL_LIBRARIES PkgConfig::PKG_CONFIG_OPENSSL CACHE INTERNAL "")
+    # The target carries its include directories; drop one cached by a BoringSSL configuration.
+    set(_gRPC_SSL_INCLUDE_DIR "" CACHE INTERNAL "")
     set(gRPC_SSL_PROVIDER "" CACHE STRING "" FORCE)
   else()
     # No project-provided BoringSSL or pkg-config OpenSSL; point gRPC at the OpenSSL package.
