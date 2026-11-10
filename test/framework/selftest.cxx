@@ -1578,6 +1578,33 @@ the_configuration_reads_the_environment_it_documents(context& ctx)
   assert_true(!config.username.empty(), "and so are credentials");
 }
 
+// Regression: the probe's connection stayed open for the rest of the run, so its traffic and
+// logging ran inside later measurements.
+void
+closing_the_backend_keeps_the_cached_answers([[maybe_unused]] context& ctx)
+{
+  auto destroyed = std::make_shared<std::atomic<bool>>(false);
+  context probed{ no_cluster(), std::make_unique<witnessed_probes>(destroyed) };
+  const auto version = probed.server_version().to_string();
+  probed.close_backend();
+  assert_true(destroyed->load(), "the backend is destroyed");
+  assert_eq(probed.server_version().to_string(), version, "a cached answer is still given");
+  assert_throws<probe_failure>(
+    [&probed]() {
+      static_cast<void>(probed.number_of_nodes());
+    },
+    "a probe without a cached answer fails");
+  assert_eq(probed.server_version().to_string(),
+            version,
+            "a cached answer is still given after an uncached probe failed");
+  assert_throws<probe_failure>(
+    [&probed]() {
+      static_cast<void>(probed.number_of_nodes());
+    },
+    "the uncached probe fails again");
+  assert_eq(probed.backends_created(), std::size_t{ 1 }, "no backend is opened again");
+}
+
 } // namespace
 
 void
@@ -1822,6 +1849,7 @@ tests() -> test_suite
     suite_name,
     {
       { CASE(runner_reports_a_passing_case) },
+      { CASE(closing_the_backend_keeps_the_cached_answers) },
       { CASE(runner_detects_a_failing_case) },
       { CASE(runner_reports_a_skipped_case) },
       { CASE(runner_detects_a_timeout), {}, timeout::fast },

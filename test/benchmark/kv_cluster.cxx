@@ -22,15 +22,18 @@ namespace couchbase::test::bench
 {
 namespace
 {
-// Opens the probe backend before anything is timed, so the result JSON carries the server version
-// and node count.
+// Caches server version and node count for the result JSON before kv_upsert_get closes the probe.
+// Queried separately so one failure leaves the other cached; missing values serialize as null.
 void
 probe(state& st)
 {
   try {
     static_cast<void>(st.ctx().server_version());
-  } catch (const probe_failure&) {
-    return; // The result JSON writes what the probe cannot answer as null.
+  } catch (const probe_failure&) { // NOLINT(bugprone-empty-catch)
+  }
+  try {
+    static_cast<void>(st.ctx().number_of_nodes());
+  } catch (const probe_failure&) { // NOLINT(bugprone-empty-catch)
   }
 }
 

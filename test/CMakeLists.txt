@@ -88,7 +88,7 @@ set_project_options(benchmark_fake_server)
 set_project_warnings(benchmark_fake_server)
 enable_sanitizers(benchmark_fake_server)
 
-couchbase_add_test(benchmark/fake_server_selftest LABEL unit LINK_CLIENT LIBS benchmark_fake_server)
+couchbase_add_test(benchmark/fake_server_selftest LABEL unit LINK_CLIENT LIBS benchmark_fake_server benchmark_framework)
 
 # CPU-only component cases for the hot paths: vbucket hashing, JSON generation and streaming, and
 # the MCBP parser.

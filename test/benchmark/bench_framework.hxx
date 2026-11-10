@@ -94,9 +94,21 @@ public:
   // fn(thread_index) performs one operation and returns false when it failed. The clock is read
   // immediately before and after fn, and the latency of a successful operation goes into a
   // per-thread histogram. A failed operation counts as an error and its latency is discarded.
+  // If provided, settle() runs on this thread before each resource sample. The first call drains
+  // prior work before the window opens; the second runs inside the window before the closing
+  // sample, so elapsed time, throughput, and resource counters include queued work.
   void per_op(std::string_view variant,
               std::size_t threads,
-              const std::function<bool(std::size_t)>& fn);
+              const std::function<bool(std::size_t)>& fn,
+              const std::function<void()>& settle = {});
+
+  // True when the filter selects the key of `variant`, either through the case or by full key.
+  [[nodiscard]] auto selected(std::string_view variant) const -> bool;
+
+  // Marks `variant` failed with `detail`. Discards any measurements already recorded for that key,
+  // and records a failed result if its measurement threw or has not run yet. Returns false without
+  // side effects if the filter excludes the key.
+  auto fail_key(std::string_view variant, std::string detail) -> bool;
 
 private:
   void run_batched(std::string_view variant,

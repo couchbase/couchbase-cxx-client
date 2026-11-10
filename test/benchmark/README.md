@@ -59,11 +59,11 @@ Progress goes to stderr and the results table to stdout.
 | `TEST_PASSWORD` | That user's password. |
 | `TEST_BUCKET` | The bucket whose default collection the cases use. |
 
-`configuration::from_environment()` in `test/framework/context.cxx` reads them. Before measuring, `benchmark_kv_cluster` asks the cluster for its server version and node count through the test framework's probe. They go into the result JSON, and `bin/check-perf` prints them under the machine description. A probe that cannot answer leaves them `null`. The probe keeps its own connection open, idle, for the rest of the run.
+`configuration::from_environment()` in `test/framework/context.cxx` reads them. A connection string that sets `enable_metrics`, `enable_tracing`, `enable_app_telemetry` or `enable_compression` fails every case that connects. Connection-string parameters apply after `connect_options()`: the first three override profile differences, while `enable_compression` overrides shared compression. Before measuring, `benchmark_kv_cluster` queries server version and node count separately through the framework probe. They go into the result JSON (`null` when unavailable), and `bin/check-perf` prints them under the machine description. `kv_upsert_get` closes the idle probe connection before its first variant so probe polling and logging stay outside measurements.
 
 ### Logging
 
-`benchmark_kv_cluster` logs through the SDK's console logger, on stderr, which the probe initialises at `info`. `TEST_LOG_LEVEL` sets another level, such as `debug`, `warn` or `off`. The other executables open no probe, and the SDK logs nothing in them.
+`benchmark_kv_cluster` logs through the SDK console logger on stderr, initialised at `info` by the probe. `TEST_LOG_LEVEL` sets another level, such as `debug`, `warn` or `off`. Other executables open no probe and log nothing until `kv_upsert_get`. `kv_upsert_get` creates the console logger if needed and sets the level to `info`, overriding `TEST_LOG_LEVEL`. That gives `t20/mixed/trace` and `t20/mixed` the same `info` baseline in every executable. `kv_upsert_get` fails before connecting if protocol logging (`TEST_LOG_PROTOCOL`) is active, because protocol logging writes every packet at `trace`.
 
 ### Exit status
 
@@ -132,15 +132,25 @@ Both profiles connect and seed the documents even when the filter selects keys o
 
 A run keys its documents `bench::<16 random hex digits>::<n>` and removes them when the case ends, however it ends. Runs against one bucket therefore never touch each other's documents, or documents already in the bucket. A removal that fails is written to stderr and does not fail the case.
 
-`kv_upsert_get` runs the default profile only. One operation is an UPSERT and then a GET of the same key, each waited for. It stores 100,000 documents of 512 bytes of JSON before measuring. Thread `w`, on its `n`-th operation, uses document `(n * 20 + w) % 100000`. Its variants:
+`kv_upsert_get` runs the default profile, except where a variant says otherwise. One operation is an UPSERT and then a GET of the same key, each waited for. It stores 100,000 documents of 512 bytes of JSON before measuring. Thread `w`, on its `n`-th operation, uses document `(n * 20 + w) % 100000`. Its variants:
 
 - `<target>/t20` runs 20 threads that share one `cluster` object. Every UPSERT builds a `tao::json::value` and stores it through the default transcoder, and every GET decodes it.
 - `<target>/t20/raw` is `t20` with the document serialised once, stored and read back through `raw_json_transcoder`, which does not parse it.
+- `<target>/t20/mixed` is `t20` with GET reading a `std::string` via `raw_json_transcoder`. UPSERT still builds and serialises a `tao::json::value`.
+- `<target>/t20/mixed/trace` runs `t20/mixed` last on its own `cluster` object, logging at `trace` only to rotating files. At most two 32 MiB files are kept in a temporary directory, removed on teardown. Connecting must write to the files and flush cleanly before timing starts. Queued `cluster` I/O handlers and log messages drain before each window resource sample. The closing drain runs inside elapsed time, so throughput includes writing the variant's queued messages.
+- `<target>/t20/mixed/bare` is `t20/mixed` in the `bare` profile.
 - `<target>/c20` is `t20` with a `cluster` object per thread, connected before and closed after the measurement.
+- `<target>/c20/mixed` is `c20` with the GET of `t20/mixed`.
 
-`kv_upsert_get` seeds its documents and connects the 20 `cluster` objects of `c20` even when the filter selects only `t20` or `t20/raw`.
+Read together, they split the cost of one operation:
 
-A failed GET or UPSERT fails the case in every variant, with the SDK's error message.
+- `t20/mixed/trace` against `t20/mixed` is the cost of trace logging;
+- `t20/mixed` against `t20/mixed/bare` is the cost of metrics, tracing, application telemetry and the transaction cleanups;
+- `c20/mixed` against `t20/mixed` is the cost or gain of a `cluster` object per thread.
+
+`kv_upsert_get` seeds documents, connects every `cluster` object, and opens the trace log even when a filter selects fewer variants.
+
+When `t20/mixed/trace` is selected, any prerequisite, setup, operation, drain, or write failure marks that key `failed` without measurements. When `t20/mixed/trace` is filtered out, a trace setup or teardown failure fails the case. In every other variant, a failed GET or UPSERT fails the active key and stops later variants.
 
 The target is the second segment of the key. `fake` is `test/benchmark/fake_server.cxx`, an MCBP server in the same process. It answers from memory, so the SDK's own cost dominates. `cluster` is the server from `TEST_CONNECTION_STRING`, so network and server time are included.
 
