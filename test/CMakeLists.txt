@@ -95,5 +95,6 @@ couchbase_add_test(benchmark/fake_server_selftest LABEL unit LINK_CLIENT LIBS be
 couchbase_add_benchmark(benchmark/vbucket_hash LINK_CLIENT)
 couchbase_add_benchmark(benchmark/json LINK_CLIENT)
 couchbase_add_benchmark(benchmark/mcbp_parser LINK_CLIENT LIBS snappy)
+couchbase_add_benchmark(benchmark/mcbp_session LINK_CLIENT)
 couchbase_add_benchmark(benchmark/kv_fake LINK_CLIENT LIBS benchmark_fake_server)
 couchbase_add_benchmark(benchmark/kv_cluster LINK_CLIENT)

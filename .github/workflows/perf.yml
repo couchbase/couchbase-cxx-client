@@ -54,7 +54,7 @@ jobs:
           restore-keys: ccache-perf-sdk-
       - name: Compare
         timeout-minutes: 150
-        run: bin/check-perf ci --out perf-report --suite vbucket_hash --suite json --suite mcbp_parser --suite kv_fake
+        run: bin/check-perf ci --out perf-report --suite vbucket_hash --suite json --suite mcbp_parser --suite mcbp_session --suite kv_fake
       # Only branch pushes save, as in abi.yml.
       - name: Save ccache
         if: ${{ !cancelled() && github.event_name == 'push' && github.ref_type == 'branch' }}
