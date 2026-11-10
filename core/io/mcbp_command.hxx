@@ -76,6 +76,12 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
   Request request;
   encoded_request_type encoded;
   std::optional<std::uint32_t> opaque_{};
+  // Whether the attempt in flight may be applied: set once send() is past collection resolution,
+  // from where the request may reach the server, and cleared when the server rejects the attempt
+  // with unknown_collection. opaque_ is assigned before resolution and cannot tell.
+  bool attempt_in_doubt_{ false };
+  // Whether an earlier attempt may have been applied. A new attempt never clears it.
+  bool earlier_attempt_in_doubt_{ false };
   std::optional<io::mcbp_session> session_{};
   mcbp_command_handler handler_{};
   std::shared_ptr<Manager> manager_{};
@@ -165,6 +171,11 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     }
   }
 
+  [[nodiscard]] auto may_have_been_applied() const -> bool
+  {
+    return attempt_in_doubt_ || earlier_attempt_in_doubt_;
+  }
+
   void cancel(retry_reason reason, bool is_timeout = true)
   {
     if constexpr (is_cancellable_operation_v<Request>) {
@@ -184,7 +195,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
     }
     if (is_timeout) {
       invoke_handler(
-        request.retries.idempotent() || !opaque_.has_value()
+        request.retries.idempotent() || !may_have_been_applied()
           ? errc::common::unambiguous_timeout // safe to retry or has not been sent to the server
           : errc::common::ambiguous_timeout   // non-idempotent and has been sent to the server
       );
@@ -269,6 +280,9 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
         });
       }
     }
+    if (!handler_) {
+      return; // completed, see send()
+    }
     if (session_->is_stopped()) {
       return manager_->map_and_send(this->shared_from_this());
     }
@@ -305,6 +319,12 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
 
   void handle_unknown_collection()
   {
+    if (!handler_) {
+      return; // completed, see send()
+    }
+    // The server rejected the attempt in flight. Reached from GetCollectionID only before any
+    // attempt was written, when there is nothing to clear.
+    attempt_in_doubt_ = false;
     auto backoff = std::chrono::milliseconds(500);
     auto time_left = deadline.expiry() - std::chrono::steady_clock::now();
     CB_LOG_DEBUG(R"({} unknown collection response for "{}", time_left={}ms, id="{}")",
@@ -314,7 +334,7 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
                  id());
     request.retries.add_reason(retry_reason::key_value_collection_outdated);
     if (time_left < backoff) {
-      return invoke_handler(make_error_code(request.retries.idempotent()
+      return invoke_handler(make_error_code(request.retries.idempotent() || !may_have_been_applied()
                                               ? errc::common::unambiguous_timeout
                                               : errc::common::ambiguous_timeout));
     }
@@ -329,6 +349,12 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
 
   void send()
   {
+    // An empty handler_ marks a completed command. GetCollectionID is subscribed under an opaque
+    // cancel() does not know, so its response and the retries it starts can arrive after the
+    // command has completed, and must not write anything.
+    if (!handler_) {
+      return;
+    }
     opaque_ = session_->next_opaque();
     request.opaque = *opaque_;
     if (request.id.use_collections() && !request.id.is_collection_resolved()) {
@@ -351,6 +377,8 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
         }
       }
     }
+    earlier_attempt_in_doubt_ = earlier_attempt_in_doubt_ || attempt_in_doubt_;
+    attempt_in_doubt_ = true;
 
     if (auto ec = request.encode_to(encoded, session_->context()); ec) {
       return invoke_handler(ec);
