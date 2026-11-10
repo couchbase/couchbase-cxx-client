@@ -24,7 +24,9 @@
 
 #include <spdlog/common.h>
 #include <spdlog/fmt/bundled/format.h>
+#include <spdlog/logger.h>
 #include <spdlog/sinks/base_sink.h>
+#include <spdlog/sinks/null_sink.h>
 
 #include <array>
 #include <atomic>
@@ -34,6 +36,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <set>
@@ -41,6 +44,7 @@
 #include <string_view>
 #include <thread>
 #include <utility>
+#include <vector>
 
 #ifndef _WIN32
 #include <csignal>
@@ -543,6 +547,115 @@ the_parent_keeps_flushing_periodically_after_a_fork([[maybe_unused]] context& ct
 #endif
 }
 
+// The threads hold a lock of spdlog's registry for most of their loop, iterating over many
+// registered loggers or replacing the file logger, so a fork that does not hold the registry leaves
+// that lock taken in the child, where notify_fork(child) then deadlocks.
+void
+a_child_forked_while_other_threads_use_the_logger_registry_exits([[maybe_unused]] context& ctx)
+{
+#ifdef _WIN32
+  skip("fork() is not available on Windows");
+#else
+  constexpr int forks{ 20 };
+  const auto directory = std::filesystem::temp_directory_path() /
+                         fmt::format("couchbase-logger-fork-{}-registry", getpid());
+  std::filesystem::create_directories(directory);
+  if (core::logger::create_file_logger(file_logger_configuration(true, directory / "parent"))) {
+    fail("the parent logger is created");
+  }
+  std::atomic<bool> stop{ false };
+  std::vector<std::thread> threads;
+  const scope_exit cleanup{ [&]() {
+    stop = true;
+    for (auto& thread : threads) {
+      thread.join();
+    }
+    core::logger::shutdown();
+    std::filesystem::remove_all(directory);
+  } };
+  for (int i = 0; i < 1000; ++i) {
+    core::logger::register_spdlog_logger(std::make_shared<spdlog::logger>(
+      fmt::format("registered-{}", i), std::make_shared<spdlog::sinks::null_sink_mt>()));
+  }
+  for (int i = 0; i < 4; ++i) {
+    threads.emplace_back([&stop, name = fmt::format("registry-user-{}", i)]() {
+      while (!stop) {
+        core::logger::set_log_levels(core::logger::level::info);
+        static_cast<void>(core::logger::check_log_levels(core::logger::level::info));
+        static_cast<void>(core::logger::get_lowest_log_level());
+        core::logger::register_spdlog_logger(
+          std::make_shared<spdlog::logger>(name, std::make_shared<spdlog::sinks::null_sink_mt>()));
+        core::logger::unregister_spdlog_logger(name);
+        std::this_thread::yield();
+      }
+    });
+  }
+  threads.emplace_back([&stop]() {
+    while (!stop) {
+      core::logger::create_blackhole_logger();
+      core::logger::reset();
+      std::this_thread::yield();
+    }
+  });
+  for (int i = 0; i < forks; ++i) {
+    const auto child = fork_while_logging([]() {
+      return 0;
+    });
+    assert_eq(child.status, 0, fmt::format("child {} of {} exits within the deadline", i, forks));
+  }
+#endif
+}
+
+// One thread creates the asynchronous logger and shuts it down in a loop, holding spdlog's thread
+// pool lock while it creates or joins the pool, so a fork that does not hold the registry leaves
+// that lock taken in the child, where notify_fork(child) then deadlocks.
+void
+a_child_forked_while_another_thread_creates_and_shuts_down_the_async_logger_exits(
+  [[maybe_unused]] context& ctx)
+{
+#ifdef _WIN32
+  skip("fork() is not available on Windows");
+#else
+  constexpr int forks{ 100 };
+  const auto directory = std::filesystem::temp_directory_path() /
+                         fmt::format("couchbase-logger-fork-{}-async-pool", getpid());
+  std::filesystem::create_directories(directory);
+  std::atomic<bool> stop{ false };
+  std::atomic<int> cycles{ 0 };
+  // written by the cycler only, read after it is joined
+  std::optional<std::string> create_error{};
+  std::thread cycler{ [&stop, &cycles, &create_error, base = directory / "async"]() {
+    while (!stop) {
+      create_error = core::logger::create_file_logger(file_logger_configuration(false, base));
+      if (create_error) {
+        return;
+      }
+      core::logger::shutdown();
+      ++cycles;
+    }
+  } };
+  const scope_exit cleanup{ [&]() {
+    stop = true;
+    if (cycler.joinable()) {
+      cycler.join();
+    }
+    core::logger::shutdown();
+    std::filesystem::remove_all(directory);
+  } };
+  for (int i = 0; i < forks; ++i) {
+    const auto child = fork_while_logging([]() {
+      return 0;
+    });
+    assert_eq(child.status, 0, fmt::format("child {} of {} exits within the deadline", i, forks));
+  }
+  stop = true;
+  cycler.join();
+  assert_false(create_error.has_value(),
+               fmt::format("the asynchronous logger is created: {}", create_error.value_or("")));
+  assert_true(cycles > 0, "the asynchronous logger is created and shut down at least once");
+#endif
+}
+
 void
 a_child_forked_while_another_thread_logs_creates_its_own_logger([[maybe_unused]] context& ctx)
 {
@@ -592,6 +705,12 @@ tests() -> test_suite
         timeout::integration },
       { CASE(the_parent_keeps_flushing_periodically_after_a_fork), {}, timeout::integration },
       { CASE(a_child_forked_during_an_error_report_does_not_deadlock_in_the_error_handler),
+        {},
+        timeout::integration },
+      { CASE(a_child_forked_while_other_threads_use_the_logger_registry_exits),
+        {},
+        timeout::integration },
+      { CASE(a_child_forked_while_another_thread_creates_and_shuts_down_the_async_logger_exits),
         {},
         timeout::integration },
     },
