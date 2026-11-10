@@ -68,6 +68,9 @@ constexpr std::chrono::milliseconds check_interval{ 100 };
 constexpr std::chrono::milliseconds min_batch_duration{ 1 };
 // Bounds the doubling for a loop the compiler emptied, whose batches never reach a millisecond.
 constexpr std::uint64_t max_batch_iterations{ std::uint64_t{ 1 } << 30 };
+// The samples a lane keeps of capped batches under the floor. Enough for a median and its interval,
+// and a bound on the memory of a loop the compiler emptied, which finishes such a batch in no time.
+constexpr std::size_t max_capped_samples{ 1024 };
 constexpr double suspect_below_ns{ 0.5 };
 
 auto
@@ -398,6 +401,8 @@ state::run_batched(std::string_view variant,
     // Every iteration of a measuring round, the batches under the floor included.
     std::uint64_t window_iterations{ 0 };
     std::vector<double> samples{};
+    // Samples of capped batches that finished under the floor.
+    std::size_t capped_samples{ 0 };
   };
   std::vector<lane> lanes(threads);
   std::atomic<bool> abort{ false };
@@ -413,12 +418,18 @@ state::run_batched(std::string_view variant,
           l.window_iterations += l.batch;
         }
         // A batch under the floor measures the clock as much as fn, so it only sizes the next one.
-        // A capped batch is kept: it is how a loop the compiler emptied reaches `suspect`.
-        if (t1 - t0 < min_batch_duration && l.batch < max_batch_iterations) {
+        // A capped batch is kept: it is how a loop the compiler emptied reaches `suspect`. Such a
+        // loop finishes a capped batch in no time, so only the first max_capped_samples of them
+        // are kept; the rest count as iterations only.
+        const bool under_floor = t1 - t0 < min_batch_duration;
+        if (under_floor && l.batch < max_batch_iterations) {
           l.batch *= 2;
         } else if (measuring) {
-          l.samples.push_back(static_cast<double>(nanoseconds(t1 - t0)) /
-                              static_cast<double>(l.batch));
+          if (!under_floor || l.capped_samples < max_capped_samples) {
+            l.samples.push_back(static_cast<double>(nanoseconds(t1 - t0)) /
+                                static_cast<double>(l.batch));
+            l.capped_samples += under_floor ? 1 : 0;
+          }
           l.iterations += l.batch;
         }
         if (t1 >= deadline) {
