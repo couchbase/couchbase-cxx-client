@@ -34,6 +34,7 @@
 #include <mach/mach_host.h>
 #include <mach/mach_init.h>
 #include <mach/mach_port.h>
+#include <mach/mach_time.h>
 #include <mach/mach_traps.h>
 #include <mach/shared_region.h>
 #include <mach/task.h>
@@ -122,6 +123,23 @@ macos_nsec2usec(std::uint64_t s) -> std::uint64_t
   return s / 1'000ULL;
 }
 
+/// PROC_PIDTASKINFO reports pti_total_user and pti_total_system in Mach absolute time units. They
+/// are nanoseconds only where the timebase is 1/1 (Intel); current Apple Silicon reports 125/3.
+inline auto
+macos_mach2msec(std::uint64_t t) -> std::uint64_t
+{
+  static const mach_timebase_info_data_t timebase = [] {
+    mach_timebase_info_data_t tb{};
+    mach_timebase_info(&tb);
+    return tb;
+  }();
+  if (timebase.denom == 0) {
+    return macos_nsec2msec(t);
+  }
+  const auto nsec = static_cast<long double>(t) * timebase.numer / timebase.denom;
+  return macos_nsec2msec(static_cast<std::uint64_t>(nsec));
+}
+
 auto
 get_proc_times(sm_pid_t pid, proc_time_t* time) -> int
 {
@@ -138,8 +156,8 @@ get_proc_times(sm_pid_t pid, proc_time_t* time) -> int
   int sz = proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &pti, sizeof(pti));
 
   if (sz == sizeof(pti)) {
-    time->user = macos_nsec2msec(pti.pti_total_user);
-    time->sys = macos_nsec2msec(pti.pti_total_system);
+    time->user = macos_mach2msec(pti.pti_total_user);
+    time->sys = macos_mach2msec(pti.pti_total_system);
     time->total = time->user + time->sys;
     return SM_OK;
   }
@@ -201,6 +219,28 @@ macos_system_metrics::get_logical_cpu_count() const -> std::uint32_t
       errno, std::system_category(), "get_logical_cpu_count() failed to fetch value");
   }
   return cpu_count;
+}
+
+auto
+macos_system_metrics::get_system_cpu() const -> system_cpu_t
+{
+  host_cpu_load_info_data_t load{};
+  mach_msg_type_number_t count = HOST_CPU_LOAD_INFO_COUNT;
+  const mach_port_t host = mach_host_self();
+  const kern_return_t kr =
+    host_statistics(host, HOST_CPU_LOAD_INFO, reinterpret_cast<host_info_t>(&load), &count);
+  mach_port_deallocate(mach_task_self(), host);
+  if (kr != KERN_SUCCESS) {
+    throw std::runtime_error(std::string("get_system_cpu() failed: ") + mach_error_string(kr));
+  }
+  // cpu_ticks are summed over all CPUs, in clock ticks.
+  const auto ticks_per_sec = SystemConstants::instance().ticks;
+  const auto msec = [ticks_per_sec](natural_t ticks) {
+    return static_cast<std::uint64_t>(ticks) * 1'000ULL / ticks_per_sec;
+  };
+  const auto busy = msec(load.cpu_ticks[CPU_STATE_USER]) + msec(load.cpu_ticks[CPU_STATE_SYSTEM]) +
+                    msec(load.cpu_ticks[CPU_STATE_NICE]);
+  return { busy, busy + msec(load.cpu_ticks[CPU_STATE_IDLE]) };
 }
 
 auto
@@ -316,6 +356,12 @@ auto
 macos_system_metrics::get_proc_cpu(sm_pid_t /*pid*/) const -> proc_cpu_t
 {
   return proc_cpu_t{};
+}
+
+auto
+macos_system_metrics::get_system_cpu() const -> system_cpu_t
+{
+  return system_cpu_t{};
 }
 
 auto

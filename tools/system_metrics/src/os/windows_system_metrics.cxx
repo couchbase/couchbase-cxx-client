@@ -105,6 +105,28 @@ windows_system_metrics::get_logical_cpu_count() const -> std::uint32_t
 }
 
 auto
+windows_system_metrics::get_system_cpu() const -> system_cpu_t
+{
+  // GetSystemTimes is documented to report only the calling thread's processor group when there is
+  // more than one (see its Remarks), so the whole machine cannot be measured.
+  if (GetActiveProcessorGroupCount() > 1) {
+    return system_cpu_t{};
+  }
+  FILETIME idle_time{};
+  FILETIME kernel_time{};
+  FILETIME user_time{};
+  if (!GetSystemTimes(&idle_time, &kernel_time, &user_time)) {
+    DWORD error = GetLastError();
+    throw std::system_error(static_cast<int>(error),
+                            std::system_category(),
+                            "GetSystemTimes failed in windows_system_metrics::get_system_cpu");
+  }
+  // Kernel time includes idle time.
+  const auto total = filetime2msec(kernel_time) + filetime2msec(user_time);
+  return { total - filetime2msec(idle_time), total };
+}
+
+auto
 windows_system_metrics::get_proc_cpu(sm_pid_t pid) const -> proc_cpu_t
 {
   HANDLE hProcess =
@@ -275,6 +297,12 @@ auto
 windows_system_metrics::get_proc_cpu(sm_pid_t /*pid*/) const -> proc_cpu_t
 {
   return proc_cpu_t{};
+}
+
+auto
+windows_system_metrics::get_system_cpu() const -> system_cpu_t
+{
+  return system_cpu_t{};
 }
 
 auto
