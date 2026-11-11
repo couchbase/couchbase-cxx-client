@@ -15,16 +15,27 @@
 
 #pragma once
 
+#include <functional>
 #include <memory>
+#include <string_view>
 
 namespace couchbase::core
 {
 class collections_component_impl;
+namespace mcbp
+{
+class queue_request;
+} // namespace mcbp
 
 class collections_component_unit_test_api
 {
 public:
   void remove_collection_from_cache(std::string_view scope_name, std::string_view collection_name);
+
+  // Hands every collection id lookup to `interceptor` instead of the dispatcher, so that a test
+  // can hold the lookup and complete it with an answer of its choosing. Set it before dispatching.
+  void intercept_collection_id_lookups(
+    std::function<void(std::shared_ptr<mcbp::queue_request>)> interceptor);
 
 private:
   friend class collections_component;

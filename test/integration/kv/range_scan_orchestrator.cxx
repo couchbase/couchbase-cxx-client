@@ -20,8 +20,10 @@
 
 #include "utils/integration_test_guard.hxx"
 #include "utils/test_data.hxx"
+#include "utils/wait_until.hxx"
 
 #include "core/agent_group.hxx"
+#include "core/mcbp/queue_request.hxx"
 #include "core/range_scan_orchestrator.hxx"
 #include "core/topology/configuration.hxx"
 
@@ -32,6 +34,7 @@
 #include <future>
 #include <memory>
 #include <variant>
+#include <vector>
 
 namespace couchbase::test
 {
@@ -116,6 +119,66 @@ sampling_scan_of_a_missing_collection_fails_with_collection_not_found([[maybe_un
 {
   scan_missing_collection(couchbase::core::sampling_scan{ 10 });
 }
+
+void
+range_scan_creates_sharing_a_failed_collection_id_lookup_are_released([[maybe_unused]] context& ctx)
+{
+  // Smoke test against a server for the unit case
+  // every_request_queued_behind_a_collection_not_found_lookup_is_retried in
+  // test/unit/core/collections_component.cxx. The callbacks hold the agent, as range_scan_stream
+  // does. Whether one create is queued behind the other's lookup when teardown starts depends on
+  // timing, so this case does not fail on every run without that fix.
+  std::vector<std::weak_ptr<couchbase::core::mcbp::queue_request>> creates;
+  {
+    ::test::utils::integration_test_guard integration;
+
+    auto ag = couchbase::core::agent_group(integration.io, { { integration.cluster } });
+    assert_success(ag.open_bucket(integration.ctx.bucket), "the agent opens the bucket");
+    auto agent = ag.get_agent(integration.ctx.bucket);
+    assert_true(agent.has_value(), "the agent group has an agent for the bucket");
+
+    couchbase::core::range_scan_create_options options{
+      couchbase::scope::default_name,
+      ::test::utils::uniq_id("missing"),
+      couchbase::core::range_scan{
+        couchbase::core::scan_term{ "a" },
+        couchbase::core::scan_term{ "b" },
+      },
+    };
+    // Longer than the case, so that both creates are still retrying at teardown.
+    options.timeout = 1min;
+
+    std::vector<std::shared_ptr<couchbase::core::mcbp::queue_request>> requests;
+    for (int i = 0; i < 2; ++i) {
+      auto op = agent->range_scan_create(
+        12, options, [holder = agent.value()](auto /* res */, auto /* ec */) {
+        });
+      assert_true(op.has_value(), "the create is dispatched");
+      requests.emplace_back(
+        std::dynamic_pointer_cast<couchbase::core::mcbp::queue_request>(op.value()));
+      assert_true(requests.back() != nullptr, "the create is a queue_request");
+      creates.emplace_back(requests.back());
+    }
+
+    // Each lookup answers collection_not_found, and every create it held is handed to a retry.
+    assert_true(::test::utils::wait_until(
+                  [&requests]() {
+                    for (const auto& request : requests) {
+                      if (request->retry_attempts() == 0) {
+                        return false;
+                      }
+                    }
+                    return true;
+                  },
+                  10s,
+                  10ms),
+                "both creates are retried after a collection_not_found lookup");
+  }
+
+  for (const auto& create : creates) {
+    assert_true(create.expired(), "the create is released after teardown");
+  }
+}
 } // namespace
 
 auto
@@ -130,6 +193,9 @@ tests() -> test_suite
         range_scan,
         timeout::integration },
       { CASE(sampling_scan_of_a_missing_collection_fails_with_collection_not_found),
+        range_scan,
+        timeout::integration },
+      { CASE(range_scan_creates_sharing_a_failed_collection_id_lookup_are_released),
         range_scan,
         timeout::integration },
     },
