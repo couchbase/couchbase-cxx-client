@@ -84,9 +84,17 @@ create_protocol_logger(const configuration& logger_settings) -> std::optional<st
  * threads may log but call no other function of the logger, couchbase::logger::set_level()
  * included. The child has no logger until it creates one; a registered log callback stays
  * registered. A lock held inside a configuration::sink or a log callback at the fork stays locked
- * in the child. Nested with couchbase::cluster::notify_fork(), the logger is the inner call: the
- * cluster's prepare joins threads that log, so it runs before the logger's prepare, and the
- * cluster's parent or child runs after the logger's.
+ * in the child. Calls into spdlog's registry that bypass the logger, such as spdlog::get() or
+ * spdlog::set_level(), are not held across the fork. Code in a configuration::sink, in the sinks of
+ * a logger passed to register_spdlog_logger(), or in a log callback must not call
+ * create_file_logger(), create_protocol_logger(), create_console_logger(),
+ * create_blackhole_logger(), reset(), shutdown(), register_spdlog_logger(),
+ * unregister_spdlog_logger(), check_log_levels(), get_lowest_log_level() or set_log_levels().
+ * Each takes a lock that the logger can hold while that code runs, on the same thread or on a
+ * thread it joins, and the call then deadlocks. Nested with
+ * couchbase::cluster::notify_fork(), the logger is the inner call: the cluster's prepare joins
+ * threads that log, so it runs before the logger's prepare, and the cluster's parent or child runs
+ * after the logger's.
  */
 void
 notify_fork(couchbase::fork_event event);

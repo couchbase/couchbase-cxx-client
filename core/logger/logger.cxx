@@ -50,6 +50,11 @@ const std::string protocol_logger_name{ "couchbase_cxx_client_protocol_logger" }
  */
 const std::string log_pattern{ "[%Y-%m-%d %T.%e] %4oms [%^%4!l%$] [%P,%*] %v" };
 
+// Every call the logger makes into spdlog's registry runs under this lock, and notify_fork() holds
+// it across the fork, so no registry mutex is left locked in the child. Taken after fork_mutex and
+// before every other logger lock.
+std::mutex registry_mutex;
+
 // spdlog caches each thread's id in a thread_local, so in a forked child the forking thread keeps
 // reporting its id in the parent. %* replaces that one stale id with the thread's id in the child.
 std::size_t forking_thread_id{ 0 }; // written by prepare, read by child, on the forking thread
@@ -143,7 +148,7 @@ update_callback_logger(const std::shared_ptr<couchbase::core::logger::log_callba
 void
 update_file_logger(const std::shared_ptr<spdlog::logger>& new_logger)
 {
-  const std::scoped_lock lock(file_logger_mutex);
+  const std::scoped_lock lock(registry_mutex, file_logger_mutex);
   // delete if already exists
   spdlog::drop(file_logger_name);
   if (new_logger) {
@@ -366,6 +371,7 @@ shutdown()
    * no-op.
    */
   get_file_logger().reset();
+  const std::scoped_lock lock(registry_mutex);
   spdlog::details::registry::instance().shutdown();
   periodic_flusher_started = false;
 }
@@ -380,22 +386,48 @@ void
 notify_fork(couchbase::fork_event event)
 {
   switch (event) {
-    case couchbase::fork_event::prepare:
-      fork_mutex.lock();
+    case couchbase::fork_event::prepare: {
+      // A throw restarts the flusher and releases, in reverse order, the locks taken so far. Sink
+      // locks that lock_all_for_fork() took before throwing stay held.
+      std::unique_lock fork_lock(fork_mutex);
       forking_thread_id = spdlog::details::os::thread_id();
+      std::unique_lock registry_lock(registry_mutex);
+      // Stopped under registry_mutex, so no other thread holds the registry's flusher lock at the
+      // fork. The flusher never takes registry_mutex, so joining it here cannot deadlock.
       if (periodic_flusher_started) {
         spdlog::flush_every(std::chrono::seconds::zero());
       }
-      file_logger_mutex.lock();
-      log_callback_mutex.lock();
-      custom_rotating_file_sink_mt::lock_all_for_fork();
-      spdlog::details::console_mutex::mutex().lock();
-      error_report_mutex.lock();
+      try {
+        std::unique_lock file_logger_lock(file_logger_mutex);
+        std::unique_lock log_callback_lock(log_callback_mutex);
+        custom_rotating_file_sink_mt::lock_all_for_fork();
+        try {
+          std::unique_lock console_lock(spdlog::details::console_mutex::mutex());
+          error_report_mutex.lock();
+          console_lock.release();
+        } catch (...) {
+          custom_rotating_file_sink_mt::unlock_all_after_fork();
+          throw;
+        }
+        // held until parent or child
+        log_callback_lock.release();
+        file_logger_lock.release();
+      } catch (...) {
+        // parent is not called for an aborted prepare, so the flusher restarts here
+        if (periodic_flusher_started) {
+          spdlog::flush_every(periodic_flush_interval);
+        }
+        throw;
+      }
+      registry_lock.release();
+      fork_lock.release();
       break;
+    }
 
     case couchbase::fork_event::parent: {
       // released even when starting the flusher thread throws
       const std::unique_lock fork_lock(fork_mutex, std::adopt_lock);
+      const std::unique_lock registry_lock(registry_mutex, std::adopt_lock);
       release_fork_locks();
       if (periodic_flusher_started) {
         spdlog::flush_every(periodic_flush_interval);
@@ -405,6 +437,7 @@ notify_fork(couchbase::fork_event event)
 
     case couchbase::fork_event::child: {
       const std::unique_lock fork_lock(fork_mutex, std::adopt_lock);
+      const std::unique_lock registry_lock(registry_mutex, std::adopt_lock);
       forked_thread_id.store(spdlog::details::os::_thread_id(), std::memory_order_relaxed);
       stale_thread_id.store(forking_thread_id, std::memory_order_relaxed);
       abandon_inherited_loggers();
@@ -499,6 +532,7 @@ create_file_logger_impl(const std::string& logger_name, const configuration& log
       sink->add_sink(logger_settings.sink);
     }
 
+    const std::scoped_lock lock(registry_mutex);
     spdlog::drop(logger_name);
 
     if (logger_settings.unit_test) {
@@ -591,6 +625,7 @@ reset()
 {
   update_file_logger(nullptr);
 
+  const std::scoped_lock lock(registry_mutex);
   spdlog::drop(protocol_logger_name);
   protocol_logger.reset();
 }
@@ -635,6 +670,7 @@ register_spdlog_logger(const std::shared_ptr<spdlog::logger>& l)
 {
   try {
     get_file_logger()->debug("Registering logger {}", l->name());
+    const std::scoped_lock lock(registry_mutex);
     spdlog::register_logger(l);
   } catch (const spdlog::spdlog_ex& e) {
     get_file_logger()->warn(
@@ -649,6 +685,7 @@ register_spdlog_logger(const std::shared_ptr<spdlog::logger>& l)
 void
 unregister_spdlog_logger(const std::string& n)
 {
+  const std::scoped_lock lock(registry_mutex);
   spdlog::drop(n);
 }
 
@@ -657,6 +694,7 @@ check_log_levels(level lvl) -> bool
 {
   auto level = translate_level(lvl);
   bool correct = true;
+  const std::scoped_lock lock(registry_mutex);
   spdlog::apply_all([level, &correct](const std::shared_ptr<spdlog::logger>& l) {
     if (l->level() != level) {
       correct = false;
@@ -669,6 +707,7 @@ auto
 get_lowest_log_level() -> level
 {
   auto lowest = spdlog::level::off;
+  const std::scoped_lock lock(registry_mutex);
   // Apply the function to each registered spdlog::logger except protocol logger
   spdlog::apply_all([&lowest](const std::shared_ptr<spdlog::logger>& l) {
     lowest = std::min(l->level(), lowest);
@@ -680,6 +719,7 @@ void
 set_log_levels(level lvl)
 {
   auto level = translate_level(lvl);
+  std::unique_lock lock(registry_mutex);
   // Apply the function to each registered spdlog::logger except protocol logger
   spdlog::apply_all([level](const std::shared_ptr<spdlog::logger>& l) {
     if (l->name() == protocol_logger_name) {
@@ -697,6 +737,7 @@ set_log_levels(level lvl)
               e.what());
     }
   });
+  lock.unlock();
 
   flush();
 }
