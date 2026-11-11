@@ -19,6 +19,7 @@
 
 #include "core/cluster.hxx"
 #include "core/collections_component.hxx"
+#include "core/collections_component_unit_test_api.hxx"
 #include "core/core_sdk_shim.hxx"
 #include "core/dispatcher.hxx"
 #include "core/mcbp/queue_request.hxx"
@@ -28,6 +29,7 @@
 #include <asio/io_context.hpp>
 
 #include <memory>
+#include <utility>
 
 namespace couchbase::test
 {
@@ -37,17 +39,23 @@ using couchbase::core::mcbp::queue_request;
 
 // A request for a non-default collection: those are the ones routed through the
 // collection-id cache rather than dispatched directly.
+template<typename Callback>
 auto
-make_request() -> std::shared_ptr<queue_request>
+make_request(Callback&& callback) -> std::shared_ptr<queue_request>
 {
-  auto request =
-    std::make_shared<queue_request>(couchbase::core::protocol::magic::client_request,
-                                    couchbase::core::protocol::client_opcode::get,
-                                    [](auto /* response */, auto /* request */, auto /* error */) {
-                                    });
+  auto request = std::make_shared<queue_request>(couchbase::core::protocol::magic::client_request,
+                                                 couchbase::core::protocol::client_opcode::get,
+                                                 std::forward<Callback>(callback));
   request->scope_name_ = "a-scope";
   request->collection_name_ = "a-collection";
   return request;
+}
+
+auto
+make_request() -> std::shared_ptr<queue_request>
+{
+  return make_request([](auto /* response */, auto /* request */, auto /* error */) {
+  });
 }
 
 // A cluster that rejects every dispatch, with no I/O and no server: close() marks
@@ -107,6 +115,47 @@ a_request_is_released_when_its_collection_id_refresh_cannot_be_dispatched(
   }
   assert_true(observer.expired(), "the failed dispatch holds no reference to the request");
 }
+
+void
+every_request_queued_behind_a_collection_not_found_lookup_is_retried([[maybe_unused]] context& ctx)
+{
+  // The regression this catches: only the request that started the lookup was retried, and the
+  // other one stayed in the cache entry's queue with no lookup in flight. Its callback holds the
+  // component, as a range scan stream holds the agent, so it also outlived the component.
+  std::weak_ptr<queue_request> started_lookup;
+  std::weak_ptr<queue_request> queued_behind;
+  {
+    asio::io_context io;
+    auto cluster = make_closed_cluster(io);
+    auto component = make_component(io, cluster);
+
+    std::shared_ptr<queue_request> lookup;
+    component.unit_test_api().intercept_collection_id_lookups(
+      [&lookup](std::shared_ptr<queue_request> request) {
+        lookup = std::move(request);
+      });
+
+    auto holds_component = [component](auto /* response */, auto /* request */, auto /* error */) {
+    };
+    auto first = make_request(holds_component);
+    auto second = make_request(holds_component);
+    started_lookup = first;
+    queued_behind = second;
+
+    assert_true(component.dispatch(first).has_value(), "the first request starts a lookup");
+    assert_true(static_cast<bool>(lookup), "the lookup was handed to the interceptor");
+    assert_true(component.dispatch(second).has_value(), "the second request queues behind it");
+
+    lookup->cancel(couchbase::errc::common::collection_not_found);
+
+    assert_eq(first->retry_attempts(), std::size_t{ 1 }, "the request that started it is retried");
+    assert_eq(
+      second->retry_attempts(), std::size_t{ 1 }, "the request queued behind it is retried");
+  }
+  // The io_context is gone, and with it the backoff timers that held both requests.
+  assert_true(started_lookup.expired(), "the request that started the lookup is released");
+  assert_true(queued_behind.expired(), "the request queued behind the lookup is released");
+}
 } // namespace
 
 auto
@@ -119,6 +168,9 @@ tests() -> test_suite
         {},
         timeout::fast },
       { CASE(a_request_is_released_when_its_collection_id_refresh_cannot_be_dispatched),
+        {},
+        timeout::fast },
+      { CASE(every_request_queued_behind_a_collection_not_found_lookup_is_retried),
         {},
         timeout::fast },
     },

@@ -279,7 +279,9 @@ public:
     req->retry_strategy_ =
       options.retry_strategy ? options.retry_strategy : default_retry_strategy_;
 
-    if (auto ec = dispatcher_.direct_dispatch(req); ec) {
+    if (lookup_interceptor_) {
+      lookup_interceptor_(req);
+    } else if (auto ec = dispatcher_.direct_dispatch(req); ec) {
       return tl::unexpected(ec);
     }
 
@@ -345,6 +347,12 @@ public:
     return request;
   }
 
+  void intercept_collection_id_lookups(
+    std::function<void(std::shared_ptr<mcbp::queue_request>)> interceptor)
+  {
+    lookup_interceptor_ = std::move(interceptor);
+  }
+
 private:
   asio::io_context& io_;
   const dispatcher dispatcher_;
@@ -352,6 +360,8 @@ private:
   std::shared_ptr<retry_strategy> default_retry_strategy_;
   std::map<std::string, std::shared_ptr<collection_id_cache_entry_impl>, std::less<>> cache_{};
   mutable std::mutex cache_mutex_{};
+  // Set only through collections_component_unit_test_api, before any dispatch.
+  std::function<void(std::shared_ptr<mcbp::queue_request>)> lookup_interceptor_{};
 };
 
 [[nodiscard]] auto
@@ -417,31 +427,25 @@ collection_id_cache_entry_impl::refresh_collection_id(
     [self = shared_from_this(), req](get_collection_id_result res, std::error_code ec) {
       if (ec) {
         if (ec == errc::common::collection_not_found) {
-          // The collection is unknown, so we need to mark the cid unknown and attempt to retry the
-          // request. Retrying the request will requeue it in the cid manager so either it will pick
-          // up the unknown cid and cause a refresh or another request will and this one will get
-          // queued within the cache. Either the collection will eventually come online or this
-          // request will time out.
+          // Retry every queued request. A request left in the queue waits for another request's
+          // retry to start a refresh, and no lookup is in flight while that retry backs off.
+          // Either the collection eventually comes online or each request times out.
           CB_LOG_DEBUG("collection \"{}.{}\" not found, attempting retry",
                        logger::metadata(req->scope_name_),
                        logger::metadata(req->collection_name_));
           self->set_id(unknown_collection_id);
-          if (self->queue_->remove(req)) {
-            if (self->manager_.lock()->handle_collection_unknown(req)) {
-              return;
+          auto queue = self->swap_queue();
+          queue->close();
+          return queue->drain([self, ec](const auto& r) {
+            if (!self->manager_.lock()->handle_collection_unknown(r)) {
+              r->try_callback({}, ec);
             }
-          } else {
-            CB_LOG_DEBUG("request no longer existed in op queue, possibly cancelled?, opaque={}, "
-                         "collection_name=\"{}\"",
-                         req->opaque_,
-                         logger::metadata(req->collection_name_));
-          }
-        } else {
-          CB_LOG_DEBUG("collection id refresh failed: {}, opaque={}, collection_name=\"{}\"",
-                       ec.message(),
-                       req->opaque_,
-                       logger::metadata(req->collection_name_));
+          });
         }
+        CB_LOG_DEBUG("collection id refresh failed: {}, opaque={}, collection_name=\"{}\"",
+                     ec.message(),
+                     req->opaque_,
+                     logger::metadata(req->collection_name_));
         // There was an error getting this collection ID so lets remove the cache from the manager
         // and try to callback on all the queued requests.
         self->manager_.lock()->remove(req->scope_name_, req->collection_name_);
@@ -524,6 +528,13 @@ collections_component_unit_test_api::remove_collection_from_cache(std::string_vi
                                                                   std::string_view collection_name)
 {
   impl_->remove(scope_name, collection_name);
+}
+
+void
+collections_component_unit_test_api::intercept_collection_id_lookups(
+  std::function<void(std::shared_ptr<mcbp::queue_request>)> interceptor)
+{
+  impl_->intercept_collection_id_lookups(std::move(interceptor));
 }
 
 auto
