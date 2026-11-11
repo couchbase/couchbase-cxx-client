@@ -1,0 +1,328 @@
+{
+  "sha": "7dcd9156138c242f230673ea1c881e9610e6fce9",
+  "date": "2026-11-11T10:04:23-08:00",
+  "cpu_model": "Intel(R) Xeon(R) 6973P-C",
+  "rows": {
+    "json_generate_binary/large": {
+      "median": 23966.640625,
+      "lower": 23887.578125,
+      "upper": 24047.0078125,
+      "cpu_model": "Intel(R) Xeon(R) 6973P-C",
+      "cpu_ns_per_op": 24025.24952471483,
+      "max_rss_bytes": 35008512
+    },
+    "json_generate_binary/small": {
+      "median": 276.12939453125,
+      "lower": 275.093017578125,
+      "upper": 277.7115478515625,
+      "cpu_model": "Intel(R) Xeon(R) 6973P-C",
+      "cpu_ns_per_op": 277.25993435911914,
+      "max_rss_bytes": 35008512
+    },
+    "json_streaming_lexer/rows_10": {
+      "median": 2676.2861328125,
+      "lower": 2666.7578125,
+      "upper": 3059.1494140625,
+      "cpu_model": "Intel(R) Xeon(R) 6973P-C",
+      "cpu_ns_per_op": 2698.5846532534247,
+      "max_rss_bytes": 35008512
+    },
+    "json_streaming_lexer/rows_1000": {
+      "median": 169427.6875,
+      "lower": 168708.625,
+      "upper": 170660.125,
+      "cpu_model": "Intel(R) Xeon(R) 6973P-C",
+      "cpu_ns_per_op": 170035.0743745774,
+      "max_rss_bytes": 35008512
+    },
+    "kv_get/cluster/bare/q64": {
+      "median": 5091.87890625,
+      "lower": 4866.80078125,
+      "upper": 5219.7421875,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 7814.3637663398695,
+      "max_rss_bytes": 34537472,
+      "server_version": "8.0.3"
+    },
+    "kv_get/cluster/bare/t1": {
+      "median": 51840.0,
+      "lower": 48768.0,
+      "upper": 52864.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 33266.34676374066,
+      "max_rss_bytes": 34537472,
+      "ops_per_second": 18118.009036914747,
+      "server_version": "8.0.3"
+    },
+    "kv_get/cluster/q64": {
+      "median": 5724.00390625,
+      "lower": 5367.953125,
+      "upper": 6041.29296875,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 8976.231461864407,
+      "max_rss_bytes": 34537472,
+      "server_version": "8.0.3"
+    },
+    "kv_get/cluster/t1": {
+      "median": 62080.0,
+      "lower": 49536.0,
+      "upper": 67840.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 42184.67336683417,
+      "max_rss_bytes": 34537472,
+      "ops_per_second": 11180.242013343537,
+      "server_version": "8.0.3"
+    },
+    "kv_get/cluster/t8": {
+      "median": 109824.0,
+      "lower": 103680.0,
+      "upper": 136704.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 21296.390862740376,
+      "max_rss_bytes": 34537472,
+      "ops_per_second": 62107.743311284525,
+      "server_version": "8.0.3"
+    },
+    "kv_get/fake/bare/q64": {
+      "median": 7540.16015625,
+      "lower": 7329.6806640625,
+      "upper": 7799.9609375,
+      "cpu_model": "Intel(R) Xeon(R) 6973P-C",
+      "cpu_ns_per_op": 11452.479139036252,
+      "max_rss_bytes": 35008512
+    },
+    "kv_get/fake/bare/t1": {
+      "median": 59776.0,
+      "lower": 56704.0,
+      "upper": 63616.0,
+      "cpu_model": "Intel(R) Xeon(R) 6973P-C",
+      "cpu_ns_per_op": 50808.288712123554,
+      "max_rss_bytes": 35008512,
+      "ops_per_second": 15497.719143408502
+    },
+    "kv_get/fake/q64": {
+      "median": 9747.3828125,
+      "lower": 9630.08203125,
+      "upper": 10198.8828125,
+      "cpu_model": "Intel(R) Xeon(R) 6973P-C",
+      "cpu_ns_per_op": 14557.458185316755,
+      "max_rss_bytes": 35008512
+    },
+    "kv_get/fake/t1": {
+      "median": 58496.0,
+      "lower": 57728.0,
+      "upper": 64128.0,
+      "cpu_model": "Intel(R) Xeon(R) 6973P-C",
+      "cpu_ns_per_op": 51666.328188464664,
+      "max_rss_bytes": 35008512,
+      "ops_per_second": 15403.484281936053
+    },
+    "kv_get/fake/t8": {
+      "median": 105216.0,
+      "lower": 104192.0,
+      "upper": 113408.0,
+      "cpu_model": "Intel(R) Xeon(R) 6973P-C",
+      "cpu_ns_per_op": 23373.619884282605,
+      "max_rss_bytes": 35008512,
+      "ops_per_second": 75205.86157495106
+    },
+    "kv_upsert/cluster/bare/q64": {
+      "median": 25047.95703125,
+      "lower": 23077.6640625,
+      "upper": 30361.1953125,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 12964.430914712497,
+      "max_rss_bytes": 34537472,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert/cluster/bare/t1": {
+      "median": 124672.0,
+      "lower": 109312.0,
+      "upper": 159232.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 58061.2212147958,
+      "max_rss_bytes": 34537472,
+      "ops_per_second": 6011.86119805105,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert/cluster/q64": {
+      "median": 25494.140625,
+      "lower": 22576.02734375,
+      "upper": 28007.453125,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 13765.857899966877,
+      "max_rss_bytes": 34537472,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert/cluster/t1": {
+      "median": 135680.0,
+      "lower": 114432.0,
+      "upper": 152064.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 63628.649843714265,
+      "max_rss_bytes": 34537472,
+      "ops_per_second": 6283.909585150656,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert/cluster/t8": {
+      "median": 463872.0,
+      "lower": 441344.0,
+      "upper": 513024.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 36365.563733472285,
+      "max_rss_bytes": 34537472,
+      "ops_per_second": 15338.777937189485,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert/fake/bare/q64": {
+      "median": 9837.234375,
+      "lower": 9707.2109375,
+      "upper": 9967.29296875,
+      "cpu_model": "Intel(R) Xeon(R) 6973P-C",
+      "cpu_ns_per_op": 15364.681177745664,
+      "max_rss_bytes": 35008512
+    },
+    "kv_upsert/fake/bare/t1": {
+      "median": 63360.0,
+      "lower": 55936.0,
+      "upper": 65792.0,
+      "cpu_model": "Intel(R) Xeon(R) 6973P-C",
+      "cpu_ns_per_op": 52761.666666666664,
+      "max_rss_bytes": 35008512,
+      "ops_per_second": 14688.686303770874
+    },
+    "kv_upsert/fake/q64": {
+      "median": 12214.43359375,
+      "lower": 12024.92578125,
+      "upper": 12736.45703125,
+      "cpu_model": "Intel(R) Xeon(R) 6973P-C",
+      "cpu_ns_per_op": 18756.683781869688,
+      "max_rss_bytes": 35008512
+    },
+    "kv_upsert/fake/t1": {
+      "median": 59520.0,
+      "lower": 57728.0,
+      "upper": 65152.0,
+      "cpu_model": "Intel(R) Xeon(R) 6973P-C",
+      "cpu_ns_per_op": 53582.88877033876,
+      "max_rss_bytes": 35008512,
+      "ops_per_second": 14984.802568818443
+    },
+    "kv_upsert/fake/t8": {
+      "median": 106240.0,
+      "lower": 104704.0,
+      "upper": 116480.0,
+      "cpu_model": "Intel(R) Xeon(R) 6973P-C",
+      "cpu_ns_per_op": 27855.667322887733,
+      "max_rss_bytes": 35008512,
+      "ops_per_second": 74010.06691692321
+    },
+    "kv_upsert_get/cluster/c20": {
+      "median": 1658880.0,
+      "lower": 1576960.0,
+      "upper": 1830912.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 107852.17429346399,
+      "max_rss_bytes": 63565824,
+      "ops_per_second": 10986.998177533025,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert_get/cluster/t20": {
+      "median": 1306624.0,
+      "lower": 1191936.0,
+      "upper": 1544192.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 56064.4212129604,
+      "max_rss_bytes": 34537472,
+      "ops_per_second": 14236.213340877144,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert_get/cluster/t20/raw": {
+      "median": 1249280.0,
+      "lower": 1183744.0,
+      "upper": 1347584.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 50445.076760190575,
+      "max_rss_bytes": 34537472,
+      "ops_per_second": 14873.613143039514,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert_get/fake/c20": {
+      "median": 437248.0,
+      "lower": 431104.0,
+      "upper": 474112.0,
+      "cpu_model": "Intel(R) Xeon(R) 6973P-C",
+      "cpu_ns_per_op": 75304.97310352398,
+      "max_rss_bytes": 82309120,
+      "ops_per_second": 44911.639175725475
+    },
+    "kv_upsert_get/fake/t20": {
+      "median": 463872.0,
+      "lower": 439296.0,
+      "upper": 490496.0,
+      "cpu_model": "Intel(R) Xeon(R) 6973P-C",
+      "cpu_ns_per_op": 51276.73014615044,
+      "max_rss_bytes": 61689856,
+      "ops_per_second": 42667.32683782019
+    },
+    "kv_upsert_get/fake/t20/raw": {
+      "median": 455680.0,
+      "lower": 433152.0,
+      "upper": 490496.0,
+      "cpu_model": "Intel(R) Xeon(R) 6973P-C",
+      "cpu_ns_per_op": 45343.792288813966,
+      "max_rss_bytes": 61730816,
+      "ops_per_second": 43373.077230992276
+    },
+    "mcbp_parser_next/plain": {
+      "median": 77.4039306640625,
+      "lower": 76.72344970703125,
+      "upper": 79.97195434570312,
+      "cpu_model": "Intel(R) Xeon(R) 6973P-C",
+      "cpu_ns_per_op": 77.59909328026107,
+      "max_rss_bytes": 35008512
+    },
+    "mcbp_parser_next/snappy": {
+      "median": 163.40936279296875,
+      "lower": 163.08392333984375,
+      "upper": 189.228515625,
+      "cpu_model": "Intel(R) Xeon(R) 6973P-C",
+      "cpu_ns_per_op": 164.18538574544922,
+      "max_rss_bytes": 35008512
+    },
+    "vbucket_hash/crc32_t1": {
+      "median": 8.296630859375,
+      "lower": 8.292041778564453,
+      "upper": 9.464599609375,
+      "cpu_model": "Intel(R) Xeon(R) 6973P-C",
+      "cpu_ns_per_op": 8.467232719969354,
+      "max_rss_bytes": 35008512
+    },
+    "vbucket_hash/map_key_t1": {
+      "median": 12.863334655761719,
+      "lower": 12.572460174560547,
+      "upper": 14.697654724121094,
+      "cpu_model": "Intel(R) Xeon(R) 6973P-C",
+      "cpu_ns_per_op": 13.500984572363025,
+      "max_rss_bytes": 35008512
+    },
+    "vbucket_hash/map_key_t8": {
+      "median": 21.276565551757812,
+      "lower": 21.203964233398438,
+      "upper": 24.463539123535156,
+      "cpu_model": "Intel(R) Xeon(R) 6973P-C",
+      "cpu_ns_per_op": 21.22290127063755,
+      "max_rss_bytes": 35008512
+    }
+  },
+  "descriptions": {
+    "json_generate_binary": "Serialises a small JSON document and an 80-item nested document with core::utils::json::generate_binary.",
+    "json_streaming_lexer": "Parses a query response of 10 or 1,000 rows with core::utils::json::streaming_lexer, fed in 4 KiB chunks.",
+    "kv_get": "Gets one of 1,000 small JSON documents per operation, blocking on 1 or 8 threads, or 64 in flight.",
+    "kv_upsert": "Upserts one of 1,000 small JSON documents per operation, blocking on 1 or 8 threads, or 64 in flight.",
+    "kv_upsert_get": "Upserts, then gets, one of 100,000 512-byte JSON documents per operation on 20 threads.",
+    "mcbp_parser_next": "Decodes one GET response frame per iteration with mcbp_parser::next, plain and Snappy-compressed.",
+    "vbucket_hash": "Hashes a key with CRC32, and maps it to its vBucket and node in a 1,024-vBucket map."
+  },
+  "run": "2026-11-11T18:32:37Z"
+}
