@@ -44,6 +44,12 @@ public:
   }
   virtual void add_tag(const std::string& name, std::uint64_t value) = 0;
   virtual void add_tag(const std::string& name, const std::string& value) = 0;
+  /**
+   * SDK invokes this method when the span finishes. It runs on an SDK I/O thread or on an
+   * application thread. That includes the thread about to deliver an operation's result or
+   * timeout. A dispatch span's end() can run concurrently with or after its parent span's end().
+   * An implementation must not wait on I/O or on the operation's completion callback.
+   */
   virtual void end() = 0;
 
   [[nodiscard]] auto name() const -> const std::string&

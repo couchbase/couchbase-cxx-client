@@ -16,6 +16,7 @@
  */
 
 #include "mcbp_session.hxx"
+#include "mcbp_session_unit_test_api.hxx"
 
 #include <couchbase/build_config.hxx>
 
@@ -52,6 +53,7 @@
 #include "core/sasl/error_fmt.h"
 #include "core/topology/capabilities_fmt.hxx"
 #include "core/topology/configuration_fmt.hxx"
+#include "core/utils/byteswap.hxx"
 #include "mcbp_buffer_pool.hxx"
 #include "mcbp_context.hxx"
 #include "mcbp_message.hxx"
@@ -68,6 +70,7 @@
 #include <spdlog/fmt/bin_to_hex.h>
 #include <spdlog/fmt/chrono.h>
 
+#include <array>
 #include <cstring>
 #include <utility>
 
@@ -1593,6 +1596,9 @@ public:
       handler(errc::common::request_canceled, retry_reason::socket_closed_while_in_flight, {}, {});
       return;
     }
+    if (!bootstrapped_ && before_subscribe_) {
+      before_subscribe_(opaque);
+    }
     {
       const std::scoped_lock lock(command_handlers_mutex_);
       command_handlers_.insert(opaque, std::move(handler));
@@ -1610,6 +1616,15 @@ public:
         pending_buffer_.emplace_back(data);
       }
     }
+  }
+
+  [[nodiscard]] auto discard(std::uint32_t opaque) -> bool
+  {
+    std::unique_lock lock(command_handlers_mutex_);
+    auto fun = command_handlers_.take(opaque);
+    // Destroyed after the lock is released: the handler's captures may re-enter the session.
+    lock.unlock();
+    return static_cast<bool>(fun);
   }
 
   [[nodiscard]] auto cancel(std::uint32_t opaque, std::error_code ec, retry_reason reason) -> bool
@@ -1640,6 +1655,23 @@ public:
     const std::scoped_lock lock(session_info_mutex_);
     return std::find(supported_features_.begin(), supported_features_.end(), feature) !=
            supported_features_.end();
+  }
+
+  void on_before_subscribe(std::function<void(std::uint32_t)> hook)
+  {
+    before_subscribe_ = std::move(hook);
+  }
+
+  [[nodiscard]] auto pending_opcodes() -> std::vector<protocol::client_opcode>
+  {
+    const std::scoped_lock lock(pending_buffer_mutex_);
+    std::vector<protocol::client_opcode> opcodes;
+    opcodes.reserve(pending_buffer_.size());
+    for (const auto& buffer : pending_buffer_) {
+      // The second byte of a request header is its opcode.
+      opcodes.push_back(static_cast<protocol::client_opcode>(buffer.at(1)));
+    }
+    return opcodes;
   }
 
   [[nodiscard]] auto supported_features() const -> std::vector<protocol::hello_feature>
@@ -2327,6 +2359,7 @@ private:
   std::string log_prefix_{};
   std::chrono::time_point<std::chrono::steady_clock> last_active_{};
   std::atomic<diag::endpoint_state> state_{ diag::endpoint_state::disconnected };
+  std::function<void(std::uint32_t)> before_subscribe_{};
 };
 
 mcbp_session::mcbp_session(const std::string& client_id,
@@ -2380,6 +2413,12 @@ auto
 mcbp_session::cancel(std::uint32_t opaque, std::error_code ec, retry_reason reason) -> bool
 {
   return impl_->cancel(opaque, ec, reason);
+}
+
+auto
+mcbp_session::discard(std::uint32_t opaque) -> bool
+{
+  return impl_->discard(opaque);
 }
 
 auto
@@ -2572,6 +2611,68 @@ auto
 mcbp_session::supported_features() const -> std::vector<protocol::hello_feature>
 {
   return impl_->supported_features();
+}
+
+auto
+mcbp_session::unit_test_api() const -> mcbp_session_unit_test_api
+{
+  return mcbp_session_unit_test_api(impl_);
+}
+
+mcbp_session_unit_test_api::mcbp_session_unit_test_api(std::shared_ptr<mcbp_session_impl> impl)
+  : impl_{ std::move(impl) }
+{
+}
+
+auto
+mcbp_session_unit_test_api::pending_opcodes() const -> std::vector<protocol::client_opcode>
+{
+  return impl_->pending_opcodes();
+}
+
+auto
+mcbp_session_unit_test_api::deliver_response(protocol::client_opcode opcode,
+                                             std::uint16_t status,
+                                             std::uint32_t opaque) const -> bool
+{
+  mcbp_message msg{};
+  msg.header.magic = static_cast<std::uint8_t>(protocol::magic::client_response);
+  msg.header.opcode = static_cast<std::uint8_t>(opcode);
+  // Multi-byte header fields are in network order, as on the wire; keylen, bodylen and cas are
+  // zero.
+  msg.header.specific = utils::host_to_network(status);
+  msg.header.opaque = utils::host_to_network(opaque);
+  return impl_->handle_request(opcode, status, opaque, std::move(msg));
+}
+
+auto
+mcbp_session_unit_test_api::deliver_response_with_server_duration(
+  protocol::client_opcode opcode,
+  std::uint16_t status,
+  std::uint32_t opaque,
+  std::uint16_t encoded_duration) const -> bool
+{
+  mcbp_message msg{};
+  msg.header.magic = static_cast<std::uint8_t>(protocol::magic::alt_client_response);
+  msg.header.opcode = static_cast<std::uint8_t>(opcode);
+  msg.header.specific = utils::host_to_network(status);
+  msg.header.opaque = utils::host_to_network(opaque);
+  // One framing extra: frame id 0 (server duration), two bytes long. In this format byte 2 of the
+  // header is the framing extras length and byte 3 the key length.
+  const std::array<std::byte, 2> sizes{ std::byte{ 3 }, std::byte{ 0 } };
+  std::memcpy(&msg.header.keylen, sizes.data(), sizes.size());
+  const auto network_duration = utils::host_to_network(encoded_duration);
+  std::array<std::byte, 2> duration_bytes{};
+  std::memcpy(duration_bytes.data(), &network_duration, duration_bytes.size());
+  msg.body = { std::byte{ 0x02 }, duration_bytes[0], duration_bytes[1] };
+  msg.header.bodylen = utils::host_to_network(static_cast<std::uint32_t>(msg.body.size()));
+  return impl_->handle_request(opcode, status, opaque, std::move(msg));
+}
+
+void
+mcbp_session_unit_test_api::on_before_subscribe(std::function<void(std::uint32_t)> hook) const
+{
+  impl_->on_before_subscribe(std::move(hook));
 }
 
 void

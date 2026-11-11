@@ -25,6 +25,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace couchbase::core::tracing
@@ -51,6 +52,11 @@ public:
   auto start_span(std::string name, std::shared_ptr<couchbase::tracing::request_span> parent)
     -> std::shared_ptr<couchbase::tracing::request_span> override;
   void report(const std::shared_ptr<threshold_logging_span>& span);
+  [[nodiscard]] auto threshold_for_service(service_type type) const -> std::chrono::milliseconds
+  {
+    return options_.threshold_for_service(type);
+  }
+  [[nodiscard]] auto flush_and_create_output() -> std::optional<std::string>;
   void start() override;
   void stop() override;
 

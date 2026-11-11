@@ -26,19 +26,38 @@
 
 #include <chrono>
 #include <memory>
+#include <type_traits>
+#include <utility>
 
 namespace couchbase::core::io::retry_orchestrator
 {
 
 namespace priv
 {
+// A command that arbitrates its own completion provides accept_retry(), which refuses a retry once
+// the command has completed. Other commands schedule every accepted retry as before.
+template<typename Command, typename = void>
+struct has_accept_retry : std::false_type {
+};
+
+template<typename Command>
+struct has_accept_retry<Command, std::void_t<decltype(std::declval<Command&>().accept_retry())>>
+  : std::true_type {
+};
+
 template<class Command>
 auto
 cap_duration(std::chrono::milliseconds uncapped, std::shared_ptr<Command> command)
   -> std::chrono::milliseconds
 {
   auto theoretical_deadline = std::chrono::steady_clock::now() + uncapped;
-  auto absolute_deadline = command->deadline.expiry();
+  auto absolute_deadline = [&command]() {
+    if constexpr (has_accept_retry<Command>::value) {
+      return command->deadline_expiry_;
+    } else {
+      return command->deadline.expiry();
+    }
+  }();
   if (auto delta = std::chrono::duration_cast<std::chrono::milliseconds>(theoretical_deadline -
                                                                          absolute_deadline);
       delta.count() > 0) {
@@ -58,6 +77,11 @@ retry_with_duration(std::shared_ptr<Manager> manager,
                     retry_reason reason,
                     std::chrono::milliseconds duration)
 {
+  if constexpr (has_accept_retry<Command>::value) {
+    if (!command->accept_retry()) {
+      return;
+    }
+  }
   command->request.retries.record_retry_attempt(reason);
   CB_LOG_TRACE(
     R"({} retrying operation {} (duration={}ms, id="{}", vbucket_id={}, reason={}, attempts={}, last_dispatched_to="{}"))",
