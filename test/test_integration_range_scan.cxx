@@ -721,13 +721,11 @@ TEST_CASE("integration: range scan cancel during streaming using pending_operati
     scan_uuid = res.scan_uuid;
   }
 
-  std::shared_ptr<couchbase::core::pending_operation> operation_holder{};
-  std::mutex operation_holder_mutex{};
-
-  auto execute_operation_cancel = [&operation_holder, &operation_holder_mutex]() {
-    std::scoped_lock lock(operation_holder_mutex);
-    operation_holder->cancel();
-  };
+  // The first item can reach the IO thread before range_scan_continue() returns the operation, so
+  // the item callback blocks until the operation has been stored. The callback holds it weakly: the
+  // request owns the callback, and a batch that completes without a cancel keeps that callback.
+  std::promise<std::weak_ptr<couchbase::core::pending_operation>> operation_barrier;
+  auto operation_future = operation_barrier.get_future().share();
 
   std::vector<couchbase::core::range_scan_item> data;
 
@@ -744,18 +742,17 @@ TEST_CASE("integration: range scan cancel during streaming using pending_operati
       scan_uuid,
       vbucket_id,
       options,
-      [&data, do_cancel = execute_operation_cancel](auto item) {
+      [&data, operation = operation_future](auto item) {
         data.emplace_back(std::move(item));
-        do_cancel(); // cancel operation after first document
+        if (auto pending = operation.get().lock(); pending) {
+          pending->cancel(); // cancel operation after first document
+        }
       },
       [barrier](auto res, auto ec) {
         barrier->set_value({ std::move(res), ec });
       });
     EXPECT_SUCCESS(op);
-    {
-      std::scoped_lock lock(operation_holder_mutex);
-      std::swap(operation_holder, op.value()); // store the operation for cancellation
-    }
+    operation_barrier.set_value(op.value()); // store the operation for cancellation
 
     auto [res, ec] = f.get();
     REQUIRE(res.complete == false);
