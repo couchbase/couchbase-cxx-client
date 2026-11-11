@@ -186,12 +186,27 @@ get_projected_request::make_response(key_value_error_context&& ctx,
   -> get_projected_response
 {
   get_projected_response response{ std::move(ctx) };
+  if (!response.ctx.ec() && encoded.error_code()) {
+    response.ctx.override_ec(encoded.error_code());
+  }
   if (!response.ctx.ec()) {
+    std::size_t expected_fields = with_expiry ? 2U : 1U;
+    expected_fields += effective_projections.empty() ? 1U : projections.size();
+    if (encoded.body().fields().size() != expected_fields) {
+      response.ctx.override_ec(errc::network::protocol_error);
+      return response;
+    }
     response.cas = encoded.cas();
-    response.flags = gsl::narrow_cast<std::uint32_t>(std::stoul(encoded.body().fields()[0].value));
-    if (with_expiry && !encoded.body().fields()[1].value.empty()) {
-      response.expiry =
-        gsl::narrow_cast<std::uint32_t>(std::stoul(encoded.body().fields()[1].value));
+    try {
+      response.flags =
+        gsl::narrow_cast<std::uint32_t>(std::stoul(encoded.body().fields()[0].value));
+      if (with_expiry && !encoded.body().fields()[1].value.empty()) {
+        response.expiry =
+          gsl::narrow_cast<std::uint32_t>(std::stoul(encoded.body().fields()[1].value));
+      }
+    } catch (const std::exception&) {
+      response.ctx.override_ec(errc::network::protocol_error);
+      return response;
     }
     if (effective_projections.empty()) {
       // from full document

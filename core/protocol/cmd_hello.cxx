@@ -38,13 +38,19 @@ hello_response_body::parse(key_value_status_code status,
 {
   Expects(header[1] == static_cast<std::byte>(opcode));
   if (status == key_value_status_code::success) {
-    const std::vector<std::uint8_t>::difference_type offset =
-      framing_extras_size + key_size + extras_size;
-    const size_t value_size = body.size() - static_cast<std::size_t>(offset);
-    Expects(value_size % 2 == 0);
+    const std::size_t prefix_size = static_cast<std::size_t>(framing_extras_size) +
+                                    static_cast<std::size_t>(key_size) +
+                                    static_cast<std::size_t>(extras_size);
+    if (prefix_size > body.size()) {
+      return false;
+    }
+    const size_t value_size = body.size() - prefix_size;
+    if (value_size % 2 != 0) {
+      return false;
+    }
     const size_t num_features = value_size / 2;
     supported_features_.reserve(num_features);
-    const auto* value = body.data() + offset;
+    const auto* value = body.data() + prefix_size;
     for (size_t i = 0; i < num_features; i++) {
       std::uint16_t field = 0;
       std::memcpy(&field, value + (i * 2), sizeof(std::uint16_t));

@@ -44,6 +44,8 @@ private:
   header_buffer header_{};
   std::uint8_t data_type_{};
   std::vector<std::byte> data_;
+  std::uint16_t key_size_{ 0 };
+  std::uint8_t extras_size_{ 0 };
   std::size_t body_size_{};
   std::uint32_t opaque_{};
   std::uint64_t cas_{};
@@ -102,10 +104,16 @@ public:
     opcode_ = static_cast<server_opcode>(header_[1]);
     data_type_ = std::to_integer<std::uint8_t>(header_[5]);
 
+    memcpy(&key_size_, header_.data() + 2, sizeof(key_size_));
+    key_size_ = utils::network_to_host(key_size_);
+    extras_size_ = std::to_integer<std::uint8_t>(header_[4]);
+
     std::uint32_t field = 0;
     memcpy(&field, header_.data() + 8, sizeof(field));
     body_size_ = utils::network_to_host(field);
-    data_.resize(body_size_);
+    if (data_.size() > body_size_) {
+      data_.resize(body_size_);
+    }
 
     memcpy(&opaque_, header_.data() + 12, sizeof(opaque_));
     opaque_ = utils::network_to_host(opaque_);
@@ -116,6 +124,11 @@ public:
 
   void parse_body()
   {
+    const std::size_t prefix_size =
+      static_cast<std::size_t>(extras_size_) + static_cast<std::size_t>(key_size_);
+    if (data_.size() < body_size_ || prefix_size > body_size_ || prefix_size > data_.size()) {
+      return;
+    }
     body_.parse(header_, data_, info_);
   }
 

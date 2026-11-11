@@ -363,6 +363,9 @@ struct mcbp_command : public std::enable_shared_from_this<mcbp_command<Manager, 
           return self->invoke_handler(ec);
         }
         protocol::client_response<protocol::get_collection_id_response_body> resp(std::move(msg));
+        if (resp.error_code()) {
+          return self->invoke_handler(resp.error_code());
+        }
         self->session_->update_collection_uid(self->request.id.collection_path(),
                                               resp.body().collection_uid());
         self->request.id.collection_uid(resp.body().collection_uid());

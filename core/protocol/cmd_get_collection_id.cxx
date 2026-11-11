@@ -38,6 +38,12 @@ get_collection_id_response_body::parse(key_value_status_code status,
 {
   Expects(header[1] == static_cast<std::byte>(opcode));
   if (status == key_value_status_code::success && extras_size == 12) {
+    const std::size_t prefix_size = static_cast<std::size_t>(framing_extras_size) +
+                                    static_cast<std::size_t>(key_size) +
+                                    static_cast<std::size_t>(extras_size);
+    if (prefix_size > body.size()) {
+      return false;
+    }
     std::vector<std::uint8_t>::difference_type offset = framing_extras_size + key_size;
 
     std::memcpy(&manifest_uid_, body.data() + offset, sizeof(manifest_uid_));

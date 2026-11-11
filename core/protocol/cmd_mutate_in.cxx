@@ -22,6 +22,7 @@
 #include "core/utils/unsigned_leb128.hxx"
 #include "frame_info_utils.hxx"
 
+#include <array>
 #include <cstring>
 #include <gsl/assert>
 
@@ -37,10 +38,21 @@ mutate_in_response_body::parse(key_value_status_code status,
                                const cmd_info& /* info */) -> bool
 {
   Expects(header[1] == static_cast<std::byte>(opcode));
+  fields_.clear();
+  token_ = {};
+  const bool multi_path_failure =
+    status == key_value_status_code::subdoc_multi_path_failure ||
+    status == key_value_status_code::subdoc_multi_path_failure_deleted;
   if (status == key_value_status_code::success ||
-      status == key_value_status_code::subdoc_multi_path_failure) {
-    using offset_type = std::vector<std::byte>::difference_type;
-    offset_type offset = framing_extras_size;
+      status == key_value_status_code::subdoc_success_deleted || multi_path_failure) {
+    const std::size_t prefix_size = static_cast<std::size_t>(framing_extras_size) +
+                                    static_cast<std::size_t>(key_size) +
+                                    static_cast<std::size_t>(extras_size);
+    if (prefix_size > body.size()) {
+      return false;
+    }
+    std::size_t offset = framing_extras_size;
+    mutation_token token{};
     if (extras_size == 16) {
       std::uint64_t partition_uuid{};
       memcpy(&partition_uuid, body.data() + offset, sizeof(partition_uuid));
@@ -51,40 +63,90 @@ mutate_in_response_body::parse(key_value_status_code status,
       memcpy(&sequence_number, body.data() + offset, sizeof(sequence_number));
       sequence_number = utils::network_to_host(sequence_number);
 
-      token_ = couchbase::utils::build_mutation_token(partition_uuid, sequence_number);
+      token = couchbase::utils::build_mutation_token(partition_uuid, sequence_number);
       offset += 8;
     } else {
       offset += extras_size;
     }
     offset += key_size;
-    fields_.reserve(16); /* we won't have more than 16 entries anyway */
-    while (static_cast<std::size_t>(offset) < body.size()) {
+    if (multi_path_failure) {
+      if (body.size() - offset != sizeof(std::uint8_t) + sizeof(std::uint16_t)) {
+        return false;
+      }
       mutate_in_field field;
-
-      field.index = std::to_integer<std::uint8_t>(body[static_cast<std::size_t>(offset)]);
-      offset++;
+      field.index = std::to_integer<std::uint8_t>(body[offset]);
+      if (field.index >= 16) {
+        return false;
+      }
+      ++offset;
 
       std::uint16_t entry_status = 0;
       memcpy(&entry_status, body.data() + offset, sizeof(entry_status));
       entry_status = utils::network_to_host(entry_status);
-      Expects(is_valid_status(entry_status));
+      if (!is_valid_status(entry_status)) {
+        return false;
+      }
       field.status = static_cast<key_value_status_code>(entry_status);
-      offset += static_cast<offset_type>(sizeof(entry_status));
+      if (field.status == key_value_status_code::success ||
+          field.status == key_value_status_code::subdoc_success_deleted) {
+        return false;
+      }
+      fields_.emplace_back(std::move(field));
+      token_ = token;
+      return true;
+    }
 
-      if (field.status == key_value_status_code::success) {
-        std::uint32_t entry_size = 0;
-        memcpy(&entry_size, body.data() + offset, sizeof(entry_size));
-        entry_size = utils::network_to_host(entry_size);
-        Expects(entry_size < 20 * 1024 * 1024);
-        offset += static_cast<offset_type>(sizeof(entry_size));
+    std::vector<mutate_in_field> fields;
+    fields.reserve(16); /* we won't have more than 16 entries anyway */
+    std::array<bool, 16> seen{};
+    while (offset < body.size()) {
+      if (fields.size() >= 16 ||
+          body.size() - offset < sizeof(std::uint8_t) + sizeof(std::uint16_t)) {
+        return false;
+      }
+      mutate_in_field field;
 
-        field.value.resize(entry_size);
-        memcpy(field.value.data(), body.data() + offset, entry_size);
-        offset += static_cast<offset_type>(entry_size);
+      field.index = std::to_integer<std::uint8_t>(body[offset]);
+      if (field.index >= 16 || seen[field.index]) {
+        return false;
+      }
+      seen[field.index] = true;
+      ++offset;
+
+      std::uint16_t entry_status = 0;
+      memcpy(&entry_status, body.data() + offset, sizeof(entry_status));
+      entry_status = utils::network_to_host(entry_status);
+      if (!is_valid_status(entry_status)) {
+        return false;
+      }
+      field.status = static_cast<key_value_status_code>(entry_status);
+      offset += sizeof(entry_status);
+
+      if (field.status != key_value_status_code::success &&
+          field.status != key_value_status_code::subdoc_success_deleted) {
+        return false;
+      }
+      if (body.size() - offset < sizeof(std::uint32_t)) {
+        return false;
+      }
+      std::uint32_t entry_size = 0;
+      memcpy(&entry_size, body.data() + offset, sizeof(entry_size));
+      entry_size = utils::network_to_host(entry_size);
+      offset += sizeof(entry_size);
+      if (entry_size > 20U * 1024U * 1024U || entry_size > body.size() - offset) {
+        return false;
       }
 
-      fields_.emplace_back(field);
+      if (entry_size > 0) {
+        field.value.resize(entry_size);
+        memcpy(field.value.data(), body.data() + offset, entry_size);
+        offset += entry_size;
+      }
+
+      fields.emplace_back(std::move(field));
     }
+    token_ = token;
+    fields_ = std::move(fields);
     return true;
   }
   return false;

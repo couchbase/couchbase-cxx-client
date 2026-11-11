@@ -36,7 +36,14 @@ sasl_auth_response_body::parse(key_value_status_code status,
 {
   Expects(header[1] == static_cast<std::byte>(opcode));
   if (status == key_value_status_code::success || status == key_value_status_code::auth_continue) {
-    std::transform(body.begin() + framing_extras_size + extras_size + key_size,
+    const std::size_t prefix_size = static_cast<std::size_t>(framing_extras_size) +
+                                    static_cast<std::size_t>(extras_size) +
+                                    static_cast<std::size_t>(key_size);
+    if (prefix_size > body.size()) {
+      return false;
+    }
+    using offset_type = std::vector<std::byte>::difference_type;
+    std::transform(body.begin() + static_cast<offset_type>(prefix_size),
                    body.end(),
                    std::back_insert_iterator(value_),
                    [](auto b) {

@@ -37,6 +37,12 @@ decrement_response_body::parse(key_value_status_code status,
 {
   Expects(header[1] == static_cast<std::byte>(opcode));
   if (status == key_value_status_code::success) {
+    const std::size_t prefix_size = static_cast<std::size_t>(framing_extras_size) +
+                                    static_cast<std::size_t>(key_size) +
+                                    static_cast<std::size_t>(extras_size);
+    if (prefix_size + sizeof(content_) > body.size()) {
+      return false;
+    }
     using offset_type = std::vector<std::byte>::difference_type;
     offset_type offset = framing_extras_size;
     if (extras_size == 16) {
@@ -51,6 +57,8 @@ decrement_response_body::parse(key_value_status_code status,
 
       token_ = couchbase::utils::build_mutation_token(partition_uuid, sequence_number);
       offset += 8;
+    } else {
+      offset += extras_size;
     }
     offset += key_size;
     memcpy(&content_, body.data() + offset, sizeof(content_));

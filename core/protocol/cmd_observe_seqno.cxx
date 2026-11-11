@@ -37,11 +37,23 @@ observe_seqno_response_body::parse(key_value_status_code status,
 {
   Expects(header[1] == static_cast<std::byte>(opcode));
   if (status == key_value_status_code::success) {
+    const std::size_t prefix_size = static_cast<std::size_t>(framing_extras_size) +
+                                    static_cast<std::size_t>(key_size) +
+                                    static_cast<std::size_t>(extras_size);
+    constexpr std::size_t base_fields_size =
+      sizeof(std::uint8_t) + sizeof(partition_id_) + sizeof(partition_uuid_) +
+      sizeof(last_persisted_sequence_number_) + sizeof(current_sequence_number_);
+    if (prefix_size + base_fields_size > body.size()) {
+      return false;
+    }
     using offset_type = std::vector<std::byte>::difference_type;
-    offset_type offset = framing_extras_size + extras_size + key_size;
+    auto offset = static_cast<offset_type>(prefix_size);
 
     const bool failover =
       std::to_integer<std::uint8_t>(body[static_cast<std::size_t>(offset)]) != 0U;
+    if (failover && prefix_size + base_fields_size + (2 * sizeof(std::uint64_t)) > body.size()) {
+      return false;
+    }
     ++offset;
 
     memcpy(&partition_id_, body.data() + offset, sizeof(partition_id_));
@@ -72,6 +84,7 @@ observe_seqno_response_body::parse(key_value_status_code status,
       memcpy(&field, body.data() + offset, sizeof(field));
       last_received_sequence_number_.emplace(utils::network_to_host(field));
     }
+    return true;
   }
   return false;
 }

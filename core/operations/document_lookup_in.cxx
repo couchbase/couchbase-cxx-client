@@ -66,6 +66,7 @@ lookup_in_request::make_response(key_value_error_context&& ctx,
   bool deleted = false;
   couchbase::cas cas{};
   std::vector<lookup_in_response::entry> fields{};
+  std::error_code ec = ctx.ec() ? ctx.ec() : encoded.error_code();
   std::optional<std::size_t> first_error_index{};
   std::optional<std::string> first_error_path{};
 
@@ -73,50 +74,54 @@ lookup_in_request::make_response(key_value_error_context&& ctx,
       encoded.status() == key_value_status_code::subdoc_multi_path_failure_deleted) {
     deleted = true;
   }
-  if (!ctx.ec()) {
-    fields.resize(specs.size());
-    for (size_t i = 0; i < specs.size(); ++i) {
-      const auto& req_entry = specs[i];
-      fields[i].original_index = req_entry.original_index_;
-      fields[i].path = req_entry.path_;
-      fields[i].opcode = static_cast<protocol::subdoc_opcode>(req_entry.opcode_);
-      fields[i].status = key_value_status_code::success;
+  if (!ec) {
+    if (encoded.body().fields().size() != specs.size()) {
+      ec = errc::network::protocol_error;
+    } else {
+      fields.resize(specs.size());
+      for (size_t i = 0; i < specs.size(); ++i) {
+        const auto& req_entry = specs[i];
+        fields[i].original_index = req_entry.original_index_;
+        fields[i].path = req_entry.path_;
+        fields[i].opcode = static_cast<protocol::subdoc_opcode>(req_entry.opcode_);
+        fields[i].status = key_value_status_code::success;
+      }
+      for (size_t i = 0; i < encoded.body().fields().size(); ++i) {
+        const auto& res_entry = encoded.body().fields()[i];
+        fields[i].status = res_entry.status;
+        fields[i].ec = protocol::map_status_code(protocol::client_opcode::subdoc_multi_mutation,
+                                                 static_cast<std::uint16_t>(res_entry.status));
+        if (fields[i].opcode == protocol::subdoc_opcode::exists &&
+            fields[i].ec == errc::key_value::path_not_found) {
+          // exists treats path_not_found as success ("false"); suppress the error so the
+          // exists flag below carries the result instead.
+          fields[i].ec.clear();
+        }
+        // Use original_index, not wire-order i: XATTR specs are reordered during encode_to(),
+        // so i != original_index (was the CXXCBC-788 bug).
+        if (!first_error_index && fields[i].ec) {
+          first_error_index = fields[i].original_index;
+          first_error_path = fields[i].path;
+        }
+        fields[i].exists = res_entry.status == key_value_status_code::success ||
+                           res_entry.status == key_value_status_code::subdoc_success_deleted;
+        if (fields[i].opcode == protocol::subdoc_opcode::exists && !fields[i].ec) {
+          fields[i].value = utils::json::generate_binary(fields[i].exists);
+        } else {
+          fields[i].value = utils::to_binary(res_entry.value);
+        }
+      }
+      // Always assign CAS; previously guarded by a local ec that was polluted by per-path
+      // errors, zeroing CAS whenever any path failed (CXXCBC-788).
+      cas = encoded.cas();
+      std::sort(fields.begin(), fields.end(), [](const auto& lhs, const auto& rhs) {
+        return lhs.original_index < rhs.original_index;
+      });
     }
-    for (size_t i = 0; i < encoded.body().fields().size(); ++i) {
-      const auto& res_entry = encoded.body().fields()[i];
-      fields[i].status = res_entry.status;
-      fields[i].ec = protocol::map_status_code(protocol::client_opcode::subdoc_multi_mutation,
-                                               static_cast<std::uint16_t>(res_entry.status));
-      if (fields[i].opcode == protocol::subdoc_opcode::exists &&
-          fields[i].ec == errc::key_value::path_not_found) {
-        // exists treats path_not_found as success ("false"); suppress the error so the
-        // exists flag below carries the result instead.
-        fields[i].ec.clear();
-      }
-      // Use original_index, not wire-order i: XATTR specs are reordered during encode_to(),
-      // so i != original_index (was the CXXCBC-788 bug).
-      if (!first_error_index && fields[i].ec) {
-        first_error_index = fields[i].original_index;
-        first_error_path = fields[i].path;
-      }
-      fields[i].exists = res_entry.status == key_value_status_code::success ||
-                         res_entry.status == key_value_status_code::subdoc_success_deleted;
-      if (fields[i].opcode == protocol::subdoc_opcode::exists && !fields[i].ec) {
-        fields[i].value = utils::json::generate_binary(fields[i].exists);
-      } else {
-        fields[i].value = utils::to_binary(res_entry.value);
-      }
-    }
-    // Always assign CAS; previously guarded by a local ec that was polluted by per-path
-    // errors, zeroing CAS whenever any path failed (CXXCBC-788).
-    cas = encoded.cas();
-    std::sort(fields.begin(), fields.end(), [](const auto& lhs, const auto& rhs) {
-      return lhs.original_index < rhs.original_index;
-    });
   }
 
   return lookup_in_response{
-    make_subdocument_error_context(ctx, ctx.ec(), first_error_path, first_error_index, deleted),
+    make_subdocument_error_context(ctx, ec, first_error_path, first_error_index, deleted),
     cas,
     std::move(fields),
     deleted,

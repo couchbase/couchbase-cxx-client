@@ -39,14 +39,21 @@ get_error_map_response_body::parse(key_value_status_code status,
 {
   Expects(header[1] == static_cast<std::byte>(opcode));
   if (status == key_value_status_code::success) {
-    const std::vector<std::uint8_t>::difference_type offset =
-      framing_extras_size + key_size + extras_size;
-    std::string_view error_map_text{ reinterpret_cast<const char*>(body.data()) + offset,
-                                     body.size() - static_cast<std::size_t>(offset) };
+    const std::size_t prefix_size = static_cast<std::size_t>(framing_extras_size) +
+                                    static_cast<std::size_t>(key_size) +
+                                    static_cast<std::size_t>(extras_size);
+    if (prefix_size > body.size()) {
+      return false;
+    }
+    std::string_view error_map_text{ reinterpret_cast<const char*>(body.data()) + prefix_size,
+                                     body.size() - prefix_size };
     try {
       errmap_ = utils::json::parse(error_map_text).as<error_map>();
     } catch (const tao::pegtl::parse_error& e) {
       CB_LOG_DEBUG("unable to parse error map as JSON: {}, {}", e.message(), error_map_text);
+      return false;
+    } catch (const std::exception&) {
+      return false;
     }
     return true;
   }
