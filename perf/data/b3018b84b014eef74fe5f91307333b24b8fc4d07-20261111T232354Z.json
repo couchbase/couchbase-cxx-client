@@ -1,0 +1,328 @@
+{
+  "sha": "b3018b84b014eef74fe5f91307333b24b8fc4d07",
+  "date": "2026-11-11T22:56:08Z",
+  "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+  "rows": {
+    "json_generate_binary/large": {
+      "median": 32608.75,
+      "lower": 32512.3125,
+      "upper": 33387.015625,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 32830.569727891154,
+      "max_rss_bytes": 35008512
+    },
+    "json_generate_binary/small": {
+      "median": 379.552001953125,
+      "lower": 379.064697265625,
+      "upper": 390.719482421875,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 381.0109495656371,
+      "max_rss_bytes": 35008512
+    },
+    "json_streaming_lexer/rows_10": {
+      "median": 3496.205078125,
+      "lower": 3483.34765625,
+      "upper": 3619.474609375,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 3518.8079997763866,
+      "max_rss_bytes": 35008512
+    },
+    "json_streaming_lexer/rows_1000": {
+      "median": 208392.125,
+      "lower": 207770.375,
+      "upper": 220084.625,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 209612.2300664452,
+      "max_rss_bytes": 35008512
+    },
+    "kv_get/cluster/bare/q64": {
+      "median": 4737.34765625,
+      "lower": 4702.380859375,
+      "upper": 4889.595703125,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 7308.181818181818,
+      "max_rss_bytes": 34656256,
+      "server_version": "8.0.3"
+    },
+    "kv_get/cluster/bare/t1": {
+      "median": 47744.0,
+      "lower": 46720.0,
+      "upper": 49280.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 31100.756106053825,
+      "max_rss_bytes": 34656256,
+      "ops_per_second": 20085.075094816708,
+      "server_version": "8.0.3"
+    },
+    "kv_get/cluster/q64": {
+      "median": 5728.099609375,
+      "lower": 5250.8203125,
+      "upper": 6069.208984375,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 8816.285076530612,
+      "max_rss_bytes": 34656256,
+      "server_version": "8.0.3"
+    },
+    "kv_get/cluster/t1": {
+      "median": 52352.0,
+      "lower": 48000.0,
+      "upper": 67840.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 37196.49951278015,
+      "max_rss_bytes": 34656256,
+      "ops_per_second": 13964.440337692946,
+      "server_version": "8.0.3"
+    },
+    "kv_get/cluster/t8": {
+      "median": 105728.0,
+      "lower": 92928.0,
+      "upper": 132608.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 19778.066444970264,
+      "max_rss_bytes": 34656256,
+      "ops_per_second": 62381.952063099176,
+      "server_version": "8.0.3"
+    },
+    "kv_get/fake/bare/q64": {
+      "median": 6928.77734375,
+      "lower": 6820.16796875,
+      "upper": 7709.720703125,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 11993.966208001768,
+      "max_rss_bytes": 35139584
+    },
+    "kv_get/fake/bare/t1": {
+      "median": 59776.0,
+      "lower": 58752.0,
+      "upper": 62336.0,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 59243.44818833682,
+      "max_rss_bytes": 35139584,
+      "ops_per_second": 15746.563317052502
+    },
+    "kv_get/fake/q64": {
+      "median": 8979.53125,
+      "lower": 8524.16796875,
+      "upper": 9254.248046875,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 14543.335780201342,
+      "max_rss_bytes": 35139584
+    },
+    "kv_get/fake/t1": {
+      "median": 61312.0,
+      "lower": 60288.0,
+      "upper": 62592.0,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 61158.47804375141,
+      "max_rss_bytes": 35139584,
+      "ops_per_second": 15508.082050525643
+    },
+    "kv_get/fake/t8": {
+      "median": 119552.0,
+      "lower": 118528.0,
+      "upper": 121088.0,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 28833.466335301764,
+      "max_rss_bytes": 35139584,
+      "ops_per_second": 65652.66601272566
+    },
+    "kv_upsert/cluster/bare/q64": {
+      "median": 20942.71875,
+      "lower": 19904.921875,
+      "upper": 23439.5234375,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 11398.266669233139,
+      "max_rss_bytes": 34656256,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert/cluster/bare/t1": {
+      "median": 120576.0,
+      "lower": 109312.0,
+      "upper": 143872.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 56476.281744130334,
+      "max_rss_bytes": 34656256,
+      "ops_per_second": 6412.555090914294,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert/cluster/q64": {
+      "median": 20118.19921875,
+      "lower": 18126.578125,
+      "upper": 26429.890625,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 12651.350334922798,
+      "max_rss_bytes": 34656256,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert/cluster/t1": {
+      "median": 115968.0,
+      "lower": 106240.0,
+      "upper": 146944.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 57074.94559303591,
+      "max_rss_bytes": 34656256,
+      "ops_per_second": 7343.101083046533,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert/cluster/t8": {
+      "median": 431104.0,
+      "lower": 375808.0,
+      "upper": 482304.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 33617.70153332321,
+      "max_rss_bytes": 34656256,
+      "ops_per_second": 16730.01579008143,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert/fake/bare/q64": {
+      "median": 9176.677734375,
+      "lower": 9086.154296875,
+      "upper": 9437.62890625,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 16706.743757301403,
+      "max_rss_bytes": 35139584
+    },
+    "kv_upsert/fake/bare/t1": {
+      "median": 62080.0,
+      "lower": 60288.0,
+      "upper": 65152.0,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 61664.26158538585,
+      "max_rss_bytes": 35139584,
+      "ops_per_second": 15360.926202626148
+    },
+    "kv_upsert/fake/q64": {
+      "median": 10955.625,
+      "lower": 10850.34375,
+      "upper": 11256.83203125,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 19088.448468685478,
+      "max_rss_bytes": 35139584
+    },
+    "kv_upsert/fake/t1": {
+      "median": 63616.0,
+      "lower": 62592.0,
+      "upper": 63872.0,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 62837.4958485553,
+      "max_rss_bytes": 35139584,
+      "ops_per_second": 15043.272768499313
+    },
+    "kv_upsert/fake/t8": {
+      "median": 114944.0,
+      "lower": 113920.0,
+      "upper": 116992.0,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 32738.655211057154,
+      "max_rss_bytes": 35139584,
+      "ops_per_second": 67185.23301505418
+    },
+    "kv_upsert_get/cluster/c20": {
+      "median": 1486848.0,
+      "lower": 1429504.0,
+      "upper": 1642496.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 98165.06076218194,
+      "max_rss_bytes": 63209472,
+      "ops_per_second": 12489.10467505184,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert_get/cluster/t20": {
+      "median": 1191936.0,
+      "lower": 1118208.0,
+      "upper": 1454080.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 50221.903741967995,
+      "max_rss_bytes": 34656256,
+      "ops_per_second": 15681.928802399372,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert_get/cluster/t20/raw": {
+      "median": 1150976.0,
+      "lower": 1077248.0,
+      "upper": 1191936.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 46667.567733611846,
+      "max_rss_bytes": 34656256,
+      "ops_per_second": 16172.384419509655,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert_get/fake/c20": {
+      "median": 731136.0,
+      "lower": 722944.0,
+      "upper": 735232.0,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 128760.57974221386,
+      "max_rss_bytes": 81981440,
+      "ops_per_second": 26911.821004498688
+    },
+    "kv_upsert_get/fake/t20": {
+      "median": 500736.0,
+      "lower": 496640.0,
+      "upper": 508928.0,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 58363.519685931074,
+      "max_rss_bytes": 61390848,
+      "ops_per_second": 39432.32476076144
+    },
+    "kv_upsert_get/fake/t20/raw": {
+      "median": 500736.0,
+      "lower": 498688.0,
+      "upper": 508928.0,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 52511.22389717951,
+      "max_rss_bytes": 61440000,
+      "ops_per_second": 39387.11945428733
+    },
+    "mcbp_parser_next/plain": {
+      "median": 104.97280883789062,
+      "lower": 104.381591796875,
+      "upper": 106.1180419921875,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 105.67919087206197,
+      "max_rss_bytes": 35008512
+    },
+    "mcbp_parser_next/snappy": {
+      "median": 240.57391357421875,
+      "lower": 239.82379150390625,
+      "upper": 242.87841796875,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 241.81757908241423,
+      "max_rss_bytes": 35008512
+    },
+    "vbucket_hash/crc32_t1": {
+      "median": 13.175098419189453,
+      "lower": 13.165000915527344,
+      "upper": 14.7078857421875,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 13.232474491514008,
+      "max_rss_bytes": 35008512
+    },
+    "vbucket_hash/map_key_t1": {
+      "median": 20.32183837890625,
+      "lower": 20.250442504882812,
+      "upper": 20.950942993164062,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 20.41967983903556,
+      "max_rss_bytes": 35008512
+    },
+    "vbucket_hash/map_key_t8": {
+      "median": 34.201751708984375,
+      "lower": 34.088592529296875,
+      "upper": 35.3343505859375,
+      "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+      "cpu_ns_per_op": 34.15771535089712,
+      "max_rss_bytes": 35008512
+    }
+  },
+  "descriptions": {
+    "json_generate_binary": "Serialises a small JSON document and an 80-item nested document with core::utils::json::generate_binary.",
+    "json_streaming_lexer": "Parses a query response of 10 or 1,000 rows with core::utils::json::streaming_lexer, fed in 4 KiB chunks.",
+    "kv_get": "Gets one of 1,000 small JSON documents per operation, blocking on 1 or 8 threads, or 64 in flight.",
+    "kv_upsert": "Upserts one of 1,000 small JSON documents per operation, blocking on 1 or 8 threads, or 64 in flight.",
+    "kv_upsert_get": "Upserts, then gets, one of 100,000 512-byte JSON documents per operation on 20 threads.",
+    "mcbp_parser_next": "Decodes one GET response frame per iteration with mcbp_parser::next, plain and Snappy-compressed.",
+    "vbucket_hash": "Hashes a key with CRC32, and maps it to its vBucket and node in a 1,024-vBucket map."
+  },
+  "run": "2026-11-11T23:23:54Z"
+}
