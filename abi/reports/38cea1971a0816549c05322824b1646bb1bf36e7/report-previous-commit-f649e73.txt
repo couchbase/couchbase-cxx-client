@@ -1,0 +1,14 @@
+libcouchbase_cxx_client.so.1.5 against previous commit f649e73: no ABI change
+
+Leaf changes summary: 0 artifact changed
+Changed leaf types summary: 0 leaf type changed
+Removed/Changed/Added functions summary: 0 Removed, 0 Changed, 0 Added function
+Removed/Changed/Added variables summary: 0 Removed, 0 Changed, 0 Added variable
+Unreachable types summary: 0 removed, 0 changed, 3 added types
+
+3 added types unreachable from any public interface:
+
+  [A] 'class std::_Function_base::_Base_manager<couchbase::core::collection_id_cache_entry_impl::refresh_collection_id(conststd::shared_ptr<couchbase::core::mcbp::queue_request>&)::<lambda(couchbase::core::get_collection_id_result,std::error_code)>::<lambda(constauto:38&)>>' at std_function.h:123:1
+  [A] 'class std::_Function_handler<void(std::shared_ptr<couchbase::core::mcbp::queue_request>),couchbase::core::collection_id_cache_entry_impl::refresh_collection_id(conststd::shared_ptr<couchbase::core::mcbp::queue_request>&)::<lambda(couchbase::core::get_collection_id_result,std::error_code)>::<lambda(constauto:38&)>>' at std_function.h:262:1
+  [A] 'struct std::remove_reference<constcouchbase::core::collection_id_cache_entry_impl::refresh_collection_id(conststd::shared_ptr<couchbase::core::mcbp::queue_request>&)::<lambda(couchbase::core::get_collection_id_result,std::error_code)>::<lambda(constauto:38&)>&>' at type_traits:1772:1
+
