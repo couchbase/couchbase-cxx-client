@@ -89,7 +89,8 @@ TEST_CASE("integration: missing scope and collection", "[integration]")
       id, couchbase::core::utils::json::generate_binary(value)
     };
     auto resp = test::utils::execute(integration.cluster, req);
-    REQUIRE(resp.ctx.ec() == couchbase::errc::common::ambiguous_timeout);
+    // GetCollectionID never resolves the collection, so the insert is never written.
+    REQUIRE(resp.ctx.ec() == couchbase::errc::common::unambiguous_timeout);
     REQUIRE(resp.ctx.retried_because_of(couchbase::retry_reason::key_value_collection_outdated));
   }
 }
