@@ -23,6 +23,8 @@
 #include "core/bucket.hxx"
 #include "core/cluster_credentials.hxx"
 #include "core/cluster_options.hxx"
+#include "core/io/mcbp_command.hxx"
+#include "core/io/mcbp_message.hxx"
 #include "core/mcbp/queue_request.hxx"
 #include "core/mcbp/queue_response.hxx"
 #include "core/metrics/meter_wrapper.hxx"
@@ -36,15 +38,21 @@
 
 #include <couchbase/error_codes.hxx>
 #include <couchbase/fail_fast_retry_strategy.hxx>
+#include <couchbase/retry_reason.hxx>
+#include <couchbase/retry_strategy.hxx>
 
 #include <asio/io_context.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <system_error>
+#include <thread>
+#include <utility>
 #include <vector>
 
 namespace couchbase::test
@@ -137,6 +145,11 @@ public:
   void run()
   {
     ctx_.run();
+  }
+
+  [[nodiscard]] auto io() -> asio::io_context&
+  {
+    return ctx_;
   }
 
 private:
@@ -329,6 +342,170 @@ an_expired_deadline_on_a_replica_read_is_unambiguous([[maybe_unused]] context& c
   assert_true(completed, "the request was completed");
   assert_error(ec, errc::common::unambiguous_timeout, "a read that never dispatched");
 }
+
+/**
+ * Retries every reason after a backoff longer than the deadline, which cap_duration() shortens to
+ * end at the deadline. Declines, and counts, any retry asked for after the completion.
+ */
+class retry_at_the_deadline : public couchbase::retry_strategy
+{
+public:
+  explicit retry_at_the_deadline(const bool& completed)
+    : completed_{ completed }
+  {
+  }
+
+  auto retry_after(const couchbase::retry_request& /* request */,
+                   couchbase::retry_reason /* reason */) -> couchbase::retry_action override
+  {
+    if (completed_) {
+      ++retries_after_completion_;
+      return couchbase::retry_action::do_not_retry();
+    }
+    return couchbase::retry_action{ std::chrono::seconds{ 10 } };
+  }
+
+  [[nodiscard]] auto to_string() const -> std::string override
+  {
+    return "retry_at_the_deadline";
+  }
+
+  [[nodiscard]] auto retries_after_completion() const -> std::size_t
+  {
+    return retries_after_completion_;
+  }
+
+private:
+  const bool& completed_;
+  std::size_t retries_after_completion_{ 0 };
+};
+
+void
+a_retry_queued_with_the_deadline_does_not_run_after_the_completion([[maybe_unused]] context& ctx)
+{
+  bucket_fixture fixture{};
+  fixture.install_config(1, /* rev = */ 1, /* with_key_value_port = */ false);
+
+  auto completed{ false };
+  auto strategy = std::make_shared<retry_at_the_deadline>(completed);
+  const couchbase::core::operations::get_replica_request request{
+    couchbase::core::document_id{ "default", "_default", "_default", "key" },
+    /* timeout = */ std::chrono::milliseconds{ 500 },
+    /* partition = */ 0,
+    /* opaque = */ 0,
+    { strategy },
+  };
+
+  using command =
+    couchbase::core::operations::mcbp_command<couchbase::core::bucket,
+                                              couchbase::core::operations::get_replica_request>;
+  auto cmd = std::make_shared<command>(
+    fixture.io(), fixture.get(), request, std::chrono::milliseconds{ 500 });
+  std::error_code ec{};
+  cmd->start([&ec, &completed](std::error_code error,
+                               std::optional<couchbase::core::io::mcbp_message>&& /* msg */) {
+    completed = true;
+    ec = error;
+  });
+  // What bucket::execute() does for a configured bucket. The first lap runs inline and, with no
+  // session to route to, arms the retry.
+  fixture.get()->map_and_send(cmd);
+
+  // The retry completion is queued behind the deadline only when the retry expires after the
+  // deadline and within the capped margin. One armed earlier runs first, asio gives equal expiries
+  // no order, and one left uncapped is still pending when the deadline cancels it. Asserted after
+  // run(), since the handler captures locals that must outlive the run.
+  const auto armed_after_deadline = cmd->retry_backoff.expiry() > cmd->deadline.expiry();
+  const auto capped =
+    cmd->retry_backoff.expiry() - cmd->deadline.expiry() < std::chrono::seconds{ 1 };
+
+  // Starting the io context after both expiries makes its first reactor pass queue both
+  // completions, the deadline first.
+  std::this_thread::sleep_until(
+    std::min(cmd->retry_backoff.expiry(), cmd->deadline.expiry() + std::chrono::seconds{ 1 }) +
+    std::chrono::milliseconds{ 50 });
+  const auto both_expired = std::chrono::steady_clock::now() > cmd->retry_backoff.expiry();
+  fixture.run();
+
+  assert_true(armed_after_deadline, "the retry expires after the deadline");
+  assert_true(capped, "the retry is capped to the deadline");
+  assert_true(both_expired, "the io context started after both expiries");
+  assert_true(completed, "the request was completed");
+  assert_error(ec, errc::common::unambiguous_timeout, "the deadline completed the request");
+  assert_eq(strategy->retries_after_completion(),
+            std::size_t{ 0 },
+            "no retry was taken after the completion");
+}
+/**
+ * A get_request command completed through cancel(), the path a deadline takes. @p completed is the
+ * flag retry_at_the_deadline reads, and @p handler_calls counts the completions.
+ */
+[[nodiscard]] auto
+completed_get(bucket_fixture& fixture, bool& completed, int& handler_calls)
+  -> std::pair<std::shared_ptr<couchbase::core::operations::mcbp_command<
+                 couchbase::core::bucket,
+                 couchbase::core::operations::get_request>>,
+               std::shared_ptr<retry_at_the_deadline>>
+{
+  auto strategy = std::make_shared<retry_at_the_deadline>(completed);
+  couchbase::core::operations::get_request request{
+    couchbase::core::document_id{ "default", "_default", "_default", "key" },
+    /* partition = */ 0,
+    /* opaque = */ 0,
+    /* timeout = */ std::chrono::milliseconds{ 500 },
+    { strategy },
+  };
+  auto cmd = std::make_shared<
+    couchbase::core::operations::mcbp_command<couchbase::core::bucket,
+                                              couchbase::core::operations::get_request>>(
+    fixture.io(), fixture.get(), std::move(request), std::chrono::milliseconds{ 500 });
+  cmd->start(
+    [&completed, &handler_calls](std::error_code /* ec */,
+                                 std::optional<couchbase::core::io::mcbp_message>&& /* msg */) {
+      completed = true;
+      ++handler_calls;
+    });
+  cmd->cancel(couchbase::retry_reason::do_not_retry);
+  return { cmd, strategy };
+}
+
+void
+a_completed_command_is_not_routed([[maybe_unused]] context& ctx)
+{
+  bucket_fixture fixture{};
+  // No configuration, so a lap fails to map the key and asks the strategy for a retry.
+  auto completed{ false };
+  auto handler_calls{ 0 };
+  auto [cmd, strategy] = completed_get(fixture, completed, handler_calls);
+  const auto calls_before = handler_calls;
+
+  fixture.get()->map_and_send(cmd);
+  fixture.run();
+
+  assert_eq(calls_before, 1, "cancel() ran the handler once");
+  assert_eq(handler_calls, 1, "the handler did not run again");
+  assert_eq(strategy->retries_after_completion(),
+            std::size_t{ 0 },
+            "no retry was taken after the completion");
+}
+
+void
+a_completed_command_is_not_scheduled_for_retry([[maybe_unused]] context& ctx)
+{
+  bucket_fixture fixture{};
+  auto completed{ false };
+  auto handler_calls{ 0 };
+  auto [cmd, strategy] = completed_get(fixture, completed, handler_calls);
+  const auto calls_before = handler_calls;
+
+  fixture.get()->schedule_for_retry(cmd, std::chrono::milliseconds{ 10 });
+  const auto armed = cmd->retry_backoff.cancel();
+  fixture.run();
+
+  assert_eq(calls_before, 1, "cancel() ran the handler once");
+  assert_eq(handler_calls, 1, "the handler did not run again");
+  assert_eq(armed, std::size_t{ 0 }, "no retry timer is armed");
+}
 } // namespace
 
 auto
@@ -356,6 +533,11 @@ tests() -> test_suite
         {},
         timeout::fast },
       { CASE(an_expired_deadline_on_a_replica_read_is_unambiguous), {}, timeout::fast },
+      { CASE(a_retry_queued_with_the_deadline_does_not_run_after_the_completion),
+        {},
+        timeout::fast },
+      { CASE(a_completed_command_is_not_routed), {}, timeout::fast },
+      { CASE(a_completed_command_is_not_scheduled_for_retry), {}, timeout::fast },
     },
   };
 }
