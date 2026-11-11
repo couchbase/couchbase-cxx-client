@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "commands/common.hxx"
 #include "hooks.hxx"
 #include "observability/span_owner.hxx"
 #include "performer.pb.h"
@@ -29,6 +30,7 @@
 #include <core/transactions/internal/utils.hxx>
 
 #include <couchbase/cluster.hxx>
+#include <couchbase/ip_protocol.hxx>
 #include <couchbase/metrics/meter.hxx>
 #include <couchbase/tracing/request_tracer.hxx>
 #include <couchbase/transactions/transactions_config.hxx>
@@ -60,6 +62,7 @@ static const size_t NUM_IO_THREADS = 1;
 // inline constexpr const char* avoids the per-translation-unit dynamic initialization (and separate
 // instance) that a header-scope `static const std::string` would incur.
 inline constexpr const char* SCHEME = "couchbase://";
+inline constexpr const char* TLS_SCHEME = "couchbases://";
 
 namespace fit_cxx
 {
@@ -96,6 +99,9 @@ private:
   std::list<std::thread> io_threads_{};
   std::string bucket_;
   std::string cluster_address_;
+  // ClusterConfig.transcoder. The SDK has no cluster-wide transcoder, so KV commands that set none
+  // of their own are given this one. Transactions take a transcoder only from their own options.
+  commands::common::transcoder default_transcoder_{};
   fit_cxx::test_hook_pair hook_pair_;
   std::list<TxnSvcHook> hook_vector_;
 
@@ -261,12 +267,24 @@ public:
             std::chrono::seconds(req->cluster_config().app_telemetry_ping_interval_secs()));
         }
 #endif
+        apply_cluster_config(req->cluster_config(), options);
       }
       std::string address = cluster_address_;
       // Workaround: SDK should work with connection strings without a scheme - TODO: remove this
       // once fixed
       if (address.find("://") == std::string::npos) {
-        address.insert(0, SCHEME);
+        const bool use_tls = req->has_cluster_config() && req->cluster_config().use_tls();
+        address.insert(0, use_tls ? TLS_SCHEME : SCHEME);
+      }
+      if (req->has_cluster_config() &&
+          req->cluster_config().has_config_poll_floor_interval_secs()) {
+        // cluster_options has no setter for it; the connection string's options apply on top.
+        address += address.find('?') == std::string::npos ? '?' : '&';
+        address += fmt::format(
+          "config_poll_floor={}ms",
+          std::chrono::milliseconds(
+            std::chrono::seconds(req->cluster_config().config_poll_floor_interval_secs()))
+            .count());
       }
       spdlog::info("Using connection string `{}`.", address);
       for (int i = 0; i < 10 && !cluster_; i++) {
@@ -456,6 +474,11 @@ public:
       }));
   }
 
+  [[nodiscard]] auto default_transcoder() const -> const commands::common::transcoder&
+  {
+    return default_transcoder_;
+  }
+
   std::shared_ptr<couchbase::cluster> cluster()
   {
     return cluster_;
@@ -474,6 +497,89 @@ public:
   couchbase::core::cluster core()
   {
     return couchbase::core::get_core_cluster(*cluster_);
+  }
+
+  /// The ClusterConfig fields that CLUSTER_CONFIG_1 covers, other than those the constructor
+  /// applies: transactions_config, the TLS settings (use_tls, cert_path, cert, insecure), and
+  /// config_poll_floor_interval_secs, which goes into the connection string. A field the SDK cannot
+  /// honour is rejected rather than ignored.
+  void apply_cluster_config(const protocol::shared::ClusterConfig& config,
+                            couchbase::cluster_options& options)
+  {
+    using std::chrono::milliseconds;
+    using std::chrono::seconds;
+    if (config.use_custom_serializer()) {
+      throw performer_exception::unimplemented(
+        "use_custom_serializer: the SDK has no cluster-wide JSON serializer");
+    }
+    if (config.has_kv_connect_timeout_secs()) {
+      options.timeouts().connect_timeout(seconds(config.kv_connect_timeout_secs()));
+    }
+    if (config.has_kv_timeout_millis()) {
+      options.timeouts().key_value_timeout(milliseconds(config.kv_timeout_millis()));
+    }
+    if (config.has_kv_durable_timeout_millis()) {
+      options.timeouts().key_value_durable_timeout(
+        milliseconds(config.kv_durable_timeout_millis()));
+    }
+    if (config.has_view_timeout_secs()) {
+      options.timeouts().view_timeout(seconds(config.view_timeout_secs()));
+    }
+    if (config.has_query_timeout_secs()) {
+      options.timeouts().query_timeout(seconds(config.query_timeout_secs()));
+    }
+    if (config.has_analytics_timeout_secs()) {
+      options.timeouts().analytics_timeout(seconds(config.analytics_timeout_secs()));
+    }
+    if (config.has_search_timeout_secs()) {
+      options.timeouts().search_timeout(seconds(config.search_timeout_secs()));
+    }
+    if (config.has_management_timeout_secs()) {
+      options.timeouts().management_timeout(seconds(config.management_timeout_secs()));
+    }
+    if (config.has_kv_scan_timeout_secs()) {
+      options.timeouts().key_value_scan_timeout(seconds(config.kv_scan_timeout_secs()));
+    }
+    if (config.has_transcoder()) {
+      default_transcoder_ = commands::common::to_transcoder(config.transcoder());
+    }
+    if (config.has_enable_mutation_tokens()) {
+      options.behavior().enable_mutation_tokens(config.enable_mutation_tokens());
+    }
+    // The SDK enables TCP keep-alive on every socket and does not apply its keep-alive options.
+    if (config.has_enable_tcp_keep_alives() && !config.enable_tcp_keep_alives()) {
+      throw performer_exception::unimplemented(
+        "enable_tcp_keep_alives=false: the SDK always enables TCP keep-alive");
+    }
+    if (config.has_tcp_keep_alive_time_millis()) {
+      throw performer_exception::unimplemented(
+        "tcp_keep_alive_time_millis: the SDK does not apply it");
+    }
+    if (config.has_force_i_p_v4() && config.force_i_p_v4()) {
+      options.network().force_ip_protocol(couchbase::ip_protocol::force_ipv4);
+    }
+    if (config.has_config_poll_interval_secs()) {
+      options.network().config_poll_interval(seconds(config.config_poll_interval_secs()));
+    }
+    if (config.has_config_idle_redial_timeout_secs()) {
+      throw performer_exception::unimplemented(
+        "config_idle_redial_timeout_secs: the SDK has no setting for it");
+    }
+    // The SDK opens one KV connection per node.
+    if (config.has_num_kv_connections() && config.num_kv_connections() != 1) {
+      throw performer_exception::unimplemented(
+        fmt::format("num_kv_connections={}: the SDK opens one KV connection per node",
+                    config.num_kv_connections()));
+    }
+    // The SDK accepts max_http_connections but opens a new HTTP session whenever none is idle.
+    if (config.has_max_http_connections() && config.max_http_connections() != 0) {
+      throw performer_exception::unimplemented(fmt::format(
+        "max_http_connections={}: the SDK does not enforce it", config.max_http_connections()));
+    }
+    if (config.has_idle_http_connection_timeout_secs()) {
+      options.network().idle_http_connection_timeout(
+        seconds(config.idle_http_connection_timeout_secs()));
+    }
   }
 
   auto create_certificate_authenticator(

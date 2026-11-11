@@ -56,9 +56,6 @@ class TxnService final : public protocol::PerformerService::Service
 private:
   std::mutex mutex_;
   std::map<std::string, ConnectionPtr> connections_;
-  std::mutex stash_mutex_;
-  std::optional<couchbase::transactions::transaction_get_result> stashed_result_{};
-  std::map<std::uint32_t, couchbase::transactions::transaction_get_result> stashed_result_slots_{};
   fit_cxx::run_result_streams streams_;
   fit_cxx::counters counters_;
   std::mutex rng_mutex_;
@@ -73,36 +70,6 @@ private:
   // shared_ptr instance from multiple threads, releasing its control block twice (double-free /
   // heap corruption).
   std::mutex cleanup_config_mutex_;
-
-  // Thread-safe accessors for the stashed-result state, which is shared across all concurrent
-  // transactions/worker threads. Getters return copies so the value can be used safely (e.g. in a
-  // blocking transaction op) after the lock is released.
-  void set_stashed_result(const couchbase::transactions::transaction_get_result& result)
-  {
-    const std::scoped_lock<std::mutex> lock(stash_mutex_);
-    stashed_result_ = result;
-  }
-  std::optional<couchbase::transactions::transaction_get_result> get_stashed_result()
-  {
-    const std::scoped_lock<std::mutex> lock(stash_mutex_);
-    return stashed_result_;
-  }
-  void set_stashed_slot(std::uint32_t slot,
-                        const couchbase::transactions::transaction_get_result& result)
-  {
-    const std::scoped_lock<std::mutex> lock(stash_mutex_);
-    stashed_result_slots_[slot] = result;
-  }
-  couchbase::transactions::transaction_get_result get_stashed_slot(std::uint32_t slot)
-  {
-    const std::scoped_lock<std::mutex> lock(stash_mutex_);
-    // Use find() rather than operator[] so a missing slot fails fast instead of silently returning
-    // a default-constructed (empty) result that would mask a test error.
-    if (auto it = stashed_result_slots_.find(slot); it != stashed_result_slots_.end()) {
-      return it->second;
-    }
-    throw performer_exception::not_found("no stashed result in slot " + std::to_string(slot));
-  }
 
   ConnectionPtr getConn(const std::string& id)
   {
@@ -129,7 +96,8 @@ private:
                         const protocol::transactions::TransactionCreateRequest* request,
                         protocol::transactions::TransactionResult* response,
                         std::atomic<bool>& timed_out,
-                        fit_cxx::transaction_context& txn_ctx);
+                        fit_cxx::transaction_context& txn_ctx,
+                        bool performance_mode = false);
 
   std::string to_key(const protocol::shared::DocLocation& loc);
 

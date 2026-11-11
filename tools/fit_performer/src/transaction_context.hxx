@@ -21,18 +21,54 @@
 
 #include <spdlog/spdlog.h>
 
+#include <couchbase/transactions/transaction_get_result.hxx>
+
 #include <condition_variable>
 #include <cstdint>
 #include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
 
 namespace fit_cxx
 {
+
+// Set while a transaction of a Workload with performance_mode runs on this thread. The protocol
+// asks performance mode to reduce performer logging and leave SDK logging alone; the SDK logs
+// through its own logger, so only the performer's debug and trace calls check this.
+inline thread_local bool quiet_performer_logging = false;
+
+/// Whether the performer should emit a routine message at `level` on this thread.
+inline auto
+performer_logs(spdlog::level::level_enum level) -> bool
+{
+  return !quiet_performer_logging && spdlog::should_log(level);
+}
+
+/// Silences the performer's routine logging on this thread for its lifetime.
+class quiet_performer_logging_guard
+{
+public:
+  explicit quiet_performer_logging_guard(bool quiet)
+    : previous_(std::exchange(quiet_performer_logging, quiet_performer_logging || quiet))
+  {
+  }
+  quiet_performer_logging_guard(const quiet_performer_logging_guard&) = delete;
+  auto operator=(const quiet_performer_logging_guard&) -> quiet_performer_logging_guard& = delete;
+  quiet_performer_logging_guard(quiet_performer_logging_guard&&) = delete;
+  auto operator=(quiet_performer_logging_guard&&) -> quiet_performer_logging_guard& = delete;
+  ~quiet_performer_logging_guard()
+  {
+    quiet_performer_logging = previous_;
+  }
+
+private:
+  bool previous_;
+};
 
 // A counting latch, mirroring the Java performer's use of CountDownLatch. set()
 // counts the latch down by one; wait() blocks until the count reaches zero.
@@ -173,9 +209,43 @@ public:
     }
   }
 
+  // The results that get commands stash for later commands of the same transaction. Getters return
+  // copies, so a value stays valid in a blocking transaction op after the lock is released.
+  void set_stashed_result(const couchbase::transactions::transaction_get_result& result)
+  {
+    const std::scoped_lock<std::mutex> lock(stash_mutex_);
+    stashed_result_ = result;
+  }
+
+  auto get_stashed_result() -> std::optional<couchbase::transactions::transaction_get_result>
+  {
+    const std::scoped_lock<std::mutex> lock(stash_mutex_);
+    return stashed_result_;
+  }
+
+  void set_stashed_slot(std::uint32_t slot,
+                        const couchbase::transactions::transaction_get_result& result)
+  {
+    const std::scoped_lock<std::mutex> lock(stash_mutex_);
+    stashed_result_slots_[slot] = result;
+  }
+
+  auto get_stashed_slot(std::uint32_t slot) -> couchbase::transactions::transaction_get_result
+  {
+    const std::scoped_lock<std::mutex> lock(stash_mutex_);
+    // find() rather than operator[], so a missing slot fails instead of yielding an empty result.
+    if (auto it = stashed_result_slots_.find(slot); it != stashed_result_slots_.end()) {
+      return it->second;
+    }
+    throw performer_exception::not_found("no stashed result in slot " + std::to_string(slot));
+  }
+
 private:
   latch_registry latches_;
   std::function<void(const std::string&)> broadcast_set_latch_;
+  std::mutex stash_mutex_;
+  std::optional<couchbase::transactions::transaction_get_result> stashed_result_{};
+  std::map<std::uint32_t, couchbase::transactions::transaction_get_result> stashed_result_slots_{};
 };
 
 } // namespace fit_cxx
