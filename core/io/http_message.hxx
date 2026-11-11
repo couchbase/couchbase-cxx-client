@@ -105,6 +105,31 @@ private:
   std::unique_ptr<utils::json::streaming_lexer> lexer_{};
 };
 
+[[nodiscard]] inline auto
+connection_header_has_close(std::string_view value) -> bool
+{
+  while (!value.empty()) {
+    const auto comma = value.find(',');
+    auto token = comma == std::string_view::npos ? value : value.substr(0, comma);
+    while (!token.empty() && (token.front() == ' ' || token.front() == '\t')) {
+      token.remove_prefix(1);
+    }
+    while (!token.empty() && (token.back() == ' ' || token.back() == '\t')) {
+      token.remove_suffix(1);
+    }
+    if (token.size() == 5 && (token[0] == 'c' || token[0] == 'C') &&
+        (token[1] == 'l' || token[1] == 'L') && (token[2] == 'o' || token[2] == 'O') &&
+        (token[3] == 's' || token[3] == 'S') && (token[4] == 'e' || token[4] == 'E')) {
+      return true;
+    }
+    if (comma == std::string_view::npos) {
+      break;
+    }
+    value.remove_prefix(comma + 1);
+  }
+  return false;
+}
+
 struct http_response {
   std::uint32_t status_code{ 0 };
   std::string status_message;
@@ -114,7 +139,7 @@ struct http_response {
   [[nodiscard]] auto must_close_connection() const -> bool
   {
     if (const auto it = headers.find("connection"); it != headers.end()) {
-      return it->second == "close";
+      return connection_header_has_close(it->second);
     }
     return false;
   }
