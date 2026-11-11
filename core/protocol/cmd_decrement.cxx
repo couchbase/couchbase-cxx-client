@@ -53,6 +53,9 @@ decrement_response_body::parse(key_value_status_code status,
       offset += 8;
     }
     offset += key_size;
+    if (body.size() < static_cast<std::size_t>(offset) + sizeof(content_)) {
+      return false;
+    }
     memcpy(&content_, body.data() + offset, sizeof(content_));
     content_ = utils::network_to_host(content_);
     return true;

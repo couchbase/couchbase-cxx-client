@@ -186,6 +186,11 @@ get_projected_request::make_response(key_value_error_context&& ctx,
   -> get_projected_response
 {
   get_projected_response response{ std::move(ctx) };
+  const std::size_t expected_fields =
+    (with_expiry ? 2 : 1) + (effective_projections.empty() ? 1 : projections.size());
+  if (!response.ctx.ec() && encoded.body().fields().size() != expected_fields) {
+    response.ctx.override_ec(errc::network::protocol_error);
+  }
   if (!response.ctx.ec()) {
     response.cas = encoded.cas();
     response.flags = gsl::narrow_cast<std::uint32_t>(std::stoul(encoded.body().fields()[0].value));

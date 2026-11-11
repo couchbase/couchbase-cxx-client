@@ -104,6 +104,10 @@ mutate_in_request::make_response(key_value_error_context&& ctx,
       fields[i].status = key_value_status_code::success;
     }
     for (const auto& entry : encoded.body().fields()) {
+      if (entry.index >= fields.size()) {
+        ec = errc::network::protocol_error;
+        break;
+      }
       if (entry.status == key_value_status_code::success) {
         fields[entry.index].value = utils::to_binary(entry.value);
       } else {
@@ -116,6 +120,11 @@ mutate_in_request::make_response(key_value_error_context&& ctx,
         ec = fields[entry.index].ec;
         break;
       }
+    }
+    if (!ec && (encoded.status() == key_value_status_code::subdoc_multi_path_failure ||
+                encoded.status() == key_value_status_code::subdoc_multi_path_failure_deleted)) {
+      // a multi-path failure names the failed path; without it the mutation would read as applied
+      ec = errc::network::protocol_error;
     }
     if (!ec) {
       response_cas = encoded.cas();

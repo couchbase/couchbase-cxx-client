@@ -15,15 +15,28 @@
  *   limitations under the License.
  */
 
+#include "framework/errors.hxx"
 #include "framework/test_registry.hxx"
 
 #include "core/io/mcbp_message.hxx"
+#include "core/operations/document_get.hxx"
+#include "core/operations/document_lookup_in.hxx"
+#include "core/operations/document_mutate_in.hxx"
 #include "core/protocol/client_response.hxx"
 #include "core/protocol/cmd_cluster_map_change_notification.hxx"
+#include "core/protocol/cmd_increment.hxx"
+#include "core/protocol/cmd_lookup_in.hxx"
+#include "core/protocol/cmd_lookup_in_replica.hxx"
+#include "core/protocol/cmd_mutate_in.hxx"
 #include "core/protocol/cmd_noop.hxx"
+#include "core/protocol/cmd_observe_seqno.hxx"
 #include "core/protocol/magic.hxx"
 #include "core/protocol/server_request.hxx"
 #include "core/protocol/status.hxx"
+
+#include <couchbase/error_codes.hxx>
+#include <couchbase/lookup_in_specs.hxx>
+#include <couchbase/mutate_in_specs.hxx>
 
 #include <array>
 #include <cstddef>
@@ -247,6 +260,168 @@ a_framing_extras_region_the_body_cannot_hold_yields_no_duration([[maybe_unused]]
             0.0,
             "a malformed response reports no duration rather than reading past its body");
 }
+// A response header for Body with the given status, key length and body length.
+template<typename Body>
+auto
+response_header(couchbase::core::key_value_status_code status,
+                std::uint16_t key_size,
+                std::uint32_t body_size) -> std::array<std::byte, 24>
+{
+  auto bytes = wire_header(static_cast<std::uint16_t>(status), 0, 0);
+  bytes[1] = static_cast<std::byte>(Body::opcode);
+  bytes[2] = static_cast<std::byte>(key_size >> 8U);
+  bytes[3] = static_cast<std::byte>(key_size);
+  for (std::size_t i = 0; i < 4; ++i) {
+    bytes[8 + i] = static_cast<std::byte>(body_size >> ((3U - i) * 8U));
+  }
+  return bytes;
+}
+
+template<typename Body>
+auto
+parses(couchbase::core::key_value_status_code status, const std::vector<std::byte>& body) -> bool
+{
+  Body parsed{};
+  couchbase::core::protocol::header_buffer header{};
+  header[1] = static_cast<std::byte>(Body::opcode);
+  return parsed.parse(status, header, 0, 0, 0, body, {});
+}
+
+void
+a_key_length_the_body_cannot_hold_is_not_parsed([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::key_value_status_code;
+  using couchbase::core::protocol::get_response_body;
+
+  // a JSON error body would be decoded from offset 32 of a 3-byte body
+  auto header = response_header<get_response_body>(key_value_status_code::not_found, 32, 3);
+  header[5] = std::byte{ 0x01 };
+  const couchbase::core::protocol::client_response<get_response_body> resp{ message_with(
+    header, { std::byte{ '{' }, std::byte{ '}' }, std::byte{ ' ' } }) };
+  assert_false(resp.error_info().has_value(), "no enhanced error is decoded");
+}
+
+void
+truncated_subdoc_entries_are_rejected([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::key_value_status_code;
+  using couchbase::core::protocol::lookup_in_replica_response_body;
+  using couchbase::core::protocol::lookup_in_response_body;
+  using couchbase::core::protocol::mutate_in_response_body;
+  const auto success = key_value_status_code::success;
+
+  // status 0x0000, length 100, two bytes of value
+  const std::vector<std::byte> short_value{
+    std::byte{ 0 }, std::byte{ 0 },   std::byte{ 0 },   std::byte{ 0 },
+    std::byte{ 0 }, std::byte{ 100 }, std::byte{ 'o' }, std::byte{ 'k' },
+  };
+  const std::vector<std::byte> short_header{ std::byte{ 0 }, std::byte{ 0 }, std::byte{ 0 } };
+  assert_false(parses<lookup_in_response_body>(success, short_value), "lookup_in, short value");
+  assert_false(parses<lookup_in_response_body>(success, short_header), "lookup_in, short header");
+  assert_false(parses<lookup_in_replica_response_body>(success, short_value),
+               "lookup_in_replica, short value");
+  assert_false(parses<lookup_in_replica_response_body>(success, short_header),
+               "lookup_in_replica, short header");
+
+  // index 0, status 0x0000, no length
+  assert_false(parses<mutate_in_response_body>(success, short_header), "mutate_in, no length");
+  // index 0, status 0x0000, length 100, two bytes of value
+  std::vector<std::byte> mutate_short_value{ std::byte{ 0 } };
+  mutate_short_value.insert(mutate_short_value.end(), short_value.begin(), short_value.end());
+  assert_false(parses<mutate_in_response_body>(success, mutate_short_value),
+               "mutate_in, short value");
+  assert_false(parses<mutate_in_response_body>(success, { std::byte{ 0 }, std::byte{ 0 } }),
+               "mutate_in, short header");
+}
+
+void
+an_unknown_subdoc_status_is_rejected([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::key_value_status_code;
+  using couchbase::core::protocol::lookup_in_replica_response_body;
+  using couchbase::core::protocol::lookup_in_response_body;
+  using couchbase::core::protocol::mutate_in_response_body;
+  const auto success = key_value_status_code::success;
+
+  const std::vector<std::byte> unknown_status{
+    std::byte{ 0xff }, std::byte{ 0xfe }, std::byte{ 0 },
+    std::byte{ 0 },    std::byte{ 0 },    std::byte{ 0 },
+  };
+  assert_false(parses<lookup_in_response_body>(success, unknown_status), "lookup_in");
+  assert_false(parses<lookup_in_replica_response_body>(success, unknown_status),
+               "lookup_in_replica");
+  // index 0 and the status alone: a failed mutate_in entry carries no length
+  assert_false(parses<mutate_in_response_body>(
+                 success, { std::byte{ 0 }, std::byte{ 0xff }, std::byte{ 0xfe } }),
+               "mutate_in");
+}
+
+void
+a_counter_response_without_its_value_is_rejected([[maybe_unused]] context& ctx)
+{
+  assert_false(parses<couchbase::core::protocol::increment_response_body>(
+                 couchbase::core::key_value_status_code::success,
+                 { std::byte{ 0 }, std::byte{ 0 }, std::byte{ 0 }, std::byte{ 1 } }),
+               "four bytes cannot hold the eight-byte counter");
+}
+
+void
+a_short_observe_seqno_body_is_not_read([[maybe_unused]] context& ctx)
+{
+  // the parser reports false on every path, so only the address sanitizer observes a read past
+  // the body here
+  couchbase::core::protocol::observe_seqno_response_body body{};
+  couchbase::core::protocol::header_buffer header{};
+  header[1] =
+    static_cast<std::byte>(couchbase::core::protocol::observe_seqno_response_body::opcode);
+  static_cast<void>(body.parse(
+    couchbase::core::key_value_status_code::success, header, 0, 0, 0, { std::byte{ 1 } }, {}));
+  assert_eq(body.partition_uuid(), std::uint64_t{ 0 }, "no partition uuid is decoded");
+}
+
+void
+subdoc_responses_that_do_not_match_the_specs_are_protocol_errors([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::key_value_status_code;
+  using couchbase::core::protocol::client_response;
+  using couchbase::core::protocol::lookup_in_response_body;
+  using couchbase::core::protocol::mutate_in_response_body;
+  const couchbase::core::document_id id{ "b", "_default", "_default", "k" };
+
+  couchbase::core::operations::lookup_in_request lookup{ id };
+  lookup.specs = couchbase::lookup_in_specs{ couchbase::lookup_in_specs::get("a"),
+                                             couchbase::lookup_in_specs::get("b") }
+                   .specs();
+  // one entry for two specs: status 0x0000, length 1, "1"
+  const std::vector<std::byte> one_entry{ std::byte{ 0 },  std::byte{ 0 }, std::byte{ 0 },
+                                          std::byte{ 0 },  std::byte{ 0 }, std::byte{ 1 },
+                                          std::byte{ '1' } };
+  const client_response<lookup_in_response_body> lookup_resp{ message_with(
+    response_header<lookup_in_response_body>(key_value_status_code::success, 0, 7), one_entry) };
+  assert_error(lookup.make_response({}, lookup_resp).ctx.ec(),
+               couchbase::errc::network::protocol_error,
+               "lookup_in with fewer entries than specs");
+
+  couchbase::core::operations::mutate_in_request mutate{ id };
+  mutate.specs =
+    couchbase::mutate_in_specs{ couchbase::mutate_in_specs::increment("a", 1) }.specs();
+  // index 5, status 0x0000, length 1, "1"
+  std::vector<std::byte> index_five{ std::byte{ 5 } };
+  index_five.insert(index_five.end(), one_entry.begin(), one_entry.end());
+  const client_response<mutate_in_response_body> mutate_resp{ message_with(
+    response_header<mutate_in_response_body>(key_value_status_code::success, 0, 8), index_five) };
+  assert_error(mutate.make_response({}, mutate_resp).ctx.ec(),
+               couchbase::errc::network::protocol_error,
+               "mutate_in with an entry index past the specs");
+
+  const client_response<mutate_in_response_body> failure_resp{ message_with(
+    response_header<mutate_in_response_body>(
+      key_value_status_code::subdoc_multi_path_failure, 0, 0),
+    {}) };
+  assert_error(mutate.make_response({}, failure_resp).ctx.ec(),
+               couchbase::errc::network::protocol_error,
+               "mutate_in multi-path failure that names no path");
+}
 } // namespace
 
 auto
@@ -260,6 +435,12 @@ tests() -> test_suite
       { CASE(a_key_length_whose_low_nibble_is_zero_does_not_hide_the_framing_extras) },
       { CASE(a_framing_extras_region_longer_than_fifteen_bytes_is_scanned_to_its_end) },
       { CASE(a_framing_extras_region_the_body_cannot_hold_yields_no_duration) },
+      { CASE(a_key_length_the_body_cannot_hold_is_not_parsed) },
+      { CASE(truncated_subdoc_entries_are_rejected) },
+      { CASE(an_unknown_subdoc_status_is_rejected) },
+      { CASE(a_counter_response_without_its_value_is_rejected) },
+      { CASE(a_short_observe_seqno_body_is_not_read) },
+      { CASE(subdoc_responses_that_do_not_match_the_specs_are_protocol_errors) },
     },
   };
 }
