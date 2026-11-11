@@ -254,7 +254,7 @@ a_fully_placed_active_and_replica_is_ready([[maybe_unused]] context& ctx)
 void
 zero_replicas_with_an_assigned_active_is_ready([[maybe_unused]] context& ctx)
 {
-  assert_true(vbucket_map_ready(config_with_vbmap(vbucket_map{ { 0 }, { 1 } }, 0)),
+  assert_true(vbucket_map_ready(config_with_vbmap(vbucket_map{ { 0 }, { 1 } }, 0, 2)),
               "an active-only bucket needs only its actives placed");
 }
 
@@ -266,9 +266,16 @@ zero_replicas_with_an_unassigned_active_is_not_ready([[maybe_unused]] context& c
 }
 
 void
+a_vbucket_slot_naming_a_node_beyond_the_node_list_is_not_ready([[maybe_unused]] context& ctx)
+{
+  assert_false(vbucket_map_ready(config_with_data_nodes(vbucket_map{ { 0, 2 } }, 1, 2)),
+               "node index 2 is out of range for a two-node cluster");
+}
+
+void
 a_missing_replica_count_needs_only_the_active([[maybe_unused]] context& ctx)
 {
-  assert_true(vbucket_map_ready(config_with_vbmap(vbucket_map{ { 0 }, { 1 } }, std::nullopt)),
+  assert_true(vbucket_map_ready(config_with_vbmap(vbucket_map{ { 0 }, { 1 } }, std::nullopt, 2)),
               "a configuration that does not say falls back to the active");
 }
 
@@ -638,6 +645,9 @@ tests() -> test_suite
       { CASE(a_fully_placed_active_and_replica_is_ready), {}, timeout::instant },
       { CASE(zero_replicas_with_an_assigned_active_is_ready), {}, timeout::instant },
       { CASE(zero_replicas_with_an_unassigned_active_is_not_ready), {}, timeout::instant },
+      { CASE(a_vbucket_slot_naming_a_node_beyond_the_node_list_is_not_ready),
+        {},
+        timeout::instant },
       { CASE(a_missing_replica_count_needs_only_the_active), {}, timeout::instant },
       { CASE(a_single_data_node_waits_only_for_the_active), {}, timeout::instant },
       { CASE(replicas_beyond_the_data_nodes_are_not_awaited), {}, timeout::instant },

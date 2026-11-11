@@ -150,7 +150,8 @@ vbucket_map_ready(const topology::configuration& config) -> bool
       return false;
     }
     for (std::size_t i = 0; i < copies; ++i) {
-      if (chain[i] < 0) { // -1 => copy not yet assigned to a node
+      if (chain[i] < 0 || static_cast<std::size_t>(chain[i]) >=
+                            config.nodes.size()) { // -1 => copy not yet assigned to a node
         return false;
       }
     }

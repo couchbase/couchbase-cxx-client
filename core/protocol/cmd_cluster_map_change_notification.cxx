@@ -34,25 +34,33 @@ cluster_map_change_notification_request_body::parse(const header_buffer& header,
                                                     const cmd_info& info) -> bool
 {
   Expects(header[1] == static_cast<std::byte>(opcode));
-  using offset_type = std::vector<std::byte>::difference_type;
 
-  auto ext_size = std::to_integer<std::uint8_t>(header[4]);
-  offset_type offset = ext_size;
+  const auto ext_size = std::to_integer<std::uint8_t>(header[4]);
+  std::uint16_t key_size = 0;
+  memcpy(&key_size, header.data() + 2, sizeof(key_size));
+  key_size = utils::network_to_host(key_size);
+  const std::size_t prefix_size =
+    static_cast<std::size_t>(ext_size) + static_cast<std::size_t>(key_size);
+  if (prefix_size > body.size()) {
+    return false;
+  }
+
+  std::size_t offset = ext_size;
   if (ext_size == 4) {
     memcpy(&protocol_revision_, body.data(), sizeof(protocol_revision_));
     protocol_revision_ = utils::network_to_host(protocol_revision_);
   }
-  std::uint16_t key_size = 0;
-  memcpy(&key_size, header.data() + 2, sizeof(key_size));
-  key_size = utils::network_to_host(key_size);
   const auto* data_ptr = reinterpret_cast<const char*>(body.data());
   bucket_.assign(data_ptr + offset, data_ptr + offset + key_size);
   offset += key_size;
-  if (body.size() > static_cast<std::size_t>(offset)) {
-    const std::string_view config_text{ data_ptr + offset,
-                                        body.size() - static_cast<std::size_t>(offset) };
-    config_ = parse_config(config_text, info.endpoint_address, info.endpoint_port);
-    config_text_.emplace(config_text);
+  if (body.size() > offset) {
+    const std::string_view config_text{ data_ptr + offset, body.size() - offset };
+    try {
+      config_ = parse_config(config_text, info.endpoint_address, info.endpoint_port);
+      config_text_.emplace(config_text);
+    } catch (const std::exception&) {
+      return false;
+    }
   }
   return true;
 }

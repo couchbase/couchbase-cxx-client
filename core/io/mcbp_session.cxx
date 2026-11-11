@@ -569,6 +569,9 @@ class mcbp_session_impl
                 }
               }
               if (resp.status() == key_value_status_code::success) {
+                if (!resp.body().config_text().has_value()) {
+                  return complete(errc::network::protocol_error);
+                }
                 // MB-60405 fixes this for 7.6.2, but for earlier versions we need to protect
                 // against using a config that has an empty vbucket map.  Ideally we don't timeout
                 // if we retry here, but a timeout would be more acceptable than a crash and if we
@@ -743,7 +746,7 @@ class mcbp_session_impl
                 }
               }
               if (resp.status() == key_value_status_code::success) {
-                if (session_) {
+                if (session_ && resp.body().config_text().has_value()) {
                   session_->update_configuration(resp.body().config());
                 }
               } else if (resp.status() == key_value_status_code::auth_stale) {
@@ -1819,11 +1822,12 @@ public:
         key_size = sizes.key;
       }
 
-      const std::vector<std::uint8_t>::difference_type offset =
-        framing_extras_size + key_size + extras_size;
-      if (utils::network_to_host(msg.header.bodylen) - offset > 0) {
+      const std::size_t offset = static_cast<std::size_t>(framing_extras_size) +
+                                 static_cast<std::size_t>(key_size) +
+                                 static_cast<std::size_t>(extras_size);
+      if (offset < msg.body.size()) {
         const std::string_view config_text{ reinterpret_cast<const char*>(msg.body.data()) + offset,
-                                            msg.body.size() - static_cast<std::size_t>(offset) };
+                                            msg.body.size() - offset };
         if (origin_.options().dump_configuration) {
           CB_LOG_TRACE(
             "{} configuration from not_my_vbucket response (size={}, endpoint=\"{}\"), {}",
@@ -1834,15 +1838,21 @@ public:
             // "none at all" case of the rule in redaction.hxx.
             logger::not_redacted(config_text));
         }
-        auto config =
-          protocol::parse_config(config_text, bootstrap_hostname_, bootstrap_port_number_);
-        CB_LOG_DEBUG(
-          "{} received not_my_vbucket status for {}, opaque={} with config rev={} in the payload",
-          log_prefix_,
-          protocol::client_opcode(msg.header.opcode),
-          utils::network_to_host(msg.header.opaque),
-          config.rev_str());
-        update_configuration(std::move(config));
+        try {
+          auto config =
+            protocol::parse_config(config_text, bootstrap_hostname_, bootstrap_port_number_);
+          CB_LOG_DEBUG(
+            "{} received not_my_vbucket status for {}, opaque={} with config rev={} in the payload",
+            log_prefix_,
+            protocol::client_opcode(msg.header.opcode),
+            utils::network_to_host(msg.header.opaque),
+            config.rev_str());
+          update_configuration(std::move(config));
+        } catch (const std::exception& e) {
+          CB_LOG_DEBUG("{} unable to parse cluster configuration from not_my_vbucket response: {}",
+                       log_prefix_,
+                       e.what());
+        }
       }
     }
   }
@@ -1918,6 +1928,9 @@ private:
     }
     if (ec) {
       return stop(retry_reason::node_not_available);
+    }
+    if (stopped_) {
+      return;
     }
     if (config_.has_value()) {
       for (const auto& node : config_.value().nodes) {
