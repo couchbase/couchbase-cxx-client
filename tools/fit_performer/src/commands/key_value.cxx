@@ -1169,7 +1169,7 @@ execute_command(const protocol::sdk::kv::Insert& cmd, const command_args& args)
   auto key = args.key;
   auto content = common::to_content(cmd.content());
   auto options = to_insert_options(cmd, args.spans);
-  auto transcoder = common::to_transcoder(cmd);
+  auto transcoder = common::to_transcoder(cmd, args.default_transcoder);
 
   std::chrono::time_point<std::chrono::high_resolution_clock> start{};
   std::chrono::time_point<std::chrono::high_resolution_clock> end{};
@@ -1239,7 +1239,7 @@ execute_command(const protocol::sdk::kv::Upsert& cmd, const command_args& args)
   auto key = args.key;
   auto content = common::to_content(cmd.content());
   auto options = to_upsert_options(cmd, args.spans);
-  auto transcoder = common::to_transcoder(cmd);
+  auto transcoder = common::to_transcoder(cmd, args.default_transcoder);
 
   std::chrono::time_point<std::chrono::high_resolution_clock> start{};
   std::chrono::time_point<std::chrono::high_resolution_clock> end{};
@@ -1310,7 +1310,7 @@ execute_command(const protocol::sdk::kv::Replace& cmd, const command_args& args)
   auto key = args.key;
   auto content = common::to_content(cmd.content());
   auto options = to_replace_options(cmd, args.spans);
-  auto transcoder = common::to_transcoder(cmd);
+  auto transcoder = common::to_transcoder(cmd, args.default_transcoder);
 
   std::chrono::time_point<std::chrono::high_resolution_clock> start{};
   std::chrono::time_point<std::chrono::high_resolution_clock> end{};
@@ -1405,7 +1405,7 @@ execute_command(const protocol::sdk::kv::Get& cmd, const command_args& args)
   auto collection = args.collection;
   auto key = args.key;
   auto options = to_get_options(cmd, args.spans);
-  auto transcoder = common::to_transcoder(cmd);
+  auto transcoder = common::to_transcoder(cmd, args.default_transcoder);
 
   auto start = std::chrono::high_resolution_clock::now();
   auto [err, res] = collection.get(key, options).get();
@@ -1461,7 +1461,7 @@ execute_command(const protocol::sdk::kv::GetAndLock& cmd, const command_args& ar
   auto key = args.key;
   auto lock_duration = std::chrono::seconds{ cmd.duration().seconds() };
   auto options = to_get_and_lock_options(cmd, args.spans);
-  auto transcoder = common::to_transcoder(cmd);
+  auto transcoder = common::to_transcoder(cmd, args.default_transcoder);
 
   auto start = std::chrono::high_resolution_clock::now();
   auto [err, res] = collection.get_and_lock(key, lock_duration, options).get();
@@ -1512,7 +1512,7 @@ execute_command(const protocol::sdk::kv::GetAndTouch& cmd, const command_args& a
   auto collection = args.collection;
   auto key = args.key;
   auto options = to_get_and_touch_options(cmd, args.spans);
-  auto transcoder = common::to_transcoder(cmd);
+  auto transcoder = common::to_transcoder(cmd, args.default_transcoder);
 
   auto start = std::chrono::high_resolution_clock::now();
   std::pair<couchbase::error, couchbase::get_result> resp;
@@ -1745,7 +1745,7 @@ execute_command(const protocol::sdk::kv::GetAnyReplica& cmd, const command_args&
   auto collection = args.collection;
   auto key = args.key;
   auto options = to_get_any_replica_options(cmd, args.spans);
-  auto transcoder = common::to_transcoder(cmd);
+  auto transcoder = common::to_transcoder(cmd, args.default_transcoder);
 
   auto start = std::chrono::high_resolution_clock::now();
   auto [err, res] = collection.get_any_replica(key, options).get();
@@ -1774,7 +1774,7 @@ execute_command(const protocol::sdk::kv::GetReplica& cmd, const command_args& ar
   auto key = args.key;
   auto strategy = to_get_replica_strategy(cmd.strategy());
   auto options = to_get_replica_options(cmd, args.spans);
-  auto transcoder = common::to_transcoder(cmd);
+  auto transcoder = common::to_transcoder(cmd, args.default_transcoder);
 
   auto start = std::chrono::high_resolution_clock::now();
   auto [err, res] = collection.get_replica(key, strategy, options).get();
@@ -1800,7 +1800,7 @@ execute_streaming_command(const protocol::sdk::kv::GetAllReplicas& cmd, const co
   auto collection = args.collection;
   auto key = args.key;
   auto options = to_get_all_replicas_options(cmd, args.spans);
-  auto transcoder = common::to_transcoder(cmd);
+  auto transcoder = common::to_transcoder(cmd, args.default_transcoder);
 
   auto [err, res] = collection.get_all_replicas(key, options).get();
 
@@ -2094,7 +2094,7 @@ execute_streaming_command(const protocol::sdk::kv::rangescan::Scan& cmd, const c
   auto collection = args.collection;
   auto scan_type = to_scan_type(cmd);
   auto options = to_scan_options(cmd);
-  auto transcoder = common::to_transcoder(cmd);
+  auto transcoder = common::to_transcoder(cmd, args.default_transcoder);
 
   auto start = std::chrono::high_resolution_clock::now();
   auto resp = collection.scan(*scan_type, options).get();

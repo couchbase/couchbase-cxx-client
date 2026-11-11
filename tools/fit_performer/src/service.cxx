@@ -110,9 +110,13 @@ void
 check_for_wait(const Cmd& cmd)
 {
   if (cmd.wait_msecs() > 0) {
-    spdlog::trace("waiting {}ms before executing cmd {}", cmd.wait_msecs(), cmd.DebugString());
+    if (fit_cxx::performer_logs(spdlog::level::trace)) {
+      spdlog::trace("waiting {}ms before executing cmd {}", cmd.wait_msecs(), cmd.DebugString());
+    }
     std::this_thread::sleep_for(std::chrono::milliseconds(cmd.wait_msecs()));
-    spdlog::trace("done waiting {}ms, executing cmd {}", cmd.wait_msecs(), cmd.DebugString());
+    if (fit_cxx::performer_logs(spdlog::level::trace)) {
+      spdlog::trace("done waiting {}ms, executing cmd {}", cmd.wait_msecs(), cmd.DebugString());
+    }
   }
 }
 
@@ -121,7 +125,8 @@ TxnService::startTxn(ConnectionPtr conn,
                      const protocol::transactions::TransactionCreateRequest* request,
                      protocol::transactions::TransactionResult* response,
                      std::atomic<bool>& timed_out,
-                     fit_cxx::transaction_context& txn_ctx)
+                     fit_cxx::transaction_context& txn_ctx,
+                     bool performance_mode)
 {
   // Guard against an empty attempts list: the per-attempt index below is computed as
   // min(attempt_count, attempts_size() - 1), which underflows to -1 when attempts_size() == 0, and
@@ -166,8 +171,10 @@ TxnService::startTxn(ConnectionPtr conn,
   auto [err, res] = conn->cluster()->transactions()->run(
     [&](std::shared_ptr<couchbase::transactions::attempt_context> ctx) -> couchbase::error {
       int attempt_to_use = std::min(attempt_count, request->attempts_size() - 1);
-      spdlog::trace(
-        "{} starting attempt {}, using {}", request->name(), attempt_count, attempt_to_use);
+      if (fit_cxx::performer_logs(spdlog::level::trace)) {
+        spdlog::trace(
+          "{} starting attempt {}, using {}", request->name(), attempt_count, attempt_to_use);
+      }
       attempt_count++;
       // now get the specific attempt we want to execute...
       const auto& attempt = request->attempts(attempt_to_use);
@@ -188,15 +195,19 @@ TxnService::startTxn(ConnectionPtr conn,
           couchbase::error op_err{};
           if (i >= deferred_from) {
             // The command's wait and the checks below still apply; only setting the latch moves.
-            spdlog::trace("{} deferring latch {} until the transaction completes",
-                          request->name(),
-                          command.set_latch().latch_name());
+            if (fit_cxx::performer_logs(spdlog::level::trace)) {
+              spdlog::trace("{} deferring latch {} until the transaction completes",
+                            request->name(),
+                            command.set_latch().latch_name());
+            }
             check_for_wait(command);
             // Looked up here, so that an unknown latch fails the transaction before it commits.
             const auto& name = command.set_latch().latch_name();
             latches_after_commit.emplace_back(name, txn_ctx.latches().get(name));
           } else {
-            spdlog::trace("{} executing command: {}", request->name(), command.DebugString());
+            if (fit_cxx::performer_logs(spdlog::level::trace)) {
+              spdlog::trace("{} executing command: {}", request->name(), command.DebugString());
+            }
             op_err = execute_command(conn, ctx, command, request->name(), txn_ctx);
           }
           if (timed_out) {
@@ -227,7 +238,9 @@ TxnService::startTxn(ConnectionPtr conn,
           throw;
         }
       }
-      spdlog::trace("{} attempt {} complete", request->name(), attempt_count);
+      if (fit_cxx::performer_logs(spdlog::level::trace)) {
+        spdlog::trace("{} attempt {} complete", request->name(), attempt_count);
+      }
       return {};
     },
     opts);
@@ -239,15 +252,25 @@ TxnService::startTxn(ConnectionPtr conn,
   }
 
   if (!grpc_status.ok()) {
-    spdlog::trace("startTxn returning non-OK status: {}", grpc_status.error_message());
+    if (fit_cxx::performer_logs(spdlog::level::trace)) {
+      spdlog::trace("startTxn returning non-OK status: {}", grpc_status.error_message());
+    }
     return grpc_status;
+  }
+  // Workload.performance_mode: a successful transaction reports only its exception, which is
+  // NO_EXCEPTION_THROWN. A failure still gets the full result.
+  if (performance_mode && !err.ec()) {
+    response->set_exception(protocol::transactions::TransactionException::NO_EXCEPTION_THROWN);
+    return grpc::Status::OK;
   }
   TxnSvcUtils::create_transaction_result(
     err,
     res,
     couchbase::core::transactions::get_core_transactions(conn->cluster()->transactions()),
     response);
-  spdlog::trace("startTxn responding with {}", response->DebugString());
+  if (fit_cxx::performer_logs(spdlog::level::trace)) {
+    spdlog::trace("startTxn responding with {}", response->DebugString());
+  }
   return grpc::Status::OK;
 }
 
@@ -450,27 +473,6 @@ TxnService::to_key(const protocol::shared::DocLocation& loc)
     fmt::format("to_key can't handle {}", loc.DebugString()));
 }
 
-// TODO(SA): deal with transcoders.  For now, we only work for json docs!!
-std::string
-content_as_string(const protocol::shared::Content& content)
-{
-  // TODO(SA): Operations using this will change to use the version under fit_cxx::common which
-  // properly returns the different types
-  switch (content.content_case()) {
-    case protocol::shared::Content::ContentCase::kConvertToJson:
-      return content.convert_to_json();
-    case protocol::shared::Content::ContentCase::kPassthroughString:
-      return content.passthrough_string();
-    case protocol::shared::Content::ContentCase::kByteArray:
-      return content.byte_array();
-    case protocol::shared::Content::ContentCase::kNull:
-      return "null";
-    default:
-      throw performer_exception::internal(
-        fmt::format("content_as_string called, but content not set {}", content.DebugString()));
-  }
-}
-
 grpc::Status
 TxnService::transactionCleanup(grpc::ServerContext* /*context*/,
                                const protocol::transactions::TransactionCleanupRequest* request,
@@ -641,6 +643,82 @@ verify_op_result(const protocol::transactions::CommandGetMulti& cmd,
   }
 }
 
+using txn_op_result = std::pair<couchbase::error, couchbase::transactions::transaction_get_result>;
+
+// Inserts `content` encoded by `transcoder`. std::monostate selects the SDK's default encoding.
+auto
+txn_insert(const std::shared_ptr<couchbase::transactions::attempt_context>& attempt_ctx,
+           const couchbase::collection& coll,
+           const std::string& id,
+           fit_cxx::commands::common::content content,
+           const fit_cxx::commands::common::transcoder& transcoder) -> txn_op_result
+{
+  return std::visit(
+    fit_cxx::commands::common::overloaded{
+      [&](auto data, couchbase::codec::default_json_transcoder coder) {
+        return attempt_ctx->template insert<decltype(coder)>(coll, id, std::move(data));
+      },
+      [&](std::vector<std::byte> data, couchbase::codec::raw_binary_transcoder coder) {
+        return attempt_ctx->template insert<decltype(coder)>(coll, id, std::move(data));
+      },
+      [&](std::vector<std::byte> data, couchbase::codec::raw_json_transcoder coder) {
+        return attempt_ctx->template insert<decltype(coder)>(coll, id, std::move(data));
+      },
+      [&](std::string data, couchbase::codec::raw_json_transcoder coder) {
+        return attempt_ctx->template insert<decltype(coder)>(coll, id, std::move(data));
+      },
+      [&](std::string data, couchbase::codec::raw_string_transcoder coder) {
+        return attempt_ctx->template insert<decltype(coder)>(coll, id, std::move(data));
+      },
+      [&](auto data, std::monostate) {
+        return attempt_ctx->insert(coll, id, std::move(data));
+      },
+      [&](auto /*data*/, auto /*coder*/) -> txn_op_result {
+        throw performer_exception::unimplemented(
+          "The SDK does not support the given content/transcoder combination");
+      },
+    },
+    std::move(content),
+    transcoder);
+}
+
+// Replaces `doc` with `content` encoded by `transcoder`. std::monostate selects the SDK's default
+// encoding.
+auto
+txn_replace(const std::shared_ptr<couchbase::transactions::attempt_context>& attempt_ctx,
+            const couchbase::transactions::transaction_get_result& doc,
+            fit_cxx::commands::common::content content,
+            const fit_cxx::commands::common::transcoder& transcoder) -> txn_op_result
+{
+  return std::visit(
+    fit_cxx::commands::common::overloaded{
+      [&](auto data, couchbase::codec::default_json_transcoder coder) {
+        return attempt_ctx->template replace<decltype(coder)>(doc, std::move(data));
+      },
+      [&](std::vector<std::byte> data, couchbase::codec::raw_binary_transcoder coder) {
+        return attempt_ctx->template replace<decltype(coder)>(doc, std::move(data));
+      },
+      [&](std::vector<std::byte> data, couchbase::codec::raw_json_transcoder coder) {
+        return attempt_ctx->template replace<decltype(coder)>(doc, std::move(data));
+      },
+      [&](std::string data, couchbase::codec::raw_json_transcoder coder) {
+        return attempt_ctx->template replace<decltype(coder)>(doc, std::move(data));
+      },
+      [&](std::string data, couchbase::codec::raw_string_transcoder coder) {
+        return attempt_ctx->template replace<decltype(coder)>(doc, std::move(data));
+      },
+      [&](auto data, std::monostate) {
+        return attempt_ctx->replace(doc, std::move(data));
+      },
+      [&](auto /*data*/, auto /*coder*/) -> txn_op_result {
+        throw performer_exception::unimplemented(
+          "The SDK does not support the given content/transcoder combination");
+      },
+    },
+    std::move(content),
+    transcoder);
+}
+
 template<typename Command, typename Operation>
 auto
 execute_op(const Command& cmd,
@@ -651,12 +729,16 @@ execute_op(const Command& cmd,
            [[maybe_unused]] bool is_query,
            Operation op) -> couchbase::error
 {
-  spdlog::debug("{} calling op", logger_prefix);
+  if (fit_cxx::performer_logs(spdlog::level::debug)) {
+    spdlog::debug("{} calling op", logger_prefix);
+  }
   auto [err, result] = op(ctx);
-  spdlog::debug(R"({} called op, got {} (cause: {}))",
-                logger_prefix,
-                err,
-                err.cause() ? err.cause()->ec().message() : "<unset>");
+  if (fit_cxx::performer_logs(spdlog::level::debug)) {
+    spdlog::debug(R"({} called op, got {} (cause: {}))",
+                  logger_prefix,
+                  err,
+                  err.cause() ? err.cause()->ec().message() : "<unset>");
+  }
   auto pass = TxnSvcUtils::validate_op_result(cmd.expected_result(), err);
   if (!pass) {
     std::string expected_results_debug_string{};
@@ -781,7 +863,9 @@ TxnService::execute_command(ConnectionPtr conn,
                             const std::string& logger_prefix,
                             fit_cxx::transaction_context& txn_ctx)
 {
-  spdlog::trace("{} executing {}", logger_prefix, cmd.DebugString());
+  if (fit_cxx::performer_logs(spdlog::level::trace)) {
+    spdlog::trace("{} executing {}", logger_prefix, cmd.DebugString());
+  }
   check_for_wait(cmd);
   if (cmd.has_test_fail()) {
     throw performer_exception::failed_precondition("Forcing test failure");
@@ -798,10 +882,10 @@ TxnService::execute_command(ConnectionPtr conn,
                       [&](std::shared_ptr<couchbase::transactions::attempt_context> c) {
                         auto [err, result] = c->get(coll, id);
                         if (!err.ec()) {
-                          set_stashed_result(result);
+                          txn_ctx.set_stashed_result(result);
                           if (cmd.get().has_stash_in_slot()) {
-                            set_stashed_slot(static_cast<std::uint32_t>(cmd.get().stash_in_slot()),
-                                             result);
+                            txn_ctx.set_stashed_slot(
+                              static_cast<std::uint32_t>(cmd.get().stash_in_slot()), result);
                           }
                         }
                         return std::pair{ err, result };
@@ -820,35 +904,39 @@ TxnService::execute_command(ConnectionPtr conn,
       [&](std::shared_ptr<couchbase::transactions::attempt_context> c) {
         auto [err, result] = c->get_replica_from_preferred_server_group(coll, id);
         if (!err.ec()) {
-          set_stashed_result(result);
+          txn_ctx.set_stashed_result(result);
           if (cmd.get_from_preferred_server_group().has_stash_in_slot()) {
-            set_stashed_slot(
+            txn_ctx.set_stashed_slot(
               static_cast<std::uint32_t>(cmd.get_from_preferred_server_group().stash_in_slot()),
               result);
           }
         }
-        spdlog::debug("get_from_preferred_server_group: {}, {}", err.message(), err.ec().message());
+        if (fit_cxx::performer_logs(spdlog::level::debug)) {
+          spdlog::debug(
+            "get_from_preferred_server_group: {}, {}", err.message(), err.ec().message());
+        }
         return std::pair{ err, result };
       });
   }
   if (cmd.has_get_multi()) {
     if (cmd.get_multi().get_multi_replicas_from_preferred_server_group()) {
-      return execute_op(
-        cmd.get_multi(),
-        ctx,
-        cmd.do_not_propagate_error(),
-        logger_prefix,
-        false,
-        false,
-        [&](std::shared_ptr<couchbase::transactions::attempt_context> c) {
-          auto [err, result] = c->get_multi_replicas_from_preferred_server_group(
-            to_get_multi_replicas_from_preferred_server_group_specs(conn, cmd),
-            to_get_multi_replicas_from_preferred_server_group_options(cmd));
-          spdlog::debug("get_multi_replicas: err.message: {}, err.ec.message: {}",
-                        err.message(),
-                        err.ec().message());
-          return std::pair{ err, result };
-        });
+      return execute_op(cmd.get_multi(),
+                        ctx,
+                        cmd.do_not_propagate_error(),
+                        logger_prefix,
+                        false,
+                        false,
+                        [&](std::shared_ptr<couchbase::transactions::attempt_context> c) {
+                          auto [err, result] = c->get_multi_replicas_from_preferred_server_group(
+                            to_get_multi_replicas_from_preferred_server_group_specs(conn, cmd),
+                            to_get_multi_replicas_from_preferred_server_group_options(cmd));
+                          if (fit_cxx::performer_logs(spdlog::level::debug)) {
+                            spdlog::debug("get_multi_replicas: err.message: {}, err.ec.message: {}",
+                                          err.message(),
+                                          err.ec().message());
+                          }
+                          return std::pair{ err, result };
+                        });
     }
     return execute_op(cmd.get_multi(),
                       ctx,
@@ -859,9 +947,11 @@ TxnService::execute_command(ConnectionPtr conn,
                       [&](std::shared_ptr<couchbase::transactions::attempt_context> c) {
                         auto [err, result] =
                           c->get_multi(to_get_multi_specs(conn, cmd), to_get_multi_options(cmd));
-                        spdlog::debug("get_multi: err.message: {}, err.ec.message: {}",
-                                      err.message(),
-                                      err.ec().message());
+                        if (fit_cxx::performer_logs(spdlog::level::debug)) {
+                          spdlog::debug("get_multi: err.message: {}, err.ec.message: {}",
+                                        err.message(),
+                                        err.ec().message());
+                        }
                         return std::pair{ err, result };
                       });
   }
@@ -883,7 +973,7 @@ TxnService::execute_command(ConnectionPtr conn,
                               "expected doc to be present and it isn't");
                           }
                           // so stash it.
-                          set_stashed_result(result);
+                          txn_ctx.set_stashed_result(result);
                           return std::pair{ err, result };
                         }
                         // we expect the doc to be absent, so there better be an error...
@@ -907,39 +997,11 @@ TxnService::execute_command(ConnectionPtr conn,
       false,
       [&](std::shared_ptr<couchbase::transactions::attempt_context> attempt_ctx) {
         if (cmd.insert().has_content()) {
-          auto transcoder = fit_cxx::commands::common::to_transcoder(cmd.insert());
-          auto content = fit_cxx::commands::common::to_content(cmd.insert().content());
-          auto [err, result] = std::visit(
-            fit_cxx::commands::common::overloaded{
-              [&, coll, id](auto data, couchbase::codec::default_json_transcoder coder) {
-                return attempt_ctx->template insert<decltype(coder)>(coll, id, std::move(data));
-              },
-              [&, coll, id](std::vector<std::byte> data,
-                            couchbase::codec::raw_binary_transcoder coder) {
-                return attempt_ctx->template insert<decltype(coder)>(coll, id, std::move(data));
-              },
-              [&, coll, id](std::vector<std::byte> data,
-                            couchbase::codec::raw_json_transcoder coder) {
-                return attempt_ctx->template insert<decltype(coder)>(coll, id, std::move(data));
-              },
-              [&, coll, id](std::string data, couchbase::codec::raw_json_transcoder coder) {
-                return attempt_ctx->template insert<decltype(coder)>(coll, id, std::move(data));
-              },
-              [&, coll, id](std::string data, couchbase::codec::raw_string_transcoder coder) {
-                return attempt_ctx->template insert<decltype(coder)>(coll, id, std::move(data));
-              },
-              [&, coll, id](auto data, std::monostate) {
-                return attempt_ctx->insert(coll, id, std::move(data));
-              },
-              [&](auto /*data*/, auto /*coder*/)
-                -> std::pair<couchbase::error, couchbase::transactions::transaction_get_result> {
-                throw performer_exception::unimplemented(
-                  "The SDK does not support the given content/transcoder combination");
-              },
-            },
-            content,
-            transcoder);
-          return std::pair{ err, result };
+          return txn_insert(attempt_ctx,
+                            coll,
+                            id,
+                            fit_cxx::commands::common::to_content(cmd.insert().content()),
+                            fit_cxx::commands::common::to_transcoder(cmd.insert()));
         }
         auto [err, result] =
           attempt_ctx->template insert<couchbase::codec::default_json_transcoder>(
@@ -959,49 +1021,12 @@ TxnService::execute_command(ConnectionPtr conn,
       false,
       [&](std::shared_ptr<couchbase::transactions::attempt_context> attempt_ctx) {
         if (cmd.replace().use_stashed_result()) {
-          if (auto stashed_result = get_stashed_result(); stashed_result) {
+          if (auto stashed_result = txn_ctx.get_stashed_result(); stashed_result) {
             if (cmd.replace().has_content()) {
-              auto transcoder = fit_cxx::commands::common::to_transcoder(cmd.replace());
-              auto content = fit_cxx::commands::common::to_content(cmd.replace().content());
-              auto [err, result] = std::visit(
-                fit_cxx::commands::common::overloaded{
-                  [&, stashed_result](auto data, couchbase::codec::default_json_transcoder coder) {
-                    return attempt_ctx->template replace<decltype(coder)>(stashed_result.value(),
-                                                                          std::move(data));
-                  },
-                  [&, stashed_result](std::vector<std::byte> data,
-                                      couchbase::codec::raw_binary_transcoder coder) {
-                    return attempt_ctx->template replace<decltype(coder)>(stashed_result.value(),
-                                                                          std::move(data));
-                  },
-                  [&, stashed_result](std::vector<std::byte> data,
-                                      couchbase::codec::raw_json_transcoder coder) {
-                    return attempt_ctx->template replace<decltype(coder)>(stashed_result.value(),
-                                                                          std::move(data));
-                  },
-                  [&, stashed_result](std::string data,
-                                      couchbase::codec::raw_json_transcoder coder) {
-                    return attempt_ctx->template replace<decltype(coder)>(stashed_result.value(),
-                                                                          std::move(data));
-                  },
-                  [&, stashed_result](std::string data,
-                                      couchbase::codec::raw_string_transcoder coder) {
-                    return attempt_ctx->template replace<decltype(coder)>(stashed_result.value(),
-                                                                          std::move(data));
-                  },
-                  [&, stashed_result](auto data, std::monostate) {
-                    return attempt_ctx->replace(stashed_result.value(), std::move(data));
-                  },
-                  [&](auto /*data*/, auto /*coder*/)
-                    -> std::pair<couchbase::error,
-                                 couchbase::transactions::transaction_get_result> {
-                    throw performer_exception::unimplemented(
-                      "The SDK does not support the given content/transcoder combination");
-                  },
-                },
-                content,
-                transcoder);
-              return std::pair{ err, result };
+              return txn_replace(attempt_ctx,
+                                 stashed_result.value(),
+                                 fit_cxx::commands::common::to_content(cmd.replace().content()),
+                                 fit_cxx::commands::common::to_transcoder(cmd.replace()));
             }
             auto [err, result] =
               attempt_ctx->template replace<couchbase::codec::default_json_transcoder>(
@@ -1022,37 +1047,10 @@ TxnService::execute_command(ConnectionPtr conn,
         }
         auto doc = res.second;
         if (cmd.replace().has_content()) {
-          auto transcoder = fit_cxx::commands::common::to_transcoder(cmd.replace());
-          auto content = fit_cxx::commands::common::to_content(cmd.replace().content());
-          auto [err, result] = std::visit(
-            fit_cxx::commands::common::overloaded{
-              [&, doc](auto data, couchbase::codec::default_json_transcoder coder) {
-                return attempt_ctx->template replace<decltype(coder)>(doc, std::move(data));
-              },
-              [&, doc](std::vector<std::byte> data, couchbase::codec::raw_binary_transcoder coder) {
-                return attempt_ctx->template replace<decltype(coder)>(doc, std::move(data));
-              },
-              [&, doc](std::vector<std::byte> data, couchbase::codec::raw_json_transcoder coder) {
-                return attempt_ctx->template replace<decltype(coder)>(doc, std::move(data));
-              },
-              [&, doc](std::string data, couchbase::codec::raw_json_transcoder coder) {
-                return attempt_ctx->template replace<decltype(coder)>(doc, std::move(data));
-              },
-              [&, doc](std::string data, couchbase::codec::raw_string_transcoder coder) {
-                return attempt_ctx->template replace<decltype(coder)>(doc, std::move(data));
-              },
-              [&, doc](auto data, std::monostate) {
-                return attempt_ctx->replace(doc, std::move(data));
-              },
-              [&](auto /*data*/, auto /*coder*/)
-                -> std::pair<couchbase::error, couchbase::transactions::transaction_get_result> {
-                throw performer_exception::unimplemented(
-                  "The SDK does not support the given content/transcoder combination");
-              },
-            },
-            content,
-            transcoder);
-          return std::pair{ err, result };
+          return txn_replace(attempt_ctx,
+                             doc,
+                             fit_cxx::commands::common::to_content(cmd.replace().content()),
+                             fit_cxx::commands::common::to_transcoder(cmd.replace()));
         }
         auto [err, result] =
           attempt_ctx->template replace<couchbase::codec::default_json_transcoder>(
@@ -1071,7 +1069,7 @@ TxnService::execute_command(ConnectionPtr conn,
                       false,
                       [&](std::shared_ptr<couchbase::transactions::attempt_context> c) {
                         if (cmd.remove().use_stashed_result()) {
-                          if (auto stashed = get_stashed_result(); stashed) {
+                          if (auto stashed = txn_ctx.get_stashed_result(); stashed) {
                             return std::pair{ c->remove(stashed.value()),
                                               couchbase::transactions::transaction_get_result{} };
                           }
@@ -1093,53 +1091,60 @@ TxnService::execute_command(ConnectionPtr conn,
     auto req = cmd.get_v2();
     auto coll = to_collection(conn, req.location());
     auto id = to_key(req.location());
-    return execute_op(req,
-                      ctx,
-                      cmd.do_not_propagate_error(),
-                      logger_prefix,
-                      false,
-                      false,
-                      [&](std::shared_ptr<couchbase::transactions::attempt_context> c) {
-                        auto [err, result] = c->get(coll, id);
-                        if (!err.ec()) {
-                          set_stashed_result(result);
-                          // get_v2 is the active oneof member here, so the slot must come from req
-                          // (not cmd.get(), the inactive v1 member, which would always report
-                          // has_stash_in_slot() == false).
-                          if (req.has_stash_in_slot()) {
-                            set_stashed_slot(static_cast<std::uint32_t>(req.stash_in_slot()),
-                                             result);
-                          }
-                        }
-                        return std::pair{ err, result };
-                      });
+    return execute_op(
+      req,
+      ctx,
+      cmd.do_not_propagate_error(),
+      logger_prefix,
+      false,
+      false,
+      [&](std::shared_ptr<couchbase::transactions::attempt_context> c) {
+        auto [err, result] = c->get(coll, id);
+        if (!err.ec() && req.has_content_as()) {
+          // Decoded for its cost only: a perf workload times contentAs(), and
+          // transactions.Get has nothing to validate the content against.
+          fit_cxx::commands::common::result_to_content(
+            result, fit_cxx::commands::common::to_transcoder(req), req.content_as(), nullptr);
+        }
+        // transactions.Get fills only the requested slot. It leaves the stashed result that v1
+        // use_stashed_result reads untouched.
+        if (!err.ec()) {
+          // get_v2 is the active oneof member here, so the slot must come from req
+          // (not cmd.get(), the inactive v1 member, which would always report
+          // has_stash_in_slot() == false).
+          if (req.has_stash_in_slot()) {
+            txn_ctx.set_stashed_slot(static_cast<std::uint32_t>(req.stash_in_slot()), result);
+          }
+        }
+        return std::pair{ err, result };
+      });
   }
   if (cmd.has_replace_v2()) {
     auto req = cmd.replace_v2();
     auto coll = to_collection(conn, req.location());
     auto id = to_key(req.location());
-    auto content_str = content_as_string(req.content());
-    auto content = couchbase::core::utils::json::parse(std::string_view{ content_str });
-    return execute_op(req,
-                      ctx,
-                      cmd.do_not_propagate_error(),
-                      logger_prefix,
-                      false,
-                      false,
-                      [&](std::shared_ptr<couchbase::transactions::attempt_context> c) {
-                        if (req.has_use_stashed_slot()) {
-                          auto stashed =
-                            get_stashed_slot(static_cast<std::uint32_t>(req.use_stashed_slot()));
-                          auto [err, res] = c->replace(stashed, content);
-                          return std::pair{ err, res };
-                        }
-                        auto [_err, doc] = c->get(coll, id);
-                        if (_err) {
-                          return std::pair{ _err, doc };
-                        }
-                        auto [err, _res] = c->replace(doc, content);
-                        return std::pair{ err, _res };
-                      });
+    auto transcoder = fit_cxx::commands::common::to_transcoder(req);
+    return execute_op(
+      req,
+      ctx,
+      cmd.do_not_propagate_error(),
+      logger_prefix,
+      false,
+      false,
+      [&](std::shared_ptr<couchbase::transactions::attempt_context> c) {
+        if (req.has_use_stashed_slot()) {
+          auto stashed =
+            txn_ctx.get_stashed_slot(static_cast<std::uint32_t>(req.use_stashed_slot()));
+          return txn_replace(
+            c, stashed, fit_cxx::commands::common::to_content(req.content()), transcoder);
+        }
+        auto [err, doc] = c->get(coll, id);
+        if (err) {
+          return std::pair{ err, doc };
+        }
+        return txn_replace(
+          c, doc, fit_cxx::commands::common::to_content(req.content()), transcoder);
+      });
   }
   if (cmd.has_remove_v2()) {
     auto req = cmd.remove_v2();
@@ -1154,7 +1159,8 @@ TxnService::execute_command(ConnectionPtr conn,
       false,
       [&](std::shared_ptr<couchbase::transactions::attempt_context> c) {
         if (req.has_use_stashed_slot()) {
-          auto stashed = get_stashed_slot(static_cast<std::uint32_t>(req.use_stashed_slot()));
+          auto stashed =
+            txn_ctx.get_stashed_slot(static_cast<std::uint32_t>(req.use_stashed_slot()));
           return std::pair{ c->remove(stashed), couchbase::transactions::transaction_get_result{} };
         }
         auto [err, doc] = c->get(coll, id);
@@ -1168,23 +1174,25 @@ TxnService::execute_command(ConnectionPtr conn,
     auto req = cmd.insert_v2();
     auto coll = to_collection(conn, req.location());
     auto id = to_key(req.location());
-    auto insert_content_str = content_as_string(req.content());
-    auto content = couchbase::core::utils::json::parse(std::string_view{ insert_content_str });
-    return execute_op(req,
-                      ctx,
-                      cmd.do_not_propagate_error(),
-                      logger_prefix,
-                      true,
-                      false,
-                      [&](std::shared_ptr<couchbase::transactions::attempt_context> c) {
-                        auto [err, res] = c->insert(coll, id, content);
-                        return std::pair{ err, res };
-                      });
+    auto transcoder = fit_cxx::commands::common::to_transcoder(req);
+    return execute_op(
+      req,
+      ctx,
+      cmd.do_not_propagate_error(),
+      logger_prefix,
+      true,
+      false,
+      [&](std::shared_ptr<couchbase::transactions::attempt_context> c) {
+        return txn_insert(
+          c, coll, id, fit_cxx::commands::common::to_content(req.content()), transcoder);
+      });
   }
   if (cmd.has_commit()) {
     // The performer advertises ExtSDKIntegration, so the transaction commits when the lambda
     // returns, and CommandCommit is ignored.
-    spdlog::trace("ignoring commit command");
+    if (fit_cxx::performer_logs(spdlog::level::trace)) {
+      spdlog::trace("ignoring commit command");
+    }
   } else if (cmd.has_rollback()) {
     // Under ExtSDKIntegration, CommandRollback raises an error so that the transaction rolls back
     // automatically.
@@ -1572,6 +1580,8 @@ TxnService::performerCapsFetch(grpc::ServerContext* /*context*/,
 
   response->add_performer_caps(protocol::performer::Caps::KV_SUPPORT_1);
   response->add_performer_caps(protocol::performer::Caps::TRANSACTIONS_SUPPORT_1);
+  response->add_performer_caps(protocol::performer::Caps::TRANSACTIONS_WORKLOAD_1);
+  response->add_performer_caps(protocol::performer::Caps::CLUSTER_CONFIG_1);
   response->add_performer_caps(protocol::performer::Caps::CLUSTER_CONFIG_CERT);
   response->add_performer_caps(protocol::performer::Caps::CLUSTER_CONFIG_INSECURE);
   response->add_performer_caps(protocol::performer::Caps::CUSTOM_SERIALIZATION_SUPPORT_FOR_SEARCH);
@@ -1688,6 +1698,8 @@ TxnService::clusterConnectionCreate(grpc::ServerContext* /*context*/,
   ConnectionPtr conn;
   try {
     conn = std::make_shared<fit_cxx::Connection>(request);
+  } catch (const performer_exception& e) {
+    return e.to_grpc_status();
   } catch (const std::exception& e) {
     return { grpc::StatusCode::CANCELLED,
              fmt::format("failed to create connection: {}", e.what()) };
@@ -1918,13 +1930,30 @@ TxnService::run(grpc::ServerContext* /*context*/,
                   auto start = std::chrono::high_resolution_clock::now();
                   res.mutable_initiated()->CopyFrom(
                     google::protobuf::util::TimeUtil::GetCurrentTime());
-                  auto result = startTxn(conn, &cmd, res.mutable_transaction(), timed_out, txn_ctx);
-                  spdlog::debug("transaction finished with result {} {}",
-                                result.error_message(),
-                                res.DebugString());
+                  const fit_cxx::quiet_performer_logging_guard quiet{
+                    work.transaction().performance_mode()
+                  };
+                  auto result = startTxn(conn,
+                                         &cmd,
+                                         res.mutable_transaction(),
+                                         timed_out,
+                                         txn_ctx,
+                                         work.transaction().performance_mode());
                   auto end = std::chrono::high_resolution_clock::now();
                   res.set_elapsednanos(
                     std::chrono::duration<int64_t, std::nano>(end - start).count());
+                  if (!result.ok()) {
+                    // A failed command still sends its result, and the result has to say it
+                    // failed: the exception's default is NO_EXCEPTION_THROWN.
+                    res.mutable_transaction()->set_exception(
+                      protocol::transactions::TransactionException::EXCEPTION_UNKNOWN);
+                    res.mutable_transaction()->add_log(result.error_message());
+                  }
+                  if (fit_cxx::performer_logs(spdlog::level::debug)) {
+                    spdlog::debug("transaction finished with result {} {}",
+                                  result.error_message(),
+                                  res.DebugString());
+                  }
                   batcher->send_result(res);
                   return 0;
                 },
@@ -1993,6 +2022,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
       /* .key = */ key,
       /* .spans = */ &spans_,
       /* .return_result = */ return_result,
+      /* .default_transcoder = */ conn->default_transcoder(),
     };
     auto res = fit_cxx::commands::key_value::execute_command(cmd.get(), cmd_args);
     batcher->send_result(res);
@@ -2005,6 +2035,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
       /* .key = */ key,
       /* .spans = */ &spans_,
       /* .return_result = */ return_result,
+      /* .default_transcoder = */ conn->default_transcoder(),
     };
     auto res = fit_cxx::commands::key_value::execute_command(cmd.replace(), cmd_args);
     batcher->send_result(res);
@@ -2017,6 +2048,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
       /* .key = */ key,
       /* .spans = */ &spans_,
       /* .return_result = */ return_result,
+      /* .default_transcoder = */ conn->default_transcoder(),
     };
     auto res = fit_cxx::commands::key_value::execute_command(cmd.insert(), cmd_args);
     batcher->send_result(res);
@@ -2030,6 +2062,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
       /* .key = */ key,
       /* .spans = */ &spans_,
       /* .return_result = */ return_result,
+      /* .default_transcoder = */ conn->default_transcoder(),
     };
     auto res = fit_cxx::commands::key_value::execute_command(cmd.upsert(), cmd_args);
     batcher->send_result(res);
@@ -2042,6 +2075,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
       /* .key = */ key,
       /* .spans = */ &spans_,
       /* .return_result = */ return_result,
+      /* .default_transcoder = */ conn->default_transcoder(),
     };
     auto res = fit_cxx::commands::key_value::execute_command(cmd.remove(), cmd_args);
     batcher->send_result(res);
@@ -2053,6 +2087,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
       /* .key = */ {},
       /* .spans = */ &spans_,
       /* .return_result = */ return_result,
+      /* .default_transcoder = */ conn->default_transcoder(),
     };
     auto res = fit_cxx::commands::key_value::execute_streaming_command(cmd.range_scan(), cmd_args);
     if (std::holds_alternative<fit_cxx::next_function>(res)) {
@@ -2271,6 +2306,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
         /* .key = */ to_key(collection_cmd.lookup_in().location()),
         /* .spans = */ &spans_,
         /* .return_result = */ return_result,
+        /* .default_transcoder = */ conn->default_transcoder(),
       };
       auto res =
         fit_cxx::commands::key_value::execute_command(collection_cmd.lookup_in(), cmd_args);
@@ -2281,6 +2317,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
         /* .key = */ to_key(collection_cmd.get_and_lock().location()),
         /* .spans = */ &spans_,
         /* .return_result = */ return_result,
+        /* .default_transcoder = */ conn->default_transcoder(),
       };
       auto res =
         fit_cxx::commands::key_value::execute_command(collection_cmd.get_and_lock(), cmd_args);
@@ -2299,6 +2336,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
         /* .key = */ to_key(collection_cmd.get_and_touch().location()),
         /* .spans = */ &spans_,
         /* .return_result = */ return_result,
+        /* .default_transcoder = */ conn->default_transcoder(),
       };
       auto res =
         fit_cxx::commands::key_value::execute_command(collection_cmd.get_and_touch(), cmd_args);
@@ -2309,6 +2347,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
         /* .key = */ to_key(collection_cmd.exists().location()),
         /* .spans = */ &spans_,
         /* .return_result = */ return_result,
+        /* .default_transcoder = */ conn->default_transcoder(),
       };
       auto res = fit_cxx::commands::key_value::execute_command(collection_cmd.exists(), cmd_args);
       batcher->send_result(res);
@@ -2318,6 +2357,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
         /* .key = */ to_key(collection_cmd.touch().location()),
         /* .spans = */ &spans_,
         /* .return_result = */ return_result,
+        /* .default_transcoder = */ conn->default_transcoder(),
       };
       auto res = fit_cxx::commands::key_value::execute_command(collection_cmd.touch(), cmd_args);
       batcher->send_result(res);
@@ -2327,6 +2367,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
         /* .key = */ to_key(collection_cmd.mutate_in().location()),
         /* .spans = */ &spans_,
         /* .return_result = */ return_result,
+        /* .default_transcoder = */ conn->default_transcoder(),
       };
       auto res =
         fit_cxx::commands::key_value::execute_command(collection_cmd.mutate_in(), cmd_args);
@@ -2337,6 +2378,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
         /* .key = */ to_key(collection_cmd.get_any_replica().location()),
         /* .spans = */ &spans_,
         /* .return_result = */ return_result,
+        /* .default_transcoder = */ conn->default_transcoder(),
       };
       auto res =
         fit_cxx::commands::key_value::execute_command(collection_cmd.get_any_replica(), cmd_args);
@@ -2347,6 +2389,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
         /* .key = */ to_key(collection_cmd.get_replica().location()),
         /* .spans = */ &spans_,
         /* .return_result = */ return_result,
+        /* .default_transcoder = */ conn->default_transcoder(),
       };
       auto res =
         fit_cxx::commands::key_value::execute_command(collection_cmd.get_replica(), cmd_args);
@@ -2357,6 +2400,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
         /* .key = */ to_key(collection_cmd.get_all_replicas().location()),
         /* .spans = */ &spans_,
         /* .return_result = */ return_result,
+        /* .default_transcoder = */ conn->default_transcoder(),
       };
       auto res = fit_cxx::commands::key_value::execute_streaming_command(
         collection_cmd.get_all_replicas(), cmd_args);
@@ -2380,6 +2424,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
           /* .key = */ to_key(binary_cmd.append().location()),
           /* .spans = */ &spans_,
           /* .return_result = */ return_result,
+          /* .default_transcoder = */ conn->default_transcoder(),
         };
         auto res = fit_cxx::commands::key_value::execute_command(binary_cmd.append(), cmd_args);
         batcher->send_result(res);
@@ -2389,6 +2434,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
           /* .key = */ to_key(binary_cmd.prepend().location()),
           /* .spans = */ &spans_,
           /* .return_result = */ return_result,
+          /* .default_transcoder = */ conn->default_transcoder(),
         };
         auto res = fit_cxx::commands::key_value::execute_command(binary_cmd.prepend(), cmd_args);
         batcher->send_result(res);
@@ -2398,6 +2444,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
           /* .key = */ to_key(binary_cmd.increment().location()),
           /* .spans = */ &spans_,
           /* .return_result = */ return_result,
+          /* .default_transcoder = */ conn->default_transcoder(),
         };
         auto res = fit_cxx::commands::key_value::execute_command(binary_cmd.increment(), cmd_args);
         batcher->send_result(res);
@@ -2407,6 +2454,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
           /* .key = */ to_key(binary_cmd.decrement().location()),
           /* .spans = */ &spans_,
           /* .return_result = */ return_result,
+          /* .default_transcoder = */ conn->default_transcoder(),
         };
         auto res = fit_cxx::commands::key_value::execute_command(binary_cmd.decrement(), cmd_args);
         batcher->send_result(res);
@@ -2418,6 +2466,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
         /* .key = */ to_key(lookup_in_cmd.location()),
         /* .spans = */ &spans_,
         /* .return_result = */ return_result,
+        /* .default_transcoder = */ conn->default_transcoder(),
       };
       auto res = fit_cxx::commands::key_value::execute_command(lookup_in_cmd, cmd_args);
       batcher->send_result(res);
@@ -2430,6 +2479,7 @@ TxnService::execute_sdk_command(ConnectionPtr conn,
         /* .key = */ key,
         /* .spans = */ &spans_,
         /* .return_result = */ return_result,
+        /* .default_transcoder = */ conn->default_transcoder(),
       };
       auto res = fit_cxx::commands::key_value::execute_streaming_command(lookup_in_cmd, cmd_args);
       if (std::holds_alternative<fit_cxx::next_function>(res)) {

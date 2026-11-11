@@ -115,14 +115,9 @@ to_content(const protocol::shared::Content& proto_content) -> content;
 auto
 to_binary(const std::string& value) -> std::vector<std::byte>;
 
-template<typename Cmd>
-auto
-to_transcoder(const Cmd& cmd) -> transcoder
+inline auto
+to_transcoder(const protocol::shared::Transcoder& proto_transcoder) -> transcoder
 {
-  if (!cmd.has_options() || !cmd.options().has_transcoder()) {
-    return std::monostate{};
-  }
-  protocol::shared::Transcoder proto_transcoder = cmd.options().transcoder();
   switch (proto_transcoder.transcoder_case()) {
     case protocol::shared::Transcoder::kJson:
       return couchbase::codec::default_json_transcoder{};
@@ -136,6 +131,18 @@ to_transcoder(const Cmd& cmd) -> transcoder
       throw performer_exception::unimplemented(
         fmt::format("transcoder not supported {}", proto_transcoder.DebugString()));
   }
+}
+
+/// The command's own transcoder, or `cluster_default` when the command sets none. KV commands pass
+/// the connection's ClusterConfig.transcoder.
+template<typename Cmd>
+auto
+to_transcoder(const Cmd& cmd, const transcoder& cluster_default = std::monostate{}) -> transcoder
+{
+  if (!cmd.has_options() || !cmd.options().has_transcoder()) {
+    return cluster_default;
+  }
+  return to_transcoder(cmd.options().transcoder());
 }
 
 template<typename Spec>
@@ -145,22 +152,11 @@ to_spec_transcoder(const Spec& spec) -> transcoder
   if (!spec.has_transcoder()) {
     return std::monostate{};
   }
-  protocol::shared::Transcoder proto_transcoder = spec.transcoder();
-  switch (proto_transcoder.transcoder_case()) {
-    case protocol::shared::Transcoder::kJson:
-      return couchbase::codec::default_json_transcoder{};
-    case protocol::shared::Transcoder::kRawBinary:
-      return couchbase::codec::raw_binary_transcoder{};
-    case protocol::shared::Transcoder::kRawJson:
-      return couchbase::codec::raw_json_transcoder{};
-    case protocol::shared::Transcoder::kRawString:
-      return couchbase::codec::raw_string_transcoder{};
-    default:
-      throw performer_exception::unimplemented(
-        fmt::format("transcoder not supported {}", proto_transcoder.DebugString()));
-  }
+  return to_transcoder(spec.transcoder());
 }
 
+/// Decodes `result` as `proto_content_as` asks, with `transcoder`. A null `proto_res_content`
+/// performs the decode and discards the value.
 template<typename Result>
 void
 result_to_content(const Result& result,
@@ -168,129 +164,183 @@ result_to_content(const Result& result,
                   const protocol::shared::ContentAs& proto_content_as,
                   protocol::shared::ContentTypes* proto_res_content)
 {
-  std::visit(
-    overloaded{
-      [&](std::monostate) {
-        // No transcoder specified: use the SDK's default read behaviour for this result type so the
-        // performer exercises the real SDK path. Transaction reads decode leniently (ignoring the
-        // document's common flags, per ExtBinarySupport), while ordinary KV reads use the strict
-        // JSON transcoder; any discrepancy here is an SDK issue to fix rather than to paper over in
-        // the performer.
-        switch (proto_content_as.as_case()) {
-          case protocol::shared::ContentAs::kAsString: {
-            proto_res_content->set_content_as_string(result.template content_as<std::string>());
-            break;
-          }
-          case protocol::shared::ContentAs::kAsByteArray: {
-            auto value = result.template content_as<std::vector<std::byte>>();
-            proto_res_content->set_content_as_bytes(
-              std::string{ reinterpret_cast<const char*>(value.data()), value.size() });
-            break;
-          }
-          case protocol::shared::ContentAs::kAsJsonObject:
-          case protocol::shared::ContentAs::kAsJsonArray:
-            proto_res_content->set_content_as_bytes(couchbase::core::utils::json::generate(
-              result.template content_as<tao::json::value>()));
-            break;
-          case protocol::shared::ContentAs::kAsBoolean:
-            proto_res_content->set_content_as_bool(result.template content_as<bool>());
-            break;
-          case protocol::shared::ContentAs::kAsInteger:
-            proto_res_content->set_content_as_int64(result.template content_as<std::int64_t>());
-            break;
-          case protocol::shared::ContentAs::kAsFloatingPoint:
-            proto_res_content->set_content_as_double(result.template content_as<double>());
-            break;
-          default:
-            throw performer_exception::unimplemented(
-              "unsupported transcoder - content type combination");
-        }
-      },
-      [&](couchbase::codec::default_json_transcoder t) {
-        switch (proto_content_as.as_case()) {
-          case protocol::shared::ContentAs::kAsString: {
-            proto_res_content->set_content_as_string(
-              result.template content_as<std::string, decltype(t)>());
-            break;
-          }
-          case protocol::shared::ContentAs::kAsByteArray: {
-            auto value = result.template content_as<std::vector<std::byte>, decltype(t)>();
-            proto_res_content->set_content_as_bytes(
-              std::string{ reinterpret_cast<const char*>(value.data()), value.size() });
-            break;
-          }
-          case protocol::shared::ContentAs::kAsJsonObject:
-          case protocol::shared::ContentAs::kAsJsonArray:
-            proto_res_content->set_content_as_bytes(couchbase::core::utils::json::generate(
-              result.template content_as<tao::json::value>()));
-            break;
-          case protocol::shared::ContentAs::kAsBoolean: {
-            proto_res_content->set_content_as_bool(result.template content_as<bool, decltype(t)>());
-            break;
-          }
-          case protocol::shared::ContentAs::kAsInteger: {
-            proto_res_content->set_content_as_int64(
-              result.template content_as<std::int64_t, decltype(t)>());
-            break;
-          }
-          case protocol::shared::ContentAs::kAsFloatingPoint: {
-            proto_res_content->set_content_as_double(
-              result.template content_as<double, decltype(t)>());
-            break;
-          }
-          default:
-            throw performer_exception::unimplemented(
-              "unsupported transcoder - content type combination");
-        }
-      },
-      [&](couchbase::codec::raw_binary_transcoder t) {
-        switch (proto_content_as.as_case()) {
-          case protocol::shared::ContentAs::kAsByteArray: {
-            auto value = result.template content_as<std::vector<std::byte>, decltype(t)>();
-            proto_res_content->set_content_as_bytes(
-              std::string{ reinterpret_cast<const char*>(value.data()), value.size() });
-            break;
-          }
-          default:
-            throw performer_exception::unimplemented(
-              "unsupported transcoder - content type combination");
-        }
-      },
-      [&](couchbase::codec::raw_json_transcoder t) {
-        switch (proto_content_as.as_case()) {
-          case protocol::shared::ContentAs::kAsString: {
-            proto_res_content->set_content_as_string(
-              result.template content_as<std::string, decltype(t)>());
-            break;
-          }
-          case protocol::shared::ContentAs::kAsByteArray: {
-            auto value = result.template content_as<std::vector<std::byte>, decltype(t)>();
-            proto_res_content->set_content_as_bytes(
-              std::string{ reinterpret_cast<const char*>(value.data()), value.size() });
-            break;
-          }
-          default:
-            throw performer_exception::unimplemented(
-              "unsupported transcoder - content type combination");
-        }
-      },
-      [&](couchbase::codec::raw_string_transcoder t) {
-        switch (proto_content_as.as_case()) {
-          case protocol::shared::ContentAs::kAsString: {
-            proto_res_content->set_content_as_string(
-              result.template content_as<std::string, decltype(t)>());
-            break;
-          }
-          default:
-            throw performer_exception::unimplemented(
-              "unsupported transcoder - content type combination");
-        }
-      },
-      [&](auto /* t */) {
-        throw performer_exception::unimplemented(
-          "unsupported transcoder - content type combination");
-      } },
-    transcoder);
+  std::visit(overloaded{
+               [&](std::monostate) {
+                 // No transcoder specified: use the SDK's default read behaviour for this result
+                 // type so the performer exercises the real SDK path. Transaction reads decode
+                 // leniently (ignoring the document's common flags, per ExtBinarySupport), while
+                 // ordinary KV reads use the strict JSON transcoder; any discrepancy here is an SDK
+                 // issue to fix rather than to paper over in the performer.
+                 switch (proto_content_as.as_case()) {
+                   case protocol::shared::ContentAs::kAsString: {
+                     {
+                       auto value = result.template content_as<std::string>();
+                       if (proto_res_content != nullptr) {
+                         proto_res_content->set_content_as_string(std::move(value));
+                       }
+                     }
+                     break;
+                   }
+                   case protocol::shared::ContentAs::kAsByteArray: {
+                     auto value = result.template content_as<std::vector<std::byte>>();
+                     if (proto_res_content != nullptr) {
+                       proto_res_content->set_content_as_bytes(
+                         std::string{ reinterpret_cast<const char*>(value.data()), value.size() });
+                     }
+                     break;
+                   }
+                   case protocol::shared::ContentAs::kAsJsonObject:
+                   case protocol::shared::ContentAs::kAsJsonArray: {
+                     auto value = result.template content_as<tao::json::value>();
+                     if (proto_res_content != nullptr) {
+                       proto_res_content->set_content_as_bytes(
+                         couchbase::core::utils::json::generate(value));
+                     }
+                     break;
+                   }
+                   case protocol::shared::ContentAs::kAsBoolean: {
+                     auto value = result.template content_as<bool>();
+                     if (proto_res_content != nullptr) {
+                       proto_res_content->set_content_as_bool(std::move(value));
+                     }
+                   } break;
+                   case protocol::shared::ContentAs::kAsInteger: {
+                     auto value = result.template content_as<std::int64_t>();
+                     if (proto_res_content != nullptr) {
+                       proto_res_content->set_content_as_int64(std::move(value));
+                     }
+                   } break;
+                   case protocol::shared::ContentAs::kAsFloatingPoint: {
+                     auto value = result.template content_as<double>();
+                     if (proto_res_content != nullptr) {
+                       proto_res_content->set_content_as_double(std::move(value));
+                     }
+                   } break;
+                   default:
+                     throw performer_exception::unimplemented(
+                       "unsupported transcoder - content type combination");
+                 }
+               },
+               [&](couchbase::codec::default_json_transcoder t) {
+                 switch (proto_content_as.as_case()) {
+                   case protocol::shared::ContentAs::kAsString: {
+                     {
+                       auto value = result.template content_as<std::string, decltype(t)>();
+                       if (proto_res_content != nullptr) {
+                         proto_res_content->set_content_as_string(std::move(value));
+                       }
+                     }
+                     break;
+                   }
+                   case protocol::shared::ContentAs::kAsByteArray: {
+                     auto value = result.template content_as<std::vector<std::byte>, decltype(t)>();
+                     if (proto_res_content != nullptr) {
+                       proto_res_content->set_content_as_bytes(
+                         std::string{ reinterpret_cast<const char*>(value.data()), value.size() });
+                     }
+                     break;
+                   }
+                   case protocol::shared::ContentAs::kAsJsonObject:
+                   case protocol::shared::ContentAs::kAsJsonArray: {
+                     auto value = result.template content_as<tao::json::value, decltype(t)>();
+                     if (proto_res_content != nullptr) {
+                       proto_res_content->set_content_as_bytes(
+                         couchbase::core::utils::json::generate(value));
+                     }
+                     break;
+                   }
+                   case protocol::shared::ContentAs::kAsBoolean: {
+                     {
+                       auto value = result.template content_as<bool, decltype(t)>();
+                       if (proto_res_content != nullptr) {
+                         proto_res_content->set_content_as_bool(std::move(value));
+                       }
+                     }
+                     break;
+                   }
+                   case protocol::shared::ContentAs::kAsInteger: {
+                     {
+                       auto value = result.template content_as<std::int64_t, decltype(t)>();
+                       if (proto_res_content != nullptr) {
+                         proto_res_content->set_content_as_int64(std::move(value));
+                       }
+                     }
+                     break;
+                   }
+                   case protocol::shared::ContentAs::kAsFloatingPoint: {
+                     {
+                       auto value = result.template content_as<double, decltype(t)>();
+                       if (proto_res_content != nullptr) {
+                         proto_res_content->set_content_as_double(std::move(value));
+                       }
+                     }
+                     break;
+                   }
+                   default:
+                     throw performer_exception::unimplemented(
+                       "unsupported transcoder - content type combination");
+                 }
+               },
+               [&](couchbase::codec::raw_binary_transcoder t) {
+                 switch (proto_content_as.as_case()) {
+                   case protocol::shared::ContentAs::kAsByteArray: {
+                     auto value = result.template content_as<std::vector<std::byte>, decltype(t)>();
+                     if (proto_res_content != nullptr) {
+                       proto_res_content->set_content_as_bytes(
+                         std::string{ reinterpret_cast<const char*>(value.data()), value.size() });
+                     }
+                     break;
+                   }
+                   default:
+                     throw performer_exception::unimplemented(
+                       "unsupported transcoder - content type combination");
+                 }
+               },
+               [&](couchbase::codec::raw_json_transcoder t) {
+                 switch (proto_content_as.as_case()) {
+                   case protocol::shared::ContentAs::kAsString: {
+                     {
+                       auto value = result.template content_as<std::string, decltype(t)>();
+                       if (proto_res_content != nullptr) {
+                         proto_res_content->set_content_as_string(std::move(value));
+                       }
+                     }
+                     break;
+                   }
+                   case protocol::shared::ContentAs::kAsByteArray: {
+                     auto value = result.template content_as<std::vector<std::byte>, decltype(t)>();
+                     if (proto_res_content != nullptr) {
+                       proto_res_content->set_content_as_bytes(
+                         std::string{ reinterpret_cast<const char*>(value.data()), value.size() });
+                     }
+                     break;
+                   }
+                   default:
+                     throw performer_exception::unimplemented(
+                       "unsupported transcoder - content type combination");
+                 }
+               },
+               [&](couchbase::codec::raw_string_transcoder t) {
+                 switch (proto_content_as.as_case()) {
+                   case protocol::shared::ContentAs::kAsString: {
+                     {
+                       auto value = result.template content_as<std::string, decltype(t)>();
+                       if (proto_res_content != nullptr) {
+                         proto_res_content->set_content_as_string(std::move(value));
+                       }
+                     }
+                     break;
+                   }
+                   default:
+                     throw performer_exception::unimplemented(
+                       "unsupported transcoder - content type combination");
+                 }
+               },
+               [&](auto /* t */) {
+                 throw performer_exception::unimplemented(
+                   "unsupported transcoder - content type combination");
+               } },
+             transcoder);
 }
 
 // result_to_content()/multi_result_to_content() raise performer_exception for a transcoder /
@@ -406,7 +456,7 @@ multi_result_to_content(const Result& result,
           case protocol::shared::ContentAs::kAsJsonObject:
           case protocol::shared::ContentAs::kAsJsonArray:
             proto_res_content->set_content_as_bytes(couchbase::core::utils::json::generate(
-              result.template content_as<tao::json::value>(idx)));
+              result.template content_as<tao::json::value, decltype(t)>(idx)));
             break;
           case protocol::shared::ContentAs::kAsBoolean: {
             proto_res_content->set_content_as_bool(

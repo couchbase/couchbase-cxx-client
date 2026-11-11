@@ -25,6 +25,7 @@
 #include "../observability/span_owner.hxx"
 #include "../service.hxx"
 #include "../stream.hxx"
+#include "common.hxx"
 
 #include <couchbase/cluster.hxx>
 #include <couchbase/collection.hxx>
@@ -40,6 +41,8 @@ struct command_args {
   std::string key;
   observability::span_owner* spans;
   bool return_result{ true };
+  /// ClusterConfig.transcoder, used by commands that set no transcoder of their own.
+  common::transcoder default_transcoder{};
 };
 
 protocol::run::Result
