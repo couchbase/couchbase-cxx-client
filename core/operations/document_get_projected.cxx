@@ -25,6 +25,9 @@
 
 #include <tao/json/value.hpp>
 
+#include <charconv>
+#include <string_view>
+
 namespace couchbase::core::operations
 {
 
@@ -39,9 +42,14 @@ subdoc_lookup(tao::json::value& root, const std::string& path) -> std::optional<
   while (offset < path.size()) {
     std::string::size_type idx = path.find_first_of(".[]", offset);
 
+    // A step entered through '[' is an index and ends at ']'.
+    if (offset > 0 && path[offset - 1] == '[' && (idx == std::string::npos || path[idx] != ']')) {
+      break;
+    }
+
     if (idx == std::string::npos) {
       const std::string key = path.substr(offset);
-      if (auto* val = cur->find(key); val != nullptr) {
+      if (auto* val = cur->is_object() ? cur->find(key) : nullptr; val != nullptr) {
         return *val;
       }
       break;
@@ -49,23 +57,28 @@ subdoc_lookup(tao::json::value& root, const std::string& path) -> std::optional<
 
     if (path[idx] == '.' || path[idx] == '[') {
       const std::string key = path.substr(offset, idx - offset);
-      auto* val = cur->find(key);
+      auto* val = cur->is_object() ? cur->find(key) : nullptr;
       if (val == nullptr) {
         break;
       }
       cur = val;
     } else if (path[idx] == ']') {
-      if (!cur->is_array()) {
+      if (offset == 0 || path[offset - 1] != '[' || !cur->is_array() || cur->get_array().empty()) {
         break;
       }
-      const std::string key = path.substr(offset, idx - offset);
-      if (const int array_index = std::stoi(key);
-          array_index == -1 || static_cast<std::size_t>(array_index) < cur->get_array().size()) {
-        cur = &cur->get_array().back();
-      } else {
-        break;
+      auto& array = cur->get_array();
+      const auto index = std::string_view{ path }.substr(offset, idx - offset);
+      std::size_t array_index = array.size() - 1;
+      if (index != "-1") {
+        const auto [end, ec] =
+          std::from_chars(index.data(), index.data() + index.size(), array_index);
+        if (ec != std::errc{} || end != index.data() + index.size() ||
+            array_index >= array.size()) {
+          break;
+        }
       }
-      if (idx < path.size() - 1) {
+      cur = &array[array_index];
+      if (idx == path.size() - 1) {
         return *cur;
       }
       idx += 1;
