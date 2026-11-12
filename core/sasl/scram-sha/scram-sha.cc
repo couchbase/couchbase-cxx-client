@@ -21,9 +21,10 @@
 #include "core/logger/logger.hxx"
 #include "core/platform/base64.h"
 #include "core/platform/random.h"
-#include "core/platform/string_hex.h"
 #include "stringutils.h"
 
+#include <array>
+#include <charconv>
 #include <cstring>
 #include <iostream>
 #include <map>
@@ -38,6 +39,58 @@ using AttributeMap = std::map<char, std::string>;
 
 namespace
 {
+constexpr unsigned int max_scram_iteration_count = 1'000'000;
+
+auto
+parse_iteration_count(std::string_view value, unsigned int& out) -> bool
+{
+  if (value.empty() || value.front() < '1' || value.front() > '9') {
+    return false;
+  }
+  for (const char ch : value) {
+    if (ch < '0' || ch > '9') {
+      return false;
+    }
+  }
+  unsigned int parsed = 0;
+  const auto [ptr, ec] = std::from_chars(value.data(), value.data() + value.size(), parsed);
+  if (ec != std::errc{} || ptr != value.data() + value.size() || parsed == 0 ||
+      parsed > max_scram_iteration_count) {
+    return false;
+  }
+  out = parsed;
+  return true;
+}
+
+auto
+is_valid_scram_printable(char ch) -> bool
+{
+  const auto uch = static_cast<unsigned char>(ch);
+  return uch >= 0x21 && uch <= 0x7e && ch != ',';
+}
+
+auto
+generate_client_nonce() -> std::string
+{
+  const couchbase::core::RandomGenerator random_generator;
+
+  std::array<char, 8> nonce{};
+  if (!couchbase::core::RandomGenerator::getBytes(nonce.data(), nonce.size())) {
+    CB_LOG_ERROR_RAW("failed to generate client nonce");
+    throw std::bad_alloc();
+  }
+
+  constexpr std::string_view hex_digits = "0123456789abcdef";
+  std::string out;
+  out.reserve(nonce.size() * 2);
+  for (const char byte : nonce) {
+    const auto u = static_cast<unsigned char>(byte);
+    out.push_back(hex_digits[(u >> 4U) & 0x0fU]);
+    out.push_back(hex_digits[u & 0x0fU]);
+  }
+  return out;
+}
+
 /**
  * Decode the attribute list into a set. The attribute list looks like:
  * "k=value,y=value" etc
@@ -49,6 +102,10 @@ namespace
 auto
 decodeAttributeList(const std::string& list, AttributeMap& attributes) -> bool
 {
+  if (list.empty()) {
+    return false;
+  }
+
   size_t pos = 0;
 
   CB_LOG_TRACE("decoding attribute list [{}]", list);
@@ -80,6 +137,10 @@ decodeAttributeList(const std::string& list, AttributeMap& attributes) -> bool
       attributes.try_emplace(key, list.substr(pos));
       pos = list.length();
     } else {
+      if (comma + 1 >= list.length()) {
+        CB_LOG_ERROR("decode attribute list [{}] failed: trailing comma", list);
+        return false;
+      }
       attributes.try_emplace(key, list.substr(pos, comma - pos));
       pos = comma + 1;
     }
@@ -121,7 +182,7 @@ ScramShaBackend::addAttribute(std::ostream& out, char key, const std::string& va
 
     case 'r': // client nonce.. printable characters
       for (const auto& c : value) {
-        if (c == ',' || (isprint(c) == 0)) {
+        if (!is_valid_scram_printable(c)) {
           throw std::invalid_argument(
             "ScramShaBackend::addAttribute: Invalid character in client nonce");
         }
@@ -253,20 +314,23 @@ ClientBackend::ClientBackend(GetUsernameCallback& user_cb,
   : MechanismBackend(user_cb, password_cb, ctx)
   , ScramShaBackend(mech, algo)
 {
-  const couchbase::core::RandomGenerator randomGenerator;
-
-  std::array<char, 8> nonce{};
-  if (!couchbase::core::RandomGenerator::getBytes(nonce.data(), nonce.size())) {
-    CB_LOG_ERROR_RAW("failed to generate server nonce");
-    throw std::bad_alloc();
-  }
-
-  clientNonce = couchbase::core::to_hex({ nonce.data(), nonce.size() });
+  clientNonce = generate_client_nonce();
 }
 
 auto
 ClientBackend::start() -> std::pair<error, std::string_view>
 {
+  state_ = StepState::WAIT_SERVER_FIRST;
+  clientNonce = generate_client_nonce();
+  iterationCount = 4096;
+  server_first_message.clear();
+  server_final_message.clear();
+  client_final_message.clear();
+  client_final_message_without_proof.clear();
+  saltedPassword.clear();
+  salt.clear();
+  nonce_.clear();
+
   std::stringstream out;
   out << "n,,";
   addAttribute(out, 'n', usernameCallback(), true);
@@ -281,11 +345,13 @@ ClientBackend::start() -> std::pair<error, std::string_view>
 auto
 ClientBackend::step(std::string_view input) -> std::pair<error, std::string_view>
 {
-  if (input.empty()) {
+  if (input.empty() || state_ == StepState::DONE) {
+    state_ = StepState::DONE;
     return { error::BAD_PARAM, {} };
   }
 
-  if (server_first_message.empty()) {
+  if (state_ == StepState::WAIT_SERVER_FIRST) {
+    state_ = StepState::DONE;
     server_first_message.assign(input.data(), input.size());
 
     AttributeMap attributes;
@@ -299,12 +365,14 @@ ClientBackend::step(std::string_view input) -> std::pair<error, std::string_view
           nonce_ = attribute.second;
           break;
         case 's':
-          salt = couchbase::core::base64::decode_to_string(attribute.second);
+          try {
+            salt = couchbase::core::base64::decode_to_string(attribute.second);
+          } catch (...) {
+            return { error::BAD_PARAM, {} };
+          }
           break;
         case 'i':
-          try {
-            iterationCount = static_cast<unsigned int>(std::stoul(attribute.second));
-          } catch (...) {
+          if (!parse_iteration_count(attribute.second, iterationCount)) {
             return { error::BAD_PARAM, {} };
           }
           break;
@@ -317,6 +385,16 @@ ClientBackend::step(std::string_view input) -> std::pair<error, std::string_view
         attributes.find('i') == attributes.end()) {
       CB_LOG_ERROR_RAW("missing r/s/i in server message");
       return { error::BAD_PARAM, {} };
+    }
+
+    if (iterationCount == 0 || nonce_.rfind(clientNonce, 0) != 0 ||
+        nonce_.size() <= clientNonce.size()) {
+      return { error::BAD_PARAM, {} };
+    }
+    for (const char ch : nonce_) {
+      if (!is_valid_scram_printable(ch)) {
+        return { error::BAD_PARAM, {} };
+      }
     }
 
     // I've got the SALT, lets generate the salted password
@@ -336,9 +414,12 @@ ClientBackend::step(std::string_view input) -> std::pair<error, std::string_view
     addAttribute(out, 'p', getClientProof(), false);
 
     client_final_message = out.str();
+    state_ = StepState::WAIT_SERVER_FINAL;
 
     return { error::CONTINUE, client_final_message };
   }
+
+  state_ = StepState::DONE;
   server_final_message.assign(input.data(), input.size());
 
   AttributeMap attributes;
@@ -347,7 +428,15 @@ ClientBackend::step(std::string_view input) -> std::pair<error, std::string_view
     return { error::BAD_PARAM, {} };
   }
 
+  if (attributes.find('m') != attributes.end()) {
+    CB_LOG_ERROR_RAW("SCRAM: unsupported mandatory extension in server-final-message");
+    return { error::BAD_PARAM, {} };
+  }
+
   if (attributes.find('e') != attributes.end()) {
+    if (attributes.find('v') != attributes.end()) {
+      return { error::BAD_PARAM, {} };
+    }
     CB_LOG_ERROR("failed to authenticate: {}", attributes['e']);
     return { error::FAIL, {} };
   }

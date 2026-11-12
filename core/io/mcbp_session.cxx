@@ -427,11 +427,24 @@ class mcbp_session_impl
             case protocol::client_opcode::sasl_auth: {
               protocol::client_response<protocol::sasl_auth_response_body> resp(std::move(msg));
               if (resp.status() == key_value_status_code::success) {
+                if (sasl_.get_name().rfind("SCRAM-", 0) == 0) {
+                  auto error_msg = fmt::format(
+                    "unable to authenticate: unexpected success status before SCRAM step "
+                    "(opaque={}, context={})",
+                    resp.opaque(),
+                    resp.error_info() ? resp.error_info()->context() : "");
+                  last_bootstrap_error_ = { errc::common::authentication_failure,
+                                            std::move(error_msg),
+                                            session_->bootstrap_hostname(),
+                                            session_->bootstrap_port() };
+                  CB_LOG_ERROR("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
+                  return complete(errc::common::authentication_failure);
+                }
                 return auth_success();
               }
               if (resp.status() == key_value_status_code::auth_continue) {
                 auto [sasl_code, sasl_payload] = sasl_.step(resp.body().value());
-                if (sasl_code == sasl::error::OK) {
+                if (sasl_code == sasl::error::OK && sasl_.get_name().rfind("SCRAM-", 0) != 0) {
                   return auth_success();
                 }
                 if (sasl_code == sasl::error::CONTINUE) {
@@ -472,7 +485,21 @@ class mcbp_session_impl
               const protocol::client_response<protocol::sasl_step_response_body> resp(
                 std::move(msg));
               if (resp.status() == key_value_status_code::success) {
-                return auth_success();
+                auto [sasl_code, sasl_payload] = sasl_.step(resp.body().value());
+                if (sasl_code == sasl::error::OK) {
+                  return auth_success();
+                }
+                auto error_msg =
+                  fmt::format("unable to authenticate: (sasl_code={}, opaque={}, context={})",
+                              sasl_code,
+                              resp.opaque(),
+                              resp.error_info() ? resp.error_info()->context() : "");
+                last_bootstrap_error_ = { errc::common::authentication_failure,
+                                          std::move(error_msg),
+                                          session_->bootstrap_hostname(),
+                                          session_->bootstrap_port() };
+                CB_LOG_ERROR("{} {}", session_->log_prefix_, last_bootstrap_error_.error_message);
+                return complete(errc::common::authentication_failure);
               }
               auto error_msg =
                 fmt::format("unable to authenticate (opcode={}, status={}, opaque={}, context={})",
