@@ -34,6 +34,7 @@
 #include <cstdint>
 #include <regex>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <utility>
 #include <vector>
@@ -240,6 +241,279 @@ a_drop_of_an_index_that_does_not_exist_is_index_not_found([[maybe_unused]] conte
   assert_eq(mapped_error<drop>(500, body), couchbase::errc::common::index_not_found, "a 500");
   assert_eq(mapped_error<drop>(400, body), couchbase::errc::common::index_not_found, "a 400");
 }
+
+auto
+decode_quoted_identifier(std::string_view token) -> std::string
+{
+  assert_true(token.size() >= 2 && token.front() == '`' && token.back() == '`',
+              "quoted identifier is enclosed in backticks");
+  std::string name;
+  for (std::size_t i = 1; i + 1 < token.size(); ++i) {
+    if (token[i] == '\\' && i + 2 < token.size()) {
+      ++i;
+    }
+    name.push_back(token[i]);
+  }
+  return name;
+}
+
+void
+an_empty_or_single_backtick_key_in_create_index_does_not_throw([[maybe_unused]] context& ctx)
+{
+  auto http_ctx = ::test::utils::make_http_context();
+
+  {
+    couchbase::core::io::http_request http_req;
+    couchbase::core::operations::management::query_index_create_request req{
+      "bucket_name", "scope_name", "collection_name",
+      "test_index",  { "" },       { "bucket_name", "scope_name" },
+    };
+    assert_eq(req.encode_to(http_req, http_ctx),
+              couchbase::errc::common::invalid_argument,
+              "an empty key in create_index returns invalid_argument without throwing");
+  }
+
+  {
+    couchbase::core::io::http_request http_req;
+    couchbase::core::operations::management::query_index_create_request req{
+      "bucket_name", "scope_name", "collection_name",
+      "test_index",  {},           { "bucket_name", "scope_name" },
+    };
+    assert_eq(req.encode_to(http_req, http_ctx),
+              couchbase::errc::common::invalid_argument,
+              "a secondary index with no keys returns invalid_argument");
+  }
+
+  {
+    const auto statement = encoded_statement({ "`" });
+    std::smatch match;
+    assert_true(std::regex_search(statement, match, create_index), "a CREATE INDEX statement");
+    assert_eq(match[2].str(), R"(`\``)", "a single backtick key is quoted and escaped");
+    assert_eq(decode_quoted_identifier(match[2].str()),
+              "`",
+              "decoding the quoted key recovers the original backtick");
+  }
+}
+
+void
+backticks_in_index_and_keyspace_identifiers_are_escaped([[maybe_unused]] context& ctx)
+{
+  auto http_ctx = ::test::utils::make_http_context();
+
+  {
+    couchbase::core::io::http_request http_req;
+    couchbase::core::operations::management::query_index_create_request req{};
+    req.bucket_name = "bkt`1";
+    req.scope_name = "scp`1";
+    req.collection_name = "col`1";
+    req.index_name = "idx`1";
+    req.keys = { "fld`1" };
+    assert_success(req.encode_to(http_req, http_ctx), "create_index encodes");
+    const auto body = couchbase::core::utils::json::parse(http_req.body);
+    assert_eq(
+      body.at("statement").get_string(),
+      R"(CREATE INDEX `idx\`1` ON default:`bkt\`1`.`scp\`1`.`col\`1`(`fld\`1`)  USING GSI )",
+      "create_index backslash-escapes internal backticks in identifiers");
+  }
+
+  {
+    couchbase::core::io::http_request http_req;
+    couchbase::core::operations::management::query_index_drop_request req{};
+    req.bucket_name = "bkt`1";
+    req.scope_name = "scp`1";
+    req.collection_name = "col`1";
+    req.index_name = "idx`1";
+    assert_success(req.encode_to(http_req, http_ctx), "drop_index encodes");
+    const auto body = couchbase::core::utils::json::parse(http_req.body);
+    assert_eq(body.at("statement").get_string(),
+              R"(DROP INDEX `idx\`1` ON default:`bkt\`1`.`scp\`1`.`col\`1` USING GSI)",
+              "drop_index backslash-escapes internal backticks in identifiers");
+  }
+
+  {
+    couchbase::core::io::http_request http_req;
+    couchbase::core::operations::management::query_index_build_request req{};
+    req.bucket_name = "bkt`1";
+    req.scope_name = "scp`1";
+    req.collection_name = "col`1";
+    req.index_names = { "idx`1", "idx`2" };
+    assert_success(req.encode_to(http_req, http_ctx), "build_index encodes");
+    const auto body = couchbase::core::utils::json::parse(http_req.body);
+    assert_eq(body.at("statement").get_string(),
+              R"(BUILD INDEX ON default:`bkt\`1`.`scp\`1`.`col\`1` (`idx\`1`,`idx\`2`))",
+              "build_index backslash-escapes internal backticks in identifiers");
+  }
+
+  for (const auto* raw : { "bkt`1", "scp`1", "col`1", "idx`1", "idx`2", "fld`1" }) {
+    const auto quoted = couchbase::core::utils::escape_query_identifier(raw);
+    assert_eq(decode_quoted_identifier(quoted),
+              raw,
+              "decoding quoted identifier recovers the original name");
+  }
+}
+
+void
+pre_quoted_keys_with_interior_backticks_or_backslashes_and_query_context_are_escaped(
+  [[maybe_unused]] context& ctx)
+{
+  auto http_ctx = ::test::utils::make_http_context();
+
+  {
+    const auto statement = encoded_statement({ "`a`,`b`", "``", R"(`a\)" });
+    std::smatch match;
+    assert_true(std::regex_search(statement, match, create_index), "a CREATE INDEX statement");
+    assert_eq(match[2].str(),
+              R"(`\`a\`,\`b\``, `\`\``, `\`a\\`)",
+              "keys that close early, are empty quotes, or end with a backslash are escaped");
+    for (const auto* raw : { "`a`,`b`", "``", R"(`a\)" }) {
+      const auto quoted = couchbase::core::utils::escape_query_identifier(raw);
+      assert_eq(decode_quoted_identifier(quoted),
+                raw,
+                "decoding escaped hostile key recovers the original key");
+    }
+  }
+
+  {
+    const auto statement = encoded_statement({
+      "`a``b`",
+      R"(`a\`b`)",
+      "`profile`.`name`",
+      "`profile`.name",
+      "`profile`.address.`zip`",
+      "`addresses`[0].`city`",
+      "`addresses`[1+1].`city`",
+      "`addresses`[4/2].`city`",
+      "`price` * `quantity`",
+      "`price` * 1.5 + `tax`",
+      "`active` AND `verified`",
+      "`profile` . `name`",
+      R"(`a\.b`.`c\`d`)",
+    });
+    std::smatch match;
+    assert_true(std::regex_search(statement, match, create_index), "a CREATE INDEX statement");
+    assert_eq(match[2].str(),
+              R"(`a``b`, `a\`b`, `profile`.`name`, `profile`.name, `profile`.address.`zip`, )"
+              R"(`addresses`[0].`city`, `addresses`[1+1].`city`, `addresses`[4/2].`city`, )"
+              R"(`price` * `quantity`, `price` * 1.5 + `tax`, `active` AND `verified`, )"
+              R"(`profile` . `name`, `a\.b`.`c\`d`)",
+              "valid pre-quoted single, dotted, subscripted, and mixed-quoting keys are preserved");
+    assert_eq(encoded_statement({
+                "`addresses`[(1+1)].`city`",
+                "`profile`.\n`name`",
+                "`profile`.\r\n`name`",
+              }),
+              "CREATE INDEX `test_index` ON "
+              "default:`bucket_name`.`scope_name`.`collection_name`(`addresses`[(1+1)].`city`, "
+              "`profile`.\n`name`, `profile`.\r\n`name`)  USING GSI ",
+              "pre-quoted parenthesized-subscript and LF/CRLF dotted keys are preserved");
+  }
+
+  {
+    const auto statement = encoded_statement({
+      "net-`tax`",
+      "`profile`..`name`",
+      "`profile`.123.`zip`",
+      "`addresses`[0) WHERE 1=1--].`city`",
+      "`profile`.`name`) WHERE 1=1 --`",
+    });
+    std::smatch match;
+    assert_true(std::regex_search(statement, match, create_index), "a CREATE INDEX statement");
+    assert_eq(match[2].str(),
+              R"(`net-\`tax\``, `\`profile\`..\`name\``, `\`profile\`.123.\`zip\``, )"
+              R"(`\`addresses\`[0) WHERE 1=1--].\`city\``, )"
+              R"(`\`profile\`.\`name\`) WHERE 1=1 --\``)",
+              "malformed or injected dotted keys are escaped as single identifiers");
+  }
+
+  {
+    couchbase::core::io::http_request http_req;
+    couchbase::core::operations::management::query_index_create_request req{
+      "ignored_bucket", "",           "",
+      "test_index",     { "field1" }, couchbase::core::query_context{ "bkt`1", "scp`1" },
+    };
+    assert_eq(req.encode_to(http_req, http_ctx),
+              couchbase::errc::common::invalid_argument,
+              "query_context with an empty collection_name is rejected");
+  }
+
+  {
+    couchbase::core::io::http_request http_req;
+    couchbase::core::operations::management::query_index_drop_request req{};
+    req.bucket_name = "bkt`1";
+    req.collection_name = "col`1";
+    req.index_name = "idx`1";
+    req.query_ctx = couchbase::core::query_context{ "bkt`1", R"(scp\1)" };
+    assert_success(req.encode_to(http_req, http_ctx), "drop_index with query_ctx encodes");
+    const auto body = couchbase::core::utils::json::parse(http_req.body);
+    assert_eq(body.at("statement").get_string(),
+              R"(DROP INDEX `idx\`1` ON default:`bkt\`1`.`scp\\1`.`col\`1` USING GSI)",
+              "drop_index with query_ctx uses the full escaped keyspace");
+    assert_eq(body.at("query_context").get_string(),
+              R"(default:`bkt\`1`.`scp\\1`)",
+              "query_context escapes backticks and backslashes");
+    assert_eq(decode_quoted_identifier(couchbase::core::utils::escape_query_identifier(R"(scp\1)")),
+              R"(scp\1)",
+              "decoding quoted scope with backslash recovers the original name");
+  }
+}
+
+// `query_index_create_request::keys` carries one string list for both raw field names and
+// pre-quoted SQL++ index keys. Inputs outside `utils::is_escaped_query_identifier` -- string
+// literals, function calls, `[*]`, `BETWEEN`, multi-word operators -- are quoted as single literal
+// field names, which GSI accepts because `CREATE INDEX` is schemaless.
+void
+sqlpp_expressions_outside_recognized_subset_are_quoted_as_literal_field_names(
+  [[maybe_unused]] context& ctx)
+{
+  constexpr std::string_view prefix =
+    "CREATE INDEX `test_index` ON default:`bucket_name`.`scope_name`.`collection_name`(";
+  constexpr std::string_view suffix = ")  USING GSI ";
+
+  for (const auto* recognized : {
+         "`email`",
+         "`profile`.`name`",
+         "`addresses`[0].`city`",
+         "`addresses`[(1+1)].`city`",
+         "`price` * 1.5 + `tax`",
+         "`price` * .5 + `tax`",
+         "`price` * 1e3 + `tax`",
+         "`price` * 1.5e-3 + `tax`",
+         "`price` * 2E+4 + `tax`",
+         "`active` AND NOT `deleted`",
+       }) {
+    assert_true(couchbase::core::utils::is_escaped_query_identifier(recognized),
+                "recognized leading-backtick identifier, path, or basic expression passes through");
+    assert_eq(encoded_statement({ recognized }),
+              std::string{ prefix } + recognized + std::string{ suffix },
+              "recognized SQL++ key is emitted verbatim");
+  }
+
+  const std::vector<std::pair<const char*, const char*>> unquoted_as_literal_fields{
+    { "`first` || ' ' || `last`", R"(`\`first\` || ' ' || \`last\``)" },
+    { "`prefix` || LOWER(`email`)", R"(`\`prefix\` || LOWER(\`email\`)`)" },
+    { "LOWER(`email`)", R"(`LOWER(\`email\`)`)" },
+    { "`items`[*].`id`", R"(`\`items\`[*].\`id\``)" },
+    { "`age` BETWEEN 18 AND `max_age`", R"(`\`age\` BETWEEN 18 AND \`max_age\``)" },
+    { "`email` NOT LIKE `pattern`", R"(`\`email\` NOT LIKE \`pattern\``)" },
+    { "`price` * 1e + `tax`", R"(`\`price\` * 1e + \`tax\``)" },
+    { "`price` * 1e+ + `tax`", R"(`\`price\` * 1e+ + \`tax\``)" },
+    { "`price` * 1e3abc + `tax`", R"(`\`price\` * 1e3abc + \`tax\``)" },
+  };
+
+  for (const auto& [expr, expected_token] : unquoted_as_literal_fields) {
+    assert_false(couchbase::core::utils::is_escaped_query_identifier(expr),
+                 "SQL++ expression outside the recognized subset is not passed through");
+    const auto statement = encoded_statement({ expr });
+    assert_eq(statement,
+              std::string{ prefix } + expected_token + std::string{ suffix },
+              "unrecognized SQL++ expression is quoted as one literal field-name token");
+    const auto emitted_token =
+      statement.substr(prefix.size(), statement.size() - prefix.size() - suffix.size());
+    assert_eq(decode_quoted_identifier(emitted_token),
+              expr,
+              "the quoted token decodes to a single literal field named after the expression text");
+  }
+}
 } // namespace
 
 auto
@@ -258,6 +532,11 @@ tests() -> test_suite
       { CASE(the_first_mapped_error_decides) },
       { CASE(the_per_scope_index_limit_is_quota_limited) },
       { CASE(a_drop_of_an_index_that_does_not_exist_is_index_not_found) },
+      { CASE(an_empty_or_single_backtick_key_in_create_index_does_not_throw) },
+      { CASE(backticks_in_index_and_keyspace_identifiers_are_escaped) },
+      { CASE(
+        pre_quoted_keys_with_interior_backticks_or_backslashes_and_query_context_are_escaped) },
+      { CASE(sqlpp_expressions_outside_recognized_subset_are_quoted_as_literal_field_names) },
     },
   };
 }
