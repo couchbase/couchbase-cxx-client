@@ -20,9 +20,28 @@
 #include <spdlog/fmt/bundled/core.h>
 
 #include <string>
+#include <string_view>
 
 namespace couchbase::core::utils
 {
+// The query service lexer reads a doubled backtick as one backtick and processes backslash escapes
+// inside backtick-quoted identifiers, so both are doubled.
+inline auto
+escape_query_identifier(std::string_view identifier) -> std::string
+{
+  std::string out;
+  out.reserve(identifier.size() + 2);
+  out.push_back('`');
+  for (const char ch : identifier) {
+    if (ch == '`' || ch == '\\') {
+      out.push_back(ch);
+    }
+    out.push_back(ch);
+  }
+  out.push_back('`');
+  return out;
+}
+
 template<typename Request>
 static auto
 check_query_management_request(const Request& req) -> bool
@@ -44,14 +63,21 @@ build_keyspace(const Request& req) -> std::string
 {
   // keyspace is just the collection if we have a query_context.
   if (req.query_ctx.has_value()) {
-    return fmt::format("{}.`{}`", req.query_ctx.value(), req.collection_name);
+    return fmt::format("{}:{}.{}.{}",
+                       req.query_ctx.namespace_id(),
+                       escape_query_identifier(req.query_ctx.bucket_name()),
+                       escape_query_identifier(req.query_ctx.scope_name()),
+                       escape_query_identifier(req.collection_name));
   }
   // otherwise, build from the bucket, scope and collection names in request...
   if (req.scope_name.empty() && req.collection_name.empty()) {
-    return fmt::format("{}:`{}`", req.namespace_id, req.bucket_name);
+    return fmt::format("{}:{}", req.namespace_id, escape_query_identifier(req.bucket_name));
   }
-  return fmt::format(
-    "{}:`{}`.`{}`.`{}`", req.namespace_id, req.bucket_name, req.scope_name, req.collection_name);
+  return fmt::format("{}:{}.{}.{}",
+                     req.namespace_id,
+                     escape_query_identifier(req.bucket_name),
+                     escape_query_identifier(req.scope_name),
+                     escape_query_identifier(req.collection_name));
 }
 
 } // namespace couchbase::core::utils

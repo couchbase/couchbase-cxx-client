@@ -27,6 +27,7 @@
 #include "core/operations/management/query_index_drop.hxx"
 #include "core/operations/management/query_index_get_all.hxx"
 #include "core/operations/management/query_index_get_all_deferred.hxx"
+#include "core/query_context.hxx"
 #include "core/utils/json.hxx"
 
 #include <tao/json/value.hpp>
@@ -240,6 +241,112 @@ a_drop_of_an_index_that_does_not_exist_is_index_not_found([[maybe_unused]] conte
   assert_eq(mapped_error<drop>(500, body), couchbase::errc::common::index_not_found, "a 500");
   assert_eq(mapped_error<drop>(400, body), couchbase::errc::common::index_not_found, "a 400");
 }
+template<typename Request>
+auto
+statement_of(const Request& req) -> std::string
+{
+  couchbase::core::io::http_request http_req;
+  auto http_ctx = ::test::utils::make_http_context();
+  assert_success(req.encode_to(http_req, http_ctx), "the request is encoded");
+  return couchbase::core::utils::json::parse(http_req.body).at("statement").get_string();
+}
+
+void
+backticks_and_backslashes_in_identifiers_are_escaped([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::operations::management::query_index_build_request;
+  using couchbase::core::operations::management::query_index_create_request;
+  using couchbase::core::operations::management::query_index_drop_request;
+
+  query_index_create_request create{};
+  create.bucket_name = "b`1";
+  create.scope_name = "s`1";
+  create.collection_name = "c`1";
+  create.index_name = "i`1";
+  create.keys = { "f`1" };
+  assert_eq(statement_of(create),
+            "CREATE INDEX `i``1` ON default:`b``1`.`s``1`.`c``1`(`f``1`)  USING GSI ",
+            "CREATE INDEX on a collection");
+
+  query_index_drop_request drop{};
+  drop.bucket_name = "b`1";
+  drop.scope_name = "s`1";
+  drop.collection_name = "c`1";
+  drop.index_name = "i`1";
+  assert_eq(statement_of(drop),
+            "DROP INDEX `i``1` ON default:`b``1`.`s``1`.`c``1` USING GSI",
+            "DROP INDEX on a collection");
+
+  query_index_drop_request legacy_drop{};
+  legacy_drop.bucket_name = "b`1";
+  legacy_drop.index_name = "i`1";
+  assert_eq(
+    statement_of(legacy_drop), "DROP INDEX `b``1`.`i``1` USING GSI", "DROP INDEX on a bucket");
+
+  query_index_build_request build{};
+  build.bucket_name = "b`1";
+  build.index_names = { "i`1", R"(i\2)" };
+  assert_eq(statement_of(build),
+            R"(BUILD INDEX ON default:`b``1` (`i``1`,`i\\2`))",
+            "BUILD INDEX on a bucket");
+
+  // query_context is parsed by the service without unescaping, so only the statement escapes it
+  query_index_create_request scoped{};
+  scoped.query_ctx = couchbase::core::query_context{ "b`1", R"(s\1)" };
+  scoped.collection_name = "c`1";
+  scoped.index_name = "i";
+  scoped.keys = { "f" };
+  couchbase::core::io::http_request scoped_req;
+  auto http_ctx = ::test::utils::make_http_context();
+  assert_success(scoped.encode_to(scoped_req, http_ctx), "the request is encoded");
+  const auto scoped_body = couchbase::core::utils::json::parse(scoped_req.body);
+  assert_eq(scoped_body.at("statement").get_string(),
+            R"(CREATE INDEX `i` ON default:`b``1`.`s\\1`.`c``1`(`f`)  USING GSI )",
+            "CREATE INDEX with a query context");
+  assert_eq(scoped_body.at("query_context").get_string(),
+            R"(default:`b`1`.`s\1`)",
+            "the query context field");
+}
+
+void
+empty_index_names_and_keys_are_invalid_arguments([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::operations::management::query_index_build_request;
+  using couchbase::core::operations::management::query_index_create_request;
+  using couchbase::core::operations::management::query_index_drop_request;
+  auto http_ctx = ::test::utils::make_http_context();
+  couchbase::core::io::http_request http_req;
+
+  query_index_create_request create{};
+  create.bucket_name = "b";
+  create.index_name = "i";
+  assert_eq(create.encode_to(http_req, http_ctx),
+            couchbase::errc::common::invalid_argument,
+            "CREATE INDEX with no keys");
+  create.keys = { "" };
+  assert_eq(create.encode_to(http_req, http_ctx),
+            couchbase::errc::common::invalid_argument,
+            "CREATE INDEX with an empty key");
+
+  query_index_drop_request drop{};
+  drop.bucket_name = "b";
+  assert_eq(drop.encode_to(http_req, http_ctx),
+            couchbase::errc::common::invalid_argument,
+            "DROP INDEX with no index name");
+  drop.is_primary = true;
+  assert_eq(
+    statement_of(drop), "DROP PRIMARY INDEX ON default:`b` USING GSI", "DROP PRIMARY INDEX");
+
+  query_index_build_request build{};
+  build.bucket_name = "b";
+  assert_eq(build.encode_to(http_req, http_ctx),
+            couchbase::errc::common::invalid_argument,
+            "BUILD INDEX with no index names");
+  build.index_names = { "i", "" };
+  assert_eq(build.encode_to(http_req, http_ctx),
+            couchbase::errc::common::invalid_argument,
+            "BUILD INDEX with an empty index name");
+}
 } // namespace
 
 auto
@@ -258,6 +365,8 @@ tests() -> test_suite
       { CASE(the_first_mapped_error_decides) },
       { CASE(the_per_scope_index_limit_is_quota_limited) },
       { CASE(a_drop_of_an_index_that_does_not_exist_is_index_not_found) },
+      { CASE(backticks_and_backslashes_in_identifiers_are_escaped) },
+      { CASE(empty_index_names_and_keys_are_invalid_arguments) },
     },
   };
 }
