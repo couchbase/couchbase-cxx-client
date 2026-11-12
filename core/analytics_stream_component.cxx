@@ -58,7 +58,9 @@ build_streaming_analytics_body(const operations::analytics_request& request,
   // The remaining options are identical to the buffered analytics path; share one encoder so the
   // two stay byte-for-byte consistent. This runs first so the control fields set below always win
   // over any same-named `raw` entry a caller may have supplied.
-  operations::encode_analytics_options(body, request);
+  if (auto ec = operations::encode_analytics_options(body, request); ec) {
+    throw std::system_error(ec);
+  }
 
   body["client_context_id"] = client_context_id;
   body["statement"] = request.statement;

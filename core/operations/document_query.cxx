@@ -25,109 +25,123 @@
 
 #include <couchbase/error_codes.hxx>
 
-#include <gsl/assert>
 #include <tao/json/value.hpp>
 
 namespace couchbase::core::operations
 {
-void
-encode_query_options(tao::json::value& body, const query_request& request)
+auto
+encode_query_options(tao::json::value& body, const query_request& request) -> std::error_code
 {
-  for (const auto& [name, value] : request.named_parameters) {
-    Expects(name.empty() == false);
-    std::string key = name;
-    if (key[0] != '$') {
-      key.insert(key.begin(), '$');
-    }
-    body[key] = utils::json::parse(value);
-  }
-  if (!request.positional_parameters.empty()) {
-    std::vector<tao::json::value> parameters;
-    parameters.reserve(request.positional_parameters.size());
-    for (const auto& value : request.positional_parameters) {
-      parameters.emplace_back(utils::json::parse(value));
-    }
-    body["args"] = std::move(parameters);
-  }
-  if (request.profile.has_value()) {
-    switch (request.profile.value()) {
-      case couchbase::query_profile::phases:
-        body["profile"] = "phases";
-        break;
-      case couchbase::query_profile::timings:
-        body["profile"] = "timings";
-        break;
-      case couchbase::query_profile::off:
-        body["profile"] = "off";
-        break;
-    }
-  }
-  if (request.use_replica.has_value()) {
-    // The capability gate is enforced by the caller (encode_to for buffered, cluster::query_stream
-    // for streaming); here we only emit the encoded field.
-    body["use_replica"] = request.use_replica.value() ? "on" : "off";
-  }
-  if (request.max_parallelism) {
-    body["max_parallelism"] = std::to_string(request.max_parallelism.value());
-  }
-  if (request.pipeline_cap) {
-    body["pipeline_cap"] = std::to_string(request.pipeline_cap.value());
-  }
-  if (request.pipeline_batch) {
-    body["pipeline_batch"] = std::to_string(request.pipeline_batch.value());
-  }
-  if (request.scan_cap) {
-    body["scan_cap"] = std::to_string(request.scan_cap.value());
-  }
-  if (!request.metrics) {
-    body["metrics"] = false;
-  }
-  if (request.readonly) {
-    body["readonly"] = true;
-  }
-  if (request.flex_index) {
-    body["use_fts"] = true;
-  }
-  if (request.preserve_expiry) {
-    body["preserve_expiry"] = true;
-  }
-  bool check_scan_wait = false;
-  if (request.scan_consistency) {
-    switch (request.scan_consistency.value()) {
-      case query_scan_consistency::not_bounded:
-        body["scan_consistency"] = "not_bounded";
-        break;
-      case query_scan_consistency::request_plus:
-        check_scan_wait = true;
-        body["scan_consistency"] = "request_plus";
-        break;
-    }
-  } else if (!request.mutation_state.empty()) {
-    check_scan_wait = true;
-    body["scan_consistency"] = "at_plus";
-    tao::json::value scan_vectors = tao::json::empty_object;
-    for (const auto& token : request.mutation_state) {
-      auto* bucket = scan_vectors.find(token.bucket_name());
-      if (bucket == nullptr) {
-        scan_vectors[token.bucket_name()] = tao::json::empty_object;
-        bucket = scan_vectors.find(token.bucket_name());
+  try {
+    for (const auto& [name, value] : request.named_parameters) {
+      if (name.empty() || name == "$") {
+        return errc::common::invalid_argument;
       }
-      auto& bucket_obj = bucket->get_object();
-      bucket_obj[std::to_string(token.partition_id())] =
-        std::vector<tao::json::value>{ token.sequence_number(),
-                                       std::to_string(token.partition_uuid()) };
+      std::string key = name;
+      if (key[0] != '$') {
+        key.insert(key.begin(), '$');
+      }
+      body[key] = utils::json::parse(value);
     }
-    body["scan_vectors"] = scan_vectors;
+    if (!request.positional_parameters.empty()) {
+      std::vector<tao::json::value> parameters;
+      parameters.reserve(request.positional_parameters.size());
+      for (const auto& value : request.positional_parameters) {
+        parameters.emplace_back(utils::json::parse(value));
+      }
+      body["args"] = std::move(parameters);
+    }
+    if (request.profile.has_value()) {
+      switch (request.profile.value()) {
+        case couchbase::query_profile::phases:
+          body["profile"] = "phases";
+          break;
+        case couchbase::query_profile::timings:
+          body["profile"] = "timings";
+          break;
+        case couchbase::query_profile::off:
+          body["profile"] = "off";
+          break;
+      }
+    }
+    if (request.use_replica.has_value()) {
+      // The capability gate is enforced by the caller (encode_to for buffered,
+      // cluster::query_stream for streaming); here we only emit the encoded field.
+      body["use_replica"] = request.use_replica.value() ? "on" : "off";
+    }
+    if (request.max_parallelism) {
+      body["max_parallelism"] = std::to_string(request.max_parallelism.value());
+    }
+    if (request.pipeline_cap) {
+      body["pipeline_cap"] = std::to_string(request.pipeline_cap.value());
+    }
+    if (request.pipeline_batch) {
+      body["pipeline_batch"] = std::to_string(request.pipeline_batch.value());
+    }
+    if (request.scan_cap) {
+      body["scan_cap"] = std::to_string(request.scan_cap.value());
+    }
+    if (!request.metrics) {
+      body["metrics"] = false;
+    }
+    if (request.readonly) {
+      body["readonly"] = true;
+    }
+    if (request.flex_index) {
+      body["use_fts"] = true;
+    }
+    if (request.preserve_expiry) {
+      body["preserve_expiry"] = true;
+    }
+    bool check_scan_wait = false;
+    if (request.scan_consistency) {
+      switch (request.scan_consistency.value()) {
+        case query_scan_consistency::not_bounded:
+          body["scan_consistency"] = "not_bounded";
+          break;
+        case query_scan_consistency::request_plus:
+          check_scan_wait = true;
+          body["scan_consistency"] = "request_plus";
+          break;
+      }
+    } else if (!request.mutation_state.empty()) {
+      check_scan_wait = true;
+      body["scan_consistency"] = "at_plus";
+      tao::json::value scan_vectors = tao::json::empty_object;
+      for (const auto& token : request.mutation_state) {
+        auto* bucket = scan_vectors.find(token.bucket_name());
+        if (bucket == nullptr) {
+          scan_vectors[token.bucket_name()] = tao::json::empty_object;
+          bucket = scan_vectors.find(token.bucket_name());
+        }
+        auto& bucket_obj = bucket->get_object();
+        bucket_obj[std::to_string(token.partition_id())] =
+          std::vector<tao::json::value>{ token.sequence_number(),
+                                         std::to_string(token.partition_uuid()) };
+      }
+      body["scan_vectors"] = scan_vectors;
+    }
+    if (check_scan_wait && request.scan_wait) {
+      body["scan_wait"] = fmt::format("{}ms", request.scan_wait.value().count());
+    }
+    if (request.query_context) {
+      body["query_context"] = request.query_context.value();
+    }
+    for (const auto& [name, value] : request.raw) {
+      if (name.empty()) {
+        return errc::common::invalid_argument;
+      }
+      auto parsed = utils::json::parse(value);
+      if (name == "statement" || name == "prepared" || name == "encoded_plan" ||
+          name == "auto_execute") {
+        continue;
+      }
+      body[name] = std::move(parsed);
+    }
+  } catch (const tao::pegtl::parse_error&) {
+    return errc::common::invalid_argument;
   }
-  if (check_scan_wait && request.scan_wait) {
-    body["scan_wait"] = fmt::format("{}ms", request.scan_wait.value().count());
-  }
-  if (request.query_context) {
-    body["query_context"] = request.query_context.value();
-  }
-  for (const auto& [name, value] : request.raw) {
-    body[name] = utils::json::parse(value);
-  }
+  return {};
 }
 
 auto
@@ -135,9 +149,18 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
   -> std::error_code
 {
   ctx_.emplace(context);
-  tao::json::value body{
-    { "client_context_id", encoded.client_context_id },
-  };
+  // use_replica is only honored when the cluster advertises read-from-replica support; reject the
+  // request up front otherwise. The field itself is encoded by encode_query_options below.
+  if (use_replica.has_value() && !context.config.capabilities.supports_read_from_replica()) {
+    return errc::common::feature_not_available;
+  }
+
+  tao::json::value body = tao::json::empty_object;
+  if (auto ec = encode_query_options(body, *this); ec) {
+    return ec;
+  }
+
+  body["client_context_id"] = encoded.client_context_id;
   if (adhoc) {
     body["statement"] = statement;
   } else {
@@ -162,14 +185,6 @@ query_request::encode_to(query_request::encoded_request_type& encoded, http_cont
     timeout_for_service -= std::chrono::milliseconds(500);
   }
   body["timeout"] = fmt::format("{}ms", timeout_for_service.count());
-
-  // use_replica is only honored when the cluster advertises read-from-replica support; reject the
-  // request up front otherwise. The field itself is encoded by encode_query_options below.
-  if (use_replica.has_value() && !context.config.capabilities.supports_read_from_replica()) {
-    return errc::common::feature_not_available;
-  }
-
-  encode_query_options(body, *this);
 
   encoded.type = type;
   encoded.headers["connection"] = "keep-alive";
@@ -241,31 +256,37 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
       }
       return response;
     }
+    const auto decoding_error =
+      encoded.status_code == 400 ? errc::common::invalid_argument : errc::common::parsing_failure;
     tao::json::value payload;
     try {
       payload = utils::json::parse(encoded.body.data());
-    } catch (const tao::pegtl::parse_error&) {
-      response.ctx.ec = errc::common::parsing_failure;
-      return response;
-    }
-    response.meta = parse_query_meta(payload);
-
-    if (response.ctx.client_context_id != response.meta.client_context_id &&
-        !response.meta.client_context_id.empty()) {
-      CB_LOG_WARNING(R"(unexpected clientContextID returned by service: "{}", expected "{}")",
-                     response.meta.client_context_id,
-                     response.ctx.client_context_id);
-    }
-
-    if (const auto* c = payload.find("prepared"); c != nullptr) {
-      response.prepared = c->get_string();
-    }
-
-    if (const auto* r = payload.find("results"); r != nullptr) {
-      response.rows.reserve(r->get_array().size());
-      for (const auto& row : r->get_array()) {
-        response.rows.emplace_back(couchbase::core::utils::json::generate(row));
+      if (!payload.is_object()) {
+        response.ctx.ec = decoding_error;
+        return response;
       }
+      response.meta = parse_query_meta(payload);
+
+      if (response.ctx.client_context_id != response.meta.client_context_id &&
+          !response.meta.client_context_id.empty()) {
+        CB_LOG_WARNING(R"(unexpected clientContextID returned by service: "{}", expected "{}")",
+                       response.meta.client_context_id,
+                       response.ctx.client_context_id);
+      }
+
+      if (const auto* c = payload.find("prepared"); c != nullptr && !c->is_null()) {
+        response.prepared = c->get_string();
+      }
+
+      if (const auto* r = payload.find("results"); r != nullptr) {
+        response.rows.reserve(r->get_array().size());
+        for (const auto& row : r->get_array()) {
+          response.rows.emplace_back(couchbase::core::utils::json::generate(row));
+        }
+      }
+    } catch (const std::exception&) {
+      response.ctx.ec = decoding_error;
+      return response;
     }
 
     // RFC-58: a 400 is a failure whatever status the body reports.
@@ -284,9 +305,13 @@ query_request::make_response(error_context::query&& ctx, const encoded_response_
             response.ctx.ec = errc::common::parsing_failure;
             return response;
           }
+          if (!row.is_object()) {
+            response.ctx.ec = errc::query::prepared_statement_failure;
+            return response;
+          }
           auto* plan = row.find("encoded_plan");
           auto* name = row.find("name");
-          if (plan != nullptr && name != nullptr) {
+          if (plan != nullptr && plan->is_string() && name != nullptr && name->is_string()) {
             if (ctx_) {
               ctx_->cache.put(statement, name->get_string(), plan->get_string());
             }

@@ -39,7 +39,7 @@ parse_analytics_meta(const tao::json::value& payload) -> analytics_response::ana
     meta.client_context_id = i->get_string();
   }
 
-  if (const auto* s = payload.find("status"); s != nullptr && s->is_string()) {
+  if (const auto* s = payload.find("status"); s != nullptr) {
     const auto& status = s->get_string();
     if (status == "running") {
       meta.status = analytics_response::analytics_status::running;

@@ -60,7 +60,9 @@ build_streaming_query_body(const operations::query_request& request,
   // stay byte-for-byte consistent. The use_replica capability gate is enforced earlier in
   // cluster::query_stream. This runs first so the control fields set below always win over any
   // same-named `raw` entry a caller may have supplied.
-  operations::encode_query_options(body, request);
+  if (auto ec = operations::encode_query_options(body, request); ec) {
+    throw std::system_error(ec);
+  }
 
   auto timeout_for_service = timeout;
   if (timeout_for_service > std::chrono::milliseconds(5'000)) {

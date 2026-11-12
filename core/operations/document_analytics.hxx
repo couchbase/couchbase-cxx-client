@@ -38,8 +38,9 @@ struct analytics_request;
  * query_context, raw) common to the buffered and streaming analytics paths onto @p body, so both
  * paths stay byte-for-byte consistent.
  */
-void
-encode_analytics_options(tao::json::value& body, const analytics_request& request);
+[[nodiscard]] auto
+encode_analytics_options(tao::json::value& body, const analytics_request& request)
+  -> std::error_code;
 
 struct analytics_response {
   struct analytics_metrics {
