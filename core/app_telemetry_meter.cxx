@@ -31,6 +31,7 @@
 #include <chrono>
 #include <map>
 #include <mutex>
+#include <string_view>
 #include <utility>
 
 namespace couchbase::core
@@ -109,8 +110,54 @@ namespace couchbase::core
 {
 namespace
 {
+// Prometheus text format: a label value escapes backslash, double quote and line feed.
+auto
+escape_label_value(std::string_view value) -> std::string
+{
+  std::string escaped;
+  escaped.reserve(value.size());
+  for (const char ch : value) {
+    switch (ch) {
+      case '\\':
+        escaped.append("\\\\");
+        break;
+      case '"':
+        escaped.append("\\\"");
+        break;
+      case '\n':
+        escaped.append("\\n");
+        break;
+      default:
+        escaped.push_back(ch);
+        break;
+    }
+  }
+  return escaped;
+}
+
+auto
+format_labels(const std::string& node_uuid,
+              const node_labels& labels,
+              const std::string& bucket,
+              const std::string& agent) -> std::string
+{
+  std::string lbuf{};
+  fmt::format_to(back_inserter(lbuf), "node_uuid=\"{}\"", escape_label_value(node_uuid));
+  if (!labels.node.empty()) {
+    fmt::format_to(back_inserter(lbuf), ",node=\"{}\"", escape_label_value(labels.node));
+  }
+  if (const auto& alt = labels.alt_node; alt && !alt->empty()) {
+    fmt::format_to(back_inserter(lbuf), ",alt_node=\"{}\"", escape_label_value(alt.value()));
+  }
+  if (!bucket.empty()) {
+    fmt::format_to(back_inserter(lbuf), ",bucket=\"{}\"", escape_label_value(bucket));
+  }
+  fmt::format_to(back_inserter(lbuf), ",agent={}", agent);
+  return lbuf;
+}
+
 struct kv_non_durable_histogram {
-  const char* name;
+  const char* name{ nullptr };
   std::atomic_uint64_t le_1ms{};
   std::atomic_uint64_t le_10ms{};
   std::atomic_uint64_t le_100ms{};
@@ -128,18 +175,7 @@ struct kv_non_durable_histogram {
                    const std::string& agent)
   {
     if (count > 0) {
-      std::string lbuf{};
-      fmt::format_to(back_inserter(lbuf), "node_uuid=\"{}\"", node_uuid);
-      if (!labels.node.empty()) {
-        fmt::format_to(back_inserter(lbuf), ",node=\"{}\"", labels.node);
-      }
-      if (const auto& alt = labels.alt_node; alt && !alt->empty()) {
-        fmt::format_to(back_inserter(lbuf), ",alt_node=\"{}\"", alt.value());
-      }
-      if (!bucket.empty()) {
-        fmt::format_to(back_inserter(lbuf), ",bucket=\"{}\"", bucket);
-      }
-      fmt::format_to(back_inserter(lbuf), ",agent={}", agent);
+      const auto lbuf = format_labels(node_uuid, labels, bucket, agent);
       fmt::format_to(output, "{}_bucket{{le=\"1\",{}}} {}\n", name, lbuf, le_1ms.load());
       fmt::format_to(output, "{}_bucket{{le=\"10\",{}}} {}\n", name, lbuf, le_10ms.load());
       fmt::format_to(output, "{}_bucket{{le=\"100\",{}}} {}\n", name, lbuf, le_100ms.load());
@@ -154,7 +190,7 @@ struct kv_non_durable_histogram {
 };
 
 struct kv_durable_histogram {
-  const char* name;
+  const char* name{ nullptr };
   std::atomic_uint64_t le_10ms{};
   std::atomic_uint64_t le_100ms{};
   std::atomic_uint64_t le_500ms{};
@@ -172,18 +208,7 @@ struct kv_durable_histogram {
                    const std::string& agent)
   {
     if (count > 0) {
-      std::string lbuf{};
-      fmt::format_to(back_inserter(lbuf), "node_uuid=\"{}\"", node_uuid);
-      if (!labels.node.empty()) {
-        fmt::format_to(back_inserter(lbuf), ",node=\"{}\"", labels.node);
-      }
-      if (const auto& alt = labels.alt_node; alt && !alt->empty()) {
-        fmt::format_to(back_inserter(lbuf), ",alt_node=\"{}\"", alt.value());
-      }
-      if (!bucket.empty()) {
-        fmt::format_to(back_inserter(lbuf), ",bucket=\"{}\"", bucket);
-      }
-      fmt::format_to(back_inserter(lbuf), ",agent={}", agent);
+      const auto lbuf = format_labels(node_uuid, labels, bucket, agent);
       fmt::format_to(output, "{}_bucket{{le=\"10\",{}}} {}\n", name, lbuf, le_10ms.load());
       fmt::format_to(output, "{}_bucket{{le=\"100\",{}}} {}\n", name, lbuf, le_100ms.load());
       fmt::format_to(output, "{}_bucket{{le=\"500\",{}}} {}\n", name, lbuf, le_500ms.load());
@@ -198,7 +223,7 @@ struct kv_durable_histogram {
 };
 
 struct http_histogram {
-  const char* name;
+  const char* name{ nullptr };
   std::atomic_uint64_t le_100ms{};
   std::atomic_uint64_t le_1s{};
   std::atomic_uint64_t le_10s{};
@@ -215,18 +240,7 @@ struct http_histogram {
                    const std::string& agent)
   {
     if (count > 0) {
-      std::string lbuf{};
-      fmt::format_to(back_inserter(lbuf), "node_uuid=\"{}\"", node_uuid);
-      if (!labels.node.empty()) {
-        fmt::format_to(back_inserter(lbuf), ",node=\"{}\"", labels.node);
-      }
-      if (const auto& alt = labels.alt_node; alt && !alt->empty()) {
-        fmt::format_to(back_inserter(lbuf), ",alt_node=\"{}\"", alt.value());
-      }
-      if (!bucket.empty()) {
-        fmt::format_to(back_inserter(lbuf), ",bucket=\"{}\"", bucket);
-      }
-      fmt::format_to(back_inserter(lbuf), ",agent={}", agent);
+      const auto lbuf = format_labels(node_uuid, labels, bucket, agent);
       fmt::format_to(output, "{}_bucket{{le=\"100\",{}}} {}\n", name, lbuf, le_100ms.load());
       fmt::format_to(output, "{}_bucket{{le=\"1000\",{}}} {}\n", name, lbuf, le_1s.load());
       fmt::format_to(output, "{}_bucket{{le=\"10000\",{}}} {}\n", name, lbuf, le_10s.load());
@@ -666,7 +680,7 @@ public:
     for (const auto& [node_uuid, buckets] : recorders_) {
       auto labels = labels_cache_[node_uuid];
       for (const auto& [bucket, recorder] : buckets) {
-
+        const auto lbuf = format_labels(node_uuid, labels, bucket, agent);
         for (std::size_t i = 0; i < recorder->counters_.size(); ++i) {
           if (is_valid_app_telemetry_counter(i)) {
             // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index)
@@ -676,17 +690,7 @@ public:
             }
 
             fmt::format_to(
-              output, "{}{{node_uuid=\"{}\"", app_telemetry_counter_name(i), node_uuid);
-            if (!labels.node.empty()) {
-              fmt::format_to(output, ",node=\"{}\"", labels.node);
-            }
-            if (const auto& alt = labels.alt_node; alt && !alt->empty()) {
-              fmt::format_to(output, ",alt_node=\"{}\"", alt.value());
-            }
-            if (!bucket.empty()) {
-              fmt::format_to(output, ",bucket=\"{}\"", bucket);
-            }
-            fmt::format_to(output, ",agent={}}} {} {}\n", agent, value, now);
+              output, "{}{{{}}} {} {}\n", app_telemetry_counter_name(i), lbuf, value, now);
           }
         }
 
@@ -769,6 +773,7 @@ app_telemetry_meter::enable()
 void
 app_telemetry_meter::update_agent(const std::string& extra)
 {
+  const std::scoped_lock lock{ impl_mutex_ };
   agent_ = generate_agent_string(extra);
 }
 
@@ -777,7 +782,7 @@ app_telemetry_meter::~app_telemetry_meter() = default;
 void
 app_telemetry_meter::update_config(const topology::configuration& config)
 {
-  const std::shared_lock lock{ impl_mutex_ };
+  const std::scoped_lock lock{ impl_mutex_ };
   return impl_->update_config(config);
 }
 
