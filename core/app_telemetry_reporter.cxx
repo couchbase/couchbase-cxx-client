@@ -90,6 +90,9 @@ public:
   {
     auto dialer = std::make_shared<telemetry_dialer>(
       std::move(address), std::move(options), ctx, tls, std::move(handler));
+    if (dialer->handler_) {
+      dialer->handler_->on_connection_pending(dialer->address_);
+    }
     dialer->resolve_address();
     return dialer;
   }
@@ -177,7 +180,13 @@ private:
       return self->reconnect_socket(ec, "connect deadline");
     });
 
-    if (options_.enable_tls) {
+    if (address_.use_tls && !options_.enable_tls) {
+      connect_deadline_.cancel();
+      return complete_with_error(
+        errc::common::invalid_argument,
+        "wss:// app telemetry endpoint requires cluster TLS to be enabled");
+    }
+    if (address_.use_tls) {
       stream_ = std::make_unique<io::tls_stream_impl>(ctx_, tls_);
     } else {
       stream_ = std::make_unique<io::plain_stream_impl>(ctx_);
@@ -442,18 +451,22 @@ private:
       }
       authorization_header = fmt::format("Authorization: {}\r\n", auth);
     }
+    const auto host_header =
+      (!address_.hostname.empty() && address_.hostname.find(':') != std::string::npos &&
+       address_.hostname.front() != '[')
+        ? fmt::format("[{}]:{}", address_.hostname, address_.service)
+        : fmt::format("{}:{}", address_.hostname, address_.service);
     auto message = fmt::format("GET {} HTTP/1.1\r\n"
                                "{}"
                                "Upgrade: websocket\r\n"
                                "Connection: Upgrade\r\n"
-                               "Host: {}:{}\r\n"
+                               "Host: {}\r\n"
                                "Sec-WebSocket-Version: 13\r\n"
                                "Sec-WebSocket-Key: {}\r\n"
                                "\r\n",
-                               address_.path,
+                               address_.path.empty() ? "/" : address_.path,
                                authorization_header,
-                               address_.hostname,
-                               address_.service,
+                               host_header,
                                codec_.session_key());
     return {
       reinterpret_cast<const std::byte*>(message.data()),
@@ -702,17 +715,24 @@ public:
       if (!origin_.options().app_telemetry_endpoint.empty()) {
         auto url =
           couchbase::core::utils::string_codec::url_parse(origin_.options().app_telemetry_endpoint);
-        if (url.host.empty() || url.scheme != "ws") {
-          CB_LOG_WARNING(
-            "unable to use \"{}\" as a app telemetry endpoint (expected ws:// and hostname)",
-            origin_.options().app_telemetry_endpoint);
+        if (url.host.empty() || (url.scheme != "ws" && url.scheme != "wss") ||
+            (url.scheme == "wss" && !origin_.options().enable_tls)) {
+          CB_LOG_WARNING_RAW(
+            "unable to use configured app telemetry endpoint (expected ws:// or wss:// with a "
+            "valid hostname and port, without userinfo, and cluster TLS enabled for wss://)");
+          meter_->disable();
           return;
+        }
+        std::uint16_t port = url.port;
+        if (port == 0) {
+          port = url.scheme == "wss" ? std::uint16_t{ 443 } : std::uint16_t{ 80 };
         }
         addresses_.push_back({
           url.host,
-          std::to_string(url.port),
-          url.path,
+          std::to_string(port),
+          url.path.empty() ? "/" : url.path,
           {},
+          url.scheme == "wss",
         });
       }
     } else {

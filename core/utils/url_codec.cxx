@@ -17,12 +17,15 @@
 
 #include "url_codec.hxx"
 
+#include <asio/ip/address_v6.hpp>
 #include <spdlog/fmt/bundled/core.h>
 
+#include <algorithm>
 #include <cctype>
 #include <climits>
 #include <cstdint>
 #include <regex>
+#include <system_error>
 
 namespace couchbase::core::utils::string_codec
 {
@@ -374,23 +377,53 @@ escape(const std::string& s, encoding mode) -> std::string
 auto
 url_parse(const std::string& src) -> url
 {
+  if (std::any_of(src.begin(), src.end(), [](unsigned char ch) {
+        return ch <= 0x20U || ch >= 0x7fU;
+      })) {
+    return {};
+  }
+
   // very basic URL parser, only cares about scheme://host[:port][/path]
   static const std::regex url_regexp{
-    R"(^([a-zA-Z][a-zA-Z\d+\-.]+):\/\/([^\/:]+)(?::(\d+))?(\/[^?#]*)?$)"
+    R"(^([a-zA-Z][a-zA-Z\d+\-.]*):\/\/(?:\[([0-9a-fA-F:.]+)\]|([^\/:?#@\[\]]+))(?::(\d+))?(\/[^?#]*)?$)"
   };
 
   url u{};
 
   std::smatch matches;
   if (std::regex_match(src, matches, url_regexp)) {
-    u.scheme = matches[1].str();
-    u.host = matches[2].str();
-    if (matches[3].length() > 0) {
-      u.port = static_cast<std::uint16_t>(std::stoul(matches[3].str()));
-    } else {
-      u.port = (u.scheme == "https" || u.scheme == "wss") ? 443 : 80;
+    std::string scheme = matches[1].str();
+    std::transform(scheme.begin(), scheme.end(), scheme.begin(), [](unsigned char ch) {
+      return static_cast<char>(std::tolower(ch));
+    });
+    std::string host = matches[2].matched ? matches[2].str() : matches[3].str();
+    if (matches[2].matched) {
+      std::error_code ec{};
+      asio::ip::make_address_v6(host, ec);
+      if (ec) {
+        return {};
+      }
     }
-    u.path = matches[4].str();
+    std::uint16_t port = 0;
+    if (matches[4].matched) {
+      std::uint32_t parsed_port = 0;
+      for (const char ch : matches[4].str()) {
+        parsed_port = (parsed_port * 10U) + static_cast<std::uint32_t>(ch - '0');
+        if (parsed_port > 65535U) {
+          return {};
+        }
+      }
+      if (parsed_port == 0U) {
+        return {};
+      }
+      port = static_cast<std::uint16_t>(parsed_port);
+    } else {
+      port = (scheme == "https" || scheme == "wss") ? 443 : 80;
+    }
+    u.scheme = std::move(scheme);
+    u.host = std::move(host);
+    u.port = port;
+    u.path = matches[5].str();
   }
 
   return u;

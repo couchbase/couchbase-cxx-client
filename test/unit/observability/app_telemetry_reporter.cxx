@@ -115,8 +115,9 @@ class telemetry_collector
 public:
   telemetry_collector(asio::io_context& io,
                       captured_exchange& result,
-                      std::function<void()> on_complete)
-    : acceptor_{ io, asio::ip::tcp::endpoint{ asio::ip::make_address("127.0.0.1"), 0 } }
+                      std::function<void()> on_complete,
+                      const asio::ip::address& bind_address = asio::ip::make_address("127.0.0.1"))
+    : acceptor_{ io, asio::ip::tcp::endpoint{ bind_address, 0 } }
     , socket_{ io }
     , result_{ result }
     , on_complete_{ std::move(on_complete) }
@@ -125,8 +126,14 @@ public:
       if (ec) {
         return;
       }
+      accepted_ = true;
       read_handshake();
     });
+  }
+
+  [[nodiscard]] auto accepted() const -> bool
+  {
+    return accepted_;
   }
 
   [[nodiscard]] auto port() const -> std::uint16_t
@@ -317,6 +324,7 @@ private:
   std::string handshake_response_{};
   std::array<std::uint8_t, 512> read_chunk_{};
   std::vector<std::uint8_t> frame_buffer_{};
+  bool accepted_{ false };
   bool telemetry_requested_{ false };
   captured_exchange& result_;
   std::function<void()> on_complete_;
@@ -362,8 +370,8 @@ cluster_config_with_collector(std::uint16_t management_port, std::string path)
 auto
 collect_telemetry(
   const std::function<couchbase::core::origin(std::uint16_t)>& make_origin,
-  const std::function<couchbase::core::topology::configuration(std::uint16_t)>& make_config)
-  -> captured_exchange
+  const std::function<couchbase::core::topology::configuration(std::uint16_t)>& make_config,
+  const asio::ip::address& bind_address = asio::ip::make_address("127.0.0.1")) -> captured_exchange
 {
   captured_exchange result{};
   asio::io_context io{};
@@ -372,13 +380,16 @@ collect_telemetry(
   couchbase::core::tls_context_provider tls{};
 
   std::unique_ptr<couchbase::core::app_telemetry_reporter> reporter{};
-  telemetry_collector collector{ io, result, [&]() {
-                                  give_up.cancel();
-                                  if (reporter) {
-                                    reporter->stop();
-                                  }
-                                  collector.close();
-                                } };
+  telemetry_collector collector{ io,
+                                 result,
+                                 [&]() {
+                                   give_up.cancel();
+                                   if (reporter) {
+                                     reporter->stop();
+                                   }
+                                   collector.close();
+                                 },
+                                 bind_address };
 
   auto origin = make_origin(collector.port());
   reporter = std::make_unique<couchbase::core::app_telemetry_reporter>(meter, origin, io, tls);
@@ -561,6 +572,321 @@ cluster_config_endpoint_with_jwt_credentials_sends_bearer_authorization(context&
                          "sdk_kv_r_total{",
                          "recorded metrics reach the cluster-configured endpoint");
 }
+
+void
+user_set_endpoint_without_path_normalizes_to_root_and_omits_authorization(context& /* ctx */)
+{
+  std::uint16_t collector_port = 0;
+  const auto result = collect_telemetry(
+    [&collector_port](std::uint16_t port) {
+      collector_port = port;
+      couchbase::core::cluster_options options{};
+      options.enable_app_telemetry = true;
+      options.app_telemetry_endpoint = fmt::format("ws://127.0.0.1:{}", port);
+      return couchbase::core::origin{ password_credentials(), "127.0.0.1", 11210, options };
+    },
+    [](std::uint16_t /* port */) {
+      return cluster_config_with_collector(18091, "/_p/appTelemetry");
+    });
+
+  assert_eq(result.request_line,
+            std::string{ "GET / HTTP/1.1" },
+            "an empty URL path on a user-set endpoint normalizes to /");
+  assert_eq(header_value(result, "host"),
+            std::optional<std::string>{ fmt::format("127.0.0.1:{}", collector_port) },
+            "Host header carries the explicit collector port");
+  assert_eq(header_value(result, "authorization"),
+            std::optional<std::string>{},
+            "normalizing the path to / leaves app_telemetry_endpoint non-empty so Authorization is "
+            "omitted");
+  assert_eq(result.telemetry_status,
+            std::optional<std::uint8_t>{ 0 },
+            "GET_TELEMETRY succeeds on the pathless user-set endpoint");
+  assert_report_contains(result.telemetry_report,
+                         "sdk_kv_r_total{",
+                         "recorded metrics reach the pathless user-set endpoint");
+}
+
+void
+tls_cluster_with_plain_ws_user_endpoint_connects_without_tls_and_omits_authorization(
+  context& /* ctx */)
+{
+  const auto result = collect_telemetry(
+    [](std::uint16_t port) {
+      const auto connstr = couchbase::core::utils::parse_connection_string(fmt::format(
+        "couchbases://127.0.0.1?app_telemetry_endpoint=WS://127.0.0.1:{}/app_telemetry", port));
+      return couchbase::core::origin{ password_credentials(), connstr };
+    },
+    [](std::uint16_t /* port */) {
+      couchbase::core::topology::configuration config{};
+      couchbase::core::topology::configuration::node node{};
+      node.hostname = "127.0.0.1";
+      node.node_uuid = "node-1";
+      node.services_tls.management = 18091;
+      node.app_telemetry_path = "/_p/appTelemetry";
+      config.nodes.push_back(std::move(node));
+      return config;
+    });
+
+  assert_eq(result.request_line,
+            std::string{ "GET /app_telemetry HTTP/1.1" },
+            "a plain ws:// user endpoint works on a couchbases:// cluster");
+  assert_eq(header_value(result, "authorization"),
+            std::optional<std::string>{},
+            "no Authorization header is sent to a ws:// user endpoint on a TLS cluster");
+  assert_eq(result.telemetry_status,
+            std::optional<std::uint8_t>{ 0 },
+            "GET_TELEMETRY succeeds over the plain WebSocket session");
+  assert_report_contains(
+    result.telemetry_report, "sdk_kv_r_total{", "recorded metrics reach the plain ws:// collector");
+}
+
+void
+percent_encoded_connection_string_endpoint_omits_authorization_and_delivers_telemetry(
+  context& /* ctx */)
+{
+  const auto result = collect_telemetry(
+    [](std::uint16_t port) {
+      const auto connstr = couchbase::core::utils::parse_connection_string(
+        fmt::format("couchbase://127.0.0.1?app_telemetry_endpoint=ws%3A%2F%2F127.0.0.1%3A{}%2F"
+                    "encoded_collect",
+                    port));
+      return couchbase::core::origin{ password_credentials(), connstr };
+    },
+    [](std::uint16_t /* port */) {
+      return cluster_config_with_collector(18091, "/_p/appTelemetry");
+    });
+
+  assert_eq(result.request_line,
+            std::string{ "GET /encoded_collect HTTP/1.1" },
+            "a percent-encoded connection-string endpoint decodes to the collector URL");
+  assert_eq(header_value(result, "authorization"),
+            std::optional<std::string>{},
+            "no Authorization header is sent to a percent-encoded connection-string endpoint");
+  assert_eq(result.telemetry_status,
+            std::optional<std::uint8_t>{ 0 },
+            "GET_TELEMETRY succeeds on the decoded endpoint");
+  assert_report_contains(
+    result.telemetry_report, "sdk_kv_r_total{", "recorded metrics reach the decoded endpoint");
+}
+
+void
+empty_connection_string_endpoint_clears_override_and_sends_authorization_to_cluster_node(
+  context& /* ctx */)
+{
+  const auto result = collect_telemetry(
+    [](std::uint16_t /* port */) {
+      couchbase::core::cluster_options user_options{};
+      user_options.enable_app_telemetry = true;
+      user_options.app_telemetry_endpoint = "ws://127.0.0.1:19999/unused";
+      const auto connstr = couchbase::core::utils::parse_connection_string(
+        "couchbase://127.0.0.1?app_telemetry_endpoint=", user_options);
+      return couchbase::core::origin{ password_credentials(), connstr };
+    },
+    [](std::uint16_t port) {
+      return cluster_config_with_collector(port, "");
+    });
+
+  assert_eq(result.request_line,
+            std::string{ "GET / HTTP/1.1" },
+            "an empty cluster appTelemetryPath normalizes to /");
+  assert_eq(header_value(result, "authorization"),
+            std::optional<std::string>{ "Basic YWxpY2U6c2VjcmV0" },
+            "clearing app_telemetry_endpoint restores Basic authorization on cluster nodes");
+  assert_eq(result.telemetry_status,
+            std::optional<std::uint8_t>{ 0 },
+            "GET_TELEMETRY succeeds on the cluster node");
+  assert_report_contains(
+    result.telemetry_report, "sdk_kv_r_total{", "recorded metrics reach the cluster node");
+}
+
+class ipv6_loopback_requirement : public requirement
+{
+public:
+  [[nodiscard]] auto describe() const -> std::string override
+  {
+    return "IPv6 loopback (::1)";
+  }
+
+  [[nodiscard]] auto check(context& /* ctx */) const -> check_result override
+  {
+    asio::io_context probe_io{};
+    std::error_code ec{};
+    asio::ip::tcp::acceptor probe{ probe_io };
+    probe.open(asio::ip::tcp::v6(), ec);
+    if (!ec) {
+      probe.bind(asio::ip::tcp::endpoint{ asio::ip::make_address("::1"), 0 }, ec);
+    }
+    if (ec) {
+      return check_result::missing(ec.message());
+    }
+    return check_result::ok();
+  }
+};
+
+void
+ipv6_user_set_endpoint_brackets_host_header_and_omits_authorization(context& /* ctx */)
+{
+  std::uint16_t collector_port = 0;
+  const auto result = collect_telemetry(
+    [&collector_port](std::uint16_t port) {
+      collector_port = port;
+      couchbase::core::cluster_options options{};
+      options.enable_app_telemetry = true;
+      options.app_telemetry_endpoint = fmt::format("ws://[::1]:{}", port);
+      return couchbase::core::origin{ password_credentials(), "127.0.0.1", 11210, options };
+    },
+    [](std::uint16_t /* port */) {
+      return cluster_config_with_collector(18091, "/_p/appTelemetry");
+    },
+    asio::ip::make_address("::1"));
+
+  assert_eq(result.request_line,
+            std::string{ "GET / HTTP/1.1" },
+            "an IPv6 user-set endpoint without a path requests /");
+  assert_eq(header_value(result, "host"),
+            std::optional<std::string>{ fmt::format("[::1]:{}", collector_port) },
+            "Host header brackets an IPv6 literal address");
+  assert_eq(header_value(result, "authorization"),
+            std::optional<std::string>{},
+            "no Authorization header is sent to an IPv6 user-set endpoint");
+  assert_eq(result.telemetry_status,
+            std::optional<std::uint8_t>{ 0 },
+            "GET_TELEMETRY succeeds over IPv6 loopback");
+  assert_report_contains(result.telemetry_report,
+                         "sdk_kv_r_total{",
+                         "recorded metrics reach the IPv6 user-set endpoint");
+}
+
+void
+invalid_non_empty_user_endpoints_do_not_fall_back_to_cluster_nodes(context& /* ctx */)
+{
+  captured_exchange result{};
+  asio::io_context io{};
+  couchbase::core::tls_context_provider tls{};
+  telemetry_collector collector{ io, result, []() {
+                                } };
+  const auto port = collector.port();
+
+  const std::vector<std::string> invalid_endpoints{
+    fmt::format("http://127.0.0.1:{}/collect", port),
+    fmt::format("wss://127.0.0.1:{}/collect", port),
+    "ws://",
+    "ws:///collect",
+    "ws://[:::]:9090/collect",
+    "ws://[1:2]:9090/collect",
+    "   ",
+    fmt::format("ws://127.0.0.1:{}/collect ", port),
+    fmt::format("ws://127.0.0.1:{}/collect\r\nX-Extra: 1", port),
+    fmt::format("ws://alice:secret@127.0.0.1:{}/collect", port),
+    "ws://127.0.0.1:0/collect",
+    "ws://127.0.0.1:70000/collect",
+    "ws://127.0.0.1:999999999999999999999999/collect",
+  };
+
+  struct entry {
+    std::shared_ptr<couchbase::core::app_telemetry_meter> meter{};
+    couchbase::core::origin origin{};
+    std::unique_ptr<couchbase::core::app_telemetry_reporter> reporter{};
+  };
+  std::vector<std::unique_ptr<entry>> entries{};
+  entries.reserve(invalid_endpoints.size());
+
+  for (const auto& invalid_endpoint : invalid_endpoints) {
+    couchbase::core::cluster_options options{};
+    options.enable_app_telemetry = true;
+    options.enable_tls = false;
+    options.app_telemetry_endpoint = invalid_endpoint;
+
+    auto item = std::make_unique<entry>(entry{
+      std::make_shared<couchbase::core::app_telemetry_meter>(),
+      couchbase::core::origin{ password_credentials(), "127.0.0.1", 11210, options },
+      nullptr,
+    });
+    item->reporter =
+      std::make_unique<couchbase::core::app_telemetry_reporter>(item->meter, item->origin, io, tls);
+    item->reporter->update_config(cluster_config_with_collector(port, "/_p/appTelemetry"));
+    item->meter->value_recorder("node-1", "default")
+      ->update_counter(couchbase::core::app_telemetry_counter::kv_r_total);
+
+    std::vector<std::byte> report{};
+    item->meter->generate_report(report);
+    assert_true(report.empty(),
+                fmt::format("invalid user endpoint '{}' leaves the meter disabled after "
+                            "update_config",
+                            invalid_endpoint));
+    entries.push_back(std::move(item));
+  }
+
+  io.run_for(100ms);
+
+  assert_false(collector.accepted(),
+               "invalid non-empty user endpoints never fall back to dialing cluster nodes");
+  assert_eq(result.request_line, std::string{}, "no handshake request was received");
+  assert_eq(header_value(result, "authorization"),
+            std::optional<std::string>{},
+            "no cluster credentials were sent");
+
+  for (auto& item : entries) {
+    item->reporter->stop();
+  }
+  collector.close();
+  io.restart();
+  io.run_for(100ms);
+}
+
+void
+malformed_cluster_node_telemetry_paths_are_skipped_without_connecting(context& /* ctx */)
+{
+  captured_exchange result{};
+  asio::io_context io{};
+  couchbase::core::tls_context_provider tls{};
+  telemetry_collector collector{ io, result, []() {
+                                } };
+  const auto port = collector.port();
+
+  couchbase::core::cluster_options options{};
+  options.enable_app_telemetry = true;
+  couchbase::core::origin origin{ password_credentials(), "127.0.0.1", 11210, options };
+  auto meter = std::make_shared<couchbase::core::app_telemetry_meter>();
+  couchbase::core::app_telemetry_reporter reporter{ meter, origin, io, tls };
+
+  couchbase::core::topology::configuration config{};
+  const std::vector<std::string> bad_paths{
+    fmt::format("http://127.0.0.1:{}/_p/appTelemetry", port),
+    "relative/path",
+    "/_p/appTelemetry ",
+    "/_p/appTelemetry\r\nX-Extra: 1",
+  };
+  for (std::size_t i = 0; i < bad_paths.size(); ++i) {
+    couchbase::core::topology::configuration::node node{};
+    node.hostname = "127.0.0.1";
+    node.node_uuid = fmt::format("node-{}", i);
+    node.services_plain.management = port;
+    node.app_telemetry_path = bad_paths[i];
+    config.nodes.push_back(std::move(node));
+  }
+
+  reporter.update_config(config);
+  meter->value_recorder("node-0", "default")
+    ->update_counter(couchbase::core::app_telemetry_counter::kv_r_total);
+
+  std::vector<std::byte> report{};
+  meter->generate_report(report);
+  assert_true(report.empty(), "malformed cluster appTelemetryPath entries disable the meter");
+
+  io.run_for(100ms);
+
+  assert_false(collector.accepted(), "malformed cluster appTelemetryPath entries are not dialed");
+  assert_eq(header_value(result, "authorization"),
+            std::optional<std::string>{},
+            "no cluster credentials are sent on malformed paths");
+
+  reporter.stop();
+  collector.close();
+  io.restart();
+  io.run_for(100ms);
+}
 } // namespace
 
 auto
@@ -575,6 +901,17 @@ tests() -> test_suite
       { CASE(connection_string_endpoint_omits_authorization_and_delivers_telemetry) },
       { CASE(cluster_config_endpoint_with_password_credentials_sends_basic_authorization) },
       { CASE(cluster_config_endpoint_with_jwt_credentials_sends_bearer_authorization) },
+      { CASE(user_set_endpoint_without_path_normalizes_to_root_and_omits_authorization) },
+      { CASE(
+        tls_cluster_with_plain_ws_user_endpoint_connects_without_tls_and_omits_authorization) },
+      { CASE(
+        percent_encoded_connection_string_endpoint_omits_authorization_and_delivers_telemetry) },
+      { CASE(
+        empty_connection_string_endpoint_clears_override_and_sends_authorization_to_cluster_node) },
+      { CASE(ipv6_user_set_endpoint_brackets_host_header_and_omits_authorization),
+        { std::make_shared<ipv6_loopback_requirement>() } },
+      { CASE(invalid_non_empty_user_endpoints_do_not_fall_back_to_cluster_nodes) },
+      { CASE(malformed_cluster_node_telemetry_paths_are_skipped_without_connecting) },
     },
   };
 }

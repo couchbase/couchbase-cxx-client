@@ -35,13 +35,22 @@ get_app_telemetry_addresses(const topology::configuration& config,
       if (node_uuid.empty()) {
         continue;
       }
+      if (std::any_of(app_telemetry_path->begin(),
+                      app_telemetry_path->end(),
+                      [](unsigned char ch) {
+                        return ch <= 0x20U || ch >= 0x7fU;
+                      }) ||
+          (!app_telemetry_path->empty() && app_telemetry_path->front() != '/')) {
+        continue;
+      }
 
       if (auto port = node.port_or(network, service_type::management, use_tls, 0); port != 0) {
         addresses.push_back({
           node.hostname_for(network),
           std::to_string(port),
-          app_telemetry_path.value(),
+          app_telemetry_path->empty() ? "/" : app_telemetry_path.value(),
           node_uuid,
+          use_tls,
         });
       }
     }
