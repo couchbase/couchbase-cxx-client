@@ -554,6 +554,60 @@ a_priority_queue_over_capacity_drops_the_lowest_priorities([[maybe_unused]] cont
 
   assert_true(queue.empty(), "stealing the data empties the queue");
 }
+
+void
+url_parse_handles_schemes_ipv6_ports_and_rejects_malformed_urls([[maybe_unused]] context& ctx)
+{
+  using couchbase::core::utils::string_codec::url_parse;
+
+  {
+    const auto u = url_parse("WS://collector.example.com");
+    assert_eq(u.scheme, std::string{ "ws" }, "scheme is normalized to lowercase");
+    assert_eq(u.host, std::string{ "collector.example.com" }, "hostname is extracted");
+    assert_eq(u.port, std::uint16_t{ 80 }, "ws defaults to port 80");
+    assert_eq(u.path, std::string{}, "missing path stays empty");
+  }
+  {
+    const auto u = url_parse("WSS://[::1]:9443/app_telemetry");
+    assert_eq(u.scheme, std::string{ "wss" }, "wss scheme is normalized to lowercase");
+    assert_eq(u.host, std::string{ "::1" }, "IPv6 brackets are stripped from host");
+    assert_eq(u.port, std::uint16_t{ 9443 }, "explicit port is preserved");
+    assert_eq(u.path, std::string{ "/app_telemetry" }, "path is preserved");
+  }
+  {
+    const auto u = url_parse("ws://[::ffff:127.0.0.1]:9090/collect");
+    assert_eq(u.host, std::string{ "::ffff:127.0.0.1" }, "IPv4-mapped IPv6 literal is accepted");
+    assert_eq(u.port, std::uint16_t{ 9090 }, "explicit port is preserved");
+  }
+  {
+    const auto u = url_parse("wss://collector.example.com:65535/");
+    assert_eq(u.port, std::uint16_t{ 65535 }, "maximum 16-bit port is accepted");
+    assert_eq(u.path, std::string{ "/" }, "root path is preserved");
+  }
+
+  const std::vector<std::string> invalid_urls{
+    "",
+    "   ",
+    "ws://",
+    "ws:///collect",
+    "ws://[127.0.0.1]:9090/collect",
+    "ws://[:::]:9090/collect",
+    "ws://[1:2]:9090/collect",
+    "ws://alice:secret@collector.example.com:9090/collect",
+    "ws://collector.example.com:0/collect",
+    "ws://collector.example.com:65536/collect",
+    "ws://collector.example.com:999999999999999999999999/collect",
+    "ws://collector.example.com:9090/collect ",
+    "ws://collector.example.com:9090/collect\r\nX-Test: 1",
+    "ws://collector.example.com:9090/collect?foo=bar",
+    "ws://collector.example.com:9090/collect#frag",
+  };
+  for (const auto& raw : invalid_urls) {
+    const auto u = url_parse(raw);
+    assert_eq(u.host, std::string{}, "invalid URL yields an empty host");
+    assert_eq(u.port, std::uint16_t{ 0 }, "invalid URL yields port 0");
+  }
+}
 } // namespace
 
 auto
@@ -581,6 +635,9 @@ tests() -> test_suite
       { CASE(a_priority_queue_below_capacity_drops_nothing), {}, timeout::instant },
       { CASE(a_priority_queue_at_capacity_drops_nothing), {}, timeout::instant },
       { CASE(a_priority_queue_over_capacity_drops_the_lowest_priorities), {}, timeout::instant },
+      { CASE(url_parse_handles_schemes_ipv6_ports_and_rejects_malformed_urls),
+        {},
+        timeout::instant },
     },
   };
 }

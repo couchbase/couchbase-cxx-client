@@ -73,7 +73,7 @@ form_encode(const std::map<std::string, std::string>& values) -> std::string
 struct url {
   std::string scheme;
   std::string host;
-  std::uint16_t port;
+  std::uint16_t port{ 0 };
   std::string path;
 };
 

@@ -30,6 +30,7 @@ struct app_telemetry_address {
   std::string service;
   std::string path;
   std::string host_uuid;
+  bool use_tls{ false };
 };
 
 auto

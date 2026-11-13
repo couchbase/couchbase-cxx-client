@@ -73,8 +73,9 @@ public:
   /**
    * Override the endpoint for the application service telementry.
    *
-   * The endpoint must use WebSocket protocol and the string should start from `ws://` and might
-   * have URL path.
+   * The endpoint must use the WebSocket protocol (`ws://`, or `wss://` when cluster TLS is enabled;
+   * an invalid endpoint or `wss://` without cluster TLS disables application telemetry) and might
+   * have a URL path.
    *
    * @param endpoint connection string for the telementry collector.
    *

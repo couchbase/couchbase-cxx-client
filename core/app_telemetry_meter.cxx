@@ -31,6 +31,7 @@
 #include <chrono>
 #include <map>
 #include <mutex>
+#include <string_view>
 #include <utility>
 
 namespace couchbase::core
@@ -109,6 +110,51 @@ namespace couchbase::core
 {
 namespace
 {
+auto
+escape_label_value(std::string_view value) -> std::string
+{
+  std::string escaped;
+  escaped.reserve(value.size());
+  for (const char ch : value) {
+    switch (ch) {
+      case '\\':
+        escaped.append("\\\\");
+        break;
+      case '"':
+        escaped.append("\\\"");
+        break;
+      case '\n':
+        escaped.append("\\n");
+        break;
+      default:
+        escaped.push_back(ch);
+        break;
+    }
+  }
+  return escaped;
+}
+
+auto
+format_common_labels(const std::string& node_uuid,
+                     const node_labels& labels,
+                     const std::string& bucket,
+                     const std::string& agent) -> std::string
+{
+  std::string lbuf{};
+  fmt::format_to(back_inserter(lbuf), "node_uuid=\"{}\"", escape_label_value(node_uuid));
+  if (!labels.node.empty()) {
+    fmt::format_to(back_inserter(lbuf), ",node=\"{}\"", escape_label_value(labels.node));
+  }
+  if (const auto& alt = labels.alt_node; alt && !alt->empty()) {
+    fmt::format_to(back_inserter(lbuf), ",alt_node=\"{}\"", escape_label_value(alt.value()));
+  }
+  if (!bucket.empty()) {
+    fmt::format_to(back_inserter(lbuf), ",bucket=\"{}\"", escape_label_value(bucket));
+  }
+  fmt::format_to(back_inserter(lbuf), ",agent={}", agent);
+  return lbuf;
+}
+
 struct kv_non_durable_histogram {
   const char* name;
   std::atomic_uint64_t le_1ms{};
@@ -128,18 +174,7 @@ struct kv_non_durable_histogram {
                    const std::string& agent)
   {
     if (count > 0) {
-      std::string lbuf{};
-      fmt::format_to(back_inserter(lbuf), "node_uuid=\"{}\"", node_uuid);
-      if (!labels.node.empty()) {
-        fmt::format_to(back_inserter(lbuf), ",node=\"{}\"", labels.node);
-      }
-      if (const auto& alt = labels.alt_node; alt && !alt->empty()) {
-        fmt::format_to(back_inserter(lbuf), ",alt_node=\"{}\"", alt.value());
-      }
-      if (!bucket.empty()) {
-        fmt::format_to(back_inserter(lbuf), ",bucket=\"{}\"", bucket);
-      }
-      fmt::format_to(back_inserter(lbuf), ",agent={}", agent);
+      const auto lbuf = format_common_labels(node_uuid, labels, bucket, agent);
       fmt::format_to(output, "{}_bucket{{le=\"1\",{}}} {}\n", name, lbuf, le_1ms.load());
       fmt::format_to(output, "{}_bucket{{le=\"10\",{}}} {}\n", name, lbuf, le_10ms.load());
       fmt::format_to(output, "{}_bucket{{le=\"100\",{}}} {}\n", name, lbuf, le_100ms.load());
@@ -172,18 +207,7 @@ struct kv_durable_histogram {
                    const std::string& agent)
   {
     if (count > 0) {
-      std::string lbuf{};
-      fmt::format_to(back_inserter(lbuf), "node_uuid=\"{}\"", node_uuid);
-      if (!labels.node.empty()) {
-        fmt::format_to(back_inserter(lbuf), ",node=\"{}\"", labels.node);
-      }
-      if (const auto& alt = labels.alt_node; alt && !alt->empty()) {
-        fmt::format_to(back_inserter(lbuf), ",alt_node=\"{}\"", alt.value());
-      }
-      if (!bucket.empty()) {
-        fmt::format_to(back_inserter(lbuf), ",bucket=\"{}\"", bucket);
-      }
-      fmt::format_to(back_inserter(lbuf), ",agent={}", agent);
+      const auto lbuf = format_common_labels(node_uuid, labels, bucket, agent);
       fmt::format_to(output, "{}_bucket{{le=\"10\",{}}} {}\n", name, lbuf, le_10ms.load());
       fmt::format_to(output, "{}_bucket{{le=\"100\",{}}} {}\n", name, lbuf, le_100ms.load());
       fmt::format_to(output, "{}_bucket{{le=\"500\",{}}} {}\n", name, lbuf, le_500ms.load());
@@ -215,18 +239,7 @@ struct http_histogram {
                    const std::string& agent)
   {
     if (count > 0) {
-      std::string lbuf{};
-      fmt::format_to(back_inserter(lbuf), "node_uuid=\"{}\"", node_uuid);
-      if (!labels.node.empty()) {
-        fmt::format_to(back_inserter(lbuf), ",node=\"{}\"", labels.node);
-      }
-      if (const auto& alt = labels.alt_node; alt && !alt->empty()) {
-        fmt::format_to(back_inserter(lbuf), ",alt_node=\"{}\"", alt.value());
-      }
-      if (!bucket.empty()) {
-        fmt::format_to(back_inserter(lbuf), ",bucket=\"{}\"", bucket);
-      }
-      fmt::format_to(back_inserter(lbuf), ",agent={}", agent);
+      const auto lbuf = format_common_labels(node_uuid, labels, bucket, agent);
       fmt::format_to(output, "{}_bucket{{le=\"100\",{}}} {}\n", name, lbuf, le_100ms.load());
       fmt::format_to(output, "{}_bucket{{le=\"1000\",{}}} {}\n", name, lbuf, le_1s.load());
       fmt::format_to(output, "{}_bucket{{le=\"10000\",{}}} {}\n", name, lbuf, le_10s.load());
@@ -324,11 +337,27 @@ private:
   std::shared_ptr<null_app_telemetry_value_recorder> instance_{
     std::make_shared<null_app_telemetry_value_recorder>()
   };
+  std::map<std::string, node_labels> labels_cache_{};
 
 public:
-  void update_config(const topology::configuration& /* config */) override
+  void update_config(const topology::configuration& config) override
   {
-    /* do nothing */
+    labels_cache_.clear();
+    for (const auto& node : config.nodes) {
+      if (node.node_uuid.empty()) {
+        continue;
+      }
+      std::optional<std::string> alt_node{};
+      if (auto it = node.alt.find("external"); it != node.alt.end()) {
+        if (!it->second.hostname.empty()) {
+          alt_node = it->second.hostname;
+        }
+      }
+      labels_cache_[node.node_uuid] = node_labels{
+        node.hostname,
+        alt_node,
+      };
+    }
   }
 
   auto value_recorder(const std::string& /* node_uuid */, const std::string& /* bucket_name */)
@@ -355,12 +384,12 @@ public:
 
   [[nodiscard]] auto current_node_labels() const -> std::map<std::string, node_labels> override
   {
-    return {};
+    return labels_cache_;
   }
 
-  void set_node_labels_cache(std::map<std::string, node_labels> /* labels */) override
+  void set_node_labels_cache(std::map<std::string, node_labels> labels) override
   {
-    /* do nothing */
+    labels_cache_ = std::move(labels);
   }
 };
 
@@ -613,8 +642,12 @@ public:
 
   void update_config(const topology::configuration& config) override
   {
+    const std::scoped_lock<std::mutex> lock(mutex_);
     node_uuids_in_last_config_.clear();
     for (const auto& node : config.nodes) {
+      if (node.node_uuid.empty()) {
+        continue;
+      }
       std::optional<std::string> alt_node{};
       if (auto it = node.alt.find("external"); it != node.alt.end()) {
         if (!it->second.hostname.empty()) {
@@ -642,15 +675,19 @@ public:
 
   [[nodiscard]] auto current_node_labels() const -> std::map<std::string, node_labels> override
   {
+    const std::scoped_lock<std::mutex> lock(mutex_);
     std::map<std::string, node_labels> labels{};
     for (const auto& node_uuid : node_uuids_in_last_config_) {
-      labels[node_uuid] = labels_cache_.at(node_uuid);
+      if (auto it = labels_cache_.find(node_uuid); it != labels_cache_.end()) {
+        labels[node_uuid] = it->second;
+      }
     }
     return labels;
   }
 
   void set_node_labels_cache(std::map<std::string, node_labels> labels) override
   {
+    const std::scoped_lock<std::mutex> lock(mutex_);
     for (const auto& [node_uuid, _] : labels) {
       node_uuids_in_last_config_.push_back(node_uuid);
     }
@@ -659,6 +696,7 @@ public:
 
   void generate_to(std::vector<std::byte>& buffer, const std::string& agent) override
   {
+    const std::scoped_lock<std::mutex> lock(mutex_);
     auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
                  std::chrono::system_clock::now().time_since_epoch())
                  .count();
@@ -666,6 +704,7 @@ public:
     for (const auto& [node_uuid, buckets] : recorders_) {
       auto labels = labels_cache_[node_uuid];
       for (const auto& [bucket, recorder] : buckets) {
+        const auto common_labels = format_common_labels(node_uuid, labels, bucket, agent);
 
         for (std::size_t i = 0; i < recorder->counters_.size(); ++i) {
           if (is_valid_app_telemetry_counter(i)) {
@@ -676,17 +715,7 @@ public:
             }
 
             fmt::format_to(
-              output, "{}{{node_uuid=\"{}\"", app_telemetry_counter_name(i), node_uuid);
-            if (!labels.node.empty()) {
-              fmt::format_to(output, ",node=\"{}\"", labels.node);
-            }
-            if (const auto& alt = labels.alt_node; alt && !alt->empty()) {
-              fmt::format_to(output, ",alt_node=\"{}\"", alt.value());
-            }
-            if (!bucket.empty()) {
-              fmt::format_to(output, ",bucket=\"{}\"", bucket);
-            }
-            fmt::format_to(output, ",agent={}}} {} {}\n", agent, value, now);
+              output, "{}{{{}}} {} {}\n", app_telemetry_counter_name(i), common_labels, value, now);
           }
         }
 
@@ -703,7 +732,7 @@ public:
   }
 
 private:
-  std::mutex mutex_{};
+  mutable std::mutex mutex_{};
   // node_uuid -> bucket_name -> recorders
   std::map<std::string,
            std::map<std::string, std::shared_ptr<default_app_telemetry_value_recorder>>>
@@ -718,7 +747,7 @@ generate_agent_string(const std::string& extra = {}) -> std::string
   constexpr auto uuid{ "00000000-0000-0000-0000-000000000000" };
   auto hello = meta::user_agent_for_mcbp(uuid, uuid, extra);
   auto json = utils::json::parse(hello.data(), hello.size());
-  return utils::json::generate(json["a"]);
+  return fmt::format("\"{}\"", escape_label_value(json.at("a").get_string()));
 }
 
 } // namespace
@@ -749,7 +778,9 @@ app_telemetry_meter::disable()
   // design: the cache re-reads the generation and drops any recorder it cached under a generation
   // that has since moved.
   generation_.fetch_add(1, std::memory_order_relaxed);
+  auto labels = impl_->current_node_labels();
   impl_ = std::make_unique<null_app_telemetry_meter_impl>();
+  impl_->set_node_labels_cache(std::move(labels));
 }
 
 void
@@ -763,12 +794,15 @@ app_telemetry_meter::enable()
   // Bump the generation before swapping impl_ (see disable() for the tolerated race): keep the same
   // bump-before-swap ordering so the cache's generation re-read reliably retires old recorders.
   generation_.fetch_add(1, std::memory_order_relaxed);
+  auto labels = impl_->current_node_labels();
   impl_ = std::make_unique<default_app_telemetry_meter_impl>();
+  impl_->set_node_labels_cache(std::move(labels));
 }
 
 void
 app_telemetry_meter::update_agent(const std::string& extra)
 {
+  const std::scoped_lock lock{ impl_mutex_ };
   agent_ = generate_agent_string(extra);
 }
 
@@ -777,7 +811,7 @@ app_telemetry_meter::~app_telemetry_meter() = default;
 void
 app_telemetry_meter::update_config(const topology::configuration& config)
 {
-  const std::shared_lock lock{ impl_mutex_ };
+  const std::scoped_lock lock{ impl_mutex_ };
   return impl_->update_config(config);
 }
 
