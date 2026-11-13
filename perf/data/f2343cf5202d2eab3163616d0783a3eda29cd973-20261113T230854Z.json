@@ -1,0 +1,421 @@
+{
+  "sha": "f2343cf5202d2eab3163616d0783a3eda29cd973",
+  "date": "2026-11-13T14:41:36-08:00",
+  "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+  "rows": {
+    "json_generate_binary/large": {
+      "median": 19630.609375,
+      "lower": 18970.796875,
+      "upper": 20828.71875,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 19693.06640625,
+      "max_rss_bytes": 35221504
+    },
+    "json_generate_binary/small": {
+      "median": 235.5172119140625,
+      "lower": 224.54705810546875,
+      "upper": 244.9208984375,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 237.46846614833976,
+      "max_rss_bytes": 35221504
+    },
+    "json_streaming_lexer/rows_10": {
+      "median": 2108.1240234375,
+      "lower": 1996.962890625,
+      "upper": 2148.998046875,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 2126.0154987203664,
+      "max_rss_bytes": 35221504
+    },
+    "json_streaming_lexer/rows_1000": {
+      "median": 123618.15625,
+      "lower": 116712.875,
+      "upper": 129374.84375,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 124055.75980392157,
+      "max_rss_bytes": 35221504
+    },
+    "kv_get/cluster/bare/q64": {
+      "median": 7155.62109375,
+      "lower": 7139.583984375,
+      "upper": 7200.20703125,
+      "cpu_model": "AMD EPYC 9V74 80-Core Processor",
+      "cpu_ns_per_op": 11189.715107539316,
+      "max_rss_bytes": 34803712,
+      "server_version": "8.0.3"
+    },
+    "kv_get/cluster/bare/t1": {
+      "median": 75520.0,
+      "lower": 72960.0,
+      "upper": 75520.0,
+      "cpu_model": "AMD EPYC 9V74 80-Core Processor",
+      "cpu_ns_per_op": 50021.06641275887,
+      "max_rss_bytes": 34803712,
+      "ops_per_second": 12592.63955062508,
+      "server_version": "8.0.3"
+    },
+    "kv_get/cluster/q64": {
+      "median": 8055.421875,
+      "lower": 7824.90234375,
+      "upper": 8461.625,
+      "cpu_model": "AMD EPYC 9V74 80-Core Processor",
+      "cpu_ns_per_op": 12906.213868191162,
+      "max_rss_bytes": 34803712,
+      "server_version": "8.0.3"
+    },
+    "kv_get/cluster/t1": {
+      "median": 81664.0,
+      "lower": 76032.0,
+      "upper": 130304.0,
+      "cpu_model": "AMD EPYC 9V74 80-Core Processor",
+      "cpu_ns_per_op": 56832.07530010913,
+      "max_rss_bytes": 34803712,
+      "ops_per_second": 10984.394909886942,
+      "server_version": "8.0.3"
+    },
+    "kv_get/cluster/t8": {
+      "median": 163328.0,
+      "lower": 158208.0,
+      "upper": 199168.0,
+      "cpu_model": "AMD EPYC 9V74 80-Core Processor",
+      "cpu_ns_per_op": 32644.659995218415,
+      "max_rss_bytes": 34803712,
+      "ops_per_second": 43744.52476603837,
+      "server_version": "8.0.3"
+    },
+    "kv_get/fake/bare/q64": {
+      "median": 3523.1953125,
+      "lower": 3476.865234375,
+      "upper": 4046.5478515625,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 6737.484487815885,
+      "max_rss_bytes": 35352576
+    },
+    "kv_get/fake/bare/t1": {
+      "median": 41600.0,
+      "lower": 39808.0,
+      "upper": 44928.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 43839.597968226524,
+      "max_rss_bytes": 35352576,
+      "ops_per_second": 23123.453041491328
+    },
+    "kv_get/fake/q64": {
+      "median": 4586.576171875,
+      "lower": 4447.48828125,
+      "upper": 4807.892578125,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 8347.515505020674,
+      "max_rss_bytes": 35352576
+    },
+    "kv_get/fake/t1": {
+      "median": 41344.0,
+      "lower": 40576.0,
+      "upper": 42624.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 43502.91712845821,
+      "max_rss_bytes": 35352576,
+      "ops_per_second": 23263.738295246752
+    },
+    "kv_get/fake/t8": {
+      "median": 72448.0,
+      "lower": 70400.0,
+      "upper": 78080.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 18448.659388952525,
+      "max_rss_bytes": 35352576,
+      "ops_per_second": 106414.3190235383
+    },
+    "kv_upsert/cluster/bare/q64": {
+      "median": 30407.953125,
+      "lower": 22155.5,
+      "upper": 32138.671875,
+      "cpu_model": "AMD EPYC 9V74 80-Core Processor",
+      "cpu_ns_per_op": 17620.034513321873,
+      "max_rss_bytes": 34803712,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert/cluster/bare/t1": {
+      "median": 189952.0,
+      "lower": 162304.0,
+      "upper": 222720.0,
+      "cpu_model": "AMD EPYC 9V74 80-Core Processor",
+      "cpu_ns_per_op": 91879.65188561956,
+      "max_rss_bytes": 34803712,
+      "ops_per_second": 4503.073823271228,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert/cluster/q64": {
+      "median": 29195.8046875,
+      "lower": 27088.61328125,
+      "upper": 34331.78125,
+      "cpu_model": "AMD EPYC 9V74 80-Core Processor",
+      "cpu_ns_per_op": 20137.792169017288,
+      "max_rss_bytes": 34803712,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert/cluster/t1": {
+      "median": 196096.0,
+      "lower": 164352.0,
+      "upper": 219648.0,
+      "cpu_model": "AMD EPYC 9V74 80-Core Processor",
+      "cpu_ns_per_op": 96963.42477140483,
+      "max_rss_bytes": 34803712,
+      "ops_per_second": 4408.654098697356,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert/cluster/t8": {
+      "median": 612352.0,
+      "lower": 502784.0,
+      "upper": 645120.0,
+      "cpu_model": "AMD EPYC 9V74 80-Core Processor",
+      "cpu_ns_per_op": 52987.39604989605,
+      "max_rss_bytes": 34803712,
+      "ops_per_second": 11851.963677268872,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert/fake/bare/q64": {
+      "median": 4480.359375,
+      "lower": 4450.46484375,
+      "upper": 4750.40234375,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 9034.80776239067,
+      "max_rss_bytes": 35352576
+    },
+    "kv_upsert/fake/bare/t1": {
+      "median": 41600.0,
+      "lower": 40320.0,
+      "upper": 45184.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 43652.06196357546,
+      "max_rss_bytes": 35352576,
+      "ops_per_second": 23751.56788843849
+    },
+    "kv_upsert/fake/q64": {
+      "median": 5469.37109375,
+      "lower": 5325.09375,
+      "upper": 5757.1796875,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 10911.171040925266,
+      "max_rss_bytes": 35352576
+    },
+    "kv_upsert/fake/t1": {
+      "median": 42368.0,
+      "lower": 41344.0,
+      "upper": 45440.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 44394.2117761946,
+      "max_rss_bytes": 35352576,
+      "ops_per_second": 22989.279692045857
+    },
+    "kv_upsert/fake/t8": {
+      "median": 69888.0,
+      "lower": 68352.0,
+      "upper": 73472.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 20826.367841761046,
+      "max_rss_bytes": 35352576,
+      "ops_per_second": 106797.19976690238
+    },
+    "kv_upsert_get/cluster/c20": {
+      "median": 2613248.0,
+      "lower": 2236416.0,
+      "upper": 3104768.0,
+      "cpu_model": "AMD EPYC 9V74 80-Core Processor",
+      "cpu_ns_per_op": 163745.66070181096,
+      "max_rss_bytes": 63348736,
+      "ops_per_second": 6979.0470714158555,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert_get/cluster/c20/mixed": {
+      "median": 2646016.0,
+      "lower": 2301952.0,
+      "upper": 3006464.0,
+      "cpu_model": "AMD EPYC 9V74 80-Core Processor",
+      "cpu_ns_per_op": 159997.95944394846,
+      "max_rss_bytes": 63729664,
+      "ops_per_second": 7066.310976699296,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert_get/cluster/t20": {
+      "median": 1708032.0,
+      "lower": 1511424.0,
+      "upper": 1921024.0,
+      "cpu_model": "AMD EPYC 9V74 80-Core Processor",
+      "cpu_ns_per_op": 80705.95895639679,
+      "max_rss_bytes": 34803712,
+      "ops_per_second": 10982.863640843838,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert_get/cluster/t20/mixed": {
+      "median": 1634304.0,
+      "lower": 1404928.0,
+      "upper": 1683456.0,
+      "cpu_model": "AMD EPYC 9V74 80-Core Processor",
+      "cpu_ns_per_op": 76281.54154677827,
+      "max_rss_bytes": 34803712,
+      "ops_per_second": 11285.349090395157,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert_get/cluster/t20/mixed/bare": {
+      "median": 1536000.0,
+      "lower": 1363968.0,
+      "upper": 1576960.0,
+      "cpu_model": "AMD EPYC 9V74 80-Core Processor",
+      "cpu_ns_per_op": 70699.69783838227,
+      "max_rss_bytes": 34803712,
+      "ops_per_second": 11898.970683649526,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert_get/cluster/t20/mixed/trace": {
+      "median": 1798144.0,
+      "lower": 1716224.0,
+      "upper": 2035712.0,
+      "cpu_model": "AMD EPYC 9V74 80-Core Processor",
+      "cpu_ns_per_op": 103927.1755374181,
+      "max_rss_bytes": 63729664,
+      "ops_per_second": 9400.774906820421,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert_get/cluster/t20/raw": {
+      "median": 1536000.0,
+      "lower": 1372160.0,
+      "upper": 1593344.0,
+      "cpu_model": "AMD EPYC 9V74 80-Core Processor",
+      "cpu_ns_per_op": 72450.42869218694,
+      "max_rss_bytes": 34803712,
+      "ops_per_second": 12234.482073717792,
+      "server_version": "8.0.3"
+    },
+    "kv_upsert_get/fake/c20": {
+      "median": 470016.0,
+      "lower": 451584.0,
+      "upper": 508928.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 85485.97338757521,
+      "max_rss_bytes": 82124800,
+      "ops_per_second": 40184.461046092016
+    },
+    "kv_upsert_get/fake/c20/mixed": {
+      "median": 474112.0,
+      "lower": 429056.0,
+      "upper": 480256.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 84657.4535120776,
+      "max_rss_bytes": 82579456,
+      "ops_per_second": 40233.42570475922
+    },
+    "kv_upsert_get/fake/t20": {
+      "median": 297984.0,
+      "lower": 289792.0,
+      "upper": 308224.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 35379.19332278553,
+      "max_rss_bytes": 61521920,
+      "ops_per_second": 65102.18006676638
+    },
+    "kv_upsert_get/fake/t20/mixed": {
+      "median": 291840.0,
+      "lower": 287744.0,
+      "upper": 310272.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 33593.8106023597,
+      "max_rss_bytes": 61648896,
+      "ops_per_second": 67385.44410665386
+    },
+    "kv_upsert_get/fake/t20/mixed/bare": {
+      "median": 275456.0,
+      "lower": 267264.0,
+      "upper": 293888.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 31948.07615686721,
+      "max_rss_bytes": 62025728,
+      "ops_per_second": 70003.64333521451
+    },
+    "kv_upsert_get/fake/t20/mixed/trace": {
+      "median": 379904.0,
+      "lower": 369664.0,
+      "upper": 392192.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 53142.75928605885,
+      "max_rss_bytes": 87326720,
+      "ops_per_second": 51327.19374375994
+    },
+    "kv_upsert_get/fake/t20/raw": {
+      "median": 291840.0,
+      "lower": 285696.0,
+      "upper": 308224.0,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 32735.178994027272,
+      "max_rss_bytes": 61583360,
+      "ops_per_second": 66219.71619347522
+    },
+    "mcbp_parser_next/plain": {
+      "median": 64.56988525390625,
+      "lower": 61.43760681152344,
+      "upper": 67.93701171875,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 64.34087533371003,
+      "max_rss_bytes": 35221504
+    },
+    "mcbp_parser_next/snappy": {
+      "median": 155.075927734375,
+      "lower": 152.9173583984375,
+      "upper": 166.2557373046875,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 156.17399688294154,
+      "max_rss_bytes": 35221504
+    },
+    "mcbp_session_dispatch_lookups/t1": {
+      "median": 42.30122375488281,
+      "lower": 42.075775146484375,
+      "upper": 45.371795654296875,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 42.537047706260815,
+      "max_rss_bytes": 35221504
+    },
+    "mcbp_session_dispatch_lookups/t8": {
+      "median": 1146.1923828125,
+      "lower": 1077.43603515625,
+      "upper": 1221.26513671875,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 567.7543492442575,
+      "max_rss_bytes": 35221504
+    },
+    "vbucket_hash/crc32_t1": {
+      "median": 8.110702514648438,
+      "lower": 8.037158966064453,
+      "upper": 8.484832763671875,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 8.236700884774008,
+      "max_rss_bytes": 35090432
+    },
+    "vbucket_hash/map_key_t1": {
+      "median": 13.27957534790039,
+      "lower": 13.144210815429688,
+      "upper": 14.238079071044922,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 13.709845177417558,
+      "max_rss_bytes": 35090432
+    },
+    "vbucket_hash/map_key_t8": {
+      "median": 23.302490234375,
+      "lower": 22.42059326171875,
+      "upper": 24.332412719726562,
+      "cpu_model": "AMD EPYC 9V45 96-Core Processor",
+      "cpu_ns_per_op": 22.930663587957874,
+      "max_rss_bytes": 35090432
+    }
+  },
+  "descriptions": {
+    "json_generate_binary": "Serialises a small JSON document and an 80-item nested document with core::utils::json::generate_binary.",
+    "json_streaming_lexer": "Parses a query response of 10 or 1,000 rows with core::utils::json::streaming_lexer, fed in 4 KiB chunks.",
+    "kv_get": "Gets one of 1,000 small JSON documents per operation, blocking on 1 or 8 threads, or 64 in flight.",
+    "kv_upsert": "Upserts one of 1,000 small JSON documents per operation, blocking on 1 or 8 threads, or 64 in flight.",
+    "kv_upsert_get": "Upserts, then gets, one of 100,000 512-byte JSON documents per operation on 20 threads, sharing one cluster or with one each, with and without trace logging.",
+    "mcbp_parser_next": "Decodes one GET response frame per iteration with mcbp_parser::next, plain and Snappy-compressed.",
+    "mcbp_session_dispatch_lookups": "Performs the four session lookups of one KV dispatch per iteration on 1 and 8 threads.",
+    "vbucket_hash": "Hashes a key with CRC32, and maps it to its vBucket and node in a 1,024-vBucket map."
+  },
+  "run": "2026-11-13T23:08:54Z"
+}
