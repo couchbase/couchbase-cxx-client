@@ -431,7 +431,7 @@ public:
   [[nodiscard]] auto must_close_connection() const -> bool
   {
     if (const auto it = headers_.find("connection"); it != headers_.end()) {
-      return it->second == "close";
+      return connection_header_has_close(it->second);
     }
     return false;
   }
