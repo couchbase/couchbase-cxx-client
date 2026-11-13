@@ -40,8 +40,7 @@ public:
 
   std::pair<error, std::string_view> step(std::string_view) override
   {
-    throw std::logic_error(
-      "cb::sasl::mechanism::plain::ClientBackend::step(): Plain auth should not call step");
+    return { error::BAD_PARAM, {} };
   }
 
 private:
