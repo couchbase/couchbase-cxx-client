@@ -28,6 +28,9 @@ struct configuration {
 
   /**
    * 8192 item size for the logging queue. This is equivalent to 2 MB
+   *
+   * The queue is shared by every asynchronous logger the SDK creates, so only the logger that
+   * creates it sets its size.
    */
   std::size_t buffer_size{ 8192 };
 

@@ -2,8 +2,17 @@ couchbase_add_test(unit/observability/app_telemetry_meter LABEL unit LINK_CLIENT
 couchbase_add_test(unit/observability/diagnostics LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/observability/logger LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/observability/logger_fork LABEL unit LINK_CLIENT)
+# Only a shared client library is initialised before, and destroyed after, the test's own statics.
+if(couchbase_cxx_client_test_library STREQUAL "couchbase_cxx_client::couchbase_cxx_client")
+  target_compile_definitions(unit_observability_logger_fork PRIVATE COUCHBASE_TEST_SHARED_CLIENT)
+endif()
 couchbase_add_test(unit/observability/meter_wrapper LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/observability/metrics LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/observability/orphan_reporter LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/observability/recorder LABEL unit LINK_CLIENT)
 couchbase_add_test(unit/observability/request_span LABEL unit LINK_CLIENT)
+# Only a client linked statically shares spdlog, and with it spdlog's global pool, with the test.
+if(TARGET couchbase_cxx_client::couchbase_cxx_client_static_intermediate)
+  set(couchbase_cxx_client_test_library couchbase_cxx_client::couchbase_cxx_client_static_intermediate)
+  couchbase_add_test(unit/observability/logger_pool LABEL unit LINK_CLIENT)
+endif()

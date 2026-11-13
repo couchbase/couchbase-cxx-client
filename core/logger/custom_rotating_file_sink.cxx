@@ -25,6 +25,7 @@
 #include "core/platform/dirutils.h"
 
 #include <algorithm>
+#include <exception>
 #include <gsl/assert>
 #include <memory>
 #include <mutex>
@@ -181,7 +182,12 @@ custom_rotating_file_sink<Mutex>::~custom_rotating_file_sink()
   auto& registry = live_sinks_of<custom_rotating_file_sink<Mutex>>();
   const std::scoped_lock lock(registry.mutex);
   registry.sinks.erase(this);
-  add_hook(closing_log_file_);
+  try {
+    add_hook(closing_log_file_);
+  } catch (const std::exception&) { // NOLINT(bugprone-empty-catch)
+    // The destructor is noexcept: a closing line that cannot be written, on a full or unwritable
+    // filesystem, is dropped, and the file is still closed.
+  }
   file_helper_.reset();
 }
 
