@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <limits>
 #include <map>
 #include <optional>
 #include <random>
@@ -68,6 +69,8 @@ constexpr std::uint8_t opcode_binary{ 0x2 };
 constexpr std::uint8_t opcode_close{ 0x08 };
 constexpr std::uint8_t opcode_ping{ 0x09 };
 constexpr std::uint8_t opcode_pong{ 0x0a };
+
+constexpr std::size_t max_frame_payload_length{ std::size_t{ 64 } * 1024U * 1024U };
 
 auto
 generate_masking_key() -> std::array<std::byte, 4>
@@ -199,7 +202,7 @@ private:
 
 public:
   explicit data_handler(const context& ctx, gsl::span<std::byte> remaining = {})
-    : buffer_{ remaining.begin(), remaining.end() }
+    : buffer_{ remaining.data(), remaining.data() + remaining.size() }
   {
     ctx.callbacks.on_ready(ctx.ws);
   }
@@ -210,7 +213,7 @@ public:
     std::vector<std::byte> buffer{};
     if (!buffer_.empty()) {
       std::swap(buffer_, buffer);
-      std::copy(data.begin(), data.end(), std::back_insert_iterator(buffer));
+      buffer.insert(buffer.end(), data.data(), data.data() + data.size());
       data = buffer;
     }
     while (!data.empty()) {
@@ -220,7 +223,7 @@ public:
           fmt::format("Decoding error: {}", std::get<decoding_error>(status).message), ctx);
       }
       if (std::holds_alternative<need_more_data>(status)) {
-        std::copy(data.begin(), data.end(), std::back_insert_iterator(buffer_));
+        buffer_.insert(buffer_.end(), data.data(), data.data() + data.size());
         return nullptr;
       }
       if (std::holds_alternative<decoded_frame>(status)) {
@@ -230,7 +233,7 @@ public:
             if (frame.expected_continuation) {
               partial_response_ = partial_frame{
                 frame.type,
-                { frame.payload.begin(), frame.payload.end() },
+                { frame.payload.data(), frame.payload.data() + frame.payload.size() },
               };
             } else {
               ctx.callbacks.on_text(ctx.ws, frame.payload);
@@ -240,7 +243,7 @@ public:
             if (frame.expected_continuation) {
               partial_response_ = partial_frame{
                 frame.type,
-                { frame.payload.begin(), frame.payload.end() },
+                { frame.payload.data(), frame.payload.data() + frame.payload.size() },
               };
             } else {
               ctx.callbacks.on_binary(ctx.ws, frame.payload);
@@ -257,16 +260,20 @@ public:
             break;
           case opcode_continuation:
             if (auto& response = partial_response_; response.has_value()) {
-              if (frame.expected_continuation) {
-                std::copy(frame.payload.begin(),
-                          frame.payload.end(),
-                          std::back_insert_iterator(response->payload));
-              } else {
+              if (response->payload.size() > max_frame_payload_length - frame.payload.size()) {
+                return std::make_unique<error_handler>(
+                  "Decoding error: fragmented message is too large", ctx);
+              }
+              response->payload.insert(response->payload.end(),
+                                       frame.payload.data(),
+                                       frame.payload.data() + frame.payload.size());
+              if (!frame.expected_continuation) {
                 if (response->type == opcode_text) {
                   ctx.callbacks.on_text(ctx.ws, response->payload);
                 } else {
                   ctx.callbacks.on_binary(ctx.ws, response->payload);
                 }
+                partial_response_.reset();
               }
             } else {
               return std::make_unique<error_handler>("Unexpected continuation frame", ctx);
@@ -293,6 +300,7 @@ public:
     settings_.on_status = on_status;
     settings_.on_header_field = on_header_field;
     settings_.on_header_value = on_header_value;
+    settings_.on_headers_complete = on_headers_complete;
     settings_.on_body = on_body;
     settings_.on_message_complete = on_message_complete;
     llhttp_init(&parser_, HTTP_RESPONSE, &settings_);
@@ -328,13 +336,18 @@ public:
           "Request has MUST contain Sec-WebSocket-Accept with valid key", ctx);
       }
 
+      auto handler = std::make_unique<data_handler>(ctx);
       if (error == HPE_PAUSED_UPGRADE) {
-        auto bytes_parsed =
+        const auto bytes_parsed =
           llhttp_get_error_pos(&parser_) - reinterpret_cast<const char*>(data.data());
-        return std::make_unique<data_handler>(ctx,
-                                              data.subspan(static_cast<std::size_t>(bytes_parsed)));
+        const auto remaining = data.subspan(static_cast<std::size_t>(bytes_parsed));
+        if (!remaining.empty()) {
+          if (auto err_handler = handler->feed(remaining, ctx)) {
+            return err_handler;
+          }
+        }
       }
-      return std::make_unique<data_handler>(ctx);
+      return handler;
     }
     return nullptr;
   }
@@ -343,7 +356,7 @@ private:
   static auto on_status(llhttp_t* parser, const char* at, std::size_t length) -> int
   {
     auto* self = static_cast<open_handshake*>(parser->data);
-    self->status_message_.assign(at, length);
+    self->status_message_.append(at, length);
     self->status_code_ = parser->status_code;
     return 0;
   }
@@ -351,10 +364,13 @@ private:
   static auto on_header_field(llhttp_t* parser, const char* at, std::size_t length) -> int
   {
     auto* self = static_cast<open_handshake*>(parser->data);
-    self->header_field_.clear();
-    self->header_field_.reserve(length);
+    if (self->reading_header_value_) {
+      self->header_field_.clear();
+      self->reading_header_value_ = false;
+    }
+    self->header_field_.reserve(self->header_field_.size() + length);
     for (std::size_t i = 0; i < length; ++i) {
-      self->header_field_ += static_cast<char>(std::tolower(at[i]));
+      self->header_field_ += static_cast<char>(std::tolower(static_cast<unsigned char>(at[i])));
     }
     return 0;
   }
@@ -362,7 +378,18 @@ private:
   static auto on_header_value(llhttp_t* parser, const char* at, std::size_t length) -> int
   {
     auto* self = static_cast<open_handshake*>(parser->data);
-    self->headers_[self->header_field_] = std::string(at, length);
+    if (!self->reading_header_value_) {
+      self->headers_[self->header_field_].clear();
+      self->reading_header_value_ = true;
+    }
+    self->headers_[self->header_field_].append(at, length);
+    return 0;
+  }
+
+  static auto on_headers_complete(llhttp_t* parser) -> int
+  {
+    auto* self = static_cast<open_handshake*>(parser->data);
+    self->status_code_ = parser->status_code;
     return 0;
   }
 
@@ -370,13 +397,6 @@ private:
   {
     auto* self = static_cast<open_handshake*>(parser->data);
     self->body_.append(std::string_view{ at, length });
-    return 0;
-  }
-
-  static auto on_body_after_upgrade(llhttp_t* parser, const char* at, std::size_t length) -> int
-  {
-    auto* self = static_cast<open_handshake*>(parser->data);
-    self->body_ = std::string_view{ at, length };
     return 0;
   }
 
@@ -391,6 +411,7 @@ private:
   llhttp_t parser_{};
 
   std::string header_field_{};
+  bool reading_header_value_{ false };
   bool complete_{};
 
   std::uint32_t status_code_{ 0 };
@@ -461,6 +482,9 @@ encode_payload_length(std::size_t length) -> std::vector<std::byte>
 auto
 decode_frame(gsl::span<std::byte> data, bool expected_continuation) -> decode_status
 {
+  if (data.empty()) {
+    return need_more_data{};
+  }
   auto first_byte = static_cast<std::uint8_t>(data[0]);
   if ((first_byte & reserved_bit_mask) != 0) {
     return decoding_error{ "unsupported error: reserved bit used" };
@@ -468,6 +492,11 @@ decode_frame(gsl::span<std::byte> data, bool expected_continuation) -> decode_st
 
   const bool expect_more = (first_byte & flag_fin) == 0;
   const std::uint8_t frame_type = first_byte & opcode_mask;
+
+  if (!is_data_frame(frame_type) && !is_control_frame(frame_type) &&
+      frame_type != opcode_continuation) {
+    return decoding_error{ "unsupported error: unknown opcode" };
+  }
 
   if (expect_more && is_control_frame(frame_type)) {
     return decoding_error{ "unsupported error: fragmented control frame" };
@@ -477,6 +506,13 @@ decode_frame(gsl::span<std::byte> data, bool expected_continuation) -> decode_st
     return decoding_error{ "unsupported error: expected continuation frame" };
   }
 
+  if (frame_type == opcode_continuation && !expected_continuation) {
+    return decoding_error{ "unsupported error: unexpected continuation frame" };
+  }
+
+  if (data.size() < 2) {
+    return need_more_data{};
+  }
   const auto second_byte = static_cast<std::uint8_t>(data[1]);
 
   const bool masked = (second_byte & flag_mask) != 0;
@@ -485,18 +521,32 @@ decode_frame(gsl::span<std::byte> data, bool expected_continuation) -> decode_st
   if (is_control_frame(frame_type) && length_7 > 125) {
     return decoding_error{ "unsupported error: control frame is too long" };
   }
+  if (frame_type == opcode_close && length_7 == 1) {
+    return decoding_error{ "unsupported error: invalid close frame payload length" };
+  }
 
   std::size_t header_length{};
   std::size_t payload_length{};
+  constexpr std::size_t masking_key_size{ 4 };
+  const std::size_t mask_overhead = masked ? masking_key_size : 0;
 
   switch (length_7) {
-    case 127:
+    case 127: {
       if (data.size() < 10) {
         return need_more_data{};
       }
       header_length = 10;
-      payload_length = mcbp::big_endian::read_uint64(data, 2);
+      const std::uint64_t raw_length = mcbp::big_endian::read_uint64(data, 2);
+      if (raw_length <= 0xffff) {
+        return decoding_error{ "unsupported error: non-minimal frame payload length" };
+      }
+      if ((raw_length >> 63U) != 0 || raw_length > max_frame_payload_length ||
+          raw_length > std::numeric_limits<std::size_t>::max() - header_length - mask_overhead) {
+        return decoding_error{ "unsupported error: frame payload length is too large" };
+      }
+      payload_length = static_cast<std::size_t>(raw_length);
       break;
+    }
 
     case 126:
       if (data.size() < 4) {
@@ -504,6 +554,9 @@ decode_frame(gsl::span<std::byte> data, bool expected_continuation) -> decode_st
       }
       header_length = 4;
       payload_length = mcbp::big_endian::read_uint16(data, 2);
+      if (payload_length < 126) {
+        return decoding_error{ "unsupported error: non-minimal frame payload length" };
+      }
       break;
 
     default:
@@ -511,17 +564,16 @@ decode_frame(gsl::span<std::byte> data, bool expected_continuation) -> decode_st
       payload_length = length_7;
   }
 
-  constexpr std::size_t masking_key_size{ 4 };
-  if (data.size() < header_length + payload_length + (masked ? masking_key_size : 0)) {
+  if (data.size() < header_length + payload_length + mask_overhead) {
     return need_more_data{};
   }
   auto consumed_bytes = header_length;
 
-  auto payload = data.subspan(header_length);
+  auto payload = data.subspan(header_length, payload_length);
   if (masked) {
     auto masking_key = data.subspan(header_length, masking_key_size);
     consumed_bytes += masking_key.size();
-    payload = data.subspan(header_length + masking_key.size());
+    payload = data.subspan(header_length + masking_key.size(), payload_length);
     mask_payload_data(masking_key, payload);
   }
   consumed_bytes += payload.size();
