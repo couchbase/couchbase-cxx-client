@@ -16,6 +16,8 @@
  */
 #pragma once
 
+#include "core/utils/keyspace.hxx"
+
 #include <spdlog/fmt/bundled/core.h>
 
 #include <optional>
@@ -51,7 +53,10 @@ public:
   [[nodiscard]] auto value() const -> std::string
   {
     if (has_value()) {
-      return fmt::format("{}:`{}`.`{}`", namespace_id_, bucket_name_.value(), scope_name_.value());
+      return fmt::format("{}:{}.{}",
+                         namespace_id_,
+                         utils::escape_query_identifier(bucket_name_.value()),
+                         utils::escape_query_identifier(scope_name_.value()));
     }
     return {};
   }

@@ -34,6 +34,9 @@ query_index_create_request::encode_to(encoded_request_type& encoded,
   if (!core::utils::check_query_management_request(*this)) {
     return errc::common::invalid_argument;
   }
+  if (!is_primary && (index_name.empty() || keys.empty())) {
+    return errc::common::invalid_argument;
+  }
   encoded.headers["content-type"] = "application/json";
   tao::json::value with{};
   if (deferred) {
@@ -55,24 +58,28 @@ query_index_create_request::encode_to(encoded_request_type& encoded,
     if (i != 0) {
       encoded_keys += ", ";
     }
-    auto key = keys.at(i);
+    const auto& key = keys.at(i);
+    if (key.empty()) {
+      return errc::common::invalid_argument;
+    }
 
-    // Add backticks around the key unless they are already present
-    if (key.at(0) == '`' && key.at(key.size() - 1) == '`') {
+    // Pass through a recognized leading-backtick identifier, path, or basic expression;
+    // any other input is quoted as one literal field name.
+    if (utils::is_escaped_query_identifier(key)) {
       encoded_keys += key;
     } else {
-      encoded_keys += fmt::format("`{}`", key);
+      encoded_keys += utils::escape_query_identifier(key);
     }
   }
   std::string keyspace = utils::build_keyspace(*this);
   tao::json::value body{
     { "statement",
       is_primary ? fmt::format(R"(CREATE PRIMARY INDEX {} ON {} USING GSI {})",
-                               index_name.empty() ? "" : fmt::format("`{}`", index_name),
+                               index_name.empty() ? "" : utils::escape_query_identifier(index_name),
                                keyspace,
                                with_clause)
-                 : fmt::format(R"(CREATE INDEX `{}` ON {}({}) {} USING GSI {})",
-                               index_name,
+                 : fmt::format(R"(CREATE INDEX {} ON {}({}) {} USING GSI {})",
+                               utils::escape_query_identifier(index_name),
                                keyspace,
                                encoded_keys,
                                where_clause,

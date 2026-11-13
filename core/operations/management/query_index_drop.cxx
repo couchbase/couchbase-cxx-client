@@ -34,16 +34,23 @@ query_index_drop_request::encode_to(encoded_request_type& encoded, http_context&
   if (!utils::check_query_management_request(*this)) {
     return errc::common::invalid_argument;
   }
+  if (!is_primary && index_name.empty()) {
+    return errc::common::invalid_argument;
+  }
   encoded.headers["content-type"] = "application/json";
   auto keyspace = utils::build_keyspace(*this);
   std::string drop_index_stmt;
   if (is_primary && index_name.empty()) {
     drop_index_stmt = fmt::format(R"(DROP PRIMARY INDEX ON {} USING GSI)", keyspace);
-  } else if (bucket_name.empty() || (!collection_name.empty() && !scope_name.empty())) {
-    drop_index_stmt = fmt::format(R"(DROP INDEX `{}` ON {} USING GSI)", index_name, keyspace);
+  } else if (query_ctx.has_value() || bucket_name.empty() ||
+             (!collection_name.empty() && !scope_name.empty())) {
+    drop_index_stmt = fmt::format(
+      R"(DROP INDEX {} ON {} USING GSI)", utils::escape_query_identifier(index_name), keyspace);
   } else {
     // this works on 6.6 and earlier
-    drop_index_stmt = fmt::format(R"(DROP INDEX `{}`.`{}` USING GSI)", bucket_name, index_name);
+    drop_index_stmt = fmt::format(R"(DROP INDEX {}.{} USING GSI)",
+                                  utils::escape_query_identifier(bucket_name),
+                                  utils::escape_query_identifier(index_name));
   }
 
   tao::json::value body{ { "statement", drop_index_stmt },

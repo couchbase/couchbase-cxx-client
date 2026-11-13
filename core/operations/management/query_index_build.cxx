@@ -34,10 +34,10 @@ quote_and_join_strings(const Range& values, const std::string& sep) -> std::stri
   std::stringstream stream;
   auto sentinel = std::end(values);
   if (auto it = std::begin(values); it != sentinel) {
-    stream << '`' << *it << '`';
+    stream << utils::escape_query_identifier(*it);
     ++it;
     while (it != sentinel) {
-      stream << sep << '`' << *it << '`';
+      stream << sep << utils::escape_query_identifier(*it);
       ++it;
     }
   }
@@ -48,8 +48,13 @@ auto
 query_index_build_request::encode_to(encoded_request_type& encoded,
                                      http_context& /* context */) const -> std::error_code
 {
-  if (!utils::check_query_management_request(*this)) {
+  if (!utils::check_query_management_request(*this) || index_names.empty()) {
     return errc::common::invalid_argument;
+  }
+  for (const auto& name : index_names) {
+    if (name.empty()) {
+      return errc::common::invalid_argument;
+    }
   }
   auto keyspace = core::utils::build_keyspace(*this);
   std::string statement =
