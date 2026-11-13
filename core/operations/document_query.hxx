@@ -47,8 +47,8 @@ struct query_request;
  * block is identical and lives here so both paths stay byte-for-byte consistent. `use_replica` is
  * always encoded when present — the capability gate is the caller's responsibility.
  */
-void
-encode_query_options(tao::json::value& body, const query_request& request);
+[[nodiscard]] auto
+encode_query_options(tao::json::value& body, const query_request& request) -> std::error_code;
 
 struct query_response {
   struct query_metrics {

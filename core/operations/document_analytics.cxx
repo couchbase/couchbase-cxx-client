@@ -25,66 +25,80 @@
 
 #include <couchbase/error_codes.hxx>
 
-#include <gsl/assert>
 #include <tao/json/value.hpp>
 
 namespace couchbase::core::operations
 {
-void
+auto
 encode_analytics_options(tao::json::value& body, const analytics_request& request)
+  -> std::error_code
 {
-  for (const auto& [name, value] : request.named_parameters) {
-    Expects(name.empty() == false);
-    std::string key = name;
-    if (key[0] != '$') {
-      key.insert(key.begin(), '$');
+  try {
+    for (const auto& [name, value] : request.named_parameters) {
+      if (name.empty() || name == "$") {
+        return errc::common::invalid_argument;
+      }
+      std::string key = name;
+      if (key[0] != '$') {
+        key.insert(key.begin(), '$');
+      }
+      body[key] = utils::json::parse(value);
     }
-    body[key] = utils::json::parse(value);
-  }
-  if (!request.positional_parameters.empty()) {
-    std::vector<tao::json::value> parameters;
-    parameters.reserve(request.positional_parameters.size());
-    for (const auto& value : request.positional_parameters) {
-      parameters.emplace_back(utils::json::parse(value));
+    if (!request.positional_parameters.empty()) {
+      std::vector<tao::json::value> parameters;
+      parameters.reserve(request.positional_parameters.size());
+      for (const auto& value : request.positional_parameters) {
+        parameters.emplace_back(utils::json::parse(value));
+      }
+      body["args"] = std::move(parameters);
     }
-    body["args"] = std::move(parameters);
-  }
-  if (request.readonly) {
-    body["readonly"] = true;
-  }
-  if (request.scan_consistency) {
-    switch (request.scan_consistency.value()) {
-      case couchbase::core::analytics_scan_consistency::not_bounded:
-        body["scan_consistency"] = "not_bounded";
-        break;
-      case couchbase::core::analytics_scan_consistency::request_plus:
-        body["scan_consistency"] = "request_plus";
-        break;
+    if (request.readonly) {
+      body["readonly"] = true;
     }
+    if (request.scan_consistency) {
+      switch (request.scan_consistency.value()) {
+        case couchbase::core::analytics_scan_consistency::not_bounded:
+          body["scan_consistency"] = "not_bounded";
+          break;
+        case couchbase::core::analytics_scan_consistency::request_plus:
+          body["scan_consistency"] = "request_plus";
+          break;
+      }
+    }
+    if (request.scope_qualifier) {
+      body["query_context"] = request.scope_qualifier.value();
+    } else if (request.scope_name && request.bucket_name) {
+      // The query context is parsed as SQL++, so its two names are quoted through the same encoder
+      // the management statements use rather than wrapped in bare backticks.
+      body["query_context"] = fmt::format("default:{}.{}",
+                                          utils::analytics::quote_identifier(*request.bucket_name),
+                                          utils::analytics::quote_identifier(*request.scope_name));
+    }
+    for (const auto& [name, value] : request.raw) {
+      if (name.empty()) {
+        return errc::common::invalid_argument;
+      }
+      body[name] = utils::json::parse(value);
+    }
+  } catch (const tao::pegtl::parse_error&) {
+    return errc::common::invalid_argument;
   }
-  if (request.scope_qualifier) {
-    body["query_context"] = request.scope_qualifier.value();
-  } else if (request.scope_name && request.bucket_name) {
-    // The query context is parsed as SQL++, so its two names are quoted through the same encoder
-    // the management statements use rather than wrapped in bare backticks.
-    body["query_context"] = fmt::format("default:{}.{}",
-                                        utils::analytics::quote_identifier(*request.bucket_name),
-                                        utils::analytics::quote_identifier(*request.scope_name));
-  }
-  for (const auto& [name, value] : request.raw) {
-    body[name] = utils::json::parse(value);
-  }
+  return {};
 }
 
 auto
 analytics_request::encode_to(analytics_request::encoded_request_type& encoded,
                              http_context& context) -> std::error_code
 {
-  tao::json::value body{ { "statement", statement },
-                         { "client_context_id", encoded.client_context_id },
-                         { "timeout", fmt::format("{}ms", encoded.timeout.count()) } };
+  tao::json::value body = tao::json::empty_object;
 
-  encode_analytics_options(body, *this);
+  if (auto ec = encode_analytics_options(body, *this); ec) {
+    return ec;
+  }
+
+  body["statement"] = statement;
+  body["client_context_id"] = encoded.client_context_id;
+  body["timeout"] = fmt::format("{}ms", encoded.timeout.count());
 
   encoded.type = type;
   encoded.headers["content-type"] = "application/json";
@@ -122,26 +136,32 @@ analytics_request::make_response(error_context::analytics&& ctx,
   response.ctx.statement = statement;
   response.ctx.parameters = body_str;
   if (!response.ctx.ec) {
+    const auto decoding_error =
+      encoded.status_code == 400 ? errc::common::invalid_argument : errc::common::parsing_failure;
     tao::json::value payload;
     try {
       payload = utils::json::parse(encoded.body.data());
-    } catch (const tao::pegtl::parse_error&) {
-      response.ctx.ec = errc::common::parsing_failure;
-      return response;
-    }
-    response.meta = parse_analytics_meta(payload);
-    if (response.ctx.client_context_id != response.meta.client_context_id &&
-        !response.meta.client_context_id.empty()) {
-      CB_LOG_WARNING(R"(unexpected clientContextID returned by service: "{}", expected "{}")",
-                     response.meta.client_context_id,
-                     response.ctx.client_context_id);
-    }
-
-    if (const auto* r = payload.find("results"); r != nullptr) {
-      response.rows.reserve(r->get_array().size());
-      for (const auto& row : r->get_array()) {
-        response.rows.emplace_back(couchbase::core::utils::json::generate(row));
+      if (!payload.is_object()) {
+        response.ctx.ec = decoding_error;
+        return response;
       }
+      response.meta = parse_analytics_meta(payload);
+      if (response.ctx.client_context_id != response.meta.client_context_id &&
+          !response.meta.client_context_id.empty()) {
+        CB_LOG_WARNING(R"(unexpected clientContextID returned by service: "{}", expected "{}")",
+                       response.meta.client_context_id,
+                       response.ctx.client_context_id);
+      }
+
+      if (const auto* r = payload.find("results"); r != nullptr) {
+        response.rows.reserve(r->get_array().size());
+        for (const auto& row : r->get_array()) {
+          response.rows.emplace_back(couchbase::core::utils::json::generate(row));
+        }
+      }
+    } catch (const std::exception&) {
+      response.ctx.ec = decoding_error;
+      return response;
     }
 
     // RFC-58: a 400 is a failure whatever status the body reports.

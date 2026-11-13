@@ -108,137 +108,165 @@ search_request::uses_custom_script_queries() const -> bool
 }
 
 auto
-search_request::encode_to(search_request::encoded_request_type& encoded,
-                          http_context& context) -> std::error_code
+search_request::encode_to(search_request::encoded_request_type& encoded, http_context& context)
+  -> std::error_code
 {
   if (disable_scoring && !std::holds_alternative<std::monostate>(scoring)) {
     return errc::common::invalid_argument;
   }
 
-  auto body = tao::json::value{
-    { "query", utils::json::parse(query) },
-    { "ctl", { { "timeout", encoded.timeout.count() } } },
-  };
-
-  if (show_request.has_value()) {
-    body["showrequest"] = show_request.value();
-  }
-
-  if (vector_search.has_value()) {
-    body["knn"] = utils::json::parse(vector_search.value());
-    if (vector_query_combination.has_value()) {
-      switch (*vector_query_combination) {
-        case couchbase::core::vector_query_combination::combination_or:
-          body["knn_operator"] = "or";
-          break;
-        case couchbase::core::vector_query_combination::combination_and:
-          body["knn_operator"] = "and";
-          break;
-      }
-    }
-  }
-
-  if (explain) {
-    body["explain"] = *explain;
-  }
-  if (limit) {
-    body["size"] = *limit;
-  }
-  if (skip) {
-    body["from"] = *skip;
-  }
-  if (disable_scoring) {
-    body["score"] = "none";
-  }
-  if (!std::holds_alternative<std::monostate>(scoring)) {
-    std::optional<std::uint32_t> score_rank_constant{};
-    std::optional<std::uint32_t> score_window_size{};
-    std::visit(
-      [&body, &score_rank_constant, &score_window_size](const auto& value) {
-        using T = std::decay_t<decltype(value)>;
-        if constexpr (std::is_same_v<T, couchbase::core::search_scoring_none>) {
-          body["score"] = "none";
-        } else if constexpr (std::is_same_v<
-                               T,
-                               couchbase::core::search_scoring_reciprocal_rank_fusion>) {
-          body["score"] = "rrf";
-          score_rank_constant = value.rank_constant;
-          score_window_size = value.window_size;
-        } else if constexpr (std::is_same_v<
-                               T,
-                               couchbase::core::search_scoring_relative_score_fusion>) {
-          body["score"] = "rsf";
-          score_window_size = value.window_size;
-        }
-      },
-      scoring);
-    tao::json::value params = tao::json::empty_object;
-    if (score_rank_constant.has_value()) {
-      params["score_rank_constant"] = score_rank_constant.value();
-    }
-    if (score_window_size.has_value()) {
-      params["score_window_size"] = score_window_size.value();
-    }
-    if (!params.get_object().empty()) {
-      body["params"] = params;
-    }
-  }
-  if (include_locations) {
-    body["includeLocations"] = true;
-  }
-  if (highlight_style || !highlight_fields.empty()) {
-    tao::json::value highlight;
-    if (highlight_style) {
-      switch (*highlight_style) {
-        case couchbase::core::search_highlight_style::html:
-          highlight["style"] = "html";
-          break;
-        case couchbase::core::search_highlight_style::ansi:
-          highlight["style"] = "ansi";
-          break;
-      }
-    }
-    if (!highlight_fields.empty()) {
-      highlight["fields"] = highlight_fields;
-    }
-    body["highlight"] = highlight;
-  }
-  if (!fields.empty()) {
-    body["fields"] = fields;
-  }
-  if (!sort_specs.empty()) {
-    body["sort"] = tao::json::empty_array;
-    for (const auto& spec : sort_specs) {
-      body["sort"].get_array().push_back(utils::json::parse(spec));
-    }
-  }
-  if (!facets.empty()) {
-    body["facets"] = tao::json::empty_object;
-    for (const auto& [name, facet] : facets) {
-      body["facets"][name] = utils::json::parse(facet);
-    }
-  }
-  if (!mutation_state.empty()) {
-    tao::json::value scan_vectors = tao::json::empty_object;
-    for (const auto& token : mutation_state) {
-      auto key = fmt::format("{}/{}", token.partition_id(), token.partition_uuid());
-      const auto* old_val = scan_vectors.find(key);
-      if (old_val == nullptr ||
-          (old_val->is_integer() && old_val->get_unsigned() < token.sequence_number())) {
-        scan_vectors[key] = token.sequence_number();
-      }
-    }
-    body["ctl"]["consistency"] = tao::json::value{
-      { "level", "at_plus" },
-      { "vectors", { { index_name, scan_vectors } } },
+  tao::json::value body{};
+  try {
+    body = tao::json::value{
+      { "query", utils::json::parse(query) },
+      { "ctl", { { "timeout", encoded.timeout.count() } } },
     };
-  }
-  if (!collections.empty()) {
-    body["collections"] = collections;
-  }
 
-  for (const auto& [key, value] : raw) {
-    body[key] = utils::json::parse(value);
+    if (show_request.has_value()) {
+      body["showrequest"] = show_request.value();
+    }
+
+    if (vector_search.has_value()) {
+      body["knn"] = utils::json::parse(vector_search.value());
+      if (vector_query_combination.has_value()) {
+        switch (*vector_query_combination) {
+          case couchbase::core::vector_query_combination::combination_or:
+            body["knn_operator"] = "or";
+            break;
+          case couchbase::core::vector_query_combination::combination_and:
+            body["knn_operator"] = "and";
+            break;
+        }
+      }
+    }
+
+    if (explain) {
+      body["explain"] = *explain;
+    }
+    if (limit) {
+      body["size"] = *limit;
+    }
+    if (skip) {
+      body["from"] = *skip;
+    }
+    if (disable_scoring) {
+      body["score"] = "none";
+    }
+    if (!std::holds_alternative<std::monostate>(scoring)) {
+      std::optional<std::uint32_t> score_rank_constant{};
+      std::optional<std::uint32_t> score_window_size{};
+      std::visit(
+        [&body, &score_rank_constant, &score_window_size](const auto& value) {
+          using T = std::decay_t<decltype(value)>;
+          if constexpr (std::is_same_v<T, couchbase::core::search_scoring_none>) {
+            body["score"] = "none";
+          } else if constexpr (std::is_same_v<
+                                 T,
+                                 couchbase::core::search_scoring_reciprocal_rank_fusion>) {
+            body["score"] = "rrf";
+            score_rank_constant = value.rank_constant;
+            score_window_size = value.window_size;
+          } else if constexpr (std::is_same_v<
+                                 T,
+                                 couchbase::core::search_scoring_relative_score_fusion>) {
+            body["score"] = "rsf";
+            score_window_size = value.window_size;
+          }
+        },
+        scoring);
+      tao::json::value params = tao::json::empty_object;
+      if (score_rank_constant.has_value()) {
+        params["score_rank_constant"] = score_rank_constant.value();
+      }
+      if (score_window_size.has_value()) {
+        params["score_window_size"] = score_window_size.value();
+      }
+      if (!params.get_object().empty()) {
+        body["params"] = params;
+      }
+    }
+    if (include_locations) {
+      body["includeLocations"] = true;
+    }
+    if (highlight_style || !highlight_fields.empty()) {
+      tao::json::value highlight;
+      if (highlight_style) {
+        switch (*highlight_style) {
+          case couchbase::core::search_highlight_style::html:
+            highlight["style"] = "html";
+            break;
+          case couchbase::core::search_highlight_style::ansi:
+            highlight["style"] = "ansi";
+            break;
+        }
+      }
+      if (!highlight_fields.empty()) {
+        highlight["fields"] = highlight_fields;
+      }
+      body["highlight"] = highlight;
+    }
+    if (!fields.empty()) {
+      body["fields"] = fields;
+    }
+    if (!sort_specs.empty()) {
+      body["sort"] = tao::json::empty_array;
+      for (const auto& spec : sort_specs) {
+        body["sort"].get_array().push_back(utils::json::parse(spec));
+      }
+    }
+    if (!facets.empty()) {
+      body["facets"] = tao::json::empty_object;
+      for (const auto& [name, facet] : facets) {
+        if (name.empty()) {
+          return errc::common::invalid_argument;
+        }
+        body["facets"][name] = utils::json::parse(facet);
+      }
+    }
+    if (!mutation_state.empty()) {
+      tao::json::value scan_vectors = tao::json::empty_object;
+      for (const auto& token : mutation_state) {
+        auto key = fmt::format("{}/{}", token.partition_id(), token.partition_uuid());
+        const auto* old_val = scan_vectors.find(key);
+        if (old_val == nullptr ||
+            (old_val->is_unsigned() && old_val->get_unsigned() < token.sequence_number())) {
+          scan_vectors[key] = token.sequence_number();
+        }
+      }
+      body["ctl"]["consistency"] = tao::json::value{
+        { "level", "at_plus" },
+        { "vectors", { { index_name, scan_vectors } } },
+      };
+    }
+    if (!collections.empty()) {
+      body["collections"] = collections;
+    }
+
+    for (const auto& [key, value] : raw) {
+      if (key.empty()) {
+        return errc::common::invalid_argument;
+      }
+      auto parsed = utils::json::parse(value);
+      if (key == "query") {
+        continue;
+      }
+      if (key == "ctl") {
+        if (!parsed.is_object()) {
+          return errc::common::invalid_argument;
+        }
+        auto& ctl = body["ctl"].get_object();
+        for (auto& [ctl_key, ctl_val] : parsed.get_object()) {
+          if (ctl_key == "timeout" || (ctl_key == "consistency" && !mutation_state.empty())) {
+            continue;
+          }
+          ctl[ctl_key] = std::move(ctl_val);
+        }
+        continue;
+      }
+      body[key] = std::move(parsed);
+    }
+  } catch (const tao::pegtl::parse_error&) {
+    return errc::common::invalid_argument;
   }
 
   if (bucket_name.has_value() && scope_name.has_value()) {
@@ -292,31 +320,42 @@ search_request::make_response(error_context::search&& ctx,
       if (log_response.has_value() && log_response.value()) {
         CB_LOG_INFO("SEARCH RESPONSE: {}", logger::user_data(utils::json::generate(payload)));
       }
-      response.meta.metrics.took = std::chrono::nanoseconds(payload.at("took").get_unsigned());
-      response.meta.metrics.max_score = payload.at("max_score").as<double>();
-      response.meta.metrics.total_rows = payload.at("total_hits").get_unsigned();
-
-      if (auto& status_prop = payload.at("status"); status_prop.is_string()) {
-        response.status = status_prop.get_string();
-        if (response.status == "ok") {
+      try {
+        if (!payload.is_object()) {
+          response.ctx.ec = errc::common::parsing_failure;
           return response;
         }
-      } else if (status_prop.is_object()) {
-        response.meta.metrics.error_partition_count = status_prop.at("failed").get_unsigned();
-        response.meta.metrics.success_partition_count = status_prop.at("successful").get_unsigned();
-        if (const auto* errors = status_prop.find("errors");
-            errors != nullptr && errors->is_object()) {
-          for (const auto& [location, message] : errors->get_object()) {
-            response.meta.errors.try_emplace(location, message.get_string());
+        response.meta.metrics.took = std::chrono::nanoseconds(payload.at("took").get_unsigned());
+        response.meta.metrics.max_score = payload.at("max_score").as<double>();
+        response.meta.metrics.total_rows = payload.at("total_hits").get_unsigned();
+
+        if (auto& status_prop = payload.at("status"); status_prop.is_string()) {
+          response.status = status_prop.get_string();
+          if (response.status == "ok") {
+            return response;
           }
+        } else if (status_prop.is_object()) {
+          response.meta.metrics.error_partition_count = status_prop.at("failed").get_unsigned();
+          response.meta.metrics.success_partition_count =
+            status_prop.at("successful").get_unsigned();
+          if (const auto* errors = status_prop.find("errors");
+              errors != nullptr && !errors->is_null()) {
+            for (const auto& [location, message] : errors->get_object()) {
+              response.meta.errors.try_emplace(location, message.get_string());
+            }
+          }
+        } else {
+          response.ctx.ec = errc::common::parsing_failure;
+          return response;
         }
-      } else {
-        response.ctx.ec = errc::common::internal_server_failure;
+      } catch (const std::exception& e) {
+        CB_LOG_ERROR("Error parsing search response header. Error: {}.", e.what());
+        response.ctx.ec = errc::common::parsing_failure;
         return response;
       }
 
       try {
-        if (const auto* rows = payload.find("hits"); rows != nullptr && rows->is_array()) {
+        if (const auto* rows = payload.find("hits"); rows != nullptr && !rows->is_null()) {
           for (const auto& entry : rows->get_array()) {
             search_response::search_row row{};
             row.index = entry.optional<std::string>("index").value_or(std::string());
@@ -361,7 +400,7 @@ search_request::make_response(error_context::search&& ctx,
             response.rows.emplace_back(row);
           }
         }
-      } catch (const std::out_of_range& e) {
+      } catch (const std::exception& e) {
         CB_LOG_ERROR("Error parsing search results. Error: {}.", e.what());
         response.ctx.ec = errc::common::parsing_failure;
         return response;
@@ -369,7 +408,7 @@ search_request::make_response(error_context::search&& ctx,
 
       try {
         if (const auto* response_facets = payload.find("facets");
-            response_facets != nullptr && response_facets->is_object()) {
+            response_facets != nullptr && !response_facets->is_null()) {
           for (const auto& [name, object] : response_facets->get_object()) {
             search_response::search_facet facet;
             facet.name = name;
@@ -379,16 +418,16 @@ search_request::make_response(error_context::search&& ctx,
             facet.other = object.at("other").get_unsigned();
 
             if (const auto* date_ranges = object.find("date_ranges");
-                date_ranges != nullptr && date_ranges->is_array()) {
+                date_ranges != nullptr && !date_ranges->is_null()) {
               for (const auto& date_range : date_ranges->get_array()) {
                 search_response::search_facet::date_range_facet date_range_facet;
                 date_range_facet.name = date_range.at("name").get_string();
                 date_range_facet.count = date_range.at("count").get_unsigned();
                 if (const auto* start = date_range.find("start");
-                    start != nullptr && start->is_string()) {
+                    start != nullptr && !start->is_null()) {
                   date_range_facet.start = start->get_string();
                 }
-                if (const auto* end = date_range.find("end"); end != nullptr && end->is_string()) {
+                if (const auto* end = date_range.find("end"); end != nullptr && !end->is_null()) {
                   date_range_facet.end = end->get_string();
                 }
                 facet.date_ranges.emplace_back(date_range_facet);
@@ -396,30 +435,32 @@ search_request::make_response(error_context::search&& ctx,
             }
 
             if (const auto& numeric_ranges = object.find("numeric_ranges");
-                numeric_ranges != nullptr && numeric_ranges->is_array()) {
+                numeric_ranges != nullptr && !numeric_ranges->is_null()) {
               for (const auto& numeric_range : numeric_ranges->get_array()) {
                 search_response::search_facet::numeric_range_facet numeric_range_facet;
                 numeric_range_facet.name = numeric_range.at("name").get_string();
                 numeric_range_facet.count = numeric_range.at("count").get_unsigned();
-                if (const auto* min = numeric_range.find("min"); min != nullptr) {
-                  if (min->is_double()) {
-                    numeric_range_facet.min = min->as<double>();
-                  } else if (min->is_integer()) {
+                if (const auto* min = numeric_range.find("min");
+                    min != nullptr && !min->is_null()) {
+                  if (min->is_unsigned()) {
                     numeric_range_facet.min = min->get_unsigned();
+                  } else {
+                    numeric_range_facet.min = min->as<double>();
                   }
                 }
-                if (const auto* max = numeric_range.find("max"); max != nullptr) {
-                  if (max->is_double()) {
-                    numeric_range_facet.max = max->as<double>();
-                  } else if (max->is_integer()) {
+                if (const auto* max = numeric_range.find("max");
+                    max != nullptr && !max->is_null()) {
+                  if (max->is_unsigned()) {
                     numeric_range_facet.max = max->get_unsigned();
+                  } else {
+                    numeric_range_facet.max = max->as<double>();
                   }
                 }
                 facet.numeric_ranges.emplace_back(numeric_range_facet);
               }
             }
 
-            if (const auto* terms = object.find("terms"); terms != nullptr && terms->is_array()) {
+            if (const auto* terms = object.find("terms"); terms != nullptr && !terms->is_null()) {
               for (const auto& term : terms->get_array()) {
                 search_response::search_facet::term_facet term_facet;
                 term_facet.term = term.at("term").get_string();
@@ -431,7 +472,7 @@ search_request::make_response(error_context::search&& ctx,
             response.facets.emplace_back(facet);
           }
         }
-      } catch (const std::out_of_range& e) {
+      } catch (const std::exception& e) {
         CB_LOG_ERROR("Error parsing search facets. Error: {}.", e.what());
         response.ctx.ec = errc::common::parsing_failure;
         return response;
@@ -446,8 +487,25 @@ search_request::make_response(error_context::search&& ctx,
         response.ctx.ec = errc::common::parsing_failure;
         return response;
       }
-      response.status = payload.at("status").get_string();
-      response.error = payload.at("error").get_string();
+      // RFC-58: an HTTP 400 is the caller's error. A 400 whose JSON body is not an object or whose
+      // status/error fields are absent or non-string names no more specific error, so it completes
+      // with invalid_argument (whereas 200, 404, and 429 report parsing_failure on mistyped
+      // fields).
+      if (!payload.is_object()) {
+        response.ctx.ec = errc::common::invalid_argument;
+        return response;
+      }
+      try {
+        if (const auto* s = payload.find("status"); s != nullptr) {
+          response.status = s->get_string();
+        }
+        if (const auto* e = payload.find("error"); e != nullptr) {
+          response.error = e->get_string();
+        }
+      } catch (const std::exception&) {
+        response.ctx.ec = errc::common::invalid_argument;
+        return response;
+      }
       if (response.error.find("index not found") != std::string::npos) {
         response.ctx.ec = errc::common::index_not_found;
         return response;
@@ -472,12 +530,20 @@ search_request::make_response(error_context::search&& ctx,
       tao::json::value payload{};
       try {
         payload = utils::json::parse(encoded.body.data());
-      } catch (const tao::pegtl::parse_error&) {
+        if (!payload.is_object()) {
+          response.ctx.ec = errc::common::parsing_failure;
+          return response;
+        }
+        if (const auto* s = payload.find("status"); s != nullptr) {
+          response.status = s->get_string();
+        }
+        if (const auto* e = payload.find("error"); e != nullptr) {
+          response.error = e->get_string();
+        }
+      } catch (const std::exception&) {
         response.ctx.ec = errc::common::parsing_failure;
         return response;
       }
-      response.status = payload.at("status").get_string();
-      response.error = payload.at("error").get_string();
 
       if (response.error.find("num_concurrent_requests") != std::string::npos ||
           response.error.find("num_queries_per_min") != std::string::npos ||
@@ -490,12 +556,20 @@ search_request::make_response(error_context::search&& ctx,
       tao::json::value payload{};
       try {
         payload = utils::json::parse(encoded.body.data());
-      } catch (const tao::pegtl::parse_error&) {
+        if (!payload.is_object()) {
+          response.ctx.ec = errc::common::parsing_failure;
+          return response;
+        }
+        if (const auto* s = payload.find("status"); s != nullptr) {
+          response.status = s->get_string();
+        }
+        if (const auto* e = payload.find("error"); e != nullptr) {
+          response.error = e->get_string();
+        }
+      } catch (const std::exception&) {
         response.ctx.ec = errc::common::parsing_failure;
         return response;
       }
-      response.status = payload.at("status").get_string();
-      response.error = payload.at("error").get_string();
       response.ctx.ec = errc::common::feature_not_available;
       return response;
     }

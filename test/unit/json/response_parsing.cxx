@@ -23,12 +23,16 @@
 #include "framework/test_registry.hxx"
 
 #include "core/analytics_scan_consistency.hxx"
+#include "core/cluster_options.hxx"
+#include "core/io/http_context.hxx"
 #include "core/io/http_error.hxx"
 #include "core/io/http_message.hxx"
 #include "core/operations/analytics_response_parsing.hxx"
 #include "core/operations/document_analytics.hxx"
 #include "core/operations/document_query.hxx"
+#include "core/operations/document_search.hxx"
 #include "core/operations/query_response_parsing.hxx"
+#include "core/topology/configuration.hxx"
 #include "core/utils/json.hxx"
 
 #include <couchbase/error_codes.hxx>
@@ -164,7 +168,7 @@ encode_query_options_emits_the_shared_request_body_fields([[maybe_unused]] conte
   req.raw["custom"] = couchbase::core::json_string{ "true" };
 
   tao::json::value body{};
-  ops::encode_query_options(body, req);
+  assert_success(ops::encode_query_options(body, req), "valid query options encode");
 
   assert_true(body.at("readonly").get_boolean(), "the readonly flag");
   assert_eq(body.at("scan_consistency").get_string(),
@@ -349,7 +353,7 @@ encode_analytics_options_emits_the_shared_request_body_fields([[maybe_unused]] c
   req.raw["custom"] = couchbase::core::json_string{ "true" };
 
   tao::json::value body{};
-  ops::encode_analytics_options(body, req);
+  assert_success(ops::encode_analytics_options(body, req), "valid analytics options encode");
 
   assert_true(body.at("readonly").get_boolean(), "the readonly flag");
   assert_eq(body.at("scan_consistency").get_string(),
@@ -370,7 +374,7 @@ encode_analytics_options_quotes_both_halves_of_the_query_context([[maybe_unused]
   req.scope_name = "scp";
 
   tao::json::value body{};
-  ops::encode_analytics_options(body, req);
+  assert_success(ops::encode_analytics_options(body, req), "query_context names encode");
 
   assert_eq(body.at("query_context").get_string(),
             std::string{ "default:`bkt`.`scp`" },
@@ -389,7 +393,7 @@ encode_analytics_options_escapes_a_backslash_in_the_query_context([[maybe_unused
   req.scope_name = "\\u0060.`Metadata`.`Dataverse";
 
   tao::json::value body{};
-  ops::encode_analytics_options(body, req);
+  assert_success(ops::encode_analytics_options(body, req), "escaped query_context names encode");
 
   assert_eq(body.at("query_context").get_string(),
             std::string{ "default:`bkt`.`\\\\u0060.``Metadata``.``Dataverse`" },
@@ -407,11 +411,342 @@ encode_analytics_options_passes_a_caller_supplied_scope_qualifier_through(
   req.scope_name = "ignored";
 
   tao::json::value body{};
-  ops::encode_analytics_options(body, req);
+  assert_success(ops::encode_analytics_options(body, req), "scope_qualifier encodes");
 
   assert_eq(body.at("query_context").get_string(),
             std::string{ "default:`bkt`.`scp`" },
             "the qualifier is used verbatim and the names are not consulted");
+}
+
+void
+search_response_parses_negative_numeric_range_facet_bounds([[maybe_unused]] context& ctx)
+{
+  couchbase::core::io::http_response encoded{};
+  encoded.status_code = 200;
+  encoded.body.append(R"({"took":100,"max_score":1.5,"total_hits":3,)"
+                      R"("status":{"failed":0,"successful":1},)"
+                      R"("facets":{"temp":{"field":"temperature","total":16,"missing":0,"other":0,)"
+                      R"("numeric_ranges":[)"
+                      R"({"name":"freezing","min":-20,"max":-5,"count":5},)"
+                      R"({"name":"subzero_float","min":-12.5,"max":-0.5,"count":3},)"
+                      R"({"name":"warm","min":10,"max":30,"count":8})"
+                      R"(]}}})");
+
+  auto resp = ops::search_request{}.make_response({}, encoded);
+  assert_success(resp.ctx.ec, "search response with negative numeric facet bounds parses");
+  assert_eq(resp.facets.size(), std::size_t{ 1 }, "one facet decoded");
+  const auto& ranges = resp.facets.front().numeric_ranges;
+  assert_eq(ranges.size(), std::size_t{ 3 }, "three numeric ranges decoded");
+
+  assert_eq(ranges[0].name, std::string{ "freezing" }, "first range name");
+  assert_true(std::holds_alternative<double>(ranges[0].min),
+              "negative integer min is stored as double");
+  assert_eq(std::get<double>(ranges[0].min), -20.0, "negative integer min value");
+  assert_true(std::holds_alternative<double>(ranges[0].max),
+              "negative integer max is stored as double");
+  assert_eq(std::get<double>(ranges[0].max), -5.0, "negative integer max value");
+
+  assert_eq(ranges[1].name, std::string{ "subzero_float" }, "second range name");
+  assert_true(std::holds_alternative<double>(ranges[1].min), "float min is stored as double");
+  assert_eq(std::get<double>(ranges[1].min), -12.5, "float min value");
+  assert_true(std::holds_alternative<double>(ranges[1].max), "float max is stored as double");
+  assert_eq(std::get<double>(ranges[1].max), -0.5, "float max value");
+
+  assert_eq(ranges[2].name, std::string{ "warm" }, "third range name");
+  assert_true(std::holds_alternative<std::uint64_t>(ranges[2].min),
+              "positive integer min is stored as uint64_t");
+  assert_eq(std::get<std::uint64_t>(ranges[2].min), std::uint64_t{ 10 }, "positive min value");
+  assert_true(std::holds_alternative<std::uint64_t>(ranges[2].max),
+              "positive integer max is stored as uint64_t");
+  assert_eq(std::get<std::uint64_t>(ranges[2].max), std::uint64_t{ 30 }, "positive max value");
+}
+
+void
+search_response_reports_parsing_failure_on_missing_or_mistyped_fields([[maybe_unused]] context& ctx)
+{
+  for (
+    const char* body : {
+      "{}",
+      R"({"took":"invalid","max_score":1.0,"total_hits":1,"status":{"failed":0,"successful":1}})",
+      R"({"took":1,"max_score":1.0,"total_hits":1,"status":{"failed":0,"successful":1},)"
+      R"("facets":{"f":{"field":123,"total":1,"missing":0,"other":0}}})",
+    }) {
+    couchbase::core::io::http_response encoded{};
+    encoded.status_code = 200;
+    encoded.body.append(body);
+    auto resp = ops::search_request{}.make_response({}, encoded);
+    assert_error(resp.ctx.ec,
+                 couchbase::errc::common::parsing_failure,
+                 std::string{ "malformed 200 search payload reports parsing_failure: " } + body);
+  }
+}
+
+void
+encode_options_reject_empty_named_parameters_and_invalid_json([[maybe_unused]] context& ctx)
+{
+  couchbase::core::topology::configuration config{};
+  couchbase::core::cluster_options options{};
+  couchbase::core::query_cache cache{};
+  couchbase::core::http_context http_ctx{ config, options, cache, "", 0, "", 0 };
+
+  {
+    ops::query_request req{ "SELECT 1" };
+    req.named_parameters["age"] = couchbase::core::json_string{ "{not-json" };
+    couchbase::core::io::http_request encoded{};
+    assert_error(req.encode_to(encoded, http_ctx),
+                 couchbase::errc::common::invalid_argument,
+                 "query request rejects malformed JSON in named parameter");
+  }
+  {
+    ops::query_request req{ "SELECT 1" };
+    req.named_parameters[""] = couchbase::core::json_string{ "42" };
+    couchbase::core::io::http_request encoded{};
+    assert_error(req.encode_to(encoded, http_ctx),
+                 couchbase::errc::common::invalid_argument,
+                 "query request rejects empty named parameter key");
+  }
+  {
+    ops::query_request req{ "SELECT 1" };
+    req.named_parameters["$"] = couchbase::core::json_string{ "42" };
+    couchbase::core::io::http_request encoded{};
+    assert_error(req.encode_to(encoded, http_ctx),
+                 couchbase::errc::common::invalid_argument,
+                 "query request rejects bare dollar named parameter key");
+  }
+  {
+    ops::analytics_request req{};
+    req.statement = "SELECT 1";
+    req.named_parameters[""] = couchbase::core::json_string{ "42" };
+    couchbase::core::io::http_request encoded{};
+    assert_error(req.encode_to(encoded, http_ctx),
+                 couchbase::errc::common::invalid_argument,
+                 "analytics request rejects empty named parameter key");
+  }
+  {
+    ops::search_request req{};
+    req.index_name = "idx";
+    req.query = couchbase::core::json_string{ R"({"match":"x"})" };
+    req.raw["bad"] = couchbase::core::json_string{ "{not-json" };
+    couchbase::core::io::http_request encoded{};
+    assert_error(req.encode_to(encoded, http_ctx),
+                 couchbase::errc::common::invalid_argument,
+                 "search request rejects malformed JSON in raw parameter");
+  }
+}
+
+void
+search_error_responses_and_mistyped_facet_bounds_do_not_throw([[maybe_unused]] context& ctx)
+{
+  for (const char* body : { "{}",
+                            "[]",
+                            R"({"status":42,"error":"index not found"})",
+                            R"({"status":"fail","error":7})" }) {
+    couchbase::core::io::http_response encoded{};
+    encoded.status_code = 400;
+    encoded.body.append(body);
+    auto resp = ops::search_request{}.make_response({}, encoded);
+    assert_error(resp.ctx.ec,
+                 couchbase::errc::common::invalid_argument,
+                 "400 search response with missing or mistyped fields maps to invalid_argument");
+  }
+  {
+    couchbase::core::io::http_response encoded{};
+    encoded.status_code = 404;
+    encoded.body.append("{}");
+    auto resp = ops::search_request{}.make_response({}, encoded);
+    assert_error(resp.ctx.ec,
+                 couchbase::errc::common::feature_not_available,
+                 "404 search response without status/error fields maps to feature_not_available");
+  }
+  {
+    couchbase::core::io::http_response encoded{};
+    encoded.status_code = 429;
+    encoded.body.append("{}");
+    auto resp = ops::search_request{}.make_response({}, encoded);
+    assert_error(resp.ctx.ec,
+                 couchbase::errc::common::internal_server_failure,
+                 "429 search response without status/error fields does not throw");
+  }
+  for (const auto status_code : { std::uint32_t{ 404 }, std::uint32_t{ 429 } }) {
+    for (const char* body :
+         { R"({"status":42,"error":"bad"})", R"({"status":"fail","error":7})" }) {
+      couchbase::core::io::http_response encoded{};
+      encoded.status_code = status_code;
+      encoded.body.append(body);
+      auto resp = ops::search_request{}.make_response({}, encoded);
+      assert_error(resp.ctx.ec,
+                   couchbase::errc::common::parsing_failure,
+                   "mistyped status or error in 404/429 search payload reports parsing_failure");
+    }
+  }
+  for (const char* body : {
+         R"({"took":1,"max_score":1.0,"total_hits":1,"status":42})",
+         R"({"took":1,"max_score":1.0,"total_hits":1,)"
+         R"("status":{"failed":1,"successful":0,"errors":"bad"}})",
+         R"({"took":1,"max_score":1.0,"total_hits":1,)"
+         R"("status":{"failed":0,"successful":1},"hits":"not-an-array"})",
+         R"({"took":1,"max_score":1.0,"total_hits":1,)"
+         R"("status":{"failed":0,"successful":1},"facets":"not-an-object"})",
+         R"({"took":1,"max_score":1.0,"total_hits":1,"status":{"failed":0,"successful":1},)"
+         R"("facets":{"f":{"field":"a","total":1,"missing":0,"other":0,)"
+         R"("numeric_ranges":[{"name":"r","count":1,"min":"bad"}]}}})",
+         R"({"took":1,"max_score":1.0,"total_hits":1,"status":{"failed":0,"successful":1},)"
+         R"("facets":{"f":{"field":"a","total":1,"missing":0,"other":0,)"
+         R"("date_ranges":[{"name":"r","count":1,"start":123}]}}})",
+       }) {
+    couchbase::core::io::http_response encoded{};
+    encoded.status_code = 200;
+    encoded.body.append(body);
+    auto resp = ops::search_request{}.make_response({}, encoded);
+    assert_error(resp.ctx.ec,
+                 couchbase::errc::common::parsing_failure,
+                 std::string{ "mistyped search response field reports parsing_failure: " } + body);
+  }
+}
+
+void
+query_and_analytics_preserve_control_fields_and_validate_response_types(
+  [[maybe_unused]] context& ctx)
+{
+  couchbase::core::topology::configuration config{};
+  couchbase::core::cluster_options options{};
+  couchbase::core::query_cache cache{};
+  couchbase::core::http_context http_ctx{ config, options, cache, "", 0, "", 0 };
+
+  {
+    ops::query_request req{ "SELECT 1" };
+    req.raw["statement"] = couchbase::core::json_string{ R"("SELECT 2")" };
+    req.raw["prepared"] = couchbase::core::json_string{ R"("injected_prep")" };
+    req.raw["encoded_plan"] = couchbase::core::json_string{ R"("injected_plan")" };
+    req.raw["auto_execute"] = couchbase::core::json_string{ "true" };
+    req.raw["client_context_id"] = couchbase::core::json_string{ R"("overridden")" };
+    couchbase::core::io::http_request encoded{};
+    encoded.client_context_id = "ctx-1";
+    assert_success(req.encode_to(encoded, http_ctx), "query request with raw fields encodes");
+    const auto body = couchbase::core::utils::json::parse(encoded.body);
+    assert_eq(body.at("statement").get_string(),
+              std::string{ "SELECT 1" },
+              "query statement is not overwritten by raw");
+    assert_true(body.find("prepared") == nullptr, "adhoc query drops raw prepared");
+    assert_true(body.find("encoded_plan") == nullptr, "adhoc query drops raw encoded_plan");
+    assert_true(body.find("auto_execute") == nullptr, "adhoc query drops raw auto_execute");
+    assert_eq(body.at("client_context_id").get_string(),
+              std::string{ "ctx-1" },
+              "query client_context_id is not overwritten by raw");
+  }
+  {
+    cache.put("SELECT 1", "cached_prep");
+    ops::query_request req{ "SELECT 1" };
+    req.adhoc = false;
+    req.raw["statement"] = couchbase::core::json_string{ R"("SELECT 2")" };
+    req.raw["prepared"] = couchbase::core::json_string{ R"("injected_prep")" };
+    req.raw["encoded_plan"] = couchbase::core::json_string{ R"("injected_plan")" };
+    req.raw["auto_execute"] = couchbase::core::json_string{ "true" };
+    couchbase::core::io::http_request encoded{};
+    encoded.client_context_id = "ctx-prep";
+    assert_success(req.encode_to(encoded, http_ctx), "cached prepared query encodes");
+    const auto body = couchbase::core::utils::json::parse(encoded.body);
+    assert_eq(body.at("prepared").get_string(),
+              std::string{ "cached_prep" },
+              "cached prepared name is preserved over raw");
+    assert_true(body.find("statement") == nullptr, "cached prepared query drops raw statement");
+    assert_true(body.find("encoded_plan") == nullptr,
+                "cached prepared query without plan drops raw encoded_plan");
+    assert_true(body.find("auto_execute") == nullptr,
+                "cached prepared query drops raw auto_execute");
+  }
+  {
+    ops::search_request req{};
+    req.index_name = "idx";
+    req.query = couchbase::core::json_string{ R"({"match":"sdk"})" };
+    req.mutation_state = { couchbase::mutation_token{ 42, 99, 3, "bkt" } };
+    req.raw["query"] = couchbase::core::json_string{ R"({"match":"raw"})" };
+    req.raw["ctl"] = couchbase::core::json_string{
+      R"({"timeout":1,"consistency":{"level":"not_bounded"},"custom_ctl":true})"
+    };
+    couchbase::core::io::http_request encoded{};
+    encoded.timeout = std::chrono::milliseconds{ 2500 };
+    assert_success(req.encode_to(encoded, http_ctx), "search request with raw collisions encodes");
+    const auto body = couchbase::core::utils::json::parse(encoded.body);
+    assert_eq(body.at("query").at("match").get_string(),
+              std::string{ "sdk" },
+              "search query is not overwritten by raw");
+    assert_eq(body.at("ctl").at("timeout").get_unsigned(),
+              std::uint64_t{ 2500 },
+              "search ctl.timeout is not overwritten by raw");
+    assert_eq(body.at("ctl").at("consistency").at("level").get_string(),
+              std::string{ "at_plus" },
+              "search ctl.consistency is not overwritten by raw");
+    assert_eq(body.at("ctl").at("consistency").at("vectors").at("idx").at("3/42").get_unsigned(),
+              std::uint64_t{ 99 },
+              "search ctl.consistency vectors are preserved");
+    assert_true(body.at("ctl").at("custom_ctl").get_boolean(),
+                "unrelated raw ctl option is retained");
+  }
+  {
+    ops::search_request req{};
+    req.index_name = "idx";
+    req.query = couchbase::core::json_string{ R"({"match":"sdk"})" };
+    req.raw["ctl"] = couchbase::core::json_string{ "123" };
+    couchbase::core::io::http_request encoded{};
+    assert_error(req.encode_to(encoded, http_ctx),
+                 couchbase::errc::common::invalid_argument,
+                 "search request rejects non-object raw ctl");
+  }
+  {
+    ops::analytics_request req{};
+    req.statement = "SELECT 1";
+    req.raw["statement"] = couchbase::core::json_string{ R"("SELECT 2")" };
+    couchbase::core::io::http_request encoded{};
+    encoded.client_context_id = "ctx-2";
+    assert_success(req.encode_to(encoded, http_ctx), "analytics request with raw fields encodes");
+    const auto body = couchbase::core::utils::json::parse(encoded.body);
+    assert_eq(body.at("statement").get_string(),
+              std::string{ "SELECT 1" },
+              "analytics statement is not overwritten by raw");
+  }
+  {
+    ops::query_request req{ "SELECT 1" };
+    req.raw[""] = couchbase::core::json_string{ "1" };
+    couchbase::core::io::http_request encoded{};
+    assert_error(req.encode_to(encoded, http_ctx),
+                 couchbase::errc::common::invalid_argument,
+                 "query request rejects empty raw key");
+  }
+  for (const char* body : {
+         R"({"status":"success","results":null})",
+         R"({"status":42,"results":[]})",
+         R"({"status":null,"results":[]})",
+       }) {
+    couchbase::core::io::http_response encoded_200{};
+    encoded_200.status_code = 200;
+    encoded_200.body.append(body);
+    auto query_200 = ops::query_request{ "SELECT 1" }.make_response({}, encoded_200);
+    assert_error(query_200.ctx.ec,
+                 couchbase::errc::common::parsing_failure,
+                 std::string{ "query 200 response with mistyped field reports parsing_failure: " } +
+                   body);
+    auto analytics_200 = ops::analytics_request{}.make_response({}, encoded_200);
+    assert_error(
+      analytics_200.ctx.ec,
+      couchbase::errc::common::parsing_failure,
+      std::string{ "analytics 200 response with mistyped field reports parsing_failure: " } + body);
+
+    couchbase::core::io::http_response encoded_400{};
+    encoded_400.status_code = 400;
+    encoded_400.body.append(body);
+    auto query_400 = ops::query_request{ "SELECT 1" }.make_response({}, encoded_400);
+    assert_error(
+      query_400.ctx.ec,
+      couchbase::errc::common::invalid_argument,
+      std::string{ "query 400 response with mistyped field reports invalid_argument: " } + body);
+    auto analytics_400 = ops::analytics_request{}.make_response({}, encoded_400);
+    assert_error(
+      analytics_400.ctx.ec,
+      couchbase::errc::common::invalid_argument,
+      std::string{ "analytics 400 response with mistyped field reports invalid_argument: " } +
+        body);
+  }
 }
 } // namespace
 
@@ -436,6 +771,11 @@ tests() -> test_suite
       { CASE(encode_analytics_options_quotes_both_halves_of_the_query_context) },
       { CASE(encode_analytics_options_escapes_a_backslash_in_the_query_context) },
       { CASE(encode_analytics_options_passes_a_caller_supplied_scope_qualifier_through) },
+      { CASE(search_response_parses_negative_numeric_range_facet_bounds) },
+      { CASE(search_response_reports_parsing_failure_on_missing_or_mistyped_fields) },
+      { CASE(encode_options_reject_empty_named_parameters_and_invalid_json) },
+      { CASE(search_error_responses_and_mistyped_facet_bounds_do_not_throw) },
+      { CASE(query_and_analytics_preserve_control_fields_and_validate_response_types) },
     },
   };
 }
