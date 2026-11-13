@@ -193,12 +193,16 @@ struct connection_endpoints {
 class collection_cache
 {
 private:
-  std::map<std::string, std::uint32_t> cid_map_{ { "_default._default", 0 } };
+  std::map<std::string, std::uint32_t> cid_map_{};
+  std::uint32_t default_cid_{ 0 };
 
 public:
   [[nodiscard]] auto get(const std::string& path) -> std::optional<std::uint32_t>
   {
     Expects(!path.empty());
+    if (path == "_default._default") {
+      return default_cid_;
+    }
     if (auto ptr = cid_map_.find(path); ptr != cid_map_.end()) {
       return ptr->second;
     }
@@ -208,13 +212,17 @@ public:
   void update(const std::string& path, std::uint32_t id)
   {
     Expects(!path.empty());
+    if (path == "_default._default") {
+      default_cid_ = id;
+      return;
+    }
     cid_map_[path] = id;
   }
 
   void reset()
   {
     cid_map_.clear();
-    cid_map_["_default._default"] = 0;
+    default_cid_ = 0;
   }
 };
 
@@ -388,6 +396,9 @@ class mcbp_session_impl
                 {
                   const std::scoped_lock lock(session_->session_info_mutex_);
                   session_->supported_features_ = resp.body().supported_features();
+                  session_->supported_features_mask_.store(
+                    compute_features_mask(session_->supported_features_),
+                    std::memory_order_release);
                 }
                 CB_LOG_DEBUG("{} supported_features=[{}]",
                              session_->log_prefix_,
@@ -902,6 +913,7 @@ public:
     , origin_{ std::move(origin) }
     , bucket_name_{ std::move(bucket_name) }
     , supported_features_{ std::move(known_features) }
+    , supported_features_mask_{ compute_features_mask(supported_features_) }
     , is_tls_{ false }
     , state_listener_{ std::move(state_listener) }
     , codec_{ { supported_features_.begin(), supported_features_.end() } }
@@ -932,6 +944,7 @@ public:
     , origin_(std::move(origin))
     , bucket_name_(std::move(bucket_name))
     , supported_features_(std::move(known_features))
+    , supported_features_mask_{ compute_features_mask(supported_features_) }
     , is_tls_{ true }
     , state_listener_{ std::move(state_listener) }
     , codec_{ { supported_features_.begin(), supported_features_.end() } }
@@ -1085,8 +1098,7 @@ public:
 
   [[nodiscard]] auto context() const -> mcbp_context
   {
-    const std::scoped_lock lock(session_info_mutex_);
-    return { config_, supported_features_ };
+    return { config_, supported_features_mask_.load(std::memory_order_acquire) };
   }
 
   void reauthenticate()
@@ -1655,9 +1667,8 @@ public:
 
   [[nodiscard]] auto supports_feature(protocol::hello_feature feature) -> bool
   {
-    const std::scoped_lock lock(session_info_mutex_);
-    return std::find(supported_features_.begin(), supported_features_.end(), feature) !=
-           supported_features_.end();
+    const auto mask = supported_features_mask_.load(std::memory_order_acquire);
+    return (mask & feature_mask_bit(feature)) != 0;
   }
 
   void on_before_subscribe(std::function<void(std::uint32_t)> hook)
@@ -2348,6 +2359,7 @@ private:
   asio::ip::tcp::resolver::results_type endpoints_;
   mutable std::mutex session_info_mutex_{};
   std::vector<protocol::hello_feature> supported_features_;
+  std::atomic<std::uint64_t> supported_features_mask_{ 0 };
   std::optional<topology::configuration> config_;
   mutable std::mutex config_mutex_{};
   std::atomic_bool configured_{ false };
