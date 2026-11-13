@@ -42,6 +42,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <queue>
 #include <random>
 #include <utility>
@@ -257,7 +258,7 @@ class websocket_session
 public:
   static auto start(asio::io_context& ctx,
                     app_telemetry_address address,
-                    cluster_credentials credentials,
+                    std::optional<cluster_credentials> credentials,
                     std::unique_ptr<io::stream_impl>&& stream,
                     std::shared_ptr<app_telemetry_meter> meter,
                     std::shared_ptr<connection_state_listener> reporter,
@@ -278,7 +279,7 @@ public:
 
   websocket_session(asio::io_context& ctx,
                     app_telemetry_address address,
-                    cluster_credentials credentials,
+                    std::optional<cluster_credentials> credentials,
                     std::unique_ptr<io::stream_impl>&& stream,
                     std::shared_ptr<app_telemetry_meter> meter,
                     std::shared_ptr<connection_state_listener> reporter,
@@ -427,17 +428,22 @@ public:
 private:
   auto build_handshake_message() -> std::vector<std::byte>
   {
-    std::string auth{};
-    if (credentials_.uses_jwt()) {
-      auth = fmt::format("Bearer {}", credentials_.jwt_token);
-    } else {
-      auto credentials = fmt::format("{}:{}", credentials_.username, credentials_.password);
-      auth = fmt::format(
-        "Basic {}",
-        base64::encode(gsl::as_bytes(gsl::span{ credentials.data(), credentials.size() })));
+    std::string authorization_header{};
+    if (auto credentials = credentials_; credentials.has_value()) {
+      std::string auth{};
+      if (credentials->uses_jwt()) {
+        auth = fmt::format("Bearer {}", credentials->jwt_token);
+      } else {
+        auto username_and_password =
+          fmt::format("{}:{}", credentials->username, credentials->password);
+        auth = fmt::format("Basic {}",
+                           base64::encode(gsl::as_bytes(gsl::span{
+                             username_and_password.data(), username_and_password.size() })));
+      }
+      authorization_header = fmt::format("Authorization: {}\r\n", auth);
     }
     auto message = fmt::format("GET {} HTTP/1.1\r\n"
-                               "Authorization: {}\r\n"
+                               "{}"
                                "Upgrade: websocket\r\n"
                                "Connection: Upgrade\r\n"
                                "Host: {}:{}\r\n"
@@ -445,7 +451,7 @@ private:
                                "Sec-WebSocket-Key: {}\r\n"
                                "\r\n",
                                address_.path,
-                               auth,
+                               authorization_header,
                                address_.hostname,
                                address_.service,
                                codec_.session_key());
@@ -577,7 +583,7 @@ private:
 
   asio::io_context& ctx_;
   app_telemetry_address address_;
-  cluster_credentials credentials_;
+  std::optional<cluster_credentials> credentials_;
   std::unique_ptr<io::stream_impl> stream_;
   std::shared_ptr<app_telemetry_meter> meter_;
   std::shared_ptr<connection_state_listener> reporter_;
@@ -753,9 +759,15 @@ public:
                    { "stream", stream->id() },
                    { "hostname", address.hostname },
                  }));
+    // SDK-RFC 84: a user-set app_telemetry_endpoint is unauthenticated; cluster-configured
+    // management endpoints authenticate with the cluster credentials.
+    std::optional<cluster_credentials> credentials{};
+    if (origin_.options().app_telemetry_endpoint.empty()) {
+      credentials = origin_.credentials();
+    }
     websocket_session_ = websocket_session::start(ctx_,
                                                   address,
-                                                  origin_.credentials(),
+                                                  std::move(credentials),
                                                   std::move(stream),
                                                   meter_,
                                                   shared_from_this(),
