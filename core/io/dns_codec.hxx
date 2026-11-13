@@ -31,7 +31,11 @@ class dns_codec
 public:
   static auto decode(const std::vector<std::uint8_t>& payload) -> dns_message
   {
+    constexpr std::size_t header_size = 6 * sizeof(std::uint16_t);
     dns_message message{};
+    if (payload.size() < header_size) {
+      return message;
+    }
     std::size_t offset = 0;
 
     std::memcpy(&message.header.id, payload.data() + offset, sizeof(std::uint16_t));
@@ -61,7 +65,11 @@ public:
 
     for (std::uint16_t idx = 0; idx < message.header.question_records; ++idx) {
       question_record qr;
-      qr.name = get_name(payload, offset);
+      if (!read_name(payload, offset, qr.name) ||
+          payload.size() - offset < 2 * sizeof(std::uint16_t)) {
+        message.questions.clear();
+        return message;
+      }
 
       std::uint16_t val = 0;
       std::memcpy(&val, payload.data() + offset, sizeof(std::uint16_t));
@@ -74,13 +82,17 @@ public:
       val = utils::network_to_host(val);
       qr.klass = static_cast<resource_class>(val);
 
-      message.questions.emplace_back(qr);
+      message.questions.emplace_back(std::move(qr));
     }
 
-    message.answers.reserve(message.header.answer_records);
+    constexpr std::size_t rr_fixed_header_size =
+      2 * sizeof(std::uint16_t) + sizeof(std::uint32_t) + sizeof(std::uint16_t);
     for (std::uint16_t idx = 0; idx < message.header.answer_records; ++idx) {
       srv_record ar;
-      ar.name = get_name(payload, offset);
+      if (!read_name(payload, offset, ar.name) || payload.size() - offset < rr_fixed_header_size) {
+        message.answers.clear();
+        return message;
+      }
 
       std::uint16_t val = 0;
       std::memcpy(&val, payload.data() + offset, sizeof(std::uint16_t));
@@ -94,18 +106,28 @@ public:
       ar.klass = resource_class(val);
 
       std::memcpy(&ar.ttl, payload.data() + offset, sizeof(std::uint32_t));
-      offset += static_cast<std::uint16_t>(4U);
+      offset += sizeof(std::uint32_t);
       ar.ttl = utils::network_to_host(ar.ttl);
 
       std::uint16_t size = 0;
       std::memcpy(&size, payload.data() + offset, sizeof(std::uint16_t));
       offset += sizeof(std::uint16_t);
       size = utils::network_to_host(size);
+      if (payload.size() - offset < size) {
+        message.answers.clear();
+        return message;
+      }
+      const std::size_t rdata_end = offset + size;
 
       if (ar.klass != resource_class::in || ar.type != resource_type::srv) {
         // ignore everything except SRV answers
-        offset += size;
+        offset = rdata_end;
         continue;
+      }
+
+      if (size < 3 * sizeof(std::uint16_t) + 1) {
+        message.answers.clear();
+        return message;
       }
 
       std::memcpy(&val, payload.data() + offset, sizeof(std::uint16_t));
@@ -120,9 +142,12 @@ public:
       offset += sizeof(std::uint16_t);
       ar.port = utils::network_to_host(val);
 
-      ar.target = get_name(payload, offset);
+      if (!read_name(payload, offset, ar.target) || offset != rdata_end) {
+        message.answers.clear();
+        return message;
+      }
 
-      message.answers.emplace_back(ar);
+      message.answers.emplace_back(std::move(ar));
     }
     return message;
   }
@@ -176,34 +201,61 @@ public:
   }
 
 private:
-  static auto get_name(const std::vector<std::uint8_t>& payload,
-                       std::size_t& offset) -> resource_name
+  static auto read_name(const std::vector<std::uint8_t>& payload,
+                        std::size_t& offset,
+                        resource_name& name) -> bool
   {
-    resource_name name{};
+    constexpr std::size_t header_size = 6 * sizeof(std::uint16_t);
+    constexpr std::size_t max_domain_name_wire_size = 255;
+    name = {};
     std::optional<std::size_t> save_offset{};
-    while (true) {
-      std::uint8_t len = payload[offset];
+    std::size_t max_jump_target = offset;
+    std::size_t total_wire_len = 0;
+    std::size_t steps = 0;
+    while (offset < payload.size() && steps <= payload.size()) {
+      ++steps;
+      const std::uint8_t len = payload[offset];
       if (len == 0) {
+        if (total_wire_len + 1 > max_domain_name_wire_size) {
+          return false;
+        }
         offset += 1;
         if (save_offset) {
-          // restore offset after pointer jump
+          // restore offset after the first pointer jump
           offset = *save_offset;
         }
-        return name;
+        return true;
       }
-      if ((len & 0b1100'0000U) != 0) {
+      const std::uint8_t label_type = len & 0b1100'0000U;
+      if (label_type == 0b1100'0000U) {
+        if (payload.size() - offset < sizeof(std::uint16_t)) {
+          return false;
+        }
         std::uint16_t ptr = 0;
         std::memcpy(&ptr, payload.data() + offset, sizeof(std::uint16_t));
         ptr = utils::network_to_host(ptr);
         ptr &= 0b0011'1111'1111'1111U;
-        // store old offset and jump to pointer
-        save_offset = offset + sizeof(std::uint16_t);
+        if (ptr < header_size || ptr >= max_jump_target || ptr >= payload.size()) {
+          return false;
+        }
+        if (!save_offset) {
+          save_offset = offset + sizeof(std::uint16_t);
+        }
+        max_jump_target = ptr;
         offset = ptr;
-      } else {
+      } else if (label_type == 0) {
+        if (payload.size() - offset - 1 < len ||
+            total_wire_len + 1U + len >= max_domain_name_wire_size) {
+          return false;
+        }
         name.labels.emplace_back(payload.data() + offset + 1, payload.data() + offset + 1 + len);
-        offset += static_cast<std::uint16_t>(1U + len);
+        total_wire_len += 1U + len;
+        offset += 1U + len;
+      } else {
+        return false;
       }
     }
+    return false;
   }
 };
 } // namespace couchbase::core::io::dns
