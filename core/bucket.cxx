@@ -761,7 +761,17 @@ public:
         return h(ec, cfg);
       }
       {
-        const std::size_t this_index = new_session.index();
+        std::size_t this_index = 0;
+        try {
+          this_index = new_session.index();
+        } catch (const std::exception&) {
+          {
+            const std::scoped_lock lock(self->sessions_mutex_);
+            self->bootstrapping_session_.reset();
+            new_session.stop(retry_reason::do_not_retry);
+          }
+          return h(errc::network::configuration_not_available, cfg);
+        }
         bool established{ false };
         {
           // Establish the session and stop tracking it as bootstrapping in one critical section, so

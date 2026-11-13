@@ -112,60 +112,61 @@ configuration::node::port_or(const std::string& network,
                  type);
     return port_or(type, is_tls, default_value);
   }
+  const auto fallback = port_or(type, is_tls, default_value);
   if (is_tls) {
     switch (type) {
       case service_type::query:
-        return address->second.services_tls.query.value_or(default_value);
+        return address->second.services_tls.query.value_or(fallback);
 
       case service_type::analytics:
-        return address->second.services_tls.analytics.value_or(default_value);
+        return address->second.services_tls.analytics.value_or(fallback);
 
       case service_type::search:
-        return address->second.services_tls.search.value_or(default_value);
+        return address->second.services_tls.search.value_or(fallback);
 
       case service_type::view:
-        return address->second.services_tls.views.value_or(default_value);
+        return address->second.services_tls.views.value_or(fallback);
 
       case service_type::management:
-        return address->second.services_tls.management.value_or(default_value);
+        return address->second.services_tls.management.value_or(fallback);
 
       case service_type::key_value:
-        return address->second.services_tls.key_value.value_or(default_value);
+        return address->second.services_tls.key_value.value_or(fallback);
 
       case service_type::eventing:
-        return address->second.services_tls.eventing.value_or(default_value);
+        return address->second.services_tls.eventing.value_or(fallback);
     }
   }
   switch (type) {
     case service_type::query:
-      return address->second.services_plain.query.value_or(default_value);
+      return address->second.services_plain.query.value_or(fallback);
 
     case service_type::analytics:
-      return address->second.services_plain.analytics.value_or(default_value);
+      return address->second.services_plain.analytics.value_or(fallback);
 
     case service_type::search:
-      return address->second.services_plain.search.value_or(default_value);
+      return address->second.services_plain.search.value_or(fallback);
 
     case service_type::view:
-      return address->second.services_plain.views.value_or(default_value);
+      return address->second.services_plain.views.value_or(fallback);
 
     case service_type::management:
-      return address->second.services_plain.management.value_or(default_value);
+      return address->second.services_plain.management.value_or(fallback);
 
     case service_type::key_value:
-      return address->second.services_plain.key_value.value_or(default_value);
+      return address->second.services_plain.key_value.value_or(fallback);
 
     case service_type::eventing:
-      return address->second.services_plain.eventing.value_or(default_value);
+      return address->second.services_plain.eventing.value_or(fallback);
   }
-  return default_value;
+  return fallback;
 }
 
 auto
 configuration::node::endpoint(const std::string& network, service_type type, bool is_tls) const
   -> std::optional<std::string>
 {
-  auto p = port_or(type, is_tls, 0);
+  auto p = port_or(network, type, is_tls, 0);
   if (p == 0) {
     return {};
   }
